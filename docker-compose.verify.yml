@@ -1,0 +1,44 @@
+# Verification harness — no local Python, Node, or Postgres required.
+#
+#   docker compose -f docker-compose.verify.yml up --abort-on-container-exit
+#
+# Exits nonzero if anything fails. Writes VERIFICATION_REPORT.md to the repo
+# root, which is the artifact to hand an auditor — it records what ran, what
+# passed, and the exact versions it ran against.
+#
+# Deliberately pinned: an audit that cannot be reproduced six months from now
+# is not an audit. Bump these consciously, never with `latest`.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: meta_supreme
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    tmpfs:
+      # Ephemeral by design: every verification run starts from an empty
+      # database, so a pass can never depend on state a previous run left.
+      - /var/lib/postgresql/data
+
+  verify:
+    image: python:3.11-slim
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/meta_supreme
+      TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/meta_supreme_test
+      DEFAULT_AI_PROVIDER: mock
+      EMBEDDING_PROVIDER: mock
+      PYTHONPATH: /repo:/repo/apps/api
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - .:/repo
+    working_dir: /repo
+    command: ["bash", "scripts/verify.sh"]

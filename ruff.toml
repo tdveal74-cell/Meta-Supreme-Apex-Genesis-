@@ -1,0 +1,17 @@
+# Ruff configuration — Meta Supreme Apex Genesis
+# Matches the codebase's established style: explicit typing imports are
+# accepted (Phase 1 convention); imports are kept sorted; FastAPI's
+# Depends-in-default idiom is allowed.
+
+target-version = "py311"
+line-length = 100
+
+[lint]
+select = ["E", "F", "W", "B", "I"]
+ignore = [
+    "B008",  # function call in default argument — FastAPI Depends() idiom
+    "E501",  # long lines are reviewed by humans, not machines
+]
+
+[lint.per-file-ignores]
+"apps/api/tests/*" = ["E402"]  # conftest pins env vars before app imports
