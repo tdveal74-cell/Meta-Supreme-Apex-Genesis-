@@ -4,14 +4,8 @@ Structured logging setup.
 
 import logging
 import sys
-from pathlib import Path
 
-# Add the root directory and apps/api to the path for imports
-root_dir = Path(__file__).parent
-sys.path.insert(0, str(root_dir))
-sys.path.insert(0, str(root_dir / "apps" / "api"))
-
-from config import settings
+from app.core.config import settings
 
 
 def setup_logging() -> None:
