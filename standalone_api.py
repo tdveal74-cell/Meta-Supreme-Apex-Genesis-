@@ -1,32 +1,31 @@
 """
-Standalone smoke entry for the flattened GitHub snapshot.
+Standalone API for the flattened GitHub snapshot.
 
-The full product expects a monorepo (`app.*`, `services.*`). Until that layout
-is restored, this module exposes a minimal FastAPI surface that exercises the
-modules that already live at repo root and need no database:
+Runs without Postgres and without monorepo package paths. Full Intelligence OS
+still requires `app.*` / `services.*` restore — see HOW_TO_TEST.md.
 
-  GET  /                  — identity
-  GET  /health            — liveness
-  GET  /billing/plans     — Phase 6 plan catalog
-  POST /billing/check     — limit evaluation (pure, offline)
+  GET  /                       identity + non-negotiables
+  GET  /health                 liveness
+  GET  /billing/plans          Phase 6 plan catalog
+  GET  /billing/plans/{id}     single plan
+  POST /billing/check          limit evaluation
+  POST /workflows/validate     pure workflow definition validation
+  GET  /system/charter         platform non-negotiables
 
 Run:
-  pip install fastapi uvicorn
+  pip install fastapi uvicorn pydantic
   uvicorn standalone_api:app --reload --port 8000
-
-Then open http://localhost:8000/health and http://localhost:8000/billing/plans
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from billing import (
-    PlanId,
     UsageSnapshot,
     all_plans,
     check_council_run,
@@ -36,14 +35,27 @@ from billing import (
     get_plan,
     plan_summary,
 )
+from definition import (
+    EFFECT_STEP_TYPES,
+    WorkflowDefinition,
+    WorkflowDefinitionError,
+)
+
+NON_NEGOTIABLES = [
+    "Not a chatbot — multi-agent Council + synthesis only",
+    "Humans decide; agents recommend",
+    "Automation never commits effects unattended",
+    "Memory is transparent, editable, deletable",
+    "Simulated output is always labeled simulated",
+]
 
 app = FastAPI(
-    title="Meta Supreme Apex Genesis (standalone smoke)",
+    title="Meta Supreme Apex Genesis (standalone)",
     description=(
         "Offline-capable surface for the flattened repo mirror. "
         "Full Intelligence OS requires monorepo restore — see HOW_TO_TEST.md."
     ),
-    version="0.6.0-smoke",
+    version="0.6.1-standalone",
 )
 
 
@@ -51,12 +63,20 @@ app = FastAPI(
 async def root():
     return {
         "name": "Meta Supreme Apex Genesis",
-        "mode": "standalone-smoke",
-        "version": "0.6.0-smoke",
+        "mode": "standalone",
+        "version": "0.6.1-standalone",
         "status": "operational",
         "phase": "6-billing-scaffold",
         "docs": "/docs",
-        "note": "Full API lives behind monorepo package paths (app.*, services.*).",
+        "non_negotiables": NON_NEGOTIABLES,
+        "endpoints": [
+            "/health",
+            "/billing/plans",
+            "/billing/check",
+            "/workflows/validate",
+            "/system/charter",
+        ],
+        "note": "Full API (Council, Memory, Knowledge) needs monorepo package paths.",
     }
 
 
@@ -66,8 +86,19 @@ async def health():
         "status": "healthy",
         "service": "meta-supreme-apex-genesis",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "version": "0.6.0-smoke",
+        "version": "0.6.1-standalone",
         "mode": "standalone",
+        "database": "not_required",
+        "ai_provider": "not_wired_in_standalone",
+    }
+
+
+@app.get("/system/charter")
+async def charter():
+    return {
+        "non_negotiables": NON_NEGOTIABLES,
+        "effect_step_types": sorted(t.value for t in EFFECT_STEP_TYPES),
+        "rule": "Reads flow; effects pause for human approval.",
     }
 
 
@@ -127,4 +158,25 @@ async def billing_check(body: CheckBody):
         "reason": result.reason,
         "limit": result.limit,
         "current": result.current,
+    }
+
+
+class ValidateBody(BaseModel):
+    definition: Dict[str, Any]
+
+
+@app.post("/workflows/validate")
+async def validate_workflow(body: ValidateBody):
+    """Pure definition validation — no DB, no execution."""
+    try:
+        parsed = WorkflowDefinition.from_dict(body.definition)
+    except WorkflowDefinitionError as exc:
+        return {"valid": False, "error": str(exc)}
+    return {
+        "valid": True,
+        "version": parsed.version,
+        "trigger": parsed.trigger.to_dict(),
+        "steps": [s.to_dict() for s in parsed.steps],
+        "effect_steps": [s.id for s in parsed.effect_steps],
+        "awaits_dispatcher": parsed.trigger.awaiting_dispatcher,
     }

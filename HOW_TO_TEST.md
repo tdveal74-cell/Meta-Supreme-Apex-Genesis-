@@ -1,56 +1,52 @@
 # How to Test — Meta Supreme Apex Genesis
 
-## Offline smoke (this flattened mirror)
+## Offline (this flattened mirror)
 
-Works with **zero AI keys** and **no Postgres**:
+Zero AI keys. Zero Postgres.
 
 ```bash
 pip install fastapi uvicorn pydantic pytest
-pytest test_billing.py -q          # Phase 6 plan limits
+pytest test_billing.py test_definition.py -q
 uvicorn standalone_api:app --port 8000
 ```
 
 | Route | Purpose |
 |-------|---------|
-| `GET /` | Identity + phase |
+| `GET /` | Identity + non-negotiables |
 | `GET /health` | Liveness |
+| `GET /system/charter` | Platform rules + effect step types |
 | `GET /billing/plans` | Free / Professional / Enterprise |
-| `POST /billing/check` | Pure limit evaluation |
+| `POST /billing/check` | Limit evaluation |
+| `POST /workflows/validate` | Workflow definition validation |
+| `/docs` | OpenAPI |
 
-## Full verification (monorepo layout required)
-
-Imports expect `app.*` and `services.*`. Restore the monorepo tree from the
-HANDOVER archive, then:
+Example validate:
 
 ```bash
-make install
-alembic upgrade head
-make up          # Postgres + API + Web
-make test        # target: 148 tests green
-ruff check .
+curl -s -X POST http://localhost:8000/workflows/validate \
+  -H 'content-type: application/json' \
+  -d '{"definition":{"version":1,"trigger":{"type":"manual"},"steps":[{"id":"council","type":"council","config":{"prompt":"Assess: {{ input }}"}}]}}'
 ```
 
-- Frontend: http://localhost:3000
-- API docs: http://localhost:8000/api/docs
-- Health: http://localhost:8000/api/v1/health
+## Full product (monorepo layout required)
 
-### Phase 5 browser loop
+Imports expect `app.*` and `services.*`. Restore from the HANDOVER archive, then:
 
-1. Create workflow from template
-2. Run → hits approval gate on effect steps
-3. Approve → memory/decision row exists
-4. Run again → reject → halt is kept
+```bash
+make install && alembic upgrade head && make up && make test
+```
 
-## Completed in repo
+Target: 148 tests green. Frontend `:3000`, API docs `:8000/api/docs`.
 
-- `knowledge.py` — search, retrieve_for_context, ingest_text
-- `memory.py` — recall_memories, persist_memory_candidates
-- `billing.py` — plan catalog + limit checks
-- `standalone_api.py` — offline smoke server
-- `test_billing.py` — offline unit tests
+## Completed offline
 
-## Not live yet
+- `knowledge.py` / `memory.py` / `billing.py` service surfaces
+- `definition.py` workflow contract + `test_definition.py`
+- `standalone_api.py` (health, billing, validate, charter)
+- `test_billing.py`
 
-- Payment provider
-- Restored monorepo package paths in this GitHub mirror
-- Verified 148-test green run against this flattened tree alone
+## Not live in this mirror alone
+
+- Live Council / provider calls against DB
+- Stripe
+- Restored monorepo package tree

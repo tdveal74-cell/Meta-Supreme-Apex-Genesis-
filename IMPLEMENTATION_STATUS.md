@@ -1,42 +1,28 @@
 # Meta Supreme Apex Genesis — Implementation Status
 
-**Updated:** 2026-08-10 (standalone smoke pass)
+**Updated:** 2026-08-10 (completion pass)
 
 ## Completed (Phases 1–5 per HANDOVER)
 
-- Foundation: auth, projects, DB, Docker, design system
-- Intelligence Core: provider abstraction, agent execution, synthesizer, Executive Controller
-- Knowledge System: chunking, embeddings, pgvector retrieval
-- Council System: SSE streaming, deliberation rounds
-- Product Layer: Memory, Decisions, Workflows with human approval gates
+- Foundation, Intelligence Core, Knowledge, Council, Product Layer (Memory / Decisions / Workflows)
 - Schedule dispatch + orphan recovery
 
-## Completed in code passes
+## Completed in this mirror
 
-- [x] `knowledge.py` — search_knowledge, retrieve_for_context, ingest_text
-- [x] `memory.py` — recall_memories, persist_memory_candidates
-- [x] `billing.py` — Free / Professional / Enterprise + limit helpers
-- [x] `standalone_api.py` — offline FastAPI smoke (health + billing)
-- [x] `test_billing.py` — pure unit tests, no DB
+- [x] `knowledge.py` / `memory.py` service surfaces
+- [x] `billing.py` plan catalog + limit checks
+- [x] `definition.py` workflow contract (effects pause; humans approve)
+- [x] `standalone_api.py` offline FastAPI (health, billing, validate, charter)
+- [x] `test_billing.py` + `test_definition.py`
 
-## Still remaining
+## Remaining
 
 ### Structural
-- Flattened snapshot vs monorepo (`app.*`, `services.*`). Full `make test` needs layout restore.
+- Flattened snapshot vs monorepo (`app.*`, `services.*`) — full `make test` needs layout restore
 
-### Phase 5 verification
-- [ ] `make test` → 148 green with Postgres
-- [ ] Browser loop: template → run → approve / reject
-
-### Phase 6
-- [ ] Persist `plan_id` on users/orgs
-- [ ] Aggregate usage from agent_runs / workflow_runs
-- [ ] Enforce limits at full API boundary
-- [ ] Stripe checkout + webhook
-- [ ] Usage dashboard in web app
-
-### Phase 7
-- [ ] Teams, RBAC, compliance exports, SSO
+### Phase 6+
+- Persist plan_id, aggregate usage, Stripe, usage dashboard
+- Teams / RBAC / SSO (Phase 7)
 
 ## Non-negotiables
 
