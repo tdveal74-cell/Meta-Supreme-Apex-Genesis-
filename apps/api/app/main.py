@@ -15,9 +15,7 @@ from app.core.logging import setup_logging
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan events."""
     setup_logging()
-
     import logging
 
     from app.db.session import AsyncSessionLocal
