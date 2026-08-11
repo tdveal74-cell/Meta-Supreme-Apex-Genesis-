@@ -1,15 +1,14 @@
 # Batch push progress
 
-**2026-08-11**
+**2026-08-11** — continuing
 
-- [x] Operator / FLAGSHIP / RESTORE / SYNC_STATUS
-- [x] database/ migrations baseline + schema stubs
-- [x] apps/api main, config paths, session, logging, router, projects, dispatch
-- [ ] remaining api/v1 routes (auth, conversations, decisions, workflows, ...)
-- [ ] apps/api models + services full tree
-- [ ] apps/web dashboard pages
-- [ ] services/workflows definition+engine under monorepo paths
-- [ ] full test suite under apps/api/tests
+- [x] health, router, main, session, logging, dispatch, projects path
+- [x] package.json, pnpm-workspace, docker stubs
+- [x] database baseline migration
+- [ ] auth, agents (full), conversations, decisions, knowledge, memory, workflows
+- [ ] models, services under apps/api
+- [ ] web dashboard pages
+- [ ] services/workflows definition+engine monorepo paths
 
-Source of truth remains Drive **Meta-Supreme-Apex-Genesis-BUILD.zip**.
-Continue: `batch pushing` in chat.
+**Drive BUILD zip remains complete source of truth.**
+Say `batch pushing` again to continue the queue.
