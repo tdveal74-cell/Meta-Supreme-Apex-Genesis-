@@ -1,25 +1,16 @@
-# Meta Supreme Apex Genesis — Implementation Status
+# Meta Supreme Apex Genesis — Status
 
-**Updated:** 2026-08-10 (flagship upgrade)
+**Updated:** 2026-08-10 (v0 offline complete)
 
-## Flagship offline surface — COMPLETE
+## v0 COMPLETE
 
-- [x] 9-agent Council registry exposed via `/agents`
-- [x] Mock deliberation `/council/deliberate` (always labeled simulated)
-- [x] System charter + non-negotiables
-- [x] Billing plans + limit checks
-- [x] Workflow definition validation (effects pause)
-- [x] `test_billing.py` + `test_definition.py`
-- [x] `FLAGSHIP.md` standard
+- [x] Flagship standalone API (agents, council, billing, workflows, charter)
+- [x] Offline unit tests
+- [x] `make standalone` / `make test-offline`
+- [x] FLAGSHIP.md · COMPLETION.md
 
-## Completed (Phases 1–5 per HANDOVER)
+## Future
 
-- Foundation, Intelligence Core, Knowledge, Council, Product Layer
-- Schedule dispatch + orphan recovery
-
-## Remaining (requires monorepo + Postgres)
-
-- Restore `app.*` / `services.*` layout for full `make test`
-- Live Anthropic/OpenAI providers at API boundary
-- Stripe + usage dashboard (Phase 6)
-- Teams / RBAC / SSO (Phase 7)
+- [ ] Monorepo layout restore → full suite
+- [ ] Stripe + usage dashboard
+- [ ] Teams / RBAC / SSO

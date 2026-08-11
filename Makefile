@@ -1,17 +1,19 @@
-.PHONY: help install dev up down logs api web test lint clean
+.PHONY: help install standalone test-offline up down logs api web test lint clean
 
 help:
-	@echo "Meta Supreme Apex Genesis — common commands"
+	@echo "Meta Supreme Apex Genesis"
 	@echo ""
-	@echo "  make install   Install frontend + backend dependencies"
-	@echo "  make up        Start full stack with Docker Compose"
-	@echo "  make down      Stop Docker Compose stack"
-	@echo "  make logs      Tail Docker Compose logs"
-	@echo "  make api       Run API locally (requires venv + DB)"
-	@echo "  make web       Run Next.js frontend"
-	@echo "  make test      Run backend tests"
-	@echo "  make lint      Lint frontend + backend"
-	@echo "  make clean     Remove caches and build artifacts"
+	@echo "  make standalone    Run flagship offline API (no DB)"
+	@echo "  make test-offline  Billing + definition unit tests"
+	@echo "  make install       Install full monorepo deps (needs layout)"
+	@echo "  make up / down     Docker stack (needs monorepo)"
+	@echo "  make test          Full pytest (needs monorepo + DB)"
+
+standalone:
+	uvicorn standalone_api:app --reload --host 0.0.0.0 --port 8000
+
+test-offline:
+	pytest test_billing.py test_definition.py -q
 
 install:
 	pnpm install
@@ -43,4 +45,3 @@ clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name ".next" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
-	rm -rf apps/api/.venv 2>/dev/null || true
