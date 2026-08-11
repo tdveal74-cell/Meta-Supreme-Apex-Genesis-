@@ -1,16 +1,24 @@
 # Meta Supreme Apex Genesis — Completion
 
-## Shipped
+## Restored from Drive
 
-- Flagship standalone API (Council, agents, billing, workflows)
-- Offline tests (`make test-offline`)
-- Package path shims: `app.core.*`, `services.agents.registry`
-- Non-negotiables enforced in API surface
+**Archive:** `Meta Supreme Apex Genesis Workflows 11.zip`  
+**Layout:** full monorepo (`apps/`, `services/`, `database/`, `infrastructure/`)
 
-## Still needs your infra
+## Surfaces
 
-- Full Postgres + original monorepo tree for 148-test suite
-- Stripe live keys
-- Production deploy of the full stack
+| Mode | Command | Needs |
+|------|---------|--------|
+| Full stack | `make up` | Docker + Postgres |
+| API local | `make api` | venv + DATABASE_URL |
+| Offline flagship | `make standalone` | pip only |
+| Tests (full) | `make test` | DB |
+| Tests (offline) | `make test-offline` | none |
 
-Primary path today: `make standalone`
+## Non-negotiables
+
+1. Not a chatbot — multi-agent Council + synthesis only
+2. Humans decide; agents recommend
+3. Automation never commits effects unattended
+4. Memory is transparent, editable, deletable
+5. Simulated output is always labeled simulated
