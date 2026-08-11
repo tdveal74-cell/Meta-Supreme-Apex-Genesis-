@@ -1,17 +1,8 @@
 {
   "name": "meta-supreme-apex-genesis",
-  "version": "0.1.0",
   "private": true,
-  "description": "Meta Supreme Apex Genesis — Intelligence Operating System",
   "scripts": {
-    "dev:web": "pnpm --filter @meta-supreme/web dev",
-    "dev:api": "cd apps/api && uvicorn app.main:app --reload --port 8000",
-    "build:web": "pnpm --filter @meta-supreme/web build",
-    "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck"
-  },
-  "engines": {
-    "node": ">=20"
-  },
-  "packageManager": "pnpm@9.15.0"
+    "dev:web": "pnpm --filter web dev",
+    "build:web": "pnpm --filter web build"
+  }
 }
