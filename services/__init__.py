@@ -1,1 +1,1 @@
-"""Services package root — flattened-mirror shim."""
+"""Meta Supreme services layer (framework-free)."""
