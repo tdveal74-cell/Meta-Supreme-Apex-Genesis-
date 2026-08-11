@@ -5,9 +5,9 @@ Workflows with human approval gates, Phase 6 billing scaffold.
 
 > Not a chatbot. Agents recommend. Humans decide.
 
-**Flagship status:** offline surface complete — see `FLAGSHIP.md`.
+**Flagship status:** offline surface complete — see `FLAGSHIP.md` and `REPOSITORY_STATUS.md`.
 
-## Quick start (zero keys)
+## Quick start (zero keys) — canonical runtime
 
 ```bash
 pip install fastapi uvicorn pydantic pytest
@@ -34,6 +34,6 @@ uvicorn standalone_api:app --reload --port 8000
 
 ## Layout note
 
-This GitHub copy is a **flattened snapshot**. Production imports expect
-`app.*` and `services.*`. The standalone API is the supported zero-infra path
-until the monorepo tree is restored (`HOW_TO_TEST.md`).
+This GitHub copy is a **flattened snapshot**. The **supported zero-infra path is `standalone_api.py`**.
+`apps/api/` is the secondary monorepo-style tree for persistent/live work (`HOW_TO_TEST.md`).
+Canonical declaration: `REPOSITORY_STATUS.md`.
