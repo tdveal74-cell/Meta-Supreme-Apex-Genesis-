@@ -1,24 +1,26 @@
 # Meta Supreme Apex Genesis — Completion
 
-## Restored from Drive
+## AAA flagship (visual + spec)
 
-**Archive:** `Meta Supreme Apex Genesis Workflows 11.zip`  
-**Layout:** full monorepo (`apps/`, `services/`, `database/`, `infrastructure/`)
+- `docs/FLAGSHIP_SPEC.md` — product + visual standard
+- `apps/web/app/globals.css` — tokens, motion, MS utility classes
+- `apps/web/app/page.tsx` — flagship marketing surface
+- `apps/web/components/ui/button.tsx` · `card.tsx` — premium primitives
+- `packages/ui/src/index.ts` — shared design tokens
+- `apps/web/tailwind.config.ts` — navy / amber / surface scale
 
-## Surfaces
+## Run paths
 
-| Mode | Command | Needs |
-|------|---------|--------|
-| Full stack | `make up` | Docker + Postgres |
-| API local | `make api` | venv + DATABASE_URL |
-| Offline flagship | `make standalone` | pip only |
-| Tests (full) | `make test` | DB |
-| Tests (offline) | `make test-offline` | none |
+| Mode | Command |
+|------|---------|
+| Offline API | `make standalone` |
+| Offline tests | `make test-offline` |
+| Full monorepo | Restore **Workflows 11** zip → `make up` |
 
-## Non-negotiables
+## Principles
 
-1. Not a chatbot — multi-agent Council + synthesis only
-2. Humans decide; agents recommend
-3. Automation never commits effects unattended
-4. Memory is transparent, editable, deletable
-5. Simulated output is always labeled simulated
+1. Not a chatbot
+2. Humans decide
+3. Reads flow · writes wait
+4. Simulated always labeled
+5. Navy · Amber · Surface only
