@@ -1,8 +1,6 @@
 # How to Test — Meta Supreme Apex Genesis
 
-## Offline (this flattened mirror)
-
-Zero AI keys. Zero Postgres.
+## Flagship offline (recommended)
 
 ```bash
 pip install fastapi uvicorn pydantic pytest
@@ -10,43 +8,22 @@ pytest test_billing.py test_definition.py -q
 uvicorn standalone_api:app --port 8000
 ```
 
-| Route | Purpose |
-|-------|---------|
-| `GET /` | Identity + non-negotiables |
-| `GET /health` | Liveness |
-| `GET /system/charter` | Platform rules + effect step types |
-| `GET /billing/plans` | Free / Professional / Enterprise |
-| `POST /billing/check` | Limit evaluation |
-| `POST /workflows/validate` | Workflow definition validation |
-| `/docs` | OpenAPI |
-
-Example validate:
+Smoke:
 
 ```bash
-curl -s -X POST http://localhost:8000/workflows/validate \
+curl -s http://localhost:8000/health
+curl -s http://localhost:8000/agents | head
+curl -s -X POST http://localhost:8000/council/deliberate \
   -H 'content-type: application/json' \
-  -d '{"definition":{"version":1,"trigger":{"type":"manual"},"steps":[{"id":"council","type":"council","config":{"prompt":"Assess: {{ input }}"}}]}}'
+  -d '{"prompt":"Should we ship the flagship offline surface?"}'
 ```
 
-## Full product (monorepo layout required)
+Every council response includes `"simulated": true`.
 
-Imports expect `app.*` and `services.*`. Restore from the HANDOVER archive, then:
+## Full product
+
+Requires monorepo layout + Postgres. See `HANDOVER_FOR_CLAUDE.md`.
 
 ```bash
 make install && alembic upgrade head && make up && make test
 ```
-
-Target: 148 tests green. Frontend `:3000`, API docs `:8000/api/docs`.
-
-## Completed offline
-
-- `knowledge.py` / `memory.py` / `billing.py` service surfaces
-- `definition.py` workflow contract + `test_definition.py`
-- `standalone_api.py` (health, billing, validate, charter)
-- `test_billing.py`
-
-## Not live in this mirror alone
-
-- Live Council / provider calls against DB
-- Stripe
-- Restored monorepo package tree

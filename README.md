@@ -5,12 +5,9 @@ Workflows with human approval gates, Phase 6 billing scaffold.
 
 > Not a chatbot. Agents recommend. Humans decide.
 
-## Layout note
+**Flagship status:** offline surface complete — see `FLAGSHIP.md`.
 
-This GitHub copy is a **flattened snapshot** of a monorepo. Production imports
-expect `app.*` and `services.*`. Use the standalone API until the tree is restored.
-
-## Quick start (offline)
+## Quick start (zero keys)
 
 ```bash
 pip install fastapi uvicorn pydantic pytest
@@ -18,13 +15,14 @@ pytest test_billing.py test_definition.py -q
 uvicorn standalone_api:app --reload --port 8000
 ```
 
-- http://localhost:8000/health
-- http://localhost:8000/billing/plans
-- http://localhost:8000/docs
-
-## Full product
-
-See `HOW_TO_TEST.md` and `HANDOVER_FOR_CLAUDE.md` after monorepo restore.
+| Route | Purpose |
+|-------|---------|
+| `GET /health` | Liveness |
+| `GET /agents` | 9-seat Council |
+| `POST /council/deliberate` | Mock deliberation (labeled simulated) |
+| `GET /billing/plans` | Free / Professional / Enterprise |
+| `POST /workflows/validate` | Workflow contract |
+| `/docs` | OpenAPI |
 
 ## Non-negotiables
 
@@ -33,3 +31,9 @@ See `HOW_TO_TEST.md` and `HANDOVER_FOR_CLAUDE.md` after monorepo restore.
 3. Automation never commits effects unattended
 4. Memory is transparent, editable, deletable
 5. Simulated output is always labeled simulated
+
+## Layout note
+
+This GitHub copy is a **flattened snapshot**. Production imports expect
+`app.*` and `services.*`. The standalone API is the supported zero-infra path
+until the monorepo tree is restored (`HOW_TO_TEST.md`).

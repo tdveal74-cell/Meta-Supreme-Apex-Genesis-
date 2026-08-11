@@ -1,16 +1,17 @@
 """
-Standalone API for the flattened GitHub snapshot.
+Flagship standalone API — offline Intelligence OS surface.
 
-Runs without Postgres and without monorepo package paths. Full Intelligence OS
-still requires `app.*` / `services.*` restore — see HOW_TO_TEST.md.
+No Postgres. No monorepo paths. Full Council roster + mock deliberation.
 
   GET  /                       identity + non-negotiables
   GET  /health                 liveness
-  GET  /billing/plans          Phase 6 plan catalog
-  GET  /billing/plans/{id}     single plan
+  GET  /system/charter         platform rules
+  GET  /agents                 9-agent Council registry
+  GET  /agents/{slug}          single agent
+  POST /council/deliberate     mock multi-agent deliberation (labeled simulated)
+  GET  /billing/plans          plan catalog
   POST /billing/check          limit evaluation
-  POST /workflows/validate     pure workflow definition validation
-  GET  /system/charter         platform non-negotiables
+  POST /workflows/validate     definition validation
 
 Run:
   pip install fastapi uvicorn pydantic
@@ -20,9 +21,9 @@ Run:
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from billing import (
@@ -35,11 +36,8 @@ from billing import (
     get_plan,
     plan_summary,
 )
-from definition import (
-    EFFECT_STEP_TYPES,
-    WorkflowDefinition,
-    WorkflowDefinitionError,
-)
+from definition import EFFECT_STEP_TYPES, WorkflowDefinition, WorkflowDefinitionError
+from registry import AGENT_REGISTRY, get_agent, list_active_agents
 
 NON_NEGOTIABLES = [
     "Not a chatbot — multi-agent Council + synthesis only",
@@ -50,33 +48,32 @@ NON_NEGOTIABLES = [
 ]
 
 app = FastAPI(
-    title="Meta Supreme Apex Genesis (standalone)",
-    description=(
-        "Offline-capable surface for the flattened repo mirror. "
-        "Full Intelligence OS requires monorepo restore — see HOW_TO_TEST.md."
-    ),
-    version="0.6.1-standalone",
+    title="Meta Supreme Apex Genesis",
+    description="Flagship offline Intelligence OS. Council · Billing · Workflows.",
+    version="1.0.0-flagship",
 )
 
 
 @app.get("/")
 async def root():
+    agents = list_active_agents()
     return {
         "name": "Meta Supreme Apex Genesis",
-        "mode": "standalone",
-        "version": "0.6.1-standalone",
+        "mode": "flagship-standalone",
+        "version": "1.0.0-flagship",
         "status": "operational",
-        "phase": "6-billing-scaffold",
-        "docs": "/docs",
+        "council_agents": len(agents),
         "non_negotiables": NON_NEGOTIABLES,
+        "docs": "/docs",
         "endpoints": [
             "/health",
+            "/system/charter",
+            "/agents",
+            "/council/deliberate",
             "/billing/plans",
             "/billing/check",
             "/workflows/validate",
-            "/system/charter",
         ],
-        "note": "Full API (Council, Memory, Knowledge) needs monorepo package paths.",
     }
 
 
@@ -86,10 +83,12 @@ async def health():
         "status": "healthy",
         "service": "meta-supreme-apex-genesis",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "version": "0.6.1-standalone",
+        "version": "1.0.0-flagship",
         "mode": "standalone",
         "database": "not_required",
-        "ai_provider": "not_wired_in_standalone",
+        "ai_provider": "mock",
+        "simulated": True,
+        "council_agents": len(list_active_agents()),
     }
 
 
@@ -99,6 +98,110 @@ async def charter():
         "non_negotiables": NON_NEGOTIABLES,
         "effect_step_types": sorted(t.value for t in EFFECT_STEP_TYPES),
         "rule": "Reads flow; effects pause for human approval.",
+        "council": {
+            "agents": len(list_active_agents()),
+            "slugs": [a.slug for a in list_active_agents()],
+        },
+    }
+
+
+@app.get("/agents")
+async def agents_list():
+    return [
+        {
+            "slug": a.slug,
+            "name": a.name,
+            "purpose": a.purpose,
+            "mission": a.mission,
+            "version": a.version,
+            "is_active": a.is_active,
+            "capabilities": a.capabilities,
+            "limitations": a.limitations,
+        }
+        for a in list_active_agents()
+    ]
+
+
+@app.get("/agents/{slug}")
+async def agent_detail(slug: str):
+    agent = get_agent(slug)
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return {
+        "slug": agent.slug,
+        "name": agent.name,
+        "purpose": agent.purpose,
+        "mission": agent.mission,
+        "version": agent.version,
+        "is_active": agent.is_active,
+        "capabilities": agent.capabilities,
+        "limitations": agent.limitations,
+        "output_format": agent.output_format,
+        "evaluation_criteria": agent.evaluation_criteria,
+        "system_instructions": agent.system_instructions,
+    }
+
+
+class CouncilRequest(BaseModel):
+    prompt: str = Field(..., min_length=1)
+    agents: Optional[List[str]] = Field(
+        default=None,
+        description="Agent slugs; default = full active Council",
+    )
+    full_council: bool = True
+
+
+@app.post("/council/deliberate")
+async def council_deliberate(body: CouncilRequest):
+    """Offline mock deliberation — every seat labeled simulated."""
+    active = list_active_agents()
+    if body.agents:
+        seats = []
+        for slug in body.agents:
+            a = get_agent(slug)
+            if a is None or not a.is_active:
+                raise HTTPException(status_code=400, detail=f"Unknown or inactive agent: {slug}")
+            seats.append(a)
+    else:
+        seats = active if body.full_council else active[:3]
+
+    topic = " ".join(body.prompt.split())[:120]
+    contributions = []
+    for agent in seats:
+        contributions.append(
+            {
+                "agent": agent.slug,
+                "name": agent.name,
+                "purpose": agent.purpose,
+                "simulated": True,
+                "provider": "mock",
+                "insight": (
+                    f"[{agent.name}] Simulated perspective on: {topic}. "
+                    f"Mission focus: {agent.mission} "
+                    "Configure Anthropic/OpenAI for live intelligence."
+                ),
+                "confidence": 0.55,
+            }
+        )
+
+    return {
+        "simulated": True,
+        "provider": "mock",
+        "prompt": body.prompt,
+        "agents_consulted": [c["agent"] for c in contributions],
+        "contributions": contributions,
+        "synthesis": {
+            "simulated": True,
+            "summary": (
+                f"Simulated Council synthesis for: {topic}. "
+                f"{len(contributions)} agents contributed. "
+                "Humans decide; agents recommend."
+            ),
+            "recommendation": "Review contributions and decide — this run is offline/mock.",
+            "dissent_preserved": True,
+        },
+        "non_negotiable": "Humans decide; agents recommend",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -167,7 +270,6 @@ class ValidateBody(BaseModel):
 
 @app.post("/workflows/validate")
 async def validate_workflow(body: ValidateBody):
-    """Pure definition validation — no DB, no execution."""
     try:
         parsed = WorkflowDefinition.from_dict(body.definition)
     except WorkflowDefinitionError as exc:
