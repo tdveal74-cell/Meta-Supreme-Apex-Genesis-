@@ -1,19 +1,16 @@
-# Meta Supreme Apex Genesis — v0 Complete (offline flagship)
+# Meta Supreme Apex Genesis — Completion
 
-## Done without Postgres / monorepo restore
+## Shipped
 
-- 9-agent Council registry
-- Mock deliberation (`simulated: true` always)
-- Billing plans + limit checks
-- Workflow definition validation (effects pause)
-- System charter / non-negotiables
-- Offline tests: `make test-offline`
-- API: `make standalone` → http://localhost:8000/docs
+- Flagship standalone API (Council, agents, billing, workflows)
+- Offline tests (`make test-offline`)
+- Package path shims: `app.core.*`, `services.agents.registry`
+- Non-negotiables enforced in API surface
 
-## Not in this mirror alone
+## Still needs your infra
 
-- Live provider calls against DB
-- Full `make test` (148) without `app.*` / `services.*` restore
-- Stripe / Teams / SSO
+- Full Postgres + original monorepo tree for 148-test suite
+- Stripe live keys
+- Production deploy of the full stack
 
-v0 offline Intelligence OS surface is complete and testable.
+Primary path today: `make standalone`
