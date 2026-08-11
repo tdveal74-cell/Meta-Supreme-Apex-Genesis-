@@ -1,46 +1,28 @@
-"""
-Application configuration.
-Secrets are loaded from environment variables. Never hard-code them.
-"""
+"""Application configuration. Secrets from environment only."""
 
 from functools import lru_cache
-from typing import List
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-    )
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     APP_NAME: str = "Meta Supreme Apex Genesis"
-    ENVIRONMENT: str = "development"
+    APP_ENV: str = "development"
     DEBUG: bool = True
-    API_V1_PREFIX: str = "/api/v1"
+    API_PREFIX: str = "/api/v1"
 
-    SECRET_KEY: str = "change-me-in-production-use-openssl-rand-hex-32"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
+    SECRET_KEY: str = "dev-only-change-me-in-production"
     ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
 
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/meta_supreme"
 
-    CORS_ORIGINS: List[str] = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
-
-    OPENAI_API_KEY: str | None = None
+    DEFAULT_AI_PROVIDER: str = "mock"  # mock | anthropic | openai
     ANTHROPIC_API_KEY: str | None = None
-    DEFAULT_AI_PROVIDER: str = "mock"
+    OPENAI_API_KEY: str | None = None
     AI_MODEL: str | None = None
-    ANTHROPIC_MODEL: str = "claude-sonnet-5"
-    OPENAI_MODEL: str = "gpt-5.2"
-    AI_TIMEOUT_SECONDS: float = 60.0
-    AI_MAX_RETRIES: int = 2
     AI_TEMPERATURE: float = 0.2
     AI_MAX_TOKENS_PER_AGENT: int = 1200
     AI_MAX_TOKENS_SYNTHESIS: int = 2000

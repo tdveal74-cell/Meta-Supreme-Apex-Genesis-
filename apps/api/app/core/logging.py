@@ -1,23 +1,17 @@
-"""
-Structured logging setup.
-"""
+"""App logging helpers — do not name this module shadowing stdlib at repo root."""
 
 import logging
-import sys
 
 from app.core.config import settings
 
 
-def setup_logging() -> None:
-    """Configure root logger for the application."""
-    log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
-
+def configure_logging() -> None:
+    level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
     logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        handlers=[logging.StreamHandler(sys.stdout)],
+        level=level,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
     )
 
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+def get_logger(name: str) -> logging.Logger:
+    return logging.getLogger(name)
