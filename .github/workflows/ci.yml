@@ -48,13 +48,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: python -m pip install --quiet pytest pytest-asyncio
+      # app.security.jwt imports app.core.config, which needs pydantic-settings.
+      # This job installed neither, so adding test_security here failed on an
+      # import rather than on anything the test asserts.
+      - run: python -m pip install --quiet pytest pytest-asyncio pydantic pydantic-settings "python-jose[cryptography]" "passlib[bcrypt]"
       # These guarded on apps/api/tests, which has never existed in this repo,
       # so the job printed a reassuring message and passed without running a
       # test. A guard whose false branch always wins is not a guard.
       - name: Council and security (report what the partial restore blocks)
         run: |
-          python -m pip install --quiet "python-jose[cryptography]" "passlib[bcrypt]" || true
           missing=0
           if [ ! -f services/agents/executor.py ]; then
             echo "::warning::services/agents/executor.py is absent from this partial restore."
