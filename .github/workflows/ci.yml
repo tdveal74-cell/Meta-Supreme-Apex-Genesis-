@@ -60,18 +60,20 @@ jobs:
       # These guarded on apps/api/tests, which has never existed in this repo,
       # so the job printed a reassuring message and passed without running a
       # test. A guard whose false branch always wins is not a guard.
-      - name: Council and security (report what the partial restore blocks)
+      - name: Council and security (no database)
         run: |
-          missing=0
           if [ ! -f services/agents/executor.py ]; then
-            echo "::warning::services/agents/executor.py is absent from this partial restore."
-            echo "::warning::It blocks test_council.py and test_phase4_council.py — see RESTORE.md."
-            missing=1
+            echo "::error::services/agents/executor.py is absent — it blocks test_council.py and test_phase4_council.py. See RESTORE.md."
+            exit 1
           fi
-          if [ "$missing" = "0" ]; then
-            python -m pytest test_council.py test_phase4_council.py -q --tb=short
-          fi
-          python -m pytest test_security.py -q --tb=short
+          # The two stream tests drive the endpoint through a real database, so
+          # they belong to the `api` job, which provisions one and runs the whole
+          # suite. Named individually rather than filtered by keyword: a `-k`
+          # pattern would silently widen as tests are added.
+          python -m pytest test_council.py test_phase4_council.py test_security.py \
+            -q --tb=short \
+            --deselect test_phase4_council.py::test_stream_endpoint_emits_events_and_persists \
+            --deselect test_phase4_council.py::test_stream_endpoint_reports_errors_as_events
 
   api:
     name: API suite (PostgreSQL 16 + pgvector)
