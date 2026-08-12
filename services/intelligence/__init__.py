@@ -16,16 +16,31 @@ that actually asked for the Council and names the module that is missing.
 
 from typing import TYPE_CHECKING, Any, List
 
+# The `X as X` form is the explicit re-export marker. Without it these read as
+# eight unused imports — `__all__` below is computed rather than literal, so a
+# static analyser cannot see that the names are published, and it was right to
+# say so.
 if TYPE_CHECKING:  # pragma: no cover - type checkers resolve the real modules
     from services.intelligence.executive_controller import (
-        AgentContribution,
-        ContextPacket,
-        CouncilExecutionError,
-        ExecutiveController,
-        IntentCategory,
-        SynthesisResult,
+        AgentContribution as AgentContribution,
     )
-    from services.intelligence.synthesizer import SynthesisOutput, Synthesizer
+    from services.intelligence.executive_controller import (
+        ContextPacket as ContextPacket,
+    )
+    from services.intelligence.executive_controller import (
+        CouncilExecutionError as CouncilExecutionError,
+    )
+    from services.intelligence.executive_controller import (
+        ExecutiveController as ExecutiveController,
+    )
+    from services.intelligence.executive_controller import (
+        IntentCategory as IntentCategory,
+    )
+    from services.intelligence.executive_controller import (
+        SynthesisResult as SynthesisResult,
+    )
+    from services.intelligence.synthesizer import SynthesisOutput as SynthesisOutput
+    from services.intelligence.synthesizer import Synthesizer as Synthesizer
 
 _CONTROLLER_EXPORTS = {
     "AgentContribution",

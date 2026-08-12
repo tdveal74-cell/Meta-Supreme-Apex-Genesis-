@@ -224,10 +224,6 @@ async def dispatch_due(
                 logger.exception("workflow %s failed to dispatch", workflow.id)
                 report.failed.append(workflow.id)
                 await db.flush()
-            except Exception:
-                logger.exception("workflow %s failed to dispatch", workflow.id)
-                report.failed.append(workflow.id)
-                await db.flush()
 
         logger.info("dispatch complete: %s", report.summary())
         return report

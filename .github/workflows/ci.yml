@@ -154,5 +154,12 @@ jobs:
             tail -40 "$f"
           done
 
+      # Blocking. This read `ruff check . || true`, which meant the linter could
+      # report anything at all and the run still went green — a quality control
+      # that cannot fail the build is an observation, not a gate. Turning it on
+      # found 17 findings, two of which were real defects: a duplicated
+      # `except Exception` in the dispatcher whose second handler was dead code,
+      # and a `zip()` in the knowledge ingest that truncated silently when the
+      # embedding provider returned fewer vectors than chunks.
       - name: Lint
-        run: ruff check . || true
+        run: ruff check .
