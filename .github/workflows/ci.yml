@@ -138,7 +138,18 @@ jobs:
       # `apps/api/tests` — a directory that has never existed here — so it
       # passed without executing a single test.
       - name: Full suite (PostgreSQL)
-        run: python -m pytest -q --tb=short
+        run: python -m pytest -q --tb=short 2>&1 | tee pytest.out
+
+      # The runner appends the whole Postgres service-container log after the
+      # steps, and that log echoes the entire init schema — hundreds of lines.
+      # Anything a failing step printed is buried above it, unreachable by
+      # tailing the job log. Re-printing the summary last is what makes a
+      # failure readable at all.
+      - name: Failure summary
+        if: failure()
+        run: |
+          echo "=== pytest summary ==="
+          grep -E "^(FAILED|ERROR|[0-9]+ (passed|failed))" pytest.out | tail -40 || tail -40 pytest.out
 
       - name: Lint
         run: ruff check . || true
