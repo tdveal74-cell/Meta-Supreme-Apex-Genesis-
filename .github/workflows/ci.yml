@@ -28,6 +28,11 @@ jobs:
       # test_billing and test_definition — 12 of the 74 tests that need no
       # database — while nine other files could not even be imported, so CI was
       # green over a suite that mostly did not run.
+      # `make standalone` is the documented zero-infrastructure entry point, and
+      # nothing imported it, so moving a module out of the flat layout broke it
+      # silently. Importing it here is the cheapest way to keep that honest.
+      - name: The documented offline entry point still imports
+        run: python -c "import standalone_api; print(standalone_api.app.title)"
       - name: Offline suite (no database, no keys)
         run: |
           python -m pytest -q --tb=short \
