@@ -22,8 +22,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install offline deps
-        run: python -m pip install --quiet fastapi uvicorn pydantic pydantic-settings pytest pytest-asyncio httpx
+      - name: Install dependencies
+        run: |
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet -r requirements.txt
       # The whole zero-infrastructure suite, named file by file. This ran only
       # test_billing and test_definition — 12 of the 74 tests that need no
       # database — while nine other files could not even be imported, so CI was
@@ -53,10 +55,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      # app.security.jwt imports app.core.config, which needs pydantic-settings.
-      # This job installed neither, so adding test_security here failed on an
-      # import rather than on anything the test asserts.
-      - run: python -m pip install --quiet pytest pytest-asyncio pydantic pydantic-settings "python-jose[cryptography]" "passlib[bcrypt]"
+      # The declared dependency set, not a hand-picked subset. Naming packages
+      # one at a time meant every test added to this job failed first on an
+      # import — pydantic-settings, then httpx — rather than on anything the
+      # test asserts. requirements.txt is what this code says it needs.
+      - run: |
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet -r requirements.txt
       # These guarded on apps/api/tests, which has never existed in this repo,
       # so the job printed a reassuring message and passed without running a
       # test. A guard whose false branch always wins is not a guard.
