@@ -18,23 +18,28 @@ Offline: `make standalone` / `make test-offline` when Makefile targets exist in 
 
 Do not treat the flattened root-level Python files on GitHub as the only layout — prefer `apps/`, `services/`, `database/` from the BUILD zip.
 
-## What this partial restore is actually missing
+## What was missing, and where it came from
 
-Measured, not guessed — each item below is the reason a specific suite cannot
-run. Everything else has been put back in the package its own imports name.
+The gaps below were measured, not guessed — each was the reason a specific
+suite could not run. All are now restored from the Drive archives this file
+names above, byte-for-byte:
 
-| Missing | Blocks | Why it cannot be reconstructed here |
+| Restored | Path | Was blocking |
 | --- | --- | --- |
-| `services/agents/executor.py` | `test_council.py`, `test_phase4_council.py` | `AgentExecutor` / `AgentTask` / `AgentResult` are imported by `services/intelligence/executive_controller.py` and `services/intelligence/synthesizer.py`. No copy exists anywhere in the repository — writing one would be inventing the Council's execution semantics, not restoring them. |
-| `database/schemas/001_initial_schema.sql` | every database-backed suite | `conftest.py` applies it to build the test database. Only the `002` and `003` increments are present, and an increment cannot create the tables it alters. |
+| `executor.py` | `services/agents/executor.py` | `test_council.py`, `test_phase4_council.py` — three modules import `AgentExecutor` / `AgentTask` / `AgentResult` |
+| `001_initial_schema.sql` | `database/schemas/` | every database-backed suite — `conftest.py` builds the test database from it |
+| `002_workflow_runs.sql` | `database/schemas/` | `workflow_runs`; the repo held a two-line placeholder |
+| `003_schedule_dispatch.sql` | `database/schemas/` | the schedule columns; also a placeholder |
+| `002_workflow_runs.py` | `database/migrations/versions/` | `alembic upgrade head` — the chain stopped at `001_baseline` |
+| `003_schedule_dispatch.py` | `database/migrations/versions/` | same |
 
-Both are in the Drive archives named at the top of this file. Drop them in and
-the blocked suites should run without further changes.
+The `.sql` files are the test fixture's twin of the Alembic revisions. If the
+two ever disagree, the migration wins and the `.sql` is the bug.
 
-### What does run
+### What runs
 
-`python -m pytest test_billing.py test_definition.py test_providers.py test_schedule.py test_workflow_engine.py`
-— 74 tests, no database, no API keys. This is what CI's standalone job runs.
+`make test-offline` — 95 tests, no database, no API keys. CI's standalone and
+engine jobs cover these.
 
-The database-backed suites need Postgres plus `asyncpg`, `sqlalchemy`, and the
-baseline schema above; CI's `api` job provisions the first two.
+The database-backed suites need Postgres with pgvector; CI's `api` job
+provisions it, applies the migrations up-down-up, and runs the whole suite.

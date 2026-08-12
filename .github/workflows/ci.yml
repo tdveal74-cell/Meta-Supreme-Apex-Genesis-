@@ -102,30 +102,36 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install API dependencies (skip if this snapshot has none)
+      # The root requirements.txt is the one this suite runs on; apps/api's
+      # is the older snapshot's. Installing it unconditionally is also what
+      # makes the failure visible if it ever goes missing.
+      - name: Install dependencies
         run: |
-          if [ ! -f apps/api/requirements.txt ]; then
-            echo "No apps/api/requirements.txt in this snapshot — skipping."
-            exit 0
-          fi
           python -m pip install --quiet --upgrade pip
-          python -m pip install --quiet -r apps/api/requirements.txt
-          python -m pip install --quiet ruff pytest pytest-asyncio httpx asyncpg alembic
-      - name: Alembic upgrade
-        working-directory: apps/api
+          python -m pip install --quiet -r requirements.txt
+
+      # The schema files are what conftest.py builds the test database from,
+      # and 001 was absent for long enough that every database-backed suite
+      # was unrunnable. Fail loudly rather than skip if that recurs.
+      - name: The test fixture's schema files are present
         run: |
-          if [ -f alembic.ini ]; then alembic upgrade head; else echo "no alembic.ini"; fi
-      - name: Alembic downgrade+upgrade (sanity)
-        working-directory: apps/api
+          for f in 001_initial_schema 002_workflow_runs 003_schedule_dispatch; do
+            test -s "database/schemas/$f.sql" || { echo "::error::database/schemas/$f.sql is missing or empty"; exit 1; }
+          done
+
+      - name: Alembic upgrade, then down and up again
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/meta_supreme
         run: |
-          if [ -f alembic.ini ]; then
-            alembic downgrade 001_baseline || true
-            alembic upgrade head || true
-          fi
-      - run: |
-          if [ -d apps/api/tests ]; then
-            python -m pytest apps/api/tests -q --tb=short
-          else
-            echo "No apps/api/tests — skipped"
-          fi
-      - run: ruff check . || true
+          alembic upgrade head
+          alembic downgrade 001_baseline
+          alembic upgrade head
+
+      # The whole suite, against a real database. This job used to run
+      # `apps/api/tests` — a directory that has never existed here — so it
+      # passed without executing a single test.
+      - name: Full suite (PostgreSQL)
+        run: python -m pytest -q --tb=short
+
+      - name: Lint
+        run: ruff check . || true
