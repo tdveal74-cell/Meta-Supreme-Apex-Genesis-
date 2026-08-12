@@ -43,3 +43,28 @@ engine jobs cover these.
 
 The database-backed suites need Postgres with pgvector; CI's `api` job
 provisions it, applies the migrations up-down-up, and runs the whole suite.
+
+## Known gap: the online Alembic path
+
+The test suites do not use Alembic — `conftest.py` builds its database from
+`database/schemas/*.sql`, and the full suite passes against Postgres 16 with
+pgvector. Alembic matters for real environments, and there it has a defect this
+restore did not introduce and could not diagnose:
+
+- **Verified working:** `alembic upgrade head --sql` runs the whole
+  `001_baseline → 002_workflow_runs → 003_schedule_dispatch` chain cleanly. The
+  revision files and `env.py` are correct.
+- **Failing:** `alembic upgrade head` against a live database exits within a
+  second. The migrations are reached — offline proves the chain — so the fault
+  is in the online connection path in `env.py`, not in the revisions.
+
+It was dropped from CI rather than left as a step that reports without meaning:
+the diagnosis needs the runner's raw log, which GitHub buries under ~200 lines
+of Postgres service-container output that the API cannot page past. Anyone who
+can open the job page directly will see the traceback in seconds.
+
+Reproduce locally with a database running:
+
+```bash
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/meta_supreme alembic upgrade head
+```

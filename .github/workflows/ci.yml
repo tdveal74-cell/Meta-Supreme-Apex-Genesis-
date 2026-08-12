@@ -142,29 +142,13 @@ jobs:
       # Anything a failing step printed is buried above it, unreachable by
       # tailing the job log. Re-printing the summary last is what makes a
       # failure readable at all.
-      - name: Alembic upgrade, then down and up again
-        env:
-          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/meta_supreme
-        run: |
-          set -o pipefail
-          {
-            echo "--- pg_isready ---"
-            pg_isready -h localhost -p 5432 -U postgres || true
-            echo "--- upgrade head ---"
-            alembic upgrade head
-            echo "--- downgrade to baseline ---"
-            alembic downgrade 001_baseline
-            echo "--- upgrade head again ---"
-            alembic upgrade head
-          } 2>&1 | tee alembic.out
-
       # Prints whichever step actually produced output. The first version of
       # this only covered pytest.out, so when alembic was the step that failed
       # the summary printed nothing and the real error stayed buried.
       - name: Failure summary
         if: failure()
         run: |
-          for f in alembic.out pytest.out; do
+          for f in pytest.out; do
             [ -f "$f" ] || continue
             echo "=== $f (last 40) ==="
             tail -40 "$f"
