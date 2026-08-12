@@ -22,8 +22,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install offline deps
-        run: python -m pip install --quiet fastapi uvicorn pydantic pydantic-settings pytest pytest-asyncio httpx
+      - name: Install dependencies
+        run: |
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet -r requirements.txt
       # The whole zero-infrastructure suite, named file by file. This ran only
       # test_billing and test_definition — 12 of the 74 tests that need no
       # database — while nine other files could not even be imported, so CI was
@@ -53,25 +55,30 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      # app.security.jwt imports app.core.config, which needs pydantic-settings.
-      # This job installed neither, so adding test_security here failed on an
-      # import rather than on anything the test asserts.
-      - run: python -m pip install --quiet pytest pytest-asyncio pydantic pydantic-settings "python-jose[cryptography]" "passlib[bcrypt]"
+      # The declared dependency set, not a hand-picked subset. Naming packages
+      # one at a time meant every test added to this job failed first on an
+      # import — pydantic-settings, then httpx — rather than on anything the
+      # test asserts. requirements.txt is what this code says it needs.
+      - run: |
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet -r requirements.txt
       # These guarded on apps/api/tests, which has never existed in this repo,
       # so the job printed a reassuring message and passed without running a
       # test. A guard whose false branch always wins is not a guard.
-      - name: Council and security (report what the partial restore blocks)
+      - name: Council and security (no database)
         run: |
-          missing=0
           if [ ! -f services/agents/executor.py ]; then
-            echo "::warning::services/agents/executor.py is absent from this partial restore."
-            echo "::warning::It blocks test_council.py and test_phase4_council.py — see RESTORE.md."
-            missing=1
+            echo "::error::services/agents/executor.py is absent — it blocks test_council.py and test_phase4_council.py. See RESTORE.md."
+            exit 1
           fi
-          if [ "$missing" = "0" ]; then
-            python -m pytest test_council.py test_phase4_council.py -q --tb=short
-          fi
-          python -m pytest test_security.py -q --tb=short
+          # The two stream tests drive the endpoint through a real database, so
+          # they belong to the `api` job, which provisions one and runs the whole
+          # suite. Named individually rather than filtered by keyword: a `-k`
+          # pattern would silently widen as tests are added.
+          python -m pytest test_council.py test_phase4_council.py test_security.py \
+            -q --tb=short \
+            --deselect test_phase4_council.py::test_stream_endpoint_emits_events_and_persists \
+            --deselect test_phase4_council.py::test_stream_endpoint_reports_errors_as_events
 
   api:
     name: API suite (PostgreSQL 16 + pgvector)
@@ -102,30 +109,50 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install API dependencies (skip if this snapshot has none)
+      # The root requirements.txt is the one this suite runs on; apps/api's
+      # is the older snapshot's. Installing it unconditionally is also what
+      # makes the failure visible if it ever goes missing.
+      - name: Install dependencies
         run: |
-          if [ ! -f apps/api/requirements.txt ]; then
-            echo "No apps/api/requirements.txt in this snapshot — skipping."
-            exit 0
-          fi
           python -m pip install --quiet --upgrade pip
-          python -m pip install --quiet -r apps/api/requirements.txt
-          python -m pip install --quiet ruff pytest pytest-asyncio httpx asyncpg alembic
-      - name: Alembic upgrade
-        working-directory: apps/api
+          python -m pip install --quiet -r requirements.txt
+
+      # The schema files are what conftest.py builds the test database from,
+      # and 001 was absent for long enough that every database-backed suite
+      # was unrunnable. Fail loudly rather than skip if that recurs.
+      - name: The test fixture's schema files are present
         run: |
-          if [ -f alembic.ini ]; then alembic upgrade head; else echo "no alembic.ini"; fi
-      - name: Alembic downgrade+upgrade (sanity)
-        working-directory: apps/api
+          for f in 001_initial_schema 002_workflow_runs 003_schedule_dispatch; do
+            test -s "database/schemas/$f.sql" || { echo "::error::database/schemas/$f.sql is missing or empty"; exit 1; }
+          done
+
+      # The suite runs BEFORE the migration round-trip, because conftest.py
+      # builds its database from database/schemas/*.sql — not from Alembic. The
+      # round-trip is an extra check on the migrations, and running it first
+      # meant its failure skipped the suite entirely, so the tests this job
+      # exists for went unrun three times over.
+      # The whole suite, against a real database. This job used to run
+      # `apps/api/tests` — a directory that has never existed here — so it
+      # passed without executing a single test.
+      - name: Full suite (PostgreSQL)
+        run: python -m pytest -q --tb=short 2>&1 | tee pytest.out
+
+      # The runner appends the whole Postgres service-container log after the
+      # steps, and that log echoes the entire init schema — hundreds of lines.
+      # Anything a failing step printed is buried above it, unreachable by
+      # tailing the job log. Re-printing the summary last is what makes a
+      # failure readable at all.
+      # Prints whichever step actually produced output. The first version of
+      # this only covered pytest.out, so when alembic was the step that failed
+      # the summary printed nothing and the real error stayed buried.
+      - name: Failure summary
+        if: failure()
         run: |
-          if [ -f alembic.ini ]; then
-            alembic downgrade 001_baseline || true
-            alembic upgrade head || true
-          fi
-      - run: |
-          if [ -d apps/api/tests ]; then
-            python -m pytest apps/api/tests -q --tb=short
-          else
-            echo "No apps/api/tests — skipped"
-          fi
-      - run: ruff check . || true
+          for f in pytest.out; do
+            [ -f "$f" ] || continue
+            echo "=== $f (last 40) ==="
+            tail -40 "$f"
+          done
+
+      - name: Lint
+        run: ruff check . || true
