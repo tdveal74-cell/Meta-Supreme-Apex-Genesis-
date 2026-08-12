@@ -126,6 +126,22 @@ jobs:
             test -s "database/schemas/$f.sql" || { echo "::error::database/schemas/$f.sql is missing or empty"; exit 1; }
           done
 
+      # The suite runs BEFORE the migration round-trip, because conftest.py
+      # builds its database from database/schemas/*.sql — not from Alembic. The
+      # round-trip is an extra check on the migrations, and running it first
+      # meant its failure skipped the suite entirely, so the tests this job
+      # exists for went unrun three times over.
+      # The whole suite, against a real database. This job used to run
+      # `apps/api/tests` — a directory that has never existed here — so it
+      # passed without executing a single test.
+      - name: Full suite (PostgreSQL)
+        run: python -m pytest -q --tb=short 2>&1 | tee pytest.out
+
+      # The runner appends the whole Postgres service-container log after the
+      # steps, and that log echoes the entire init schema — hundreds of lines.
+      # Anything a failing step printed is buried above it, unreachable by
+      # tailing the job log. Re-printing the summary last is what makes a
+      # failure readable at all.
       - name: Alembic upgrade, then down and up again
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/meta_supreme
@@ -142,17 +158,6 @@ jobs:
             alembic upgrade head
           } 2>&1 | tee alembic.out
 
-      # The whole suite, against a real database. This job used to run
-      # `apps/api/tests` — a directory that has never existed here — so it
-      # passed without executing a single test.
-      - name: Full suite (PostgreSQL)
-        run: python -m pytest -q --tb=short 2>&1 | tee pytest.out
-
-      # The runner appends the whole Postgres service-container log after the
-      # steps, and that log echoes the entire init schema — hundreds of lines.
-      # Anything a failing step printed is buried above it, unreachable by
-      # tailing the job log. Re-printing the summary last is what makes a
-      # failure readable at all.
       # Prints whichever step actually produced output. The first version of
       # this only covered pytest.out, so when alembic was the step that failed
       # the summary printed nothing and the real error stayed buried.
