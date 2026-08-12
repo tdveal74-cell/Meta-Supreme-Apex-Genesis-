@@ -2,7 +2,7 @@
 
 import pytest
 
-from definition import (
+from services.workflows.definition import (
     EFFECT_STEP_TYPES,
     StepType,
     WorkflowDefinition,

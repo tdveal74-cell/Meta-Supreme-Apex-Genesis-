@@ -1,26 +1,24 @@
 """
-Logging shim.
-
-Imports from `logging_setup`, NOT `logging`. The implementation used to live in
-a root-level `logging.py`, which shadowed the standard library for anything
-running with the repository root on `sys.path` — which CI does, via PYTHONPATH.
-
-That was not a theoretical hazard. `pip` itself could not start in CI:
-
-    pip/_internal/utils/_log.py: import logging
-      -> <repo>/logging.py: from app.core.config import settings
-        -> config.py: from pydantic_settings import ...
-          -> ModuleNotFoundError: No module named 'pydantic_settings'
-
-Dependency installation died before a single test ran. Never name a top-level
-module after a standard library one.
+Structured logging setup.
 """
 
-try:
-    from logging_setup import setup_logging  # noqa: F401
-except ImportError:  # pragma: no cover - fallback for partial checkouts
+import logging
+import sys
 
-    def setup_logging() -> None:
-        import logging
+from app.core.config import settings
 
-        logging.basicConfig(level=logging.INFO)
+
+def setup_logging() -> None:
+    """Configure root logger for the application."""
+    log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
+
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
+
+    # Reduce noise from third-party libraries
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)

@@ -40,8 +40,13 @@ test:
 standalone:
 	uvicorn standalone_api:app --reload --host 0.0.0.0 --port 8000
 
+# `python3 -m pytest`, not `pytest`: the bare console script belongs to
+# whichever environment installed it, which is not necessarily the
+# interpreter holding this project's dependencies. That mismatch reports as
+# a missing module and sends people hunting for a package they already have.
 test-offline:
-	pytest test_billing.py test_definition.py -q
+	python3 -m pytest test_billing.py test_definition.py test_providers.py \
+	       test_schedule.py test_workflow_engine.py test_security.py -q
 
 lint:
 	pnpm -r lint || true
