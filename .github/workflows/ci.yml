@@ -22,10 +22,20 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install minimal deps
-        run: python -m pip install --quiet fastapi uvicorn pydantic pytest httpx
-      - name: Offline smoke tests (documented zero-key path)
-        run: python -m pytest test_billing.py test_definition.py -q --tb=short
+      - name: Install offline deps
+        run: python -m pip install --quiet fastapi uvicorn pydantic pydantic-settings pytest pytest-asyncio httpx
+      # The whole zero-infrastructure suite, named file by file. This ran only
+      # test_billing and test_definition — 12 of the 74 tests that need no
+      # database — while nine other files could not even be imported, so CI was
+      # green over a suite that mostly did not run.
+      - name: Offline suite (no database, no keys)
+        run: |
+          python -m pytest -q --tb=short \
+            test_billing.py \
+            test_definition.py \
+            test_providers.py \
+            test_schedule.py \
+            test_workflow_engine.py
 
   engine:
     name: Engine + cadence (no database)
@@ -39,13 +49,22 @@ jobs:
         with:
           python-version: "3.11"
       - run: python -m pip install --quiet pytest pytest-asyncio
-      - name: Engine tests (best effort if paths present)
+      # These guarded on apps/api/tests, which has never existed in this repo,
+      # so the job printed a reassuring message and passed without running a
+      # test. A guard whose false branch always wins is not a guard.
+      - name: Council and security (report what the partial restore blocks)
         run: |
-          if [ -f apps/api/tests/test_workflow_engine.py ]; then
-            python -m pytest apps/api/tests/test_workflow_engine.py apps/api/tests/test_schedule.py -q
-          else
-            echo "Monorepo engine tests not present in this snapshot — standalone job is canonical."
+          python -m pip install --quiet "python-jose[cryptography]" "passlib[bcrypt]" || true
+          missing=0
+          if [ ! -f services/agents/executor.py ]; then
+            echo "::warning::services/agents/executor.py is absent from this partial restore."
+            echo "::warning::It blocks test_council.py and test_phase4_council.py — see RESTORE.md."
+            missing=1
           fi
+          if [ "$missing" = "0" ]; then
+            python -m pytest test_council.py test_phase4_council.py -q --tb=short
+          fi
+          python -m pytest test_security.py -q --tb=short
 
   api:
     name: API suite (PostgreSQL 16 + pgvector)
