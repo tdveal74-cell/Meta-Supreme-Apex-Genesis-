@@ -2,7 +2,7 @@
   "name": "meta-supreme-apex-genesis",
   "private": true,
   "scripts": {
-    "dev:web": "pnpm --filter web dev",
-    "build:web": "pnpm --filter web build"
+    "dev:web": "pnpm --filter @meta-supreme/web dev",
+    "build:web": "pnpm --filter @meta-supreme/web build"
   }
 }

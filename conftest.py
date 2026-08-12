@@ -32,7 +32,20 @@ import pytest  # noqa: E402
 #     pip install pytest pytest-asyncio
 #     bash scripts/verify-offline.sh
 
-_REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
+# Walk up to the directory that actually holds `database/schemas`, rather than
+# counting parents. This file was flattened here from a nested location where
+# `parents[3]` was the repo root; at the root it indexes past the filesystem
+# root and raises IndexError, so collection died before a single test ran.
+def _find_repo_root(start: pathlib.Path) -> pathlib.Path:
+    for candidate in (start, *start.parents):
+        if (candidate / "database" / "schemas").is_dir():
+            return candidate
+    # No schemas anywhere: the offline suites do not need them, so fall back to
+    # this file's directory rather than failing collection for every test.
+    return start
+
+
+_REPO_ROOT = _find_repo_root(pathlib.Path(__file__).resolve().parent)
 _SCHEMA_DIR = _REPO_ROOT / "database" / "schemas"
 _BASELINE_SCHEMA = _SCHEMA_DIR / "001_initial_schema.sql"
 
