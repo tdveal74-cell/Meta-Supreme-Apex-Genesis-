@@ -1,7 +1,8 @@
 """Basic health endpoint tests."""
 
-from app.main import app
 from fastapi.testclient import TestClient
+
+from app.main import app
 
 client = TestClient(app)
 

@@ -20,13 +20,13 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.knowledge import Embedding, KnowledgeItem
-from services.knowledge.chunking import chunk_text
 from services.intelligence.providers.embeddings import create_embedding_provider
+from services.knowledge.chunking import chunk_text
 
 logger = logging.getLogger(__name__)
 
@@ -195,7 +195,11 @@ async def ingest_text(
         provider = _embedding_provider()
         vectors = await provider.embed([c["text"] for c in chunks])
 
-        for idx, (chunk, vector) in enumerate(zip(chunks, vectors)):
+        # strict=True: a provider that returns fewer vectors than chunks is a
+        # bug, and an unstrict zip absorbs it silently — the tail of the document
+        # never gets embedded, the item is still marked "ready", and the missing
+        # content simply never turns up in a search. Better to raise here.
+        for idx, (chunk, vector) in enumerate(zip(chunks, vectors, strict=True)):
             db.add(
                 Embedding(
                     knowledge_item_id=item.id,

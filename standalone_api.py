@@ -36,12 +36,12 @@ from billing import (
     get_plan,
     plan_summary,
 )
+from services.agents.registry import get_agent, list_active_agents
 from services.workflows.definition import (
     EFFECT_STEP_TYPES,
     WorkflowDefinition,
     WorkflowDefinitionError,
 )
-from services.agents.registry import AGENT_REGISTRY, get_agent, list_active_agents
 
 NON_NEGOTIABLES = [
     "Not a chatbot — multi-agent Council + synthesis only",

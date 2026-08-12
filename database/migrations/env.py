@@ -35,8 +35,8 @@ if config.config_file_name is not None and not config.attributes.get("quiet_logg
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 try:  # enables --autogenerate; not required to run migrations
-    from app.db.session import Base
     import app.models  # noqa: F401  — registers every mapper on Base.metadata
+    from app.db.session import Base
 
     target_metadata = Base.metadata
 except Exception:  # pragma: no cover - import environment dependent

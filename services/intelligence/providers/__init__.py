@@ -7,6 +7,7 @@ package they were written in. Restoring the package is what makes those imports
 resolve; nothing inside the modules had to change.
 """
 
+from services.intelligence.providers.anthropic_provider import AnthropicProvider
 from services.intelligence.providers.base import (
     AIProvider,
     ChatMessage,
@@ -22,7 +23,6 @@ from services.intelligence.providers.base import (
     TokenUsage,
     extract_json,
 )
-from services.intelligence.providers.anthropic_provider import AnthropicProvider
 from services.intelligence.providers.embeddings import (
     EmbeddingProvider,
     EmbeddingResponse,
