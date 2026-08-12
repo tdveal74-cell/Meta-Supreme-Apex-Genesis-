@@ -46,8 +46,13 @@ services:
 
   web:
     build:
-      context: ../../apps/web
-      dockerfile: ../../infrastructure/docker/Dockerfile.web
+      # The repository root, exactly as the api service above uses. Dockerfile.web
+      # copies package.json, pnpm-workspace.yaml and packages/ — none of which
+      # exist under apps/web — so a context scoped to apps/web fails on its first
+      # COPY. The old `dockerfile:` path also climbed out of its own context,
+      # which the builder rejects outright.
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.web
     container_name: meta-supreme-web
     restart: unless-stopped
     environment:
@@ -57,9 +62,14 @@ services:
     depends_on:
       - api
     volumes:
-      - ../../apps/web:/app
-      - /app/node_modules
-      - /app/.next
+      # The image installs the whole workspace at /app and works from
+      # /app/apps/web, so the source mount has to land at /app/apps/web. Mounting
+      # it over /app buried the workspace root — pnpm-workspace.yaml, packages/ui
+      # and the installed node_modules all vanished behind it, and @meta-supreme/ui
+      # stopped resolving.
+      - ../../apps/web:/app/apps/web
+      - /app/apps/web/node_modules
+      - /app/apps/web/.next
     command: pnpm dev
 
 volumes:
