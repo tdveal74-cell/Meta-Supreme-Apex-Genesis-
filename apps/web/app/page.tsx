@@ -43,16 +43,16 @@ export default function HomePage() {
           </div>
           <nav className="flex items-center gap-3 sm:gap-4">
             <Link
-              href="/login"
+              href="/council/deliberate"
               className="hidden text-sm font-medium text-navy/70 transition hover:text-navy sm:inline"
             >
-              Sign in
+              Council
             </Link>
             <Link
-              href="/login"
+              href="/council/deliberate"
               className="rounded-lg bg-navy px-4 py-2 text-sm font-medium text-surface shadow-soft transition hover:bg-navy-800 focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-2"
             >
-              Enter system
+              Deliberate
             </Link>
           </nav>
         </div>
@@ -81,10 +81,10 @@ export default function HomePage() {
               </p>
               <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
                 <Link
-                  href="/login"
+                  href="/council/deliberate"
                   className="inline-flex min-h-11 items-center justify-center rounded-lg bg-navy px-7 text-sm font-medium text-surface shadow-elevated transition hover:bg-navy-800"
                 >
-                  Open Command Center
+                  Open Council
                 </Link>
                 <Link
                   href="#system"
@@ -94,7 +94,7 @@ export default function HomePage() {
                 </Link>
               </div>
               <p className="mt-6 text-xs text-navy/45">
-                Offline mock provider available · zero keys required for local runs
+                Offline simulated path · zero keys required
               </p>
             </div>
           </div>
@@ -141,10 +141,10 @@ export default function HomePage() {
                 </p>
               </div>
               <Link
-                href="/login"
+                href="/council/deliberate"
                 className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg bg-amber px-6 text-sm font-semibold text-navy shadow-soft transition hover:bg-amber-500"
               >
-                Start with mock intelligence
+                Run a deliberation
               </Link>
             </div>
           </div>
