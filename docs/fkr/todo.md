@@ -1,20 +1,20 @@
 # Federated Knowledge Retrieval System - Task Checklist
 
-**Design locked:** 2026-08-14  
-**Plan:** `docs/fkr/plan.md`  
-**Spec:** `docs/fkr/design-spec.md`  
+**Design locked:** 2026-08-14
 **Gauntlet:** `docs/fkr/GAUNTLET.md`
+**Phase 1 status:** `docs/fkr/PHASE1_STATUS.md`
 
 ## Phase 1: Foundation
-- [ ] Task 1: Alembic migration for narrow-waist evolution
-- [ ] Task 2: Update SQLAlchemy models
+- [x] Task 1: Alembic migration for narrow-waist evolution (source written; not applied)
+- [x] Task 2: Update SQLAlchemy models (source written; dual path)
 
 ### Checkpoint: Foundation
-- [ ] Migration + models applied; existing knowledge paths still work
-- [ ] Human review before proceeding
+- [ ] Migration + models applied on Docker Postgres
+- [ ] Existing knowledge tests pass
+- [ ] Human review before Phase 2
 
 ## Phase 2: Core Retrieval (Stage 4)
-- [ ] Task 3: Pure RRF function + unit tests
+- [x] Task 3: Pure RRF function + unit tests (source written)
 - [ ] Task 4: hybrid_retrieve service
 
 ### Checkpoint: Core Retrieval
@@ -25,18 +25,9 @@
 - [ ] Task 5: Distillation helper
 - [ ] Task 6: Evolved ingest pipeline + FastAPI /ingest
 
-### Checkpoint: Ingestion
-- [ ] Can ingest a document and immediately retrieve it via hybrid path
-- [ ] Human review
-
 ## Phase 4: Synthesis and Query Surface (Stage 5)
 - [ ] Task 7: Re-ranker + synthesize_with_governance
 - [ ] Task 8: FastAPI /query endpoint
-
-### Checkpoint: Full Pipeline
-- [ ] End-to-end ingest to hybrid to synthesize with citations works
-- [ ] All tests green
-- [ ] Human review of sample answers
 
 ## Phase 5: Hardening and Docs
 - [ ] Task 9: Test suite expansion + regression protection
