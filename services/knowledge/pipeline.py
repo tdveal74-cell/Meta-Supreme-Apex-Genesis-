@@ -1,6 +1,7 @@
 """FKR pipeline: ingest_and_distill + query orchestration.
 
 Keeps pure-semantic search_knowledge alive; hybrid path is additive.
+Stage 5 now uses cross-encoder (LLM-as-judge) re-ranking when available.
 """
 
 from __future__ import annotations
@@ -16,7 +17,11 @@ from services.intelligence.providers.embeddings import create_embedding_provider
 from services.knowledge.chunking import chunk_text
 from services.knowledge.distillation import distill_content
 from services.knowledge.retrieval import RetrievalCandidate, hybrid_retrieve
-from services.knowledge.synthesis import SynthesizedAnswer, synthesize_with_governance
+from services.knowledge.synthesis import (
+    SynthesizedAnswer,
+    synthesize_with_cross_encoder,
+    synthesize_with_governance,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +35,21 @@ def _embedding_provider():
         openai_api_key=getattr(settings, "OPENAI_API_KEY", None),
         model=getattr(settings, "EMBEDDING_MODEL", None),
     )
+
+
+def _completion_provider():
+    """Best-effort completion provider for cross-encoder judging."""
+    try:
+        from services.intelligence.providers.factory import create_completion_provider
+
+        name = getattr(settings, "DEFAULT_AI_PROVIDER", "mock")
+        return create_completion_provider(
+            name,
+            openai_api_key=getattr(settings, "OPENAI_API_KEY", None),
+            anthropic_api_key=getattr(settings, "ANTHROPIC_API_KEY", None),
+        )
+    except Exception:
+        return None
 
 
 async def ingest_and_distill(
@@ -156,7 +176,7 @@ async def query_knowledge(
     project_id: Optional[str] = None,
     user_tokens: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
-    """Hybrid retrieve + synthesize. Returns answer, citations, candidates."""
+    """Hybrid retrieve + cross-encoder re-rank + synthesize."""
     provider = _embedding_provider()
     embed_result = await provider.embed([query])
     if not embed_result.vectors:
@@ -170,12 +190,18 @@ async def query_knowledge(
         owner_id=owner_id,
         query=query,
         query_vec=embed_result.vectors[0],
-        limit=limit,
+        limit=max(limit * 3, 18),  # larger RRF pool for the re-ranker
         project_id=project_id,
         user_tokens=user_tokens,
     )
-    answer = synthesize_with_governance(
-        query=query, candidates=candidates, owner_id=owner_id
+
+    completion = _completion_provider()
+    answer = await synthesize_with_cross_encoder(
+        query=query,
+        candidates=candidates,
+        owner_id=owner_id,
+        max_citations=limit,
+        provider=completion,
     )
     return _pack(answer, candidates)
 
@@ -186,6 +212,7 @@ def _pack(answer: SynthesizedAnswer, candidates: List[RetrievalCandidate]) -> Di
         "cleared": answer.cleared,
         "refusal_reason": answer.refusal_reason,
         "simulated": answer.simulated,
+        "rerank_method": getattr(answer, "rerank_method", "unknown"),
         "citations": [
             {
                 "index": c.index,
@@ -193,6 +220,7 @@ def _pack(answer: SynthesizedAnswer, candidates: List[RetrievalCandidate]) -> Di
                 "title": c.title,
                 "chunk_index": c.chunk_index,
                 "score": c.score,
+                "rerank_score": c.rerank_score,
                 "excerpt": c.excerpt,
             }
             for c in answer.citations
