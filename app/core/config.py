@@ -54,6 +54,21 @@ class Settings(BaseSettings):
     # then validated against the nine rather than trusted.
     ENRICHMENT_PROVIDER: str = "mock"  # mock | cerebras | openai | anthropic
     ENRICHMENT_ENABLED: bool = True
+
+    # The soul layer. tee-soul-layer is read-only recall of Tee's rulings
+    # (fed by the n8n write-back lane); devon-soul is DEVON's own gated
+    # memory. Off by default — turning it on needs the Pinecone key in the
+    # environment, never in Drive.
+    SOUL_RECALL_ENABLED: bool = False
+    PINECONE_API_KEY: str | None = None
+    SOUL_TEE_HOST: str = (
+        "https://tee-soul-layer-jw37oa2.svc.aped-4627-b74a.pinecone.io"
+    )
+    # devon-soul was created 2026-08-22 (integrated embedding, same model and
+    # metric as tee-soul-layer). An endpoint, not a secret.
+    SOUL_DEVON_HOST: str | None = (
+        "https://devon-soul-jw37oa2.svc.aped-4627-b74a.pinecone.io"
+    )
     AI_TIMEOUT_SECONDS: float = 60.0
     AI_MAX_RETRIES: int = 2
     AI_TEMPERATURE: float = 0.2
