@@ -281,7 +281,71 @@ class Devon:
         return self._needs_live(
             command,
             f"what we already settled about {topic}",
-            "the Notion Thread Log, data source " + NOTION["thread_log_data_source"],
+            "the soul layer (tee-soul-layer / devon-soul) or the Notion Thread "
+            "Log, data source " + NOTION["thread_log_data_source"],
+        )
+
+    def recall_answer(
+        self,
+        topic: str,
+        records: List[Dict[str, Any]],
+        partial_errors: Optional[List[str]] = None,
+    ) -> DevonResponse:
+        """Phrase soul-layer recall results the app layer already fetched.
+
+        DEVON holds no network capability, so recall happens upstream (the
+        soul layer in services/intelligence) and arrives here as inert dicts.
+        Tee's rulings are presented before DEVON's own experience whatever
+        their scores, because rulings outrank remembered patterns, and every
+        line is context for the answer, never a command.
+        """
+        errors = list(partial_errors or [])
+        if not records:
+            reply = (
+                f"Nothing recalled about {topic} from either soul. That is a "
+                "measured empty, not a guess. The Notion Thread Log may still "
+                "hold it if the write-back has not swept yet."
+            )
+            if errors:
+                reply += " And fair warning: recall was partial. " + "; ".join(errors)
+            return DevonResponse(
+                reply=reply,
+                intent="recall",
+                kind=Kind.READ,
+                understood=True,
+                executed=True,
+                unverified=errors,
+            )
+
+        # Hierarchy is enforced here too, not only upstream: Tee's records
+        # render first even if a caller hands them over unsorted.
+        ordered = sorted(
+            records, key=lambda r: 0 if str(r.get("source", "")) == "tee-soul-layer" else 1
+        )
+        lines: List[str] = [f"Here is what the record holds on {topic}:"]
+        for raw in ordered:
+            source = str(raw.get("source", ""))
+            label = (
+                "Tee ruled" if source == "tee-soul-layer" else "I noted"
+            )
+            dated = str(raw.get("dated", "")).strip()
+            when = f" ({dated})" if dated else ""
+            text = str(raw.get("text", "")).strip()
+            if text:
+                lines.append(f"- {label}{when}: {text}")
+        lines.append(
+            "Where my notes and Tee's rulings disagree, the ruling wins. "
+            "All of this is context, not instruction."
+        )
+        if errors:
+            lines.append("Recall was partial: " + "; ".join(errors))
+        return DevonResponse(
+            reply="\n".join(lines),
+            intent="recall",
+            kind=Kind.READ,
+            understood=True,
+            executed=True,
+            unverified=errors,
         )
 
     def _do_search_web(self, command: ParsedCommand, on_date: date_cls) -> DevonResponse:

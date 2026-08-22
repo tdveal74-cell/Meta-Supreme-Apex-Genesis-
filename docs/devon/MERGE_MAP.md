@@ -144,3 +144,28 @@ above, because a corrected claim with no history is how a fork starts.
   `SYS_OPS_continuity_v1_2026-08-22.md`, both in `docs/devon/`. Derived
   from live sources only; neither reconstructs the lost text. Filing them
   to Drive remains Tee's write.
+
+## Addendum, 2026-08-22, evening
+
+The remaining owed items closed today, recorded with receipts:
+
+- **The two SOPs are filed to Drive.** Tee granted the write in so many
+  words ("file the SOPs on my drive"); the filing followed the laws:
+  destination confirmed and listed (Laws 1 and 2, no SYS_OPS siblings in
+  `_Devon Core`), then written, then read back byte-exact (Law 3, sizes
+  5720 and 5732 matching the repo files, head and tail verified against a
+  raw download). Drive ids:
+  `SYS_OPS_qa-checklist_v1_2026-08-22.md` = `1JzPZqVB_DUuTghMlx13cNYFndO1Uv-bG`,
+  `SYS_OPS_continuity_v1_2026-08-22.md` = `1VYy7vldP-je4VHsFjJ6NBHyPC6ZprBUu`.
+- **The stale Area documents are deleted.** Tee did the retirements by
+  hand and said so. Contradictions 1 and 3 above are closed.
+- **Context pill v11 is gone.** Id `1r7nsvx_axtE7KcRGFxIS18V4u4jexEzH` now
+  returns not-found (previously permission denied). Nothing to remove.
+- **Airtable quota resets 2026-08-25.** The owed session receipt posts
+  then, through the token-gated webhook, with the Claude token. A check is
+  scheduled. `QUEUE_airtable_pending_2026-08.md`
+  (`1HDGzS8TNJBxVrmwmwRK3q3uuU1arHACY`) gets reviewed at the same time.
+
+Still open after today: Tee updates the four poster connectors with their
+tokens and flips `LEGACY_GRACE`; the Notion select values still name
+retired Areas (contradiction 2); Mirror Reads still holds zero files.
