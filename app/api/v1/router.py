@@ -16,6 +16,7 @@ from app.api.v1 import (
     knowledge_fkr,
     memory,
     projects,
+    soul,
     workflows,
 )
 
@@ -33,3 +34,4 @@ api_router.include_router(memory.router)
 api_router.include_router(decisions.router)
 api_router.include_router(workflows.router)
 api_router.include_router(devon.router)
+api_router.include_router(soul.router)
