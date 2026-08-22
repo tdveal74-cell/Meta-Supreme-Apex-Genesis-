@@ -205,3 +205,27 @@ by a test.
 Per hard rule 5, the objection is logged once and the ruling stands. The list
 travels unedited in `SYS_SPEC_voice-standard_v2` for the `tee-voice` skill to
 apply with its own exempt categories.
+
+## The console
+
+`docs/devon/assets/SYS_OPS_devon-console_v1_2026-08-22.html`
+
+A single file HUD over everything above: the vault rail, doctrine versions, the
+nine Areas as a brain map, the Council's nine seats, the eight filing laws, the
+approval gate, the automations, and what is currently blocked. It opens in any
+browser with no server and no keys.
+
+The command bar is the useful part rather than the decorative one. Type a
+command and it parses against the same intent set and the same confidence floors
+as `commands.py`, then shows what DEVON would do: a capture resolves an Area and
+builds a conforming filename, a gated effect raises an approval and runs
+nothing, and a half heard sentence is declined rather than guessed at.
+
+**It is a snapshot and it says so at the top.** The panels are rendered from the
+DEVON modules at build time. Drive, Notion, Airtable and n8n were not read to
+draw it, so a number here is only as current as the build. That warning is not
+decoration: the vault's own rule is that a regenerated HUD lives where it was
+generated and the vault stays stale until someone saves it back.
+
+Regenerate by rebuilding the state and re-injecting it. The filename follows the
+convention and was built by `naming.build_filename` rather than typed.
