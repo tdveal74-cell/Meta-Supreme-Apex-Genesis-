@@ -208,7 +208,7 @@ apply with its own exempt categories.
 
 ## The console
 
-`docs/devon/assets/SYS_OPS_devon-console_v1_2026-08-22.html`
+`docs/devon/assets/SYS_OPS_devon-console_v2_2026-08-22.html`
 
 A single file HUD over everything above: the vault rail, doctrine versions, the
 nine Areas as a brain map, the Council's nine seats, the eight filing laws, the
@@ -229,3 +229,35 @@ generated and the vault stays stale until someone saves it back.
 
 Regenerate by rebuilding the state and re-injecting it. The filename follows the
 convention and was built by `naming.build_filename` rather than typed.
+
+### Voice
+
+v2 makes the console talk. It uses the browser's own Web Speech API, so there is
+no key, no service and no audio leaving the machine.
+
+**Speaking.** DEVON answers aloud through speech synthesis. The voice, pace and a
+mute toggle sit under the transcript. Browsers refuse to speak before a user
+gesture, so the greeting is written immediately and voiced on the first click
+rather than failing silently.
+
+**Listening.** The orb starts speech recognition. Interim words appear as he
+hears them, and the final phrase goes through the same router as the typed line.
+Recognition exists in Chrome, Edge and Safari and does not in Firefox, and a
+sandboxed frame may refuse microphone permission. Both cases say so plainly and
+leave the typed line working, because a console that silently stops listening is
+worse than one that never offered.
+
+**The gate is live.** A gated command raises a real request with an id, a stated
+consequence, a single use token, a 72 hour countdown and APPROVE or REFUSE
+buttons. Ruling on it moves the record to the history strip. Every refusal path
+resolves to `NO_MATCH`, the same sentinel the Python queue uses.
+
+**The register.** Lines are drawn from a small set per outcome so repeated
+commands do not read as a recording. All of them hold the persona's boundary:
+the warmth is in courtesy and in unhurried sentence rhythm, never in phonetic
+dialect spelling. If a line would read as a stereotype rather than a person it
+is wrong, and that constraint is load bearing rather than decorative.
+
+He also stays inside the hard rules while talking. He never says a thing ran when
+it did not, he hands every ruling back, and asked for state he has not read he
+says so rather than inventing a number in a friendly voice.
