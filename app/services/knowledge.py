@@ -9,7 +9,7 @@ Public surface used by the rest of the app:
 
 - search_knowledge(...)        — semantic search scoped to the owner
 - retrieve_for_context(...)    — top-k chunks folded into Council context
-- ingest_text(...)             — persist + chunk + embed a knowledge item
+- ingest_knowledge(...)        — persist + chunk + embed a knowledge item
 
 Dependency direction: app → services. This module may import models and
 services.*; the services layer never imports app.*.
@@ -152,7 +152,7 @@ async def retrieve_for_context(
     ]
 
 
-async def ingest_text(
+async def ingest_knowledge(
     db: AsyncSession,
     *,
     owner_id: str,
@@ -160,6 +160,7 @@ async def ingest_text(
     content: str,
     project_id: Optional[str] = None,
     source_type: str = "manual",
+    source_uri: Optional[str] = None,
     meta: Optional[Dict[str, Any]] = None,
 ) -> KnowledgeItem:
     """
@@ -174,6 +175,7 @@ async def ingest_text(
         title=(title or "Untitled").strip()[:500],
         content=content or "",
         source_type=source_type,
+        source_uri=source_uri,
         status="processing",
         meta=meta or {},
     )

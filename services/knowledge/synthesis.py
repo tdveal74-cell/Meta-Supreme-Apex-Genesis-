@@ -16,7 +16,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, List, Optional, Sequence
 
 from services.knowledge.retrieval import RetrievalCandidate
 
@@ -83,8 +83,8 @@ def _offline_rerank(
 
     ordered = sorted(candidates, key=score, reverse=True)
     for c in ordered:
-        setattr(c, "rerank_score", score(c))
-        setattr(c, "rerank_reason", "offline-lexical")
+        c.rerank_score = score(c)
+        c.rerank_reason = "offline-lexical"
     return ordered[: max(1, top_k)]
 
 
@@ -157,8 +157,8 @@ async def cross_encoder_rerank(
         score, reason = await _llm_judge_score(query, c.content, provider)
         # Light prior from original RRF so a zero judge score does not erase consensus
         blended = 0.85 * score + 0.15 * (float(c.score) * 10.0)
-        setattr(c, "rerank_score", blended)
-        setattr(c, "rerank_reason", reason)
+        c.rerank_score = blended
+        c.rerank_reason = reason
         scored.append((blended, c, reason))
 
     scored.sort(key=lambda t: (-t[0], t[1].embedding_id))

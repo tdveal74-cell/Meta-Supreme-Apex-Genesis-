@@ -135,6 +135,12 @@ jobs:
       # `apps/api/tests` — a directory that has never existed here — so it
       # passed without executing a single test.
       - name: Full suite (PostgreSQL)
+        # pipefail is load bearing. Without it the pipeline reports tee's exit
+        # status, so a pytest failure -- including a collection error that runs
+        # zero tests -- passes this step silently. Same class as the
+        # `ruff check . || true` removed in #5: a gate that cannot fail is an
+        # observation, not a gate.
+        shell: bash -eo pipefail {0}
         run: python -m pytest -q --tb=short 2>&1 | tee pytest.out
 
       # The runner appends the whole Postgres service-container log after the
