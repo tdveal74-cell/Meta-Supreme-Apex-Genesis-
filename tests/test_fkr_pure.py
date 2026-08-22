@@ -10,7 +10,7 @@ from services.knowledge.synthesis import synthesize_with_governance
 def test_distill_rejects_empty():
     try:
         distill_content(title="x", content="")
-        assert False, "expected ValueError"
+        raise AssertionError("expected ValueError")
     except ValueError:
         pass
 

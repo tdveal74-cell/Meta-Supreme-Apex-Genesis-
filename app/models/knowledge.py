@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import uuid4
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -58,9 +59,10 @@ class Embedding(Base):
     )
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    # Stored as vector(1536) in Postgres. ORM accepts list for ingest writes;
-    # hybrid retrieval uses native pgvector operators via SQL.
-    embedding: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    # vector(1536) in Postgres, mapped with the real pgvector type — a JSONB
+    # mapping renders `$N::JSONB` on INSERT and Postgres refuses jsonb→vector.
+    # Hybrid retrieval uses native pgvector operators via SQL.
+    embedding: Mapped[Optional[list]] = mapped_column(Vector(1536), nullable=True)
     meta: Mapped[dict] = mapped_column("metadata", JSONB, default=dict, nullable=False)
     # Denormalized waist fields (back-filled from knowledge_items).
     source: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

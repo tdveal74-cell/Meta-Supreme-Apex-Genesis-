@@ -23,12 +23,17 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+        message = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
         return JSONResponse(
             status_code=exc.status_code,
+            headers=getattr(exc, "headers", None),
             content={
+                # FastAPI's standard error field — what clients (and the test
+                # suite) read first. The structured envelope rides alongside.
+                "detail": message,
                 "error": {
                     "code": "http_error",
-                    "message": exc.detail if isinstance(exc.detail, str) else str(exc.detail),
+                    "message": message,
                     "status": exc.status_code,
                 }
             },

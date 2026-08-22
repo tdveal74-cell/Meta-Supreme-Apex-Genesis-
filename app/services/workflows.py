@@ -320,6 +320,11 @@ async def start_run(
             f"A workflow with status {workflow.status!r} cannot be run"
         )
 
+    # Callers hand us whatever their layer uses for ids (the dispatcher passes
+    # the raw asyncpg uuid.UUID). Normalize once — meta is JSONB and json.dumps
+    # refuses UUID objects.
+    user_id = str(user_id)
+
     definition = parse_definition(workflow.definition)
     run = WorkflowRun(
         workflow_id=workflow.id,
