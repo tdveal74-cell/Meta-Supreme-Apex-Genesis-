@@ -208,7 +208,7 @@ apply with its own exempt categories.
 
 ## The console
 
-`docs/devon/assets/SYS_OPS_devon-console_v2_2026-08-22.html`
+`docs/devon/assets/SYS_OPS_devon-console_v3_2026-08-22.html`
 
 A single file HUD over everything above: the vault rail, doctrine versions, the
 nine Areas as a brain map, the Council's nine seats, the eight filing laws, the
@@ -261,3 +261,54 @@ is wrong, and that constraint is load bearing rather than decorative.
 He also stays inside the hard rules while talking. He never says a thing ran when
 it did not, he hands every ruling back, and asked for state he has not read he
 says so rather than inventing a number in a friendly voice.
+
+### Key generator
+
+v3 adds one, aimed at a job the vault already has open: webhook paths v1 records
+the Capture Hook reusing an ElevenLabs key as generic header auth, and says a
+purpose made secret is owed before it is published. The presets name that case
+first.
+
+Four formats: hex, base64url, UUID v4, and a word phrase for something a person
+has to read down a phone line. Entropy is computed from the alphabet actually in
+use and shown under the field, so a thin choice is visible rather than assumed
+strong. The 122 bit figure on UUID v4 is honest: six of its bits are fixed by
+the specification.
+
+Every byte of key material comes from `crypto.getRandomValues`, drawn through
+rejection sampling so that an alphabet which does not divide 256 cannot bias the
+low indices. `Math.random` appears once in the page, choosing which phrasing
+DEVON speaks, and never touches key material.
+
+Nothing is transmitted and nothing is persisted. The key is not written to
+browser storage, not logged to the transcript, and not spoken aloud. Storing a
+generated secret to make it convenient is how it stops being a secret. The panel
+also says plainly that a key never goes in the vault, which is the standing rule
+and the lesson from the plaintext SSH key found at Drive root.
+
+### Learning, and its honest limits
+
+He remembers corrections. When he cannot place a capture he asks where it should
+have gone, and the answer becomes a keyword mapping. When he declines an
+utterance he asks what it meant, and that becomes a phrase mapping. Both are
+consulted before the built in rules on the next attempt, and the readout says
+when a match came from something you taught rather than passing it off as built
+in.
+
+**What it does not do.** It does not retrain a model, it does not travel between
+devices or people, and it does not change the Python. It is a local correction
+memory in one browser, worth exactly what that is worth. The phrase "self
+learning" invites a larger assumption, so the limit is stated here and in the
+module rather than left to be discovered.
+
+**Two constraints are enforced, not merely documented.** A learned Area is
+validated against the nine when it is written and again when it is read, so no
+amount of teaching can mint a tenth. And because this is memory, it is
+transparent, editable and deletable: every entry is listed in full with its own
+delete control, EXPORT prints the entire store as JSON with nothing withheld,
+and FORGET ALL clears it. That is the platform's fourth non negotiable rather
+than a courtesy.
+
+Storage is `localStorage`, wrapped in try and catch on both read and write, so a
+private window or blocked site data degrades to a session that simply does not
+remember rather than one that breaks.
