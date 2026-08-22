@@ -81,15 +81,17 @@ async def search_knowledge(
         SELECT
             e.knowledge_item_id,
             ki.title,
+            ki.source_type,
             e.content,
             e.chunk_index,
-            (e.embedding <=> :query_vec) AS distance
+            (e.embedding <=> CAST(:query_vec AS vector)) AS distance
         FROM embeddings e
         JOIN knowledge_items ki ON ki.id = e.knowledge_item_id
         WHERE ki.owner_id = :owner_id
           AND ki.status = 'ready'
-          AND (:project_id IS NULL OR ki.project_id = :project_id)
-        ORDER BY e.embedding <=> :query_vec
+          AND (CAST(:project_id AS uuid) IS NULL
+               OR ki.project_id = CAST(:project_id AS uuid))
+        ORDER BY e.embedding <=> CAST(:query_vec AS vector)
         LIMIT :limit
         """
     )
@@ -108,6 +110,7 @@ async def search_knowledge(
         {
             "knowledge_item_id": str(row["knowledge_item_id"]),
             "title": row["title"] or "Untitled",
+            "source_type": row["source_type"] or "manual",
             "content": row["content"] or "",
             "chunk_index": int(row["chunk_index"]),
             "distance": float(row["distance"]) if row["distance"] is not None else 1.0,
@@ -185,41 +188,63 @@ async def ingest_knowledge(
     try:
         chunks = chunk_text(
             content or "",
-            chunk_size=getattr(settings, "CHUNK_SIZE", 800),
-            overlap=getattr(settings, "CHUNK_OVERLAP", 100),
+            chunk_chars=getattr(settings, "CHUNK_SIZE", 1500),
+            overlap_chars=getattr(settings, "CHUNK_OVERLAP", 200),
         )
         if not chunks:
             item.status = "ready"
             item.meta = {**(item.meta or {}), "chunk_count": 0}
             await db.flush()
+            await db.refresh(item)
             return item
 
         provider = _embedding_provider()
-        embedding = await provider.embed([c["text"] for c in chunks])
+        embedding = await provider.embed([c.content for c in chunks])
         vectors = embedding.vectors
 
         # strict=True: a provider that returns fewer vectors than chunks is a
         # bug, and an unstrict zip absorbs it silently — the tail of the document
         # never gets embedded, the item is still marked "ready", and the missing
         # content simply never turns up in a search. Better to raise here.
-        for idx, (chunk, vector) in enumerate(zip(chunks, vectors, strict=True)):
+        for chunk, vector in zip(chunks, vectors, strict=True):
             db.add(
                 Embedding(
                     knowledge_item_id=item.id,
-                    chunk_index=idx,
-                    content=chunk["text"],
+                    chunk_index=chunk.index,
+                    content=chunk.content,
                     embedding=vector,
-                    token_count=chunk.get("token_count"),
+                    # Narrow-waist denormalization: rows ingested through this
+                    # legacy path must be visible to FKR hybrid retrieval too.
+                    source=source_type,
+                    owner_id=owner_id,
+                    project_id=project_id,
                 )
             )
+        await db.flush()
+
+        # FTS back-fill, same idiom as services/knowledge/pipeline.py — the
+        # lexical leg of hybrid retrieval reads this column.
+        await db.execute(
+            text(
+                """
+                UPDATE embeddings
+                SET fts = to_tsvector('english', COALESCE(content, ''))
+                WHERE knowledge_item_id = :kid AND fts IS NULL
+                """
+            ),
+            {"kid": item.id},
+        )
 
         item.status = "ready"
         item.meta = {
             **(item.meta or {}),
             "chunk_count": len(chunks),
             "embedding_provider": getattr(provider, "name", "unknown"),
+            # Transparency: mock embeddings are labeled, never passed off as real.
+            "simulated_embeddings": getattr(provider, "name", "") == "mock",
         }
         await db.flush()
+        await db.refresh(item)
         return item
 
     except Exception as exc:  # noqa: BLE001 — surface failure, never silent
@@ -230,4 +255,5 @@ async def ingest_knowledge(
             "error": str(exc)[:1000],
         }
         await db.flush()
+        await db.refresh(item)
         return item

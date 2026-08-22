@@ -128,6 +128,13 @@ async def recall_memories(
     return out
 
 
+#: The memories.memory_type CHECK constraint, mirrored — anything else is
+#: recorded as 'other' rather than failing the whole exchange.
+_ALLOWED_MEMORY_TYPES = frozenset(
+    {"preference", "context", "decision", "lesson", "pattern", "other"}
+)
+
+
 async def persist_memory_candidates(
     db: AsyncSession,
     *,
@@ -144,20 +151,6 @@ async def persist_memory_candidates(
     Each is stored with origin metadata so the user can see, edit, pause, or delete it.
     """
     candidates = getattr(result, "memory_updates", None) or []
-    if not candidates:
-        # Fallback: if the synthesizer emitted nothing, still capture a light
-        # context memory from the exchange so future recall has something to work with.
-        # Keep it low-importance and clearly labeled.
-        snippet = (message or "").strip()
-        if not snippet:
-            return []
-        candidates = [
-            {
-                "content": f"Discussed: {snippet[:280]}",
-                "memory_type": "context",
-                "importance": 4,
-            }
-        ]
 
     written: List[Memory] = []
     for raw in candidates[:5]:  # hard ceiling per exchange
@@ -166,7 +159,13 @@ async def persist_memory_candidates(
             memory_type = "context"
             importance = 5
         elif isinstance(raw, dict):
-            content = str(raw.get("content") or raw.get("text") or "").strip()
+            content_raw = raw.get("content") or raw.get("text")
+            if not isinstance(content_raw, str):
+                # Structured machine summaries (e.g. the controller's
+                # interaction_summary candidate carries a dict) are not
+                # user-readable memories — never persist their repr.
+                continue
+            content = content_raw.strip()
             memory_type = str(raw.get("memory_type") or raw.get("type") or "context")
             try:
                 importance = int(raw.get("importance", 5))
@@ -177,6 +176,8 @@ async def persist_memory_candidates(
 
         if not content:
             continue
+        if memory_type not in _ALLOWED_MEMORY_TYPES:
+            memory_type = "other"  # the schema CHECK is the vocabulary
 
         importance = max(1, min(10, importance))
         memory = Memory(
@@ -185,6 +186,29 @@ async def persist_memory_candidates(
             memory_type=memory_type[:64],
             content=content[:4000],
             importance=importance,
+            is_active=True,
+            meta={
+                "origin": "council_interaction",
+                "conversation_id": conversation_id,
+                "request_id": getattr(result, "request_id", None),
+                "intent": getattr(getattr(result, "intent", None), "value", None),
+            },
+        )
+        db.add(memory)
+        written.append(memory)
+
+    if not written:
+        # Fallback: still capture a light context memory from the exchange so
+        # future recall has something to work with. Low-importance, labeled.
+        snippet = (message or "").strip()
+        if not snippet:
+            return []
+        memory = Memory(
+            user_id=user_id,
+            project_id=project_id,
+            memory_type="context",
+            content=f"Discussed: {snippet[:280]}",
+            importance=4,
             is_active=True,
             meta={
                 "origin": "council_interaction",
