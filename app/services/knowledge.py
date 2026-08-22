@@ -69,10 +69,10 @@ async def search_knowledge(
 
     limit = max(1, min(limit, 20))
     provider = _embedding_provider()
-    vectors = await provider.embed([query])
-    if not vectors:
+    embedding = await provider.embed([query])
+    if not embedding.vectors:
         return []
-    query_vec = vectors[0]
+    query_vec = embedding.vectors[0]
 
     # pgvector cosine distance operator: <=>
     # Scoped strictly to the owner. Optional project filter when provided.
@@ -195,7 +195,8 @@ async def ingest_knowledge(
             return item
 
         provider = _embedding_provider()
-        vectors = await provider.embed([c["text"] for c in chunks])
+        embedding = await provider.embed([c["text"] for c in chunks])
+        vectors = embedding.vectors
 
         # strict=True: a provider that returns fewer vectors than chunks is a
         # bug, and an unstrict zip absorbs it silently — the tail of the document

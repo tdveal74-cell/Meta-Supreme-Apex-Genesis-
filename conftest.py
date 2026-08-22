@@ -53,7 +53,11 @@ _BASELINE_SCHEMA = _SCHEMA_DIR / "001_initial_schema.sql"
 #: written to be re-runnable (IF NOT EXISTS / DROP … IF EXISTS) so a test
 #: database created before a schema change picks the change up instead of
 #: failing with a missing column.
-_INCREMENTAL_SCHEMAS = ("002_workflow_runs.sql", "003_schedule_dispatch.sql")
+_INCREMENTAL_SCHEMAS = (
+    "002_workflow_runs.sql",
+    "003_schedule_dispatch.sql",
+    "004_federated_knowledge_waist.sql",
+)
 
 _DSN = TEST_DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
 _ADMIN_DSN = _DSN.rsplit("/", 1)[0] + "/postgres"
