@@ -121,3 +121,26 @@ write.
 
 The Drive side writes this merge implies are listed above under contradictions 1
 and 3. They are Tee's to make or to delegate to a thread that holds the write.
+
+## Addendum, 2026-08-22, later the same day
+
+Two owed items moved. Recorded here rather than edited into the sections
+above, because a corrected claim with no history is how a fork starts.
+
+- **The `/devon-capture` endpoint is no longer unauthenticated.** Tee ruled;
+  per-poster capture tokens went live in n8n workflow `pPIt2cELH2RVZktS`
+  (Check Token and Apply Token Identity nodes, version
+  `43bbbe10-8ede-4bb0-979f-b25061453c1f`). A valid token files and stamps
+  the platform, a wrong token is refused, and an untokened post files
+  flagged UNAUTHENTICATED while legacy grace holds. Grace ends when Tee
+  flips `LEGACY_GRACE` to false after adding each poster's token to its
+  connector. Verified by shown runs: 17 local checks on the stored node
+  code, and n8n executions 3134 (valid token, success), 3135 (untokened,
+  success under grace), 3136 (wrong token, refused). Tokens live only in
+  n8n, never in Drive.
+- **The QA checklist and continuity SOP are rewritten**, as new v1
+  artifacts that say so in their headers:
+  `SYS_OPS_qa-checklist_v1_2026-08-22.md` and
+  `SYS_OPS_continuity_v1_2026-08-22.md`, both in `docs/devon/`. Derived
+  from live sources only; neither reconstructs the lost text. Filing them
+  to Drive remains Tee's write.
