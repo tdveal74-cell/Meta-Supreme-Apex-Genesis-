@@ -2,10 +2,14 @@
 Meta Supreme Apex Genesis — API Entry Point
 """
 
+import re
 from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -91,5 +95,34 @@ async def root():
         "version": "0.1.0",
         "status": "operational",
         "docs": "/api/docs",
-        "phase": "5-workflows",
+        "console": "/console",
+        "phase": "6-soul",
     }
+
+
+# The DEVON console, served same-origin so its soul-recall calls need no CORS
+# story at all. The newest console version in the assets folder wins, which is
+# the precedence rule the vault already lives by.
+_CONSOLE_DIR = Path(__file__).resolve().parent.parent / "docs" / "devon" / "assets"
+
+
+def _newest_console() -> Optional[Path]:
+    def _version(page: Path) -> int:
+        match = re.search(r"_v(\d+)_", page.name)
+        return int(match.group(1)) if match else 0
+
+    candidates = [
+        p
+        for p in _CONSOLE_DIR.glob("SYS_OPS_devon-console_v*.html")
+        if not p.name.startswith("SUPERSEDED_")
+    ]
+    # max by numeric version, not lexical sort: v10 must beat v4.
+    return max(candidates, key=_version, default=None)
+
+
+@app.get("/console", include_in_schema=False)
+async def console():
+    page = _newest_console()
+    if page is None:
+        raise HTTPException(status_code=404, detail="No console asset found")
+    return FileResponse(page, media_type="text/html")
