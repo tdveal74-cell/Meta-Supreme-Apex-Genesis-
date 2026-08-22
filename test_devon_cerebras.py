@@ -302,3 +302,60 @@ async def test_the_result_serialises_for_logging():
     assert payload["area"] == "Money"
     assert payload["provider"] == "cerebras"
     assert payload["tokens"] == 50
+
+
+# -- the call site must thread every key the factory accepts -----------------
+
+
+def test_the_factory_accepts_a_key_for_every_supported_provider():
+    """A regression guard for the gap this test was written after.
+
+    `cerebras` was added to the factory and to config, and the application call
+    site was not updated to pass its key, so DEFAULT_AI_PROVIDER=cerebras built a
+    provider with an empty key and raised. Adding a provider without threading
+    its key through is silent until someone flips the setting in production.
+
+    This asserts the shape rather than the specific names, so the next provider
+    added is covered without anyone remembering to extend the test.
+    """
+    import inspect
+
+    from services.intelligence.providers.factory import (
+        SUPPORTED_PROVIDERS,
+    )
+    from services.intelligence.providers.factory import (
+        create_provider as factory_create,
+    )
+
+    signature = inspect.signature(factory_create)
+    key_params = {p for p in signature.parameters if p.endswith("_api_key")}
+
+    # Every provider that is not the offline mock needs a credential parameter.
+    needs_key = [p for p in SUPPORTED_PROVIDERS if p != "mock"]
+    for provider_name in needs_key:
+        expected = f"{provider_name}_api_key"
+        assert expected in key_params, (
+            f"factory has no '{expected}' parameter for supported provider "
+            f"'{provider_name}'"
+        )
+
+
+def test_the_application_call_site_passes_every_factory_key():
+    """Read the call site and confirm no credential parameter was left behind."""
+    import inspect
+    import pathlib
+    import re
+
+    from services.intelligence.providers.factory import create_provider as factory_create
+
+    key_params = {
+        p for p in inspect.signature(factory_create).parameters if p.endswith("_api_key")
+    }
+
+    source = pathlib.Path("app/services/intelligence.py").read_text(encoding="utf-8")
+    calls = re.findall(r"create_provider\((.*?)\n    \)", source, re.DOTALL)
+    assert calls, "no create_provider call found in app/services/intelligence.py"
+
+    for call in calls:
+        for key in key_params:
+            assert key in call, f"call site does not pass '{key}': {call[:120]}"

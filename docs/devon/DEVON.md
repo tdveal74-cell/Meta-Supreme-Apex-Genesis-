@@ -119,8 +119,15 @@ the same lane is available here through the platform's provider abstraction.
 
 ```
 CEREBRAS_API_KEY=...
-ENRICHMENT_PROVIDER=cerebras
+ENRICHMENT_PROVIDER=cerebras     # tag captures with an Area and a summary
+DEFAULT_AI_PROVIDER=cerebras     # optional: run the whole Council on it too
 ```
+
+The two settings are separate on purpose. Enrichment is high volume, latency
+sensitive and mechanical, so it belongs on the cheapest model that can do it,
+while the Council keeps whichever model was chosen for judgement. Routing
+mechanical work downward is most of the volume in a studio this size. Setting
+only `ENRICHMENT_PROVIDER` is the common case.
 
 `services/intelligence/enrichment.py` asks the model for an Area and a one line
 summary, then puts the answer through the same trust ladder: validated against

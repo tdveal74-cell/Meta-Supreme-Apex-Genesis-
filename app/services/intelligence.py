@@ -47,18 +47,57 @@ def get_provider() -> AIProvider:
     model = settings.AI_MODEL or (
         settings.ANTHROPIC_MODEL if name == "anthropic"
         else settings.OPENAI_MODEL if name == "openai"
+        else settings.CEREBRAS_MODEL if name == "cerebras"
         else None
     )
     provider = create_provider(
         name,
         anthropic_api_key=settings.ANTHROPIC_API_KEY,
         openai_api_key=settings.OPENAI_API_KEY,
+        cerebras_api_key=settings.CEREBRAS_API_KEY,
         model=model,
         timeout_seconds=settings.AI_TIMEOUT_SECONDS,
         max_retries=settings.AI_MAX_RETRIES,
     )
     logger.info(
         "AI provider initialized: %s (model=%s)", provider.name, provider.default_model
+    )
+    return provider
+
+
+@lru_cache
+def get_enrichment_provider() -> AIProvider:
+    """Build the provider used to tag captures with an Area and a summary.
+
+    Kept separate from `get_provider` on purpose. Enrichment is high volume,
+    latency sensitive and mechanical, so it belongs on the cheapest model that
+    can do it, while the Council keeps the model chosen for judgement. Routing
+    mechanical work downward is most of the volume in a studio this size.
+
+    Whatever this returns, the Area it suggests is still validated against the
+    nine before anything is filed. The provider is a suggestion engine, never an
+    authority.
+    """
+    name = settings.ENRICHMENT_PROVIDER
+    model = (
+        settings.CEREBRAS_MODEL if name == "cerebras"
+        else settings.OPENAI_MODEL if name == "openai"
+        else settings.ANTHROPIC_MODEL if name == "anthropic"
+        else None
+    )
+    provider = create_provider(
+        name,
+        anthropic_api_key=settings.ANTHROPIC_API_KEY,
+        openai_api_key=settings.OPENAI_API_KEY,
+        cerebras_api_key=settings.CEREBRAS_API_KEY,
+        model=model,
+        timeout_seconds=min(settings.AI_TIMEOUT_SECONDS, 30.0),
+        max_retries=settings.AI_MAX_RETRIES,
+    )
+    logger.info(
+        "Enrichment provider initialized: %s (model=%s)",
+        provider.name,
+        provider.default_model,
     )
     return provider
 
