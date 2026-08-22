@@ -166,3 +166,41 @@ def test_newest_console_orders_by_numeric_version(tmp_path, monkeypatch):
     newest = main_mod._newest_console()
     assert newest is not None
     assert "_v10_" in newest.name
+
+
+def test_enabled_without_a_key_is_unavailable_not_a_crash(monkeypatch):
+    """The state the starter script creates when the key prompt is skipped.
+
+    Enabled with no key must read as unavailable, the same as switched off,
+    so /recall answers 503 with what to set instead of raising a
+    ProviderConfigError that reaches the user as an opaque 500.
+    """
+    from app.core.config import settings
+    from app.services.soul import get_soul_layer
+
+    monkeypatch.setattr(settings, "SOUL_RECALL_ENABLED", True)
+    monkeypatch.setattr(settings, "PINECONE_API_KEY", None)
+    get_soul_layer.cache_clear()
+    try:
+        assert get_soul_layer() is None
+    finally:
+        get_soul_layer.cache_clear()
+
+
+async def test_recall_says_503_when_enabled_without_a_key(
+    client, auth_headers, monkeypatch
+):
+    from app.core.config import settings
+    from app.services.soul import get_soul_layer
+
+    monkeypatch.setattr(settings, "SOUL_RECALL_ENABLED", True)
+    monkeypatch.setattr(settings, "PINECONE_API_KEY", "")
+    get_soul_layer.cache_clear()
+    try:
+        response = await client.get(
+            "/api/v1/soul/recall?q=areas", headers=auth_headers
+        )
+        assert response.status_code == 503
+        assert "PINECONE_API_KEY" in response.json()["detail"]
+    finally:
+        get_soul_layer.cache_clear()

@@ -18,15 +18,18 @@ from services.intelligence.soul import SoulLayer
 @lru_cache
 def get_soul_layer() -> Optional[SoulLayer]:
     """
-    The process-wide soul layer, or None when recall is switched off.
+    The process-wide soul layer, or None when recall cannot run.
 
-    Misconfiguration fails loudly: enabled without a key raises rather than
-    silently degrading — SoulLayer's own constructor enforces that.
+    Switched off and switched on without a key are the same answer to a
+    caller: recall is unavailable. Both return None so the API says so in
+    one honest sentence that names what to set, rather than raising a
+    ProviderConfigError that reaches the user as an opaque 500. This is
+    also what `/soul/status` already reports, so the two agree.
     """
-    if not settings.SOUL_RECALL_ENABLED:
+    if not settings.SOUL_RECALL_ENABLED or not settings.PINECONE_API_KEY:
         return None
     return SoulLayer(
-        api_key=settings.PINECONE_API_KEY or "",
+        api_key=settings.PINECONE_API_KEY,
         tee_host=settings.SOUL_TEE_HOST,
         devon_host=settings.SOUL_DEVON_HOST,
     )
