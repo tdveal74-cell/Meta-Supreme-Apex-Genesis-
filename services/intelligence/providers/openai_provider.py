@@ -27,9 +27,16 @@ _API_URL = "https://api.openai.com/v1/chat/completions"
 
 
 class OpenAIProvider(AIProvider):
-    """OpenAI models via the Chat Completions API."""
+    """OpenAI models via the Chat Completions API.
+
+    `api_url` is a class attribute rather than a module constant so that any
+    OpenAI compatible endpoint can reuse this request path by subclassing and
+    overriding one line. Cerebras is the first such subclass. The default is
+    unchanged, so nothing that used this class before behaves differently.
+    """
 
     name = "openai"
+    api_url = _API_URL
 
     def __init__(
         self,
@@ -78,7 +85,7 @@ class OpenAIProvider(AIProvider):
                 timeout=self.timeout_seconds, transport=self._transport
             ) as client:
                 response = await client.post(
-                    _API_URL,
+                    self.api_url,
                     json=body,
                     headers={
                         "Authorization": f"Bearer {self._api_key}",

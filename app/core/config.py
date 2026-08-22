@@ -42,10 +42,18 @@ class Settings(BaseSettings):
     # output; switch to "anthropic" or "openai" (+ API key) for live intelligence.
     OPENAI_API_KEY: str | None = None
     ANTHROPIC_API_KEY: str | None = None
-    DEFAULT_AI_PROVIDER: str = "mock"  # mock | anthropic | openai
+    CEREBRAS_API_KEY: str | None = None
+    DEFAULT_AI_PROVIDER: str = "mock"  # mock | anthropic | openai | cerebras
     AI_MODEL: str | None = None  # override the provider's default model
     ANTHROPIC_MODEL: str = "claude-sonnet-5"
     OPENAI_MODEL: str = "gpt-5.2"
+    CEREBRAS_MODEL: str = "gpt-oss-120b"
+
+    # Capture enrichment. Cerebras is the measured lane for this job: it returns
+    # an Area and a one line summary in tens of milliseconds, and the Area is
+    # then validated against the nine rather than trusted.
+    ENRICHMENT_PROVIDER: str = "mock"  # mock | cerebras | openai | anthropic
+    ENRICHMENT_ENABLED: bool = True
     AI_TIMEOUT_SECONDS: float = 60.0
     AI_MAX_RETRIES: int = 2
     AI_TEMPERATURE: float = 0.2

@@ -1,0 +1,384 @@
+"""
+DEVON endpoints, the second brain surface.
+
+Every route here is a read or a validation. Nothing writes to Drive, Notion,
+Airtable or n8n, and nothing runs an effect. Captures return a filing plan and
+effects return an approval request, which keeps the API surface incapable of
+committing something unattended.
+
+The approval queue is process local by default, so a request raised on one
+worker is not visible to another. That is correct for the single operator
+deployment this serves and is stated here rather than discovered later. Swap in
+a shared store through the ApprovalStore protocol before running more than one
+worker.
+"""
+
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
+
+from services.devon import areas as areas_mod
+from services.devon import filing, flagship, naming, persona, receipts, vault
+from services.devon.approval import ApprovalQueue
+from services.devon.assistant import Devon
+from services.devon.commands import ALL_INTENTS, approval_gated_intents
+from services.devon.precedence import Candidate, resolve
+
+router = APIRouter(prefix="/devon", tags=["DEVON"])
+
+# One queue and one assistant per process, so an approval raised by a command
+# call is decidable by a later decide call.
+_queue = ApprovalQueue()
+_devon = Devon(approvals=_queue)
+
+
+@router.get("")
+async def devon_identity() -> Dict[str, Any]:
+    """Who DEVON is and what this surface will not do."""
+    return {
+        "name": persona.NAME,
+        "owner": persona.OWNER,
+        "persona": persona.PERSONA_SUMMARY,
+        "register": persona.REGISTER,
+        "boundary": persona.BOUNDARY,
+        "areas": areas_mod.canonical_labels(),
+        "hard_rules": [r.rule for r in persona.HARD_RULES],
+        "intents": len(ALL_INTENTS),
+        "approval_gated_intents": [i.name for i in approval_gated_intents()],
+        "guarantees": [
+            "No route writes to Drive, Notion, Airtable or n8n.",
+            "Captures return a filing plan. The caller executes it.",
+            "Effects return an approval request. Rulings are Tee's, never a model's.",
+        ],
+    }
+
+
+@router.get("/areas")
+async def list_areas() -> Dict[str, Any]:
+    """The nine Areas, with both vocabularies."""
+    return {
+        "count": areas_mod.AREA_COUNT,
+        "source": areas_mod.SOURCE,
+        "areas": [
+            {
+                "label": a.label,
+                "filename_code": a.code,
+                "covers": a.covers,
+                "ruled": a.ruled,
+                "drive_folder": vault.AREA_FOLDERS.get(a.label),
+            }
+            for a in areas_mod.AREAS
+        ],
+        "rule": "Never add an Area without Tee's ruling.",
+    }
+
+
+class CommandBody(BaseModel):
+    text: str = Field(..., min_length=1, description="What was said to DEVON")
+
+
+@router.post("/command")
+async def command(body: CommandBody) -> Dict[str, Any]:
+    """Route one utterance. Returns what DEVON understood and what he did not do."""
+    return _devon.ask(body.text).to_dict()
+
+
+class DecideBody(BaseModel):
+    request_id: Optional[str] = None
+    token: Optional[str] = None
+    decision: Optional[str] = Field(default=None, description="approve or refuse")
+    decided_by: str = "Tee"
+
+
+@router.get("/approvals")
+async def list_approvals() -> Dict[str, Any]:
+    """Everything awaiting a ruling."""
+    return {
+        "pending": [
+            {
+                "request_id": r.request_id,
+                "title": r.title,
+                "what_happens": r.what_happens,
+                "blast_radius": r.blast_radius,
+                "reversible": r.reversible,
+                "expires_at": r.expires_at.isoformat(),
+            }
+            for r in _queue.pending()
+        ],
+        "note": "Process local queue. Not shared across workers.",
+    }
+
+
+@router.post("/approvals/decide")
+async def decide(body: DecideBody) -> Dict[str, Any]:
+    """Rule on a pending request. Single use, expiring, fails closed."""
+    result = _queue.decide(body.request_id, body.token, body.decision, body.decided_by)
+    return {
+        "ok": result.ok,
+        "approved": result.approved,
+        "request_id": result.request_id,
+        "state": result.state.value if result.state else None,
+        "reason": result.reason.value if result.reason else None,
+        "message": result.message,
+    }
+
+
+class ReceiptBody(BaseModel):
+    text: str = Field(..., min_length=1)
+
+
+@router.post("/receipt/parse")
+async def parse_receipt(body: ReceiptBody) -> Dict[str, Any]:
+    """Read either receipt format and report every problem found."""
+    try:
+        receipt = receipts.parse_receipt(body.text)
+    except receipts.ReceiptError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    problems = receipts.validate(receipt)
+    return {
+        "format": receipt.source_format.value if receipt.source_format else None,
+        "valid": not any(p.severity == "error" for p in problems),
+        "receipt": {
+            "date": receipt.date,
+            "platform": receipt.platform,
+            "areas": receipt.areas,
+            "title": receipt.title,
+            "summary": receipt.summary,
+            "decided": receipt.decided,
+            "built": receipt.built,
+            "open_threads": receipt.open_threads,
+            "next_action": receipt.next_action,
+            "canon": receipt.canon,
+            "verify": receipt.verify,
+            "files_opened": receipt.files_opened,
+            "unverified": receipt.unverified,
+        },
+        "problems": [
+            {"field": p.field_name, "severity": p.severity, "message": p.message}
+            for p in problems
+        ],
+        "produced_a_decision": receipt.produced_a_decision,
+        "changes_canon": receipt.changes_canon,
+    }
+
+
+class NameBody(BaseModel):
+    filename: str = Field(..., min_length=1)
+
+
+@router.post("/naming/validate")
+async def validate_name(body: NameBody) -> Dict[str, Any]:
+    """Check a filename against naming convention v4."""
+    parsed = naming.parse_filename(body.filename)
+    return {
+        "conforms": parsed.conforms,
+        "area": parsed.area,
+        "type_code": parsed.type_code,
+        "slug": parsed.slug,
+        "version": parsed.version,
+        "date": parsed.date,
+        "markers": list(parsed.markers),
+        "protected": parsed.is_protected,
+        "superseded": parsed.is_superseded,
+        "warnings_in_name": list(parsed.warnings_in_name),
+        "violations": [
+            {"rule": v.rule, "severity": v.severity, "message": v.message}
+            for v in parsed.violations
+        ],
+    }
+
+
+class BuildNameBody(BaseModel):
+    area: str
+    type_code: str
+    slug: str
+    version: int = 1
+    on_date: str
+    marker: Optional[str] = None
+    extension: str = "md"
+    superseded: bool = False
+
+
+@router.post("/naming/build")
+async def build_name(body: BuildNameBody) -> Dict[str, str]:
+    """Build a conforming filename, or refuse with the reason."""
+    try:
+        return {
+            "filename": naming.build_filename(
+                area=body.area,
+                type_code=body.type_code,
+                slug=body.slug,
+                version=body.version,
+                on_date=body.on_date,
+                marker=body.marker,
+                extension=body.extension,
+                superseded=body.superseded,
+            )
+        }
+    except naming.NamingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+class CandidateBody(BaseModel):
+    name: str
+    drive_id: Optional[str] = None
+    size_bytes: Optional[int] = None
+    document_date: Optional[str] = None
+    modified_time: Optional[str] = None
+    created_time: Optional[str] = None
+    parent_path: str = ""
+    is_canon: bool = False
+
+
+class PrecedenceBody(BaseModel):
+    candidates: List[CandidateBody]
+    disagrees_on_load_bearing: bool = False
+
+
+@router.post("/precedence/resolve")
+async def resolve_precedence(body: PrecedenceBody) -> Dict[str, Any]:
+    """Decide which draft is current, or refuse and say why."""
+    ruling = resolve(
+        [Candidate(**c.model_dump()) for c in body.candidates],
+        disagrees_on_load_bearing=body.disagrees_on_load_bearing,
+    )
+    return {
+        "outcome": ruling.outcome.value,
+        "auto_resolvable": ruling.auto_resolvable,
+        "signal": ruling.signal.value,
+        "winner": ruling.winner.name if ruling.winner else None,
+        "losers": [c.name for c in ruling.losers],
+        "reasons": ruling.reasons,
+        "refusal_codes": ruling.refusal_codes,
+        "conflict_row": ruling.conflict_row() if not ruling.auto_resolvable else None,
+    }
+
+
+class WriteCheckBody(BaseModel):
+    filename: str
+    parent_id: str
+    writing_new_version: bool = False
+    folder_listed: bool = False
+    newest_sibling: Optional[str] = None
+    newest_sibling_read: bool = False
+    change: str = "substance"
+    lane_supports_in_place: bool = False
+    folder_contents: List[str] = Field(default_factory=list)
+
+
+@router.post("/filing/check")
+async def check_filing(body: WriteCheckBody) -> Dict[str, Any]:
+    """Run the filing laws against a proposed write. Answers only, no effect."""
+    try:
+        change = filing.ChangeKind(body.change)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400, detail="change must be 'correction' or 'substance'"
+        ) from exc
+
+    request = filing.WriteRequest(
+        filename=body.filename,
+        parent_id=body.parent_id,
+        writing_new_version=body.writing_new_version,
+        sibling_evidence=filing.SiblingRead(
+            folder_listed=body.folder_listed,
+            newest_sibling=body.newest_sibling,
+            newest_sibling_read=body.newest_sibling_read,
+        ),
+        change=change,
+        lane_supports_in_place=body.lane_supports_in_place,
+        folder_contents=tuple(body.folder_contents),
+    )
+    check = filing.check_write(request)
+    return {
+        "allowed": check.allowed,
+        "summary": check.summary(),
+        "laws": [
+            {"law": r.law, "verdict": r.verdict.value, "message": r.message}
+            for r in check.results
+        ],
+        "naming_violations": check.naming_violations,
+        "folder_warnings": [
+            {"name": n, "warnings": list(w)} for n, w in check.folder_warnings
+        ],
+    }
+
+
+@router.get("/filing/laws")
+async def list_laws() -> Dict[str, Any]:
+    """The eight laws, each naming the failure that produced it."""
+    return {
+        "source": filing.SOURCE,
+        "one_line": (
+            "Read the newest file first. Write to the tree, never the root. Prove it "
+            "with a read-back you validated. Never rule for Tee."
+        ),
+        "laws": [
+            {
+                "number": law.number,
+                "title": law.title,
+                "rule": law.rule,
+                "failure_prevented": law.failure_prevented,
+            }
+            for law in filing.LAWS
+        ],
+    }
+
+
+@router.get("/vault")
+async def vault_map() -> Dict[str, Any]:
+    """The Drive, Notion, Airtable and n8n map, with its staleness stated."""
+    return {
+        "read_on": vault.READ_ON,
+        "caveat": vault.VERIFY_BEFORE_AUTOMATION,
+        "root": vault.VAULT_ROOT,
+        "folders": vault.FOLDERS,
+        "known_empty": list(vault.KNOWN_EMPTY),
+        "area_folders": vault.AREA_FOLDERS,
+        "doctrine": vault.DOCTRINE,
+        "notion": {k: v for k, v in vault.NOTION.items() if k != "thread_log_properties"},
+        "notion_properties": list(vault.NOTION["thread_log_properties"]),
+        "airtable": vault.AIRTABLE,
+        "webhooks": vault.WEBHOOKS,
+        "webhook_rule": vault.WEBHOOK_RULE,
+        "workflows": vault.WORKFLOWS,
+    }
+
+
+@router.get("/flagship")
+async def flagship_bar() -> Dict[str, Any]:
+    """The ship gate: three clauses, twelve dimensions, and the thresholds."""
+    return {
+        "source": flagship.SOURCE,
+        "clauses": [
+            {"number": c.number, "title": c.title, "test": c.test} for c in flagship.CLAUSES
+        ],
+        "dimensions": list(flagship.DIMENSIONS),
+        "thresholds": {
+            "min_per_dimension": flagship.MIN_PER_DIMENSION,
+            "min_mean": flagship.MIN_MEAN,
+            "required_security": flagship.REQUIRED_SECURITY,
+            "min_verification": flagship.MIN_VERIFICATION,
+            "max_revision_cycles": flagship.MAX_REVISION_CYCLES,
+        },
+        "standing_rules": [
+            "INSPECT, THEN HAND BACK. The human owns SHIP.",
+            "FINDINGS CARRY EVIDENCE. Without one, the finding does not exist.",
+            "NEVER CLAIM FIXED, TESTED, WORKS OR SAFE WITHOUT A SHOWN RUN.",
+            "NEVER FABRICATE a failing input, execution id, test result or score.",
+            "A SUCCESS RESPONSE IS A CLAIM, NOT A RECEIPT. READ THE STATE BACK.",
+        ],
+        "stale_artifact_class": {
+            "shape": flagship.STALE_ARTIFACT_SHAPE,
+            "defense": flagship.STALE_ARTIFACT_DEFENSE,
+            "logged_instances": list(flagship.STALE_ARTIFACT_INSTANCES),
+        },
+    }
+
+
+@router.get("/prompt")
+async def devon_prompt() -> Dict[str, str]:
+    """DEVON's assembled system prompt, so every surface can use the same one."""
+    return {"system_prompt": persona.system_prompt()}

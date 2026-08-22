@@ -12,6 +12,12 @@ No Postgres. No monorepo paths. Full Council roster + mock deliberation.
   GET  /billing/plans          plan catalog
   POST /billing/check          limit evaluation
   POST /workflows/validate     definition validation
+  GET  /devon                  DEVON identity and guarantees
+  POST /devon/command          route one utterance to DEVON
+  GET  /devon/areas            the nine Areas
+  GET  /devon/filing/laws      the eight filing laws
+  GET  /devon/vault            the second brain map
+  ...                          full DEVON surface under /devon
 
 Run:
   pip install fastapi uvicorn pydantic
@@ -26,6 +32,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from app.api.v1.devon import router as devon_router
 from billing import (
     UsageSnapshot,
     all_plans,
@@ -37,6 +44,7 @@ from billing import (
     plan_summary,
 )
 from services.agents.registry import get_agent, list_active_agents
+from services.devon import __version__ as devon_version
 from services.workflows.definition import (
     EFFECT_STEP_TYPES,
     WorkflowDefinition,
@@ -53,9 +61,13 @@ NON_NEGOTIABLES = [
 
 app = FastAPI(
     title="Meta Supreme Apex Genesis",
-    description="Flagship offline Intelligence OS. Council · Billing · Workflows.",
+    description="Flagship offline Intelligence OS. Council · Billing · Workflows · DEVON.",
     version="1.0.0-flagship",
 )
+
+# DEVON, the second brain. Every route is a read or a validation: nothing writes
+# to Drive, Notion, Airtable or n8n, so the zero key runtime stays effect free.
+app.include_router(devon_router)
 
 
 @app.get("/")
@@ -67,6 +79,7 @@ async def root():
         "version": "1.0.0-flagship",
         "status": "operational",
         "council_agents": len(agents),
+        "devon": {"version": devon_version, "surface": "/devon"},
         "non_negotiables": NON_NEGOTIABLES,
         "docs": "/docs",
         "endpoints": [
@@ -77,6 +90,7 @@ async def root():
             "/billing/plans",
             "/billing/check",
             "/workflows/validate",
+            "/devon",
         ],
     }
 

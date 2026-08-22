@@ -9,6 +9,7 @@ from app.api.v1 import (
     auth,
     conversations,
     decisions,
+    devon,
     health,
     intelligence,
     knowledge,
@@ -31,3 +32,4 @@ api_router.include_router(knowledge_fkr.router)
 api_router.include_router(memory.router)
 api_router.include_router(decisions.router)
 api_router.include_router(workflows.router)
+api_router.include_router(devon.router)

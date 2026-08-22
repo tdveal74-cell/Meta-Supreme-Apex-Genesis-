@@ -1,0 +1,973 @@
+<title>DEVON Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oxanium:wght@300;400;600;800&family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;1,400&display=swap">
+
+<style>
+/* ===========================================================================
+   DEVON CONSOLE
+   A deliberately single-world dark instrument. Every colour is painted
+   explicitly from a token so the page holds on any host ground.
+   Material logic: copper is the persona, brass is his owner's studio gold,
+   verdigris is what copper becomes when it is proven, oxide is what it becomes
+   when it is left alone. Nothing here is decorative for its own sake.
+   =========================================================================== */
+
+:root {
+  --void:      #070D16;
+  --panel:     #0E1826;
+  --panel-2:   #111F31;
+  --line:      #1E3348;
+  --line-soft: #16273A;
+
+  --copper:    #C77B4A;
+  --copper-lo: #8A5533;
+  --brass:     #D4A017;
+  --patina:    #4FB3A5;
+  --oxide:     #A03E2F;
+
+  --ink:       #EDE4D8;
+  --muted:     #8A9BAE;
+  --faint:     #56697E;
+
+  --display: 'Oxanium', 'Arial Narrow', sans-serif;
+  --mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
+  --sans: 'IBM Plex Sans', system-ui, sans-serif;
+
+  --gap: clamp(8px, 0.9vw, 14px);
+  --pad: clamp(10px, 1.1vw, 16px);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--void);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Ambient field: a faint engineering grid plus a slow scan. Both sit behind
+   everything and neither intercepts a pointer. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(var(--line-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+  background-size: 46px 46px;
+  opacity: 0.35;
+  mask-image: radial-gradient(ellipse 120% 90% at 50% 40%, #000 30%, transparent 85%);
+}
+body::after {
+  content: "";
+  position: fixed;
+  left: 0; right: 0;
+  height: 180px;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(180deg, transparent, rgba(199,123,74,0.05) 55%, transparent);
+  animation: sweep 14s linear infinite;
+}
+@keyframes sweep {
+  0%   { transform: translateY(-200px); }
+  100% { transform: translateY(102vh); }
+}
+
+.shell {
+  position: relative;
+  z-index: 2;
+  max-width: 1680px;
+  margin: 0 auto;
+  padding: var(--gap);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+/* --- panel chrome -------------------------------------------------------- */
+
+.panel {
+  position: relative;
+  background: linear-gradient(160deg, var(--panel) 0%, var(--panel-2) 100%);
+  border: 1px solid var(--line);
+  padding: var(--pad);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+/* Corner brackets, drawn with two gradients rather than four elements. */
+.panel::before, .panel::after {
+  content: "";
+  position: absolute;
+  width: 13px; height: 13px;
+  border: 1px solid var(--copper);
+  pointer-events: none;
+}
+.panel::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+.panel::after  { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+
+.panel > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 7px;
+}
+.panel h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.19em;
+  text-transform: uppercase;
+  color: var(--copper);
+}
+.panel .meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--faint);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+/* --- top identity bar ---------------------------------------------------- */
+
+.topbar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--gap);
+  border: 1px solid var(--line);
+  background: linear-gradient(90deg, var(--panel) 0%, var(--void) 60%, var(--panel) 100%);
+  padding: 10px var(--pad);
+}
+.brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.sigil { width: 44px; height: 44px; flex: 0 0 auto; }
+.brand h1 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: clamp(20px, 2.3vw, 30px);
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  color: var(--ink);
+  line-height: 1;
+}
+.brand .sub {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+  margin-top: 4px;
+}
+.brand .sub b { color: var(--copper); font-weight: 500; }
+
+.snapwarn {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--brass);
+  border: 1px solid rgba(212,160,23,0.35);
+  background: rgba(212,160,23,0.07);
+  padding: 6px 10px;
+  text-align: center;
+  line-height: 1.45;
+}
+.snapwarn b { color: var(--ink); font-weight: 600; }
+
+.clockbox { text-align: right; font-family: var(--mono); }
+.clockbox .t {
+  font-family: var(--display);
+  font-size: clamp(26px, 3.2vw, 42px);
+  font-weight: 300;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.clockbox .d { font-size: 10.5px; color: var(--muted); letter-spacing: 0.14em; margin-top: 5px; }
+
+/* --- main grid ----------------------------------------------------------- */
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) minmax(420px, 2.1fr) minmax(230px, 1.25fr);
+  gap: var(--gap);
+  align-items: start;
+}
+.col { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+
+/* --- vault rail ---------------------------------------------------------- */
+
+.vault { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.vault li {
+  display: flex; align-items: center; gap: 9px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  padding: 7px 9px;
+  border-left: 2px solid var(--copper-lo);
+  background: rgba(30,51,72,0.28);
+  color: var(--ink);
+  transition: background 0.18s, border-color 0.18s, transform 0.18s;
+}
+.vault li:hover { background: rgba(199,123,74,0.13); border-left-color: var(--copper); transform: translateX(3px); }
+.vault li .n { color: var(--faint); font-size: 10px; }
+.vault li.core { border-left-color: var(--brass); }
+.vault li.core .n { color: var(--brass); }
+.vault li.empty { opacity: 0.55; }
+.vault li.empty::after { content: "EMPTY"; margin-left: auto; font-size: 9px; color: var(--faint); letter-spacing: 0.1em; }
+
+/* --- readout rows -------------------------------------------------------- */
+
+.rows { display: flex; flex-direction: column; gap: 3px; }
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  padding: 5px 7px;
+  background: rgba(30,51,72,0.2);
+  color: var(--ink);
+}
+.row .k { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .v { font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+
+.pill {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  padding: 2px 7px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+.ok   { color: var(--patina); }
+.warn { color: var(--brass); }
+.stop { color: var(--oxide); }
+.idle { color: var(--faint); }
+
+/* --- the core map -------------------------------------------------------- */
+
+.core-panel { align-items: center; }
+.map-wrap { width: 100%; display: flex; justify-content: center; }
+svg.map { width: 100%; max-width: 560px; height: auto; display: block; }
+
+.node-hit { cursor: pointer; }
+.node-ring { transition: r 0.25s, opacity 0.25s; }
+.node-lbl {
+  font-family: var(--display);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  fill: var(--muted);
+  transition: fill 0.2s;
+}
+.node-hit:hover .node-lbl, .node-hit:focus-visible .node-lbl { fill: var(--ink); }
+.node-hit:hover .node-ring, .node-hit:focus-visible .node-ring { opacity: 1; }
+.node-hit:focus-visible { outline: none; }
+.node-hit:focus-visible .node-dot { stroke: var(--brass); stroke-width: 2.5; }
+
+.spin-slow { transform-origin: 280px 280px; animation: spin 96s linear infinite; }
+.spin-back { transform-origin: 280px 280px; animation: spin 150s linear infinite reverse; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.pulse { animation: pulse 3.6s ease-in-out infinite; transform-origin: 280px 280px; }
+@keyframes pulse {
+  0%, 100% { opacity: 0.32; transform: scale(1); }
+  50%      { opacity: 0.72; transform: scale(1.07); }
+}
+
+.readout {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+  min-height: 34px;
+  border-top: 1px solid var(--line);
+  padding-top: 9px;
+  width: 100%;
+}
+.readout b { color: var(--copper); font-weight: 500; }
+.readout .code { color: var(--brass); }
+
+/* --- command bar --------------------------------------------------------- */
+
+.cmd { display: flex; flex-direction: column; gap: 9px; }
+.cmd-input {
+  display: flex; align-items: center; gap: 9px;
+  border: 1px solid var(--line);
+  background: rgba(7,13,22,0.75);
+  padding: 9px 11px;
+}
+.cmd-input .caret { color: var(--copper); font-family: var(--mono); font-size: 13px; }
+.cmd-input input {
+  flex: 1; min-width: 0;
+  background: transparent; border: 0; outline: none;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+.cmd-input input::placeholder { color: var(--faint); }
+.cmd-input:focus-within { border-color: var(--copper); box-shadow: 0 0 0 1px rgba(199,123,74,0.28); }
+
+.cmd-out {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.65;
+  border-left: 2px solid var(--line);
+  padding: 9px 12px;
+  min-height: 76px;
+  background: rgba(30,51,72,0.16);
+  overflow-x: auto;
+}
+.cmd-out .lead { color: var(--ink); }
+.cmd-out .dim { color: var(--muted); }
+.cmd-out .hl { color: var(--copper); }
+.cmd-out .gate { color: var(--brass); }
+.cmd-out .no { color: var(--oxide); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  background: transparent;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: color 0.16s, border-color 0.16s;
+}
+.chip:hover, .chip:focus-visible { color: var(--copper); border-color: var(--copper); outline: none; }
+
+/* --- council ------------------------------------------------------------- */
+
+.council { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.seat {
+  border: 1px solid var(--line);
+  padding: 7px 5px;
+  text-align: center;
+  transition: border-color 0.2s, background 0.2s;
+}
+.seat:hover { border-color: var(--copper); background: rgba(199,123,74,0.09); }
+.seat .nm {
+  font-family: var(--display); font-size: 11px; font-weight: 600;
+  letter-spacing: 0.09em; color: var(--ink); display: block;
+}
+.seat .pp { font-family: var(--mono); font-size: 8.5px; color: var(--faint); letter-spacing: 0.05em; }
+
+/* --- laws ---------------------------------------------------------------- */
+
+.laws { counter-reset: law; display: flex; flex-direction: column; gap: 2px; }
+.law {
+  display: grid; grid-template-columns: 22px 1fr; gap: 8px;
+  font-family: var(--mono); font-size: 10.5px; line-height: 1.45;
+  padding: 5px 6px; color: var(--muted);
+  border-bottom: 1px solid var(--line-soft);
+}
+.law:last-child { border-bottom: 0; }
+.law .num { color: var(--copper); font-weight: 600; }
+
+/* --- gauges -------------------------------------------------------------- */
+
+.gauges { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); }
+.gauge { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.gauge svg { width: 100%; max-width: 108px; height: auto; }
+.gauge .lab {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em;
+  color: var(--faint); text-transform: uppercase; text-align: center;
+}
+.gauge .val {
+  font-family: var(--display); font-size: 19px; font-weight: 600;
+  fill: var(--ink); font-variant-numeric: tabular-nums;
+}
+.gauge .unit { font-family: var(--mono); font-size: 8px; fill: var(--faint); letter-spacing: 0.1em; }
+
+/* --- ticker -------------------------------------------------------------- */
+
+.ticker {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  overflow: hidden;
+  position: relative;
+  padding: 9px 0;
+}
+.ticker-track {
+  display: flex; gap: 46px; white-space: nowrap;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em;
+  animation: roll 58s linear infinite;
+  width: max-content;
+}
+.ticker-track span { color: var(--muted); }
+.ticker-track b { font-weight: 500; }
+@keyframes roll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.ticker:hover .ticker-track { animation-play-state: paused; }
+
+/* --- footer -------------------------------------------------------------- */
+
+.foot {
+  display: flex; flex-wrap: wrap; gap: 8px 22px;
+  justify-content: space-between; align-items: center;
+  font-family: var(--mono); font-size: 10px; color: var(--faint);
+  letter-spacing: 0.07em;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.foot b { color: var(--muted); font-weight: 400; }
+
+.boot { opacity: 0; animation: boot 0.6s ease-out forwards; }
+@keyframes boot { to { opacity: 1; } }
+
+@media (max-width: 1080px) {
+  .grid { grid-template-columns: 1fr; }
+  .topbar { grid-template-columns: 1fr; text-align: center; }
+  .brand { justify-content: center; }
+  .clockbox { text-align: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spin-slow, .spin-back, .pulse, .ticker-track, body::after { animation: none !important; }
+  .boot { opacity: 1; animation: none; }
+}
+</style>
+
+<div class="shell">
+
+  <!-- ===================== IDENTITY ===================== -->
+  <div class="topbar boot" style="animation-delay:.02s">
+    <div class="brand">
+      <svg class="sigil" viewBox="0 0 44 44" aria-hidden="true">
+        <circle cx="22" cy="22" r="20" fill="none" stroke="#1E3348" stroke-width="1"/>
+        <circle cx="22" cy="22" r="15" fill="none" stroke="#C77B4A" stroke-width="1.4"/>
+        <circle cx="22" cy="22" r="7"  fill="none" stroke="#D4A017" stroke-width="1"/>
+        <circle cx="22" cy="22" r="2.6" fill="#4FB3A5"/>
+        <path d="M22 2 L22 7 M22 37 L22 42 M2 22 L7 22 M37 22 L42 22" stroke="#C77B4A" stroke-width="1.2"/>
+      </svg>
+      <div>
+        <h1>DEVON</h1>
+        <div class="sub">SECOND BRAIN <b>/</b> OPERATOR <b id="owner">Tee</b> <b>/</b> META SUPREME APEX GENESIS</div>
+      </div>
+    </div>
+
+    <div class="snapwarn">
+      <b>SNAPSHOT, NOT LIVE TRUTH.</b><br>
+      Rendered from the DEVON modules at build time. Drive, Notion, Airtable and n8n
+      were not read to draw this. Regenerate before trusting a number.
+    </div>
+
+    <div class="clockbox">
+      <div class="t" id="clock">00:00:00</div>
+      <div class="d" id="date">LOADING</div>
+    </div>
+  </div>
+
+  <!-- ===================== MAIN GRID ===================== -->
+  <div class="grid">
+
+    <!-- ---------- LEFT: vault + doctrine ---------- -->
+    <div class="col">
+      <section class="panel boot" style="animation-delay:.10s">
+        <header><h2>Vault</h2><span class="meta">DRIVE</span></header>
+        <ul class="vault" id="vault"></ul>
+      </section>
+
+      <section class="panel boot" style="animation-delay:.16s">
+        <header><h2>Doctrine</h2><span class="meta">GOVERNING</span></header>
+        <div class="rows" id="doctrine"></div>
+      </section>
+
+      <section class="panel boot" style="animation-delay:.22s">
+        <header><h2>Capture Lane</h2><span class="meta">WEBHOOKS</span></header>
+        <div class="rows" id="hooks"></div>
+      </section>
+    </div>
+
+    <!-- ---------- CENTER: the brain map + command ---------- -->
+    <div class="col">
+      <section class="panel core-panel boot" style="animation-delay:.06s">
+        <header style="width:100%"><h2>Brain Map</h2><span class="meta">9 AREAS / 9 SEATS</span></header>
+
+        <div class="map-wrap">
+          <svg class="map" viewBox="0 0 560 560" role="img"
+               aria-label="Radial map: the DEVON core, nine Areas orbiting it, and nine Council seats on the outer ring.">
+            <defs>
+              <radialGradient id="coreGlow">
+                <stop offset="0%"   stop-color="#4FB3A5" stop-opacity="0.55"/>
+                <stop offset="55%"  stop-color="#C77B4A" stop-opacity="0.18"/>
+                <stop offset="100%" stop-color="#C77B4A" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+
+            <!-- structural rings -->
+            <circle cx="280" cy="280" r="248" fill="none" stroke="#16273A"/>
+            <circle cx="280" cy="280" r="196" fill="none" stroke="#1E3348"/>
+            <circle cx="280" cy="280" r="128" fill="none" stroke="#1E3348"/>
+            <circle cx="280" cy="280" r="62"  fill="none" stroke="#8A5533"/>
+
+            <!-- rotating tick rings -->
+            <g class="spin-slow" id="tickOuter" stroke="#8A5533"></g>
+            <g class="spin-back" id="tickInner" stroke="#1E3348"></g>
+
+            <!-- council seats, outer -->
+            <g id="seats"></g>
+            <!-- area spokes and nodes, inner -->
+            <g id="spokes" stroke="#1E3348"></g>
+            <g id="areas"></g>
+
+            <!-- core -->
+            <circle cx="280" cy="280" r="58" fill="url(#coreGlow)" class="pulse"/>
+            <circle cx="280" cy="280" r="26" fill="none" stroke="#C77B4A" stroke-width="1.5"/>
+            <circle cx="280" cy="280" r="15" fill="none" stroke="#D4A017" stroke-width="1"/>
+            <circle cx="280" cy="280" r="5"  fill="#4FB3A5"/>
+            <text x="280" y="332" text-anchor="middle"
+                  style="font-family:Oxanium,sans-serif;font-size:12px;font-weight:800;letter-spacing:.28em;fill:#EDE4D8">DEVON</text>
+          </svg>
+        </div>
+
+        <div class="readout" id="readout">
+          Hover an Area to read its brief. Nine Areas, ruled. Never invent a tenth.
+        </div>
+      </section>
+
+      <section class="panel boot" style="animation-delay:.14s">
+        <header><h2>Command Language</h2><span class="meta" id="intentCount"></span></header>
+        <div class="cmd">
+          <div class="cmd-input">
+            <span class="caret">&gt;</span>
+            <label for="cmd" style="position:absolute;left:-9999px">Say something to DEVON</label>
+            <input id="cmd" type="text" autocomplete="off" spellcheck="false"
+                   placeholder="Devon, remember the render decision is still blocking TQO">
+          </div>
+          <div class="cmd-out" id="cmdout">
+            <span class="dim">Type a command. DEVON parses it here and shows what he would do.
+            Nothing runs: captures return a filing plan, effects return an approval request.</span>
+          </div>
+          <div class="chips" id="chips"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ---------- RIGHT: council, laws, gate ---------- -->
+    <div class="col">
+      <section class="panel boot" style="animation-delay:.12s">
+        <header><h2>The Council</h2><span class="meta">9 SEATS</span></header>
+        <div class="council" id="council"></div>
+      </section>
+
+      <section class="panel boot" style="animation-delay:.18s">
+        <header><h2>Approval Gate</h2><span class="meta">EFFECTS</span></header>
+        <div class="rows" id="gate"></div>
+      </section>
+
+      <section class="panel boot" style="animation-delay:.24s">
+        <header><h2>Automations</h2><span class="meta">n8n</span></header>
+        <div class="rows" id="flows"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ===================== GAUGES + LAWS ===================== -->
+  <div class="grid">
+    <section class="panel boot" style="animation-delay:.28s">
+      <header><h2>Filing Laws</h2><span class="meta">EIGHT</span></header>
+      <div class="laws" id="laws"></div>
+    </section>
+
+    <section class="panel boot" style="animation-delay:.30s">
+      <header><h2>Ship Gate</h2><span class="meta">FLAGSHIP BAR</span></header>
+      <div class="gauges" id="gauges"></div>
+      <div class="rows" id="clauses" style="margin-top:2px"></div>
+    </section>
+
+    <section class="panel boot" style="animation-delay:.32s">
+      <header><h2>Blocked</h2><span class="meta">NOT ON WORK</span></header>
+      <div class="rows" id="blocked"></div>
+    </section>
+  </div>
+
+  <!-- ===================== TICKER ===================== -->
+  <div class="ticker boot" style="animation-delay:.34s">
+    <div class="ticker-track" id="ticker"></div>
+  </div>
+
+  <div class="foot">
+    <span>DEVON CONSOLE <b>/</b> generated <b id="gen"></b></span>
+    <span>VAULT IDS READ <b id="readOn"></b> <b>/</b> not self updating</span>
+    <span>CANON HAS ONE WRITER AT A TIME</span>
+  </div>
+</div>
+
+<script>
+const STATE = {"areas": [{"label": "TQO", "code": "TQO", "covers": "The Quiet Operator: channel, content engine, monetization", "ruled": "original", "folder": "1DXDzO_qY17i1ChE-gOqL3oOwBVbaveLH"}, {"label": "Podcast", "code": "TSWS", "covers": "The Shadow We Share: episodes, guests, pipeline", "ruled": "original", "folder": "1ZNnbg7bFfcEAM0bMZ96sUnZsr8NXXl6c"}, {"label": "NCO", "code": "NCO", "covers": "NCO Forge: military leadership channel, checklists, product line", "ruled": "2026-08-05", "folder": "1GhyNDBaBLrcJux9gEVtVpSTnbDK1eJzO"}, {"label": "ACX", "code": "ACX", "covers": "Ascension Caudex: the micro drama IP, its canon, assets, pipeline", "ruled": "2026-08-20", "folder": "1a_baNvgH9CBb4biuBCbdNb_4P9fvkO1a"}, {"label": "Health", "code": "HEALTH", "covers": "fitness, energy, medical, raw data feeds", "ruled": "original", "folder": "1BkZ0YfANbOS0fQf_2F-e-22LTSeV8xRg"}, {"label": "Money", "code": "MONEY", "covers": "personal finances, separate from TQO revenue", "ruled": "original", "folder": "1PbsQU2VSLSt-e7scjWY83X5k-y27c8OO"}, {"label": "Family", "code": "FAMILY", "covers": "people and relationships", "ruled": "original", "folder": "1LU5mD4reyWwN-D3O_41FCvP1BuUvqlhd"}, {"label": "Learning", "code": "LEARNING", "covers": "skills being built, courses, study", "ruled": "original", "folder": "1_WWVxVMfhCxMdxXLv6NjSiKPCzZmbQFu"}, {"label": "Systems", "code": "SYS", "covers": "the brain itself: Devon, the vault, the automations", "ruled": "original", "folder": "1La9LZ1zvpnU6-ep-EVStEy33M8cvyUGr"}], "agents": [{"slug": "oracle", "name": "Oracle", "purpose": "Future intelligence"}, {"slug": "analyst", "name": "Analyst", "purpose": "Evidence intelligence"}, {"slug": "strategist", "name": "Strategist", "purpose": "Decision intelligence"}, {"slug": "architect", "name": "Architect", "purpose": "Systems intelligence"}, {"slug": "engineer", "name": "Engineer", "purpose": "Execution intelligence"}, {"slug": "guardian", "name": "Guardian", "purpose": "Risk intelligence"}, {"slug": "creator", "name": "Creator", "purpose": "Communication intelligence"}, {"slug": "librarian", "name": "Librarian", "purpose": "Knowledge intelligence"}, {"slug": "skeptic", "name": "Skeptic", "purpose": "Challenge intelligence"}], "laws": [{"n": 1, "title": "Root holds the vault and nothing else."}, {"n": 2, "title": "Read the newest sibling before writing a new version."}, {"n": 3, "title": "A success response is a claim. A validated read-back is a receipt."}, {"n": 4, "title": "Exact duplicates die on sight. Distinct versions are Tee's ruling."}, {"n": 5, "title": "Filenames that carry warnings are canon. Obey them before any rule."}, {"n": 6, "title": "Retire by moving and renaming, not by deleting."}, {"n": 7, "title": "Sweep to a dated holding folder. Never route in bulk blind."}, {"n": 8, "title": "Correct in place where the lane supports it. Batch and bump once where it does not."}], "hard_rules": [{"n": 1, "rule": "No em dashes in anything delivered. Restructure the sentence rather than swapping punctuation."}, {"n": 2, "rule": "Artifacts, not claims. Never say done, fixed, tested or shipped without a shown result. A success response is a claim; a read-back is a receipt."}, {"n": 3, "rule": "Unverified beats plausible invention. Say unverified plainly."}, {"n": 4, "rule": "Name real openable artifacts, not adjectives. Cite a file, id, url or exact value. Professional is not a standard."}, {"n": 5, "rule": "Rulings beat rules. Recommend, then hand the decision to Tee. When overruled, log the objection once and execute at full quality."}, {"n": 6, "rule": "Voice and likeness are owned, never rented. Karrie holds permanent veto over her likeness."}, {"n": 7, "rule": "Lead with the built thing. Minimal caveats, no preamble."}, {"n": 8, "rule": "Terse replies (Ok, Resolve, Noted) mean proceed, not iterate."}, {"n": 9, "rule": "Nothing publishes without a human watching or listening end to end."}, {"n": 10, "rule": "No exception path on compliance: platform policy, AI disclosure, authorship, rights, channel identity."}], "doctrine": {"master_directory": {"id": "1sSnB7tdXhf7ECAknNgE_tINrmJ1maUg_", "version": "6", "governs": "the folder map and ids"}, "context_pill": {"id": "1bySPMORLCMlBkNv9YuK2uvuWTiJL6_qS", "version": "16", "governs": "current state"}, "standing_instructions": {"id": "1A88Nkf5BpCZysmHP7XYMXBtaEh4Eqj9M", "version": "3", "governs": "behaviour"}, "filing_laws": {"id": "1YxrdXHqlT5kkdzWey5qO_21KbVDQd9ID", "version": "3", "governs": "filing"}, "naming_convention": {"id": "1r5-7JCqMDEHcYWj97AxZuWuzb7wdSYCL", "version": "4", "governs": "what files are called"}, "voice_standard": {"id": "1MpGAI5OGVkw7_EZpLpBba1nJ-YQWwmOt", "version": "2", "governs": "anything published under Tee's name"}, "flagship_bar": {"id": "1s4l6r9ucGWrtEENqlBqDmFtpl4_85z_m", "version": "01", "governs": "ship quality and the gauntlet"}, "precedence_doctrine": {"id": "1EaFyPPAXIX5j75oJ06tvvUuq4Qd73jB4", "version": "2", "governs": "which version wins and when nothing wins"}, "webhook_paths": {"id": "1wKkFGVBXaFZqWvLjSiBrxXWLk8Lwkd8c", "version": "1", "governs": "one path, one job"}, "areas": {"id": "1UrmxHSkVQjdHdiF2rRUo2lOCIbx1EFjg", "version": "current", "governs": "the nine Area vocabulary"}, "capture_protocol": {"id": "1jVAQ6KwhFXoONg3cLYFDfi0zhLMjWAfi", "version": "1", "governs": "cross platform capture"}}, "folders": {"0. Inbox": "1wvKmGuaWQTxOT6Q8XQCU3Zv825VvbgdO", "1. Projects": "1E7XUosP3OzAi9tDShcVNbhm-9zzzsMsd", "2. Areas": "1efaZ37s3PBjeEFD1HUQnN3QwH3pV0Rbc", "3. Resources": "1Ls1zoO_nUyCTnEdZ5d-2Nz8IdbEoYOVU", "4. Archive": "1xJuCYDrQdqBGqt0I7GOFkkLHAtdmRab6", "_Devon Core": "17chQD2DTfzbnZy2oGwiJxEk7PHvnstBp", "_Templates": "12aqJzZRCZWTb8hbEb9mTxf6FPEt46d2c", "Mirror Reads": "1ZwE5USNTFHN5Tj2sT97kLOAAzttl7Nj4"}, "workflows": {"iPhone Inbox Capture": {"id": "5s6CwWWelffqszQe", "state": "active"}, "Capture Webhook": {"id": "pPIt2cELH2RVZktS", "state": "active"}, "Pipeline Watchdog": {"id": "wndFo6uJCqVuINaV", "state": "active"}, "Precedence Guard": {"id": "W5rlpAt6hsJAExU6", "state": "active, daily 07:00"}, "Capture Nudge": {"id": "YHueoBK7TSLdTlfF", "state": "active, daily 08:00"}, "Soul Layer Write-Back": {"id": "edIJx7Q3FXTawg9J", "state": "active, 15 minute poll"}, "Approval Queue": {"id": "syRVj0G47mA1b0Xn", "state": "active"}, "Duplicate Sweep": {"id": "X7OGXWHBx57CIG42", "state": "active"}, "OS Error Handler": {"id": "rqYmaQh91iCce8DJ", "state": "active"}, "TQO FINAL V5": {"id": "gsGJQan7a6ZufhYt", "state": "inactive by ruling"}, "Capture Hook": {"id": "Cbd24ptTPWch3aZO", "state": "retired 2026-08-22"}}, "webhooks": {"devon-capture": {"job": "cross platform receipts", "auth": null, "open": true}, "devon-inbox": {"job": "iOS and agent captures, text and binary", "auth": "header x-devon-key", "open": false}, "devon-approve-request": {"job": "raise a high impact action for approval", "auth": "header x-devon-key", "open": true}, "devon-approve-decide": {"job": "approve or refuse a pending action from an email link", "auth": "single use token in the link, 72 hour expiry", "open": false}}, "airtable": {"live": "app28z7XnKzjfTXwc", "dead": "appKIY47KvzBpZQOQ", "blocked": "Every write returned HTTP 429 PUBLIC_API_BILLING_LIMIT_EXCEEDED as of 2026-08-22. This is "}, "intents": {"total": 24, "effects": 9, "gated": ["open_app", "take_screenshot", "send_message", "shutdown", "restart"]}, "flagship": {"dimensions": ["scope fidelity", "correctness", "unverified claims", "security", "reversibility and blast radius", "silent failure resistance", "idempotency", "traceability", "observability", "completeness", "maintainability", "flagship bar"], "clauses": [{"n": 1, "title": "Root, not symptom"}, {"n": 2, "title": "Simplest form that fully works"}, {"n": 3, "title": "Handed off clean"}], "thresholds": {"floor": 3, "mean": 4.0, "security": 5, "verification": 4}}, "persona": {"name": "DEVON", "owner": "Tee (Terrance Veal)", "summary": "A Native American man from the Southeastern US, copper toned, with a warm Southern drawl. Courteous, sharp, lightly witty.", "boundary": "Never caricature. The drawl is warmth, not a costume. If a line would read as a stereotype rather than a person, it is wrong. Rewrite it plainly."}, "read_on": "2026-08-22"}
+;
+
+/* ---------- helpers ---------- */
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, html) => {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (html !== undefined) n.innerHTML = html;
+  return n;
+};
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------- clock ---------- */
+function tick() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  $('clock').textContent = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  $('date').textContent = d.toLocaleDateString(undefined,
+    { weekday:'long', day:'numeric', month:'long', year:'numeric' }).toUpperCase();
+}
+tick(); setInterval(tick, 1000);
+$('gen').textContent = new Date().toISOString().slice(0, 16).replace('T', ' ');
+$('readOn').textContent = STATE.read_on;
+$('owner').textContent = STATE.persona.owner.split(' ')[0];
+
+/* ---------- vault rail ---------- */
+const EMPTY = new Set(['Mirror Reads']);
+Object.entries(STATE.folders).forEach(([name, id]) => {
+  const core = name.startsWith('_');
+  const li = el('li', (core ? 'core ' : '') + (EMPTY.has(name) ? 'empty' : ''));
+  li.innerHTML = `<span class="n">${core ? '◆' : '▸'}</span><span>${esc(name)}</span>`;
+  li.title = id;
+  $('vault').appendChild(li);
+});
+
+/* ---------- doctrine ---------- */
+const DOC_LABEL = {
+  master_directory:'Master directory', context_pill:'Context pill',
+  standing_instructions:'Standing instructions', filing_laws:'Filing laws',
+  naming_convention:'Naming convention', voice_standard:'Voice standard',
+  flagship_bar:'Flagship bar', precedence_doctrine:'Precedence doctrine',
+  webhook_paths:'Webhook paths', areas:'Areas', capture_protocol:'Capture protocol'
+};
+Object.entries(STATE.doctrine).forEach(([k, v]) => {
+  const r = el('div', 'row');
+  r.innerHTML = `<span class="k">${esc(DOC_LABEL[k] || k)}</span>
+                 <span class="v"><span class="pill ok">${/^[\d.]+$/.test(v.version) ? 'v' + esc(v.version) : esc(String(v.version).toUpperCase())}</span></span>`;
+  r.title = v.governs + '  ·  ' + v.id;
+  $('doctrine').appendChild(r);
+});
+
+/* ---------- webhooks ---------- */
+Object.entries(STATE.webhooks).forEach(([path, w]) => {
+  const authed = !!w.auth;
+  const r = el('div', 'row');
+  r.innerHTML = `<span class="k">/${esc(path)}</span>
+    <span class="v"><span class="pill ${authed ? 'ok' : 'stop'}">${authed ? 'AUTH' : 'OPEN'}</span></span>`;
+  r.title = w.job + (authed ? '  ·  ' + w.auth : '  ·  unauthenticated, needs a ruling');
+  $('hooks').appendChild(r);
+});
+
+/* ---------- council ---------- */
+STATE.agents.forEach(a => {
+  const s = el('div', 'seat');
+  s.innerHTML = `<span class="nm">${esc(a.name)}</span><span class="pp">${esc(a.purpose.split(' ')[0].toUpperCase())}</span>`;
+  s.title = a.purpose;
+  $('council').appendChild(s);
+});
+
+/* ---------- approval gate ---------- */
+const gateRows = [
+  ['Intents total', STATE.intents.total, 'idle'],
+  ['State changing', STATE.intents.effects, 'warn'],
+  ['Need a ruling', STATE.intents.gated.length, 'stop'],
+  ['Token lifetime', '72 h', 'idle'],
+  ['Token storage', 'HASH ONLY', 'ok'],
+  ['Fails', 'CLOSED', 'ok']
+];
+gateRows.forEach(([k, v, cls]) => {
+  const r = el('div', 'row');
+  r.innerHTML = `<span class="k">${k}</span><span class="v"><span class="pill ${cls}">${esc(v)}</span></span>`;
+  $('gate').appendChild(r);
+});
+STATE.intents.gated.forEach(name => {
+  const r = el('div', 'row');
+  r.innerHTML = `<span class="k" style="padding-left:10px">↳ ${esc(name.replace(/_/g, ' '))}</span>
+                 <span class="v"><span class="pill warn">GATED</span></span>`;
+  $('gate').appendChild(r);
+});
+
+/* ---------- automations ---------- */
+Object.entries(STATE.workflows).forEach(([name, w]) => {
+  const st = w.state;
+  const cls = st.startsWith('active') ? 'ok' : st.startsWith('retired') ? 'idle' : 'warn';
+  const short = st.startsWith('active') ? 'LIVE' : st.startsWith('retired') ? 'RETIRED' : 'OFF';
+  const r = el('div', 'row');
+  r.innerHTML = `<span class="k">${esc(name)}</span><span class="v"><span class="pill ${cls}">${short}</span></span>`;
+  r.title = w.id + '  ·  ' + st;
+  $('flows').appendChild(r);
+});
+
+/* ---------- filing laws ---------- */
+STATE.laws.forEach(l => {
+  const d = el('div', 'law');
+  d.innerHTML = `<span class="num">${l.n}</span><span>${esc(l.title)}</span>`;
+  $('laws').appendChild(d);
+});
+
+/* ---------- ship gate gauges ---------- */
+function gauge(label, value, max, unit, colour) {
+  const pct = Math.max(0, Math.min(1, value / max));
+  const R = 40, C = 2 * Math.PI * R, arc = C * 0.75;
+  const wrap = el('div', 'gauge');
+  wrap.innerHTML = `
+    <svg viewBox="0 0 108 108" role="img" aria-label="${esc(label)}: ${value} of ${max}">
+      <circle cx="54" cy="54" r="${R}" fill="none" stroke="#1E3348" stroke-width="6"
+              stroke-dasharray="${arc} ${C}" transform="rotate(135 54 54)" stroke-linecap="butt"/>
+      <circle cx="54" cy="54" r="${R}" fill="none" stroke="${colour}" stroke-width="6"
+              stroke-dasharray="${arc * pct} ${C}" transform="rotate(135 54 54)" stroke-linecap="butt"/>
+      <text x="54" y="56" text-anchor="middle" class="val">${value}</text>
+      <text x="54" y="70" text-anchor="middle" class="unit">${esc(unit)}</text>
+    </svg>
+    <div class="lab">${esc(label)}</div>`;
+  return wrap;
+}
+const T = STATE.flagship.thresholds;
+$('gauges').appendChild(gauge('Dim floor', T.floor, 5, 'MIN', '#C77B4A'));
+$('gauges').appendChild(gauge('Mean', T.mean, 5, 'REQ', '#D4A017'));
+$('gauges').appendChild(gauge('Security', T.security, 5, 'EXACT', '#4FB3A5'));
+STATE.flagship.clauses.forEach(c => {
+  const r = el('div', 'row');
+  r.innerHTML = `<span class="k">${c.n}. ${esc(c.title)}</span>
+                 <span class="v"><span class="pill idle">CLAUSE</span></span>`;
+  $('clauses').appendChild(r);
+});
+
+/* ---------- blocked ---------- */
+[
+  ['Airtable API', 'QUOTA', 'stop', STATE.airtable.blocked],
+  ['/devon-capture auth', 'OPEN', 'stop', 'Unauthenticated by design. Needs a ruling.'],
+  ['TQO FINAL V5', 'OFF', 'warn', 'Inactive by ruling until funded.'],
+  ['QA checklists', 'LOST', 'stop', 'Deleted in the name purge. Rewrite from scratch.'],
+  ['Continuity SOP', 'LOST', 'stop', 'Not recoverable from any surviving file.'],
+  ['Mirror Reads', 'EMPTY', 'idle', 'Zero files when listed.']
+].forEach(([k, v, cls, tip]) => {
+  const r = el('div', 'row');
+  r.innerHTML = `<span class="k">${esc(k)}</span><span class="v"><span class="pill ${cls}">${v}</span></span>`;
+  r.title = tip;
+  $('blocked').appendChild(r);
+});
+
+/* ---------- the brain map ---------- */
+const CX = 280, CY = 280, SVGNS = 'http://www.w3.org/2000/svg';
+const mk = (tag, attrs) => {
+  const n = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  return n;
+};
+// tick rings
+for (let i = 0; i < 72; i++) {
+  const a = (i / 72) * Math.PI * 2, long = i % 6 === 0;
+  const r1 = long ? 238 : 244, r2 = 248;
+  $('tickOuter').appendChild(mk('line', {
+    x1: CX + Math.cos(a) * r1, y1: CY + Math.sin(a) * r1,
+    x2: CX + Math.cos(a) * r2, y2: CY + Math.sin(a) * r2,
+    'stroke-width': long ? 1.6 : 0.8, opacity: long ? 0.9 : 0.45
+  }));
+}
+for (let i = 0; i < 40; i++) {
+  const a = (i / 40) * Math.PI * 2;
+  $('tickInner').appendChild(mk('line', {
+    x1: CX + Math.cos(a) * 122, y1: CY + Math.sin(a) * 122,
+    x2: CX + Math.cos(a) * 128, y2: CY + Math.sin(a) * 128, 'stroke-width': 1
+  }));
+}
+// council seats on the outer ring
+STATE.agents.forEach((a, i) => {
+  const ang = (i / STATE.agents.length) * Math.PI * 2 - Math.PI / 2 + 0.35;
+  const x = CX + Math.cos(ang) * 222, y = CY + Math.sin(ang) * 222;
+  const g = mk('g', {});
+  g.appendChild(mk('circle', { cx: x, cy: y, r: 3, fill: '#1E3348', stroke: '#56697E', 'stroke-width': 1 }));
+  const t = mk('text', {
+    x, y: y + (Math.sin(ang) > 0.2 ? 16 : -9), 'text-anchor': 'middle',
+    style: 'font-family:IBM Plex Mono,monospace;font-size:8.5px;letter-spacing:.1em;fill:#56697E'
+  });
+  t.textContent = a.name.toUpperCase();
+  g.appendChild(t);
+  $('seats').appendChild(g);
+});
+// the nine Areas
+const AREA_COLOUR = ['#C77B4A','#D4A017','#4FB3A5','#C77B4A','#8A9BAE','#D4A017','#C77B4A','#4FB3A5','#D4A017'];
+STATE.areas.forEach((area, i) => {
+  const ang = (i / STATE.areas.length) * Math.PI * 2 - Math.PI / 2;
+  const x = CX + Math.cos(ang) * 128, y = CY + Math.sin(ang) * 128;
+  const colour = AREA_COLOUR[i];
+
+  $('spokes').appendChild(mk('line', { x1: CX, y1: CY, x2: x, y2: y, 'stroke-width': 1, opacity: 0.5 }));
+
+  const g = mk('g', { class: 'node-hit', tabindex: '0', role: 'button',
+                      'aria-label': `${area.label}: ${area.covers}` });
+  g.appendChild(mk('circle', { class: 'node-ring', cx: x, cy: y, r: 15, fill: 'none',
+                               stroke: colour, 'stroke-width': 1, opacity: 0.25 }));
+  g.appendChild(mk('circle', { class: 'node-dot', cx: x, cy: y, r: 6.5, fill: '#0E1826',
+                               stroke: colour, 'stroke-width': 2 }));
+  const lx = CX + Math.cos(ang) * 168, ly = CY + Math.sin(ang) * 168;
+  const t = mk('text', { class: 'node-lbl', x: lx, y: ly + 4, 'text-anchor': 'middle' });
+  t.textContent = area.label.toUpperCase();
+  g.appendChild(t);
+
+  const show = () => {
+    $('readout').innerHTML =
+      `<b>${esc(area.label)}</b> <span class="code">files as ${esc(area.code)}</span><br>${esc(area.covers)}`;
+  };
+  const reset = () => {
+    $('readout').innerHTML = 'Hover an Area to read its brief. Nine Areas, ruled. Never invent a tenth.';
+  };
+  g.addEventListener('mouseenter', show);
+  g.addEventListener('focus', show);
+  g.addEventListener('mouseleave', reset);
+  g.addEventListener('blur', reset);
+  $('areas').appendChild(g);
+});
+
+/* ---------- command parsing, mirroring services/devon/commands.py ---------- */
+const INTENTS = [
+  { n:'capture', k:'CAPTURE', floor:.80, lead:['remember that','remember this','remember','make a note of','note this'], dest:'Notion Inbox, Notes and Ideas' },
+  { n:'add_task', k:'CAPTURE', floor:.80, lead:['add a task to','add a task','add task','new task','remind me to'], dest:'Notion Tasks' },
+  { n:'start_project', k:'CAPTURE', floor:.82, lead:['start a project called','start a project','new project called','new project'], dest:'Notion Projects and Goals' },
+  { n:'episode_idea', k:'CAPTURE', floor:.82, lead:['new episode idea','episode idea'], dest:'Airtable Podcast HQ, Idea stage', area:'Podcast' },
+  { n:'recall', k:'READ', floor:.76, lead:['what do we already know about','what do we know about','what did we decide about'], dest:'reads the Thread Log' },
+  { n:'whats_on_my_plate', k:'READ', floor:.78, lead:["what's on my plate","whats on my plate"], dest:'reads' },
+  { n:'brief', k:'READ', floor:.80, lead:['brief me','briefing'], dest:'reads' },
+  { n:'status_report', k:'READ', floor:.80, lead:['status report'], dest:'reads' },
+  { n:'log_thread', k:'CAPTURE', floor:.84, lead:['log this thread','log this conversation','receipt'], dest:'Notion Thread Log' },
+  { n:'refresh_dashboard', k:'EFFECT', floor:.84, lead:['refresh my dashboard'], dest:'regenerates this console' },
+  { n:'get_time', k:'READ', floor:.72, lead:['what time is it','the time'], dest:'answers locally' },
+  { n:'get_weather', k:'READ', floor:.74, lead:['weather in','weather for',"what's the weather"], dest:'a weather provider' },
+  { n:'open_app', k:'EFFECT', floor:.86, gated:1, lead:['open','launch'], dest:'launches a program' },
+  { n:'take_screenshot', k:'EFFECT', floor:.84, gated:1, lead:['take a screenshot','screenshot'], dest:'writes an image to disk' },
+  { n:'send_message', k:'EFFECT', floor:.88, gated:1, lead:['send a message to','send message to'], dest:'sends on your behalf' },
+  { n:'shutdown', k:'EFFECT', floor:.92, gated:1, lead:['shut down the computer','shutdown the computer'], dest:'powers the machine off' },
+  { n:'restart', k:'EFFECT', floor:.92, gated:1, lead:['restart the computer','reboot the computer'], dest:'reboots the machine' }
+];
+const AREAS_KW = STATE.areas.map(a => ({
+  label: a.label,
+  kw: ({ TQO:['tqo','quiet operator','monetization'], Podcast:['podcast','tsws','episode','vespera','auren','shadow we share'],
+         NCO:['nco','forge','sergeant','military'], ACX:['acx','ascension','caudex','archivist','folio'],
+         Health:['health','fitness','sleep','workout'], Money:['money','invoice','budget','credit','tax'],
+         Family:['family','karrie','birthday'], Learning:['learning','course','study'],
+         Systems:['systems','devon','vault','n8n','airtable','notion','workflow','webhook','doctrine'] })[a.label] || []
+}));
+
+function stripWake(s) { return s.replace(/^\s*(devon|jarvis)\b[\s,:.!]*/i, '').trim(); }
+function norm(s) { return s.toLowerCase().replace(/\s+/g, ' ').trim().replace(/[?.!,]+$/, ''); }
+
+function classifyArea(text) {
+  const h = text.toLowerCase();
+  const scored = AREAS_KW.map(a => ({ label: a.label, hits: a.kw.filter(k => h.includes(k)).length }))
+                         .filter(a => a.hits > 0).sort((a, b) => b.hits - a.hits);
+  if (!scored.length) return null;
+  if (scored.length > 1 && scored[0].hits === scored[1].hits) return null;
+  return scored[0].label;
+}
+
+function parse(raw) {
+  const body = stripWake(raw), n = norm(body);
+  if (!n) return null;
+  let best = null;
+  for (const it of INTENTS) {
+    for (const lead of it.lead) {
+      const L = norm(lead);
+      if (n === L || n.startsWith(L + ' ') || n.includes(L)) {
+        const score = n === L ? 1 : 0.95;
+        if (!best || L.length > best.leadLen) best = { it, score, leadLen: L.length, lead };
+      }
+    }
+  }
+  if (!best) return { unknown: true, body };
+  const idx = body.toLowerCase().indexOf(best.lead.toLowerCase());
+  const payload = idx === -1 ? '' : body.slice(idx + best.lead.length).replace(/^[\s,:;-]+/, '');
+  return { it: best.it, score: best.score, payload, body };
+}
+
+function render(raw) {
+  const out = $('cmdout');
+  if (!raw.trim()) {
+    out.innerHTML = '<span class="dim">Type a command. DEVON parses it here and shows what he would do. ' +
+      'Nothing runs: captures return a filing plan, effects return an approval request.</span>';
+    return;
+  }
+  const r = parse(raw);
+  if (!r || r.unknown) {
+    out.innerHTML = `<span class="no">DECLINED</span> <span class="dim">no intent above its floor.</span><br>
+      <span class="dim">Declining rather than guessing. A half heard sentence never reaches an effect.</span>`;
+    return;
+  }
+  const it = r.it;
+  const lines = [];
+  lines.push(`<span class="lead">INTENT</span> <span class="hl">${it.n.replace(/_/g,' ')}</span>
+              <span class="dim">/ ${it.k} / confidence ${r.score.toFixed(2)} / floor ${it.floor}</span>`);
+
+  if (it.gated) {
+    lines.push(`<span class="gate">APPROVAL REQUIRED</span> <span class="dim">${esc(it.dest)}</span>`);
+    lines.push(`<span class="dim">Request raised. Nothing has run. Rulings are yours, never a model's.</span>`);
+  } else if (it.k === 'CAPTURE') {
+    const area = it.area || classifyArea(r.payload || r.body);
+    lines.push(`<span class="dim">DESTINATION</span> ${esc(it.dest)}`);
+    if (area) {
+      const code = (STATE.areas.find(a => a.label === area) || {}).code || '';
+      lines.push(`<span class="dim">AREA</span> <span class="hl">${esc(area)}</span> <span class="dim">files as ${esc(code)}</span>`);
+      if (r.payload) {
+        const slug = r.payload.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,44);
+        const d = new Date().toISOString().slice(0,10);
+        lines.push(`<span class="dim">FILENAME</span> ${esc(code)}_DOC_${esc(slug)}_v1_${d}.md`);
+      }
+    } else {
+      lines.push(`<span class="gate">NO AREA</span> <span class="dim">no signal in the text. Files unrouted rather than guessed.</span>`);
+    }
+    if (r.payload) lines.push(`<span class="dim">PAYLOAD</span> ${esc(r.payload)}`);
+    lines.push(`<span class="dim">Planned, not written. That call is yours.</span>`);
+  } else {
+    lines.push(`<span class="dim">${esc(it.dest)}</span>`);
+    if (r.payload) lines.push(`<span class="dim">SUBJECT</span> ${esc(r.payload)}`);
+  }
+  out.innerHTML = lines.join('<br>');
+}
+
+$('cmd').addEventListener('input', (e) => render(e.target.value));
+$('intentCount').textContent = STATE.intents.total + ' INTENTS / ' + STATE.intents.gated.length + ' GATED';
+
+const EXAMPLES = [
+  'Devon, remember the ACX folio needs its own canon folder',
+  'Devon, new episode idea about inheritance and silence',
+  'Devon, add a task to verify the D10 grid hash',
+  'Devon, shut down the computer',
+  'Devon, what do we already know about the Airtable quota',
+  'asdkjh qwe nonsense'
+];
+EXAMPLES.forEach(x => {
+  const b = el('button', 'chip', esc(x.length > 42 ? x.slice(0, 40) + '…' : x));
+  b.type = 'button';
+  b.addEventListener('click', () => { $('cmd').value = x; render(x); $('cmd').focus(); });
+  $('chips').appendChild(b);
+});
+
+/* ---------- ticker ---------- */
+const TICKS = [
+  ['ok','NINE AREAS RULED','ACX added 2026-08-20. Anything saying eight is stale.'],
+  ['warn','CANON HAS ONE WRITER','Five documents forked in two days. Confirm the write before touching _Devon Core.'],
+  ['stop','AIRTABLE QUOTA','Monthly workspace limit. Backoff does nothing. Blocked on money, not on work.'],
+  ['stop','/devon-capture UNAUTHENTICATED','Deliberate. Lower blast radius. Needs a ruling.'],
+  ['ok','A READ-BACK IS A RECEIPT','A success response is only a claim.'],
+  ['warn','SNAPSHOT IS NOT LIVE TRUTH','Regenerate before trusting a number.'],
+  ['stop','REBUILD OWED','QA checklists and continuity SOP are not recoverable. Do not let a model fake them.'],
+  ['ok','RELOCATING IS NOT REMEDIATING','A secret moved is a secret contained, not fixed.']
+];
+const track = $('ticker');
+const buildTicks = () => TICKS.forEach(([cls, head, tail]) => {
+  const s = el('span', '', `<b class="${cls}" style="color:var(--${cls==='ok'?'patina':cls==='warn'?'brass':'oxide'})">${esc(head)}</b> &nbsp;${esc(tail)}`);
+  track.appendChild(s);
+});
+buildTicks(); buildTicks();
+</script>

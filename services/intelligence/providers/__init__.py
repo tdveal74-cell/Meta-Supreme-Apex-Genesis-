@@ -23,6 +23,10 @@ from services.intelligence.providers.base import (
     TokenUsage,
     extract_json,
 )
+from services.intelligence.providers.cerebras_provider import (
+    CerebrasProvider,
+    RateLimiter,
+)
 from services.intelligence.providers.embeddings import (
     EmbeddingProvider,
     EmbeddingResponse,
@@ -37,6 +41,8 @@ from services.intelligence.providers.openai_provider import OpenAIProvider
 __all__ = [
     "AIProvider",
     "AnthropicProvider",
+    "CerebrasProvider",
+    "RateLimiter",
     "ChatMessage",
     "EmbeddingProvider",
     "EmbeddingResponse",
