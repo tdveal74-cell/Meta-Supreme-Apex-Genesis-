@@ -59,6 +59,25 @@ app = FastAPI(
 )
 
 
+@app.middleware("http")
+async def never_cache(request, call_next):
+    """
+    Nothing this service returns may be stored by anything.
+
+    Tee's home screen icon kept showing a refusal page from before a deploy,
+    because iOS caches a standalone web app's start page hard and the
+    responses went out as `public`. Stale is the mild half of the problem:
+    `public` on the authenticated console meant an intermediary was entitled
+    to store a page carrying the whole estate map and hand it to whoever
+    asked next. Every response here is either gated or a refusal, and none of
+    it is worth caching, so none of it is cacheable.
+    """
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store, private, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
+
 def _console_token() -> str:
     return (os.environ.get("CONSOLE_TOKEN") or "").strip()
 

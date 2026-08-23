@@ -85,6 +85,16 @@ out = {
     ).headers["content-type"],
     # The default has to be the door, whatever the caller's Accept says or
     # does not say. These are the shapes a real client sends.
+    # A stale cached page is how a fixed deploy keeps looking broken, and a
+    # cacheable authenticated page is worse than stale.
+    "cache_control_console_anon": client.get("/console").headers.get("cache-control"),
+    "cache_control_console_authed": client.get("/console", headers=AUTH).headers.get(
+        "cache-control"
+    ),
+    "cache_control_root": client.get("/").headers.get("cache-control"),
+    "cache_control_recall": client.get(
+        "/api/v1/soul/recall?q=x", headers=AUTH
+    ).headers.get("cache-control"),
     "root_no_accept_is_door": 'id="t"' in client.get("/").text,
     "root_star_accept_is_door": 'id="t"'
     in client.get("/", headers={"Accept": "*/*"}).text,
