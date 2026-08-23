@@ -235,7 +235,17 @@ class SoulLayer:
         except ProviderError as exc:
             errors.append(f"tee-soul-layer unavailable: {exc}")
 
-        if self.devon_host:
+        if not self.devon_host:
+            # Silence here read as "DEVON has no experience of this", when the
+            # truth was that DEVON was never asked. One index answering is a
+            # partial recall and has to say so, or the caller believes both
+            # souls came back empty.
+            errors.append(
+                f"devon-soul was not searched: no host is configured for "
+                f"{DEVON_INDEX_NAME!r}, so only Tee's rulings were read. Set "
+                f"SOUL_DEVON_HOST to include DEVON's own experience."
+            )
+        elif top_k_devon > 0:
             try:
                 devon_hits = await self._search(
                     self.devon_host, DEVON_NAMESPACE, query, top_k_devon, DEVON_SOURCE
@@ -256,7 +266,11 @@ class SoulLayer:
     async def _search(
         self, host: str, namespace: str, text: str, top_k: int, source: str
     ) -> List[SoulRecord]:
-        payload = {"query": {"inputs": {"text": text}, "top_k": max(1, top_k)}}
+        # The caller's ceiling is honoured as given. max(1, top_k) turned a
+        # request for zero records into a request for one, which the API
+        # advertised as valid and then quietly disobeyed. Zero is handled by
+        # not calling this at all.
+        payload = {"query": {"inputs": {"text": text}, "top_k": top_k}}
         response = await self._request(
             "POST", f"{host}/records/namespaces/{namespace}/search", json_body=payload
         )
@@ -275,8 +289,15 @@ class SoulLayer:
                     heading=str(fields.get("heading", "")),
                     area=str(fields.get("area", "")),
                     dated=str(fields.get("ruled_on") or fields.get("observed_on") or ""),
+                    # `source` and `kind` above are set from the index the
+                    # hit came from and from a validated read. A record's own
+                    # payload carries writer-controlled keys, so anything
+                    # named like a trust field is dropped rather than shipped
+                    # alongside the real one for a consumer to confuse.
                     metadata={
-                        k: v for k, v in fields.items() if k not in ("text",)
+                        k: v
+                        for k, v in fields.items()
+                        if k not in ("text", "source")
                     },
                 )
             )
@@ -341,7 +362,11 @@ class SoulLayer:
                 f"({DEVON_INDEX_NAME!r}) and set SOUL_DEVON_HOST.",
                 provider="pinecone",
             )
-        if self.devon_host == self.tee_host:
+        # Compared case-insensitively: hosts are case-insensitive, and this
+        # single comparison is the whole of the guarantee that Tee's rulings
+        # cannot be written to. A guarantee that a capital letter defeats is
+        # not a guarantee.
+        if self.devon_host.casefold() == self.tee_host.casefold():
             raise SoulWriteRefused(
                 "devon-soul may not be the tee-soul-layer index. The boundary "
                 "ruling of 2026-08-20 keeps Tee's soul read-only from here.",
