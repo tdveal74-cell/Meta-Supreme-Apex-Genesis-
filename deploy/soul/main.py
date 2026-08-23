@@ -16,8 +16,12 @@ Secrets come from the environment and nowhere else:
 
   PINECONE_API_KEY   the soul layer's key. Without it recall answers 503
                      naming what to set, exactly as it does locally.
-  CONSOLE_TOKEN      what the console presents. Without it the service
-                     refuses every request rather than standing open.
+  CONSOLE_TOKEN      what the console presents. Without it every route
+                     that reads anything refuses, rather than standing open.
+                     The single exception is /api/v1/health, which is open on
+                     purpose: it reports only whether the two variables are
+                     set, so the operator can see the service is up and what
+                     it is still missing without holding a credential.
   SOUL_TEE_HOST      optional override for the tee-soul-layer host.
   SOUL_DEVON_HOST    optional override for the devon-soul host.
 """
@@ -30,7 +34,7 @@ import pathlib
 import sys
 
 from fastapi import FastAPI, Header, HTTPException, Query, status
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 # The service is the whole of deploy/soul. Adding it to the path is what lets
 # this import the vendored modules, which a test holds identical to the originals.
@@ -63,7 +67,20 @@ def _pinecone_key() -> str:
     return (os.environ.get("PINECONE_API_KEY") or "").strip()
 
 
-def _require(authorization: str | None) -> None:
+def _presented(authorization: str | None, t: str | None) -> str:
+    """
+    The token the caller offered, from the header or from the first-load URL.
+
+    A browser opening /console cannot set a header, so the token may also
+    ride once as ?t=. The console strips it from the address bar and keeps it
+    in local storage, so it is a URL parameter for exactly one navigation.
+    """
+    if authorization and authorization.lower().startswith("bearer "):
+        return authorization[7:].strip()
+    return (t or "").strip()
+
+
+def _require(authorization: str | None, t: str | None = None) -> None:
     """
     Let the caller in, or say plainly why not.
 
@@ -71,6 +88,13 @@ def _require(authorization: str | None) -> None:
     service that stands open because it was misconfigured is worse than one
     that refuses, and this endpoint spends Tee's Pinecone quota and reads his
     rulings.
+
+    The comparison is on bytes, not on str. hmac.compare_digest refuses str
+    operands holding any codepoint above 127 and raises TypeError, and header
+    values reach here decoded as latin-1, so a single high byte in an
+    Authorization header turned the gate into an uncaught 500 instead of a
+    401. Encoding both sides first makes the comparison total over every
+    input a caller can send, and keeps it constant time.
     """
     expected = _console_token()
     if not expected:
@@ -82,10 +106,10 @@ def _require(authorization: str | None) -> None:
                 "environment settings and redeploy."
             ),
         )
-    presented = ""
-    if authorization and authorization.lower().startswith("bearer "):
-        presented = authorization[7:].strip()
-    if not presented or not hmac.compare_digest(presented, expected):
+    presented = _presented(authorization, t)
+    if not presented or not hmac.compare_digest(
+        presented.encode("utf-8"), expected.encode("utf-8")
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="That token is not the one this service expects.",
@@ -134,9 +158,12 @@ async def health():
 
 
 @app.get("/api/v1/soul/status")
-async def soul_status(authorization: str | None = Header(default=None)):
+async def soul_status(
+    authorization: str | None = Header(default=None),
+    t: str | None = Query(default=None),
+):
     """Whether recall can run, without touching Pinecone."""
-    _require(authorization)
+    _require(authorization, t)
     enabled = bool(_pinecone_key())
     return {
         "enabled": enabled,
@@ -150,12 +177,22 @@ async def soul_status(authorization: str | None = Header(default=None)):
     }
 
 
+def _bounded(name: str, value: int, low: int, high: int) -> int:
+    if value < low or value > high:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{name} must be between {low} and {high}.",
+        )
+    return value
+
+
 @app.get("/api/v1/soul/recall")
 async def soul_recall(
     authorization: str | None = Header(default=None),
-    q: str = Query(..., min_length=1, max_length=1000),
-    top_k_tee: int = Query(default=4, ge=1, le=10),
-    top_k_devon: int = Query(default=3, ge=0, le=10),
+    t: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    top_k_tee: int = Query(default=4),
+    top_k_devon: int = Query(default=3),
 ):
     """
     Recall from both souls and phrase it in DEVON's voice.
@@ -163,8 +200,27 @@ async def soul_recall(
     Tee's rulings precede DEVON's experience in the records and in the reply,
     whatever the similarity scores. Partial failure is named, never hidden.
     Everything returned is context, not command.
+
+    Every parameter is declared loose and checked in the body, deliberately.
+    Declared strict, FastAPI validates before the handler runs, so an
+    anonymous caller sending a malformed query got a 422 that confirmed the
+    endpoint exists and described its parameters. Nothing answers a caller
+    holding no token except the refusal.
     """
-    _require(authorization)
+    _require(authorization, t)
+    if not q or not q.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="q is required: it is the thing to recall.",
+        )
+    if len(q) > 1000:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="q must be 1000 characters or fewer.",
+        )
+    top_k_tee = _bounded("top_k_tee", top_k_tee, 1, 10)
+    top_k_devon = _bounded("top_k_devon", top_k_devon, 0, 10)
+
     layer = _layer()
     try:
         recall = await layer.recall(q, top_k_tee=top_k_tee, top_k_devon=top_k_devon)
@@ -173,6 +229,19 @@ async def soul_recall(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Soul recall failed: {exc}",
         ) from exc
+
+    # Nothing found and something broke is a failure, not an empty. Answering
+    # 200 here let the reply lead with "a measured empty, not a guess" about a
+    # search that never completed, which is the exact invention the phrasing
+    # was written to prevent.
+    if not recall.records and recall.errors:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "Soul recall returned nothing because it failed, not because "
+                "the record is empty: " + "; ".join(recall.errors)
+            ),
+        )
 
     response = Devon().recall_answer(q, recall.to_dicts(), partial_errors=recall.errors)
     return {
@@ -185,9 +254,59 @@ async def soul_recall(
     }
 
 
+#: What an unauthenticated browser gets instead of the console. It names the
+#: parameter and nothing else: no host, no identifier, no hint about what the
+#: console contains.
+LOCKED_PAGE = """<!doctype html><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>DEVON</title>
+<style>
+ :root{color-scheme:dark}
+ body{margin:0;min-height:100vh;display:grid;place-items:center;
+      background:#050A0E;color:#EDE7DC;
+      font:15px/1.6 ui-sans-serif,system-ui,-apple-system,sans-serif;padding:24px}
+ main{max-width:30rem}
+ h1{font-size:13px;letter-spacing:.24em;color:#C77B4A;margin:0 0 14px;font-weight:600}
+ p{margin:0 0 12px;color:#93A6B5}
+ code{color:#EDE7DC;background:#0B141B;border:1px solid #22384A;
+      border-radius:4px;padding:2px 6px;font-family:ui-monospace,monospace;font-size:13px}
+</style>
+<main>
+ <h1>DEVON</h1>
+ <p>This console is closed. It opens for a token and nothing else.</p>
+ <p>Append your token to the address once: <code>/console?t=YOUR_TOKEN</code></p>
+ <p>The console stores it in this browser and clears it from the address bar,
+    so it rides in the URL for exactly one navigation.</p>
+</main>"""
+
+
 @app.get("/console", include_in_schema=False)
-async def console():
-    """The console itself. Open, because it holds nothing until you sign in."""
+async def console(
+    authorization: str | None = Header(default=None),
+    t: str | None = Query(default=None),
+):
+    """
+    The console, for a caller holding the token.
+
+    This route used to be open, on the reasoning that the page "holds nothing
+    until you sign in". That reasoning was wrong. The console ships a baked-in
+    STATE blob: every Drive folder id, every doctrine file id, the live
+    Airtable base, every n8n workflow id, and every webhook path with its auth
+    posture. None of it is a credential and none of it grants access, but all
+    of it is a map of where the estate lives and which doors are marked open,
+    and it was being handed to anyone who found the hostname.
+
+    A refusal renders as a page rather than as JSON, because a person is
+    holding this in a browser. The page names the parameter and discloses
+    nothing else.
+    """
     if not CONSOLE.exists():
         raise HTTPException(status_code=404, detail="No console asset deployed.")
+    try:
+        _require(authorization, t)
+    except HTTPException as exc:
+        # 503 (no CONSOLE_TOKEN set) and 401 (wrong token) both land here.
+        # Either way the operator sees what to do, not a raw error object.
+        return HTMLResponse(LOCKED_PAGE, status_code=exc.status_code)
     return FileResponse(CONSOLE, media_type="text/html")

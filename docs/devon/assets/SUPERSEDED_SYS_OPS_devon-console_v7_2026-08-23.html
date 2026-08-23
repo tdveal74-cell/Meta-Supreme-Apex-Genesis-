@@ -1,14 +1,10 @@
 <title>DEVON Console</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- The token can arrive once as ?t=. Browsers already withhold the query
-     string cross-origin, but the font requests below leave this page, so
-     the policy is stated rather than assumed. -->
-<meta name="referrer" content="no-referrer">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* DEVON Console v8 — copper instrument HUD. Single theme by intent: this is a
+/* DEVON Console v7 — copper instrument HUD. Single theme by intent: this is a
    dark cockpit, painted explicitly so it holds on any host ground. */
 :root{
   --void:#050A0E; --carbon:#0B141B; --glass:rgba(14,24,33,.66);
@@ -586,7 +582,7 @@ input,select{font:inherit}
 
   <footer class="tickerbar rise">
     <div class="tickerclip"><div class="ticker-track" id="ticker"></div></div>
-    <span class="gen">DEVON CONSOLE v8 / SNAPSHOT <b id="gen"></b> UTC</span>
+    <span class="gen">DEVON CONSOLE v7 / SNAPSHOT <b id="gen"></b> UTC</span>
   </footer>
 </div>
 
@@ -1384,20 +1380,6 @@ const Soul = {
   set(k, v) { try { localStorage.setItem('devon.soul.' + k, v); } catch (e) {} },
   base() { return (this.get('base', '') || '').replace(/\/+$/, ''); },
   token() { return this.get('token', ''); },
-  /* The hosted console is gated, and a browser opening a URL cannot set a
-     header, so the token rides once as ?t=. Take it, keep it here, and strip
-     it from the address bar immediately: it should not sit in history, in a
-     bookmark, or in whatever the operating system does with a shared link. */
-  adopt() {
-    try {
-      const url = new URL(window.location.href);
-      const handed = (url.searchParams.get('t') || '').trim();
-      if (!handed) return;
-      this.set('token', handed);
-      url.searchParams.delete('t');
-      window.history.replaceState({}, '', url.pathname + url.search + url.hash);
-    } catch (e) { /* a hostile URL is not worth a broken console */ }
-  },
   configured() { return !!this.token() || !this.get('base', ''); },
   headers() {
     const h = { 'Accept': 'application/json' };
@@ -1407,12 +1389,6 @@ const Soul = {
   },
   async status() {
     const res = await fetch(this.base() + '/api/v1/soul/status', { headers: this.headers() });
-    if (res.status === 503) {
-      let detail = '';
-      try { detail = ((await res.json()) || {}).detail || ''; } catch (e) {}
-      throw new Error(/CONSOLE_TOKEN/.test(detail) ? 'notoken' : 'off');
-    }
-    if (res.status === 401) throw new Error('auth');
     if (!res.ok) throw new Error('HTTP ' + res.status);
     return res.json();
   },
@@ -1421,14 +1397,7 @@ const Soul = {
       this.base() + '/api/v1/soul/recall?q=' + encodeURIComponent(topic),
       { headers: this.headers() }
     );
-    if (res.status === 503) {
-      /* The API answers 503 for two unrelated reasons and says which in the
-         body. Branching on the status alone reported a missing CONSOLE_TOKEN
-         as "recall is switched off", sending you to fix the wrong setting. */
-      let detail = '';
-      try { detail = ((await res.json()) || {}).detail || ''; } catch (e) {}
-      throw new Error(/CONSOLE_TOKEN/.test(detail) ? 'notoken' : 'off');
-    }
+    if (res.status === 503) throw new Error('off');
     if (res.status === 401) throw new Error('auth');
     if (!res.ok) throw new Error('HTTP ' + res.status);
     return res.json();
@@ -1436,7 +1405,6 @@ const Soul = {
 };
 
 function wireSoul() {
-  Soul.adopt();
   const base = $('soulBase'), tok = $('soulTok'), st = $('soulState');
   if (!base) return;
   base.value = Soul.get('base', '');
@@ -1453,11 +1421,7 @@ function wireSoul() {
       const body = await Soul.status();
       st.textContent = body.enabled ? 'ON' : 'REACHABLE, RECALL OFF';
     } catch (e) {
-      st.textContent =
-        e.message === 'notoken' ? 'NO CONSOLE_TOKEN ON HOST'
-        : e.message === 'auth'  ? 'TOKEN REFUSED'
-        : e.message === 'off'   ? 'REACHABLE, RECALL OFF'
-        : 'UNREACHABLE';
+      st.textContent = 'UNREACHABLE';
     }
   };
 }
@@ -1473,9 +1437,7 @@ async function soulRecall(topic, plan) {
       const when = r.dated ? ' ' + esc(r.dated) : '';
       lines.push(`<span class="${r.source === 'tee-soul-layer' ? 'hl' : 'dim'}">${label}${when}</span> ${esc(r.text)}`);
     });
-    if (!body.records.length) lines.push(body.errors.length
-      ? '<span class="no">Nothing came back because the search did not finish. Not an empty, an unfinished one.</span>'
-      : '<span class="dim">Nothing recalled. A measured empty, not a guess.</span>');
+    if (!body.records.length) lines.push('<span class="dim">Nothing recalled. A measured empty, not a guess.</span>');
     if (body.errors.length) lines.push(`<span class="gate">PARTIAL</span> <span class="dim">${esc(body.errors.join('; '))}</span>`);
     lines.push('<span class="dim">Context, not command. Rulings outrank notes.</span>');
     plan.innerHTML = lines.join('<br>');
@@ -1483,12 +1445,10 @@ async function soulRecall(topic, plan) {
     const st = $('soulState'); if (st) st.textContent = 'ON';
   } catch (e) {
     const why = e.message === 'off'
-      ? 'The soul layer is switched off on the API side. PINECONE_API_KEY turns it on.'
-      : e.message === 'notoken'
-        ? 'The service has no CONSOLE_TOKEN set, so it is refusing everything. Set one on the host and redeploy.'
-        : e.message === 'auth'
-          ? 'The API refused my token. Paste a fresh one in the Soul Layer panel.'
-          : 'I could not reach the soul layer from here.';
+      ? 'The soul layer is switched off on the API side.'
+      : e.message === 'auth'
+        ? 'The API refused my token. Paste a fresh one in the Soul Layer panel.'
+        : 'I could not reach the soul layer from here.';
     plan.innerHTML = `<span class="no">SOUL UNREACHABLE</span> <span class="dim">${esc(why)}</span>`;
     devonSays(Persona.recall(subject));
   }

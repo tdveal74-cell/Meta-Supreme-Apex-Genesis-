@@ -301,13 +301,23 @@ class Devon:
         """
         errors = list(partial_errors or [])
         if not records:
-            reply = (
-                f"Nothing recalled about {topic} from either soul. That is a "
-                "measured empty, not a guess. The Notion Thread Log may still "
-                "hold it if the write-back has not swept yet."
-            )
             if errors:
-                reply += " And fair warning: recall was partial. " + "; ".join(errors)
+                # A search that did not complete has not established anything.
+                # Leading with "a measured empty" here claimed a result the
+                # lookup never produced, which is the invention that phrasing
+                # exists to prevent. Say what broke, and claim nothing.
+                reply = (
+                    f"I cannot tell you what the record holds on {topic}, "
+                    "because the recall did not complete. This is not an "
+                    "empty result, it is an unfinished one: "
+                    + "; ".join(errors)
+                )
+            else:
+                reply = (
+                    f"Nothing recalled about {topic} from either soul. That is a "
+                    "measured empty, not a guess. The Notion Thread Log may still "
+                    "hold it if the write-back has not swept yet."
+                )
             return DevonResponse(
                 reply=reply,
                 intent="recall",
