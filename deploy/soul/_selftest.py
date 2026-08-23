@@ -72,6 +72,46 @@ out = {
     # Health is open on purpose and says only whether the two are set.
     "health_anonymous": client.get("/api/v1/health").status_code,
     "health_body": client.get("/api/v1/health").json(),
+    # The bare hostname has to be usable by a person holding a phone.
+    "root_browser_status": client.get("/", headers={"Accept": "text/html"}).status_code,
+    "root_browser_is_html": "text/html"
+    in client.get("/", headers={"Accept": "text/html"}).headers["content-type"],
+    "root_browser_has_paste_field": 'id="t"'
+    in client.get("/", headers={"Accept": "text/html"}).text,
+    "root_browser_leaks_state": "const STATE"
+    in client.get("/", headers={"Accept": "text/html"}).text,
+    "root_json_still_json": client.get(
+        "/", headers={"Accept": "application/json"}
+    ).headers["content-type"],
+    # A closed console is a door with a paste field, not a dead end, and it
+    # says which of the three walls you hit.
+    "console_closed_has_paste_field": 'id="t"' in client.get("/console").text,
+    "console_no_token_says_so": "No token yet" in client.get("/console").text,
+    "console_bad_token_says_refused": "was refused"
+    in client.get("/console?t=nope").text,
+    "console_bad_token_not_confused_with_no_token": "No token yet"
+    not in client.get("/console?t=nope").text,
+    # Signing in once has to mean once: a top level navigation carries no
+    # header, so without the cookie every home screen launch would land on
+    # the door again.
+    "console_cookie_opens_it": client.get(
+        "/console", cookies={"devon_console": "probe-token"}
+    ).status_code,
+    "console_cookie_serves_the_real_console": "const STATE"
+    in client.get("/console", cookies={"devon_console": "probe-token"}).text,
+    "console_wrong_cookie_refused": client.get(
+        "/console", cookies={"devon_console": "wrong"}
+    ).status_code,
+    "recall_cookie_opens_it": client.get(
+        "/api/v1/soul/status", cookies={"devon_console": "probe-token"}
+    ).status_code,
+    # A header must win over a stale cookie, or a rotated token can never
+    # be used by an API caller whose browser still holds the old one.
+    "header_beats_stale_cookie": client.get(
+        "/api/v1/soul/status",
+        headers=AUTH,
+        cookies={"devon_console": "stale-and-wrong"},
+    ).status_code,
 }
 
 # With no CONSOLE_TOKEN at all the service closes rather than opening.
@@ -79,6 +119,10 @@ os.environ.pop("CONSOLE_TOKEN", None)
 out["no_token_status"] = client.get("/api/v1/soul/status").status_code
 out["no_token_console"] = client.get("/console").status_code
 out["no_token_console_body_has_state"] = "const STATE" in client.get("/console").text
+out["no_token_console_names_the_host"] = (
+    "no CONSOLE_TOKEN set on the host" in client.get("/console").text
+)
+out["no_token_console_has_paste_field"] = 'id="t"' in client.get("/console").text
 out["no_token_health"] = client.get("/api/v1/health").status_code
 
 print(json.dumps(out))

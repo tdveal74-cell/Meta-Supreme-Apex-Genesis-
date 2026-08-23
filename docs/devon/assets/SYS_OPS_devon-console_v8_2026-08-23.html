@@ -1394,6 +1394,14 @@ const Soul = {
       const handed = (url.searchParams.get('t') || '').trim();
       if (!handed) return;
       this.set('token', handed);
+      // Same reason the door sets it: a top level navigation cannot carry a
+      // header, so this is what makes a home screen launch open the console
+      // rather than the door. Arriving by ?t= counts as signing in.
+      try {
+        var secure = location.protocol === 'https:' ? '; Secure' : '';
+        document.cookie = 'devon_console=' + encodeURIComponent(handed) +
+                          '; path=/; max-age=31536000; SameSite=Strict' + secure;
+      } catch (e) {}
       url.searchParams.delete('t');
       window.history.replaceState({}, '', url.pathname + url.search + url.hash);
     } catch (e) { /* a hostile URL is not worth a broken console */ }

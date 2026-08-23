@@ -33,7 +33,7 @@ import os
 import pathlib
 import sys
 
-from fastapi import FastAPI, Header, HTTPException, Query, status
+from fastapi import Cookie, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 # The service is the whole of deploy/soul. Adding it to the path is what lets
@@ -67,20 +67,34 @@ def _pinecone_key() -> str:
     return (os.environ.get("PINECONE_API_KEY") or "").strip()
 
 
-def _presented(authorization: str | None, t: str | None) -> str:
-    """
-    The token the caller offered, from the header or from the first-load URL.
+#: Name of the cookie the door and the console both set.
+TOKEN_COOKIE = "devon_console"
 
-    A browser opening /console cannot set a header, so the token may also
-    ride once as ?t=. The console strips it from the address bar and keeps it
-    in local storage, so it is a URL parameter for exactly one navigation.
+
+def _presented(
+    authorization: str | None, t: str | None, cookie: str | None = None
+) -> str:
+    """
+    The token the caller offered: a header, the first-load URL, or a cookie.
+
+    A browser performing a top level navigation cannot set a header, which is
+    why ?t= exists at all. But it cannot set one on the second visit either,
+    so without the cookie every launch from a home screen would land on the
+    door and ask for the token again. The cookie is what makes signing in
+    once mean once.
+
+    Header first so an API caller is never overridden by a stale cookie.
     """
     if authorization and authorization.lower().startswith("bearer "):
         return authorization[7:].strip()
-    return (t or "").strip()
+    if t and t.strip():
+        return t.strip()
+    return (cookie or "").strip()
 
 
-def _require(authorization: str | None, t: str | None = None) -> None:
+def _require(
+    authorization: str | None, t: str | None = None, cookie: str | None = None
+) -> None:
     """
     Let the caller in, or say plainly why not.
 
@@ -106,7 +120,7 @@ def _require(authorization: str | None, t: str | None = None) -> None:
                 "environment settings and redeploy."
             ),
         )
-    presented = _presented(authorization, t)
+    presented = _presented(authorization, t, cookie)
     if not presented or not hmac.compare_digest(
         presented.encode("utf-8"), expected.encode("utf-8")
     ):
@@ -135,8 +149,87 @@ def _layer() -> SoulLayer:
     )
 
 
+#: The door. One page for both ways in: the bare hostname, and /console
+#: without a usable token. A paste field rather than instructions to type a
+#: long token onto the end of a URL by hand, and a line naming which of the
+#: three situations you are in, because "closed" said the same words whether
+#: you gave no token, gave a wrong one, or the host had none set.
+#:
+#: It is open to anyone, so it holds nothing: no host, no identifier, no
+#: estate detail. A test asserts that rather than trusting it.
+def door_page(reason: str = "") -> str:
+    note = f'<p class="why">{reason}</p>' if reason else ""
+    return DOOR_HTML.replace("{{NOTE}}", note)
+
+
+DOOR_HTML = """<!doctype html><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>DEVON</title>
+<style>
+ :root{color-scheme:dark}
+ *{box-sizing:border-box}
+ body{margin:0;min-height:100vh;display:grid;place-items:center;
+      background:#050A0E;color:#EDE7DC;
+      font:15px/1.6 ui-sans-serif,system-ui,-apple-system,sans-serif;padding:24px}
+ main{width:100%;max-width:26rem}
+ h1{font-size:13px;letter-spacing:.24em;color:#C77B4A;margin:0 0 6px;font-weight:600}
+ p{margin:0 0 18px;color:#93A6B5;font-size:14px}
+ p.why{color:#D4A017;border-left:2px solid #D4A017;padding-left:10px;font-size:13px}
+ label{display:block;font-size:11px;letter-spacing:.18em;color:#5E7484;margin:0 0 6px}
+ input{width:100%;padding:13px 12px;background:#0B141B;color:#EDE7DC;
+       border:1px solid #22384A;border-radius:6px;font:14px ui-monospace,monospace}
+ input:focus{outline:none;border-color:#C77B4A}
+ button{width:100%;margin-top:10px;padding:13px;border:1px solid #C77B4A;
+        border-radius:6px;background:transparent;color:#C77B4A;
+        font:600 12px/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.20em;
+        cursor:pointer}
+ button:active{background:#1A1008}
+ .note{margin-top:16px;font-size:12px;color:#5E7484}
+</style>
+<main>
+ <h1>DEVON</h1>
+ {{NOTE}}
+ <p>Paste your console token. It is kept in this browser and nowhere else.</p>
+ <form id="f" autocomplete="off">
+  <label for="t">CONSOLE TOKEN</label>
+  <input id="t" type="password" inputmode="text" autocapitalize="off"
+         autocorrect="off" spellcheck="false" placeholder="CONSOLE_TOKEN from the host">
+  <button type="submit">OPEN THE CONSOLE</button>
+ </form>
+ <p class="note">Reads only. Nothing here writes to either soul.</p>
+</main>
+<script>
+document.getElementById('f').addEventListener('submit', function (e) {
+  e.preventDefault();
+  var v = (document.getElementById('t').value || '').trim();
+  if (!v) return;
+  // Stored the way the console stores it, so on this path the token never
+  // reaches the address bar, the history, or a bookmark.
+  try { localStorage.setItem('devon.soul.token', v); } catch (err) {}
+  // Signing in once has to mean once. A top level navigation cannot carry a
+  // header, so without this every launch from a home screen would land back
+  // on this page asking for the token again. Strict, so it is never sent
+  // from another site, and this whole service is reads with no effects.
+  var secure = location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = 'devon_console=' + encodeURIComponent(v) +
+                    '; path=/; max-age=31536000; SameSite=Strict' + secure;
+  location.href = '/console?t=' + encodeURIComponent(v);
+});
+</script>"""
+
+
 @app.get("/", include_in_schema=False)
-async def root():
+async def root(accept: str | None = Header(default=None)):
+    """
+    A door for a person, JSON for anything else.
+
+    This answered JSON to everyone, so opening the bare hostname on a phone
+    put you at a directory listing you could not act on: no tappable link,
+    and the one route that matters needs a token appended by hand.
+    """
+    if accept and "text/html" in accept.lower():
+        return HTMLResponse(door_page())
     return JSONResponse(
         {
             "name": "DEVON Soul",
@@ -161,9 +254,10 @@ async def health():
 async def soul_status(
     authorization: str | None = Header(default=None),
     t: str | None = Query(default=None),
+    devon_console: str | None = Cookie(default=None),
 ):
     """Whether recall can run, without touching Pinecone."""
-    _require(authorization, t)
+    _require(authorization, t, devon_console)
     enabled = bool(_pinecone_key())
     return {
         "enabled": enabled,
@@ -190,6 +284,7 @@ def _bounded(name: str, value: int, low: int, high: int) -> int:
 async def soul_recall(
     authorization: str | None = Header(default=None),
     t: str | None = Query(default=None),
+    devon_console: str | None = Cookie(default=None),
     q: str | None = Query(default=None),
     top_k_tee: int = Query(default=4),
     top_k_devon: int = Query(default=3),
@@ -207,7 +302,7 @@ async def soul_recall(
     endpoint exists and described its parameters. Nothing answers a caller
     holding no token except the refusal.
     """
-    _require(authorization, t)
+    _require(authorization, t, devon_console)
     if not q or not q.strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -254,37 +349,11 @@ async def soul_recall(
     }
 
 
-#: What an unauthenticated browser gets instead of the console. It names the
-#: parameter and nothing else: no host, no identifier, no hint about what the
-#: console contains.
-LOCKED_PAGE = """<!doctype html><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="referrer" content="no-referrer">
-<title>DEVON</title>
-<style>
- :root{color-scheme:dark}
- body{margin:0;min-height:100vh;display:grid;place-items:center;
-      background:#050A0E;color:#EDE7DC;
-      font:15px/1.6 ui-sans-serif,system-ui,-apple-system,sans-serif;padding:24px}
- main{max-width:30rem}
- h1{font-size:13px;letter-spacing:.24em;color:#C77B4A;margin:0 0 14px;font-weight:600}
- p{margin:0 0 12px;color:#93A6B5}
- code{color:#EDE7DC;background:#0B141B;border:1px solid #22384A;
-      border-radius:4px;padding:2px 6px;font-family:ui-monospace,monospace;font-size:13px}
-</style>
-<main>
- <h1>DEVON</h1>
- <p>This console is closed. It opens for a token and nothing else.</p>
- <p>Append your token to the address once: <code>/console?t=YOUR_TOKEN</code></p>
- <p>The console stores it in this browser and clears it from the address bar,
-    so it rides in the URL for exactly one navigation.</p>
-</main>"""
-
-
 @app.get("/console", include_in_schema=False)
 async def console(
     authorization: str | None = Header(default=None),
     t: str | None = Query(default=None),
+    devon_console: str | None = Cookie(default=None),
 ):
     """
     The console, for a caller holding the token.
@@ -304,9 +373,25 @@ async def console(
     if not CONSOLE.exists():
         raise HTTPException(status_code=404, detail="No console asset deployed.")
     try:
-        _require(authorization, t)
+        _require(authorization, t, devon_console)
     except HTTPException as exc:
-        # 503 (no CONSOLE_TOKEN set) and 401 (wrong token) both land here.
-        # Either way the operator sees what to do, not a raw error object.
-        return HTMLResponse(LOCKED_PAGE, status_code=exc.status_code)
+        # Three situations used to render one sentence, so a refused token and
+        # a host with no token configured were indistinguishable from the
+        # outside. None of this says more than /api/v1/health already does,
+        # and it is the difference between fixing the right setting and
+        # hunting the wrong one.
+        if exc.status_code == status.HTTP_503_SERVICE_UNAVAILABLE:
+            why = (
+                "This service has no CONSOLE_TOKEN set on the host, so it is "
+                "refusing everything. Set one there and redeploy. A token "
+                "pasted here cannot help until that is done."
+            )
+        elif _presented(authorization, t, devon_console):
+            why = (
+                "That token was refused. Check it for a stray space, a "
+                "changed character, or a capital the keyboard added."
+            )
+        else:
+            why = "No token yet."
+        return HTMLResponse(door_page(why), status_code=exc.status_code)
     return FileResponse(CONSOLE, media_type="text/html")
