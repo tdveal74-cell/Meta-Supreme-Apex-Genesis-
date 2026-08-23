@@ -245,6 +245,22 @@ def test_the_bare_hostname_is_a_door_for_a_person(probe):
     assert probe["root_json_still_json"].startswith("application/json")
 
 
+def test_the_root_fails_toward_the_door(probe):
+    """
+    The door was conditional on a browser Accept header, which put the path a
+    person actually takes behind a branch nothing available to me could
+    exercise against the live deployment. A caller now has to ask for JSON by
+    name; everything else gets the page a human can use.
+
+    The four Accept shapes below are what real clients send: nothing at all,
+    the wildcard, Safari's, and Chrome's.
+    """
+    assert probe["root_no_accept_is_door"] is True
+    assert probe["root_star_accept_is_door"] is True
+    assert probe["root_safari_accept_is_door"] is True
+    assert probe["root_chrome_accept_is_door"] is True
+
+
 def test_a_closed_console_is_a_door_not_a_dead_end(probe):
     """
     The refusal page carried instructions to type ?t= plus a long token onto
