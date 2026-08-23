@@ -60,7 +60,7 @@ def test_the_console_shipped_with_the_service_is_the_current_one():
 
 def test_the_deployed_service_has_no_write_surface():
     """Reads flow; this lane performs no effects, and that is structural."""
-    source = (DEPLOY / "api" / "index.py").read_text()
+    source = (DEPLOY / "main.py").read_text()
     for verb in ("@app.post", "@app.put", "@app.patch", "@app.delete"):
         assert verb not in source, (
             f"{verb} appeared in the soul service. The phone lane is reads "
@@ -70,7 +70,7 @@ def test_the_deployed_service_has_no_write_surface():
 
 
 def test_the_service_never_hardcodes_a_secret():
-    source = (DEPLOY / "api" / "index.py").read_text()
+    source = (DEPLOY / "main.py").read_text()
     assert "pcsk_" not in source and "dst_" not in source, (
         "A literal key or token is in the deployed source. Secrets come from "
         "the host environment and nowhere else."

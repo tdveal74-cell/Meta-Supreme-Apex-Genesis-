@@ -32,9 +32,9 @@ import sys
 from fastapi import FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import FileResponse, JSONResponse
 
-# The service sits at deploy/soul/, so the repository root is three up. Adding
-# it to the path is what lets this import the real modules rather than copies.
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+# The service is the whole of deploy/soul. Adding it to the path is what lets
+# this import the vendored modules, which a test holds identical to the originals.
+ROOT = pathlib.Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
