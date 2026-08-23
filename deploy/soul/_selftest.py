@@ -83,6 +83,14 @@ out = {
     "root_json_still_json": client.get(
         "/", headers={"Accept": "application/json"}
     ).headers["content-type"],
+    # A closed console is a door with a paste field, not a dead end, and it
+    # says which of the three walls you hit.
+    "console_closed_has_paste_field": 'id="t"' in client.get("/console").text,
+    "console_no_token_says_so": "No token yet" in client.get("/console").text,
+    "console_bad_token_says_refused": "was refused"
+    in client.get("/console?t=nope").text,
+    "console_bad_token_not_confused_with_no_token": "No token yet"
+    not in client.get("/console?t=nope").text,
 }
 
 # With no CONSOLE_TOKEN at all the service closes rather than opening.
@@ -90,6 +98,10 @@ os.environ.pop("CONSOLE_TOKEN", None)
 out["no_token_status"] = client.get("/api/v1/soul/status").status_code
 out["no_token_console"] = client.get("/console").status_code
 out["no_token_console_body_has_state"] = "const STATE" in client.get("/console").text
+out["no_token_console_names_the_host"] = (
+    "no CONSOLE_TOKEN set on the host" in client.get("/console").text
+)
+out["no_token_console_has_paste_field"] = 'id="t"' in client.get("/console").text
 out["no_token_health"] = client.get("/api/v1/health").status_code
 
 print(json.dumps(out))

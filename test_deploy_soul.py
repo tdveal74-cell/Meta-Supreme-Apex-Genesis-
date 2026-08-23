@@ -245,6 +245,33 @@ def test_the_bare_hostname_is_a_door_for_a_person(probe):
     assert probe["root_json_still_json"].startswith("application/json")
 
 
+def test_a_closed_console_is_a_door_not_a_dead_end(probe):
+    """
+    The refusal page carried instructions to type ?t= plus a long token onto
+    the end of a URL by hand, on a phone, with no way to act from the page
+    itself. It carries the same paste field the root does now.
+    """
+    assert probe["console_closed_has_paste_field"] is True
+    assert probe["no_token_console_has_paste_field"] is True
+
+
+def test_the_door_names_which_wall_you_hit(probe):
+    """
+    One sentence covered three different situations: no token offered, a
+    token refused, and a host with no CONSOLE_TOKEN configured. From outside
+    they were indistinguishable, so there was no way to know whether to fix
+    your paste or fix the deployment.
+
+    Nothing here tells an anonymous caller more than /api/v1/health already
+    does, and it is the difference between fixing the right setting and
+    hunting the wrong one.
+    """
+    assert probe["console_no_token_says_so"] is True
+    assert probe["console_bad_token_says_refused"] is True
+    assert probe["console_bad_token_not_confused_with_no_token"] is True
+    assert probe["no_token_console_names_the_host"] is True
+
+
 def test_health_is_the_one_open_route_and_says_only_what_is_set(probe):
     """
     Deliberate: the operator has to be able to see the service is up and what

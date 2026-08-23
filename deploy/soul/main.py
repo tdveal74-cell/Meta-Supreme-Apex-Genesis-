@@ -135,13 +135,20 @@ def _layer() -> SoulLayer:
     )
 
 
-#: The door. Typing /console?t=<a 64 character token> into a phone keyboard
-#: is a miserable thing to ask of anybody, and getting one character wrong
-#: gives you a refusal with no clue which character it was. A paste field and
-#: a button do the same job without the typing. The token goes straight into
-#: the same local storage the console reads, so it never rides in the URL at
-#: all on this path, and the form never leaves the browser.
-DOOR_PAGE = """<!doctype html><meta charset="utf-8">
+#: The door. One page for both ways in: the bare hostname, and /console
+#: without a usable token. A paste field rather than instructions to type a
+#: long token onto the end of a URL by hand, and a line naming which of the
+#: three situations you are in, because "closed" said the same words whether
+#: you gave no token, gave a wrong one, or the host had none set.
+#:
+#: It is open to anyone, so it holds nothing: no host, no identifier, no
+#: estate detail. A test asserts that rather than trusting it.
+def door_page(reason: str = "") -> str:
+    note = f'<p class="why">{reason}</p>' if reason else ""
+    return DOOR_HTML.replace("{{NOTE}}", note)
+
+
+DOOR_HTML = """<!doctype html><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <title>DEVON</title>
@@ -154,6 +161,7 @@ DOOR_PAGE = """<!doctype html><meta charset="utf-8">
  main{width:100%;max-width:26rem}
  h1{font-size:13px;letter-spacing:.24em;color:#C77B4A;margin:0 0 6px;font-weight:600}
  p{margin:0 0 18px;color:#93A6B5;font-size:14px}
+ p.why{color:#D4A017;border-left:2px solid #D4A017;padding-left:10px;font-size:13px}
  label{display:block;font-size:11px;letter-spacing:.18em;color:#5E7484;margin:0 0 6px}
  input{width:100%;padding:13px 12px;background:#0B141B;color:#EDE7DC;
        border:1px solid #22384A;border-radius:6px;font:14px ui-monospace,monospace}
@@ -167,6 +175,7 @@ DOOR_PAGE = """<!doctype html><meta charset="utf-8">
 </style>
 <main>
  <h1>DEVON</h1>
+ {{NOTE}}
  <p>Paste your console token. It is kept in this browser and nowhere else.</p>
  <form id="f" autocomplete="off">
   <label for="t">CONSOLE TOKEN</label>
@@ -181,11 +190,11 @@ document.getElementById('f').addEventListener('submit', function (e) {
   e.preventDefault();
   var v = (document.getElementById('t').value || '').trim();
   if (!v) return;
-  // Hand it to the console the same way the console stores it, so the token
-  // never appears in the address bar, in history, or in a bookmark.
+  // Stored the way the console stores it, so on this path the token never
+  // reaches the address bar, the history, or a bookmark.
   try { localStorage.setItem('devon.soul.token', v); } catch (err) {}
-  // The navigation still needs to prove itself to the gate, and a top level
-  // GET cannot carry a header. It rides once, and the console strips it.
+  // The navigation itself still has to prove itself to the gate, and a top
+  // level GET cannot carry a header. It rides once; the console strips it.
   location.href = '/console?t=' + encodeURIComponent(v);
 });
 </script>"""
@@ -201,7 +210,7 @@ async def root(accept: str | None = Header(default=None)):
     and the one route that matters needs a token appended by hand.
     """
     if accept and "text/html" in accept.lower():
-        return HTMLResponse(DOOR_PAGE)
+        return HTMLResponse(door_page())
     return JSONResponse(
         {
             "name": "DEVON Soul",
@@ -319,33 +328,6 @@ async def soul_recall(
     }
 
 
-#: What an unauthenticated browser gets instead of the console. It names the
-#: parameter and nothing else: no host, no identifier, no hint about what the
-#: console contains.
-LOCKED_PAGE = """<!doctype html><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="referrer" content="no-referrer">
-<title>DEVON</title>
-<style>
- :root{color-scheme:dark}
- body{margin:0;min-height:100vh;display:grid;place-items:center;
-      background:#050A0E;color:#EDE7DC;
-      font:15px/1.6 ui-sans-serif,system-ui,-apple-system,sans-serif;padding:24px}
- main{max-width:30rem}
- h1{font-size:13px;letter-spacing:.24em;color:#C77B4A;margin:0 0 14px;font-weight:600}
- p{margin:0 0 12px;color:#93A6B5}
- code{color:#EDE7DC;background:#0B141B;border:1px solid #22384A;
-      border-radius:4px;padding:2px 6px;font-family:ui-monospace,monospace;font-size:13px}
-</style>
-<main>
- <h1>DEVON</h1>
- <p>This console is closed. It opens for a token and nothing else.</p>
- <p>Append your token to the address once: <code>/console?t=YOUR_TOKEN</code></p>
- <p>The console stores it in this browser and clears it from the address bar,
-    so it rides in the URL for exactly one navigation.</p>
-</main>"""
-
-
 @app.get("/console", include_in_schema=False)
 async def console(
     authorization: str | None = Header(default=None),
@@ -371,7 +353,23 @@ async def console(
     try:
         _require(authorization, t)
     except HTTPException as exc:
-        # 503 (no CONSOLE_TOKEN set) and 401 (wrong token) both land here.
-        # Either way the operator sees what to do, not a raw error object.
-        return HTMLResponse(LOCKED_PAGE, status_code=exc.status_code)
+        # Three situations used to render one sentence, so a refused token and
+        # a host with no token configured were indistinguishable from the
+        # outside. None of this says more than /api/v1/health already does,
+        # and it is the difference between fixing the right setting and
+        # hunting the wrong one.
+        if exc.status_code == status.HTTP_503_SERVICE_UNAVAILABLE:
+            why = (
+                "This service has no CONSOLE_TOKEN set on the host, so it is "
+                "refusing everything. Set one there and redeploy. A token "
+                "pasted here cannot help until that is done."
+            )
+        elif _presented(authorization, t):
+            why = (
+                "That token was refused. Check it for a stray space, a "
+                "changed character, or a capital the keyboard added."
+            )
+        else:
+            why = "No token yet."
+        return HTMLResponse(door_page(why), status_code=exc.status_code)
     return FileResponse(CONSOLE, media_type="text/html")
