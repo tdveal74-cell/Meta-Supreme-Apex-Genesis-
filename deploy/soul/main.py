@@ -59,6 +59,25 @@ app = FastAPI(
 )
 
 
+@app.middleware("http")
+async def never_cache(request, call_next):
+    """
+    Nothing this service returns may be stored by anything.
+
+    Tee's home screen icon kept showing a refusal page from before a deploy,
+    because iOS caches a standalone web app's start page hard and the
+    responses went out as `public`. Stale is the mild half of the problem:
+    `public` on the authenticated console meant an intermediary was entitled
+    to store a page carrying the whole estate map and hand it to whoever
+    asked next. Every response here is either gated or a refusal, and none of
+    it is worth caching, so none of it is cacheable.
+    """
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store, private, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
+
 def _console_token() -> str:
     return (os.environ.get("CONSOLE_TOKEN") or "").strip()
 
@@ -222,22 +241,31 @@ document.getElementById('f').addEventListener('submit', function (e) {
 @app.get("/", include_in_schema=False)
 async def root(accept: str | None = Header(default=None)):
     """
-    A door for a person, JSON for anything else.
+    A door for a person. JSON only for a caller that asks for it by name.
 
     This answered JSON to everyone, so opening the bare hostname on a phone
-    put you at a directory listing you could not act on: no tappable link,
-    and the one route that matters needs a token appended by hand.
+    put you at a directory listing you could not act on. The first fix made
+    the door conditional on a browser Accept header, which put the path a
+    person takes behind a branch that could not be exercised from anywhere I
+    could reach the deployment. So the default is the door.
     """
-    if accept and "text/html" in accept.lower():
-        return HTMLResponse(door_page())
-    return JSONResponse(
-        {
-            "name": "DEVON Soul",
-            "console": "/console",
-            "reads": ["/api/v1/soul/status", "/api/v1/soul/recall?q="],
-            "writes": "none by design",
-        }
-    )
+    wants = (accept or "").lower()
+    # Fails toward the door, deliberately. Serving the listing by default and
+    # the door only on a recognised browser Accept meant the branch I could
+    # not reach from a terminal was the one a person actually hits. Now a
+    # caller has to ask for JSON by name; everything else, including an empty
+    # or unfamiliar Accept, gets the page a human can use. Machines that want
+    # a machine answer have /api/v1/health, which is open and never negotiates.
+    if "application/json" in wants and "text/html" not in wants:
+        return JSONResponse(
+            {
+                "name": "DEVON Soul",
+                "console": "/console",
+                "reads": ["/api/v1/soul/status", "/api/v1/soul/recall?q="],
+                "writes": "none by design",
+            }
+        )
+    return HTMLResponse(door_page())
 
 
 @app.get("/api/v1/health", include_in_schema=False)

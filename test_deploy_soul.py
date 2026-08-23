@@ -245,6 +245,47 @@ def test_the_bare_hostname_is_a_door_for_a_person(probe):
     assert probe["root_json_still_json"].startswith("application/json")
 
 
+@pytest.mark.parametrize(
+    "key",
+    [
+        "cache_control_console_anon",
+        "cache_control_console_authed",
+        "cache_control_root",
+        "cache_control_recall",
+    ],
+)
+def test_nothing_this_service_returns_is_cacheable(probe, key):
+    """
+    A home screen icon kept showing a refusal page from before a deploy,
+    because iOS caches a standalone web app's start page hard and every
+    response went out as `public`.
+
+    Stale is the mild half. `public` on the authenticated console meant an
+    intermediary was entitled to store a page carrying the estate map and
+    serve it to whoever asked next. Every response here is gated or is a
+    refusal, and none of it is worth caching.
+    """
+    value = (probe[key] or "").lower()
+    assert "no-store" in value, f"{key} is {probe[key]!r}"
+    assert "public" not in value, f"{key} is {probe[key]!r}"
+
+
+def test_the_root_fails_toward_the_door(probe):
+    """
+    The door was conditional on a browser Accept header, which put the path a
+    person actually takes behind a branch nothing available to me could
+    exercise against the live deployment. A caller now has to ask for JSON by
+    name; everything else gets the page a human can use.
+
+    The four Accept shapes below are what real clients send: nothing at all,
+    the wildcard, Safari's, and Chrome's.
+    """
+    assert probe["root_no_accept_is_door"] is True
+    assert probe["root_star_accept_is_door"] is True
+    assert probe["root_safari_accept_is_door"] is True
+    assert probe["root_chrome_accept_is_door"] is True
+
+
 def test_a_closed_console_is_a_door_not_a_dead_end(probe):
     """
     The refusal page carried instructions to type ?t= plus a long token onto

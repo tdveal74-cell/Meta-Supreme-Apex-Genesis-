@@ -83,6 +83,38 @@ out = {
     "root_json_still_json": client.get(
         "/", headers={"Accept": "application/json"}
     ).headers["content-type"],
+    # The default has to be the door, whatever the caller's Accept says or
+    # does not say. These are the shapes a real client sends.
+    # A stale cached page is how a fixed deploy keeps looking broken, and a
+    # cacheable authenticated page is worse than stale.
+    "cache_control_console_anon": client.get("/console").headers.get("cache-control"),
+    "cache_control_console_authed": client.get("/console", headers=AUTH).headers.get(
+        "cache-control"
+    ),
+    "cache_control_root": client.get("/").headers.get("cache-control"),
+    "cache_control_recall": client.get(
+        "/api/v1/soul/recall?q=x", headers=AUTH
+    ).headers.get("cache-control"),
+    "root_no_accept_is_door": 'id="t"' in client.get("/").text,
+    "root_star_accept_is_door": 'id="t"'
+    in client.get("/", headers={"Accept": "*/*"}).text,
+    "root_safari_accept_is_door": 'id="t"'
+    in client.get(
+        "/",
+        headers={
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        },
+    ).text,
+    "root_chrome_accept_is_door": 'id="t"'
+    in client.get(
+        "/",
+        headers={
+            "Accept": (
+                "text/html,application/xhtml+xml,application/xml;q=0.9,"
+                "image/avif,image/webp,image/apng,*/*;q=0.8"
+            )
+        },
+    ).text,
     # A closed console is a door with a paste field, not a dead end, and it
     # says which of the three walls you hit.
     "console_closed_has_paste_field": 'id="t"' in client.get("/console").text,

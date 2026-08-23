@@ -1383,7 +1383,32 @@ const Soul = {
   get(k, d) { try { return localStorage.getItem('devon.soul.' + k) || d; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('devon.soul.' + k, v); } catch (e) {} },
   base() { return (this.get('base', '') || '').replace(/\/+$/, ''); },
-  token() { return this.get('token', ''); },
+  /* The gate accepts a header, ?t=, or the cookie, and the cookie is what a
+     home screen launch actually carries. Reading only local storage meant a
+     launch that the service had already let in still reported NOT
+     CONFIGURED, because iOS hands a standalone web app its own storage and
+     the credential was sitting in the cookie the whole time. */
+  fromCookie() {
+    try {
+      const hit = document.cookie.match(/(?:^|;\s*)devon_console=([^;]*)/);
+      return hit ? decodeURIComponent(hit[1]).trim() : '';
+    } catch (e) { return ''; }
+  },
+  token() { return this.get('token', '') || this.fromCookie(); },
+  /* Bring the two into line, whichever one arrived first, so the token field
+     shows what is actually in force and header auth works either way. */
+  reconcile() {
+    const stored = this.get('token', '');
+    const cookie = this.fromCookie();
+    if (!stored && cookie) { this.set('token', cookie); return; }
+    if (stored && !cookie) {
+      try {
+        var secure = location.protocol === 'https:' ? '; Secure' : '';
+        document.cookie = 'devon_console=' + encodeURIComponent(stored) +
+                          '; path=/; max-age=31536000; SameSite=Strict' + secure;
+      } catch (e) {}
+    }
+  },
   /* The hosted console is gated, and a browser opening a URL cannot set a
      header, so the token rides once as ?t=. Take it, keep it here, and strip
      it from the address bar immediately: it should not sit in history, in a
@@ -1406,7 +1431,6 @@ const Soul = {
       window.history.replaceState({}, '', url.pathname + url.search + url.hash);
     } catch (e) { /* a hostile URL is not worth a broken console */ }
   },
-  configured() { return !!this.token() || !this.get('base', ''); },
   headers() {
     const h = { 'Accept': 'application/json' };
     const t = this.token();
@@ -1445,15 +1469,43 @@ const Soul = {
 
 function wireSoul() {
   Soul.adopt();
+  Soul.reconcile();
   const base = $('soulBase'), tok = $('soulTok'), st = $('soulState');
   if (!base) return;
   base.value = Soul.get('base', '');
   tok.value = Soul.token();
-  if (Soul.token()) st.textContent = 'CONFIGURED, UNTESTED';
+  /* A badge reading UNTESTED beside a button called TEST reads like a switch
+     you have to flip. Nothing is gated on it: recall calls the API directly
+     and never looks here. So the panel asks the service itself, once, on
+     load, and reports what came back rather than waiting to be asked. */
+  {
+    st.textContent = 'CHECKING';
+    Soul.status().then(
+      body => { st.textContent = body.enabled ? 'ON' : 'REACHABLE, RECALL OFF'; },
+      e => {
+        st.textContent =
+          e.message === 'notoken' ? 'NO CONSOLE_TOKEN ON HOST'
+          : e.message === 'auth'  ? 'TOKEN REFUSED'
+          : e.message === 'off'   ? 'REACHABLE, RECALL OFF'
+          : 'UNREACHABLE';
+      }
+    );
+  }
   $('soulSave').onclick = () => {
     Soul.set('base', base.value.trim());
     Soul.set('token', tok.value.trim());
-    st.textContent = Soul.token() ? 'SAVED, UNTESTED' : 'NOT CONFIGURED';
+    if (!Soul.token()) { st.textContent = 'NOT CONFIGURED'; return; }
+    st.textContent = 'CHECKING';
+    Soul.status().then(
+      body => { st.textContent = body.enabled ? 'ON' : 'REACHABLE, RECALL OFF'; },
+      e => {
+        st.textContent =
+          e.message === 'notoken' ? 'NO CONSOLE_TOKEN ON HOST'
+          : e.message === 'auth'  ? 'TOKEN REFUSED'
+          : e.message === 'off'   ? 'REACHABLE, RECALL OFF'
+          : 'UNREACHABLE';
+      }
+    );
   };
   $('soulTest').onclick = async () => {
     st.textContent = 'TESTING';
