@@ -72,6 +72,17 @@ out = {
     # Health is open on purpose and says only whether the two are set.
     "health_anonymous": client.get("/api/v1/health").status_code,
     "health_body": client.get("/api/v1/health").json(),
+    # The bare hostname has to be usable by a person holding a phone.
+    "root_browser_status": client.get("/", headers={"Accept": "text/html"}).status_code,
+    "root_browser_is_html": "text/html"
+    in client.get("/", headers={"Accept": "text/html"}).headers["content-type"],
+    "root_browser_has_paste_field": 'id="t"'
+    in client.get("/", headers={"Accept": "text/html"}).text,
+    "root_browser_leaks_state": "const STATE"
+    in client.get("/", headers={"Accept": "text/html"}).text,
+    "root_json_still_json": client.get(
+        "/", headers={"Accept": "application/json"}
+    ).headers["content-type"],
 }
 
 # With no CONSOLE_TOKEN at all the service closes rather than opening.

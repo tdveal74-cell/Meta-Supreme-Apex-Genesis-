@@ -135,8 +135,73 @@ def _layer() -> SoulLayer:
     )
 
 
+#: The door. Typing /console?t=<a 64 character token> into a phone keyboard
+#: is a miserable thing to ask of anybody, and getting one character wrong
+#: gives you a refusal with no clue which character it was. A paste field and
+#: a button do the same job without the typing. The token goes straight into
+#: the same local storage the console reads, so it never rides in the URL at
+#: all on this path, and the form never leaves the browser.
+DOOR_PAGE = """<!doctype html><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>DEVON</title>
+<style>
+ :root{color-scheme:dark}
+ *{box-sizing:border-box}
+ body{margin:0;min-height:100vh;display:grid;place-items:center;
+      background:#050A0E;color:#EDE7DC;
+      font:15px/1.6 ui-sans-serif,system-ui,-apple-system,sans-serif;padding:24px}
+ main{width:100%;max-width:26rem}
+ h1{font-size:13px;letter-spacing:.24em;color:#C77B4A;margin:0 0 6px;font-weight:600}
+ p{margin:0 0 18px;color:#93A6B5;font-size:14px}
+ label{display:block;font-size:11px;letter-spacing:.18em;color:#5E7484;margin:0 0 6px}
+ input{width:100%;padding:13px 12px;background:#0B141B;color:#EDE7DC;
+       border:1px solid #22384A;border-radius:6px;font:14px ui-monospace,monospace}
+ input:focus{outline:none;border-color:#C77B4A}
+ button{width:100%;margin-top:10px;padding:13px;border:1px solid #C77B4A;
+        border-radius:6px;background:transparent;color:#C77B4A;
+        font:600 12px/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.20em;
+        cursor:pointer}
+ button:active{background:#1A1008}
+ .note{margin-top:16px;font-size:12px;color:#5E7484}
+</style>
+<main>
+ <h1>DEVON</h1>
+ <p>Paste your console token. It is kept in this browser and nowhere else.</p>
+ <form id="f" autocomplete="off">
+  <label for="t">CONSOLE TOKEN</label>
+  <input id="t" type="password" inputmode="text" autocapitalize="off"
+         autocorrect="off" spellcheck="false" placeholder="CONSOLE_TOKEN from the host">
+  <button type="submit">OPEN THE CONSOLE</button>
+ </form>
+ <p class="note">Reads only. Nothing here writes to either soul.</p>
+</main>
+<script>
+document.getElementById('f').addEventListener('submit', function (e) {
+  e.preventDefault();
+  var v = (document.getElementById('t').value || '').trim();
+  if (!v) return;
+  // Hand it to the console the same way the console stores it, so the token
+  // never appears in the address bar, in history, or in a bookmark.
+  try { localStorage.setItem('devon.soul.token', v); } catch (err) {}
+  // The navigation still needs to prove itself to the gate, and a top level
+  // GET cannot carry a header. It rides once, and the console strips it.
+  location.href = '/console?t=' + encodeURIComponent(v);
+});
+</script>"""
+
+
 @app.get("/", include_in_schema=False)
-async def root():
+async def root(accept: str | None = Header(default=None)):
+    """
+    A door for a person, JSON for anything else.
+
+    This answered JSON to everyone, so opening the bare hostname on a phone
+    put you at a directory listing you could not act on: no tappable link,
+    and the one route that matters needs a token appended by hand.
+    """
+    if accept and "text/html" in accept.lower():
+        return HTMLResponse(DOOR_PAGE)
     return JSONResponse(
         {
             "name": "DEVON Soul",

@@ -228,6 +228,23 @@ def test_an_anonymous_caller_is_refused_before_anything_is_validated(probe):
     assert probe["recall_authed_no_q"] == 422
 
 
+def test_the_bare_hostname_is_a_door_for_a_person(probe):
+    """
+    The root answered JSON to everyone, so opening the hostname on a phone
+    landed you on a directory listing with no tappable way in and a route
+    that needs a 64 character token typed onto the end of it by hand.
+
+    A browser gets a paste field. Anything else still gets the JSON.
+    """
+    assert probe["root_browser_status"] == 200
+    assert probe["root_browser_is_html"] is True
+    assert probe["root_browser_has_paste_field"] is True
+    assert probe["root_browser_leaks_state"] is False, (
+        "the door page must carry no estate detail; it is open to anyone"
+    )
+    assert probe["root_json_still_json"].startswith("application/json")
+
+
 def test_health_is_the_one_open_route_and_says_only_what_is_set(probe):
     """
     Deliberate: the operator has to be able to see the service is up and what
