@@ -1406,7 +1406,6 @@ const Soul = {
       window.history.replaceState({}, '', url.pathname + url.search + url.hash);
     } catch (e) { /* a hostile URL is not worth a broken console */ }
   },
-  configured() { return !!this.token() || !this.get('base', ''); },
   headers() {
     const h = { 'Accept': 'application/json' };
     const t = this.token();
@@ -1449,11 +1448,38 @@ function wireSoul() {
   if (!base) return;
   base.value = Soul.get('base', '');
   tok.value = Soul.token();
-  if (Soul.token()) st.textContent = 'CONFIGURED, UNTESTED';
+  /* A badge reading UNTESTED beside a button called TEST reads like a switch
+     you have to flip. Nothing is gated on it: recall calls the API directly
+     and never looks here. So the panel asks the service itself, once, on
+     load, and reports what came back rather than waiting to be asked. */
+  if (Soul.token()) {
+    st.textContent = 'CHECKING';
+    Soul.status().then(
+      body => { st.textContent = body.enabled ? 'ON' : 'REACHABLE, RECALL OFF'; },
+      e => {
+        st.textContent =
+          e.message === 'notoken' ? 'NO CONSOLE_TOKEN ON HOST'
+          : e.message === 'auth'  ? 'TOKEN REFUSED'
+          : e.message === 'off'   ? 'REACHABLE, RECALL OFF'
+          : 'UNREACHABLE';
+      }
+    );
+  }
   $('soulSave').onclick = () => {
     Soul.set('base', base.value.trim());
     Soul.set('token', tok.value.trim());
-    st.textContent = Soul.token() ? 'SAVED, UNTESTED' : 'NOT CONFIGURED';
+    if (!Soul.token()) { st.textContent = 'NOT CONFIGURED'; return; }
+    st.textContent = 'CHECKING';
+    Soul.status().then(
+      body => { st.textContent = body.enabled ? 'ON' : 'REACHABLE, RECALL OFF'; },
+      e => {
+        st.textContent =
+          e.message === 'notoken' ? 'NO CONSOLE_TOKEN ON HOST'
+          : e.message === 'auth'  ? 'TOKEN REFUSED'
+          : e.message === 'off'   ? 'REACHABLE, RECALL OFF'
+          : 'UNREACHABLE';
+      }
+    );
   };
   $('soulTest').onclick = async () => {
     st.textContent = 'TESTING';
