@@ -272,6 +272,32 @@ def test_the_door_names_which_wall_you_hit(probe):
     assert probe["no_token_console_names_the_host"] is True
 
 
+def test_signing_in_once_means_once(probe):
+    """
+    A top level navigation cannot carry an Authorization header, which is
+    why ?t= exists. But it cannot carry one on the second visit either, so
+    without a cookie every launch from a home screen lands back on the door
+    asking for the token again. Verified in a real browser as well: sign in
+    at the root, then a bare GET /console opens the console.
+    """
+    assert probe["console_cookie_opens_it"] == 200
+    assert probe["console_cookie_serves_the_real_console"] is True
+    assert probe["recall_cookie_opens_it"] == 200
+
+
+def test_a_wrong_cookie_is_refused_like_anything_else(probe):
+    assert probe["console_wrong_cookie_refused"] == 401
+
+
+def test_a_header_beats_a_stale_cookie(probe):
+    """
+    Otherwise a rotated token could never be used by a caller whose browser
+    still holds the old one: the cookie would silently win and the correct
+    credential would look wrong.
+    """
+    assert probe["header_beats_stale_cookie"] == 200
+
+
 def test_health_is_the_one_open_route_and_says_only_what_is_set(probe):
     """
     Deliberate: the operator has to be able to see the service is up and what

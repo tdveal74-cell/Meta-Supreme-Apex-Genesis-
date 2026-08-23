@@ -91,6 +91,27 @@ out = {
     in client.get("/console?t=nope").text,
     "console_bad_token_not_confused_with_no_token": "No token yet"
     not in client.get("/console?t=nope").text,
+    # Signing in once has to mean once: a top level navigation carries no
+    # header, so without the cookie every home screen launch would land on
+    # the door again.
+    "console_cookie_opens_it": client.get(
+        "/console", cookies={"devon_console": "probe-token"}
+    ).status_code,
+    "console_cookie_serves_the_real_console": "const STATE"
+    in client.get("/console", cookies={"devon_console": "probe-token"}).text,
+    "console_wrong_cookie_refused": client.get(
+        "/console", cookies={"devon_console": "wrong"}
+    ).status_code,
+    "recall_cookie_opens_it": client.get(
+        "/api/v1/soul/status", cookies={"devon_console": "probe-token"}
+    ).status_code,
+    # A header must win over a stale cookie, or a rotated token can never
+    # be used by an API caller whose browser still holds the old one.
+    "header_beats_stale_cookie": client.get(
+        "/api/v1/soul/status",
+        headers=AUTH,
+        cookies={"devon_console": "stale-and-wrong"},
+    ).status_code,
 }
 
 # With no CONSOLE_TOKEN at all the service closes rather than opening.

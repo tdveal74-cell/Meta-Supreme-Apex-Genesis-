@@ -33,7 +33,7 @@ import os
 import pathlib
 import sys
 
-from fastapi import FastAPI, Header, HTTPException, Query, status
+from fastapi import Cookie, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 # The service is the whole of deploy/soul. Adding it to the path is what lets
@@ -67,20 +67,34 @@ def _pinecone_key() -> str:
     return (os.environ.get("PINECONE_API_KEY") or "").strip()
 
 
-def _presented(authorization: str | None, t: str | None) -> str:
-    """
-    The token the caller offered, from the header or from the first-load URL.
+#: Name of the cookie the door and the console both set.
+TOKEN_COOKIE = "devon_console"
 
-    A browser opening /console cannot set a header, so the token may also
-    ride once as ?t=. The console strips it from the address bar and keeps it
-    in local storage, so it is a URL parameter for exactly one navigation.
+
+def _presented(
+    authorization: str | None, t: str | None, cookie: str | None = None
+) -> str:
+    """
+    The token the caller offered: a header, the first-load URL, or a cookie.
+
+    A browser performing a top level navigation cannot set a header, which is
+    why ?t= exists at all. But it cannot set one on the second visit either,
+    so without the cookie every launch from a home screen would land on the
+    door and ask for the token again. The cookie is what makes signing in
+    once mean once.
+
+    Header first so an API caller is never overridden by a stale cookie.
     """
     if authorization and authorization.lower().startswith("bearer "):
         return authorization[7:].strip()
-    return (t or "").strip()
+    if t and t.strip():
+        return t.strip()
+    return (cookie or "").strip()
 
 
-def _require(authorization: str | None, t: str | None = None) -> None:
+def _require(
+    authorization: str | None, t: str | None = None, cookie: str | None = None
+) -> None:
     """
     Let the caller in, or say plainly why not.
 
@@ -106,7 +120,7 @@ def _require(authorization: str | None, t: str | None = None) -> None:
                 "environment settings and redeploy."
             ),
         )
-    presented = _presented(authorization, t)
+    presented = _presented(authorization, t, cookie)
     if not presented or not hmac.compare_digest(
         presented.encode("utf-8"), expected.encode("utf-8")
     ):
@@ -193,8 +207,13 @@ document.getElementById('f').addEventListener('submit', function (e) {
   // Stored the way the console stores it, so on this path the token never
   // reaches the address bar, the history, or a bookmark.
   try { localStorage.setItem('devon.soul.token', v); } catch (err) {}
-  // The navigation itself still has to prove itself to the gate, and a top
-  // level GET cannot carry a header. It rides once; the console strips it.
+  // Signing in once has to mean once. A top level navigation cannot carry a
+  // header, so without this every launch from a home screen would land back
+  // on this page asking for the token again. Strict, so it is never sent
+  // from another site, and this whole service is reads with no effects.
+  var secure = location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = 'devon_console=' + encodeURIComponent(v) +
+                    '; path=/; max-age=31536000; SameSite=Strict' + secure;
   location.href = '/console?t=' + encodeURIComponent(v);
 });
 </script>"""
@@ -235,9 +254,10 @@ async def health():
 async def soul_status(
     authorization: str | None = Header(default=None),
     t: str | None = Query(default=None),
+    devon_console: str | None = Cookie(default=None),
 ):
     """Whether recall can run, without touching Pinecone."""
-    _require(authorization, t)
+    _require(authorization, t, devon_console)
     enabled = bool(_pinecone_key())
     return {
         "enabled": enabled,
@@ -264,6 +284,7 @@ def _bounded(name: str, value: int, low: int, high: int) -> int:
 async def soul_recall(
     authorization: str | None = Header(default=None),
     t: str | None = Query(default=None),
+    devon_console: str | None = Cookie(default=None),
     q: str | None = Query(default=None),
     top_k_tee: int = Query(default=4),
     top_k_devon: int = Query(default=3),
@@ -281,7 +302,7 @@ async def soul_recall(
     endpoint exists and described its parameters. Nothing answers a caller
     holding no token except the refusal.
     """
-    _require(authorization, t)
+    _require(authorization, t, devon_console)
     if not q or not q.strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -332,6 +353,7 @@ async def soul_recall(
 async def console(
     authorization: str | None = Header(default=None),
     t: str | None = Query(default=None),
+    devon_console: str | None = Cookie(default=None),
 ):
     """
     The console, for a caller holding the token.
@@ -351,7 +373,7 @@ async def console(
     if not CONSOLE.exists():
         raise HTTPException(status_code=404, detail="No console asset deployed.")
     try:
-        _require(authorization, t)
+        _require(authorization, t, devon_console)
     except HTTPException as exc:
         # Three situations used to render one sentence, so a refused token and
         # a host with no token configured were indistinguishable from the
@@ -364,7 +386,7 @@ async def console(
                 "refusing everything. Set one there and redeploy. A token "
                 "pasted here cannot help until that is done."
             )
-        elif _presented(authorization, t):
+        elif _presented(authorization, t, devon_console):
             why = (
                 "That token was refused. Check it for a stray space, a "
                 "changed character, or a capital the keyboard added."
