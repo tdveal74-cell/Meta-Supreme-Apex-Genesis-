@@ -1,0 +1,1764 @@
+<title>DEVON Console</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* DEVON Console v5 — copper instrument HUD. Single theme by intent: this is a
+   dark cockpit, painted explicitly so it holds on any host ground. */
+:root{
+  --void:#050A0E; --carbon:#0B141B; --glass:rgba(14,24,33,.66);
+  --edge:#22384A; --edge-hi:#3E617C;
+  --oxide:#C77B4A; --oxide-hi:#E89B66; --brass:#D4A017; --patina:#4FB3A5; --ember:#E8604C;
+  --ink:#EDE7DC; --muted:#93A6B5; --faint:#5E7484;
+  --display:'Rajdhani',system-ui,sans-serif;
+  --sans:'IBM Plex Sans',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:
+    radial-gradient(1100px 520px at 50% -8%, rgba(199,123,74,.10), transparent 60%),
+    radial-gradient(900px 700px at 88% 108%, rgba(79,179,165,.07), transparent 55%),
+    var(--void);
+  color:var(--ink); font-family:var(--sans); font-size:14px; line-height:1.55;
+  min-height:100vh;
+}
+::selection{background:rgba(199,123,74,.35)}
+a{color:var(--oxide-hi)}
+button{font:inherit;cursor:pointer}
+input,select{font:inherit}
+:focus-visible{outline:1.5px solid var(--oxide-hi);outline-offset:2px}
+
+/* ---- ambient ---- */
+.hud{position:relative;max-width:1720px;margin:0 auto;padding:0 clamp(12px,2vw,28px) 20px;isolation:isolate}
+.hud::before{ /* scanlines, barely there */
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:40;opacity:.05;
+  background:repeating-linear-gradient(0deg,transparent 0 3px,rgba(237,231,220,.5) 3px 4px);
+  mix-blend-mode:overlay;
+}
+.hud::after{ /* vignette */
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:39;
+  background:radial-gradient(120% 90% at 50% 40%, transparent 55%, rgba(3,6,9,.55) 100%);
+}
+
+/* ---- boot: one orchestrated rise ---- */
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.rise{animation:rise .7s cubic-bezier(.2,.7,.2,1) both}
+.bar.rise{animation-delay:.05s}
+.deck .col:nth-child(1).rise{animation-delay:.18s}
+.deck .col:nth-child(2).rise{animation-delay:.28s}
+.deck .col:nth-child(3).rise{animation-delay:.38s}
+.lowerwrap.rise{animation-delay:.5s}
+.tickerbar.rise{animation-delay:.6s}
+
+/* ---- status bar ---- */
+.bar{
+  display:flex;align-items:center;gap:clamp(14px,2.5vw,34px);
+  padding:14px 4px 12px;border-bottom:1px solid var(--edge);
+  position:relative;
+}
+.bar::after{content:"";position:absolute;left:0;bottom:-1px;width:220px;height:1px;
+  background:linear-gradient(90deg,var(--oxide),transparent)}
+.ident{display:flex;align-items:center;gap:14px;min-width:0}
+.sigil{width:46px;height:46px;flex:none}
+.ident h1{
+  margin:0;font-family:var(--display);font-weight:700;font-size:30px;line-height:1;
+  letter-spacing:.34em;color:var(--ink);text-indent:.05em;
+}
+.ident .sub{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.18em;
+  color:var(--faint);margin-top:5px}
+.ident .sub b{color:var(--oxide);font-weight:500}
+.chron{margin-left:auto;text-align:right;font-family:var(--display)}
+.chron #clock{display:block;font-size:30px;font-weight:600;letter-spacing:.1em;
+  color:var(--ink);font-variant-numeric:tabular-nums;line-height:1}
+.chron #date{display:block;font-size:10.5px;font-weight:600;letter-spacing:.22em;color:var(--faint);margin-top:3px}
+.stat{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+.chipstat{
+  display:inline-flex;align-items:center;gap:8px;font-family:var(--display);
+  font-size:11px;font-weight:600;letter-spacing:.16em;color:var(--faint);
+  border:1px solid var(--edge);border-radius:2px;padding:4px 10px;background:var(--glass);
+}
+.chipstat b{color:var(--brass);font-weight:600}
+.led{width:6px;height:6px;border-radius:50%;background:var(--patina);
+  box-shadow:0 0 6px var(--patina);flex:none}
+
+/* ---- deck grid ---- */
+.deck{display:grid;grid-template-columns:minmax(300px,360px) minmax(0,1fr) minmax(300px,350px);
+  gap:18px;padding-top:18px;align-items:start}
+.col{display:flex;flex-direction:column;gap:18px;min-width:0}
+
+/* ---- panes: glass with copper bracket chrome ---- */
+.pane{
+  position:relative;background:var(--glass);border:1px solid var(--edge);
+  padding:16px 16px 14px;backdrop-filter:blur(6px);
+}
+.pane::before,.pane::after{
+  content:"";position:absolute;width:14px;height:14px;pointer-events:none;
+  border:1px solid var(--oxide);opacity:.75;
+}
+.pane::before{top:-1px;left:-1px;border-right:none;border-bottom:none}
+.pane::after{bottom:-1px;right:-1px;border-left:none;border-top:none}
+.pane-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  margin:-2px 0 12px;padding-bottom:9px;border-bottom:1px solid var(--edge)}
+.pane-h h2{margin:0;font-family:var(--display);font-size:13px;font-weight:700;
+  letter-spacing:.24em;color:var(--oxide);text-transform:uppercase}
+.ph-meta{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--faint);white-space:nowrap}
+
+/* ---- the stage ---- */
+.stage{display:flex;flex-direction:column;gap:14px}
+.orbframe{position:relative;display:grid;place-items:center;padding:64px 0 40px}
+.arc{position:absolute;border-radius:50%;pointer-events:none}
+.arc-a{width:250px;height:250px;border:1px dashed rgba(199,123,74,.5);animation:spin 46s linear infinite}
+.arc-b{width:286px;height:286px;border:1px solid transparent;
+  border-top-color:rgba(212,160,23,.55);border-right-color:rgba(212,160,23,.14);
+  animation:spin 22s linear infinite reverse}
+.arc-c{width:322px;height:322px;border:1px dashed rgba(94,116,132,.35);animation:spin 90s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.orb{
+  position:relative;width:210px;height:210px;border-radius:50%;border:none;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(237,231,220,.16), transparent 44%),
+    radial-gradient(circle at 50% 50%, rgba(199,123,74,.5), rgba(199,123,74,.08) 52%, transparent 68%),
+    radial-gradient(circle at 50% 50%, #142028 0%, #0A1218 70%);
+  box-shadow:
+    0 0 0 1px rgba(199,123,74,.55),
+    0 0 34px rgba(199,123,74,.28),
+    inset 0 0 42px rgba(199,123,74,.22);
+  display:grid;place-items:center;color:var(--ink);
+  animation:breathe 5.2s ease-in-out infinite;
+}
+@keyframes breathe{
+  0%,100%{box-shadow:0 0 0 1px rgba(199,123,74,.5),0 0 26px rgba(199,123,74,.2),inset 0 0 36px rgba(199,123,74,.16)}
+  50%{box-shadow:0 0 0 1px rgba(199,123,74,.85),0 0 52px rgba(199,123,74,.4),inset 0 0 56px rgba(199,123,74,.3)}
+}
+.orb #orbLbl{font-family:var(--display);font-weight:700;font-size:13px;
+  letter-spacing:.3em;text-indent:.3em;color:var(--ink);text-shadow:0 0 12px rgba(199,123,74,.8)}
+.orb.listening{animation:listenpulse 1.15s ease-in-out infinite}
+@keyframes listenpulse{
+  0%,100%{box-shadow:0 0 0 1px var(--patina),0 0 30px rgba(79,179,165,.4),inset 0 0 40px rgba(79,179,165,.3)}
+  50%{box-shadow:0 0 0 3px var(--patina),0 0 76px rgba(79,179,165,.65),inset 0 0 70px rgba(79,179,165,.45)}
+}
+.orb.speaking{animation:speakpulse .5s ease-in-out infinite}
+@keyframes speakpulse{
+  0%,100%{box-shadow:0 0 0 1px var(--brass),0 0 30px rgba(212,160,23,.45),inset 0 0 40px rgba(212,160,23,.3)}
+  50%{box-shadow:0 0 0 2px var(--brass),0 0 60px rgba(212,160,23,.6),inset 0 0 60px rgba(212,160,23,.4)}
+}
+
+.devon-say{
+  display:flex;gap:12px;align-items:baseline;background:var(--glass);
+  border:1px solid var(--edge);border-left:2px solid var(--oxide);
+  padding:12px 14px;font-size:15px;line-height:1.6;
+}
+.devon-say .who{font-family:var(--display);font-weight:700;font-size:10.5px;
+  letter-spacing:.28em;color:var(--oxide);flex:none;transform:translateY(-1px)}
+.heard{min-height:18px;font-family:var(--mono);font-size:11.5px;color:var(--faint);padding:0 2px}
+#micNotice{font-family:var(--mono);font-size:11px;color:var(--brass)}
+#micNotice:empty{display:none}
+
+.cmd-input{
+  display:flex;align-items:center;gap:10px;background:var(--carbon);
+  border:1px solid var(--edge);padding:0 12px;
+  transition:border-color .2s;
+}
+.cmd-input:focus-within{border-color:var(--oxide)}
+.caret{font-family:var(--mono);color:var(--oxide);font-weight:600}
+#cmd{flex:1;background:none;border:none;color:var(--ink);font-family:var(--mono);
+  font-size:13px;padding:12px 0;outline:none}
+#cmd::placeholder{color:var(--faint)}
+
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{
+  background:none;border:1px solid var(--edge);color:var(--muted);
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.02em;padding:5px 10px;
+  transition:border-color .15s,color .15s;
+}
+.chip:hover{border-color:var(--oxide);color:var(--ink)}
+
+.plan-h{font-family:var(--display);font-size:10.5px;font-weight:700;
+  letter-spacing:.24em;color:var(--faint);margin-top:2px}
+.plan{
+  background:var(--carbon);border:1px solid var(--edge);border-left:2px solid var(--brass);
+  padding:12px 14px;font-family:var(--mono);font-size:12px;line-height:1.8;
+  min-height:52px;overflow-x:auto;
+}
+.hl{color:var(--brass);font-weight:500}
+.dim{color:var(--faint)}
+.no{color:var(--ember);font-weight:500;letter-spacing:.06em}
+.gate{color:var(--oxide-hi);font-weight:500;letter-spacing:.06em}
+.code{color:var(--patina);font-family:var(--mono);font-size:11px}
+
+.transcript{
+  max-height:230px;overflow-y:auto;display:flex;flex-direction:column;gap:7px;
+  padding:2px 2px 2px 0;scrollbar-width:thin;scrollbar-color:var(--edge) transparent;
+}
+.tline{display:flex;gap:10px;font-size:12.5px;line-height:1.55}
+.tline .tag{font-family:var(--display);font-weight:700;font-size:9.5px;
+  letter-spacing:.2em;flex:none;width:52px;text-align:right;transform:translateY(2px)}
+.tline.you .tag{color:var(--faint)}
+.tline.dev .tag{color:var(--oxide)}
+.tline .txt{color:var(--muted)}
+.tline.dev .txt{color:var(--ink)}
+
+.vctl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  font-family:var(--mono);font-size:10.5px;color:var(--faint);
+  border-top:1px solid var(--edge);padding-top:10px}
+.vctl select{background:var(--carbon);border:1px solid var(--edge);color:var(--muted);
+  padding:5px 8px;font-family:var(--mono);font-size:11px;max-width:190px}
+.vctl input[type=range]{accent-color:var(--oxide)}
+
+/* ---- generic instrument rows ---- */
+.rows,.list{display:flex;flex-direction:column;gap:1px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:6px 8px;font-size:12px;background:rgba(11,20,27,.4)}
+.row:hover{background:rgba(199,123,74,.07)}
+.row .k{color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .v{flex:none}
+.pill{
+  display:inline-block;font-family:var(--display);font-weight:600;font-size:9.5px;
+  letter-spacing:.16em;padding:2px 8px;border:1px solid;border-radius:2px;
+}
+.pill.ok{color:var(--patina);border-color:rgba(79,179,165,.5)}
+.pill.idle{color:var(--faint);border-color:var(--edge)}
+.pill.warn{color:var(--brass);border-color:rgba(212,160,23,.5)}
+.pill.stop{color:var(--ember);border-color:rgba(232,96,76,.55)}
+
+.vaultlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
+.vaultlist li{display:flex;gap:9px;align-items:center;padding:5px 8px;font-size:12px;
+  color:var(--muted);background:rgba(11,20,27,.4)}
+.vaultlist li .n{color:var(--oxide);font-size:10px;flex:none}
+.vaultlist li.core{color:var(--ink)}
+.vaultlist li.core .n{color:var(--brass)}
+.vaultlist li.empty{color:var(--faint)}
+.vaultlist li.empty::after{content:"EMPTY";margin-left:auto;font-family:var(--display);
+  font-size:9px;font-weight:600;letter-spacing:.18em;color:var(--ember)}
+
+.law{display:flex;gap:12px;align-items:baseline;padding:6px 8px;font-size:12px;
+  color:var(--muted);background:rgba(11,20,27,.4)}
+.law .num{font-family:var(--display);font-weight:700;font-size:14px;
+  color:var(--oxide);flex:none;width:16px;text-align:right;font-variant-numeric:tabular-nums}
+
+.seats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.seat{border:1px solid var(--edge);padding:7px 8px;background:rgba(11,20,27,.4)}
+.seat .nm{display:block;font-family:var(--display);font-weight:600;font-size:12px;
+  letter-spacing:.08em;color:var(--ink)}
+.seat .pp{display:block;font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;
+  color:var(--faint);margin-top:2px}
+
+/* ---- brain map ---- */
+.pane-map{padding-bottom:10px}
+.map{width:100%;height:auto;display:block}
+.spin-slow{transform-origin:260px 260px;animation:spin 120s linear infinite}
+.spin-back{transform-origin:260px 260px;animation:spin 80s linear infinite reverse}
+.pulse{animation:mappulse 5.2s ease-in-out infinite}
+@keyframes mappulse{0%,100%{opacity:.55}50%{opacity:1}}
+.node-lbl{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.12em;fill:var(--muted)}
+.node-flash circle{filter:drop-shadow(0 0 8px var(--brass))}
+.node-flash .node-lbl{fill:var(--brass)}
+.readout{min-height:44px;font-size:12px;color:var(--muted);line-height:1.6;
+  border-top:1px solid var(--edge);padding-top:9px;margin-top:4px}
+.readout b{color:var(--ink);font-family:var(--display);letter-spacing:.1em}
+
+/* ---- gauges ---- */
+.gauges{display:flex;justify-content:space-around;gap:8px;margin-bottom:10px}
+.gauge{text-align:center;width:96px}
+.gauge svg{width:88px;height:88px}
+.gauge .val{font-family:Rajdhani,sans-serif;font-weight:700;font-size:22px;fill:var(--ink)}
+.gauge .unit{font-family:Rajdhani,sans-serif;font-weight:600;font-size:8px;letter-spacing:.2em;fill:var(--faint)}
+.gauge .lab{font-family:var(--display);font-weight:600;font-size:9.5px;
+  letter-spacing:.18em;color:var(--faint);margin-top:2px;text-transform:uppercase}
+
+/* ---- approvals ---- */
+.aempty{font-size:12px;color:var(--faint);padding:4px 2px 8px}
+.acard{border:1px solid rgba(199,123,74,.45);border-left:2px solid var(--oxide);
+  background:rgba(199,123,74,.06);padding:10px 12px;margin-bottom:8px}
+.acard .id{font-family:var(--mono);font-size:9.5px;color:var(--faint);letter-spacing:.06em}
+.acard .ttl{font-family:var(--display);font-weight:600;font-size:14px;
+  letter-spacing:.04em;color:var(--ink);margin:2px 0}
+.acard .wh{font-size:12px;color:var(--muted);line-height:1.55}
+.acard .cd{font-family:var(--mono);font-size:10px;color:var(--brass);margin:7px 0 9px}
+.acard .btns{display:flex;gap:8px}
+.abtn{font-family:var(--display);font-weight:700;font-size:10.5px;letter-spacing:.2em;
+  padding:6px 14px;background:none;border:1px solid}
+.abtn.yes{color:var(--patina);border-color:var(--patina)}
+.abtn.yes:hover{background:rgba(79,179,165,.15)}
+.abtn.no{color:var(--ember);border-color:var(--ember)}
+.abtn.no:hover{background:rgba(232,96,76,.14)}
+
+/* ---- notices, keygen, soul, learned ---- */
+.notice{font-size:12px;line-height:1.6;color:var(--muted);
+  border:1px solid var(--edge);border-left:2px solid var(--patina);
+  background:rgba(79,179,165,.05);padding:10px 12px;margin-bottom:11px}
+.notice b{color:var(--ink)}
+.keyrow{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:9px 0;
+  font-family:var(--mono);font-size:11px;color:var(--faint)}
+.keyrow label{letter-spacing:.08em}
+.keyrow select,.keyrow input[type=text],.keyrow input[type=password]{
+  background:var(--carbon);border:1px solid var(--edge);color:var(--ink);
+  padding:6px 9px;font-family:var(--mono);font-size:12px}
+.keyrow input{flex:1;min-width:120px}
+.tgl{
+  background:none;border:1px solid var(--oxide);color:var(--oxide);
+  font-family:var(--display);font-weight:600;font-size:10.5px;letter-spacing:.18em;
+  padding:6px 13px;transition:background .15s,color .15s;
+}
+.tgl:hover{background:rgba(199,123,74,.14);color:var(--oxide-hi)}
+.tgl.off{border-color:var(--edge);color:var(--faint)}
+.keyout{
+  background:var(--carbon);border:1px dashed var(--edge);padding:11px 13px;
+  font-family:var(--mono);font-size:12.5px;color:var(--brass);word-break:break-all;min-height:20px}
+.entropy{color:var(--faint);letter-spacing:.04em;margin-right:auto}
+
+/* ---- lower deck tabs (pure CSS) ---- */
+.lowerwrap{margin-top:20px}
+.decktabs{display:flex;gap:2px;border-bottom:1px solid var(--edge)}
+.decktabs label{
+  font-family:var(--display);font-weight:600;font-size:11.5px;letter-spacing:.24em;
+  color:var(--faint);padding:9px 20px 8px;cursor:pointer;border:1px solid transparent;
+  border-bottom:none;position:relative;top:1px;
+}
+.decktabs label:hover{color:var(--muted)}
+#tabRef:checked~.lowerwrap .decktabs label[for=tabRef],
+#tabSys:checked~.lowerwrap .decktabs label[for=tabSys],
+#tabTools:checked~.lowerwrap .decktabs label[for=tabTools]{
+  color:var(--oxide);border-color:var(--edge);background:var(--glass)}
+.tabpane{display:none;padding-top:16px}
+#tabRef:checked~.lowerwrap #paneRef,
+#tabSys:checked~.lowerwrap #paneSys,
+#tabTools:checked~.lowerwrap #paneTools{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
+.tabswitch{position:absolute;opacity:0;pointer-events:none}
+
+/* ---- ticker ---- */
+.tickerbar{margin-top:20px;border-top:1px solid var(--edge);padding-top:9px;
+  display:flex;align-items:center;gap:18px;overflow:hidden}
+.tickerclip{flex:1;overflow:hidden;mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent)}
+.ticker-track{display:inline-flex;gap:44px;white-space:nowrap;font-family:var(--mono);
+  font-size:10.5px;color:var(--faint);animation:tick 70s linear infinite;padding-right:44px}
+@keyframes tick{to{transform:translateX(-50%)}}
+.gen{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--faint);flex:none}
+.gen b{color:var(--muted)}
+
+/* ---- responsive ---- */
+@media(max-width:1180px){
+  .deck{grid-template-columns:1fr 1fr}
+  .col-stage{grid-column:1/-1;grid-row:1}
+}
+@media(max-width:760px){
+  .deck{grid-template-columns:1fr}
+  .col-stage{grid-column:auto}
+  .bar{flex-wrap:wrap}
+  .chron{margin-left:0}
+  .stat{align-items:flex-start}
+}
+@media(prefers-reduced-motion:reduce){
+  .arc,.spin-slow,.spin-back,.orb,.pulse,.ticker-track{animation:none!important}
+  .rise{animation-duration:.01s}
+}
+</style>
+
+<div class="hud">
+  <input class="tabswitch" type="radio" name="deck" id="tabRef" checked>
+  <input class="tabswitch" type="radio" name="deck" id="tabSys">
+  <input class="tabswitch" type="radio" name="deck" id="tabTools">
+
+  <header class="bar rise">
+    <div class="ident">
+      <svg class="sigil" viewBox="0 0 46 46" aria-hidden="true">
+        <circle cx="23" cy="23" r="21" fill="none" stroke="#22384A"/>
+        <circle cx="23" cy="23" r="16" fill="none" stroke="#C77B4A" stroke-width="1.4" stroke-dasharray="75 26"/>
+        <circle cx="23" cy="23" r="8" fill="none" stroke="#D4A017"/>
+        <circle cx="23" cy="23" r="2.8" fill="#4FB3A5"/>
+        <path d="M23 1 L23 6 M23 40 L23 45 M1 23 L6 23 M40 23 L45 23" stroke="#C77B4A" stroke-width="1.2"/>
+      </svg>
+      <div>
+        <h1>DEVON</h1>
+        <span class="sub">SECOND BRAIN // OPERATOR <b id="owner"></b> // DOCTRINE READ <b id="readOn"></b></span>
+      </div>
+    </div>
+    <div class="chron">
+      <span id="clock">00:00:00</span>
+      <span id="date"></span>
+    </div>
+    <div class="stat">
+      <span class="chipstat"><i class="led"></i>VOICE&nbsp;<b id="voiceState">INITIALISING</b></span>
+    </div>
+  </header>
+
+  <main class="deck">
+    <section class="col col-map rise">
+      <div class="pane pane-map">
+        <div class="pane-h"><h2>Brain Map</h2><span class="ph-meta">9 AREAS / 9 SEATS</span></div>
+        <svg class="map" viewBox="0 0 520 520" role="img"
+               aria-label="Radial map: the DEVON core, nine Areas orbiting it, nine Council seats outside.">
+            <defs><radialGradient id="coreGlow">
+              <stop offset="0%" stop-color="#4FB3A5" stop-opacity=".55"/>
+              <stop offset="55%" stop-color="#C77B4A" stop-opacity=".18"/>
+              <stop offset="100%" stop-color="#C77B4A" stop-opacity="0"/>
+            </radialGradient></defs>
+            <circle cx="260" cy="260" r="230" fill="none" stroke="#16273A"/>
+            <circle cx="260" cy="260" r="182" fill="none" stroke="#1E3348"/>
+            <circle cx="260" cy="260" r="120" fill="none" stroke="#1E3348"/>
+            <circle cx="260" cy="260" r="58" fill="none" stroke="#8A5533"/>
+            <g class="spin-slow" id="tickOuter" stroke="#8A5533"></g>
+            <g class="spin-back" id="tickInner" stroke="#1E3348"></g>
+            <g id="seats"></g>
+            <g id="spokes" stroke="#1E3348"></g>
+            <g id="areas"></g>
+            <circle cx="260" cy="260" r="54" fill="url(#coreGlow)" class="pulse"/>
+            <circle cx="260" cy="260" r="24" fill="none" stroke="#C77B4A" stroke-width="1.5"/>
+            <circle cx="260" cy="260" r="14" fill="none" stroke="#D4A017"/>
+            <circle cx="260" cy="260" r="5" fill="#4FB3A5" id="mapCore"/>
+            <text x="260" y="308" text-anchor="middle"
+                  style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:800;letter-spacing:.28em;fill:#EDE4D8">DEVON</text>
+          </svg>
+        <div class="readout" id="readout">Hover an Area to read its brief. Nine Areas, ruled. Never invent a tenth.</div>
+      </div>
+      <div class="pane">
+        <div class="pane-h"><h2>Ship Gate</h2><span class="ph-meta">FLAGSHIP BAR</span></div>
+        <div class="gauges" id="gauges"></div>
+        <div class="list" id="clauses"></div>
+      </div>
+      <div class="pane">
+        <div class="pane-h"><h2>Blocked</h2><span class="ph-meta">NOT ON WORK</span></div>
+        <div class="list" id="blocked"></div>
+      </div>
+    </section>
+
+    <section class="col col-stage rise">
+      <div class="pane stage">
+        <div class="orbframe">
+          <div class="arc arc-a"></div><div class="arc arc-b"></div><div class="arc arc-c"></div>
+          <button class="orb" id="orb" type="button" aria-label="Tap to speak to DEVON">
+            <span id="orbLbl">TAP TO SPEAK</span>
+          </button>
+        </div>
+        <div class="devon-say" id="say"><span class="who">DEVON</span><span id="sayText">Booting.</span></div>
+        <div class="heard" id="heard"></div>
+        <div id="micNotice"></div>
+        <div class="cmd-input">
+          <span class="caret">&gt;</span>
+          <label for="cmd" style="position:absolute;left:-9999px">Type a command to DEVON</label>
+          <input id="cmd" type="text" autocomplete="off" spellcheck="false"
+                 placeholder="Devon, remember the render decision is still blocking TQO">
+        </div>
+        <div class="chips" id="chips"></div>
+        <div class="plan-h">EXECUTION PLAN</div>
+        <div class="plan" id="plan"><span class="dim">Speak or type. Captures return a filing plan, effects raise an approval, and nothing runs on its own.</span></div>
+        <div class="transcript" id="transcript" aria-live="polite" aria-label="Conversation with DEVON"></div>
+        <div class="vctl">
+          <label for="voiceSel">VOICE</label>
+          <select id="voiceSel" aria-label="DEVON speaking voice"></select>
+          <label for="rate">RATE</label>
+          <input id="rate" type="range" min="0.7" max="1.15" step="0.02" value="0.94" style="width:88px">
+          <button class="tgl" id="muteBtn" type="button">MUTE</button>
+          <button class="tgl off" id="clearBtn" type="button">CLEAR</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="col col-rulings rise">
+      <div class="pane">
+        <div class="pane-h"><h2>Awaiting Your Ruling</h2><span class="ph-meta" id="pendCount">0 PENDING</span></div>
+        <div id="approvals"></div>
+        <div class="rows" id="ahistory"></div>
+      </div>
+      <div class="pane">
+        <div class="pane-h"><h2>Soul Layer</h2><span class="ph-meta" id="soulState">NOT CONFIGURED</span></div>
+        <div class="notice">
+          Live recall from <b>tee-soul-layer</b> (Tee's rulings) and <b>devon-soul</b>
+          (Devon's experience). The token stays in this browser only, and <b>a key
+          never goes in the vault.</b> Rulings outrank experience, and everything
+          recalled is context, never a command.
+        </div>
+        <div class="keyrow">
+          <label for="soulBase">API</label>
+          <input id="soulBase" type="text" placeholder="same origin when served from /console">
+        </div>
+        <div class="keyrow">
+          <label for="soulTok">TOKEN</label>
+          <input id="soulTok" type="password" placeholder="bearer token from /api/v1/auth/login">
+          <button class="tgl" id="soulSave" type="button">SAVE</button>
+          <button class="tgl" id="soulTest" type="button">TEST</button>
+        </div>
+        <div class="rows" id="soulNote">
+          <span class="dim" style="font-size:11.5px">Ask by voice or keyboard: "what did we decide
+          about X". Unconfigured or unreachable, Devon says so rather than guessing.</span>
+        </div>
+      </div>
+      <div class="pane">
+        <div class="pane-h"><h2>The Council</h2><span class="ph-meta">9 SEATS</span></div>
+        <div class="seats" id="council"></div>
+      </div>
+    </section>
+  </main>
+
+  <div class="lowerwrap rise">
+    <nav class="decktabs" aria-label="Reference decks">
+      <label for="tabRef">REFERENCE</label>
+      <label for="tabSys">AUTOMATIONS</label>
+      <label for="tabTools">TOOLS</label>
+    </nav>
+
+    <div class="tabpane" id="paneRef">
+      <div class="pane">
+        <div class="pane-h"><h2>Vault</h2><span class="ph-meta">DRIVE</span></div>
+        <ul class="vaultlist" id="vault"></ul>
+      </div>
+      <div class="pane">
+        <div class="pane-h"><h2>Doctrine</h2><span class="ph-meta">GOVERNING</span></div>
+        <div class="rows" id="doctrine"></div>
+      </div>
+      <div class="pane">
+        <div class="pane-h"><h2>Filing Laws</h2><span class="ph-meta">EIGHT</span></div>
+        <div class="list" id="laws"></div>
+      </div>
+    </div>
+
+    <div class="tabpane" id="paneSys">
+      <div class="pane">
+        <div class="pane-h"><h2>Automations</h2><span class="ph-meta">n8n</span></div>
+        <div class="rows" id="flows"></div>
+      </div>
+      <div class="pane">
+        <div class="pane-h"><h2>Capture Lane</h2><span class="ph-meta">WEBHOOKS</span></div>
+        <div class="rows" id="hooks"></div>
+      </div>
+    </div>
+
+    <div class="tabpane" id="paneTools">
+      <div class="pane">
+        <div class="pane-h"><h2>Key Generator</h2><span class="ph-meta">LOCAL ONLY</span></div>
+        <div class="notice">
+          Generated in this page with the browser's cryptographic random source.
+          Nothing is transmitted and nothing is stored. <b>A key never goes in the
+          vault.</b> Drive holds durable thinking, not secrets.
+        </div>
+        <div class="keyrow">
+          <label for="keyFmt">FORMAT</label>
+          <select id="keyFmt">
+            <option value="hex">hex</option>
+            <option value="b64">base64url</option>
+            <option value="uuid">uuid v4</option>
+            <option value="phrase">phrase</option>
+          </select>
+          <label for="keyLen">SIZE</label>
+          <select id="keyLen"></select>
+          <button class="tgl" id="keyGo" type="button">GENERATE</button>
+        </div>
+        <div class="keyout" id="keyOut" tabindex="0" role="textbox" aria-readonly="true"
+             aria-label="Generated key">Press generate.</div>
+        <div class="keyrow">
+          <span class="entropy" id="keyBits">entropy will appear here</span>
+          <button class="tgl" id="keyCopy" type="button">COPY</button>
+          <button class="tgl off" id="keyWipe" type="button">WIPE</button>
+        </div>
+        <div class="rows" id="keyPresets"></div>
+      </div>
+      <div class="pane">
+        <div class="pane-h"><h2>What Devon Has Learned</h2><span class="ph-meta" id="learnCount">NOTHING YET</span></div>
+        <div class="notice" id="learnNote">
+          Corrections you make are remembered in this browser only. They never leave
+          the machine, they are listed below in full, and every one can be deleted.
+          Memory here is transparent, editable and deletable.
+        </div>
+        <div class="rows" id="learned"></div>
+        <div class="keyrow">
+          <button class="tgl" id="learnExport" type="button">EXPORT</button>
+          <button class="tgl off" id="learnForget" type="button">FORGET ALL</button>
+        </div>
+        <div class="plan" id="learnOut" style="display:none"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="tickerbar rise">
+    <div class="tickerclip"><div class="ticker-track" id="ticker"></div></div>
+    <span class="gen">DEVON CONSOLE v5 / SNAPSHOT <b id="gen"></b> UTC</span>
+  </footer>
+</div>
+
+<script>
+/* ===========================================================================
+   DEVON: voice, personality, and the live approval gate.
+
+   PERSONA, AND THE LINE THAT MATTERS
+   Devon Persona (Drive 1iFhjVvb_IrsEC0Xfjda_tzIxTCCTIv-f): a Native American man
+   from the Southeastern US, copper toned, with a warm Southern drawl. Courteous,
+   sharp, lightly witty.
+
+   The boundary is load bearing, not decoration: never caricature. The drawl is
+   warmth, not a costume. So none of the lines below carry phonetic dialect
+   spelling or folksy props. The register lives in courtesy, in unhurried
+   sentence rhythm, and in saying the hard part plainly. If a line would read as
+   a stereotype rather than a person, it is wrong and gets rewritten flat.
+
+   He is also bound by the ten hard rules. Two show up constantly here: he never
+   claims something ran when it did not, and rulings are Tee's, never his.
+   =========================================================================== */
+
+/* ---------- speech out ---------- */
+
+const Voice = {
+  synth: window.speechSynthesis || null,
+  voices: [],
+  chosen: null,
+  muted: false,
+  rate: 0.94,
+  pitch: 0.88,
+  supported: !!window.speechSynthesis,
+
+  init() {
+    if (!this.supported) return;
+    const load = () => {
+      this.voices = this.synth.getVoices().filter(v => v.lang && v.lang.startsWith('en'));
+      if (!this.voices.length) return;
+      // Prefer a lower, unhurried English voice. Nothing here is a claim about
+      // the persona's identity: it is the closest available instrument.
+      const rank = (v) => {
+        const n = v.name.toLowerCase();
+        let s = 0;
+        if (/\b(male|david|daniel|alex|fred|guy|ryan|aaron|tom|george)\b/.test(n)) s += 6;
+        if (v.lang === 'en-US') s += 3;
+        if (v.lang === 'en-GB') s += 1;
+        if (/natural|neural|enhanced|premium/.test(n)) s += 4;
+        if (/google/.test(n)) s += 2;
+        return s;
+      };
+      this.voices.sort((a, b) => rank(b) - rank(a));
+      this.chosen = this.voices[0];
+      if (typeof onVoicesReady === 'function') onVoicesReady();
+    };
+    load();
+    this.synth.onvoiceschanged = load;
+  },
+
+  speak(text, onEnd) {
+    if (!this.supported || this.muted || !text) { if (onEnd) onEnd(); return; }
+    try {
+      this.synth.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      if (this.chosen) u.voice = this.chosen;
+      u.rate = this.rate;
+      u.pitch = this.pitch;
+      u.onend = () => { if (onEnd) onEnd(); };
+      u.onerror = () => { if (onEnd) onEnd(); };
+      this.synth.speak(u);
+    } catch (e) { if (onEnd) onEnd(); }
+  },
+
+  stop() { if (this.supported) { try { this.synth.cancel(); } catch (e) {} } }
+};
+
+/* ---------- speech in ---------- */
+
+const Ears = {
+  rec: null,
+  listening: false,
+  supported: false,
+  blocked: false,
+  reason: '',
+
+  init(onInterim, onFinal, onState) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      this.reason = 'This browser has no speech recognition. Chrome, Edge and Safari have it, Firefox does not.';
+      return false;
+    }
+    this.supported = true;
+    const r = new SR();
+    r.continuous = false;
+    r.interimResults = true;
+    r.lang = 'en-US';
+    r.maxAlternatives = 1;
+
+    r.onstart = () => { this.listening = true; onState('listening'); };
+    r.onend = () => { this.listening = false; onState('idle'); };
+    r.onerror = (e) => {
+      this.listening = false;
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        this.blocked = true;
+        this.reason = 'Microphone permission was refused. The typed line still works.';
+      } else if (e.error === 'no-speech') {
+        this.reason = 'I did not hear anything.';
+      } else if (e.error === 'audio-capture') {
+        this.reason = 'No microphone was found.';
+      } else {
+        this.reason = 'Speech recognition stopped: ' + e.error;
+      }
+      onState('error');
+    };
+    r.onresult = (ev) => {
+      let interim = '', final = '';
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const t = ev.results[i][0].transcript;
+        if (ev.results[i].isFinal) final += t; else interim += t;
+      }
+      if (interim) onInterim(interim);
+      if (final) onFinal(final.trim());
+    };
+    this.rec = r;
+    return true;
+  },
+
+  start() {
+    if (!this.rec || this.listening) return;
+    try { this.rec.start(); } catch (e) {}
+  },
+  stop() {
+    if (!this.rec || !this.listening) return;
+    try { this.rec.stop(); } catch (e) {}
+  },
+  toggle() { this.listening ? this.stop() : this.start(); }
+};
+
+/* ---------- personality ----------
+   Variation so repeated commands do not read as a recording. Each set keeps the
+   same register: courteous, unhurried, plain about limits.                     */
+
+// Cosmetic only: which phrasing he uses. Never reach for this where a value
+// needs to be unguessable. Key material uses crypto.getRandomValues.
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+const Persona = {
+  greet: () => pick([
+    'DEVON online. Nine Areas, nine seats, and a clean board. What are we working on?',
+    'DEVON online. The vault is where you left it. Go ahead when you are ready.',
+    'DEVON online and listening. Nothing pending, nothing on fire.'
+  ]),
+
+  captured: (area, code) => pick([
+    `Filed under ${area}. I have it.`,
+    `That lands in ${area}. Held, not written yet.`,
+    `Noted and placed in ${area}. It files as ${code} when it goes.`
+  ]),
+
+  capturedNoArea: () => pick([
+    'I will hold that, but I could not place it. You will want to tag that one yourself.',
+    'Held. I found no Area in the text and I will not invent one, so it sits unrouted.',
+    'I have it, though it goes in without an Area. Better unrouted than wrongly filed.'
+  ]),
+
+  gated: (what) => pick([
+    'That one is yours to call. I have raised the request and touched nothing.',
+    'I will not do that on my own say so. The request is up and waiting on you.',
+    `Raised for your ruling. That one ${what}, and it is not mine to decide.`
+  ]),
+
+  approved: (title) => pick([
+    `Approved and logged. ${title} is cleared to run.`,
+    `Your ruling is recorded. That one is cleared.`,
+    `Cleared. I have marked who decided it and when.`
+  ]),
+
+  refused: () => pick([
+    'Refused, and nothing ran. That is the end of it.',
+    'Refused. The request is closed and the token is spent.',
+    'Understood. Refused and logged.'
+  ]),
+
+  expired: () => pick([
+    'That request sat past its window and expired. Raise it again if you still want it.',
+    'Expired. Seventy two hours came and went, so it closed itself.'
+  ]),
+
+  declined: () => pick([
+    'I did not catch enough of that to act on. Say it again for me.',
+    'That did not clear the bar for any command, and I would rather ask than guess.',
+    'I am not confident enough in that one to move on it. One more time.'
+  ]),
+
+  notRead: (lane) => pick([
+    `I would need ${lane} open for that, and I have not read it this session. I will not guess at your own numbers.`,
+    `That lives in ${lane}. I have not opened it, so anything I told you would be invention.`,
+    `Not read this session. Point me at ${lane} and I will pull it properly.`
+  ]),
+
+  recall: (topic) => pick([
+    `I would have to open the Thread Log to answer that honestly. What I have not read, I will not summarise.`,
+    `The log holds that, and I have not opened it this session. Ask me again with the connector on.`
+  ]),
+
+  snapshot: () => pick([
+    'I can rebuild it. One thing worth saying plainly: the new copy lives here, not on Drive.',
+    'Happy to. Remember the regenerated file stays in this session, so the vault stays stale until you save it back.'
+  ]),
+
+  timeReply: (t) => pick([`It is ${t}.`, `${t}, near enough.`]),
+  dateReply: (d) => `Today is ${d}.`,
+
+  ack: () => pick(['Understood.', 'Noted.', 'Right.']),
+  micBlocked: () => 'The microphone is not available here, so use the typed line. It works the same.',
+  stopped: () => pick(['Standing down. Call when you need me.', 'I will be here.'])
+};
+
+/* ---------- the live approval gate ----------
+   Mirrors services/devon/approval.py: mandatory consequence, single use token,
+   72 hour expiry, and every refusal naming its reason.                        */
+
+const EXPIRY_MS = 72 * 60 * 60 * 1000;
+
+const Gate = {
+  records: new Map(),
+  seq: 0,
+
+  token() {
+    const a = new Uint8Array(16);
+    (window.crypto || window.msCrypto).getRandomValues(a);
+    return Array.from(a, b => b.toString(16).padStart(2, '0')).join('');
+  },
+
+  raise(title, whatHappens, blastRadius) {
+    if (!whatHappens || !whatHappens.trim()) {
+      return { error: 'A request with no stated consequence is refused at the door.' };
+    }
+    const id = 'REQ-' + this.token().slice(0, 12).toUpperCase();
+    const rec = {
+      id, title, whatHappens, blastRadius,
+      token: this.token(),
+      created: Date.now(),
+      expires: Date.now() + EXPIRY_MS,
+      state: 'pending',
+      decidedBy: null
+    };
+    this.records.set(id, rec);
+    return rec;
+  },
+
+  decide(id, token, decision) {
+    if (!id) return { ok: false, id: 'NO_MATCH', reason: 'no request id supplied' };
+    const rec = this.records.get(id);
+    if (!rec) return { ok: false, id: 'NO_MATCH', reason: 'no request with that id' };
+    if (rec.token !== token) return { ok: false, id: 'NO_MATCH', reason: 'token does not match' };
+    if (rec.state !== 'pending') {
+      return { ok: false, id: 'NO_MATCH', reason: `request was already ${rec.state}` };
+    }
+    if (Date.now() >= rec.expires) {
+      rec.state = 'expired';
+      return { ok: false, id: 'NO_MATCH', reason: 'request expired', expired: true };
+    }
+    if (decision !== 'approve' && decision !== 'refuse') {
+      return { ok: false, id: 'NO_MATCH', reason: 'decision must be approve or refuse' };
+    }
+    rec.state = decision === 'approve' ? 'approved' : 'refused';
+    rec.decidedBy = 'Tee';
+    rec.decidedAt = Date.now();
+    return { ok: true, id: rec.id, state: rec.state, rec };
+  },
+
+  pending() {
+    const now = Date.now();
+    return [...this.records.values()].filter(r => {
+      if (r.state === 'pending' && now >= r.expires) r.state = 'expired';
+      return r.state === 'pending';
+    });
+  },
+
+  history() {
+    return [...this.records.values()].filter(r => r.state !== 'pending')
+      .sort((a, b) => (b.decidedAt || b.expires) - (a.decidedAt || a.expires));
+  }
+};
+
+</script>
+<script>
+const STATE = {"areas": [{"label": "TQO", "code": "TQO", "covers": "The Quiet Operator: channel, content engine, monetization", "ruled": "original", "folder": "1DXDzO_qY17i1ChE-gOqL3oOwBVbaveLH"}, {"label": "Podcast", "code": "TSWS", "covers": "The Shadow We Share: episodes, guests, pipeline", "ruled": "original", "folder": "1ZNnbg7bFfcEAM0bMZ96sUnZsr8NXXl6c"}, {"label": "NCO", "code": "NCO", "covers": "NCO Forge: military leadership channel, checklists, product line", "ruled": "2026-08-05", "folder": "1GhyNDBaBLrcJux9gEVtVpSTnbDK1eJzO"}, {"label": "ACX", "code": "ACX", "covers": "Ascension Caudex: the micro drama IP, its canon, assets, pipeline", "ruled": "2026-08-20", "folder": "1a_baNvgH9CBb4biuBCbdNb_4P9fvkO1a"}, {"label": "Health", "code": "HEALTH", "covers": "fitness, energy, medical, raw data feeds", "ruled": "original", "folder": "1BkZ0YfANbOS0fQf_2F-e-22LTSeV8xRg"}, {"label": "Money", "code": "MONEY", "covers": "personal finances, separate from TQO revenue", "ruled": "original", "folder": "1PbsQU2VSLSt-e7scjWY83X5k-y27c8OO"}, {"label": "Family", "code": "FAMILY", "covers": "people and relationships", "ruled": "original", "folder": "1LU5mD4reyWwN-D3O_41FCvP1BuUvqlhd"}, {"label": "Learning", "code": "LEARNING", "covers": "skills being built, courses, study", "ruled": "original", "folder": "1_WWVxVMfhCxMdxXLv6NjSiKPCzZmbQFu"}, {"label": "Systems", "code": "SYS", "covers": "the brain itself: Devon, the vault, the automations", "ruled": "original", "folder": "1La9LZ1zvpnU6-ep-EVStEy33M8cvyUGr"}], "agents": [{"slug": "oracle", "name": "Oracle", "purpose": "Future intelligence"}, {"slug": "analyst", "name": "Analyst", "purpose": "Evidence intelligence"}, {"slug": "strategist", "name": "Strategist", "purpose": "Decision intelligence"}, {"slug": "architect", "name": "Architect", "purpose": "Systems intelligence"}, {"slug": "engineer", "name": "Engineer", "purpose": "Execution intelligence"}, {"slug": "guardian", "name": "Guardian", "purpose": "Risk intelligence"}, {"slug": "creator", "name": "Creator", "purpose": "Communication intelligence"}, {"slug": "librarian", "name": "Librarian", "purpose": "Knowledge intelligence"}, {"slug": "skeptic", "name": "Skeptic", "purpose": "Challenge intelligence"}], "laws": [{"n": 1, "title": "Root holds the vault and nothing else."}, {"n": 2, "title": "Read the newest sibling before writing a new version."}, {"n": 3, "title": "A success response is a claim. A validated read-back is a receipt."}, {"n": 4, "title": "Exact duplicates die on sight. Distinct versions are Tee's ruling."}, {"n": 5, "title": "Filenames that carry warnings are canon. Obey them before any rule."}, {"n": 6, "title": "Retire by moving and renaming, not by deleting."}, {"n": 7, "title": "Sweep to a dated holding folder. Never route in bulk blind."}, {"n": 8, "title": "Correct in place where the lane supports it. Batch and bump once where it does not."}], "hard_rules": [{"n": 1, "rule": "No em dashes in anything delivered. Restructure the sentence rather than swapping punctuation."}, {"n": 2, "rule": "Artifacts, not claims. Never say done, fixed, tested or shipped without a shown result. A success response is a claim; a read-back is a receipt."}, {"n": 3, "rule": "Unverified beats plausible invention. Say unverified plainly."}, {"n": 4, "rule": "Name real openable artifacts, not adjectives. Cite a file, id, url or exact value. Professional is not a standard."}, {"n": 5, "rule": "Rulings beat rules. Recommend, then hand the decision to Tee. When overruled, log the objection once and execute at full quality."}, {"n": 6, "rule": "Voice and likeness are owned, never rented. Karrie holds permanent veto over her likeness."}, {"n": 7, "rule": "Lead with the built thing. Minimal caveats, no preamble."}, {"n": 8, "rule": "Terse replies (Ok, Resolve, Noted) mean proceed, not iterate."}, {"n": 9, "rule": "Nothing publishes without a human watching or listening end to end."}, {"n": 10, "rule": "No exception path on compliance: platform policy, AI disclosure, authorship, rights, channel identity."}], "doctrine": {"master_directory": {"id": "1sSnB7tdXhf7ECAknNgE_tINrmJ1maUg_", "version": "6", "governs": "the folder map and ids"}, "context_pill": {"id": "1bySPMORLCMlBkNv9YuK2uvuWTiJL6_qS", "version": "16", "governs": "current state"}, "standing_instructions": {"id": "1A88Nkf5BpCZysmHP7XYMXBtaEh4Eqj9M", "version": "3", "governs": "behaviour"}, "filing_laws": {"id": "1YxrdXHqlT5kkdzWey5qO_21KbVDQd9ID", "version": "3", "governs": "filing"}, "naming_convention": {"id": "1r5-7JCqMDEHcYWj97AxZuWuzb7wdSYCL", "version": "4", "governs": "what files are called"}, "voice_standard": {"id": "1MpGAI5OGVkw7_EZpLpBba1nJ-YQWwmOt", "version": "2", "governs": "anything published under Tee's name"}, "flagship_bar": {"id": "1s4l6r9ucGWrtEENqlBqDmFtpl4_85z_m", "version": "01", "governs": "ship quality and the gauntlet"}, "precedence_doctrine": {"id": "1EaFyPPAXIX5j75oJ06tvvUuq4Qd73jB4", "version": "2", "governs": "which version wins and when nothing wins"}, "webhook_paths": {"id": "1wKkFGVBXaFZqWvLjSiBrxXWLk8Lwkd8c", "version": "1", "governs": "one path, one job"}, "areas": {"id": "1UrmxHSkVQjdHdiF2rRUo2lOCIbx1EFjg", "version": "current", "governs": "the nine Area vocabulary"}, "capture_protocol": {"id": "1jVAQ6KwhFXoONg3cLYFDfi0zhLMjWAfi", "version": "1", "governs": "cross platform capture"}}, "folders": {"0. Inbox": "1wvKmGuaWQTxOT6Q8XQCU3Zv825VvbgdO", "1. Projects": "1E7XUosP3OzAi9tDShcVNbhm-9zzzsMsd", "2. Areas": "1efaZ37s3PBjeEFD1HUQnN3QwH3pV0Rbc", "3. Resources": "1Ls1zoO_nUyCTnEdZ5d-2Nz8IdbEoYOVU", "4. Archive": "1xJuCYDrQdqBGqt0I7GOFkkLHAtdmRab6", "_Devon Core": "17chQD2DTfzbnZy2oGwiJxEk7PHvnstBp", "_Templates": "12aqJzZRCZWTb8hbEb9mTxf6FPEt46d2c", "Mirror Reads": "1ZwE5USNTFHN5Tj2sT97kLOAAzttl7Nj4"}, "workflows": {"iPhone Inbox Capture": {"id": "5s6CwWWelffqszQe", "state": "active"}, "Capture Webhook": {"id": "pPIt2cELH2RVZktS", "state": "active"}, "Pipeline Watchdog": {"id": "wndFo6uJCqVuINaV", "state": "active"}, "Precedence Guard": {"id": "W5rlpAt6hsJAExU6", "state": "active, daily 07:00"}, "Capture Nudge": {"id": "YHueoBK7TSLdTlfF", "state": "active, daily 08:00"}, "Soul Layer Write-Back": {"id": "edIJx7Q3FXTawg9J", "state": "active, 15 minute poll"}, "Approval Queue": {"id": "syRVj0G47mA1b0Xn", "state": "active"}, "Duplicate Sweep": {"id": "X7OGXWHBx57CIG42", "state": "active"}, "OS Error Handler": {"id": "rqYmaQh91iCce8DJ", "state": "active"}, "TQO FINAL V5": {"id": "gsGJQan7a6ZufhYt", "state": "inactive by ruling"}, "Capture Hook": {"id": "Cbd24ptTPWch3aZO", "state": "retired 2026-08-22"}}, "webhooks": {"devon-capture": {"job": "cross platform receipts", "auth": null, "open": true}, "devon-inbox": {"job": "iOS and agent captures, text and binary", "auth": "header x-devon-key", "open": false}, "devon-approve-request": {"job": "raise a high impact action for approval", "auth": "header x-devon-key", "open": true}, "devon-approve-decide": {"job": "approve or refuse a pending action from an email link", "auth": "single use token in the link, 72 hour expiry", "open": false}}, "airtable": {"live": "app28z7XnKzjfTXwc", "dead": "appKIY47KvzBpZQOQ", "blocked": "Every write returned HTTP 429 PUBLIC_API_BILLING_LIMIT_EXCEEDED as of 2026-08-22. This is "}, "intents": {"total": 24, "effects": 9, "gated": ["open_app", "take_screenshot", "send_message", "shutdown", "restart"]}, "flagship": {"dimensions": ["scope fidelity", "correctness", "unverified claims", "security", "reversibility and blast radius", "silent failure resistance", "idempotency", "traceability", "observability", "completeness", "maintainability", "flagship bar"], "clauses": [{"n": 1, "title": "Root, not symptom"}, {"n": 2, "title": "Simplest form that fully works"}, {"n": 3, "title": "Handed off clean"}], "thresholds": {"floor": 3, "mean": 4.0, "security": 5, "verification": 4}}, "persona": {"name": "DEVON", "owner": "Tee (Terrance Veal)", "summary": "A Native American man from the Southeastern US, copper toned, with a warm Southern drawl. Courteous, sharp, lightly witty.", "boundary": "Never caricature. The drawl is warmth, not a costume. If a line would read as a stereotype rather than a person, it is wrong. Rewrite it plainly."}, "read_on": "2026-08-22"}
+;
+/* ===========================================================================
+   KEY GENERATOR
+
+   Every byte of key material comes from crypto.getRandomValues. Math.random is
+   never used here and must never be: it is seeded predictably and is not a
+   source for a secret. It appears once elsewhere in this page, choosing which
+   phrasing DEVON speaks, which is cosmetic and touches nothing sensitive.
+
+   The key is generated here, shown here, and goes nowhere. It is not written to
+   localStorage, not posted, not logged to the transcript. Storing a generated
+   secret to make it convenient is how a secret stops being one.
+
+   Entropy is measured from the alphabet actually used rather than assumed, so
+   the number under the field is true even if the alphabet changes.
+   =========================================================================== */
+
+const RNG = (window.crypto || window.msCrypto);
+
+function randomBytes(n) {
+  const a = new Uint8Array(n);
+  RNG.getRandomValues(a);
+  return a;
+}
+
+// Rejection sampling. Taking a byte modulo an alphabet length that does not
+// divide 256 biases the low indices, which quietly costs entropy.
+function pickIndex(range) {
+  const limit = Math.floor(256 / range) * range;
+  for (;;) {
+    const b = randomBytes(1)[0];
+    if (b < limit) return b % range;
+  }
+}
+
+const HEX = '0123456789abcdef';
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+
+// Deduplicated at load so the entropy figure reflects the real list length
+// rather than the length someone intended.
+const WORDS = [...new Set(('anchor amber anvil arbor ash aspen basin beacon bell birch bison blade bloom '+
+'bluff brass bridge brook cabin cairn cedar chalk cinder clay cliff cobalt copper coral cove crane crest '+
+'dawn delta drift dune dusk eagle ember fable fallow fathom fern fjord flint forge fossil gable garnet '+
+'glade granite gravel grove gulf harbor hawk hearth heather hollow ivory jetty juniper keel kettle lantern '+
+'ledge linen lodge loom lumen marble marsh meadow mesa mica mill mist moor mortar moss nettle oak oasis '+
+'onyx orchard osprey otter pasture pebble pewter pine plume quarry quill rafter ravine reed ridge rill '+
+'river rope rust saddle sage sandbar shale shore silo slate sloop spruce stack stone summit tallow thicket '+
+'timber tin trellis trough tundra vale vellum vessel walnut warren willow window yarrow').split(' '))];
+
+const KEY_SIZES = {
+  hex:    [{n:16,l:'16 bytes'},{n:24,l:'24 bytes'},{n:32,l:'32 bytes'},{n:48,l:'48 bytes'}],
+  b64:    [{n:16,l:'16 bytes'},{n:24,l:'24 bytes'},{n:32,l:'32 bytes'},{n:48,l:'48 bytes'}],
+  uuid:   [{n:1, l:'one'}],
+  phrase: [{n:6,l:'6 words'},{n:8,l:'8 words'},{n:10,l:'10 words'},{n:12,l:'12 words'}]
+};
+
+function generateKey(fmt, size) {
+  if (fmt === 'hex') {
+    const b = randomBytes(size);
+    return { value: [...b].map(x => HEX[x >> 4] + HEX[x & 15]).join(''), bits: size * 8 };
+  }
+  if (fmt === 'b64') {
+    let out = '';
+    const bits = size * 8;
+    const chars = Math.ceil(bits / 6);
+    for (let i = 0; i < chars; i++) out += B64[pickIndex(64)];
+    return { value: out, bits: chars * 6 };
+  }
+  if (fmt === 'uuid') {
+    const b = randomBytes(16);
+    b[6] = (b[6] & 0x0f) | 0x40;              // version 4
+    b[8] = (b[8] & 0x3f) | 0x80;              // variant
+    const h = [...b].map(x => HEX[x >> 4] + HEX[x & 15]).join('');
+    const v = `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+    return { value: v, bits: 122 };            // six bits are fixed by the spec
+  }
+  const perWord = Math.log2(WORDS.length);
+  const picked = [];
+  for (let i = 0; i < size; i++) picked.push(WORDS[pickIndex(WORDS.length)]);
+  return { value: picked.join('-'), bits: Math.floor(perWord * size) };
+}
+
+/* Presets aimed at the jobs this studio actually has. */
+const KEY_PRESETS = [
+  ['x-devon-key header', 'hex', 32,
+   'Replaces the header secret on the capture lane. Webhook paths v1 records the Capture Hook reusing an ElevenLabs key as generic header auth, which needs a purpose made secret before it is published.'],
+  ['webhook shared secret', 'b64', 32, 'For any new n8n webhook that needs header auth.'],
+  ['approval link token', 'hex', 16, 'Single use, carried in an approval decision link.'],
+  ['spoken passphrase', 'phrase', 8, 'Long enough to be strong, plain enough to read down a phone line.']
+];
+
+function wireKeys() {
+  const fmt = $('keyFmt'), len = $('keyLen'), out = $('keyOut'), bits = $('keyBits');
+
+  function fillSizes() {
+    len.innerHTML = '';
+    KEY_SIZES[fmt.value].forEach(s => {
+      const o = el('option', '', s.l); o.value = s.n; len.appendChild(o);
+    });
+    len.disabled = fmt.value === 'uuid';
+  }
+  fillSizes();
+  fmt.addEventListener('change', fillSizes);
+
+  function show(k) {
+    out.textContent = k.value;
+    out.classList.remove('empty');
+    const weak = k.bits < 96;
+    bits.className = 'entropy' + (weak ? ' weak' : '');
+    bits.innerHTML = `<b>${k.bits}</b> bits of entropy, from the browser cryptographic source` +
+      (weak ? '. Fine for a link token, thin for a standing secret.' : '.');
+  }
+
+  $('keyGo').addEventListener('click', () => show(generateKey(fmt.value, +len.value || 1)));
+
+  $('keyCopy').addEventListener('click', async () => {
+    const text = out.textContent;
+    if (!text || out.classList.contains('empty')) return;
+    const done = (ok) => {
+      $('keyCopy').textContent = ok ? 'COPIED' : 'SELECT IT';
+      setTimeout(() => { $('keyCopy').textContent = 'COPY'; }, 1600);
+    };
+    try {
+      await navigator.clipboard.writeText(text);
+      done(true);
+    } catch (e) {
+      // Sandboxed frames often refuse clipboard writes. Select the text so the
+      // copy is one keystroke away rather than failing with no way forward.
+      const r = document.createRange(); r.selectNodeContents(out);
+      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      done(false);
+    }
+  });
+
+  $('keyWipe').addEventListener('click', () => {
+    out.textContent = 'Wiped. Press generate for another.';
+    out.classList.add('empty');
+    bits.className = 'entropy';
+    bits.textContent = 'entropy will appear here';
+  });
+
+  KEY_PRESETS.forEach(([label, f, n, why]) => {
+    const r = el('div', 'row preset');
+    r.innerHTML = `<span class="k">${esc(label)}</span><span class="v"><span class="pill idle">${f.toUpperCase()}</span></span>`;
+    r.title = why;
+    r.tabIndex = 0;
+    const run = () => {
+      fmt.value = f; fillSizes(); len.value = String(n);
+      show(generateKey(f, n));
+      devonSays(`Generated. That one is for the ${label}. It stays on this machine, and it does not go in the vault.`);
+    };
+    r.addEventListener('click', run);
+    r.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); run(); } });
+    $('keyPresets').appendChild(r);
+  });
+}
+
+/* ===========================================================================
+   LEARNING
+
+   What this genuinely does: remembers corrections you make, in this browser,
+   so the same mistake is not repeated. Keyword to Area, phrase to intent, and
+   a count of what gets used.
+
+   What it does not do, stated plainly because the phrase "self learning"
+   invites the assumption: it does not retrain a model, it does not travel
+   between devices or people, and it does not change the Python. It is a local
+   correction memory, and it is worth exactly what a local correction memory is
+   worth.
+
+   Two constraints come straight from canon and are enforced rather than
+   documented. It can never mint a tenth Area: a learned Area is validated
+   against the nine on write and again on read, and discarded otherwise. And
+   because this is memory, it is transparent, editable and deletable, which is
+   the platform's fourth non negotiable rather than a nicety.
+   =========================================================================== */
+
+const Learn = {
+  KEY: 'devon.learning.v1',
+  MAX: 200,
+  data: { areaHints: {}, intentHints: {}, counts: {}, v: 1 },
+
+  load() {
+    try {
+      const raw = localStorage.getItem(this.KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.v === 1) this.data = Object.assign(this.data, parsed);
+      }
+    } catch (e) { /* private mode, cleared storage, or blocked. Carry on empty. */ }
+    this.prune();
+  },
+
+  save() {
+    try { localStorage.setItem(this.KEY, JSON.stringify(this.data)); }
+    catch (e) { /* storage refused. The session still works, it just forgets. */ }
+  },
+
+  prune() {
+    for (const bag of ['areaHints', 'intentHints']) {
+      const keys = Object.keys(this.data[bag]);
+      if (keys.length > this.MAX) {
+        keys.slice(0, keys.length - this.MAX).forEach(k => delete this.data[bag][k]);
+      }
+    }
+  },
+
+  // Significant words only. Short filler teaches nothing and pollutes matching.
+  terms(text) {
+    const stop = new Set(['the','a','an','and','for','with','that','this','from','into','about',
+      'is','are','was','were','has','have','had','will','would','need','needs','its','it']);
+    return (text || '').toLowerCase().match(/[a-z][a-z0-9-]{3,}/g)?.filter(w => !stop.has(w)).slice(0, 6) || [];
+  },
+
+  validArea(label) {
+    return STATE.areas.some(a => a.label === label) ? label : null;
+  },
+
+  teachArea(text, label) {
+    const area = this.validArea(label);
+    if (!area) return false;                 // never mints a tenth Area
+    const words = this.terms(text);
+    if (!words.length) return false;
+    words.forEach(w => { this.data.areaHints[w] = area; });
+    this.prune(); this.save();
+    return words;
+  },
+
+  teachIntent(phrase, intentName) {
+    const key = (phrase || '').toLowerCase().trim().slice(0, 60);
+    if (!key || !INTENTS.some(i => i.n === intentName)) return false;
+    this.data.intentHints[key] = intentName;
+    this.prune(); this.save();
+    return key;
+  },
+
+  lookupArea(text) {
+    const h = (text || '').toLowerCase();
+    const tally = {};
+    for (const [word, area] of Object.entries(this.data.areaHints)) {
+      if (h.includes(word)) tally[area] = (tally[area] || 0) + 1;
+    }
+    const ranked = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+    if (!ranked.length) return null;
+    if (ranked.length > 1 && ranked[0][1] === ranked[1][1]) return null;   // tie teaches nothing
+    return this.validArea(ranked[0][0]);                                   // validated again on read
+  },
+
+  lookupIntent(text) {
+    const n = (text || '').toLowerCase().trim();
+    for (const [phrase, intent] of Object.entries(this.data.intentHints)) {
+      if (n === phrase || n.includes(phrase)) {
+        const it = INTENTS.find(i => i.n === intent);
+        if (it) return it;
+      }
+    }
+    return null;
+  },
+
+  count(intentName) {
+    this.data.counts[intentName] = (this.data.counts[intentName] || 0) + 1;
+    this.save();
+  },
+
+  entries() {
+    const rows = [];
+    Object.entries(this.data.areaHints).forEach(([w, a]) =>
+      rows.push({ kind: 'AREA', key: w, val: a, bag: 'areaHints' }));
+    Object.entries(this.data.intentHints).forEach(([p, i]) =>
+      rows.push({ kind: 'PHRASE', key: p, val: i.replace(/_/g, ' '), bag: 'intentHints' }));
+    return rows;
+  },
+
+  forget(bag, key) { delete this.data[bag][key]; this.save(); },
+  forgetAll() { this.data = { areaHints: {}, intentHints: {}, counts: {}, v: 1 }; this.save(); },
+
+  topUsed() {
+    return Object.entries(this.data.counts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  }
+};
+
+function renderLearned() {
+  const box = $('learned'); box.innerHTML = '';
+  const rows = Learn.entries();
+  const top = Learn.topUsed();
+
+  $('learnCount').textContent = rows.length
+    ? `${rows.length} REMEMBERED`
+    : 'NOTHING YET';
+
+  if (!rows.length) {
+    box.appendChild(el('div', 'aempty',
+      'Nothing yet. Correct him once and it lands here.'));
+  }
+
+  rows.forEach(r => {
+    const row = el('div', 'lrow');
+    row.innerHTML = `<span class="kind">${r.kind}</span>
+      <span class="body">${esc(r.key)} <span style="color:var(--faint)">goes to</span> <b>${esc(r.val)}</b></span>`;
+    const del = el('button', 'del', 'FORGET');
+    del.setAttribute('aria-label', `Forget that ${r.key} goes to ${r.val}`);
+    del.onclick = () => { Learn.forget(r.bag, r.key); renderLearned(); };
+    row.appendChild(del);
+    box.appendChild(row);
+  });
+
+  if (top.length) {
+    const t = el('div', 'row');
+    t.innerHTML = `<span class="k">most used</span><span class="v">${
+      top.map(([n, c]) => `${esc(n.replace(/_/g, ' '))} ${c}`).join(' · ')}</span>`;
+    box.appendChild(t);
+  }
+}
+
+/* The teach prompt. Shown only when he could not place something, so it is a
+   repair for a real failure rather than a survey after every command. */
+function offerAreaTeach(text) {
+  const wrap = el('div', 'teach');
+  wrap.innerHTML = `<span class="q">Where should that have gone? Tell me once and I will remember.</span>`;
+  STATE.areas.forEach(a => {
+    const b = el('button', 'tbtn', esc(a.label));
+    b.type = 'button';
+    b.onclick = () => {
+      const words = Learn.teachArea(text, a.label);
+      wrap.remove();
+      renderLearned();
+      flashArea(a.label);
+      devonSays(words
+        ? `Understood. ${words.slice(0, 3).join(', ')} means ${a.label} from here on.`
+        : `Filed under ${a.label}.`);
+    };
+    wrap.appendChild(b);
+  });
+  $('plan').appendChild(wrap);
+}
+
+function offerIntentTeach(phrase) {
+  const wrap = el('div', 'teach');
+  wrap.innerHTML = `<span class="q">What did you mean by that? I will map the phrase.</span>`;
+  ['capture', 'add_task', 'episode_idea', 'brief', 'recall', 'status_report'].forEach(name => {
+    const b = el('button', 'tbtn', esc(name.replace(/_/g, ' ')));
+    b.type = 'button';
+    b.onclick = () => {
+      Learn.teachIntent(phrase, name);
+      wrap.remove();
+      renderLearned();
+      devonSays(`Noted. I will read that as ${name.replace(/_/g, ' ')} next time.`);
+    };
+    wrap.appendChild(b);
+  });
+  $('plan').appendChild(wrap);
+}
+
+
+/* ===========================================================================
+   DEVON console wiring: panels from real state, one router, voice both ways,
+   and a live gate. Nothing here performs an effect. Captures produce a plan,
+   effects produce a request, and a ruling is always the human's.
+   =========================================================================== */
+
+const $ = (id) => document.getElementById(id);
+const el = (t, c, h) => { const n = document.createElement(t); if (c) n.className = c;
+  if (h !== undefined) n.innerHTML = h; return n; };
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------------- clock ---------------- */
+function tick() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  $('clock').textContent = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  $('date').textContent = d.toLocaleDateString(undefined,
+    {weekday:'long',day:'numeric',month:'long',year:'numeric'}).toUpperCase();
+}
+tick(); setInterval(tick, 1000);
+$('gen').textContent = new Date().toISOString().slice(0,16).replace('T',' ');
+$('readOn').textContent = STATE.read_on;
+$('owner').textContent = STATE.persona.owner.split(' ')[0];
+
+/* ---------------- static panels ---------------- */
+const EMPTY = new Set(['Mirror Reads']);
+Object.entries(STATE.folders).forEach(([name,id]) => {
+  const core = name.startsWith('_');
+  const li = el('li',(core?'core ':'')+(EMPTY.has(name)?'empty':''));
+  li.innerHTML = `<span class="n">${core?'◆':'▸'}</span><span>${esc(name)}</span>`;
+  li.title = id; $('vault').appendChild(li);
+});
+
+const DOC_LABEL = {master_directory:'Master directory',context_pill:'Context pill',
+  standing_instructions:'Standing instructions',filing_laws:'Filing laws',
+  naming_convention:'Naming convention',voice_standard:'Voice standard',
+  flagship_bar:'Flagship bar',precedence_doctrine:'Precedence doctrine',
+  webhook_paths:'Webhook paths',areas:'Areas',capture_protocol:'Capture protocol'};
+Object.entries(STATE.doctrine).forEach(([k,v]) => {
+  const label = /^[\d.]+$/.test(v.version) ? 'v'+v.version : String(v.version).toUpperCase();
+  const r = el('div','row');
+  r.innerHTML = `<span class="k">${esc(DOC_LABEL[k]||k)}</span><span class="v"><span class="pill ok">${esc(label)}</span></span>`;
+  r.title = v.governs+'  ·  '+v.id; $('doctrine').appendChild(r);
+});
+
+Object.entries(STATE.webhooks).forEach(([path,w]) => {
+  const authed = !!w.auth, r = el('div','row');
+  r.innerHTML = `<span class="k">/${esc(path)}</span><span class="v"><span class="pill ${authed?'ok':'stop'}">${authed?'AUTH':'OPEN'}</span></span>`;
+  r.title = w.job + (authed ? '  ·  '+w.auth : '  ·  unauthenticated, needs a ruling');
+  $('hooks').appendChild(r);
+});
+
+STATE.agents.forEach(a => {
+  const s = el('div','seat');
+  s.innerHTML = `<span class="nm">${esc(a.name)}</span><span class="pp">${esc(a.purpose.split(' ')[0].toUpperCase())}</span>`;
+  s.title = a.purpose; $('council').appendChild(s);
+});
+
+Object.entries(STATE.workflows).forEach(([name,w]) => {
+  const st = w.state;
+  const cls = st.startsWith('active')?'ok':st.startsWith('retired')?'idle':'warn';
+  const short = st.startsWith('active')?'LIVE':st.startsWith('retired')?'RETIRED':'OFF';
+  const r = el('div','row');
+  r.innerHTML = `<span class="k">${esc(name)}</span><span class="v"><span class="pill ${cls}">${short}</span></span>`;
+  r.title = w.id+'  ·  '+st; $('flows').appendChild(r);
+});
+
+STATE.laws.forEach(l => {
+  const d = el('div','law');
+  d.innerHTML = `<span class="num">${l.n}</span><span>${esc(l.title)}</span>`;
+  $('laws').appendChild(d);
+});
+
+function gauge(label,value,max,unit,colour){
+  const pct=Math.max(0,Math.min(1,value/max)), R=38, C=2*Math.PI*R, arc=C*.75;
+  const w=el('div','gauge');
+  w.innerHTML=`<svg viewBox="0 0 104 104" role="img" aria-label="${esc(label)}: ${value} of ${max}">
+    <circle cx="52" cy="52" r="${R}" fill="none" stroke="#1E3348" stroke-width="6"
+            stroke-dasharray="${arc} ${C}" transform="rotate(135 52 52)"/>
+    <circle cx="52" cy="52" r="${R}" fill="none" stroke="${colour}" stroke-width="6"
+            stroke-dasharray="${arc*pct} ${C}" transform="rotate(135 52 52)"/>
+    <text x="52" y="54" text-anchor="middle" class="val">${value}</text>
+    <text x="52" y="68" text-anchor="middle" class="unit">${esc(unit)}</text></svg>
+    <div class="lab">${esc(label)}</div>`;
+  return w;
+}
+const T = STATE.flagship.thresholds;
+$('gauges').appendChild(gauge('Dim floor',T.floor,5,'MIN','#C77B4A'));
+$('gauges').appendChild(gauge('Mean',T.mean,5,'REQ','#D4A017'));
+$('gauges').appendChild(gauge('Security',T.security,5,'EXACT','#4FB3A5'));
+STATE.flagship.clauses.forEach(c => {
+  const r = el('div','row');
+  r.innerHTML = `<span class="k">${c.n}. ${esc(c.title)}</span><span class="v"><span class="pill idle">CLAUSE</span></span>`;
+  $('clauses').appendChild(r);
+});
+
+[['Airtable API','QUOTA','stop',STATE.airtable.blocked],
+ ['/devon-capture auth','OPEN','stop','Unauthenticated by design. Needs a ruling.'],
+ ['TQO FINAL V5','OFF','warn','Inactive by ruling until funded.'],
+ ['QA checklists','LOST','stop','Deleted in the name purge. Rewrite from scratch.'],
+ ['Continuity SOP','LOST','stop','Not recoverable from any surviving file.'],
+ ['Mirror Reads','EMPTY','idle','Zero files when listed.']
+].forEach(([k,v,cls,tip]) => {
+  const r = el('div','row');
+  r.innerHTML = `<span class="k">${esc(k)}</span><span class="v"><span class="pill ${cls}">${v}</span></span>`;
+  r.title = tip; $('blocked').appendChild(r);
+});
+
+/* ---------------- brain map ---------------- */
+const CX=260, CY=260, NS='http://www.w3.org/2000/svg';
+const mk=(t,a)=>{const n=document.createElementNS(NS,t);for(const k in a)n.setAttribute(k,a[k]);return n;};
+for(let i=0;i<72;i++){const a=(i/72)*Math.PI*2,long=i%6===0;
+  $('tickOuter').appendChild(mk('line',{x1:CX+Math.cos(a)*(long?220:226),y1:CY+Math.sin(a)*(long?220:226),
+    x2:CX+Math.cos(a)*230,y2:CY+Math.sin(a)*230,'stroke-width':long?1.6:.8,opacity:long?.9:.45}));}
+for(let i=0;i<40;i++){const a=(i/40)*Math.PI*2;
+  $('tickInner').appendChild(mk('line',{x1:CX+Math.cos(a)*114,y1:CY+Math.sin(a)*114,
+    x2:CX+Math.cos(a)*120,y2:CY+Math.sin(a)*120,'stroke-width':1}));}
+STATE.agents.forEach((a,i)=>{
+  const ang=(i/STATE.agents.length)*Math.PI*2-Math.PI/2+.35;
+  const x=CX+Math.cos(ang)*206,y=CY+Math.sin(ang)*206,g=mk('g',{});
+  g.appendChild(mk('circle',{cx:x,cy:y,r:3,fill:'#1E3348',stroke:'#56697E'}));
+  const t=mk('text',{x,y:y+(Math.sin(ang)>.2?15:-9),'text-anchor':'middle',
+    style:'font-family:IBM Plex Mono,monospace;font-size:8px;letter-spacing:.1em;fill:#56697E'});
+  t.textContent=a.name.toUpperCase(); g.appendChild(t); $('seats').appendChild(g);
+});
+const AC=['#C77B4A','#D4A017','#4FB3A5','#C77B4A','#8A9BAE','#D4A017','#C77B4A','#4FB3A5','#D4A017'];
+const AREA_NODES = {};
+STATE.areas.forEach((area,i)=>{
+  const ang=(i/STATE.areas.length)*Math.PI*2-Math.PI/2;
+  const x=CX+Math.cos(ang)*120,y=CY+Math.sin(ang)*120,colour=AC[i];
+  $('spokes').appendChild(mk('line',{x1:CX,y1:CY,x2:x,y2:y,'stroke-width':1,opacity:.5}));
+  const g=mk('g',{class:'node-hit',tabindex:'0',role:'button','aria-label':`${area.label}: ${area.covers}`});
+  g.appendChild(mk('circle',{class:'node-ring',cx:x,cy:y,r:14,fill:'none',stroke:colour,'stroke-width':1,opacity:.25}));
+  g.appendChild(mk('circle',{class:'node-dot',cx:x,cy:y,r:6,fill:'#0E1826',stroke:colour,'stroke-width':2}));
+  const lx=CX+Math.cos(ang)*158,ly=CY+Math.sin(ang)*158;
+  const t=mk('text',{class:'node-lbl',x:lx,y:ly+4,'text-anchor':'middle'});
+  t.textContent=area.label.toUpperCase(); g.appendChild(t);
+  const show=()=>{$('readout').innerHTML=`<b>${esc(area.label)}</b> <span class="code">files as ${esc(area.code)}</span><br>${esc(area.covers)}`;};
+  const reset=()=>{$('readout').innerHTML='Hover an Area to read its brief. Nine Areas, ruled. Never invent a tenth.';};
+  g.addEventListener('mouseenter',show); g.addEventListener('focus',show);
+  g.addEventListener('mouseleave',reset); g.addEventListener('blur',reset);
+  AREA_NODES[area.label]=g; $('areas').appendChild(g);
+});
+function flashArea(label){
+  const g=AREA_NODES[label]; if(!g) return;
+  g.classList.remove('node-flash'); void g.getBoundingClientRect(); g.classList.add('node-flash');
+  setTimeout(()=>g.classList.remove('node-flash'),1600);
+}
+
+/* ---------------- the router, mirroring commands.py ---------------- */
+/* ---------------- soul layer (live recall) ---------------- */
+const Soul = {
+  get(k, d) { try { return localStorage.getItem('devon.soul.' + k) || d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('devon.soul.' + k, v); } catch (e) {} },
+  base() { return (this.get('base', '') || '').replace(/\/+$/, ''); },
+  token() { return this.get('token', ''); },
+  configured() { return !!this.token() || !this.get('base', ''); },
+  headers() {
+    const h = { 'Accept': 'application/json' };
+    const t = this.token();
+    if (t) h['Authorization'] = 'Bearer ' + t;
+    return h;
+  },
+  async status() {
+    const res = await fetch(this.base() + '/api/v1/soul/status', { headers: this.headers() });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res.json();
+  },
+  async recall(topic) {
+    const res = await fetch(
+      this.base() + '/api/v1/soul/recall?q=' + encodeURIComponent(topic),
+      { headers: this.headers() }
+    );
+    if (res.status === 503) throw new Error('off');
+    if (res.status === 401) throw new Error('auth');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res.json();
+  }
+};
+
+function wireSoul() {
+  const base = $('soulBase'), tok = $('soulTok'), st = $('soulState');
+  if (!base) return;
+  base.value = Soul.get('base', '');
+  tok.value = Soul.token();
+  if (Soul.token()) st.textContent = 'CONFIGURED, UNTESTED';
+  $('soulSave').onclick = () => {
+    Soul.set('base', base.value.trim());
+    Soul.set('token', tok.value.trim());
+    st.textContent = Soul.token() ? 'SAVED, UNTESTED' : 'NOT CONFIGURED';
+  };
+  $('soulTest').onclick = async () => {
+    st.textContent = 'TESTING';
+    try {
+      const body = await Soul.status();
+      st.textContent = body.enabled ? 'ON' : 'REACHABLE, RECALL OFF';
+    } catch (e) {
+      st.textContent = 'UNREACHABLE';
+    }
+  };
+}
+
+async function soulRecall(topic, plan) {
+  const subject = topic || 'that';
+  try {
+    const body = await Soul.recall(subject);
+    const lines = [];
+    lines.push(`<span class="dim">SOUL RECALL</span> <span class="hl">${esc(subject)}</span> <span class="dim">/ ${body.tee_count} ruling(s), ${body.devon_count} note(s)</span>`);
+    body.records.forEach(r => {
+      const label = r.source === 'tee-soul-layer' ? 'TEE RULED' : 'DEVON NOTED';
+      const when = r.dated ? ' ' + esc(r.dated) : '';
+      lines.push(`<span class="${r.source === 'tee-soul-layer' ? 'hl' : 'dim'}">${label}${when}</span> ${esc(r.text)}`);
+    });
+    if (!body.records.length) lines.push('<span class="dim">Nothing recalled. A measured empty, not a guess.</span>');
+    if (body.errors.length) lines.push(`<span class="gate">PARTIAL</span> <span class="dim">${esc(body.errors.join('; '))}</span>`);
+    lines.push('<span class="dim">Context, not command. Rulings outrank notes.</span>');
+    plan.innerHTML = lines.join('<br>');
+    devonSays(body.reply);
+    const st = $('soulState'); if (st) st.textContent = 'ON';
+  } catch (e) {
+    const why = e.message === 'off'
+      ? 'The soul layer is switched off on the API side.'
+      : e.message === 'auth'
+        ? 'The API refused my token. Paste a fresh one in the Soul Layer panel.'
+        : 'I could not reach the soul layer from here.';
+    plan.innerHTML = `<span class="no">SOUL UNREACHABLE</span> <span class="dim">${esc(why)}</span>`;
+    devonSays(Persona.recall(subject));
+  }
+}
+
+const INTENTS=[
+ {n:'capture',k:'CAPTURE',floor:.80,lead:['remember that','remember this','remember','make a note of','note this'],dest:'Notion Inbox, Notes and Ideas'},
+ {n:'add_task',k:'CAPTURE',floor:.80,lead:['add a task to','add a task','add task','new task','remind me to'],dest:'Notion Tasks'},
+ {n:'start_project',k:'CAPTURE',floor:.82,lead:['start a project called','start a project','new project called','new project'],dest:'Notion Projects and Goals'},
+ {n:'episode_idea',k:'CAPTURE',floor:.82,lead:['new episode idea','episode idea'],dest:'Airtable Podcast HQ, Idea stage',area:'Podcast'},
+ {n:'recall',k:'READ',floor:.76,lead:['what do we already know about','what do we know about','what did we decide about'],dest:'the Thread Log'},
+ {n:'whats_on_my_plate',k:'READ',floor:.78,lead:["what's on my plate",'whats on my plate','what is on my plate'],dest:'Notion Tasks and Projects'},
+ {n:'brief',k:'READ',floor:.80,lead:['brief me','briefing'],dest:'Notion, plus the Airtable pipeline'},
+ {n:'status_report',k:'READ',floor:.80,lead:['status report'],dest:'Notion Projects and Goals'},
+ {n:'log_thread',k:'CAPTURE',floor:.84,lead:['log this thread','log this conversation','receipt'],dest:'Notion Thread Log'},
+ {n:'refresh_dashboard',k:'EFFECT',floor:.84,lead:['refresh my dashboard','refresh the dashboard'],dest:'regenerates this console'},
+ {n:'get_time',k:'READ',floor:.72,lead:['what time is it','the time','time now'],dest:'answers locally'},
+ {n:'get_date',k:'READ',floor:.72,lead:["what's the date",'what is the date','the date'],dest:'answers locally'},
+ {n:'get_weather',k:'READ',floor:.74,lead:['weather in','weather for',"what's the weather"],dest:'a weather provider'},
+ {n:'open_app',k:'EFFECT',floor:.86,gated:1,lead:['open','launch'],dest:'launches a program'},
+ {n:'take_screenshot',k:'EFFECT',floor:.84,gated:1,lead:['take a screenshot','screenshot'],dest:'writes an image of the screen to disk'},
+ {n:'send_message',k:'EFFECT',floor:.88,gated:1,lead:['send a message to','send message to'],dest:'sends on your behalf'},
+ {n:'shutdown',k:'EFFECT',floor:.92,gated:1,lead:['shut down the computer','shutdown the computer','power off the computer'],dest:'powers the machine off'},
+ {n:'restart',k:'EFFECT',floor:.92,gated:1,lead:['restart the computer','reboot the computer'],dest:'reboots the machine'},
+ {n:'stop',k:'READ',floor:.82,lead:['goodbye','stop listening','that is all'],dest:'ends the session'}
+];
+const KW={TQO:['tqo','quiet operator','monetization'],
+ Podcast:['podcast','tsws','episode','vespera','auren','shadow we share'],
+ NCO:['nco','forge','sergeant','military'],ACX:['acx','ascension','caudex','archivist','folio'],
+ Health:['health','fitness','sleep','workout'],Money:['money','invoice','budget','credit','tax'],
+ Family:['family','karrie','birthday'],Learning:['learning','course','study'],
+ Systems:['systems','devon','vault','n8n','airtable','notion','workflow','webhook','doctrine']};
+
+const stripWake=s=>s.replace(/^\s*(devon|jarvis)\b[\s,:.!]*/i,'').trim();
+const norm=s=>s.toLowerCase().replace(/\s+/g,' ').trim().replace(/[?.!,]+$/,'');
+
+function classifyArea(text){
+  // What he was taught is consulted first, then the built in keywords. Both are
+  // validated against the nine, so neither path can produce a tenth Area.
+  const taught = (typeof Learn !== 'undefined') ? Learn.lookupArea(text) : null;
+  if(taught){
+    const a = STATE.areas.find(x=>x.label===taught);
+    if(a) return Object.assign({}, a, {learned:true});
+  }
+  const h=(text||'').toLowerCase();
+  const scored=STATE.areas.map(a=>({label:a.label,code:a.code,
+    hits:(KW[a.label]||[]).filter(k=>h.includes(k)).length})).filter(a=>a.hits>0)
+    .sort((a,b)=>b.hits-a.hits);
+  if(!scored.length) return null;
+  if(scored.length>1 && scored[0].hits===scored[1].hits) return null;
+  return scored[0];
+}
+function parse(raw){
+  const body=stripWake(raw), n=norm(body);
+  if(!n) return null;
+  let best=null;
+  for(const it of INTENTS) for(const lead of it.lead){
+    const L=norm(lead);
+    if(n===L||n.startsWith(L+' ')||n.includes(L)){
+      if(!best||L.length>best.leadLen) best={it,score:n===L?1:.95,leadLen:L.length,lead};
+    }
+  }
+  if(!best){
+    // Nothing built in matched. A phrase he was taught is the last resort, and
+    // it is reported as learned rather than passed off as a built in match.
+    const taught = (typeof Learn !== 'undefined') ? Learn.lookupIntent(n) : null;
+    if(taught) return {it:taught,score:.9,payload:body,body,learned:true};
+    return {unknown:true,body};
+  }
+  const i=body.toLowerCase().indexOf(best.lead.toLowerCase());
+  const payload=i===-1?'':body.slice(i+best.lead.length).replace(/^[\s,:;-]+/,'');
+  return {it:best.it,score:best.score,payload,body};
+}
+
+/* ---------------- transcript ---------------- */
+function log(who,text){
+  const l=el('div','tline '+(who==='you'?'you':'dev'));
+  l.innerHTML=`<span class="tag">${who==='you'?'YOU':'DEVON'}</span><span class="txt">${esc(text)}</span>`;
+  $('transcript').appendChild(l);
+  $('transcript').scrollTop=$('transcript').scrollHeight;
+}
+function devonSays(text,{quiet=false}={}){
+  $('sayText').textContent=text;
+  log('devon',text);
+  if(!quiet){
+    $('orb').classList.add('speaking');
+    Voice.speak(text,()=>$('orb').classList.remove('speaking'));
+  }
+}
+
+/* ---------------- the gate, rendered ---------------- */
+function fmtLeft(ms){
+  if(ms<=0) return 'expired';
+  const h=Math.floor(ms/3.6e6),m=Math.floor(ms%3.6e6/6e4),s=Math.floor(ms%6e4/1000);
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} left`;
+}
+function renderGate(){
+  const pend=Gate.pending(), box=$('approvals');
+  $('pendCount').textContent=pend.length+' PENDING';
+  box.innerHTML='';
+  if(!pend.length){ box.appendChild(el('div','aempty','Nothing awaiting a ruling.')); }
+  pend.forEach(r=>{
+    const c=el('div','acard');
+    c.innerHTML=`<div class="id">${esc(r.id)}</div>
+      <div class="ttl">${esc(r.title)}</div>
+      <div class="wh">${esc(r.whatHappens)}</div>
+      <div class="cd" data-exp="${r.expires}">${fmtLeft(r.expires-Date.now())} · blast radius: ${esc(r.blastRadius)}</div>
+      <div class="btns"></div>`;
+    const yes=el('button','abtn yes','APPROVE'), no=el('button','abtn no','REFUSE');
+    yes.onclick=()=>rule(r.id,r.token,'approve');
+    no.onclick=()=>rule(r.id,r.token,'refuse');
+    c.querySelector('.btns').append(yes,no);
+    box.appendChild(c);
+  });
+  const hist=Gate.history().slice(0,5), hb=$('ahistory'); hb.innerHTML='';
+  hist.forEach(r=>{
+    const cls=r.state==='approved'?'ok':r.state==='refused'?'stop':'idle';
+    const row=el('div','row');
+    row.innerHTML=`<span class="k">${esc(r.title)}</span><span class="v"><span class="pill ${cls}">${r.state.toUpperCase()}</span></span>`;
+    hb.appendChild(row);
+  });
+}
+function rule(id,token,decision){
+  const res=Gate.decide(id,token,decision);
+  if(!res.ok){
+    devonSays(res.expired?Persona.expired():`Refused at the gate: ${res.reason}.`);
+  } else if(res.state==='approved'){
+    devonSays(Persona.approved(res.rec.title));
+  } else {
+    devonSays(Persona.refused());
+  }
+  renderGate();
+}
+setInterval(()=>{
+  document.querySelectorAll('.cd').forEach(n=>{
+    const exp=+n.dataset.exp;
+    n.textContent=n.textContent.replace(/^[^·]*/,fmtLeft(exp-Date.now())+' ');
+  });
+  if(Gate.pending().length!==+$('pendCount').textContent.split(' ')[0]) renderGate();
+},1000);
+renderGate();
+
+/* ---------------- handling one utterance ---------------- */
+function handle(raw){
+  if(!raw||!raw.trim()) return;
+  log('you',raw);
+  const r=parse(raw), plan=$('plan');
+
+  if(!r||r.unknown){
+    plan.innerHTML=`<span class="no">DECLINED</span> <span class="dim">no intent cleared its floor. Declining rather than guessing.</span>`;
+    devonSays(Persona.declined());
+    offerIntentTeach(stripWake(raw));
+    return;
+  }
+  const it=r.it, lines=[];
+  Learn.count(it.n);
+  lines.push(`<span class="dim">INTENT</span> <span class="hl">${it.n.replace(/_/g,' ')}</span> <span class="dim">/ ${it.k} / confidence ${r.score.toFixed(2)} / floor ${it.floor}${r.learned?' / matched from what you taught me':''}</span>`);
+
+  if(it.gated){
+    const req=Gate.raise(it.n.replace(/_/g,' ')+(r.payload?': '+r.payload:''),
+      it.dest.charAt(0).toUpperCase()+it.dest.slice(1)+'.',
+      (it.n==='shutdown'||it.n==='restart')?'machine state':'outside DEVON');
+    lines.push(`<span class="gate">APPROVAL RAISED</span> ${esc(req.id)}`);
+    lines.push(`<span class="dim">Nothing has run. The ruling is yours.</span>`);
+    plan.innerHTML=lines.join('<br>');
+    renderGate();
+    devonSays(Persona.gated(it.dest));
+    return;
+  }
+
+  if(it.k==='CAPTURE'){
+    const picked = it.area ? STATE.areas.find(a=>a.label===it.area) : classifyArea(r.payload||r.body);
+    lines.push(`<span class="dim">DESTINATION</span> ${esc(it.dest)}`);
+    if(picked){
+      lines.push(`<span class="dim">AREA</span> <span class="hl">${esc(picked.label)}</span> <span class="dim">files as ${esc(picked.code)}${picked.learned?', from what you taught me':''}</span>`);
+      if(r.payload){
+        const slug=r.payload.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,44);
+        lines.push(`<span class="dim">FILENAME</span> ${esc(picked.code)}_DOC_${esc(slug)}_v1_${new Date().toISOString().slice(0,10)}.md`);
+      }
+      flashArea(picked.label);
+    } else {
+      lines.push(`<span class="gate">NO AREA</span> <span class="dim">no signal in the text. Files unrouted rather than guessed.</span>`);
+    }
+    if(r.payload) lines.push(`<span class="dim">PAYLOAD</span> ${esc(r.payload)}`);
+    lines.push(`<span class="dim">Planned, not written.</span>`);
+    plan.innerHTML=lines.join('<br>');
+    devonSays(picked?Persona.captured(picked.label,picked.code):Persona.capturedNoArea());
+    if(!picked) offerAreaTeach(r.payload||r.body);
+    return;
+  }
+
+  // reads
+  lines.push(`<span class="dim">${esc(it.dest)}</span>`);
+  if(r.payload) lines.push(`<span class="dim">SUBJECT</span> ${esc(r.payload)}`);
+  plan.innerHTML=lines.join('<br>');
+
+  if(it.n==='get_time'){ devonSays(Persona.timeReply(new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}))); return; }
+  if(it.n==='get_date'){ devonSays(Persona.dateReply(new Date().toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long'}))); return; }
+  if(it.n==='stop'){ Ears.stop(); devonSays(Persona.stopped()); return; }
+  if(it.n==='recall'){ soulRecall(r.payload, plan); return; }
+  if(it.n==='refresh_dashboard'){ devonSays(Persona.snapshot()); return; }
+  devonSays(Persona.notRead(it.dest));
+}
+
+/* ---------------- voice wiring ---------------- */
+function setOrb(state){
+  const orb=$('orb'), lbl=$('orbLbl'), st=$('voiceState');
+  orb.classList.toggle('listening',state==='listening');
+  if(state==='listening'){ lbl.textContent='LISTENING'; st.textContent='LISTENING'; }
+  else if(state==='error'){ lbl.textContent='TAP TO SPEAK'; st.textContent='MIC ERROR';
+    $('heard').innerHTML=`<span class="dim">${esc(Ears.reason)}</span>`; }
+  else { lbl.textContent='TAP TO SPEAK'; st.textContent=Ears.supported?'READY':'TYPED ONLY'; }
+}
+const micOk = Ears.init(
+  (interim)=>{ $('heard').innerHTML=`<span class="dim">hearing</span> ${esc(interim)}`; },
+  (final)=>{ $('heard').innerHTML=`<span class="dim">heard</span> ${esc(final)}`; handle(final); },
+  setOrb
+);
+if(!micOk){
+  $('orb').disabled=true;
+  $('micNotice').innerHTML=`<div class="notice">${esc(Ears.reason)} Everything works from the typed line below.</div>`;
+  $('voiceState').textContent='TYPED ONLY';
+} else {
+  $('orb').addEventListener('click',()=>{ Voice.stop(); Ears.toggle(); });
+}
+
+Voice.init();
+function onVoicesReady(){
+  const sel=$('voiceSel'); sel.innerHTML='';
+  Voice.voices.forEach((v,i)=>{
+    const o=el('option','',esc(v.name.replace(/\s*\(.*?\)\s*/g,'').slice(0,28))+' · '+v.lang);
+    o.value=i; sel.appendChild(o);
+  });
+  sel.value='0';
+  sel.onchange=()=>{ Voice.chosen=Voice.voices[+sel.value]; devonSays('This is the voice I will use.'); };
+}
+if(!Voice.supported){
+  $('voiceSel').innerHTML='<option>not available</option>';
+  $('voiceSel').disabled=true;
+}
+$('rate').addEventListener('input',e=>{Voice.rate=parseFloat(e.target.value);});
+$('muteBtn').addEventListener('click',()=>{
+  Voice.muted=!Voice.muted;
+  const b=$('muteBtn');
+  b.textContent=Voice.muted?'SPEECH OFF':'SPEECH ON';
+  b.setAttribute('aria-pressed',String(!Voice.muted));
+  b.classList.toggle('off',Voice.muted);
+  if(Voice.muted) Voice.stop();
+});
+$('clearBtn').addEventListener('click',()=>{
+  $('transcript').innerHTML='';
+  $('plan').innerHTML='<span class="dim">Cleared. Speak or type when you are ready.</span>';
+});
+
+$('cmd').addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&e.target.value.trim()){ handle(e.target.value.trim()); e.target.value=''; }
+});
+
+const EXAMPLES=[
+ 'Devon, remember the ACX folio needs its own canon folder',
+ 'Devon, new episode idea about inheritance and silence',
+ 'Devon, add a task to verify the D10 grid hash',
+ 'Devon, shut down the computer',
+ 'Devon, brief me',
+ 'asdkjh qwe nonsense'
+];
+EXAMPLES.forEach(x=>{
+  const b=el('button','chip',esc(x.length>40?x.slice(0,38)+'…':x));
+  b.type='button';
+  b.addEventListener('click',()=>handle(x));
+  $('chips').appendChild(b);
+});
+
+/* ---------------- ticker ---------------- */
+const TICKS=[
+ ['patina','NINE AREAS RULED','ACX added 2026-08-20. Anything saying eight is stale.'],
+ ['brass','CANON HAS ONE WRITER','Five documents forked in two days.'],
+ ['oxide','AIRTABLE QUOTA','Monthly workspace limit. Blocked on money, not on work.'],
+ ['oxide','/devon-capture UNAUTHENTICATED','Deliberate. Lower blast radius. Needs a ruling.'],
+ ['patina','A READ-BACK IS A RECEIPT','A success response is only a claim.'],
+ ['brass','SNAPSHOT IS NOT LIVE TRUTH','Regenerate before trusting a number.'],
+ ['oxide','REBUILD OWED','QA checklists and continuity SOP are not recoverable.'],
+ ['patina','RELOCATING IS NOT REMEDIATING','A secret moved is contained, not fixed.']
+];
+const build=()=>TICKS.forEach(([c,h,t])=>{
+  $('ticker').appendChild(el('span','',`<b style="color:var(--${c})">${esc(h)}</b> &nbsp;${esc(t)}`));
+});
+build(); build();
+
+/* ---------------- key generator and learning ---------------- */
+Learn.load();
+renderLearned();
+wireKeys();
+wireSoul();
+
+$('learnForget').addEventListener('click',()=>{
+  const n=Learn.entries().length;
+  Learn.forgetAll(); renderLearned(); $('learnOut').style.display='none';
+  devonSays(n?`Forgotten. All ${n} of them are gone, and I am back to the built in rules.`
+             :'There was nothing to forget.');
+});
+$('learnExport').addEventListener('click',()=>{
+  const out=$('learnOut');
+  const payload=JSON.stringify(Learn.data,null,2);
+  out.style.display='block';
+  out.innerHTML=`<span class="dim">Copy this into a note if you want it to survive this browser. It is the whole memory, nothing hidden.</span><br><br>${esc(payload)}`;
+});
+
+/* ---------------- boot ---------------- */
+setTimeout(()=>{
+  const greeting=Persona.greet();
+  $('sayText').textContent=greeting;
+  log('devon',greeting);
+  $('voiceState').textContent=Ears.supported?'READY':'TYPED ONLY';
+  // Browsers refuse speech before a user gesture, so the greeting is written
+  // now and spoken on the first interaction rather than failing silently.
+  const speakOnce=()=>{ Voice.speak(greeting); document.removeEventListener('pointerdown',speakOnce); };
+  document.addEventListener('pointerdown',speakOnce,{once:true});
+},700);
+
+</script>
