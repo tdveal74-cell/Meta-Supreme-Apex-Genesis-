@@ -42,6 +42,12 @@ class ToolRisk(str, Enum):
     BLOCKED = "blocked"
 
 
+class EffectStatus(str, Enum):
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    AMBIGUOUS = "ambiguous"
+
+
 @dataclass(frozen=True)
 class ToolCall:
     name: str
@@ -192,4 +198,86 @@ class RuntimeResult:
             "task": self.task.to_dict(),
             "approval_token": self.approval_token,
             "message": self.message,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Phase 1: Adapter-level durable effect receipts
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class EffectIntent:
+    """Pure record written before an external effect is attempted.
+
+    Bound to the task, step, tool, arguments hash, and the caller's
+    Idempotency-Key so a later receipt can be matched exactly and a stale
+    worker cannot claim a different intent.
+    """
+
+    intent_id: str
+    task_id: str
+    step_id: str
+    tool_name: str
+    arguments_hash: str
+    idempotency_key: str
+    created_at: datetime = field(default_factory=utcnow)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "intent_id": self.intent_id,
+            "task_id": self.task_id,
+            "step_id": self.step_id,
+            "tool_name": self.tool_name,
+            "arguments_hash": self.arguments_hash,
+            "idempotency_key": self.idempotency_key,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+@dataclass(frozen=True)
+class EffectReceipt:
+    """Record written after the external system has acknowledged the effect
+    (or after the adapter has recorded that no provider-level idempotency
+    was available).
+
+    Status AMBIGUOUS is reserved for the runtime when an intent exists but
+    no matching receipt can be found after a crash; adapters themselves
+    should return SUCCEEDED or FAILED.
+    """
+
+    intent_id: str
+    status: EffectStatus
+    provider_receipt_id: str = ""
+    raw_response: Dict[str, Any] = field(default_factory=dict)
+    recorded_at: datetime = field(default_factory=utcnow)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "intent_id": self.intent_id,
+            "status": self.status.value,
+            "provider_receipt_id": self.provider_receipt_id,
+            "raw_response": dict(self.raw_response),
+            "recorded_at": self.recorded_at.isoformat(),
+        }
+
+
+@dataclass(frozen=True)
+class AmbiguousOutcome:
+    """Surfaced when an EffectIntent exists and no matching EffectReceipt
+    can be found. The runtime must refuse automatic retry.
+    """
+
+    intent: EffectIntent
+    reason: str = "ambiguous_external_effect"
+    detail: str = (
+        "An external effect was intended but no durable receipt was recorded. "
+        "Automatic retry is refused; human inspection is required."
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "intent": self.intent.to_dict(),
+            "reason": self.reason,
+            "detail": self.detail,
         }
