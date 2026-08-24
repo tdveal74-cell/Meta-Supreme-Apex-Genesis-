@@ -1,0 +1,322 @@
+name: DEVON remote-main hotfix builder
+
+on:
+  push:
+    branches:
+      - fix/devon-browser-terminal-remote-main
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[devon-hotfix-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/devon-browser-terminal-remote-main
+          fetch-depth: 0
+      - name: Apply grounded branch-state repair
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          app_path = Path('deploy/soul/app.py')
+          text = app_path.read_text()
+          start = text.index('async def _ensure_main_branch')
+          end = text.index('\n\nasync def _repo_root', start)
+          replacement = '''async def _ensure_main_branch(sandbox: Any, repo_root: str) -> tuple[str, bool]:
+              """Attach a clean detached worktree to tracked main without losing user state."""
+              current = await _git_branch(sandbox, repo_root)
+              if current:
+                  return current, False
+
+              dirty = await sandbox.run_process(
+                  "git",
+                  ["-C", repo_root, "status", "--porcelain"],
+                  capture_output=True,
+              )
+              if int(dirty.returncode) != 0:
+                  raise RuntimeError("could not inspect detached Meta worktree state")
+              if str(dirty.stdout or "").strip():
+                  return "detached", False
+
+              head = await sandbox.run_process(
+                  "git",
+                  ["-C", repo_root, "rev-parse", "HEAD"],
+                  capture_output=True,
+              )
+              if int(head.returncode) != 0:
+                  raise RuntimeError("could not resolve detached Meta HEAD")
+              head_lines = str(head.stdout or "").strip().splitlines()
+              if not head_lines:
+                  raise RuntimeError("detached Meta HEAD was empty")
+              head_sha = head_lines[-1].strip()
+              recovery_branch = f"devon/recovery-{head_sha[:12]}"
+              recovery_ref = f"refs/heads/{recovery_branch}"
+
+              recovery_exists = await sandbox.run_process(
+                  "git",
+                  ["-C", repo_root, "show-ref", "--verify", "--quiet", recovery_ref],
+                  capture_output=True,
+              )
+              if int(recovery_exists.returncode) != 0:
+                  preserved = await sandbox.run_process(
+                      "git",
+                      ["-C", repo_root, "branch", recovery_branch, head_sha],
+                      capture_output=True,
+                  )
+                  if int(preserved.returncode) != 0:
+                      detail = str(
+                          preserved.stderr or preserved.stdout or "git branch failed"
+                      ).strip()
+                      raise RuntimeError(
+                          f"could not preserve detached Meta HEAD: {detail[-2_000:]}"
+                      )
+
+              fetch_refspec = "+refs/heads/main:refs/remotes/origin/main"
+              configured = await sandbox.run_process(
+                  "git",
+                  ["-C", repo_root, "config", "remote.origin.fetch", fetch_refspec],
+                  capture_output=True,
+              )
+              if int(configured.returncode) != 0:
+                  detail = str(
+                      configured.stderr or configured.stdout or "git config failed"
+                  ).strip()
+                  raise RuntimeError(
+                      f"could not configure origin/main tracking: {detail[-2_000:]}"
+                  )
+
+              fetched = await sandbox.run_process(
+                  "git",
+                  [
+                      "-C",
+                      repo_root,
+                      "fetch",
+                      "--depth",
+                      "1",
+                      "origin",
+                      fetch_refspec,
+                  ],
+                  capture_output=True,
+              )
+              if int(fetched.returncode) != 0:
+                  detail = str(fetched.stderr or fetched.stdout or "git fetch failed").strip()
+                  raise RuntimeError(f"could not resolve origin/main: {detail[-2_000:]}")
+
+              remote_main = await sandbox.run_process(
+                  "git",
+                  ["-C", repo_root, "rev-parse", "--verify", "refs/remotes/origin/main"],
+                  capture_output=True,
+              )
+              if int(remote_main.returncode) != 0:
+                  raise RuntimeError("origin/main fetch completed without a remote-tracking ref")
+
+              local_main = await sandbox.run_process(
+                  "git",
+                  ["-C", repo_root, "show-ref", "--verify", "--quiet", "refs/heads/main"],
+                  capture_output=True,
+              )
+              if int(local_main.returncode) == 0:
+                  can_ff = await sandbox.run_process(
+                      "git",
+                      [
+                          "-C",
+                          repo_root,
+                          "merge-base",
+                          "--is-ancestor",
+                          "refs/heads/main",
+                          "refs/remotes/origin/main",
+                      ],
+                      capture_output=True,
+                  )
+                  if int(can_ff.returncode) != 0:
+                      return "detached", False
+                  switched = await sandbox.run_process(
+                      "git",
+                      ["-C", repo_root, "switch", "main"],
+                      capture_output=True,
+                  )
+                  if int(switched.returncode) == 0:
+                      switched = await sandbox.run_process(
+                          "git",
+                          ["-C", repo_root, "merge", "--ff-only", "refs/remotes/origin/main"],
+                          capture_output=True,
+                      )
+              else:
+                  switched = await sandbox.run_process(
+                      "git",
+                      [
+                          "-C",
+                          repo_root,
+                          "switch",
+                          "-c",
+                          "main",
+                          "refs/remotes/origin/main",
+                      ],
+                      capture_output=True,
+                  )
+              if int(switched.returncode) != 0:
+                  detail = str(switched.stderr or switched.stdout or "git switch failed").strip()
+                  raise RuntimeError(
+                      f"could not attach detached worktree to main: {detail[-2_000:]}"
+                  )
+
+              for key, value in (
+                  ("branch.main.remote", "origin"),
+                  ("branch.main.merge", "refs/heads/main"),
+              ):
+                  tracked = await sandbox.run_process(
+                      "git",
+                      ["-C", repo_root, "config", key, value],
+                      capture_output=True,
+                  )
+                  if int(tracked.returncode) != 0:
+                      detail = str(
+                          tracked.stderr or tracked.stdout or "git config failed"
+                      ).strip()
+                      raise RuntimeError(
+                          f"could not configure main upstream: {detail[-2_000:]}"
+                      )
+
+              verified = await _git_branch(sandbox, repo_root)
+              if verified != "main":
+                  raise RuntimeError("Meta worktree branch attach completed without local main")
+              return verified, True
+          '''
+          # Workflow script is indented in YAML; normalize the Python replacement itself.
+          import textwrap
+          replacement = textwrap.dedent(replacement)
+          app_path.write_text(text[:start] + replacement + text[end:])
+
+          Path('test_devon_remote_main_tracking.py').write_text(r'''"""Regression for Vercel shallow detached checkout without a tracked origin/main."""
+
+import asyncio
+import importlib
+import os
+import pathlib
+import sys
+import types
+
+ROOT = pathlib.Path(__file__).resolve().parent
+DEPLOY = ROOT / "deploy" / "soul"
+
+
+class Result:
+    def __init__(self, stdout="", stderr="", returncode=0):
+        self.stdout = stdout
+        self.stderr = stderr
+        self.returncode = returncode
+
+
+class Sandbox:
+    def __init__(self, *, dirty=False):
+        self.dirty = dirty
+        self.branch = None
+        self.remote_ref = False
+        self.fetch_tracking = False
+        self.local_main = False
+        self.commands = []
+
+    async def run_process(self, executable, args=None, **kwargs):
+        argv = list(args or [])
+        self.commands.append([executable, argv, dict(kwargs)])
+        if executable != "git" or len(argv) < 3 or argv[0] != "-C":
+            return Result()
+        command = argv[2:]
+        if command == ["symbolic-ref", "--quiet", "--short", "HEAD"]:
+            return Result(f"{self.branch}\n") if self.branch else Result(returncode=1)
+        if command == ["status", "--porcelain"]:
+            return Result(" M user-work.txt\n" if self.dirty else "")
+        if command == ["rev-parse", "HEAD"]:
+            return Result("ad5651ef9ca4e58ba19879ab3a00b034b5479b5a\n")
+        if command[:4] == ["show-ref", "--verify", "--quiet", "refs/heads/devon/recovery-ad5651ef9ca4"]:
+            return Result(returncode=1)
+        if command[:2] == ["branch", "devon/recovery-ad5651ef9ca4"]:
+            return Result()
+        if command == [
+            "config",
+            "remote.origin.fetch",
+            "+refs/heads/main:refs/remotes/origin/main",
+        ]:
+            self.fetch_tracking = True
+            return Result()
+        if command == [
+            "fetch",
+            "--depth",
+            "1",
+            "origin",
+            "+refs/heads/main:refs/remotes/origin/main",
+        ]:
+            self.remote_ref = True
+            return Result()
+        if command == ["rev-parse", "--verify", "refs/remotes/origin/main"]:
+            return Result("feedface\n") if self.remote_ref else Result(returncode=1)
+        if command == ["show-ref", "--verify", "--quiet", "refs/heads/main"]:
+            return Result(returncode=0 if self.local_main else 1)
+        if command == ["switch", "-c", "main", "refs/remotes/origin/main"]:
+            if not (self.fetch_tracking and self.remote_ref):
+                return Result(stderr="origin/main is not a branch\n", returncode=128)
+            self.local_main = True
+            self.branch = "main"
+            return Result()
+        if command in (
+            ["config", "branch.main.remote", "origin"],
+            ["config", "branch.main.merge", "refs/heads/main"],
+        ):
+            return Result()
+        return Result()
+
+
+def _hosted():
+    os.environ["CONSOLE_TOKEN"] = "test-console-token"
+    sys.path.insert(0, str(DEPLOY))
+    vercel = types.ModuleType("vercel")
+    vercel.__path__ = []
+    sandbox_mod = types.ModuleType("vercel.sandbox")
+    sandbox_mod.create_sandbox = lambda **kwargs: None
+    sandbox_mod.resume_sandbox = lambda **kwargs: None
+    sandbox_mod.GitSource = type("GitSource", (), {"__init__": lambda self, **kwargs: None})
+    headers_mod = types.ModuleType("vercel.headers")
+    headers_mod.set_headers = lambda headers: None
+    vercel.sandbox = sandbox_mod
+    sys.modules["vercel"] = vercel
+    sys.modules["vercel.sandbox"] = sandbox_mod
+    sys.modules["vercel.headers"] = headers_mod
+    sys.modules.pop("app", None)
+    return importlib.import_module("app")
+
+
+def test_shallow_detached_checkout_fetches_tracking_ref_before_switching_main():
+    hosted = _hosted()
+    box = Sandbox()
+    result = asyncio.run(hosted._ensure_main_branch(box, "/vercel/Meta-Supreme-Apex-Genesis-"))
+    assert result == ("main", True)
+    assert box.branch == "main"
+    commands = [entry[1][2:] for entry in box.commands if entry[0] == "git"]
+    assert ["config", "remote.origin.fetch", "+refs/heads/main:refs/remotes/origin/main"] in commands
+    assert ["fetch", "--depth", "1", "origin", "+refs/heads/main:refs/remotes/origin/main"] in commands
+    assert ["switch", "-c", "main", "refs/remotes/origin/main"] in commands
+    assert ["switch", "-c", "main", "--track", "origin/main"] not in commands
+    assert ["branch", "devon/recovery-ad5651ef9ca4", "ad5651ef9ca4e58ba19879ab3a00b034b5479b5a"] in commands
+
+
+def test_dirty_detached_checkout_is_preserved_before_fetch_or_switch():
+    hosted = _hosted()
+    box = Sandbox(dirty=True)
+    result = asyncio.run(hosted._ensure_main_branch(box, "/vercel/Meta-Supreme-Apex-Genesis-"))
+    assert result == ("detached", False)
+    commands = [entry[1][2:] for entry in box.commands if entry[0] == "git"]
+    assert not any(command and command[0] == "fetch" for command in commands)
+    assert not any(command and command[0] == "switch" for command in commands)
+''')
+          PY
+          rm -f .github/workflows/devon-remote-main-hotfix-builder.yml
+          git config user.name "DEVON CI Hotfix"
+          git config user.email "actions@users.noreply.github.com"
+          git add deploy/soul/app.py test_devon_remote_main_tracking.py .github/workflows/devon-remote-main-hotfix-builder.yml
+          git commit -m "fix(devon): harden shallow detached main attach [devon-hotfix-applied]"
+          git push origin HEAD:fix/devon-browser-terminal-remote-main
