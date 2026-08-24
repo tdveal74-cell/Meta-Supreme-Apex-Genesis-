@@ -237,7 +237,7 @@ def test_sandbox_creation_never_receives_production_secrets():
 
 def test_deployed_code_cannot_regress_to_removed_or_guessed_runtime_contracts():
     source = (DEPLOY / "app.py").read_text()
-    source_lines = source.splitlines()
+    source_lines = [line.strip() for line in source.splitlines()]
     assert "Sandbox.create" not in source
     assert ".run_command(" not in source
     assert "vercel_sandbox.create_sandbox(" in source
@@ -246,7 +246,7 @@ def test_deployed_code_cannot_regress_to_removed_or_guessed_runtime_contracts():
     assert 'WORKSPACE_ROOT = "/vercel/sandbox"' not in source_lines
     assert 'LEGACY_WORKSPACE_ROOT = "/vercel/sandbox"' in source_lines
     assert 'reported = getattr(sandbox, "cwd", None)' in source_lines
-    assert "            cwd=cwd," in source_lines
+    assert "cwd=cwd," in source_lines
 
 
 def test_hosted_wrapper_itself_never_imports_subprocess():
