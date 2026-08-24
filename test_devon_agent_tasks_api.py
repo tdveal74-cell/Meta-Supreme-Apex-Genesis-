@@ -248,25 +248,42 @@ async def test_task_owner_isolation(client, auth_headers):
 def test_runtime_approval_binding_cannot_authorize_a_different_command(
     configured_operator,
 ):
-    from services.agent_runtime.governance import approval_marker
+    from services.agent_runtime.governance import (
+        RUNTIME_REQUESTED_BY,
+        approval_binding,
+        approval_marker,
+    )
     from services.devon.approval import ApprovalQueue
     from services.operator.bridge import OperatorError
 
     approvals = ApprovalQueue()
-    plan = configured_operator.plan("touch bound.txt")
+    original = {"command": "touch approved.txt"}
+    binding = approval_binding(
+        task_id="TASK-BOUND",
+        step_id="STEP-01",
+        tool_name="operator.command",
+        arguments=original,
+    )
     record, token = approvals.request(
         title="Bound command",
-        what_happens=f"Run a different command. {approval_marker('different-binding')}",
-        requested_by="test",
+        what_happens=f"Run the approved command. {approval_marker(binding)}",
+        requested_by=RUNTIME_REQUESTED_BY,
     )
     ruled = approvals.decide(record.request_id, token, "approve")
     assert ruled.approved is True
 
-    with pytest.raises(OperatorError, match="binding does not match"):
+    metadata = {
+        "request_id": record.request_id,
+        "binding": binding,
+        "task_id": "TASK-BOUND",
+        "step_id": "STEP-01",
+        "tool_name": "operator.command",
+    }
+    with pytest.raises(OperatorError, match="does not match these arguments"):
         configured_operator.execute_runtime_approved(
-            plan,
-            request_id=record.request_id,
-            binding="expected-binding",
+            arguments={"command": "touch substituted.txt"},
+            approval_metadata=metadata,
             approvals=approvals,
         )
-    assert not Path(configured_operator.root, "bound.txt").exists()
+    assert not Path(configured_operator.root, "approved.txt").exists()
+    assert not Path(configured_operator.root, "substituted.txt").exists()
