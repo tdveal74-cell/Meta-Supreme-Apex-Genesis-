@@ -99,32 +99,12 @@ class OperatorCapabilityAdapter:
         if not_ready:
             return not_ready
         args = dict(arguments)
-        approval = args.pop(APPROVAL_METADATA_KEY, None)
-        if not isinstance(approval, dict):
-            return ToolResult(False, error="runtime approval metadata is missing")
-        request_id = str(approval.get("request_id") or "").strip()
-        binding = str(approval.get("binding") or "").strip()
-        if not request_id or not binding:
-            return ToolResult(False, error="runtime approval metadata is incomplete")
-
-        command = str(args.get("command") or "").strip()
-        cwd = args.get("cwd")
-        timeout = int(args.get("timeout_seconds") or 60)
+        approval_metadata = args.pop(APPROVAL_METADATA_KEY, None)
         try:
-            plan = self.bridge.plan(command, str(cwd) if cwd else None)
-            if plan.risk is Risk.BLOCKED:
-                return ToolResult(False, error=plan.reason)
-            if plan.risk is Risk.READ:
-                return ToolResult(
-                    False,
-                    error="operator.command is for effectful work; use operator.read for reads",
-                )
             result = self.bridge.execute_runtime_approved(
-                plan,
-                request_id=request_id,
-                binding=binding,
+                arguments=args,
+                approval_metadata=approval_metadata,
                 approvals=self.approvals,
-                timeout_seconds=timeout,
             )
         except (OperatorError, ValueError, TypeError) as exc:
             return ToolResult(False, error=str(exc))
