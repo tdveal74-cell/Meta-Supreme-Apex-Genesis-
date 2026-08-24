@@ -122,7 +122,7 @@ jobs:
       # was unrunnable. Fail loudly rather than skip if that recurs.
       - name: The test fixture's schema files are present
         run: |
-          for f in 001_initial_schema 002_workflow_runs 003_schedule_dispatch 004_federated_knowledge_waist; do
+          for f in 001_initial_schema 002_workflow_runs 003_schedule_dispatch 004_federated_knowledge_waist 005_agent_runtime_persistence; do
             test -s "database/schemas/$f.sql" || { echo "::error::database/schemas/$f.sql is missing or empty"; exit 1; }
           done
 
