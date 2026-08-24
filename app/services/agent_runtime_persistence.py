@@ -46,6 +46,14 @@ def _request_hash(*, max_steps: int) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _persistable_result(result_payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Copy a run response without persisting one-time approval credentials."""
+    safe = dict(result_payload)
+    if "approval_token" in safe:
+        safe["approval_token"] = None
+    return safe
+
+
 class TaskExecutionBusy(RuntimeError):
     """Another live worker owns the task execution lease."""
 
@@ -420,7 +428,7 @@ class AgentTaskRepository:
             )
             .values(
                 state="completed",
-                result=dict(result_payload),
+                result=_persistable_result(result_payload),
                 error=None,
                 lease_token=None,
                 lease_owner=None,
