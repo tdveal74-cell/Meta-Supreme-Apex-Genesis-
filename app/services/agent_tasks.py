@@ -9,19 +9,32 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.devon import _queue as approvals
 from app.api.v1.operator import _bridge as operator_bridge
-from app.services.agent_runtime_persistence import AgentLearningRepository, AgentTaskRepository
+from app.services.agent_runtime_persistence import (
+    AgentLearningRepository,
+    AgentTaskRepository,
+)
 from app.services.intelligence import get_provider
-from services.agent_runtime.contracts import AgentTask, PlanStep, RuntimeResult, ToolCall
+from services.agent_runtime.contracts import (
+    AgentTask,
+    PlanStep,
+    RuntimeResult,
+    ToolCall,
+)
 from services.agent_runtime.planner import LLMPlanner, StaticPlanner
 from services.agent_runtime.runtime import AgentRuntime
 from services.agent_runtime.store import InMemoryAgentTaskStore
 from services.agent_runtime.tools import ToolRegistry
+from services.github.agent_adapter import GitHubCapabilityAdapter
+from services.github.client import GitHubRESTClient
 from services.operator.agent_adapter import OperatorCapabilityAdapter
+
+github_client = GitHubRESTClient()
 
 
 def build_tool_registry() -> ToolRegistry:
     registry = ToolRegistry()
     OperatorCapabilityAdapter(operator_bridge, approvals).register(registry)
+    GitHubCapabilityAdapter(github_client, approvals).register(registry)
     return registry
 
 
@@ -176,6 +189,12 @@ class DurableAgentTaskService:
                 "configured": operator_bridge.configured,
                 "root": str(operator_bridge.root),
                 "cwd_confinement_is_os_sandbox": False,
+            },
+            "github": {
+                "configured": github_client.configured,
+                "allowed_repositories": github_client.allowed_repositories,
+                "api_url": github_client.base_url,
+                "token_exposed": False,
             },
         }
 
