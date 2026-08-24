@@ -139,7 +139,9 @@ async def test_pending_listing_durably_sweeps_overdue_rows(_clean_tables):
     def force_expired() -> None:
         with psycopg.connect(_dsn()) as conn:
             conn.execute(
-                "UPDATE devon_approvals SET expires_at = NOW() - INTERVAL '1 minute' "
+                "UPDATE devon_approvals "
+                "SET created_at = NOW() - INTERVAL '2 hours', "
+                "expires_at = NOW() - INTERVAL '1 minute' "
                 "WHERE request_id = %s",
                 (record.request_id,),
             )
