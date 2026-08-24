@@ -20,10 +20,10 @@ NO_MATCH, which matches no record, so a mis-wired caller writes nothing rather
 than writing something. Routing can be got wrong by editing a graph. Data shape
 cannot.
 
-No external dependency in the decision path. The live queue deliberately avoids
-Airtable so the gate keeps working while the base is quota blocked. The store
-here is an interface with an in-memory default for the same reason: the gate
-must not fail open because a backend is down.
+The queue is storage-agnostic. The in-memory store remains useful for offline
+and unit work, while production can supply a durable shared store through the
+same protocol. A backend failure is allowed to fail the request; it must never
+silently fall back to a weaker store.
 
 Only a hash of the token is stored, never the token itself. The plaintext is
 returned once, to the caller raising the request, and is not recoverable from the
@@ -34,6 +34,11 @@ a wrong token is told only that it does not match.
 
 Tokens are compared with hmac.compare_digest. A check that short circuits on the
 first wrong byte leaks the token one character at a time.
+
+Decision transitions are compare-and-set. A store may be shared by several
+workers, but only the worker that atomically changes a row from `pending` may
+report a successful ruling. A losing worker reads the authoritative final state
+and refuses the replay.
 """
 
 from __future__ import annotations
@@ -150,21 +155,23 @@ class DecisionResult:
 class ApprovalStore(Protocol):
     """Storage interface, so the gate is not tied to one backend."""
 
+    backend_name: str
+
     def put(self, request: ApprovalRequest) -> None: ...
 
     def get(self, request_id: str) -> Optional[ApprovalRequest]: ...
 
-    def update(self, request: ApprovalRequest) -> None: ...
+    def transition_pending(self, request: ApprovalRequest) -> bool:
+        """Atomically replace a pending record; false means another actor won."""
+        ...
 
     def pending(self) -> List[ApprovalRequest]: ...
 
 
 class InMemoryApprovalStore:
-    """Default store. Process local, deliberately simple.
+    """Process-local store for offline work and single-process tests."""
 
-    Suitable for a single operator assistant on one machine, which is the actual
-    deployment. A durable store is a drop in replacement through the protocol.
-    """
+    backend_name = "memory"
 
     def __init__(self) -> None:
         self._records: Dict[str, ApprovalRequest] = {}
@@ -175,8 +182,12 @@ class InMemoryApprovalStore:
     def get(self, request_id: str) -> Optional[ApprovalRequest]:
         return self._records.get(request_id)
 
-    def update(self, request: ApprovalRequest) -> None:
+    def transition_pending(self, request: ApprovalRequest) -> bool:
+        current = self._records.get(request.request_id)
+        if current is None or current.state is not ApprovalState.PENDING:
+            return False
         self._records[request.request_id] = request
+        return True
 
     def pending(self) -> List[ApprovalRequest]:
         return [
@@ -200,6 +211,10 @@ class ApprovalQueue:
 
     def __init__(self, store: Optional[ApprovalStore] = None) -> None:
         self._store = store or InMemoryApprovalStore()
+
+    @property
+    def storage_backend(self) -> str:
+        return getattr(self._store, "backend_name", self._store.__class__.__name__)
 
     def request(
         self,
@@ -245,7 +260,8 @@ class ApprovalQueue:
 
         The eight paths verified on the live queue are each handled explicitly
         and each names its reason, because a refusal nobody hears is the same as
-        an approval.
+        an approval. The store transition is atomic so this remains single-use
+        when several workers share one backend.
         """
         at = at or _now()
 
@@ -272,24 +288,19 @@ class ApprovalQueue:
             )
 
         if record.state is not ApprovalState.PENDING:
-            return DecisionResult(
-                False,
-                NO_MATCH,
-                state=record.state,
-                reason=RefusalReason.ALREADY_DECIDED,
-                message=f"Already {record.state.value}. A token is single use.",
-            )
+            return self._already_decided(record)
 
         if record.is_expired(at):
             expired = replace(record, state=ApprovalState.EXPIRED, decided_at=at)
-            self._store.update(expired)
-            return DecisionResult(
-                False,
-                NO_MATCH,
-                state=ApprovalState.EXPIRED,
-                reason=RefusalReason.EXPIRED,
-                message=f"Expired at {record.expires_at.isoformat()}.",
-            )
+            if self._store.transition_pending(expired):
+                return DecisionResult(
+                    False,
+                    NO_MATCH,
+                    state=ApprovalState.EXPIRED,
+                    reason=RefusalReason.EXPIRED,
+                    message=f"Expired at {record.expires_at.isoformat()}.",
+                )
+            return self._race_lost(record.request_id)
 
         normalized = (decision or "").strip().lower()
         if normalized not in (Decision.APPROVE.value, Decision.REFUSE.value):
@@ -309,18 +320,50 @@ class ApprovalQueue:
             record,
             state=new_state,
             decided_at=at,
-            decided_by=decided_by,
+            decided_by=(decided_by or "Tee").strip() or "Tee",
         )
-        self._store.update(decided)
+        if not self._store.transition_pending(decided):
+            return self._race_lost(record.request_id)
+
         return DecisionResult(
             True,
             record.request_id,
             state=new_state,
-            message=f"{new_state.value} by {decided_by}.",
+            message=f"{new_state.value} by {decided.decided_by}.",
         )
 
     def pending(self) -> List[ApprovalRequest]:
         return self._store.pending()
 
     def get(self, request_id: str) -> Optional[ApprovalRequest]:
+        record = self._store.get(request_id)
+        if record is None or record.state is not ApprovalState.PENDING:
+            return record
+        if not record.is_expired():
+            return record
+
+        expired = replace(record, state=ApprovalState.EXPIRED, decided_at=_now())
+        if self._store.transition_pending(expired):
+            return expired
         return self._store.get(request_id)
+
+    @staticmethod
+    def _already_decided(record: ApprovalRequest) -> DecisionResult:
+        return DecisionResult(
+            False,
+            NO_MATCH,
+            state=record.state,
+            reason=RefusalReason.ALREADY_DECIDED,
+            message=f"Already {record.state.value}. A token is single use.",
+        )
+
+    def _race_lost(self, request_id: str) -> DecisionResult:
+        latest = self._store.get(request_id)
+        if latest is None:
+            return DecisionResult(
+                False,
+                NO_MATCH,
+                reason=RefusalReason.UNKNOWN_ID,
+                message=f"No request {request_id}.",
+            )
+        return self._already_decided(latest)
