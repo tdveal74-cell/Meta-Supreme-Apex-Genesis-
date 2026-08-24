@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +16,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.models.project import Project
 from app.security.deps import CurrentUser
+from app.services.agent_runtime_persistence import (
+    TaskExecutionBusy,
+    TaskExecutionLeaseLost,
+    TaskRunConflict,
+    TaskRunPreviouslyFailed,
+)
 from app.services.agent_tasks import agent_tasks_service
 from services.agent_runtime.runtime import AgentRuntimeError
 
@@ -147,20 +153,33 @@ async def run_task(
     task_id: str,
     body: TaskRunBody,
     current_user: CurrentUser,
+    response: Response,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     try:
-        result = await agent_tasks_service.run_until_blocked(
+        outcome = await agent_tasks_service.run_until_blocked(
             db,
             owner_id=current_user.id,
             task_id=task_id,
             max_steps=body.max_steps,
+            idempotency_key=idempotency_key,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Agent task not found") from exc
-    except AgentRuntimeError as exc:
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        AgentRuntimeError,
+        TaskExecutionBusy,
+        TaskExecutionLeaseLost,
+        TaskRunConflict,
+        TaskRunPreviouslyFailed,
+    ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return result.to_dict()
+    response.headers["Idempotency-Key"] = outcome.idempotency_key
+    response.headers["Idempotent-Replay"] = "true" if outcome.replayed else "false"
+    return outcome.result
 
 
 @router.post("/{task_id}/cancel")
@@ -179,6 +198,8 @@ async def cancel_task(
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Agent task not found") from exc
+    except TaskExecutionBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _task_view(task)
 
 
@@ -198,7 +219,7 @@ async def rollback_task(
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Agent task not found") from exc
-    except AgentRuntimeError as exc:
+    except (AgentRuntimeError, TaskExecutionBusy) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _task_view(task)
 
@@ -209,11 +230,14 @@ async def delete_task(
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    deleted = await agent_tasks_service.delete_task(
-        db,
-        owner_id=current_user.id,
-        task_id=task_id,
-    )
+    try:
+        deleted = await agent_tasks_service.delete_task(
+            db,
+            owner_id=current_user.id,
+            task_id=task_id,
+        )
+    except TaskExecutionBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not deleted:
         raise HTTPException(status_code=404, detail="Agent task not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
