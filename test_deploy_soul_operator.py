@@ -1,8 +1,9 @@
 """Regression tests for the hosted DEVON browser Operator boundary.
 
 The fake mirrors the shipped ``vercel-sandbox==0.4.0`` module API and reproduces
-the production incidents where the Sandbox cwd is not itself a Git repository
-and a source-provided Git worktree can arrive at detached HEAD. DEVON must
+the production incidents where the Sandbox cwd is not itself a Git repository,
+a source-provided Git worktree can arrive at detached HEAD, and GitSource can
+leave ``origin/main`` without real remote-tracking metadata. DEVON must
 verify/bootstrap the Meta worktree and safely attach a clean detached checkout
 to local ``main`` without discarding dirty workspace edits.
 """
@@ -40,6 +41,9 @@ branches = {}
 local_branches = {}
 dirty_workspaces = set()
 clone_targets = []
+fetch_tracking = set()
+remote_main_fetched = set()
+recovery_refs = set()
 
 class FakeGitSource(dict):
     def __init__(self, *, url, revision=None):
@@ -91,7 +95,44 @@ class FakeSandbox:
                     return FakeResult(" M user-work.txt\n")
                 return FakeResult("")
 
+            if command == ["rev-parse", "HEAD"]:
+                return FakeResult("ad5651ef9ca4e58ba19879ab3a00b034b5479b5a\n")
+
+            recovery = "refs/heads/devon/recovery-ad5651ef9ca4"
+            if command == ["show-ref", "--verify", "--quiet", recovery]:
+                return FakeResult(returncode=0 if self.name in recovery_refs else 1)
+
+            if command == [
+                "branch",
+                "devon/recovery-ad5651ef9ca4",
+                "ad5651ef9ca4e58ba19879ab3a00b034b5479b5a",
+            ]:
+                recovery_refs.add(self.name)
+                return FakeResult("")
+
+            if command == [
+                "config",
+                "remote.origin.fetch",
+                "+refs/heads/main:refs/remotes/origin/main",
+            ]:
+                fetch_tracking.add(self.name)
+                return FakeResult("")
+
+            if command == [
+                "fetch",
+                "--depth",
+                "1",
+                "origin",
+                "+refs/heads/main:refs/remotes/origin/main",
+            ]:
+                if self.name not in fetch_tracking:
+                    return FakeResult(stderr="remote refspec not configured\n", returncode=1)
+                remote_main_fetched.add(self.name)
+                return FakeResult("")
+
             if command == ["rev-parse", "--verify", "refs/remotes/origin/main"]:
+                # Reproduce the live GitSource oddity: the ref can resolve as an
+                # object even before the remote tracking metadata is configured.
                 return FakeResult("deadbeef\n")
 
             if command == ["show-ref", "--verify", "--quiet", "refs/heads/main"]:
@@ -104,12 +145,31 @@ class FakeSandbox:
                 branches[self.name] = "main"
                 return FakeResult("Your branch is up to date with 'origin/main'.\n")
 
-            if command == ["switch", "-c", "main", "--track", "origin/main"]:
+            if command == ["switch", "-c", "main", "refs/remotes/origin/main"]:
+                if self.name not in fetch_tracking or self.name not in remote_main_fetched:
+                    return FakeResult(stderr="origin/main is not a branch\n", returncode=128)
                 local_branches.setdefault(self.name, set()).add("main")
                 branches[self.name] = "main"
-                return FakeResult("branch 'main' set up to track 'origin/main'.\n")
+                return FakeResult("")
 
-            if command[:3] == ["fetch", "--depth", "1"]:
+            if command == ["switch", "-c", "main", "--track", "origin/main"]:
+                return FakeResult(stderr="origin/main is not a branch\n", returncode=128)
+
+            if command in (
+                ["config", "branch.main.remote", "origin"],
+                ["config", "branch.main.merge", "refs/heads/main"],
+            ):
+                return FakeResult("")
+
+            if command == [
+                "merge-base",
+                "--is-ancestor",
+                "refs/heads/main",
+                "refs/remotes/origin/main",
+            ]:
+                return FakeResult(returncode=0)
+
+            if command == ["merge", "--ff-only", "refs/remotes/origin/main"]:
                 return FakeResult("")
 
             return FakeResult()
@@ -191,8 +251,9 @@ escape = client.post(
     json={"command":"pwd", "cwd":"/etc", "workspace_id":"devon-workspace-001"},
 )
 
-# Reproduce the latest production screenshot: verified Git worktree, detached HEAD,
-# clean tree. DEVON should create/track local main without resetting the worktree.
+# Reproduce the authenticated production failure after PR #22: verified Git
+# worktree, clean detached HEAD, origin/main object resolvable, but no remote
+# tracking refspec. DEVON must build the tracking ref before switching.
 detached_box = FakeSandbox("detached-clean")
 repo_ready.add("detached-clean")
 repo_paths["detached-clean"] = "/vercel/Meta-Supreme-Apex-Genesis-"
@@ -202,7 +263,8 @@ detached_attach = asyncio.run(
     hosted._ensure_main_branch(detached_box, "/vercel/Meta-Supreme-Apex-Genesis-")
 )
 
-# A dirty detached workspace is user state. Preserve it rather than switching.
+# A dirty detached workspace is user state. Preserve it rather than fetching or
+# switching branches.
 dirty_box = FakeSandbox("detached-dirty")
 repo_ready.add("detached-dirty")
 repo_paths["detached-dirty"] = "/vercel/Meta-Supreme-Apex-Genesis-"
@@ -311,7 +373,9 @@ def test_non_git_sandbox_cwd_bootstraps_and_enters_meta_worktree():
     assert probe["clone_targets"] == ["/vercel/devon-meta"]
 
     first_box_commands = probe["commands"][0]
-    clone = next(cmd for cmd in first_box_commands if cmd[0] == "git" and cmd[1][0] == "clone")
+    clone = next(
+        cmd for cmd in first_box_commands if cmd[0] == "git" and cmd[1][0] == "clone"
+    )
     assert clone[1][-1] == "/vercel/devon-meta"
     user_command = next(cmd for cmd in first_box_commands if cmd[0] == "bash")
     assert user_command[2]["cwd"] == "/vercel/devon-meta"
@@ -327,25 +391,45 @@ def test_resumed_workspace_reuses_verified_repo_for_git_status():
     assert probe["resumed"][0] == {"name": "devon-workspace-001"}
 
 
-def test_clean_detached_git_source_worktree_attaches_to_local_main():
+def test_clean_detached_git_source_worktree_builds_tracking_ref_then_main():
     probe = _probe()
     assert probe["detached_attach"] == ["main", True]
     assert probe["detached_branch"] == "main"
     commands = probe["detached_commands"]
-    assert any(
-        cmd[0] == "git"
-        and cmd[1][-5:] == ["switch", "-c", "main", "--track", "origin/main"]
-        for cmd in commands
-    )
+    argv = [cmd[1][2:] for cmd in commands if cmd[0] == "git"]
+    assert [
+        "config",
+        "remote.origin.fetch",
+        "+refs/heads/main:refs/remotes/origin/main",
+    ] in argv
+    assert [
+        "fetch",
+        "--depth",
+        "1",
+        "origin",
+        "+refs/heads/main:refs/remotes/origin/main",
+    ] in argv
+    assert ["switch", "-c", "main", "refs/remotes/origin/main"] in argv
+    assert ["switch", "-c", "main", "--track", "origin/main"] not in argv
+    assert [
+        "branch",
+        "devon/recovery-ad5651ef9ca4",
+        "ad5651ef9ca4e58ba19879ab3a00b034b5479b5a",
+    ] in argv
+    assert ["config", "branch.main.remote", "origin"] in argv
+    assert ["config", "branch.main.merge", "refs/heads/main"] in argv
 
 
-def test_dirty_detached_worktree_is_preserved_without_switch_or_reset():
+def test_dirty_detached_worktree_is_preserved_without_fetch_switch_or_reset():
     probe = _probe()
     assert probe["dirty_attach"] == ["detached", False]
     assert probe["dirty_branch"] is None
     commands = probe["dirty_commands"]
-    assert any(cmd[0] == "git" and cmd[1][-2:] == ["status", "--porcelain"] for cmd in commands)
-    assert not any(cmd[0] == "git" and "switch" in cmd[1] for cmd in commands)
+    argv = [cmd[1][2:] for cmd in commands if cmd[0] == "git"]
+    assert ["status", "--porcelain"] in argv
+    assert not any(command and command[0] == "fetch" for command in argv)
+    assert not any(command and command[0] == "switch" for command in argv)
+    assert not any(command and command[0] == "reset" for command in argv)
 
 
 def test_old_browser_paths_are_aliases_for_verified_repo_root():
@@ -385,7 +469,7 @@ def test_sandbox_creation_never_receives_production_secrets():
     assert "token" not in create
 
 
-def test_deployed_code_cannot_equate_sandbox_cwd_with_git_repo_or_leave_clean_detached_head():
+def test_deployed_code_cannot_equate_sandbox_cwd_with_git_repo_or_fake_tracking():
     source = (DEPLOY / "app.py").read_text()
     source_lines = [line.strip() for line in source.splitlines()]
     assert "Sandbox.create" not in source
@@ -396,6 +480,9 @@ def test_deployed_code_cannot_equate_sandbox_cwd_with_git_repo_or_leave_clean_de
     assert "async def _ensure_main_branch(" in source
     assert '"rev-parse", "--show-toplevel"' in source
     assert '"symbolic-ref", "--quiet", "--short", "HEAD"' in source
+    assert 'fetch_refspec = "+refs/heads/main:refs/remotes/origin/main"' in source
+    assert '"switch",' in source
+    assert '"--track",\n            "origin/main"' not in source
     assert 'META_REPO_DIRNAME = "devon-meta"' in source_lines
     assert "repo_root, repo_bootstrapped = await _repo_root(" in source
     assert "branch, branch_attached = await _ensure_main_branch(" in source
