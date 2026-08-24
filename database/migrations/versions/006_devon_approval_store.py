@@ -14,6 +14,8 @@ import pathlib
 
 from alembic import op
 
+from database.migrations.sql_script import execute_sql_script
+
 revision = "006_devon_approval_store"
 down_revision = "005_agent_runtime_persistence"
 branch_labels = None
@@ -26,7 +28,7 @@ _SCHEMA = _REPO_ROOT / "database" / "schemas" / "006_devon_approval_store.sql"
 def upgrade() -> None:
     if not _SCHEMA.is_file():
         raise RuntimeError(f"DEVON approval schema not found at {_SCHEMA}")
-    op.execute(_SCHEMA.read_text(encoding="utf-8"))
+    execute_sql_script(_SCHEMA.read_text(encoding="utf-8"))
 
 
 def downgrade() -> None:
