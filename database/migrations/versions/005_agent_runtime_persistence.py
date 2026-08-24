@@ -16,6 +16,8 @@ import pathlib
 
 from alembic import op
 
+from database.migrations.sql_script import execute_sql_script
+
 revision = "005_agent_runtime_persistence"
 down_revision = "004_federated_knowledge_waist"
 branch_labels = None
@@ -28,7 +30,7 @@ _SCHEMA = _REPO_ROOT / "database" / "schemas" / "005_agent_runtime_persistence.s
 def upgrade() -> None:
     if not _SCHEMA.is_file():
         raise RuntimeError(f"Agent Runtime schema not found at {_SCHEMA}")
-    op.execute(_SCHEMA.read_text(encoding="utf-8"))
+    execute_sql_script(_SCHEMA.read_text(encoding="utf-8"))
 
 
 def downgrade() -> None:
