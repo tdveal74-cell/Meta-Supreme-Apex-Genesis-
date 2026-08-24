@@ -13,6 +13,8 @@ Load-bearing boundaries:
 - Browser access uses the existing DEVON console gate and SameSite cookie.
 - The Sandbox base directory and the Meta Git worktree are discovered and
   verified independently. A Sandbox cwd is never assumed to be a Git repo.
+- Clean detached GitSource worktrees are attached to local ``main``. Dirty
+  detached worktrees are preserved instead of being reset or switched.
 """
 
 from __future__ import annotations
@@ -235,6 +237,85 @@ async def _git_toplevel(sandbox: Any, candidate: str) -> str | None:
     return _absolute_directory(lines[-1], label="git toplevel")
 
 
+async def _git_branch(sandbox: Any, repo_root: str) -> str | None:
+    """Return the current local branch, or None when HEAD is detached."""
+    probe = await sandbox.run_process(
+        "git",
+        ["-C", repo_root, "symbolic-ref", "--quiet", "--short", "HEAD"],
+        capture_output=True,
+    )
+    if int(probe.returncode) != 0:
+        return None
+    lines = str(probe.stdout or "").strip().splitlines()
+    return lines[-1].strip() if lines else None
+
+
+async def _ensure_main_branch(sandbox: Any, repo_root: str) -> tuple[str, bool]:
+    """Attach a clean detached worktree to main without discarding user edits."""
+    current = await _git_branch(sandbox, repo_root)
+    if current:
+        return current, False
+
+    dirty = await sandbox.run_process(
+        "git",
+        ["-C", repo_root, "status", "--porcelain"],
+        capture_output=True,
+    )
+    if int(dirty.returncode) != 0:
+        raise RuntimeError("could not inspect detached Meta worktree state")
+    if str(dirty.stdout or "").strip():
+        return "detached", False
+
+    remote_main = await sandbox.run_process(
+        "git",
+        ["-C", repo_root, "rev-parse", "--verify", "refs/remotes/origin/main"],
+        capture_output=True,
+    )
+    if int(remote_main.returncode) != 0:
+        fetched = await sandbox.run_process(
+            "git",
+            [
+                "-C",
+                repo_root,
+                "fetch",
+                "--depth",
+                "1",
+                "origin",
+                "main:refs/remotes/origin/main",
+            ],
+            capture_output=True,
+        )
+        if int(fetched.returncode) != 0:
+            detail = str(fetched.stderr or fetched.stdout or "git fetch failed").strip()
+            raise RuntimeError(f"could not resolve origin/main: {detail[-2_000:]}")
+
+    local_main = await sandbox.run_process(
+        "git",
+        ["-C", repo_root, "show-ref", "--verify", "--quiet", "refs/heads/main"],
+        capture_output=True,
+    )
+    switch_args = ["-C", repo_root, "switch", "main"]
+    if int(local_main.returncode) != 0:
+        switch_args = [
+            "-C",
+            repo_root,
+            "switch",
+            "-c",
+            "main",
+            "--track",
+            "origin/main",
+        ]
+    switched = await sandbox.run_process("git", switch_args, capture_output=True)
+    if int(switched.returncode) != 0:
+        detail = str(switched.stderr or switched.stdout or "git switch failed").strip()
+        raise RuntimeError(f"could not attach detached worktree to main: {detail[-2_000:]}")
+
+    verified = await _git_branch(sandbox, repo_root)
+    if verified != "main":
+        raise RuntimeError("Meta worktree branch attach completed without local main")
+    return verified, True
+
+
 async def _repo_root(sandbox: Any, sandbox_root: str) -> tuple[str, bool]:
     """Find or create a verified Meta Git worktree inside the Sandbox."""
     direct = await _git_toplevel(sandbox, sandbox_root)
@@ -404,6 +485,7 @@ async def operator_terminal_command(
         )
         sandbox_root = await _sandbox_root(sandbox)
         repo_root, repo_bootstrapped = await _repo_root(sandbox, sandbox_root)
+        branch, branch_attached = await _ensure_main_branch(sandbox, repo_root)
         cwd = _normalize_cwd(requested_cwd, repo_root, sandbox_root)
         script = (
             f"{command}\n"
@@ -436,6 +518,8 @@ async def operator_terminal_command(
             "workspace_root": repo_root,
             "sandbox_root": sandbox_root,
             "repo_bootstrapped": repo_bootstrapped,
+            "branch": branch,
+            "branch_attached": branch_attached,
             "exit_code": exit_code,
             "stdout": stdout,
             "stderr": stderr,
