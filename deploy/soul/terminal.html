@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#05080c">
+<title>DEVON Operator Terminal</title>
+<style>
+:root{color-scheme:dark;--bg:#05080c;--panel:#090e13;--line:#1d2a34;--text:#e7edf2;--muted:#778a98;--gold:#d4a017;--green:#81d9aa;--red:#ff9b9b;--blue:#8ec9ff}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}body{min-height:100vh;padding:max(14px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+.shell{width:min(1180px,100%);margin:0 auto;display:flex;flex-direction:column;min-height:calc(100vh - 30px);gap:12px}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 15px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.025)}.brand{display:flex;align-items:center;gap:11px}.mark{width:38px;height:38px;border-radius:10px;border:1px solid rgba(212,160,23,.42);background:rgba(212,160,23,.09);display:grid;place-items:center;color:#e3bd50;font:800 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.12em}.eyebrow{font-size:9px;font-weight:800;letter-spacing:.25em;color:#d7ae3c}.title{font-size:16px;font-weight:700;margin-top:2px}.right{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.badge,.link{border:1px solid var(--line);border-radius:999px;padding:6px 9px;color:var(--muted);font-size:10px;text-decoration:none;background:#070b0f}.badge.ready{color:var(--green);border-color:rgba(129,217,170,.3)}.main{display:grid;grid-template-columns:minmax(0,1fr) 285px;gap:12px;flex:1;min-height:0}.terminal{display:flex;flex-direction:column;min-height:68vh;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel)}.chrome{display:flex;align-items:center;justify-content:space-between;padding:10px 13px;border-bottom:1px solid var(--line);background:#070b0f}.dots{display:flex;gap:6px}.dot{width:8px;height:8px;border-radius:50%;background:#34434e}.dot:nth-child(1){background:#905151}.dot:nth-child(2){background:#907944}.dot:nth-child(3){background:#4d8065}.session{font:10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#596b78}.transcript{flex:1;min-height:310px;max-height:calc(100vh - 290px);overflow:auto;padding:16px;font:12.5px/1.65 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;overscroll-behavior:contain}.line{white-space:pre-wrap;overflow-wrap:anywhere;margin:0 0 7px}.system{color:#607481}.command{color:#edcb6f}.stdout{color:#b7e7cb}.stderr{color:var(--red)}.notice{color:var(--blue)}.composer{border-top:1px solid var(--line);padding:11px;background:#070b0f}.cwdrow{display:flex;gap:8px;align-items:center;margin-bottom:8px}.cwdrow label{font:9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#657886}.cwdrow input{flex:1;min-width:0;background:#05080c;border:1px solid var(--line);border-radius:7px;padding:8px 9px;color:#aebdca;font:11px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;outline:none}.prompt{display:flex;align-items:flex-start;gap:8px;border:1px solid var(--line);border-radius:9px;background:#05080c;padding:9px 10px}.dollar{color:var(--gold);font:700 13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}.prompt textarea{flex:1;resize:none;min-height:44px;max-height:160px;background:transparent;border:0;outline:0;color:var(--text);font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;padding:0}.prompt textarea::placeholder{color:#3e515e}.run{align-self:stretch;border:1px solid rgba(212,160,23,.55);background:rgba(212,160,23,.12);color:#e4bd50;border-radius:8px;padding:0 12px;font-size:11px;font-weight:800;cursor:pointer}.run:disabled{opacity:.35;cursor:not-allowed}.side{display:flex;flex-direction:column;gap:12px}.card{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:14px}.card h2{font-size:10px;letter-spacing:.17em;text-transform:uppercase;color:#8a9ba7;margin:0 0 11px}.kv{display:grid;grid-template-columns:92px 1fr;gap:7px;font-size:10.5px;margin:7px 0}.kv span:first-child{color:#596c79}.kv span:last-child{color:#b7c4cd;overflow-wrap:anywhere}.safe{font-size:11px;line-height:1.55;color:#788b98;margin:0}.safe strong{color:#cbd5dc}.actions{display:grid;gap:8px}.secondary{width:100%;border:1px solid var(--line);background:#070b0f;color:#a7b6c0;border-radius:8px;padding:10px;font-size:11px;font-weight:700;cursor:pointer}.secondary.danger{color:#e2b96b;border-color:rgba(212,160,23,.28)}.footer{font-size:9.5px;color:#4c606e;text-align:center;padding:1px 8px}
+@media(max-width:800px){body{padding-left:8px;padding-right:8px}.main{grid-template-columns:1fr}.side{display:grid;grid-template-columns:1fr 1fr}.transcript{max-height:none;min-height:43vh}.terminal{min-height:64vh}.right .link{display:none}}
+@media(max-width:520px){.top{padding:11px}.right{gap:5px}.badge{padding:5px 7px}.side{grid-template-columns:1fr}.transcript{padding:13px;font-size:11.5px}.cwdrow{align-items:stretch;flex-direction:column}.prompt{gap:6px}.run{padding:0 9px}.title{font-size:14px}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="top">
+    <div class="brand"><div class="mark">DV</div><div><div class="eyebrow">DEVON</div><div class="title">Operator Terminal</div></div></div>
+    <div class="right"><span id="statusBadge" class="badge">CONNECTING</span><span class="badge">ISOLATED WORKSPACE</span><a class="link" href="/console">DEVON CONSOLE</a></div>
+  </header>
+  <div class="main">
+    <section class="terminal" aria-label="DEVON browser terminal">
+      <div class="chrome"><div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div><div id="sessionLabel" class="session">fresh workspace</div></div>
+      <div id="transcript" class="transcript" aria-live="polite"></div>
+      <form id="commandForm" class="composer">
+        <div class="cwdrow"><label for="cwd">WORKING DIRECTORY</label><input id="cwd" autocomplete="off" spellcheck="false" value="/vercel/sandbox"></div>
+        <div class="prompt"><span class="dollar">$</span><textarea id="command" rows="2" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="git status"></textarea><button id="runButton" class="run" type="submit">RUN</button></div>
+      </form>
+    </section>
+    <aside class="side">
+      <section class="card">
+        <h2>Execution boundary</h2>
+        <div class="kv"><span>Runtime</span><span id="mode">checking</span></div>
+        <div class="kv"><span>Repo</span><span id="repo">checking</span></div>
+        <div class="kv"><span>Branch</span><span id="ref">checking</span></div>
+        <div class="kv"><span>GitHub write</span><span id="gitwrite">not connected</span></div>
+      </section>
+      <section class="card">
+        <h2>What this means</h2>
+        <p class="safe"><strong>This is a real shell in a cloud microVM.</strong> It is not a shell on your phone, Chromebook, Vercel host, or DEVON core. The workspace can be edited and tested. Production secrets are not injected and GitHub push is not connected in v1.</p>
+      </section>
+      <section class="card actions">
+        <h2>Workspace</h2>
+        <button id="resetButton" class="secondary danger" type="button">Reset from Meta main</button>
+        <button id="clearButton" class="secondary" type="button">Clear transcript</button>
+      </section>
+    </aside>
+  </div>
+  <div class="footer">DEVON plans and governs. Operator execution stays inside the isolated workspace.</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const transcript=$('transcript'), form=$('commandForm'), input=$('command'), cwd=$('cwd'), run=$('runButton');
+  const statusBadge=$('statusBadge'), sessionLabel=$('sessionLabel');
+  let busy=false;
+  let snapshot='';
+  try{snapshot=sessionStorage.getItem('devon.operator.snapshot')||'';}catch(e){}
+
+  function line(kind,text){
+    if(text===undefined||text===null||text==='')return;
+    const el=document.createElement('div');el.className='line '+kind;el.textContent=String(text);transcript.appendChild(el);transcript.scrollTop=transcript.scrollHeight;
+  }
+  function setBusy(value){busy=value;run.disabled=value;input.disabled=value;cwd.disabled=value;run.textContent=value?'RUNNING…':'RUN';}
+  function setSnapshot(value){snapshot=value||'';try{if(snapshot)sessionStorage.setItem('devon.operator.snapshot',snapshot);else sessionStorage.removeItem('devon.operator.snapshot');}catch(e){} sessionLabel.textContent=snapshot?'workspace snapshot active':'fresh workspace';}
+  async function api(path,options){
+    const r=await fetch(path,Object.assign({cache:'no-store',credentials:'same-origin'},options||{}));
+    if(!r.ok){let msg=r.status+' '+r.statusText;try{const b=await r.json();msg=b.detail||JSON.stringify(b);}catch(e){}throw new Error(msg);}return r.json();
+  }
+  async function status(){
+    try{
+      const s=await api('/api/v1/operator-terminal/status');
+      statusBadge.textContent='READY';statusBadge.classList.add('ready');
+      $('mode').textContent=s.mode||'isolated';$('repo').textContent=s.repository||'Meta';$('ref').textContent=s.ref||'main';$('gitwrite').textContent=s.github_write_connected?'connected':'not connected';
+      line('system','DEVON Operator ready. No local terminal is required.');
+      line('system','Workspace: '+(s.workspace||'/vercel/sandbox')+' · Meta '+(s.ref||'main'));
+      if(snapshot)line('notice','Restoring your browser session workspace on the next command.');
+    }catch(e){statusBadge.textContent='UNAVAILABLE';line('stderr',e.message);}
+  }
+  async function execute(command,reset){
+    setBusy(true);
+    line('command',(cwd.value||'/vercel/sandbox')+' $ '+command);
+    try{
+      const out=await api('/api/v1/operator-terminal/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:command,cwd:cwd.value||'/vercel/sandbox',snapshot_id:snapshot||null,reset:!!reset})});
+      if(out.stdout)line('stdout',out.stdout.replace(/\n$/,''));
+      if(out.stderr)line('stderr',out.stderr.replace(/\n$/,''));
+      line(out.exit_code===0?'system':'stderr','exit '+out.exit_code+(out.truncated?' · output truncated':''));
+      cwd.value=out.cwd||cwd.value;setSnapshot(out.snapshot_id||'');
+    }catch(e){line('stderr',e.message);}finally{setBusy(false);input.focus();}
+  }
+  form.addEventListener('submit',function(e){e.preventDefault();const command=input.value.trim();if(!command||busy)return;input.value='';execute(command,false);});
+  input.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit();}});
+  $('clearButton').addEventListener('click',function(){transcript.textContent='';line('system','Transcript cleared. Workspace unchanged.');});
+  $('resetButton').addEventListener('click',async function(){if(busy)return;setSnapshot('');cwd.value='/vercel/sandbox';line('notice','Workspace reset requested. The next command starts from Meta main.');});
+  setSnapshot(snapshot);status();
+})();
+</script>
+</body>
+</html>
