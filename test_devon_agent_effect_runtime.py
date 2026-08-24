@@ -17,6 +17,7 @@ from services.agent_runtime.contracts import (
 from services.agent_runtime.planner import StaticPlanner
 from services.agent_runtime.runtime import AgentRuntime
 from services.agent_runtime.tools import ToolRegistry, ToolResult, ToolSpec
+from services.devon.approval import ApprovalQueue
 
 
 class _Recorder:
@@ -80,14 +81,6 @@ async def test_runtime_records_intent_and_receipt_for_effectful_tool() -> None:
         )
     )
 
-    # Pre-approve by not requiring the approval queue path: use a tool that is
-    # WRITE but we drive the runtime after manually marking approval approved
-    # is complex offline. Instead register as READ to prove no recorder call,
-    # and a second case with a custom runtime path is covered by the WRITE path
-    # when approval is not required... WRITE always requires approval.
-    # So we use HIGH_IMPACT and inject an approvals queue that is already approved.
-    from services.devon.approval import ApprovalQueue, ApprovalState
-
     approvals = ApprovalQueue()
     recorder = _Recorder()
     steps = [
@@ -111,10 +104,10 @@ async def test_runtime_records_intent_and_receipt_for_effectful_tool() -> None:
     assert first.approval_token
     assert not recorder.intents
 
-    # Approve the pending request.
-    record = approvals.get(task.plan.steps[0].approval_request_id)
-    assert record is not None
-    approvals.decide(first.approval_token, approve=True)
+    request_id = first.task.plan.steps[0].approval_request_id
+    assert request_id
+    decided = approvals.decide(request_id, first.approval_token, "approve")
+    assert decided.ok
 
     second = await runtime.run_next(task.task_id)
     assert second.task.done or second.task.current_step >= 1
