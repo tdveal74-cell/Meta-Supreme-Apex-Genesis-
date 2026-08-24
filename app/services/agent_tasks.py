@@ -9,9 +9,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.devon import _queue as approvals
 from app.api.v1.operator import _bridge as operator_bridge
-from app.services.agent_runtime_persistence import AgentLearningRepository, AgentTaskRepository
+from app.services.agent_runtime_persistence import (
+    AgentLearningRepository,
+    AgentTaskRepository,
+)
 from app.services.intelligence import get_provider
-from services.agent_runtime.contracts import AgentTask, PlanStep, RuntimeResult, ToolCall
+from services.agent_runtime.contracts import (
+    AgentTask,
+    PlanStep,
+    RuntimeResult,
+    ToolCall,
+)
 from services.agent_runtime.planner import LLMPlanner, StaticPlanner
 from services.agent_runtime.runtime import AgentRuntime
 from services.agent_runtime.store import InMemoryAgentTaskStore
