@@ -61,7 +61,9 @@ def test_real_baseline_schema_splits_function_body_as_one_statement():
     function_statements = [
         statement
         for statement in statements
-        if "FUNCTION update_updated_at_column" in statement
+        if statement.startswith(
+            "CREATE OR REPLACE FUNCTION update_updated_at_column()"
+        )
     ]
     assert len(function_statements) == 1
     assert "NEW.updated_at = NOW();" in function_statements[0]
