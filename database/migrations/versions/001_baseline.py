@@ -7,14 +7,17 @@ Create Date: 2026-08-04
 The schema through Phase 4 was maintained as `database/schemas/001_initial_schema.sql`
 and applied by hand. Rather than transcribing ~350 lines of DDL into Python —
 where it would immediately begin drifting from the file the tests still apply —
-this baseline *executes that file*. The two can never disagree, because there is
-only one of them.
+this baseline executes that file through the migration SQL-script helper.
+
+asyncpg prepares each Alembic statement and rejects a whole multi-command file,
+so the helper splits only on top-level semicolons while preserving PostgreSQL
+quoted strings, comments, and dollar-quoted PL/pgSQL bodies.
 
     New database:       alembic upgrade head
     Existing database:  alembic stamp 001_baseline && alembic upgrade head
 
-From 002 onward, migrations are hand-written and Alembic is the source of truth;
-`001_initial_schema.sql` is frozen and must not be edited again.
+From 002 onward, migrations are hand-written unless they intentionally adopt an
+already-canonical re-runnable schema file.
 """
 
 from __future__ import annotations
@@ -22,6 +25,8 @@ from __future__ import annotations
 import pathlib
 
 from alembic import op
+
+from database.migrations.sql_script import execute_sql_script
 
 revision = "001_baseline"
 down_revision = None
@@ -56,7 +61,7 @@ def upgrade() -> None:
             f"Baseline schema not found at {_SCHEMA}. If this database already "
             f"has the Phase 4 schema, run `alembic stamp 001_baseline` instead."
         )
-    op.execute(_SCHEMA.read_text(encoding="utf-8"))
+    execute_sql_script(_SCHEMA.read_text(encoding="utf-8"))
 
 
 def downgrade() -> None:
