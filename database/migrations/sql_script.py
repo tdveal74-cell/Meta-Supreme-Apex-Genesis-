@@ -1,4 +1,4 @@
-"""Safe-enough PostgreSQL script execution for Alembic's asyncpg connection.
+"""PostgreSQL script execution for Alembic's asyncpg connection.
 
 SQLAlchemy's asyncpg dialect prepares every ``op.execute()`` statement. asyncpg
 therefore rejects a whole schema file containing several SQL commands. The raw
@@ -6,8 +6,9 @@ schema files also contain PL/pgSQL bodies with semicolons, so ``text.split(';')`
 is not safe.
 
 This scanner recognizes the quoting/comment forms used by PostgreSQL DDL and
-splits only on semicolons that are outside all of them. Each resulting statement
-then goes through Alembic's existing transactional connection.
+splits only on semicolons that are outside all of them. Comments are discarded
+outside quoted content so a trailing comments-only section never becomes a fake
+statement. Each result goes through Alembic's existing transactional connection.
 """
 
 from __future__ import annotations
@@ -36,24 +37,23 @@ def iter_statements(script: str) -> Iterator[str]:
         nxt = script[index + 1] if index + 1 < length else ""
 
         if line_comment:
-            buffer.append(char)
             index += 1
             if char == "\n":
                 line_comment = False
+                buffer.append("\n")
             continue
 
         if block_comment_depth:
             if char == "/" and nxt == "*":
-                buffer.extend((char, nxt))
                 block_comment_depth += 1
                 index += 2
                 continue
             if char == "*" and nxt == "/":
-                buffer.extend((char, nxt))
                 block_comment_depth -= 1
                 index += 2
+                if not block_comment_depth:
+                    buffer.append(" ")
                 continue
-            buffer.append(char)
             index += 1
             continue
 
@@ -90,13 +90,11 @@ def iter_statements(script: str) -> Iterator[str]:
             continue
 
         if char == "-" and nxt == "-":
-            buffer.extend((char, nxt))
             line_comment = True
             index += 2
             continue
 
         if char == "/" and nxt == "*":
-            buffer.extend((char, nxt))
             block_comment_depth = 1
             index += 2
             continue
