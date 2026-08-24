@@ -294,6 +294,24 @@ class GitHubCapabilityAdapter:
             if isinstance(nested, dict) and nested.get("sha"):
                 metadata[f"{key}_sha"] = nested.get("sha")
         metadata["response_keys"] = sorted(str(key) for key in data.keys())[:100]
+
+        # Prefer a stable provider receipt id so durable effect receipts can
+        # bind to the exact GitHub object that was created or mutated.
+        receipt_id = ""
+        for candidate in (
+            data.get("sha"),
+            (data.get("commit") or {}).get("sha") if isinstance(data.get("commit"), dict) else None,
+            (data.get("object") or {}).get("sha") if isinstance(data.get("object"), dict) else None,
+            data.get("html_url"),
+            data.get("url"),
+            data.get("number"),
+        ):
+            if candidate is not None and str(candidate).strip():
+                receipt_id = str(candidate).strip()
+                break
+        if receipt_id:
+            metadata["provider_receipt_id"] = receipt_id
+
         return ToolResult(
             True,
             output=rendered,
