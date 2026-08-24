@@ -1,6 +1,6 @@
 """Hosted DEVON Operator surface for the phone/browser lane.
 
-The existing ``main.py`` remains the read-only DEVON Soul application.  This
+The existing ``main.py`` remains the read-only DEVON Soul application. This
 module is only a deployment wrapper: it imports that application and mounts a
 separate Operator capability whose commands execute inside a Vercel Sandbox
 microVM, never inside the DEVON Soul function process.
@@ -17,14 +17,15 @@ from __future__ import annotations
 
 import posixpath
 import re
+import shlex
 from pathlib import Path
-from typing import Any
 
 from fastapi import Cookie, Header, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, HTMLResponse
 from main import TOKEN_COOKIE, _presented, _require, app
+from vercel import sandbox as vercel_sandbox
 from vercel.headers import set_headers
-from vercel.sandbox import Sandbox
+from vercel.sandbox import GitSource
 
 ROOT = Path(__file__).resolve().parent
 TERMINAL = ROOT / "terminal.html"
@@ -34,7 +35,7 @@ META_REPO_REF = "main"
 MAX_COMMAND_CHARS = 8_000
 MAX_OUTPUT_CHARS = 1_000_000
 CWD_MARKER = "__DEVON_CWD__="
-SNAPSHOT_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,256}$")
+WORKSPACE_ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,256}$")
 
 
 @app.middleware("http")
@@ -49,9 +50,9 @@ def _operator_require(
     t: str | None,
     cookie: str | None,
 ) -> None:
-    # v1 deliberately reuses the already-established browser gate.  The shell
+    # v1 deliberately reuses the already-established browser gate. The shell
     # receives no production credentials and cannot write GitHub, so possession
-    # of this gate buys an isolated disposable workspace, not estate access.
+    # of this gate buys an isolated workspace, not estate access.
     _require(authorization, t, cookie)
 
 
@@ -123,25 +124,18 @@ def _normalize_cwd(value: object) -> str:
     return normalized
 
 
-def _snapshot_id(value: object) -> str | None:
+def _workspace_id(value: object) -> str | None:
     if value is None:
         return None
     candidate = str(value).strip()
     if not candidate:
         return None
-    if not SNAPSHOT_RE.fullmatch(candidate):
+    if not WORKSPACE_ID_RE.fullmatch(candidate):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="snapshot id is malformed",
+            detail="workspace id is malformed",
         )
     return candidate
-
-
-def _read_result_field(result: Any, name: str, default: Any = "") -> Any:
-    value = getattr(result, name, default)
-    if callable(value):
-        value = value()
-    return value
 
 
 def _bounded_output(value: object) -> tuple[str, bool]:
@@ -168,44 +162,21 @@ def _extract_cwd(stdout: str, fallback: str) -> tuple[str, str]:
     return "".join(kept), resolved
 
 
-def _snapshot_value(snapshot: Any) -> str:
-    for name in ("snapshot_id", "id"):
-        value = getattr(snapshot, name, None)
-        if callable(value):
-            value = value()
-        if value:
-            return str(value)
-    if isinstance(snapshot, dict):
-        for name in ("snapshot_id", "snapshotId", "id"):
-            if snapshot.get(name):
-                return str(snapshot[name])
-    raise RuntimeError("sandbox snapshot returned no id")
-
-
-def _fresh_sandbox() -> Any:
-    return Sandbox.create(
-        runtime="python3.13",
-        source={
-            "type": "git",
-            "url": META_REPO_URL,
-            "revision": META_REPO_REF,
-            "depth": 1,
-        },
+async def _fresh_sandbox():
+    """Create the persistent named workspace supported by vercel-sandbox 0.4."""
+    return await vercel_sandbox.create_sandbox(
+        source=GitSource(url=META_REPO_URL, revision=META_REPO_REF),
+        persistent=True,
     )
 
 
-def _restored_sandbox(snapshot_id: str) -> Any:
-    return Sandbox.create(
-        runtime="python3.13",
-        source={"type": "snapshot", "snapshot_id": snapshot_id},
-    )
+async def _resume_sandbox(workspace_id: str):
+    return await vercel_sandbox.resume_sandbox(name=workspace_id)
 
 
-def _stop_quietly(sandbox: Any) -> None:
+async def _stop_quietly(sandbox) -> None:
     try:
-        stop = getattr(sandbox, "stop", None)
-        if callable(stop):
-            stop()
+        await sandbox.stop()
     except Exception:
         pass
 
@@ -260,6 +231,7 @@ async def operator_terminal_status(
         "production_secrets_injected": False,
         "github_write_connected": False,
         "devon_core_executes": False,
+        "sandbox_sdk_contract": "vercel-sandbox-0.4-module-api",
     }
 
 
@@ -270,7 +242,7 @@ async def operator_terminal_command(
     t: str | None = Query(default=None),
     devon_console: str | None = Cookie(default=None),
 ):
-    """Execute one shell command inside an isolated snapshot-backed Sandbox."""
+    """Execute one shell command inside an isolated persistent Sandbox."""
     _operator_require(authorization, t, devon_console)
     try:
         body = await request.json()
@@ -290,17 +262,18 @@ async def operator_terminal_command(
 
     cwd = _normalize_cwd(body.get("cwd"))
     reset = bool(body.get("reset"))
-    previous_snapshot = None if reset else _snapshot_id(body.get("snapshot_id"))
+    prior_workspace = _workspace_id(body.get("workspace_id") or body.get("snapshot_id"))
+    if reset:
+        prior_workspace = None
 
     sandbox = None
+    stopped = False
     try:
         sandbox = (
-            _restored_sandbox(previous_snapshot)
-            if previous_snapshot
-            else _fresh_sandbox()
+            await _resume_sandbox(prior_workspace)
+            if prior_workspace
+            else await _fresh_sandbox()
         )
-        import shlex
-
         script = (
             f"cd -- {shlex.quote(cwd)} || exit 74\n"
             f"{command}\n"
@@ -308,28 +281,31 @@ async def operator_terminal_command(
             f"printf '\\n{CWD_MARKER}%s\\n' \"$PWD\"\n"
             "exit $rc\n"
         )
-        result = sandbox.run_command("bash", ["-lc", script])
-        stdout_raw = _read_result_field(result, "stdout", "")
-        stderr_raw = _read_result_field(result, "stderr", "")
-        exit_code = _read_result_field(result, "exit_code", None)
-        if exit_code is None:
-            exit_code = _read_result_field(result, "returncode", 1)
-
-        stdout_text, resolved_cwd = _extract_cwd(str(stdout_raw or ""), cwd)
+        result = await sandbox.run_process(
+            "bash",
+            ["-lc", script],
+            capture_output=True,
+        )
+        stdout_text, resolved_cwd = _extract_cwd(str(result.stdout or ""), cwd)
         stdout, stdout_truncated = _bounded_output(stdout_text)
-        stderr, stderr_truncated = _bounded_output(stderr_raw)
+        stderr, stderr_truncated = _bounded_output(result.stderr or "")
+        exit_code = int(result.returncode)
+        next_workspace = str(sandbox.name)
 
-        snapshot = sandbox.snapshot()
-        next_snapshot = _snapshot_value(snapshot)
-        sandbox = None
+        # Persistent sandboxes snapshot their filesystem on stop and resume from
+        # that state on the next browser command. This is the v0.4 SDK contract.
+        await sandbox.stop()
+        stopped = True
 
         return {
             "command": command,
             "cwd": resolved_cwd,
-            "exit_code": int(exit_code),
+            "exit_code": exit_code,
             "stdout": stdout,
             "stderr": stderr,
-            "snapshot_id": next_snapshot,
+            "workspace_id": next_workspace,
+            # Backward-compatible field for a terminal page cached before this hotfix.
+            "snapshot_id": next_workspace,
             "workspace_reset": reset,
             "truncated": stdout_truncated or stderr_truncated,
             "github_write_connected": False,
@@ -342,5 +318,5 @@ async def operator_terminal_command(
             detail=f"isolated operator sandbox failed: {type(exc).__name__}: {exc}",
         ) from exc
     finally:
-        if sandbox is not None:
-            _stop_quietly(sandbox)
+        if sandbox is not None and not stopped:
+            await _stop_quietly(sandbox)
