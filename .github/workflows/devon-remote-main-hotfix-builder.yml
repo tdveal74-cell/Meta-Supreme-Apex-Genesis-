@@ -187,7 +187,6 @@ jobs:
                   raise RuntimeError("Meta worktree branch attach completed without local main")
               return verified, True
           '''
-          # Workflow script is indented in YAML; normalize the Python replacement itself.
           import textwrap
           replacement = textwrap.dedent(replacement)
           app_path.write_text(text[:start] + replacement + text[end:])
@@ -233,24 +232,14 @@ class Sandbox:
             return Result(" M user-work.txt\n" if self.dirty else "")
         if command == ["rev-parse", "HEAD"]:
             return Result("ad5651ef9ca4e58ba19879ab3a00b034b5479b5a\n")
-        if command[:4] == ["show-ref", "--verify", "--quiet", "refs/heads/devon/recovery-ad5651ef9ca4"]:
+        if command == ["show-ref", "--verify", "--quiet", "refs/heads/devon/recovery-ad5651ef9ca4"]:
             return Result(returncode=1)
         if command[:2] == ["branch", "devon/recovery-ad5651ef9ca4"]:
             return Result()
-        if command == [
-            "config",
-            "remote.origin.fetch",
-            "+refs/heads/main:refs/remotes/origin/main",
-        ]:
+        if command == ["config", "remote.origin.fetch", "+refs/heads/main:refs/remotes/origin/main"]:
             self.fetch_tracking = True
             return Result()
-        if command == [
-            "fetch",
-            "--depth",
-            "1",
-            "origin",
-            "+refs/heads/main:refs/remotes/origin/main",
-        ]:
+        if command == ["fetch", "--depth", "1", "origin", "+refs/heads/main:refs/remotes/origin/main"]:
             self.remote_ref = True
             return Result()
         if command == ["rev-parse", "--verify", "refs/remotes/origin/main"]:
@@ -263,10 +252,7 @@ class Sandbox:
             self.local_main = True
             self.branch = "main"
             return Result()
-        if command in (
-            ["config", "branch.main.remote", "origin"],
-            ["config", "branch.main.merge", "refs/heads/main"],
-        ):
+        if command in (["config", "branch.main.remote", "origin"], ["config", "branch.main.merge", "refs/heads/main"]):
             return Result()
         return Result()
 
@@ -277,8 +263,10 @@ def _hosted():
     vercel = types.ModuleType("vercel")
     vercel.__path__ = []
     sandbox_mod = types.ModuleType("vercel.sandbox")
-    sandbox_mod.create_sandbox = lambda **kwargs: None
-    sandbox_mod.resume_sandbox = lambda **kwargs: None
+    async def _noop(**kwargs):
+        return None
+    sandbox_mod.create_sandbox = _noop
+    sandbox_mod.resume_sandbox = _noop
     sandbox_mod.GitSource = type("GitSource", (), {"__init__": lambda self, **kwargs: None})
     headers_mod = types.ModuleType("vercel.headers")
     headers_mod.set_headers = lambda headers: None
@@ -320,3 +308,5 @@ def test_dirty_detached_checkout_is_preserved_before_fetch_or_switch():
           git add deploy/soul/app.py test_devon_remote_main_tracking.py .github/workflows/devon-remote-main-hotfix-builder.yml
           git commit -m "fix(devon): harden shallow detached main attach [devon-hotfix-applied]"
           git push origin HEAD:fix/devon-browser-terminal-remote-main
+
+# second push intentionally triggers this already-present workflow
