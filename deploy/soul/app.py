@@ -38,6 +38,21 @@ CWD_MARKER = "__DEVON_CWD__="
 WORKSPACE_ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,256}$")
 
 
+def _assert_sandbox_sdk_contract() -> None:
+    """Fail deployment import if the pinned Sandbox API drifts again."""
+    missing = [
+        name
+        for name in ("create_sandbox", "resume_sandbox")
+        if not callable(getattr(vercel_sandbox, name, None))
+    ]
+    if missing:
+        joined = ", ".join(missing)
+        raise RuntimeError(f"Vercel Sandbox SDK contract missing: {joined}")
+
+
+_assert_sandbox_sdk_contract()
+
+
 @app.middleware("http")
 async def register_vercel_request_context(request: Request, call_next):
     """Expose Vercel's per-request OIDC context to the Python SDK."""
