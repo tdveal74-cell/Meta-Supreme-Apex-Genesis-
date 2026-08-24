@@ -25,7 +25,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Dict, Optional
 
-from services.agent_runtime.governance import approval_marker
+from services.agent_runtime.governance import require_approved_runtime_binding
 from services.devon.approval import ApprovalQueue, ApprovalState
 
 MAX_COMMAND_CHARS = 4000
@@ -239,32 +239,40 @@ class OperatorBridge:
 
     def execute_runtime_approved(
         self,
-        plan: CommandPlan,
         *,
-        request_id: str,
-        binding: str,
+        arguments: Dict[str, object],
+        approval_metadata: object,
         approvals: ApprovalQueue,
-        timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
     ) -> ExecutionResult:
-        """Execute a plan only when the Agent Runtime approval matches it exactly.
+        """Execute only the exact Operator arguments approved by DEVON.
 
-        The runtime writes a SHA-256 binding for task id, step id, tool name and
-        arguments into the human-readable approval consequence. The bridge
-        recomputes no policy here; it verifies that the exact binding supplied
-        by the runtime is present on the approved record before crossing the
-        process boundary.
+        The bridge does not trust a supplied binding string. It asks the shared
+        governance helper to recompute the binding from the actual arguments it
+        is about to interpret, then builds the command plan from those same
+        arguments before crossing the process boundary.
         """
+        args = dict(arguments)
+        try:
+            require_approved_runtime_binding(
+                approvals,
+                approval_metadata,
+                tool_name="operator.command",
+                arguments=args,
+            )
+        except ValueError as exc:
+            raise OperatorError(str(exc)) from exc
+
+        command = str(args.get("command") or "").strip()
+        cwd = args.get("cwd")
+        timeout = int(args.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS)
+        plan = self.plan(command, str(cwd) if cwd else None)
         if plan.risk is Risk.BLOCKED:
             raise OperatorError(plan.reason)
-        record = approvals.get(request_id)
-        if record is None:
-            raise OperatorError("runtime approval request no longer exists")
-        if record.state is not ApprovalState.APPROVED:
-            raise OperatorError(f"approval state is {record.state.value}, not approved")
-        marker = approval_marker(binding)
-        if marker not in record.what_happens:
-            raise OperatorError("runtime approval binding does not match this command")
-        return self._run(plan, timeout_seconds)
+        if plan.risk is Risk.READ:
+            raise OperatorError(
+                "operator.command is for effectful work; use operator.read for reads"
+            )
+        return self._run(plan, timeout)
 
     def _run(self, plan: CommandPlan, timeout_seconds: int) -> ExecutionResult:
         timeout = max(1, min(int(timeout_seconds), MAX_TIMEOUT_SECONDS))
