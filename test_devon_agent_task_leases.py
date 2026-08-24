@@ -141,7 +141,10 @@ async def test_live_lease_blocks_second_worker_cancel_and_delete(
     configured_operator,
 ):
     from app.db.session import AsyncSessionLocal
-    from app.services.agent_runtime_persistence import AgentTaskRepository, TaskExecutionBusy
+    from app.services.agent_runtime_persistence import (
+        AgentTaskRepository,
+        TaskExecutionBusy,
+    )
 
     created = await client.post(
         "/api/v1/agent-tasks",
@@ -209,7 +212,7 @@ async def test_expired_lease_can_be_taken_over_and_stale_worker_is_fenced(
     configured_operator,
 ):
     from app.db.session import AsyncSessionLocal
-    from app.models.agent_runtime import AgentTaskRecord
+    from app.models.agent_runtime import AgentTaskRecord, AgentTaskRunRecord
     from app.services.agent_runtime_persistence import (
         AgentTaskRepository,
         TaskExecutionLeaseLost,
@@ -268,6 +271,14 @@ async def test_expired_lease_can_be_taken_over_and_stale_worker_is_fenced(
         await takeover_session.commit()
     assert second.lease_token and second.lease_token != first.lease_token
     assert second.execution_generation > first.execution_generation
+
+    async with AsyncSessionLocal() as ledger_session:
+        abandoned = await ledger_session.get(AgentTaskRunRecord, first.run_id)
+        assert abandoned is not None
+        assert abandoned.state == "failed"
+        assert abandoned.error == "superseded after execution lease expired"
+        assert abandoned.completed_at is not None
+        assert abandoned.lease_token is None
 
     async with AsyncSessionLocal() as stale_session:
         with pytest.raises(TaskExecutionLeaseLost, match="stale result"):
