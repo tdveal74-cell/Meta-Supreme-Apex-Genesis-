@@ -38,8 +38,10 @@ class Settings(BaseSettings):
     ]
 
     # AI Providers (abstracted — keys injected at runtime, never hard-coded)
-    # "mock" runs the full system offline with clearly-labeled simulated
-    # output; switch to "anthropic" or "openai" (+ API key) for live intelligence.
+    # Offline default is "mock". Live DEVON voice and enrichment use Cerebras
+    # (gpt-oss-120b, measured 42ms). start-devon.sh writes DEFAULT_AI_PROVIDER
+    # and ENRICHMENT_PROVIDER to cerebras and prompts for CEREBRAS_API_KEY.
+    # CI keeps mock explicitly. Missing keys fail loudly, never silently degrade.
     OPENAI_API_KEY: str | None = None
     ANTHROPIC_API_KEY: str | None = None
     CEREBRAS_API_KEY: str | None = None
