@@ -15,7 +15,6 @@ Load-bearing boundaries:
 
 from __future__ import annotations
 
-import os
 import posixpath
 import re
 from pathlib import Path
@@ -23,10 +22,9 @@ from typing import Any
 
 from fastapi import Cookie, Header, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, HTMLResponse
+from main import TOKEN_COOKIE, _presented, _require, app
 from vercel.headers import set_headers
 from vercel.sandbox import Sandbox
-
-from main import TOKEN_COOKIE, _presented, _require, app
 
 ROOT = Path(__file__).resolve().parent
 TERMINAL = ROOT / "terminal.html"
@@ -233,8 +231,6 @@ async def operator_terminal(
         return HTMLResponse(_terminal_door(why), status_code=exc.status_code)
 
     response = FileResponse(TERMINAL, media_type="text/html")
-    # Direct ?t= visits must become ordinary cookie-authenticated API calls
-    # after the page loads, just like the existing DEVON door flow.
     if t and t.strip():
         response.set_cookie(
             TOKEN_COOKIE,
@@ -303,9 +299,6 @@ async def operator_terminal_command(
             if previous_snapshot
             else _fresh_sandbox()
         )
-        # Bash lives *inside the microVM*.  This is intentionally a real shell
-        # rather than the host-side argv-only bridge from v1.  No production
-        # environment or host filesystem is forwarded to it.
         import shlex
 
         script = (
@@ -328,7 +321,7 @@ async def operator_terminal_command(
 
         snapshot = sandbox.snapshot()
         next_snapshot = _snapshot_value(snapshot)
-        sandbox = None  # snapshot finalizes/stops the session
+        sandbox = None
 
         return {
             "command": command,
