@@ -1,9 +1,9 @@
 """Regression tests for the hosted DEVON browser Operator boundary.
 
-The live Sandbox service is replaced with a fake that mirrors the public API
-shipped by ``vercel-sandbox==0.4.0``. This intentionally does not provide the
-old ``Sandbox.create``/``run_command`` methods, and it reports the Git workspace
-through ``sandbox.cwd`` instead of assuming a host path.
+The fake mirrors the shipped ``vercel-sandbox==0.4.0`` module API and, crucially,
+reproduces the production incident where ``sandbox.cwd`` is a valid directory
+but is not itself a Git repository. DEVON must verify or bootstrap the Meta
+worktree before it executes the browser command.
 """
 
 from __future__ import annotations
@@ -33,30 +33,64 @@ created = []
 resumed = []
 headers_seen = []
 boxes = []
+repo_ready = set()
+clone_targets = []
 
 class FakeGitSource(dict):
     def __init__(self, *, url, revision=None):
         super().__init__(url=url, revision=revision)
 
 class FakeResult:
-    def __init__(self, stdout="hello from sandbox\n__DEVON_CWD__=/home/vercel-sandbox\n"):
-        self.returncode = 0
+    def __init__(self, stdout="", stderr="", returncode=0):
+        self.returncode = returncode
         self.stdout = stdout
-        self.stderr = ""
+        self.stderr = stderr
 
 class FakeSandbox:
-    def __init__(self, name, kwargs=None, cwd="/home/vercel-sandbox"):
+    def __init__(self, name, kwargs=None, cwd="/vercel"):
         self.name = name
         self.kwargs = kwargs or {}
         self.cwd = cwd
         self.commands = []
         self.stopped = False
         boxes.append(self)
+
     async def run_process(self, executable, args=None, **kwargs):
-        self.commands.append([executable, list(args or []), dict(kwargs)])
+        argv = list(args or [])
+        self.commands.append([executable, argv, dict(kwargs)])
+
         if executable == "pwd":
-            return FakeResult("/home/vercel-sandbox\n")
+            return FakeResult(f"{self.cwd or '/vercel'}\n")
+
+        if executable == "git" and len(argv) >= 4 and argv[0] == "-C":
+            candidate = argv[1]
+            if (
+                argv[2:] == ["rev-parse", "--show-toplevel"]
+                and self.name in repo_ready
+                and candidate == "/vercel/devon-meta"
+            ):
+                return FakeResult("/vercel/devon-meta\n")
+            return FakeResult(stderr="fatal: not a git repository\n", returncode=128)
+
+        if executable == "find":
+            if self.name in repo_ready:
+                return FakeResult("/vercel/devon-meta/.git\n")
+            return FakeResult("")
+
+        if executable == "git" and argv and argv[0] == "clone":
+            target = argv[-1]
+            clone_targets.append(target)
+            repo_ready.add(self.name)
+            return FakeResult(stderr="Cloning into 'devon-meta'...\n")
+
+        if executable == "bash":
+            cwd = kwargs.get("cwd", "/vercel")
+            return FakeResult(
+                f"hello from sandbox\n__DEVON_CWD__={cwd}\n"
+            )
+
         return FakeResult()
+
     async def stop(self):
         self.stopped = True
 
@@ -95,16 +129,17 @@ anon_command = client.post("/api/v1/operator-terminal/command", json={"command":
 client.cookies.set("devon_console", "test-console-token")
 authed_terminal = client.get("/terminal")
 authed_status = client.get("/api/v1/operator-terminal/status")
+
+# Reproduce the production screenshot: /vercel exists but is not a Git repo.
 first = client.post(
     "/api/v1/operator-terminal/command",
-    # This is the stale path already cached by the production browser UI.
-    json={"command":"pwd", "cwd":"/vercel/sandbox"},
+    json={"command":"pwd", "cwd":"/vercel"},
 )
 second = client.post(
     "/api/v1/operator-terminal/command",
     json={
         "command":"git status",
-        "cwd":"/home/vercel-sandbox",
+        "cwd":"/vercel/devon-meta",
         "workspace_id":"devon-workspace-001",
     },
 )
@@ -115,6 +150,12 @@ escape = client.post(
 
 fallback_box = FakeSandbox("fallback", cwd=None)
 fallback_root = asyncio.run(hosted._sandbox_root(fallback_box))
+legacy_alias = hosted._normalize_cwd(
+    "/vercel/sandbox", "/vercel/devon-meta", "/vercel"
+)
+home_alias = hosted._normalize_cwd(
+    "/home/vercel-sandbox", "/vercel/devon-meta", "/vercel"
+)
 
 mutations = sorted(
     (method, route.path)
@@ -140,9 +181,12 @@ print(json.dumps({
     "created": created,
     "resumed": resumed,
     "commands": [s.commands for s in boxes],
+    "clone_targets": clone_targets,
     "stopped": [s.stopped for s in boxes],
     "fallback_root": fallback_root,
     "fallback_commands": fallback_box.commands,
+    "legacy_alias": legacy_alias,
+    "home_alias": home_alias,
     "headers_registered": bool(headers_seen),
     "mutations": mutations,
 }))
@@ -170,82 +214,93 @@ def test_browser_operator_is_gated_and_separate_from_soul():
     assert probe["mutations"] == [["POST", "/api/v1/operator-terminal/command"]]
 
 
-def test_browser_operator_reports_dynamic_workspace_contract():
+def test_browser_operator_reports_verified_git_worktree_contract():
     probe = _probe()
     status_body = probe["status_body"]
     assert status_body["mode"] == "isolated-vercel-sandbox"
-    assert status_body["workspace"] == "auto-discovered from Sandbox cwd"
-    assert status_body["workspace_discovery"] == "sandbox.cwd with pwd fallback"
+    assert status_body["workspace"] == "verified Meta Git worktree"
+    assert "git rev-parse" in status_body["workspace_discovery"]
     assert status_body["production_secrets_injected"] is False
     assert status_body["github_write_connected"] is False
     assert status_body["devon_core_executes"] is False
     assert status_body["sandbox_sdk_contract"] == "vercel-sandbox-0.4-module-api"
 
 
-def test_legacy_browser_path_maps_to_runtime_reported_workspace():
+def test_non_git_sandbox_cwd_bootstraps_and_enters_meta_worktree():
     probe = _probe()
     assert probe["first_status"] == 200
     assert probe["first_body"]["stdout"] == "hello from sandbox\n"
-    assert probe["first_body"]["cwd"] == "/home/vercel-sandbox"
-    assert probe["first_body"]["workspace_root"] == "/home/vercel-sandbox"
+    assert probe["first_body"]["sandbox_root"] == "/vercel"
+    assert probe["first_body"]["workspace_root"] == "/vercel/devon-meta"
+    assert probe["first_body"]["cwd"] == "/vercel/devon-meta"
+    assert probe["first_body"]["repo_bootstrapped"] is True
     assert probe["first_body"]["workspace_id"] == "devon-workspace-001"
-    assert probe["first_body"]["snapshot_id"] == "devon-workspace-001"
-    assert probe["second_status"] == 200
+    assert probe["clone_targets"] == ["/vercel/devon-meta"]
 
-    assert len(probe["created"]) == 1
-    first_create = probe["created"][0]
-    assert first_create["source"] == {
-        "url": "https://github.com/tdveal74-cell/Meta-Supreme-Apex-Genesis-.git",
-        "revision": "main",
-    }
-    assert first_create["persistent"] is True
+    first_box_commands = probe["commands"][0]
+    clone = next(cmd for cmd in first_box_commands if cmd[0] == "git" and cmd[1][0] == "clone")
+    assert clone[1][-1] == "/vercel/devon-meta"
+    user_command = next(cmd for cmd in first_box_commands if cmd[0] == "bash")
+    assert user_command[2]["cwd"] == "/vercel/devon-meta"
+
+
+def test_resumed_workspace_reuses_verified_repo_for_git_status():
+    probe = _probe()
+    assert probe["second_status"] == 200
+    assert probe["second_body"]["cwd"] == "/vercel/devon-meta"
+    assert probe["second_body"]["workspace_root"] == "/vercel/devon-meta"
+    assert probe["second_body"]["repo_bootstrapped"] is False
     assert probe["resumed"][0] == {"name": "devon-workspace-001"}
 
-    first_command = probe["commands"][0][0]
-    assert first_command[0] == "bash"
-    assert first_command[1][0] == "-lc"
-    assert first_command[2]["cwd"] == "/home/vercel-sandbox"
-    assert first_command[2]["capture_output"] is True
 
-
-def test_pwd_fallback_discovers_workspace_when_sdk_cwd_is_missing():
+def test_old_browser_paths_are_aliases_for_verified_repo_root():
     probe = _probe()
-    assert probe["fallback_root"] == "/home/vercel-sandbox"
+    assert probe["legacy_alias"] == "/vercel/devon-meta"
+    assert probe["home_alias"] == "/vercel/devon-meta"
+
+
+def test_pwd_fallback_discovers_sandbox_base_when_sdk_cwd_is_missing():
+    probe = _probe()
+    assert probe["fallback_root"] == "/vercel"
     assert probe["fallback_commands"] == [["pwd", [], {"capture_output": True}]]
 
 
-def test_workspace_cannot_escape_runtime_reported_root():
+def test_working_directory_cannot_escape_verified_meta_worktree():
     probe = _probe()
     assert probe["escape_status"] == 422
     assert probe["headers_registered"] is True
 
 
-def test_persistent_sandboxes_stop_after_normal_commands():
+def test_persistent_sandboxes_stop_after_normal_and_refused_commands():
     probe = _probe()
-    # Fresh and resumed command boxes stop. The escape-path box also stops in
-    # finally after the request is rejected. The fallback probe is standalone.
     assert all(probe["stopped"][:3])
 
 
 def test_sandbox_creation_never_receives_production_secrets():
     probe = _probe()
-    for create in probe["created"]:
-        assert "env" not in create
-        assert "password" not in create
-        assert "token" not in create
+    assert len(probe["created"]) == 1
+    create = probe["created"][0]
+    assert create["source"] == {
+        "url": "https://github.com/tdveal74-cell/Meta-Supreme-Apex-Genesis-.git",
+        "revision": "main",
+    }
+    assert create["persistent"] is True
+    assert "env" not in create
+    assert "password" not in create
+    assert "token" not in create
 
 
-def test_deployed_code_cannot_regress_to_removed_or_guessed_runtime_contracts():
+def test_deployed_code_cannot_equate_sandbox_cwd_with_git_repo_again():
     source = (DEPLOY / "app.py").read_text()
     source_lines = [line.strip() for line in source.splitlines()]
     assert "Sandbox.create" not in source
     assert ".run_command(" not in source
     assert "vercel_sandbox.create_sandbox(" in source
     assert "vercel_sandbox.resume_sandbox(" in source
-    assert ".run_process(" in source
-    assert 'WORKSPACE_ROOT = "/vercel/sandbox"' not in source_lines
-    assert 'LEGACY_WORKSPACE_ROOT = "/vercel/sandbox"' in source_lines
-    assert 'reported = getattr(sandbox, "cwd", None)' in source_lines
+    assert "async def _repo_root(" in source
+    assert '"rev-parse", "--show-toplevel"' in source
+    assert 'META_REPO_DIRNAME = "devon-meta"' in source_lines
+    assert "repo_root, repo_bootstrapped = await _repo_root(" in source
     assert "cwd=cwd," in source_lines
 
 
