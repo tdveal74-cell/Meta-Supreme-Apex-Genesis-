@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import posixpath
 import re
-import shlex
 from pathlib import Path
 from typing import Any
 
