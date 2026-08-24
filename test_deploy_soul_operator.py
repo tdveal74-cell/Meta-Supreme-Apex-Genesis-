@@ -1,8 +1,9 @@
 """Regression tests for the hosted DEVON browser Operator boundary.
 
-The live Sandbox service is replaced with a tiny fake.  CI verifies routing,
-authentication, snapshot continuity and secret non-forwarding without spending
-cloud compute or requiring Vercel credentials.
+The live Sandbox service is replaced with a fake that mirrors the public API
+shipped by ``vercel-sandbox==0.4.0``. This intentionally does not provide the
+old ``Sandbox.create``/``run_command`` methods, so SDK drift cannot be hidden by
+a stale test double again.
 """
 
 from __future__ import annotations
@@ -28,40 +29,48 @@ os.environ.pop("PINECONE_API_KEY", None)
 sys.path.insert(0, r"__DEPLOY__")
 
 created = []
+resumed = []
 headers_seen = []
+boxes = []
+
+class FakeGitSource(dict):
+    def __init__(self, *, url, revision=None):
+        super().__init__(url=url, revision=revision)
 
 class FakeResult:
-    exit_code = 0
-    def stdout(self):
-        return "hello from sandbox\n__DEVON_CWD__=/vercel/sandbox\n"
-    def stderr(self):
-        return ""
-
-class FakeSnapshot:
-    snapshot_id = "snap_test_123"
+    def __init__(self):
+        self.returncode = 0
+        self.stdout = "hello from sandbox\n__DEVON_CWD__=/vercel/sandbox\n"
+        self.stderr = ""
 
 class FakeSandbox:
-    def __init__(self, kwargs):
-        self.kwargs = kwargs
+    def __init__(self, name, kwargs=None):
+        self.name = name
+        self.kwargs = kwargs or {}
         self.commands = []
         self.stopped = False
-    @classmethod
-    def create(cls, **kwargs):
-        sbx = cls(kwargs)
-        created.append(sbx)
-        return sbx
-    def run_command(self, executable, args):
-        self.commands.append([executable, list(args)])
+        boxes.append(self)
+    async def run_process(self, executable, args, **kwargs):
+        self.commands.append([executable, list(args), dict(kwargs)])
         return FakeResult()
-    def snapshot(self):
-        return FakeSnapshot()
-    def stop(self):
+    async def stop(self):
         self.stopped = True
+
+async def create_sandbox(**kwargs):
+    created.append(kwargs)
+    return FakeSandbox("devon-workspace-001", kwargs)
+
+async def resume_sandbox(*, name, **kwargs):
+    resumed.append({"name": name, **kwargs})
+    return FakeSandbox(name, kwargs)
 
 vercel = types.ModuleType("vercel")
 vercel.__path__ = []
 sandbox_mod = types.ModuleType("vercel.sandbox")
-sandbox_mod.Sandbox = FakeSandbox
+sandbox_mod.GitSource = FakeGitSource
+sandbox_mod.create_sandbox = create_sandbox
+sandbox_mod.resume_sandbox = resume_sandbox
+vercel.sandbox = sandbox_mod
 headers_mod = types.ModuleType("vercel.headers")
 def set_headers(headers):
     headers_seen.append(dict(headers))
@@ -91,12 +100,12 @@ second = client.post(
     json={
         "command":"git status",
         "cwd":"/vercel/sandbox",
-        "snapshot_id":"snap_test_123",
+        "workspace_id":"devon-workspace-001",
     },
 )
 escape = client.post(
     "/api/v1/operator-terminal/command",
-    json={"command":"pwd", "cwd":"/etc", "snapshot_id":"snap_test_123"},
+    json={"command":"pwd", "cwd":"/etc", "workspace_id":"devon-workspace-001"},
 )
 
 mutations = sorted(
@@ -120,8 +129,10 @@ print(json.dumps({
     "second_status": second.status_code,
     "second_body": second.json(),
     "escape_status": escape.status_code,
-    "created": [s.kwargs for s in created],
-    "commands": [s.commands for s in created],
+    "created": created,
+    "resumed": resumed,
+    "commands": [s.commands for s in boxes],
+    "stopped": [s.stopped for s in boxes],
     "headers_registered": bool(headers_seen),
     "mutations": mutations,
 }))
@@ -156,27 +167,26 @@ def test_browser_operator_reports_the_truth_about_its_boundary():
     assert status_body["production_secrets_injected"] is False
     assert status_body["github_write_connected"] is False
     assert status_body["devon_core_executes"] is False
+    assert status_body["sandbox_sdk_contract"] == "vercel-sandbox-0.4-module-api"
 
 
-def test_commands_start_from_meta_and_resume_only_from_snapshot():
+def test_commands_create_from_meta_then_resume_named_workspace():
     probe = _probe()
     assert probe["first_status"] == 200
     assert probe["first_body"]["stdout"] == "hello from sandbox\n"
     assert probe["first_body"]["cwd"] == "/vercel/sandbox"
-    assert probe["first_body"]["snapshot_id"] == "snap_test_123"
+    assert probe["first_body"]["workspace_id"] == "devon-workspace-001"
+    assert probe["first_body"]["snapshot_id"] == "devon-workspace-001"
     assert probe["second_status"] == 200
 
-    first_create, second_create = probe["created"][:2]
+    assert len(probe["created"]) == 1
+    first_create = probe["created"][0]
     assert first_create["source"] == {
-        "type": "git",
         "url": "https://github.com/tdveal74-cell/Meta-Supreme-Apex-Genesis-.git",
         "revision": "main",
-        "depth": 1,
     }
-    assert second_create["source"] == {
-        "type": "snapshot",
-        "snapshot_id": "snap_test_123",
-    }
+    assert first_create["persistent"] is True
+    assert probe["resumed"] == [{"name": "devon-workspace-001"}]
 
     for create in probe["created"]:
         assert "env" not in create
@@ -184,15 +194,32 @@ def test_commands_start_from_meta_and_resume_only_from_snapshot():
         assert "token" not in create
 
 
-def test_command_runs_in_microvm_shell_and_cwd_cannot_escape_workspace():
+def test_command_uses_current_run_process_api_and_stops_for_persistence():
     probe = _probe()
     assert probe["commands"][0][0][0] == "bash"
     assert probe["commands"][0][0][1][0] == "-lc"
+    assert probe["commands"][0][0][2]["capture_output"] is True
+    assert all(probe["stopped"])
     assert probe["escape_status"] == 422
     assert probe["headers_registered"] is True
+
+
+def test_deployed_code_cannot_regress_to_removed_sdk_methods():
+    source = (DEPLOY / "app.py").read_text()
+    assert "Sandbox.create" not in source
+    assert ".run_command(" not in source
+    assert "vercel_sandbox.create_sandbox(" in source
+    assert "vercel_sandbox.resume_sandbox(" in source
+    assert ".run_process(" in source
 
 
 def test_hosted_wrapper_itself_never_imports_subprocess():
     source = (DEPLOY / "app.py").read_text()
     assert "import subprocess" not in source
     assert "subprocess." not in source
+
+
+def test_deployment_pins_the_sdk_surface_it_implements():
+    requirements = (DEPLOY / "requirements.txt").read_text().splitlines()
+    assert "vercel==0.10.0" in requirements
+    assert "vercel-sandbox==0.4.0" in requirements
