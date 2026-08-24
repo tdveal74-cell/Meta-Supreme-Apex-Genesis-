@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 
 from services.agent_runtime.contracts import (
     AgentTask,
+    EffectStatus,
     Observation,
     RuntimeResult,
     StepState,
@@ -14,6 +15,7 @@ from services.agent_runtime.contracts import (
     TaskState,
     ToolRisk,
 )
+from services.agent_runtime.effect_recorder import EffectRecorder
 from services.agent_runtime.governance import (
     APPROVAL_METADATA_KEY,
     RUNTIME_REQUESTED_BY,
@@ -37,6 +39,10 @@ class AgentRuntime:
     DEVON core does not execute here. This separate runtime consumes a validated
     plan and capability adapters. Tool risk determines whether the loop may run
     immediately or must stop at DEVON's approval queue.
+
+    When an optional EffectRecorder is injected by the application layer,
+    WRITE / HIGH_IMPACT tool calls write a durable intent before execution and a
+    receipt afterward. Without a recorder the runtime behaves exactly as before.
     """
 
     def __init__(
@@ -47,12 +53,16 @@ class AgentRuntime:
         approvals: Optional[ApprovalQueue] = None,
         store: Optional[AgentTaskStore] = None,
         learning: Optional[LearningStore] = None,
+        effect_recorder: Optional[EffectRecorder] = None,
+        effect_idempotency_key: str = "",
     ) -> None:
         self.planner = planner
         self.tools = tools
         self.approvals = approvals or ApprovalQueue()
         self.store = store or InMemoryAgentTaskStore()
         self.learning = learning or InMemoryLearningStore()
+        self.effect_recorder = effect_recorder
+        self.effect_idempotency_key = (effect_idempotency_key or "").strip()
 
     async def create_task(
         self,
@@ -190,7 +200,40 @@ class AgentRuntime:
                 "step_id": step.step_id,
                 "tool_name": spec.name,
             }
+
+        intent = None
+        if spec.approval_required and self.effect_recorder is not None:
+            intent = await self.effect_recorder.begin_effect(
+                task_id=task.task_id,
+                step_id=step.step_id,
+                tool_name=spec.name,
+                arguments=dict(step.tool_call.arguments),
+                idempotency_key=self.effect_idempotency_key or task.task_id,
+            )
+
         result = await self.tools.execute(spec.name, execution_arguments)
+
+        if intent is not None and self.effect_recorder is not None:
+            status = EffectStatus.SUCCEEDED if result.ok else EffectStatus.FAILED
+            provider_receipt_id = ""
+            if result.metadata and isinstance(result.metadata, dict):
+                provider_receipt_id = str(
+                    result.metadata.get("provider_receipt_id")
+                    or result.metadata.get("id")
+                    or ""
+                )
+            await self.effect_recorder.complete_effect(
+                intent=intent,
+                status=status,
+                provider_receipt_id=provider_receipt_id,
+                raw_response={
+                    "ok": result.ok,
+                    "output": result.output,
+                    "error": result.error,
+                    "metadata": dict(result.metadata or {}),
+                },
+            )
+
         observation = Observation(
             step_id=step.step_id,
             ok=result.ok,

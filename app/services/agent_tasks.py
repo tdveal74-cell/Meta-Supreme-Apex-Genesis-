@@ -14,13 +14,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.devon import _queue as approvals
 from app.api.v1.operator import _bridge as operator_bridge
 from app.db.session import AsyncSessionLocal
+from app.services.agent_effect_receipts import EffectReceiptRepository
 from app.services.agent_runtime_persistence import (
     AgentLearningRepository,
     AgentTaskRepository,
     TaskExecutionLeaseLost,
 )
 from app.services.intelligence import get_provider
-from services.agent_runtime.contracts import AgentTask, PlanStep, ToolCall
+from app.services.leased_effect_recorder import LeasedEffectRecorder
+from services.agent_runtime.contracts import AgentTask, PlanStep, TaskState, ToolCall
+from services.agent_runtime.effect_recorder import EffectRecorder
 from services.agent_runtime.planner import LLMPlanner, StaticPlanner
 from services.agent_runtime.runtime import AgentRuntime
 from services.agent_runtime.store import InMemoryAgentTaskStore
@@ -61,6 +64,7 @@ class DurableAgentTaskService:
     def __init__(self) -> None:
         self.tasks = AgentTaskRepository()
         self.learning = AgentLearningRepository()
+        self.effects = EffectReceiptRepository()
         self.worker_id = (
             f"{socket.gethostname()}:{os.getpid()}:{secrets.token_hex(4)}"
         )
@@ -145,6 +149,29 @@ class DurableAgentTaskService:
         idempotency_key: Optional[str] = None,
     ) -> TaskRunOutcome:
         key = self._normalize_idempotency_key(idempotency_key)
+
+        # Refuse automatic retry when a prior crash left an intent without a receipt.
+        orphans = await self.effects.find_orphan_intents(
+            db, owner_id=owner_id, task_id=task_id
+        )
+        if orphans:
+            task = await self.tasks.get_owned(db, owner_id=owner_id, task_id=task_id)
+            if task is not None and not task.done:
+                task.state = TaskState.FAILED
+                task.failure_reason = orphans[0].reason
+                task.touch()
+                await self.tasks.save(
+                    db,
+                    owner_id=owner_id,
+                    task=task,
+                    project_id=self._project_id(task),
+                )
+                await db.commit()
+            raise RuntimeError(
+                f"ambiguous_external_effect: {orphans[0].detail} "
+                f"(intent_id={orphans[0].intent.intent_id})"
+            )
+
         lease_seconds = _lease_seconds()
         claim = await self.tasks.acquire_execution(
             db,
@@ -181,7 +208,18 @@ class DurableAgentTaskService:
             )
         )
         try:
-            runtime = self._runtime_for(claim.task)
+            recorder = LeasedEffectRecorder(
+                db=db,
+                owner_id=owner_id,
+                lease_token=claim.lease_token,
+                execution_generation=claim.execution_generation,
+                repository=self.effects,
+            )
+            runtime = self._runtime_for(
+                claim.task,
+                effect_recorder=recorder,
+                effect_idempotency_key=key,
+            )
             result = await runtime.run_until_blocked(
                 claim.task.task_id,
                 max_steps=max_steps,
@@ -300,6 +338,7 @@ class DurableAgentTaskService:
                 "idempotency_ledger": True,
                 "lease_seconds": _lease_seconds(),
                 "crash_atomic_external_effects": False,
+                "effect_receipts": True,
             },
         }
 
@@ -389,7 +428,12 @@ class DurableAgentTaskService:
         return key
 
     @staticmethod
-    def _runtime_for(task: AgentTask) -> AgentRuntime:
+    def _runtime_for(
+        task: AgentTask,
+        *,
+        effect_recorder: Optional[EffectRecorder] = None,
+        effect_idempotency_key: str = "",
+    ) -> AgentRuntime:
         store = InMemoryAgentTaskStore()
         store.put(task)
         planner = StaticPlanner(
@@ -401,6 +445,8 @@ class DurableAgentTaskService:
             tools=build_tool_registry(),
             approvals=approvals,
             store=store,
+            effect_recorder=effect_recorder,
+            effect_idempotency_key=effect_idempotency_key,
         )
 
     @staticmethod
