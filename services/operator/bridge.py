@@ -25,6 +25,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Dict, Optional
 
+from services.agent_runtime.governance import require_approved_runtime_binding
 from services.devon.approval import ApprovalQueue, ApprovalState
 
 MAX_COMMAND_CHARS = 4000
@@ -235,6 +236,43 @@ class OperatorBridge:
 
         self._pending.pop(request_id, None)
         return self._run(pending.plan, timeout_seconds)
+
+    def execute_runtime_approved(
+        self,
+        *,
+        arguments: Dict[str, object],
+        approval_metadata: object,
+        approvals: ApprovalQueue,
+    ) -> ExecutionResult:
+        """Execute only the exact Operator arguments approved by DEVON.
+
+        The bridge does not trust a supplied binding string. It asks the shared
+        governance helper to recompute the binding from the actual arguments it
+        is about to interpret, then builds the command plan from those same
+        arguments before crossing the process boundary.
+        """
+        args = dict(arguments)
+        try:
+            require_approved_runtime_binding(
+                approvals,
+                approval_metadata,
+                tool_name="operator.command",
+                arguments=args,
+            )
+        except ValueError as exc:
+            raise OperatorError(str(exc)) from exc
+
+        command = str(args.get("command") or "").strip()
+        cwd = args.get("cwd")
+        timeout = int(args.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS)
+        plan = self.plan(command, str(cwd) if cwd else None)
+        if plan.risk is Risk.BLOCKED:
+            raise OperatorError(plan.reason)
+        if plan.risk is Risk.READ:
+            raise OperatorError(
+                "operator.command is for effectful work; use operator.read for reads"
+            )
+        return self._run(plan, timeout)
 
     def _run(self, plan: CommandPlan, timeout_seconds: int) -> ExecutionResult:
         timeout = max(1, min(int(timeout_seconds), MAX_TIMEOUT_SECONDS))

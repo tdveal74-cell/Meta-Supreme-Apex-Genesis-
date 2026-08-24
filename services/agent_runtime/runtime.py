@@ -14,6 +14,12 @@ from services.agent_runtime.contracts import (
     TaskState,
     ToolRisk,
 )
+from services.agent_runtime.governance import (
+    APPROVAL_METADATA_KEY,
+    RUNTIME_REQUESTED_BY,
+    approval_binding,
+    approval_marker,
+)
 from services.agent_runtime.learning import InMemoryLearningStore, LearningStore
 from services.agent_runtime.planner import Planner
 from services.agent_runtime.store import AgentTaskStore, InMemoryAgentTaskStore
@@ -117,17 +123,26 @@ class AgentRuntime:
             self.store.put(task)
             return RuntimeResult(task=task, message=task.failure_reason)
 
+        binding: Optional[str] = None
         if spec.approval_required:
+            binding = approval_binding(
+                task_id=task.task_id,
+                step_id=step.step_id,
+                tool_name=spec.name,
+                arguments=step.tool_call.arguments,
+            )
             approval = self._approval_state(step.approval_request_id)
             if step.approval_request_id is None:
                 self._checkpoint(task, f"before effectful step {step.step_id}")
+                marker = approval_marker(binding)
                 record, token = self.approvals.request(
                     title=f"DEVON Agent: {step.title}",
                     what_happens=(
                         f"Run tool `{spec.name}` with arguments "
-                        f"{step.tool_call.arguments!r} for task `{task.goal}`."
+                        f"{step.tool_call.arguments!r} for task `{task.goal}`. "
+                        f"{marker}"
                     ),
-                    requested_by="DEVON Agent Runtime",
+                    requested_by=RUNTIME_REQUESTED_BY,
                     area=str(task.context.get("area") or "Systems"),
                     reversible=spec.reversible,
                     blast_radius=spec.blast_radius,
@@ -166,7 +181,16 @@ class AgentRuntime:
         task.touch()
         self.store.put(task)
 
-        result = await self.tools.execute(spec.name, step.tool_call.arguments)
+        execution_arguments = dict(step.tool_call.arguments)
+        if spec.approval_required:
+            execution_arguments[APPROVAL_METADATA_KEY] = {
+                "request_id": step.approval_request_id,
+                "binding": binding,
+                "task_id": task.task_id,
+                "step_id": step.step_id,
+                "tool_name": spec.name,
+            }
+        result = await self.tools.execute(spec.name, execution_arguments)
         observation = Observation(
             step_id=step.step_id,
             ok=result.ok,

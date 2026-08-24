@@ -57,6 +57,7 @@ _INCREMENTAL_SCHEMAS = (
     "002_workflow_runs.sql",
     "003_schedule_dispatch.sql",
     "004_federated_knowledge_waist.sql",
+    "005_agent_runtime_persistence.sql",
 )
 
 _DSN = TEST_DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
@@ -65,6 +66,10 @@ _TEST_DB_NAME = _DSN.rsplit("/", 1)[1]
 
 # Tables wiped between tests (order respects FKs; agents stays seeded).
 _DATA_TABLES = (
+    "agent_task_checkpoints",
+    "agent_tasks",
+    "agent_runtime_memories",
+    "agent_runtime_skills",
     "agent_runs",
     "messages",
     "conversations",

@@ -5,6 +5,7 @@ API v1 Router - aggregates all module routers.
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    agent_tasks,
     agents,
     auth,
     conversations,
@@ -36,4 +37,5 @@ api_router.include_router(decisions.router)
 api_router.include_router(workflows.router)
 api_router.include_router(devon.router)
 api_router.include_router(operator.router)
+api_router.include_router(agent_tasks.router)
 api_router.include_router(soul.router)
