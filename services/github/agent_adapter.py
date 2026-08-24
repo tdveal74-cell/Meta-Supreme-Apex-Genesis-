@@ -95,7 +95,8 @@ class GitHubCapabilityAdapter:
                 name="github.merge_pull_request",
                 description=(
                     "Merge one pull request in an allowlisted repository after high-impact "
-                    "DEVON approval. expected_head_sha should be supplied to prevent stale merges."
+                    "DEVON approval. A full expected_head_sha is required so the ruling is "
+                    "pinned to the exact code revision."
                 ),
                 risk=ToolRisk.HIGH_IMPACT,
                 handler=self._merge_pull_request,
@@ -110,7 +111,10 @@ class GitHubCapabilityAdapter:
         )
 
     async def _read_file(self, arguments: Dict[str, Any]) -> ToolResult:
-        repository = self._repo(arguments)
+        try:
+            repository = self._repo(arguments)
+        except GitHubRESTError as exc:
+            return ToolResult(False, error=str(exc))
         path = str(arguments.get("path") or "").strip()
         ref = arguments.get("ref")
         return await self._read_call(
@@ -122,18 +126,21 @@ class GitHubCapabilityAdapter:
         )
 
     async def _pull_request(self, arguments: Dict[str, Any]) -> ToolResult:
-        repository = self._repo(arguments)
         try:
+            repository = self._repo(arguments)
             number = int(arguments.get("number"))
-        except (TypeError, ValueError) as exc:
-            return ToolResult(False, error="pull request number must be an integer")
+        except (GitHubRESTError, TypeError, ValueError) as exc:
+            return ToolResult(False, error=str(exc))
         return await self._read_call(lambda: self.client.pull_request(repository, number))
 
     async def _create_branch(self, arguments: Dict[str, Any]) -> ToolResult:
-        args = self._approved_arguments(arguments)
+        args = self._approved_arguments(arguments, tool_name="github.create_branch")
         if isinstance(args, ToolResult):
             return args
-        repository = self._repo(args)
+        try:
+            repository = self._repo(args)
+        except GitHubRESTError as exc:
+            return ToolResult(False, error=str(exc))
         branch = str(args.get("branch") or "").strip()
         base_ref = str(args.get("base_ref") or "main").strip()
         return await self._write_call(
@@ -141,10 +148,13 @@ class GitHubCapabilityAdapter:
         )
 
     async def _write_file(self, arguments: Dict[str, Any]) -> ToolResult:
-        args = self._approved_arguments(arguments)
+        args = self._approved_arguments(arguments, tool_name="github.write_file")
         if isinstance(args, ToolResult):
             return args
-        repository = self._repo(args)
+        try:
+            repository = self._repo(args)
+        except GitHubRESTError as exc:
+            return ToolResult(False, error=str(exc))
         sha = args.get("sha")
         return await self._write_call(
             lambda: self.client.write_file(
@@ -158,10 +168,13 @@ class GitHubCapabilityAdapter:
         )
 
     async def _create_pull_request(self, arguments: Dict[str, Any]) -> ToolResult:
-        args = self._approved_arguments(arguments)
+        args = self._approved_arguments(arguments, tool_name="github.create_pull_request")
         if isinstance(args, ToolResult):
             return args
-        repository = self._repo(args)
+        try:
+            repository = self._repo(args)
+        except GitHubRESTError as exc:
+            return ToolResult(False, error=str(exc))
         return await self._write_call(
             lambda: self.client.create_pull_request(
                 repository,
@@ -174,29 +187,44 @@ class GitHubCapabilityAdapter:
         )
 
     async def _merge_pull_request(self, arguments: Dict[str, Any]) -> ToolResult:
-        args = self._approved_arguments(arguments)
+        args = self._approved_arguments(arguments, tool_name="github.merge_pull_request")
         if isinstance(args, ToolResult):
             return args
-        repository = self._repo(args)
         try:
+            repository = self._repo(args)
             number = int(args.get("number"))
-        except (TypeError, ValueError):
-            return ToolResult(False, error="pull request number must be an integer")
-        expected = args.get("expected_head_sha")
+        except (GitHubRESTError, TypeError, ValueError) as exc:
+            return ToolResult(False, error=str(exc))
+        expected = str(args.get("expected_head_sha") or "").strip()
+        if not expected:
+            return ToolResult(
+                False,
+                error="expected_head_sha is required for every GitHub pull request merge",
+            )
         return await self._write_call(
             lambda: self.client.merge_pull_request(
                 repository,
                 number,
+                expected_head_sha=expected,
                 merge_method=str(args.get("merge_method") or "merge"),
-                expected_head_sha=str(expected).strip() if expected else None,
             )
         )
 
-    def _approved_arguments(self, arguments: Dict[str, Any]) -> Dict[str, Any] | ToolResult:
+    def _approved_arguments(
+        self,
+        arguments: Dict[str, Any],
+        *,
+        tool_name: str,
+    ) -> Dict[str, Any] | ToolResult:
         args = dict(arguments)
         metadata = args.pop(APPROVAL_METADATA_KEY, None)
         try:
-            require_approved_runtime_binding(self.approvals, metadata)
+            require_approved_runtime_binding(
+                self.approvals,
+                metadata,
+                tool_name=tool_name,
+                arguments=args,
+            )
         except ValueError as exc:
             return ToolResult(False, error=str(exc))
         return args
@@ -245,8 +273,29 @@ class GitHubCapabilityAdapter:
         truncated = len(rendered) > MAX_OUTPUT_CHARS
         if truncated:
             rendered = rendered[:MAX_OUTPUT_CHARS] + "\n[DEVON GitHub output truncated]\n"
+
+        metadata: Dict[str, Any] = {"truncated": truncated}
+        for key in (
+            "repository",
+            "path",
+            "ref",
+            "sha",
+            "size",
+            "html_url",
+            "number",
+            "url",
+            "merged",
+            "message",
+        ):
+            if key in data:
+                metadata[key] = data[key]
+        for key in ("object", "commit", "content"):
+            nested = data.get(key)
+            if isinstance(nested, dict) and nested.get("sha"):
+                metadata[f"{key}_sha"] = nested.get("sha")
+        metadata["response_keys"] = sorted(str(key) for key in data.keys())[:100]
         return ToolResult(
             True,
             output=rendered,
-            metadata={"response": data, "truncated": truncated},
+            metadata=metadata,
         )
