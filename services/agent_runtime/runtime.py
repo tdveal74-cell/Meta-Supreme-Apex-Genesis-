@@ -16,6 +16,7 @@ from services.agent_runtime.contracts import (
 )
 from services.agent_runtime.governance import (
     APPROVAL_METADATA_KEY,
+    RUNTIME_REQUESTED_BY,
     approval_binding,
     approval_marker,
 )
@@ -141,7 +142,7 @@ class AgentRuntime:
                         f"{step.tool_call.arguments!r} for task `{task.goal}`. "
                         f"{marker}"
                     ),
-                    requested_by="DEVON Agent Runtime",
+                    requested_by=RUNTIME_REQUESTED_BY,
                     area=str(task.context.get("area") or "Systems"),
                     reversible=spec.reversible,
                     blast_radius=spec.blast_radius,
@@ -185,6 +186,9 @@ class AgentRuntime:
             execution_arguments[APPROVAL_METADATA_KEY] = {
                 "request_id": step.approval_request_id,
                 "binding": binding,
+                "task_id": task.task_id,
+                "step_id": step.step_id,
+                "tool_name": spec.name,
             }
         result = await self.tools.execute(spec.name, execution_arguments)
         observation = Observation(
