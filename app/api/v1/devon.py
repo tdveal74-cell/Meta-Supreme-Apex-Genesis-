@@ -6,11 +6,12 @@ Airtable or n8n, and nothing runs an effect. Captures return a filing plan and
 effects return an approval request, which keeps the API surface incapable of
 committing something unattended.
 
-The approval queue uses the PostgreSQL shared store by default. That makes a
-pending ruling visible across API workers and recoverable after process restart.
-An explicit DEVON_APPROVAL_STORE=memory setting is available for offline/local
-work only. Backend failures fail closed rather than silently downgrading to a
-process-local queue.
+The approval queue uses the PostgreSQL shared store by default. Pending approval
+records and rulings are visible across API workers and durable across process
+restart. The one-time plaintext approval token is intentionally never persisted
+or recoverable from the queue. An explicit DEVON_APPROVAL_STORE=memory setting
+is available for offline/local work only. Backend failures fail closed rather
+than silently downgrading to a process-local queue.
 """
 
 from typing import Any, Dict, List, Optional
@@ -34,6 +35,17 @@ _queue = build_approval_queue()
 _devon = Devon(approvals=_queue)
 
 
+def _approval_storage_status() -> Dict[str, Any]:
+    shared = _queue.storage_backend == "postgres"
+    return {
+        "backend": _queue.storage_backend,
+        "shared": shared,
+        "state_durable": shared,
+        "plaintext_tokens_persisted": False,
+        "token_recoverable": False,
+    }
+
+
 @router.get("")
 async def devon_identity() -> Dict[str, Any]:
     """Who DEVON is and what this surface will not do."""
@@ -47,11 +59,7 @@ async def devon_identity() -> Dict[str, Any]:
         "hard_rules": [r.rule for r in persona.HARD_RULES],
         "intents": len(ALL_INTENTS),
         "approval_gated_intents": [i.name for i in approval_gated_intents()],
-        "approval_storage": {
-            "backend": _queue.storage_backend,
-            "shared": _queue.storage_backend == "postgres",
-            "restart_safe": _queue.storage_backend == "postgres",
-        },
+        "approval_storage": _approval_storage_status(),
         "guarantees": [
             "No route writes to Drive, Notion, Airtable or n8n.",
             "Captures return a filing plan. The caller executes it.",
@@ -112,14 +120,10 @@ async def list_approvals() -> Dict[str, Any]:
             }
             for r in _queue.pending()
         ],
-        "storage": {
-            "backend": _queue.storage_backend,
-            "shared": _queue.storage_backend == "postgres",
-            "restart_safe": _queue.storage_backend == "postgres",
-            "plaintext_tokens_persisted": False,
-        },
+        "storage": _approval_storage_status(),
         "note": (
-            "PostgreSQL-backed shared approval authority. Rulings remain human-only."
+            "PostgreSQL-backed shared approval state. The one-time plaintext token "
+            "is not stored or recoverable. Rulings remain human-only."
             if _queue.storage_backend == "postgres"
             else "Process-local approval queue configured explicitly for offline/local work."
         ),
