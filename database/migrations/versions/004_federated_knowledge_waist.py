@@ -11,6 +11,11 @@ acl_tokens on embeddings; HNSW + GIN + ACL indexes.
 Empty acl_tokens defaults preserve ownership-only behaviour.
 HNSW is created CONCURRENTLY outside the migration transaction.
 Existing pure-semantic search_knowledge path is not altered by this revision.
+
+`embeddings.updated_at` belongs to the baseline schema. Some historical databases
+may predate that baseline field, so upgrade ensures the column exists without
+claiming ownership of it. Downgrade therefore never removes the baseline-owned
+column.
 """
 
 from __future__ import annotations
@@ -75,14 +80,12 @@ def upgrade() -> None:
         "embeddings",
         sa.Column("fts", postgresql.TSVECTOR(), nullable=True),
     )
-    op.add_column(
-        "embeddings",
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("NOW()"),
-            nullable=False,
-        ),
+    # Baseline 001 already owns this column on fresh databases. Historical
+    # databases that predate it are repaired in place without making revision
+    # 004 the owner of the field.
+    op.execute(
+        "ALTER TABLE embeddings ADD COLUMN IF NOT EXISTS updated_at "
+        "TIMESTAMPTZ NOT NULL DEFAULT NOW()"
     )
 
     op.execute(
@@ -154,7 +157,6 @@ def downgrade() -> None:
     op.drop_index("idx_embeddings_project", table_name="embeddings")
     op.drop_index("idx_embeddings_owner_acl", table_name="embeddings")
 
-    op.drop_column("embeddings", "updated_at")
     op.drop_column("embeddings", "fts")
     op.drop_column("embeddings", "acl_tokens")
     op.drop_column("embeddings", "project_id")
