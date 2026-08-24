@@ -147,3 +147,76 @@ class AgentRuntimeSkill(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class AgentEffectIntentRecord(Base):
+    """Durable record of an external effect that is about to be attempted.
+
+    Written before the capability adapter is called. Bound to the task, step,
+    tool, arguments hash, and the caller's Idempotency-Key so a later receipt
+    can be matched exactly and a stale worker cannot claim a different intent.
+    """
+
+    __tablename__ = "agent_effect_intents"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_id",
+            "task_id",
+            "intent_id",
+            name="uq_agent_effect_intents_owner_task_intent",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    intent_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    task_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("agent_tasks.id", ondelete="CASCADE"), nullable=False
+    )
+    owner_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    step_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    tool_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    arguments_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    execution_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    lease_token: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class AgentEffectReceiptRecord(Base):
+    """Durable record written after the external system has acknowledged the
+    effect (or after the adapter has recorded that no provider-level
+    idempotency was available).
+
+    Bound to the intent and to the same lease generation so a stale worker
+    cannot write a receipt for a lease it no longer owns.
+    """
+
+    __tablename__ = "agent_effect_receipts"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_id",
+            "intent_id",
+            name="uq_agent_effect_receipts_owner_intent",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    intent_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    task_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("agent_tasks.id", ondelete="CASCADE"), nullable=False
+    )
+    owner_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    provider_receipt_id: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    raw_response: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    execution_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    lease_token: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
