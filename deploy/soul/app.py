@@ -13,8 +13,9 @@ Load-bearing boundaries:
 - Browser access uses the existing DEVON console gate and SameSite cookie.
 - The Sandbox base directory and the Meta Git worktree are discovered and
   verified independently. A Sandbox cwd is never assumed to be a Git repo.
-- Clean detached GitSource worktrees are attached to local ``main``. Dirty
-  detached worktrees are preserved instead of being reset or switched.
+- Clean detached GitSource worktrees are attached to local ``main`` only after
+  an explicit ``origin/main`` tracking ref is fetched. Dirty detached worktrees
+  are preserved instead of being reset or switched.
 """
 
 from __future__ import annotations
@@ -251,7 +252,7 @@ async def _git_branch(sandbox: Any, repo_root: str) -> str | None:
 
 
 async def _ensure_main_branch(sandbox: Any, repo_root: str) -> tuple[str, bool]:
-    """Attach a clean detached worktree to main without discarding user edits."""
+    """Attach a clean detached worktree to tracked main without losing state."""
     current = await _git_branch(sandbox, repo_root)
     if current:
         return current, False
@@ -266,49 +267,155 @@ async def _ensure_main_branch(sandbox: Any, repo_root: str) -> tuple[str, bool]:
     if str(dirty.stdout or "").strip():
         return "detached", False
 
+    # Preserve the detached commit before moving the worktree. This protects
+    # commits that GitSource may have materialized outside any local branch.
+    head = await sandbox.run_process(
+        "git",
+        ["-C", repo_root, "rev-parse", "HEAD"],
+        capture_output=True,
+    )
+    if int(head.returncode) != 0:
+        raise RuntimeError("could not resolve detached Meta HEAD")
+    head_lines = str(head.stdout or "").strip().splitlines()
+    if not head_lines:
+        raise RuntimeError("detached Meta HEAD was empty")
+    head_sha = head_lines[-1].strip()
+    recovery_branch = f"devon/recovery-{head_sha[:12]}"
+    recovery_ref = f"refs/heads/{recovery_branch}"
+    recovery_exists = await sandbox.run_process(
+        "git",
+        ["-C", repo_root, "show-ref", "--verify", "--quiet", recovery_ref],
+        capture_output=True,
+    )
+    if int(recovery_exists.returncode) != 0:
+        preserved = await sandbox.run_process(
+            "git",
+            ["-C", repo_root, "branch", recovery_branch, head_sha],
+            capture_output=True,
+        )
+        if int(preserved.returncode) != 0:
+            detail = str(
+                preserved.stderr or preserved.stdout or "git branch failed"
+            ).strip()
+            raise RuntimeError(
+                f"could not preserve detached Meta HEAD: {detail[-2_000:]}"
+            )
+
+    # Vercel GitSource can deliver a shallow checkout where the object at
+    # refs/remotes/origin/main exists but Git has no fetch/tracking metadata for
+    # origin/main. Install the exact refspec and fetch it unconditionally.
+    fetch_refspec = "+refs/heads/main:refs/remotes/origin/main"
+    configured = await sandbox.run_process(
+        "git",
+        ["-C", repo_root, "config", "remote.origin.fetch", fetch_refspec],
+        capture_output=True,
+    )
+    if int(configured.returncode) != 0:
+        detail = str(
+            configured.stderr or configured.stdout or "git config failed"
+        ).strip()
+        raise RuntimeError(
+            f"could not configure origin/main tracking: {detail[-2_000:]}"
+        )
+
+    fetched = await sandbox.run_process(
+        "git",
+        [
+            "-C",
+            repo_root,
+            "fetch",
+            "--depth",
+            "1",
+            "origin",
+            fetch_refspec,
+        ],
+        capture_output=True,
+    )
+    if int(fetched.returncode) != 0:
+        detail = str(fetched.stderr or fetched.stdout or "git fetch failed").strip()
+        raise RuntimeError(f"could not resolve origin/main: {detail[-2_000:]}")
+
     remote_main = await sandbox.run_process(
         "git",
         ["-C", repo_root, "rev-parse", "--verify", "refs/remotes/origin/main"],
         capture_output=True,
     )
     if int(remote_main.returncode) != 0:
-        fetched = await sandbox.run_process(
-            "git",
-            [
-                "-C",
-                repo_root,
-                "fetch",
-                "--depth",
-                "1",
-                "origin",
-                "main:refs/remotes/origin/main",
-            ],
-            capture_output=True,
-        )
-        if int(fetched.returncode) != 0:
-            detail = str(fetched.stderr or fetched.stdout or "git fetch failed").strip()
-            raise RuntimeError(f"could not resolve origin/main: {detail[-2_000:]}")
+        raise RuntimeError("origin/main fetch completed without a remote-tracking ref")
 
     local_main = await sandbox.run_process(
         "git",
         ["-C", repo_root, "show-ref", "--verify", "--quiet", "refs/heads/main"],
         capture_output=True,
     )
-    switch_args = ["-C", repo_root, "switch", "main"]
-    if int(local_main.returncode) != 0:
-        switch_args = [
-            "-C",
-            repo_root,
-            "switch",
-            "-c",
-            "main",
-            "--track",
-            "origin/main",
-        ]
-    switched = await sandbox.run_process("git", switch_args, capture_output=True)
+    if int(local_main.returncode) == 0:
+        # Never overwrite a divergent local branch. A clean worktree does not
+        # imply that a pre-existing local main has no unique commits.
+        can_ff = await sandbox.run_process(
+            "git",
+            [
+                "-C",
+                repo_root,
+                "merge-base",
+                "--is-ancestor",
+                "refs/heads/main",
+                "refs/remotes/origin/main",
+            ],
+            capture_output=True,
+        )
+        if int(can_ff.returncode) != 0:
+            return "detached", False
+        switched = await sandbox.run_process(
+            "git",
+            ["-C", repo_root, "switch", "main"],
+            capture_output=True,
+        )
+        if int(switched.returncode) == 0:
+            switched = await sandbox.run_process(
+                "git",
+                ["-C", repo_root, "merge", "--ff-only", "refs/remotes/origin/main"],
+                capture_output=True,
+            )
+    else:
+        # Use the fully qualified ref. Do not rely on `--track origin/main`,
+        # which is the exact operation that failed in authenticated production.
+        switched = await sandbox.run_process(
+            "git",
+            [
+                "-C",
+                repo_root,
+                "switch",
+                "-c",
+                "main",
+                "refs/remotes/origin/main",
+            ],
+            capture_output=True,
+        )
+
     if int(switched.returncode) != 0:
         detail = str(switched.stderr or switched.stdout or "git switch failed").strip()
-        raise RuntimeError(f"could not attach detached worktree to main: {detail[-2_000:]}")
+        raise RuntimeError(
+            f"could not attach detached worktree to main: {detail[-2_000:]}"
+        )
+
+    # Configure the upstream explicitly after branch creation so it does not
+    # depend on whatever metadata GitSource happened to provide.
+    for key, value in (
+        ("branch.main.remote", "origin"),
+        ("branch.main.merge", "refs/heads/main"),
+    ):
+        tracked = await sandbox.run_process(
+            "git",
+            ["-C", repo_root, "config", key, value],
+            capture_output=True,
+        )
+        if int(tracked.returncode) != 0:
+            detail = str(
+                tracked.stderr or tracked.stdout or "git config failed"
+            ).strip()
+            raise RuntimeError(
+                f"could not configure main upstream: {detail[-2_000:]}"
+            )
 
     verified = await _git_branch(sandbox, repo_root)
     if verified != "main":
@@ -490,7 +597,7 @@ async def operator_terminal_command(
         script = (
             f"{command}\n"
             "rc=$?\n"
-            f"printf '\\n{CWD_MARKER}%s\\n' \"$PWD\"\n"
+            f"printf '\n{CWD_MARKER}%s\n' \"$PWD\"\n"
             "exit $rc\n"
         )
         result = await sandbox.run_process(
