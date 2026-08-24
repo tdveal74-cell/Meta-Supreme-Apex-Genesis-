@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any, Dict
 
 from services.agent_runtime.governance import APPROVAL_METADATA_KEY
@@ -115,9 +116,21 @@ class OperatorCapabilityAdapter:
         returncode = int(data.get("returncode") or 0)
         stdout = str(data.get("stdout") or "")
         stderr = str(data.get("stderr") or "")
+        metadata = dict(data)
+
+        # Local shell has no external provider object id. Synthesize a stable
+        # receipt id from returncode + command fingerprint so durable effect
+        # receipts are still inspectable after the fact.
+        command = str(data.get("command") or data.get("argv") or "")
+        fingerprint = hashlib.sha256(
+            f"{returncode}:{command}:{stdout[:200]}:{stderr[:200]}".encode("utf-8")
+        ).hexdigest()[:24]
+        metadata["provider_receipt_id"] = f"op-{returncode}-{fingerprint}"
+        metadata["provider_idempotency"] = "local-synthetic"
+
         return ToolResult(
             ok=returncode == 0,
             output=stdout,
             error=stderr if returncode else "",
-            metadata=dict(data),
+            metadata=metadata,
         )
