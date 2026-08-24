@@ -18,6 +18,12 @@ import, which is the expensive way to find out.
 """
 
 from app.models.agent import Agent, AgentRun
+from app.models.agent_runtime import (
+    AgentRuntimeMemory,
+    AgentRuntimeSkill,
+    AgentTaskCheckpointRecord,
+    AgentTaskRecord,
+)
 from app.models.conversation import Conversation, Message
 from app.models.decision import Decision
 from app.models.knowledge import Embedding, KnowledgeItem
@@ -30,6 +36,10 @@ from app.models.workflow import Workflow, WorkflowRun
 __all__ = [
     "Agent",
     "AgentRun",
+    "AgentRuntimeMemory",
+    "AgentRuntimeSkill",
+    "AgentTaskCheckpointRecord",
+    "AgentTaskRecord",
     "Conversation",
     "Decision",
     "Embedding",
