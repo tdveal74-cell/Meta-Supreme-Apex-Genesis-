@@ -156,26 +156,29 @@ async def test_pending_listing_durably_sweeps_overdue_rows(_clean_tables):
 
 
 @pytest.mark.asyncio
-async def test_devon_api_reports_shared_restart_safe_backend(client):
+async def test_devon_api_reports_shared_durable_state_without_token_recovery(client):
     response = await client.get("/api/v1/devon/approvals")
     assert response.status_code == 200, response.text
     storage = response.json()["storage"]
     assert storage == {
         "backend": "postgres",
         "shared": True,
-        "restart_safe": True,
+        "state_durable": True,
         "plaintext_tokens_persisted": False,
+        "token_recoverable": False,
     }
 
 
 @pytest.mark.asyncio
-async def test_devon_identity_reports_shared_approval_backend(client):
+async def test_devon_identity_reports_shared_durable_approval_state(client):
     response = await client.get("/api/v1/devon")
     assert response.status_code == 200, response.text
     assert response.json()["approval_storage"] == {
         "backend": "postgres",
         "shared": True,
-        "restart_safe": True,
+        "state_durable": True,
+        "plaintext_tokens_persisted": False,
+        "token_recoverable": False,
     }
 
 
