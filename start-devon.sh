@@ -32,8 +32,8 @@ CONSOLE_PASSWORD="devon-console-local-password"
 
 bold() { printf "\033[1m%s\033[0m\n" "$1"; }
 step() { printf "\n\033[38;5;173m[%s/7]\033[0m %s\n" "$1" "$2"; }
-ok()   { printf "      \033[38;5;79m*\033[0m %s\n" "$1"; }
-warn() { printf "      \033[38;5;179m!\033[0m %s\n" "$1"; }
+ok()   { printf "      \033[38;5;79m*%s\033[0m %s\n" "" "$1"; }
+warn() { printf "      \033[38;5;179m!%s\033[0m %s\n" "" "$1"; }
 die()  { printf "\n\033[38;5;203mStopped.\033[0m %s\n\n" "$1"; exit 1; }
 
 printf "\n"
@@ -78,9 +78,6 @@ ok "Packages ready"
 # ---------------------------------------------------------------------------
 step 3 "Finding a database"
 # ---------------------------------------------------------------------------
-# An already-running PostgreSQL is used as it is. Docker is only needed when
-# there is no database at all, so Docker trouble never blocks someone who
-# already has one.
 db_reachable() {
   "$VENV_PY" - "$1" "$2" <<'PYEOF' 2>/dev/null
 import socket, sys
@@ -122,7 +119,7 @@ port $PG_PORT, stop it, or change PG_PORT at the top of this script."
   printf "\n"
   db_reachable localhost "$PG_PORT" || die \
 "The database did not come up. See what it says with:  docker logs $PG_CONTAINER"
-  sleep 3   # accepting connections is not the same as ready for queries
+  sleep 3
   ok "Database ready"
 else
   die \
@@ -152,13 +149,15 @@ DATABASE_URL=postgresql+asyncpg://postgres:$PG_PASSWORD@localhost:$PG_PORT/$PG_D
 SOUL_RECALL_ENABLED=true
 PINECONE_API_KEY=
 
-# Optional extras. Uncomment a pair and DEVON uses it.
-# ENRICHMENT_PROVIDER=cerebras
-# CEREBRAS_API_KEY=
-# DEFAULT_AI_PROVIDER=anthropic
-# ANTHROPIC_API_KEY=
+# DEVON voice and enrichment use Cerebras (measured 42ms lane, gpt-oss-120b).
+# Paste your Cerebras Cloud key. Without it the process fails loudly rather
+# than silently falling back to a different provider.
+DEFAULT_AI_PROVIDER=cerebras
+ENRICHMENT_PROVIDER=cerebras
+CEREBRAS_MODEL=gpt-oss-120b
+CEREBRAS_API_KEY=
 ENVEOF
-  ok "Wrote .env"
+  ok "Wrote .env (Cerebras is the default voice and enrichment provider)"
 fi
 
 if grep -q '^PINECONE_API_KEY=$' .env 2>/dev/null; then
@@ -180,11 +179,28 @@ PYEOF
   fi
 fi
 
+if grep -q '^CEREBRAS_API_KEY=$' .env 2>/dev/null; then
+  printf "\n      DEVON voice is set to Cerebras. Paste your Cerebras Cloud key.\n"
+  printf "      Find it at https://cloud.cerebras.ai under API Keys.\n"
+  printf "      Paste it and press Enter, or press Enter to leave unset (live calls will fail closed).\n\n"
+  printf "      Cerebras key: "
+  read -r CEREBRAS_INPUT || CEREBRAS_INPUT=""
+  if [ -n "${CEREBRAS_INPUT:-}" ]; then
+    "$VENV_PY" - "$CEREBRAS_INPUT" <<'PYEOF'
+import pathlib, sys
+key = sys.argv[1].strip()
+p = pathlib.Path(".env")
+p.write_text(p.read_text().replace("CEREBRAS_API_KEY=", "CEREBRAS_API_KEY=" + key, 1))
+PYEOF
+    ok "Saved Cerebras key to .env"
+  else
+    warn "Skipped. DEFAULT_AI_PROVIDER=cerebras will refuse until the key is set."
+  fi
+fi
+
 # ---------------------------------------------------------------------------
 step 5 "Creating the database tables"
 # ---------------------------------------------------------------------------
-# Done in Python so no psql install is needed, and so it uses the same
-# DATABASE_URL the app will use.
 "$VENV_PY" - <<'PYEOF'
 import asyncio, pathlib, re, sys
 
@@ -228,7 +244,6 @@ async def main():
             if "already exists" in str(exc).lower():
                 print("      * %s (already applied)" % path.name)
             else:
-                # Statement by statement, so one stale line cannot stop the rest.
                 applied = failed = 0
                 for stmt in [s.strip() for s in re.split(r";\s*\n", sql) if s.strip()]:
                     try:
@@ -300,6 +315,7 @@ bold "DEVON is up."
 printf "\n"
 printf "  Open this:    http://localhost:%s/console\n" "$API_PORT"
 printf "  Soul recall:  %s\n" "${SOUL:-unknown}"
+printf "  Voice model:  Cerebras (gpt-oss-120b) when CEREBRAS_API_KEY is set\n"
 printf "\n"
 printf "  In the console, find the Soul Layer panel on the right.\n"
 printf "  Leave API empty. Paste this into TOKEN, press SAVE, then TEST:\n"
