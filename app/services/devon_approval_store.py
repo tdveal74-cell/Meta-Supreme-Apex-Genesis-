@@ -10,6 +10,7 @@ only the SHA-256 token hash contained in ``ApprovalRequest``.
 
 from __future__ import annotations
 
+import os
 from typing import Any, Optional
 
 import psycopg
@@ -35,6 +36,14 @@ def _normalize_dsn(value: str) -> str:
     if dsn.startswith("postgres://"):
         return "postgresql://" + dsn.removeprefix("postgres://")
     return dsn
+
+
+def _connect_timeout() -> float:
+    raw = os.getenv("DEVON_APPROVAL_CONNECT_TIMEOUT_SECONDS", "5").strip()
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise ValueError("DEVON_APPROVAL_CONNECT_TIMEOUT_SECONDS must be numeric") from exc
 
 
 _COLUMNS = """
@@ -81,7 +90,7 @@ class PostgresApprovalStore:
         try:
             with self._connect() as conn:
                 conn.execute(sql, self._params(request))
-        except psycopg.Error as exc:
+        except psycopg.Error:
             raise ApprovalStoreUnavailable(
                 "DEVON approval database is unavailable; request was not queued"
             ) from None
@@ -91,7 +100,7 @@ class PostgresApprovalStore:
         try:
             with self._connect() as conn:
                 row = conn.execute(sql, (request_id,)).fetchone()
-        except psycopg.Error as exc:
+        except psycopg.Error:
             raise ApprovalStoreUnavailable(
                 "DEVON approval database is unavailable; approval state is unknown"
             ) from None
@@ -115,7 +124,7 @@ class PostgresApprovalStore:
             with self._connect() as conn:
                 cursor = conn.execute(sql, self._params(request))
                 return cursor.rowcount == 1
-        except psycopg.Error as exc:
+        except psycopg.Error:
             raise ApprovalStoreUnavailable(
                 "DEVON approval database is unavailable; ruling was not recorded"
             ) from None
@@ -141,7 +150,7 @@ class PostgresApprovalStore:
             with self._connect() as conn:
                 conn.execute(expire_sql)
                 rows = conn.execute(select_sql).fetchall()
-        except psycopg.Error as exc:
+        except psycopg.Error:
             raise ApprovalStoreUnavailable(
                 "DEVON approval database is unavailable; pending state is unknown"
             ) from None
@@ -197,16 +206,16 @@ def build_approval_queue(
     dsn: Optional[str] = None,
 ) -> ApprovalQueue:
     """Construct the configured queue without silently weakening its backend."""
-    selected = (mode or settings.DEVON_APPROVAL_STORE).strip().lower()
+    selected = (mode or os.getenv("DEVON_APPROVAL_STORE", "postgres")).strip().lower()
     if selected == "memory":
         return ApprovalQueue(InMemoryApprovalStore())
     if selected != "postgres":
         raise ValueError("DEVON_APPROVAL_STORE must be 'postgres' or 'memory'")
 
-    database_url = dsn or settings.DEVON_APPROVAL_DATABASE_URL or settings.DATABASE_URL
+    database_url = dsn or os.getenv("DEVON_APPROVAL_DATABASE_URL") or settings.DATABASE_URL
     return ApprovalQueue(
         PostgresApprovalStore(
             database_url,
-            connect_timeout_seconds=settings.DEVON_APPROVAL_CONNECT_TIMEOUT_SECONDS,
+            connect_timeout_seconds=_connect_timeout(),
         )
     )
