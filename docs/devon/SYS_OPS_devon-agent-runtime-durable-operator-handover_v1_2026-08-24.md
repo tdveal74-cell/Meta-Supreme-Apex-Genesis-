@@ -10,15 +10,14 @@ branch: feat/devon-agent-runtime-durable-operator
 pull_request: 25
 base_merge: 374a983844a9c399fc6fbc7b71a90f9cedf397a7
 predecessor_pull_request: 24
-purpose: Record the PostgreSQL durability layer, Agent Tasks API, generic capability adapter contract, approval-bound Operator adapter, verification evidence, operational limits, and next build sequence.
+purpose: Record PostgreSQL Agent Runtime durability, authenticated Agent Tasks, transparent learning state, the generic capability-adapter boundary, the governed Operator adapter, the approval-binding security correction, verification evidence, operational limits, and the next build sequence.
 ---
 
 # DEVON Durable Agent Tasks and Operator Adapter Handover v1
 
-## 1. Starting state and ruling
+## 1. Starting state
 
-PR #24, `feat(devon): add governed Agent Runtime v1`, was explicitly authorized
-by Tee and merged into `main` on 2026-08-24.
+PR #24, `feat(devon): add governed Agent Runtime v1`, was explicitly authorized by Tee and merged into `main` on 2026-08-24.
 
 Merge commit:
 
@@ -26,25 +25,22 @@ Merge commit:
 374a983844a9c399fc6fbc7b71a90f9cedf397a7
 ```
 
-This PR starts from that merge commit and implements the first two items in the
-v1 handover's recommended next-build sequence:
+PR #25 starts from that merge and implements the first production-facing runtime layers:
 
-1. PostgreSQL durable task, checkpoint, memory, and skill storage.
-2. A generic capability-adapter boundary with the existing Operator Bridge as
-   the first real execution toolset.
+1. PostgreSQL durable task and checkpoint state.
+2. PostgreSQL durable, inspectable memory and versioned skill state.
+3. An authenticated Agent Tasks API.
+4. A generic capability-adapter contract.
+5. The existing Operator Bridge as the first governed real execution adapter.
 
-It also adds the authenticated Agent Tasks API required to operate those layers.
+DEVON doctrine remains unchanged:
 
-The DEVON doctrine remains unchanged:
-
-- `services/devon` owns identity, doctrine, judgement, validation, and approval
-  authority.
-- `services/devon` does not own subprocess or network effects.
+- `services/devon` owns doctrine, judgement, validation, and approval authority.
+- `services/devon` does not execute subprocesses or network effects.
 - Human rulings belong to Tee.
 - The Agent Runtime owns resumable task state.
 - Capability adapters own effects.
-- An approval is permission for the exact described effect, not general
-  permission to act.
+- An approval authorizes one exact described effect, not a general permission to act.
 
 ## 2. Architecture
 
@@ -59,39 +55,49 @@ Authenticated Agent Tasks API
 Application coordinator
  app/services/agent_tasks.py
  |
- +--------------------------+
- |                          |
- v                          v
-PostgreSQL durability       DEVON Agent Runtime
- tasks/checkpoints          plan / act / observe
- memories/skills            approval-aware loop
- |                          |
- +------------+-------------+
-              |
-              v
-       DEVON ApprovalQueue
-              |
-              v
-       Capability adapters
-              |
-              v
+ +----------------------------+
+ |                            |
+ v                            v
+PostgreSQL durability         DEVON Agent Runtime
+ tasks/checkpoints            plan / act / observe
+ memories/skills              approval-aware loop
+ |                            |
+ +-------------+--------------+
+               |
+               v
+        DEVON ApprovalQueue
+               |
+               v
+       capability registry
+               |
+               v
+       Operator adapter
+               |
+               v
        Operator Bridge
-              |
-              v
+               |
+               v
        local process host
 ```
 
-Dependency direction remains one way. `services/devon` does not import the
-Agent Runtime, SQLAlchemy models, or Operator capability code.
+Dependency direction is one way. `services/devon` does not import Agent Runtime, SQLAlchemy, API, or Operator capability code.
 
-## 3. Sources opened before implementation
+## 3. Canonical sources opened
 
-Canonical Meta repository sources read during this build included:
+Sources opened during implementation and subsequent security audit included:
 
 ```text
 docs/devon/SYS_OPS_devon-agent-runtime-handover_v1_2026-08-24.md
 services/devon/approval.py
 services/operator/bridge.py
+services/operator/agent_adapter.py
+services/agent_runtime/contracts.py
+services/agent_runtime/store.py
+services/agent_runtime/learning.py
+services/agent_runtime/planner.py
+services/agent_runtime/runtime.py
+services/agent_runtime/tools.py
+services/agent_runtime/governance.py
 app/api/v1/devon.py
 app/api/v1/operator.py
 app/api/v1/router.py
@@ -100,20 +106,13 @@ app/models/__init__.py
 app/models/workflow.py
 app/models/memory.py
 app/models/project.py
+app/services/agent_tasks.py
 conftest.py
 .github/workflows/ci.yml
-services/agent_runtime/contracts.py
-services/agent_runtime/store.py
-services/agent_runtime/learning.py
-services/agent_runtime/planner.py
-services/agent_runtime/runtime.py
-services/agent_runtime/tools.py
 services/intelligence/providers/mock_provider.py
 ```
 
-These reads established the current schema pattern, ownership rules, test
-migration mechanism, shared DEVON approval queue, shared Operator Bridge, and
-framework-free runtime contracts before new code was written.
+These reads established the current schema pattern, user ownership boundary, test migration mechanism, shared DEVON approval queue, shared Operator Bridge, and framework-free runtime contracts.
 
 ## 4. Persistence layer
 
@@ -125,7 +124,7 @@ Added:
 database/schemas/005_agent_runtime_persistence.sql
 ```
 
-It creates four owner-scoped tables:
+Tables:
 
 ```text
 agent_tasks
@@ -134,18 +133,17 @@ agent_runtime_memories
 agent_runtime_skills
 ```
 
-Key properties:
+Properties:
 
-- task IDs use the existing `TASK-*` runtime identity;
-- task payloads are stored as canonical JSONB snapshots;
-- checkpoints are stored independently as an audit-friendly history;
-- task and checkpoint rows are scoped to the authenticated owner;
-- project association is optional and uses `ON DELETE SET NULL`;
-- memories are inspectable and deletable records;
+- canonical `TASK-*` IDs are preserved;
+- task snapshots are JSONB;
+- checkpoints are independently persisted for auditability;
+- task, checkpoint, memory, and skill rows are owner-scoped;
+- optional project association uses `ON DELETE SET NULL`;
+- memories are inspectable and deletable;
 - skills are unique by owner and normalized name;
-- skill updates increment the version rather than silently replacing history
-  semantics;
-- indexes support owner/state and owner/update-time retrieval.
+- skill changes increment the stored version;
+- indexes support owner/state and update-time retrieval.
 
 ### 4.2 SQLAlchemy models
 
@@ -170,31 +168,30 @@ Modified:
 app/models/__init__.py
 ```
 
-The new models are registered in the model package so mapper configuration and
-test discovery do not depend on incidental imports.
+The new models are explicitly registered so mapper configuration does not depend on incidental imports.
 
-### 4.3 Test database application
+### 4.3 Persistence repositories
+
+Added:
+
+```text
+app/services/agent_runtime_persistence.py
+```
+
+`AgentTaskRepository` supplies owner-scoped async save/get/list/delete. Task snapshots use PostgreSQL upsert. Checkpoints append by stable checkpoint ID.
+
+`AgentLearningRepository` supplies owner-scoped memory and skill operations. Recall is deterministic lexical overlap in this layer. It is transparent retrieval, not hidden training.
+
+### 4.4 Test schema path
 
 Modified:
 
 ```text
 conftest.py
-```
-
-`005_agent_runtime_persistence.sql` is now applied after schemas 001 through
-004. Agent Runtime tables are included in test cleanup before owner/project
-rows are truncated.
-
-Modified:
-
-```text
 .github/workflows/ci.yml
 ```
 
-The explicit schema-presence gate now requires migration 005 as well as 001
-through 004. This closes a gap found by reading the first successful PR #25 CI
-log, where conftest used schema 005 but the explicit gate still named only the
-older four migrations.
+The test database applies migration 005 after migrations 001 through 004. Agent Runtime tables are included in cleanup. The explicit CI schema-presence gate names migration 005 so a missing migration fails loudly.
 
 ## 5. Canonical task round trip
 
@@ -204,44 +201,28 @@ Added:
 services/agent_runtime/serialization.py
 ```
 
-`task_from_dict()` reconstructs the framework-free runtime contract from the
-canonical `AgentTask.to_dict()` representation, including:
+`task_from_dict()` reconstructs the framework-free `AgentTask` contract from `AgentTask.to_dict()` including:
 
 - plan and steps;
-- tool calls and arguments;
+- tool arguments;
 - step state;
 - approval request IDs;
 - observations;
 - checkpoints;
-- completion/failure state;
+- terminal task state;
 - timestamps.
 
-This keeps the database adapter from becoming a second task model with different
-semantics.
+This prevents the database layer from becoming a second incompatible task model.
 
-Added:
+## 6. Approval binding, corrected design
 
-```text
-app/services/agent_runtime_persistence.py
-```
-
-`AgentTaskRepository` provides owner-scoped asynchronous save, get, list, and
-delete operations. Task snapshots use PostgreSQL upsert. Checkpoints append by
-stable checkpoint ID.
-
-`AgentLearningRepository` provides owner-scoped asynchronous memory and skill
-operations. Recall remains deterministic lexical overlap in this version.
-This is transparent retrieval, not hidden model retraining.
-
-## 6. Approval binding
-
-Added:
+Added and subsequently hardened:
 
 ```text
 services/agent_runtime/governance.py
 ```
 
-For every approval-required step, the runtime creates a SHA-256 binding over:
+For each approval-required step, the runtime computes a SHA-256 binding over canonical sorted JSON containing:
 
 ```text
 task_id
@@ -250,31 +231,46 @@ tool_name
 exact tool arguments
 ```
 
-The canonical JSON is sorted before hashing. The approval consequence includes
-a machine-readable marker:
+The human-readable approval consequence contains:
 
 ```text
 DEVON-RUNTIME-BINDING:<sha256>
 ```
 
-Modified:
+The runtime passes capability metadata only after the authoritative approval state is `approved`:
 
 ```text
-services/agent_runtime/runtime.py
+request_id
+binding
+task_id
+step_id
+tool_name
 ```
 
-The runtime now:
+### 6.1 Security audit correction
 
-1. computes the binding before raising an effect approval;
-2. records the binding marker in `what_happens`;
-3. rechecks the authoritative DEVON approval state on resume;
-4. passes the request ID and binding to the capability adapter only after the
-   request is approved.
+During the subsequent GitHub adapter layer, static review found a trust gap in the first PR #25 implementation.
 
-This prevents a broad approval token from becoming permission to substitute a
-different command after the human ruling.
+The first implementation generated a correct binding and stored its marker on the approval record, but the Operator capability boundary accepted a binding string supplied by the runtime and only checked whether that marker appeared on the approved record. The bridge did not independently recompute the hash from the arguments it was about to execute.
 
-## 7. Generic capability adapter boundary
+That was not strong enough to support the claim that the process boundary itself verified the exact effect.
+
+The correction was backported into PR #25 before merge.
+
+`require_approved_runtime_binding()` now runs at the capability boundary and:
+
+1. requires `request_id`, `binding`, `task_id`, `step_id`, and `tool_name` metadata;
+2. compares the metadata tool name to the adapter's known tool name with `hmac.compare_digest`;
+3. independently recomputes SHA-256 from the actual arguments the adapter is about to use;
+4. compares supplied and recomputed bindings with `hmac.compare_digest`;
+5. requires the authoritative DEVON approval request to still exist;
+6. requires approval state `approved`;
+7. requires `requested_by == "DEVON Agent Runtime"`;
+8. requires the approval consequence to contain the marker for the independently recomputed binding.
+
+The adapter therefore does not treat runtime metadata as proof by itself.
+
+## 7. Generic capability adapter contract
 
 Added:
 
@@ -282,14 +278,11 @@ Added:
 services/agent_runtime/adapters.py
 ```
 
-It defines the `CapabilityAdapter` protocol and a registration helper. An
-adapter names itself and registers governed `ToolSpec` instances into the
-runtime registry.
+It defines the adapter registration boundary around governed `ToolSpec` instances. The Agent Runtime sees declared risk before execution.
 
-This is the expansion point for later GitHub, browser, n8n, Drive, EditForge,
-GPU, Vercel Sandbox, scheduler, and MCP capability packages.
+This is the expansion point for GitHub, durable approval storage, browser automation, n8n, Drive, EditForge, GPU, deployment, scheduler, and MCP adapters.
 
-## 8. Operator capability adapter
+## 8. Operator adapter
 
 Added:
 
@@ -297,49 +290,44 @@ Added:
 services/operator/agent_adapter.py
 ```
 
-It exposes two tools:
-
 ### `operator.read`
 
 Risk: `read`
 
-Behavior:
-
-- requires the existing Operator Bridge to be configured;
-- asks the bridge to classify the command;
-- executes only when the bridge classifies the exact command as read-only;
-- refuses mutating or blocked commands;
-- uses argv execution with no shell expansion, matching the existing bridge.
+- Requires the Operator Bridge to be configured.
+- Reclassifies the exact command at the bridge.
+- Executes only if the bridge says it is read-only.
+- Refuses mutating or blocked commands.
+- Uses argv execution with `shell=False`.
 
 ### `operator.command`
 
 Risk: `high_impact`
 
-Behavior:
+- Always stops at the Agent Runtime's DEVON approval gate.
+- Removes runtime approval metadata from the tool argument envelope.
+- Passes the remaining exact effect arguments and approval identity to the bridge.
+- Does not itself trust a supplied binding string.
 
-- always stops at DEVON human approval in the Agent Runtime;
-- requires the runtime request ID and exact approval binding;
-- asks the Operator Bridge to classify the command again;
-- refuses commands still in the bridge's blocked set;
-- refuses read commands and directs the caller to `operator.read`;
-- crosses the process boundary only through `execute_runtime_approved()`.
-
-Modified:
+Modified and hardened:
 
 ```text
 services/operator/bridge.py
 ```
 
-Added `execute_runtime_approved()`. It verifies:
+`execute_runtime_approved()` now receives the actual argument dictionary plus approval metadata. It invokes the shared exact-binding verifier before interpreting the command. Only after that verification does it build a `CommandPlan` from those same arguments.
 
-1. the command is not blocked;
-2. the DEVON approval request still exists;
-3. the request state is `approved`;
-4. the request's `what_happens` contains the exact runtime binding marker.
+It then:
 
-Only then does it call the existing `_run()` process execution path.
+- re-applies the Operator command classifier;
+- refuses blocked commands;
+- refuses read commands on the effectful tool and directs them to `operator.read`;
+- executes with the approved timeout and working directory;
+- crosses the process boundary through the existing `_run()` path.
 
-The bridge's original terminal approval flow remains intact.
+This sequencing matters: approval verification is tied to the exact argument object used to build the eventual command plan.
+
+The direct Operator Terminal approval flow remains separate and unchanged.
 
 ## 9. Durable application coordinator
 
@@ -349,28 +337,25 @@ Added:
 app/services/agent_tasks.py
 ```
 
-The service deliberately reuses the existing process singletons:
+The service reuses the existing per-process singletons:
 
 ```text
 app.api.v1.devon._queue
 app.api.v1.operator._bridge
 ```
 
-That means the terminal and Agent Tasks surface consult one DEVON approval
-authority and one Operator Bridge per API process rather than creating parallel
-approval universes.
+The terminal and Agent Tasks API therefore consult one approval authority and one Operator Bridge per API process rather than parallel gates.
 
 The service:
 
 - loads durable learning context before planning;
-- supports explicit validated steps for deterministic controlled workflows;
+- supports explicit validated steps for controlled workflows;
 - otherwise uses the existing provider abstraction through `LLMPlanner`;
-- restores task snapshots from PostgreSQL before running;
-- advances the framework-free Agent Runtime;
-- persists every externally visible task transition before the API request
-  completes;
-- exposes task cancel and truthful logical rollback;
-- exposes the registered tool catalog and Operator configuration state.
+- restores tasks from PostgreSQL;
+- advances the framework-free runtime;
+- persists externally visible state transitions;
+- exposes cancel and truthful logical rollback;
+- exposes the governed tool catalog and Operator configuration state.
 
 ## 10. Authenticated Agent Tasks API
 
@@ -408,18 +393,18 @@ PUT    /api/v1/agent-tasks/learning/skills/{name}
 
 Properties:
 
-- every route requires the existing authenticated current-user dependency;
-- tasks, memories, and skills are owner-scoped;
-- a project ID is accepted only when the authenticated user owns the project;
-- unknown tasks are returned as 404 rather than exposing cross-owner existence;
+- existing authenticated-current-user dependency on every route;
+- owner-scoped tasks, memories, and skills;
+- project ID accepted only for a project owned by the authenticated user;
+- unknown/cross-owner task retrieval returns 404;
 - runtime state conflicts use 409;
-- invalid plans use 422;
-- task creation can use explicit steps or provider-backed planning;
+- invalid explicit plans use 422;
+- explicit-step and provider-planned task creation are both supported;
 - the tool catalog states that Operator root confinement is not an OS sandbox.
 
 ## 11. Regression coverage
 
-Added:
+Added and hardened:
 
 ```text
 test_devon_agent_tasks_api.py
@@ -427,92 +412,75 @@ test_devon_agent_tasks_api.py
 
 Coverage includes:
 
-1. a durable `operator.read` task executes and can be fetched after completion;
-2. the read creates and persists a checkpoint;
-3. an `operator.command` task stops before the effect;
-4. the effect does not occur before approval;
-5. DEVON approval resumes the exact bound command;
-6. the completed task does not execute again on normal replay;
-7. durable memories can be created, listed, injected into planning context, and
-   deleted;
-8. durable skills increment from version 1 to version 2 on update;
-9. a second authenticated user cannot see another user's task;
-10. an approved request carrying the wrong binding cannot authorize a different
-    command.
+1. durable `operator.read` execution and fetch after completion;
+2. persisted checkpoint creation;
+3. effectful command stopping before execution;
+4. no effect before human approval;
+5. approved exact command execution;
+6. no second execution on ordinary completed-task replay;
+7. durable memory create/list/context/delete;
+8. durable skill version increment;
+9. cross-owner task isolation;
+10. an explicit argument-substitution attack: approval is created for `touch approved.txt`, then execution is attempted with `touch substituted.txt`; the capability boundary recomputes the binding, refuses the mismatch, and neither file is created.
 
-## 12. Verified code-head evidence
+## 12. Verification evidence
 
-The first complete implementation head before the CI-gate tightening and this
-handover was:
+### 12.1 Pre-audit implementation
 
-```text
-64ab5c4859faf170daf0d0dcd6e1e5ae9856cea3
-```
-
-GitHub Actions run:
-
-```text
-32754658696
-```
-
-Results read from GitHub Actions:
+Earlier exact-head run `32755156675` on head `f74d652e5e9db87cb87e9668a5f9f6edf36151e2` passed:
 
 ```text
 Standalone offline flagship: PASS
 Engine + cadence/security: PASS
 PostgreSQL 16 + pgvector API suite: PASS
-pytest: 640 passed, 4 warnings in 58.48s
+Schema gate including 005: PASS
+pytest: 641 passed, 4 warnings in 63.96s
 Ruff: All checks passed!
 ```
 
-The four warnings are existing Starlette/FastAPI deprecation warnings and did
-not fail the suite.
+Those results establish the persistence/API layer baseline, but they predate the approval-boundary correction above.
 
-A new exact-head CI run is required after the CI-gate and handover commits. PR
-#25 must not be called final or merged until that final head is green.
+### 12.2 Security-repair evidence from stacked GitHub layer
 
-## 13. Operational limits that remain true
+The corrected shared runtime/Operator code was exercised on the stacked GitHub adapter branch before being backported here. Two successive PostgreSQL runs reached:
 
-### 13.1 Approval state is still process local
+```text
+650 passed, 4 warnings
+```
 
-Task, checkpoint, memory, and skill state are now PostgreSQL durable.
+The only failure on those stacked runs was Ruff I001 on a GitHub-layer module-level blank line in `app/services/agent_tasks.py`, unrelated to the shared approval verifier or Operator tests. The exact argument-substitution regression passed as part of those 650 tests.
 
-The DEVON `ApprovalQueue` still uses its process-local default store. Therefore,
-a task that is already `waiting_approval` is not fully restart-resumable if the
-API process dies before the human decides. The task snapshot survives, but the
-corresponding approval record does not.
+### 12.3 Final PR #25 exact-head requirement
 
-Do not run multiple API workers for Agent Tasks approval work until the approval
-store is made shared/durable or routed through the already verified external
-approval queue.
+This handover commit moves the PR #25 head. A fresh GitHub Actions run over this handover-inclusive head is mandatory before PR #25 is called final. The result belongs on the PR record because writing the resulting run ID back into this file would create another new head.
+
+## 13. Remaining operational limits
+
+### 13.1 Approval state is still process-local
+
+Task, checkpoint, memory, and skill state are PostgreSQL durable. The current DEVON `ApprovalQueue` default remains process-local.
+
+A task already in `waiting_approval` survives in PostgreSQL, but its corresponding approval request does not survive an API process death. Do not claim restart-safe approval resumption or multi-worker approval consistency yet.
+
+The next reliability layer should make approval state shared/durable or route the runtime through the already verified external approval queue.
 
 ### 13.2 External effects are not crash-atomic exactly once
 
-Normal replay after a completed task is persisted does not re-run the effect and
-is covered by regression tests.
+Normal replay after a completed task is persisted does not re-run the effect and is regression-tested.
 
-There is still a crash window after an external process effect succeeds and
-before the resulting task snapshot is committed to PostgreSQL. A process death
-inside that window can leave the external system changed while the durable task
-still appears not completed.
+There remains a crash interval after an external effect succeeds but before the resulting task snapshot commit. A process death in that interval can leave the external system changed while durable runtime state still appears incomplete.
 
-True crash-atomic exactly-once behavior requires adapter-specific idempotency,
-receipts, or durable execution leases. This PR does not claim that property.
+Adapter-specific idempotency keys, execution leases, and/or durable effect receipts are required before claiming crash-atomic exactly-once execution.
 
-### 13.3 Operator root is not an operating-system sandbox
+### 13.3 Operator root is not an OS sandbox
 
-`DEVON_OPERATOR_ROOT` constrains the process working directory chosen by the
-bridge. It is not a chroot, container, VM, seccomp profile, or filesystem
-sandbox.
+`DEVON_OPERATOR_ROOT` constrains working-directory resolution only. It is not a chroot, container, VM, seccomp profile, or filesystem sandbox.
 
-An approved command runs with the operating-system permissions of the API
-process user and can explicitly address any resource that user can reach.
+An approved command runs with the operating-system permissions of the API process user and may explicitly address resources reachable by that user.
 
-### 13.4 No broad shell interpreter was added
+### 13.4 No broad shell interpreter
 
-The Operator Bridge still uses argv execution with `shell=False`. Pipes,
-redirects, glob expansion, shell variable expansion, and interactive shell
-programs are not part of this layer.
+The bridge still uses `subprocess.run(..., shell=False)`. Native shell pipes, redirects, glob expansion, shell variables, and interactive PTY behavior are outside this layer.
 
 ## 14. Artifacts added in PR #25
 
@@ -541,34 +509,48 @@ conftest.py
 .github/workflows/ci.yml
 ```
 
-No source file under `services/devon/` is modified by this PR.
+Security-audit backport modified these existing PR #25 artifacts again:
 
-## 16. Remaining next-layer sequence
+```text
+services/agent_runtime/governance.py
+services/agent_runtime/runtime.py
+services/operator/bridge.py
+services/operator/agent_adapter.py
+test_devon_agent_tasks_api.py
+docs/devon/SYS_OPS_devon-agent-runtime-durable-operator-handover_v1_2026-08-24.md
+```
 
-After PR #25 is merged and stable, continue in this order:
+No source file under `services/devon/` is modified by PR #25.
 
-1. GitHub capability adapter. Reads automatic. Writes and remote effects through
-   DEVON approval and exact binding.
-2. Durable/shared approval store so a waiting task survives API process restart
-   and multiple workers can consult one authority.
-3. Browser automation adapter with domain allow/deny and action risk policy.
-4. Isolated subagent pool with bounded concurrency, budgets, and parent task
-   accountability.
-5. Durable scheduler with delivery destinations and run leases.
-6. MCP discovery/registration with risk declarations per exposed tool.
-7. Browser/phone Agent Tasks UI showing plan, progress, observations,
-   checkpoints, approvals, cost, and receipts.
-8. Only after those layers are proven, autonomous skill proposals. Publication
-   and modification remain reviewable and versioned.
+## 16. Runtime configuration
 
-The shared approval store is moved ahead of browser automation here because the
-new PostgreSQL task layer exposes the restart mismatch clearly. It is a
-reliability prerequisite for unattended multi-worker operation.
+Operator capability remains disabled unless explicitly configured on the private execution host:
 
-## 17. Current production status
+```bash
+DEVON_OPERATOR_ENABLED=1
+DEVON_OPERATOR_KEY=<strong purpose-made secret>
+DEVON_OPERATOR_ROOT=/absolute/path/to/Meta-Supreme-Apex-Genesis-
+```
 
-PR #25 is open and unmerged as of this handover commit.
+Do not put the Operator key into a `NEXT_PUBLIC_*` environment variable or source control.
 
-This branch adds production API code, but it is not on `main` until a human
-explicitly authorizes PR #25 to merge. No deployment claim is made by this
-handover.
+## 17. Next layer sequence
+
+After PR #25 is authorized, merged, and stable:
+
+1. GitHub capability adapter with allowlisted reads and approval-bound remote effects.
+2. Durable/shared approval storage so waiting tasks survive process restart and multiple workers consult one authority.
+3. Browser automation with explicit domain/action policy.
+4. Isolated bounded subagent pool with budgets and parent-task accountability.
+5. Durable scheduler with execution leases and delivery destinations.
+6. MCP discovery/registration with risk declarations per exposed capability.
+7. Browser/phone Agent Tasks UI showing plans, observations, checkpoints, approvals, costs, and receipts.
+8. Autonomous skill proposals only after those layers are proven. Publication and modification remain reviewable and versioned.
+
+Shared approval durability remains the first reliability prerequisite after the GitHub adapter because the PostgreSQL task layer makes the restart mismatch explicit.
+
+## 18. Current status
+
+PR #25 remains open and unmerged. No production deployment is claimed.
+
+The security correction was deliberately applied before merge. Final acceptance requires the fresh handover-inclusive GitHub Actions run to pass all three lanes and Ruff, followed by a read-back of PR state.
