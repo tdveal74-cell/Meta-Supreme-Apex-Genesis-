@@ -11,8 +11,8 @@ Load-bearing boundaries:
 - Production environment variables are never forwarded into the Sandbox.
 - The Sandbox receives no GitHub write credential in v1.
 - Browser access uses the existing DEVON console gate and SameSite cookie.
-- The Sandbox working directory is discovered from the live runtime, never
-  assumed from a host-specific path.
+- The Sandbox base directory and the Meta Git worktree are discovered and
+  verified independently. A Sandbox cwd is never assumed to be a Git repo.
 """
 
 from __future__ import annotations
@@ -31,9 +31,12 @@ from vercel.sandbox import GitSource
 
 ROOT = Path(__file__).resolve().parent
 TERMINAL = ROOT / "terminal.html"
-LEGACY_WORKSPACE_ROOT = "/vercel/sandbox"
+LEGACY_WORKSPACE_ALIASES = frozenset(
+    {"/vercel/sandbox", "/vercel", "/home/vercel-sandbox"}
+)
 META_REPO_URL = "https://github.com/tdveal74-cell/Meta-Supreme-Apex-Genesis-.git"
 META_REPO_REF = "main"
+META_REPO_DIRNAME = "devon-meta"
 MAX_COMMAND_CHARS = 8_000
 MAX_OUTPUT_CHARS = 1_000_000
 CWD_MARKER = "__DEVON_CWD__="
@@ -135,20 +138,24 @@ def _absolute_directory(value: object, *, label: str) -> str:
     return candidate
 
 
-def _normalize_cwd(value: object, workspace_root: str) -> str:
-    """Resolve a browser cwd while confining it to the discovered workspace."""
+def _inside(path: str, root: str) -> bool:
+    return path == root or path.startswith(root + "/")
+
+
+def _normalize_cwd(value: object, repo_root: str, sandbox_root: str) -> str:
+    """Resolve browser cwd while confining it to the verified Meta worktree."""
     raw = str(value or "").strip()
-    # PR #18/19 shipped this path into the browser. Treat it as an alias for
-    # the runtime-reported cwd so existing tabs recover without manual cleanup.
-    if not raw or raw == LEGACY_WORKSPACE_ROOT:
-        return workspace_root
+    # Earlier terminal versions cached host-shaped paths. They are compatibility
+    # aliases only. The real worktree is verified on every command.
+    if not raw or raw == sandbox_root or raw in LEGACY_WORKSPACE_ALIASES:
+        return repo_root
     if not raw.startswith("/"):
-        raw = posixpath.join(workspace_root, raw)
+        raw = posixpath.join(repo_root, raw)
     normalized = posixpath.normpath(raw)
-    if normalized != workspace_root and not normalized.startswith(workspace_root + "/"):
+    if not _inside(normalized, repo_root):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="working directory must stay inside the DEVON sandbox workspace",
+            detail="working directory must stay inside the DEVON Meta worktree",
         )
     return normalized
 
@@ -174,7 +181,12 @@ def _bounded_output(value: object) -> tuple[str, bool]:
     return text[:MAX_OUTPUT_CHARS] + "\n[DEVON output truncated]\n", True
 
 
-def _extract_cwd(stdout: str, fallback: str, workspace_root: str) -> tuple[str, str]:
+def _extract_cwd(
+    stdout: str,
+    fallback: str,
+    repo_root: str,
+    sandbox_root: str,
+) -> tuple[str, str]:
     lines = stdout.splitlines(keepends=True)
     resolved = fallback
     kept: list[str] = []
@@ -183,7 +195,7 @@ def _extract_cwd(stdout: str, fallback: str, workspace_root: str) -> tuple[str, 
         if stripped.startswith(CWD_MARKER):
             candidate = stripped[len(CWD_MARKER) :].strip()
             try:
-                resolved = _normalize_cwd(candidate, workspace_root)
+                resolved = _normalize_cwd(candidate, repo_root, sandbox_root)
             except HTTPException:
                 resolved = fallback
             continue
@@ -192,7 +204,7 @@ def _extract_cwd(stdout: str, fallback: str, workspace_root: str) -> tuple[str, 
 
 
 async def _sandbox_root(sandbox: Any) -> str:
-    """Discover the live Git workspace from SDK state, with a pwd fallback."""
+    """Discover the live Sandbox base directory, with a pwd fallback."""
     reported = getattr(sandbox, "cwd", None)
     if callable(reported):
         reported = reported()
@@ -208,8 +220,77 @@ async def _sandbox_root(sandbox: Any) -> str:
     return _absolute_directory(lines[-1], label="sandbox pwd")
 
 
+async def _git_toplevel(sandbox: Any, candidate: str) -> str | None:
+    """Return a verified Git toplevel for candidate, or None when it is not Git."""
+    probe = await sandbox.run_process(
+        "git",
+        ["-C", candidate, "rev-parse", "--show-toplevel"],
+        capture_output=True,
+    )
+    if int(probe.returncode) != 0:
+        return None
+    lines = str(probe.stdout or "").strip().splitlines()
+    if not lines:
+        return None
+    return _absolute_directory(lines[-1], label="git toplevel")
+
+
+async def _repo_root(sandbox: Any, sandbox_root: str) -> tuple[str, bool]:
+    """Find or create a verified Meta Git worktree inside the Sandbox."""
+    direct = await _git_toplevel(sandbox, sandbox_root)
+    if direct and _inside(direct, sandbox_root):
+        return direct, False
+
+    # GitSource checkout placement is not treated as a contract. Search only
+    # inside the isolated Sandbox root and verify any hit with git itself.
+    find_result = await sandbox.run_process(
+        "find",
+        [sandbox_root, "-maxdepth", "4", "-type", "d", "-name", ".git", "-print", "-quit"],
+        capture_output=True,
+    )
+    if int(find_result.returncode) == 0:
+        for line in str(find_result.stdout or "").splitlines():
+            dotgit = posixpath.normpath(line.strip())
+            candidate = posixpath.dirname(dotgit)
+            if not candidate or not _inside(candidate, sandbox_root):
+                continue
+            verified = await _git_toplevel(sandbox, candidate)
+            if verified and _inside(verified, sandbox_root):
+                return verified, False
+
+    target = posixpath.join(sandbox_root, META_REPO_DIRNAME)
+    existing = await _git_toplevel(sandbox, target)
+    if existing and _inside(existing, sandbox_root):
+        return existing, False
+
+    clone = await sandbox.run_process(
+        "git",
+        [
+            "clone",
+            "--depth",
+            "1",
+            "--branch",
+            META_REPO_REF,
+            "--single-branch",
+            META_REPO_URL,
+            target,
+        ],
+        cwd=sandbox_root,
+        capture_output=True,
+    )
+    if int(clone.returncode) != 0:
+        detail = str(clone.stderr or clone.stdout or "git clone failed").strip()
+        detail = detail[-2_000:]
+        raise RuntimeError(f"Meta repository bootstrap failed: {detail}")
+
+    verified = await _git_toplevel(sandbox, target)
+    if not verified or not _inside(verified, sandbox_root):
+        raise RuntimeError("Meta repository bootstrap completed without a valid Git worktree")
+    return verified, True
+
+
 async def _fresh_sandbox():
-    """Create the persistent Git-backed workspace supported by Sandbox 0.4."""
+    """Create the persistent workspace supported by Sandbox 0.4."""
     return await vercel_sandbox.create_sandbox(
         source=GitSource(url=META_REPO_URL, revision=META_REPO_REF),
         persistent=True,
@@ -271,8 +352,8 @@ async def operator_terminal_status(
     return {
         "status": "ready",
         "mode": "isolated-vercel-sandbox",
-        "workspace": "auto-discovered from Sandbox cwd",
-        "workspace_discovery": "sandbox.cwd with pwd fallback",
+        "workspace": "verified Meta Git worktree",
+        "workspace_discovery": "git rev-parse, bounded .git search, verified clone fallback",
         "repository": "tdveal74-cell/Meta-Supreme-Apex-Genesis-",
         "ref": META_REPO_REF,
         "production_secrets_injected": False,
@@ -321,8 +402,9 @@ async def operator_terminal_command(
             if prior_workspace
             else await _fresh_sandbox()
         )
-        workspace_root = await _sandbox_root(sandbox)
-        cwd = _normalize_cwd(requested_cwd, workspace_root)
+        sandbox_root = await _sandbox_root(sandbox)
+        repo_root, repo_bootstrapped = await _repo_root(sandbox, sandbox_root)
+        cwd = _normalize_cwd(requested_cwd, repo_root, sandbox_root)
         script = (
             f"{command}\n"
             "rc=$?\n"
@@ -336,7 +418,7 @@ async def operator_terminal_command(
             capture_output=True,
         )
         stdout_text, resolved_cwd = _extract_cwd(
-            str(result.stdout or ""), cwd, workspace_root
+            str(result.stdout or ""), cwd, repo_root, sandbox_root
         )
         stdout, stdout_truncated = _bounded_output(stdout_text)
         stderr, stderr_truncated = _bounded_output(result.stderr or "")
@@ -351,7 +433,9 @@ async def operator_terminal_command(
         return {
             "command": command,
             "cwd": resolved_cwd,
-            "workspace_root": workspace_root,
+            "workspace_root": repo_root,
+            "sandbox_root": sandbox_root,
+            "repo_bootstrapped": repo_bootstrapped,
             "exit_code": exit_code,
             "stdout": stdout,
             "stderr": stderr,
