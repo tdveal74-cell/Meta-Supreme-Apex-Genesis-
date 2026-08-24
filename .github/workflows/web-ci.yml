@@ -1,0 +1,33 @@
+name: Web CI
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "apps/web/**"
+      - "packages/ui/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/web-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  web:
+    name: Next.js typecheck + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install locked workspace
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm --filter @meta-supreme/web typecheck
+      - name: Production build
+        run: pnpm --filter @meta-supreme/web build

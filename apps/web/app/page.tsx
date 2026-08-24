@@ -43,6 +43,12 @@ export default function HomePage() {
           </div>
           <nav className="flex items-center gap-3 sm:gap-4">
             <Link
+              href="/terminal"
+              className="hidden text-sm font-medium text-navy/70 transition hover:text-navy sm:inline"
+            >
+              Operator
+            </Link>
+            <Link
               href="/council/deliberate"
               className="hidden text-sm font-medium text-navy/70 transition hover:text-navy sm:inline"
             >
@@ -87,14 +93,14 @@ export default function HomePage() {
                   Open Council
                 </Link>
                 <Link
-                  href="#system"
+                  href="/terminal"
                   className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border bg-surface-elevated px-7 text-sm font-medium text-navy shadow-soft transition hover:bg-surface-muted"
                 >
-                  View the system
+                  Open DEVON Terminal
                 </Link>
               </div>
               <p className="mt-6 text-xs text-navy/45">
-                Offline simulated path · zero keys required
+                Council supports a zero-key simulated path. Operator execution is separately gated.
               </p>
             </div>
           </div>
@@ -135,16 +141,16 @@ export default function HomePage() {
                   Reads flow. Writes wait.
                 </h2>
                 <p className="mt-3 text-sm leading-relaxed text-navy/65">
-                  Workflow steps that only read can run alone. Memory writes,
-                  decision drafts, and exports pause until you approve the
-                  rendered payload.
+                  The Operator Bridge lets DEVON hand approved work to the host
+                  without giving DEVON core subprocess capability. Mutating
+                  commands pause at the existing human approval gate.
                 </p>
               </div>
               <Link
-                href="/council/deliberate"
+                href="/terminal"
                 className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg bg-amber px-6 text-sm font-semibold text-navy shadow-soft transition hover:bg-amber-500"
               >
-                Run a deliberation
+                Open Operator Terminal
               </Link>
             </div>
           </div>
