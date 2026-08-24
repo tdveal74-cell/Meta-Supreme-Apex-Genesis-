@@ -38,7 +38,11 @@ def _tokens(text: str) -> set[str]:
 
 
 def _request_hash(*, max_steps: int) -> str:
-    payload = json.dumps({"max_steps": int(max_steps)}, sort_keys=True, separators=(",", ":"))
+    payload = json.dumps(
+        {"max_steps": int(max_steps)},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -274,6 +278,27 @@ class AgentTaskRepository:
             if exists_result.scalar_one_or_none() is None:
                 raise KeyError(f"unknown agent task: {task_id}")
             raise TaskExecutionBusy("agent task is already running on another worker")
+
+        stale_filters = [
+            AgentTaskRunRecord.owner_id == owner_id,
+            AgentTaskRunRecord.task_id == task_id,
+            AgentTaskRunRecord.state == "running",
+        ]
+        if existing is not None:
+            stale_filters.append(AgentTaskRunRecord.id != existing.id)
+        await db.execute(
+            update(AgentTaskRunRecord)
+            .where(*stale_filters)
+            .values(
+                state="failed",
+                result=None,
+                error="superseded after execution lease expired",
+                lease_token=None,
+                lease_owner=None,
+                updated_at=now,
+                completed_at=now,
+            )
+        )
 
         if existing is None:
             run_id = f"RUN-{secrets.token_hex(8).upper()}"
