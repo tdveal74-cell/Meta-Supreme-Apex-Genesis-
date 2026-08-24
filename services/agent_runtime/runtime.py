@@ -87,11 +87,14 @@ class AgentRuntime:
     ) -> RuntimeResult:
         result = RuntimeResult(task=self.get(task_id), message="task loaded")
         for _ in range(max(1, int(max_steps))):
-            task = result.task
-            if task.done or task.state is TaskState.WAITING_APPROVAL:
+            if result.task.done:
                 break
             result = await self.run_next(task_id)
-            if result.approval_token or result.task.done:
+            if (
+                result.approval_token
+                or result.task.done
+                or result.task.state is TaskState.WAITING_APPROVAL
+            ):
                 break
         return result
 
@@ -115,7 +118,7 @@ class AgentRuntime:
             return RuntimeResult(task=task, message=task.failure_reason)
 
         if spec.approval_required:
-            approval = self._approval_state(task, step.approval_request_id)
+            approval = self._approval_state(step.approval_request_id)
             if step.approval_request_id is None:
                 self._checkpoint(task, f"before effectful step {step.step_id}")
                 record, token = self.approvals.request(
@@ -218,7 +221,10 @@ class AgentRuntime:
         if checkpoint is None:
             raise AgentRuntimeError(f"unknown checkpoint: {checkpoint_id}")
 
-        for index in range(checkpoint.current_step, min(task.current_step, len(task.plan.steps))):
+        for index in range(
+            checkpoint.current_step,
+            min(task.current_step, len(task.plan.steps)),
+        ):
             step = task.plan.steps[index]
             spec = self.tools.require(step.tool_call.name)
             if step.state is StepState.COMPLETED and spec.approval_required:
@@ -241,12 +247,7 @@ class AgentRuntime:
         self.store.put(task)
         return task
 
-    def _approval_state(
-        self,
-        task: AgentTask,
-        request_id: Optional[str],
-    ) -> Optional[ApprovalState]:
-        del task
+    def _approval_state(self, request_id: Optional[str]) -> Optional[ApprovalState]:
         if not request_id:
             return None
         record = self.approvals.get(request_id)
@@ -274,7 +275,11 @@ class AgentRuntime:
 
     @staticmethod
     def _summary(task: AgentTask) -> str:
-        outputs = [item.output.strip() for item in task.observations if item.ok and item.output.strip()]
+        outputs = [
+            item.output.strip()
+            for item in task.observations
+            if item.ok and item.output.strip()
+        ]
         if not outputs:
             return f"Completed {len(task.plan.steps)} steps for: {task.goal}"
         joined = "\n\n".join(outputs)
