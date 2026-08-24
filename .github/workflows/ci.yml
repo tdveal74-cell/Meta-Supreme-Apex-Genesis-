@@ -84,11 +84,6 @@ jobs:
     name: API suite (PostgreSQL 16 + pgvector)
     runs-on: ubuntu-latest
     needs: engine
-    # NOTE: no job-level `if: hashFiles(...)`. hashFiles() is not available in
-    # a job-level condition — GitHub rejects the WHOLE FILE at parse time, and
-    # the run then reports a failure with zero jobs and no log to read. That is
-    # why CI showed "failure" with nothing in it. The requirements check is a
-    # step guard below, where the file is actually present to test.
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -109,48 +104,63 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      # The root requirements.txt is the one this suite runs on; apps/api's
-      # is the older snapshot's. Installing it unconditionally is also what
-      # makes the failure visible if it ever goes missing.
       - name: Install dependencies
         run: |
           python -m pip install --quiet --upgrade pip
           python -m pip install --quiet -r requirements.txt
 
-      # The schema files are what conftest.py builds the test database from,
-      # and 001 was absent for long enough that every database-backed suite
-      # was unrunnable. Fail loudly rather than skip if that recurs.
-      - name: The test fixture's schema files are present
+      - name: The test fixture's schema and deploy migrations are present
         run: |
           for f in 001_initial_schema 002_workflow_runs 003_schedule_dispatch 004_federated_knowledge_waist 005_agent_runtime_persistence 006_devon_approval_store; do
             test -s "database/schemas/$f.sql" || { echo "::error::database/schemas/$f.sql is missing or empty"; exit 1; }
           done
+          for f in 005_agent_runtime_persistence 006_devon_approval_store; do
+            test -s "database/migrations/versions/$f.py" || { echo "::error::database/migrations/versions/$f.py is missing or empty"; exit 1; }
+          done
 
-      # The suite runs BEFORE the migration round-trip, because conftest.py
-      # builds its database from database/schemas/*.sql — not from Alembic. The
-      # round-trip is an extra check on the migrations, and running it first
-      # meant its failure skipped the suite entirely, so the tests this job
-      # exists for went unrun three times over.
-      # The whole suite, against a real database. This job used to run
-      # `apps/api/tests` — a directory that has never existed here — so it
-      # passed without executing a single test.
       - name: Full suite (PostgreSQL)
-        # pipefail is load bearing. Without it the pipeline reports tee's exit
-        # status, so a pytest failure -- including a collection error that runs
-        # zero tests -- passes this step silently. Same class as the
-        # `ruff check . || true` removed in #5: a gate that cannot fail is an
-        # observation, not a gate.
         shell: bash -eo pipefail {0}
         run: python -m pytest -q --tb=short 2>&1 | tee pytest.out
 
-      # The runner appends the whole Postgres service-container log after the
-      # steps, and that log echoes the entire init schema — hundreds of lines.
-      # Anything a failing step printed is buried above it, unreachable by
-      # tailing the job log. Re-printing the summary last is what makes a
-      # failure readable at all.
-      # Prints whichever step actually produced output. The first version of
-      # this only covered pytest.out, so when alembic was the step that failed
-      # the summary printed nothing and the real error stayed buried.
+      - name: Fresh Alembic deploy reaches shared approval head
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/meta_supreme
+        run: |
+          alembic upgrade head
+          alembic downgrade 004_federated_knowledge_waist
+          alembic upgrade head
+          python - <<'PY'
+          import asyncio
+          import asyncpg
+
+          async def main():
+              conn = await asyncpg.connect(
+                  "postgresql://postgres:postgres@localhost:5432/meta_supreme"
+              )
+              try:
+                  expected = {
+                      "agent_tasks",
+                      "agent_task_checkpoints",
+                      "agent_runtime_memories",
+                      "agent_runtime_skills",
+                      "devon_approvals",
+                  }
+                  rows = await conn.fetch(
+                      "SELECT table_name FROM information_schema.tables "
+                      "WHERE table_schema = 'public' AND table_name = ANY($1::text[])",
+                      list(expected),
+                  )
+                  present = {row["table_name"] for row in rows}
+                  missing = expected - present
+                  assert not missing, f"missing migrated tables: {sorted(missing)}"
+                  revision = await conn.fetchval("SELECT version_num FROM alembic_version")
+                  assert revision == "006_devon_approval_store", revision
+              finally:
+                  await conn.close()
+
+          asyncio.run(main())
+          PY
+
       - name: Failure summary
         if: failure()
         run: |
@@ -160,12 +170,5 @@ jobs:
             tail -40 "$f"
           done
 
-      # Blocking. This read `ruff check . || true`, which meant the linter could
-      # report anything at all and the run still went green — a quality control
-      # that cannot fail the build is an observation, not a gate. Turning it on
-      # found 17 findings, two of which were real defects: a duplicated
-      # `except Exception` in the dispatcher whose second handler was dead code,
-      # and a `zip()` in the knowledge ingest that truncated silently when the
-      # embedding provider returned fewer vectors than chunks.
       - name: Lint
         run: ruff check .
