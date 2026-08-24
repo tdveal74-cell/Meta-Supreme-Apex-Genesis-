@@ -111,10 +111,10 @@ jobs:
 
       - name: The test fixture's schema and deploy migrations are present
         run: |
-          for f in 001_initial_schema 002_workflow_runs 003_schedule_dispatch 004_federated_knowledge_waist 005_agent_runtime_persistence 006_devon_approval_store; do
+          for f in 001_initial_schema 002_workflow_runs 003_schedule_dispatch 004_federated_knowledge_waist 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases; do
             test -s "database/schemas/$f.sql" || { echo "::error::database/schemas/$f.sql is missing or empty"; exit 1; }
           done
-          for f in 005_agent_runtime_persistence 006_devon_approval_store; do
+          for f in 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases; do
             test -s "database/migrations/versions/$f.py" || { echo "::error::database/migrations/versions/$f.py is missing or empty"; exit 1; }
           done
 
@@ -122,7 +122,7 @@ jobs:
         shell: bash -eo pipefail {0}
         run: python -m pytest -q --tb=short 2>&1 | tee pytest.out
 
-      - name: Fresh Alembic deploy reaches shared approval head
+      - name: Fresh Alembic deploy reaches task lease head
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/meta_supreme
         run: |
@@ -140,6 +140,7 @@ jobs:
               try:
                   expected = {
                       "agent_tasks",
+                      "agent_task_runs",
                       "agent_task_checkpoints",
                       "agent_runtime_memories",
                       "agent_runtime_skills",
@@ -153,8 +154,21 @@ jobs:
                   present = {row["table_name"] for row in rows}
                   missing = expected - present
                   assert not missing, f"missing migrated tables: {sorted(missing)}"
+                  lease_columns = await conn.fetch(
+                      "SELECT column_name FROM information_schema.columns "
+                      "WHERE table_schema = 'public' AND table_name = 'agent_tasks' "
+                      "AND column_name = ANY($1::text[])",
+                      ["lease_token", "lease_owner", "lease_expires_at", "execution_generation"],
+                  )
+                  present_columns = {row["column_name"] for row in lease_columns}
+                  assert present_columns == {
+                      "lease_token",
+                      "lease_owner",
+                      "lease_expires_at",
+                      "execution_generation",
+                  }, present_columns
                   revision = await conn.fetchval("SELECT version_num FROM alembic_version")
-                  assert revision == "006_devon_approval_store", revision
+                  assert revision == "007_agent_task_execution_leases", revision
               finally:
                   await conn.close()
 
