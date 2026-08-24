@@ -16,6 +16,7 @@ from urllib.parse import quote
 import httpx
 
 _REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+_COMMIT_SHA_RE = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 MAX_FILE_BYTES = 1_000_000
 MAX_ERROR_CHARS = 2_000
 
@@ -35,9 +36,7 @@ class GitHubRESTClient:
         transport: Optional[httpx.AsyncBaseTransport] = None,
     ) -> None:
         self.token = (
-            token
-            if token is not None
-            else os.getenv("DEVON_GITHUB_TOKEN") or os.getenv("GITHUB_TOKEN") or ""
+            token if token is not None else os.getenv("DEVON_GITHUB_TOKEN", "")
         ).strip()
         raw_allowed = (
             list(allowed_repos)
@@ -82,7 +81,8 @@ class GitHubRESTClient:
     ) -> Dict[str, Any]:
         repo = self.require_repository(repository)
         clean_path = self._clean_repo_path(path)
-        params = {"ref": ref} if ref else None
+        clean_ref = self._clean_ref(ref, field="ref") if ref else None
+        params = {"ref": clean_ref} if clean_ref else None
         data = await self._request(
             "GET",
             f"/repos/{repo}/contents/{quote(clean_path, safe='/')}",
@@ -95,28 +95,36 @@ class GitHubRESTClient:
             raise GitHubRESTError(
                 f"GitHub file exceeds DEVON read limit of {MAX_FILE_BYTES} bytes"
             )
+        encoding = str(data.get("encoding") or "base64").strip().lower()
+        if encoding != "base64":
+            raise GitHubRESTError("GitHub file is not returned as base64 content")
         encoded = str(data.get("content") or "").replace("\n", "")
         try:
-            raw = base64.b64decode(encoded, validate=False)
-        except Exception as exc:
+            raw = base64.b64decode(encoded, validate=True)
+        except (ValueError, TypeError) as exc:
             raise GitHubRESTError("GitHub file content is not valid base64") from exc
         if len(raw) > MAX_FILE_BYTES:
             raise GitHubRESTError(
                 f"decoded GitHub file exceeds DEVON read limit of {MAX_FILE_BYTES} bytes"
             )
+        try:
+            content = raw.decode("utf-8", errors="strict")
+        except UnicodeDecodeError as exc:
+            raise GitHubRESTError("GitHub file is not valid UTF-8 text") from exc
         return {
             "repository": repo,
             "path": clean_path,
-            "ref": ref,
+            "ref": clean_ref,
             "sha": data.get("sha"),
             "size": len(raw),
-            "content": raw.decode("utf-8", errors="replace"),
+            "content": content,
             "html_url": data.get("html_url"),
         }
 
     async def pull_request(self, repository: str, number: int) -> Dict[str, Any]:
         repo = self.require_repository(repository)
-        return await self._request("GET", f"/repos/{repo}/pulls/{int(number)}")
+        pr_number = self._positive_int(number, field="pull request number")
+        return await self._request("GET", f"/repos/{repo}/pulls/{pr_number}")
 
     async def create_branch(
         self,
@@ -133,9 +141,9 @@ class GitHubRESTClient:
             f"/repos/{repo}/git/ref/heads/{quote(clean_base, safe='')}",
         )
         try:
-            sha = str(source["object"]["sha"])
+            sha = self._clean_commit_sha(str(source["object"]["sha"]))
         except (KeyError, TypeError) as exc:
-            raise GitHubRESTError("GitHub base ref response has no commit SHA") from exc
+            raise GitHubRESTError("GitHub base ref response has no valid commit SHA") from exc
         return await self._request(
             "POST",
             f"/repos/{repo}/git/refs",
@@ -169,7 +177,7 @@ class GitHubRESTClient:
             "branch": clean_branch,
         }
         if sha:
-            body["sha"] = str(sha).strip()
+            body["sha"] = self._clean_commit_sha(str(sha).strip())
         return await self._request(
             "PUT",
             f"/repos/{repo}/contents/{quote(clean_path, safe='/')}",
@@ -207,20 +215,19 @@ class GitHubRESTClient:
         repository: str,
         number: int,
         *,
+        expected_head_sha: str,
         merge_method: str = "merge",
-        expected_head_sha: Optional[str] = None,
     ) -> Dict[str, Any]:
         repo = self.require_repository(repository)
+        pr_number = self._positive_int(number, field="pull request number")
+        expected = self._clean_commit_sha(expected_head_sha)
         method = (merge_method or "merge").strip().lower()
         if method not in {"merge", "squash", "rebase"}:
             raise GitHubRESTError("merge_method must be merge, squash, or rebase")
-        body: Dict[str, Any] = {"merge_method": method}
-        if expected_head_sha:
-            body["sha"] = str(expected_head_sha).strip()
         return await self._request(
             "PUT",
-            f"/repos/{repo}/pulls/{int(number)}/merge",
-            json_body=body,
+            f"/repos/{repo}/pulls/{pr_number}/merge",
+            json_body={"merge_method": method, "sha": expected},
         )
 
     async def _request(
@@ -294,11 +301,42 @@ class GitHubRESTClient:
     @staticmethod
     def _clean_ref(value: str, *, field: str) -> str:
         clean = (value or "").strip().removeprefix("refs/heads/")
-        if not clean or clean.startswith("/") or clean.endswith("/"):
+        if not clean or clean == "@" or clean.startswith("/") or clean.endswith("/"):
             raise GitHubRESTError(f"{field} is invalid")
-        if ".." in clean or "~" in clean or "^" in clean or ":" in clean or "\\" in clean:
+        if clean.startswith(".") or clean.endswith(".") or clean.endswith(".lock"):
+            raise GitHubRESTError(f"{field} is invalid")
+        if ".." in clean or "//" in clean or "@{" in clean:
             raise GitHubRESTError(f"{field} contains a forbidden ref sequence")
+        forbidden = {" ", "~", "^", ":", "?", "*", "[", "\\"}
+        if any(char in forbidden or ord(char) < 32 or ord(char) == 127 for char in clean):
+            raise GitHubRESTError(f"{field} contains a forbidden ref character")
+        parts = clean.split("/")
+        if any(
+            not part
+            or part.startswith(".")
+            or part.endswith(".")
+            or part.endswith(".lock")
+            for part in parts
+        ):
+            raise GitHubRESTError(f"{field} contains an invalid ref segment")
         return clean
+
+    @staticmethod
+    def _clean_commit_sha(value: str) -> str:
+        clean = (value or "").strip()
+        if not _COMMIT_SHA_RE.fullmatch(clean):
+            raise GitHubRESTError("commit SHA must be a full 40- or 64-character hex object id")
+        return clean.lower()
+
+    @staticmethod
+    def _positive_int(value: object, *, field: str) -> int:
+        try:
+            number = int(value)
+        except (TypeError, ValueError) as exc:
+            raise GitHubRESTError(f"{field} must be an integer") from exc
+        if number < 1:
+            raise GitHubRESTError(f"{field} must be at least 1")
+        return number
 
     @staticmethod
     def _error_message(response: httpx.Response) -> str:
