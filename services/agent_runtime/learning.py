@@ -13,7 +13,7 @@ import secrets
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from threading import RLock
-from typing import Dict, Iterable, List, Optional, Protocol, Sequence, Tuple
+from typing import Dict, List, Optional, Protocol, Sequence, Tuple
 
 from services.agent_runtime.contracts import utcnow
 
@@ -67,7 +67,13 @@ class SkillRecord:
 
 
 class LearningStore(Protocol):
-    def remember(self, text: str, *, tags: Sequence[str] = (), source: str = "operator") -> MemoryRecord: ...
+    def remember(
+        self,
+        text: str,
+        *,
+        tags: Sequence[str] = (),
+        source: str = "operator",
+    ) -> MemoryRecord: ...
 
     def forget(self, memory_id: str) -> bool: ...
 
@@ -107,7 +113,9 @@ class InMemoryLearningStore:
         clean = (text or "").strip()
         if not clean:
             raise ValueError("memory text is empty")
-        normalized_tags = tuple(sorted({tag.strip().lower() for tag in tags if tag.strip()}))
+        normalized_tags = tuple(
+            sorted({tag.strip().lower() for tag in tags if tag.strip()})
+        )
         record = MemoryRecord(
             memory_id=f"MEM-{secrets.token_hex(6).upper()}",
             text=clean,
@@ -175,15 +183,17 @@ class InMemoryLearningStore:
                     description=clean_description,
                     instructions=clean_instructions,
                     version=existing.version + 1,
-                    provenance=(provenance or existing.provenance).strip() or existing.provenance,
+                    provenance=(provenance or existing.provenance).strip()
+                    or existing.provenance,
                     updated_at=utcnow(),
                 )
             self._skills[clean_name] = record
             return record
 
     def get_skill(self, name: str) -> Optional[SkillRecord]:
+        normalized = (name or "").strip().lower().replace(" ", "-")
         with self._lock:
-            return self._skills.get((name or "").strip().lower().replace(" ", "-"))
+            return self._skills.get(normalized)
 
     def list_skills(self) -> List[SkillRecord]:
         with self._lock:
