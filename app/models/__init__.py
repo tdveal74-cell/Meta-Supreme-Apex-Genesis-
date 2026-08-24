@@ -19,6 +19,8 @@ import, which is the expensive way to find out.
 
 from app.models.agent import Agent, AgentRun
 from app.models.agent_runtime import (
+    AgentEffectIntentRecord,
+    AgentEffectReceiptRecord,
     AgentRuntimeMemory,
     AgentRuntimeSkill,
     AgentTaskCheckpointRecord,
@@ -37,6 +39,8 @@ from app.models.workflow import Workflow, WorkflowRun
 __all__ = [
     "Agent",
     "AgentRun",
+    "AgentEffectIntentRecord",
+    "AgentEffectReceiptRecord",
     "AgentRuntimeMemory",
     "AgentRuntimeSkill",
     "AgentTaskCheckpointRecord",
