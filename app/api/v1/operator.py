@@ -46,7 +46,9 @@ async def operator_status() -> Dict[str, Any]:
         "root": str(_bridge.root),
         "devon_core_executes": False,
         "boundary": (
-            "DEVON plans and gates. The Operator Bridge executes only inside the configured root."
+            "DEVON plans and gates. The Operator Bridge confines the working directory "
+            "to the configured root. Approved commands still run with the API process "
+            "user's operating-system permissions."
         ),
     }
 
