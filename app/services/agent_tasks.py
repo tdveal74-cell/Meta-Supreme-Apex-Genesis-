@@ -28,7 +28,6 @@ from services.github.agent_adapter import GitHubCapabilityAdapter
 from services.github.client import GitHubRESTClient
 from services.operator.agent_adapter import OperatorCapabilityAdapter
 
-
 github_client = GitHubRESTClient()
 
 
