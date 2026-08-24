@@ -11,14 +11,16 @@ Load-bearing boundaries:
 - Production environment variables are never forwarded into the Sandbox.
 - The Sandbox receives no GitHub write credential in v1.
 - Browser access uses the existing DEVON console gate and SameSite cookie.
+- The Sandbox working directory is discovered from the live runtime, never
+  assumed from a host-specific path.
 """
 
 from __future__ import annotations
 
 import posixpath
 import re
-import shlex
 from pathlib import Path
+from typing import Any
 
 from fastapi import Cookie, Header, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, HTMLResponse
@@ -29,7 +31,7 @@ from vercel.sandbox import GitSource
 
 ROOT = Path(__file__).resolve().parent
 TERMINAL = ROOT / "terminal.html"
-WORKSPACE_ROOT = "/vercel/sandbox"
+LEGACY_WORKSPACE_ROOT = "/vercel/sandbox"
 META_REPO_URL = "https://github.com/tdveal74-cell/Meta-Supreme-Apex-Genesis-.git"
 META_REPO_REF = "main"
 MAX_COMMAND_CHARS = 8_000
@@ -126,12 +128,24 @@ document.getElementById('f').addEventListener('submit', function (e) {
 </script>"""
 
 
-def _normalize_cwd(value: object) -> str:
-    raw = str(value or WORKSPACE_ROOT).strip() or WORKSPACE_ROOT
+def _absolute_directory(value: object, *, label: str) -> str:
+    candidate = posixpath.normpath(str(value or "").strip())
+    if not candidate.startswith("/"):
+        raise RuntimeError(f"{label} must be an absolute directory")
+    return candidate
+
+
+def _normalize_cwd(value: object, workspace_root: str) -> str:
+    """Resolve a browser cwd while confining it to the discovered workspace."""
+    raw = str(value or "").strip()
+    # PR #18/19 shipped this path into the browser. Treat it as an alias for
+    # the runtime-reported cwd so existing tabs recover without manual cleanup.
+    if not raw or raw == LEGACY_WORKSPACE_ROOT:
+        return workspace_root
     if not raw.startswith("/"):
-        raw = posixpath.join(WORKSPACE_ROOT, raw)
+        raw = posixpath.join(workspace_root, raw)
     normalized = posixpath.normpath(raw)
-    if normalized != WORKSPACE_ROOT and not normalized.startswith(WORKSPACE_ROOT + "/"):
+    if normalized != workspace_root and not normalized.startswith(workspace_root + "/"):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="working directory must stay inside the DEVON sandbox workspace",
@@ -160,7 +174,7 @@ def _bounded_output(value: object) -> tuple[str, bool]:
     return text[:MAX_OUTPUT_CHARS] + "\n[DEVON output truncated]\n", True
 
 
-def _extract_cwd(stdout: str, fallback: str) -> tuple[str, str]:
+def _extract_cwd(stdout: str, fallback: str, workspace_root: str) -> tuple[str, str]:
     lines = stdout.splitlines(keepends=True)
     resolved = fallback
     kept: list[str] = []
@@ -169,7 +183,7 @@ def _extract_cwd(stdout: str, fallback: str) -> tuple[str, str]:
         if stripped.startswith(CWD_MARKER):
             candidate = stripped[len(CWD_MARKER) :].strip()
             try:
-                resolved = _normalize_cwd(candidate)
+                resolved = _normalize_cwd(candidate, workspace_root)
             except HTTPException:
                 resolved = fallback
             continue
@@ -177,8 +191,25 @@ def _extract_cwd(stdout: str, fallback: str) -> tuple[str, str]:
     return "".join(kept), resolved
 
 
+async def _sandbox_root(sandbox: Any) -> str:
+    """Discover the live Git workspace from SDK state, with a pwd fallback."""
+    reported = getattr(sandbox, "cwd", None)
+    if callable(reported):
+        reported = reported()
+    if reported:
+        return _absolute_directory(reported, label="sandbox cwd")
+
+    probe = await sandbox.run_process("pwd", capture_output=True)
+    if int(probe.returncode) != 0:
+        raise RuntimeError("sandbox did not report a working directory and pwd failed")
+    lines = str(probe.stdout or "").strip().splitlines()
+    if not lines:
+        raise RuntimeError("sandbox did not report a working directory and pwd was empty")
+    return _absolute_directory(lines[-1], label="sandbox pwd")
+
+
 async def _fresh_sandbox():
-    """Create the persistent named workspace supported by vercel-sandbox 0.4."""
+    """Create the persistent Git-backed workspace supported by Sandbox 0.4."""
     return await vercel_sandbox.create_sandbox(
         source=GitSource(url=META_REPO_URL, revision=META_REPO_REF),
         persistent=True,
@@ -189,7 +220,7 @@ async def _resume_sandbox(workspace_id: str):
     return await vercel_sandbox.resume_sandbox(name=workspace_id)
 
 
-async def _stop_quietly(sandbox) -> None:
+async def _stop_quietly(sandbox: Any) -> None:
     try:
         await sandbox.stop()
     except Exception:
@@ -240,7 +271,8 @@ async def operator_terminal_status(
     return {
         "status": "ready",
         "mode": "isolated-vercel-sandbox",
-        "workspace": WORKSPACE_ROOT,
+        "workspace": "auto-discovered from Sandbox cwd",
+        "workspace_discovery": "sandbox.cwd with pwd fallback",
         "repository": "tdveal74-cell/Meta-Supreme-Apex-Genesis-",
         "ref": META_REPO_REF,
         "production_secrets_injected": False,
@@ -275,7 +307,7 @@ async def operator_terminal_command(
             detail=f"command exceeds {MAX_COMMAND_CHARS} characters",
         )
 
-    cwd = _normalize_cwd(body.get("cwd"))
+    requested_cwd = body.get("cwd")
     reset = bool(body.get("reset"))
     prior_workspace = _workspace_id(body.get("workspace_id") or body.get("snapshot_id"))
     if reset:
@@ -289,8 +321,9 @@ async def operator_terminal_command(
             if prior_workspace
             else await _fresh_sandbox()
         )
+        workspace_root = await _sandbox_root(sandbox)
+        cwd = _normalize_cwd(requested_cwd, workspace_root)
         script = (
-            f"cd -- {shlex.quote(cwd)} || exit 74\n"
             f"{command}\n"
             "rc=$?\n"
             f"printf '\\n{CWD_MARKER}%s\\n' \"$PWD\"\n"
@@ -299,9 +332,12 @@ async def operator_terminal_command(
         result = await sandbox.run_process(
             "bash",
             ["-lc", script],
+            cwd=cwd,
             capture_output=True,
         )
-        stdout_text, resolved_cwd = _extract_cwd(str(result.stdout or ""), cwd)
+        stdout_text, resolved_cwd = _extract_cwd(
+            str(result.stdout or ""), cwd, workspace_root
+        )
         stdout, stdout_truncated = _bounded_output(stdout_text)
         stderr, stderr_truncated = _bounded_output(result.stderr or "")
         exit_code = int(result.returncode)
@@ -315,6 +351,7 @@ async def operator_terminal_command(
         return {
             "command": command,
             "cwd": resolved_cwd,
+            "workspace_root": workspace_root,
             "exit_code": exit_code,
             "stdout": stdout,
             "stderr": stderr,
