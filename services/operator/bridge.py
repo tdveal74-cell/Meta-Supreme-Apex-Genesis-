@@ -45,7 +45,7 @@ class Risk(str, Enum):
 
 READ_ONLY_BINARIES = {
     "pwd", "ls", "cat", "head", "tail", "wc", "stat", "uname", "whoami",
-    "id", "date", "df", "du", "ps", "env", "printenv", "which", "whereis",
+    "id", "date", "df", "du", "ps", "which", "whereis",
 }
 READ_ONLY_GIT = {
     "status", "log", "diff", "show", "rev-parse", "ls-files", "ls-tree",
