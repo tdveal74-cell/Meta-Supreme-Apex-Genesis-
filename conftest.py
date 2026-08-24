@@ -20,6 +20,7 @@ os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["DEFAULT_AI_PROVIDER"] = "mock"
 os.environ["ENVIRONMENT"] = "test"
 os.environ["DEBUG"] = "false"
+os.environ["DEVON_APPROVAL_STORE"] = "postgres"
 
 import pytest  # noqa: E402
 
@@ -58,6 +59,7 @@ _INCREMENTAL_SCHEMAS = (
     "003_schedule_dispatch.sql",
     "004_federated_knowledge_waist.sql",
     "005_agent_runtime_persistence.sql",
+    "006_devon_approval_store.sql",
 )
 
 _DSN = TEST_DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
@@ -66,6 +68,7 @@ _TEST_DB_NAME = _DSN.rsplit("/", 1)[1]
 
 # Tables wiped between tests (order respects FKs; agents stays seeded).
 _DATA_TABLES = (
+    "devon_approvals",
     "agent_task_checkpoints",
     "agent_tasks",
     "agent_runtime_memories",
