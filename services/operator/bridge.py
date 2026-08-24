@@ -25,6 +25,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Dict, Optional
 
+from services.agent_runtime.governance import approval_marker
 from services.devon.approval import ApprovalQueue, ApprovalState
 
 MAX_COMMAND_CHARS = 4000
@@ -235,6 +236,35 @@ class OperatorBridge:
 
         self._pending.pop(request_id, None)
         return self._run(pending.plan, timeout_seconds)
+
+    def execute_runtime_approved(
+        self,
+        plan: CommandPlan,
+        *,
+        request_id: str,
+        binding: str,
+        approvals: ApprovalQueue,
+        timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    ) -> ExecutionResult:
+        """Execute a plan only when the Agent Runtime approval matches it exactly.
+
+        The runtime writes a SHA-256 binding for task id, step id, tool name and
+        arguments into the human-readable approval consequence. The bridge
+        recomputes no policy here; it verifies that the exact binding supplied
+        by the runtime is present on the approved record before crossing the
+        process boundary.
+        """
+        if plan.risk is Risk.BLOCKED:
+            raise OperatorError(plan.reason)
+        record = approvals.get(request_id)
+        if record is None:
+            raise OperatorError("runtime approval request no longer exists")
+        if record.state is not ApprovalState.APPROVED:
+            raise OperatorError(f"approval state is {record.state.value}, not approved")
+        marker = approval_marker(binding)
+        if marker not in record.what_happens:
+            raise OperatorError("runtime approval binding does not match this command")
+        return self._run(plan, timeout_seconds)
 
     def _run(self, plan: CommandPlan, timeout_seconds: int) -> ExecutionResult:
         timeout = max(1, min(int(timeout_seconds), MAX_TIMEOUT_SECONDS))
