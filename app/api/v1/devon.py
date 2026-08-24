@@ -6,11 +6,12 @@ Airtable or n8n, and nothing runs an effect. Captures return a filing plan and
 effects return an approval request, which keeps the API surface incapable of
 committing something unattended.
 
-The approval queue is process local by default, so a request raised on one
-worker is not visible to another. That is correct for the single operator
-deployment this serves and is stated here rather than discovered later. Swap in
-a shared store through the ApprovalStore protocol before running more than one
-worker.
+The approval queue uses the PostgreSQL shared store by default. Pending approval
+records and rulings are visible across API workers and durable across process
+restart. The one-time plaintext approval token is intentionally never persisted
+or recoverable from the queue. An explicit DEVON_APPROVAL_STORE=memory setting
+is available for offline/local work only. Backend failures fail closed rather
+than silently downgrading to a process-local queue.
 """
 
 from typing import Any, Dict, List, Optional
@@ -18,19 +19,31 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from app.services.devon_approval_store import build_approval_queue
 from services.devon import areas as areas_mod
 from services.devon import filing, flagship, naming, persona, receipts, vault
-from services.devon.approval import ApprovalQueue
 from services.devon.assistant import Devon
 from services.devon.commands import ALL_INTENTS, approval_gated_intents
 from services.devon.precedence import Candidate, resolve
 
 router = APIRouter(prefix="/devon", tags=["DEVON"])
 
-# One queue and one assistant per process, so an approval raised by a command
-# call is decidable by a later decide call.
-_queue = ApprovalQueue()
+# One logical approval authority per API process, backed by the same PostgreSQL
+# table across workers. Operator and Agent Tasks import this queue so every
+# effect lane consults the same durable authority.
+_queue = build_approval_queue()
 _devon = Devon(approvals=_queue)
+
+
+def _approval_storage_status() -> Dict[str, Any]:
+    shared = _queue.storage_backend == "postgres"
+    return {
+        "backend": _queue.storage_backend,
+        "shared": shared,
+        "state_durable": shared,
+        "plaintext_tokens_persisted": False,
+        "token_recoverable": False,
+    }
 
 
 @router.get("")
@@ -46,6 +59,7 @@ async def devon_identity() -> Dict[str, Any]:
         "hard_rules": [r.rule for r in persona.HARD_RULES],
         "intents": len(ALL_INTENTS),
         "approval_gated_intents": [i.name for i in approval_gated_intents()],
+        "approval_storage": _approval_storage_status(),
         "guarantees": [
             "No route writes to Drive, Notion, Airtable or n8n.",
             "Captures return a filing plan. The caller executes it.",
@@ -106,7 +120,13 @@ async def list_approvals() -> Dict[str, Any]:
             }
             for r in _queue.pending()
         ],
-        "note": "Process local queue. Not shared across workers.",
+        "storage": _approval_storage_status(),
+        "note": (
+            "PostgreSQL-backed shared approval state. The one-time plaintext token "
+            "is not stored or recoverable. Rulings remain human-only."
+            if _queue.storage_backend == "postgres"
+            else "Process-local approval queue configured explicitly for offline/local work."
+        ),
     }
 
 
