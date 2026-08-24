@@ -2,24 +2,25 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
 import secrets
+import socket
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.devon import _queue as approvals
 from app.api.v1.operator import _bridge as operator_bridge
+from app.db.session import AsyncSessionLocal
 from app.services.agent_runtime_persistence import (
     AgentLearningRepository,
     AgentTaskRepository,
+    TaskExecutionLeaseLost,
 )
 from app.services.intelligence import get_provider
-from services.agent_runtime.contracts import (
-    AgentTask,
-    PlanStep,
-    RuntimeResult,
-    ToolCall,
-)
+from services.agent_runtime.contracts import AgentTask, PlanStep, ToolCall
 from services.agent_runtime.planner import LLMPlanner, StaticPlanner
 from services.agent_runtime.runtime import AgentRuntime
 from services.agent_runtime.store import InMemoryAgentTaskStore
@@ -38,12 +39,31 @@ def build_tool_registry() -> ToolRegistry:
     return registry
 
 
+def _lease_seconds() -> int:
+    raw = os.getenv("DEVON_AGENT_TASK_LEASE_SECONDS", "120").strip()
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError("DEVON_AGENT_TASK_LEASE_SECONDS must be an integer") from exc
+    return max(15, min(value, 3600))
+
+
+@dataclass(frozen=True)
+class TaskRunOutcome:
+    result: Dict[str, Any]
+    idempotency_key: str
+    replayed: bool
+
+
 class DurableAgentTaskService:
-    """Persist every externally visible task transition in PostgreSQL."""
+    """Persist task transitions and fence execution across API workers."""
 
     def __init__(self) -> None:
         self.tasks = AgentTaskRepository()
         self.learning = AgentLearningRepository()
+        self.worker_id = (
+            f"{socket.gethostname()}:{os.getpid()}:{secrets.token_hex(4)}"
+        )
 
     async def create_task(
         self,
@@ -122,17 +142,87 @@ class DurableAgentTaskService:
         owner_id: str,
         task_id: str,
         max_steps: int = 20,
-    ) -> RuntimeResult:
-        task = await self._required(db, owner_id=owner_id, task_id=task_id)
-        runtime = self._runtime_for(task)
-        result = await runtime.run_until_blocked(task.task_id, max_steps=max_steps)
-        await self.tasks.save(
+        idempotency_key: Optional[str] = None,
+    ) -> TaskRunOutcome:
+        key = self._normalize_idempotency_key(idempotency_key)
+        lease_seconds = _lease_seconds()
+        claim = await self.tasks.acquire_execution(
             db,
             owner_id=owner_id,
-            task=result.task,
-            project_id=self._project_id(result.task),
+            task_id=task_id,
+            idempotency_key=key,
+            max_steps=max_steps,
+            lease_owner=self.worker_id,
+            lease_seconds=lease_seconds,
         )
-        return result
+        if claim.replay_result is not None:
+            return TaskRunOutcome(
+                result=dict(claim.replay_result),
+                idempotency_key=key,
+                replayed=True,
+            )
+        if claim.task is None or claim.lease_token is None:
+            raise TaskExecutionLeaseLost("execution claim is missing its fenced task state")
+
+        # The lease must be durable before any capability adapter can execute.
+        await db.commit()
+
+        stop_heartbeat = asyncio.Event()
+        lease_lost = asyncio.Event()
+        heartbeat = asyncio.create_task(
+            self._heartbeat_execution_lease(
+                stop=stop_heartbeat,
+                lost=lease_lost,
+                owner_id=owner_id,
+                task_id=task_id,
+                run_id=claim.run_id,
+                lease_token=claim.lease_token,
+                lease_seconds=lease_seconds,
+            )
+        )
+        try:
+            runtime = self._runtime_for(claim.task)
+            result = await runtime.run_until_blocked(
+                claim.task.task_id,
+                max_steps=max_steps,
+            )
+            await self._stop_heartbeat(stop_heartbeat, heartbeat)
+            if lease_lost.is_set():
+                raise TaskExecutionLeaseLost(
+                    "agent task lease renewal failed; stale result was not committed"
+                )
+            payload = result.to_dict()
+            await self.tasks.complete_execution(
+                db,
+                owner_id=owner_id,
+                run_id=claim.run_id,
+                lease_token=claim.lease_token,
+                task=result.task,
+                result_payload=payload,
+                project_id=self._project_id(result.task),
+            )
+            await db.commit()
+            return TaskRunOutcome(
+                result=payload,
+                idempotency_key=key,
+                replayed=False,
+            )
+        except Exception as exc:
+            await self._stop_heartbeat(stop_heartbeat, heartbeat)
+            await db.rollback()
+            try:
+                await self.tasks.fail_execution(
+                    db,
+                    owner_id=owner_id,
+                    task_id=task_id,
+                    run_id=claim.run_id,
+                    lease_token=claim.lease_token,
+                    error=str(exc),
+                )
+                await db.commit()
+            except Exception:
+                await db.rollback()
+            raise
 
     async def cancel(
         self,
@@ -142,7 +232,11 @@ class DurableAgentTaskService:
         task_id: str,
         reason: str,
     ) -> AgentTask:
-        task = await self._required(db, owner_id=owner_id, task_id=task_id)
+        task = await self._required_for_mutation(
+            db,
+            owner_id=owner_id,
+            task_id=task_id,
+        )
         runtime = self._runtime_for(task)
         cancelled = runtime.cancel(task.task_id, reason=reason)
         await self.tasks.save(
@@ -161,7 +255,11 @@ class DurableAgentTaskService:
         task_id: str,
         checkpoint_id: str,
     ) -> AgentTask:
-        task = await self._required(db, owner_id=owner_id, task_id=task_id)
+        task = await self._required_for_mutation(
+            db,
+            owner_id=owner_id,
+            task_id=task_id,
+        )
         runtime = self._runtime_for(task)
         rewound = runtime.rollback_agent_state(task.task_id, checkpoint_id)
         await self.tasks.save(
@@ -196,6 +294,13 @@ class DurableAgentTaskService:
                 "api_url": github_client.base_url,
                 "token_exposed": False,
             },
+            "execution": {
+                "shared_task_leases": True,
+                "fencing_tokens": True,
+                "idempotency_ledger": True,
+                "lease_seconds": _lease_seconds(),
+                "crash_atomic_external_effects": False,
+            },
         }
 
     async def _required(
@@ -209,6 +314,79 @@ class DurableAgentTaskService:
         if task is None:
             raise KeyError(f"unknown agent task: {task_id}")
         return task
+
+    async def _required_for_mutation(
+        self,
+        db: AsyncSession,
+        *,
+        owner_id: str,
+        task_id: str,
+    ) -> AgentTask:
+        task = await self.tasks.get_owned_for_mutation(
+            db,
+            owner_id=owner_id,
+            task_id=task_id,
+        )
+        if task is None:
+            raise KeyError(f"unknown agent task: {task_id}")
+        return task
+
+    async def _heartbeat_execution_lease(
+        self,
+        *,
+        stop: asyncio.Event,
+        lost: asyncio.Event,
+        owner_id: str,
+        task_id: str,
+        run_id: str,
+        lease_token: str,
+        lease_seconds: int,
+    ) -> None:
+        interval = max(5.0, lease_seconds / 3)
+        while True:
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=interval)
+                return
+            except TimeoutError:
+                pass
+            try:
+                async with AsyncSessionLocal() as session:
+                    renewed = await self.tasks.renew_execution(
+                        session,
+                        owner_id=owner_id,
+                        task_id=task_id,
+                        run_id=run_id,
+                        lease_token=lease_token,
+                        lease_seconds=lease_seconds,
+                    )
+                    if renewed:
+                        await session.commit()
+                    else:
+                        await session.rollback()
+                        lost.set()
+                        return
+            except Exception:
+                lost.set()
+                return
+
+    @staticmethod
+    async def _stop_heartbeat(stop: asyncio.Event, heartbeat: asyncio.Task) -> None:
+        if heartbeat.done():
+            await heartbeat
+            return
+        stop.set()
+        await heartbeat
+
+    @staticmethod
+    def _normalize_idempotency_key(value: Optional[str]) -> str:
+        if value is None:
+            return f"auto-{secrets.token_hex(16)}"
+        key = value.strip()
+        if not key:
+            raise ValueError("Idempotency-Key cannot be empty")
+        if len(key) > 200:
+            raise ValueError("Idempotency-Key exceeds 200 characters")
+        return key
 
     @staticmethod
     def _runtime_for(task: AgentTask) -> AgentRuntime:

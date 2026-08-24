@@ -60,6 +60,7 @@ _INCREMENTAL_SCHEMAS = (
     "004_federated_knowledge_waist.sql",
     "005_agent_runtime_persistence.sql",
     "006_devon_approval_store.sql",
+    "007_agent_task_execution_leases.sql",
 )
 
 _DSN = TEST_DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
@@ -69,6 +70,7 @@ _TEST_DB_NAME = _DSN.rsplit("/", 1)[1]
 # Tables wiped between tests (order respects FKs; agents stays seeded).
 _DATA_TABLES = (
     "devon_approvals",
+    "agent_task_runs",
     "agent_task_checkpoints",
     "agent_tasks",
     "agent_runtime_memories",

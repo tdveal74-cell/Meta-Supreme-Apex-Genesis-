@@ -23,6 +23,7 @@ from app.models.agent_runtime import (
     AgentRuntimeSkill,
     AgentTaskCheckpointRecord,
     AgentTaskRecord,
+    AgentTaskRunRecord,
 )
 from app.models.conversation import Conversation, Message
 from app.models.decision import Decision
@@ -40,6 +41,7 @@ __all__ = [
     "AgentRuntimeSkill",
     "AgentTaskCheckpointRecord",
     "AgentTaskRecord",
+    "AgentTaskRunRecord",
     "Conversation",
     "Decision",
     "Embedding",
