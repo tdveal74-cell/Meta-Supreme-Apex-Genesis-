@@ -26,13 +26,6 @@ jobs:
         run: |
           python -m pip install --quiet --upgrade pip
           python -m pip install --quiet -r requirements.txt
-      # The whole zero-infrastructure suite, named file by file. This ran only
-      # test_billing and test_definition — 12 of the 74 tests that need no
-      # database — while nine other files could not even be imported, so CI was
-      # green over a suite that mostly did not run.
-      # `make standalone` is the documented zero-infrastructure entry point, and
-      # nothing imported it, so moving a module out of the flat layout broke it
-      # silently. Importing it here is the cheapest way to keep that honest.
       - name: The documented offline entry point still imports
         run: python -c "import standalone_api; print(standalone_api.app.title)"
       - name: Offline suite (no database, no keys)
@@ -55,26 +48,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      # The declared dependency set, not a hand-picked subset. Naming packages
-      # one at a time meant every test added to this job failed first on an
-      # import — pydantic-settings, then httpx — rather than on anything the
-      # test asserts. requirements.txt is what this code says it needs.
       - run: |
           python -m pip install --quiet --upgrade pip
           python -m pip install --quiet -r requirements.txt
-      # These guarded on apps/api/tests, which has never existed in this repo,
-      # so the job printed a reassuring message and passed without running a
-      # test. A guard whose false branch always wins is not a guard.
       - name: Council and security (no database)
         run: |
           if [ ! -f services/agents/executor.py ]; then
             echo "::error::services/agents/executor.py is absent — it blocks test_council.py and test_phase4_council.py. See RESTORE.md."
             exit 1
           fi
-          # The two stream tests drive the endpoint through a real database, so
-          # they belong to the `api` job, which provisions one and runs the whole
-          # suite. Named individually rather than filtered by keyword: a `-k`
-          # pattern would silently widen as tests are added.
           python -m pytest test_council.py test_phase4_council.py test_security.py \
             -q --tb=short \
             --deselect test_phase4_council.py::test_stream_endpoint_emits_events_and_persists \
@@ -111,10 +93,10 @@ jobs:
 
       - name: The test fixture's schema and deploy migrations are present
         run: |
-          for f in 001_initial_schema 002_workflow_runs 003_schedule_dispatch 004_federated_knowledge_waist 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts; do
+          for f in 001_initial_schema 002_workflow_runs 003_schedule_dispatch 004_federated_knowledge_waist 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion; do
             test -s "database/schemas/$f.sql" || { echo "::error::database/schemas/$f.sql is missing or empty"; exit 1; }
           done
-          for f in 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts; do
+          for f in 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion; do
             test -s "database/migrations/versions/$f.py" || { echo "::error::database/migrations/versions/$f.py is missing or empty"; exit 1; }
           done
 
@@ -122,7 +104,7 @@ jobs:
         shell: bash -eo pipefail {0}
         run: python -m pytest -q --tb=short 2>&1 | tee pytest.out
 
-      - name: Fresh Alembic deploy reaches effect receipts head
+      - name: Fresh Alembic deploy reaches Hermes expansion head
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/meta_supreme
         run: |
@@ -147,6 +129,8 @@ jobs:
                       "devon_approvals",
                       "agent_effect_intents",
                       "agent_effect_receipts",
+                      "agent_schedules",
+                      "agent_skill_proposals",
                   }
                   rows = await conn.fetch(
                       "SELECT table_name FROM information_schema.tables "
@@ -170,7 +154,7 @@ jobs:
                       "execution_generation",
                   }, present_columns
                   revision = await conn.fetchval("SELECT version_num FROM alembic_version")
-                  assert revision == "008_agent_effect_receipts", revision
+                  assert revision == "009_agent_hermes_expansion", revision
               finally:
                   await conn.close()
 
