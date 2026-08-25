@@ -125,6 +125,11 @@ class MockProvider(AIProvider):
         topic = _topic_of(request)
         keys = _declared_keys(request)
 
+        if request.json_mode and request.metadata.get("component") == "devon-agent-planner":
+            planned = self._planner_response(request)
+            if planned is not None:
+                return planned
+
         if request.json_mode and keys:
             payload = {key: _value_for(key, topic) for key in keys}
             return json.dumps(payload, ensure_ascii=False)
@@ -139,4 +144,39 @@ class MockProvider(AIProvider):
             f"Simulated response for: {topic}\n\n"
             "This output was produced by the offline mock provider. Configure a "
             "real AI provider (Anthropic or OpenAI) to receive live intelligence."
+        )
+
+    @staticmethod
+    def _planner_response(request: CompletionRequest) -> Optional[str]:
+        """A valid single-step plan for the DEVON agent planner.
+
+        The planner validates tool names against its registry, so the step must
+        name a tool from the request's own catalog. Prefers a read tool; never
+        selects a blocked one. Returns None when the payload is not the
+        planner's contract so the generic shape still answers.
+        """
+        try:
+            payload = json.loads(request.messages[-1].content)
+            catalog = payload["tools"]
+            goal = str(payload.get("goal") or "the goal")
+        except (ValueError, KeyError, IndexError, TypeError):
+            return None
+        usable = [t for t in catalog if t.get("risk") != "blocked" and t.get("name")]
+        if not usable:
+            return None
+        tool = next((t for t in usable if t.get("risk") == "read"), usable[0])
+        return json.dumps(
+            {
+                "steps": [
+                    {
+                        "title": f"Simulated step for: {goal[:80]}",
+                        "tool": tool["name"],
+                        "arguments": {},
+                        "reason": "offline mock plan",
+                        "expected_outcome": "deterministic mock observation",
+                    }
+                ],
+                "completion_criteria": ["mock step executed"],
+            },
+            ensure_ascii=False,
         )
