@@ -70,6 +70,10 @@ class TaskRunPreviouslyFailed(RuntimeError):
     """A completed idempotency record already contains a failed execution."""
 
 
+class AmbiguousEffectRefusal(RuntimeError):
+    """An orphan effect intent blocks the task; automatic retry is refused."""
+
+
 @dataclass(frozen=True)
 class AgentTaskExecutionClaim:
     run_id: str

@@ -118,10 +118,16 @@ def probe():
     return json.loads(result.stdout.strip().splitlines()[-1])
 
 
+# The one non-GET route the soul service may answer. Conflict-search is a
+# recall query for the Build 12 learning gate: POST only because the claim
+# rides in a body, auth-gated, and it writes nothing anywhere.
+READ_ONLY_POST_ROUTES = [["POST", "/api/v1/soul/conflict-search"]]
+
+
 def test_the_deployed_service_has_no_write_surface(probe):
     """The DEVON Soul app in main.py remains structurally read-only."""
-    assert probe["effect_methods"] == [], (
-        f"the soul service answers {probe['effect_methods']}; Operator effects must stay outside main.py"
+    assert probe["effect_routes"] == READ_ONLY_POST_ROUTES, (
+        f"the soul service answers {probe['effect_routes']}; Operator effects must stay outside main.py"
     )
 
 

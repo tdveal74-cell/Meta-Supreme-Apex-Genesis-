@@ -61,6 +61,9 @@ _INCREMENTAL_SCHEMAS = (
     "005_agent_runtime_persistence.sql",
     "006_devon_approval_store.sql",
     "007_agent_task_execution_leases.sql",
+    "008_agent_effect_receipts.sql",
+    "009_agent_hermes_expansion.sql",
+    "010_agent_subagent_links.sql",
 )
 
 _DSN = TEST_DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
@@ -70,6 +73,11 @@ _TEST_DB_NAME = _DSN.rsplit("/", 1)[1]
 # Tables wiped between tests (order respects FKs; agents stays seeded).
 _DATA_TABLES = (
     "devon_approvals",
+    "agent_effect_receipts",
+    "agent_effect_intents",
+    "agent_subagent_links",
+    "agent_schedules",
+    "agent_skill_proposals",
     "agent_task_runs",
     "agent_task_checkpoints",
     "agent_tasks",

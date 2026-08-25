@@ -38,13 +38,11 @@ out = {
         }.__repr__()
         for r in main.app.routes
     ),
-    "effect_methods": sorted(
-        {
-            m
-            for r in main.app.routes
-            for m in (getattr(r, "methods", None) or [])
-            if m not in ("GET", "HEAD", "OPTIONS")
-        }
+    "effect_routes": sorted(
+        [m, r.path]
+        for r in main.app.routes
+        for m in (getattr(r, "methods", None) or [])
+        if m not in ("GET", "HEAD", "OPTIONS")
     ),
     # A high byte in the Authorization header used to escape the gate as a 500.
     # Sent as raw bytes: httpx refuses to ascii-encode a str header, but a

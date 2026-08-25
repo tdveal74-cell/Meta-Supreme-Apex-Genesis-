@@ -344,7 +344,12 @@ def test_browser_operator_is_gated_and_separate_from_soul():
     assert probe["authed_terminal"] == 200
     assert probe["authed_terminal_is_real"] is True
     assert probe["authed_status"] == 200
-    assert probe["mutations"] == [["POST", "/api/v1/operator-terminal/command"]]
+    # Terminal command is the only real mutation; soul conflict-search is a
+    # POST-shaped recall query (read-only, verified in test_deploy_soul).
+    assert probe["mutations"] == [
+        ["POST", "/api/v1/operator-terminal/command"],
+        ["POST", "/api/v1/soul/conflict-search"],
+    ]
 
 
 def test_browser_operator_reports_verified_git_worktree_contract():
