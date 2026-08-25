@@ -58,8 +58,8 @@ async def create_schedule(
             run_at=run_at,
             context=body.context,
         )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as err:
+        raise HTTPException(status_code=422, detail=str(err)) from err
     await db.commit()
     return item.to_dict()
 
@@ -93,10 +93,26 @@ async def materialize_due_schedules(
         created = await agent_tasks_service.materialize_due_schedules(
             db, owner_id=current_user.id
         )
-    except (ValueError, KeyError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (ValueError, KeyError) as err:
+        raise HTTPException(status_code=422, detail=str(err)) from err
     await db.commit()
     return created
+
+
+@router.get("/subagents")
+async def list_subagents(
+    current_user: CurrentUser,
+    parent_task_id: str = Query(..., min_length=1, max_length=64),
+    limit: int = Query(default=50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+) -> List[Dict[str, Any]]:
+    tasks = await agent_tasks_service.list_subagent_tasks(
+        db,
+        owner_id=current_user.id,
+        parent_task_id=parent_task_id,
+        limit=limit,
+    )
+    return [task.to_dict() for task in tasks]
 
 
 @router.post("/subagents", status_code=status.HTTP_201_CREATED)
@@ -115,10 +131,10 @@ async def spawn_subagent(
             max_steps=body.max_steps,
             inherit_context_keys=body.inherit_context_keys,
         )
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except KeyError as err:
+        raise HTTPException(status_code=404, detail=str(err)) from err
+    except ValueError as err:
+        raise HTTPException(status_code=422, detail=str(err)) from err
     await db.commit()
     return task.to_dict()
 
@@ -168,10 +184,10 @@ async def decide_skill_proposal(
             proposal_id=proposal_id,
             approve=body.approve,
         )
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Skill proposal not found") from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except KeyError as err:
+        raise HTTPException(status_code=404, detail="Skill proposal not found") from err
+    except ValueError as err:
+        raise HTTPException(status_code=409, detail=str(err)) from err
 
     result: Dict[str, Any] = {"proposal": decided.to_dict(), "skill": None}
     if body.approve and body.promote:

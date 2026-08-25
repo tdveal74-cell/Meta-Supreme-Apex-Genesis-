@@ -31,6 +31,7 @@ from services.agent_runtime.expansion import (
     new_subagent_spec,
 )
 from services.agent_runtime.expansion_tools import ExpansionToolAdapter
+from services.agent_runtime.learning_loop import draft_skill_proposal_from_task
 from services.agent_runtime.planner import LLMPlanner, StaticPlanner
 from services.agent_runtime.runtime import AgentRuntime
 from services.agent_runtime.store import InMemoryAgentTaskStore
@@ -57,6 +58,15 @@ def _browser_live_fetch_enabled() -> bool:
         "true",
         "yes",
         "on",
+    }
+
+
+def _auto_skill_propose_enabled() -> bool:
+    return os.getenv("DEVON_AUTO_SKILL_PROPOSE", "1").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
     }
 
 
@@ -182,6 +192,24 @@ class DurableAgentTaskService:
             context=child_context,
             project_id=project_id,
         )
+
+    async def list_subagent_tasks(
+        self,
+        db: AsyncSession,
+        *,
+        owner_id: str,
+        parent_task_id: str,
+        limit: int = 50,
+    ) -> List[AgentTask]:
+        tasks = await self.tasks.list_owned(
+            db, owner_id=owner_id, limit=max(limit, 100), offset=0
+        )
+        children = [
+            task
+            for task in tasks
+            if str(task.context.get("parent_task_id") or "") == parent_task_id
+        ]
+        return children[:limit]
 
     async def materialize_due_schedules(
         self,
@@ -349,6 +377,16 @@ class DurableAgentTaskService:
                     completed=result.task.state is TaskState.COMPLETED,
                     failure_reason=result.task.failure_reason or "",
                 )
+            if (
+                result.task.state is TaskState.COMPLETED
+                and _auto_skill_propose_enabled()
+            ):
+                proposal = draft_skill_proposal_from_task(result.task)
+                if proposal is not None:
+                    await self.expansion.save_skill_proposal(
+                        db, owner_id=owner_id, proposal=proposal
+                    )
+                    payload["skill_proposal"] = proposal.to_dict()
             await db.commit()
             return TaskRunOutcome(
                 result=payload,
@@ -461,6 +499,7 @@ class DurableAgentTaskService:
                 "skill_proposals": True,
                 "skill_promotion_requires_human": True,
                 "materialize_due_schedules": True,
+                "auto_skill_propose_on_success": _auto_skill_propose_enabled(),
             },
             "execution": {
                 "shared_task_leases": True,
