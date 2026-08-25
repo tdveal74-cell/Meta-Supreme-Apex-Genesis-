@@ -121,6 +121,38 @@ class HermesExpansionRepository:
         await db.flush()
         return self._schedule_from_row(row)
 
+    async def mark_from_task_outcome(
+        self,
+        db: AsyncSession,
+        *,
+        owner_id: str,
+        task_id: str,
+        completed: bool,
+        failure_reason: str = "",
+    ) -> Optional[ScheduledGoal]:
+        """If a schedule is linked to this task, mark it completed or failed."""
+        result = await db.execute(
+            select(AgentScheduleRecord).where(
+                AgentScheduleRecord.owner_id == owner_id,
+                AgentScheduleRecord.task_id == task_id,
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return None
+        if row.state in {
+            ScheduleState.COMPLETED.value,
+            ScheduleState.CANCELLED.value,
+        }:
+            return self._schedule_from_row(row)
+        row.state = (
+            ScheduleState.COMPLETED.value if completed else ScheduleState.FAILED.value
+        )
+        row.failure_reason = (failure_reason or "") if not completed else ""
+        row.updated_at = _utcnow()
+        await db.flush()
+        return self._schedule_from_row(row)
+
     async def save_skill_proposal(
         self,
         db: AsyncSession,
