@@ -19,6 +19,11 @@ wrong:
 5. Pinecone console — the only proof a committed record really exists.
    Digest emails say so explicitly: verify before trusting.
 
+The committer persists NO execution data (deliberate: approval tokens must
+never land in stored executions), so its n8n execution history is empty by
+design. Inspect the feed log and commit log with the read-only Table Reader
+workflow instead; never add an approval_queue read to it.
+
 ## Email vocabulary (all from Gmail, senderName tells you the organ)
 
 - "APPROVAL NEEDED: Soul commit: …" — the queue asking Tee to rule. Links
@@ -33,10 +38,12 @@ wrong:
 | Failure | Behavior |
 |---|---|
 | Feeder POST to webhook fails | not logged as fed; retried next poll; digest alerts |
-| Approval request POST fails | no commit-log row; retried next poll; digest alerts |
-| Soul upsert fails after approval | row stays PROPOSED with a note; approval stands; retried under the SAME record id (no duplicate possible) |
+| Approval request POST fails or its response is lost | no commit-log row; next poll reconciles against approval_queue by evidence and ADOPTS the request if the queue stored it anyway — the card is never raised twice, and a decision Tee made on it is honored |
+| Soul upsert fails after approval | row stays PROPOSED with an attempt counter in the note; approval stands; retried under the SAME record id (no duplicate possible); alerts damp to first failure + roughly every 4h |
 | Workflow crashes between commit and log update | next poll re-upserts same id, then updates the log — self-healing |
-| Proposal rejected or expired | terminal; never re-raised |
+| Workflow crashes anywhere (node error) | the Error Alarm workflow emails Tee out-of-band — in-band digests cannot fire from a dead run |
+| Proposal rejected, refused, or expired | terminal; never re-raised |
+| Queue row deleted / unknown status / bad expires_at | commit-log row closes EXPIRED 24h past the 72h TTL from proposed_at — nothing can stick silently forever |
 | Same job re-reported COMPLETED to the ledger | feeder feeds once per intent (feed log is the dedupe, not the ledger's learning_state) |
 
 ## Rules for touching things
