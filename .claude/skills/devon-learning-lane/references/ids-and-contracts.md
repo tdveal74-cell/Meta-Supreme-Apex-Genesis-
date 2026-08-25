@@ -16,7 +16,7 @@ before trusting in a much later session.
 | Approval Queue workflow | `syRVj0G47mA1b0Xn` | webhooks `devon-approve-request` (POST, x-devon-key) and `devon-approve-decide` (GET, token in link) |
 | approval_queue table | `u6wzeN5y9LNxROsN` | status pending/approved/rejected; 72h expiry; contains a plaintext token column — never read it |
 | Soul Committer workflow | `lANs6wopaK0PkNhN` | 15-min poll; propose + resolve branches; first draft `Wo7zPxpGH8kiBRy8` archived unpublished after adversarial review |
-| devon_soul_commit_log table | `U9fnVy19Vc8kvQAw` | intent_id, state (PROPOSED/COMMITTED/REJECTED/EXPIRED), request_id, record_id, claim, area, proposed_at, resolved_at, note |
+| devon_soul_commit_log table | `U9fnVy19Vc8kvQAw` | intent_id, state (PROPOSED/COMMITTED/REJECTED/EXPIRED/REVERTED), request_id, record_id, claim, area, proposed_at, resolved_at, note |
 | Error Alarm workflow | `XDQXwgFkUhYxoEjG` | shared error workflow; emails Tee when a workflow that names it crashes out-of-band |
 | Learning Lane Table Reader | `we45pHkQHRmSRnZx` | manual, read-only view of feed log + commit log; deliberately never reads approval_queue (token column) |
 
