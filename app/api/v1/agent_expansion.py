@@ -116,9 +116,9 @@ async def spawn_subagent(
             inherit_context_keys=body.inherit_context_keys,
         )
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exp
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exp
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     await db.commit()
     return task.to_dict()
 
@@ -169,9 +169,9 @@ async def decide_skill_proposal(
             approve=body.approve,
         )
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Skill proposal not found") from exp
-    except ValueError as exp:
-        raise HTTPException(status_code=409, detail=str(exp)) from exp
+        raise HTTPException(status_code=404, detail="Skill proposal not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     result: Dict[str, Any] = {"proposal": decided.to_dict(), "skill": None}
     if body.approve and body.promote:
