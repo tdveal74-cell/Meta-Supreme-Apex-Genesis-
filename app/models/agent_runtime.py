@@ -150,13 +150,6 @@ class AgentRuntimeSkill(Base):
 
 
 class AgentEffectIntentRecord(Base):
-    """Durable record of an external effect that is about to be attempted.
-
-    Written before the capability adapter is called. Bound to the task, step,
-    tool, arguments hash, and the caller's Idempotency-Key so a later receipt
-    can be matched exactly and a stale worker cannot claim a different intent.
-    """
-
     __tablename__ = "agent_effect_intents"
     __table_args__ = (
         UniqueConstraint(
@@ -187,14 +180,6 @@ class AgentEffectIntentRecord(Base):
 
 
 class AgentEffectReceiptRecord(Base):
-    """Durable record written after the external system has acknowledged the
-    effect (or after the adapter has recorded that no provider-level
-    idempotency was available).
-
-    Bound to the intent and to the same lease generation so a stale worker
-    cannot write a receipt for a lease it no longer owns.
-    """
-
     __tablename__ = "agent_effect_receipts"
     __table_args__ = (
         UniqueConstraint(
@@ -219,4 +204,67 @@ class AgentEffectReceiptRecord(Base):
     lease_token: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class AgentScheduleRecord(Base):
+    """Durable delayed goal for Hermes scheduler."""
+
+    __tablename__ = "agent_schedules"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_id",
+            "schedule_id",
+            name="uq_agent_schedules_owner_schedule",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    schedule_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    owner_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    goal: Mapped[str] = mapped_column(Text, nullable=False)
+    run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    context: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    task_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("agent_tasks.id", ondelete="SET NULL"), nullable=True
+    )
+    failure_reason: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class AgentSkillProposalRecord(Base):
+    """Durable skill proposal awaiting human promote/reject."""
+
+    __tablename__ = "agent_skill_proposals"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_id",
+            "proposal_id",
+            name="uq_agent_skill_proposals_owner_proposal",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    proposal_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    owner_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    instructions: Mapped[str] = mapped_column(Text, nullable=False)
+    source_task_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    decided_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
