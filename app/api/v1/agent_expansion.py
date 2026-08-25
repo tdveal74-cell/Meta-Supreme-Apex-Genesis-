@@ -58,8 +58,8 @@ async def create_schedule(
             run_at=run_at,
             context=body.context,
         )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as err:
+        raise HTTPException(status_code=422, detail=str(err)) from err
     await db.commit()
     return item.to_dict()
 
@@ -93,8 +93,8 @@ async def materialize_due_schedules(
         created = await agent_tasks_service.materialize_due_schedules(
             db, owner_id=current_user.id
         )
-    except (ValueError, KeyError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (ValueError, KeyError) as err:
+        raise HTTPException(status_code=422, detail=str(err)) from err
     await db.commit()
     return created
 
@@ -131,10 +131,10 @@ async def spawn_subagent(
             max_steps=body.max_steps,
             inherit_context_keys=body.inherit_context_keys,
         )
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exp
-    except ValueError as exp:
-        raise HTTPException(status_code=422, detail=str(exp)) from exp
+    except KeyError as err:
+        raise HTTPException(status_code=404, detail=str(err)) from err
+    except ValueError as err:
+        raise HTTPException(status_code=422, detail=str(err)) from err
     await db.commit()
     return task.to_dict()
 
@@ -184,10 +184,10 @@ async def decide_skill_proposal(
             proposal_id=proposal_id,
             approve=body.approve,
         )
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Skill proposal not found") from exp
-    except ValueError as exp:
-        raise HTTPException(status_code=409, detail=str(exp)) from exp
+    except KeyError as err:
+        raise HTTPException(status_code=404, detail="Skill proposal not found") from err
+    except ValueError as err:
+        raise HTTPException(status_code=409, detail=str(err)) from err
 
     result: Dict[str, Any] = {"proposal": decided.to_dict(), "skill": None}
     if body.approve and body.promote:
