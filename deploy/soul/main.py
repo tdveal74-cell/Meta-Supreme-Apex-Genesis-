@@ -32,6 +32,7 @@ import asyncio
 import hmac
 import os
 import pathlib
+import re
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -51,6 +52,8 @@ from services.devon.assistant import Devon  # noqa: E402
 from services.intelligence.providers.base import ProviderError  # noqa: E402
 from services.intelligence.soul import (  # noqa: E402
     DEFAULT_TEE_HOST,
+    DEVON_SOURCE,
+    TEE_SOURCE,
     SoulLayer,
 )
 
@@ -197,6 +200,165 @@ def _is_active(record: dict[str, Any]) -> bool:
     if status_val is None:
         return True
     return str(status_val).lower() == "active"
+
+
+# ---------------------------------------------------------------------------
+# Build 12 conflict policy
+# ---------------------------------------------------------------------------
+#
+# Both souls embed with llama-text-embed-v2 on cosine, so a match score is a
+# similarity in [0, 1]. Observed against live tee-soul-layer rulings: records
+# that merely share territory with a claim land around 0.10-0.22. The old
+# rule — any active match blocks — made those adjacent rulings a permanent
+# veto on learning. The bands below say what a score is evidence OF:
+#
+#   score <= 0                     unknown: no usable score, a human decides
+#   score <  CONFLICT_WEAK_BELOW   weak: shared territory, not a contradiction
+#   score <  CONFLICT_STRONG_AT    adjacent: close enough that a human decides
+#   score >= CONFLICT_STRONG_AT    strong: the claim sits inside ruled ground
+#
+# (A returned hit with no positive score is malformed upstream data, not a
+# measured dissimilarity — it may not count toward "clear".)
+#
+# Nothing here auto-resolves a contradiction (the precedence doctrine: for
+# contradictions, nothing wins — flag and let a human rule). The only outcome
+# this policy reaches on its own is "clear", and only when every active match
+# is weak and both souls were actually read in full. Everything stronger, and
+# every partial or failed read, still stops at a human.
+#
+# Known residual: the claim text steers the embedding, so a caller could in
+# principle pad or paraphrase a claim to dilute its similarity to a ruling.
+# The endpoint is CONSOLE_TOKEN-gated and fed by the trusted Candidate
+# Former, which the candidate itself never controls — the same trust that
+# makes this issuer's receipts acceptable at all.
+CONFLICT_WEAK_BELOW = 0.35
+CONFLICT_STRONG_AT = 0.60
+CONFLICT_POLICY_VERSION = "b12.1"
+
+#: Prohibition language. Inside a strong match this upgrades the label from
+#: "requires_human" to "conflict": a strongly similar ruling that forbids
+#: something is the shape a live contradiction takes. It is a label for the
+#: human reviewer, not a verdict — the claim may agree with the prohibition,
+#: and either label stops the write.
+_OPPOSITION_CUES = (
+    "never",
+    "must not",
+    "may not",
+    "do not",
+    "don't",
+    "not allowed",
+    "forbidden",
+    "forbid",
+    "forbids",
+    "prohibited",
+    "prohibits",
+    "banned",
+    "refuse",
+    "refuses",
+    "refused",
+    "reject",
+    "rejects",
+    "rejected",
+    "overruled",
+    "reversed",
+    "no-write",
+    "read-only",
+)
+
+_OPPOSITION_RE = re.compile(
+    r"(?<![a-z0-9])("
+    + "|".join(re.escape(cue) for cue in _OPPOSITION_CUES)
+    + r")(?![a-z0-9])"
+)
+
+
+def _score_band(score: float) -> str:
+    if score >= CONFLICT_STRONG_AT:
+        return "strong"
+    if score >= CONFLICT_WEAK_BELOW:
+        return "adjacent"
+    if score > 0.0:
+        return "weak"
+    return "unknown"
+
+
+def _opposing_cue(text: str) -> str | None:
+    """The first prohibition marker in a record's text, or None."""
+    # Typographic apostrophes fold to ASCII first, or a ruling written
+    # "don't" in a word processor would never match the cue.
+    lowered = (text or "").lower().replace("’", "'")
+    hit = _OPPOSITION_RE.search(lowered)
+    return hit.group(1) if hit else None
+
+
+def _saturated_window(
+    retrieved: list[dict[str, Any]], limits: dict[str, int]
+) -> str | None:
+    """
+    The source whose retrieval window may be hiding a non-weak hit, or None.
+
+    The status:active filter runs after retrieval, so inactive records spend
+    window slots. Every unretrieved hit scores at or below the lowest
+    retrieved one — which means a window that came back full with its floor
+    at or above the weak line could be concealing an active, non-weak match
+    below the cutoff, and nothing may be cleared past that. A full window
+    whose floor is weak conceals only weaker hits and clears safely.
+    """
+    for source, limit in limits.items():
+        records = [r for r in retrieved if r.get("source") == source]
+        if limit and len(records) >= limit:
+            floor = min(float(r.get("score") or 0.0) for r in records)
+            if floor >= CONFLICT_WEAK_BELOW:
+                return source
+    return None
+
+
+def _conflict_decision(matched: list[dict[str, Any]]) -> tuple[str, str]:
+    """
+    Judge the active matches. Escalation only — "clear" is reached solely
+    when every match is weak, and the caller still withholds it unless the
+    recall was complete and whole.
+    """
+    if not matched:
+        return "clear", "no active matches: nothing to conflict with"
+
+    strong = [m for m in matched if m["band"] == "strong"]
+    adjacent = [m for m in matched if m["band"] == "adjacent"]
+
+    for m in strong:
+        cue = _opposing_cue(str(m.get("text") or ""))
+        if cue:
+            return "conflict", (
+                f"strong match {m.get('id')} (score {m['score']:.2f}) carries "
+                f"prohibition language ({cue!r}): treated as a live conflict "
+                "until a human rules"
+            )
+    if strong:
+        top = max(strong, key=lambda m: m["score"])
+        return "requires_human", (
+            f"{len(strong)} strong match(es), top {top.get('id')} at "
+            f"{top['score']:.2f} (>= {CONFLICT_STRONG_AT}): the claim sits "
+            "inside ruled territory, a human decides"
+        )
+    if adjacent:
+        top = max(adjacent, key=lambda m: m["score"])
+        return "requires_human", (
+            f"{len(adjacent)} adjacent match(es), top {top.get('id')} at "
+            f"{top['score']:.2f} (>= {CONFLICT_WEAK_BELOW}): related enough "
+            "that a human decides"
+        )
+    unknown = [m for m in matched if m["band"] == "unknown"]
+    if unknown:
+        return "requires_human", (
+            f"{len(unknown)} match(es) carried no usable score: unbandable "
+            "evidence cannot clear, a human decides"
+        )
+    top = max(matched, key=lambda m: m["score"])
+    return "clear", (
+        f"all {len(matched)} active match(es) weak, top score "
+        f"{top['score']:.2f} (< {CONFLICT_WEAK_BELOW}): shared territory, "
+        "not a contradiction"
+    )
 
 
 def door_page(reason: str = "") -> str:
@@ -400,10 +562,28 @@ async def conflict_search(
 
     Hard timeout: if the search has not returned within CONFLICT_SEARCH_TIMEOUT_S
     the receipt is issued as incomplete + requires_human instead of hanging.
+
+    Conflict policy (b12.1): matches are banded by score — weak matches are
+    shared territory and do not block on their own; adjacent and strong
+    matches defer to a human; a strong match carrying prohibition language
+    is labeled a conflict outright. "clear" is only ever issued from a
+    complete recall with both souls read — a timeout, failure, or partial
+    read stays requires_human whatever was matched, and so does a retrieval
+    window that came back full with no weak-scored floor, because such a
+    window can hide an active non-weak match below the cutoff.
     """
     _require(authorization, t, devon_console)
 
     claim = body.claim.strip()
+    if len(claim) < 8:
+        # The schema's min_length runs on the raw string, so eight spaces
+        # slip past it, strip to nothing, and an empty recall would come
+        # back complete with no matches — a trusted "clear" receipt minted
+        # without a single record read. Refuse instead.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="claim must be at least 8 characters once whitespace is trimmed.",
+        )
     sources = body.sources or [
         "tee-soul-layer/rulings",
         "canon/rulings",
@@ -413,6 +593,8 @@ async def conflict_search(
 
     matched: list[dict[str, Any]] = []
     notes_parts: list[str] = []
+    recall_errors: list[str] = []
+    saturated: str | None = None
     complete = True
 
     try:
@@ -425,13 +607,20 @@ async def conflict_search(
             timeout=CONFLICT_SEARCH_TIMEOUT_S,
         )
 
-        for rec in recall.to_dicts():
+        retrieved = recall.to_dicts()
+        saturated = _saturated_window(
+            retrieved, {TEE_SOURCE: top_k_tee, DEVON_SOURCE: top_k_devon}
+        )
+
+        for rec in retrieved:
             if not _is_active(rec):
                 continue
+            score = float(rec.get("score") or 0.0)
             matched.append({
                 "id": rec.get("id"),
                 "text": rec.get("text"),
-                "score": rec.get("score"),
+                "score": score,
+                "band": _score_band(score),
                 "source": rec.get("source"),
                 "kind": rec.get("kind"),
                 "heading": rec.get("heading"),
@@ -444,6 +633,7 @@ async def conflict_search(
             f"active_matched={len(matched)}"
         )
         if recall.errors:
+            recall_errors = list(recall.errors)
             notes_parts.append("partial: " + "; ".join(recall.errors))
             if recall.tee_count == 0 and recall.devon_count == 0:
                 complete = False
@@ -464,12 +654,28 @@ async def conflict_search(
 
     notes_parts.append("status:active filter applied where the field exists")
 
-    if not complete:
-        conflict_status = "requires_human"
-    elif len(matched) == 0:
-        conflict_status = "clear"
-    else:
-        conflict_status = "requires_human"
+    conflict_status, decision = _conflict_decision(matched)
+    if conflict_status == "clear":
+        # Escalation may stand on partial evidence; clearance may not. A
+        # claim is only clear when both souls were read, in full, and still
+        # nothing stronger than weak adjacency came back.
+        if not complete:
+            conflict_status = "requires_human"
+            decision = "the search did not complete, so nothing can be cleared"
+        elif recall_errors:
+            conflict_status = "requires_human"
+            decision = (
+                "a soul went unread (partial recall): weak evidence from a "
+                "partial read cannot clear the claim"
+            )
+        elif saturated:
+            conflict_status = "requires_human"
+            decision = (
+                f"the {saturated} retrieval window came back full with no "
+                f"score below {CONFLICT_WEAK_BELOW}: an active non-weak match "
+                "may sit below the cutoff, so a human decides"
+            )
+    notes_parts.append(f"policy {CONFLICT_POLICY_VERSION}: {decision}")
 
     return {
         "receipt_id": _new_ulid(),
@@ -478,6 +684,12 @@ async def conflict_search(
         "conflict_status": conflict_status,
         "matched_records": matched,
         "notes": ". ".join(notes_parts) + ".",
+        "policy": {
+            "version": CONFLICT_POLICY_VERSION,
+            "weak_below": CONFLICT_WEAK_BELOW,
+            "strong_at": CONFLICT_STRONG_AT,
+            "decision": decision,
+        },
         "issued_at": _now(),
         "issued_by": "conflict-search-issuer",
     }

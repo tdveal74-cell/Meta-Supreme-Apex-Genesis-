@@ -38,9 +38,9 @@ out = {
         }.__repr__()
         for r in main.app.routes
     ),
-    "effect_methods": sorted(
+    "effect_routes": sorted(
         {
-            m
+            f"{m} {r.path}"
             for r in main.app.routes
             for m in (getattr(r, "methods", None) or [])
             if m not in ("GET", "HEAD", "OPTIONS")

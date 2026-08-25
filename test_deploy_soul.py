@@ -44,6 +44,10 @@ DELIBERATELY_DIFFERENT = {
         "app but executes commands only in Vercel Sandbox"
     ),
     "_selftest.py": "the behavioural probe below, run as a subprocess",
+    "_conflict_selftest.py": (
+        "the conflict-policy probe, run as a subprocess by "
+        "test_deploy_soul_conflict_policy.py"
+    ),
     "services/intelligence/__init__.py": (
         "trimmed: the platform version eagerly exposes the Council, which this lane does not ship"
     ),
@@ -119,9 +123,19 @@ def probe():
 
 
 def test_the_deployed_service_has_no_write_surface(probe):
-    """The DEVON Soul app in main.py remains structurally read-only."""
-    assert probe["effect_methods"] == [], (
-        f"the soul service answers {probe['effect_methods']}; Operator effects must stay outside main.py"
+    """The DEVON Soul app in main.py remains structurally read-only.
+
+    Exactly one route answers POST: the Build 12 conflict-search receipt
+    issuer. A claim is long and Tee-shaped, so it travels in a body rather
+    than a query string, but the route only reads — its handler recalls from
+    both souls and issues a receipt, and main.py holds no write path for it
+    to reach (its decision policy is covered by
+    test_deploy_soul_conflict_policy.py). Any other effect method appearing
+    here is a regression; Operator effects must stay outside main.py.
+    """
+    assert probe["effect_routes"] == ["POST /api/v1/soul/conflict-search"], (
+        f"the soul service answers {probe['effect_routes']}; the conflict-search "
+        "receipt issuer is the only permitted non-GET route"
     )
 
 
