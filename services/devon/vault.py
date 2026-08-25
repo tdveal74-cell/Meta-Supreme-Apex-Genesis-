@@ -287,7 +287,13 @@ WEBHOOKS = {
         "destination": "n8n data table approval_queue u6wzeN5y9LNxROsN",
         "workflow": "syRVj0G47mA1b0Xn",
         "auth": "header x-devon-key",
-        "open_ruling": "The POST half has never run. A missing email is the tell.",
+        "open_ruling": (
+            "POST half first proven live 2026-08-25 by the Soul Committer smoke. "
+            "Known defect, fix pending a ruling: Build Request's rand() uses signed "
+            "shifts, so ids and tokens can embed the literal text 'undefined' "
+            "(seen live: REQ-20260825-Jundef), collapsing suffix entropy. Fix is "
+            ">>> in place of >> for the three shifted indexes."
+        ),
     },
     "devon-approve-decide": {
         "job": "approve or refuse a pending action from an email link",
@@ -336,6 +342,14 @@ WORKFLOWS = {
     "Live State Ledger": {"id": "z9j2I8h0RnbDKGBO", "state": "active"},
     "Build 12 Upstream Test": {"id": "VznESplSFCs8ldph", "state": "active"},
     "Build 12 Ledger Feeder": {"id": "6hQD8YhiYzR1FFda", "state": "active, 15 minute poll"},
+    # Sole devon-soul writer, approval gated. First draft Wo7zPxpGH8kiBRy8 was
+    # archived unpublished after adversarial review; lANs6wopaK0PkNhN is the
+    # rebuild that shipped. Its execution data persistence is off on purpose
+    # (approval tokens must not land in stored executions); truth lives in the
+    # data tables and digest emails, read via the Table Reader.
+    "Soul Committer": {"id": "lANs6wopaK0PkNhN", "state": "active, 15 minute poll"},
+    "Error Alarm": {"id": "XDQXwgFkUhYxoEjG", "state": "active, shared error workflow"},
+    "Learning Lane Table Reader": {"id": "we45pHkQHRmSRnZx", "state": "manual, read only"},
     "TQO FINAL V5": {"id": "gsGJQan7a6ZufhYt", "state": "inactive by ruling"},
     "Capture Hook": {"id": "Cbd24ptTPWch3aZO", "state": "retired 2026-08-22"},
 }

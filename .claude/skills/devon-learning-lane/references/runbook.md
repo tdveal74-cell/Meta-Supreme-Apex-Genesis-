@@ -1,0 +1,73 @@
+# Learning lane runbook
+
+## Where the truth lives
+
+Each stage keeps its own receipt. Read them in this order when something looks
+wrong:
+
+1. `devon_state_ledger` — did the job actually reach COMPLETED? (terminal
+   states: COMPLETED, CANCELLED; only COMPLETED feeds.)
+2. `devon_build12_feed_log` — one row per fed job. `webhook_status` is the
+   HTTP code read back; `gate_decision` is what the gate answered. A missing
+   row means the feeder has not fed it yet (or its POST failed and is
+   retrying — a failure emailed a digest).
+3. `devon_soul_commit_log` — one row per PROMOTE proposal.
+   PROPOSED = awaiting Tee (an APPROVAL NEEDED email exists);
+   COMMITTED = written, `record_id` names the devon-soul record;
+   REJECTED / EXPIRED = closed forever.
+4. `approval_queue` — the decision record itself (status/decided_at).
+5. Pinecone console — the only proof a committed record really exists.
+   Digest emails say so explicitly: verify before trusting.
+
+The committer persists NO execution data (deliberate: approval tokens must
+never land in stored executions), so its n8n execution history is empty by
+design. Inspect the feed log and commit log with the read-only Table Reader
+workflow instead; never add an approval_queue read to it.
+
+## Email vocabulary (all from Gmail, senderName tells you the organ)
+
+- "APPROVAL NEEDED: Soul commit: …" — the queue asking Tee to rule. Links
+  expire after 72h; no decision is a rejection.
+- "Build 12 feeder: N job(s) fed…" — feed digest; FAILED lines retry next poll.
+- "Soul Committer: N record(s) committed…" — commits landed (verify in console).
+- "Soul Committer: … FAILED" / "closed without commit" — failures and closures.
+- Silence = nothing happened. Every poll with zero work sends nothing.
+
+## Failure semantics (what retries vs what stops)
+
+| Failure | Behavior |
+|---|---|
+| Feeder POST to webhook fails | not logged as fed; retried next poll; digest alerts |
+| Approval request POST fails or its response is lost | no commit-log row; next poll reconciles against approval_queue by evidence and ADOPTS the request if the queue stored it anyway — the card is never raised twice, and a decision Tee made on it is honored |
+| Soul upsert fails after approval | row stays PROPOSED with an attempt counter in the note; approval stands; retried under the SAME record id (no duplicate possible); alerts damp to first failure + roughly every 4h |
+| Workflow crashes between commit and log update | next poll re-upserts same id, then updates the log — self-healing |
+| Committer crashes anywhere (node error) | the Error Alarm workflow emails Tee out-of-band — in-band digests cannot fire from a dead run. ONLY the committer names the Error Alarm in its settings today; a crashed FEEDER or QUEUE alerts nobody, so when the lane stalls, check those two in the n8n executions list before trusting silence |
+| Feed-log row has webhook_status 200 but empty/garbled gate_decision | the gate answered 200 with a body the feeder could not parse a decision from; the intent is logged as fed (never re-fed) and invisible to the committer — terminal and near-silent (the feed digest line just lacks the ", gate ..." suffix). Repair: determine the gate's real decision (upstream execution history, or re-run the claim through the gate manually), then manually correct the feed-log row's gate_decision; a corrected PROMOTE enters committer intake on the next poll |
+| Proposal rejected, refused, or expired | terminal; never re-raised |
+| Queue row deleted / unknown status / bad expires_at | commit-log row closes EXPIRED 24h past the 72h TTL from proposed_at — nothing can stick silently forever |
+| Same job re-reported COMPLETED to the ledger | feeder feeds once per intent (feed log is the dedupe, not the ledger's learning_state) |
+
+## Rules for touching things
+
+- Conflict policy: edit `deploy/soul/main.py` in the repo, run
+  `test_deploy_soul_conflict_policy.py` + `test_deploy_soul.py`, ship by PR.
+  The deployed service updates on Vercel deploy of main.
+- Live n8n workflows: prefer creating a new additive workflow over editing a
+  live organ; if editing, export/read the JSON first and keep the sticky-note
+  documentation truthful. The Build 12 Upstream workflow is not editable via
+  MCP by design.
+- Any new webhook or workflow: register it in `services/devon/vault.py`
+  (WEBHOOKS / WORKFLOWS, mirrored byte-identically in
+  `deploy/soul/services/devon/vault.py`) in the same change — the map's own
+  rule: one path, one job, listed before a collision can route silently.
+- Nothing in this lane updates Drive, Notion, or canon unless Tee explicitly
+  instructs in the current session.
+
+## Trust ladder for the gate
+
+The gate is young. Confidence grows from receipts: feed digests accumulate
+gate decisions; PROMOTE stays rare (needs >= 2 independent sources + a clear
+receipt); every soul commit is individually human-approved. If the gate
+misbehaves, the conservative rollback is unpublishing the feeder or committer
+workflow (each is additive and stops cleanly) — never loosening the approval
+gate.
