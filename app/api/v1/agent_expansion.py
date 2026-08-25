@@ -116,9 +116,9 @@ async def spawn_subagent(
             inherit_context_keys=body.inherit_context_keys,
         )
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=404, detail=str(exc)) from exp
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise HTTPException(status_code=422, detail=str(exc)) from exp
     await db.commit()
     return task.to_dict()
 
