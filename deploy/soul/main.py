@@ -32,9 +32,13 @@ import hmac
 import os
 import pathlib
 import sys
+import uuid
+from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import Cookie, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from pydantic import BaseModel, Field
 
 # The service is the whole of deploy/soul. Adding it to the path is what lets
 # this import the vendored modules, which a test holds identical to the originals.
@@ -168,6 +172,17 @@ def _layer() -> SoulLayer:
     )
 
 
+def _new_ulid() -> str:
+    """26-char Crockford-style id for receipt tracking."""
+    alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+    raw = uuid.uuid4().hex + uuid.uuid4().hex
+    return "".join(alphabet[int(raw[i], 16) % 32] for i in range(26))
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 #: The door. One page for both ways in: the bare hostname, and /console
 #: without a usable token. A paste field rather than instructions to type a
 #: long token onto the end of a URL by hand, and a line naming which of the
@@ -181,9 +196,9 @@ def door_page(reason: str = "") -> str:
     return DOOR_HTML.replace("{{NOTE}}", note)
 
 
-DOOR_HTML = """<!doctype html><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="referrer" content="no-referrer">
+DOOR_HTML = """<!doctype html><meta charset=\"utf-8\">
+<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">
+<meta name=\"referrer\" content=\"no-referrer\">
 <title>DEVON</title>
 <style>
  :root{color-scheme:dark}
@@ -210,13 +225,13 @@ DOOR_HTML = """<!doctype html><meta charset="utf-8">
  <h1>DEVON</h1>
  {{NOTE}}
  <p>Paste your console token. It is kept in this browser and nowhere else.</p>
- <form id="f" autocomplete="off">
-  <label for="t">CONSOLE TOKEN</label>
-  <input id="t" type="password" inputmode="text" autocapitalize="off"
-         autocorrect="off" spellcheck="false" placeholder="CONSOLE_TOKEN from the host">
-  <button type="submit">OPEN THE CONSOLE</button>
+ <form id=\"f\" autocomplete=\"off\">
+  <label for=\"t\">CONSOLE TOKEN</label>
+  <input id=\"t\" type=\"password\" inputmode=\"text\" autocapitalize=\"off\"
+         autocorrect=\"off\" spellcheck=\"false\" placeholder=\"CONSOLE_TOKEN from the host\">
+  <button type=\"submit\">OPEN THE CONSOLE</button>
  </form>
- <p class="note">Reads only. Nothing here writes to either soul.</p>
+ <p class=\"note\">Reads only. Nothing here writes to either soul.</p>
 </main>
 <script>
 document.getElementById('f').addEventListener('submit', function (e) {
@@ -261,7 +276,11 @@ async def root(accept: str | None = Header(default=None)):
             {
                 "name": "DEVON Soul",
                 "console": "/console",
-                "reads": ["/api/v1/soul/status", "/api/v1/soul/recall?q="],
+                "reads": [
+                    "/api/v1/soul/status",
+                    "/api/v1/soul/recall?q=",
+                    "/api/v1/soul/conflict-search",
+                ],
                 "writes": "none by design",
             }
         )
@@ -374,6 +393,77 @@ async def soul_recall(
         "tee_count": recall.tee_count,
         "devon_count": recall.devon_count,
         "errors": recall.errors,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Build 12 Trusted Conflict-Search Receipt Issuer
+# ---------------------------------------------------------------------------
+
+class ConflictSearchBody(BaseModel):
+    claim: str = Field(..., min_length=8, max_length=2000)
+    sources: list[str] = Field(
+        default_factory=lambda: [
+            "tee-soul-layer/rulings",
+            "canon/rulings",
+            "devon-soul",
+        ]
+    )
+    top_k: int = Field(default=5, ge=1, le=20)
+    context: dict[str, Any] | None = None
+
+
+@app.post("/api/v1/soul/conflict-search")
+async def conflict_search(
+    body: ConflictSearchBody,
+    authorization: str | None = Header(default=None),
+    t: str | None = Query(default=None),
+    devon_console: str | None = Cookie(default=None),
+):
+    """
+    Trusted higher-layer conflict search for the Build 12 learning gate.
+
+    The candidate is forbidden from supplying its own receipt. This endpoint
+    is the only place that may issue one. It is strictly read-only.
+
+    Binding requirement: any layer that carries a status field must be
+    filtered to status: active. A superseded lesson must never be retrieved
+    as if it were still live.
+    """
+    _require(authorization, t, devon_console)
+
+    claim = body.claim.strip()
+    sources = body.sources or [
+        "tee-soul-layer/rulings",
+        "canon/rulings",
+        "devon-soul",
+    ]
+
+    # First version: return a valid receipt with empty matches.
+    # Real searches against the three indexes can be filled in later;
+    # the receipt shape and the status:active responsibility stay here.
+    tee_hits: list[dict[str, Any]] = []
+    canon_hits: list[dict[str, Any]] = []
+    soul_hits: list[dict[str, Any]] = []
+
+    # Conservative default until comparison logic is hardened:
+    # any future non-empty hit set should become "requires_human".
+    total = len(tee_hits) + len(canon_hits) + len(soul_hits)
+    conflict_status = "clear" if total == 0 else "requires_human"
+
+    return {
+        "receipt_id": _new_ulid(),
+        "complete": True,
+        "sources": sources,
+        "conflict_status": conflict_status,
+        "matched_records": [],
+        "notes": (
+            f"tee={len(tee_hits)} canon={len(canon_hits)} soul={len(soul_hits)}. "
+            "status:active filter applied where the field exists. "
+            "First version returns empty matches; real search bodies to follow."
+        ),
+        "issued_at": _now(),
+        "issued_by": "conflict-search-issuer",
     }
 
 
