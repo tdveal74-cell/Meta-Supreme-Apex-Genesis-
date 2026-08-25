@@ -176,6 +176,29 @@ class HermesExpansionRepository:
         await db.flush()
         return proposal
 
+    async def has_skill_proposal_named(
+        self,
+        db: AsyncSession,
+        *,
+        owner_id: str,
+        name: str,
+    ) -> bool:
+        """True when any proposal for this goal slug already exists.
+
+        A PROPOSED one is awaiting the human decision, a REJECTED one was
+        already declined, and an APPROVED one is already promoted - in every
+        case drafting another copy of the same goal is noise.
+        """
+        result = await db.execute(
+            select(AgentSkillProposalRecord.id)
+            .where(
+                AgentSkillProposalRecord.owner_id == owner_id,
+                AgentSkillProposalRecord.name == name,
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is not None
+
     async def get_skill_proposal(
         self,
         db: AsyncSession,

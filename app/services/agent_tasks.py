@@ -396,7 +396,9 @@ class DurableAgentTaskService:
                 and _auto_skill_propose_enabled()
             ):
                 proposal = draft_skill_proposal_from_task(result.task)
-                if proposal is not None:
+                if proposal is not None and not await self.expansion.has_skill_proposal_named(
+                    db, owner_id=owner_id, name=proposal.name
+                ):
                     await self.expansion.save_skill_proposal(
                         db, owner_id=owner_id, proposal=proposal
                     )
