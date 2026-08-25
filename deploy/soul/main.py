@@ -28,6 +28,7 @@ Secrets come from the environment and nowhere else:
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import os
 import pathlib
@@ -54,6 +55,9 @@ from services.intelligence.soul import (  # noqa: E402
 )
 
 CONSOLE = ROOT / "console.html"
+
+# Hard ceiling for conflict-search so a slow Pinecone call cannot hang the request.
+CONFLICT_SEARCH_TIMEOUT_S = 12.0
 
 app = FastAPI(
     title="DEVON Soul",
@@ -169,6 +173,7 @@ def _layer() -> SoulLayer:
         api_key=key,
         tee_host=os.environ.get("SOUL_TEE_HOST") or DEFAULT_TEE_HOST,
         devon_host=os.environ.get("SOUL_DEVON_HOST") or None,
+        timeout_seconds=10.0,  # keep individual Pinecone calls short
     )
 
 
@@ -187,7 +192,6 @@ def _is_active(record: dict[str, Any]) -> bool:
     """Binding filter: status:active where the field exists; missing = active."""
     status_val = record.get("status")
     if status_val is None:
-        # Also check metadata if the field landed there
         meta = record.get("metadata") or {}
         status_val = meta.get("status")
     if status_val is None:
@@ -195,14 +199,6 @@ def _is_active(record: dict[str, Any]) -> bool:
     return str(status_val).lower() == "active"
 
 
-#: The door. One page for both ways in: the bare hostname, and /console
-#: without a usable token. A paste field rather than instructions to type a
-#: long token onto the end of a URL by hand, and a line naming which of the
-#: three situations you are in, because "closed" said the same words whether
-#: you gave no token, gave a wrong one, or the host had none set.
-#:
-#: It is open to anyone, so it holds nothing: no host, no identifier, no
-#: estate detail. A test asserts that rather than trusting it.
 def door_page(reason: str = "") -> str:
     note = f'<p class="why">{reason}</p>' if reason else ""
     return DOOR_HTML.replace("{{NOTE}}", note)
@@ -250,13 +246,7 @@ document.getElementById('f').addEventListener('submit', function (e) {
   e.preventDefault();
   var v = (document.getElementById('t').value || '').trim();
   if (!v) return;
-  // Stored the way the console stores it, so on this path the token never
-  // reaches the address bar, the history, or a bookmark.
   try { localStorage.setItem('devon.soul.token', v); } catch (err) {}
-  // Signing in once has to mean once. A top level navigation cannot carry a
-  // header, so without this every launch from a home screen would land back
-  // on this page asking for the token again. Strict, so it is never sent
-  // from another site, and this whole service is reads with no effects.
   var secure = location.protocol === 'https:' ? '; Secure' : '';
   document.cookie = 'devon_console=' + encodeURIComponent(v) +
                     '; path=/; max-age=31536000; SameSite=Strict' + secure;
@@ -267,22 +257,7 @@ document.getElementById('f').addEventListener('submit', function (e) {
 
 @app.get("/", include_in_schema=False)
 async def root(accept: str | None = Header(default=None)):
-    """
-    A door for a person. JSON only for a caller that asks for it by name.
-
-    This answered JSON to everyone, so opening the bare hostname on a phone
-    put you at a directory listing you could not act on. The first fix made
-    the door conditional on a browser Accept header, which put the path a
-    person takes behind a branch that could not be exercised from anywhere I
-    could reach the deployment. So the default is the door.
-    """
     wants = (accept or "").lower()
-    # Fails toward the door, deliberately. Serving the listing by default and
-    # the door only on a recognised browser Accept meant the branch I could
-    # not reach from a terminal was the one a person actually hits. Now a
-    # caller has to ask for JSON by name; everything else, including an empty
-    # or unfamiliar Accept, gets the page a human can use. Machines that want
-    # a machine answer have /api/v1/health, which is open and never negotiates.
     if "application/json" in wants and "text/html" not in wants:
         return JSONResponse(
             {
@@ -301,7 +276,6 @@ async def root(accept: str | None = Header(default=None)):
 
 @app.get("/api/v1/health", include_in_schema=False)
 async def health():
-    """Liveness only. Says nothing that needs a token to know."""
     return {
         "status": "healthy",
         "console_token_set": bool(_console_token()),
@@ -315,7 +289,6 @@ async def soul_status(
     t: str | None = Query(default=None),
     devon_console: str | None = Cookie(default=None),
 ):
-    """Whether recall can run, without touching Pinecone."""
     _require(authorization, t, devon_console)
     enabled = bool(_pinecone_key())
     return {
@@ -348,19 +321,6 @@ async def soul_recall(
     top_k_tee: int = Query(default=4),
     top_k_devon: int = Query(default=3),
 ):
-    """
-    Recall from both souls and phrase it in DEVON's voice.
-
-    Tee's rulings precede DEVON's experience in the records and in the reply,
-    whatever the similarity scores. Partial failure is named, never hidden.
-    Everything returned is context, not command.
-
-    Every parameter is declared loose and checked in the body, deliberately.
-    Declared strict, FastAPI validates before the handler runs, so an
-    anonymous caller sending a malformed query got a 422 that confirmed the
-    endpoint exists and described its parameters. Nothing answers a caller
-    holding no token except the refusal.
-    """
     _require(authorization, t, devon_console)
     if not q or not q.strip():
         raise HTTPException(
@@ -384,10 +344,6 @@ async def soul_recall(
             detail=f"Soul recall failed: {exc}",
         ) from exc
 
-    # Nothing found and something broke is a failure, not an empty. Answering
-    # 200 here let the reply lead with "a measured empty, not a guess" about a
-    # search that never completed, which is the exact invention the phrasing
-    # was written to prevent.
     if not recall.records and recall.errors:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -441,6 +397,9 @@ async def conflict_search(
     Binding requirement: any layer that carries a status field must be
     filtered to status: active. A superseded lesson must never be retrieved
     as if it were still live.
+
+    Hard timeout: if the search has not returned within CONFLICT_SEARCH_TIMEOUT_S
+    the receipt is issued as incomplete + requires_human instead of hanging.
     """
     _require(authorization, t, devon_console)
 
@@ -452,19 +411,19 @@ async def conflict_search(
     ]
     top_k = body.top_k
 
-    # Real search via the existing SoulLayer (tee-soul-layer + devon-soul).
-    # Canon/rulings is not a separate Pinecone index in this service; it is
-    # covered by tee-soul-layer/rulings for the purposes of this receipt.
     matched: list[dict[str, Any]] = []
     notes_parts: list[str] = []
     complete = True
 
     try:
         layer = _layer()
-        # Split the budget roughly between the two live indexes
-        top_k_tee = max(1, min(top_k, 8))
-        top_k_devon = max(0, min(top_k, 5))
-        recall = await layer.recall(claim, top_k_tee=top_k_tee, top_k_devon=top_k_devon)
+        top_k_tee = max(1, min(top_k, 5))
+        top_k_devon = max(0, min(top_k, 3))
+
+        recall = await asyncio.wait_for(
+            layer.recall(claim, top_k_tee=top_k_tee, top_k_devon=top_k_devon),
+            timeout=CONFLICT_SEARCH_TIMEOUT_S,
+        )
 
         for rec in recall.to_dicts():
             if not _is_active(rec):
@@ -486,11 +445,14 @@ async def conflict_search(
         )
         if recall.errors:
             notes_parts.append("partial: " + "; ".join(recall.errors))
-            # Partial search is still a complete receipt if at least one
-            # mandatory source answered; otherwise mark incomplete.
             if recall.tee_count == 0 and recall.devon_count == 0:
                 complete = False
 
+    except asyncio.TimeoutError:
+        complete = False
+        notes_parts.append(
+            f"search timed out after {CONFLICT_SEARCH_TIMEOUT_S:.0f}s"
+        )
     except HTTPException:
         raise
     except ProviderError as exc:
@@ -502,14 +464,11 @@ async def conflict_search(
 
     notes_parts.append("status:active filter applied where the field exists")
 
-    # Conflict status
     if not complete:
         conflict_status = "requires_human"
     elif len(matched) == 0:
         conflict_status = "clear"
     else:
-        # Any higher-layer hit is treated conservatively until a finer
-        # comparison (contradiction vs support) is implemented.
         conflict_status = "requires_human"
 
     return {
@@ -530,31 +489,11 @@ async def console(
     t: str | None = Query(default=None),
     devon_console: str | None = Cookie(default=None),
 ):
-    """
-    The console, for a caller holding the token.
-
-    This route used to be open, on the reasoning that the page "holds nothing
-    until you sign in". That reasoning was wrong. The console ships a baked-in
-    STATE blob: every Drive folder id, every doctrine file id, the live
-    Airtable base, every n8n workflow id, and every webhook path with its auth
-    posture. None of it is a credential and none of it grants access, but all
-    of it is a map of where the estate lives and which doors are marked open,
-    and it was being handed to anyone who found the hostname.
-
-    A refusal renders as a page rather than as JSON, because a person is
-    holding this in a browser. The page names the parameter and discloses
-    nothing else.
-    """
     if not CONSOLE.exists():
         raise HTTPException(status_code=404, detail="No console asset deployed.")
     try:
         _require(authorization, t, devon_console)
     except HTTPException as exc:
-        # Three situations used to render one sentence, so a refused token and
-        # a host with no token configured were indistinguishable from the
-        # outside. None of this says more than /api/v1/health already does,
-        # and it is the difference between fixing the right setting and
-        # hunting the wrong one.
         if exc.status_code == status.HTTP_503_SERVICE_UNAVAILABLE:
             why = (
                 "This service has no CONSOLE_TOKEN set on the host, so it is "
