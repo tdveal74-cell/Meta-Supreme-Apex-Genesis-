@@ -24,21 +24,32 @@ from app.services.intelligence import get_provider
 from app.services.leased_effect_recorder import LeasedEffectRecorder
 from services.agent_runtime.contracts import AgentTask, PlanStep, TaskState, ToolCall
 from services.agent_runtime.effect_recorder import EffectRecorder
+from services.agent_runtime.expansion import InMemoryScheduleStore, SkillProposalStore
+from services.agent_runtime.expansion_tools import ExpansionToolAdapter
 from services.agent_runtime.planner import LLMPlanner, StaticPlanner
 from services.agent_runtime.runtime import AgentRuntime
 from services.agent_runtime.store import InMemoryAgentTaskStore
 from services.agent_runtime.tools import ToolRegistry
+from services.browser.agent_adapter import BrowserCapabilityAdapter
 from services.github.agent_adapter import GitHubCapabilityAdapter
 from services.github.client import GitHubRESTClient
 from services.operator.agent_adapter import OperatorCapabilityAdapter
 
 github_client = GitHubRESTClient()
+schedule_store = InMemoryScheduleStore()
+skill_proposal_store = SkillProposalStore()
+expansion_adapter = ExpansionToolAdapter(
+    schedules=schedule_store,
+    skill_proposals=skill_proposal_store,
+)
 
 
 def build_tool_registry() -> ToolRegistry:
     registry = ToolRegistry()
     OperatorCapabilityAdapter(operator_bridge, approvals).register(registry)
     GitHubCapabilityAdapter(github_client, approvals).register(registry)
+    BrowserCapabilityAdapter(approvals).register(registry)
+    expansion_adapter.register(registry)
     return registry
 
 
@@ -46,8 +57,8 @@ def _lease_seconds() -> int:
     raw = os.getenv("DEVON_AGENT_TASK_LEASE_SECONDS", "120").strip()
     try:
         value = int(raw)
-    except ValueError as exc:
-        raise ValueError("DEVON_AGENT_TASK_LEASE_SECONDS must be an integer") from exc
+    except ValueError as exp:
+        raise ValueError("DEVON_AGENT_TASK_LEASE_SECONDS must be an integer") from exp
     return max(15, min(value, 3600))
 
 
@@ -150,7 +161,6 @@ class DurableAgentTaskService:
     ) -> TaskRunOutcome:
         key = self._normalize_idempotency_key(idempotency_key)
 
-        # Refuse automatic retry when a prior crash left an intent without a receipt.
         orphans = await self.effects.find_orphan_intents(
             db, owner_id=owner_id, task_id=task_id
         )
@@ -191,7 +201,6 @@ class DurableAgentTaskService:
         if claim.task is None or claim.lease_token is None:
             raise TaskExecutionLeaseLost("execution claim is missing its fenced task state")
 
-        # The lease must be durable before any capability adapter can execute.
         await db.commit()
 
         stop_heartbeat = asyncio.Event()
@@ -331,6 +340,17 @@ class DurableAgentTaskService:
                 "allowed_repositories": github_client.allowed_repositories,
                 "api_url": github_client.base_url,
                 "token_exposed": False,
+            },
+            "browser": {
+                "enabled": True,
+                "allowlisted_fetch": True,
+                "navigate_requires_approval": True,
+            },
+            "expansion": {
+                "subagents": True,
+                "scheduler": True,
+                "skill_proposals": True,
+                "skill_promotion_requires_human": True,
             },
             "execution": {
                 "shared_task_leases": True,
