@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent_runtime import AgentScheduleRecord, AgentSkillProposalRecord
 from services.agent_runtime.expansion import (
-    ScheduleState,
     ScheduledGoal,
+    ScheduleState,
     SkillProposal,
     SkillProposalState,
 )

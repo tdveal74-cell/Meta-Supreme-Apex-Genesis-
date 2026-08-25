@@ -13,10 +13,10 @@ branch: feat/devon-hermes-expansion
 
 ## Delivered
 
-1. **Subagents** — `SubAgentSpec` + `runtime.spawn_subagent` (WRITE, approval-gated). Bounded max_steps (1–12). Proposes child goal under parent; does not bypass receipts.
-2. **Scheduler** — `ScheduledGoal` + `InMemoryScheduleStore` + `runtime.schedule_goal`. Due scan via `store.due()`. No silent effects.
-3. **Browser** — `BrowserCapabilityAdapter` with allowlisted `browser.fetch` (READ) and approval-gated `browser.navigate` (WRITE). Offline stub safe for CI.
-4. **Skill proposals** — `SkillProposalStore` drafts from completed observations; `decide(approve=True|False)`. Promotion is human-only.
+1. **Subagents**: `SubAgentSpec` + `runtime.spawn_subagent` (WRITE, approval-gated). Bounded max_steps (1 to 12). Proposes child goal under parent; does not bypass receipts.
+2. **Scheduler**: `ScheduledGoal` + `InMemoryScheduleStore` + `runtime.schedule_goal`. Due scan via `store.due()`. No silent effects.
+3. **Browser**: `BrowserCapabilityAdapter` with allowlisted `browser.fetch` (READ) and approval-gated `browser.navigate` (WRITE). Offline stub safe for CI.
+4. **Skill proposals**: `SkillProposalStore` drafts from completed observations; `decide(approve=True|False)`. Promotion is human-only.
 
 ## Wiring
 

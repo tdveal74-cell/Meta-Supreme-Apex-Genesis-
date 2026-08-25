@@ -17,6 +17,7 @@ from app.db.session import get_db
 from app.models.project import Project
 from app.security.deps import CurrentUser
 from app.services.agent_runtime_persistence import (
+    AmbiguousEffectRefusal,
     TaskExecutionBusy,
     TaskExecutionLeaseLost,
     TaskRunConflict,
@@ -171,6 +172,7 @@ async def run_task(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except (
         AgentRuntimeError,
+        AmbiguousEffectRefusal,
         TaskExecutionBusy,
         TaskExecutionLeaseLost,
         TaskRunConflict,

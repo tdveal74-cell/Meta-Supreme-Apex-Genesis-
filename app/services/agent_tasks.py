@@ -18,6 +18,7 @@ from app.services.agent_effect_receipts import EffectReceiptRepository
 from app.services.agent_runtime_persistence import (
     AgentLearningRepository,
     AgentTaskRepository,
+    AmbiguousEffectRefusal,
     TaskExecutionLeaseLost,
 )
 from app.services.hermes_expansion_persistence import HermesExpansionRepository
@@ -324,7 +325,7 @@ class DurableAgentTaskService:
                     project_id=self._project_id(task),
                 )
                 await db.commit()
-            raise RuntimeError(
+            raise AmbiguousEffectRefusal(
                 f"ambiguous_external_effect: {orphans[0].detail} "
                 f"(intent_id={orphans[0].intent.intent_id})"
             )
@@ -386,6 +387,19 @@ class DurableAgentTaskService:
                     "agent task lease renewal failed; stale result was not committed"
                 )
             payload = result.to_dict()
+            # The drafted proposal must enter the payload before the run ledger
+            # stores it, or an idempotent replay would differ from the original
+            # response by exactly this key.
+            if (
+                result.task.state is TaskState.COMPLETED
+                and _auto_skill_propose_enabled()
+            ):
+                proposal = draft_skill_proposal_from_task(result.task)
+                if proposal is not None:
+                    await self.expansion.save_skill_proposal(
+                        db, owner_id=owner_id, proposal=proposal
+                    )
+                    payload["skill_proposal"] = proposal.to_dict()
             await self.tasks.complete_execution(
                 db,
                 owner_id=owner_id,
@@ -403,16 +417,6 @@ class DurableAgentTaskService:
                     completed=result.task.state is TaskState.COMPLETED,
                     failure_reason=result.task.failure_reason or "",
                 )
-            if (
-                result.task.state is TaskState.COMPLETED
-                and _auto_skill_propose_enabled()
-            ):
-                proposal = draft_skill_proposal_from_task(result.task)
-                if proposal is not None:
-                    await self.expansion.save_skill_proposal(
-                        db, owner_id=owner_id, proposal=proposal
-                    )
-                    payload["skill_proposal"] = proposal.to_dict()
             await db.commit()
             return TaskRunOutcome(
                 result=payload,

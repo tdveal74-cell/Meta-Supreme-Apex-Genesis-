@@ -25,10 +25,10 @@ repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 
 ## API surface
 
-- `/api/v1/agent-tasks` — tasks, run, learning
-- `/api/v1/agent-expansion/schedules` — create, list, due, materialize
-- `/api/v1/agent-expansion/subagents` — spawn child task
-- `/api/v1/agent-expansion/skill-proposals` — propose, list, decide+promote
+- `/api/v1/agent-tasks`: tasks, run, learning
+- `/api/v1/agent-expansion/schedules`: create, list, due, materialize
+- `/api/v1/agent-expansion/subagents`: spawn child task
+- `/api/v1/agent-expansion/skill-proposals`: propose, list, decide+promote
 
 ## Governance invariants held
 
