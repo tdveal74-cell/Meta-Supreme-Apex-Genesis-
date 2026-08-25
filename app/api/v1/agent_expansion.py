@@ -99,6 +99,22 @@ async def materialize_due_schedules(
     return created
 
 
+@router.get("/subagents")
+async def list_subagents(
+    current_user: CurrentUser,
+    parent_task_id: str = Query(..., min_length=1, max_length=64),
+    limit: int = Query(default=50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+) -> List[Dict[str, Any]]:
+    tasks = await agent_tasks_service.list_subagent_tasks(
+        db,
+        owner_id=current_user.id,
+        parent_task_id=parent_task_id,
+        limit=limit,
+    )
+    return [task.to_dict() for task in tasks]
+
+
 @router.post("/subagents", status_code=status.HTTP_201_CREATED)
 async def spawn_subagent(
     body: SubagentSpawnBody,
@@ -169,9 +185,9 @@ async def decide_skill_proposal(
             approve=body.approve,
         )
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Skill proposal not found") from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=404, detail="Skill proposal not found") from exp
+    except ValueError as exp:
+        raise HTTPException(status_code=409, detail=str(exp)) from exp
 
     result: Dict[str, Any] = {"proposal": decided.to_dict(), "skill": None}
     if body.approve and body.promote:
