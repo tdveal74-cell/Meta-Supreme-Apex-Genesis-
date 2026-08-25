@@ -20,17 +20,23 @@ from app.services.agent_runtime_persistence import (
     AgentTaskRepository,
     TaskExecutionLeaseLost,
 )
+from app.services.hermes_expansion_persistence import HermesExpansionRepository
 from app.services.intelligence import get_provider
 from app.services.leased_effect_recorder import LeasedEffectRecorder
 from services.agent_runtime.contracts import AgentTask, PlanStep, TaskState, ToolCall
 from services.agent_runtime.effect_recorder import EffectRecorder
-from services.agent_runtime.expansion import InMemoryScheduleStore, SkillProposalStore
+from services.agent_runtime.expansion import (
+    InMemoryScheduleStore,
+    SkillProposalStore,
+    new_subagent_spec,
+)
 from services.agent_runtime.expansion_tools import ExpansionToolAdapter
 from services.agent_runtime.planner import LLMPlanner, StaticPlanner
 from services.agent_runtime.runtime import AgentRuntime
 from services.agent_runtime.store import InMemoryAgentTaskStore
 from services.agent_runtime.tools import ToolRegistry
 from services.browser.agent_adapter import BrowserCapabilityAdapter
+from services.browser.http_fetcher import maybe_live_fetcher
 from services.github.agent_adapter import GitHubCapabilityAdapter
 from services.github.client import GitHubRESTClient
 from services.operator.agent_adapter import OperatorCapabilityAdapter
@@ -42,13 +48,26 @@ expansion_adapter = ExpansionToolAdapter(
     schedules=schedule_store,
     skill_proposals=skill_proposal_store,
 )
+expansion_repo = HermesExpansionRepository()
+
+
+def _browser_live_fetch_enabled() -> bool:
+    return os.getenv("DEVON_BROWSER_LIVE_FETCH", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def build_tool_registry() -> ToolRegistry:
     registry = ToolRegistry()
     OperatorCapabilityAdapter(operator_bridge, approvals).register(registry)
     GitHubCapabilityAdapter(github_client, approvals).register(registry)
-    BrowserCapabilityAdapter(approvals).register(registry)
+    BrowserCapabilityAdapter(
+        approvals,
+        fetcher=maybe_live_fetcher(_browser_live_fetch_enabled()),
+    ).register(registry)
     expansion_adapter.register(registry)
     return registry
 
@@ -76,6 +95,7 @@ class DurableAgentTaskService:
         self.tasks = AgentTaskRepository()
         self.learning = AgentLearningRepository()
         self.effects = EffectReceiptRepository()
+        self.expansion = expansion_repo
         self.worker_id = (
             f"{socket.gethostname()}:{os.getpid()}:{secrets.token_hex(4)}"
         )
@@ -125,6 +145,79 @@ class DurableAgentTaskService:
             project_id=project_id,
         )
         return task
+
+    async def spawn_subagent_task(
+        self,
+        db: AsyncSession,
+        *,
+        owner_id: str,
+        parent_task_id: str,
+        goal: str,
+        max_steps: int = 8,
+        inherit_context_keys: Optional[Sequence[str]] = None,
+    ) -> AgentTask:
+        """Create a durable child task under a parent. Does not auto-run."""
+        parent = await self.get_task(db, owner_id=owner_id, task_id=parent_task_id)
+        if parent is None:
+            raise KeyError(f"unknown parent task: {parent_task_id}")
+        spec = new_subagent_spec(
+            parent_task_id=parent_task_id,
+            goal=goal,
+            max_steps=max_steps,
+            inherit_context_keys=inherit_context_keys or (),
+        )
+        child_context: Dict[str, Any] = {
+            "parent_task_id": parent_task_id,
+            "subagent_id": spec.subagent_id,
+            "max_steps": spec.max_steps,
+        }
+        for key in spec.inherit_context_keys:
+            if key in parent.context:
+                child_context[key] = parent.context[key]
+        project_id = self._project_id(parent)
+        return await self.create_task(
+            db,
+            owner_id=owner_id,
+            goal=spec.goal,
+            context=child_context,
+            project_id=project_id,
+        )
+
+    async def materialize_due_schedules(
+        self,
+        db: AsyncSession,
+        *,
+        owner_id: str,
+    ) -> List[Dict[str, Any]]:
+        """Turn due schedules into durable agent tasks. Does not auto-run effects."""
+        due = await self.expansion.due_schedules(db, owner_id=owner_id)
+        created: List[Dict[str, Any]] = []
+        for item in due:
+            if item.task_id:
+                continue
+            task = await self.create_task(
+                db,
+                owner_id=owner_id,
+                goal=item.goal,
+                context={
+                    **dict(item.context),
+                    "schedule_id": item.schedule_id,
+                    "scheduled": True,
+                },
+            )
+            linked = await self.expansion.attach_task(
+                db,
+                owner_id=owner_id,
+                schedule_id=item.schedule_id,
+                task_id=task.task_id,
+            )
+            created.append(
+                {
+                    "schedule": linked.to_dict(),
+                    "task": task.to_dict(),
+                }
+            )
+        return created
 
     async def get_task(
         self,
@@ -344,6 +437,7 @@ class DurableAgentTaskService:
             "browser": {
                 "enabled": True,
                 "allowlisted_fetch": True,
+                "live_fetch": _browser_live_fetch_enabled(),
                 "navigate_requires_approval": True,
             },
             "expansion": {
@@ -351,6 +445,7 @@ class DurableAgentTaskService:
                 "scheduler": True,
                 "skill_proposals": True,
                 "skill_promotion_requires_human": True,
+                "materialize_due_schedules": True,
             },
             "execution": {
                 "shared_task_leases": True,
