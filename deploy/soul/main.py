@@ -183,6 +183,18 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _is_active(record: dict[str, Any]) -> bool:
+    """Binding filter: status:active where the field exists; missing = active."""
+    status_val = record.get("status")
+    if status_val is None:
+        # Also check metadata if the field landed there
+        meta = record.get("metadata") or {}
+        status_val = meta.get("status")
+    if status_val is None:
+        return True
+    return str(status_val).lower() == "active"
+
+
 #: The door. One page for both ways in: the bare hostname, and /console
 #: without a usable token. A paste field rather than instructions to type a
 #: long token onto the end of a URL by hand, and a line naming which of the
@@ -438,30 +450,75 @@ async def conflict_search(
         "canon/rulings",
         "devon-soul",
     ]
+    top_k = body.top_k
 
-    # First version: return a valid receipt with empty matches.
-    # Real searches against the three indexes can be filled in later;
-    # the receipt shape and the status:active responsibility stay here.
-    tee_hits: list[dict[str, Any]] = []
-    canon_hits: list[dict[str, Any]] = []
-    soul_hits: list[dict[str, Any]] = []
+    # Real search via the existing SoulLayer (tee-soul-layer + devon-soul).
+    # Canon/rulings is not a separate Pinecone index in this service; it is
+    # covered by tee-soul-layer/rulings for the purposes of this receipt.
+    matched: list[dict[str, Any]] = []
+    notes_parts: list[str] = []
+    complete = True
 
-    # Conservative default until comparison logic is hardened:
-    # any future non-empty hit set should become "requires_human".
-    total = len(tee_hits) + len(canon_hits) + len(soul_hits)
-    conflict_status = "clear" if total == 0 else "requires_human"
+    try:
+        layer = _layer()
+        # Split the budget roughly between the two live indexes
+        top_k_tee = max(1, min(top_k, 8))
+        top_k_devon = max(0, min(top_k, 5))
+        recall = await layer.recall(claim, top_k_tee=top_k_tee, top_k_devon=top_k_devon)
+
+        for rec in recall.to_dicts():
+            if not _is_active(rec):
+                continue
+            matched.append({
+                "id": rec.get("id"),
+                "text": rec.get("text"),
+                "score": rec.get("score"),
+                "source": rec.get("source"),
+                "kind": rec.get("kind"),
+                "heading": rec.get("heading"),
+                "area": rec.get("area"),
+                "dated": rec.get("dated"),
+            })
+
+        notes_parts.append(
+            f"tee={recall.tee_count} devon={recall.devon_count} "
+            f"active_matched={len(matched)}"
+        )
+        if recall.errors:
+            notes_parts.append("partial: " + "; ".join(recall.errors))
+            # Partial search is still a complete receipt if at least one
+            # mandatory source answered; otherwise mark incomplete.
+            if recall.tee_count == 0 and recall.devon_count == 0:
+                complete = False
+
+    except HTTPException:
+        raise
+    except ProviderError as exc:
+        complete = False
+        notes_parts.append(f"search failed: {exc}")
+    except Exception as exc:
+        complete = False
+        notes_parts.append(f"unexpected: {type(exc).__name__}: {str(exc)[:200]}")
+
+    notes_parts.append("status:active filter applied where the field exists")
+
+    # Conflict status
+    if not complete:
+        conflict_status = "requires_human"
+    elif len(matched) == 0:
+        conflict_status = "clear"
+    else:
+        # Any higher-layer hit is treated conservatively until a finer
+        # comparison (contradiction vs support) is implemented.
+        conflict_status = "requires_human"
 
     return {
         "receipt_id": _new_ulid(),
-        "complete": True,
+        "complete": complete,
         "sources": sources,
         "conflict_status": conflict_status,
-        "matched_records": [],
-        "notes": (
-            f"tee={len(tee_hits)} canon={len(canon_hits)} soul={len(soul_hits)}. "
-            "status:active filter applied where the field exists. "
-            "First version returns empty matches; real search bodies to follow."
-        ),
+        "matched_records": matched,
+        "notes": ". ".join(notes_parts) + ".",
         "issued_at": _now(),
         "issued_by": "conflict-search-issuer",
     }
