@@ -287,3 +287,54 @@ def test_runtime_approval_binding_cannot_authorize_a_different_command(
         )
     assert not Path(configured_operator.root, "approved.txt").exists()
     assert not Path(configured_operator.root, "substituted.txt").exists()
+
+
+@pytest.mark.asyncio
+async def test_auto_skill_propose_dedupes_by_goal(
+    client, auth_headers, configured_operator
+):
+    """The same goal completed twice drafts exactly one skill proposal."""
+
+    async def complete(goal: str) -> dict:
+        created = await client.post(
+            "/api/v1/agent-tasks",
+            headers=auth_headers,
+            json={
+                "goal": goal,
+                "steps": [
+                    {
+                        "title": "Read working directory",
+                        "tool": "operator.read",
+                        "arguments": {"command": "pwd"},
+                    }
+                ],
+            },
+        )
+        assert created.status_code == 201, created.text
+        run = await client.post(
+            f"/api/v1/agent-tasks/{created.json()['task_id']}/run",
+            headers=auth_headers,
+            json={"max_steps": 5},
+        )
+        assert run.status_code == 200, run.text
+        assert run.json()["task"]["state"] == "completed"
+        return run.json()
+
+    first = await complete("Summarize the operator workspace")
+    assert "skill_proposal" in first, "first completion must draft a proposal"
+    name = first["skill_proposal"]["name"]
+
+    second = await complete("Summarize the operator workspace")
+    assert "skill_proposal" not in second, "same goal must not draft a duplicate"
+
+    listed = await client.get(
+        "/api/v1/agent-expansion/skill-proposals", headers=auth_headers
+    )
+    assert listed.status_code == 200, listed.text
+    matching = [p for p in listed.json() if p["name"] == name]
+    assert len(matching) == 1, "one goal, one proposal row"
+
+    # A different goal still drafts.
+    third = await complete("Inventory the operator workspace")
+    assert "skill_proposal" in third
+    assert third["skill_proposal"]["name"] != name
