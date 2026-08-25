@@ -44,6 +44,10 @@ DELIBERATELY_DIFFERENT = {
         "app but executes commands only in Vercel Sandbox"
     ),
     "_selftest.py": "the behavioural probe below, run as a subprocess",
+    "_conflict_selftest.py": (
+        "the conflict-policy probe, run as a subprocess by "
+        "test_deploy_soul_conflict_policy.py"
+    ),
     "services/intelligence/__init__.py": (
         "trimmed: the platform version eagerly exposes the Council, which this lane does not ship"
     ),
