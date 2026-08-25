@@ -296,6 +296,25 @@ WEBHOOKS = {
         "auth": "single use token in the link, 72 hour expiry",
         "open_ruling": None,
     },
+    "devon-ledger": {
+        "job": "Build 02 state ledger writes, one row per intent",
+        "destination": "n8n data table devon_state_ledger VYyno7pDWmY6uxBz",
+        "workflow": "z9j2I8h0RnbDKGBO",
+        "auth": "header x-devon-key",
+        "open_ruling": None,
+    },
+    "devon-build12-upstream": {
+        "job": "start the Build 12 learning gate for a completed source job",
+        "destination": "Candidate Former, then conflict-search receipt, then Learning Gate",
+        "workflow": "VznESplSFCs8ldph",
+        "auth": None,
+        "open_ruling": (
+            "Unauthenticated. The Ledger Feeder sends x-devon-key anyway, so "
+            "turning header auth on later cannot break the automatic feed. The "
+            "gate itself is the safety: PROMOTE alone writes, and only to "
+            "devon-subconscious, never devon-soul."
+        ),
+    },
 }
 
 WEBHOOK_RULE = (
@@ -314,6 +333,9 @@ WORKFLOWS = {
     "Approval Queue": {"id": "syRVj0G47mA1b0Xn", "state": "active"},
     "Duplicate Sweep": {"id": "X7OGXWHBx57CIG42", "state": "active"},
     "OS Error Handler": {"id": "rqYmaQh91iCce8DJ", "state": "active"},
+    "Live State Ledger": {"id": "z9j2I8h0RnbDKGBO", "state": "active"},
+    "Build 12 Upstream Test": {"id": "VznESplSFCs8ldph", "state": "active"},
+    "Build 12 Ledger Feeder": {"id": "6hQD8YhiYzR1FFda", "state": "active, 15 minute poll"},
     "TQO FINAL V5": {"id": "gsGJQan7a6ZufhYt", "state": "inactive by ruling"},
     "Capture Hook": {"id": "Cbd24ptTPWch3aZO", "state": "retired 2026-08-22"},
 }
