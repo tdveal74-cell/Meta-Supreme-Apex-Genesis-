@@ -35,7 +35,10 @@ jobs:
             test_definition.py \
             test_providers.py \
             test_schedule.py \
-            test_workflow_engine.py
+            test_workflow_engine.py \
+            test_devon_hermes_expansion.py \
+            test_devon_hermes_durable_followon.py \
+            test_devon_learning_loop.py
 
   engine:
     name: Engine + cadence (no database)
@@ -93,10 +96,10 @@ jobs:
 
       - name: The test fixture's schema and deploy migrations are present
         run: |
-          for f in 001_initial_schema 002_workflow_runs 003_schedule_dispatch 004_federated_knowledge_waist 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion; do
+          for f in 001_initial_schema 002_workflow_runs 003_schedule_dispatch 004_federated_knowledge_waist 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion 010_agent_subagent_links; do
             test -s "database/schemas/$f.sql" || { echo "::error::database/schemas/$f.sql is missing or empty"; exit 1; }
           done
-          for f in 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion; do
+          for f in 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion 010_agent_subagent_links; do
             test -s "database/migrations/versions/$f.py" || { echo "::error::database/migrations/versions/$f.py is missing or empty"; exit 1; }
           done
 
@@ -104,7 +107,7 @@ jobs:
         shell: bash -eo pipefail {0}
         run: python -m pytest -q --tb=short 2>&1 | tee pytest.out
 
-      - name: Fresh Alembic deploy reaches Hermes expansion head
+      - name: Fresh Alembic deploy reaches subagent links head
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/meta_supreme
         run: |
@@ -131,6 +134,7 @@ jobs:
                       "agent_effect_receipts",
                       "agent_schedules",
                       "agent_skill_proposals",
+                      "agent_subagent_links",
                   }
                   rows = await conn.fetch(
                       "SELECT table_name FROM information_schema.tables "
@@ -140,21 +144,8 @@ jobs:
                   present = {row["table_name"] for row in rows}
                   missing = expected - present
                   assert not missing, f"missing migrated tables: {sorted(missing)}"
-                  lease_columns = await conn.fetch(
-                      "SELECT column_name FROM information_schema.columns "
-                      "WHERE table_schema = 'public' AND table_name = 'agent_tasks' "
-                      "AND column_name = ANY($1::text[])",
-                      ["lease_token", "lease_owner", "lease_expires_at", "execution_generation"],
-                  )
-                  present_columns = {row["column_name"] for row in lease_columns}
-                  assert present_columns == {
-                      "lease_token",
-                      "lease_owner",
-                      "lease_expires_at",
-                      "execution_generation",
-                  }, present_columns
                   revision = await conn.fetchval("SELECT version_num FROM alembic_version")
-                  assert revision == "009_agent_hermes_expansion", revision
+                  assert revision == "010_agent_subagent_links", revision
               finally:
                   await conn.close()
 

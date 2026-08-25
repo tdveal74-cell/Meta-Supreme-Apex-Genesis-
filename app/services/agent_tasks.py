@@ -23,6 +23,7 @@ from app.services.agent_runtime_persistence import (
 from app.services.hermes_expansion_persistence import HermesExpansionRepository
 from app.services.intelligence import get_provider
 from app.services.leased_effect_recorder import LeasedEffectRecorder
+from app.services.subagent_links import SubagentLinkRepository
 from services.agent_runtime.contracts import AgentTask, PlanStep, TaskState, ToolCall
 from services.agent_runtime.effect_recorder import EffectRecorder
 from services.agent_runtime.expansion import (
@@ -50,6 +51,7 @@ expansion_adapter = ExpansionToolAdapter(
     skill_proposals=skill_proposal_store,
 )
 expansion_repo = HermesExpansionRepository()
+subagent_links = SubagentLinkRepository()
 
 
 def _browser_live_fetch_enabled() -> bool:
@@ -106,6 +108,7 @@ class DurableAgentTaskService:
         self.learning = AgentLearningRepository()
         self.effects = EffectReceiptRepository()
         self.expansion = expansion_repo
+        self.subagent_links = subagent_links
         self.worker_id = (
             f"{socket.gethostname()}:{os.getpid()}:{secrets.token_hex(4)}"
         )
@@ -185,13 +188,21 @@ class DurableAgentTaskService:
             if key in parent.context:
                 child_context[key] = parent.context[key]
         project_id = self._project_id(parent)
-        return await self.create_task(
+        child = await self.create_task(
             db,
             owner_id=owner_id,
             goal=spec.goal,
             context=child_context,
             project_id=project_id,
         )
+        await self.subagent_links.link(
+            db,
+            owner_id=owner_id,
+            parent_task_id=parent_task_id,
+            child_task_id=child.task_id,
+            subagent_id=spec.subagent_id,
+        )
+        return child
 
     async def list_subagent_tasks(
         self,
@@ -201,15 +212,30 @@ class DurableAgentTaskService:
         parent_task_id: str,
         limit: int = 50,
     ) -> List[AgentTask]:
+        child_ids = await self.subagent_links.list_child_ids(
+            db,
+            owner_id=owner_id,
+            parent_task_id=parent_task_id,
+            limit=limit,
+        )
+        out: List[AgentTask] = []
+        for child_id in child_ids:
+            task = await self.tasks.get_owned(
+                db, owner_id=owner_id, task_id=child_id
+            )
+            if task is not None:
+                out.append(task)
+        if out:
+            return out
+        # Fallback for pre-link children that only stored parent_task_id in context.
         tasks = await self.tasks.list_owned(
             db, owner_id=owner_id, limit=max(limit, 100), offset=0
         )
-        children = [
+        return [
             task
             for task in tasks
             if str(task.context.get("parent_task_id") or "") == parent_task_id
-        ]
-        return children[:limit]
+        ][:limit]
 
     async def materialize_due_schedules(
         self,
@@ -495,6 +521,7 @@ class DurableAgentTaskService:
             },
             "expansion": {
                 "subagents": True,
+                "durable_subagent_links": True,
                 "scheduler": True,
                 "skill_proposals": True,
                 "skill_promotion_requires_human": True,
