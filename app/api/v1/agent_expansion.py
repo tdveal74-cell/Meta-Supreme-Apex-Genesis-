@@ -1,4 +1,4 @@
-"""Hermes expansion HTTP surface: schedules and skill proposals."""
+"""Hermes expansion HTTP surface: schedules, skill proposals, subagents."""
 
 from __future__ import annotations
 
@@ -34,6 +34,13 @@ class SkillProposeBody(BaseModel):
 class SkillDecideBody(BaseModel):
     approve: bool
     promote: bool = True
+
+
+class SubagentSpawnBody(BaseModel):
+    parent_task_id: str = Field(..., min_length=1, max_length=64)
+    goal: str = Field(..., min_length=1, max_length=20_000)
+    max_steps: int = Field(default=8, ge=1, le=12)
+    inherit_context_keys: List[str] = Field(default_factory=list, max_length=20)
 
 
 @router.post("/schedules", status_code=status.HTTP_201_CREATED)
@@ -74,6 +81,46 @@ async def list_due_schedules(
     items = await _repo.due_schedules(db, owner_id=current_user.id)
     await db.commit()
     return [item.to_dict() for item in items]
+
+
+@router.post("/schedules/materialize")
+async def materialize_due_schedules(
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> List[Dict[str, Any]]:
+    """Create durable agent tasks for due schedules. Does not auto-run effects."""
+    try:
+        created = await agent_tasks_service.materialize_due_schedules(
+            db, owner_id=current_user.id
+        )
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await db.commit()
+    return created
+
+
+@router.post("/subagents", status_code=status.HTTP_201_CREATED)
+async def spawn_subagent(
+    body: SubagentSpawnBody,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """Create a durable child task under a parent. Does not auto-run."""
+    try:
+        task = await agent_tasks_service.spawn_subagent_task(
+            db,
+            owner_id=current_user.id,
+            parent_task_id=body.parent_task_id,
+            goal=body.goal,
+            max_steps=body.max_steps,
+            inherit_context_keys=body.inherit_context_keys,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exp
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await db.commit()
+    return task.to_dict()
 
 
 @router.post("/skill-proposals", status_code=status.HTTP_201_CREATED)
@@ -122,7 +169,7 @@ async def decide_skill_proposal(
             approve=body.approve,
         )
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Skill proposal not found") from exc
+        raise HTTPException(status_code=404, detail="Skill proposal not found") from exp
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
