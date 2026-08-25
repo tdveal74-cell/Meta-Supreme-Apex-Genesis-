@@ -14,8 +14,6 @@ from app.security.deps import CurrentUser
 from app.services.agent_tasks import agent_tasks_service
 from app.services.hermes_expansion_persistence import HermesExpansionRepository
 from services.agent_runtime.expansion import SkillProposalStore
-from services.agent_runtime.learning import InMemoryLearningStore
-from services.agent_runtime.skill_promotion import promote_approved_skill
 
 router = APIRouter(prefix="/agent-expansion", tags=["DEVON Agent Expansion"])
 _repo = HermesExpansionRepository()
@@ -130,7 +128,6 @@ async def decide_skill_proposal(
 
     result: Dict[str, Any] = {"proposal": decided.to_dict(), "skill": None}
     if body.approve and body.promote:
-        # Application-layer promotion into durable learning skills.
         skill = await agent_tasks_service.learning.upsert_skill(
             db,
             owner_id=current_user.id,
