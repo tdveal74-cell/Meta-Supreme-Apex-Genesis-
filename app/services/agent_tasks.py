@@ -371,6 +371,7 @@ class DurableAgentTaskService:
                 lease_token=claim.lease_token,
                 execution_generation=claim.execution_generation,
                 repository=self.effects,
+                session_factory=AsyncSessionLocal,
             )
             runtime = self._runtime_for(
                 claim.task,
