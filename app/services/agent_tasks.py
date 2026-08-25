@@ -341,6 +341,14 @@ class DurableAgentTaskService:
                 result_payload=payload,
                 project_id=self._project_id(result.task),
             )
+            if result.task.done:
+                await self.expansion.mark_from_task_outcome(
+                    db,
+                    owner_id=owner_id,
+                    task_id=result.task.task_id,
+                    completed=result.task.state is TaskState.COMPLETED,
+                    failure_reason=result.task.failure_reason or "",
+                )
             await db.commit()
             return TaskRunOutcome(
                 result=payload,
@@ -358,6 +366,13 @@ class DurableAgentTaskService:
                     run_id=claim.run_id,
                     lease_token=claim.lease_token,
                     error=str(exc),
+                )
+                await self.expansion.mark_from_task_outcome(
+                    db,
+                    owner_id=owner_id,
+                    task_id=task_id,
+                    completed=False,
+                    failure_reason=str(exc),
                 )
                 await db.commit()
             except Exception:
