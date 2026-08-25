@@ -16,8 +16,6 @@ from services.agent_runtime.expansion import (
     SkillProposal,
     SkillProposalState,
 )
-from services.agent_runtime.learning import SkillRecord
-from services.agent_runtime.skill_promotion import promote_approved_skill
 
 
 def _utcnow() -> datetime:
@@ -100,6 +98,29 @@ class HermesExpansionRepository:
         await db.flush()
         return out
 
+    async def attach_task(
+        self,
+        db: AsyncSession,
+        *,
+        owner_id: str,
+        schedule_id: str,
+        task_id: str,
+    ) -> ScheduledGoal:
+        result = await db.execute(
+            select(AgentScheduleRecord).where(
+                AgentScheduleRecord.owner_id == owner_id,
+                AgentScheduleRecord.schedule_id == schedule_id,
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            raise KeyError(f"unknown schedule: {schedule_id}")
+        row.task_id = task_id
+        row.state = ScheduleState.RUNNING.value
+        row.updated_at = _utcnow()
+        await db.flush()
+        return self._schedule_from_row(row)
+
     async def save_skill_proposal(
         self,
         db: AsyncSession,
@@ -107,7 +128,6 @@ class HermesExpansionRepository:
         owner_id: str,
         proposal: SkillProposal,
     ) -> SkillProposal:
-        now = _utcnow()
         row = AgentSkillProposalRecord(
             id=f"ASP-{secrets.token_hex(8).upper()}",
             proposal_id=proposal.proposal_id,
