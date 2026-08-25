@@ -344,11 +344,8 @@ def test_browser_operator_is_gated_and_separate_from_soul():
     assert probe["authed_terminal"] == 200
     assert probe["authed_terminal_is_real"] is True
     assert probe["authed_status"] == 200
-    # Two POST routes and no more: the operator command (the one real
-    # effect, gated and sandboxed) and the soul lane's conflict-search
-    # receipt issuer, which is read-only despite its method —
-    # test_deploy_soul.py holds the soul app's route list to exactly that
-    # one non-GET route.
+    # Terminal command is the only real mutation; soul conflict-search is a
+    # POST-shaped recall query (read-only, verified in test_deploy_soul).
     assert probe["mutations"] == [
         ["POST", "/api/v1/operator-terminal/command"],
         ["POST", "/api/v1/soul/conflict-search"],

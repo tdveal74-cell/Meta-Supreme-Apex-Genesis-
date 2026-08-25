@@ -122,20 +122,16 @@ def probe():
     return json.loads(result.stdout.strip().splitlines()[-1])
 
 
-def test_the_deployed_service_has_no_write_surface(probe):
-    """The DEVON Soul app in main.py remains structurally read-only.
+# The one non-GET route the soul service may answer. Conflict-search is a
+# recall query for the Build 12 learning gate: POST only because the claim
+# rides in a body, auth-gated, and it writes nothing anywhere.
+READ_ONLY_POST_ROUTES = [["POST", "/api/v1/soul/conflict-search"]]
 
-    Exactly one route answers POST: the Build 12 conflict-search receipt
-    issuer. A claim is long and Tee-shaped, so it travels in a body rather
-    than a query string, but the route only reads — its handler recalls from
-    both souls and issues a receipt, and main.py holds no write path for it
-    to reach (its decision policy is covered by
-    test_deploy_soul_conflict_policy.py). Any other effect method appearing
-    here is a regression; Operator effects must stay outside main.py.
-    """
-    assert probe["effect_routes"] == ["POST /api/v1/soul/conflict-search"], (
-        f"the soul service answers {probe['effect_routes']}; the conflict-search "
-        "receipt issuer is the only permitted non-GET route"
+
+def test_the_deployed_service_has_no_write_surface(probe):
+    """The DEVON Soul app in main.py remains structurally read-only."""
+    assert probe["effect_routes"] == READ_ONLY_POST_ROUTES, (
+        f"the soul service answers {probe['effect_routes']}; Operator effects must stay outside main.py"
     )
 
 
