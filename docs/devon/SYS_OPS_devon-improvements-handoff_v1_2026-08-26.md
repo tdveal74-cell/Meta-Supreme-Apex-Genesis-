@@ -98,10 +98,16 @@ two-steps FAILED then CANCELLED, envelope history preserved plus a janitor
 trace note, digest email only when it acted, Error Alarm + 300s timeout set.
 Dry-tested (execution 3581) before publish. Registered in
 `services/devon/vault.py` WORKFLOWS (+ deploy mirror + skill tables +
-runbook) in the same change. Remaining verification: the first live sweep
-(02:30 UTC) should clear the eight stale Aug-24 E2E jobs and the
-heartbeat's stuck_jobs alert should drain on the following pulse; a session
-check-in is armed for 02:54 UTC to confirm both.
+runbook) in the same change. First live sweep run on demand at
+2026-08-26T02:21Z (execution 3592): SUCCESS, zero jobs swept, and that is
+CORRECT - the eight stale E2E jobs carry updatedAt stamps of Aug 24
+01:02-07:53 UTC, only 42-49h old, past the heartbeat's 24h alert threshold
+but under the janitor's 96h action TTL. This doc's earlier expectation that
+the first sweep would clear them was a timing error, now corrected: the
+Aug 28 02:30 sweep cancels the first two (01:02 stamps), the Aug 29 sweep
+the remaining six, each with a digest email. The heartbeat keeps alerting
+until then - warn early, act late is the design. A session check-in is
+armed for 2026-08-28T03:05Z to verify the first acting sweep.
 
 ### 6. Weekly table backup by email - PUBLISHED 2026-08-26
 
