@@ -11,6 +11,7 @@ live Server-Sent Events.
 import asyncio
 import json
 import logging
+import secrets
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -26,11 +27,16 @@ from app.models.agent import Agent, AgentRun
 from app.models.conversation import Conversation, Message
 from app.models.project import Project
 from app.security.deps import CurrentUser
+from app.services.agent_tasks import build_tool_registry
 from app.services.devon_halt import get_halt_registry
-from app.services.intelligence import run_council_for_message
+from app.services.intelligence import get_provider, run_council_for_message
+from services.agent_runtime.agent_turn import AgentTurn
+from services.agent_runtime.conversation import PresenceExecutor
+from services.agent_runtime.presence import Caller
 from services.agents.registry import AGENT_REGISTRY
 from services.intelligence import CouncilExecutionError, SynthesisResult
 from services.intelligence.providers import ProviderConfigError, ProviderError
+from services.intelligence.providers.base import ChatMessage
 
 logger = logging.getLogger(__name__)
 
@@ -548,4 +554,127 @@ async def halt_turn(
             if stopped
             else "that turn is not running; nothing to stop"
         ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Talking to DEVON while he works (Build 15)
+# ---------------------------------------------------------------------------
+
+HISTORY_TURNS = 12
+
+
+class ActRequest(BaseModel):
+    content: str = Field(..., min_length=1, max_length=8000)
+    confirm_token: Optional[str] = Field(None, max_length=200)
+
+
+@router.post("/{conversation_id}/act/stream")
+async def act_stream(
+    conversation_id: str,
+    payload: ActRequest,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """One conversational turn in which DEVON may answer AND act.
+
+    This is the seam where presence authority becomes real. The Caller is built
+    from `current_user` — the authenticated dependency — and never from the
+    request body, so presence is established by the transport that verified a
+    human and cannot be asserted by anything the model or a tool emits.
+
+    The turn id is generated here and returned in the first event, so Tee can
+    stop this specific turn through POST /{id}/halt. It is random rather than
+    sequential: a turn id is the handle to someone's running work, and guessable
+    handles invite stopping other people's.
+
+    Event stream: `turn_started` → (`tool_started` / `tool_result` /
+    `tool_unknown` / `refused`)* → exactly one terminal event, one of `answer`,
+    `needs_confirmation`, `card_required`, `halted`, `step_limit`, or `error`.
+    """
+    conversation = await _get_owned_conversation(conversation_id, current_user.id, db)
+
+    turn_id = f"TURN-{secrets.token_hex(8).upper()}"
+    registry = get_halt_registry()
+    halt = registry.open(turn_id)
+
+    history_rows = (
+        (
+            await db.execute(
+                select(Message)
+                .where(Message.conversation_id == conversation.id)
+                .order_by(Message.created_at.desc())
+                .limit(HISTORY_TURNS)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    history = [
+        ChatMessage(
+            role=("assistant" if row.role == "assistant" else "user"),
+            content=row.content,
+        )
+        for row in reversed(history_rows)
+    ]
+
+    tools = build_tool_registry()
+    turn = AgentTurn(
+        provider=get_provider(),
+        tools=tools,
+        executor=PresenceExecutor(tools, turn_id=turn_id),
+    )
+    conversation_pk = conversation.id
+
+    async def event_stream():
+        answered = ""
+        try:
+            async for event in turn.run(
+                payload.content,
+                caller=Caller.human(actor=current_user.id),
+                halt=halt,
+                history=history,
+                confirmed_token=(payload.confirm_token or ""),
+            ):
+                if event.type == "answer":
+                    answered = str(event.data.get("text") or "")
+                yield f"data: {json.dumps(event.to_dict(), ensure_ascii=False)}\n\n"
+        except Exception:  # noqa: BLE001 — the stream must always terminate
+            logger.exception("agent turn failed")
+            yield (
+                "data: "
+                + json.dumps({"type": "error", "message": "the turn failed"})
+                + "\n\n"
+            )
+        finally:
+            # Always release the brake, or the registry grows one entry per turn
+            # for the life of the process.
+            registry.close(turn_id)
+            if answered:
+                try:
+                    async with AsyncSessionLocal() as session:
+                        session.add(
+                            Message(
+                                conversation_id=conversation_pk,
+                                role="user",
+                                content=payload.content,
+                                meta={"turn_id": turn_id},
+                            )
+                        )
+                        session.add(
+                            Message(
+                                conversation_id=conversation_pk,
+                                role="assistant",
+                                content=answered,
+                                meta={"turn_id": turn_id, "surface": "devon-agent-turn"},
+                            )
+                        )
+                        await session.commit()
+                except Exception:  # noqa: BLE001 — a lost transcript must not fail the turn
+                    logger.exception("could not persist agent turn transcript")
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
