@@ -57,10 +57,21 @@ before trusting in a much later session.
 |---|---|---|
 | tee-soul-layer | `https://tee-soul-layer-jw37oa2.svc.aped-4627-b74a.pinecone.io`, namespace `rulings` | Soul Layer Write-Back only; READ-ONLY from the learning lane |
 | devon-soul | `https://devon-soul-jw37oa2.svc.aped-4627-b74a.pinecone.io`, namespace `experience` | Soul Committer only, approval-gated |
-| devon-subconscious | namespace `experience` | upstream workflow on PROMOTE |
+| devon-subconscious | `https://devon-subconscious-jw37oa2.svc.aped-4627-b74a.pinecone.io`, namespace `experience` | upstream workflow on PROMOTE |
 
 Wire format: NDJSON upserts to `{host}/records/namespaces/{ns}/upsert`,
 header `X-Pinecone-API-Version: 2025-04`.
+
+devon-subconscious was verified EMPTY on 2026-08-26: its only record
+(`4YZ5HG555ZFRY69RPNH0SP3B7B`, a Build 12 upstream test write from
+2026-08-25 with placeholder source_intent_ids
+`01ABCDEFGHJKLMNPQRSTUVWX01/02`) was purged at Tee's direction, with
+fetch-before and fetch-after receipts in n8n execution 3625. The first
+record ever written there must come from real completed work. The
+committer smoke (`SMOKE-COMMITTER-V2-20260825`, feed row
+`webhook_status 0`) never wrote the subconscious; it was injected at
+the committer propose path only, and its devon-soul record was already
+deleted under the REVERTED ruling.
 
 ## devon-soul service (deploy/soul on Vercel, devon-soul.vercel.app)
 
