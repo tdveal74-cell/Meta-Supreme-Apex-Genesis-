@@ -17,6 +17,12 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+#: The registered name of the Council consultation tool. The runtime pattern-
+#: matches this name when it builds an approval card, so the constant lives in
+#: the shared contracts rather than in the adapter or the runtime alone.
+COUNCIL_TOOL_NAME = "council.consult"
+
+
 class TaskState(str, Enum):
     PLANNED = "planned"
     RUNNING = "running"

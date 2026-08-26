@@ -44,24 +44,21 @@ including a RecordingPlanner proving the payload reaches the planner) and
 `test_devon_soul_recall_seam.py` (durable seam, repos stubbed, no DB).
 Partial recall surfaces in `errors`, never looks empty.
 
-### 2. Council for gated jobs (repo work)
+### 2. Council for gated jobs (repo work) - DONE 2026-08-26
 
-There is no "level 3" and no council trace string in this repo; the real
-parking spot is `services/agent_runtime/runtime.py` `run_next`
-(approval_required branch, message "human ruling required"). A full 9-seat
-council already exists (`services/agents/registry.py`,
-`services/intelligence/executive_controller.py` `ExecutiveController.run`).
-
-Smallest sound change: register a `council.consult` tool with
-`risk=ToolRisk.READ` in `build_tool_registry()`
-(`app/services/agent_tasks.py` ~line 76), a thin adapter over
-`ExecutiveController.run` modeled on `services/browser/agent_adapter.py`,
-returning SynthesisResult fields as ToolResult metadata. Then extend the
-`what_happens` text for effectful steps to carry the latest council
-observation, or the words "no council consultation is on record for this
-task" - appended BEFORE the approval marker is computed, so
-`services/agent_runtime/governance.py` binding checks stay green
-(`test_devon_shared_approvals.py`). No new approval-level taxonomy.
+Shipped as planned: `council.consult` (risk READ) registers in
+`build_tool_registry()` via `CouncilCapabilityAdapter`
+(`services/intelligence/council_adapter.py`), a thin adapter over
+`ExecutiveController.run` returning SynthesisResult fields as ToolResult
+metadata; the tool name is the shared constant `COUNCIL_TOOL_NAME` in
+`services/agent_runtime/contracts.py`. Every effectful step's approval card
+now carries the latest successful council observation (capped, flattened,
+marker-prefix-stripped so a synthesis can never forge a binding marker) or
+the exact sentence "No council consultation is on record for this task." -
+appended before the marker, which stays the final element, so the
+governance binding checks stay green. Tests: `test_devon_council_tool.py`
+(adapter reads, card content, marker order, forged-marker stripping,
+failed-consultation handling); no new approval-level taxonomy.
 
 ### 3. First genuine PROMOTE (live lane)
 
