@@ -138,6 +138,25 @@ record of pulses and reflections first. Deliberately not built in the
 2026-08-26 session for that reason; revisit once the reflection rows have
 accumulated for a week or two.
 
+## Build 15: presence authority (2026-08-26)
+
+Tee ruled on 2026-08-26 that in a live conversation his message IS the approval
+("build it as conversation unlimited and instant, consequences not gated";
+option chosen: Presence = authority). The policy, the brake, and the executor
+merged in PR #74; the loop and its transport followed.
+
+An adversarial gauntlet then established that the first cut did not work: no
+confirmation could be answered at all, and presence never reached a single
+guarded tool. Both are fixed. The full account of the findings, the decisions
+taken, and the one item deliberately deferred is in
+`SYS_SPEC_presence-authority_v1_2026-08-26.md`. Read that before touching
+`services/agent_runtime/conversation.py` or `/act/stream`.
+
+The one deferred item, so it is not lost: **an APPROVED approval record has no
+CONSUMED state and can be replayed.** It predates presence and its fix is a
+schema change against the live shared `devon_approvals` table; the exact steps
+are named at the end of that spec.
+
 ## Session receipts
 
 Build 13 gauntlet and fixes: session of 2026-08-25/26 (this doc's commit).

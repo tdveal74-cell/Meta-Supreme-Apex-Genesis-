@@ -17,26 +17,62 @@ eight merges landed on a red main because nobody looked.
 
 ## Local verification parity with CI
 
-CI is three jobs (`.github/workflows/ci.yml`): offline standalone, engine
-(council/security), and the PostgreSQL API suite. Reproduce all three locally
-before any push; one validated push beats three speculative ones.
+CI is FOUR jobs (`.github/workflows/ci.yml`), chained
+`standalone -> {container, engine} -> api`: offline standalone, the Railway
+container contract, engine (council/security), and the PostgreSQL API suite.
+Reproduce all four locally before any push; one validated push beats three
+speculative ones. The full suite alone is not parity: the standalone job runs
+with NO `PYTHONPATH` and no database, so an import that only resolves under the
+test path passes locally and fails there.
 
 ```
 export DEFAULT_AI_PROVIDER=mock EMBEDDING_PROVIDER=mock ENVIRONMENT=test
 export PYTHONPATH=$PWD:$PWD/apps/api
 export DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/meta_supreme
 export TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/meta_supreme_test
-python -m pytest -q --tb=short        # full suite needs Postgres 16 + pgvector
+
+# 1. standalone, exactly as CI runs it: no PYTHONPATH, no database
+env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python -c "import standalone_api"
+env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python -m pytest -q \
+  test_billing.py test_definition.py test_providers.py test_schedule.py \
+  test_workflow_engine.py test_devon_hermes_expansion.py \
+  test_devon_hermes_durable_followon.py test_devon_learning_loop.py \
+  test_devon_operating_layer.py
+
+# 2. container contract (the import check, without building the image)
+env -u PYTHONPATH DEFAULT_AI_PROVIDER=mock python -c "from app.main import app; \
+  from app.api.v1.auth import passkey_login_options; \
+  from services.intelligence.providers.cerebras_provider import CerebrasProvider"
+
+# 3. engine
+python -m pytest test_council.py test_phase4_council.py test_security.py -q \
+  --deselect test_phase4_council.py::test_stream_endpoint_emits_events_and_persists \
+  --deselect test_phase4_council.py::test_stream_endpoint_reports_errors_as_events
+
+# 4. api suite + migrations (needs Postgres 16 + pgvector)
+python -m pytest -q --tb=short
 ruff check .
 alembic upgrade head && alembic downgrade 004_federated_knowledge_waist && alembic upgrade head
 ```
 
 Container quirks seen in practice: install `cffi` if `cryptography` panics on
-import (Debian-packaged copy lacks `_cffi_backend`); apt provides
+import (Debian-packaged copy lacks `_cffi_backend`); `pip install --ignore-installed
+cryptography webauthn` when the Debian copy shadows the wheel; apt provides
 `postgresql-16-pgvector`; initdb under `/var/lib/postgresql` as the postgres
 user, then create `meta_supreme` and `meta_supreme_test` with the `vector`
 extension. Postgres does not survive container restarts; `pg_ctl start` again
 on ConnectionRefused.
+
+**An interrupted pytest poisons the next local run.** `_clean_tables` truncates
+only AFTER each test, so killing pytest mid-test leaves
+`council-tester@example.com` behind and the next session's first `auth_headers`
+fails with a 409 about an email nobody in that session registered. Cure:
+`psql -h 127.0.0.1 -U postgres -d meta_supreme_test -c "TRUNCATE users CASCADE"`,
+or just run the suite again (its own post-wipe clears it). CI never hits this
+because each run gets a fresh database. Truncating before the yield as well
+LOOKS like the fix and is not: under pytest-asyncio the pre-wipe lands after
+`auth_headers` has registered, and the run dies on "User not found or inactive"
+instead. Tried on 2026-08-26, reverted.
 
 ## Failure patterns with known root causes
 
@@ -107,6 +143,8 @@ Check these before inventing new theories:
 Env flags: `DEVON_AUTO_SKILL_PROPOSE` (default on),
 `DEVON_BROWSER_LIVE_FETCH` (default off), `DEVON_AGENT_TASK_LEASE_SECONDS`
 (default 120), `DEFAULT_AI_PROVIDER`/`ENRICHMENT_PROVIDER` (cerebras live,
-mock in CI). Alembic head as of 2026-08-25: `010_agent_subagent_links`.
+mock in CI). Alembic head as of 2026-08-26: `012_live_state_ledger` (the skill
+said `010_agent_subagent_links` until then; verify with `alembic heads` rather
+than trusting this line).
 Live-environment verification (deployed DB, Cerebras key) cannot run from CI
 or agent containers; it is always a manual item for Tee.
