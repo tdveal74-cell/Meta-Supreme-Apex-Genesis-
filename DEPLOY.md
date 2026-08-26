@@ -123,3 +123,52 @@ To run the web app without containers at all:
 pnpm install --frozen-lockfile
 pnpm dev:web
 ```
+
+---
+
+## Vercel builds only when the project actually changed
+
+Two Vercel projects deploy from this repository, each with its own root
+directory: `meta-supreme-web` from `apps/web`, and `devon-soul` from
+`deploy/soul`. Both used to rebuild on every commit to every branch, whether or
+not the change could possibly affect them. On 2026-08-26 a one file docs change
+triggered four builds across the two projects and none of them could have
+produced a different artifact. That is how a free plan reaches its cap of 100
+deployments a day while shipping almost nothing.
+
+Each project now carries a `vercel.json` in its root directory with an
+`ignoreCommand`. Vercel runs it before building: exit 0 means skip, any other
+exit means build.
+
+| Project | Root | Builds when these change |
+|---|---|---|
+| meta-supreme-web | `apps/web` | `apps/web`, `packages/ui`, `pnpm-lock.yaml`, `pnpm-workspace.yaml` |
+| devon-soul | `deploy/soul` | `deploy/soul` |
+
+The web app's list is wider than its own root on purpose. It imports
+`@meta-supreme/ui` from `packages/ui` in `tailwind.config.ts` and
+`app/layout.tsx`, so a theme change with no file touched under `apps/web` still
+has to rebuild. Skipping that would ship a stale brand and the skip would be
+invisible. The lockfile and workspace file are included for the same reason: a
+dependency change alters the build without altering the app's own source.
+
+`deploy/soul` needs no such widening. It vendors what it uses into
+`deploy/soul/services/`, byte identical copies guarded by `test_deploy_soul.py`,
+so everything that can change its build already lives under its root.
+
+The pathspecs are repository absolute (`':/apps/web'`), not relative, so they
+mean the same thing wherever the command runs.
+
+**It fails toward building, never toward skipping.** `git diff --quiet` exits 0
+only when it is certain nothing changed. On a first deployment or a clone with
+no `HEAD^` the command errors, which is a non zero exit, and the build proceeds.
+A wasted build costs a slot. A wrongly skipped build ships something stale and
+says it succeeded.
+
+Verified against real merges before shipping:
+
+| Merge | apps/web | devon-soul | Correct because |
+|---|---|---|---|
+| PR #69 `763b150`, one docs file | skip | skip | Neither project can be affected |
+| PR #68 `9b255bc`, the ledger | skip | build | Vendoring touched `deploy/soul` |
+| PR #66 `600522c`, operating layer | build | build | It changed the command center |
