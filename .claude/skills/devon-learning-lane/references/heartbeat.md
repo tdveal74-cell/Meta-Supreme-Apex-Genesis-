@@ -16,9 +16,16 @@ devon_soul_commit_log, and devon_heartbeat_log; computes vitals; writes ONE
 beat row; emails Tee only when something new needs him or roughly daily.
 Keeps beating on empty tables (first beat introduces itself). It reads no
 secrets: the approval_queue table is never touched, which is why its
-execution-data saving can stay on. Its only write is its own beat row.
+execution-data saving can stay on. Its only writes are its own beat row and
+the receipt flip of that row's `emailed` column after a successful send.
 Crash alerting via the shared Error Alarm (`XDQXwgFkUhYxoEjG`); execution
-timeout 300s.
+timeout 300s. Anchor rows (previous pulse, last emailed, last reflection)
+are picked only from rows whose `beat_at` parses and sits at most 1h in the
+future, compared numerically - one malformed or forged row (the free-form
+reflection writer is the likeliest source) cannot silence `missed_beat`, the
+daily email clock, or the reflection watch. Shipped through an adversarial
+gauntlet on 2026-08-26: 13 findings raised, 7 confirmed, all fixed before
+the first publish.
 
 Findings it computes, each with a stable key:
 
@@ -27,18 +34,24 @@ Findings it computes, each with a stable key:
 | stuck_jobs | yes | ledger jobs non-terminal beyond 24h |
 | feeder_silent | yes | COMPLETED jobs with no feed-log row after 40 min; dead-feeder detection (the feeder has no error workflow wired) |
 | malformed_feed | yes | fed rows with HTTP 200 but empty gate_decision; terminal and invisible to the committer, repair per runbook |
-| committer_stalled | yes | PROPOSED soul rows past 72h expiry plus 4h grace |
+| soul_overdue | yes | PROPOSED soul rows open past 76h; the text names both readings - the committer may legitimately hold a row inside its 96h close-by-absence window (or be retrying a failing commit), or the resolve lane is stalled |
 | missed_beat | yes | previous pulse older than 7.5h; the heartbeat monitoring itself |
 | cards_expiring | no | approval cards within 24h of expiry, still undecided |
-| reflection_missing | no | no reflection row within 26h; the body noticing the mind went quiet |
+| reflection_missing | no | no reflection row within 26h, or the newest reflection timestamp is unreadable (fails closed); the body noticing the mind went quiet |
 
 EMAIL CADENCE: a beat emails when an alerting finding key appears that the
-previous beat did not carry, or when ~22h have passed since the last emailed
-beat. A persisting problem therefore alerts once and then rides the daily
-note. Known tradeoff: a NEW instance under an already-alerted key (a second
-stuck job while one is already stuck) does not re-alert until the daily note.
-Sender name: DEVON Heartbeat. Quiet beats still log; the heartbeat log, not
-the inbox, is the proof of life.
+last SUCCESSFULLY EMAILED pulse did not carry, or when ~22h have passed since
+the last emailed beat. A persisting problem therefore alerts once and then
+rides the daily note. The `emailed` column is a receipt, not a claim: the
+beat row inserts with `no` and a Mark Emailed node flips it to `yes` only
+after the Gmail send succeeds (with retry), so a failed send leaves its
+alerts NEW and they re-fire on the very next beat - the failure direction is
+a duplicate email, never silence. Known tradeoff: a NEW instance under an
+already-alerted key (a second stuck job while one is already stuck) does not
+re-alert until the daily note. Known limit: the pulse email and the crash
+alarm share one Gmail credential, so a Gmail-wide outage silences both; the
+heartbeat log stays the witness. Sender name: DEVON Heartbeat. Quiet beats
+still log; the heartbeat log, not the inbox, is the proof of life.
 
 ## The Reflection (claude.ai Routine `trig_01XCKFGEbojhkPRnNbMd8yCP`, daily 11:30 UTC)
 
@@ -64,7 +77,9 @@ sessions in this org.
 
 Columns: beat_at, kind (`pulse` | `reflection`), vitals (JSON string),
 findings (newline-separated `key | text` lines), reflection, emailed
-(`yes`/`no`). Both writers only insert; nothing updates or deletes. Growth is
+(`yes`/`no`, a send receipt - see EMAIL CADENCE). The pulse inserts its beat
+row and then updates only that row's emailed column; the reflection only
+inserts. Nothing else updates or deletes. Growth is
 ~4 pulse rows/day plus 1 reflection; revisit the returnAll read if it ever
 matters (years away at this volume).
 
