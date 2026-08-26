@@ -32,25 +32,30 @@ services:
       SECRET_KEY: change-me-in-production-use-openssl-rand-hex-32
       CORS_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000"]'
       DEFAULT_AI_PROVIDER: ${DEFAULT_AI_PROVIDER:-mock}
+      ENRICHMENT_PROVIDER: ${ENRICHMENT_PROVIDER:-mock}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      CEREBRAS_API_KEY: ${CEREBRAS_API_KEY:-}
+      CEREBRAS_MODEL: ${CEREBRAS_MODEL:-gpt-oss-120b}
+      PASSKEY_RP_ID: ${PASSKEY_RP_ID:-localhost}
+      PASSKEY_RP_NAME: ${PASSKEY_RP_NAME:-DEVON Command Center}
+      PASSKEY_ORIGIN: ${PASSKEY_ORIGIN:-http://localhost:3000}
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      - ../../apps/api:/app
+      # Mount the same canonical source tree the production image copies.
+      - ../../app:/app/app
       - ../../services:/app/services
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      - ../../database:/app/database
+      - ../../docs:/app/docs
+      - ../../alembic.ini:/app/alembic.ini:ro
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   web:
     build:
-      # The repository root, exactly as the api service above uses. Dockerfile.web
-      # copies package.json, pnpm-workspace.yaml and packages/ — none of which
-      # exist under apps/web — so a context scoped to apps/web fails on its first
-      # COPY. The old `dockerfile:` path also climbed out of its own context,
-      # which the builder rejects outright.
       context: ../..
       dockerfile: infrastructure/docker/Dockerfile.web
     container_name: meta-supreme-web
@@ -62,11 +67,6 @@ services:
     depends_on:
       - api
     volumes:
-      # The image installs the whole workspace at /app and works from
-      # /app/apps/web, so the source mount has to land at /app/apps/web. Mounting
-      # it over /app buried the workspace root — pnpm-workspace.yaml, packages/ui
-      # and the installed node_modules all vanished behind it, and @meta-supreme/ui
-      # stopped resolving.
       - ../../apps/web:/app/apps/web
       - /app/apps/web/node_modules
       - /app/apps/web/.next

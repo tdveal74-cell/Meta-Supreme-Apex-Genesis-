@@ -40,6 +40,20 @@ jobs:
             test_devon_hermes_durable_followon.py \
             test_devon_learning_loop.py
 
+  container:
+    name: Railway container contract
+    runs-on: ubuntu-latest
+    needs: standalone
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the production API image
+        run: docker build -f infrastructure/docker/Dockerfile.api -t devon-api-ci .
+      - name: Image imports canonical DEVON, passkeys, and Cerebras
+        run: |
+          docker run --rm --entrypoint python \
+            -e DEFAULT_AI_PROVIDER=mock \
+            devon-api-ci -c "from app.main import app; from app.api.v1.auth import passkey_login_options; from services.intelligence.providers.cerebras_provider import CerebrasProvider; print(app.title, passkey_login_options.__name__, CerebrasProvider.name)"
+
   engine:
     name: Engine + cadence (no database)
     runs-on: ubuntu-latest
@@ -68,7 +82,7 @@ jobs:
   api:
     name: API suite (PostgreSQL 16 + pgvector)
     runs-on: ubuntu-latest
-    needs: engine
+    needs: [engine, container]
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -96,10 +110,10 @@ jobs:
 
       - name: The test fixture's schema and deploy migrations are present
         run: |
-          for f in 001_initial_schema 002_workflow_runs 003_schedule_dispatch 004_federated_knowledge_waist 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion 010_agent_subagent_links; do
+          for f in 001_initial_schema 002_workflow_runs 003_schedule_dispatch 004_federated_knowledge_waist 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion 010_agent_subagent_links 011_passkeys; do
             test -s "database/schemas/$f.sql" || { echo "::error::database/schemas/$f.sql is missing or empty"; exit 1; }
           done
-          for f in 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion 010_agent_subagent_links; do
+          for f in 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion 010_agent_subagent_links 011_passkeys; do
             test -s "database/migrations/versions/$f.py" || { echo "::error::database/migrations/versions/$f.py is missing or empty"; exit 1; }
           done
 
@@ -107,7 +121,7 @@ jobs:
         shell: bash -eo pipefail {0}
         run: python -m pytest -q --tb=short 2>&1 | tee pytest.out
 
-      - name: Fresh Alembic deploy reaches subagent links head
+      - name: Fresh Alembic deploy reaches passkey head
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/meta_supreme
         run: |
@@ -135,6 +149,8 @@ jobs:
                       "agent_schedules",
                       "agent_skill_proposals",
                       "agent_subagent_links",
+                      "passkey_credentials",
+                      "passkey_challenges",
                   }
                   rows = await conn.fetch(
                       "SELECT table_name FROM information_schema.tables "
@@ -145,7 +161,7 @@ jobs:
                   missing = expected - present
                   assert not missing, f"missing migrated tables: {sorted(missing)}"
                   revision = await conn.fetchval("SELECT version_num FROM alembic_version")
-                  assert revision == "010_agent_subagent_links", revision
+                  assert revision == "011_passkeys", revision
               finally:
                   await conn.close()
 

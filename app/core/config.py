@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     ALGORITHM: str = "HS256"
 
+    # DEVON Command Center passkeys. These defaults bind credentials to the
+    # canonical production Vercel host. Railway can override them for a custom
+    # domain without changing code. WebAuthn private keys never reach DEVON.
+    PASSKEY_RP_ID: str = "meta-supreme-web.vercel.app"
+    PASSKEY_RP_NAME: str = "DEVON Command Center"
+    PASSKEY_ORIGIN: str = "https://meta-supreme-web.vercel.app"
+    PASSKEY_CHALLENGE_TTL_SECONDS: int = 300
+
     # Operator shell: a second, shell-only key distinct from the operator
     # key, plus an idle timeout (seconds). The shell also requires a valid
     # login JWT, so opening a bash PTY needs BOTH factors. Empty key leaves

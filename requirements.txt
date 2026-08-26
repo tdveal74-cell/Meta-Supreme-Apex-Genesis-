@@ -16,6 +16,7 @@ pgvector>=0.3.6
 python-jose[cryptography]>=3.3.0
 bcrypt>=4.2.0
 python-multipart>=0.0.17
+webauthn>=3.0.0
 
 # HTTP & Utils
 httpx>=0.28.0

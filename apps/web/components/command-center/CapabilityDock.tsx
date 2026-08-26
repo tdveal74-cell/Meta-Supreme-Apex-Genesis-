@@ -161,7 +161,7 @@ export function CapabilityDock() {
         : `MESH ${activeCount}/7`;
 
   return (
-    <div className="fixed bottom-3 right-3 z-[60] sm:bottom-5 sm:right-5">
+    <div className="fixed bottom-[4.75rem] right-3 z-[60] sm:bottom-[5.25rem] sm:right-5">
       {open && (
         <section className="mb-2 w-[min(92vw,380px)] border border-[#3e617c] bg-[#071016]/95 shadow-2xl shadow-black/50 backdrop-blur-xl">
           <header className="flex items-center justify-between border-b border-[#22384a] px-4 py-3">

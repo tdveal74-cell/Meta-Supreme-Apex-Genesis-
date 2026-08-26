@@ -64,6 +64,7 @@ _INCREMENTAL_SCHEMAS = (
     "008_agent_effect_receipts.sql",
     "009_agent_hermes_expansion.sql",
     "010_agent_subagent_links.sql",
+    "011_passkeys.sql",
 )
 
 _DSN = TEST_DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
@@ -72,6 +73,8 @@ _TEST_DB_NAME = _DSN.rsplit("/", 1)[1]
 
 # Tables wiped between tests (order respects FKs; agents stays seeded).
 _DATA_TABLES = (
+    "passkey_challenges",
+    "passkey_credentials",
     "devon_approvals",
     "agent_effect_receipts",
     "agent_effect_intents",

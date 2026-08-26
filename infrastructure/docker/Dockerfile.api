@@ -7,12 +7,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY apps/api/requirements.txt .
+# The repository-root API is the canonical DEVON runtime. Keeping Railway on
+# the same package CI exercises prevents the old apps/api mirror from drifting
+# away from passkeys, Cerebras, persona, approvals, and agent execution.
+COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY apps/api/ .
+COPY app/ ./app/
 COPY services/ ./services/
+COPY database/ ./database/
+COPY docs/ ./docs/
+COPY alembic.ini ./alembic.ini
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Advance the durable schema before accepting traffic. Alembic is idempotent
+# at head, so ordinary restarts are a no-op; a failed migration prevents an
+# API process from starting against an incompatible schema.
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
