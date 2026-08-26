@@ -19,6 +19,24 @@ type PendingApproval = {
   title: string;
 };
 
+/** An irreversible call DEVON stopped to ask about, mid-turn.
+ *
+ * `handle` is opaque and server-held: it names a call DEVON proposed, and
+ * nothing a client can compute. Echo it back to run that exact call and
+ * nothing else. Single use, fifteen minutes, this conversation only. */
+type PendingConfirm = {
+  handle: string;
+  tool: string;
+  detail: string;
+  args: Record<string, unknown>;
+};
+
+/** One event off the /act/stream wire. */
+type TurnEvent = {
+  type: string;
+  [key: string]: unknown;
+};
+
 type IntelligenceStatus = {
   provider: string;
   model: string;
@@ -27,14 +45,6 @@ type IntelligenceStatus = {
 
 const TOKEN_KEY = "devon-chat-token";
 const EMAIL_KEY = "devon-chat-email";
-
-const QUESTION_START =
-  /^(what|who|whom|whose|why|how|when|where|which|is|are|am|was|were|can|could|should|shall|do|does|did|will|would|may|might|explain|tell me|talk to me|describe|summarize|compare)\b/i;
-
-function looksLikeQuestion(text: string): boolean {
-  const t = text.trim();
-  return t.endsWith("?") || QUESTION_START.test(t);
-}
 
 function errorMessage(value: unknown): string {
   if (value instanceof Error) return value.message;
@@ -52,10 +62,22 @@ async function readApiError(response: Response): Promise<string> {
 }
 
 /**
- * Talk to DEVON: one input, voice in and voice out, and he executes.
- * Questions go to the Council (/intelligence/ask). Directives become agent
- * tasks (/agent-tasks) — reads run, writes stop at an approval card that is
- * ruled on right here. Works on a phone: big targets, mic behind a tap.
+ * Talk to DEVON: one input, voice in and voice out, and he acts while he
+ * answers.
+ *
+ * The default path is the Build 15 conversational loop,
+ * POST /conversations/{id}/act/stream, which streams his work as it happens:
+ * every tool call, every result, and the receipt id of any effect. Under
+ * presence authority a read or a reversible write runs on Tee's word alone,
+ * with no card and no waiting. Anything that cannot be walked back stops and
+ * asks him here, in the same breath, and answering RESUMES the turn rather
+ * than restarting it.
+ *
+ * "Ask the council" is kept as its own mode for deliberation, since that is a
+ * different instrument: nine agents arguing, no hands. The loop can also reach
+ * the council itself as a tool when it decides a question deserves one.
+ *
+ * Works on a phone: big targets, mic behind a tap.
  */
 export function DevonChat() {
   const [token, setToken] = useState("");
@@ -70,6 +92,9 @@ export function DevonChat() {
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<"auto" | "ask" | "do">("auto");
   const [pending, setPending] = useState<PendingApproval | null>(null);
+  const [confirming, setConfirming] = useState<PendingConfirm | null>(null);
+  const [turnId, setTurnId] = useState("");
+  const conversationRef = useRef("");
 
   const [voiceOut, setVoiceOut] = useState(true);
   const [listening, setListening] = useState(false);
@@ -295,6 +320,154 @@ export function DevonChat() {
     [append, authedFetch, runTask, speak],
   );
 
+  /** One conversation, reused for the session, so DEVON keeps his thread. */
+  const ensureConversation = useCallback(async (): Promise<string> => {
+    if (conversationRef.current) return conversationRef.current;
+    const response = await authedFetch("/conversations", {
+      method: "POST",
+      body: JSON.stringify({ title: "DEVON live" }),
+    });
+    if (!response.ok) throw new Error(await readApiError(response));
+    const created = await response.json();
+    conversationRef.current = String(created.id || "");
+    if (!conversationRef.current) throw new Error("no conversation id returned");
+    return conversationRef.current;
+  }, [authedFetch]);
+
+  /**
+   * Run one turn and narrate it as it happens.
+   *
+   * `confirmHandle` is set only when answering a question DEVON asked. It names
+   * the stored call, so the resumed turn does exactly what he showed and the
+   * steps before it are not run a second time.
+   */
+  const converse = useCallback(
+    async (text: string, confirmHandle?: string) => {
+      const conversationId = await ensureConversation();
+      const response = await authedFetch(
+        `/conversations/${conversationId}/act/stream`,
+        {
+          method: "POST",
+          body: JSON.stringify(
+            confirmHandle ? { content: text, confirm: confirmHandle } : { content: text },
+          ),
+        },
+      );
+      if (!response.ok) throw new Error(await readApiError(response));
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("this browser cannot read a streamed reply");
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let spoken = "";
+
+      const handle = (event: TurnEvent) => {
+        switch (event.type) {
+          case "turn_started":
+            setTurnId(String(event.turn_id || ""));
+            break;
+
+          case "turn_resumed":
+            append("system", `Resuming — running ${String(event.tool || "")}.`);
+            break;
+
+          case "tool_started":
+            // Narrated as it happens, so Tee watches the work rather than
+            // waiting on a summary of it.
+            append(
+              "system",
+              `${String(event.tool || "")}${event.why ? ` — ${String(event.why)}` : ""}`,
+            );
+            break;
+
+          case "tool_result": {
+            const ok = Boolean(event.ok);
+            const receipt = String(event.approval_request_id || "");
+            const body = String(event.output || "").slice(0, 400);
+            append(
+              "system",
+              `${ok ? "✓" : "✗"} ${String(event.tool || "")}${
+                receipt ? ` · receipt ${receipt}` : ""
+              }${body ? `\n${body}` : ""}`,
+            );
+            break;
+          }
+
+          case "tool_unknown":
+            append("system", `No such tool: ${String(event.tool || "")}.`);
+            break;
+
+          case "refused":
+            append("system", `Refused: ${String(event.detail || "blocked by policy")}`);
+            break;
+
+          case "tool_capped":
+            append("system", String(event.detail || "That tool has hit its limit for this turn."));
+            break;
+
+          case "needs_confirmation":
+            setConfirming({
+              handle: String(event.confirm || ""),
+              tool: String(event.tool || ""),
+              detail: String(event.detail || ""),
+              args: (event.arguments as Record<string, unknown>) || {},
+            });
+            spoken = "That one cannot be walked back. Confirm and I will run it.";
+            append("devon", spoken);
+            break;
+
+          case "card_required":
+            append("system", String(event.detail || "That needs an approval card."));
+            break;
+
+          case "halted":
+            append("system", `Stopped: ${String(event.reason || "you said stop")}.`);
+            break;
+
+          case "step_limit":
+            append("system", String(event.message || "Stopped at the tool limit for one turn."));
+            break;
+
+          case "answer":
+            spoken = String(event.text || "");
+            append("devon", spoken);
+            break;
+
+          case "error":
+            append("system", String(event.message || "The turn failed."));
+            break;
+
+          default:
+            break;
+        }
+      };
+
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const frames = buffer.split("\n\n");
+          buffer = frames.pop() ?? "";
+          for (const frame of frames) {
+            const line = frame.split("\n").find((l) => l.startsWith("data: "));
+            if (!line) continue;
+            try {
+              handle(JSON.parse(line.slice(6)) as TurnEvent);
+            } catch {
+              // A frame we cannot parse is not worth ending the turn over.
+            }
+          }
+        }
+      } finally {
+        setTurnId("");
+      }
+
+      if (spoken) speak(spoken);
+    },
+    [append, authedFetch, ensureConversation, speak],
+  );
+
   const ask = useCallback(
     async (question: string) => {
       const response = await authedFetch("/intelligence/ask", {
@@ -317,11 +490,22 @@ export function DevonChat() {
       append("you", text);
       setBusy(true);
       try {
-        const doExecute = mode === "do" || (mode === "auto" && !looksLikeQuestion(text));
-        if (doExecute) {
+        // Three genuinely different instruments, not three phrasings of one.
+        //
+        //   ask   the council: nine agents deliberating, no hands
+        //   do    a durable agent task, which outlives this conversation and
+        //         waits on an emailed card if Tee walks away
+        //   auto  the live loop: he answers and acts in one breath, on Tee's
+        //         word alone, and can reach the council itself as a tool
+        //
+        // auto is the default because it is the one that behaves like a
+        // colleague rather than a form.
+        if (mode === "ask") {
+          await ask(text);
+        } else if (mode === "do") {
           await execute(text);
         } else {
-          await ask(text);
+          await converse(text);
         }
       } catch (error) {
         const line = `Hit a wall: ${errorMessage(error)}`;
@@ -331,7 +515,7 @@ export function DevonChat() {
         setBusy(false);
       }
     },
-    [append, ask, busy, execute, input, mode, speak, token],
+    [append, ask, busy, converse, execute, input, mode, speak, token],
   );
 
   const sendRef = useRef(send);
@@ -362,6 +546,46 @@ export function DevonChat() {
       append("system", `Approval flow failed: ${errorMessage(error)}`);
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** Answer the question DEVON asked, and resume the same turn. */
+  async function confirmAction(agree: boolean) {
+    if (!confirming || busy) return;
+    const current = confirming;
+    setConfirming(null);
+    if (!agree) {
+      append("you", "No.");
+      append("devon", "Left alone.");
+      return;
+    }
+    append("you", "Yes, go ahead.");
+    setBusy(true);
+    try {
+      await converse("Yes, go ahead.", current.handle);
+    } catch (error) {
+      append("system", `That confirmation did not land: ${errorMessage(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Stop the running turn.
+   *
+   * Narrow and honest on purpose: no FURTHER effect runs in this turn. It
+   * cannot undo one that already completed, and saying so is better than a
+   * button that implies an undo.
+   */
+  async function halt() {
+    if (!turnId || !conversationRef.current) return;
+    try {
+      await authedFetch(`/conversations/${conversationRef.current}/halt`, {
+        method: "POST",
+        body: JSON.stringify({ turn_id: turnId, reason: "Tee said stop" }),
+      });
+    } catch {
+      // A stop that does not reach him is reported by the turn itself.
     }
   }
 
@@ -505,6 +729,54 @@ export function DevonChat() {
               Approve and execute
             </button>
           </div>
+        </div>
+      )}
+
+      {confirming && (
+        <div className="border-t border-amber-400/25 bg-amber-400/[0.07] px-4 py-4 sm:px-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-300">
+            This one cannot be walked back
+          </p>
+          <p className="mt-1 font-mono text-sm text-white">{confirming.tool}</p>
+          {confirming.detail && (
+            <p className="mt-1 text-sm text-white/70">{confirming.detail}</p>
+          )}
+          {Object.keys(confirming.args).length > 0 && (
+            <pre className="mt-2 max-h-40 overflow-auto rounded-lg border border-white/10 bg-black/40 p-3 text-xs text-white/60">
+              {JSON.stringify(confirming.args, null, 2)}
+            </pre>
+          )}
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void confirmAction(false)}
+              className="min-h-11 flex-1 rounded-lg border border-white/15 px-4 text-sm font-medium text-white/70 transition hover:bg-white/5 disabled:opacity-40 sm:flex-none sm:px-6"
+            >
+              Leave it
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void confirmAction(true)}
+              className="min-h-11 flex-1 rounded-lg bg-amber-300 px-4 text-sm font-semibold text-[#171006] transition hover:bg-amber-200 disabled:opacity-40 sm:flex-none sm:px-6"
+            >
+              Yes, run it
+            </button>
+          </div>
+        </div>
+      )}
+
+      {turnId && (
+        <div className="flex items-center justify-between gap-3 border-t border-white/10 bg-black/30 px-4 py-2 text-xs sm:px-6">
+          <span className="font-mono text-white/40">working · {turnId}</span>
+          <button
+            type="button"
+            onClick={() => void halt()}
+            className="min-h-9 rounded-lg border border-rose-400/40 px-3 text-xs font-medium text-rose-200 transition hover:bg-rose-400/10"
+          >
+            Stop
+          </button>
         </div>
       )}
 
