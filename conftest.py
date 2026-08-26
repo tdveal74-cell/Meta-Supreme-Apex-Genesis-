@@ -65,14 +65,26 @@ _INCREMENTAL_SCHEMAS = (
     "009_agent_hermes_expansion.sql",
     "010_agent_subagent_links.sql",
     "011_passkeys.sql",
+    "012_live_state_ledger.sql",
 )
 
 _DSN = TEST_DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
 _ADMIN_DSN = _DSN.rsplit("/", 1)[0] + "/postgres"
 _TEST_DB_NAME = _DSN.rsplit("/", 1)[1]
 
-# Tables wiped between tests (order respects FKs; agents stays seeded).
+# Tables wiped between tests (order respects FKs; agents and executors stay
+# seeded, the latter by 012_live_state_ledger.sql).
 _DATA_TABLES = (
+    "universal_receipts",
+    "learning_candidates",
+    "verifications",
+    "errors",
+    "systems",
+    "artifacts",
+    "approvals",
+    "actions",
+    "events",
+    "intents",
     "passkey_challenges",
     "passkey_credentials",
     "devon_approvals",

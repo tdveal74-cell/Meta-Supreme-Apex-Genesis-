@@ -39,6 +39,7 @@ from typing import Any, Dict, List, Mapping, Optional
 
 import httpx
 
+from services.devon import ecosystem
 from services.intelligence.providers.base import (
     ProviderAuthError,
     ProviderConfigError,
@@ -65,6 +66,11 @@ DEFAULT_TEE_HOST = "https://tee-soul-layer-jw37oa2.svc.aped-4627-b74a.pinecone.i
 TEE_NAMESPACE = "rulings"
 DEVON_NAMESPACE = "experience"
 DEVON_INDEX_NAME = "devon-soul"
+
+#: Sent to Pinecone when an index is created, and enforced by the vendor rather
+#: than by this repository. The ecosystem doctrine is the single source for the
+#: value; it is imported rather than restated so the two cannot drift.
+DELETION_PROTECTION = ecosystem.VENDOR_DELETION_PROTECTION
 
 TEE_SOURCE = "tee-soul-layer"
 DEVON_SOURCE = "devon-soul"
@@ -485,6 +491,12 @@ async def ensure_devon_index(
                 "name": name,
                 "cloud": cloud,
                 "region": region,
+                # Deletion protection is set at creation and enforced by the
+                # vendor. A policy that lives only in this repository cannot
+                # stop a console click or a script that never imports it, and
+                # a memory index is the one thing here with no backup worth the
+                # name: the records in it are what DEVON learned.
+                "deletion_protection": DELETION_PROTECTION,
                 "embed": {
                     "model": EMBED_MODEL,
                     "field_map": {"text": "text"},

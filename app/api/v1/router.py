@@ -16,6 +16,7 @@ from app.api.v1 import (
     intelligence,
     knowledge,
     knowledge_fkr,
+    ledger,
     memory,
     operator,
     operator_shell,
@@ -43,3 +44,4 @@ api_router.include_router(operator_shell.router)
 api_router.include_router(agent_tasks.router)
 api_router.include_router(agent_expansion.router)
 api_router.include_router(soul.router)
+api_router.include_router(ledger.router)
