@@ -27,6 +27,20 @@ type Schedule = {
   state?: string;
 };
 
+type OperatingSurface = {
+  surface?: string;
+  status?: string;
+  contract_ready?: boolean;
+  live_verified?: boolean;
+};
+
+type OperatingLayerStatus = {
+  canonical_orchestrator?: string;
+  second_orchestrator_created?: boolean;
+  policy_version?: string;
+  surfaces?: OperatingSurface[];
+};
+
 type MeshState = "locked" | "loading" | "online" | "degraded";
 
 function tokenFromDevice() {
@@ -55,6 +69,7 @@ export function CapabilityDock() {
   const [catalog, setCatalog] = useState<ToolCatalog | null>(null);
   const [soul, setSoul] = useState<SoulStatus | null>(null);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [operatingLayer, setOperatingLayer] = useState<OperatingLayerStatus | null>(null);
   const [checkedAt, setCheckedAt] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -84,15 +99,17 @@ export function CapabilityDock() {
       setCatalog(null);
       setSoul(null);
       setSchedules([]);
+      setOperatingLayer(null);
       return;
     }
 
     setState("loading");
     const headers = { Authorization: `Bearer ${token}` };
-    const [toolsResult, soulResult, schedulesResult] = await Promise.allSettled([
+    const [toolsResult, soulResult, schedulesResult, operatingLayerResult] = await Promise.allSettled([
       fetch(`${API_BASE}/agent-tasks/tools`, { cache: "no-store", headers }),
       fetch(`${API_BASE}/soul/status`, { cache: "no-store", headers }),
       fetch(`${API_BASE}/agent-expansion/schedules`, { cache: "no-store", headers }),
+      fetch(`${API_BASE}/devon/operating-layer/status`, { cache: "no-store" }),
     ]);
 
     let failures = 0;
@@ -115,6 +132,13 @@ export function CapabilityDock() {
       setSchedules((await schedulesResult.value.json()) as Schedule[]);
     } else {
       setSchedules([]);
+      failures += 1;
+    }
+
+    if (operatingLayerResult.status === "fulfilled" && operatingLayerResult.value.ok) {
+      setOperatingLayer((await operatingLayerResult.value.json()) as OperatingLayerStatus);
+    } else {
+      setOperatingLayer(null);
       failures += 1;
     }
 
@@ -211,6 +235,33 @@ export function CapabilityDock() {
                   <span className="font-mono text-[9px] text-[#d4a017]">{nextSchedule?.run_at ? new Date(nextSchedule.run_at).toLocaleString() : "NONE"}</span>
                 </div>
                 <p className="mt-1 truncate text-[10px] text-[#93a6b5]">{nextSchedule?.goal || "No unmaterialized scheduled goal is currently visible."}</p>
+              </div>
+
+              <div className="mt-3 border border-[#3e617c] bg-[#071016] px-3 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#c77b4a]">Complementary layer</span>
+                  <span className="font-mono text-[9px] text-sky-200">
+                    {operatingLayer?.canonical_orchestrator === "DEVON" && operatingLayer?.second_orchestrator_created === false
+                      ? "DEVON ROUTES"
+                      : "UNVERIFIED"}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {(operatingLayer?.surfaces || [])
+                    .filter((surface) => surface.surface !== "devon")
+                    .map((surface) => (
+                      <span
+                        key={surface.surface}
+                        title={surface.live_verified ? "Live verified" : "Contract ready. External live state is not probed"}
+                        className="border border-sky-400/25 bg-sky-400/[0.06] px-2 py-1 font-mono text-[8px] uppercase tracking-[0.1em] text-sky-100/80"
+                      >
+                        {surface.surface?.replaceAll("_", " ")}
+                      </span>
+                    ))}
+                </div>
+                <p className="mt-2 text-[9px] leading-4 text-[#526979]">
+                  Policy readiness is live. External Claude, ChatGPT, Codex, Research, Work, app, and task sessions remain unclaimed until their own receipts arrive.
+                </p>
               </div>
 
               <p className="mt-3 text-[9px] leading-4 text-[#526979]">

@@ -46,7 +46,8 @@ standalone:
 # a missing module and sends people hunting for a package they already have.
 test-offline:
 	python3 -m pytest test_billing.py test_definition.py test_providers.py \
-	       test_schedule.py test_workflow_engine.py test_security.py -q
+	       test_schedule.py test_workflow_engine.py test_security.py \
+	       test_devon_operating_layer.py -q
 
 lint:
 	pnpm -r lint || true
