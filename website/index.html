@@ -198,6 +198,104 @@
     font-family: var(--mono); font-size: 12.5px; color: var(--ink-soft);
   }
 
+  /* ---------- Flagship ---------- */
+  .badges { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
+  .badge {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em;
+    border-radius: 999px; padding: 6px 14px; border: 1px solid var(--line);
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; }
+  .badge.yes { background: var(--green-bg); color: var(--green); border-color: var(--green); }
+  .badge.yes::before { background: var(--green); }
+  .badge.no { background: transparent; color: var(--ink-soft); }
+  .badge.no::before { background: var(--line); }
+
+  .pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 56px; }
+  @media (max-width: 900px) { .pillars { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { .pillars { grid-template-columns: 1fr; } }
+  .pillar {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 22px;
+  }
+  .pillar .pname {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--amber); display: block; margin-bottom: 8px;
+  }
+  .pillar p { font-family: var(--sans); font-weight: 600; font-size: 15px; line-height: 1.4; }
+
+  .console {
+    border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+    display: grid; grid-template-columns: 320px 1fr; background: var(--card);
+  }
+  @media (max-width: 860px) { .console { grid-template-columns: 1fr; } }
+  .console .routes { border-right: 1px solid var(--line); }
+  @media (max-width: 860px) { .console .routes { border-right: none; border-bottom: 1px solid var(--line); } }
+  .console .routes-head, .console .resp-head {
+    padding: 12px 20px; border-bottom: 1px solid var(--line);
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--ink-soft);
+  }
+  .route-btn {
+    display: flex; gap: 10px; align-items: baseline; width: 100%;
+    text-align: left; background: none; border: none; cursor: pointer;
+    padding: 13px 20px; border-bottom: 1px solid var(--line);
+    font-family: var(--mono); font-size: 13px; color: var(--ink);
+  }
+  .route-btn:last-child { border-bottom: none; }
+  .route-btn .verb { font-weight: 500; color: var(--ink-soft); min-width: 38px; }
+  .route-btn:hover { background: var(--paper); }
+  .route-btn[aria-selected="true"] { background: var(--ink); color: var(--paper); }
+  .route-btn[aria-selected="true"] .verb { color: var(--amber); }
+  .console .resp { display: flex; flex-direction: column; min-width: 0; }
+  .console pre {
+    margin: 0; padding: 20px 24px; overflow-x: auto; flex: 1;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.7;
+    background: var(--ink); color: #C7CFDB; min-height: 340px;
+  }
+  .console pre .k { color: #8FA3C0; }
+  .console pre .s { color: #A8C6A1; }
+  .console pre .n { color: #D9B26A; }
+  .console pre .sim, .console pre .sim .k, .console pre .sim .n { color: var(--amber); font-weight: 500; }
+  .console-note {
+    padding: 12px 22px; font-family: var(--mono); font-size: 12px;
+    color: var(--ink-soft); border-top: 1px solid var(--line);
+  }
+
+  /* ---------- DEVON ---------- */
+  .devon-intro { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-bottom: 56px; align-items: start; }
+  @media (max-width: 860px) { .devon-intro { grid-template-columns: 1fr; } }
+  .devon-intro .creed {
+    background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--amber);
+    border-radius: 10px; padding: 24px 26px;
+    font-family: var(--mono); font-size: 13.5px; line-height: 1.8; color: var(--ink);
+  }
+  .areas-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  @media (max-width: 900px) { .areas-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { .areas-grid { grid-template-columns: 1fr; } }
+  .area {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px;
+  }
+  .area .code { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; color: var(--amber); display: block; margin-bottom: 6px; }
+  .area h4 { font-family: var(--sans); font-weight: 700; font-size: 15.5px; margin-bottom: 4px; }
+  .area p { font-size: 13.5px; color: var(--ink-soft); }
+
+  .laws { margin-top: 64px; }
+  .laws h3 {
+    font-family: var(--display); text-transform: uppercase; font-size: 24px; margin-bottom: 10px;
+  }
+  .laws .laws-sub { color: var(--ink-soft); max-width: 620px; margin-bottom: 28px; }
+  .law {
+    border-bottom: 1px solid var(--line);
+    display: grid; grid-template-columns: 64px 1fr; gap: 20px; padding: 20px 0;
+  }
+  .law .lnum { font-family: var(--display); font-size: 22px; color: var(--amber); line-height: 1.3; }
+  .law h4 { font-family: var(--sans); font-weight: 700; font-size: 16.5px; margin-bottom: 5px; }
+  .law .lrule { font-size: 14.5px; color: var(--ink-soft); }
+  .law .lwhy {
+    margin-top: 8px; font-family: var(--mono); font-size: 12px; color: var(--red);
+    background: var(--red-bg); border-radius: 6px; padding: 8px 12px; display: inline-block;
+  }
+
   /* ---------- Sections ---------- */
   section { padding: 88px 0; border-bottom: 1px solid var(--line); }
   .sec-head { margin-bottom: 48px; }
@@ -400,9 +498,11 @@
   <div class="nav">
     <a class="wordmark" href="#top"><span class="seal" aria-hidden="true"></span>META SUPREME APEX GENESIS</a>
     <nav class="links" aria-label="Sections">
+      <a href="#flagship">Flagship</a>
       <a href="#ecosystem">Ecosystem</a>
       <a href="#council">Council</a>
       <a href="#engines">Engines</a>
+      <a href="#devon">DEVON</a>
       <a href="#operations">Operations</a>
       <a href="#doctrine">Doctrine</a>
     </nav>
@@ -415,7 +515,7 @@
   <!-- ======================= HERO ======================= -->
   <div class="hero">
     <div class="wrap">
-      <span class="eyebrow">Intelligence Operating System · Operations &amp; Ecosystem</span>
+      <span class="eyebrow">Intelligence Operating System · v1.0.0-flagship · Operations &amp; Ecosystem</span>
       <h1>Agents recommend.<br><span class="decide">Humans decide.</span></h1>
       <p class="hero-sub">
         Nine specialist agents deliberate over your knowledge, surface their
@@ -466,6 +566,51 @@
       </div>
     </div>
   </div>
+
+  <!-- ======================= FLAGSHIP ======================= -->
+  <section id="flagship">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="kicker">The Flagship Base</span>
+        <h2>Offline-flagship: proven on any machine</h2>
+        <p>The flagship standard is the base everything scales from. The whole
+           surface runs with zero keys, zero database, zero cost — and it tells
+           you exactly what it is and is not, with status badges that stay honest.</p>
+        <div class="badges">
+          <span class="badge yes">offline-flagship: yes</span>
+          <span class="badge no">live-provider-ready: keys + wiring</span>
+          <span class="badge no">persistent-production-ready: Postgres + RLS proof</span>
+        </div>
+      </div>
+
+      <div class="pillars reveal">
+        <div class="pillar"><span class="pname">Identity</span><p>Intelligence OS — not a chatbot.</p></div>
+        <div class="pillar"><span class="pname">Council</span><p>9 named agents; dissent preserved.</p></div>
+        <div class="pillar"><span class="pname">Human gate</span><p>Effects never commit unattended.</p></div>
+        <div class="pillar"><span class="pname">Simulation</span><p>Always labeled simulated when offline.</p></div>
+        <div class="pillar"><span class="pname">Billing</span><p>Explicit limits; Free is fully usable offline.</p></div>
+        <div class="pillar"><span class="pname">Testability</span><p>Zero-key smoke path on any machine.</p></div>
+      </div>
+
+      <div class="console reveal" aria-label="Flagship API surface explorer">
+        <div class="routes">
+          <div class="routes-head">standalone_api.py</div>
+          <button class="route-btn" data-route="health" aria-selected="true"><span class="verb">GET</span>/health</button>
+          <button class="route-btn" data-route="charter"><span class="verb">GET</span>/system/charter</button>
+          <button class="route-btn" data-route="agents"><span class="verb">GET</span>/agents</button>
+          <button class="route-btn" data-route="deliberate"><span class="verb">POST</span>/council/deliberate</button>
+          <button class="route-btn" data-route="plans"><span class="verb">GET</span>/billing/plans</button>
+          <button class="route-btn" data-route="validate"><span class="verb">POST</span>/workflows/validate</button>
+          <button class="route-btn" data-route="devon"><span class="verb">GET</span>/devon</button>
+        </div>
+        <div class="resp">
+          <div class="resp-head" id="resp-head">response · 200 OK</div>
+          <pre id="resp-body" aria-live="polite"></pre>
+          <div class="console-note">Example responses from the offline surface. Every mock run carries <strong>simulated: true</strong> — the system never pretends to be live.</div>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <!-- ======================= ECOSYSTEM ======================= -->
   <section id="ecosystem">
@@ -576,6 +721,98 @@
              preparing an export: each stops at a gate and waits for you.</p>
           <div class="gate-line amber">⏸ effects never commit unattended</div>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= DEVON ======================= -->
+  <section id="devon">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="kicker">DEVON · The Second Brain</span>
+        <h2>Doctrine that enforces itself</h2>
+        <p>DEVON began as a knowledge system spread across Drive, Notion, Airtable
+           and n8n, governed by doctrine documents that kept being violated by
+           threads that had read them. Prose does not enforce — a function that
+           refuses does. So the doctrine was compiled into code.</p>
+      </div>
+
+      <div class="devon-intro reveal">
+        <div>
+          <p style="font-size:17px; color: var(--ink-soft); margin-bottom: 18px;">
+            Every route under <code style="font-family:var(--mono); font-size:14px;">/devon</code>
+            is a read or a validation. The package parses, plans, validates and
+            gates — the caller executes. That split keeps importing DEVON free of
+            consequences.</p>
+          <p style="font-size:17px; color: var(--ink-soft);">
+            Nine Areas file everything. A supplied Area is never trusted — it is
+            resolved against the canon, and when the top two candidates tie,
+            DEVON refuses to guess.</p>
+        </div>
+        <div class="creed">
+          NOTHING IN THIS PACKAGE PERFORMS<br>
+          A NETWORK CALL OR AN EFFECT.<br><br>
+          It parses, plans, validates and gates.<br>
+          The caller executes.
+        </div>
+      </div>
+
+      <div class="areas-grid reveal">
+        <div class="area"><span class="code">TQO</span><h4>The Quiet Operator</h4><p>Channel, content engine, monetization.</p></div>
+        <div class="area"><span class="code">TSWS</span><h4>Podcast</h4><p>The Shadow We Share: episodes, guests, pipeline.</p></div>
+        <div class="area"><span class="code">NCO</span><h4>NCO Forge</h4><p>Military leadership channel, checklists, product line.</p></div>
+        <div class="area"><span class="code">ACX</span><h4>Ascension Caudex</h4><p>The micro-drama IP, its canon, assets, pipeline.</p></div>
+        <div class="area"><span class="code">HEALTH</span><h4>Health</h4><p>Fitness, energy, medical, raw data feeds.</p></div>
+        <div class="area"><span class="code">MONEY</span><h4>Money</h4><p>Personal finances, separate from TQO revenue.</p></div>
+        <div class="area"><span class="code">FAMILY</span><h4>Family</h4><p>People and relationships.</p></div>
+        <div class="area"><span class="code">LEARNING</span><h4>Learning</h4><p>Skills being built, courses, study.</p></div>
+        <div class="area"><span class="code">SYS</span><h4>Systems</h4><p>The brain itself: DEVON, the vault, the automations.</p></div>
+      </div>
+
+      <div class="laws reveal">
+        <h3>The eight filing laws</h3>
+        <p class="laws-sub">Every law is here because something broke without it,
+           and each carries the failure it prevents.</p>
+        <div class="law"><span class="lnum">01</span><div>
+          <h4>Root holds the vault and nothing else</h4>
+          <p class="lrule">Never write a new file to root. Never leave a file at root "for now."</p>
+          <span class="lwhy">prevented: 160 items accumulating at root, including a plaintext private key</span>
+        </div></div>
+        <div class="law"><span class="lnum">02</span><div>
+          <h4>Read the newest sibling before writing a new version</h4>
+          <p class="lrule">List the folder, sort by date, read the newest in full. It may already be the merge.</p>
+          <span class="lwhy">prevented: the naming convention forking twice, sixty seconds apart</span>
+        </div></div>
+        <div class="law"><span class="lnum">03</span><div>
+          <h4>A success response is a claim. A validated read-back is a receipt.</h4>
+          <p class="lrule">Every move, rename, create or delete is confirmed by reading state back.</p>
+          <span class="lwhy">prevented: a guard firing correctly for the wrong reason</span>
+        </div></div>
+        <div class="law"><span class="lnum">04</span><div>
+          <h4>Exact duplicates die on sight. Distinct versions are the owner's ruling.</h4>
+          <p class="lrule">Identical title, identical byte size, older timestamp: trash it. Anything else is a distinct version — a model does not decide which draft survives.</p>
+          <span class="lwhy">prevented: keep-latest deleting an addendum holding four rulings that existed nowhere else</span>
+        </div></div>
+        <div class="law"><span class="lnum">05</span><div>
+          <h4>Filenames that carry warnings are canon</h4>
+          <p class="lrule">Titles carrying instructions outrank any general heuristic. Read every filename before acting on any file.</p>
+          <span class="lwhy">prevented: a literal keep-latest pass deleting the only copy of four rulings</span>
+        </div></div>
+        <div class="law"><span class="lnum">06</span><div>
+          <h4>Retire by moving and renaming, not by deleting</h4>
+          <p class="lrule">Superseded material moves to the archive with its status in the filename. Deletion is final.</p>
+          <span class="lwhy">prevented: a trashed file the connector could never restore</span>
+        </div></div>
+        <div class="law"><span class="lnum">07</span><div>
+          <h4>Sweep to a dated holding folder. Never route in bulk blind.</h4>
+          <p class="lrule">A pile that is not understood moves whole into a dated sweep folder and stops. Nothing there is canon until a human routes it.</p>
+          <span class="lwhy">prevented: a holding folder outliving its session and becoming the mess it was built to fix</span>
+        </div></div>
+        <div class="law"><span class="lnum">08</span><div>
+          <h4>Correct in place where the lane supports it. Batch and bump once where it does not.</h4>
+          <p class="lrule">Corrections do not deserve a version. Substance does.</p>
+          <span class="lwhy">prevented: six master-directory versions produced in a single day, one correction at a time</span>
+        </div></div>
       </div>
     </div>
   </section>
@@ -704,6 +941,7 @@
              already built for SOC 2 and GDPR readiness.</p>
         </div>
       </div>
+      <p class="council-note">// Beyond standalone: the full monorepo + Postgres unlocks live providers, persistence, and the 148-test suite.</p>
     </div>
   </section>
 
@@ -780,6 +1018,45 @@ uvicorn standalone_api:app --reload --port 8000
       navGate.classList.add('halted');
       navGateText.textContent = '0 gates waiting';
     });
+
+    // Flagship console — example responses from the offline surface.
+    var RESPONSES = {
+      health: { head: 'GET /health · 200 OK', body:
+'{\n  "status": "healthy",\n  "service": "meta-supreme-apex-genesis",\n  "version": "1.0.0-flagship",\n  "mode": "standalone",\n  "database": "not_required",\n  "ai_provider": "mock",\n  <sim>"simulated": true</sim>,\n  "council_agents": 9\n}' },
+      charter: { head: 'GET /system/charter · 200 OK', body:
+'{\n  "non_negotiables": [\n    "Not a chatbot — multi-agent Council + synthesis only",\n    "Humans decide; agents recommend",\n    "Automation never commits effects unattended",\n    "Memory is transparent, editable, deletable",\n    "Simulated output is always labeled simulated"\n  ],\n  "rule": "Reads flow; effects pause for human approval.",\n  "council": { "agents": 9 }\n}' },
+      agents: { head: 'GET /agents · 200 OK', body:
+'[\n  { "slug": "oracle",     "purpose": "Future / emerging patterns" },\n  { "slug": "analyst",    "purpose": "Evidence & research" },\n  { "slug": "strategist", "purpose": "Options & tradeoffs" },\n  { "slug": "architect",  "purpose": "Systems & frameworks" },\n  { "slug": "engineer",   "purpose": "Implementation plans" },\n  { "slug": "guardian",   "purpose": "Risk & security" },\n  { "slug": "creator",    "purpose": "Communication & messaging" },\n  { "slug": "librarian",  "purpose": "Knowledge organization" },\n  { "slug": "skeptic",    "purpose": "Assumption testing" }\n]' },
+      deliberate: { head: 'POST /council/deliberate · 200 OK', body:
+'{\n  <sim>"simulated": true</sim>,\n  "provider": "mock",\n  "agents_consulted": ["oracle", "analyst", "…", "skeptic"],\n  "synthesis": {\n    <sim>"simulated": true</sim>,\n    "recommendation": "Review contributions and decide —\\n      this run is offline/mock.",\n    "dissent_preserved": true\n  },\n  "non_negotiable": "Humans decide; agents recommend"\n}' },
+      plans: { head: 'GET /billing/plans · 200 OK', body:
+'{\n  "plans": [\n    { "id": "free",         "target": "individuals" },\n    { "id": "professional", "target": "power users / small teams" },\n    { "id": "enterprise",   "target": "organizations" }\n  ]\n}\n\n// Free is fully usable offline — explicit limits, no card.' },
+      validate: { head: 'POST /workflows/validate · 200 OK', body:
+'{\n  "valid": true,\n  "trigger": { "type": "schedule", "cadence": "daily:07:00" },\n  "effect_steps": ["write_memory"],\n  "awaits_dispatcher": true\n}\n\n// Effect-gate enforcement happens at save time:\n// a definition with unguarded effects never validates.' },
+      devon: { head: 'GET /devon · 200 OK', body:
+'{\n  "name": "DEVON",\n  "role": "second brain",\n  "areas": 9,\n  "filing_laws": 8,\n  "guarantee": "No route under /devon performs a network\\n    call or an effect. It parses, plans, validates\\n    and gates. The caller executes."\n}' }
+    };
+    var respHead = document.getElementById('resp-head');
+    var respBody = document.getElementById('resp-body');
+    var routeBtns = document.querySelectorAll('.route-btn');
+    function renderResponse(key) {
+      var r = RESPONSES[key];
+      if (!r) return;
+      respHead.textContent = 'response · ' + r.head.split(' · ')[1];
+      respBody.innerHTML = r.body
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/&lt;sim&gt;/g, '<span class="sim">').replace(/&lt;\/sim&gt;/g, '</span>')
+        .replace(/"([^"]+)":/g, '<span class="k">"$1"</span>:')
+        .replace(/: "([^"]*)"/g, ': <span class="s">"$1"</span>')
+        .replace(/: (\d+|true|false)/g, ': <span class="n">$1</span>');
+      routeBtns.forEach(function (b) {
+        b.setAttribute('aria-selected', b.dataset.route === key ? 'true' : 'false');
+      });
+    }
+    routeBtns.forEach(function (b) {
+      b.addEventListener('click', function () { renderResponse(b.dataset.route); });
+    });
+    renderResponse('health');
 
     // Scroll reveals — skipped for reduced motion.
     var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
