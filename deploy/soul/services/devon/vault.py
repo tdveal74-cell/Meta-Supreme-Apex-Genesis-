@@ -363,6 +363,12 @@ WORKFLOWS = {
     # skipped and named, and the Heartbeat keeps alerting on them
     # (stuck_jobs) until repaired by hand.
     "Ledger Janitor": {"id": "HKNEDVy7PUKPtsrN", "state": "active, daily 02:30"},
+    # Weekly read-only export: the four learning-lane tables (state ledger,
+    # feed log, soul commit log, heartbeat log) each to CSV, one Gmail with
+    # four attachments. approval_queue is EXCLUDED on purpose: its rows carry
+    # plaintext decision tokens, and mailing them would let anyone with inbox
+    # access approve soul writes. Never add it to this or any export.
+    "Weekly Table Backup": {"id": "qCfGZ1CwmpK9vOta", "state": "active, weekly Sun 03:10"},
     "TQO FINAL V5": {"id": "gsGJQan7a6ZufhYt", "state": "inactive by ruling"},
     "Capture Hook": {"id": "Cbd24ptTPWch3aZO", "state": "retired 2026-08-22"},
 }

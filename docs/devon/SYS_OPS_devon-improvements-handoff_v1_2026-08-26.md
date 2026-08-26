@@ -98,15 +98,19 @@ runbook) in the same change. Remaining verification: the first live sweep
 heartbeat's stuck_jobs alert should drain on the following pulse; a session
 check-in is armed for 02:54 UTC to confirm both.
 
-### 6. Weekly table backup by email (n8n, additive)
+### 6. Weekly table backup by email - PUBLISHED 2026-08-26
 
-Weekly schedule; read devon_state_ledger, devon_build12_feed_log,
-devon_soul_commit_log, devon_heartbeat_log; convert each to CSV (Convert to
-File node, not hand-rolled Buffer code); merge binaries onto one item; one
-Gmail with four attachments. approval_queue is EXCLUDED on purpose: its rows
-carry plaintext decision tokens, and mailing them would let inbox access
-approve soul writes. Document the exclusion in the sticky and the skill.
-Register in vault.py in the same change as publish.
+Workflow `qCfGZ1CwmpK9vOta` (DEVON - Weekly Table Backup) is live: Sundays
+03:10 UTC, reads the four learning-lane tables, converts each to CSV
+(Convert to File nodes), merges the binaries onto one item, and sends one
+Gmail with four attachments. approval_queue is EXCLUDED on purpose (rows
+carry plaintext decision tokens; mailing them would let inbox access
+approve soul writes) - documented in the canvas sticky, vault.py, the
+skill tables, and the runbook. Error Alarm + 300s timeout attached.
+Dry-tested (execution 3589, Gmail pinned): all four tables read (13 rows
+total), four CSVs built and merged, subject and body correct. Registered
+in vault.py WORKFLOWS (+ mirror + skill tables) in the same change as
+publish.
 
 ### 7. Build 14: reflection to intent (design constraint fixed)
 

@@ -44,6 +44,11 @@ workflow instead; never add an approval_queue read to it.
   the ledger said no or the POST failed (left as-is, swept again next day);
   SKIPPED lines (unreadable envelope or unknown state) need hand repair — the
   heartbeat's stuck_jobs finding keeps alerting on them until fixed.
+- "DEVON weekly backup: N row(s), K/4 tables attached" — the Sunday 03:10
+  UTC read-only export of the four learning-lane tables as CSV attachments.
+  A MISSING line means a table's read returned nothing or its branch
+  failed; inspect via the Table Reader. approval_queue is never in this
+  email, on purpose.
 - Silence = nothing happened. Every poll with zero work sends nothing.
 
 ## Failure semantics (what retries vs what stops)
