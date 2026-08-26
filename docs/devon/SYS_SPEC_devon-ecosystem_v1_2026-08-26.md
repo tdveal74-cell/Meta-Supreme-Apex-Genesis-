@@ -172,7 +172,7 @@ merge. All three surfaces were verified current on 2026-08-26.
 
 | Surface | Deployment | Commit |
 |---|---|---|
-| Railway `api` | `a5d7d7a4` SUCCESS at 10:01:38 UTC, logs show `Running upgrade 011_passkeys -> 012_live_state_ledger` | `763b150` |
+| Railway `api` | `a6c1908c` SUCCESS at 13:01:58 UTC, healthcheck passed, `alembic upgrade head` ran with nothing pending | `c0fa80c` |
 | Vercel `meta-supreme-web` | `dpl_Bf5QS6rzDyJoWBqf5msoX2vUitep`, READY, `target: "production"` | `5f409cf` |
 | Vercel `devon-soul` | `dpl_6e6XWExoD7xSYb5uDKjT1t6C4mp1`, READY, `target: "production"` | `5f409cf` |
 
@@ -181,9 +181,18 @@ free plan cap of 100 deployments a day blocked the automatic production builds
 earlier in the day. `5f409cf` and repo main `44568cd` differ only by the merge
 commit; their trees are byte identical, so production carries main's content.
 
-Railway sits one merge behind main on purpose. The commits after `763b150`
-change `vercel.json` and `DEPLOY.md` only, neither of which the API builds from,
-so a redeploy would produce the same container.
+Railway was four merges behind on 2026-08-26 and nothing noticed, because
+**autodeploy is disabled**: the Railway GitHub App is not installed on this
+repository, so no push to `main` triggers a build. The staleness was legitimate
+through `#70`-`#72` (docs, skills, `vercel.json` - none of which the API builds
+from) and became real at `#73`, which changed
+`services/agent_runtime/planner.py`. Deployment `a6c1908c` was created by hand
+from the current head at 13:00 UTC to close it.
+
+Until the GitHub App is installed and autodeploy re-enabled, **every merge that
+touches container code needs a manual deployment**, and no alarm anywhere in the
+estate reports a stale surface. Do not read a merged PR as a shipped one on this
+project.
 
 A `target` of `null` on a Vercel deployment means preview, not production. That
 distinction is written down here because reading a green preview as a shipped
