@@ -350,6 +350,12 @@ WORKFLOWS = {
     "Soul Committer": {"id": "lANs6wopaK0PkNhN", "state": "active, 15 minute poll"},
     "Error Alarm": {"id": "XDQXwgFkUhYxoEjG", "state": "active, shared error workflow"},
     "Learning Lane Table Reader": {"id": "we45pHkQHRmSRnZx", "state": "manual, read only"},
+    # Build 13. The 6-hour pulse reads every organ (never approval_queue, whose
+    # rows carry plaintext decision tokens), writes one beat row to
+    # devon_heartbeat_log (Adg1Gd9HML7Q4L3U), and emails Tee on new findings or
+    # roughly daily. Its partner is a claude.ai Routine (daily Reflection) that
+    # writes reflection rows into the same table; the pulse flags its silence.
+    "Heartbeat": {"id": "dRgTNLod2s8BAcPg", "state": "active, 6 hour pulse"},
     "TQO FINAL V5": {"id": "gsGJQan7a6ZufhYt", "state": "inactive by ruling"},
     "Capture Hook": {"id": "Cbd24ptTPWch3aZO", "state": "retired 2026-08-22"},
 }

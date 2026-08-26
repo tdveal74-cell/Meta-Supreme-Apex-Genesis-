@@ -21,7 +21,10 @@ wrong:
    receipted reversal (first instance: the 2026-08-25 smoke card, approved
    by mistake, committed at 20:15Z, deleted and reverted at 20:23Z).
 4. `approval_queue` — the decision record itself (status/decided_at).
-5. Pinecone console — the only proof a committed record really exists.
+5. `devon_heartbeat_log` — the Build 13 pulse writes vitals and keyed
+   findings every 6h; a healthy estate shows fresh pulse rows even when the
+   inbox is silent. Details: `references/heartbeat.md`.
+6. Pinecone console — the only proof a committed record really exists.
    Digest emails say so explicitly: verify before trusting.
 
 The committer persists NO execution data (deliberate: approval tokens must
