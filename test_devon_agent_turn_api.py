@@ -366,6 +366,91 @@ async def test_presence_gets_past_the_capability_boundary_on_a_real_tool(
 
 
 # ---------------------------------------------------------------------------
+# One whole conversation, the way Tee would actually have it
+# ---------------------------------------------------------------------------
+
+
+async def test_a_whole_exchange_end_to_end(client, auth_headers, scripted):
+    """Every other test here proves one mechanism. This proves the shape.
+
+    Each part of this worked in isolation in the cut that shipped broken; what
+    did not work was the join. So this drives a realistic exchange all the way
+    through, over HTTP, in the order Tee would hit it: ask, read, act, get
+    stopped by something guarded, answer it, and be told what happened. Then it
+    reads the conversation back and checks the record matches what occurred.
+    """
+    conversation_id = await new_conversation(client, auth_headers)
+
+    # 1. A question that needs a look at the world, then an answer.
+    scripted(
+        call("github.repo_status"),
+        say("I checked the repository and I could not reach it from here."),
+    )
+    first = events_of(
+        await act(client, auth_headers, conversation_id, content="how does the repo look?")
+    )
+    assert [e["type"] for e in first][-1] == "answer"
+    assert any(e["type"] == "tool_result" for e in first)
+
+    # 2. A reversible write: runs on his word alone, no card, no waiting.
+    scripted(
+        call("runtime.schedule_goal", goal="sweep stale jobs", cron="0 3 * * *"),
+        say("Scheduled the sweep for 03:00 daily."),
+    )
+    second = events_of(
+        await act(client, auth_headers, conversation_id, content="schedule a nightly sweep")
+    )
+    scheduled = [e for e in second if e["type"] == "tool_result"][0]
+    assert scheduled["ok"] is True, scheduled["output"]
+    assert scheduled["approval_request_id"].startswith("REQ-")
+    assert "needs_confirmation" not in [e["type"] for e in second]
+
+    # 3. Something guarded: stops and asks, in the same breath.
+    scripted(call("github.write_file", path="NOTES.md", content="ship it"))
+    third = events_of(
+        await act(client, auth_headers, conversation_id, content="write that into NOTES.md")
+    )
+    question = third[-1]
+    assert question["type"] == "needs_confirmation"
+    assert question["tool"] == "github.write_file"
+    handle = question["confirm"]
+
+    # 4. He says yes. The turn resumes; it does not start over.
+    scripted(say("I tried, but no repository is configured for me to write to."))
+    fourth = events_of(
+        await act(client, auth_headers, conversation_id, content="yes, go ahead", confirm=handle)
+    )
+    assert "turn_resumed" in [e["type"] for e in fourth]
+    assert [e["type"] for e in fourth][-1] == "answer"
+    written = [e for e in fourth if e["type"] == "tool_result"][0]
+    assert written["tool"] == "github.write_file"
+    # Past the governance gate, into the adapter's own refusal.
+    assert "runtime approval" not in written["output"]
+
+    # 5. The record. Four exchanges, in order, each with an assistant reply, and
+    #    the one that stopped to ask says so rather than looking like an answer.
+    detail = await client.get(
+        f"/api/v1/conversations/{conversation_id}", headers=auth_headers
+    )
+    messages = detail.json()["messages"]
+    assert [m["role"] for m in messages] == ["user", "assistant"] * 4
+    said = [m["content"] for m in messages if m["role"] == "user"]
+    assert said == [
+        "how does the repo look?",
+        "schedule a nightly sweep",
+        "write that into NOTES.md",
+        "yes, go ahead",
+    ]
+    stopped_to_ask = messages[5]
+    assert stopped_to_ask["role"] == "assistant"
+    assert "confirm" in stopped_to_ask["content"].lower()
+    # And it names what had already run before it stopped, so a turn that had
+    # effects and then paused cannot read later as a turn that did nothing.
+    assert stopped_to_ask["metadata"]["ending"] == "needs_confirmation"
+    assert stopped_to_ask["metadata"]["answered"] is False
+
+
+# ---------------------------------------------------------------------------
 # Presence is the transport's word, and the brake is reachable
 # ---------------------------------------------------------------------------
 
