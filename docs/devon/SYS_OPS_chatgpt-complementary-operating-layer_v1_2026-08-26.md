@@ -225,9 +225,14 @@ Recorded from GitHub after the pull request landed, not asserted from memory.
   commit, the merged tree is identical to the final head, and the root and
   `deploy/soul` copies of `operating_layer.py` hash identically at main
 
-Still unverified, stated so nobody assumes otherwise: Vercel preview and
-production deployment (the free plan daily deploy cap was exhausted, retry
-window roughly 24 hours), production reachability, external-surface live
+Deployment was still unverified when this document was written. It has since
+been read back on 2026-08-26: Railway `api` live on deployment `a5d7d7a4` with
+migration `012_live_state_ledger` applied, and both Vercel projects promoted to
+`target: "production"` on `5f409cf`. The detail lives in
+`SYS_SPEC_devon-ecosystem_v1_2026-08-26.md` under "Deployment, read back", which
+is the one place that record is kept.
+
+Still unverified, stated so nobody assumes otherwise: external-surface live
 sessions, and the live-environment items that always remain manual for Tee.
 
 ## Receipt boundary

@@ -165,11 +165,32 @@ The Area registry in `services/devon/areas.py` owns these codes. This module
 lists them and a test asserts every one still resolves through that registry, so
 the map can never become a second registry that drifts.
 
+## Deployment, read back
+
+Merging is not deploying, so this section records the read back rather than the
+merge. All three surfaces were verified current on 2026-08-26.
+
+| Surface | Deployment | Commit |
+|---|---|---|
+| Railway `api` | `a5d7d7a4` SUCCESS at 10:01:38 UTC, logs show `Running upgrade 011_passkeys -> 012_live_state_ledger` | `763b150` |
+| Vercel `meta-supreme-web` | `dpl_Bf5QS6rzDyJoWBqf5msoX2vUitep`, READY, `target: "production"` | `5f409cf` |
+| Vercel `devon-soul` | `dpl_6e6XWExoD7xSYb5uDKjT1t6C4mp1`, READY, `target: "production"` | `5f409cf` |
+
+The two Vercel surfaces reached production by promotion at 11:10 UTC after the
+free plan cap of 100 deployments a day blocked the automatic production builds
+earlier in the day. `5f409cf` and repo main `44568cd` differ only by the merge
+commit; their trees are byte identical, so production carries main's content.
+
+Railway sits one merge behind main on purpose. The commits after `763b150`
+change `vercel.json` and `DEPLOY.md` only, neither of which the API builds from,
+so a redeploy would produce the same container.
+
+A `target` of `null` on a Vercel deployment means preview, not production. That
+distinction is written down here because reading a green preview as a shipped
+production build is the exact mistake this document exists to prevent.
+
 ## What is still not live, stated plainly
 
-- **Deployment.** Merging is not deploying. The Vercel free plan deploy cap was
-  exhausted on 2026-08-26; production reachability is unverified until a deploy
-  lands and is read back.
 - **The learning lane's own half.** Promotion into `devon-subconscious` and the
   approval gated commit into `devon-soul` run as live n8n workflows recorded in
   `services/devon/vault.py`. This repository holds their gates, not their
