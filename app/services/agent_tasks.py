@@ -24,6 +24,7 @@ from app.services.agent_runtime_persistence import (
 from app.services.hermes_expansion_persistence import HermesExpansionRepository
 from app.services.intelligence import get_provider
 from app.services.leased_effect_recorder import LeasedEffectRecorder
+from app.services.soul import get_soul_layer
 from app.services.subagent_links import SubagentLinkRepository
 from services.agent_runtime.contracts import AgentTask, PlanStep, TaskState, ToolCall
 from services.agent_runtime.effect_recorder import EffectRecorder
@@ -35,7 +36,7 @@ from services.agent_runtime.expansion import (
 from services.agent_runtime.expansion_tools import ExpansionToolAdapter
 from services.agent_runtime.learning_loop import draft_skill_proposal_from_task
 from services.agent_runtime.planner import LLMPlanner, StaticPlanner
-from services.agent_runtime.runtime import AgentRuntime
+from services.agent_runtime.runtime import AgentRuntime, soul_recall_payload
 from services.agent_runtime.store import InMemoryAgentTaskStore
 from services.agent_runtime.tools import ToolRegistry
 from services.browser.agent_adapter import BrowserCapabilityAdapter
@@ -138,6 +139,15 @@ class DurableAgentTaskService:
             goal=clean_goal,
             project_id=project_id,
         )
+        # get_soul_layer() is None unless SOUL_RECALL_ENABLED and
+        # PINECONE_API_KEY are both set, so recall is inert by default; when
+        # live, a provider failure lands in the payload's errors and planning
+        # proceeds exactly as it would without recall.
+        soul = get_soul_layer()
+        if soul is not None:
+            merged_context["soul_recall"] = await soul_recall_payload(
+                soul, clean_goal
+            )
 
         if planned_steps is not None:
             steps = self._steps_from_payload(planned_steps)

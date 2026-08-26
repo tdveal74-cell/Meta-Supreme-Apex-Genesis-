@@ -24,7 +24,11 @@ from services.agent_runtime.learning import (
     SkillRecord,
 )
 from services.agent_runtime.planner import LLMPlanner, Planner, StaticPlanner
-from services.agent_runtime.runtime import AgentRuntime, AgentRuntimeError
+from services.agent_runtime.runtime import (
+    AgentRuntime,
+    AgentRuntimeError,
+    soul_recall_payload,
+)
 from services.agent_runtime.store import AgentTaskStore, InMemoryAgentTaskStore
 from services.agent_runtime.tools import ToolRegistry, ToolResult, ToolSpec
 
@@ -53,4 +57,5 @@ __all__ = [
     "ToolResult",
     "ToolRisk",
     "ToolSpec",
+    "soul_recall_payload",
 ]

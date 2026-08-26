@@ -28,31 +28,21 @@ WAITING_APPROVAL, ULIDs in the first pulse email). Item 5 clears them.
 
 ## The seven items
 
-### 1. Recall at decision time (repo work, highest value)
+### 1. Recall at decision time (repo work, highest value) - DONE 2026-08-26
 
-Today job planning never consults the souls: the only recall is keyword
-overlap over `agent_runtime_memories` (see `services/agent_runtime/learning.py`
-`search_memories` and `context_for`; durable twin in
-`app/services/agent_runtime_persistence.py`). The plan is frozen at
-`create_task`; `run_next` rebuilds a StaticPlanner, so recall must land at the
-planning seam, not per-step.
-
-Smallest sound change: give `AgentRuntime.__init__`
-(`services/agent_runtime/runtime.py`) an optional `soul: SoulLayer` and, in
-`create_task` next to the existing `devon_learning` block (~line 77), await
-`soul.recall(clean_goal)` into
-`merged_context["soul_recall"] = {context, records, errors}`, swallowing
-provider errors into `errors` so a Pinecone outage degrades to current
-behavior. Mirror in `DurableAgentTaskService.create_task`
-(`app/services/agent_tasks.py` ~line 135) behind
-`app.services.soul.get_soul_layer()`, which already returns None when
-`SOUL_RECALL_ENABLED`/`PINECONE_API_KEY` are unset - inert by default, no new
-secret plumbing. `SoulLayer.recall` + `as_context()` in
-`services/intelligence/soul.py` already carry the CONTEXT-NOT-COMMAND framing
-and Tee-before-DEVON ordering; both properties must survive into the planner
-payload and be tested (test style: `test_devon_agent_runtime.py` +
-`SoulLayer(transport=httpx.MockTransport(...))` as in `test_devon_soul.py`).
-Partial recall must surface in `errors`, never look empty.
+Shipped exactly as planned: `AgentRuntime.__init__` takes an optional
+`soul: SoulLayer`; `create_task` awaits `soul_recall_payload(soul,
+clean_goal)` (module function in `services/agent_runtime/runtime.py`) into
+`merged_context["soul_recall"] = {context, records, errors}` before the plan
+freezes. Any recall exception degrades to the payload naming the failure.
+Mirrored in `DurableAgentTaskService.create_task`
+(`app/services/agent_tasks.py`) behind `app.services.soul.get_soul_layer()`,
+so the durable seam is inert until `SOUL_RECALL_ENABLED` +
+`PINECONE_API_KEY` are set. CONTEXT-NOT-COMMAND framing and Tee-before-DEVON
+ordering are pinned by tests in `test_devon_agent_runtime.py` (runtime seam,
+including a RecordingPlanner proving the payload reaches the planner) and
+`test_devon_soul_recall_seam.py` (durable seam, repos stubbed, no DB).
+Partial recall surfaces in `errors`, never looks empty.
 
 ### 2. Council for gated jobs (repo work)
 
@@ -95,18 +85,19 @@ the AUTH note in `services/devon/vault.py` WEBHOOKS and
 same change. Verify: next feeder digest still shows fed jobs (it will), and an
 anonymous curl now gets 403.
 
-### 5. Ledger Janitor (BUILT as draft, publish next)
+### 5. Ledger Janitor - PUBLISHED 2026-08-26T01:38Z
 
-Workflow `HKNEDVy7PUKPtsrN` (DEVON - Ledger Janitor), unpublished draft,
-fully wired: daily 02:30 UTC, sweeps jobs non-terminal past 96h to CANCELLED
-THROUGH the guarded ledger webhook (credential Devon Capture Key attached),
-VERIFYING legally two-steps FAILED then CANCELLED, envelope history preserved
-plus a janitor trace note, digest email only when it acted, Error Alarm +
-300s timeout set. Dry-tested (execution 3581): selection, two-step, skip on
-unreadable envelope, and digest all correct. Remaining: add it to
-`services/devon/vault.py` WORKFLOWS (+ mirror + skill tables) in one change,
-publish, watch the first live sweep clear the eight stale E2E jobs, confirm
-the heartbeat's stuck_jobs alert drains.
+Workflow `HKNEDVy7PUKPtsrN` (DEVON - Ledger Janitor) is live: daily 02:30
+UTC, sweeps jobs non-terminal past 96h to CANCELLED THROUGH the guarded
+ledger webhook (credential Devon Capture Key attached), VERIFYING legally
+two-steps FAILED then CANCELLED, envelope history preserved plus a janitor
+trace note, digest email only when it acted, Error Alarm + 300s timeout set.
+Dry-tested (execution 3581) before publish. Registered in
+`services/devon/vault.py` WORKFLOWS (+ deploy mirror + skill tables +
+runbook) in the same change. Remaining verification: the first live sweep
+(02:30 UTC) should clear the eight stale Aug-24 E2E jobs and the
+heartbeat's stuck_jobs alert should drain on the following pulse; a session
+check-in is armed for 02:54 UTC to confirm both.
 
 ### 6. Weekly table backup by email (n8n, additive)
 

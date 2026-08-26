@@ -70,6 +70,7 @@ policy semantics, every live id, and every payload contract:
 | Soul Committer | n8n workflow, 15-min poll | state machine in reference |
 | Vault map | repo `services/devon/vault.py` WEBHOOKS/WORKFLOWS | keep truthful on every change |
 | Heartbeat (Build 13) | n8n pulse + claude.ai reflection Routine | continuity and self-monitoring, `references/heartbeat.md` |
+| Ledger Janitor | n8n workflow, daily 02:30 UTC | sweeps jobs non-terminal past 96h to CANCELLED through the guarded ledger webhook; ids in reference |
 
 ## Which reference to read
 

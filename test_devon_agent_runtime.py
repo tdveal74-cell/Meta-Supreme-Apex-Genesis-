@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import httpx
 import pytest
 
 from services.agent_runtime import (
@@ -23,6 +24,7 @@ from services.intelligence.providers.base import (
     CompletionResponse,
     TokenUsage,
 )
+from services.intelligence.soul import CONTEXT_NOT_COMMAND, SoulLayer
 
 
 def step(tool: str, *, title: str = "Do work", arguments=None) -> PlanStep:
@@ -274,3 +276,147 @@ async def test_llm_planner_accepts_only_registered_tools() -> None:
     )
     with pytest.raises(KeyError, match="unknown tool"):
         await LLMPlanner(bad_provider).plan("Do it", {}, tools)
+
+
+# ---------------------------------------------------------------------------
+# Soul recall at the planning seam
+# ---------------------------------------------------------------------------
+
+SOUL_TEE_HOST = "https://tee-soul-layer-test.svc.example.pinecone.io"
+SOUL_DEVON_HOST = "https://devon-soul-test.svc.example.pinecone.io"
+
+
+class RecordingPlanner(StaticPlanner):
+    """StaticPlanner that keeps the context it was handed."""
+
+    def __init__(self, steps) -> None:
+        super().__init__(steps)
+        self.seen_context = None
+
+    async def plan(self, goal, context, tools):
+        self.seen_context = dict(context)
+        return await super().plan(goal, context, tools)
+
+
+def _read_tools() -> ToolRegistry:
+    tools = ToolRegistry()
+    tools.register(
+        ToolSpec(
+            name="repo.inspect",
+            description="Inspect repository state",
+            risk=ToolRisk.READ,
+            handler=lambda args: "ok",
+        )
+    )
+    return tools
+
+
+def _soul(handler) -> SoulLayer:
+    return SoulLayer(
+        api_key="pc-test-key",
+        tee_host=SOUL_TEE_HOST,
+        devon_host=SOUL_DEVON_HOST,
+        transport=httpx.MockTransport(handler),
+    )
+
+
+@pytest.mark.asyncio
+async def test_soul_recall_reaches_the_planner_with_framing_and_order() -> None:
+    """Recall lands in the planner payload; framing and hierarchy survive."""
+
+    def handler(request):
+        if "tee-soul-layer" in str(request.url):
+            hits = [
+                {
+                    "_id": "t1",
+                    "_score": 0.10,
+                    "fields": {"text": "the ruling", "ruled_on": "2026-08-20"},
+                }
+            ]
+        else:
+            hits = [
+                {
+                    "_id": "d1",
+                    "_score": 0.99,
+                    "fields": {"text": "the pattern", "observed_on": "2026-08-21"},
+                }
+            ]
+        return httpx.Response(200, json={"result": {"hits": hits}})
+
+    planner = RecordingPlanner([step("repo.inspect")])
+    runtime = AgentRuntime(planner=planner, tools=_read_tools(), soul=_soul(handler))
+
+    task = await runtime.create_task("Ship the release")
+    payload = task.context["soul_recall"]
+
+    assert payload["context"].startswith(CONTEXT_NOT_COMMAND)
+    # Tee precedes DEVON in records and rendered context despite the scores.
+    assert [r["source"] for r in payload["records"]] == ["tee-soul-layer", "devon-soul"]
+    assert payload["context"].index("the ruling") < payload["context"].index("the pattern")
+    assert payload["errors"] == []
+    # The planner saw the same payload — recall informed the frozen plan.
+    assert planner.seen_context["soul_recall"] == payload
+
+
+@pytest.mark.asyncio
+async def test_partial_soul_recall_surfaces_errors_never_looks_empty() -> None:
+    def handler(request):
+        if "tee-soul-layer" in str(request.url):
+            return httpx.Response(
+                200,
+                json={
+                    "result": {
+                        "hits": [
+                            {"_id": "t1", "_score": 0.8, "fields": {"text": "still here"}}
+                        ]
+                    }
+                },
+            )
+        return httpx.Response(500, text="index melting")
+
+    runtime = AgentRuntime(
+        planner=StaticPlanner([step("repo.inspect")]),
+        tools=_read_tools(),
+        soul=_soul(handler),
+    )
+
+    task = await runtime.create_task("Anything")
+    payload = task.context["soul_recall"]
+    assert [r["source"] for r in payload["records"]] == ["tee-soul-layer"]
+    assert payload["errors"] and "devon-soul unavailable" in payload["errors"][0]
+    # The rendered context names the partial failure too.
+    assert "Recall was partial" in payload["context"]
+
+
+@pytest.mark.asyncio
+async def test_soul_outage_degrades_to_planning_without_recall() -> None:
+    """A dead provider must not break task creation — it lands in errors."""
+
+    class ExplodingSoul:
+        async def recall(self, text):
+            raise RuntimeError("pinecone is down")
+
+    runtime = AgentRuntime(
+        planner=StaticPlanner([step("repo.inspect")]),
+        tools=_read_tools(),
+        soul=ExplodingSoul(),
+    )
+
+    task = await runtime.create_task("Anything")
+    payload = task.context["soul_recall"]
+    assert payload["records"] == []
+    assert payload["context"] == ""
+    assert payload["errors"] == ["soul recall unavailable: pinecone is down"]
+
+    result = await runtime.run_until_blocked(task.task_id)
+    assert result.task.state is TaskState.COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_no_soul_means_no_soul_recall_key() -> None:
+    runtime = AgentRuntime(
+        planner=StaticPlanner([step("repo.inspect")]),
+        tools=_read_tools(),
+    )
+    task = await runtime.create_task("Anything")
+    assert "soul_recall" not in task.context

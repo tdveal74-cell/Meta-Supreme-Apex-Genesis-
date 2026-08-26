@@ -356,6 +356,14 @@ WORKFLOWS = {
     # roughly daily. Its partner is a claude.ai Routine (daily Reflection) that
     # writes reflection rows into the same table; the pulse flags its silence.
     "Heartbeat": {"id": "dRgTNLod2s8BAcPg", "state": "active, 6 hour pulse"},
+    # Daily sweep: any ledger job still non-terminal past 96h is cancelled
+    # THROUGH the guarded devon-ledger webhook, never by writing the table
+    # directly, so legal-transition rules keep applying (VERIFYING two-steps
+    # FAILED then CANCELLED). Envelope history is preserved plus a janitor
+    # trace note. Digest email only when it acted; unreadable envelopes are
+    # skipped and named, and the Heartbeat keeps alerting on them
+    # (stuck_jobs) until repaired by hand.
+    "Ledger Janitor": {"id": "HKNEDVy7PUKPtsrN", "state": "active, daily 02:30"},
     "TQO FINAL V5": {"id": "gsGJQan7a6ZufhYt", "state": "inactive by ruling"},
     "Capture Hook": {"id": "Cbd24ptTPWch3aZO", "state": "retired 2026-08-22"},
 }
