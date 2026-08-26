@@ -283,8 +283,11 @@ class AgentTurn:
                 )
                 return
 
-            # The confirmed call is a step like any other, and counts like one.
-            steps_used += 1
+            # Deliberately NOT counted again. The main loop charges a step when
+            # a tool call is proposed, and this call was proposed on the leg that
+            # stopped to ask -- `resume.steps_used` already includes it. Charging
+            # it a second time would quietly cost the resumed turn a step it had
+            # not spent.
             events, stop_here = self._absorb(outcome, observations, spent, steps_used)
             for event in events:
                 yield event

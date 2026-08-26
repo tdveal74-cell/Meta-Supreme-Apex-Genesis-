@@ -558,6 +558,35 @@ async def test_the_step_allowance_is_not_refreshed_by_a_confirmation() -> None:
 
 
 @pytest.mark.asyncio
+async def test_the_confirmed_step_is_not_charged_twice() -> None:
+    """It was charged when it was proposed; resuming completes it, it is not new."""
+    reg, ran = default_tools()
+    turn, provider = build(
+        call("ledger.read"),
+        say("Done."),
+        tools=reg,
+    )
+
+    events = await collect(
+        turn,
+        "yes",
+        caller=TEE,
+        halt=HaltSignal(),
+        resume=ResumedStep(
+            tool="notes.append",
+            arguments={"text": "hi"},
+            # One step already spent on the read, one on proposing the write.
+            steps_used=MAX_TURN_STEPS - 2,
+        ),
+    )
+
+    # Two steps of allowance remain, so the loop gets both: one more tool call
+    # and then the answer. Charging the confirmed call again would have left one.
+    assert ran == ["notes.append", "ledger.read"]
+    assert types_of(events)[-1] == "answer"
+
+
+@pytest.mark.asyncio
 async def test_the_question_carries_the_counters_the_resume_needs() -> None:
     consults: List[str] = []
     reg, ran = default_tools()
