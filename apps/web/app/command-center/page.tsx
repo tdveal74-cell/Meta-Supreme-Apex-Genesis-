@@ -69,6 +69,12 @@ export default function CommandCenterPage() {
             >
               Terminal
             </Link>
+            <Link
+              href="/shell"
+              className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
+            >
+              Real shell
+            </Link>
           </nav>
         </header>
 

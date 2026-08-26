@@ -92,8 +92,28 @@ async function readApiError(response: Response): Promise<string> {
  * embedded in the Command Center and full-screen at /terminal.
  */
 export function OperatorTerminal() {
-  const [key, setKey] = useState("");
+  const [key, setKeyState] = useState("");
   const [cwd, setCwd] = useState("");
+
+  // Remember the operator key on this device so Tee types it once.
+  // The /shell page reads the same slot.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("devon-operator-key") || "";
+      if (saved) setKeyState(saved);
+    } catch {
+      // Storage refusal only costs persistence.
+    }
+  }, []);
+  const setKey = (value: string) => {
+    setKeyState(value);
+    try {
+      if (value) localStorage.setItem("devon-operator-key", value);
+      else localStorage.removeItem("devon-operator-key");
+    } catch {
+      // Same: the key still works for this visit.
+    }
+  };
   const [command, setCommand] = useState("");
   const [lines, setLines] = useState<TerminalLine[]>(initialLines);
   const [pending, setPending] = useState<PendingApproval | null>(null);
@@ -158,7 +178,7 @@ export function OperatorTerminal() {
     const raw = command.trim();
     if (!raw || busy || pending) return;
     if (!key) {
-      append("stderr", "Operator key required. It is kept only in this page state and is not persisted.");
+      append("stderr", "Operator key required. Once entered it is remembered on this device.");
       return;
     }
 
