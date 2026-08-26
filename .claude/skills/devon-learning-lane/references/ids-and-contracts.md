@@ -22,6 +22,7 @@ before trusting in a much later session.
 | Heartbeat workflow (Build 13) | `dRgTNLod2s8BAcPg` | 6h pulse: vitals, keyed findings, roughly daily email; see `references/heartbeat.md` |
 | devon_heartbeat_log table | `Adg1Gd9HML7Q4L3U` | beat_at, kind (pulse/reflection), vitals, findings, reflection, emailed |
 | Daily Reflection Routine | `trig_01XCKFGEbojhkPRnNbMd8yCP` | claude.ai Routine, 11:30 UTC, writes one reflection row; see `references/heartbeat.md` |
+| Ledger Janitor workflow | `HKNEDVy7PUKPtsrN` | daily 02:30 UTC; sweeps jobs non-terminal past 96h to CANCELLED through the guarded `devon-ledger` webhook (legal transitions enforced; VERIFYING two-steps FAILED then CANCELLED); envelope history preserved plus a janitor trace note; digest email only when it acted |
 
 ### Soul Committer v2 semantics (why it is shaped this way)
 

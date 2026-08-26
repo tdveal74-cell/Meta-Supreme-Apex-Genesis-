@@ -39,6 +39,11 @@ workflow instead; never add an approval_queue read to it.
 - "Build 12 feeder: N job(s) fed…" — feed digest; FAILED lines retry next poll.
 - "Soul Committer: N record(s) committed…" — commits landed (verify in console).
 - "Soul Committer: … FAILED" / "closed without commit" — failures and closures.
+- "DEVON Janitor: N stale job(s) cancelled…" — the daily 02:30 UTC sweep
+  cancelled jobs non-terminal past 96h through the ledger. REFUSED lines mean
+  the ledger said no or the POST failed (left as-is, swept again next day);
+  SKIPPED lines (unreadable envelope or unknown state) need hand repair — the
+  heartbeat's stuck_jobs finding keeps alerting on them until fixed.
 - Silence = nothing happened. Every poll with zero work sends nothing.
 
 ## Failure semantics (what retries vs what stops)
@@ -54,6 +59,7 @@ workflow instead; never add an approval_queue read to it.
 | Proposal rejected, refused, or expired | terminal; never re-raised |
 | Queue row deleted / unknown status / bad expires_at | commit-log row closes EXPIRED 24h past the 72h TTL from proposed_at — nothing can stick silently forever |
 | Same job re-reported COMPLETED to the ledger | feeder feeds once per intent (feed log is the dedupe, not the ledger's learning_state) |
+| Job stuck non-terminal past 96h | the Ledger Janitor (daily 02:30 UTC) sweeps it to CANCELLED through the guarded ledger webhook, VERIFYING legally two-stepping FAILED then CANCELLED; a row with an unreadable envelope or unknown state is skipped and named in the digest — repair the envelope by hand, and the heartbeat's stuck_jobs finding keeps alerting until the row goes terminal |
 | Tee approves a card by mistake | there is NO in-band undo: the queue records decisions immutably and the committer will write on its next tick. Unpublish the committer FIRST, then check the commit log. If it already committed, reverse by hand with receipts: delete the devon-soul record by its exact `record_id` (Pinecone `/vectors/delete`), verify with a fetch, and set the commit-log row to REVERTED with a note naming the ruling — then republish. The approve and reject links sit adjacent in the email; slow down on that tap |
 
 ## Rules for touching things
