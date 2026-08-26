@@ -4,7 +4,7 @@ type: SYS_OPS
 version: 1
 date: 2026-08-26
 area: Systems
-status: local-verification-passed-remote-ci-pending
+status: merged-remote-ci-green-deploy-pending
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 base_ref: main
 base_commit: 19d8ff3ed4ad374923d408cc8a8c0af5c00ebcf6
@@ -198,7 +198,37 @@ Local verification completed on the feature branch:
 Frontend package installation could not reach the package registry in the
 local execution sandbox. Docker is not installed in this workspace. Frontend
 typecheck, frontend build, full integration CI, preview, merge, deployment, and
-production reachability remain unverified until GitHub supplies their evidence.
+production reachability remained unverified at the time of the paragraph above.
+The read-back below supplies the evidence that has since arrived.
+
+## Remote verification read-back, 2026-08-26 post-merge
+
+Recorded from GitHub after the pull request landed, not asserted from memory.
+
+- Pull request: #66, final head `0b9470a28d987590eaa4dbe53b09db1e2fd00608`
+- Two follow-up commits landed on the branch before merge:
+  - `32aef5c` shipped `services/devon/operating_layer.py` byte identical into
+    `deploy/soul` and synced the drifted vendored `__init__.py`, closing the
+    two `test_deploy_soul.py` vendoring failures from the first CI run
+  - `0b9470a` closed two review findings fail closed: a handoff whose
+    `requested_output` is missing or blank is now an error, and audit
+    severities are normalised with unknown spellings refusing the verdict,
+    both with negative controls
+- CI on the final head, workflow runs `32945927159` and `32945927151`, all
+  five checks success: Standalone offline flagship (canonical), Engine +
+  cadence (no database), Railway container contract, API suite (PostgreSQL 16
+  + pgvector, completed 2026-08-26T08:08:33Z), Next.js typecheck + build
+- Merged by Tee's explicit authorization as
+  `Merge PR #66: DEVON complementary ChatGPT operating layer`, merge commit
+  `600522cc9d4ffb7b8bb76ab215b7655a4a207410`
+- Read back after merge with a fresh fetch: `origin/main` equals the merge
+  commit, the merged tree is identical to the final head, and the root and
+  `deploy/soul` copies of `operating_layer.py` hash identically at main
+
+Still unverified, stated so nobody assumes otherwise: Vercel preview and
+production deployment (the free plan daily deploy cap was exhausted, retry
+window roughly 24 hours), production reachability, external-surface live
+sessions, and the live-environment items that always remain manual for Tee.
 
 ## Receipt boundary
 
@@ -206,6 +236,7 @@ The public repository stores the handoff, evidence, and receipt schemas but no
 capture credential. A DEVON receipt for this build must travel through the
 private authorized capture path. Git history is not a credential store.
 
-GitHub CI, pull request checks, frontend typecheck, frontend build, preview,
-merge, production deployment, and external-surface live sessions remain
-unverified until executed or read back.
+GitHub CI, pull request checks, frontend typecheck, frontend build, and the
+merge are now verified and recorded in the read-back section above. Preview,
+production deployment, and external-surface live sessions remain unverified
+until executed or read back.
