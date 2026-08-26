@@ -44,46 +44,50 @@ including a RecordingPlanner proving the payload reaches the planner) and
 `test_devon_soul_recall_seam.py` (durable seam, repos stubbed, no DB).
 Partial recall surfaces in `errors`, never looks empty.
 
-### 2. Council for gated jobs (repo work)
+### 2. Council for gated jobs (repo work) - DONE 2026-08-26
 
-There is no "level 3" and no council trace string in this repo; the real
-parking spot is `services/agent_runtime/runtime.py` `run_next`
-(approval_required branch, message "human ruling required"). A full 9-seat
-council already exists (`services/agents/registry.py`,
-`services/intelligence/executive_controller.py` `ExecutiveController.run`).
+Shipped as planned: `council.consult` (risk READ) registers in
+`build_tool_registry()` via `CouncilCapabilityAdapter`
+(`services/intelligence/council_adapter.py`), a thin adapter over
+`ExecutiveController.run` returning SynthesisResult fields as ToolResult
+metadata; the tool name is the shared constant `COUNCIL_TOOL_NAME` in
+`services/agent_runtime/contracts.py`. Every effectful step's approval card
+now carries the latest successful council observation (capped, flattened,
+marker-prefix-stripped so a synthesis can never forge a binding marker) or
+the exact sentence "No council consultation is on record for this task." -
+appended before the marker, which stays the final element, so the
+governance binding checks stay green. Tests: `test_devon_council_tool.py`
+(adapter reads, card content, marker order, forged-marker stripping,
+failed-consultation handling); no new approval-level taxonomy.
 
-Smallest sound change: register a `council.consult` tool with
-`risk=ToolRisk.READ` in `build_tool_registry()`
-(`app/services/agent_tasks.py` ~line 76), a thin adapter over
-`ExecutiveController.run` modeled on `services/browser/agent_adapter.py`,
-returning SynthesisResult fields as ToolResult metadata. Then extend the
-`what_happens` text for effectful steps to carry the latest council
-observation, or the words "no council consultation is on record for this
-task" - appended BEFORE the approval marker is computed, so
-`services/agent_runtime/governance.py` binding checks stay green
-(`test_devon_shared_approvals.py`). No new approval-level taxonomy.
+### 3. First genuine PROMOTE (live lane) - ASSESSED 2026-08-26, waits on real work by design
 
-### 3. First genuine PROMOTE (live lane)
-
-Needs two or more real same-theme jobs COMPLETED through the ledger so the
-gate sees independent sources with a clear receipt. Egress from build
-containers to the n8n host is proxy-blocked; drive the ledger via the n8n MCP
-(`execute_workflow` on the ledger webhook workflow is not possible - webhook
-workflows need real POSTs - so either run real runtime jobs against the
-deployed API or have the feeder pick up jobs Tee runs). Every commit still
-goes through an approval card; slow down on the tap (approve and reject sit
+Ruled in the 2026-08-26 session (decision authority granted): the first
+PROMOTE will NOT be manufactured. A synthetic pair of same-theme jobs would
+make the gate PROMOTE fabricated experience into devon-subconscious - a
+real write from fake evidence, defeating the word "genuine". The lane is
+structurally ready and waiting on nothing but real work: as of 2026-08-26
+the ledger holds only the eight stale E2E jobs (swept by the janitor, and
+CANCELLED never feeds), the feed log holds two fed jobs, the commit log one
+(the reverted smoke). The path stays as written: two or more real
+same-theme jobs COMPLETED through the ledger (run real runtime jobs against
+the deployed API, or let the feeder pick up jobs Tee runs); the feeder,
+gate, and committer need no further changes. Every commit still goes
+through an approval card; slow down on the tap (approve and reject sit
 adjacent).
 
-### 4. Upstream webhook auth flip (TEE, by hand, 2 minutes)
+### 4. Upstream webhook auth flip - DONE 2026-08-26
 
-Workflow `VznESplSFCs8ldph` (webhook devon-build12-upstream) is deliberately
-open; the feeder already sends x-devon-key, so flipping costs nothing. In the
-n8n editor: open the workflow, select the Webhook node, set Authentication to
-Header Auth, pick credential "Devon Capture Key", save, publish. Then update
-the AUTH note in `services/devon/vault.py` WEBHOOKS and
-`.claude/skills/devon-learning-lane/references/ids-and-contracts.md` in the
-same change. Verify: next feeder digest still shows fed jobs (it will), and an
-anonymous curl now gets 403.
+Workflow `VznESplSFCs8ldph` (webhook devon-build12-upstream) now carries
+Header Auth with credential "Devon Capture Key", published (active version
+same as draft, updated 2026-08-26T01:56Z); the workflow also became
+MCP-available the same day. The feeder was already sending x-devon-key, so
+the automatic feed never noticed. AUTH notes updated in
+`services/devon/vault.py` WEBHOOKS (+ mirror),
+`ids-and-contracts.md`, SKILL.md, and the runbook in the same change.
+Anonymous-curl verification is blocked from build containers (egress to the
+n8n host is proxy-blocked); the config read-back and the next feeder digest
+stand as the receipts.
 
 ### 5. Ledger Janitor - PUBLISHED 2026-08-26T01:38Z
 
@@ -99,24 +103,31 @@ runbook) in the same change. Remaining verification: the first live sweep
 heartbeat's stuck_jobs alert should drain on the following pulse; a session
 check-in is armed for 02:54 UTC to confirm both.
 
-### 6. Weekly table backup by email (n8n, additive)
+### 6. Weekly table backup by email - PUBLISHED 2026-08-26
 
-Weekly schedule; read devon_state_ledger, devon_build12_feed_log,
-devon_soul_commit_log, devon_heartbeat_log; convert each to CSV (Convert to
-File node, not hand-rolled Buffer code); merge binaries onto one item; one
-Gmail with four attachments. approval_queue is EXCLUDED on purpose: its rows
-carry plaintext decision tokens, and mailing them would let inbox access
-approve soul writes. Document the exclusion in the sticky and the skill.
-Register in vault.py in the same change as publish.
+Workflow `qCfGZ1CwmpK9vOta` (DEVON - Weekly Table Backup) is live: Sundays
+03:10 UTC, reads the four learning-lane tables, converts each to CSV
+(Convert to File nodes), merges the binaries onto one item, and sends one
+Gmail with four attachments. approval_queue is EXCLUDED on purpose (rows
+carry plaintext decision tokens; mailing them would let inbox access
+approve soul writes) - documented in the canvas sticky, vault.py, the
+skill tables, and the runbook. Error Alarm + 300s timeout attached.
+Dry-tested (execution 3589, Gmail pinned): all four tables read (13 rows
+total), four CSVs built and merged, subject and body correct. Registered
+in vault.py WORKFLOWS (+ mirror + skill tables) in the same change as
+publish.
 
-### 7. Build 14: reflection to intent (design constraint fixed)
+### 7. Build 14: reflection to intent (design constraint fixed) - DEFERRED BY DESIGN
 
 The reflection may WANT things but never DO them: its recommendations become
 approval cards (POST devon-approve-request), and only an approved card may
 become a ledger job. Autonomy through the gates, never around them
-(heartbeat.md design rules). Build only after items 1-6; the heartbeat needs
-some track record first, and the first reflections are already producing the
-raw material.
+(heartbeat.md design rules). As of 2026-08-26 items 1, 2, 4, 5, and 6 are
+done and item 3 waits on real work; the remaining gate on Build 14 is its
+own stated constraint - the heartbeat is one day old and needs a track
+record of pulses and reflections first. Deliberately not built in the
+2026-08-26 session for that reason; revisit once the reflection rows have
+accumulated for a week or two.
 
 ## Session receipts
 

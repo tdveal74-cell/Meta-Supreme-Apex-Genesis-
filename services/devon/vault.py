@@ -313,13 +313,12 @@ WEBHOOKS = {
         "job": "start the Build 12 learning gate for a completed source job",
         "destination": "Candidate Former, then conflict-search receipt, then Learning Gate",
         "workflow": "VznESplSFCs8ldph",
-        "auth": None,
-        "open_ruling": (
-            "Unauthenticated. The Ledger Feeder sends x-devon-key anyway, so "
-            "turning header auth on later cannot break the automatic feed. The "
-            "gate itself is the safety: PROMOTE alone writes, and only to "
-            "devon-subconscious, never devon-soul."
-        ),
+        # Flipped from open to header auth 2026-08-26 (the improvement plan's
+        # item 4). The feeder was already sending the key, so nothing in the
+        # automatic feed changed; an anonymous POST now gets 403 instead of
+        # reaching the Candidate Former.
+        "auth": "header x-devon-key",
+        "open_ruling": None,
     },
 }
 
@@ -364,6 +363,12 @@ WORKFLOWS = {
     # skipped and named, and the Heartbeat keeps alerting on them
     # (stuck_jobs) until repaired by hand.
     "Ledger Janitor": {"id": "HKNEDVy7PUKPtsrN", "state": "active, daily 02:30"},
+    # Weekly read-only export: the four learning-lane tables (state ledger,
+    # feed log, soul commit log, heartbeat log) each to CSV, one Gmail with
+    # four attachments. approval_queue is EXCLUDED on purpose: its rows carry
+    # plaintext decision tokens, and mailing them would let anyone with inbox
+    # access approve soul writes. Never add it to this or any export.
+    "Weekly Table Backup": {"id": "qCfGZ1CwmpK9vOta", "state": "active, weekly Sun 03:10"},
     "TQO FINAL V5": {"id": "gsGJQan7a6ZufhYt", "state": "inactive by ruling"},
     "Capture Hook": {"id": "Cbd24ptTPWch3aZO", "state": "retired 2026-08-22"},
 }

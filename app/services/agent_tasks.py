@@ -26,7 +26,13 @@ from app.services.intelligence import get_provider
 from app.services.leased_effect_recorder import LeasedEffectRecorder
 from app.services.soul import get_soul_layer
 from app.services.subagent_links import SubagentLinkRepository
-from services.agent_runtime.contracts import AgentTask, PlanStep, TaskState, ToolCall
+from services.agent_runtime.contracts import (
+    COUNCIL_TOOL_NAME,
+    AgentTask,
+    PlanStep,
+    TaskState,
+    ToolCall,
+)
 from services.agent_runtime.effect_recorder import EffectRecorder
 from services.agent_runtime.expansion import (
     InMemoryScheduleStore,
@@ -39,10 +45,12 @@ from services.agent_runtime.planner import LLMPlanner, StaticPlanner
 from services.agent_runtime.runtime import AgentRuntime, soul_recall_payload
 from services.agent_runtime.store import InMemoryAgentTaskStore
 from services.agent_runtime.tools import ToolRegistry
+from services.agents.registry import list_agent_slugs
 from services.browser.agent_adapter import BrowserCapabilityAdapter
 from services.browser.http_fetcher import maybe_live_fetcher
 from services.github.agent_adapter import GitHubCapabilityAdapter
 from services.github.client import GitHubRESTClient
+from services.intelligence.council_adapter import CouncilCapabilityAdapter
 from services.operator.agent_adapter import OperatorCapabilityAdapter
 
 github_client = GitHubRESTClient()
@@ -54,6 +62,9 @@ expansion_adapter = ExpansionToolAdapter(
 )
 expansion_repo = HermesExpansionRepository()
 subagent_links = SubagentLinkRepository()
+# The provider resolves at call time, so the mock provider serves CI and the
+# live provider serves production through the same adapter instance.
+council_adapter = CouncilCapabilityAdapter(get_provider)
 
 
 def _browser_live_fetch_enabled() -> bool:
@@ -83,6 +94,7 @@ def build_tool_registry() -> ToolRegistry:
         fetcher=maybe_live_fetcher(_browser_live_fetch_enabled()),
     ).register(registry)
     expansion_adapter.register(registry)
+    council_adapter.register(registry)
     return registry
 
 
@@ -535,6 +547,13 @@ class DurableAgentTaskService:
                 "allowlisted_fetch": True,
                 "live_fetch": _browser_live_fetch_enabled(),
                 "navigate_requires_approval": True,
+            },
+            "council": {
+                "enabled": True,
+                "tool": COUNCIL_TOOL_NAME,
+                "read_only": True,
+                "agents": list_agent_slugs(),
+                "observation_reaches_approval_cards": True,
             },
             "expansion": {
                 "subagents": True,

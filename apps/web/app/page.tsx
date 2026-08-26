@@ -43,22 +43,16 @@ export default function HomePage() {
           </div>
           <nav className="flex items-center gap-3 sm:gap-4">
             <Link
-              href="/terminal"
-              className="hidden text-sm font-medium text-navy/70 transition hover:text-navy sm:inline"
-            >
-              Operator
-            </Link>
-            <Link
               href="/council/deliberate"
               className="hidden text-sm font-medium text-navy/70 transition hover:text-navy sm:inline"
             >
               Council
             </Link>
             <Link
-              href="/council/deliberate"
+              href="/command-center"
               className="rounded-lg bg-navy px-4 py-2 text-sm font-medium text-surface shadow-soft transition hover:bg-navy-800 focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-2"
             >
-              Deliberate
+              Command Center
             </Link>
           </nav>
         </div>
@@ -87,16 +81,16 @@ export default function HomePage() {
               </p>
               <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
                 <Link
-                  href="/council/deliberate"
+                  href="/command-center"
                   className="inline-flex min-h-11 items-center justify-center rounded-lg bg-navy px-7 text-sm font-medium text-surface shadow-elevated transition hover:bg-navy-800"
                 >
-                  Open Council
+                  Open Command Center
                 </Link>
                 <Link
-                  href="/terminal"
+                  href="/council/deliberate"
                   className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border bg-surface-elevated px-7 text-sm font-medium text-navy shadow-soft transition hover:bg-surface-muted"
                 >
-                  Open DEVON Terminal
+                  Open Council
                 </Link>
               </div>
               <p className="mt-6 text-xs text-navy/45">
@@ -147,10 +141,10 @@ export default function HomePage() {
                 </p>
               </div>
               <Link
-                href="/terminal"
+                href="/command-center"
                 className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg bg-amber px-6 text-sm font-semibold text-navy shadow-soft transition hover:bg-amber-500"
               >
-                Open Operator Terminal
+                Open the Command Center
               </Link>
             </div>
           </div>

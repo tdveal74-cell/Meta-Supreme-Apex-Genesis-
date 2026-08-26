@@ -66,11 +66,12 @@ policy semantics, every live id, and every payload contract:
 |---|---|---|
 | Conflict policy b12.1 | repo `deploy/soul/main.py` (tests: `test_deploy_soul_conflict_policy.py`) | code + tests are canonical |
 | Ledger Feeder | n8n workflow, 15-min poll | ids in reference |
-| Upstream gate | n8n workflow (webhook), MCP-blocked from editing | receipt contract in reference |
+| Upstream gate | n8n workflow (webhook, x-devon-key since 2026-08-26) | receipt contract in reference |
 | Soul Committer | n8n workflow, 15-min poll | state machine in reference |
 | Vault map | repo `services/devon/vault.py` WEBHOOKS/WORKFLOWS | keep truthful on every change |
 | Heartbeat (Build 13) | n8n pulse + claude.ai reflection Routine | continuity and self-monitoring, `references/heartbeat.md` |
 | Ledger Janitor | n8n workflow, daily 02:30 UTC | sweeps jobs non-terminal past 96h to CANCELLED through the guarded ledger webhook; ids in reference |
+| Weekly Table Backup | n8n workflow, Sundays 03:10 UTC | mails the four learning-lane tables as CSVs; approval_queue excluded on purpose (token column); ids in reference |
 
 ## Which reference to read
 

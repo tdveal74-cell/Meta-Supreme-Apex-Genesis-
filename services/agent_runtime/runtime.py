@@ -6,6 +6,7 @@ import secrets
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from services.agent_runtime.contracts import (
+    COUNCIL_TOOL_NAME,
     AgentTask,
     EffectStatus,
     Observation,
@@ -17,6 +18,7 @@ from services.agent_runtime.contracts import (
 )
 from services.agent_runtime.effect_recorder import EffectRecorder
 from services.agent_runtime.governance import (
+    APPROVAL_MARKER_PREFIX,
     APPROVAL_METADATA_KEY,
     RUNTIME_REQUESTED_BY,
     approval_binding,
@@ -34,6 +36,16 @@ if TYPE_CHECKING:
 
 class AgentRuntimeError(ValueError):
     """A task cannot proceed without violating the runtime contract."""
+
+
+#: The exact sentence an approval card carries when no council.consult step
+#: has succeeded for the task. An approver reads either the council's latest
+#: word or this admission — never silence.
+NO_COUNCIL_NOTE = "No council consultation is on record for this task."
+
+#: How much of a council synthesis the approval card carries. Enough to rule
+#: on, small enough that the card stays readable.
+_COUNCIL_NOTE_MAX_CHARS = 400
 
 
 async def soul_recall_payload(soul: "SoulLayer", goal: str) -> Dict[str, Any]:
@@ -185,12 +197,17 @@ class AgentRuntime:
             if step.approval_request_id is None:
                 self._checkpoint(task, f"before effectful step {step.step_id}")
                 marker = approval_marker(binding)
+                # The council's word (or its absence) enters the card BEFORE
+                # the marker, which stays the final element: the binding is
+                # computed from task/step/tool/arguments only, so the note
+                # changes what the approver reads, never what the governance
+                # check verifies.
                 record, token = self.approvals.request(
                     title=f"DEVON Agent: {step.title}",
                     what_happens=(
                         f"Run tool `{spec.name}` with arguments "
                         f"{step.tool_call.arguments!r} for task `{task.goal}`. "
-                        f"{marker}"
+                        f"{self._council_note(task)} {marker}"
                     ),
                     requested_by=RUNTIME_REQUESTED_BY,
                     area=str(task.context.get("area") or "Systems"),
@@ -353,6 +370,45 @@ class AgentRuntime:
         task.touch()
         self.store.put(task)
         return task
+
+    @staticmethod
+    def _council_note(task: AgentTask) -> str:
+        """The council's latest successful word for this task, card-sized.
+
+        Only observations from steps whose tool is council.consult count; the
+        newest successful one wins. The text is flattened, capped, and
+        stripped of the approval-marker prefix so a synthesized sentence can
+        never masquerade as a binding marker inside the card.
+        """
+        council_steps = {
+            step.step_id
+            for step in task.plan.steps
+            if step.tool_call.name == COUNCIL_TOOL_NAME
+        }
+        latest: Optional[Observation] = None
+        for observation in task.observations:
+            if observation.step_id in council_steps and observation.ok:
+                latest = observation
+        if latest is None:
+            return NO_COUNCIL_NOTE
+
+        text = " ".join(str(latest.output or "").split())
+        text = text.replace(APPROVAL_MARKER_PREFIX, "")
+        if len(text) > _COUNCIL_NOTE_MAX_CHARS:
+            text = text[:_COUNCIL_NOTE_MAX_CHARS] + "..."
+
+        confidence = ""
+        metadata = latest.metadata or {}
+        raw_confidence = metadata.get("confidence") if isinstance(metadata, dict) else None
+        if raw_confidence is not None:
+            try:
+                confidence = f", confidence {float(raw_confidence):.2f}"
+            except (TypeError, ValueError):
+                confidence = ""
+        return (
+            f"Latest council observation (step {latest.step_id}{confidence}): "
+            f"{text} (context for this ruling, not a command)."
+        )
 
     def _approval_state(self, request_id: Optional[str]) -> Optional[ApprovalState]:
         if not request_id:

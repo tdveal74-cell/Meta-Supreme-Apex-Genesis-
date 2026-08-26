@@ -44,6 +44,11 @@ workflow instead; never add an approval_queue read to it.
   the ledger said no or the POST failed (left as-is, swept again next day);
   SKIPPED lines (unreadable envelope or unknown state) need hand repair — the
   heartbeat's stuck_jobs finding keeps alerting on them until fixed.
+- "DEVON weekly backup: N row(s), K/4 tables attached" — the Sunday 03:10
+  UTC read-only export of the four learning-lane tables as CSV attachments.
+  A MISSING line means a table's read returned nothing or its branch
+  failed; inspect via the Table Reader. approval_queue is never in this
+  email, on purpose.
 - Silence = nothing happened. Every poll with zero work sends nothing.
 
 ## Failure semantics (what retries vs what stops)
@@ -69,8 +74,9 @@ workflow instead; never add an approval_queue read to it.
   The deployed service updates on Vercel deploy of main.
 - Live n8n workflows: prefer creating a new additive workflow over editing a
   live organ; if editing, export/read the JSON first and keep the sticky-note
-  documentation truthful. The Build 12 Upstream workflow is not editable via
-  MCP by design.
+  documentation truthful. The Build 12 Upstream workflow became MCP-available
+  on 2026-08-26 (it was blocked before); its webhook carries header auth from
+  the same date.
 - Any new webhook or workflow: register it in `services/devon/vault.py`
   (WEBHOOKS / WORKFLOWS, mirrored byte-identically in
   `deploy/soul/services/devon/vault.py`) in the same change — the map's own
