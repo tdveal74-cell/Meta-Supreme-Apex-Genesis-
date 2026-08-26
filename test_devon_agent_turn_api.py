@@ -279,6 +279,49 @@ async def test_answering_yes_does_not_re_run_the_steps_before_the_question(
 # ---------------------------------------------------------------------------
 
 
+async def test_a_reversible_write_runs_immediately_and_leaves_a_receipt(
+    client, auth_headers, scripted
+):
+    """The case Tee actually hits most, and the whole point of the feature.
+
+    A reversible write under presence gets no card, no email, no waiting. The
+    previous cut got that far and then died at the capability boundary. This
+    proves the effect really executes and really leaves a queue row naming it.
+
+    `runtime.schedule_goal` is chosen because it is a genuine WRITE whose adapter
+    completes in a test process. `browser.navigate` alongside it proves the same
+    for an adapter that then declines on its own grounds.
+    """
+    scripted(
+        call("browser.navigate", url="https://example.com"),
+        call("runtime.schedule_goal", goal="sweep the ledger", cron="0 * * * *"),
+        say("Scheduled."),
+    )
+    conversation_id = await new_conversation(client, auth_headers)
+
+    events = events_of(
+        await act(client, auth_headers, conversation_id, content="go look, then schedule it")
+    )
+
+    results = {e["tool"]: e for e in events if e["type"] == "tool_result"}
+    assert set(results) == {"browser.navigate", "runtime.schedule_goal"}
+
+    # Neither was stopped to ask, and neither was sent to a card.
+    assert "needs_confirmation" not in [e["type"] for e in events]
+    assert "card_required" not in [e["type"] for e in events]
+
+    # The write actually ran.
+    scheduled = results["runtime.schedule_goal"]
+    assert scheduled["ok"] is True, scheduled["output"]
+    assert scheduled["approval_request_id"].startswith("REQ-")
+
+    # And the one that declined, declined on its OWN grounds rather than at the
+    # governance gate, which is where the previous cut stopped every write.
+    navigated = results["browser.navigate"]
+    assert "runtime approval" not in navigated["output"]
+    assert "allowlist" in navigated["output"]
+
+
 async def test_presence_gets_past_the_capability_boundary_on_a_real_tool(
     client, auth_headers, scripted
 ):
@@ -373,27 +416,46 @@ async def test_the_brake_reaches_a_turn_that_is_still_running(
     monkeypatch.setattr("app.api.v1.conversations.get_provider", lambda: provider)
     conversation_id = await new_conversation(client, auth_headers)
 
+    from app.db.session import engine
+
     turn = asyncio.create_task(
         act(client, auth_headers, conversation_id, content="go look")
     )
-    await asyncio.wait_for(reached_provider.wait(), timeout=5)
+    # Everything mid-flight sits in a try, and `release` is set in the finally.
+    # An assertion that fires while the provider is still blocked would otherwise
+    # leave the turn task waiting forever and hang the run instead of failing it,
+    # which is exactly what happened when this was checked against the unfixed
+    # code. A test that hangs on failure is worse than no test.
+    try:
+        await asyncio.wait_for(reached_provider.wait(), timeout=5)
 
-    # Mid-turn, on a different request, while the stream is open.
-    stopped = await client.post(
-        f"/api/v1/conversations/{conversation_id}/halt",
-        json={"turn_id": "TURN-UNKNOWN"},
-        headers=auth_headers,
+        # The measurable half: the request session was released before the
+        # stream opened, so a turn in flight holds no pool connection at all.
+        # Without the early close this is 1 per concurrent turn, for the whole
+        # life of the turn.
+        checked_out = engine.pool.checkedout()
+
+        # Mid-turn, on a different request, while the stream is open.
+        stopped = await client.post(
+            f"/api/v1/conversations/{conversation_id}/halt",
+            json={"turn_id": "TURN-UNKNOWN"},
+            headers=auth_headers,
+        )
+    finally:
+        release.set()
+
+    assert checked_out == 0, (
+        "a streaming turn is pinning a pool connection; the halt endpoint will "
+        "queue behind it under load"
     )
     assert stopped.status_code == 200, "halt answered while a turn was in flight"
     assert stopped.json()["halted"] is False
 
-    release.set()
     events = events_of(await asyncio.wait_for(turn, timeout=10))
-    turn_id = events[0]["turn_id"]
 
     # And a halt aimed at the real id would have landed: the id was reachable in
     # the registry for the life of the turn.
-    assert turn_id.startswith("TURN-")
+    assert events[0]["turn_id"].startswith("TURN-")
 
 
 async def test_a_finished_turn_reports_nothing_to_stop(client, auth_headers, scripted):

@@ -67,6 +67,16 @@ class PresenceDecision(str, Enum):
 #: Keep this list SHORT and specific. Every name added here is friction Tee feels
 #: on every turn, so a tool belongs here only when a mistake is genuinely hard to
 #: walk back. Reversible damage does not qualify.
+#:
+#: As of 2026-08-26 none of these names is a registered runtime tool: the soul
+#: write surface is an n8n workflow behind the approval queue, not something
+#: `build_tool_registry` hands out. So this list is currently forward-looking,
+#: which is the state in which a guard quietly rots. Two tests in
+#: `test_devon_presence_authority.py` are the tripwires: one fails the day any
+#: name here becomes registered, and one fails if a write is registered on a
+#: guarded surface (`soul.`, `subconscious.`, `secrets.`, `credentials.`) under a
+#: name this list does not already know. Matching is exact, so `soul.append`
+#: would buy itself silence without anyone deciding to.
 ALWAYS_CONFIRM_TOOLS: FrozenSet[str] = frozenset(
     {
         # Writes into the two soul indexes: DEVON's experience and Tee's rulings.
@@ -103,6 +113,30 @@ class Caller:
     def automated(cls, kind: str = "automation") -> "Caller":
         """A routine, the reflection, a scheduler, a webhook. Nobody is watching."""
         return cls(kind=kind or "automation", present=False, actor="")
+
+
+def confirm_reason(
+    spec: ToolSpec,
+    *,
+    always_confirm: Optional[FrozenSet[str]] = None,
+) -> str:
+    """Why a CONFIRM was ruled, in words that are true of THIS tool.
+
+    Two different rules produce CONFIRM and they mean different things. A tool
+    named in ALWAYS_CONFIRM_TOOLS is guarded because its surface is expensive to
+    get wrong, and such a tool may well be reversible -- the list matches on name
+    precisely so a mislabelled adapter cannot buy itself silence. A tool that
+    reaches CONFIRM by the HIGH_IMPACT-and-not-reversible rule genuinely cannot
+    be walked back.
+
+    Telling Tee "this cannot be undone" about something that can is a small lie,
+    and a gate that lies about why it is stopping him teaches him to stop reading
+    it. So the question says which one it is.
+    """
+    confirm_set = ALWAYS_CONFIRM_TOOLS if always_confirm is None else always_confirm
+    if spec.name in confirm_set:
+        return "writes somewhere a mistake is expensive to walk back"
+    return "cannot be undone"
 
 
 def decide(

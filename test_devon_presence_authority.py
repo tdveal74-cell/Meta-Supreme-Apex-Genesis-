@@ -20,6 +20,7 @@ from services.agent_runtime.presence import (
     ALWAYS_CONFIRM_TOOLS,
     Caller,
     PresenceDecision,
+    confirm_reason,
     decide,
 )
 from services.agent_runtime.tools import ToolSpec
@@ -90,6 +91,27 @@ def test_named_irreversible_tools_confirm_inline(name: str) -> None:
     )
 
 
+def test_the_question_says_which_rule_stopped_it() -> None:
+    """A gate that lies about why it stopped you teaches you to stop reading it.
+
+    Two rules produce CONFIRM. A named tool is guarded for its surface and may be
+    perfectly reversible; the HIGH_IMPACT rule fires on tools that genuinely
+    cannot be walked back. Saying "cannot be undone" about the first is a small
+    lie, and small lies in a governance prompt are how consent gets manufactured.
+    """
+    named = spec(sorted(ALWAYS_CONFIRM_TOOLS)[0], ToolRisk.WRITE, reversible=True)
+    irreversible = spec("warehouse.truncate", ToolRisk.HIGH_IMPACT, reversible=False)
+
+    assert decide(named, TEE) is PresenceDecision.CONFIRM
+    assert decide(irreversible, TEE) is PresenceDecision.CONFIRM
+
+    assert confirm_reason(named) == "writes somewhere a mistake is expensive to walk back"
+    assert confirm_reason(irreversible) == "cannot be undone"
+    # The named one is reversible, so the irreversible wording would be false.
+    assert named.reversible is True
+    assert "cannot be undone" != confirm_reason(named)
+
+
 def test_unnamed_irreversible_high_impact_still_confirms() -> None:
     """A tool declaring itself irreversible earns a question without being listed."""
     unlisted = spec("warehouse.truncate", ToolRisk.HIGH_IMPACT, reversible=False)
@@ -100,6 +122,64 @@ def test_unnamed_irreversible_high_impact_still_confirms() -> None:
 def test_the_confirm_list_stays_short() -> None:
     """Every name here is friction Tee feels on every turn. Growth needs a reason."""
     assert len(ALWAYS_CONFIRM_TOOLS) <= 8
+
+
+# ---------------------------------------------------------------------------
+# The guard against the guard being decorative
+# ---------------------------------------------------------------------------
+#
+# Every test above builds its own ToolSpec, which proves `decide` reads the list
+# and proves nothing about whether the list matches the tools DEVON actually has.
+# As of 2026-08-26 it matches NOTHING: not one name in ALWAYS_CONFIRM_TOOLS is
+# registered. That is correct for today -- the soul write surface is an n8n
+# workflow behind the approval queue, not a runtime tool -- and it is exactly the
+# condition under which a guard rots unnoticed. The two tests below are the
+# tripwires for the day it stops being true.
+
+
+def _live_registry():
+    from app.services.agent_tasks import build_tool_registry
+
+    return build_tool_registry()
+
+
+def test_the_confirm_list_names_nothing_registered_yet_and_says_so() -> None:
+    """A deliberate state, pinned so a change to it has to be noticed.
+
+    When a soul or credential write DOES become a runtime tool, this fails. That
+    is the point: whoever registers it must come here, confirm the name matches
+    the list, and update this test. A guard nobody is forced to look at is a
+    guard that silently stops applying.
+    """
+    registered = {t["name"] for t in _live_registry().describe()}
+    assert ALWAYS_CONFIRM_TOOLS.isdisjoint(registered), (
+        "a named-confirm tool is now registered; verify decide() actually guards "
+        "it end to end, then update this test to assert that instead"
+    )
+
+
+GUARDED_PREFIXES = ("soul.", "subconscious.", "secrets.", "credentials.")
+
+
+def test_no_soul_or_credential_write_escapes_the_named_guard() -> None:
+    """The drift that would actually hurt: right surface, different name.
+
+    ALWAYS_CONFIRM_TOOLS matches on exact names, so registering `soul.append`
+    instead of `soul.write` buys silence without anyone deciding to. A write on
+    one of these surfaces either carries a name the list already knows, or it
+    does not belong on the surface.
+    """
+    escaped = [
+        t["name"]
+        for t in _live_registry().describe()
+        if t["name"].startswith(GUARDED_PREFIXES)
+        and t["risk"] != "read"
+        and t["name"] not in ALWAYS_CONFIRM_TOOLS
+    ]
+    assert not escaped, (
+        f"these write on a guarded surface under a name the confirm list does "
+        f"not know: {escaped}. Add them to ALWAYS_CONFIRM_TOOLS or rename them."
+    )
 
 
 # ---------------------------------------------------------------------------

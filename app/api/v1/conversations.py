@@ -614,6 +614,14 @@ async def act_stream(
     the thing it stops. Persistence inside the stream opens its own short-lived
     session instead.
 
+    Measured rather than assumed, because the close is easy to mistake for a
+    no-op and delete: with the session closed, `engine.pool.checkedout()` is 0
+    for the whole streaming window, and `get_db`'s own teardown (`commit()` then
+    `close()`, which FastAPI runs after the response finishes) does NOT
+    re-acquire a connection — committing an already-closed AsyncSession is inert.
+    `test_the_brake_reaches_a_turn_that_is_still_running` asserts the pool count
+    mid-stream so this stays true.
+
     Event stream: `turn_started` → (`turn_resumed` / `tool_started` /
     `tool_result` / `tool_unknown` / `refused` / `tool_capped`)* → exactly one
     terminal event, one of `answer`, `needs_confirmation`, `card_required`,
@@ -783,7 +791,7 @@ _TERMINAL_EVENTS = frozenset(
 #: What the transcript says when a turn ended without DEVON answering. Written
 #: from DEVON's side, because that is the row a later turn reads back as history.
 _ENDING_NOTES = {
-    "needs_confirmation": "Stopped to ask you to confirm an action that cannot be undone.",
+    "needs_confirmation": "Stopped to ask you to confirm a guarded action.",
     "card_required": "Stopped: that action needs an approval card, and nobody was present to rule on it.",
     "halted": "Stopped because you said stop.",
     "step_limit": "Stopped after reaching the tool limit for one turn without an answer.",

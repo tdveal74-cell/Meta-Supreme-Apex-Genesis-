@@ -50,7 +50,12 @@ from services.agent_runtime.governance import (
     approval_marker,
 )
 from services.agent_runtime.halt import Halted, HaltSignal
-from services.agent_runtime.presence import Caller, PresenceDecision, decide
+from services.agent_runtime.presence import (
+    Caller,
+    PresenceDecision,
+    confirm_reason,
+    decide,
+)
 from services.agent_runtime.tools import ToolRegistry, ToolResult, ToolSpec
 from services.devon.approval import ApprovalQueue
 
@@ -201,7 +206,9 @@ class PresenceExecutor:
                     tool=spec.name,
                     decision=verdict,
                     ran=False,
-                    detail=f"{spec.name} cannot be walked back; confirm to run it",
+                    detail=(
+                        f"{spec.name} {confirm_reason(spec)}; confirm to run it"
+                    ),
                     confirm_token=token,
                     arguments=args,
                     awaiting_confirmation=True,
