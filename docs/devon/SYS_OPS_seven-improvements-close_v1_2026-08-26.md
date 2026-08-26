@@ -28,14 +28,15 @@ Command Center.
 
 ## What to watch next
 
-- The janitor's first live sweep ran on demand at 2026-08-26T02:21Z
-  (execution 3592): SUCCESS with zero jobs swept, which is correct - the
-  eight stale E2E jobs are 42-49h old, past the heartbeat's 24h alert
-  threshold but under the janitor's 96h action TTL (warn early, act late).
-  They cross 96h on Aug 28: that day's 02:30 sweep cancels the first two,
-  the Aug 29 sweep the remaining six, each with a digest email; the
-  heartbeat's stuck_jobs finding drains as they go terminal. A check-in is
-  armed for 2026-08-28T03:05Z to verify the first acting sweep.
+- The eight stale Aug-24 E2E jobs are CLEARED. The janitor's on-demand run
+  at 02:21Z (execution 3592) correctly swept nothing (jobs 42-49h old,
+  under the 96h TTL); Tee then directed an immediate clear, so a one-time
+  version-documented TTL override (96h to 24h) ran as execution 3593 at
+  02:27Z and cancelled all eight through the guarded ledger webhook (every
+  POST accepted, zero refusals, digest email sent), after which the 96h
+  TTL was restored and republished. The heartbeat's stuck_jobs finding
+  should be absent from the ~07:14 UTC pulse; a check-in at 07:35Z
+  confirms the drain.
 - The first weekly backup email lands Sunday 03:10 UTC with four CSV
   attachments. approval_queue is excluded on purpose; never add it.
 - Item 3 completes itself the first time two real same-theme jobs run to

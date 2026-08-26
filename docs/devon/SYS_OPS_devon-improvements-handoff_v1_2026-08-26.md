@@ -99,15 +99,18 @@ trace note, digest email only when it acted, Error Alarm + 300s timeout set.
 Dry-tested (execution 3581) before publish. Registered in
 `services/devon/vault.py` WORKFLOWS (+ deploy mirror + skill tables +
 runbook) in the same change. First live sweep run on demand at
-2026-08-26T02:21Z (execution 3592): SUCCESS, zero jobs swept, and that is
-CORRECT - the eight stale E2E jobs carry updatedAt stamps of Aug 24
-01:02-07:53 UTC, only 42-49h old, past the heartbeat's 24h alert threshold
-but under the janitor's 96h action TTL. This doc's earlier expectation that
-the first sweep would clear them was a timing error, now corrected: the
-Aug 28 02:30 sweep cancels the first two (01:02 stamps), the Aug 29 sweep
-the remaining six, each with a digest email. The heartbeat keeps alerting
-until then - warn early, act late is the design. A session check-in is
-armed for 2026-08-28T03:05Z to verify the first acting sweep.
+2026-08-26T02:21Z (execution 3592): SUCCESS, zero jobs swept, correctly -
+the eight stale E2E jobs were only 42-49h old, past the heartbeat's 24h
+alert threshold but under the janitor's 96h action TTL (warn early, act
+late). Tee then directed an immediate clear: a one-time, version-documented
+TTL override (96h to 24h) was published, execution 3593 at 02:27Z cancelled
+ALL EIGHT jobs through the guarded ledger webhook (4 EXECUTING and 4
+WAITING_APPROVAL, every POST accepted, zero refusals, digest email "DEVON
+Janitor: 8 stale job(s) cancelled" sent), and the 96h TTL was restored and
+republished within the minute (active version confirmed byte-identical to
+the standing policy). The ledger now holds only terminal rows; the
+heartbeat's stuck_jobs finding should be absent from the ~07:14 UTC pulse,
+with a session check-in armed at 07:35Z to confirm.
 
 ### 6. Weekly table backup by email - PUBLISHED 2026-08-26
 
