@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meta Supreme Apex Genesis — Intelligence Operating System</title>
+<meta name="description" content="Nine agents deliberate. One human decides. The operations and ecosystem surface for Meta Supreme Apex Genesis.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #ECEFF3;
+    --card: #F7F9FB;
+    --ink: #0F1A2B;
+    --ink-soft: #46536A;
+    --line: #C9D2DC;
+    --amber: #B27A0E;
+    --amber-bg: #F6EBD3;
+    --green: #1F7A54;
+    --green-bg: #DFEEE5;
+    --red: #B3402F;
+    --red-bg: #F3DFDA;
+    --display: "Archivo Black", "Archivo", "Arial Black", sans-serif;
+    --sans: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --serif: "Source Serif 4", Georgia, serif;
+    --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection { background: var(--amber); color: #fff; }
+
+  a { color: inherit; }
+  a:focus-visible, button:focus-visible {
+    outline: 3px solid var(--amber);
+    outline-offset: 3px;
+  }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- Nav ---------- */
+  header.site {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(236, 239, 243, 0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; max-width: 1180px; margin: 0 auto;
+  }
+  .wordmark {
+    font-family: var(--display);
+    font-size: 15px; letter-spacing: 0.06em;
+    text-decoration: none; display: flex; align-items: center; gap: 10px;
+  }
+  .wordmark .seal {
+    width: 22px; height: 22px; border-radius: 50%;
+    border: 2.5px solid var(--ink); position: relative; flex-shrink: 0;
+  }
+  .wordmark .seal::after {
+    content: ""; position: absolute; inset: 4px;
+    border-radius: 50%; background: var(--amber);
+  }
+  nav.links { display: flex; gap: 26px; }
+  nav.links a {
+    font-family: var(--sans); font-weight: 600; font-size: 13px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    text-decoration: none; color: var(--ink-soft);
+  }
+  nav.links a:hover { color: var(--ink); }
+  .gate-chip {
+    font-family: var(--mono); font-size: 12px;
+    background: var(--amber-bg); color: var(--amber);
+    border: 1px solid var(--amber);
+    border-radius: 999px; padding: 5px 12px;
+    display: inline-flex; align-items: center; gap: 7px;
+    white-space: nowrap;
+  }
+  .gate-chip .dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--amber);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  .gate-chip.approved { background: var(--green-bg); color: var(--green); border-color: var(--green); }
+  .gate-chip.approved .dot { background: var(--green); animation: none; }
+  .gate-chip.halted { background: var(--red-bg); color: var(--red); border-color: var(--red); }
+  .gate-chip.halted .dot { background: var(--red); animation: none; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+  @media (max-width: 860px) {
+    nav.links { display: none; }
+  }
+
+  /* ---------- Hero ---------- */
+  .hero { padding: 84px 0 72px; border-bottom: 1px solid var(--line); }
+  .eyebrow {
+    font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--ink-soft);
+    display: flex; align-items: center; gap: 12px; margin-bottom: 30px;
+  }
+  .eyebrow::before {
+    content: ""; width: 34px; height: 1px; background: var(--ink-soft);
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(46px, 8.4vw, 108px);
+    line-height: 0.98; letter-spacing: -0.015em;
+    text-transform: uppercase;
+  }
+  h1 .decide {
+    display: inline-block; position: relative; color: var(--ink);
+  }
+  h1 .decide::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0.04em;
+    height: 0.09em; background: var(--amber);
+  }
+  .hero-sub {
+    max-width: 560px; margin-top: 30px;
+    font-size: 19px; color: var(--ink-soft);
+  }
+  .hero-sub strong { color: var(--ink); font-weight: 600; }
+
+  /* ---------- Gate demo ---------- */
+  .gate-demo {
+    margin-top: 54px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .gate-demo .demo-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--line);
+    font-family: var(--mono); font-size: 12.5px; color: var(--ink-soft);
+  }
+  .run-steps {
+    display: flex; align-items: stretch; flex-wrap: wrap;
+  }
+  .rstep {
+    flex: 1 1 180px;
+    padding: 22px;
+    border-right: 1px solid var(--line);
+    min-width: 175px;
+    position: relative;
+  }
+  .rstep:last-child { border-right: none; }
+  .rstep .tag {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--ink-soft); display: block; margin-bottom: 8px;
+  }
+  .rstep .name { font-family: var(--sans); font-weight: 700; font-size: 15px; }
+  .rstep .detail { font-size: 13.5px; color: var(--ink-soft); margin-top: 5px; }
+  .rstep.done { background: var(--green-bg); }
+  .rstep.done .tag { color: var(--green); }
+  .rstep.gate { background: var(--amber-bg); }
+  .rstep.gate .tag { color: var(--amber); }
+  .rstep.gate.approved { background: var(--green-bg); }
+  .rstep.gate.approved .tag { color: var(--green); }
+  .rstep.gate.rejected { background: var(--red-bg); }
+  .rstep.gate.rejected .tag { color: var(--red); }
+  .rstep.pending { opacity: 0.45; }
+  .rstep.pending.completed { opacity: 1; background: var(--green-bg); }
+  .rstep.pending.completed .tag { color: var(--green); }
+  .rstep.pending.halted-step { opacity: 1; background: var(--red-bg); }
+  .rstep.pending.halted-step .tag { color: var(--red); }
+
+  .gate-actions { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn {
+    font-family: var(--sans); font-weight: 700; font-size: 13px;
+    letter-spacing: 0.03em; text-transform: uppercase;
+    border-radius: 8px; padding: 9px 18px; cursor: pointer;
+    border: 1.5px solid transparent;
+  }
+  .btn-approve { background: var(--ink); color: var(--paper); }
+  .btn-approve:hover { background: var(--green); }
+  .btn-reject { background: transparent; color: var(--ink-soft); border-color: var(--line); }
+  .btn-reject:hover { color: var(--red); border-color: var(--red); }
+  .demo-note {
+    padding: 13px 22px;
+    border-top: 1px solid var(--line);
+    font-family: var(--mono); font-size: 12.5px; color: var(--ink-soft);
+  }
+
+  /* ---------- Sections ---------- */
+  section { padding: 88px 0; border-bottom: 1px solid var(--line); }
+  .sec-head { margin-bottom: 48px; }
+  .sec-head .kicker {
+    font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--amber); margin-bottom: 14px; display: block;
+  }
+  h2 {
+    font-family: var(--display); text-transform: uppercase;
+    font-size: clamp(30px, 4.6vw, 52px); line-height: 1.04; letter-spacing: -0.01em;
+    max-width: 760px;
+  }
+  .sec-head p { max-width: 620px; margin-top: 18px; color: var(--ink-soft); font-size: 17.5px; }
+
+  /* ---------- Ecosystem stack ---------- */
+  .stack { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .layer {
+    display: grid; grid-template-columns: 200px 1fr 260px;
+    gap: 24px; align-items: baseline;
+    padding: 26px 28px; background: var(--card);
+    border-bottom: 1px solid var(--line);
+  }
+  .layer:last-child { border-bottom: none; }
+  .layer:nth-child(even) { background: transparent; }
+  .layer .lname { font-family: var(--sans); font-weight: 700; font-size: 16px; }
+  .layer .ldesc { color: var(--ink-soft); font-size: 15.5px; }
+  .layer .ltech { font-family: var(--mono); font-size: 12.5px; color: var(--ink-soft); text-align: right; }
+  .layer.core { background: var(--ink); color: var(--paper); }
+  .layer.core .ldesc, .layer.core .ltech { color: #A9B4C6; }
+  @media (max-width: 800px) {
+    .layer { grid-template-columns: 1fr; gap: 6px; }
+    .layer .ltech { text-align: left; }
+  }
+
+  /* ---------- Council ---------- */
+  .council-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+  }
+  @media (max-width: 900px) { .council-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { .council-grid { grid-template-columns: 1fr; } }
+  .seat {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 26px 24px; position: relative;
+    transition: transform 0.18s ease, border-color 0.18s ease;
+  }
+  .seat:hover { transform: translateY(-3px); border-color: var(--ink); }
+  .seat .glyph {
+    font-family: var(--display); font-size: 30px; line-height: 1;
+    margin-bottom: 16px; color: var(--ink);
+  }
+  .seat h3 { font-family: var(--sans); font-weight: 700; font-size: 18px; margin-bottom: 6px; }
+  .seat p { font-size: 15px; color: var(--ink-soft); }
+  .seat .role-tag {
+    position: absolute; top: 24px; right: 22px;
+    font-family: var(--mono); font-size: 11px; color: var(--ink-soft);
+  }
+  .seat.skeptic { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .seat.skeptic p, .seat.skeptic .role-tag { color: #A9B4C6; }
+  .council-note {
+    margin-top: 22px; font-family: var(--mono); font-size: 13px; color: var(--ink-soft);
+  }
+
+  /* ---------- Engines ---------- */
+  .engines { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 900px) { .engines { grid-template-columns: 1fr; } }
+  .engine {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 30px 26px;
+    display: flex; flex-direction: column;
+  }
+  .engine h3 { font-family: var(--display); text-transform: uppercase; font-size: 19px; margin-bottom: 14px; }
+  .engine p { color: var(--ink-soft); font-size: 15.5px; flex: 1; }
+  .pipeline { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .pipeline .chip {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.05em;
+    border: 1px solid var(--line); background: var(--paper);
+    border-radius: 6px; padding: 4px 9px;
+  }
+  .pipeline .arrow { color: var(--ink-soft); font-size: 12px; }
+  .engine .gate-line {
+    margin-top: 20px;
+    font-family: var(--mono); font-size: 12.5px;
+    padding: 10px 12px; border-radius: 8px;
+  }
+  .engine .gate-line.amber { background: var(--amber-bg); color: var(--amber); }
+  .engine .gate-line.green { background: var(--green-bg); color: var(--green); }
+
+  /* ---------- Operations ---------- */
+  .ops-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 48px; align-items: start; }
+  @media (max-width: 900px) { .ops-grid { grid-template-columns: 1fr; } }
+  .loop-list { counter-reset: loop; list-style: none; }
+  .loop-list li {
+    counter-increment: loop;
+    display: grid; grid-template-columns: 56px 1fr; gap: 18px;
+    padding: 22px 0; border-bottom: 1px solid var(--line);
+  }
+  .loop-list li::before {
+    content: counter(loop, decimal-leading-zero);
+    font-family: var(--display); font-size: 24px; color: var(--amber);
+    line-height: 1.25;
+  }
+  .loop-list h4 { font-family: var(--sans); font-weight: 700; font-size: 16.5px; margin-bottom: 4px; }
+  .loop-list p { font-size: 15px; color: var(--ink-soft); }
+
+  .cost-card {
+    background: var(--ink); color: var(--paper); border-radius: 14px; padding: 32px 30px;
+    position: sticky; top: 90px;
+  }
+  .cost-card h3 { font-family: var(--display); text-transform: uppercase; font-size: 19px; margin-bottom: 8px; }
+  .cost-card .sub { color: #A9B4C6; font-size: 14.5px; margin-bottom: 22px; }
+  .cost-row {
+    display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: baseline;
+    padding: 15px 0; border-bottom: 1px solid rgba(236,239,243,0.15);
+  }
+  .cost-row:last-of-type { border-bottom: none; }
+  .cost-row code { font-family: var(--mono); font-size: 13px; color: var(--paper); }
+  .cost-row .mult { font-family: var(--display); font-size: 24px; color: var(--amber); white-space: nowrap; }
+  .cost-row .why { grid-column: 1 / -1; font-size: 13.5px; color: #A9B4C6; margin-top: -6px; }
+  .cost-card .warn {
+    margin-top: 20px; font-family: var(--mono); font-size: 12.5px;
+    color: var(--amber); border: 1px dashed var(--amber);
+    border-radius: 8px; padding: 12px 14px;
+  }
+
+  /* ---------- Doctrine ---------- */
+  .doctrine { background: var(--ink); color: var(--paper); border-bottom: none; }
+  .doctrine .kicker { color: var(--amber); }
+  .doctrine h2 { color: var(--paper); }
+  .doctrine .sec-head p { color: #A9B4C6; }
+  .rules { list-style: none; margin-top: 8px; }
+  .rules li {
+    font-family: var(--display); text-transform: uppercase;
+    font-size: clamp(20px, 3.2vw, 34px); line-height: 1.15;
+    padding: 26px 0; border-bottom: 1px solid rgba(236,239,243,0.15);
+    display: grid; grid-template-columns: 70px 1fr; gap: 20px; align-items: baseline;
+  }
+  .rules li span.idx { font-size: 15px; font-family: var(--mono); color: var(--amber); letter-spacing: 0.1em; }
+  .doctrine-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 64px; }
+  @media (max-width: 800px) { .doctrine-cols { grid-template-columns: 1fr; } }
+  .doctrine-cols h3 {
+    font-family: var(--mono); font-size: 13px; text-transform: uppercase;
+    letter-spacing: 0.14em; margin-bottom: 18px;
+  }
+  .doctrine-cols .never h3 { color: var(--red); opacity: 0.95; }
+  .doctrine-cols .wont h3 { color: #A9B4C6; }
+  .doctrine-cols ul { list-style: none; }
+  .doctrine-cols li {
+    font-size: 15.5px; color: #C7CFDB; padding: 11px 0 11px 22px;
+    border-bottom: 1px solid rgba(236,239,243,0.1); position: relative;
+  }
+  .doctrine-cols .never li::before {
+    content: "✕"; position: absolute; left: 0; color: var(--red); font-size: 13px; top: 14px;
+  }
+  .doctrine-cols .wont li::before {
+    content: "—"; position: absolute; left: 0; color: #6B7789; top: 11px;
+  }
+  .doctrine-cols li code { font-family: var(--mono); font-size: 13px; color: var(--paper); }
+
+  /* ---------- Plans ---------- */
+  .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 800px) { .plans { grid-template-columns: 1fr; } }
+  .plan {
+    border: 1px solid var(--line); border-radius: 12px; padding: 30px 26px; background: var(--card);
+  }
+  .plan h3 { font-family: var(--display); text-transform: uppercase; font-size: 20px; }
+  .plan .aud { font-family: var(--mono); font-size: 12.5px; color: var(--ink-soft); margin: 8px 0 16px; display: block; }
+  .plan p { font-size: 15px; color: var(--ink-soft); }
+  .plan.pro { border-color: var(--ink); border-width: 2px; }
+
+  /* ---------- Footer ---------- */
+  footer.site {
+    padding: 72px 0 48px;
+  }
+  .foot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
+  @media (max-width: 800px) { .foot-grid { grid-template-columns: 1fr; } }
+  .foot-grid h3 { font-family: var(--display); text-transform: uppercase; font-size: 22px; margin-bottom: 14px; }
+  .foot-grid p { color: var(--ink-soft); font-size: 15.5px; max-width: 420px; }
+  pre.start {
+    background: var(--ink); color: #C7CFDB; border-radius: 12px;
+    padding: 22px 24px; font-family: var(--mono); font-size: 13px;
+    line-height: 1.75; overflow-x: auto;
+  }
+  pre.start .c { color: #6B7789; }
+  .colophon {
+    margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--line);
+    display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 12px; color: var(--ink-soft);
+  }
+
+  /* ---------- Reveal (hidden state only applies when JS is running) ---------- */
+  .js .reveal { opacity: 0; transform: translateY(16px); transition: opacity 0.6s ease, transform 0.6s ease; }
+  .js .reveal.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .js .reveal { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="nav">
+    <a class="wordmark" href="#top"><span class="seal" aria-hidden="true"></span>META SUPREME APEX GENESIS</a>
+    <nav class="links" aria-label="Sections">
+      <a href="#ecosystem">Ecosystem</a>
+      <a href="#council">Council</a>
+      <a href="#engines">Engines</a>
+      <a href="#operations">Operations</a>
+      <a href="#doctrine">Doctrine</a>
+    </nav>
+    <span class="gate-chip" id="nav-gate"><span class="dot" aria-hidden="true"></span><span id="nav-gate-text">1 gate waiting on you</span></span>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ======================= HERO ======================= -->
+  <div class="hero">
+    <div class="wrap">
+      <span class="eyebrow">Intelligence Operating System · Operations &amp; Ecosystem</span>
+      <h1>Agents recommend.<br><span class="decide">Humans decide.</span></h1>
+      <p class="hero-sub">
+        Nine specialist agents deliberate over your knowledge, surface their
+        disagreements, and synthesize a recommendation. Then everything stops.
+        <strong>Nothing is written, exported, or recorded until you answer the
+        gate</strong> — every run, indefinitely.
+      </p>
+
+      <div class="gate-demo" aria-label="Live example of an approval gate">
+        <div class="demo-head">
+          <span>WORKFLOW RUN · weekly-brief</span>
+          <span>trigger — daily:07:00 UTC</span>
+        </div>
+        <div class="run-steps">
+          <div class="rstep done">
+            <span class="tag">✓ complete</span>
+            <span class="name">Retrieve knowledge</span>
+            <p class="detail">Vault searched, context assembled.</p>
+          </div>
+          <div class="rstep done">
+            <span class="tag">✓ complete</span>
+            <span class="name">Council deliberates</span>
+            <p class="detail">9 seats, points of tension preserved.</p>
+          </div>
+          <div class="rstep done">
+            <span class="tag">✓ complete</span>
+            <span class="name">Synthesis</span>
+            <p class="detail">Recommendation drafted with dissent noted.</p>
+          </div>
+          <div class="rstep gate" id="gate-step">
+            <span class="tag" id="gate-tag">⏸ waiting on you</span>
+            <span class="name">Gate: write to memory</span>
+            <p class="detail" id="gate-detail">The rendered payload is the actual text that would be written — not a template.</p>
+            <div class="gate-actions" id="gate-actions">
+              <button class="btn btn-approve" id="btn-approve">Approve</button>
+              <button class="btn btn-reject" id="btn-reject">Reject</button>
+            </div>
+          </div>
+          <div class="rstep pending" id="final-step">
+            <span class="tag" id="final-tag">queued</span>
+            <span class="name" id="final-name">Memory written</span>
+            <p class="detail" id="final-detail">Recorded under your user id, in the audit trail.</p>
+          </div>
+        </div>
+        <div class="demo-note" id="demo-note">
+          An unanswered gate is a stopped workflow. This one is waiting for you.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= ECOSYSTEM ======================= -->
+  <section id="ecosystem">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="kicker">The Ecosystem</span>
+        <h2>One system, six layers, no black boxes</h2>
+        <p>Every request travels the same path: down through the application to
+           the Executive Controller, out to the Council and the engines, and back
+           up as a recommendation with its reasoning intact.</p>
+      </div>
+      <div class="stack reveal">
+        <div class="layer">
+          <span class="lname">Experience</span>
+          <span class="ldesc">Command Center, Council Room, Knowledge Vault, Decision Center — the four rooms you actually work in.</span>
+          <span class="ltech">Next.js · packages/ui</span>
+        </div>
+        <div class="layer">
+          <span class="lname">Application</span>
+          <span class="ldesc">Server and client components with a shared design system and purposeful motion.</span>
+          <span class="ltech">App Router · RSC</span>
+        </div>
+        <div class="layer">
+          <span class="lname">API services</span>
+          <span class="ldesc">Versioned routes with strict contracts, auth, structured logging, and rate limiting.</span>
+          <span class="ltech">FastAPI · /api/v1 · Pydantic</span>
+        </div>
+        <div class="layer core">
+          <span class="lname">Orchestration</span>
+          <span class="ldesc">The Executive Controller: intent → context → routing → execution → synthesis. The central brain that decides which seats speak.</span>
+          <span class="ltech">Executive Controller</span>
+        </div>
+        <div class="layer">
+          <span class="lname">Council &amp; engines</span>
+          <span class="ldesc">Nine registered, versioned agents beside the Knowledge and Memory engines.</span>
+          <span class="ltech">9 seats · pgvector retrieval</span>
+        </div>
+        <div class="layer">
+          <span class="lname">Database</span>
+          <span class="ldesc">Every table carries ownership and tenancy; row-level security is mandatory, and the audit log is first-class.</span>
+          <span class="ltech">PostgreSQL · pgvector</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= COUNCIL ======================= -->
+  <section id="council">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="kicker">The Council</span>
+        <h2>Nine seats. Disagreement is the point.</h2>
+        <p>A single model smooths over tension. The Council preserves it — you read
+           the points of tension, not just the synthesis. Each seat has a clear
+           identity, mission, limitations, and output schema.</p>
+      </div>
+      <div class="council-grid reveal">
+        <div class="seat"><span class="glyph">Or</span><span class="role-tag">seat 1/9</span><h3>Oracle</h3><p>Future and emerging patterns — what this looks like two moves from now.</p></div>
+        <div class="seat"><span class="glyph">An</span><span class="role-tag">seat 2/9</span><h3>Analyst</h3><p>Evidence and research — what the retrieved knowledge actually supports.</p></div>
+        <div class="seat"><span class="glyph">St</span><span class="role-tag">seat 3/9</span><h3>Strategist</h3><p>Options and tradeoffs — the paths available and what each one costs.</p></div>
+        <div class="seat"><span class="glyph">Ar</span><span class="role-tag">seat 4/9</span><h3>Architect</h3><p>Systems and frameworks — how the pieces should fit together.</p></div>
+        <div class="seat"><span class="glyph">En</span><span class="role-tag">seat 5/9</span><h3>Engineer</h3><p>Implementation plans — the concrete steps from here to done.</p></div>
+        <div class="seat"><span class="glyph">Gu</span><span class="role-tag">seat 6/9</span><h3>Guardian</h3><p>Risk and security — what breaks, leaks, or comes back to bite.</p></div>
+        <div class="seat"><span class="glyph">Cr</span><span class="role-tag">seat 7/9</span><h3>Creator</h3><p>Communication and messaging — how the answer lands with people.</p></div>
+        <div class="seat"><span class="glyph">Li</span><span class="role-tag">seat 8/9</span><h3>Librarian</h3><p>Knowledge organization — where this belongs and what it connects to.</p></div>
+        <div class="seat skeptic"><span class="glyph">Sk</span><span class="role-tag">seat 9/9</span><h3>Skeptic</h3><p>Assumption testing — the seat whose job is to disagree with the other eight.</p></div>
+      </div>
+      <p class="council-note">// full_council: true convenes all nine. The default routes to the 3–4 seats the question needs.</p>
+    </div>
+  </section>
+
+  <!-- ======================= ENGINES ======================= -->
+  <section id="engines">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="kicker">The Engines</span>
+        <h2>What the Council thinks with</h2>
+        <p>An empty vault means the Council reasons from the question alone — the
+           least interesting thing it does. Feed it, curate it, and gate what it
+           writes back.</p>
+      </div>
+      <div class="engines reveal">
+        <div class="engine">
+          <h3>Knowledge</h3>
+          <p>Documents become retrievable context through one pipeline. Semantic
+             search over pgvector puts the right passages in front of the right
+             seats.</p>
+          <div class="pipeline" aria-label="Knowledge pipeline stages">
+            <span class="chip">UPLOAD</span><span class="arrow">→</span>
+            <span class="chip">EXTRACT</span><span class="arrow">→</span>
+            <span class="chip">CHUNK</span><span class="arrow">→</span>
+            <span class="chip">EMBED</span><span class="arrow">→</span>
+            <span class="chip">STORE</span><span class="arrow">→</span>
+            <span class="chip">RETRIEVE</span>
+          </div>
+        </div>
+        <div class="engine">
+          <h3>Memory</h3>
+          <p>Preferences, project context, past decisions, and lessons learned —
+             persistent and permission-controlled. Memory is a list you curate,
+             never a black box: every entry is visible, editable, and deletable.</p>
+          <div class="gate-line green">responses report how many memories were used</div>
+        </div>
+        <div class="engine">
+          <h3>Workflows</h3>
+          <p>Scheduled or manual runs that deliberate on their own — until they
+             want to commit an effect. Writing memory, opening a decision,
+             preparing an export: each stops at a gate and waits for you.</p>
+          <div class="gate-line amber">⏸ effects never commit unattended</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= OPERATIONS ======================= -->
+  <section id="operations">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="kicker">Operations</span>
+        <h2>The one job that is yours</h2>
+        <p>Everything runs on its own except the decisions. The operating burden
+           is not uptime or tuning — it is answering gates. The daily loop takes
+           minutes; skipping it stops the system.</p>
+      </div>
+      <div class="ops-grid">
+        <ol class="loop-list reveal">
+          <li>
+            <div><h4>Answer your gates</h4>
+            <p>Read the rendered payload — the actual text that would be written.
+               Approve, edit first, or reject. A rejection halts the run and keeps
+               its reason; nothing is lost by refusing.</p></div>
+          </li>
+          <li>
+            <div><h4>Check what the Council recalled</h4>
+            <p>If memory use is climbing while answers get worse, you have
+               accumulated a bad memory. Correct or pause it — bad memory
+               compounds into every future answer.</p></div>
+          </li>
+          <li>
+            <div><h4>Watch simulated mode</h4>
+            <p>If the provider is mock, every response is labeled simulated.
+               Deterministic, offline, useful for testing flows — useless for
+               actual judgment.</p></div>
+          </li>
+          <li>
+            <div><h4>Weekly: ten minutes</h4>
+            <p>Gates older than a few days, token spend by workflow, memory
+               hygiene, halted-run patterns, and schedule health. A pattern of
+               rejections means the workflow's prompt is wrong — edit the step.</p></div>
+          </li>
+        </ol>
+        <div class="cost-card reveal">
+          <h3>What drives the bill</h3>
+          <p class="sub">Three settings, in order of how much they hurt.</p>
+          <div class="cost-row">
+            <code>full_council: true</code><span class="mult">×3</span>
+            <span class="why">Nine seats instead of 3–4 — roughly triples a run.</span>
+          </div>
+          <div class="cost-row">
+            <code>deliberate: true</code><span class="mult">×2</span>
+            <span class="why">A second round where every agent re-reads the others.</span>
+          </div>
+          <div class="cost-row">
+            <code>trigger: hourly</code><span class="mult">×24</span>
+            <span class="why">Hourly is 24× daily. This is the one that actually hurts.</span>
+          </div>
+          <div class="warn">All three together ≈ 50× a single-agent daily run. There is no budget cap — watch the per-run token records yourself.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= DOCTRINE ======================= -->
+  <section class="doctrine" id="doctrine">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="kicker">Doctrine</span>
+        <h2>Non-negotiables</h2>
+        <p>The rules the whole product rests on. They hold in every mode, on every
+           plan, in every environment.</p>
+      </div>
+      <ol class="rules reveal">
+        <li><span class="idx">01</span>Not a chatbot — Council and synthesis only</li>
+        <li><span class="idx">02</span>Humans decide; agents recommend</li>
+        <li><span class="idx">03</span>Automation never commits effects unattended</li>
+        <li><span class="idx">04</span>Memory is transparent, editable, deletable</li>
+        <li><span class="idx">05</span>Simulated output is always labeled simulated</li>
+      </ol>
+      <div class="doctrine-cols reveal">
+        <div class="never">
+          <h3>Never</h3>
+          <ul>
+            <li>Never set <code>WORKFLOW_APPROVAL_REQUIRED=false</code> — it silently removes the guarantee everything rests on, and no incident is fixed by it.</li>
+            <li>Never edit the frozen baseline schema — changes ship as migrations.</li>
+            <li>Never resolve someone else's gate — approvals are recorded under your user id, and a shared account makes the audit trail a fiction.</li>
+            <li>Never downgrade past the migration that holds <code>workflow_runs</code> — that is where every approval record lives.</li>
+          </ul>
+        </div>
+        <div class="wont">
+          <h3>What it will not do — and says so</h3>
+          <ul>
+            <li>Send anything outbound. Exports render into the run record for you to read and copy.</li>
+            <li>Bill anyone, or share permissions across a team.</li>
+            <li>Enforce a spend limit for you.</li>
+            <li>Decide anything. It recommends; you record the call.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= PLANS ======================= -->
+  <section id="plans">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="kicker">Plans</span>
+        <h2>Built as a platform, not a demo</h2>
+      </div>
+      <div class="plans reveal">
+        <div class="plan">
+          <h3>Free</h3>
+          <span class="aud">for individuals</span>
+          <p>The full Council and engines, scoped to one person figuring out what
+             structured deliberation is worth.</p>
+        </div>
+        <div class="plan pro">
+          <h3>Professional</h3>
+          <span class="aud">for power users &amp; small teams</span>
+          <p>For operators running real workflows on real cadences, where the
+             gates carry actual decisions.</p>
+        </div>
+        <div class="plan">
+          <h3>Enterprise</h3>
+          <span class="aud">for organizations</span>
+          <p>Tenancy isolation, RBAC, full audit logging — the architecture is
+             already built for SOC 2 and GDPR readiness.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ======================= FOOTER ======================= -->
+<footer class="site">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <h3>Run it in one minute</h3>
+        <p>The zero-key path needs nothing but Python. Nothing costs money and
+           nothing is real until you connect a provider — and the system tells
+           you which mode it is in.</p>
+      </div>
+      <pre class="start"><span class="c"># canonical zero-infra runtime</span>
+pip install fastapi uvicorn pydantic pytest
+pytest test_billing.py test_definition.py -q
+uvicorn standalone_api:app --reload --port 8000
+<span class="c"># /health · /agents · /council/deliberate · /docs</span></pre>
+    </div>
+    <div class="colophon">
+      <span>META SUPREME APEX GENESIS — Intelligence Operating System</span>
+      <span>An unanswered gate is a stopped workflow.</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  document.documentElement.classList.add('js');
+  (function () {
+    var approveBtn = document.getElementById('btn-approve');
+    var rejectBtn = document.getElementById('btn-reject');
+    var gateStep = document.getElementById('gate-step');
+    var gateTag = document.getElementById('gate-tag');
+    var gateDetail = document.getElementById('gate-detail');
+    var gateActions = document.getElementById('gate-actions');
+    var finalStep = document.getElementById('final-step');
+    var finalTag = document.getElementById('final-tag');
+    var finalName = document.getElementById('final-name');
+    var finalDetail = document.getElementById('final-detail');
+    var demoNote = document.getElementById('demo-note');
+    var navGate = document.getElementById('nav-gate');
+    var navGateText = document.getElementById('nav-gate-text');
+
+    function settle() {
+      gateActions.style.display = 'none';
+      approveBtn.disabled = true;
+      rejectBtn.disabled = true;
+    }
+
+    approveBtn.addEventListener('click', function () {
+      settle();
+      gateStep.classList.add('approved');
+      gateTag.textContent = '✓ approved by you';
+      gateDetail.textContent = 'Approval recorded under your user id.';
+      finalStep.classList.add('completed');
+      finalTag.textContent = '✓ complete';
+      demoNote.textContent = 'Run complete. The effect committed only because you said so.';
+      navGate.classList.add('approved');
+      navGateText.textContent = '0 gates waiting';
+    });
+
+    rejectBtn.addEventListener('click', function () {
+      settle();
+      gateStep.classList.add('rejected');
+      gateTag.textContent = '✕ rejected by you';
+      gateDetail.textContent = 'Run halted. Your reason is kept with it.';
+      finalStep.classList.add('halted-step');
+      finalTag.textContent = 'halted';
+      finalName.textContent = 'Nothing written';
+      finalDetail.textContent = 'Nothing is lost by refusing.';
+      demoNote.textContent = 'Run halted. A rejection is an answer — the audit trail keeps it.';
+      navGate.classList.add('halted');
+      navGateText.textContent = '0 gates waiting';
+    });
+
+    // Scroll reveals — skipped for reduced motion.
+    var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var reveals = document.querySelectorAll('.reveal');
+    if (reduced || !('IntersectionObserver' in window)) {
+      reveals.forEach(function (el) { el.classList.add('in'); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          e.target.classList.add('in');
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.12 });
+    reveals.forEach(function (el) { io.observe(el); });
+  })();
+</script>
+
+</body>
+</html>
