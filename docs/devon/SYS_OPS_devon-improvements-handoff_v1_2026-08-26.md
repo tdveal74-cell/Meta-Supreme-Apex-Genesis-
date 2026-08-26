@@ -74,16 +74,18 @@ deployed API or have the feeder pick up jobs Tee runs). Every commit still
 goes through an approval card; slow down on the tap (approve and reject sit
 adjacent).
 
-### 4. Upstream webhook auth flip (TEE, by hand, 2 minutes)
+### 4. Upstream webhook auth flip - DONE 2026-08-26
 
-Workflow `VznESplSFCs8ldph` (webhook devon-build12-upstream) is deliberately
-open; the feeder already sends x-devon-key, so flipping costs nothing. In the
-n8n editor: open the workflow, select the Webhook node, set Authentication to
-Header Auth, pick credential "Devon Capture Key", save, publish. Then update
-the AUTH note in `services/devon/vault.py` WEBHOOKS and
-`.claude/skills/devon-learning-lane/references/ids-and-contracts.md` in the
-same change. Verify: next feeder digest still shows fed jobs (it will), and an
-anonymous curl now gets 403.
+Workflow `VznESplSFCs8ldph` (webhook devon-build12-upstream) now carries
+Header Auth with credential "Devon Capture Key", published (active version
+same as draft, updated 2026-08-26T01:56Z); the workflow also became
+MCP-available the same day. The feeder was already sending x-devon-key, so
+the automatic feed never noticed. AUTH notes updated in
+`services/devon/vault.py` WEBHOOKS (+ mirror),
+`ids-and-contracts.md`, SKILL.md, and the runbook in the same change.
+Anonymous-curl verification is blocked from build containers (egress to the
+n8n host is proxy-blocked); the config read-back and the next feeder digest
+stand as the receipts.
 
 ### 5. Ledger Janitor - PUBLISHED 2026-08-26T01:38Z
 

@@ -12,7 +12,7 @@ before trusting in a much later session.
 | devon_state_ledger data table | `VYyno7pDWmY6uxBz` | one row per intent; `learning_state` belongs to the envelope and is rewritten on every upsert — never use it as a foreign marker |
 | Ledger Feeder workflow | `6hQD8YhiYzR1FFda` | 15-min poll; feeds COMPLETED jobs once each |
 | devon_build12_feed_log table | `QeoV4V4dYXXN8dBR` | intent_id, fed_at, webhook_status, gate_decision, claim, area (area may be empty; parse `. Area: X.` from claim as fallback) |
-| Build 12 Upstream Test workflow | `VznESplSFCs8ldph` | webhook `devon-build12-upstream`; NO header auth (deliberate — see below); NOT editable via MCP |
+| Build 12 Upstream Test workflow | `VznESplSFCs8ldph` | webhook `devon-build12-upstream`; header auth `x-devon-key` ON since 2026-08-26 (credential Devon Capture Key); MCP-available since 2026-08-26 |
 | Approval Queue workflow | `syRVj0G47mA1b0Xn` | webhooks `devon-approve-request` (POST, x-devon-key) and `devon-approve-decide` (GET, token in link) |
 | approval_queue table | `u6wzeN5y9LNxROsN` | status pending/approved/rejected; 72h expiry; contains a plaintext token column — never read it |
 | Soul Committer workflow | `lANs6wopaK0PkNhN` | 15-min poll; propose + resolve branches; first draft `Wo7zPxpGH8kiBRy8` archived unpublished after adversarial review |
@@ -87,13 +87,12 @@ tests, ship through a PR — never by editing the deployed service.
 
 ## Webhook payload: feeder → devon-build12-upstream
 
-AUTH: none — the webhook is deliberately unauthenticated (open ruling recorded
-in `services/devon/vault.py` WEBHOOKS). The feeder sends `x-devon-key` anyway,
-so header auth can be enabled later without breaking the automatic feed. Until
-then anyone with the URL can POST candidate claims (and a caller-supplied
-`source_intent_ids` list) into the gate; the stated safety is the gate itself —
-PROMOTE alone writes, and only to devon-subconscious, never devon-soul. Weigh
-this in any security review of the lane.
+AUTH: header `x-devon-key` (flipped on 2026-08-26, closing the open ruling
+that was recorded in `services/devon/vault.py` WEBHOOKS). The feeder was
+already sending the key, so the automatic feed never noticed the flip; an
+anonymous POST now gets 403 instead of reaching the Candidate Former. The
+gate remains the second line of defense: PROMOTE alone writes, and only to
+devon-subconscious, never devon-soul.
 
 ```json
 {"claim": "...", "source_intent_ids": ["<ULID>"], "proposed_scope": "<area>",

@@ -69,8 +69,9 @@ workflow instead; never add an approval_queue read to it.
   The deployed service updates on Vercel deploy of main.
 - Live n8n workflows: prefer creating a new additive workflow over editing a
   live organ; if editing, export/read the JSON first and keep the sticky-note
-  documentation truthful. The Build 12 Upstream workflow is not editable via
-  MCP by design.
+  documentation truthful. The Build 12 Upstream workflow became MCP-available
+  on 2026-08-26 (it was blocked before); its webhook carries header auth from
+  the same date.
 - Any new webhook or workflow: register it in `services/devon/vault.py`
   (WEBHOOKS / WORKFLOWS, mirrored byte-identically in
   `deploy/soul/services/devon/vault.py`) in the same change — the map's own
