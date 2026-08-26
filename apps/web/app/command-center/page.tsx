@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DevonChat } from "@/components/devon/DevonChat";
 import { OperatorTerminal } from "@/components/terminal/OperatorTerminal";
 
 const panels = [
@@ -57,13 +58,23 @@ export default function CommandCenterPage() {
               Council
             </Link>
             <Link
-              href="/terminal"
+              href="/devon"
               className="rounded-lg bg-amber-300 px-3 py-2 font-semibold text-[#151006] transition hover:bg-amber-200"
             >
-              Terminal full screen
+              DEVON full screen
+            </Link>
+            <Link
+              href="/terminal"
+              className="rounded-lg border border-white/10 px-3 py-2 font-medium text-white/70 transition hover:border-white/20 hover:text-white"
+            >
+              Terminal
             </Link>
           </nav>
         </header>
+
+        <div className="mb-4">
+          <DevonChat />
+        </div>
 
         <section className="mb-4 grid gap-4 md:grid-cols-3">
           {panels.map((panel) => (

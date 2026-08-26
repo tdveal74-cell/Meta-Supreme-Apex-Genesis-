@@ -111,6 +111,7 @@ def build_controller(provider: Optional[AIProvider] = None) -> ExecutiveControll
         deliberation_rounds=settings.COUNCIL_DELIBERATION_ROUNDS,
         fast_model=settings.AI_MODEL_FAST,
         synthesis_model=settings.AI_MODEL_SYNTHESIS,
+        synthesis_persona=settings.SYNTHESIS_PERSONA,
         max_tokens_per_agent=settings.AI_MAX_TOKENS_PER_AGENT,
         synthesis_max_tokens=settings.AI_MAX_TOKENS_SYNTHESIS,
         temperature=settings.AI_TEMPERATURE,

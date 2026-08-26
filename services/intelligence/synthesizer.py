@@ -89,11 +89,25 @@ class Synthesizer:
         max_tokens: int = 2000,
         temperature: float = 0.2,
         model: str | None = None,  # synthesis-tier override; None → provider default
+        persona: str = "",  # optional voice; applies to the response text only
     ):
         self.provider = provider
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.model = model
+        self.persona = (persona or "").strip()
+
+    def _system_prompt(self) -> str:
+        if not self.persona:
+            return _SYNTHESIS_SYSTEM
+        # The persona shapes voice, never substance: it is appended after the
+        # contract so the accuracy rules and required JSON keys stay intact.
+        return (
+            _SYNTHESIS_SYSTEM
+            + "\n\nVoice (apply to the `response` text only; never weaken the "
+            "accuracy rules or alter the JSON contract):\n"
+            + self.persona
+        )
 
     async def synthesize(
         self,
@@ -106,7 +120,7 @@ class Synthesizer:
         failed = [r for r in results if r.status != "completed"]
 
         request = CompletionRequest(
-            system=_SYNTHESIS_SYSTEM,
+            system=self._system_prompt(),
             messages=[
                 ChatMessage(role="user", content=self._build_prompt(message, intent, completed, failed))
             ],

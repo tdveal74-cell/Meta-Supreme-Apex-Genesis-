@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { API_BASE } from "@/lib/api-base";
 
 type LineKind = "system" | "command" | "stdout" | "stderr" | "approval";
 
@@ -56,13 +57,6 @@ type OperatorStatus = {
   boundary: string;
 };
 
-// NEXT_PUBLIC_API_URL wins when set. Otherwise production builds talk to
-// the deployed DEVON API on Railway and dev builds to the local API.
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
-  (process.env.NODE_ENV === "production"
-    ? "https://api-production-5644.up.railway.app/api/v1"
-    : "http://localhost:8000/api/v1");
 
 const initialLines: TerminalLine[] = [
   {

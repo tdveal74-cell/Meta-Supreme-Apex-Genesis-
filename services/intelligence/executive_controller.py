@@ -179,6 +179,7 @@ class ExecutiveController:
         deliberation_rounds: int = 1,
         fast_model: Optional[str] = None,
         synthesis_model: Optional[str] = None,
+        synthesis_persona: str = "",
         max_tokens_per_agent: int = 1200,
         synthesis_max_tokens: int = 2000,
         temperature: float = 0.2,
@@ -197,6 +198,7 @@ class ExecutiveController:
             max_tokens=synthesis_max_tokens,
             temperature=temperature,
             model=synthesis_model,
+            persona=synthesis_persona,
         )
         self.request_id = str(uuid4())
 

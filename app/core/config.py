@@ -88,6 +88,11 @@ class Settings(BaseSettings):
     AI_MODEL_FAST: str | None = None
     AI_MODEL_SYNTHESIS: str | None = None
 
+    # Optional voice for the synthesized answer. Applied to the response text
+    # only; the synthesis accuracy rules and JSON contract are untouched.
+    # Empty (the default) means no persona — existing behavior exactly.
+    SYNTHESIS_PERSONA: str = ""
+
     # Knowledge & retrieval (Phase 3)
     # "mock" embeddings are deterministic and offline (clearly labeled);
     # switch to "openai" (+ OPENAI_API_KEY) for real semantic retrieval.
