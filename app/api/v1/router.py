@@ -12,6 +12,7 @@ from app.api.v1 import (
     conversations,
     decisions,
     devon,
+    devon_editforge,
     health,
     intelligence,
     knowledge,
@@ -39,6 +40,7 @@ api_router.include_router(memory.router)
 api_router.include_router(decisions.router)
 api_router.include_router(workflows.router)
 api_router.include_router(devon.router)
+api_router.include_router(devon_editforge.router)
 api_router.include_router(operator.router)
 api_router.include_router(operator_shell.router)
 api_router.include_router(agent_tasks.router)

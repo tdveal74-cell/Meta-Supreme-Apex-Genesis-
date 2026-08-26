@@ -1,6 +1,6 @@
 # REPOSITORY_STATUS — Meta Supreme Apex Genesis
 
-**Updated:** 2026-08-11
+**Updated:** 2026-08-26
 
 | Field | Value |
 |-------|--------|
@@ -14,6 +14,8 @@
 | Known blockers | Canonical path ambiguity (flatten vs apps/api); current-head CI proof must be visible; requirements not fully pin-locked |
 | Deployment | No production URL required for offline flagship |
 | Governance | Agents recommend · humans decide · simulated output labeled |
+| EditForge execution | `services/devon/editforge_execution.py` + `/api/v1/devon/editforge/*` — exact-intent approval, execute, poll, receipt validation, retry, cancel |
+| Self-hosted media | DEVON URL/token are environment-configurable; development compose reaches host-published EditForge through `host.docker.internal` |
 
 ## Status badges (explicit)
 
