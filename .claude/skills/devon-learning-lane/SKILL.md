@@ -69,6 +69,7 @@ policy semantics, every live id, and every payload contract:
 | Upstream gate | n8n workflow (webhook), MCP-blocked from editing | receipt contract in reference |
 | Soul Committer | n8n workflow, 15-min poll | state machine in reference |
 | Vault map | repo `services/devon/vault.py` WEBHOOKS/WORKFLOWS | keep truthful on every change |
+| Heartbeat (Build 13) | n8n pulse + claude.ai reflection Routine | continuity and self-monitoring, `references/heartbeat.md` |
 
 ## Which reference to read
 
@@ -77,6 +78,8 @@ policy semantics, every live id, and every payload contract:
 - Something looks stuck, failed, or silent → `references/runbook.md`
 - Building or modifying any DEVON n8n workflow →
   `references/n8n-conventions.md` (applies estate-wide, not just this lane)
+- The Heartbeat: the 6h pulse, the daily reflection, or the
+  devon_heartbeat_log → `references/heartbeat.md`
 
 ## Provenance
 

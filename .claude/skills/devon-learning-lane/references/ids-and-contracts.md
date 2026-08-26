@@ -18,7 +18,10 @@ before trusting in a much later session.
 | Soul Committer workflow | `lANs6wopaK0PkNhN` | 15-min poll; propose + resolve branches; first draft `Wo7zPxpGH8kiBRy8` archived unpublished after adversarial review |
 | devon_soul_commit_log table | `U9fnVy19Vc8kvQAw` | intent_id, state (PROPOSED/COMMITTED/REJECTED/EXPIRED/REVERTED), request_id, record_id, claim, area, proposed_at, resolved_at, note |
 | Error Alarm workflow | `XDQXwgFkUhYxoEjG` | shared error workflow; emails Tee when a workflow that names it crashes out-of-band |
-| Learning Lane Table Reader | `we45pHkQHRmSRnZx` | manual, read-only view of feed log + commit log; deliberately never reads approval_queue (token column) |
+| Learning Lane Table Reader | `we45pHkQHRmSRnZx` | manual, read-only view of feed log, commit log, state ledger, heartbeat log; deliberately never reads approval_queue (token column) |
+| Heartbeat workflow (Build 13) | `dRgTNLod2s8BAcPg` | 6h pulse: vitals, keyed findings, roughly daily email; see `references/heartbeat.md` |
+| devon_heartbeat_log table | `Adg1Gd9HML7Q4L3U` | beat_at, kind (pulse/reflection), vitals, findings, reflection, emailed |
+| Daily Reflection Routine | `trig_01XCKFGEbojhkPRnNbMd8yCP` | claude.ai Routine, 11:30 UTC, writes one reflection row; see `references/heartbeat.md` |
 
 ### Soul Committer v2 semantics (why it is shaped this way)
 
