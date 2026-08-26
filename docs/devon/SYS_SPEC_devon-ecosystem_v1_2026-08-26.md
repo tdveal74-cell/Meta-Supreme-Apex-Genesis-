@@ -127,6 +127,12 @@ Deletion protection is now also sent to the vendor at index creation
 repository cannot stop a console click or a script that never imports it. The
 value is declared once in the doctrine and imported, so the two cannot drift.
 
+The three indexes that already existed carry vendor deletion protection too.
+Tee confirmed it on 2026-08-26, so the gap the audit recorded is closed at the
+vendor as well as in code. That confirmation is a stated fact rather than a
+read this repository performed: nothing here can query Pinecone, so a later
+reader who needs certainty checks the console rather than trusting this line.
+
 ## The action execution layer
 
 DEVON decides where. `route_action` sends internal duties to n8n and commercial
@@ -172,9 +178,6 @@ the map can never become a second registry that drifts.
 - **The external operating surfaces.** Claude, ChatGPT, Codex, Deep Research,
   Work, connected apps and scheduled tasks report `contract_ready` with
   `live_verified: false` until each returns its own receipt. No invented green.
-- **Vendor deletion protection on indexes that already exist.** The setting is
-  sent at creation. Indexes created before this change need it applied once in
-  the Pinecone console, which is a manual item for Tee.
 
 ## Where it lives
 
