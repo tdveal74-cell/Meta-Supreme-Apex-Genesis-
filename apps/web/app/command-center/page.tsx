@@ -1,5 +1,6 @@
 import { CapabilityDock } from "@/components/command-center/CapabilityDock";
 import { MissionAdvisor } from "@/components/command-center/MissionAdvisor";
+import { PasskeyAccess } from "@/components/command-center/PasskeyAccess";
 import { UnifiedCommandCenter } from "@/components/command-center/UnifiedCommandCenter";
 
 export default function CommandCenterPage() {
@@ -7,6 +8,7 @@ export default function CommandCenterPage() {
     <>
       <UnifiedCommandCenter />
       <MissionAdvisor />
+      <PasskeyAccess />
       <CapabilityDock />
     </>
   );
