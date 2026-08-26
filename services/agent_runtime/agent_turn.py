@@ -11,7 +11,7 @@ This is that loop. It is deliberately iterative rather than plan-then-execute:
 a conversation cannot freeze its plan at the first message, because the second
 tool result routinely changes what the third call should be.
 
-Three properties hold it together:
+Four properties hold it together:
 
 - **Authority comes from the transport, never the transcript.** The Caller is
   handed in by the endpoint that authenticated a human. Nothing the model emits
@@ -22,6 +22,14 @@ Three properties hold it together:
 - **The loop is bounded.** Every iteration costs a provider call, so a model
   that loops on itself burns Tee's money. `max_steps` caps it and the cap is
   reported as a real outcome rather than a silent stop.
+- **A confirmation resumes the turn; it never replays it.** The first cut of
+  this loop ended the turn on a question and expected the whole turn to be
+  driven again with a token attached. An adversarial pass on 2026-08-26 watched
+  that re-run every step that preceded the question -- `browser.navigate` fired
+  twice for one "yes" -- because "re-ask the model from the top" and "do the one
+  thing he agreed to" are not the same instruction. So the question carries its
+  observations out, and the answer carries them back in: on resume the confirmed
+  call runs, and only then does the model get asked what to do next.
 
 Wire format: the provider has no native tool-use, so the same JSON-mode
 discipline the planner uses applies here. Each reply is one object, either
@@ -35,7 +43,12 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Dict, List, Optional, Sequence
 
-from services.agent_runtime.conversation import PresenceExecutor
+from services.agent_runtime.contracts import COUNCIL_TOOL_NAME
+from services.agent_runtime.conversation import (
+    PresenceExecutor,
+    StepOutcome,
+    confirm_binding,
+)
 from services.agent_runtime.halt import Halted, HaltSignal
 from services.agent_runtime.presence import Caller, PresenceDecision
 from services.agent_runtime.tools import ToolRegistry
@@ -61,6 +74,23 @@ TURN_CONTRACT = (
     'OR {"tool": "exact.tool.name", "arguments": {}, "why": "one short clause"}'
 )
 
+PER_TURN_TOOL_BUDGET: Dict[str, int] = {
+    COUNCIL_TOOL_NAME: 1,
+}
+"""Tools whose single call costs far more than one provider round trip.
+
+`max_steps` bounds how many times the LOOP calls the provider; it says nothing
+about what one tool does internally. The council convenes a panel and can spend
+well over a hundred completions inside a single `council.consult`, which the
+step counter cannot see and the stream does not show. A model that decides
+deliberation is the answer could therefore consult eight times in one turn and
+spend more than most days of DEVON's operation.
+
+The cap is per turn and deliberately one: a second opinion from the same panel
+on the same question is not new information. Hitting it is reported to the model
+as an observation rather than silently swallowed, so it reroutes instead of
+retrying."""
+
 
 @dataclass
 class TurnEvent:
@@ -82,6 +112,42 @@ class Observation:
 
     def as_line(self) -> str:
         return f"{self.tool} -> {self.outcome}"
+
+    def to_dict(self) -> Dict[str, str]:
+        return {"tool": self.tool, "outcome": self.outcome}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Observation":
+        return cls(
+            tool=str(data.get("tool") or ""),
+            outcome=str(data.get("outcome") or ""),
+        )
+
+    @classmethod
+    def from_result(cls, tool: str, ok: bool, body: str) -> "Observation":
+        """The one place a tool result becomes something the model reads.
+
+        A failure keeps its FAILED prefix and is cut shorter than a success: the
+        model needs to know a call failed and roughly why, and a long stack trace
+        crowds out the work that did succeed.
+        """
+        text = body or ""
+        return cls(tool=tool, outcome=(text[:1000] if ok else f"FAILED: {text[:500]}"))
+
+
+@dataclass(frozen=True)
+class ResumedStep:
+    """The call Tee confirmed, plus the work that led up to it.
+
+    Handed in by the transport after it has spent a stored confirmation handle.
+    Nothing here is taken from the request body: `tool` and `arguments` are what
+    the loop itself proposed and the server remembered, which is what stops a
+    confirmation from becoming a way to name an arbitrary tool call.
+    """
+
+    tool: str
+    arguments: Dict[str, Any] = field(default_factory=dict)
+    observations: List[Observation] = field(default_factory=list)
 
 
 class AgentTurn:
@@ -162,20 +228,56 @@ class AgentTurn:
         caller: Caller,
         halt: HaltSignal,
         history: Optional[Sequence[ChatMessage]] = None,
-        confirmed_token: str = "",
+        resume: Optional[ResumedStep] = None,
     ) -> AsyncIterator[TurnEvent]:
         clean = (message or "").strip()
         if not clean:
             yield TurnEvent("error", {"message": "empty message"})
             return
 
-        observations: List[Observation] = []
+        observations: List[Observation] = list(resume.observations) if resume else []
+        spent: Dict[str, int] = {}
         system = self._system(caller)
-        # A confirmation answers the FIRST tool call of this turn and is spent
-        # once, so a single yes can never authorise a second effect.
-        pending_token = (confirmed_token or "").strip()
 
         yield TurnEvent("turn_started", {"turn_id": self.executor.turn_id})
+
+        if resume is not None:
+            # Tee answered a question. Do the thing he answered, and nothing
+            # else: the steps before it already ran, and their results are
+            # carried in `observations` rather than earned a second time.
+            yield TurnEvent(
+                "turn_resumed",
+                {"turn_id": self.executor.turn_id, "tool": resume.tool},
+            )
+            token = confirm_binding(
+                turn_id=self.executor.turn_id,
+                tool_name=resume.tool,
+                arguments=resume.arguments,
+            )
+            try:
+                outcome = await self.executor.run_step(
+                    resume.tool,
+                    resume.arguments,
+                    caller=caller,
+                    halt=halt,
+                    step_id=self._step_id(observations),
+                    confirmed_token=token,
+                )
+            except Halted as stop:
+                yield TurnEvent("halted", {"reason": stop.reason})
+                return
+            except KeyError:
+                yield TurnEvent(
+                    "error",
+                    {"message": "the confirmed tool is no longer registered"},
+                )
+                return
+
+            events, stop_here = self._absorb(outcome, observations)
+            for event in events:
+                yield event
+            if stop_here:
+                return
 
         for _step in range(self.max_steps):
             if halt.halted:
@@ -218,6 +320,22 @@ class AgentTurn:
             if not isinstance(arguments, dict):
                 arguments = {}
 
+            budget = PER_TURN_TOOL_BUDGET.get(tool_name)
+            if budget is not None:
+                used = spent.get(tool_name, 0)
+                if used >= budget:
+                    detail = (
+                        f"{tool_name} has already been used {used} time(s) this "
+                        f"turn, which is its limit; answer from what you have or "
+                        "use a cheaper tool"
+                    )
+                    yield TurnEvent(
+                        "tool_capped", {"tool": tool_name, "limit": budget, "detail": detail}
+                    )
+                    observations.append(Observation(tool=tool_name, outcome=detail))
+                    continue
+                spent[tool_name] = used + 1
+
             yield TurnEvent(
                 "tool_started",
                 {"tool": tool_name, "why": str(reply.get("why") or "").strip()},
@@ -229,7 +347,7 @@ class AgentTurn:
                     arguments,
                     caller=caller,
                     halt=halt,
-                    confirmed_token=pending_token,
+                    step_id=self._step_id(observations),
                 )
             except Halted as stop:
                 yield TurnEvent("halted", {"reason": stop.reason})
@@ -242,45 +360,12 @@ class AgentTurn:
                 )
                 yield TurnEvent("tool_unknown", {"tool": tool_name})
                 continue
-            finally:
-                pending_token = ""
 
-            if outcome.decision is PresenceDecision.CONFIRM and not outcome.ran:
-                yield TurnEvent(
-                    "needs_confirmation",
-                    {
-                        "tool": outcome.tool,
-                        "arguments": outcome.arguments,
-                        "confirm_token": outcome.confirm_token,
-                        "detail": outcome.detail,
-                    },
-                )
+            events, stop_here = self._absorb(outcome, observations)
+            for event in events:
+                yield event
+            if stop_here:
                 return
-
-            if outcome.decision is PresenceDecision.REFUSE:
-                yield TurnEvent("refused", {"tool": outcome.tool, "detail": outcome.detail})
-                observations.append(
-                    Observation(tool=outcome.tool, outcome="refused: blocked by policy")
-                )
-                continue
-
-            if outcome.decision is PresenceDecision.CARD:
-                yield TurnEvent("card_required", {"tool": outcome.tool, "detail": outcome.detail})
-                return
-
-            result = outcome.result
-            ok = bool(result and result.ok)
-            body = (result.output if result else "") or (result.error if result else "")
-            yield TurnEvent(
-                "tool_result",
-                {"tool": outcome.tool, "ok": ok, "output": body[:2000]},
-            )
-            observations.append(
-                Observation(
-                    tool=outcome.tool,
-                    outcome=(body[:1000] if ok else f"FAILED: {body[:500]}"),
-                )
-            )
 
         # Fell out of the loop with work still queued. Say so plainly: a silent
         # stop here would look like an answer.
@@ -294,6 +379,79 @@ class AgentTurn:
                 ),
             },
         )
+
+    @staticmethod
+    def _step_id(observations: Sequence[Observation]) -> str:
+        """A stable identity for the step about to run.
+
+        Numbered from the work already done, so a resumed turn keeps counting
+        where it left off instead of restarting at one. The approval binding
+        includes this, which is what stops two identical calls in one turn from
+        sharing a single authorisation.
+        """
+        return f"STEP-{len(observations) + 1:02d}"
+
+    def _absorb(
+        self,
+        outcome: StepOutcome,
+        observations: List[Observation],
+    ) -> tuple:
+        """Turn one step outcome into events, and say whether the turn ends here.
+
+        Pure: it appends to `observations` and returns events for the caller to
+        yield. Keeping it out of the generator is what lets the first step of a
+        resumed turn and the Nth step of a fresh one share exactly one code path.
+        """
+        events: List[TurnEvent] = []
+
+        if outcome.awaiting_confirmation:
+            events.append(
+                TurnEvent(
+                    "needs_confirmation",
+                    {
+                        "turn_id": self.executor.turn_id,
+                        "tool": outcome.tool,
+                        "arguments": outcome.arguments,
+                        "detail": outcome.detail,
+                        # Carried so the transport can remember the question
+                        # exactly as asked, without reconstructing it from the
+                        # events it happened to forward.
+                        "observations": [obs.to_dict() for obs in observations],
+                    },
+                )
+            )
+            return events, True
+
+        if outcome.decision is PresenceDecision.REFUSE:
+            events.append(
+                TurnEvent("refused", {"tool": outcome.tool, "detail": outcome.detail})
+            )
+            observations.append(
+                Observation(tool=outcome.tool, outcome="refused: blocked by policy")
+            )
+            return events, False
+
+        if outcome.decision is PresenceDecision.CARD:
+            events.append(
+                TurnEvent("card_required", {"tool": outcome.tool, "detail": outcome.detail})
+            )
+            return events, True
+
+        result = outcome.result
+        ok = bool(result and result.ok)
+        body = (result.output if result else "") or (result.error if result else "")
+        data: Dict[str, Any] = {
+            "tool": outcome.tool,
+            "ok": ok,
+            "output": (body or "")[:2000],
+        }
+        if outcome.approval_request_id:
+            # The receipt half of presence authority: every effect names the row
+            # that authorised it, in the stream, while Tee is watching.
+            data["approval_request_id"] = outcome.approval_request_id
+        events.append(TurnEvent("tool_result", data))
+        observations.append(Observation.from_result(outcome.tool, ok, body or ""))
+        return events, False
 
     async def _ask(
         self,

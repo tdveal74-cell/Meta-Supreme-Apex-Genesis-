@@ -130,6 +130,9 @@ class MockProvider(AIProvider):
             if planned is not None:
                 return planned
 
+        if request.json_mode and request.metadata.get("component") == "devon-agent-turn":
+            return self._turn_response(request)
+
         if request.json_mode and keys:
             payload = {key: _value_for(key, topic) for key in keys}
             return json.dumps(payload, ensure_ascii=False)
@@ -144,6 +147,32 @@ class MockProvider(AIProvider):
             f"Simulated response for: {topic}\n\n"
             "This output was produced by the offline mock provider. Configure a "
             "real AI provider (Anthropic or OpenAI) to receive live intelligence."
+        )
+
+    @staticmethod
+    def _turn_response(request: CompletionRequest) -> str:
+        """An answer in the conversational turn's contract.
+
+        Without this the mock replies in its generic
+        `{"response": ..., "confidence": ...}` shape, which carries neither
+        `say` nor `tool` -- so every turn under the offline provider ended on
+        "DEVON replied with neither words nor an action" and the whole
+        conversational surface was dead in CI and in any mock deployment.
+
+        Deliberately always an answer and never a tool call. A provider that
+        invents effects because it is offline is a far worse failure than one
+        that declines to act, and the tool paths are exercised by tests that
+        script a provider on purpose.
+        """
+        return json.dumps(
+            {
+                "say": (
+                    f"Simulated answer for: {_topic_of(request)}. This is the "
+                    "offline mock provider; configure a real AI provider to get "
+                    "live intelligence."
+                )
+            },
+            ensure_ascii=False,
         )
 
     @staticmethod

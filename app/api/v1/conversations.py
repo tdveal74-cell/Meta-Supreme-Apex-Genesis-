@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.devon import _queue as approval_queue
 from app.db.session import AsyncSessionLocal, get_db
 from app.models.agent import Agent, AgentRun
 from app.models.conversation import Conversation, Message
@@ -29,8 +30,9 @@ from app.models.project import Project
 from app.security.deps import CurrentUser
 from app.services.agent_tasks import build_tool_registry
 from app.services.devon_halt import get_halt_registry
+from app.services.devon_pending_confirmations import get_pending_confirmations
 from app.services.intelligence import get_provider, run_council_for_message
-from services.agent_runtime.agent_turn import AgentTurn
+from services.agent_runtime.agent_turn import AgentTurn, Observation, ResumedStep
 from services.agent_runtime.conversation import PresenceExecutor
 from services.agent_runtime.presence import Caller
 from services.agents.registry import AGENT_REGISTRY
@@ -566,7 +568,14 @@ HISTORY_TURNS = 12
 
 class ActRequest(BaseModel):
     content: str = Field(..., min_length=1, max_length=8000)
-    confirm_token: Optional[str] = Field(None, max_length=200)
+    confirm: Optional[str] = Field(
+        None,
+        max_length=200,
+        description=(
+            "The handle from a needs_confirmation event, echoed back to say yes. "
+            "Single use, and only valid in the conversation it was offered in."
+        ),
+    )
 
 
 @router.post("/{conversation_id}/act/stream")
@@ -588,13 +597,63 @@ async def act_stream(
     sequential: a turn id is the handle to someone's running work, and guessable
     handles invite stopping other people's.
 
-    Event stream: `turn_started` → (`tool_started` / `tool_result` /
-    `tool_unknown` / `refused`)* → exactly one terminal event, one of `answer`,
-    `needs_confirmation`, `card_required`, `halted`, `step_limit`, or `error`.
+    Answering a confirmation
+    ------------------------
+    When a turn stops on `needs_confirmation` it carries a `confirm` handle. Send
+    it back in the next request and the SAME turn resumes: the confirmed call
+    runs, and the steps that preceded it do not run again. The handle names a
+    call the server stored, so a client cannot use it to invoke something DEVON
+    never proposed, and it is spent on use, so a yes cannot be replayed.
+
+    Database sessions
+    -----------------
+    The request session is released before streaming begins. A stream lives as
+    long as the turn does, and a session held across it pins a pool connection
+    for that whole time — which is how a handful of long turns can starve the
+    very endpoint Tee would use to stop them. The brake must never queue behind
+    the thing it stops. Persistence inside the stream opens its own short-lived
+    session instead.
+
+    Event stream: `turn_started` → (`turn_resumed` / `tool_started` /
+    `tool_result` / `tool_unknown` / `refused` / `tool_capped`)* → exactly one
+    terminal event, one of `answer`, `needs_confirmation`, `card_required`,
+    `halted`, `step_limit`, or `error`.
     """
     conversation = await _get_owned_conversation(conversation_id, current_user.id, db)
+    conversation_pk = conversation.id
 
-    turn_id = f"TURN-{secrets.token_hex(8).upper()}"
+    pending = get_pending_confirmations()
+    resume: Optional[ResumedStep] = None
+    turn_id = ""
+    if payload.confirm:
+        confirmed = pending.claim(
+            payload.confirm,
+            owner=str(conversation_pk),
+            actor=str(current_user.id),
+        )
+        if confirmed is None:
+            # Deliberately one message for every way a handle can fail. Which
+            # confirmations are outstanding is not something an unmatched guess
+            # should be able to learn.
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "that confirmation is no longer open; ask DEVON again and "
+                    "answer the new question"
+                ),
+            )
+        turn_id = confirmed.turn_id
+        resume = ResumedStep(
+            tool=confirmed.tool,
+            arguments=dict(confirmed.arguments),
+            observations=[
+                Observation(tool=tool, outcome=outcome)
+                for tool, outcome in confirmed.observations
+            ],
+        )
+
+    if not turn_id:
+        turn_id = f"TURN-{secrets.token_hex(8).upper()}"
     registry = get_halt_registry()
     halt = registry.open(turn_id)
 
@@ -618,29 +677,71 @@ async def act_stream(
         for row in reversed(history_rows)
     ]
 
+    # Everything the turn needs is in hand. Give the connection back before the
+    # stream opens; see the note above.
+    await db.close()
+
+    # A resumed turn keeps the message that started it, so the model still knows
+    # what it was doing. Tee's actual reply ("yes", "go ahead") is recorded in
+    # the transcript below rather than fed to the loop as a fresh instruction.
+    loop_message = resume_message = payload.content
+    if resume is not None:
+        loop_message = _resume_prompt(resume)
+
     tools = build_tool_registry()
     turn = AgentTurn(
         provider=get_provider(),
         tools=tools,
-        executor=PresenceExecutor(tools, turn_id=turn_id),
+        executor=PresenceExecutor(
+            tools,
+            turn_id=turn_id,
+            approvals=approval_queue,
+            actor=str(current_user.id),
+        ),
     )
-    conversation_pk = conversation.id
 
     async def event_stream():
         answered = ""
+        ending = "error"
+        effects: List[str] = []
         try:
             async for event in turn.run(
-                payload.content,
+                loop_message,
                 caller=Caller.human(actor=current_user.id),
                 halt=halt,
                 history=history,
-                confirmed_token=(payload.confirm_token or ""),
+                resume=resume,
             ):
+                data = event.to_dict()
                 if event.type == "answer":
                     answered = str(event.data.get("text") or "")
-                yield f"data: {json.dumps(event.to_dict(), ensure_ascii=False)}\n\n"
+                if event.type == "tool_result":
+                    effects.append(str(event.data.get("tool") or ""))
+                if event.type in _TERMINAL_EVENTS:
+                    ending = event.type
+                if event.type == "needs_confirmation":
+                    # Remember the question exactly as it was asked, and hand the
+                    # client an opaque handle rather than anything it could have
+                    # computed for itself.
+                    offer = pending.offer(
+                        turn_id=turn_id,
+                        owner=str(conversation_pk),
+                        actor=str(current_user.id),
+                        tool=str(event.data.get("tool") or ""),
+                        arguments=dict(event.data.get("arguments") or {}),
+                        observations=tuple(
+                            (str(obs.get("tool") or ""), str(obs.get("outcome") or ""))
+                            for obs in (event.data.get("observations") or [])
+                        ),
+                        message=resume_message,
+                    )
+                    data.pop("observations", None)
+                    data["confirm"] = offer.handle
+                    data["expires_at"] = offer.expires_at.isoformat()
+                yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
         except Exception:  # noqa: BLE001 — the stream must always terminate
             logger.exception("agent turn failed")
+            ending = "error"
             yield (
                 "data: "
                 + json.dumps({"type": "error", "message": "the turn failed"})
@@ -650,31 +751,111 @@ async def act_stream(
             # Always release the brake, or the registry grows one entry per turn
             # for the life of the process.
             registry.close(turn_id)
-            if answered:
-                try:
-                    async with AsyncSessionLocal() as session:
-                        session.add(
-                            Message(
-                                conversation_id=conversation_pk,
-                                role="user",
-                                content=payload.content,
-                                meta={"turn_id": turn_id},
-                            )
-                        )
-                        session.add(
-                            Message(
-                                conversation_id=conversation_pk,
-                                role="assistant",
-                                content=answered,
-                                meta={"turn_id": turn_id, "surface": "devon-agent-turn"},
-                            )
-                        )
-                        await session.commit()
-                except Exception:  # noqa: BLE001 — a lost transcript must not fail the turn
-                    logger.exception("could not persist agent turn transcript")
+            await _persist_turn(
+                conversation_pk=conversation_pk,
+                turn_id=turn_id,
+                said=resume_message,
+                answered=answered,
+                ending=ending,
+                effects=effects,
+            )
 
     return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+#: Events that end a turn. Every one of them is a transcript entry, not just the
+#: one that happens to be an answer.
+_TERMINAL_EVENTS = frozenset(
+    {
+        "answer",
+        "needs_confirmation",
+        "card_required",
+        "halted",
+        "step_limit",
+        "error",
+    }
+)
+
+#: What the transcript says when a turn ended without DEVON answering. Written
+#: from DEVON's side, because that is the row a later turn reads back as history.
+_ENDING_NOTES = {
+    "needs_confirmation": "Stopped to ask you to confirm an action that cannot be undone.",
+    "card_required": "Stopped: that action needs an approval card, and nobody was present to rule on it.",
+    "halted": "Stopped because you said stop.",
+    "step_limit": "Stopped after reaching the tool limit for one turn without an answer.",
+    "error": "Stopped: the turn failed before reaching an answer.",
+}
+
+
+def _resume_prompt(resume: ResumedStep) -> str:
+    """What the model is told when a turn picks back up.
+
+    Stated as history, not as a new instruction. The confirmed call has already
+    run by the time the model sees this, and it needs to know that so it reports
+    what happened rather than proposing it again.
+    """
+    return (
+        f"Continuing: Tee confirmed `{resume.tool}` and it has now run. "
+        "Read the tool results below, then either finish the job or tell him "
+        "what happened."
+    )
+
+
+async def _persist_turn(
+    *,
+    conversation_pk: Any,
+    turn_id: str,
+    said: str,
+    answered: str,
+    ending: str,
+    effects: List[str],
+) -> None:
+    """Write the exchange down, however it ended.
+
+    Persisting only on `answer` was the shape this replaced, and it erased the
+    turns that matter most: a halted turn, a turn that stopped on a confirmation,
+    a turn that failed — each of them can have run real effects first, and none
+    of them left any trace that they had. A transcript that only records success
+    is not a record, it is a highlight reel.
+
+    So every ending writes both rows, and when there is no answer the assistant
+    row says how it ended and names the tools that ran before it did.
+    """
+    text = answered
+    if not text:
+        note = _ENDING_NOTES.get(ending, "Stopped before reaching an answer.")
+        if effects:
+            note += " Tools that ran first: " + ", ".join(dict.fromkeys(effects)) + "."
+        text = note
+
+    try:
+        async with AsyncSessionLocal() as session:
+            session.add(
+                Message(
+                    conversation_id=conversation_pk,
+                    role="user",
+                    content=said,
+                    meta={"turn_id": turn_id},
+                )
+            )
+            session.add(
+                Message(
+                    conversation_id=conversation_pk,
+                    role="assistant",
+                    content=text,
+                    meta={
+                        "turn_id": turn_id,
+                        "surface": "devon-agent-turn",
+                        "ending": ending,
+                        "answered": bool(answered),
+                        "tools_ran": list(dict.fromkeys(effects)),
+                    },
+                )
+            )
+            await session.commit()
+    except Exception:  # noqa: BLE001 — a lost transcript must not fail the turn
+        logger.exception("could not persist agent turn transcript")
