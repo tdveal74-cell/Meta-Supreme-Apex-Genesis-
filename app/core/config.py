@@ -8,6 +8,9 @@ from typing import List
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from services.devon.persona import BOUNDARY as DEVON_PERSONA_BOUNDARY
+from services.devon.persona import REGISTER as DEVON_PERSONA_REGISTER
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -95,10 +98,18 @@ class Settings(BaseSettings):
     AI_MODEL_FAST: str | None = None
     AI_MODEL_SYNTHESIS: str | None = None
 
-    # Optional voice for the synthesized answer. Applied to the response text
-    # only; the synthesis accuracy rules and JSON contract are untouched.
-    # Empty (the default) means no persona — existing behavior exactly.
-    SYNTHESIS_PERSONA: str = ""
+    # DEVON's canonical voice is the default, not an optional decoration. The
+    # source remains services.devon.persona so every surface has one owner for
+    # register and anti-caricature boundaries. An environment override is still
+    # allowed when a deployment needs a temporary voice experiment.
+    SYNTHESIS_PERSONA: str = (
+        "Speak as DEVON, Tee's second brain. "
+        + DEVON_PERSONA_REGISTER
+        + " "
+        + DEVON_PERSONA_BOUNDARY
+        + " Address Tee naturally when useful. Be direct, grounded, capable, and lightly charismatic. "
+        "Never trade accuracy, uncertainty, or approval boundaries for personality."
+    )
 
     # Knowledge & retrieval (Phase 3)
     # "mock" embeddings are deterministic and offline (clearly labeled);
