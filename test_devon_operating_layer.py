@@ -145,6 +145,15 @@ def test_claude_chatgpt_handoff_requires_exact_sources_and_output_contract():
     }
 
 
+def test_blank_requested_output_is_refused_not_warned():
+    base = _valid_handoff()
+    blank = HandoffEnvelope(**{**base.__dict__, "requested_output": ("   ",)})
+    issues = validate_handoff(blank)
+    assert any(
+        issue.field == "requested_output" and issue.severity == "error" for issue in issues
+    )
+
+
 def test_unresolved_handoff_conflict_stops_instead_of_crossing_models():
     base = _valid_handoff()
     blocked = HandoffEnvelope(
@@ -189,6 +198,36 @@ def test_cross_model_audit_is_independent_and_evidence_gated():
     assert not failed.accepted
     assert any("same surface" in reason for reason in failed.reasons)
     assert any("unresolved" in reason for reason in failed.reasons)
+
+
+def test_audit_severities_normalize_and_unknown_spellings_fail_closed():
+    messy_high = evaluate_audit(
+        producer=Surface.CODEX,
+        verifier=Surface.CLAUDE,
+        score=100,
+        findings=(
+            AuditFinding(severity="HIGH ", claim="x", evidence=("payload",), resolved=False),
+        ),
+        verification_evidence=("pytest: 1 passed",),
+        final_artifact_sha256=HASH_A,
+    )
+    assert not messy_high.accepted
+    assert any("unresolved" in reason for reason in messy_high.reasons)
+
+    unknown = evaluate_audit(
+        producer=Surface.CODEX,
+        verifier=Surface.CLAUDE,
+        score=100,
+        findings=(
+            AuditFinding(
+                severity="high-severity", claim="x", evidence=("payload",), resolved=False
+            ),
+        ),
+        verification_evidence=("pytest: 1 passed",),
+        final_artifact_sha256=HASH_A,
+    )
+    assert not unknown.accepted
+    assert any("unrecognised finding severity" in reason for reason in unknown.reasons)
 
 
 def test_artifact_return_stays_on_a_branch_and_requires_readback():

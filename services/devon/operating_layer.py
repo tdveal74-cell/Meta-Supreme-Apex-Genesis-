@@ -445,15 +445,22 @@ def validate_handoff(envelope: HandoffEnvelope) -> List[ContractIssue]:
         )
     for index, artifact in enumerate(envelope.artifacts):
         issues.extend(_artifact_issues(artifact, f"artifacts[{index}]"))
-    if not envelope.requested_output:
+    if not any(item.strip() for item in envelope.requested_output):
         issues.append(
             ContractIssue(
                 "requested_output",
-                "warning",
-                "The receiving surface has no explicit output contract.",
+                "error",
+                "The receiving surface needs an explicit output contract before the handoff can cross.",
             )
         )
     return issues
+
+
+# The only severities the audit gate recognises. A producer-specific spelling
+# is refused rather than silently ignored, because an unrecognised severity on
+# an unresolved finding would otherwise let the audit pass.
+KNOWN_SEVERITIES = frozenset({"critical", "high", "medium", "low", "info"})
+BLOCKING_SEVERITIES = frozenset({"critical", "high"})
 
 
 @dataclass(frozen=True)
@@ -547,10 +554,22 @@ def evaluate_audit(
         reasons.append("producer and verifier are the same surface")
     if score < QUALITY_THRESHOLD:
         reasons.append(f"score {score} is below {QUALITY_THRESHOLD}")
+    unknown = sorted({
+        finding.severity
+        for finding in findings
+        if finding.severity.strip().lower() not in KNOWN_SEVERITIES
+    })
+    if unknown:
+        reasons.append(
+            "unrecognised finding severity: "
+            + ", ".join(repr(value) for value in unknown)
+            + ". Known severities: "
+            + ", ".join(sorted(KNOWN_SEVERITIES))
+        )
     unresolved = [
         finding
         for finding in findings
-        if finding.severity.lower() in {"critical", "high"} and not finding.resolved
+        if finding.severity.strip().lower() in BLOCKING_SEVERITIES and not finding.resolved
     ]
     if unresolved:
         reasons.append(f"{len(unresolved)} unresolved critical or high finding(s) remain")
