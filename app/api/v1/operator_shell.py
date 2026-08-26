@@ -2,28 +2,42 @@
 
 This is the operator's own terminal, not DEVON's. DEVON remains
 execution-free and his gated command path (/operator/command) is
-unchanged. This endpoint hands the HUMAN holding the operator key a real
-PTY running bash on the API container: pipes, redirects, interactive
-programs, the lot. It is deliberately not gated per-command because the
-key holder is the same person the approval queue escalates to.
+unchanged. This endpoint hands a real PTY running bash on the API
+container to a human: pipes, redirects, interactive programs, the lot.
+
+Because a full shell is a serious capability, opening one needs TWO
+independent factors, not one:
+
+  1. a valid login JWT (the same access token the web app already holds
+     after sign-in), proving the caller is an authenticated user; and
+  2. the dedicated shell key (DEVON_SHELL_KEY), which is DISTINCT from the
+     operator key used by DEVON's gated command path.
+
+The socket also closes itself after an idle period with no input
+(DEVON_SHELL_IDLE_TIMEOUT_SECONDS), so a forgotten tab does not leave a
+live root shell open indefinitely.
 
 Protocol (all text frames):
-  client -> {"type": "hello", "key": "...", "cols": 120, "rows": 32}
-  server -> {"type": "ready", "shell": "/bin/bash", "cwd": "..."}
+  client -> {"type": "hello", "token": "<jwt>", "key": "<shell key>",
+             "cols": 120, "rows": 32}
+  server -> {"type": "ready", "shell": "/bin/bash", "cwd": "...",
+             "idle_timeout": 900}
   client -> {"type": "input", "data": "ls -la\n"}
   client -> {"type": "resize", "cols": 100, "rows": 40}
   server -> {"type": "output", "data": "..."}
   server -> {"type": "exit", "code": 0}       (shell process ended)
   server -> {"type": "error", "message": "..."} then close (auth failures)
 
-The socket closes with code 4401 on a bad key and 4400 on a malformed
-hello. The bash process group is killed when the socket goes away.
+Close codes: 4401 bad token or bad key, 4400 malformed hello, 4403 shell
+disabled (no DEVON_SHELL_KEY configured), 4408 idle timeout. The bash
+process group is killed when the socket goes away.
 """
 
 from __future__ import annotations
 
 import asyncio
 import fcntl
+import hmac
 import json
 import logging
 import os
@@ -37,7 +51,8 @@ from typing import Any, Dict
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.api.v1.operator import _bridge
-from services.operator.bridge import OperatorError
+from app.core.config import settings
+from app.security.jwt import decode_access_token
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +62,31 @@ _HELLO_TIMEOUT_SECONDS = 15.0
 _MAX_INPUT_CHARS = 16_384
 _MIN_DIM, _MAX_COLS, _MAX_ROWS = 2, 500, 300
 _KILL_GRACE_SECONDS = 2.0
+
+
+class _ShellAuthError(Exception):
+    """Raised when the two-factor gate refuses. Carries a close code."""
+
+    def __init__(self, message: str, code: int) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def _authorize_shell(hello: Dict[str, Any]) -> None:
+    """Require BOTH a valid login JWT and the dedicated shell key."""
+    shell_key = settings.DEVON_SHELL_KEY
+    if not _bridge.enabled:
+        raise _ShellAuthError("operator bridge is disabled", 4403)
+    if not shell_key:
+        raise _ShellAuthError("shell is not configured", 4403)
+
+    token = str(hello.get("token") or "")
+    if not token or decode_access_token(token) is None:
+        raise _ShellAuthError("sign in first: valid session required", 4401)
+
+    supplied = str(hello.get("key") or "")
+    if not hmac.compare_digest(shell_key, supplied):
+        raise _ShellAuthError("shell key does not match", 4401)
 
 
 def _clamp(value: Any, fallback: int, upper: int) -> int:
@@ -83,10 +123,10 @@ async def operator_shell(ws: WebSocket) -> None:
         return
 
     try:
-        _bridge.authenticate(hello.get("key"))
-    except OperatorError as exc:
+        _authorize_shell(hello)
+    except _ShellAuthError as exc:
         await ws.send_text(json.dumps({"type": "error", "message": str(exc)}))
-        await ws.close(code=4401)
+        await ws.close(code=exc.code)
         return
 
     cols = _clamp(hello.get("cols"), 100, _MAX_COLS)
@@ -128,8 +168,16 @@ async def operator_shell(ws: WebSocket) -> None:
             output_queue.put_nowait(b"")  # EOF sentinel
 
     loop.add_reader(master_fd, _on_pty_readable)
+    idle_timeout = max(30, int(settings.DEVON_SHELL_IDLE_TIMEOUT_SECONDS))
     await ws.send_text(
-        json.dumps({"type": "ready", "shell": shell, "cwd": str(_bridge.root)})
+        json.dumps(
+            {
+                "type": "ready",
+                "shell": shell,
+                "cwd": str(_bridge.root),
+                "idle_timeout": idle_timeout,
+            }
+        )
     )
 
     async def _pump_output() -> None:
@@ -147,7 +195,18 @@ async def operator_shell(ws: WebSocket) -> None:
 
     async def _pump_input() -> None:
         while True:
-            message = await ws.receive_text()
+            try:
+                message = await asyncio.wait_for(
+                    ws.receive_text(), timeout=idle_timeout
+                )
+            except asyncio.TimeoutError:
+                await ws.send_text(
+                    json.dumps(
+                        {"type": "error", "message": "closed after idle timeout"}
+                    )
+                )
+                await ws.close(code=4408)
+                return
             try:
                 parsed = json.loads(message)
             except json.JSONDecodeError:

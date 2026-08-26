@@ -15,7 +15,10 @@ import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { WS_BASE } from "@/lib/api-base";
 
-const KEY_SLOT = "devon-operator-key";
+// The shell key is its own credential, separate from the gated
+// terminal's operator key. The login token is the second factor.
+const SHELL_KEY_SLOT = "devon-shell-key";
+const TOKEN_SLOT = "devon-chat-token";
 
 type ShellState = "locked" | "connecting" | "live" | "closed" | "error";
 
@@ -25,14 +28,19 @@ export function RealShell() {
   const fitRef = useRef<FitAddon | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const [key, setKey] = useState("");
+  const [token, setToken] = useState("");
   const [state, setState] = useState<ShellState>("locked");
   const [note, setNote] = useState("");
 
-  // The terminal key is shared with the gated Operator Terminal.
+  // Remember the shell key on this device; read the login token that the
+  // DEVON chat / command center already stored at sign-in.
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(KEY_SLOT) || "";
-      if (saved) setKey(saved);
+      const savedKey = localStorage.getItem(SHELL_KEY_SLOT) || "";
+      if (savedKey) setKey(savedKey);
+      const savedToken =
+        localStorage.getItem(TOKEN_SLOT) || sessionStorage.getItem(TOKEN_SLOT) || "";
+      if (savedToken) setToken(savedToken);
     } catch {
       // Storage refusal only costs convenience.
     }
@@ -45,10 +53,15 @@ export function RealShell() {
 
   const connect = useCallback(() => {
     if (!key || state === "connecting" || state === "live") return;
+    if (!token) {
+      setState("error");
+      setNote("Sign in on the Command Center or Talk to DEVON first — the shell needs a valid session as well as the key.");
+      return;
+    }
     setState("connecting");
     setNote("");
     try {
-      localStorage.setItem(KEY_SLOT, key);
+      localStorage.setItem(SHELL_KEY_SLOT, key);
     } catch {
       // Fine — the key still works for this visit.
     }
@@ -84,6 +97,7 @@ export function RealShell() {
       socket.send(
         JSON.stringify({
           type: "hello",
+          token,
           key,
           cols: term.cols,
           rows: term.rows,
@@ -105,6 +119,9 @@ export function RealShell() {
         term.focus();
       } else if (frame.type === "exit") {
         setNote(`Shell exited (code ${frame.code}). Reconnect to start a new one.`);
+      } else if (frame.type === "error" && frame.message?.includes("idle")) {
+        setState("closed");
+        setNote("Shell closed after inactivity. Reconnect to start a new one.");
       } else if (frame.type === "error") {
         setState("error");
         setNote(frame.message || "The shell refused the connection.");
@@ -161,7 +178,7 @@ export function RealShell() {
             type="password"
             value={key}
             onChange={(event) => setKey(event.target.value)}
-            placeholder="Operator key"
+            placeholder="Shell key"
             autoComplete="off"
             className="w-44 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 font-mono text-xs text-white outline-none transition placeholder:text-white/25 focus:border-amber-300/40"
           />
@@ -194,14 +211,15 @@ export function RealShell() {
               {note ||
                 (state === "connecting"
                   ? "Opening the PTY…"
-                  : "Enter your operator key and Connect. This is a full bash shell on the DEVON API container — pipes, redirects, everything.")}
+                  : "Sign in first, then enter your shell key and Connect. This is a full bash shell on the DEVON API container — pipes, redirects, everything.")}
             </p>
           </div>
         )}
       </div>
 
       <p className="border-t border-white/10 bg-black/25 px-4 py-2.5 text-[11px] leading-4 text-white/30">
-        Full shell, no per-command gate: the operator key IS the authority here. The
+        Two-factor: a valid session AND the shell key (separate from the operator
+        key). No per-command gate once in, and it closes after 15 min idle. The
         container filesystem is ephemeral — redeploys reset anything outside the
         database. DEVON's own execution stays approval-gated on the other terminal.
       </p>
