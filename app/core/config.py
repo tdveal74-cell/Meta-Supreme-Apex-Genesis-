@@ -95,6 +95,13 @@ class Settings(BaseSettings):
     AI_MAX_TOKENS_PER_AGENT: int = 1200
     AI_MAX_TOKENS_SYNTHESIS: int = 2000
 
+    # DEVON remains the approval and orchestration authority. EditForge is the
+    # authenticated media execution boundary. The token is never returned by
+    # status routes or written into receipts.
+    EDITFORGE_URL: str = "https://editforge.vercel.app"
+    EDITFORGE_TOKEN: str | None = None
+    EDITFORGE_TIMEOUT_SECONDS: float = 60.0
+
     # Council execution
     COUNCIL_PARALLEL_EXECUTION: bool = True  # parallel default (Phase 4); set false for sequential
     COUNCIL_MAX_CONCURRENCY: int = 3  # provider calls in flight (rate-limit friendly)

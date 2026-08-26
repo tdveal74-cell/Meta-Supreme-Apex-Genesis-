@@ -40,11 +40,15 @@ services:
       PASSKEY_RP_ID: ${PASSKEY_RP_ID:-localhost}
       PASSKEY_RP_NAME: ${PASSKEY_RP_NAME:-DEVON Command Center}
       PASSKEY_ORIGIN: ${PASSKEY_ORIGIN:-http://localhost:3000}
+      EDITFORGE_URL: ${EDITFORGE_URL:-http://host.docker.internal:3100}
+      EDITFORGE_TOKEN: ${EDITFORGE_TOKEN:-}
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       # Mount the same canonical source tree the production image copies.
       - ../../app:/app/app

@@ -125,6 +125,14 @@ passes.
 The planner rejects absolute paths, parent traversal, invalid hashes, unsafe ids,
 and any base other than `main`. Its response states `executed: false`.
 
+### Governed EditForge effect lane added 2026-08-26
+
+The operating-layer routes above remain plan and validation surfaces. Actual media
+effects now use the separate `/api/v1/devon/editforge/*` module documented in
+`SYS_OPS_devon-editforge-execution_v1_2026-08-26.md`. That module goes through the
+existing shared approval authority and keeps DEVON as the sole orchestrator; it does
+not weaken the plan-only guarantees of this module.
+
 ## Source of truth and conflict rules
 
 1. Tee's explicit current ruling outranks every model and artifact.
