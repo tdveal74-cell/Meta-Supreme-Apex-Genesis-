@@ -26,6 +26,7 @@ from app.models.agent import Agent, AgentRun
 from app.models.conversation import Conversation, Message
 from app.models.project import Project
 from app.security.deps import CurrentUser
+from app.services.devon_halt import get_halt_registry
 from app.services.intelligence import run_council_for_message
 from services.agents.registry import AGENT_REGISTRY
 from services.intelligence import CouncilExecutionError, SynthesisResult
@@ -496,3 +497,55 @@ async def list_agent_runs(
         )
         for run, slug in result.all()
     ]
+
+
+# ---------------------------------------------------------------------------
+# "DEVON, stop."
+# ---------------------------------------------------------------------------
+
+class HaltRequest(BaseModel):
+    turn_id: str = Field(..., min_length=1, max_length=200)
+    reason: Optional[str] = Field(None, max_length=500)
+
+
+class HaltResponse(BaseModel):
+    turn_id: str
+    halted: bool
+    detail: str
+
+
+@router.post("/{conversation_id}/halt", response_model=HaltResponse)
+async def halt_turn(
+    conversation_id: str,
+    payload: HaltRequest,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> HaltResponse:
+    """Stop a running turn.
+
+    Presence authority lets DEVON act the moment Tee speaks, so there has to be
+    a way to say stop that does not mean unpublishing a workflow. This is it.
+
+    What it promises is narrow and deliberate: no FURTHER effect runs in that
+    turn. It cannot undo an effect that already completed, and it does not
+    pretend to. Ownership is checked first, so a halt is not a way to probe
+    which turn ids exist.
+
+    A turn that already finished returns halted=False rather than an error.
+    Saying stop half a second late is a race, not a failure, and reporting it
+    honestly is better than a 404 that reads like something went wrong.
+    """
+    await _get_owned_conversation(conversation_id, current_user.id, db)
+
+    stopped = get_halt_registry().halt(
+        payload.turn_id, (payload.reason or "").strip() or "Tee said stop"
+    )
+    return HaltResponse(
+        turn_id=payload.turn_id,
+        halted=stopped,
+        detail=(
+            "no further effect will run in this turn"
+            if stopped
+            else "that turn is not running; nothing to stop"
+        ),
+    )
