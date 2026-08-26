@@ -82,9 +82,11 @@ docs-only commit produced four builds that could not have differed from their
 predecessors. The cap was then reached while shipping almost nothing, and it
 blocked the production deploys that mattered.
 
-**The fix, already shipped:** each project root carries a `vercel.json` with an
-`ignoreCommand`. Vercel runs it before building; **exit 0 skips, any other exit
-builds**.
+**The mitigation, already shipped:** each project root carries a `vercel.json`
+with an `ignoreCommand`. Vercel runs it before building; **exit 0 skips, any
+other exit builds**. Call it a mitigation rather than a fix: it reliably stops
+the build, and whether it stops the deployment being counted is unproven. See
+"What the ignoreCommand does and does not save" below.
 
 ```
 apps/web      git diff --quiet HEAD^ HEAD -- ':/apps/web' ':/packages/ui' ':/pnpm-lock.yaml' ':/pnpm-workspace.yaml'
@@ -100,24 +102,58 @@ silent. `devon-soul` needs no widening because it vendors everything it uses.
 **If you change either rule, prove it cannot silently skip a real change.** A
 false skip ships stale code with no failure anywhere.
 
+### What the ignoreCommand does and does not save
+
+It saves the build: no build minutes, no build time, and no risk of shipping a
+rebuilt artifact nobody asked for.
+
+**It probably does not save the deployment count.** The cap's error code is
+`api-deployments-free-per-day`, which counts deployments *created*, and an
+ignored build is still a created deployment record. On 2026-08-26 four ignored
+deployments were created between 11:49 and 12:07, and the next deployment at
+12:15 was refused outright. That sequence is consistent with ignored
+deployments counting.
+
+This is read off behaviour rather than off Vercel's accounting, so treat it as
+the working assumption and not a settled fact. The safe posture either way:
+**do not describe the ignoreCommand as making commits free.** It makes them
+cheap in build time. Whether it makes them free against the daily count is
+unproven, and the optimistic reading is the one that burned this estate.
+
 ### Reading a skipped build correctly
 
 An ignored build is recorded as **`CANCELED`**, and the Vercel bot comments
 "Skipped Deployments / Ignored" with the deployment ids. That is the rule
-working, not a failure and not the cap. Do not report it as a problem and do
-not try to force the build.
+working rather than a failure, so do not report it as a problem and do not try
+to force the build.
 
-Distinguish the three by evidence, never by assumption:
+A refusal looks completely different and names itself:
+
+```
+Deployment failed for project <name> with the following error:
+Resource is limited - try again in 24 hours
+(more than 100, code: "api-deployments-free-per-day").
+```
+
+Distinguish them by evidence, never by assumption:
 
 | Appearance | Means |
 |---|---|
 | `CANCELED` plus an "Ignored" bot comment | The `ignoreCommand` skipped it. Correct. |
-| No deployment created at all for a qualifying commit | Possible cap. Check whether any build has succeeded recently. |
-| A build that ran and reached `READY` | Capacity exists. The cap is not currently biting. |
+| A bot comment naming `api-deployments-free-per-day` | The cap. Nothing will deploy until the window rolls. |
+| A build that ran and reached `READY` | There was headroom **at that moment**. See below. |
+
+**A build succeeding does not mean the cap has reset.** The window is rolling,
+so a slot ageing out lets one or two builds through while the account is still
+over its daily count. On 2026-08-26 a promotion built successfully at 11:10 and
+was read as proof the quota had reset; a deployment was refused at 12:15. One
+success is a point, not a trend, and it says nothing about the next request.
 
 There is no quota-remaining endpoint in the available tooling. Read behaviour,
-say you are reading behaviour, and point at the dashboard Usage page for the
-actual number rather than inventing one.
+say plainly that you are reading behaviour, and point at the dashboard Usage
+page for the actual number rather than inferring one. If asked whether the
+quota has reset, the only honest answers are a refusal seen (no) or a
+dashboard reading (yes); a recent success is neither.
 
 ## Promotion costs a build
 
