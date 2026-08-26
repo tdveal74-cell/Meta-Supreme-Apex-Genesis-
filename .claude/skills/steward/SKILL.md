@@ -67,9 +67,14 @@ Check these before inventing new theories:
 - **Banned dash in docs**: `test_devon_integrity.py` bans em and en dashes in
   `services/devon/*.py` and `docs/devon/*.md`. Restructure sentences; do not
   swap punctuation.
-- **Vercel preview failed / CodeRabbit skipped**: cosmetic. The gate is the
-  CI workflow, not third-party commit statuses. Vercel free-plan quota is
-  100 deploys/day.
+- **Vercel preview failed / CodeRabbit skipped**: cosmetic *for merging*. The
+  gate is the CI workflow, not third-party commit statuses. A skipped Vercel
+  build recorded as `CANCELED` with an "Ignored" bot comment is the per project
+  `ignoreCommand` working, not a failure.
+  Cosmetic for merging is not cosmetic for shipping: a green preview is not
+  production. See the `deploy-readback` skill before claiming any surface is
+  live. On 2026-08-26 preview statuses were reported as production while all
+  three surfaces sat stale.
 
 ## Governance invariants (never relax to get green)
 
