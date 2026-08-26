@@ -38,7 +38,8 @@ jobs:
             test_workflow_engine.py \
             test_devon_hermes_expansion.py \
             test_devon_hermes_durable_followon.py \
-            test_devon_learning_loop.py
+            test_devon_learning_loop.py \
+            test_devon_operating_layer.py
 
   container:
     name: Railway container contract

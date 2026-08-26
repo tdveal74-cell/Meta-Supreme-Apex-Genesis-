@@ -7,7 +7,7 @@ import { OperatorTerminal } from "@/components/terminal/OperatorTerminal";
 import { RealShell } from "@/components/terminal/RealShell";
 import { API_BASE } from "@/lib/api-base";
 
-type CheckState = "checking" | "online" | "offline" | "locked" | "scheduled";
+type CheckState = "checking" | "online" | "offline" | "locked" | "scheduled" | "ready";
 type ExecMode = "gated" | "shell";
 
 type IntelligenceStatus = {
@@ -22,9 +22,16 @@ type OperatorStatus = {
   root?: string;
 };
 
+type OperatingLayerStatus = {
+  canonical_orchestrator?: string;
+  second_orchestrator_created?: boolean;
+  policy_version?: string;
+  surfaces?: Array<{ surface?: string; contract_ready?: boolean; live_verified?: boolean }>;
+};
+
 const AREAS = [
-  ["TQO", "Quiet Operator"],
-  ["TSWS", "Shadow We Share"],
+  ["TQO", "The Quiet Operator"],
+  ["TSWS", "The Shadow We Share"],
   ["NCO", "NCO Forge"],
   ["ACX", "Ascension Caudex"],
   ["HEALTH", "Health"],
@@ -44,14 +51,14 @@ const ORGANS = [
 function dotClass(state: CheckState) {
   if (state === "online") return "bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,.7)]";
   if (state === "checking") return "bg-amber-300 animate-pulse";
-  if (state === "locked" || state === "scheduled") return "bg-sky-300";
+  if (state === "locked" || state === "scheduled" || state === "ready") return "bg-sky-300";
   return "bg-red-400";
 }
 
 function labelClass(state: CheckState) {
   if (state === "online") return "text-emerald-200";
   if (state === "checking") return "text-amber-200";
-  if (state === "locked" || state === "scheduled") return "text-sky-200";
+  if (state === "locked" || state === "scheduled" || state === "ready") return "text-sky-200";
   return "text-red-200";
 }
 
@@ -87,6 +94,8 @@ export function UnifiedCommandCenter() {
   const [operator, setOperator] = useState<OperatorStatus | null>(null);
   const [mindState, setMindState] = useState<CheckState>("checking");
   const [mind, setMind] = useState<IntelligenceStatus | null>(null);
+  const [layerState, setLayerState] = useState<CheckState>("checking");
+  const [operatingLayer, setOperatingLayer] = useState<OperatingLayerStatus | null>(null);
   const [lastProbe, setLastProbe] = useState<Date | null>(null);
   const [execMode, setExecMode] = useState<ExecMode>("gated");
 
@@ -111,6 +120,7 @@ export function UnifiedCommandCenter() {
   const refreshStatus = useCallback(async () => {
     setApiState("checking");
     setOperatorState("checking");
+    setLayerState("checking");
     try {
       const response = await fetch(`${API_BASE}/health`, { cache: "no-store" });
       setApiState(response.ok ? "online" : "offline");
@@ -127,6 +137,21 @@ export function UnifiedCommandCenter() {
     } catch {
       setOperator(null);
       setOperatorState("offline");
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/devon/operating-layer/status`, { cache: "no-store" });
+      if (!response.ok) throw new Error("operating layer status unavailable");
+      const data = (await response.json()) as OperatingLayerStatus;
+      setOperatingLayer(data);
+      setLayerState(
+        data.canonical_orchestrator === "DEVON" && data.second_orchestrator_created === false
+          ? "ready"
+          : "offline",
+      );
+    } catch {
+      setOperatingLayer(null);
+      setLayerState("offline");
     }
 
     let token = "";
@@ -240,7 +265,7 @@ export function UnifiedCommandCenter() {
           </div>
         </header>
 
-        <section className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Estate status and configured organs">
+        <section className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6" aria-label="Estate status and configured organs">
           <StatusCard
             label="DEVON API"
             state={apiState}
@@ -254,7 +279,17 @@ export function UnifiedCommandCenter() {
             value={operatorState === "online" ? "READY" : operatorState.toUpperCase()}
             detail={operator?.root ? `Root ${operator.root}` : "Gated command execution"}
           />
-          <StatusCard label="Heartbeat" state="scheduled" value="6H SCHEDULE" detail="Build 13 pulse configured; live last-beat telemetry is not exposed here" />
+          <StatusCard
+            label="ChatGPT layer"
+            state={layerState}
+            value={layerState === "ready" ? "ROUTING READY" : layerState.toUpperCase()}
+            detail={
+              operatingLayer?.surfaces
+                ? `${operatingLayer.surfaces.filter((surface) => surface.surface !== "devon" && surface.contract_ready).length} external surfaces contract ready. Live state stays unclaimed`
+                : "DEVON policy probe failed"
+            }
+          />
+          <StatusCard label="Heartbeat" state="scheduled" value="6H SCHEDULE" detail="Build 13 pulse configured. Live last-beat telemetry is not exposed here" />
           <StatusCard label="Write authority" state="locked" value="TEE" detail="Writes stop at human ruling" />
         </section>
 
