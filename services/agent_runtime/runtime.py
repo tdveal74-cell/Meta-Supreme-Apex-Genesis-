@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import secrets
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from services.agent_runtime.contracts import (
     AgentTask,
@@ -28,9 +28,38 @@ from services.agent_runtime.store import AgentTaskStore, InMemoryAgentTaskStore
 from services.agent_runtime.tools import ToolRegistry
 from services.devon.approval import ApprovalQueue, ApprovalState
 
+if TYPE_CHECKING:
+    from services.intelligence.soul import SoulLayer
+
 
 class AgentRuntimeError(ValueError):
     """A task cannot proceed without violating the runtime contract."""
+
+
+async def soul_recall_payload(soul: "SoulLayer", goal: str) -> Dict[str, Any]:
+    """Recall both souls into one inert planner payload.
+
+    The CONTEXT-NOT-COMMAND framing and the Tee-before-DEVON ordering come
+    from SoulRecall itself and survive here untouched: `context` is
+    `as_context()` verbatim and `records` keeps the recall's order. A
+    provider failure degrades to the payload naming the failure instead of
+    raising — a Pinecone outage must leave planning exactly as it was
+    without recall — and a partial recall keeps its `errors`, so an outage
+    can never be mistaken for both souls answering empty.
+    """
+    try:
+        recall = await soul.recall(goal)
+    except Exception as exc:
+        return {
+            "context": "",
+            "records": [],
+            "errors": [f"soul recall unavailable: {exc}"],
+        }
+    return {
+        "context": recall.as_context(),
+        "records": recall.to_dicts(),
+        "errors": list(recall.errors),
+    }
 
 
 class AgentRuntime:
@@ -43,6 +72,11 @@ class AgentRuntime:
     When an optional EffectRecorder is injected by the application layer,
     WRITE / HIGH_IMPACT tool calls write a durable intent before execution and a
     receipt afterward. Without a recorder the runtime behaves exactly as before.
+
+    When an optional SoulLayer is injected, `create_task` recalls both souls
+    at the planning seam — the plan is frozen at creation, so this is the one
+    moment recall can inform it — and hands the planner an inert
+    `soul_recall` payload. Without a soul the context is exactly as before.
     """
 
     def __init__(
@@ -55,6 +89,7 @@ class AgentRuntime:
         learning: Optional[LearningStore] = None,
         effect_recorder: Optional[EffectRecorder] = None,
         effect_idempotency_key: str = "",
+        soul: Optional["SoulLayer"] = None,
     ) -> None:
         self.planner = planner
         self.tools = tools
@@ -63,6 +98,7 @@ class AgentRuntime:
         self.learning = learning or InMemoryLearningStore()
         self.effect_recorder = effect_recorder
         self.effect_idempotency_key = (effect_idempotency_key or "").strip()
+        self.soul = soul
 
     async def create_task(
         self,
@@ -77,6 +113,10 @@ class AgentRuntime:
         context_for = getattr(self.learning, "context_for", None)
         if callable(context_for):
             merged_context["devon_learning"] = context_for(clean_goal)
+        if self.soul is not None:
+            merged_context["soul_recall"] = await soul_recall_payload(
+                self.soul, clean_goal
+            )
         plan = await self.planner.plan(clean_goal, merged_context, self.tools)
         if not plan.steps:
             raise AgentRuntimeError("planner produced an empty plan")
