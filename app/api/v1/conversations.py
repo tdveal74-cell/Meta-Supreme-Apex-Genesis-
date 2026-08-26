@@ -9,6 +9,7 @@ live Server-Sent Events.
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import secrets
@@ -658,6 +659,8 @@ async def act_stream(
                 Observation(tool=tool, outcome=outcome)
                 for tool, outcome in confirmed.observations
             ],
+            spent=dict(confirmed.spent),
+            steps_used=confirmed.steps_used,
         )
 
     if not turn_id:
@@ -684,6 +687,30 @@ async def act_stream(
         )
         for row in reversed(history_rows)
     ]
+
+    # What Tee said is written down BEFORE the stream opens, in the request
+    # scope, where nothing can cancel it. Leaving both rows to the `finally`
+    # meant a client disconnect took the whole exchange with it: closing the tab
+    # cancels the response generator, `asyncio.CancelledError` is a
+    # BaseException that the stream's `except Exception` never sees, and even a
+    # shielded write is cancelled with the surrounding anyio scope. Verified,
+    # not assumed -- shielding alone was tried and the transcript still came
+    # back empty.
+    #
+    # What this does NOT claim: the assistant row, written when the turn ends,
+    # is still best-effort on a disconnect. The durable record of any EFFECT is
+    # not the transcript at all -- it is the approval row, committed to Postgres
+    # by `_authorise` before the handler is ever called. So a lost assistant row
+    # costs the conversational history of that turn, never the audit trail.
+    db.add(
+        Message(
+            conversation_id=conversation_pk,
+            role="user",
+            content=payload.content,
+            meta={"turn_id": turn_id},
+        )
+    )
+    await db.commit()
 
     # Everything the turn needs is in hand. Give the connection back before the
     # stream opens; see the note above.
@@ -742,8 +769,15 @@ async def act_stream(
                             for obs in (event.data.get("observations") or [])
                         ),
                         message=resume_message,
+                        spent=tuple(
+                            (str(k), int(v))
+                            for k, v in (event.data.get("spent") or {}).items()
+                        ),
+                        steps_used=int(event.data.get("steps_used") or 0),
                     )
                     data.pop("observations", None)
+                    data.pop("spent", None)
+                    data.pop("steps_used", None)
                     data["confirm"] = offer.handle
                     data["expires_at"] = offer.expires_at.isoformat()
                 yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
@@ -759,14 +793,34 @@ async def act_stream(
             # Always release the brake, or the registry grows one entry per turn
             # for the life of the process.
             registry.close(turn_id)
-            await _persist_turn(
-                conversation_pk=conversation_pk,
-                turn_id=turn_id,
-                said=resume_message,
-                answered=answered,
-                ending=ending,
-                effects=effects,
+
+            # Shielded, because a client disconnect is the one ending that could
+            # lose the record of effects that already ran. Closing the tab
+            # cancels this generator, and `asyncio.CancelledError` is a
+            # BaseException, so the `except Exception` above never sees it and a
+            # plain `await` here is cancelled before the write lands. Reproduced
+            # on 2026-08-26 against the real app: an APPROVED approval row, the
+            # adapter called, and zero transcript rows.
+            #
+            # Shielding alone is not enough -- the outer await still raises -- so
+            # on cancellation we wait for the shielded write to finish before
+            # re-raising. The turn is over either way; the only question is
+            # whether it left a record, and it must.
+            saving = asyncio.ensure_future(
+                _persist_turn(
+                    conversation_pk=conversation_pk,
+                    turn_id=turn_id,
+                    answered=answered,
+                    ending=ending,
+                    effects=effects,
+                )
             )
+            try:
+                await asyncio.shield(saving)
+            except asyncio.CancelledError:
+                with contextlib.suppress(BaseException):
+                    await saving
+                raise
 
     return StreamingResponse(
         event_stream(),
@@ -817,12 +871,14 @@ async def _persist_turn(
     *,
     conversation_pk: Any,
     turn_id: str,
-    said: str,
     answered: str,
     ending: str,
     effects: List[str],
 ) -> None:
-    """Write the exchange down, however it ended.
+    """Write down how the turn ended, however it ended.
+
+    The user's own message is already stored by the endpoint before streaming
+    starts, so this writes the assistant side only.
 
     Persisting only on `answer` was the shape this replaced, and it erased the
     turns that matter most: a halted turn, a turn that stopped on a confirmation,
@@ -842,14 +898,6 @@ async def _persist_turn(
 
     try:
         async with AsyncSessionLocal() as session:
-            session.add(
-                Message(
-                    conversation_id=conversation_pk,
-                    role="user",
-                    content=said,
-                    meta={"turn_id": turn_id},
-                )
-            )
             session.add(
                 Message(
                     conversation_id=conversation_pk,

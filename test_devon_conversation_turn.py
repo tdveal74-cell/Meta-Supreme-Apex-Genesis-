@@ -282,6 +282,41 @@ async def test_a_yes_cannot_drift_onto_different_arguments() -> None:
 
 
 @pytest.mark.asyncio
+async def test_the_receipt_names_every_field_whatever_the_model_puts_first() -> None:
+    """The model chooses argument order; it must not choose what the row omits.
+
+    The first cut quoted `repr(args)` and cut at a fixed length, so a
+    github.write_file whose `content` came first produced a row that never named
+    the repository, the path, or the branch. Nothing unsafe ran, because the
+    binding covers the full arguments either way, but a receipt that omits the
+    target is exactly the failure this layer exists to prevent.
+    """
+    spec, ran = recorder("github.write_file", ToolRisk.WRITE, reversible=True)
+    ex, queue = executor(spec)
+    args = {
+        "content": "X" * 900,
+        "repository": "tee/private-estate",
+        "path": "deploy/secrets.yaml",
+        "branch": "main",
+    }
+
+    out = await ex.run_step("github.write_file", args, caller=TEE, halt=HaltSignal())
+
+    row = queue.get(out.approval_request_id).what_happens
+    for field in ("repository", "private-estate", "path", "secrets.yaml", "branch", "main"):
+        assert field in row, f"the receipt does not say {field}"
+    # The long value is bounded rather than dropping its neighbours.
+    assert "X" * 900 not in row
+    assert "(+" in row and "chars)" in row
+    # And the binding still covers the FULL arguments, untruncated.
+    assert approval_marker(
+        approval_binding(
+            task_id=TURN, step_id="STEP-01", tool_name="github.write_file", arguments=args
+        )
+    ) in row
+
+
+@pytest.mark.asyncio
 async def test_a_yes_cannot_be_replayed_into_a_later_turn() -> None:
     spec, ran = recorder("soul.commit", ToolRisk.WRITE, reversible=True)
     args = {"claim": "x"}

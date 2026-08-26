@@ -119,6 +119,41 @@ def test_unnamed_irreversible_high_impact_still_confirms() -> None:
     assert decide(unlisted, TEE) is PresenceDecision.CONFIRM
 
 
+def test_an_irreversible_write_confirms_even_without_high_impact() -> None:
+    """The hole a second adversarial pass found, reproduced over HTTP first.
+
+    The rule used to read `HIGH_IMPACT and not reversible`, under a comment
+    saying irreversibility is the property that matters. The extra clause
+    excluded every WRITE that declares itself irreversible, and two of DEVON's
+    real tools are exactly that shape, so he could open a pull request on Tee's
+    repository having asked nobody, while the module docstring, the turn's
+    system prompt and the published spec all promised otherwise.
+    """
+    irreversible_write = spec("github.create_pull_request", ToolRisk.WRITE, reversible=False)
+    assert irreversible_write.name not in ALWAYS_CONFIRM_TOOLS
+    assert irreversible_write.risk is not ToolRisk.HIGH_IMPACT
+    assert decide(irreversible_write, TEE) is PresenceDecision.CONFIRM
+
+
+def test_every_registered_irreversible_tool_asks_a_present_human() -> None:
+    """Stated against the real registry, not a hand-built spec.
+
+    The parametrised tests above build their own ToolSpec, which is how the
+    hole survived: they proved `decide` reads the flags and proved nothing about
+    the tools DEVON actually holds.
+    """
+    registry = _live_registry()
+    escaped = [
+        t["name"]
+        for t in registry.describe()
+        if t["risk"] != "read"
+        and t["risk"] != "blocked"
+        and not t["reversible"]
+        and decide(registry.require(t["name"]), TEE) is not PresenceDecision.CONFIRM
+    ]
+    assert not escaped, f"irreversible and yet runs without asking: {escaped}"
+
+
 def test_the_confirm_list_stays_short() -> None:
     """Every name here is friction Tee feels on every turn. Growth needs a reason."""
     assert len(ALWAYS_CONFIRM_TOOLS) <= 8

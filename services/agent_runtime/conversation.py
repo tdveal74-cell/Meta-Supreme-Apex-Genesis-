@@ -61,10 +61,25 @@ from services.devon.approval import ApprovalQueue
 
 CONFIRM_BINDING_PREFIX = "DEVON-PRESENCE-CONFIRM:"
 
-MAX_ARGUMENT_DIGEST = 600
+MAX_ARGUMENT_DIGEST = 1200
 """How much of the arguments the approval row quotes. The row is a receipt a
 human reads, not a payload store, and the binding -- which is computed over the
 FULL arguments -- is what the capability boundary verifies."""
+
+MAX_ARGUMENT_VALUE_DIGEST = 120
+"""How much of any ONE argument value the row quotes.
+
+The first cut of this quoted `repr(args)` and cut the whole string at a fixed
+length. Argument order is the model's, preserved end to end from its own JSON,
+so a long first value pushed every later key past the cut: a `github.write_file`
+with 700 characters of `content` first produced a row that never said which
+repository, path, or branch it wrote to. The binding still covered the full
+arguments, so nothing unsafe ran, but the receipt a human reads afterwards
+described the wrong thing by omission -- and a receipt that omits the target is
+the failure this whole layer exists to prevent.
+
+Per-value truncation with sorted keys fixes it: every key name survives, every
+value is bounded, and the model cannot choose what gets dropped."""
 
 
 def confirm_binding(
@@ -85,6 +100,32 @@ def confirm_binding(
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _argument_digest(args: Dict[str, Any]) -> str:
+    """A row a human can act on, whatever the model put in the arguments.
+
+    Keys sorted so the order is ours and not the model's, each value bounded
+    separately so no single long value can crowd the others out, and the key
+    names listed in full if the whole thing still has to be cut. The reader
+    always learns WHICH fields were involved even when a value is elided.
+    """
+    if not args:
+        return "{}"
+
+    rendered = []
+    for key in sorted(args, key=str):
+        text = repr(args[key])
+        if len(text) > MAX_ARGUMENT_VALUE_DIGEST:
+            dropped = len(text) - MAX_ARGUMENT_VALUE_DIGEST
+            text = f"{text[:MAX_ARGUMENT_VALUE_DIGEST]}... (+{dropped} chars)"
+        rendered.append(f"{key!r}: {text}")
+
+    digest = "{" + ", ".join(rendered) + "}"
+    if len(digest) <= MAX_ARGUMENT_DIGEST:
+        return digest
+    names = ", ".join(repr(key) for key in sorted(args, key=str))
+    return f"{digest[:MAX_ARGUMENT_DIGEST]}... (truncated; all keys: {names})"
 
 
 @dataclass(frozen=True)
@@ -309,9 +350,7 @@ class PresenceExecutor:
             tool_name=spec.name,
             arguments=args,
         )
-        digest = repr(args)
-        if len(digest) > MAX_ARGUMENT_DIGEST:
-            digest = digest[:MAX_ARGUMENT_DIGEST] + "... (truncated)"
+        digest = _argument_digest(args)
         who = self.actor or "Tee"
 
         try:

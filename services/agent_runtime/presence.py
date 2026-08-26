@@ -169,11 +169,28 @@ def decide(
     if spec.name in confirm_set:
         return PresenceDecision.CONFIRM
 
-    # High impact that cannot be walked back earns a question even from a present
+    # Anything that cannot be walked back earns a question even from a present
     # human, without needing to be named above: "irreversible" is the property
     # that matters, and an adapter declaring it should not also have to remember
     # to add itself to a list.
-    if spec.risk is ToolRisk.HIGH_IMPACT and not spec.reversible:
+    #
+    # This deliberately does NOT also require HIGH_IMPACT, and that is a fix
+    # rather than a preference. It used to read
+    # `if spec.risk is ToolRisk.HIGH_IMPACT and not spec.reversible`, under this
+    # same comment about irreversibility being the property that matters, and the
+    # extra clause quietly excluded every WRITE that declares itself
+    # irreversible. `github.create_branch` and `github.create_pull_request` are
+    # both `risk=WRITE, reversible=False`, so both fell through to RUN: DEVON
+    # could open a pull request on Tee's repository without ever asking, while
+    # the module docstring, the turn's system prompt, and the published spec all
+    # promised that an irreversible action still stops. Reproduced over HTTP on
+    # 2026-08-26 before the fix.
+    #
+    # Honouring the declaration is the safe direction. A tool that finds this too
+    # strict should declare itself reversible on purpose, in its adapter, where
+    # someone has to think about it -- not collect silence from a risk-class
+    # clause nobody meant as a permission.
+    if not spec.reversible:
         return PresenceDecision.CONFIRM
 
     # A reversible write with a human present. This is the friction that goes:

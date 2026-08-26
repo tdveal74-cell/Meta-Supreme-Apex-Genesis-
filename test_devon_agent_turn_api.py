@@ -450,6 +450,40 @@ async def test_a_whole_exchange_end_to_end(client, auth_headers, scripted):
     assert stopped_to_ask["metadata"]["answered"] is False
 
 
+async def test_what_tee_said_is_stored_before_the_turn_can_fail(
+    client, auth_headers, scripted
+):
+    """The user's message is written in the request scope, not the `finally`.
+
+    Leaving both rows to the end meant a client disconnect took the whole
+    exchange with it: closing the tab cancels the response generator,
+    `CancelledError` is a BaseException the stream's `except Exception` never
+    sees, and even a shielded write dies with the surrounding anyio scope. That
+    was verified, not assumed -- shielding alone was tried and the transcript
+    still came back empty.
+
+    So the half that can be made certain is made certain. Here the provider
+    fails outright, which is the cheapest way to reach a turn that ends badly,
+    and Tee's message is on the record regardless.
+    """
+    scripted("not json at all, the provider is confused")
+    conversation_id = await new_conversation(client, auth_headers)
+
+    events = events_of(
+        await act(client, auth_headers, conversation_id, content="do the thing")
+    )
+    assert events[-1]["type"] == "error"
+
+    detail = await client.get(
+        f"/api/v1/conversations/{conversation_id}", headers=auth_headers
+    )
+    messages = detail.json()["messages"]
+    said = [m for m in messages if m["role"] == "user"]
+    assert [m["content"] for m in said] == ["do the thing"]
+    # And it is stored exactly once, not duplicated by the ending write.
+    assert len(said) == 1
+
+
 # ---------------------------------------------------------------------------
 # Presence is the transport's word, and the brake is reachable
 # ---------------------------------------------------------------------------

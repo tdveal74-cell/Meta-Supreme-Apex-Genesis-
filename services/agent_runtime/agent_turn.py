@@ -148,6 +148,15 @@ class ResumedStep:
     tool: str
     arguments: Dict[str, Any] = field(default_factory=dict)
     observations: List[Observation] = field(default_factory=list)
+    spent: Dict[str, int] = field(default_factory=dict)
+    """What the per-turn tool budget had already consumed before the question.
+
+    Without this the budget resets on resume and is not a per-turn budget at
+    all: consult, propose something irreversible, say yes, consult again. Two
+    panels under one turn id, and nothing in the stream showing it."""
+    steps_used: int = 0
+    """Tool calls already made this turn, so resuming does not grant a fresh
+    allowance on top of the one already spent."""
 
 
 class AgentTurn:
@@ -236,7 +245,8 @@ class AgentTurn:
             return
 
         observations: List[Observation] = list(resume.observations) if resume else []
-        spent: Dict[str, int] = {}
+        spent: Dict[str, int] = dict(resume.spent) if resume else {}
+        steps_used = resume.steps_used if resume else 0
         system = self._system(caller)
 
         yield TurnEvent("turn_started", {"turn_id": self.executor.turn_id})
@@ -273,13 +283,16 @@ class AgentTurn:
                 )
                 return
 
-            events, stop_here = self._absorb(outcome, observations)
+            # The confirmed call is a step like any other, and counts like one.
+            steps_used += 1
+            events, stop_here = self._absorb(outcome, observations, spent, steps_used)
             for event in events:
                 yield event
             if stop_here:
                 return
 
-        for _step in range(self.max_steps):
+        remaining = max(0, self.max_steps - steps_used)
+        for _step in range(remaining):
             if halt.halted:
                 yield TurnEvent("halted", {"reason": halt.reason})
                 return
@@ -336,6 +349,7 @@ class AgentTurn:
                     continue
                 spent[tool_name] = used + 1
 
+            steps_used += 1
             yield TurnEvent(
                 "tool_started",
                 {"tool": tool_name, "why": str(reply.get("why") or "").strip()},
@@ -361,7 +375,7 @@ class AgentTurn:
                 yield TurnEvent("tool_unknown", {"tool": tool_name})
                 continue
 
-            events, stop_here = self._absorb(outcome, observations)
+            events, stop_here = self._absorb(outcome, observations, spent, steps_used)
             for event in events:
                 yield event
             if stop_here:
@@ -395,6 +409,8 @@ class AgentTurn:
         self,
         outcome: StepOutcome,
         observations: List[Observation],
+        spent: Dict[str, int],
+        steps_used: int,
     ) -> tuple:
         """Turn one step outcome into events, and say whether the turn ends here.
 
@@ -415,8 +431,12 @@ class AgentTurn:
                         "detail": outcome.detail,
                         # Carried so the transport can remember the question
                         # exactly as asked, without reconstructing it from the
-                        # events it happened to forward.
+                        # events it happened to forward. The counters ride along
+                        # for the same reason: a budget the resume does not
+                        # inherit is not a per-turn budget.
                         "observations": [obs.to_dict() for obs in observations],
+                        "spent": dict(spent),
+                        "steps_used": steps_used,
                     },
                 )
             )

@@ -16,7 +16,7 @@ of a `ToolSpec` and a `Caller`:
 |---|---|---|
 | READ | run | run |
 | reversible WRITE | run | approval card |
-| irreversible / HIGH_IMPACT | confirm inline | approval card |
+| anything declaring `reversible=False` | confirm inline | approval card |
 | named in `ALWAYS_CONFIRM_TOOLS` | confirm inline | approval card |
 | BLOCKED | refuse | refuse |
 
@@ -140,6 +140,56 @@ for an absent human already exists and this is not it.
 - **Forged metadata**: `_devon_runtime_approval` is stripped from model-authored
   arguments before the decision, the binding, and the handler. A tool call
   cannot carry its own permission slip.
+
+## What the second pass found
+
+The fixes above went through another adversarial pass before merging. It
+confirmed four more defects, and one of them was worse than anything in the
+first round.
+
+**Irreversible writes ran without asking.** The rule read
+`if spec.risk is ToolRisk.HIGH_IMPACT and not spec.reversible`, under a comment
+saying irreversibility is the property that matters. The extra clause silently
+excluded every WRITE that declares itself irreversible, and two real tools are
+exactly that shape: `github.create_branch` and `github.create_pull_request`, both
+`risk=WRITE, reversible=False`. Both fell through to RUN, so DEVON could open a
+pull request on Tee's repository having asked nobody, while the module
+docstring, the turn's system prompt, and the table above all promised that an
+irreversible action still stops. Reproduced over HTTP. The rule is now
+`if not spec.reversible`, which honours what the adapter declares; a tool that
+finds that too strict should declare itself reversible in its adapter, where
+someone has to think about it.
+
+**The per-turn cost cap did not survive a confirmation.** `spent` was local to
+`run()`, and a resumed leg builds a fresh `AgentTurn`, so consult, propose
+something irreversible, say yes, consult again bought a second council panel
+under the same turn id with nothing in the stream showing it. The counters now
+ride out on the question and back in on the answer, and the step allowance is
+carried the same way so a yes does not grant a fresh one.
+
+**The receipt could be steered into omitting its target.** `what_happens` quoted
+`repr(args)` cut at a fixed length, and argument order is the model's, preserved
+from its own JSON. A `github.write_file` with 700 characters of `content` first
+produced a row that never named the repository, the path, or the branch. Nothing
+unsafe ran, because the binding covers the full arguments either way, but a
+receipt that omits the target is the failure this layer exists to prevent. The
+digest now sorts keys, bounds each value separately, and lists every key name in
+full when it still has to be cut.
+
+**A disconnect took the transcript with it.** Closing the tab cancels the
+response generator; `asyncio.CancelledError` is a BaseException the stream's
+`except Exception` never sees, so the write in the `finally` was cancelled
+before it landed. Shielding was tried and is NOT sufficient, because the
+shielded task dies with the surrounding anyio cancel scope. What is certain is
+now made certain: Tee's own message is written before the stream opens, in the
+request scope. The assistant row stays best-effort.
+
+That last one is worth stating precisely, because the first reading of it was
+too alarming. The durable record of an EFFECT was never the transcript: it is
+the approval row, committed to Postgres by `_authorise` before the handler is
+ever called. The reproduction that found this showed exactly that shape, an
+APPROVED row and an empty transcript. So a disconnect costs the conversational
+history of one turn, never the audit trail of what ran.
 
 ## Known open, deliberately not in this change
 

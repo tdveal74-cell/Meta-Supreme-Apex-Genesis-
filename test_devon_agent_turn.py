@@ -489,6 +489,101 @@ async def test_an_expensive_tool_is_capped_per_turn_and_the_model_is_told() -> N
 
 
 @pytest.mark.asyncio
+async def test_the_expensive_tool_budget_survives_a_confirmation() -> None:
+    """A budget a resume does not inherit is not a per-turn budget.
+
+    `spent` is local to run(), and a resumed leg builds a fresh AgentTurn, so
+    the sequence consult, propose something irreversible, say yes, consult again
+    bought a second panel under the same turn id with no tool_capped event.
+    Found by an adversarial pass and reproduced over HTTP.
+    """
+    consults: List[str] = []
+
+    def council_handler(args):
+        consults.append("consult")
+        return ToolResult(ok=True, output="the panel is split")
+
+    reg, ran = default_tools()
+    reg.register(
+        ToolSpec(COUNCIL_TOOL_NAME, "deliberate", ToolRisk.READ, council_handler)
+    )
+    turn, _ = build(
+        call(COUNCIL_TOOL_NAME, question="again"),
+        say("Here is what I found."),
+        tools=reg,
+    )
+
+    events = await collect(
+        turn,
+        "yes",
+        caller=TEE,
+        halt=HaltSignal(),
+        resume=ResumedStep(
+            tool="soul.commit",
+            arguments={"claim": "x"},
+            observations=[Observation(tool=COUNCIL_TOOL_NAME, outcome="split")],
+            spent={COUNCIL_TOOL_NAME: 1},
+            steps_used=2,
+        ),
+    )
+
+    assert consults == [], "the resumed leg convened a second panel"
+    capped = [e for e in events if e["type"] == "tool_capped"]
+    assert capped and capped[0]["tool"] == COUNCIL_TOOL_NAME
+
+
+@pytest.mark.asyncio
+async def test_the_step_allowance_is_not_refreshed_by_a_confirmation() -> None:
+    """Otherwise a yes buys a whole second turn's worth of tool calls."""
+    reg, ran = default_tools()
+    turn, provider = build(say("unreachable"), tools=reg)
+
+    events = await collect(
+        turn,
+        "yes",
+        caller=TEE,
+        halt=HaltSignal(),
+        resume=ResumedStep(
+            tool="notes.append",
+            arguments={"text": "hi"},
+            steps_used=MAX_TURN_STEPS,
+        ),
+    )
+
+    # The confirmed call runs; the allowance is already spent, so the loop does
+    # not get to ask the provider even once more.
+    assert ran == ["notes.append"]
+    assert provider.requests == []
+    assert types_of(events)[-1] == "step_limit"
+
+
+@pytest.mark.asyncio
+async def test_the_question_carries_the_counters_the_resume_needs() -> None:
+    consults: List[str] = []
+    reg, ran = default_tools()
+    reg.register(
+        ToolSpec(
+            COUNCIL_TOOL_NAME,
+            "deliberate",
+            ToolRisk.READ,
+            lambda a: (consults.append("c"), ToolResult(ok=True, output="split"))[1],
+        )
+    )
+    turn, _ = build(
+        call(COUNCIL_TOOL_NAME, question="a"),
+        call("soul.commit", claim="x"),
+        tools=reg,
+    )
+
+    events = await collect(turn, "think then remember", caller=TEE, halt=HaltSignal())
+
+    ask = events[-1]
+    assert ask["type"] == "needs_confirmation"
+    assert ask["spent"] == {COUNCIL_TOOL_NAME: 1}
+    assert ask["steps_used"] == 2
+
+
+@pytest.mark.asyncio
 async def test_a_tool_failure_feeds_back_instead_of_killing_the_turn() -> None:
     def broken(args):
         raise RuntimeError("adapter exploded")

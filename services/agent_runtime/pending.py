@@ -76,6 +76,14 @@ class PendingConfirmation:
     """(tool, outcome) pairs from the steps that already ran this turn."""
     message: str
     """The message that started the turn, so the resumed loop keeps its thread."""
+    spent: Tuple[Tuple[str, int], ...] = ()
+    """Per-turn tool budget already consumed before the question.
+
+    Carried because a resumed leg builds a fresh AgentTurn, and a budget that
+    resets on resume is not a per-turn budget at all: consult, propose something
+    irreversible, get a yes, consult again."""
+    steps_used: int = 0
+    """Tool calls already made, so a resumed turn does not get a fresh allowance."""
     created_at: datetime = field(default_factory=_now)
     expires_at: datetime = field(
         default_factory=lambda: _now() + timedelta(seconds=CONFIRMATION_TTL_SECONDS)
@@ -108,6 +116,8 @@ class PendingConfirmationRegistry:
         arguments: Optional[Dict[str, Any]] = None,
         observations: Tuple[Tuple[str, str], ...] = (),
         message: str = "",
+        spent: Tuple[Tuple[str, int], ...] = (),
+        steps_used: int = 0,
     ) -> PendingConfirmation:
         """Remember a question. Returns the record whose handle the client echoes."""
         clean_turn = (turn_id or "").strip()
@@ -125,6 +135,8 @@ class PendingConfirmationRegistry:
             arguments=dict(arguments or {}),
             observations=tuple(observations),
             message=message or "",
+            spent=tuple(spent),
+            steps_used=max(0, int(steps_used)),
         )
         with self._lock:
             self._prune_locked()
