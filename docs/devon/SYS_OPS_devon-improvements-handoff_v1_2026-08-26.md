@@ -60,15 +60,20 @@ governance binding checks stay green. Tests: `test_devon_council_tool.py`
 (adapter reads, card content, marker order, forged-marker stripping,
 failed-consultation handling); no new approval-level taxonomy.
 
-### 3. First genuine PROMOTE (live lane)
+### 3. First genuine PROMOTE (live lane) - ASSESSED 2026-08-26, waits on real work by design
 
-Needs two or more real same-theme jobs COMPLETED through the ledger so the
-gate sees independent sources with a clear receipt. Egress from build
-containers to the n8n host is proxy-blocked; drive the ledger via the n8n MCP
-(`execute_workflow` on the ledger webhook workflow is not possible - webhook
-workflows need real POSTs - so either run real runtime jobs against the
-deployed API or have the feeder pick up jobs Tee runs). Every commit still
-goes through an approval card; slow down on the tap (approve and reject sit
+Ruled in the 2026-08-26 session (decision authority granted): the first
+PROMOTE will NOT be manufactured. A synthetic pair of same-theme jobs would
+make the gate PROMOTE fabricated experience into devon-subconscious - a
+real write from fake evidence, defeating the word "genuine". The lane is
+structurally ready and waiting on nothing but real work: as of 2026-08-26
+the ledger holds only the eight stale E2E jobs (swept by the janitor, and
+CANCELLED never feeds), the feed log holds two fed jobs, the commit log one
+(the reverted smoke). The path stays as written: two or more real
+same-theme jobs COMPLETED through the ledger (run real runtime jobs against
+the deployed API, or let the feeder pick up jobs Tee runs); the feeder,
+gate, and committer need no further changes. Every commit still goes
+through an approval card; slow down on the tap (approve and reject sit
 adjacent).
 
 ### 4. Upstream webhook auth flip - DONE 2026-08-26
@@ -112,14 +117,17 @@ total), four CSVs built and merged, subject and body correct. Registered
 in vault.py WORKFLOWS (+ mirror + skill tables) in the same change as
 publish.
 
-### 7. Build 14: reflection to intent (design constraint fixed)
+### 7. Build 14: reflection to intent (design constraint fixed) - DEFERRED BY DESIGN
 
 The reflection may WANT things but never DO them: its recommendations become
 approval cards (POST devon-approve-request), and only an approved card may
 become a ledger job. Autonomy through the gates, never around them
-(heartbeat.md design rules). Build only after items 1-6; the heartbeat needs
-some track record first, and the first reflections are already producing the
-raw material.
+(heartbeat.md design rules). As of 2026-08-26 items 1, 2, 4, 5, and 6 are
+done and item 3 waits on real work; the remaining gate on Build 14 is its
+own stated constraint - the heartbeat is one day old and needs a track
+record of pulses and reflections first. Deliberately not built in the
+2026-08-26 session for that reason; revisit once the reflection rows have
+accumulated for a week or two.
 
 ## Session receipts
 
