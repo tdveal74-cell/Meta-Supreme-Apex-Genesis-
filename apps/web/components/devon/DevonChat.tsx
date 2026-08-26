@@ -113,8 +113,11 @@ export function DevonChat() {
   // Restore a session and greet once.
   useEffect(() => {
     try {
-      const saved = sessionStorage.getItem(TOKEN_KEY) || "";
-      const savedEmail = sessionStorage.getItem(EMAIL_KEY) || "";
+      // localStorage so Tee signs in once per device, not once per visit.
+      const saved =
+        localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY) || "";
+      const savedEmail =
+        localStorage.getItem(EMAIL_KEY) || sessionStorage.getItem(EMAIL_KEY) || "";
       if (saved) setToken(saved);
       if (savedEmail) setEmail(savedEmail);
     } catch {
@@ -194,8 +197,8 @@ export function DevonChat() {
       const data = await response.json();
       setToken(data.access_token);
       try {
-        sessionStorage.setItem(TOKEN_KEY, data.access_token);
-        sessionStorage.setItem(EMAIL_KEY, email);
+        localStorage.setItem(TOKEN_KEY, data.access_token);
+        localStorage.setItem(EMAIL_KEY, email);
       } catch {
         // Storage refusal only costs persistence.
       }
@@ -212,6 +215,7 @@ export function DevonChat() {
     setStatus(null);
     setPending(null);
     try {
+      localStorage.removeItem(TOKEN_KEY);
       sessionStorage.removeItem(TOKEN_KEY);
     } catch {
       // Nothing to clean if storage was never writable.

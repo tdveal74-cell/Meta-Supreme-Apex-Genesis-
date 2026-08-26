@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     ALGORITHM: str = "HS256"
 
+    # Operator shell: a second, shell-only key distinct from the operator
+    # key, plus an idle timeout (seconds). The shell also requires a valid
+    # login JWT, so opening a bash PTY needs BOTH factors. Empty key leaves
+    # the shell disabled even when the operator bridge is enabled.
+    DEVON_SHELL_KEY: str = ""
+    DEVON_SHELL_IDLE_TIMEOUT_SECONDS: int = 900  # 15 minutes of no input
+
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/meta_supreme"
 

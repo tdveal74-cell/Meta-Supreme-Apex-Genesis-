@@ -6,3 +6,6 @@ export const API_BASE =
   (process.env.NODE_ENV === "production"
     ? "https://api-production-5644.up.railway.app/api/v1"
     : "http://localhost:8000/api/v1");
+
+// Same origin as API_BASE, spoken over WebSocket.
+export const WS_BASE = API_BASE.replace(/^http/, "ws");

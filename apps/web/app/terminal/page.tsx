@@ -20,6 +20,12 @@ export default function DevonTerminalPage() {
             <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1.5">Full screen</span>
             <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1.5">Human final</span>
             <Link
+              href="/shell"
+              className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
+            >
+              Real shell
+            </Link>
+            <Link
               href="/command-center"
               className="rounded-lg border border-white/10 px-3 py-2 font-medium text-white/70 transition hover:border-white/20 hover:text-white"
             >
