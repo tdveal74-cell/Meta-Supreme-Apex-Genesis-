@@ -140,6 +140,31 @@ export function DevonChat() {
     setMessages((current) => [...current, { id: sequence.current, role, text, chips }]);
   }, []);
 
+  // iOS Safari will not speak from an async callback until the page has spoken
+  // once inside a real user gesture. Every speak() below happens after an await
+  // (a streamed reply, a finished task), so on iPhone the engine stayed locked
+  // and DEVON was silent with no error anywhere: Tee reported it on 2026-08-27
+  // with the ringer up, which is what ruled out the mute switch.
+  //
+  // Priming is one inaudible utterance spoken while the tap is still live. It
+  // unlocks the engine for the rest of the page's life, and it is idempotent so
+  // the tenth tap costs nothing.
+  const voicePrimed = useRef(false);
+  const primeVoice = useCallback(() => {
+    if (voicePrimed.current) return;
+    try {
+      const synth = window.speechSynthesis;
+      if (!synth) return;
+      const silent = new SpeechSynthesisUtterance(" ");
+      silent.volume = 0;
+      synth.speak(silent);
+      voicePrimed.current = true;
+    } catch {
+      // A browser that refuses to be primed is one that was never going to
+      // speak; the real calls degrade to silence exactly as before.
+    }
+  }, []);
+
   const speak = useCallback((text: string) => {
     if (!voiceOutRef.current) return;
     try {
@@ -220,6 +245,9 @@ export function DevonChat() {
   async function signIn(event?: FormEvent) {
     event?.preventDefault();
     if (!email || !password || authBusy) return;
+    // Sign-in is a gesture too, and the reply that follows it is the first
+    // thing DEVON says. Priming here means the greeting is audible.
+    primeVoice();
     setAuthBusy(true);
     setAuthError("");
     try {
@@ -548,6 +576,9 @@ export function DevonChat() {
     async (raw?: string) => {
       const text = (raw ?? input).trim();
       if (!text || busy || !token) return;
+      // Before the first await, while this is still the tap's own task. Moving
+      // it below any await puts it outside the gesture and iOS ignores it.
+      primeVoice();
       setInput("");
       append("you", text);
       setBusy(true);
@@ -577,7 +608,7 @@ export function DevonChat() {
         setBusy(false);
       }
     },
-    [append, ask, busy, converse, execute, input, mode, speak, token],
+    [append, ask, busy, converse, execute, input, mode, primeVoice, speak, token],
   );
 
   const sendRef = useRef(send);
@@ -653,6 +684,9 @@ export function DevonChat() {
 
   function toggleMic() {
     if (!voiceSupported) return;
+    // Reaching for the mic is the clearest signal yet that this is a spoken
+    // exchange, and it is a tap, so it is a free chance to unlock the engine.
+    primeVoice();
     if (listening) {
       recognitionRef.current?.stop?.();
       setListening(false);
@@ -711,7 +745,10 @@ export function DevonChat() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setVoiceOut((v) => !v)}
+            onClick={() => {
+              primeVoice();
+              setVoiceOut((v) => !v);
+            }}
             className={`rounded-full border px-3 py-1 transition ${
               voiceOut
                 ? "border-amber-300/40 bg-amber-300/10 text-amber-200"
