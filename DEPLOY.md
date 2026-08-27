@@ -140,6 +140,23 @@ Each project now carries a `vercel.json` in its root directory with an
 `ignoreCommand`. Vercel runs it before building: exit 0 means skip, any other
 exit means build.
 
+**The comparison is against the last successful deployment, not against the
+previous commit.** `VERCEL_GIT_PREVIOUS_SHA` holds the commit that actually
+shipped, and Vercel exposes it only when an ignore step is configured. The
+first version of this rule compared `HEAD^` with `HEAD`, which asks "did this
+one commit touch my paths" when the question that matters is "does what
+production is serving differ from what is on main". Those come apart the moment
+a build does not run. On 2026-08-26 the daily cap refused the build carrying
+`apps/web/components/devon/DevonChat.tsx`; the next commit touched no path under
+`apps/web`, so the old rule skipped, and it would have skipped every commit
+after that too. The change was stranded in main with production serving without
+it and nothing anywhere reporting a problem.
+
+The rule fails open. If `VERCEL_GIT_PREVIOUS_SHA` is empty, or names a commit
+this checkout does not contain, it builds. A needless build costs one
+deployment; a wrong skip ships stale code silently, and silence is the part
+that makes it expensive.
+
 | Project | Root | Builds when these change |
 |---|---|---|
 | meta-supreme-web | `apps/web` | `apps/web`, `packages/ui`, `pnpm-lock.yaml`, `pnpm-workspace.yaml` |
