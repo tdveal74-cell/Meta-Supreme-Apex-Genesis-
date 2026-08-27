@@ -40,6 +40,7 @@ class ExpansionToolAdapter:
         registry.register(
             ToolSpec(
                 name="runtime.spawn_subagent",
+                parameters=("parent_task_id", "goal", "max_steps", "inherit_context_keys"),
                 description=(
                     "Propose a bounded child agent goal under the current parent task. "
                     "Does not execute the child; the application layer must create the "
@@ -54,6 +55,7 @@ class ExpansionToolAdapter:
         registry.register(
             ToolSpec(
                 name="runtime.schedule_goal",
+                parameters=("goal", "owner_id", "delay_seconds", "context"),
                 description=(
                     "Schedule a goal to become runnable after a delay. The scheduled "
                     "goal does not execute effects until a later governed run."
@@ -67,6 +69,7 @@ class ExpansionToolAdapter:
         registry.register(
             ToolSpec(
                 name="runtime.propose_skill",
+                parameters=("task_id", "goal", "observations"),
                 description=(
                     "Draft a skill proposal from a completed task's observations. "
                     "Does not activate the skill; Tee must approve promotion."

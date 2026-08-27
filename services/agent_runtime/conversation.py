@@ -56,7 +56,13 @@ from services.agent_runtime.presence import (
     confirm_reason,
     decide,
 )
-from services.agent_runtime.tools import ToolRegistry, ToolResult, ToolSpec
+from services.agent_runtime.tools import (
+    ToolRegistry,
+    ToolResult,
+    ToolSpec,
+    unknown_argument_error,
+    unknown_arguments,
+)
 from services.devon.approval import ApprovalQueue
 
 CONFIRM_BINDING_PREFIX = "DEVON-PRESENCE-CONFIRM:"
@@ -214,6 +220,23 @@ class PresenceExecutor:
             if key != APPROVAL_METADATA_KEY
         }
         spec: ToolSpec = self.tools.require(tool_name)
+
+        # Before the verdict, before the binding, before any row is minted. An
+        # argument the adapter will not read must not appear on a card the human
+        # reads, because the card would then describe an action the process is
+        # not going to take.
+        unknown = unknown_arguments(spec, args)
+        if unknown:
+            message = unknown_argument_error(spec, unknown)
+            return StepOutcome(
+                tool=spec.name,
+                decision=PresenceDecision.REFUSE,
+                ran=False,
+                result=ToolResult(ok=False, error=message),
+                detail=message,
+                arguments=args,
+            )
+
         verdict = decide(spec, caller)
         token = confirm_binding(
             turn_id=self.turn_id, tool_name=spec.name, arguments=args

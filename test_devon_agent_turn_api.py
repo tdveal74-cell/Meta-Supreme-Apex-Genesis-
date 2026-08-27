@@ -294,7 +294,7 @@ async def test_a_reversible_write_runs_immediately_and_leaves_a_receipt(
     """
     scripted(
         call("browser.navigate", url="https://example.com"),
-        call("runtime.schedule_goal", goal="sweep the ledger", cron="0 * * * *"),
+        call("runtime.schedule_goal", goal="sweep the ledger", delay_seconds=3600),
         say("Scheduled."),
     )
     conversation_id = await new_conversation(client, auth_headers)
@@ -394,7 +394,7 @@ async def test_a_whole_exchange_end_to_end(client, auth_headers, scripted):
 
     # 2. A reversible write: runs on his word alone, no card, no waiting.
     scripted(
-        call("runtime.schedule_goal", goal="sweep stale jobs", cron="0 3 * * *"),
+        call("runtime.schedule_goal", goal="sweep stale jobs", delay_seconds=86400),
         say("Scheduled the sweep for 03:00 daily."),
     )
     second = events_of(

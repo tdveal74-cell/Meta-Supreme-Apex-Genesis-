@@ -30,6 +30,7 @@ class GitHubCapabilityAdapter:
         registry.register(
             ToolSpec(
                 name="github.repo_status",
+                parameters=("repository",),
                 description="Read metadata for one allowlisted GitHub repository.",
                 risk=ToolRisk.READ,
                 handler=self._repo_status,
@@ -40,6 +41,7 @@ class GitHubCapabilityAdapter:
         registry.register(
             ToolSpec(
                 name="github.read_file",
+                parameters=("repository", "path", "ref"),
                 description="Read one UTF-8 file up to 1 MB from an allowlisted repository.",
                 risk=ToolRisk.READ,
                 handler=self._read_file,
@@ -50,6 +52,7 @@ class GitHubCapabilityAdapter:
         registry.register(
             ToolSpec(
                 name="github.pull_request",
+                parameters=("repository", "number"),
                 description="Read one pull request from an allowlisted repository.",
                 risk=ToolRisk.READ,
                 handler=self._pull_request,
@@ -60,6 +63,7 @@ class GitHubCapabilityAdapter:
         registry.register(
             ToolSpec(
                 name="github.create_branch",
+                parameters=("repository", "branch", "base_ref"),
                 description="Create one branch in an allowlisted repository after DEVON approval.",
                 risk=ToolRisk.WRITE,
                 handler=self._create_branch,
@@ -70,6 +74,7 @@ class GitHubCapabilityAdapter:
         registry.register(
             ToolSpec(
                 name="github.write_file",
+                parameters=("repository", "path", "content", "message", "branch", "sha"),
                 description=(
                     "Create or replace one repository file up to 1 MB after DEVON approval. "
                     "Existing files require their current blob SHA."
@@ -83,6 +88,7 @@ class GitHubCapabilityAdapter:
         registry.register(
             ToolSpec(
                 name="github.create_pull_request",
+                parameters=("repository", "title", "head", "base", "body", "draft"),
                 description="Open one pull request in an allowlisted repository after DEVON approval.",
                 risk=ToolRisk.WRITE,
                 handler=self._create_pull_request,
@@ -93,6 +99,7 @@ class GitHubCapabilityAdapter:
         registry.register(
             ToolSpec(
                 name="github.merge_pull_request",
+                parameters=("repository", "number", "expected_head_sha", "merge_method"),
                 description=(
                     "Merge one pull request in an allowlisted repository after high-impact "
                     "DEVON approval. A full expected_head_sha is required so the ruling is "
