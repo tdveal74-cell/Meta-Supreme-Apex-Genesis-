@@ -129,6 +129,34 @@ class PostgresApprovalStore:
                 "DEVON approval database is unavailable; ruling was not recorded"
             ) from None
 
+    def transition_approved(self, request: ApprovalRequest) -> bool:
+        """Atomically let exactly one worker spend an approved request.
+
+        The `state = 'approved'` predicate is the whole mechanism: two workers
+        holding the same approval metadata both reach this UPDATE, exactly one
+        matches a row, and the loser is told the effect is already running.
+        """
+        if request.state is not ApprovalState.CONSUMED:
+            raise ValueError("transition_approved requires the consumed state")
+
+        sql = """
+            UPDATE devon_approvals
+               SET state = %(state)s,
+                   decided_at = %(decided_at)s,
+                   decided_by = %(decided_by)s,
+                   updated_at = NOW()
+             WHERE request_id = %(request_id)s
+               AND state = 'approved'
+        """
+        try:
+            with self._connect() as conn:
+                cursor = conn.execute(sql, self._params(request))
+                return cursor.rowcount == 1
+        except psycopg.Error:
+            raise ApprovalStoreUnavailable(
+                "DEVON approval database is unavailable; the effect was not spent"
+            ) from None
+
     def pending(self) -> list[ApprovalRequest]:
         """Return live pending requests and durably expire overdue rows."""
         expire_sql = """

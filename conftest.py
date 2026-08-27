@@ -66,6 +66,7 @@ _INCREMENTAL_SCHEMAS = (
     "010_agent_subagent_links.sql",
     "011_passkeys.sql",
     "012_live_state_ledger.sql",
+    "013_approval_consumption.sql",
 )
 
 _DSN = TEST_DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")

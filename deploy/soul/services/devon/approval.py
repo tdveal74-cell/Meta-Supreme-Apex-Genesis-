@@ -68,6 +68,16 @@ class ApprovalState(str, Enum):
     APPROVED = "approved"
     REFUSED = "refused"
     EXPIRED = "expired"
+    CONSUMED = "consumed"
+    """Approved, and the effect it authorised has been performed.
+
+    Without this an approval is a standing permission rather than a permission
+    to do one thing once. The capability boundary checked that a record was
+    APPROVED and bound to these arguments, and both stayed true forever, so the
+    same approved effect could be replayed indefinitely by anyone who kept the
+    metadata. Consuming is what makes an approval single use at the boundary,
+    the way `decide` already made the token single use at the gate.
+    """
 
 
 class Decision(str, Enum):
@@ -84,6 +94,7 @@ class RefusalReason(str, Enum):
     UNRECOGNISED_DECISION = "decision must be approve or refuse"
     EXPIRED = "request expired"
     ALREADY_DECIDED = "request was already decided"
+    ALREADY_CONSUMED = "approved effect was already performed"
     NO_CONSEQUENCE = "request did not state what happens"
     NO_TITLE = "request did not state a title"
 
@@ -165,6 +176,16 @@ class ApprovalStore(Protocol):
         """Atomically replace a pending record; false means another actor won."""
         ...
 
+    def transition_approved(self, request: ApprovalRequest) -> bool:
+        """Atomically spend an approved record; false means it was already spent.
+
+        Separate from `transition_pending` rather than a generalisation of it
+        because the guard differs: that one refuses anything not PENDING, this
+        one refuses anything not APPROVED. Collapsing them into one "expected
+        state" argument would let a caller pass the state it hopes to find.
+        """
+        ...
+
     def pending(self) -> List[ApprovalRequest]: ...
 
 
@@ -185,6 +206,13 @@ class InMemoryApprovalStore:
     def transition_pending(self, request: ApprovalRequest) -> bool:
         current = self._records.get(request.request_id)
         if current is None or current.state is not ApprovalState.PENDING:
+            return False
+        self._records[request.request_id] = request
+        return True
+
+    def transition_approved(self, request: ApprovalRequest) -> bool:
+        current = self._records.get(request.request_id)
+        if current is None or current.state is not ApprovalState.APPROVED:
             return False
         self._records[request.request_id] = request
         return True
@@ -330,6 +358,82 @@ class ApprovalQueue:
             record.request_id,
             state=new_state,
             message=f"{new_state.value} by {decided.decided_by}.",
+        )
+
+    def consume(
+        self,
+        request_id: Optional[str],
+        consumed_by: str = "DEVON Agent Runtime",
+        at: Optional[datetime] = None,
+    ) -> DecisionResult:
+        """Spend an approved record so its effect cannot be performed twice.
+
+        Called by the capability boundary once it has satisfied itself that the
+        record authorises exactly the effect about to run. It is deliberately
+        the last thing checked and the last thing changed: everything cheap and
+        non-destructive happens first, so a request refused for any other reason
+        leaves the approval still spendable.
+
+        Returns a DecisionResult rather than a bare bool so a replay attempt
+        arrives with a reason attached. A refusal nobody can explain is the
+        failure this queue was built to avoid.
+        """
+        at = at or _now()
+
+        if not request_id:
+            return DecisionResult(
+                False, NO_MATCH, reason=RefusalReason.NO_ID, message="No request id."
+            )
+
+        record = self._store.get(request_id)
+        if record is None:
+            return DecisionResult(
+                False,
+                NO_MATCH,
+                reason=RefusalReason.UNKNOWN_ID,
+                message=f"No request {request_id}.",
+            )
+
+        if record.state is ApprovalState.CONSUMED:
+            return DecisionResult(
+                False,
+                record.request_id,
+                state=ApprovalState.CONSUMED,
+                reason=RefusalReason.ALREADY_CONSUMED,
+                message="This approval was already spent; raise a new one.",
+            )
+
+        if record.state is not ApprovalState.APPROVED:
+            return DecisionResult(
+                False,
+                record.request_id,
+                state=record.state,
+                reason=RefusalReason.ALREADY_DECIDED,
+                message=f"State is {record.state.value}, not approved.",
+            )
+
+        spent = replace(
+            record,
+            state=ApprovalState.CONSUMED,
+            decided_at=record.decided_at or at,
+            decided_by=record.decided_by or (consumed_by or "").strip() or None,
+        )
+        if not self._store.transition_approved(spent):
+            # Another worker spent it between the read and the write. The effect
+            # is running exactly once; this caller is simply not the one running it.
+            return DecisionResult(
+                False,
+                record.request_id,
+                state=ApprovalState.CONSUMED,
+                reason=RefusalReason.ALREADY_CONSUMED,
+                message="This approval was spent by another worker.",
+            )
+
+        return DecisionResult(
+            True,
+            record.request_id,
+            state=ApprovalState.CONSUMED,
+            message="Approval spent.",
         )
 
     def pending(self) -> List[ApprovalRequest]:
