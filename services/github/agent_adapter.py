@@ -34,12 +34,43 @@ class GitHubCapabilityAdapter:
         self.client = client
         self.approvals = approvals
 
+    def _scope(self) -> str:
+        """The sentence that tells the model which repositories it can reach.
+
+        Written on 2026-08-27 after watching DEVON ask Tee for a repository name
+        he could not possibly have known. The tool catalog the model reads
+        carries name, description, risk, parameters and blast radius; the
+        allowlist lives in a separate structure that only the Command Center
+        reads. So `repository` was a required argument with no discoverable
+        legal value, and asking was the correct behaviour on the information he
+        had. It was still a bad exchange, because the estate knew the answer.
+
+        All three states say something useful. One repository is the common case
+        and the model should simply use it. Several means it must choose and be
+        told the choices. None means every call will be refused, and saying so
+        beats letting it discover that one refusal at a time.
+        """
+        allowed = self.client.allowed_repositories
+        if not allowed:
+            return (
+                " No repository is allowlisted, so every call here will be "
+                "refused until DEVON_GITHUB_ALLOWED_REPOS is set."
+            )
+        if len(allowed) == 1:
+            return (
+                f" Only {allowed[0]} is allowlisted, so use it as the repository "
+                "unless Tee names another; any other value is refused."
+            )
+        listed = ", ".join(allowed)
+        return f" Allowlisted repositories: {listed}. Any other value is refused."
+
     def register(self, registry: ToolRegistry) -> None:
+        scope = self._scope()
         registry.register(
             ToolSpec(
                 name="github.repo_status",
                 parameters=("repository",),
-                description="Read metadata for one allowlisted GitHub repository.",
+                description="Read metadata for one allowlisted GitHub repository." + scope,
                 risk=ToolRisk.READ,
                 handler=self._repo_status,
                 reversible=True,
@@ -54,6 +85,7 @@ class GitHubCapabilityAdapter:
                     "Read one UTF-8 file up to 1 MB from an allowlisted repository. "
                     "A long file is returned in windows: pass the next_offset from the "
                     "previous call as offset to continue reading where it stopped."
+                    + scope
                 ),
                 risk=ToolRisk.READ,
                 handler=self._read_file,
@@ -65,7 +97,7 @@ class GitHubCapabilityAdapter:
             ToolSpec(
                 name="github.pull_request",
                 parameters=("repository", "number"),
-                description="Read one pull request from an allowlisted repository.",
+                description="Read one pull request from an allowlisted repository." + scope,
                 risk=ToolRisk.READ,
                 handler=self._pull_request,
                 reversible=True,
@@ -76,7 +108,7 @@ class GitHubCapabilityAdapter:
             ToolSpec(
                 name="github.create_branch",
                 parameters=("repository", "branch", "base_ref"),
-                description="Create one branch in an allowlisted repository after DEVON approval.",
+                description="Create one branch in an allowlisted repository after DEVON approval." + scope,
                 risk=ToolRisk.WRITE,
                 handler=self._create_branch,
                 reversible=False,
@@ -89,7 +121,7 @@ class GitHubCapabilityAdapter:
                 parameters=("repository", "path", "content", "message", "branch", "sha"),
                 description=(
                     "Create or replace one repository file up to 1 MB after DEVON approval. "
-                    "Existing files require their current blob SHA."
+                    "Existing files require their current blob SHA." + scope
                 ),
                 risk=ToolRisk.HIGH_IMPACT,
                 handler=self._write_file,
@@ -101,7 +133,7 @@ class GitHubCapabilityAdapter:
             ToolSpec(
                 name="github.create_pull_request",
                 parameters=("repository", "title", "head", "base", "body", "draft"),
-                description="Open one pull request in an allowlisted repository after DEVON approval.",
+                description="Open one pull request in an allowlisted repository after DEVON approval." + scope,
                 risk=ToolRisk.WRITE,
                 handler=self._create_pull_request,
                 reversible=False,
@@ -115,7 +147,7 @@ class GitHubCapabilityAdapter:
                 description=(
                     "Merge one pull request in an allowlisted repository after high-impact "
                     "DEVON approval. A full expected_head_sha is required so the ruling is "
-                    "pinned to the exact code revision."
+                    "pinned to the exact code revision." + scope
                 ),
                 risk=ToolRisk.HIGH_IMPACT,
                 handler=self._merge_pull_request,
