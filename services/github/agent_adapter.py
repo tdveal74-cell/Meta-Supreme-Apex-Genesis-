@@ -16,6 +16,14 @@ from services.github.client import GitHubRESTClient, GitHubRESTError
 
 MAX_OUTPUT_CHARS = 200_000
 
+READ_WINDOW_CHARS = 4_000
+"""How much file content one github.read_file call returns.
+
+Deliberately larger than the model's observation budget and far smaller than the
+1 MB file limit. Bigger than the budget so a window is never the thing that
+truncates; smaller than the file so `next_offset` is a real answer to "read the
+rest" rather than a promise the tool cannot keep."""
+
 
 class GitHubCapabilityAdapter:
     """Expose an explicit allowlisted subset of GitHub REST to the agent loop."""
@@ -41,8 +49,12 @@ class GitHubCapabilityAdapter:
         registry.register(
             ToolSpec(
                 name="github.read_file",
-                parameters=("repository", "path", "ref"),
-                description="Read one UTF-8 file up to 1 MB from an allowlisted repository.",
+                parameters=("repository", "path", "ref", "offset"),
+                description=(
+                    "Read one UTF-8 file up to 1 MB from an allowlisted repository. "
+                    "A long file is returned in windows: pass the next_offset from the "
+                    "previous call as offset to continue reading where it stopped."
+                ),
                 risk=ToolRisk.READ,
                 handler=self._read_file,
                 reversible=True,
@@ -124,13 +136,64 @@ class GitHubCapabilityAdapter:
             return ToolResult(False, error=str(exc))
         path = str(arguments.get("path") or "").strip()
         ref = arguments.get("ref")
-        return await self._read_call(
-            lambda: self.client.read_file(
+        try:
+            offset = self._offset(arguments.get("offset"))
+        except ValueError as exc:
+            return ToolResult(False, error=str(exc))
+
+        async def call() -> Dict[str, Any]:
+            data = await self.client.read_file(
                 repository,
                 path,
                 ref=str(ref).strip() if ref else None,
             )
-        )
+            return self._window(data, offset)
+
+        return await self._read_call(call)
+
+    @staticmethod
+    def _offset(raw: Any) -> int:
+        """Where in the file to start reading. Rejects nonsense rather than clamping.
+
+        Silently treating a bad offset as 0 would hand back the opening window
+        again, which is the exact loop this argument exists to end.
+        """
+        if raw is None or raw == "":
+            return 0
+        try:
+            offset = int(raw)
+        except (TypeError, ValueError):
+            raise ValueError(f"offset must be a whole number of characters, got {raw!r}") from None
+        if offset < 0:
+            raise ValueError(f"offset must not be negative, got {offset}")
+        return offset
+
+    @staticmethod
+    def _window(data: Dict[str, Any], offset: int) -> Dict[str, Any]:
+        """Return one readable slice of a file, and say where the next one starts.
+
+        The window is smaller than the file limit on purpose. The model reads a
+        bounded prefix of any observation, so returning 200 KB of JSON spends the
+        whole budget on content it will never see and leaves it unable to tell a
+        long file from a finished one. A window plus `next_offset` is the same
+        information in a form it can act on.
+        """
+        content = data.get("content")
+        if not isinstance(content, str):
+            return data
+        total = len(content)
+        windowed = dict(data)
+        windowed["content"] = content[offset : offset + READ_WINDOW_CHARS]
+        windowed["offset"] = offset
+        windowed["total_characters"] = total
+        end = min(offset + READ_WINDOW_CHARS, total)
+        if end < total:
+            windowed["next_offset"] = end
+            windowed["remaining_characters"] = total - end
+        else:
+            windowed["next_offset"] = None
+            windowed["remaining_characters"] = 0
+        return windowed
 
     async def _pull_request(self, arguments: Dict[str, Any]) -> ToolResult:
         try:
