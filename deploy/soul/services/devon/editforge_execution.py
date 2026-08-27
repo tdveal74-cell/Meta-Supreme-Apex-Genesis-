@@ -50,6 +50,10 @@ class EditForgeExecutionError(RuntimeError):
     """A governed execution was refused or the execution boundary failed."""
 
 
+def _positive_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+
+
 def canonical_hash(value: Mapping[str, Any]) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -88,6 +92,15 @@ def validate_intent(intent: Mapping[str, Any]) -> list[str]:
         issues.append("operation ids must be unique")
     if any(not isinstance(operation.get("params"), dict) for operation in operations if isinstance(operation, dict)):
         issues.append("every operation params value must be an object")
+    for operation in operations:
+        if not isinstance(operation, dict) or not isinstance(operation.get("params"), dict):
+            continue
+        operation_type = str(operation.get("type") or "")
+        params = operation["params"]
+        if operation_type == "synthesize-voice" and not _positive_number(params.get("maxCharacters")):
+            issues.append("synthesize-voice requires a positive params.maxCharacters approval ceiling")
+        if operation_type in {"generate-full-motion", "lip-sync"} and not _positive_number(params.get("maxCredits")):
+            issues.append(f"{operation_type} requires a positive params.maxCredits approval ceiling")
     unknown = operation_types - ALLOWED_OPERATIONS
     if unknown:
         issues.append(f"unsupported operations: {', '.join(sorted(unknown))}")
@@ -128,11 +141,19 @@ def validate_intent(intent: Mapping[str, Any]) -> list[str]:
 def approval_consequence(intent: Mapping[str, Any]) -> str:
     digest = canonical_hash(intent)
     operation_types = [str(op.get("type")) for op in intent.get("operations", [])]
+    ceilings: list[str] = []
+    for operation in intent.get("operations", []):
+        params = operation.get("params") or {}
+        if operation.get("type") == "synthesize-voice":
+            ceilings.append(f"voice characters <= {params.get('maxCharacters')}")
+        elif operation.get("type") in {"generate-full-motion", "lip-sync"}:
+            ceilings.append(f"{operation.get('type')} credits <= {params.get('maxCredits')}")
+    ceiling_text = f" Provider ceilings: {', '.join(ceilings)}." if ceilings else ""
     return (
         "Authorize DEVON to send this exact non-destructive edit command to EditForge. "
         f"Project: {intent.get('projectId')}. Cut: {intent.get('cutId')}. "
         f"Operations: {', '.join(operation_types)}. Output: {(intent.get('output') or {}).get('mode')}. "
-        "This does not authorize canon changes, identity changes, publication, or deletion. "
+        f"This does not authorize canon changes, identity changes, publication, or deletion.{ceiling_text} "
         f"{APPROVAL_MARKER}{digest}"
     )
 
