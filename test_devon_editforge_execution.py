@@ -47,7 +47,7 @@ def intent(**overrides):
         },
         "canon": {"version": "tqo-canon-v1", "locked": True},
         "operations": [
-            {"id": "motion", "type": "generate-full-motion", "params": {}},
+            {"id": "motion", "type": "generate-full-motion", "params": {"maxCredits": 30}},
             {"id": "preview", "type": "render-preview", "params": {}},
         ],
         "output": {
@@ -87,6 +87,36 @@ def test_micro_drama_without_full_motion_is_refused():
         operations=[{"id": "preview", "type": "render-preview", "params": {}}],
     )
     assert any("full motion" in issue for issue in validate_intent(value))
+
+
+def test_provider_work_requires_an_exact_spend_ceiling():
+    value = intent(
+        operations=[
+            {"id": "voice", "type": "synthesize-voice", "params": {"text": "Ready."}},
+            {"id": "motion", "type": "generate-full-motion", "params": {}},
+            {"id": "sync", "type": "lip-sync", "params": {"maxCredits": False}},
+            {"id": "preview", "type": "render-preview", "params": {}},
+        ]
+    )
+    issues = validate_intent(value)
+    assert any("maxCharacters" in issue for issue in issues)
+    assert sum("maxCredits" in issue for issue in issues) == 2
+
+
+def test_provider_ceilings_are_visible_and_hash_bound_in_approval():
+    value = intent(
+        operations=[
+            {"id": "voice", "type": "synthesize-voice", "params": {"text": "Ready.", "maxCharacters": 100}},
+            {"id": "sync", "type": "lip-sync", "params": {"maxCredits": 20}},
+            {"id": "preview", "type": "render-preview", "params": {}},
+        ]
+    )
+    consequence = approval_consequence(value)
+    assert "voice characters <= 100" in consequence
+    assert "lip-sync credits <= 20" in consequence
+    changed = intent(operations=[*value["operations"]])
+    changed["operations"][1] = {**changed["operations"][1], "params": {"maxCredits": 40}}
+    assert not approval_matches(what_happens=consequence, intent=changed)
 
 
 def test_project_canon_cannot_cross_properties():
