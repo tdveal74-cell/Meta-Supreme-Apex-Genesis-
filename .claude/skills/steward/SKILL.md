@@ -17,13 +17,29 @@ eight merges landed on a red main because nobody looked.
 
 ## Local verification parity with CI
 
-CI is FOUR jobs (`.github/workflows/ci.yml`), chained
+CI is FOUR jobs in `.github/workflows/ci.yml`, chained
 `standalone -> {container, engine} -> api`: offline standalone, the Railway
 container contract, engine (council/security), and the PostgreSQL API suite.
+The api job also ends with `ruff check .`, so lint failures surface there rather
+than as a job of their own.
 Reproduce all four locally before any push; one validated push beats three
 speculative ones. The full suite alone is not parity: the standalone job runs
 with NO `PYTHONPATH` and no database, so an import that only resolves under the
 test path passes locally and fails there.
+
+**A FIFTH job exists and is easy to miss, because it usually does not run.**
+`.github/workflows/web-ci.yml` runs `Next.js typecheck + build` and is path
+filtered to `apps/web/**`, `packages/ui/**`, the root `package.json`, the
+lockfile, the workspace file, and itself. Touch none of those and it never
+appears, which is why a run of Python-only PRs makes CI look like exactly four
+jobs. It is a real gate on any web change: `pnpm --filter @meta-supreme/web
+typecheck` then `build`. Reproduce it with `npx tsc --noEmit` and `npx next
+build` from `apps/web`, and note that `tsc` piped into `tail` reports the exit
+code of `tail`, so capture `$?` directly or a type error reads as a pass.
+
+ESLint is NOT configured in this repository. `next lint` drops into its
+interactive setup prompt and exits non-zero, which looks like a lint failure and
+is not one. There is no web lint step in CI to reproduce.
 
 ```
 export DEFAULT_AI_PROVIDER=mock EMBEDDING_PROVIDER=mock ENVIRONMENT=test
