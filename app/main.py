@@ -58,6 +58,14 @@ async def lifespan(app: FastAPI):
         except Exception:  # noqa: BLE001 — never block startup on maintenance
             log.exception("orphaned-run sweep failed; runs may remain stuck")
 
+    # Say what the CORS allowlist will actually accept. On 2026-08-27 every
+    # browser call from the Command Center failed and nothing in any log named
+    # the allowed origins, so diagnosing it meant reading Railway's HTTP stream
+    # and inferring the cause from a 400 on a preflight.
+    from app.core.cors import log_cors_configuration
+
+    log_cors_configuration(log, settings.CORS_ORIGINS, settings.ENVIRONMENT)
+
     yield
     # Shutdown: close connections gracefully
 
