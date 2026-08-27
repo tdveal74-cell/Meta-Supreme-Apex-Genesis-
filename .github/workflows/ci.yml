@@ -174,7 +174,7 @@ jobs:
                   missing = expected - present
                   assert not missing, f"missing migrated tables: {sorted(missing)}"
                   revision = await conn.fetchval("SELECT version_num FROM alembic_version")
-                  assert revision == "012_live_state_ledger", revision
+                  assert revision == "013_approval_consumption", revision
               finally:
                   await conn.close()
 
