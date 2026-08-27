@@ -50,6 +50,7 @@ class CouncilCapabilityAdapter:
         registry.register(
             ToolSpec(
                 name=COUNCIL_TOOL_NAME,
+                parameters=("question", "agents", "full_council", "deliberate"),
                 description=(
                     "Consult the nine-seat Council about a question before "
                     "acting. Read-only deliberation: the synthesis is context "

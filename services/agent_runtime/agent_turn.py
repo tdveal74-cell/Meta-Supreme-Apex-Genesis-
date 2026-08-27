@@ -449,8 +449,17 @@ class AgentTurn:
             events.append(
                 TurnEvent("refused", {"tool": outcome.tool, "detail": outcome.detail})
             )
+            # The turn continues after a refusal, so what the model is told here
+            # decides whether it can correct itself. A fixed "blocked by policy"
+            # was fine while refusal only ever meant a BLOCKED tool; it is not
+            # fine now that a malformed argument list also lands here, because
+            # the model would retry the same call or abandon a task it could
+            # have fixed by renaming one key.
             observations.append(
-                Observation(tool=outcome.tool, outcome="refused: blocked by policy")
+                Observation(
+                    tool=outcome.tool,
+                    outcome=f"refused: {outcome.detail or 'blocked by policy'}",
+                )
             )
             return events, False
 

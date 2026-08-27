@@ -24,6 +24,7 @@ class OperatorCapabilityAdapter:
         registry.register(
             ToolSpec(
                 name="operator.read",
+                parameters=("command", "cwd", "timeout_seconds"),
                 description=(
                     "Run one command that the Operator Bridge classifies read-only. "
                     "No shell pipes, redirects, glob expansion, or shell built-ins."
@@ -37,6 +38,7 @@ class OperatorCapabilityAdapter:
         registry.register(
             ToolSpec(
                 name="operator.command",
+                parameters=("command", "cwd", "timeout_seconds"),
                 description=(
                     "Run one mutating local command only after DEVON human approval. "
                     "Blocked host-destruction commands remain refused at the bridge."

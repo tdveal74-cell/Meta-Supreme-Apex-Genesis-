@@ -51,6 +51,7 @@ class BrowserCapabilityAdapter:
         registry.register(
             ToolSpec(
                 name="browser.fetch",
+                parameters=("url",),
                 description=(
                     "Fetch one allowlisted HTTP(S) URL as plain text (read-only). "
                     "No cookies, no form posts, no script execution."
@@ -64,9 +65,12 @@ class BrowserCapabilityAdapter:
         registry.register(
             ToolSpec(
                 name="browser.navigate",
+                parameters=("url",),
                 description=(
-                    "Record an intentional navigation to an allowlisted URL after "
-                    "DEVON approval. Does not open a real browser session in this slice."
+                    "Record an intent to navigate to an allowlisted URL, under "
+                    "DEVON approval. This opens NO browser and loads NO page: it "
+                    "returns nothing about the URL's contents. To read a page, "
+                    "use browser.fetch instead."
                 ),
                 risk=ToolRisk.WRITE,
                 handler=self._navigate,
@@ -119,10 +123,15 @@ class BrowserCapabilityAdapter:
         receipt = hashlib.sha256(f"nav:{url}".encode()).hexdigest()[:24]
         return ToolResult(
             True,
-            output=f"Navigation recorded for {url}",
+            output=(
+                f"Recorded an intent to navigate to {url}. No browser session was "
+                "opened and no page was loaded, so nothing here was read. Use "
+                "browser.fetch to actually retrieve the page."
+            ),
             metadata={
                 "url": url,
                 "action": "navigate",
+                "visited": False,
                 "provider_receipt_id": f"br-nav-{receipt}",
             },
         )
