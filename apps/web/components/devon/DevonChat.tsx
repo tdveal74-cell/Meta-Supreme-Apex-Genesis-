@@ -83,6 +83,12 @@ export function DevonChat() {
   const [token, setToken] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // Recovery reuses `password` as the new password, because it is the same
+  // thing the user is choosing either way. The key is separate and is never
+  // persisted: it is a standing secret from the deployment environment, not a
+  // session credential, so it lives only as long as the keystroke that spends it.
+  const [recovering, setRecovering] = useState(false);
+  const [recoveryKey, setRecoveryKey] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState("");
   const [status, setStatus] = useState<IntelligenceStatus | null>(null);
@@ -232,6 +238,42 @@ export function DevonChat() {
       setAuthError(errorMessage(error));
     } finally {
       setAuthBusy(false);
+    }
+  }
+
+  async function resetPassword(event?: FormEvent) {
+    event?.preventDefault();
+    if (!email || password.length < 8 || !recoveryKey || authBusy) return;
+    setAuthBusy(true);
+    setAuthError("");
+
+    // Deliberately not inside the try's success path: signIn() guards on
+    // authBusy and would refuse to run while this call still owns the flag.
+    let reset = false;
+    try {
+      const response = await fetch(`${API_BASE}/auth/password/reset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          new_password: password,
+          recovery_key: recoveryKey,
+        }),
+      });
+      if (!response.ok) throw new Error(await readApiError(response));
+      reset = true;
+    } catch (error) {
+      setAuthError(errorMessage(error));
+    } finally {
+      setAuthBusy(false);
+    }
+
+    if (reset) {
+      // Drop the key the moment it has been spent. Nothing here writes it to
+      // storage, and holding it in state after use buys nothing.
+      setRecoveryKey("");
+      setRecovering(false);
+      await signIn();
     }
   }
 
@@ -781,9 +823,14 @@ export function DevonChat() {
       )}
 
       {!authed ? (
-        <form onSubmit={signIn} className="border-t border-white/10 bg-black/25 p-4 sm:p-5">
+        <form
+          onSubmit={recovering ? resetPassword : signIn}
+          className="border-t border-white/10 bg-black/25 p-4 sm:p-5"
+        >
           <p className="mb-3 text-xs text-white/45">
-            Sign in to wake DEVON. First time with an email creates the account.
+            {recovering
+              ? "Set a new password with your recovery key. The key is the one in the deployment environment, not your password."
+              : "Sign in to wake DEVON. First time with an email creates the account."}
           </p>
           <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
             <input
@@ -799,18 +846,53 @@ export function DevonChat() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               type="password"
-              autoComplete="current-password"
-              placeholder="Password (8+ characters)"
+              autoComplete={recovering ? "new-password" : "current-password"}
+              placeholder={
+                recovering ? "New password (8+ characters)" : "Password (8+ characters)"
+              }
               className="min-h-11 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-amber-300/40"
             />
             <button
               type="submit"
-              disabled={authBusy || !email || password.length < 8}
+              disabled={
+                authBusy || !email || password.length < 8 || (recovering && !recoveryKey)
+              }
               className="min-h-11 rounded-lg bg-amber-300 px-6 text-sm font-bold text-[#151006] transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-30"
             >
-              {authBusy ? "Signing in…" : "Sign in"}
+              {authBusy
+                ? recovering
+                  ? "Resetting…"
+                  : "Signing in…"
+                : recovering
+                  ? "Reset"
+                  : "Sign in"}
             </button>
           </div>
+
+          {recovering && (
+            <input
+              value={recoveryKey}
+              onChange={(event) => setRecoveryKey(event.target.value)}
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="Recovery key (DEVON_RECOVERY_KEY)"
+              className="mt-3 min-h-11 w-full rounded-lg border border-amber-300/25 bg-black/30 px-3 font-mono text-sm text-white outline-none transition placeholder:text-white/25 focus:border-amber-300/40"
+            />
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setRecovering((was) => !was);
+              setAuthError("");
+              setRecoveryKey("");
+            }}
+            className="mt-3 text-xs text-white/40 underline-offset-2 transition hover:text-white/70 hover:underline"
+          >
+            {recovering ? "Back to sign in" : "Forgot your password?"}
+          </button>
+
           {authError && <p className="mt-2 text-xs text-red-300">{authError}</p>}
         </form>
       ) : (
