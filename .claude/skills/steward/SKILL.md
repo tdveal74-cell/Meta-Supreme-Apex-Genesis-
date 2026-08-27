@@ -74,10 +74,25 @@ alembic upgrade head && alembic downgrade 004_federated_knowledge_waist && alemb
 Container quirks seen in practice: install `cffi` if `cryptography` panics on
 import (Debian-packaged copy lacks `_cffi_backend`); `pip install --ignore-installed
 cryptography webauthn` when the Debian copy shadows the wheel; apt provides
-`postgresql-16-pgvector`; initdb under `/var/lib/postgresql` as the postgres
-user, then create `meta_supreme` and `meta_supreme_test` with the `vector`
-extension. Postgres does not survive container restarts; `pg_ctl start` again
-on ConnectionRefused.
+`postgresql-16-pgvector`; initdb as the postgres user, then create
+`meta_supreme` and `meta_supreme_test` with the `vector` extension.
+
+Postgres does not survive container restarts, and `ConnectionRefused` in the
+middle of a run is that, not a test failure: the suite reports it as a hundred
+or more collection ERRORs while the tests that ran before the drop still pass.
+Restart with the cluster's REAL data directory, which is `/var/lib/pgtest`:
+
+```
+su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/pgtest -l /tmp/pg.log start"
+```
+
+`/var/lib/postgresql/16/main` also exists and is the empty Debian skeleton. On
+2026-08-27 pointing `pg_ctl` there failed with `could not access the server
+configuration file`, which reads like a broken install rather than the wrong
+path. Find it with `find / -maxdepth 5 -name PG_VERSION` rather than assuming.
+
+Also: `pytest ... | tail` reports tail's exit code, the same trap as `tsc`.
+A run with 154 errors exits 0 through a pipe. Redirect to a file and check `$?`.
 
 **An interrupted pytest poisons the next local run.** `_clean_tables` truncates
 only AFTER each test, so killing pytest mid-test leaves

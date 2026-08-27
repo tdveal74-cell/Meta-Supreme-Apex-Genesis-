@@ -103,6 +103,13 @@ class TurnEvent:
         return {"type": self.type, **self.data}
 
 
+# How much of a tool result the model reads. A success gets more room than a
+# failure: a long stack trace crowds out the work that did succeed, while a
+# truncated success is the thing the model has to reason about.
+OBSERVATION_LIMIT = 1000
+FAILURE_OBSERVATION_LIMIT = 500
+
+
 @dataclass
 class Observation:
     """What a tool call produced, in the form the model sees next iteration."""
@@ -130,9 +137,28 @@ class Observation:
         A failure keeps its FAILED prefix and is cut shorter than a success: the
         model needs to know a call failed and roughly why, and a long stack trace
         crowds out the work that did succeed.
+
+        A cut success says so. Silence here is what made DEVON read the same
+        README three times on 2026-08-27: he saw 1000 characters ending
+        mid-token, correctly judged that he was missing the rest, and asked
+        again, which returned the identical 1000 characters. The retry was the
+        right instinct served by the wrong information. Naming the cut, its
+        size, and the fact that repeating the call changes nothing is what turns
+        that loop into a decision.
         """
         text = body or ""
-        return cls(tool=tool, outcome=(text[:1000] if ok else f"FAILED: {text[:500]}"))
+        if not ok:
+            return cls(tool=tool, outcome=f"FAILED: {text[:FAILURE_OBSERVATION_LIMIT]}")
+        if len(text) <= OBSERVATION_LIMIT:
+            return cls(tool=tool, outcome=text)
+        note = (
+            f"\n[DEVON showed the first {OBSERVATION_LIMIT} of {len(text)} characters "
+            f"and withheld {len(text) - OBSERVATION_LIMIT}. Calling this tool again with "
+            "the same arguments returns the same first "
+            f"{OBSERVATION_LIMIT}. Read further by passing a larger offset, if this tool "
+            "takes one.]"
+        )
+        return cls(tool=tool, outcome=text[:OBSERVATION_LIMIT] + note)
 
 
 @dataclass(frozen=True)
