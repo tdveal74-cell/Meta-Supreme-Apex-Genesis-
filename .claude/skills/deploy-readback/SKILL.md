@@ -25,6 +25,16 @@ honest answer is "unverified", not an optimistic one.
 | Vercel `meta-supreme-web` | The web app and Command Center, root `apps/web` | `list_deployments` for the project |
 | Vercel `devon-soul` | The phone lane, root `deploy/soul` | `list_deployments` for the project |
 
+**Count the Vercel projects before trusting any of this.** On 2026-08-27 a
+diagnosis assumed two and there were four, all deploying from this one
+repository: `meta-supreme-web` and `devon-soul` above, plus
+`meta-supreme-apex-genesis` and `meta-supreme-apex-genesis-web`, both imported
+on 2026-08-26. The third had no `ignoreCommand` and rebuilt on every push to
+every branch, which is what actually exhausted the cap; it was paused on Tee's
+instruction. `list_projects` is the only honest answer to "how many are there",
+and the Vercel commit statuses on a PR head name every project that ran, which
+is how the extra two were found.
+
 Identifiers live in the estate's own records rather than here, because a stale
 id in a skill file is worse than no id. Read them from
 `docs/devon/SYS_SPEC_devon-ecosystem_v1_2026-08-26.md` under "Deployment, read
@@ -89,9 +99,30 @@ the build, and whether it stops the deployment being counted is unproven. See
 "What the ignoreCommand does and does not save" below.
 
 ```
-apps/web      git diff --quiet HEAD^ HEAD -- ':/apps/web' ':/packages/ui' ':/pnpm-lock.yaml' ':/pnpm-workspace.yaml'
-deploy/soul   git diff --quiet HEAD^ HEAD -- ':/deploy/soul'
+if [ -z "$VERCEL_GIT_PREVIOUS_SHA" ] || ! git cat-file -e "$VERCEL_GIT_PREVIOUS_SHA^{commit}" 2>/dev/null; then exit 1; fi
+git diff --quiet "$VERCEL_GIT_PREVIOUS_SHA" HEAD -- <that project's paths>
 ```
+
+**The comparison base is the load bearing part.** `VERCEL_GIT_PREVIOUS_SHA` is
+the commit of the last successful deployment, which Vercel exposes only when an
+ignore step is configured. The first version of these rules compared `HEAD^`
+with `HEAD`, which asks "did this one commit touch my paths" when the question
+that decides a build is "does what production is serving differ from main".
+Those agree only while every build actually runs.
+
+They came apart on 2026-08-26. The cap refused the build carrying
+`apps/web/components/devon/DevonChat.tsx`, so it became owed; the next merge
+touched nothing under `apps/web`, so the old rule skipped it, and would have
+skipped every later commit that also missed those paths. The change sat
+stranded in main, production served without it, no check failed, and the skip
+was reported as success. `devon-soul` escaped only because the next merge
+happened to touch `deploy/soul`, so it built and carried its own owed change
+along; luck is not a mechanism.
+
+**The rule fails open, deliberately, against this repository's usual
+direction.** No previous SHA, or one this checkout does not contain, means
+build. A needless build costs one deployment. A wrong skip ships stale code and
+says nothing, and the silence is what makes that expensive.
 
 `meta-supreme-web` deliberately watches beyond its own root: it imports
 `@meta-supreme/ui` from `packages/ui` in `tailwind.config.ts` and
