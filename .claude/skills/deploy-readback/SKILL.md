@@ -151,6 +151,35 @@ the working assumption and not a settled fact. The safe posture either way:
 cheap in build time. Whether it makes them free against the daily count is
 unproven, and the optimistic reading is the one that burned this estate.
 
+### The first preview on a new branch always builds
+
+The fail-open guard is not only a safety net for damaged history: it fires
+routinely, on every branch's first push. A new branch has no previous
+successful deployment, so `VERCEL_GIT_PREVIOUS_SHA` is empty, the guard exits
+1, and the build runs no matter what the commit touched.
+
+**So do not predict a skip on a pull request from path reasoning.** On
+2026-08-27 a docs-only commit was pushed to a fresh branch with a PR body
+claiming both Vercel projects would correctly skip. All three active projects
+built previews. Nothing was broken; the prediction applied production-branch
+reasoning to a first preview. The build log settles it in one line, and is the
+only honest way to tell a fail-open build from a rule failure:
+
+```
+Running "if [ -z "$VERCEL_GIT_PREVIOUS_SHA" ] || ! git cat-file -e ..."
+Running "vercel build"
+```
+
+The rule ran and chose to build. Contrast a genuine skip, where the
+`ignoreCommand` line is followed by the build being ignored rather than by
+`vercel build`.
+
+Practical consequences. A preview building on a docs-only PR is expected and
+is not evidence the rule is broken. Every PR branch therefore costs at least
+one build per active project regardless of its paths, which is worth knowing
+when the daily cap is near. And the skips worth checking are the ones on
+**main**, where a previous SHA exists and the comparison is real.
+
 ### Reading a skipped build correctly
 
 An ignored build is recorded as **`CANCELED`**, and the Vercel bot comments
