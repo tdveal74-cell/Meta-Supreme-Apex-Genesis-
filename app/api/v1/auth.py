@@ -7,7 +7,9 @@ JWT used everywhere else so authorization semantics do not fork.
 
 from __future__ import annotations
 
+import hmac
 import json
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -44,6 +46,11 @@ from app.security.deps import CurrentUser
 from app.security.jwt import create_access_token
 from app.security.password import hash_password, verify_password
 
+#: A recovery key shorter than this is refused outright. The realistic threat
+#: is not brute force against a random secret, it is a human picking something
+#: short and memorable for a credential that resets an account.
+MIN_RECOVERY_KEY_LENGTH = 32
+
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
@@ -60,6 +67,12 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+    new_password: str = Field(..., min_length=8, max_length=128)
+    recovery_key: str = Field(..., min_length=1, max_length=512)
 
 
 class TokenResponse(BaseModel):
@@ -205,6 +218,87 @@ async def login(
     user.last_login_at = datetime.now(timezone.utc)
     await db.flush()
     return _token_for(user)
+
+
+@router.post("/password/reset", response_model=UserResponse)
+async def reset_password(
+    payload: PasswordResetRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Set a new password using the out-of-band recovery key.
+
+    This API sends no email, so the usual emailed-link flow has nothing to send
+    a link through. What exists instead is the trust boundary the Operator
+    Bridge already relies on: a secret held in the deployment environment and
+    readable only by whoever owns the deployment. Someone who can read
+    DEVON_RECOVERY_KEY in Railway is, by construction, entitled to recover the
+    account.
+
+    Four properties make that safe to expose on a public endpoint.
+
+    It fails closed when unconfigured. A deployment that never set the key has
+    no reset path at all, rather than one guarded by an empty string. A key too
+    short to resist guessing is refused for the same reason.
+
+    The key is checked FIRST, before the account is looked up. Every later error
+    may speak plainly about whether an email exists, because reaching them means
+    the caller already proved they hold the secret. A caller who has not proved
+    it learns nothing here about who has an account.
+
+    The comparison is constant time, so the key cannot be recovered a byte at a
+    time from response timing.
+
+    Passkeys deliberately survive a reset. Clearing them would turn a leaked
+    recovery key into a way to strip the account's strongest credential, and
+    anyone who passed the key check can already sign in regardless.
+
+    One honest limit: JWTs already issued stay valid until they expire. Tokens
+    are stateless and there is no denylist, so a reset closes off future logins
+    with the old password without severing a session already in flight.
+    """
+    configured = os.getenv("DEVON_RECOVERY_KEY", "").strip()
+    if len(configured) < MIN_RECOVERY_KEY_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Password recovery is not configured. Set DEVON_RECOVERY_KEY to a "
+                f"random secret of at least {MIN_RECOVERY_KEY_LENGTH} characters."
+            ),
+        )
+
+    if not hmac.compare_digest(configured, payload.recovery_key):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Recovery key is not valid.",
+        )
+
+    email = payload.email.lower()
+
+    # Optional pin. When set, the key recovers exactly one account instead of
+    # any account on the deployment, so a leaked key cannot take over a
+    # different user. Cheap, and recommended.
+    pinned = os.getenv("DEVON_RECOVERY_EMAIL", "").strip().lower()
+    if pinned and not hmac.compare_digest(pinned, email):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This recovery key does not cover that account.",
+        )
+
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account with that email.",
+        )
+
+    user.password_hash = hash_password(payload.new_password)
+    # A disabled account is re-enabled by a successful recovery: being locked
+    # out is the situation this endpoint exists to end.
+    user.is_active = True
+    await db.flush()
+    await db.refresh(user)
+    return user
 
 
 # ---------------------------------------------------------------------------
