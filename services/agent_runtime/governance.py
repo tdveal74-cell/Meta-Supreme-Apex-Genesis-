@@ -83,4 +83,21 @@ def require_approved_runtime_binding(
         raise ValueError("approval request was not raised by DEVON Agent Runtime")
     if approval_marker(expected_binding) not in record.what_happens:
         raise ValueError("runtime approval binding does not match this effect")
+
+    # Last, and only once everything else has passed. Until this line an
+    # approval was a standing permission: APPROVED and bound to these arguments
+    # were both permanently true, so the same governed effect could be replayed
+    # forever by anyone still holding the metadata. Spending it here makes it
+    # permission to do one thing once.
+    #
+    # This runs BEFORE the handler, which means an effect whose handler then
+    # fails leaves the approval spent and needs a fresh one. That is deliberate.
+    # The alternative is to spend it afterwards, which leaves a live approval
+    # sitting behind a half-finished effect, and a partial write is exactly the
+    # situation where a silent replay does the most damage.
+    spent = approvals.consume(request_id)
+    if not spent.ok:
+        raise ValueError(
+            f"runtime approval could not be spent: {spent.message}"
+        )
     return request_id, expected_binding

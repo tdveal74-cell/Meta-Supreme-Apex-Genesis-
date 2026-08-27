@@ -143,8 +143,18 @@ Check these before inventing new theories:
 Env flags: `DEVON_AUTO_SKILL_PROPOSE` (default on),
 `DEVON_BROWSER_LIVE_FETCH` (default off), `DEVON_AGENT_TASK_LEASE_SECONDS`
 (default 120), `DEFAULT_AI_PROVIDER`/`ENRICHMENT_PROVIDER` (cerebras live,
-mock in CI). Alembic head as of 2026-08-26: `012_live_state_ledger` (the skill
-said `010_agent_subagent_links` until then; verify with `alembic heads` rather
-than trusting this line).
+mock in CI). Alembic head as of 2026-08-27: `013_approval_consumption` (the
+skill said `010_agent_subagent_links`, then `012_live_state_ledger`; verify with
+`alembic heads` rather than trusting this line).
+
+**A new migration touches ci.yml in THREE places, not two.** The two `for f in
+001... ; do test -s` loops check that the schema and migration files exist, and
+they are the obvious ones. The third is an assertion inside the Python heredoc
+of the "Fresh Alembic deploy" step: `assert revision == "<head>"`. On
+2026-08-27 the first two were updated and the third was not, so the whole api
+job went red on `AssertionError: 013_approval_consumption` after 1043 tests had
+passed and the upgrade/downgrade/upgrade round trip had worked. The failure
+names the new head, which reads like the migration broke rather than like a
+pinned expectation went stale.
 Live-environment verification (deployed DB, Cerebras key) cannot run from CI
 or agent containers; it is always a manual item for Tee.
