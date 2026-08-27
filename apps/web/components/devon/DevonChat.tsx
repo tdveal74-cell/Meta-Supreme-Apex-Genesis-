@@ -46,7 +46,27 @@ type IntelligenceStatus = {
 const TOKEN_KEY = "devon-chat-token";
 const EMAIL_KEY = "devon-chat-email";
 
+// Host only, for the failure message below. The full base is already printed on
+// the page, so this reveals nothing new.
+const API_HOST = (() => {
+  try {
+    return new URL(API_BASE).host;
+  } catch {
+    return API_BASE;
+  }
+})();
+
 function errorMessage(value: unknown): string {
+  // A fetch that never completed rejects with a TypeError, and the browser's own
+  // wording for it is uselessly bare: Safari says "Load failed", Chrome says
+  // "Failed to fetch". Neither hints that the request never left the tab, so on
+  // 2026-08-27 a CORS allowlist missing this origin read on screen as though a
+  // credential had been rejected. Errors we raise ourselves carry the API's own
+  // detail and are plain Errors, which makes the type a clean line between
+  // "could not reach the API" and "the API answered no".
+  if (value instanceof TypeError) {
+    return `Could not reach the API at ${API_HOST}. The request never completed, so this is a network, DNS or CORS problem rather than a rejected email or password.`;
+  }
   if (value instanceof Error) return value.message;
   return String(value);
 }
