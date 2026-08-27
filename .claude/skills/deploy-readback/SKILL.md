@@ -174,6 +174,14 @@ The rule ran and chose to build. Contrast a genuine skip, where the
 `ignoreCommand` line is followed by the build being ignored rather than by
 `vercel build`.
 
+**From the second push onward the comparison base is the branch's own last
+deployment, not production.** The same PR proved it: push two touched only the
+skill file, and all three active projects recorded Ignored, because
+`VERCEL_GIT_PREVIOUS_SHA` then pointed at push one on that branch. So a preview
+skip means "nothing changed since I last built this branch", which is a
+different question from the one a skip on `main` answers. Do not read a preview
+skip as evidence about what production serves.
+
 Practical consequences. A preview building on a docs-only PR is expected and
 is not evidence the rule is broken. Every PR branch therefore costs at least
 one build per active project regardless of its paths, which is worth knowing
