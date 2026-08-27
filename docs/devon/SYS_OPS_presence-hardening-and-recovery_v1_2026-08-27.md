@@ -33,7 +33,7 @@ reported a working capability that had done nothing.
 | The recovery path has a door in the UI | DONE | PR #85, merged `b2c19fe`; live at `/command-center` |
 | GitHub writes configured in production | DONE | `DEVON_GITHUB_TOKEN` + `DEVON_GITHUB_ALLOWED_REPOS` set on Railway |
 | First real read by Tee through the conversation path | DONE | Tee, 2026-08-27, in the Command Center; see "The chain was closed by the only person who could close it" |
-| An approval actually spent by a live effect | WAITS ON TEE | a read is not approval gated, so this arc still has no live receipt for `013_approval_consumption` |
+| An approval actually spent by a live effect | DONE | Tee, 2026-08-27; `github.create_branch` created branch `Devon` at `fe52cb3`. See "The governed write, and what asking twice does not prove" |
 
 ## The three defects worth remembering
 
@@ -138,15 +138,61 @@ The honest summary is that the estate can now be talked to and can act on
 what it is told, and that the governance layer sitting between those two
 facts has been proven everywhere except in production.
 
+## The governed write, and what asking twice does not prove
+
+Minutes after the read, Tee asked DEVON to create a branch. The card named
+`github.create_branch` with exactly three arguments, `repository`, `branch` and
+`base_ref`, which is precisely the surface PR #82 made `ToolSpec` declare. He had
+not named the repository; the allowlist reached him through the tool description
+PR #89 added. The card said the effect could not be walked back, which is the
+`reversible=False` declaration surfacing rather than a warning about damage. He
+approved it, and branch `Devon` exists at `fe52cb3`, which was the tip of main at
+that moment.
+
+**That closes the approval spend, and the branch is the proof.**
+`require_approved_runtime_binding` calls `approvals.consume` before the handler
+and raises when the spend fails, so an effect that reached GitHub is an effect
+whose approval was spent first. The row above is settled by the branch existing,
+not by anything anyone observed in the interface.
+
+**Asking a second time does not demonstrate it, and this document previously
+implied it would.** The runtime computes its binding as
+`approval_binding(task_id=self.turn_id, ...)`, and `turn_id` is fresh every turn.
+A repeated request is therefore a different binding, a different record and a new
+card, whether or not the first approval was ever spent. The second card is
+guaranteed by construction.
+
+What consumption actually defends against is a holder replaying the same record:
+the runtime metadata for one already approved effect, re-invoked. Nothing in the
+Command Center can do that, because the interface never reuses a turn. So the
+protection is real, is covered by tests with a negative control, and is not
+observable from the front end. Any future attempt to prove it by hand needs to
+replay a token, not repeat a sentence.
+
 ## What is still owed, and by whom
 
-- **Tee, and only Tee. Done on 2026-08-27.** See the section below. What it
-  left standing is narrower and is stated there: no live effect has yet spent
-  an approval, because the exchange that closed the chain was a read.
+- **Nothing. Both halves were done on 2026-08-27**, the read and then the
+  governed write. See the two sections above.
 - **Tee.** Retire the duplicate Vercel project `meta-supreme-apex-genesis`.
-  It is paused, and it posts a failing commit status on every pull request
+  It is paused, has no custom domain, and none of its origins appear in the
+  API's CORS allowlist, so no browser session could reach the API from it
+  even if it were loaded. It has no root directory and no `ignoreCommand`,
+  so it rebuilt the whole monorepo on every push, which is where the daily
+  Vercel cap went. It posts a failing commit status on every pull request
   that is red identically on main. No delete or disconnect tool exists in
   the Vercel MCP surface, so this is a dashboard action.
+- **Tee, a decision rather than a chore.** Two Vercel projects still build
+  `apps/web` and serve identical code: `meta-supreme-web`, which
+  `app/core/config.py` calls the canonical production host and binds
+  passkeys to through `PASSKEY_RP_ID`, and `meta-supreme-apex-genesis-web`,
+  which is the one he actually loads. The live API's CORS allowlist admits
+  both, so CORS does not decide it. WebAuthn credentials are bound to the
+  relying party id, so retiring the host named in `PASSKEY_RP_ID` without
+  first repointing that variable and re-registering would end passkey login,
+  and the symptom would look like a broken passkey rather than a deleted
+  project. Nothing logs the deployed value, and reading Railway's variable
+  list would expose the GitHub token alongside it, so this is his to read
+  from the dashboard.
 - `browser.navigate` opens no browser and loads no page. Its output now says
   so plainly, having previously read "Navigation recorded for ...", which a
   model reads as done and then answers questions about a page it never saw.

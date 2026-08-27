@@ -151,19 +151,29 @@ the working assumption and not a settled fact. The safe posture either way:
 cheap in build time. Whether it makes them free against the daily count is
 unproven, and the optimistic reading is the one that burned this estate.
 
-### The first preview on a new branch always builds
+### A preview builds when the BRANCH has no previous deployment
 
 The fail-open guard is not only a safety net for damaged history: it fires
-routinely, on every branch's first push. A new branch has no previous
-successful deployment, so `VERCEL_GIT_PREVIOUS_SHA` is empty, the guard exits
-1, and the build runs no matter what the commit touched.
+whenever a branch ref has no deployment behind it. `VERCEL_GIT_PREVIOUS_SHA` is
+then empty, the guard exits 1, and the build runs no matter what the commit
+touched.
 
-**So do not predict a skip on a pull request from path reasoning.** On
-2026-08-27 a docs-only commit was pushed to a fresh branch with a PR body
-claiming both Vercel projects would correctly skip. All three active projects
-built previews. Nothing was broken; the prediction applied production-branch
-reasoning to a first preview. The build log settles it in one line, and is the
-only honest way to tell a fail-open build from a rule failure:
+**The condition is the branch ref's deployment history, not the branch's
+novelty, and in this repository those come apart.** The convention here is to
+recycle the designated branch name after every merge, restarting it from
+`origin/main` and force pushing. Vercel keeps that ref's deployment history
+across the force push, so the second and later lives of a recycled branch have a
+previous SHA from the outset and the guard never fires. PR #93 proved it: its
+very first push recorded Ignored on all three active projects, on a branch name
+that had already carried PR #92. Saying "a new branch always builds" would have
+predicted a build there and been wrong.
+
+**So do not predict either outcome on a pull request from path reasoning.** On
+2026-08-27 a docs-only commit was pushed to a genuinely fresh branch with a PR
+body claiming both Vercel projects would correctly skip. All three active
+projects built previews. Nothing was broken; the prediction applied
+production-branch reasoning to a first preview. The build log settles it in one
+line, and is the only honest way to tell a fail-open build from a rule failure:
 
 ```
 Running "if [ -z "$VERCEL_GIT_PREVIOUS_SHA" ] || ! git cat-file -e ..."
@@ -182,11 +192,12 @@ skip means "nothing changed since I last built this branch", which is a
 different question from the one a skip on `main` answers. Do not read a preview
 skip as evidence about what production serves.
 
-Practical consequences. A preview building on a docs-only PR is expected and
-is not evidence the rule is broken. Every PR branch therefore costs at least
-one build per active project regardless of its paths, which is worth knowing
-when the daily cap is near. And the skips worth checking are the ones on
-**main**, where a previous SHA exists and the comparison is real.
+Practical consequences. A preview building on a docs-only PR is expected and is
+not evidence the rule is broken. A branch's first ever push costs one build per
+active project regardless of its paths, which is worth knowing when the daily
+cap is near; a recycled branch does not, which is a quiet argument for the
+recycling convention. And the skips worth auditing are the ones on **main**,
+where the comparison base is production and a wrong skip ships stale code.
 
 ### Reading a skipped build correctly
 
