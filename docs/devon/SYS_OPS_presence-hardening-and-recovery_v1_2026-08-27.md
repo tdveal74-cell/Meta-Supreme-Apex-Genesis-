@@ -173,26 +173,28 @@ replay a token, not repeat a sentence.
 
 - **Nothing. Both halves were done on 2026-08-27**, the read and then the
   governed write. See the two sections above.
-- **Tee.** Retire the duplicate Vercel project `meta-supreme-apex-genesis`.
-  It is paused, has no custom domain, and none of its origins appear in the
-  API's CORS allowlist, so no browser session could reach the API from it
-  even if it were loaded. It has no root directory and no `ignoreCommand`,
-  so it rebuilt the whole monorepo on every push, which is where the daily
-  Vercel cap went. It posts a failing commit status on every pull request
-  that is red identically on main. No delete or disconnect tool exists in
-  the Vercel MCP surface, so this is a dashboard action.
-- **Tee, a decision rather than a chore.** Two Vercel projects still build
-  `apps/web` and serve identical code: `meta-supreme-web`, which
-  `app/core/config.py` calls the canonical production host and binds
-  passkeys to through `PASSKEY_RP_ID`, and `meta-supreme-apex-genesis-web`,
-  which is the one he actually loads. The live API's CORS allowlist admits
-  both, so CORS does not decide it. WebAuthn credentials are bound to the
-  relying party id, so retiring the host named in `PASSKEY_RP_ID` without
-  first repointing that variable and re-registering would end passkey login,
-  and the symptom would look like a broken passkey rather than a deleted
-  project. Nothing logs the deployed value, and reading Railway's variable
-  list would expose the GitHub token alongside it, so this is his to read
-  from the dashboard.
+- **Tee. Two Vercel projects to delete, and the decision behind them is
+  settled.** `meta-supreme-apex-genesis` is paused, has no custom domain,
+  and none of its origins appear in the API's CORS allowlist, so no browser
+  session could reach the API from it even if it were loaded. It has no root
+  directory and no `ignoreCommand`, so it rebuilt the whole monorepo on
+  every push, which is where the daily Vercel cap went. `meta-supreme-web`
+  builds `apps/web` and serves code identical to
+  `meta-supreme-apex-genesis-web`, which is the front end actually loaded.
+  Both go; `meta-supreme-apex-genesis-web` stays. No delete or disconnect
+  tool exists in the Vercel MCP surface, so this is a dashboard action.
+
+  What briefly made the second one a decision rather than a chore was
+  `PASSKEY_RP_ID`. WebAuthn credentials bind to the relying party id, so
+  retiring the host it names would have ended passkey login and presented as
+  a broken passkey rather than a deleted project. Tee read it from the
+  Railway dashboard on 2026-08-27, since nothing logs the deployed value and
+  reading the variable list would expose the GitHub token alongside it. Both
+  `PASSKEY_RP_ID` and `PASSKEY_ORIGIN` name
+  `meta-supreme-apex-genesis-web.vercel.app`, correctly paired, the origin
+  with a scheme and the rp id without. PR #94 then repointed the code
+  defaults, which still named the project being retired, so nothing in the
+  repository depends on `meta-supreme-web` any longer.
 - `browser.navigate` opens no browser and loads no page. Its output now says
   so plainly, having previously read "Navigation recorded for ...", which a
   model reads as done and then answers questions about a page it never saw.
