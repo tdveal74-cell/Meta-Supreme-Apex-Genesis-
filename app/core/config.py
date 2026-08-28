@@ -34,9 +34,17 @@ class Settings(BaseSettings):
     # DEVON Command Center passkeys. These defaults bind credentials to the
     # canonical production Vercel host. Railway can override them for a custom
     # domain without changing code. WebAuthn private keys never reach DEVON.
-    PASSKEY_RP_ID: str = "meta-supreme-web.vercel.app"
+    #
+    # The two must always name the SAME host, the origin with a scheme and the
+    # rp id without one, or registration and login disagree about who is asking.
+    # They previously defaulted to meta-supreme-web.vercel.app, a project that
+    # served the same code and was retired on 2026-08-27 once production was
+    # confirmed to override both. A default naming a host that no longer exists
+    # is the worst kind: it applies only when the override is missing, and the
+    # failure surfaces as a rejected passkey rather than as absent config.
+    PASSKEY_RP_ID: str = "meta-supreme-apex-genesis-web.vercel.app"
     PASSKEY_RP_NAME: str = "DEVON Command Center"
-    PASSKEY_ORIGIN: str = "https://meta-supreme-web.vercel.app"
+    PASSKEY_ORIGIN: str = "https://meta-supreme-apex-genesis-web.vercel.app"
     PASSKEY_CHALLENGE_TTL_SECONDS: int = 300
 
     # Operator shell: a second, shell-only key distinct from the operator
