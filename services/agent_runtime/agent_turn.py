@@ -328,12 +328,20 @@ class AgentTurn:
             used += extra
         kept.reverse()
         omitted = len(lines) - len(kept)
-        marker = f"[{omitted} earlier tool result(s) compacted; do not repeat them]"
+
+        def marker_for(count: int) -> str:
+            names = ", ".join(obs.tool for obs in observations[:count])
+            return (
+                f"[{count} earlier tool result(s) compacted; already called, "
+                f"do not repeat: {names}]"
+            )
+
+        marker = marker_for(omitted)
         room = self.observations_max_chars - len(marker) - (1 if kept else 0)
         while kept and sum(len(line) + 1 for line in kept) > max(0, room):
             kept.pop(0)
             omitted += 1
-            marker = f"[{omitted} earlier tool result(s) compacted; do not repeat them]"
+            marker = marker_for(omitted)
             room = self.observations_max_chars - len(marker) - (1 if kept else 0)
         if not kept:
             newest = lines[-1]
