@@ -754,5 +754,6 @@ async def test_tool_context_is_bounded_and_keeps_the_newest_result() -> None:
     )
     assert len(tool_context) <= TURN_OBSERVATIONS_MAX_CHARS + framed_overhead
     assert "earlier tool result(s) compacted" in tool_context
+    assert "do not repeat: tool.0" in tool_context
     assert "tool.9 -> result-9-" in tool_context
 
