@@ -102,6 +102,13 @@ class Settings(BaseSettings):
     AI_TEMPERATURE: float = 0.2
     AI_MAX_TOKENS_PER_AGENT: int = 1200
     AI_MAX_TOKENS_SYNTHESIS: int = 2000
+    # Live AgentTurn is an iterative loop, so these limits apply on every tool
+    # step rather than once per Council request. Keep the newest context and a
+    # compact completion budget; deployments can raise them with measurements.
+    AI_MAX_TOKENS_AGENT_TURN: int = 600
+    AI_TURN_HISTORY_MAX_MESSAGES: int = 12
+    AI_TURN_HISTORY_MAX_CHARS: int = 12_000
+    AI_TURN_OBSERVATIONS_MAX_CHARS: int = 6_000
 
     # DEVON remains the approval and orchestration authority. EditForge is the
     # authenticated media execution boundary. The token is never returned by
