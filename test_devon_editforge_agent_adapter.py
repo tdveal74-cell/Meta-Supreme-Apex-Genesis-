@@ -30,6 +30,7 @@ async def test_editforge_status_is_read_only_and_returns_live_fields() -> None:
     spec = registry.require("editforge.status")
     assert spec.risk is ToolRisk.READ
     assert spec.approval_required is False
+    assert spec.parameters == ("scope",)
 
     result = await registry.execute("editforge.status", {})
     assert result.ok is True
@@ -39,6 +40,10 @@ async def test_editforge_status_is_read_only_and_returns_live_fields() -> None:
     assert payload["editforge"]["executionReady"] is True
     assert payload["editforge"]["workerReachable"] is True
     assert payload["editforge"]["health"] == "healthy"
+
+    refused = await registry.execute("editforge.status", {"scope": "render"})
+    assert refused.ok is False
+    assert "scope must be execution" in refused.error
 
 
 @pytest.mark.asyncio

@@ -39,11 +39,14 @@ class EditForgeCapabilityAdapter:
                 handler=self._status,
                 reversible=True,
                 blast_radius="one authenticated read from the EditForge health boundary",
+                parameters=("scope",),
             )
         )
 
     async def _status(self, arguments: Dict[str, Any]) -> ToolResult:
-        del arguments
+        scope = str(arguments.get("scope") or "execution").strip().lower()
+        if scope != "execution":
+            return ToolResult(False, error="scope must be execution")
         try:
             payload = dict(await self._status_reader())
         except Exception as exc:
