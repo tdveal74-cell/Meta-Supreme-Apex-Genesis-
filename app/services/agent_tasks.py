@@ -21,7 +21,11 @@ from app.services.agent_runtime_persistence import (
     AmbiguousEffectRefusal,
     TaskExecutionLeaseLost,
 )
-from app.services.editforge_client import EditForgeConfig, read_editforge_status
+from app.services.editforge_client import (
+    EditForgeClient,
+    EditForgeConfig,
+    read_editforge_status,
+)
 from app.services.hermes_expansion_persistence import HermesExpansionRepository
 from app.services.intelligence import get_provider
 from app.services.leased_effect_recorder import LeasedEffectRecorder
@@ -69,11 +73,11 @@ subagent_links = SubagentLinkRepository()
 council_adapter = CouncilCapabilityAdapter(get_provider)
 
 
-async def _read_live_editforge_status() -> Dict[str, Any]:
-    """Bind the runtime tool to the same private config as the HTTP control API."""
+def _editforge_client() -> EditForgeClient:
+    """Resolve current private EditForge configuration at call time."""
     from app.core.config import settings
 
-    return await read_editforge_status(
+    return EditForgeClient(
         EditForgeConfig(
             base_url=settings.EDITFORGE_URL,
             token=settings.EDITFORGE_TOKEN or "",
@@ -82,7 +86,33 @@ async def _read_live_editforge_status() -> Dict[str, Any]:
     )
 
 
-editforge_adapter = EditForgeCapabilityAdapter(_read_live_editforge_status)
+async def _read_live_editforge_status() -> Dict[str, Any]:
+    """Bind the runtime tool to the same private config as the HTTP control API."""
+    return await read_editforge_status(_editforge_client().config)
+
+
+async def _execute_editforge(command: Dict[str, Any]) -> Dict[str, Any]:
+    return await _editforge_client().execute(command)
+
+
+async def _read_editforge_execution(
+    command_id: str,
+    poll: bool,
+) -> Dict[str, Any]:
+    return await _editforge_client().execution(command_id, poll=poll)
+
+
+async def _control_editforge(command_id: str, action: str) -> Dict[str, Any]:
+    return await _editforge_client().action(command_id, action)
+
+
+editforge_adapter = EditForgeCapabilityAdapter(
+    _read_live_editforge_status,
+    command_writer=_execute_editforge,
+    execution_reader=_read_editforge_execution,
+    action_writer=_control_editforge,
+    approvals=approvals,
+)
 
 
 def _browser_live_fetch_enabled() -> bool:
