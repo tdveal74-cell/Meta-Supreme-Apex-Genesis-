@@ -87,3 +87,19 @@ class EditForgeClient:
             f"/api/edits/{quote(command_id, safe='')}",
             payload={"action": action},
         )
+
+
+async def read_editforge_status(config: EditForgeConfig) -> Dict[str, Any]:
+    """Return the normalized live status without ever returning the credential."""
+    client = EditForgeClient(config)
+    if not config.configured:
+        return {
+            "configured": False,
+            "live_verified": False,
+            "reason": "EDITFORGE_URL and EDITFORGE_TOKEN must be configured",
+        }
+    try:
+        status = await client.status()
+    except EditForgeExecutionError as exc:
+        return {"configured": True, "live_verified": False, "reason": str(exc)}
+    return {"configured": True, "live_verified": True, "editforge": status}

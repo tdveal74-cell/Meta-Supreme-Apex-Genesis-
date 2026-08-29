@@ -21,6 +21,7 @@ from app.services.agent_runtime_persistence import (
     AmbiguousEffectRefusal,
     TaskExecutionLeaseLost,
 )
+from app.services.editforge_client import EditForgeConfig, read_editforge_status
 from app.services.hermes_expansion_persistence import HermesExpansionRepository
 from app.services.intelligence import get_provider
 from app.services.leased_effect_recorder import LeasedEffectRecorder
@@ -48,6 +49,7 @@ from services.agent_runtime.tools import ToolRegistry
 from services.agents.registry import list_agent_slugs
 from services.browser.agent_adapter import BrowserCapabilityAdapter
 from services.browser.http_fetcher import maybe_live_fetcher
+from services.editforge.agent_adapter import EditForgeCapabilityAdapter
 from services.github.agent_adapter import GitHubCapabilityAdapter
 from services.github.client import GitHubRESTClient
 from services.intelligence.council_adapter import CouncilCapabilityAdapter
@@ -65,6 +67,22 @@ subagent_links = SubagentLinkRepository()
 # The provider resolves at call time, so the mock provider serves CI and the
 # live provider serves production through the same adapter instance.
 council_adapter = CouncilCapabilityAdapter(get_provider)
+
+
+async def _read_live_editforge_status() -> Dict[str, Any]:
+    """Bind the runtime tool to the same private config as the HTTP control API."""
+    from app.core.config import settings
+
+    return await read_editforge_status(
+        EditForgeConfig(
+            base_url=settings.EDITFORGE_URL,
+            token=settings.EDITFORGE_TOKEN or "",
+            timeout_seconds=settings.EDITFORGE_TIMEOUT_SECONDS,
+        )
+    )
+
+
+editforge_adapter = EditForgeCapabilityAdapter(_read_live_editforge_status)
 
 
 def _browser_live_fetch_enabled() -> bool:
@@ -93,6 +111,7 @@ def build_tool_registry() -> ToolRegistry:
         approvals,
         fetcher=maybe_live_fetcher(_browser_live_fetch_enabled()),
     ).register(registry)
+    editforge_adapter.register(registry)
     expansion_adapter.register(registry)
     council_adapter.register(registry)
     return registry

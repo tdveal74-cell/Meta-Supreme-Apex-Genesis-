@@ -10,7 +10,11 @@ from pydantic import BaseModel, Field
 from app.api.v1.devon import _queue
 from app.core.config import settings
 from app.security.deps import CurrentUser
-from app.services.editforge_client import EditForgeClient, EditForgeConfig
+from app.services.editforge_client import (
+    EditForgeClient,
+    EditForgeConfig,
+    read_editforge_status,
+)
 from services.devon.approval import ApprovalState
 from services.devon.editforge_execution import (
     EditForgeExecutionError,
@@ -143,18 +147,7 @@ def _public_execution(execution: Dict[str, Any]) -> Dict[str, Any]:
 @router.get("/status")
 async def editforge_status(user: CurrentUser) -> Dict[str, Any]:
     """Read the live EditForge boundary without exposing its credential."""
-    client = _client()
-    if not client.config.configured:
-        return {
-            "configured": False,
-            "live_verified": False,
-            "reason": "EDITFORGE_URL and EDITFORGE_TOKEN must be configured",
-        }
-    try:
-        status = await client.status()
-    except EditForgeExecutionError as exc:
-        return {"configured": True, "live_verified": False, "reason": str(exc)}
-    return {"configured": True, "live_verified": True, "editforge": status}
+    return await read_editforge_status(_client().config)
 
 
 @router.post("/authorize")
