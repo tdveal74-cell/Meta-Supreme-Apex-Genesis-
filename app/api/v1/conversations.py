@@ -675,7 +675,7 @@ async def act_stream(
                 select(Message)
                 .where(Message.conversation_id == conversation.id)
                 .order_by(Message.created_at.desc())
-                .limit(HISTORY_TURNS)
+                .limit(settings.AI_TURN_HISTORY_MAX_MESSAGES)
             )
         )
         .scalars()
