@@ -24,6 +24,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.devon import _queue as approval_queue
+from app.core.config import settings
 from app.db.session import AsyncSessionLocal, get_db
 from app.models.agent import Agent, AgentRun
 from app.models.conversation import Conversation, Message
@@ -733,6 +734,10 @@ async def act_stream(
             approvals=approval_queue,
             actor=str(current_user.id),
         ),
+        max_completion_tokens=settings.AI_MAX_TOKENS_AGENT_TURN,
+        history_max_messages=settings.AI_TURN_HISTORY_MAX_MESSAGES,
+        history_max_chars=settings.AI_TURN_HISTORY_MAX_CHARS,
+        observations_max_chars=settings.AI_TURN_OBSERVATIONS_MAX_CHARS,
     )
 
     async def event_stream():
