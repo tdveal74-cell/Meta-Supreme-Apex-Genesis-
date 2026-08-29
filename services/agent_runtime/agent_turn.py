@@ -69,6 +69,16 @@ Eight is chosen to be generous for real work (read four tables, compare, act)
 and still bounded, because each step is a paid provider round trip.
 """
 
+# A turn returns either one compact tool call or one conversational answer. It
+# never needs the 1,500-token completion previously reserved for every loop
+# iteration. These defaults keep both sides of each paid request bounded while
+# leaving constructor overrides for deployments that have measured a real need.
+TURN_MAX_COMPLETION_TOKENS = 600
+TURN_HISTORY_MAX_MESSAGES = 12
+TURN_HISTORY_MAX_CHARS = 12_000
+TURN_OBSERVATIONS_MAX_CHARS = 6_000
+_COMPACTION_NOTE = "[earlier content omitted to stay within DEVON's token budget]\n"
+
 TURN_CONTRACT = (
     '{"say": "what you want to tell Tee"} '
     'OR {"tool": "exact.tool.name", "arguments": {}, "why": "one short clause"}'
@@ -201,17 +211,29 @@ class AgentTurn:
         executor: PresenceExecutor,
         model: Optional[str] = None,
         max_steps: int = MAX_TURN_STEPS,
+        max_completion_tokens: int = TURN_MAX_COMPLETION_TOKENS,
+        history_max_messages: int = TURN_HISTORY_MAX_MESSAGES,
+        history_max_chars: int = TURN_HISTORY_MAX_CHARS,
+        observations_max_chars: int = TURN_OBSERVATIONS_MAX_CHARS,
     ) -> None:
         self.provider = provider
         self.tools = tools
         self.executor = executor
         self.model = model
         self.max_steps = max(1, min(int(max_steps), MAX_TURN_STEPS))
+        self.max_completion_tokens = max(128, int(max_completion_tokens))
+        self.history_max_messages = max(0, int(history_max_messages))
+        self.history_max_chars = max(0, int(history_max_chars))
+        self.observations_max_chars = max(256, int(observations_max_chars))
 
     # -- prompt ------------------------------------------------------------
 
     def _system(self, caller: Caller) -> str:
-        catalog = json.dumps(self.tools.describe(), ensure_ascii=False)
+        # The catalog is repeated on every provider call. Compact JSON keeps the
+        # exact governed surface while avoiding whitespace tokens on every step.
+        catalog = json.dumps(
+            self.tools.describe(), ensure_ascii=False, separators=(",", ":")
+        )
         return (
             "You are DEVON, Tee's second brain and executive control plane. "
             "You are in a live conversation with him: answer like a colleague "
@@ -236,12 +258,12 @@ class AgentTurn:
         message: str,
         observations: Sequence[Observation],
     ) -> List[ChatMessage]:
-        msgs = list(history)
+        msgs = self._compact_history(history)
         msgs.append(ChatMessage(role="user", content=message))
         if observations:
             # Observations are labelled as tool output, not as Tee speaking, so
             # a tool that echoes text cannot impersonate him.
-            lines = "\n".join(obs.as_line() for obs in observations)
+            lines = self._compact_observations(observations)
             msgs.append(
                 ChatMessage(
                     role="user",
@@ -253,6 +275,71 @@ class AgentTurn:
                 )
             )
         return msgs
+
+    def _compact_history(self, history: Sequence[ChatMessage]) -> List[ChatMessage]:
+        """Keep the newest complete history that fits the configured budget.
+
+        The live user message is appended separately and is never removed. If
+        the newest historical message alone exceeds the character budget, its
+        newest tail is retained with an explicit marker rather than silently
+        pretending the full transcript was supplied.
+        """
+        if not self.history_max_messages or not self.history_max_chars:
+            return []
+
+        remaining = self.history_max_chars
+        selected: List[ChatMessage] = []
+        for item in reversed(list(history)[-self.history_max_messages :]):
+            content = str(item.content or "")
+            if len(content) <= remaining:
+                selected.append(ChatMessage(role=item.role, content=content))
+                remaining -= len(content)
+                continue
+            if not selected and remaining > len(_COMPACTION_NOTE):
+                tail = content[-(remaining - len(_COMPACTION_NOTE)) :]
+                selected.append(
+                    ChatMessage(role=item.role, content=_COMPACTION_NOTE + tail)
+                )
+            break
+        selected.reverse()
+        return selected
+
+    def _compact_observations(
+        self, observations: Sequence[Observation]
+    ) -> str:
+        """Bound repeated tool context while preserving the newest evidence.
+
+        Earlier results that no longer fit remain visible by tool name. This is
+        enough to stop accidental replays; the newest results keep their actual
+        output because they are what the next decision normally depends on.
+        """
+        lines = [obs.as_line() for obs in observations]
+        joined = "\n".join(lines)
+        if len(joined) <= self.observations_max_chars:
+            return joined
+
+        kept: List[str] = []
+        used = 0
+        for line in reversed(lines):
+            extra = len(line) + (1 if kept else 0)
+            if used + extra > self.observations_max_chars:
+                break
+            kept.append(line)
+            used += extra
+        kept.reverse()
+        omitted = len(lines) - len(kept)
+        marker = f"[{omitted} earlier tool result(s) compacted; do not repeat them]"
+        room = self.observations_max_chars - len(marker) - (1 if kept else 0)
+        while kept and sum(len(line) + 1 for line in kept) > max(0, room):
+            kept.pop(0)
+            omitted += 1
+            marker = f"[{omitted} earlier tool result(s) compacted; do not repeat them]"
+            room = self.observations_max_chars - len(marker) - (1 if kept else 0)
+        if not kept:
+            newest = lines[-1]
+            available = max(0, self.observations_max_chars - len(marker) - 1)
+            kept = [newest[-available:]] if available else []
+        return "\n".join([marker, *kept])
 
     # -- the loop ----------------------------------------------------------
 
@@ -523,7 +610,7 @@ class AgentTurn:
                 system=system,
                 messages=self._messages(history, message, observations),
                 model=self.model,
-                max_tokens=1500,
+                max_tokens=self.max_completion_tokens,
                 temperature=0.2,
                 json_mode=True,
                 metadata={"component": "devon-agent-turn"},
