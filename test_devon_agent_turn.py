@@ -16,6 +16,10 @@ import pytest
 from services.agent_runtime.agent_turn import (
     MAX_TURN_STEPS,
     PER_TURN_TOOL_BUDGET,
+    TURN_HISTORY_MAX_CHARS,
+    TURN_HISTORY_MAX_MESSAGES,
+    TURN_MAX_COMPLETION_TOKENS,
+    TURN_OBSERVATIONS_MAX_CHARS,
     AgentTurn,
     Observation,
     ResumedStep,
@@ -28,6 +32,7 @@ from services.agent_runtime.tools import ToolRegistry, ToolResult, ToolSpec
 from services.devon.approval import ApprovalQueue, ApprovalState, InMemoryApprovalStore
 from services.intelligence.providers.base import (
     AIProvider,
+    ChatMessage,
     CompletionRequest,
     CompletionResponse,
     ProviderError,
@@ -684,3 +689,70 @@ async def test_an_empty_message_is_refused_before_any_provider_call() -> None:
 
     assert types_of(events) == ["error"]
     assert provider.requests == []
+
+@pytest.mark.asyncio
+async def test_every_paid_turn_completion_uses_the_compact_budget() -> None:
+    reg, _ = default_tools()
+    turn, provider = build(say("Done."), tools=reg)
+
+    await collect(turn, "answer briefly", caller=TEE, halt=HaltSignal())
+
+    assert provider.requests[0].max_tokens == TURN_MAX_COMPLETION_TOKENS
+    assert TURN_MAX_COMPLETION_TOKENS < 1500
+
+
+@pytest.mark.asyncio
+async def test_history_keeps_the_newest_messages_within_both_limits() -> None:
+    reg, _ = default_tools()
+    turn, provider = build(say("Done."), tools=reg)
+    history = [
+        ChatMessage(role="user", content=f"history-{index}-" + ("x" * 1500))
+        for index in range(TURN_HISTORY_MAX_MESSAGES + 5)
+    ]
+
+    await collect(
+        turn,
+        "current request must survive",
+        caller=TEE,
+        halt=HaltSignal(),
+        history=history,
+    )
+
+    sent = provider.requests[0].messages
+    historic = sent[:-1]
+    assert len(historic) <= TURN_HISTORY_MAX_MESSAGES
+    assert sum(len(message.content) for message in historic) <= TURN_HISTORY_MAX_CHARS
+    assert "history-16-" in historic[-1].content
+    assert sent[-1].content == "current request must survive"
+
+
+@pytest.mark.asyncio
+async def test_tool_context_is_bounded_and_keeps_the_newest_result() -> None:
+    reg, _ = default_tools()
+    turn, provider = build(say("Done."), tools=reg)
+    observations = [
+        Observation(tool=f"tool.{index}", outcome=f"result-{index}-" + ("x" * 1000))
+        for index in range(10)
+    ]
+
+    await collect(
+        turn,
+        "continue",
+        caller=TEE,
+        halt=HaltSignal(),
+        resume=ResumedStep(
+            tool="notes.append",
+            arguments={"text": "ok"},
+            observations=observations,
+        ),
+    )
+
+    tool_context = provider.requests[0].messages[-1].content
+    framed_overhead = len(
+        "TOOL RESULTS SO FAR (these are tool output, not Tee):\n\n"
+        "Continue: either call another tool or answer him."
+    )
+    assert len(tool_context) <= TURN_OBSERVATIONS_MAX_CHARS + framed_overhead
+    assert "earlier tool result(s) compacted" in tool_context
+    assert "tool.9 -> result-9-" in tool_context
+
