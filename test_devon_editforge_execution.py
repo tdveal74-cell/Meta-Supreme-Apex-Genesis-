@@ -5,7 +5,11 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from app.services.editforge_client import EditForgeClient, EditForgeConfig
+from app.services.editforge_client import (
+    EditForgeClient,
+    EditForgeConfig,
+    read_editforge_status,
+)
 from services.devon.editforge_execution import (
     EDIT_COMMAND_SCHEMA,
     EditForgeExecutionError,
@@ -232,3 +236,75 @@ async def test_client_fails_closed_without_credentials():
     client = EditForgeClient(EditForgeConfig("", ""))
     with pytest.raises(EditForgeExecutionError, match="URL and token"):
         await client.execute({})
+
+
+def _status_transport(*, health: int = 200, edits: int = 200):
+    """Two-route stub: the open health route and the authenticated edit lane."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        if request.url.path == "/api/health":
+            if health >= 400:
+                return httpx.Response(health, json={"error": "unreachable"})
+            return httpx.Response(200, json={"status": "healthy", "executionReady": True})
+        if edits >= 400:
+            return httpx.Response(edits, json={"error": "Authentication required"})
+        return httpx.Response(200, json={"executions": []})
+
+    return httpx.MockTransport(handler), seen
+
+
+@pytest.mark.asyncio
+async def test_status_verifies_the_token_not_merely_reachability():
+    # EditForge leaves /api/health outside its access gate, so a wrong token
+    # used to report a fully verified studio and only failed on the first real
+    # command. live_verified must mean the credential works.
+    transport, seen = _status_transport(edits=401)
+    result = await read_editforge_status(
+        EditForgeConfig("https://editforge.example", "wrong-token"),
+        transport=transport,
+    )
+    assert result["configured"] is True
+    assert result["live_verified"] is False
+    assert "refused an authenticated read" in result["reason"]
+    assert "EDITFORGE_MCP_TOKEN" in result["reason"]
+    # The health payload survives, so "up but unauthenticated" stays
+    # distinguishable from "down".
+    assert result["editforge"]["status"] == "healthy"
+    assert "/api/edits" in seen
+
+
+@pytest.mark.asyncio
+async def test_status_is_verified_when_the_authenticated_lane_answers():
+    transport, seen = _status_transport()
+    result = await read_editforge_status(
+        EditForgeConfig("https://editforge.example", "secret"),
+        transport=transport,
+    )
+    assert result["live_verified"] is True
+    assert result["editforge"]["executionReady"] is True
+    assert seen == ["/api/health", "/api/edits"]
+
+
+@pytest.mark.asyncio
+async def test_status_reports_unreachable_before_probing_the_credential():
+    transport, seen = _status_transport(health=503)
+    result = await read_editforge_status(
+        EditForgeConfig("https://editforge.example", "secret"),
+        transport=transport,
+    )
+    assert result["live_verified"] is False
+    assert "editforge" not in result
+    # No point spending an authenticated round trip on a studio that is down.
+    assert seen == ["/api/health"]
+
+
+@pytest.mark.asyncio
+async def test_status_fails_closed_without_credentials():
+    result = await read_editforge_status(EditForgeConfig("", ""))
+    assert result == {
+        "configured": False,
+        "live_verified": False,
+        "reason": "EDITFORGE_URL and EDITFORGE_TOKEN must be configured",
+    }

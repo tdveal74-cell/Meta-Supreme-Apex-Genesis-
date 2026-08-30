@@ -68,7 +68,18 @@ class EditForgeClient:
         return data
 
     async def status(self) -> Dict[str, Any]:
+        """Health only. EditForge leaves this route open, so it proves nothing
+        about the credential — see `read_editforge_status`."""
         return await self._request("GET", "/api/health")
+
+    async def executions(self) -> Dict[str, Any]:
+        """Authenticated read of the edit lane.
+
+        Read-only, spends nothing, and travels the same `/api/edits` boundary
+        every command does, so reaching it proves the credential works for the
+        thing execution actually needs.
+        """
+        return await self._request("GET", "/api/edits")
 
     async def execute(self, command: Mapping[str, Any]) -> Dict[str, Any]:
         return await self._request("POST", "/api/edits", payload=command)
@@ -89,9 +100,27 @@ class EditForgeClient:
         )
 
 
-async def read_editforge_status(config: EditForgeConfig) -> Dict[str, Any]:
-    """Return the normalized live status without ever returning the credential."""
-    client = EditForgeClient(config)
+async def read_editforge_status(
+    config: EditForgeConfig,
+    *,
+    transport: Optional[httpx.AsyncBaseTransport] = None,
+) -> Dict[str, Any]:
+    """Return the normalized live status without ever returning the credential.
+
+    `live_verified` means the configured token actually works, not merely that
+    something answered. EditForge deliberately leaves `/api/health` outside its
+    access gate so uptime checks survive a private deployment, so reading it
+    proves reachability and nothing else: a wrong `EDITFORGE_TOKEN` reported a
+    fully verified studio and only surfaced later, as a 401 on the first real
+    command. Verifying costs one authenticated read of the same `/api/edits`
+    lane every command travels.
+
+    The three outcomes stay distinguishable rather than collapsing into one
+    false negative: not configured, unreachable, and reachable-but-rejected.
+    The last keeps the health payload, because "the studio is up and your token
+    is wrong" is a different fix from "the studio is down".
+    """
+    client = EditForgeClient(config, transport=transport)
     if not config.configured:
         return {
             "configured": False,
@@ -102,4 +131,21 @@ async def read_editforge_status(config: EditForgeConfig) -> Dict[str, Any]:
         status = await client.status()
     except EditForgeExecutionError as exc:
         return {"configured": True, "live_verified": False, "reason": str(exc)}
+    try:
+        await client.executions()
+    except EditForgeExecutionError as exc:
+        return {
+            "configured": True,
+            "live_verified": False,
+            # States what was observed, then the overwhelmingly likely remedy.
+            # `_request` does not surface the status code, so this cannot claim
+            # the refusal was specifically a 401 — a failing edit store would
+            # land here too, and naming a cause it did not verify would send an
+            # operator to rotate a token that was never wrong.
+            "reason": (
+                f"EditForge is reachable but refused an authenticated read: {exc}"
+                " — EDITFORGE_TOKEN must match the studio's EDITFORGE_MCP_TOKEN"
+            ),
+            "editforge": status,
+        }
     return {"configured": True, "live_verified": True, "editforge": status}
