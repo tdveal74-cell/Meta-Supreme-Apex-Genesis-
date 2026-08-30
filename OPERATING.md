@@ -30,6 +30,9 @@ workflow.** Check for them daily.
 
 ---
 
+Running DEVON and EditForge together on one machine, with nothing hosted
+involved, is its own runbook: `docs/OPERATING_LOCALLY.md`.
+
 ## 1. Starting and stopping
 
 ```bash
