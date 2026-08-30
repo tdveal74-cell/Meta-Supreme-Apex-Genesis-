@@ -4,7 +4,7 @@ type: SYS_OPS
 version: 1
 date: 2026-08-30
 area: Creation
-status: configured-not-yet-run
+status: verified-booted
 owner: DEVON
 ---
 
@@ -65,14 +65,38 @@ with no provider credentials at all.
 
 ## Verified evidence
 
-- `compose.local.yaml` resolves under `docker compose config`.
-- `start-devon.sh` and `scripts/devon-local.sh` pass `bash -n`.
+Configuration:
+
+- `compose.local.yaml` resolves under `docker compose config`, and CI holds it
+  to the same contract check as `compose.yaml`.
+- `start-devon.sh` and both EditForge runners pass `bash -n`.
 - `.env` generation exercised on all three paths: fresh write, append to an
   existing `.env`, and a re-run that changes nothing.
 - Token generation fills only blank values, so re-running rotates no credential
   DEVON is already holding.
 
-Not verified: no Docker daemon was available in the configuration workspace, so
-the stack was never booted and no render ran. First run on Tee's machine is the
-proof. It reads `executionReady: true` from `/api/health`, then completes an
-authenticated read of `/api/edits`.
+Booted, 2026-08-30, in the configuration workspace:
+
+- `/api/health` on `http://localhost:3100` returned `executionReady: true`,
+  with `workerConfigured` and `workerReachable` both true.
+- An authenticated read of `/api/edits` returned HTTP 200. No token returned
+  401, and a wrong token returned 401, so the gate is load bearing rather than
+  decorative. `/api/sources` is gated the same way.
+- The worker reported `status: healthy` with `ffmpeg` and `ffprobe` both true.
+- The runner stopped what it started, leaving nothing listening.
+
+That boot used `scripts/devon-local-nodocker.sh`, which runs the same two
+services as plain Node processes. `compose.local.yaml` itself was not built,
+because the egress policy in that workspace refuses Docker Hub's blob CDN and
+the base image cannot be pulled. So the application lane is proven end to end,
+and the container packaging of it is still proven only by `docker compose
+config`. A first Compose boot on a host with registry access closes that.
+
+## Production, for contrast
+
+The production studio is a separate stack: `compose.yaml` on a Hostinger VPS,
+answering at `editforge.online`. Tee confirmed on 2026-08-30 that its health
+check passes and that service, storage, worker and execution are reachable and
+operational. That is a statement from the owner rather than something this
+repository verified, and it says nothing about the local lane, which is a
+different file on a different address.
