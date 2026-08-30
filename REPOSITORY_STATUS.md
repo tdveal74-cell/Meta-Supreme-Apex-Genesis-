@@ -16,6 +16,7 @@
 | Governance | Agents recommend · humans decide · simulated output labeled |
 | EditForge execution | `services/devon/editforge_execution.py` + `/api/v1/devon/editforge/*` — exact-intent approval, execute, poll, receipt validation, retry, cancel |
 | Self-hosted media | DEVON URL/token are environment-configurable; development compose reaches host-published EditForge through `host.docker.internal` |
+| Local media lane | `start-devon.sh` writes `EDITFORGE_URL`/`EDITFORGE_TOKEN` for an EditForge on the same machine; EditForge's `compose.local.yaml` runs control plane + FFmpeg worker with no provider credentials |
 
 ## Status badges (explicit)
 

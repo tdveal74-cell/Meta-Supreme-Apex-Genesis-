@@ -156,8 +156,33 @@ DEFAULT_AI_PROVIDER=cerebras
 ENRICHMENT_PROVIDER=cerebras
 CEREBRAS_MODEL=gpt-oss-120b
 CEREBRAS_API_KEY=
+
+# Media execution. DEVON stays the approval and orchestration authority;
+# EditForge renders. These address an EditForge on this machine rather than the
+# hosted deployment. Start it with EditForge's ./scripts/devon-local.sh, which
+# generates the token and prints these two lines. With EDITFORGE_TOKEN empty the
+# lane fails closed rather than calling out unauthenticated.
+EDITFORGE_URL=http://localhost:3100
+EDITFORGE_TOKEN=
 ENVEOF
   ok "Wrote .env (Cerebras is the default voice and enrichment provider)"
+fi
+
+# An .env written before the local media lane existed carries no EditForge
+# settings, which leaves DEVON silently addressing the hosted deployment. Add
+# the lane without touching anything already in the file.
+if ! grep -q '^EDITFORGE_URL=' .env 2>/dev/null; then
+  cat >> .env <<'EDITFORGEEOF'
+
+# Media execution. DEVON stays the approval and orchestration authority;
+# EditForge renders. These address an EditForge on this machine rather than the
+# hosted deployment. Start it with EditForge's ./scripts/devon-local.sh, which
+# generates the token and prints these two lines. With EDITFORGE_TOKEN empty the
+# lane fails closed rather than calling out unauthenticated.
+EDITFORGE_URL=http://localhost:3100
+EDITFORGE_TOKEN=
+EDITFORGEEOF
+  ok "Added the local EditForge lane to your existing .env"
 fi
 
 if grep -q '^PINECONE_API_KEY=$' .env 2>/dev/null; then
