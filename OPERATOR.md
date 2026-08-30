@@ -96,6 +96,9 @@ Vercel deploy · Anthropic key in project env · TQO FINAL V5 (209 nodes).
 
 ### TSWS / EditForge
 Voices locked · premium-restraint on every grade · n8n health before pilot.
+Local render lane: EditForge `./scripts/devon-local.sh`, then `EDITFORGE_URL` /
+`EDITFORGE_TOKEN` in DEVON's `.env` —
+`docs/devon/SYS_OPS_devon-editforge-local-operation_v1_2026-08-30.md`.
 
 ### Psycle
 Real PsycleApp tree · cinematic LivingTree motion.
