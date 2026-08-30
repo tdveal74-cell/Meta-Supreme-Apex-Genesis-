@@ -32,9 +32,9 @@ deployment, and nothing in either repository's setup path offered a local one.
 ## The local shape
 
 EditForge's `compose.local.yaml` runs the control plane and the FFmpeg worker
-only — `compose.yaml` minus the identity-locked provider service and its required
-registry secret, under its own Compose project name so the two stacks never share
-a volume. `EditForge/scripts/devon-local.sh` brings it up and prints DEVON's two
+only. It is `compose.yaml` without the identity-locked provider service and its
+required registry secret, under its own Compose project name so the two stacks
+never share a volume. `EditForge/scripts/devon-local.sh` brings it up and prints DEVON's two
 lines. `EditForge/docs/LOCAL_OPERATION.md` is the runbook.
 
 `start-devon.sh` now writes the lane into a fresh `.env`, and appends it to an
@@ -46,8 +46,8 @@ EDITFORGE_TOKEN=
 ```
 
 `http://host.docker.internal:3100` where DEVON itself runs in Docker on the same
-host. An empty token still fails closed — `EditForgeConfig.configured` is false,
-and the client refuses before any request.
+host. An empty token still fails closed. `EditForgeConfig.configured` is false,
+and the client refuses before any request reaches the network.
 
 ## What the local lane cannot do
 
@@ -55,9 +55,9 @@ Clone voice, full motion, and lip sync are not in it. Their adapter URLs are
 unset, so an accepted operation that asks for one fails; it is never silently
 skipped. Nonlinear assembly is the same, pending
 `EDITFORGE_TIMELINE_ADAPTER_URL`. Those need the full `compose.yaml`, a consented
-identity registry, and a per-job ceiling, and no paid render should be submitted
-before Tee approves the exact identity, source assets, and ceiling —
-`docs/DEVON_EXECUTION.md` in EditForge.
+identity registry, and a per-job ceiling. No paid render should be submitted
+before Tee approves the exact identity, source assets, and ceiling. EditForge's
+`docs/DEVON_EXECUTION.md` carries that path.
 
 Picture and finishing work is unaffected: trim, reframe, derive-short, speed,
 captions, audio-mix, grade, and preview/master encoding all compile in the worker
@@ -74,5 +74,5 @@ with no provider credentials at all.
 
 Not verified: no Docker daemon was available in the configuration workspace, so
 the stack was never booted and no render ran. First run on Tee's machine is the
-proof — `executionReady: true` from `/api/health`, then an authenticated read of
-`/api/edits`.
+proof. It reads `executionReady: true` from `/api/health`, then completes an
+authenticated read of `/api/edits`.
