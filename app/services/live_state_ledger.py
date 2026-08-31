@@ -647,19 +647,44 @@ class LiveStateLedger:
         )
 
     async def search_receipted_captures(
-        self, db: AsyncSession, *, owner_id: str, query: str, limit: int = 20
+        self,
+        db: AsyncSession,
+        *,
+        owner_id: str,
+        query: str,
+        kind: str | None = None,
+        limit: int = 20,
     ) -> list[dict]:
         """Find committed captures by text. Unapproved proposals are not memories.
 
-        Tee rulings outrank DEVON notes regardless of recency. A later note
-        cannot sit above an earlier ruling. The artifact body is the payload;
-        ``estate://`` is a path label, not a blob store.
+        Tee rulings outrank operator files, which outrank notes. Still ILIKE,
+        not Pinecone soul-hierarchy recall. The artifact body is the payload;
+        estate:// is a path label, not a blob store. Query * skips the text
+        filter so plate/brief can list receipted files.
         """
+        from services.memory import OPERATIONAL_KINDS, rank_label
+
         needle = (query or "").strip()
         if not needle:
             return []
+        scan_all = needle in {"*", "all"}
         pattern = f"%{needle}%"
-        precedence = case((ArtifactRecord.kind == "ruling", 0), else_=1)
+        precedence = case(
+            (ArtifactRecord.kind == "ruling", 0),
+            (ArtifactRecord.kind.in_(tuple(sorted(OPERATIONAL_KINDS))), 1),
+            else_=2,
+        )
+        filters = [IntentRecord.owner_id == owner_id]
+        if not scan_all:
+            filters.append(
+                or_(
+                    IntentRecord.stated.ilike(pattern),
+                    ArtifactRecord.body.ilike(pattern),
+                )
+            )
+        wanted = (kind or "").strip().lower()
+        if wanted:
+            filters.append(ArtifactRecord.kind == wanted)
         result = await db.execute(
             select(IntentRecord, UniversalReceiptRecord, ArtifactRecord)
             .join(
@@ -667,13 +692,7 @@ class LiveStateLedger:
                 UniversalReceiptRecord.intent_id == IntentRecord.id,
             )
             .outerjoin(ArtifactRecord, ArtifactRecord.intent_id == IntentRecord.id)
-            .where(
-                IntentRecord.owner_id == owner_id,
-                or_(
-                    IntentRecord.stated.ilike(pattern),
-                    ArtifactRecord.body.ilike(pattern),
-                ),
-            )
+            .where(*filters)
             .order_by(precedence.asc(), IntentRecord.created_at.desc())
             .limit(limit)
         )
@@ -683,15 +702,15 @@ class LiveStateLedger:
             if intent.id in seen:
                 continue
             seen.add(intent.id)
-            kind = artifact.kind if artifact is not None else "lesson"
+            kind_name = artifact.kind if artifact is not None else "lesson"
             body = (artifact.body if artifact is not None else "") or intent.stated
             found.append(
                 {
                     "intent_id": intent.id,
                     "text": body,
                     "body": body,
-                    "kind": kind,
-                    "rank": "tee-ruling" if kind == "ruling" else "devon-note",
+                    "kind": kind_name,
+                    "rank": rank_label(kind_name),
                     "state": intent.state,
                     "artifact_path": artifact.path if artifact is not None else None,
                     "receipt_id": receipt.id,

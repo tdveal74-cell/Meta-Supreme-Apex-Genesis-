@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services import soul as soul_service
 from app.services.live_state_ledger import ledger
+from services import memory as memory_store
 from services.devon import ecosystem
 from services.devon.approval import ApprovalQueue, ApprovalState
 from services.devon.assistant import Devon, FilingPlan
@@ -38,9 +39,13 @@ from services.intelligence.soul import (
     SoulWriteRefused,
 )
 
-#: Ledger kinds include Tee rulings. Pinecone devon-soul still refuses
-#: ``ruling`` (ALLOWED_KINDS). A ruling here is a ledger row, not Layer 1.
-LEDGER_KINDS = frozenset(set(ALLOWED_KINDS) | {"ruling"})
+#: Ledger kinds include Tee rulings and operator files (task, project,
+#: thread, brief, plate, episode). Pinecone devon-soul still refuses
+#: ``ruling`` and these operational kinds (ALLOWED_KINDS). A ruling here
+#: is a ledger row, not Layer 1. Notion/Drive/n8n stay missing.
+LEDGER_KINDS = frozenset(
+    set(ALLOWED_KINDS) | {"ruling"} | set(memory_store.OPERATIONAL_KINDS)
+)
 
 LOOP = "knowledge_loop.v1"
 DEFAULT_LAYER = 5  # Devon Soul
@@ -85,7 +90,7 @@ def _n8n_env() -> tuple[str, str]:
     return url, key
 
 
-def _connector_honesty() -> Dict[str, Any]:
+def _connector_honesty(*, postgres_proven: bool = False) -> Dict[str, Any]:
     url, key = _n8n_env()
     notion = (os.environ.get("NOTION_TOKEN") or os.environ.get("NOTION_API_KEY") or "").strip()
     drive = (os.environ.get("GOOGLE_DRIVE_TOKEN") or os.environ.get("DRIVE_TOKEN") or "").strip()
@@ -96,13 +101,18 @@ def _connector_honesty() -> Dict[str, Any]:
             "engine": "PostgreSQL",
             "configured": bool(db_url),
             "store": "Live State Ledger (intents, events, artifacts.body)",
-            "written": bool(db_url),
-            "live": bool(db_url),
+            "written": postgres_proven,
+            "live": postgres_proven,
             "reason": (
-                "PostgreSQL is the actual store. estate://ledger/captures/... "
-                "is a path label; the capture body is on artifacts.body."
-                if db_url
-                else "DATABASE_URL unset. The loop cannot persist."
+                "This request used the PostgreSQL engine. live is not inferred "
+                "from DATABASE_URL alone. estate:// is a path label; the capture "
+                "body is on artifacts.body."
+                if postgres_proven
+                else (
+                    "DATABASE_URL is set; that is env presence, not a proven live engine."
+                    if db_url
+                    else "DATABASE_URL unset. The loop cannot persist."
+                )
             ),
         },
         "n8n": {
@@ -176,11 +186,14 @@ def _build_candidate(
 
 def _plan_for(text: str) -> Optional[FilingPlan]:
     """Compiler plan only. executed stays False inside services.devon."""
+    response = Devon().ask(text)
+    if response.plan is not None:
+        return response.plan
     utterance = text.strip()
     if not utterance.lower().startswith("remember"):
         utterance = f"remember {utterance}"
-    response = Devon().ask(utterance)
-    return response.plan
+        return Devon().ask(utterance).plan
+    return None
 
 
 def _candidate_from_payload(payload: Dict[str, Any]) -> SoulWriteCandidate:
@@ -311,7 +324,7 @@ class KnowledgeLoop:
             payload={"approval_request_id": record.request_id},
         )
 
-        connectors = _connector_honesty()
+        connectors = _connector_honesty(postgres_proven=True)
         return {
             "proposed": True,
             "executed": False,
@@ -521,7 +534,7 @@ class KnowledgeLoop:
             next_steps="Find via GET /api/v1/soul/find. Pinecone recall only when the layer is on.",
         )
 
-        connectors = _connector_honesty()
+        connectors = _connector_honesty(postgres_proven=True)
         pinecone_on = connectors["pinecone"]["configured"]
         return {
             "executed": True,
@@ -540,12 +553,21 @@ class KnowledgeLoop:
         }
 
     async def find(
-        self, db: AsyncSession, *, owner_id: str, query: str
+        self,
+        db: AsyncSession,
+        *,
+        owner_id: str,
+        query: str,
+        kind: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Find a committed capture without Drive/Notion/n8n sitting open."""
+        """Find a committed capture without Drive/Notion/n8n sitting open.
+
+        ILIKE on stated+body. Tee rulings first. Not Pinecone hierarchy.
+        """
         hits = await ledger.search_receipted_captures(
-            db, owner_id=owner_id, query=query
+            db, owner_id=owner_id, query=query, kind=kind
         )
+        hits = memory_store.from_receipted_artifacts(hits)
         layer = soul_service.get_soul_layer()
         soul_hits: list[dict] = []
         soul_errors: list[str] = []
@@ -570,13 +592,14 @@ class KnowledgeLoop:
     async def _maybe_write_soul(
         self, candidate: SoulWriteCandidate, layer: int
     ) -> Dict[str, Any]:
-        if candidate.kind == "ruling":
+        if candidate.kind not in ALLOWED_KINDS:
             return {
                 "written": False,
                 "live": False,
                 "reason": (
-                    "Kind ruling stays on the PostgreSQL ledger and is ranked "
-                    "above notes. Layer 1 Tee Soul is never written from this loop."
+                    f"Kind {candidate.kind} stays on the PostgreSQL ledger. "
+                    "Layer 1 Tee Soul is never written from this loop. "
+                    "Pinecone devon-soul only accepts lesson/correction/pattern/preference."
                 ),
             }
         if layer != DEFAULT_LAYER:

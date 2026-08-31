@@ -247,19 +247,24 @@ class Devon:
     def _do_whats_on_my_plate(self, command: ParsedCommand, on_date: date_cls) -> DevonResponse:
         return self._needs_live(
             command,
-            "your tasks, deadlines and project status",
-            f"Notion, database {NOTION['thread_log_database']} and the Tasks board",
+            "your tasks, deadlines and project status from the Live State Ledger",
+            ("the Live State Ledger (Postgres). Notion Tasks is missing, "
+                f"including database {NOTION['thread_log_database']}"),
         )
 
     def _do_status_report(self, command: ParsedCommand, on_date: date_cls) -> DevonResponse:
-        return self._needs_live(command, "the project rollup", "Notion Projects and Goals")
+        return self._needs_live(
+            command,
+            "the project rollup from the Live State Ledger",
+            "the Live State Ledger (Postgres). Notion Projects and Goals is missing",
+        )
 
     def _do_brief(self, command: ParsedCommand, on_date: date_cls) -> DevonResponse:
         return self._needs_live(
             command,
             "your briefing: overdue and due today, projects, inbox count, "
             "podcast pipeline, and one suggested priority",
-            "Notion, plus the Airtable podcast pipeline",
+            "the Live State Ledger (Postgres). Notion, plus the Airtable podcast pipeline, are missing",
         )
 
     def _do_triage(self, command: ParsedCommand, on_date: date_cls) -> DevonResponse:
@@ -281,8 +286,9 @@ class Devon:
         return self._needs_live(
             command,
             f"what we already settled about {topic}",
-            "the soul layer (tee-soul-layer / devon-soul) or the Notion Thread "
-            "Log, data source " + NOTION["thread_log_data_source"],
+            "the Live State Ledger (ILIKE, not recall-at-plan-time) or the soul "
+            "layer when SOUL_RECALL_ENABLED. Notion Thread Log is missing, "
+            "data source " + NOTION["thread_log_data_source"],
         )
 
     def recall_answer(
@@ -414,42 +420,34 @@ class Devon:
 
     def _do_capture(self, command: ParsedCommand, on_date: date_cls) -> DevonResponse:
         return self._plan_capture(
-            command, on_date, destination="Notion Inbox, Notes and Ideas", type_code="DOC"
+            command, on_date, destination="Live State Ledger (Postgres). Notion Inbox, Notes and Ideas is missing", type_code="DOC"
         )
 
     def _do_add_task(self, command: ParsedCommand, on_date: date_cls) -> DevonResponse:
         return self._plan_capture(
-            command, on_date, destination="Notion Tasks", type_code="DOC"
+            command, on_date, destination="Live State Ledger (Postgres). Notion Tasks is missing", type_code="DOC"
         )
 
     def _do_start_project(self, command: ParsedCommand, on_date: date_cls) -> DevonResponse:
         return self._plan_capture(
-            command, on_date, destination="Notion Projects and Goals", type_code="DOC"
+            command, on_date, destination="Live State Ledger (Postgres). Notion Projects and Goals is missing", type_code="DOC"
         )
 
     def _do_episode_idea(self, command: ParsedCommand, on_date: date_cls) -> DevonResponse:
         return self._plan_capture(
             command,
             on_date,
-            destination="Airtable Podcast HQ, Idea stage",
+            destination="Live State Ledger (Postgres). Airtable Podcast HQ, Idea stage is missing",
             type_code="DOC",
             force_area="Podcast",
         )
 
     def _do_log_thread(self, command: ParsedCommand, on_date: date_cls) -> DevonResponse:
-        return DevonResponse(
-            reply=(
-                "Ready to file the receipt. Give me the Area and a two line summary "
-                "and I will build it in the standing format, files opened and "
-                "unverified included."
-            ),
-            intent=command.name,
-            kind=Kind.CAPTURE,
-            understood=True,
-            score=command.score,
-            method=command.method.value,
-            executed=False,
-            reason="a receipt is written by the model that had the conversation",
+        return self._plan_capture(
+            command,
+            on_date,
+            destination="Live State Ledger (Postgres). Notion Thread Log is missing",
+            type_code="DOC",
         )
 
     def _plan_capture(

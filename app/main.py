@@ -108,9 +108,11 @@ async def root():
     }
 
 
-# The DEVON console, served same-origin so its soul-recall calls need no CORS
-# story at all. The newest console version in the assets folder wins, which is
-# the precedence rule the vault already lives by.
+# I serve the Loop HUD same-origin at GET /console so remember / file a ruling /
+# find hit /api/v1/soul on this host with the CurrentUser JWT. CORS is not
+# this path. The newest SYS_OPS console in the assets folder wins, and that
+# file is kept byte-identical to deploy/soul/console.html. The unwired v8
+# asset is superseded. devon-soul.vercel.app still cannot persist.
 _CONSOLE_DIR = Path(__file__).resolve().parent.parent / "docs" / "devon" / "assets"
 
 

@@ -145,8 +145,9 @@ def test_flagship_and_completion_refuse_closed_brain_and_live_inflation():
         assert "not operator-live" in blob.lower()
 
 
-def test_gauntlet_ledger_floor_is_58_not_55_as_current_or_80():
-    assert "| **Meta Supreme overall** | **58** |" in GAUNTLET
+def test_gauntlet_ledger_floor_is_60_not_58_as_current_or_80():
+    assert "| **Meta Supreme overall** | **60** |" in GAUNTLET
+    assert "| 2nd-brain | 60 |" in GAUNTLET
     assert "Ledger floor" in GAUNTLET
     assert "~72" not in GAUNTLET
     assert "**~72**" not in GAUNTLET
@@ -219,3 +220,33 @@ def test_console_does_not_claim_cookie_is_httponly():
     assert "; HttpOnly" not in CONSOLE
     assert "HttpOnly cookie" not in CONSOLE
     assert "httponly cookie" not in CONSOLE.lower()
+
+def test_operator_console_splits_jwt_from_console_token():
+    assert 'id="platTok"' in CONSOLE
+    assert "Not CONSOLE_TOKEN" in CONSOLE
+    assert "Not a platform JWT" in CONSOLE
+    assert "devon.platform.jwt" in CONSOLE
+    assert "CONSOLE_TOKEN for this soul host; platform JWT for app.main" not in CONSOLE
+
+
+def test_pending_approvals_persist_in_session_storage_not_learning_v1():
+    assert "devon.loop.pending" in CONSOLE
+    assert "Loop.loadPending" in CONSOLE
+    assert "Loop.setPending" in CONSOLE
+    assert "Loop.dropPending" in CONSOLE
+    refuse = CONSOLE[CONSOLE.index("async function ruleLoop") : CONSOLE.index("function rule(")]
+    assert "Loop.dropPending" in refuse
+    assert "Loop.approve" in refuse
+    # REFUSE branch must not call approve/commit
+    refuse_only = refuse[refuse.index("if(decision!=='approve')") : refuse.index("try {")]
+    assert "Loop.approve" not in refuse_only
+    assert "Loop.commit" not in refuse_only
+
+
+def test_console_same_origin_default_and_vercel_fail_close():
+    assert "same origin" in CONSOLE
+    assert "onVercelSoulHost" in CONSOLE
+    assert "operatorJwt" in CONSOLE
+    assert "add_task" in CONSOLE and "KIND_FOR" in CONSOLE
+    assert "whats_on_my_plate" in CONSOLE
+    assert "findThroughLoop('*'" in CONSOLE or 'findThroughLoop("*"' in CONSOLE

@@ -280,3 +280,65 @@ def test_propose_docstring_does_not_claim_writes_nothing():
     assert "Writes nothing" not in api
     assert "PostgreSQL" in loop
     assert "LEDGER_KINDS" in loop
+
+
+def test_postgres_live_is_not_inferred_from_env_alone(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://example/db")
+    from app.services import knowledge_loop as loop_mod
+    raw = loop_mod._connector_honesty()
+    assert raw["postgres"]["configured"] is True
+    assert raw["postgres"]["live"] is False
+    assert raw["postgres"]["written"] is False
+    proven = loop_mod._connector_honesty(postgres_proven=True)
+    assert proven["postgres"]["live"] is True
+    assert proven["postgres"]["written"] is True
+
+
+async def test_platform_console_serves_the_wired_loop_hud(client):
+    response = await client.get("/console")
+    assert response.status_code == 200, response.text
+    html = response.text
+    assert "Loop.propose" in html
+    assert "rememberThroughLoop" in html
+    assert "/api/v1/soul/propose" in html
+    assert "devon.platform.jwt" in html
+    assert "add_task" in html
+    assert "KIND_FOR" in html
+
+
+async def test_task_files_to_the_ledger_not_notion(client, auth_headers):
+    committed = await _propose_approve_commit(
+        client,
+        auth_headers,
+        "add a task to verify the D10 grid hash",
+        kind="task",
+    )
+    assert committed["artifact"]["kind"] == "task"
+    assert committed["connectors"]["notion"]["written"] is False
+    assert committed["connectors"]["notion"]["live"] is False
+    assert committed["soul"]["written"] is False
+    assert committed["connectors"]["postgres"]["live"] is True
+
+    found = await client.get(
+        "/api/v1/soul/find?q=D10&kind=task",
+        headers=auth_headers,
+    )
+    assert found.status_code == 200, found.text
+    hits = found.json()["ledger"]
+    assert hits, found.json()
+    assert hits[0]["kind"] == "task"
+    assert hits[0]["rank"] == "operator-file"
+    assert "D10" in (hits[0]["body"] or "")
+
+
+def test_services_memory_points_at_receipted_artifacts_not_localstorage():
+    from services import memory
+    assert memory.STORE == "postgresql"
+    assert "devon.learning.v1" in memory.NOT_MEMORY_KEYS
+    pointed = memory.from_receipted_artifacts(
+        [{"kind": "task", "body": "verify hash", "text": "verify hash"}]
+    )
+    assert pointed[0]["store"] == "postgresql"
+    assert pointed[0]["localStorage"] is False
+    assert pointed[0]["rank"] == "operator-file"
+    assert memory.rank_kind("ruling") < memory.rank_kind("task") < memory.rank_kind("lesson")

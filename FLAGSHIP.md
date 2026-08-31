@@ -39,15 +39,16 @@ uvicorn standalone_api:app --port 8000
 
 ## Honesty (2026-08-31)
 
-- This is not a closed 2nd-brain loop. Knowledge still needs a second tool open.
-- Vault folder ids in the console STATE blob are a 2026-08-22 ID snapshot, not a live Drive read.
+- This is not a closed 2nd-brain loop. Knowledge still needs a second tool open for Notion, Drive, and n8n.
+- Vault folder ids in the console STATE blob are a 2026-08-22 ID snapshot, not a live Drive read or live vault sync.
 - Filing plans only: `executed: false`. DEVON plans; humans decide.
-- Soul recall is off by default (needs `PINECONE_API_KEY`). Do not invent live soul connectivity.
+- Soul recall is off by default. It needs `SOUL_RECALL_ENABLED` and `PINECONE_API_KEY`. Do not invent live soul connectivity.
 - Hermes stack status is CI-proven / not operator-live. Do not wear a Live badge for undeployed operator verification.
-- In-estate remember/approve/commit writes the Live State Ledger after a consumed approval. The operator HUD calls that loop when the platform API base URL is set, and fail-closes when it is unset. That is not Notion live, not Drive live, and not a claim that devon-soul.vercel.app moved (production SHA is still d2aff6d; that host has no Postgres and does not mount propose).
-- Tee rulings may enter the ledger (kind ruling) and outrank DEVON notes on find. Layer 1 Tee Soul is still never written from this loop.
-- Capture payload is stored on artifacts.body in PostgreSQL. estate:// is a path label.
-- `services/memory` is an empty stub. Hermes expansion defaults are in-memory / not durable.
+- I serve the Loop HUD same-origin at app.main GET /console. Remember / file a ruling / add a task / start a project / log a thread propose on this host with the CurrentUser JWT. PLATFORM is not required there. CONSOLE_TOKEN is only for soul-host recall on devon-soul.vercel.app. That Vercel host has no Postgres, production SHA is still d2aff6d, and I do not pretend localStorage is memory.
+- Tee rulings may enter the ledger (kind ruling) and outrank DEVON notes on find. Tasks, projects, threads, plate, and brief file the same receipted Postgres ledger. Layer 1 Tee Soul is still never written from this loop.
+- Capture payload is stored on artifacts.body in PostgreSQL. estate:// is a path label. Find is still ILIKE on stated+body, Tee-first rank, not recall-at-plan-time.
+- `services/memory` points reads at those receipted artifacts. It is not localStorage. Hermes expansion defaults are in-memory / not durable.
+- Notion, Drive, and n8n are missing. I do not fake a write to them. `postgres.live` is proven by the engine this request, not by DATABASE_URL sitting in the env.
 
 ## Beyond standalone
 

@@ -27,14 +27,15 @@
 
 ## Honesty (2026-08-31)
 
-- Not a closed 2nd-brain claim. The knowledge loop is unclosed on the live host.
-- Vault: 2026-08-22 ID snapshot in the console STATE blob.
+- Not a closed 2nd-brain claim. I still would not put Notion away.
+- Vault: 2026-08-22 ID snapshot in the console STATE blob. Not live vault sync.
 - Filing: `executed: false`. Plans only; humans decide.
-- Soul recall: off by default until `PINECONE_API_KEY` is set.
+- Soul recall: off by default until `SOUL_RECALL_ENABLED` and `PINECONE_API_KEY` are set.
 - Hermes: CI-proven / not operator-live. No Live badge for schema-only verification.
-- In-estate ledger commit exists in this branch after consume-once approval. The operator HUD uses propose/approve/commit/find when the platform API is set; unset, remember is refused rather than stored in localStorage. Not Notion live. Public gate still production SHA d2aff6d (no Postgres on that host).
-- Ledger find ranks Tee rulings above DEVON notes. Artifact body lives on PostgreSQL artifacts.body.
-- `services/memory` is an empty stub / not durable. No Live badge.
+- I serve the wired Loop HUD from app.main GET /console, same origin, CurrentUser JWT. CONSOLE_TOKEN stays on the Vercel soul host only. Public gate still production SHA d2aff6d (no Postgres on that host). Remember fail-closes there rather than storing localStorage as memory.
+- Tasks, projects, thread log, plate, and brief file the receipted Postgres ledger after consume-once. Notion/Drive/n8n are still missing. Find is ILIKE, Tee rulings first, not recall-at-plan-time. Layer 1 Tee Soul stays 403.
+- Ledger find ranks Tee rulings above operator files and notes. Artifact body lives on PostgreSQL artifacts.body.
+- `services/memory` points at those receipted artifacts. Not localStorage. No Live badge.
 
 ## DEVON-operated EditForge execution (2026-08-26)
 

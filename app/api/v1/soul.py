@@ -211,12 +211,16 @@ async def soul_commit(
 async def soul_find(
     current_user: CurrentUser,
     q: str = Query(..., min_length=1, max_length=1000),
+    kind: Optional[str] = Query(default=None, max_length=32),
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
-    """Find a committed capture in-estate. Does not require Pinecone."""
+    """Find a committed capture in-estate. Does not require Pinecone.
+
+    ILIKE on stated+body. Optional kind filter. Tee rulings first.
+    """
     try:
         return await knowledge_loop.find(
-            db, owner_id=str(current_user.id), query=q
+            db, owner_id=str(current_user.id), query=q, kind=kind
         )
     except (KnowledgeLoopRefused, LedgerRefused) as exc:
         raise _loop_error(exc) from exc

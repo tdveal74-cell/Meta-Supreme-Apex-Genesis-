@@ -177,3 +177,10 @@ def test_a_healthy_configuration_logs_without_warning(caplog) -> None:
         log_cors_configuration(log, [GOOD], "production")
 
     assert [record.levelno for record in caplog.records] == [logging.INFO]
+
+
+def test_default_cors_does_not_allow_the_vercel_soul_host() -> None:
+    from app.core.config import Settings
+    origins = Settings().CORS_ORIGINS
+    assert "https://devon-soul.vercel.app" not in origins
+    assert is_localhost_only(origins)
