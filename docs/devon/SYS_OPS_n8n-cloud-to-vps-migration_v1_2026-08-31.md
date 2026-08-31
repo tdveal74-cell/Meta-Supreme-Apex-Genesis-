@@ -78,8 +78,14 @@ Cloud before cutover, never exported.
 `devon_state_ledger` is the one table where leaving rows behind has a
 consequence. It is keyed by `intent_id`, and the Ledger Janitor cancels jobs
 that have been non-terminal past 96 hours. Start the VPS with an empty ledger
-and open Cloud jobs simply never terminate on either side. Either drain Cloud
-to terminal states before cutover, or move the non-terminal rows across.
+and open Cloud jobs simply never terminate on either side.
+
+Ruled 2026-08-31: drain Cloud to terminal states before cutover, rather than
+copying non-terminal rows across. The Janitor already cancels anything stuck
+past 96 hours, so most of the draining happens on its own if you let Cloud run.
+The VPS then starts with a genuinely empty ledger and no half-copied envelope
+history. This makes the cutover wait on the slowest open job, which is the
+cost of the ruling and is worth naming out loud.
 
 ## 3. Sub-workflow and error-workflow references
 
@@ -165,8 +171,8 @@ default is a safety property. Do not override it to save clicks.
    party.
 2. Create all 28 credentials on the VPS. Record the new id beside the old one.
 3. Create all 9 data tables. `approval_queue` empty, always.
-4. Decide the `devon_state_ledger` question: drain Cloud to terminal, or move
-   the non-terminal rows.
+4. Let Cloud drain to terminal states, per the ruling above. Check the ledger
+   for non-terminal rows and wait them out rather than copying them.
 5. `n8n_migrate.py export` from Cloud, then `inspect` the export. Inspect
    reports credentials by id, webhook paths, data tables and active states.
    Read that report against this document before importing anything.
