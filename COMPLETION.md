@@ -27,11 +27,13 @@
 
 ## Honesty (2026-08-31)
 
-- Not a closed 2nd-brain claim. The knowledge loop is unclosed.
+- Not a closed 2nd-brain claim. The knowledge loop is unclosed on the live host.
 - Vault: 2026-08-22 ID snapshot in the console STATE blob.
 - Filing: `executed: false`. Plans only; humans decide.
 - Soul recall: off by default until `PINECONE_API_KEY` is set.
 - Hermes: CI-proven / not operator-live. No Live badge for schema-only verification.
+- In-estate ledger commit exists in this branch after consume-once approval. Not Notion live. Public gate still production SHA d2aff6d.
+- `services/memory` is an empty stub / not durable. No Live badge.
 
 ## DEVON-operated EditForge execution (2026-08-26)
 

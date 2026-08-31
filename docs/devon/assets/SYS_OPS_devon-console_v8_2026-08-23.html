@@ -1397,7 +1397,7 @@ const Soul = {
       return hit ? decodeURIComponent(hit[1]).trim() : '';
     } catch (e) { return ''; }
   },
-  token() { return this.get('token', '') || this.fromSession() || this.fromCookie(); },
+  token() { return this.fromSession() || this.fromCookie(); },
   /* Bring the two into line, whichever one arrived first, so the token field
      shows what is actually in force and header auth works either way. */
   reconcile() {
@@ -1415,12 +1415,12 @@ const Soul = {
   keep(v) {
     const handed = (v || '').trim();
     if (!handed) return;
-    this.set('token', handed);
     try { sessionStorage.setItem('devon.soul.token', handed); } catch (e) {}
+    try { localStorage.removeItem('devon.soul.token'); } catch (e) {}
     try {
       var secure = location.protocol === 'https:' ? '; Secure' : '';
       document.cookie = 'devon_console=' + encodeURIComponent(handed) +
-                        '; path=/; max-age=31536000; SameSite=Strict' + secure;
+                        '; path=/; max-age=43200; SameSite=Strict' + secure;
     } catch (e) {}
   },
   /* A leftover query param t is stripped from the address bar only. It is

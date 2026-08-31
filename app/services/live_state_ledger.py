@@ -610,5 +610,66 @@ class LiveStateLedger:
             "receiptable_reason": receipt_reason,
         }
 
+    async def intent_id_for_approval_request(
+        self, db: AsyncSession, *, owner_id: str, request_id: str
+    ) -> str:
+        """Find the intent that raised this approval. One request, one intent."""
+        result = await db.execute(
+            select(EventRecord).where(
+                EventRecord.owner_id == owner_id,
+                EventRecord.name == "PLAN_CREATED",
+            )
+        )
+        for row in result.scalars().all():
+            payload = row.payload or {}
+            if payload.get("approval_request_id") == request_id:
+                return row.intent_id
+        raise LedgerRefused(
+            [f"No knowledge-loop plan on this owner's record for {request_id}."]
+        )
+
+    async def search_receipted_captures(
+        self, db: AsyncSession, *, owner_id: str, query: str, limit: int = 20
+    ) -> list[dict]:
+        """Find committed captures by text. Unapproved proposals are not memories."""
+        needle = (query or "").strip()
+        if not needle:
+            return []
+        pattern = f"%{needle}%"
+        result = await db.execute(
+            select(IntentRecord, UniversalReceiptRecord, ArtifactRecord)
+            .join(
+                UniversalReceiptRecord,
+                UniversalReceiptRecord.intent_id == IntentRecord.id,
+            )
+            .outerjoin(ArtifactRecord, ArtifactRecord.intent_id == IntentRecord.id)
+            .where(
+                IntentRecord.owner_id == owner_id,
+                IntentRecord.stated.ilike(pattern),
+            )
+            .order_by(IntentRecord.created_at.desc())
+            .limit(limit)
+        )
+        found: list[dict] = []
+        seen: set[str] = set()
+        for intent, receipt, artifact in result.all():
+            if intent.id in seen:
+                continue
+            seen.add(intent.id)
+            found.append(
+                {
+                    "intent_id": intent.id,
+                    "text": intent.stated,
+                    "state": intent.state,
+                    "artifact_path": artifact.path if artifact is not None else None,
+                    "receipt_id": receipt.id,
+                    "what_happened": receipt.what_happened,
+                    "source": "live-state-ledger",
+                    "durable": True,
+                    "live": False,
+                }
+            )
+        return found
+
 
 ledger = LiveStateLedger()

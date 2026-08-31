@@ -44,6 +44,8 @@ uvicorn standalone_api:app --port 8000
 - Filing plans only: `executed: false`. DEVON plans; humans decide.
 - Soul recall is off by default (needs `PINECONE_API_KEY`). Do not invent live soul connectivity.
 - Hermes stack status is CI-proven / not operator-live. Do not wear a Live badge for undeployed operator verification.
+- In-estate remember/approve/commit writes the Live State Ledger after a consumed approval. That is not Notion live, not Drive live, and not a claim that devon-soul.vercel.app moved (production SHA is still d2aff6d).
+- `services/memory` is an empty stub. Hermes expansion defaults are in-memory / not durable.
 
 ## Beyond standalone
 

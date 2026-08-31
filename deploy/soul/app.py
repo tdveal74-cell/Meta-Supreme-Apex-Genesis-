@@ -114,7 +114,7 @@ TERMINAL_DOOR_HTML = """<!doctype html><meta charset="utf-8">
 <main>
  <h1>DEVON OPERATOR</h1>
  {{NOTE}}
- <p>Paste the same console token you already use. It is kept in this browser and nowhere else.</p>
+ <p>This is the Operator terminal, not the soul console. Paste the console token. It stays in this browser session (sessionStorage and a 12-hour SameSite cookie) and is not sent to another site.</p>
  <form id="f" autocomplete="off">
   <label for="t">CONSOLE TOKEN</label>
   <input id="t" type="password" inputmode="text" autocapitalize="off" autocorrect="off"
@@ -129,10 +129,10 @@ document.getElementById('f').addEventListener('submit', function (e) {
   var v = (document.getElementById('t').value || '').trim();
   if (!v) return;
   try { sessionStorage.setItem('devon.soul.token', v); } catch (err) {}
-  try { localStorage.setItem('devon.soul.token', v); } catch (err) {}
+  try { localStorage.removeItem('devon.soul.token'); } catch (err) {}
   var secure = location.protocol === 'https:' ? '; Secure' : '';
   document.cookie = 'devon_console=' + encodeURIComponent(v) +
-                    '; path=/; max-age=31536000; SameSite=Strict' + secure;
+                    '; path=/; max-age=43200; SameSite=Strict' + secure;
   location.href = '/terminal';
 });
 </script>"""

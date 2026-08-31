@@ -400,7 +400,7 @@ NOT_FOUND_HTML = """<!doctype html><meta charset=\"utf-8\">
  <h1>DEVON</h1>
  <p>No page at this path. This surface is the console door, not a public API browser.</p>
  <p><a href=\"/\">Return to the door</a></p>
- <p class=\"note\">Reads only. Nothing here writes to either soul.</p>
+ <p class=\"note\">Soul recall is reads only. Nothing here writes to either soul index. /terminal is a separate Operator sandbox and can write inside that isolated workspace.</p>
 </main>"""
 
 
@@ -434,14 +434,14 @@ DOOR_HTML = """<!doctype html><meta charset=\"utf-8\">
 <main>
  <h1>DEVON</h1>
  {{NOTE}}
- <p>Paste your console token. It is kept in this browser and nowhere else.</p>
+ <p>Paste your console token. It stays in this browser session (sessionStorage and a 12-hour SameSite cookie) and is not sent to another site.</p>
  <form id=\"f\" autocomplete=\"off\">
   <label for=\"t\">CONSOLE TOKEN</label>
   <input id=\"t\" type=\"password\" inputmode=\"text\" autocapitalize=\"off\"
          autocorrect=\"off\" spellcheck=\"false\" placeholder=\"CONSOLE_TOKEN from the host\">
   <button type=\"submit\">OPEN THE CONSOLE</button>
  </form>
- <p class=\"note\">Reads only. Nothing here writes to either soul.</p>
+ <p class=\"note\">Soul recall is reads only. Nothing here writes to either soul index. /terminal is a separate Operator sandbox and can write inside that isolated workspace.</p>
 </main>
 <script>
 document.getElementById('f').addEventListener('submit', function (e) {
@@ -449,10 +449,10 @@ document.getElementById('f').addEventListener('submit', function (e) {
   var v = (document.getElementById('t').value || '').trim();
   if (!v) return;
   try { sessionStorage.setItem('devon.soul.token', v); } catch (err) {}
-  try { localStorage.setItem('devon.soul.token', v); } catch (err) {}
+  try { localStorage.removeItem('devon.soul.token'); } catch (err) {}
   var secure = location.protocol === 'https:' ? '; Secure' : '';
   document.cookie = 'devon_console=' + encodeURIComponent(v) +
-                    '; path=/; max-age=31536000; SameSite=Strict' + secure;
+                    '; path=/; max-age=43200; SameSite=Strict' + secure;
   location.href = '/console';
 });
 </script>"""
@@ -471,7 +471,8 @@ async def root(accept: str | None = Header(default=None)):
                     "/api/v1/soul/recall?q=",
                     "/api/v1/soul/conflict-search",
                 ],
-                "writes": "none by design",
+                "soul_writes": "none by design",
+                "operator_terminal": "/terminal is a separate Operator sandbox when the wrapper is mounted; not a soul write",
             }
         )
     return HTMLResponse(door_page())

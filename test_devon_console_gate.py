@@ -100,7 +100,9 @@ def test_gate_is_top_aligned_with_full_width_44px_targets():
     assert "align-items:flex-start" in MAIN
     assert "min-height:44px" in MAIN
     assert "OPEN THE CONSOLE" in MAIN
-    assert "Reads only. Nothing here writes to either soul." in MAIN
+    assert "Soul recall is reads only." in MAIN
+    assert "either soul index" in MAIN
+    assert "/terminal is a separate Operator sandbox" in MAIN
     assert "no-referrer" in MAIN
     assert "referrer" in MAIN
 
@@ -143,16 +145,37 @@ def test_flagship_and_completion_refuse_closed_brain_and_live_inflation():
         assert "not operator-live" in blob.lower()
 
 
-def test_gauntlet_ledger_floor_is_56_not_72():
-    assert "**56**" in GAUNTLET
+def test_gauntlet_ledger_floor_is_55_not_56_or_72():
+    assert "**55**" in GAUNTLET
     assert "Ledger floor" in GAUNTLET
     assert "~72" not in GAUNTLET
     assert "**~72**" not in GAUNTLET
+    assert "**56**" not in GAUNTLET
     assert "CI-proven" in GAUNTLET
     assert "not operator-live" in GAUNTLET
     assert "executed: false" in GAUNTLET
     assert "2026-08-22 ID snapshot" in GAUNTLET
     assert "Flagship UI" in GAUNTLET and "38" in GAUNTLET
-    assert "Honesty" in GAUNTLET and "64" in GAUNTLET
+    assert "Honesty" in GAUNTLET and "69" in GAUNTLET
     assert "Human gates" in GAUNTLET and "86" in GAUNTLET
     assert "| DEVON |" in GAUNTLET
+    assert "d2aff6d" in GAUNTLET
+    assert "Not 100" in GAUNTLET or "Not 80. Not 100." in GAUNTLET
+
+
+def test_token_is_session_storage_and_a_short_cookie_not_a_year():
+    for blob in (MAIN, APP, CONSOLE):
+        assert "max-age=31536000" not in blob
+        assert "max-age=43200" in blob
+        assert "localStorage.setItem('devon.soul.token'" not in blob
+        assert "sessionStorage.setItem('devon.soul.token'" in blob
+
+
+def test_host_does_not_claim_writes_none_while_shipping_an_operator_terminal():
+    assert '"writes": "none by design"' not in MAIN
+    assert "soul_writes" in MAIN
+    assert "separate Operator sandbox" in MAIN
+    door = _terminal_door()
+    assert "Operator terminal, not the soul console" in door
+    term = (DEPLOY / "terminal.html").read_text()
+    assert "Not the soul read lane" in term
