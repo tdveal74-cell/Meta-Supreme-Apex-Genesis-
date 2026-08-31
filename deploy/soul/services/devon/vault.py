@@ -268,11 +268,12 @@ WEBHOOKS = {
         "job": "cross platform receipts",
         "destination": "Airtable Thread Receipts tblEhgEZoNr2ztbB3",
         "workflow": "pPIt2cELH2RVZktS",
-        "auth": None,
+        "auth": "header x-devon-key",
         "open_ruling": (
-            "Still unauthenticated. Deliberately unchanged, because the posters are "
-            "ChatGPT and Grok and most chat platforms cannot attach a custom header. "
-            "Lower blast radius since it only creates rows. Needs a ruling."
+            "Header auth enforced live 2026-08-23, credential Devon Capture Key "
+            "FYRvkRTOcROEYZ9P. This entry carried auth None until 2026-08-31, so "
+            "anything reasoned from it before that date treated the lane as open. "
+            "Posters that cannot attach a custom header now need a shim."
         ),
     },
     "devon-inbox": {
