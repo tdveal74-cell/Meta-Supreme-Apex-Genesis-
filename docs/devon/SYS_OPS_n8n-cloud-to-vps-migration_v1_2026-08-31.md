@@ -2,7 +2,8 @@
 
     status: pre-flight, nothing migrated
     source: thequietoperator.app.n8n.cloud (n8n Cloud)
-    target: the Hostinger VPS srv1936199, currently empty of workflows
+    target: the Hostinger VPS srv1936193 (2.25.140.44), n8n.editforge.online,
+            currently empty of workflows
     tool: scripts/n8n_migrate.py
     read from the live Cloud estate on 2026-08-31
 
@@ -45,13 +46,22 @@ Then the service keys: Pinecone account, Pinecone Api-Key, OpenRouter
 account, Airtable Personal Access Token account, Eleven Labs, Cerebras Cloud,
 Speechify API, Pexel Header Auth, GitHub, SMTP account.
 
-**OAuth credentials, the real blocker.** Four of them: Gmail account, Google
-Drive account, YouTube account 2, Notion account. OAuth cannot be copied at
-all. Each needs a fresh consent flow on the VPS, and the OAuth redirect URI
-for the VPS host must be registered with the provider first. For the three
-Google credentials that means adding the VPS callback to the Google Cloud
-project's authorised redirect URIs. Do this before anything else; it is the
+**OAuth credentials, the real blocker.** Three of them, all Google:
+
+    Gmail account          vsTKuAilHmpYCc5L   gmailOAuth2
+    Google Drive account   WMz320icjnur7rDL   googleDriveOAuth2Api
+    YouTube account 2      GA3sbYnmJAAo0AVC   youTubeOAuth2Api
+
+OAuth cannot be copied. Each needs a fresh consent flow on the VPS, and the
+redirect URI for the VPS host has to be registered in the Google Cloud project
+first. See the callback section below. Do this before anything else; it is the
 only item on this list with a dependency outside your own estate.
+
+`Notion account` (69GcWnTi2TDh1FAN) is NOT one of these. Its type is
+`notionApi`, an internal integration token, not `notionOAuth2Api`. It needs no
+redirect URI, just the token pasted like any other API key. Read credential
+types rather than names here: several of the names in this estate suggest an
+auth model the credential does not use.
 
 ## 2. Data tables, 9 of them
 
@@ -166,9 +176,9 @@ default is a safety property. Do not override it to save clicks.
 
 ## Order of work
 
-1. Register the VPS OAuth redirect URIs with Google and Notion. Nothing else
-   proceeds until this is done, and it is the only step that waits on a third
-   party.
+1. Register the VPS OAuth redirect URI in Google Cloud, per the callback
+   section below. Nothing else proceeds until this is done, and it is the only
+   step that waits on a third party.
 2. Create all 28 credentials on the VPS. Record the new id beside the old one.
 3. Create all 9 data tables. `approval_queue` empty, always.
 4. Let Cloud drain to terminal states, per the ruling above. Check the ledger
@@ -197,3 +207,31 @@ a real export. Run it before you trust any count in this file.
 The migration itself has not been attempted. Direct egress to both
 `thequietoperator.app.n8n.cloud` and `n8n.editforge.online` is blocked from
 the agent sandbox, so the tool runs on your machine, not here.
+
+## The OAuth callback URL
+
+n8n on the VPS runs behind Traefik, which terminates TLS on 443 and proxies to
+the n8n container on 127.0.0.1:5678. The n8n OAuth callback path is fixed, so
+the redirect URI is the host plus that path:
+
+    https://n8n.editforge.online/rest/oauth2-credential/callback
+
+Register that exact string in the Google Cloud project that owns the OAuth
+client, under APIs and Services, Credentials, the OAuth 2.0 Client ID, then
+Authorised redirect URIs. Google matches redirect URIs literally: scheme, host,
+path and the absence of a trailing slash all have to agree, and a mismatch
+fails at consent time with redirect_uri_mismatch rather than at save time.
+
+Two things to check rather than assume.
+
+First, whether the three Google credentials share one OAuth client. Open each
+credential in n8n and compare the Client ID. One shared client means one
+redirect URI covers all three. Three different clients means three separate
+Google Cloud entries, possibly in three different projects.
+
+Second, the host itself. The URL above is derived from DNS (n8n.editforge.online
+resolves to 2.25.140.44, which is srv1936193) and from the Traefik container
+publishing 443. It has not been fetched, because this sandbox has no egress to
+that host. The authoritative value is printed by n8n itself: open any OAuth2
+credential on the VPS and copy the OAuth Redirect URL it displays. If that
+string differs from the one above, n8n is right and this document is wrong.
