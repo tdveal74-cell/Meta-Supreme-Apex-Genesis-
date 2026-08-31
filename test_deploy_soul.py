@@ -225,3 +225,15 @@ def test_an_unset_console_token_closes_the_service(probe):
     assert probe["no_token_status"] == 503
     assert probe["no_token_console"] == 503
     assert probe["no_token_console_body_has_state"] is False
+
+def test_unknown_paths_are_branded_html_not_fastapi_json(probe):
+    for key in ("health", "docs", "agents"):
+        assert probe[f"unknown_{key}_status"] == 404
+        assert "text/html" in (probe[f"unknown_{key}_content_type"] or "").lower()
+        assert probe[f"unknown_{key}_is_fastapi_json"] is False
+        body = probe[f"unknown_{key}_body"]
+        assert "#0A1628" in body
+        assert "#D4A017" in body
+        assert "healthy" not in body.lower()
+        assert "Return to the door" in body
+

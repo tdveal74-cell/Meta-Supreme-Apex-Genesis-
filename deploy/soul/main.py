@@ -38,9 +38,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import Cookie, FastAPI, Header, HTTPException, Query, status
+from fastapi import Cookie, FastAPI, Header, HTTPException, Query, Request, status
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 # The service is the whole of deploy/soul. Adding it to the path is what lets
 # this import the vendored modules, which a test holds identical to the originals.
@@ -68,6 +70,14 @@ app = FastAPI(
     docs_url=None,      # nothing to browse; the console is the surface
     redoc_url=None,
 )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def branded_http_exception(request: Request, exc: StarletteHTTPException):
+    """Unknown paths get a flagship HTML page, not unstyled FastAPI JSON."""
+    if exc.status_code == 404:
+        return HTMLResponse(not_found_page(), status_code=404)
+    return await http_exception_handler(request, exc)
 
 
 @app.middleware("http")
@@ -105,13 +115,13 @@ def _presented(
     authorization: str | None, t: str | None, cookie: str | None = None
 ) -> str:
     """
-    The token the caller offered: a header, the first-load URL, or a cookie.
+    The token the caller offered: a header, a leftover query param t, or a cookie.
 
-    A browser performing a top level navigation cannot set a header, which is
-    why ?t= exists at all. But it cannot set one on the second visit either,
-    so without the cookie every launch from a home screen would land on the
-    door and ask for the token again. The cookie is what makes signing in
-    once mean once.
+    A browser performing a top level navigation cannot set a header. The door
+    therefore stores the token in sessionStorage and a SameSite cookie, then
+    opens /console with no token in the URL. Query param t remains accepted
+    so a legacy link still works; the console strips it from the address bar
+    after storing it. The cookie is what makes signing in once mean once.
 
     Header first so an API caller is never overridden by a stale cookie.
     """
@@ -366,30 +376,62 @@ def door_page(reason: str = "") -> str:
     return DOOR_HTML.replace("{{NOTE}}", note)
 
 
-DOOR_HTML = """<!doctype html><meta charset=\"utf-8\">
-<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">
+def not_found_page() -> str:
+    return NOT_FOUND_HTML
+
+
+NOT_FOUND_HTML = """<!doctype html><meta charset=\"utf-8\">
+<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">
 <meta name=\"referrer\" content=\"no-referrer\">
 <title>DEVON</title>
 <style>
- :root{color-scheme:dark}
+ :root{color-scheme:dark;--navy:#0A1628;--amber:#D4A017;--surface:#F8F5F0}
  *{box-sizing:border-box}
- body{margin:0;min-height:100vh;display:grid;place-items:center;
-      background:#050A0E;color:#EDE7DC;
-      font:15px/1.6 ui-sans-serif,system-ui,-apple-system,sans-serif;padding:24px}
+ html,body{margin:0;overflow-x:hidden}
+ body{min-height:100dvh;min-height:100vh;display:flex;align-items:flex-start;
+      justify-content:flex-start;background:var(--navy);color:var(--surface);
+      font:15px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif;
+      padding:max(16px,env(safe-area-inset-top,0px)) 16px 24px}
  main{width:100%;max-width:26rem}
- h1{font-size:13px;letter-spacing:.24em;color:#C77B4A;margin:0 0 6px;font-weight:600}
- p{margin:0 0 18px;color:#93A6B5;font-size:14px}
- p.why{color:#D4A017;border-left:2px solid #D4A017;padding-left:10px;font-size:13px}
- label{display:block;font-size:11px;letter-spacing:.18em;color:#5E7484;margin:0 0 6px}
- input{width:100%;padding:13px 12px;background:#0B141B;color:#EDE7DC;
-       border:1px solid #22384A;border-radius:6px;font:14px ui-monospace,monospace}
- input:focus{outline:none;border-color:#C77B4A}
- button{width:100%;margin-top:10px;padding:13px;border:1px solid #C77B4A;
-        border-radius:6px;background:transparent;color:#C77B4A;
-        font:600 12px/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.20em;
+ h1{font-size:12px;letter-spacing:.24em;color:var(--amber);margin:0 0 8px;font-weight:700}
+ p{margin:0 0 14px;color:#93A6B5;font-size:14px}
+ a{color:var(--amber)}
+ .note{margin-top:14px;font-size:12px;color:#8A9BAE}
+</style>
+<main>
+ <h1>DEVON</h1>
+ <p>No page at this path. This surface is the console door, not a public API browser.</p>
+ <p><a href=\"/\">Return to the door</a></p>
+ <p class=\"note\">Reads only. Nothing here writes to either soul.</p>
+</main>"""
+
+
+DOOR_HTML = """<!doctype html><meta charset=\"utf-8\">
+<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">
+<meta name=\"referrer\" content=\"no-referrer\">
+<title>DEVON</title>
+<style>
+ :root{color-scheme:dark;--navy:#0A1628;--amber:#D4A017;--surface:#F8F5F0}
+ *{box-sizing:border-box}
+ html,body{margin:0;overflow-x:hidden}
+ body{min-height:100dvh;min-height:100vh;display:flex;align-items:flex-start;
+      justify-content:flex-start;background:var(--navy);color:var(--surface);
+      font:15px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif;
+      padding:max(16px,env(safe-area-inset-top,0px)) 16px 24px}
+ main{width:100%;max-width:26rem}
+ h1{font-size:12px;letter-spacing:.24em;color:var(--amber);margin:0 0 8px;font-weight:700}
+ p{margin:0 0 14px;color:#93A6B5;font-size:14px}
+ p.why{color:var(--amber);border-left:2px solid var(--amber);padding-left:10px;font-size:13px}
+ label{display:block;font-size:11px;letter-spacing:.18em;color:#8A9BAE;margin:0 0 6px}
+ input{width:100%;min-height:44px;padding:12px;background:#0C1A2E;color:var(--surface);
+       border:1px solid #1E3348;border-radius:6px;font:14px ui-monospace,monospace}
+ input:focus{outline:none;border-color:var(--amber)}
+ button{width:100%;min-height:44px;margin-top:10px;padding:12px;border:1px solid var(--amber);
+        border-radius:6px;background:transparent;color:var(--amber);
+        font:700 12px/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.18em;
         cursor:pointer}
- button:active{background:#1A1008}
- .note{margin-top:16px;font-size:12px;color:#5E7484}
+ button:active{background:#0C1A2E}
+ .note{margin-top:14px;font-size:12px;color:#8A9BAE}
 </style>
 <main>
  <h1>DEVON</h1>
@@ -408,11 +450,12 @@ document.getElementById('f').addEventListener('submit', function (e) {
   e.preventDefault();
   var v = (document.getElementById('t').value || '').trim();
   if (!v) return;
+  try { sessionStorage.setItem('devon.soul.token', v); } catch (err) {}
   try { localStorage.setItem('devon.soul.token', v); } catch (err) {}
   var secure = location.protocol === 'https:' ? '; Secure' : '';
   document.cookie = 'devon_console=' + encodeURIComponent(v) +
                     '; path=/; max-age=31536000; SameSite=Strict' + secure;
-  location.href = '/console?t=' + encodeURIComponent(v);
+  location.href = '/console';
 });
 </script>"""
 

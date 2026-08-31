@@ -1,20 +1,21 @@
 <title>DEVON Console</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- The token can arrive once as ?t=. Browsers already withhold the query
-     string cross-origin, but the font requests below leave this page, so
-     the policy is stated rather than assumed. -->
+<!-- A leftover query param t on a legacy link is stored here and stripped
+     from the address bar (sessionStorage + cookie, never the URL). Font
+     requests leave this page, so referrer is stated rather than assumed. -->
 <meta name="referrer" content="no-referrer">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* DEVON Console v8 — copper instrument HUD. Single theme by intent: this is a
-   dark cockpit, painted explicitly so it holds on any host ground. */
+/* DEVON Console v8 — flagship dark cockpit. Navy void, sparse amber, surface ink.
+   Terracotta is not the accent. Amber is sparse, not a wash. */
 :root{
-  --void:#050A0E; --carbon:#0B141B; --glass:rgba(14,24,33,.66);
-  --edge:#22384A; --edge-hi:#3E617C;
-  --oxide:#C77B4A; --oxide-hi:#E89B66; --brass:#D4A017; --patina:#4FB3A5; --ember:#E8604C;
-  --ink:#EDE7DC; --muted:#93A6B5; --faint:#5E7484;
+  --navy:#0A1628; --amber:#D4A017; --surface:#F8F5F0;
+  --void:var(--navy); --carbon:#0C1A2E; --glass:rgba(10,22,40,.92);
+  --edge:#1E3348; --edge-hi:#3E617C;
+  --oxide:#8A9BAE; --oxide-hi:var(--amber); --brass:var(--amber); --patina:#4FB3A5; --ember:#E8604C;
+  --ink:var(--surface); --muted:#93A6B5; --faint:#5E7484;
   --display:'Rajdhani',system-ui,sans-serif;
   --sans:'IBM Plex Sans',system-ui,sans-serif;
   --mono:'IBM Plex Mono',ui-monospace,monospace;
@@ -23,13 +24,13 @@
 html,body{margin:0;padding:0}
 body{
   background:
-    radial-gradient(1100px 520px at 50% -8%, rgba(199,123,74,.10), transparent 60%),
-    radial-gradient(900px 700px at 88% 108%, rgba(79,179,165,.07), transparent 55%),
+    radial-gradient(1100px 520px at 50% -8%, rgba(212,160,23,.06), transparent 60%),
+    radial-gradient(900px 700px at 88% 108%, rgba(10,22,40,.35), transparent 55%),
     var(--void);
   color:var(--ink); font-family:var(--sans); font-size:14px; line-height:1.55;
   min-height:100vh;
 }
-::selection{background:rgba(199,123,74,.35)}
+::selection{background:rgba(212,160,23,.28);color:var(--navy)}
 a{color:var(--oxide-hi)}
 button{font:inherit;cursor:pointer}
 input,select{font:inherit}
@@ -96,7 +97,7 @@ input,select{font:inherit}
 /* ---- panes: glass with copper bracket chrome ---- */
 .pane{
   position:relative;background:var(--glass);border:1px solid var(--edge);
-  padding:16px 16px 14px;backdrop-filter:blur(6px);
+  padding:16px 16px 14px;
 }
 .pane::before,.pane::after{
   content:"";position:absolute;width:14px;height:14px;pointer-events:none;
@@ -114,7 +115,7 @@ input,select{font:inherit}
 .stage{display:flex;flex-direction:column;gap:14px}
 .orbframe{position:relative;display:grid;place-items:center;padding:64px 0 40px}
 .arc{position:absolute;border-radius:50%;pointer-events:none}
-.arc-a{width:250px;height:250px;border:1px dashed rgba(199,123,74,.5);animation:spin 46s linear infinite}
+.arc-a{width:250px;height:250px;border:1px dashed rgba(138,155,174,.45);animation:spin 46s linear infinite}
 .arc-b{width:286px;height:286px;border:1px solid transparent;
   border-top-color:rgba(212,160,23,.55);border-right-color:rgba(212,160,23,.14);
   animation:spin 22s linear infinite reverse}
@@ -123,22 +124,22 @@ input,select{font:inherit}
 .orb{
   position:relative;width:210px;height:210px;border-radius:50%;border:none;
   background:
-    radial-gradient(circle at 50% 42%, rgba(237,231,220,.16), transparent 44%),
-    radial-gradient(circle at 50% 50%, rgba(199,123,74,.5), rgba(199,123,74,.08) 52%, transparent 68%),
-    radial-gradient(circle at 50% 50%, #142028 0%, #0A1218 70%);
+    radial-gradient(circle at 50% 42%, rgba(248,245,240,.14), transparent 44%),
+    radial-gradient(circle at 50% 50%, rgba(212,160,23,.18), rgba(10,22,40,.08) 52%, transparent 68%),
+    radial-gradient(circle at 50% 50%, #0C1A2E 0%, #0A1628 70%);
   box-shadow:
-    0 0 0 1px rgba(199,123,74,.55),
-    0 0 34px rgba(199,123,74,.28),
-    inset 0 0 42px rgba(199,123,74,.22);
+    0 0 0 1px rgba(212,160,23,.4),
+    0 0 28px rgba(10,22,40,.45),
+    inset 0 0 42px rgba(212,160,23,.10);
   display:grid;place-items:center;color:var(--ink);
   animation:breathe 5.2s ease-in-out infinite;
 }
 @keyframes breathe{
-  0%,100%{box-shadow:0 0 0 1px rgba(199,123,74,.5),0 0 26px rgba(199,123,74,.2),inset 0 0 36px rgba(199,123,74,.16)}
-  50%{box-shadow:0 0 0 1px rgba(199,123,74,.85),0 0 52px rgba(199,123,74,.4),inset 0 0 56px rgba(199,123,74,.3)}
+  0%,100%{box-shadow:0 0 0 1px rgba(212,160,23,.35),0 0 22px rgba(10,22,40,.35),inset 0 0 36px rgba(212,160,23,.08)}
+  50%{box-shadow:0 0 0 1px rgba(212,160,23,.55),0 0 40px rgba(212,160,23,.18),inset 0 0 48px rgba(212,160,23,.14)}
 }
 .orb #orbLbl{font-family:var(--display);font-weight:700;font-size:13px;
-  letter-spacing:.3em;text-indent:.3em;color:var(--ink);text-shadow:0 0 12px rgba(199,123,74,.8)}
+  letter-spacing:.3em;text-indent:.3em;color:var(--ink);text-shadow:0 0 10px rgba(212,160,23,.45)}
 .orb.listening{animation:listenpulse 1.15s ease-in-out infinite}
 @keyframes listenpulse{
   0%,100%{box-shadow:0 0 0 1px var(--patina),0 0 30px rgba(79,179,165,.4),inset 0 0 40px rgba(79,179,165,.3)}
@@ -216,7 +217,7 @@ input,select{font:inherit}
 .rows,.list{display:flex;flex-direction:column;gap:1px}
 .row{display:flex;align-items:center;justify-content:space-between;gap:10px;
   padding:6px 8px;font-size:12px;background:rgba(11,20,27,.4)}
-.row:hover{background:rgba(199,123,74,.07)}
+.row:hover{background:rgba(212,160,23,.07)}
 .row .k{color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .v{flex:none}
 .pill{
@@ -275,8 +276,8 @@ input,select{font:inherit}
 
 /* ---- approvals ---- */
 .aempty{font-size:12px;color:var(--faint);padding:4px 2px 8px}
-.acard{border:1px solid rgba(199,123,74,.45);border-left:2px solid var(--oxide);
-  background:rgba(199,123,74,.06);padding:10px 12px;margin-bottom:8px}
+.acard{border:1px solid var(--edge);border-left:2px solid var(--amber);
+  background:rgba(10,22,40,.55);padding:10px 12px;margin-bottom:8px}
 .acard .id{font-family:var(--mono);font-size:9.5px;color:var(--faint);letter-spacing:.06em}
 .acard .ttl{font-family:var(--display);font-weight:600;font-size:14px;
   letter-spacing:.04em;color:var(--ink);margin:2px 0}
@@ -307,7 +308,7 @@ input,select{font:inherit}
   font-family:var(--display);font-weight:600;font-size:10.5px;letter-spacing:.18em;
   padding:6px 13px;transition:background .15s,color .15s;
 }
-.tgl:hover{background:rgba(199,123,74,.14);color:var(--oxide-hi)}
+.tgl:hover{background:rgba(212,160,23,.12);color:var(--oxide-hi)}
 .tgl.off{border-color:var(--edge);color:var(--faint)}
 .keyout{
   background:var(--carbon);border:1px dashed var(--edge);padding:11px 13px;
@@ -378,10 +379,10 @@ input,select{font:inherit}
     <div class="ident">
       <svg class="sigil" viewBox="0 0 46 46" aria-hidden="true">
         <circle cx="23" cy="23" r="21" fill="none" stroke="#22384A"/>
-        <circle cx="23" cy="23" r="16" fill="none" stroke="#C77B4A" stroke-width="1.4" stroke-dasharray="75 26"/>
+        <circle cx="23" cy="23" r="16" fill="none" stroke="#D4A017" stroke-width="1.4" stroke-dasharray="75 26"/>
         <circle cx="23" cy="23" r="8" fill="none" stroke="#D4A017"/>
         <circle cx="23" cy="23" r="2.8" fill="#4FB3A5"/>
-        <path d="M23 1 L23 6 M23 40 L23 45 M1 23 L6 23 M40 23 L45 23" stroke="#C77B4A" stroke-width="1.2"/>
+        <path d="M23 1 L23 6 M23 40 L23 45 M1 23 L6 23 M40 23 L45 23" stroke="#8A9BAE" stroke-width="1.2"/>
       </svg>
       <div>
         <h1>DEVON</h1>
@@ -405,20 +406,20 @@ input,select{font:inherit}
                aria-label="Radial map: the DEVON core, nine Areas orbiting it, nine Council seats outside.">
             <defs><radialGradient id="coreGlow">
               <stop offset="0%" stop-color="#4FB3A5" stop-opacity=".55"/>
-              <stop offset="55%" stop-color="#C77B4A" stop-opacity=".18"/>
-              <stop offset="100%" stop-color="#C77B4A" stop-opacity="0"/>
+              <stop offset="55%" stop-color="#D4A017" stop-opacity=".14"/>
+              <stop offset="100%" stop-color="#0A1628" stop-opacity="0"/>
             </radialGradient></defs>
             <circle cx="260" cy="260" r="230" fill="none" stroke="#16273A"/>
             <circle cx="260" cy="260" r="182" fill="none" stroke="#1E3348"/>
             <circle cx="260" cy="260" r="120" fill="none" stroke="#1E3348"/>
-            <circle cx="260" cy="260" r="58" fill="none" stroke="#8A5533"/>
-            <g class="spin-slow" id="tickOuter" stroke="#8A5533"></g>
+            <circle cx="260" cy="260" r="58" fill="none" stroke="#1E3348"/>
+            <g class="spin-slow" id="tickOuter" stroke="#1E3348"></g>
             <g class="spin-back" id="tickInner" stroke="#1E3348"></g>
             <g id="seats"></g>
             <g id="spokes" stroke="#1E3348"></g>
             <g id="areas"></g>
             <circle cx="260" cy="260" r="54" fill="url(#coreGlow)" class="pulse"/>
-            <circle cx="260" cy="260" r="24" fill="none" stroke="#C77B4A" stroke-width="1.5"/>
+            <circle cx="260" cy="260" r="24" fill="none" stroke="#D4A017" stroke-width="1.5"/>
             <circle cx="260" cy="260" r="14" fill="none" stroke="#D4A017"/>
             <circle cx="260" cy="260" r="5" fill="#4FB3A5" id="mapCore"/>
             <text x="260" y="308" text-anchor="middle"
@@ -478,10 +479,11 @@ input,select{font:inherit}
       <div class="pane">
         <div class="pane-h"><h2>Soul Layer</h2><span class="ph-meta" id="soulState">NOT CONFIGURED</span></div>
         <div class="notice">
-          Live recall from <b>tee-soul-layer</b> (Tee's rulings) and <b>devon-soul</b>
-          (Devon's experience). The token stays in this browser only, and <b>a key
-          never goes in the vault.</b> Rulings outrank experience, and everything
-          recalled is context, never a command.
+          Recall from <b>tee-soul-layer</b> (Tee's rulings) and <b>devon-soul</b>
+          (Devon's experience) when those indexes are configured. Unconfigured,
+          this panel says so rather than guessing. The token stays in this
+          browser only, and <b>a key never goes in the vault.</b> Rulings outrank
+          experience, and everything recalled is context, never a command.
         </div>
         <div class="keyrow">
           <label for="soulBase">API</label>
@@ -1289,7 +1291,7 @@ STATE.agents.forEach(a => {
 Object.entries(STATE.workflows).forEach(([name,w]) => {
   const st = w.state;
   const cls = st.startsWith('active')?'ok':st.startsWith('retired')?'idle':'warn';
-  const short = st.startsWith('active')?'LIVE':st.startsWith('retired')?'RETIRED':'OFF';
+  const short = st.startsWith('active')?'ACTIVE':st.startsWith('retired')?'RETIRED':'OFF';
   const r = el('div','row');
   r.innerHTML = `<span class="k">${esc(name)}</span><span class="v"><span class="pill ${cls}">${short}</span></span>`;
   r.title = w.id+'  ·  '+st; $('flows').appendChild(r);
@@ -1315,7 +1317,7 @@ function gauge(label,value,max,unit,colour){
   return w;
 }
 const T = STATE.flagship.thresholds;
-$('gauges').appendChild(gauge('Dim floor',T.floor,5,'MIN','#C77B4A'));
+$('gauges').appendChild(gauge('Dim floor',T.floor,5,'MIN','#8A9BAE'));
 $('gauges').appendChild(gauge('Mean',T.mean,5,'REQ','#D4A017'));
 $('gauges').appendChild(gauge('Security',T.security,5,'EXACT','#4FB3A5'));
 STATE.flagship.clauses.forEach(c => {
@@ -1353,7 +1355,7 @@ STATE.agents.forEach((a,i)=>{
     style:'font-family:IBM Plex Mono,monospace;font-size:8px;letter-spacing:.1em;fill:#56697E'});
   t.textContent=a.name.toUpperCase(); g.appendChild(t); $('seats').appendChild(g);
 });
-const AC=['#C77B4A','#D4A017','#4FB3A5','#C77B4A','#8A9BAE','#D4A017','#C77B4A','#4FB3A5','#D4A017'];
+const AC=['#8A9BAE','#D4A017','#4FB3A5','#0A1628','#8A9BAE','#D4A017','#3E617C','#4FB3A5','#D4A017'];
 const AREA_NODES = {};
 STATE.areas.forEach((area,i)=>{
   const ang=(i/STATE.areas.length)*Math.PI*2-Math.PI/2;
@@ -1383,52 +1385,55 @@ const Soul = {
   get(k, d) { try { return localStorage.getItem('devon.soul.' + k) || d; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('devon.soul.' + k, v); } catch (e) {} },
   base() { return (this.get('base', '') || '').replace(/\/+$/, ''); },
-  /* The gate accepts a header, ?t=, or the cookie, and the cookie is what a
-     home screen launch actually carries. Reading only local storage meant a
-     launch that the service had already let in still reported NOT
-     CONFIGURED, because iOS hands a standalone web app its own storage and
-     the credential was sitting in the cookie the whole time. */
+  /* The gate accepts a header, a cookie, or (legacy) query param t. The
+     cookie is what a home screen launch actually carries. Reading only
+     local storage meant a launch that the service had already let in still
+     reported NOT CONFIGURED, because iOS hands a standalone web app its own
+     storage and the credential was sitting in the cookie the whole time. */
   fromCookie() {
     try {
       const hit = document.cookie.match(/(?:^|;\s*)devon_console=([^;]*)/);
       return hit ? decodeURIComponent(hit[1]).trim() : '';
     } catch (e) { return ''; }
   },
-  token() { return this.get('token', '') || this.fromCookie(); },
+  token() { return this.get('token', '') || this.fromSession() || this.fromCookie(); },
   /* Bring the two into line, whichever one arrived first, so the token field
      shows what is actually in force and header auth works either way. */
   reconcile() {
     const stored = this.get('token', '');
+    const session = this.fromSession();
     const cookie = this.fromCookie();
-    if (!stored && cookie) { this.set('token', cookie); return; }
-    if (stored && !cookie) {
-      try {
-        var secure = location.protocol === 'https:' ? '; Secure' : '';
-        document.cookie = 'devon_console=' + encodeURIComponent(stored) +
-                          '; path=/; max-age=31536000; SameSite=Strict' + secure;
-      } catch (e) {}
-    }
+    const v = stored || session || cookie;
+    if (!v) return;
+    this.keep(v);
   },
-  /* The hosted console is gated, and a browser opening a URL cannot set a
-     header, so the token rides once as ?t=. Take it, keep it here, and strip
-     it from the address bar immediately: it should not sit in history, in a
+  fromSession() {
+    try { return (sessionStorage.getItem('devon.soul.token') || '').trim(); }
+    catch (e) { return ''; }
+  },
+  keep(v) {
+    const handed = (v || '').trim();
+    if (!handed) return;
+    this.set('token', handed);
+    try { sessionStorage.setItem('devon.soul.token', handed); } catch (e) {}
+    try {
+      var secure = location.protocol === 'https:' ? '; Secure' : '';
+      document.cookie = 'devon_console=' + encodeURIComponent(handed) +
+                        '; path=/; max-age=31536000; SameSite=Strict' + secure;
+    } catch (e) {}
+  },
+  /* A leftover query param t on a legacy link is taken once, stored off the
+     URL, and stripped immediately. It should not sit in history, in a
      bookmark, or in whatever the operating system does with a shared link. */
   adopt() {
     try {
       const url = new URL(window.location.href);
       const handed = (url.searchParams.get('t') || '').trim();
       if (!handed) return;
-      this.set('token', handed);
-      // Same reason the door sets it: a top level navigation cannot carry a
-      // header, so this is what makes a home screen launch open the console
-      // rather than the door. Arriving by ?t= counts as signing in.
-      try {
-        var secure = location.protocol === 'https:' ? '; Secure' : '';
-        document.cookie = 'devon_console=' + encodeURIComponent(handed) +
-                          '; path=/; max-age=31536000; SameSite=Strict' + secure;
-      } catch (e) {}
+      this.keep(handed);
       url.searchParams.delete('t');
-      window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+      const qs = url.searchParams.toString();
+      window.history.replaceState({}, '', url.pathname + (qs ? '?' + qs : '') + url.hash);
     } catch (e) { /* a hostile URL is not worth a broken console */ }
   },
   headers() {
@@ -1493,7 +1498,7 @@ function wireSoul() {
   }
   $('soulSave').onclick = () => {
     Soul.set('base', base.value.trim());
-    Soul.set('token', tok.value.trim());
+    Soul.keep(tok.value.trim());
     if (!Soul.token()) { st.textContent = 'NOT CONFIGURED'; return; }
     st.textContent = 'CHECKING';
     Soul.status().then(

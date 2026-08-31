@@ -144,6 +144,15 @@ out = {
     ).status_code,
 }
 
+# Unknown paths used to leak FastAPI JSON {"detail":"Not Found"}.
+# /health is not /api/v1/health and must not invent a healthy process.
+for _path, _key in (("/health", "health"), ("/docs", "docs"), ("/agents", "agents")):
+    _res = client.get(_path)
+    out[f"unknown_{_key}_status"] = _res.status_code
+    out[f"unknown_{_key}_content_type"] = _res.headers.get("content-type", "")
+    out[f"unknown_{_key}_body"] = _res.text
+    out[f"unknown_{_key}_is_fastapi_json"] = _res.text.strip() == '{"detail":"Not Found"}'
+
 # With no CONSOLE_TOKEN at all the service closes rather than opening.
 os.environ.pop("CONSOLE_TOKEN", None)
 out["no_token_status"] = client.get("/api/v1/soul/status").status_code
