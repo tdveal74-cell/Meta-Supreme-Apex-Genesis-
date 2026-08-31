@@ -4,7 +4,7 @@ type: SYS_OPS
 version: 1
 date: 2026-08-24
 area: Systems
-status: operational-on-main
+status: ci-proven-not-operator-live
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 ---
 
@@ -14,14 +14,16 @@ repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 
 | Capability | Status |
 |---|---|
-| Agent runtime + leases + idempotency | Live |
-| Effect intents / receipts + orphan refusal | Live |
-| Cerebras voice / enrichment default | Live (key required) |
-| Subagents (spawn durable child tasks) | Live API |
-| Scheduler (create / due / materialize) | Live API + schema 009 |
-| Browser allowlisted fetch + approved navigate | Live (fetch offline unless `DEVON_BROWSER_LIVE_FETCH`) |
-| Skill proposals + human promote | Live API |
-| Effect receipts provider_receipt_id (GitHub + Operator) | Live |
+| Agent runtime + leases + idempotency | CI-proven. Not operator-live. |
+| Effect intents / receipts + orphan refusal | CI-proven. Not operator-live. |
+| Cerebras voice / enrichment default | CI-proven (key required). Not operator-live. |
+| Subagents (spawn durable child tasks) | CI-proven API. Not operator-live. |
+| Scheduler (create / due / materialize) | CI-proven API + schema 009. Not operator-live. |
+| Browser allowlisted fetch + approved navigate | CI-proven (fetch offline unless `DEVON_BROWSER_LIVE_FETCH`). Not operator-live. |
+| Skill proposals + human promote | CI-proven API. Not operator-live. |
+| Effect receipts provider_receipt_id (GitHub + Operator) | CI-proven. Not operator-live. |
+
+Honest label: CI-proven / not operator-live. Superseded by v2.
 
 ## API surface
 

@@ -1,13 +1,13 @@
-# Meta Supreme Apex Genesis — Completion
+# Meta Supreme Apex Genesis - Completion
 
 ## AAA flagship (visual + spec)
 
-- `docs/FLAGSHIP_SPEC.md` — product + visual standard
-- `apps/web/app/globals.css` — tokens, motion, MS utility classes
-- `apps/web/app/page.tsx` — flagship marketing surface
-- `apps/web/components/ui/button.tsx` · `card.tsx` — premium primitives
-- `packages/ui/src/index.ts` — shared design tokens
-- `apps/web/tailwind.config.ts` — navy / amber / surface scale
+- `docs/FLAGSHIP_SPEC.md` - product + visual standard
+- `apps/web/app/globals.css` - tokens, motion, MS utility classes
+- `apps/web/app/page.tsx` - flagship marketing surface
+- `apps/web/components/ui/button.tsx` · `card.tsx` - premium primitives
+- `packages/ui/src/index.ts` - shared design tokens
+- `apps/web/tailwind.config.ts` - navy / amber / surface scale
 
 ## Run paths
 
@@ -25,6 +25,14 @@
 4. Simulated always labeled
 5. Navy · Amber · Surface only
 
+## Honesty (2026-08-31)
+
+- Not a closed 2nd-brain claim. The knowledge loop is unclosed.
+- Vault: 2026-08-22 ID snapshot in the console STATE blob.
+- Filing: `executed: false`. Plans only; humans decide.
+- Soul recall: off by default until `PINECONE_API_KEY` is set.
+- Hermes: CI-proven / not operator-live. No Live badge for schema-only verification.
+
 ## DEVON-operated EditForge execution (2026-08-26)
 
 - [x] Shared-approval authorization bound to exact edit intent hash
@@ -34,4 +42,4 @@
 - [x] Authenticated execute, status, receipt validation, retry, and cancel API
 - [x] Environment-configurable self-hosted EditForge URL and bearer token
 - [x] Canonical service vendored byte-identically into `deploy/soul`
-- [ ] Live provider smoke render after consented IDs and deployment credentials are installed
+- [ ] Provider smoke render after consented IDs and deployment credentials are installed (not claimed live here)

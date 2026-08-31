@@ -25,9 +25,9 @@ import re
 from pathlib import Path
 from typing import Any
 
-from fastapi import Cookie, Header, HTTPException, Query, Request, status
+from fastapi import Cookie, Header, HTTPException, Request, status
 from fastapi.responses import FileResponse, HTMLResponse
-from main import TOKEN_COOKIE, _presented, _require, app
+from main import _presented, _require, app
 from vercel import sandbox as vercel_sandbox
 from vercel.headers import set_headers
 from vercel.sandbox import GitSource
@@ -70,13 +70,13 @@ async def register_vercel_request_context(request: Request, call_next):
 
 def _operator_require(
     authorization: str | None,
-    t: str | None,
     cookie: str | None,
 ) -> None:
     # v1 deliberately reuses the already-established browser gate. The shell
     # receives no production credentials and cannot write GitHub, so possession
-    # of this gate buys an isolated workspace, not estate access.
-    _require(authorization, t, cookie)
+    # of this gate buys an isolated workspace, not estate access. Query param
+    # t is never accepted as auth (cookie / sessionStorage / header only).
+    _require(authorization, cookie)
 
 
 def _terminal_door(reason: str = "") -> str:
@@ -89,33 +89,36 @@ TERMINAL_DOOR_HTML = """<!doctype html><meta charset="utf-8">
 <meta name="referrer" content="no-referrer">
 <title>DEVON Operator</title>
 <style>
- :root{color-scheme:dark}
+ :root{color-scheme:dark;--navy:#0A1628;--amber:#D4A017;--surface:#F8F5F0}
  *{box-sizing:border-box}
- body{margin:0;min-height:100vh;display:grid;place-items:center;background:#05080c;
-      color:#e8edf2;font:15px/1.6 ui-sans-serif,system-ui,-apple-system,sans-serif;padding:24px}
- main{width:100%;max-width:28rem}
- .eyebrow{font-size:11px;letter-spacing:.24em;color:#d4a017;font-weight:700;margin:0 0 8px}
- h1{font-size:25px;letter-spacing:-.02em;margin:0 0 8px}
- p{margin:0 0 18px;color:#93a6b5}
- p.why{color:#d4a017;border-left:2px solid #d4a017;padding-left:10px;font-size:13px}
- label{display:block;font-size:10px;letter-spacing:.18em;color:#6f8493;margin:0 0 6px}
- input{width:100%;padding:13px 12px;background:#0b141b;color:#e8edf2;border:1px solid #22384a;
-       border-radius:8px;font:14px ui-monospace,SFMono-Regular,Menlo,monospace}
- input:focus{outline:none;border-color:#d4a017}
- button{width:100%;margin-top:10px;padding:14px;border:1px solid #d4a017;border-radius:8px;
-        background:#d4a017;color:#080b0f;font:700 12px/1 ui-sans-serif,system-ui,sans-serif;
-        letter-spacing:.16em;cursor:pointer}
- .note{margin-top:16px;font-size:12px;color:#5e7484}
+ html,body{margin:0;overflow-x:hidden}
+ body{min-height:100dvh;min-height:100vh;display:flex;align-items:flex-start;
+      justify-content:flex-start;background:var(--navy);color:var(--surface);
+      font:15px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif;
+      padding:max(16px,env(safe-area-inset-top,0px)) 16px 24px}
+ main{width:100%;max-width:26rem}
+ h1{font-size:12px;letter-spacing:.24em;color:var(--amber);margin:0 0 8px;font-weight:700}
+ p{margin:0 0 14px;color:#93A6B5;font-size:14px}
+ p.why{color:var(--amber);border-left:2px solid var(--amber);padding-left:10px;font-size:13px}
+ label{display:block;font-size:11px;letter-spacing:.18em;color:#8A9BAE;margin:0 0 6px}
+ input{width:100%;min-height:44px;padding:12px;background:#0C1A2E;color:var(--surface);
+       border:1px solid #1E3348;border-radius:6px;font:14px ui-monospace,monospace}
+ input:focus{outline:none;border-color:var(--amber)}
+ button{width:100%;min-height:44px;margin-top:10px;padding:12px;border:1px solid var(--amber);
+        border-radius:6px;background:transparent;color:var(--amber);
+        font:700 12px/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.18em;
+        cursor:pointer}
+ button:active{background:#0C1A2E}
+ .note{margin-top:14px;font-size:12px;color:#8A9BAE}
 </style>
 <main>
- <p class="eyebrow">DEVON · OPERATOR</p>
- <h1>Browser Terminal</h1>
+ <h1>DEVON OPERATOR</h1>
  {{NOTE}}
- <p>Paste the same DEVON console token you already use. No terminal app is required on this device.</p>
+ <p>Paste the same console token you already use. It is kept in this browser and nowhere else.</p>
  <form id="f" autocomplete="off">
-  <label for="t">DEVON CONSOLE TOKEN</label>
+  <label for="t">CONSOLE TOKEN</label>
   <input id="t" type="password" inputmode="text" autocapitalize="off" autocorrect="off"
-         spellcheck="false" placeholder="Paste token">
+         spellcheck="false" placeholder="CONSOLE_TOKEN from the host">
   <button type="submit">OPEN TERMINAL</button>
  </form>
  <p class="note">Commands execute in an isolated cloud workspace. No production secrets or GitHub write credential are injected.</p>
@@ -125,6 +128,7 @@ document.getElementById('f').addEventListener('submit', function (e) {
   e.preventDefault();
   var v = (document.getElementById('t').value || '').trim();
   if (!v) return;
+  try { sessionStorage.setItem('devon.soul.token', v); } catch (err) {}
   try { localStorage.setItem('devon.soul.token', v); } catch (err) {}
   var secure = location.protocol === 'https:' ? '; Secure' : '';
   document.cookie = 'devon_console=' + encodeURIComponent(v) +
@@ -499,44 +503,31 @@ async def _stop_quietly(sandbox: Any) -> None:
 @app.get("/terminal", include_in_schema=False)
 async def operator_terminal(
     authorization: str | None = Header(default=None),
-    t: str | None = Query(default=None),
     devon_console: str | None = Cookie(default=None),
 ):
     """Serve the browser terminal only to a caller through the DEVON gate."""
     if not TERMINAL.exists():
         raise HTTPException(status_code=404, detail="No terminal asset deployed.")
     try:
-        _operator_require(authorization, t, devon_console)
+        _operator_require(authorization, devon_console)
     except HTTPException as exc:
         if exc.status_code == status.HTTP_503_SERVICE_UNAVAILABLE:
             why = "DEVON's console gate is not configured on the host."
-        elif _presented(authorization, t, devon_console):
+        elif _presented(authorization, devon_console):
             why = "That DEVON token was refused."
         else:
             why = "Sign in once to open the Operator terminal."
         return HTMLResponse(_terminal_door(why), status_code=exc.status_code)
 
-    response = FileResponse(TERMINAL, media_type="text/html")
-    if t and t.strip():
-        response.set_cookie(
-            TOKEN_COOKIE,
-            t.strip(),
-            max_age=31_536_000,
-            httponly=False,
-            secure=True,
-            samesite="strict",
-            path="/",
-        )
-    return response
+    return FileResponse(TERMINAL, media_type="text/html")
 
 
 @app.get("/api/v1/operator-terminal/status")
 async def operator_terminal_status(
     authorization: str | None = Header(default=None),
-    t: str | None = Query(default=None),
     devon_console: str | None = Cookie(default=None),
 ):
-    _operator_require(authorization, t, devon_console)
+    _operator_require(authorization, devon_console)
     return {
         "status": "ready",
         "mode": "isolated-vercel-sandbox",
@@ -555,11 +546,10 @@ async def operator_terminal_status(
 async def operator_terminal_command(
     request: Request,
     authorization: str | None = Header(default=None),
-    t: str | None = Query(default=None),
     devon_console: str | None = Cookie(default=None),
 ):
     """Execute one shell command inside an isolated persistent Sandbox."""
-    _operator_require(authorization, t, devon_console)
+    _operator_require(authorization, devon_console)
     try:
         body = await request.json()
     except Exception as exc:

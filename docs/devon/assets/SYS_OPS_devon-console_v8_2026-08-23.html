@@ -1,7 +1,7 @@
 <title>DEVON Console</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- A leftover query param t on a legacy link is stored here and stripped
-     from the address bar (sessionStorage + cookie, never the URL). Font
+<!-- A leftover query param t on a legacy link is stripped from the
+     address bar. It is never accepted as auth. Font
      requests leave this page, so referrer is stated rather than assumed. -->
 <meta name="referrer" content="no-referrer">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1385,11 +1385,12 @@ const Soul = {
   get(k, d) { try { return localStorage.getItem('devon.soul.' + k) || d; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('devon.soul.' + k, v); } catch (e) {} },
   base() { return (this.get('base', '') || '').replace(/\/+$/, ''); },
-  /* The gate accepts a header, a cookie, or (legacy) query param t. The
-     cookie is what a home screen launch actually carries. Reading only
-     local storage meant a launch that the service had already let in still
-     reported NOT CONFIGURED, because iOS hands a standalone web app its own
-     storage and the credential was sitting in the cookie the whole time. */
+  /* The gate accepts a header or a cookie only. Query param t is never
+     auth. The cookie is what a home screen launch actually carries. Reading
+     only local storage meant a launch that the service had already let in
+     still reported NOT CONFIGURED, because iOS hands a standalone web app
+     its own storage and the credential was sitting in the cookie the whole
+     time. */
   fromCookie() {
     try {
       const hit = document.cookie.match(/(?:^|;\s*)devon_console=([^;]*)/);
@@ -1422,15 +1423,13 @@ const Soul = {
                         '; path=/; max-age=31536000; SameSite=Strict' + secure;
     } catch (e) {}
   },
-  /* A leftover query param t on a legacy link is taken once, stored off the
-     URL, and stripped immediately. It should not sit in history, in a
-     bookmark, or in whatever the operating system does with a shared link. */
+  /* A leftover query param t is stripped from the address bar only. It is
+     never accepted as auth and never written into storage. Cookie,
+     sessionStorage, and Authorization header are the only credentials. */
   adopt() {
     try {
       const url = new URL(window.location.href);
-      const handed = (url.searchParams.get('t') || '').trim();
-      if (!handed) return;
-      this.keep(handed);
+      if (!url.searchParams.get('t')) return;
       url.searchParams.delete('t');
       const qs = url.searchParams.toString();
       window.history.replaceState({}, '', url.pathname + (qs ? '?' + qs : '') + url.hash);

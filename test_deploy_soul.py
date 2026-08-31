@@ -147,9 +147,13 @@ def test_the_console_is_not_a_public_page(probe):
     assert probe["anonymous_body_has_airtable"] is False
 
 
-def test_the_console_opens_for_a_token_in_a_header_or_on_the_url(probe):
-    assert probe["console_query_token"] == 200
+def test_the_console_opens_for_a_header_or_cookie_not_query_param(probe):
+    assert probe["console_query_token"] == 401
+    assert probe["console_query_token_is_door"] is True
     assert probe["console_header_token"] == 200
+    assert probe["console_cookie_opens_it"] == 200
+    assert probe["status_query_token_alone"] == 401
+    assert probe["recall_query_token_alone"] == 401
 
 
 def test_an_anonymous_caller_is_refused_before_anything_is_validated(probe):

@@ -112,28 +112,26 @@ TOKEN_COOKIE = "devon_console"
 
 
 def _presented(
-    authorization: str | None, t: str | None, cookie: str | None = None
+    authorization: str | None, cookie: str | None = None
 ) -> str:
     """
-    The token the caller offered: a header, a leftover query param t, or a cookie.
+    The token the caller offered: a Bearer header or the SameSite cookie.
 
     A browser performing a top level navigation cannot set a header. The door
     therefore stores the token in sessionStorage and a SameSite cookie, then
-    opens /console with no token in the URL. Query param t remains accepted
-    so a legacy link still works; the console strips it from the address bar
-    after storing it. The cookie is what makes signing in once mean once.
+    opens /console with no token in the URL. Query param t is never accepted
+    as auth: it would land the credential in history, bookmarks, and referrer
+    logs. The cookie is what makes signing in once mean once.
 
     Header first so an API caller is never overridden by a stale cookie.
     """
     if authorization and authorization.lower().startswith("bearer "):
         return authorization[7:].strip()
-    if t and t.strip():
-        return t.strip()
     return (cookie or "").strip()
 
 
 def _require(
-    authorization: str | None, t: str | None = None, cookie: str | None = None
+    authorization: str | None, cookie: str | None = None
 ) -> None:
     """
     Let the caller in, or say plainly why not.
@@ -160,7 +158,7 @@ def _require(
                 "environment settings and redeploy."
             ),
         )
-    presented = _presented(authorization, t, cookie)
+    presented = _presented(authorization, cookie)
     if not presented or not hmac.compare_digest(
         presented.encode("utf-8"), expected.encode("utf-8")
     ):
@@ -491,10 +489,9 @@ async def health():
 @app.get("/api/v1/soul/status")
 async def soul_status(
     authorization: str | None = Header(default=None),
-    t: str | None = Query(default=None),
     devon_console: str | None = Cookie(default=None),
 ):
-    _require(authorization, t, devon_console)
+    _require(authorization, devon_console)
     enabled = bool(_pinecone_key())
     return {
         "enabled": enabled,
@@ -520,13 +517,12 @@ def _bounded(name: str, value: int, low: int, high: int) -> int:
 @app.get("/api/v1/soul/recall")
 async def soul_recall(
     authorization: str | None = Header(default=None),
-    t: str | None = Query(default=None),
     devon_console: str | None = Cookie(default=None),
     q: str | None = Query(default=None),
     top_k_tee: int = Query(default=4),
     top_k_devon: int = Query(default=3),
 ):
-    _require(authorization, t, devon_console)
+    _require(authorization, devon_console)
     if not q or not q.strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -590,7 +586,6 @@ class ConflictSearchBody(BaseModel):
 async def conflict_search(
     body: ConflictSearchBody,
     authorization: str | None = Header(default=None),
-    t: str | None = Query(default=None),
     devon_console: str | None = Cookie(default=None),
 ):
     """
@@ -615,7 +610,7 @@ async def conflict_search(
     window that came back full with no weak-scored floor, because such a
     window can hide an active non-weak match below the cutoff.
     """
-    _require(authorization, t, devon_console)
+    _require(authorization, devon_console)
 
     claim = body.claim.strip()
     if len(claim) < 8:
@@ -741,13 +736,12 @@ async def conflict_search(
 @app.get("/console", include_in_schema=False)
 async def console(
     authorization: str | None = Header(default=None),
-    t: str | None = Query(default=None),
     devon_console: str | None = Cookie(default=None),
 ):
     if not CONSOLE.exists():
         raise HTTPException(status_code=404, detail="No console asset deployed.")
     try:
-        _require(authorization, t, devon_console)
+        _require(authorization, devon_console)
     except HTTPException as exc:
         if exc.status_code == status.HTTP_503_SERVICE_UNAVAILABLE:
             why = (
@@ -755,7 +749,7 @@ async def console(
                 "refusing everything. Set one there and redeploy. A token "
                 "pasted here cannot help until that is done."
             )
-        elif _presented(authorization, t, devon_console):
+        elif _presented(authorization, devon_console):
             why = (
                 "That token was refused. Check it for a stray space, a "
                 "changed character, or a capital the keyboard added."
