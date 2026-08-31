@@ -268,11 +268,12 @@ WEBHOOKS = {
         "job": "cross platform receipts",
         "destination": "Airtable Thread Receipts tblEhgEZoNr2ztbB3",
         "workflow": "pPIt2cELH2RVZktS",
-        "auth": None,
+        "auth": "header x-devon-key",
         "open_ruling": (
-            "Still unauthenticated. Deliberately unchanged, because the posters are "
-            "ChatGPT and Grok and most chat platforms cannot attach a custom header. "
-            "Lower blast radius since it only creates rows. Needs a ruling."
+            "Header auth enforced live 2026-08-23, credential Devon Capture Key "
+            "FYRvkRTOcROEYZ9P. This entry carried auth None until 2026-08-31, so "
+            "anything reasoned from it before that date treated the lane as open. "
+            "Posters that cannot attach a custom header now need a shim."
         ),
     },
     "devon-inbox": {
@@ -289,10 +290,12 @@ WEBHOOKS = {
         "auth": "header x-devon-key",
         "open_ruling": (
             "POST half first proven live 2026-08-25 by the Soul Committer smoke. "
-            "Known defect, fix pending a ruling: Build Request's rand() uses signed "
-            "shifts, so ids and tokens can embed the literal text 'undefined' "
-            "(seen live: REQ-20260825-Jundef), collapsing suffix entropy. Fix is "
-            ">>> in place of >> for the three shifted indexes."
+            "The signed-shift entropy defect recorded here (ids and tokens "
+            "embedding the literal text 'undefined', seen live as "
+            "REQ-20260825-Jundef) was FIXED in the live workflow on 2026-08-25. "
+            "Build Request now uses >>> for all three shifted indexes, and the "
+            "workflow's own sticky note warns against changing them back. This "
+            "entry still called the fix pending until 2026-08-31."
         ),
     },
     "devon-approve-decide": {
