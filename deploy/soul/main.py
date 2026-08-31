@@ -400,7 +400,7 @@ NOT_FOUND_HTML = """<!doctype html><meta charset=\"utf-8\">
  <h1>DEVON</h1>
  <p>No page at this path. This surface is the console door, not a public API browser.</p>
  <p><a href=\"/\">Return to the door</a></p>
- <p class=\"note\">Soul recall is reads only. Nothing here writes to either soul index. /terminal is a separate Operator sandbox and can write inside that isolated workspace.</p>
+ <p class=\"note\">Soul recall is reads only. Nothing here writes to either soul index. Propose is not live on this host; devon-soul.vercel.app has no Postgres. Remember goes through the platform API when that base URL is set. /terminal is a separate Operator sandbox and can write inside that isolated workspace.</p>
 </main>"""
 
 
@@ -441,7 +441,7 @@ DOOR_HTML = """<!doctype html><meta charset=\"utf-8\">
          autocorrect=\"off\" spellcheck=\"false\" placeholder=\"CONSOLE_TOKEN from the host\">
   <button type=\"submit\">OPEN THE CONSOLE</button>
  </form>
- <p class=\"note\">Soul recall is reads only. Nothing here writes to either soul index. /terminal is a separate Operator sandbox and can write inside that isolated workspace.</p>
+ <p class=\"note\">Soul recall is reads only. Nothing here writes to either soul index. Propose is not live on this host; devon-soul.vercel.app has no Postgres. Remember goes through the platform API when that base URL is set. /terminal is a separate Operator sandbox and can write inside that isolated workspace.</p>
 </main>
 <script>
 document.getElementById('f').addEventListener('submit', function (e) {

@@ -32,7 +32,8 @@
 - Filing: `executed: false`. Plans only; humans decide.
 - Soul recall: off by default until `PINECONE_API_KEY` is set.
 - Hermes: CI-proven / not operator-live. No Live badge for schema-only verification.
-- In-estate ledger commit exists in this branch after consume-once approval. Not Notion live. Public gate still production SHA d2aff6d.
+- In-estate ledger commit exists in this branch after consume-once approval. The operator HUD uses propose/approve/commit/find when the platform API is set; unset, remember is refused rather than stored in localStorage. Not Notion live. Public gate still production SHA d2aff6d (no Postgres on that host).
+- Ledger find ranks Tee rulings above DEVON notes. Artifact body lives on PostgreSQL artifacts.body.
 - `services/memory` is an empty stub / not durable. No Live badge.
 
 ## DEVON-operated EditForge execution (2026-08-26)

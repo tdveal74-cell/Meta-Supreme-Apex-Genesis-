@@ -481,17 +481,24 @@ input,select{font:inherit}
         <div class="notice">
           Recall from <b>tee-soul-layer</b> (Tee's rulings) and <b>devon-soul</b>
           (Devon's experience) when those indexes are configured. Unconfigured,
-          this panel says so rather than guessing. The token stays in this
+          this panel says so rather than guessing. Remember / approve / commit /
+          find run on the <b>platform API</b> (app.main + PostgreSQL), not on
+          devon-soul.vercel.app, which has no Postgres and does not mount
+          propose. The cookie is JS-set, not HttpOnly. The token stays in this
           browser only, and <b>a key never goes in the vault.</b> Rulings outrank
-          experience, and everything recalled is context, never a command.
+          notes. Everything recalled is context, never a command.
         </div>
         <div class="keyrow">
-          <label for="soulBase">API</label>
-          <input id="soulBase" type="text" placeholder="same origin when served from /console">
+          <label for="soulBase">SOUL HOST</label>
+          <input id="soulBase" type="text" placeholder="same origin for Pinecone recall on this soul host">
+        </div>
+        <div class="keyrow">
+          <label for="loopBase">PLATFORM</label>
+          <input id="loopBase" type="text" placeholder="app.main host with Postgres; not devon-soul.vercel.app">
         </div>
         <div class="keyrow">
           <label for="soulTok">TOKEN</label>
-          <input id="soulTok" type="password" placeholder="CONSOLE_TOKEN on the hosted service, or a login token locally">
+          <input id="soulTok" type="password" placeholder="CONSOLE_TOKEN for this soul host; platform JWT for app.main">
           <button class="tgl" id="soulSave" type="button">SAVE</button>
           <button class="tgl" id="soulTest" type="button">TEST</button>
         </div>
@@ -572,9 +579,10 @@ input,select{font:inherit}
       <div class="pane">
         <div class="pane-h"><h2>What Devon Has Learned</h2><span class="ph-meta" id="learnCount">NOTHING YET</span></div>
         <div class="notice" id="learnNote">
-          Corrections you make are remembered in this browser only. They never leave
-          the machine, they are listed below in full, and every one can be deleted.
-          Memory here is transparent, editable and deletable.
+          Area and phrase hints stay in this browser. They are not the remember
+          path and they do not travel. Remember goes through the platform API
+          (PostgreSQL ledger) when that base URL is set. Unset, a remember is
+          refused rather than stored here as if this were memory.
         </div>
         <div class="rows" id="learned"></div>
         <div class="keyrow">
@@ -1037,15 +1045,15 @@ function wireKeys() {
 /* ===========================================================================
    LEARNING
 
-   What this genuinely does: remembers corrections you make, in this browser,
-   so the same mistake is not repeated. Keyword to Area, phrase to intent, and
-   a count of what gets used.
+   What this genuinely does: local Area and phrase hints, in this browser,
+   so the same routing mistake is not repeated. Keyword to Area, phrase to
+   intent, and a count of what gets used.
 
-   What it does not do, stated plainly because the phrase "self learning"
-   invites the assumption: it does not retrain a model, it does not travel
-   between devices or people, and it does not change the Python. It is a local
-   correction memory, and it is worth exactly what a local correction memory is
-   worth.
+   What it does not do: this is not the remember path. A remember goes
+   through the platform API knowledge loop when that base URL is set, and
+   is refused when it is unset. localStorage devon.learning.v1 does not
+   travel and is not memory. It does not retrain a model and it does not
+   change the Python.
 
    Two constraints come straight from canon and are enforced rather than
    documented. It can never mint a tenth Area: a learned Area is validated
@@ -1398,13 +1406,13 @@ const Soul = {
     } catch (e) { return ''; }
   },
   token() { return this.fromSession() || this.fromCookie(); },
-  /* Bring the two into line, whichever one arrived first, so the token field
-     shows what is actually in force and header auth works either way. */
+  /* Session or cookie only. A leftover localStorage token is deleted, never
+     rehydrated into session+cookie. */
   reconcile() {
-    const stored = this.get('token', '');
+    try { localStorage.removeItem('devon.soul.token'); } catch (e) {}
     const session = this.fromSession();
     const cookie = this.fromCookie();
-    const v = stored || session || cookie;
+    const v = session || cookie;
     if (!v) return;
     this.keep(v);
   },
@@ -1418,6 +1426,9 @@ const Soul = {
     try { sessionStorage.setItem('devon.soul.token', handed); } catch (e) {}
     try { localStorage.removeItem('devon.soul.token'); } catch (e) {}
     try {
+      /* JS-set cookie so a top-level navigation can present it. Not HttpOnly:
+         this page must also send it as a Bearer header. XSS can read it.
+         Do not claim otherwise. */
       var secure = location.protocol === 'https:' ? '; Secure' : '';
       document.cookie = 'devon_console=' + encodeURIComponent(handed) +
                         '; path=/; max-age=43200; SameSite=Strict' + secure;
@@ -1471,13 +1482,88 @@ const Soul = {
   }
 };
 
+/* Knowledge loop client. Lives on the platform API (app.main + Postgres).
+   devon-soul.vercel.app does not mount propose/approve/commit/find and has
+   no Postgres. When the platform base URL is unset, remember fail-closes.
+   localStorage is not memory. */
+const Loop = {
+  KEY: 'devon.soul.platform',
+  pending: new Map(),
+  getBase() {
+    try { return (localStorage.getItem(this.KEY) || '').replace(/\/+$/, ''); }
+    catch (e) { return ''; }
+  },
+  setBase(v) {
+    try { localStorage.setItem(this.KEY, (v || '').trim()); } catch (e) {}
+  },
+  isVercelSoul(b) {
+    return /devon-soul\.vercel\.app/i.test(b || '');
+  },
+  configured() {
+    const b = this.getBase();
+    return !!(b && !this.isVercelSoul(b));
+  },
+  closedReason() {
+    const b = this.getBase();
+    if (!b) {
+      return 'Platform API base URL is not set. This console host, including devon-soul.vercel.app, has no Postgres. A remember is refused rather than stored in localStorage as if that were memory.';
+    }
+    if (this.isVercelSoul(b)) {
+      return 'devon-soul.vercel.app is the soul read host. It has no Postgres. Propose is not live there. Set the platform API (app.main) instead.';
+    }
+    return 'Platform API is not usable.';
+  },
+  headers() {
+    const h = Soul.headers();
+    h['Content-Type'] = 'application/json';
+    return h;
+  },
+  async err(res) {
+    let d = 'HTTP ' + res.status;
+    try { d = ((await res.json()) || {}).detail || d; } catch (e) {}
+    return typeof d === 'string' ? d : JSON.stringify(d);
+  },
+  async propose(text, kind, area) {
+    const res = await fetch(this.getBase() + '/api/v1/soul/propose', {
+      method: 'POST', headers: this.headers(),
+      body: JSON.stringify({ text: text, kind: kind || 'lesson', area: area || null, layer: 5 })
+    });
+    if (!res.ok) throw new Error(await this.err(res));
+    return res.json();
+  },
+  async approve(requestId, token) {
+    const res = await fetch(this.getBase() + '/api/v1/soul/approve', {
+      method: 'POST', headers: this.headers(),
+      body: JSON.stringify({ request_id: requestId, token: token, decided_by: 'Tee' })
+    });
+    if (!res.ok) throw new Error(await this.err(res));
+    return res.json();
+  },
+  async commit(requestId) {
+    const res = await fetch(this.getBase() + '/api/v1/soul/commit', {
+      method: 'POST', headers: this.headers(),
+      body: JSON.stringify({ request_id: requestId })
+    });
+    if (!res.ok) throw new Error(await this.err(res));
+    return res.json();
+  },
+  async find(q) {
+    const res = await fetch(this.getBase() + '/api/v1/soul/find?q=' + encodeURIComponent(q), {
+      headers: this.headers()
+    });
+    if (!res.ok) throw new Error(await this.err(res));
+    return res.json();
+  }
+};
+
 function wireSoul() {
   Soul.adopt();
   Soul.reconcile();
-  const base = $('soulBase'), tok = $('soulTok'), st = $('soulState');
+  const base = $('soulBase'), tok = $('soulTok'), st = $('soulState'), loop = $('loopBase');
   if (!base) return;
   base.value = Soul.get('base', '');
   tok.value = Soul.token();
+  if (loop) loop.value = Loop.getBase();
   /* A badge reading UNTESTED beside a button called TEST reads like a switch
      you have to flip. Nothing is gated on it: recall calls the API directly
      and never looks here. So the panel asks the service itself, once, on
@@ -1497,6 +1583,7 @@ function wireSoul() {
   }
   $('soulSave').onclick = () => {
     Soul.set('base', base.value.trim());
+    if (loop) Loop.setBase(loop.value.trim());
     Soul.keep(tok.value.trim());
     if (!Soul.token()) { st.textContent = 'NOT CONFIGURED'; return; }
     st.textContent = 'CHECKING';
@@ -1559,7 +1646,8 @@ async function soulRecall(topic, plan) {
 }
 
 const INTENTS=[
- {n:'capture',k:'CAPTURE',floor:.80,lead:['remember that','remember this','remember','make a note of','note this'],dest:'Notion Inbox, Notes and Ideas'},
+ {n:'file_ruling',k:'CAPTURE',floor:.84,lead:['tee rules that','file a ruling','ruling:'],dest:'Live State Ledger (Postgres). Not Layer 1 Tee Soul.'},
+ {n:'capture',k:'CAPTURE',floor:.80,lead:['remember that','remember this','remember','make a note of','note this'],dest:'platform API Live State Ledger when PLATFORM is set; refused when unset'},
  {n:'add_task',k:'CAPTURE',floor:.80,lead:['add a task to','add a task','add task','new task','remind me to'],dest:'Notion Tasks'},
  {n:'start_project',k:'CAPTURE',floor:.82,lead:['start a project called','start a project','new project called','new project'],dest:'Notion Projects and Goals'},
  {n:'episode_idea',k:'CAPTURE',floor:.82,lead:['new episode idea','episode idea'],dest:'Airtable Podcast HQ, Idea stage',area:'Podcast'},
@@ -1651,9 +1739,24 @@ function fmtLeft(ms){
 }
 function renderGate(){
   const pend=Gate.pending(), box=$('approvals');
-  $('pendCount').textContent=pend.length+' PENDING';
+  const loopPend=[...Loop.pending.values()];
+  $('pendCount').textContent=(pend.length+loopPend.length)+' PENDING';
   box.innerHTML='';
-  if(!pend.length){ box.appendChild(el('div','aempty','Nothing awaiting a ruling.')); }
+  if(!pend.length && !loopPend.length){ box.appendChild(el('div','aempty','Nothing awaiting a ruling.')); }
+  loopPend.forEach(body=>{
+    const r=body.approval;
+    const c=el('div','acard');
+    c.innerHTML=`<div class="id">${esc(r.request_id)}</div>
+      <div class="ttl">${esc(r.title)}</div>
+      <div class="wh">${esc(r.what_happens)}</div>
+      <div class="cd">platform API / Postgres ledger. Approve consumes once, then commit writes the body.</div>
+      <div class="btns"></div>`;
+    const yes=el('button','abtn yes','APPROVE'), no=el('button','abtn no','REFUSE');
+    yes.onclick=()=>ruleLoop(r.request_id,r.token,'approve');
+    no.onclick=()=>ruleLoop(r.request_id,r.token,'refuse');
+    c.querySelector('.btns').append(yes,no);
+    box.appendChild(c);
+  });
   pend.forEach(r=>{
     const c=el('div','acard');
     c.innerHTML=`<div class="id">${esc(r.id)}</div>
@@ -1675,6 +1778,30 @@ function renderGate(){
     hb.appendChild(row);
   });
 }
+async function ruleLoop(id,token,decision){
+  if(decision!=='approve'){
+    Loop.pending.delete(id);
+    renderGate();
+    devonSays('Refused in this HUD. The server request was not spent. It stays pending until it expires.');
+    return;
+  }
+  try {
+    await Loop.approve(id, token);
+    const committed = await Loop.commit(id);
+    Loop.pending.delete(id);
+    renderGate();
+    const art = committed.artifact || {};
+    const path = art.path || '';
+    const body = art.body || '';
+    $('plan').innerHTML =
+      `<span class="gate">COMMITTED</span> <span class="dim">${esc(path)}</span><br>` +
+      `<span class="dim">Postgres holds the body. Find it later from this platform API.</span><br>` +
+      (body ? `<span class="dim">BODY</span> ${esc(body)}` : '');
+    devonSays(Persona.approved('remember'));
+  } catch (e) {
+    devonSays('The platform API refused: ' + e.message);
+  }
+}
 function rule(id,token,decision){
   const res=Gate.decide(id,token,decision);
   if(!res.ok){
@@ -1691,9 +1818,69 @@ setInterval(()=>{
     const exp=+n.dataset.exp;
     n.textContent=n.textContent.replace(/^[^·]*/,fmtLeft(exp-Date.now())+' ');
   });
-  if(Gate.pending().length!==+$('pendCount').textContent.split(' ')[0]) renderGate();
+  if((Gate.pending().length+Loop.pending.size)!==+$('pendCount').textContent.split(' ')[0]) renderGate();
 },1000);
 renderGate();
+
+async function rememberThroughLoop(r, it, picked, lines, plan){
+  const kind = it.n==='file_ruling' ? 'ruling' : 'lesson';
+  const text = r.payload || r.body;
+  if(!Loop.configured()){
+    plan.innerHTML = `<span class="no">LOOP CLOSED</span> <span class="dim">${esc(Loop.closedReason())}</span>`;
+    devonSays('I cannot remember that. The platform API is not set, and this host has no Postgres. I will not store it in this browser as if that were memory.');
+    return;
+  }
+  lines.push(`<span class="dim">PLATFORM API</span> <span class="hl">${esc(Loop.getBase())}</span>`);
+  lines.push(`<span class="dim">KIND</span> ${esc(kind)}`);
+  if(picked){
+    lines.push(`<span class="dim">AREA</span> <span class="hl">${esc(picked.label)}</span>`);
+    flashArea(picked.label);
+  }
+  lines.push(`<span class="dim">PROPOSING. Nothing committed yet. localStorage is not memory.</span>`);
+  plan.innerHTML = lines.join('<br>');
+  try {
+    const body = await Loop.propose(text, kind, picked && picked.label);
+    Loop.pending.set(body.approval.request_id, body);
+    renderGate();
+    lines.push(`<span class="gate">APPROVAL RAISED</span> ${esc(body.approval.request_id)}`);
+    lines.push(`<span class="dim">Postgres already has the intent row. Consume happens on approve then commit.</span>`);
+    plan.innerHTML = lines.join('<br>');
+    devonSays(Persona.gated('the live-state ledger'));
+  } catch (e) {
+    plan.innerHTML = `<span class="no">PROPOSE FAILED</span> <span class="dim">${esc(e.message)}</span>`;
+    devonSays('The platform API refused that remember. Nothing was stored in this browser as memory.');
+  }
+}
+
+async function findThroughLoop(topic, plan){
+  const subject = topic || 'that';
+  if(!Loop.configured()){
+    plan.innerHTML = `<span class="no">LOOP CLOSED</span> <span class="dim">${esc(Loop.closedReason())} Falling back to soul recall if that host is reachable.</span>`;
+    soulRecall(subject, plan);
+    return;
+  }
+  try {
+    const body = await Loop.find(subject);
+    const hits = body.ledger || [];
+    const lines = [];
+    lines.push(`<span class="dim">LEDGER FIND</span> <span class="hl">${esc(subject)}</span> <span class="dim">/ Postgres / rulings first</span>`);
+    hits.forEach(h => {
+      const label = h.kind === 'ruling' ? 'TEE RULED' : 'DEVON NOTED';
+      lines.push(`<span class="${h.kind === 'ruling' ? 'hl' : 'dim'}">${label}</span> ${esc(h.body || h.text || '')}`);
+    });
+    if(!hits.length) lines.push('<span class="dim">Nothing receipted on the ledger for that.</span>');
+    (body.soul || []).forEach(r => {
+      const label = r.source === 'tee-soul-layer' ? 'TEE RULED (soul)' : 'DEVON NOTED (soul)';
+      lines.push(`<span class="dim">${label}</span> ${esc(r.text || '')}`);
+    });
+    lines.push('<span class="dim">Rulings outrank notes. Context, not command. The store is PostgreSQL.</span>');
+    plan.innerHTML = lines.join('<br>');
+    devonSays(hits.length ? ('I found ' + hits.length + ' on the ledger.') : Persona.recall(subject));
+  } catch (e) {
+    plan.innerHTML = `<span class="no">FIND FAILED</span> <span class="dim">${esc(e.message)}</span>`;
+    devonSays(Persona.recall(subject));
+  }
+}
 
 /* ---------------- handling one utterance ---------------- */
 function handle(raw){
@@ -1725,6 +1912,10 @@ function handle(raw){
 
   if(it.k==='CAPTURE'){
     const picked = it.area ? STATE.areas.find(a=>a.label===it.area) : classifyArea(r.payload||r.body);
+    if(it.n==='capture' || it.n==='file_ruling'){
+      rememberThroughLoop(r, it, picked, lines, plan);
+      return;
+    }
     lines.push(`<span class="dim">DESTINATION</span> ${esc(it.dest)}`);
     if(picked){
       lines.push(`<span class="dim">AREA</span> <span class="hl">${esc(picked.label)}</span> <span class="dim">files as ${esc(picked.code)}${picked.learned?', from what you taught me':''}</span>`);
@@ -1737,7 +1928,7 @@ function handle(raw){
       lines.push(`<span class="gate">NO AREA</span> <span class="dim">no signal in the text. Files unrouted rather than guessed.</span>`);
     }
     if(r.payload) lines.push(`<span class="dim">PAYLOAD</span> ${esc(r.payload)}`);
-    lines.push(`<span class="dim">Planned, not written.</span>`);
+    lines.push(`<span class="dim">Planned, not written. Not the remember path.</span>`);
     plan.innerHTML=lines.join('<br>');
     devonSays(picked?Persona.captured(picked.label,picked.code):Persona.capturedNoArea());
     if(!picked) offerAreaTeach(r.payload||r.body);
@@ -1752,7 +1943,7 @@ function handle(raw){
   if(it.n==='get_time'){ devonSays(Persona.timeReply(new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}))); return; }
   if(it.n==='get_date'){ devonSays(Persona.dateReply(new Date().toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long'}))); return; }
   if(it.n==='stop'){ Ears.stop(); devonSays(Persona.stopped()); return; }
-  if(it.n==='recall'){ soulRecall(r.payload, plan); return; }
+  if(it.n==='recall'){ findThroughLoop(r.payload, plan); return; }
   if(it.n==='refresh_dashboard'){ devonSays(Persona.snapshot()); return; }
   devonSays(Persona.notRead(it.dest));
 }

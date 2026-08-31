@@ -3,9 +3,12 @@ Soul endpoints — recall over HTTP, honestly gated, plus the write lane.
 
 Recall queries both souls (tee-soul-layer, then devon-soul) and returns the
 records plus DEVON's phrased reply, hierarchy intact. The write lane is
-propose -> approve -> commit: propose enqueues and writes nothing, approve
-is the existing hashed single-use approval queue (not a second grantor),
-commit consumes that approval and then persists. Tee Soul is never written.
+propose -> approve -> commit: propose enqueues and writes Live State Ledger
+intent rows in PostgreSQL (it does not consume, and it does not write soul,
+Notion, or Drive), approve is the existing hashed single-use approval queue
+(not a second grantor), commit consumes that approval and then persists an
+artifact body. Kind ruling may enter the ledger and outranks notes on find.
+Layer 1 Tee Soul is never written.
 
 Switched off, recall says so with a 503 rather than pretending: soul
 recall exists only when SOUL_RECALL_ENABLED and PINECONE_API_KEY are set.
@@ -149,7 +152,12 @@ async def soul_propose(
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
-    """Enqueue a remember. Returns an approval request. Writes nothing."""
+    """Enqueue a remember. Returns an approval request.
+
+    Writes ledger intent rows in PostgreSQL. Does not consume. Does not
+    write soul, Notion, or Drive. This route lives on app.main, not on
+    the Vercel soul host (devon-soul.vercel.app has no Postgres).
+    """
     try:
         return await knowledge_loop.propose(
             db,

@@ -149,6 +149,8 @@ class ArtifactRecord(Base):
     media_type: Mapped[str] = mapped_column(
         String(200), nullable=False, default="application/octet-stream"
     )
+    body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    kind: Mapped[str] = mapped_column(String(32), nullable=False, default="lesson")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

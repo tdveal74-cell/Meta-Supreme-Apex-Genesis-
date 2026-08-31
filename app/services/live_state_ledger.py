@@ -29,7 +29,7 @@ import secrets
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
-from sqlalchemy import select
+from sqlalchemy import case, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -304,8 +304,11 @@ class LiveStateLedger:
         sha256: str = "",
         media_type: str = "application/octet-stream",
         action_id: Optional[str] = None,
+        body: str = "",
+        kind: str = "lesson",
     ) -> Dict[str, Any]:
         await self._intent(db, owner_id=owner_id, intent_id=intent_id)
+        payload = body or ""
         record = ArtifactRecord(
             id=_new_id("ART"),
             intent_id=intent_id,
@@ -314,11 +317,20 @@ class LiveStateLedger:
             path=path,
             sha256=sha256,
             media_type=media_type,
+            body=payload,
+            kind=(kind or "lesson").strip().lower() or "lesson",
             created_at=_now(),
         )
         db.add(record)
         await db.flush()
-        return {"artifact_id": record.id, "path": path}
+        return {
+            "artifact_id": record.id,
+            "path": path,
+            "sha256": sha256,
+            "media_type": media_type,
+            "body": record.body,
+            "kind": record.kind,
+        }
 
     async def record_error(
         self,
@@ -587,7 +599,13 @@ class LiveStateLedger:
                 for row in actions.scalars().all()
             ],
             "artifacts": [
-                {"artifact_id": row.id, "path": row.path, "sha256": row.sha256}
+                {
+                    "artifact_id": row.id,
+                    "path": row.path,
+                    "sha256": row.sha256,
+                    "body": row.body,
+                    "kind": row.kind,
+                }
                 for row in artifacts.scalars().all()
             ],
             "receipt": (
@@ -631,11 +649,17 @@ class LiveStateLedger:
     async def search_receipted_captures(
         self, db: AsyncSession, *, owner_id: str, query: str, limit: int = 20
     ) -> list[dict]:
-        """Find committed captures by text. Unapproved proposals are not memories."""
+        """Find committed captures by text. Unapproved proposals are not memories.
+
+        Tee rulings outrank DEVON notes regardless of recency. A later note
+        cannot sit above an earlier ruling. The artifact body is the payload;
+        ``estate://`` is a path label, not a blob store.
+        """
         needle = (query or "").strip()
         if not needle:
             return []
         pattern = f"%{needle}%"
+        precedence = case((ArtifactRecord.kind == "ruling", 0), else_=1)
         result = await db.execute(
             select(IntentRecord, UniversalReceiptRecord, ArtifactRecord)
             .join(
@@ -645,9 +669,12 @@ class LiveStateLedger:
             .outerjoin(ArtifactRecord, ArtifactRecord.intent_id == IntentRecord.id)
             .where(
                 IntentRecord.owner_id == owner_id,
-                IntentRecord.stated.ilike(pattern),
+                or_(
+                    IntentRecord.stated.ilike(pattern),
+                    ArtifactRecord.body.ilike(pattern),
+                ),
             )
-            .order_by(IntentRecord.created_at.desc())
+            .order_by(precedence.asc(), IntentRecord.created_at.desc())
             .limit(limit)
         )
         found: list[dict] = []
@@ -656,15 +683,21 @@ class LiveStateLedger:
             if intent.id in seen:
                 continue
             seen.add(intent.id)
+            kind = artifact.kind if artifact is not None else "lesson"
+            body = (artifact.body if artifact is not None else "") or intent.stated
             found.append(
                 {
                     "intent_id": intent.id,
-                    "text": intent.stated,
+                    "text": body,
+                    "body": body,
+                    "kind": kind,
+                    "rank": "tee-ruling" if kind == "ruling" else "devon-note",
                     "state": intent.state,
                     "artifact_path": artifact.path if artifact is not None else None,
                     "receipt_id": receipt.id,
                     "what_happened": receipt.what_happened,
                     "source": "live-state-ledger",
+                    "store": "postgresql",
                     "durable": True,
                     "live": False,
                 }

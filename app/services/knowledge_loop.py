@@ -4,13 +4,18 @@ DEVON's compiler in ``services.devon`` stays effect-free: a capture is a
 FilingPlan with ``executed: False``. This module is the caller that performs
 the effect, outside that package.
 
-The loop is: propose (enqueue, no write) -> human approve (existing queue,
+The loop is: propose (enqueue plus Live State Ledger intent rows in
+PostgreSQL; no consume, no soul write) -> human approve (existing queue,
 hashed single-use token) -> consume-before-execute commit. Commit always
-persists a Live State Ledger artifact and receipt so "if it is not in the
-ledger it did not happen" is true even when Notion, Drive, n8n, and Pinecone
-are unset. Soul write is additive and fail-closed: only devon-soul /
-subconscious per ``check_layer_write``, never Tee Soul. n8n is routed only
-when a webhook env is actually set. Missing connectors are named, never faked.
+persists a Live State Ledger artifact *with body* and a receipt so "if it
+is not in the ledger it did not happen" is true even when Notion, Drive,
+n8n, and Pinecone are unset. PostgreSQL is the store; ``estate://`` is a
+path label. Kind ``ruling`` may enter the ledger so Tee's rulings outrank
+DEVON notes on find; Layer 1 Tee Soul is still never written. Soul write
+is additive and fail-closed: only devon-soul / subconscious per
+``check_layer_write``, never Tee Soul, and skipped unless SOUL_RECALL_ENABLED
+and PINECONE_API_KEY. n8n is routed only when a webhook env is actually set.
+Missing connectors are named, never faked.
 """
 
 from __future__ import annotations
@@ -32,6 +37,10 @@ from services.intelligence.soul import (
     SoulWriteCandidate,
     SoulWriteRefused,
 )
+
+#: Ledger kinds include Tee rulings. Pinecone devon-soul still refuses
+#: ``ruling`` (ALLOWED_KINDS). A ruling here is a ledger row, not Layer 1.
+LEDGER_KINDS = frozenset(set(ALLOWED_KINDS) | {"ruling"})
 
 LOOP = "knowledge_loop.v1"
 DEFAULT_LAYER = 5  # Devon Soul
@@ -81,7 +90,21 @@ def _connector_honesty() -> Dict[str, Any]:
     notion = (os.environ.get("NOTION_TOKEN") or os.environ.get("NOTION_API_KEY") or "").strip()
     drive = (os.environ.get("GOOGLE_DRIVE_TOKEN") or os.environ.get("DRIVE_TOKEN") or "").strip()
     pinecone = bool(soul_service.get_soul_layer())
+    db_url = (os.environ.get("DATABASE_URL") or "").strip()
     return {
+        "postgres": {
+            "engine": "PostgreSQL",
+            "configured": bool(db_url),
+            "store": "Live State Ledger (intents, events, artifacts.body)",
+            "written": bool(db_url),
+            "live": bool(db_url),
+            "reason": (
+                "PostgreSQL is the actual store. estate://ledger/captures/... "
+                "is a path label; the capture body is on artifacts.body."
+                if db_url
+                else "DATABASE_URL unset. The loop cannot persist."
+            ),
+        },
         "n8n": {
             "configured": bool(url),
             "live": False,
@@ -134,11 +157,11 @@ def _build_candidate(
             provider="knowledge-loop",
         )
     normalized = (kind or "").strip().lower()
-    if normalized not in ALLOWED_KINDS:
+    if normalized not in LEDGER_KINDS:
         raise SoulWriteRefused(
-            f"Kind {kind!r} may not enter devon-soul. Allowed: "
-            f"{', '.join(sorted(ALLOWED_KINDS))}. Rulings enter "
-            "tee-soul-layer through the Thread Log lane and nowhere else.",
+            f"Kind {kind!r} may not enter the in-estate ledger. Allowed: "
+            f"{', '.join(sorted(LEDGER_KINDS))}. Kind ruling is a ledger "
+            "row ranked above notes; it does not write Layer 1 Tee Soul.",
             provider="knowledge-loop",
         )
     return SoulWriteCandidate(
@@ -185,7 +208,12 @@ class KnowledgeLoop:
         area: Optional[str] = None,
         layer: int = DEFAULT_LAYER,
     ) -> Dict[str, Any]:
-        """Enqueue a capture. Returns an approval request. Writes nothing."""
+        """Enqueue a capture. Returns an approval request.
+
+        Writes Live State Ledger intent rows in PostgreSQL (open_intent,
+        CONTEXT_LOADED, PLAN_CREATED, plan_action, APPROVAL_REQUESTED). Does
+        not consume the approval. Does not write soul, Notion, or Drive.
+        """
         allowed, reason = ecosystem.check_layer_write(layer, approved_by_tee=False)
         if layer == 1:
             raise KnowledgeLoopRefused(
@@ -213,10 +241,17 @@ class KnowledgeLoop:
             "executed": False,
         }
 
-        what = candidate.what_happens() + (
-            " Also persists a ledger artifact so the capture is findable in-estate "
-            "without Drive, Notion, or n8n sitting open."
-        )
+        if candidate.kind == "ruling":
+            what = (
+                "Tee files a ruling on the Live State Ledger (PostgreSQL). "
+                "Find ranks this above DEVON notes. Layer 1 Tee Soul is not "
+                "written. Notion, Drive, and n8n are not written."
+            )
+        else:
+            what = candidate.what_happens() + (
+                " Also persists a ledger artifact with body so the capture is "
+                "findable in-estate without Drive, Notion, or n8n sitting open."
+            )
         record, token = _queue().request(
             title=f"Remember: {payload_text[:80]}",
             what_happens=what,
@@ -429,6 +464,8 @@ class KnowledgeLoop:
             path=path,
             sha256=_sha256(candidate.text),
             media_type="text/plain",
+            body=candidate.text,
+            kind=candidate.kind,
         )
         await ledger.append_event(
             db,
@@ -533,6 +570,15 @@ class KnowledgeLoop:
     async def _maybe_write_soul(
         self, candidate: SoulWriteCandidate, layer: int
     ) -> Dict[str, Any]:
+        if candidate.kind == "ruling":
+            return {
+                "written": False,
+                "live": False,
+                "reason": (
+                    "Kind ruling stays on the PostgreSQL ledger and is ranked "
+                    "above notes. Layer 1 Tee Soul is never written from this loop."
+                ),
+            }
         if layer != DEFAULT_LAYER:
             return {
                 "written": False,

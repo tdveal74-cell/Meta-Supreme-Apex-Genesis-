@@ -44,7 +44,9 @@ uvicorn standalone_api:app --port 8000
 - Filing plans only: `executed: false`. DEVON plans; humans decide.
 - Soul recall is off by default (needs `PINECONE_API_KEY`). Do not invent live soul connectivity.
 - Hermes stack status is CI-proven / not operator-live. Do not wear a Live badge for undeployed operator verification.
-- In-estate remember/approve/commit writes the Live State Ledger after a consumed approval. That is not Notion live, not Drive live, and not a claim that devon-soul.vercel.app moved (production SHA is still d2aff6d).
+- In-estate remember/approve/commit writes the Live State Ledger after a consumed approval. The operator HUD calls that loop when the platform API base URL is set, and fail-closes when it is unset. That is not Notion live, not Drive live, and not a claim that devon-soul.vercel.app moved (production SHA is still d2aff6d; that host has no Postgres and does not mount propose).
+- Tee rulings may enter the ledger (kind ruling) and outrank DEVON notes on find. Layer 1 Tee Soul is still never written from this loop.
+- Capture payload is stored on artifacts.body in PostgreSQL. estate:// is a path label.
 - `services/memory` is an empty stub. Hermes expansion defaults are in-memory / not durable.
 
 ## Beyond standalone

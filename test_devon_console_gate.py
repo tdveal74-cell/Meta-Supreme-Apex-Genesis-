@@ -145,22 +145,24 @@ def test_flagship_and_completion_refuse_closed_brain_and_live_inflation():
         assert "not operator-live" in blob.lower()
 
 
-def test_gauntlet_ledger_floor_is_55_not_56_or_72():
-    assert "**55**" in GAUNTLET
+def test_gauntlet_ledger_floor_is_58_not_55_as_current_or_80():
+    assert "| **Meta Supreme overall** | **58** |" in GAUNTLET
     assert "Ledger floor" in GAUNTLET
     assert "~72" not in GAUNTLET
     assert "**~72**" not in GAUNTLET
-    assert "**56**" not in GAUNTLET
+    assert "**80**" not in GAUNTLET
+    assert "**100**" not in GAUNTLET
     assert "CI-proven" in GAUNTLET
     assert "not operator-live" in GAUNTLET
     assert "executed: false" in GAUNTLET
     assert "2026-08-22 ID snapshot" in GAUNTLET
     assert "Flagship UI" in GAUNTLET and "38" in GAUNTLET
-    assert "Honesty" in GAUNTLET and "69" in GAUNTLET
+    assert "| Honesty | 72 |" in GAUNTLET
+    assert "2nd-brain" in GAUNTLET
     assert "Human gates" in GAUNTLET and "86" in GAUNTLET
     assert "| DEVON |" in GAUNTLET
     assert "d2aff6d" in GAUNTLET
-    assert "Not 100" in GAUNTLET or "Not 80. Not 100." in GAUNTLET
+    assert "Not 80. Not 100." in GAUNTLET
 
 
 def test_token_is_session_storage_and_a_short_cookie_not_a_year():
@@ -179,3 +181,41 @@ def test_host_does_not_claim_writes_none_while_shipping_an_operator_terminal():
     assert "Operator terminal, not the soul console" in door
     term = (DEPLOY / "terminal.html").read_text()
     assert "Not the soul read lane" in term
+
+
+def test_console_remember_uses_loop_when_platform_api_is_set():
+    assert "Loop.configured" in CONSOLE
+    assert "/api/v1/soul/propose" in CONSOLE
+    assert "/api/v1/soul/approve" in CONSOLE
+    assert "/api/v1/soul/commit" in CONSOLE
+    assert "/api/v1/soul/find" in CONSOLE
+    assert "rememberThroughLoop" in CONSOLE
+    assert "Loop.propose" in CONSOLE
+    assert "devon-soul.vercel.app" in CONSOLE
+    assert "has no Postgres" in CONSOLE
+    assert "LOOP CLOSED" in CONSOLE
+    assert "localStorage is not memory" in CONSOLE
+    assert "devon.soul.platform" in CONSOLE
+
+
+def test_console_fail_closes_remember_when_platform_api_unset():
+    assert "Loop.closedReason" in CONSOLE
+    assert "refused rather than stored in localStorage" in CONSOLE
+    assert "I cannot remember that" in CONSOLE
+    # Area hints may still use devon.learning.v1; remember must not treat that as memory.
+    start = CONSOLE.index('id="learnNote"')
+    learn = " ".join(CONSOLE[start : start + 800].split())
+    assert "not the remember path" in learn
+
+
+def test_reconcile_does_not_rehydrate_localstorage_token():
+    rec = CONSOLE[CONSOLE.index("reconcile()") : CONSOLE.index("keep(v)")]
+    assert "this.get('token'" not in rec
+    assert "localStorage.removeItem('devon.soul.token')" in rec
+    assert "session || cookie" in rec or "session||cookie" in rec.replace(" ", "")
+
+
+def test_console_does_not_claim_cookie_is_httponly():
+    assert "; HttpOnly" not in CONSOLE
+    assert "HttpOnly cookie" not in CONSOLE
+    assert "httponly cookie" not in CONSOLE.lower()
