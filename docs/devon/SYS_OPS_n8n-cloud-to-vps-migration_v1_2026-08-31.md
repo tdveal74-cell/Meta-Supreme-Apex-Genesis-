@@ -68,7 +68,7 @@ auth model the credential does not use.
 Schema and rows both stay behind. Create the table, then decide separately
 whether its contents move.
 
-    devon_state_ledger        VYyno7pDWmY6uxBz   33 columns
+    devon_state_ledger        VYyno7pDWmY6uxBz   34 columns
     approval_queue            u6wzeN5y9LNxROsN   16 columns
     devon_soul_commit_log     U9fnVy19Vc8kvQAw    9 columns
     devon_github_checkpoints  7OT3H8GzyqP5RgmJ    7 columns
@@ -77,6 +77,18 @@ whether its contents move.
     devon_soul_setup          VBW2nTLQcaZ8l74a    4 columns
     tqo_content               tc2lBzham6J65EP7   53 columns
     nco_content               NTUtlcfrvNmS2oau   53 columns
+
+Every column name, type and position is recorded in
+`docs/devon/n8n-datatable-schemas.json`, read from the live instance on
+2026-08-31. Build the tables from that file rather than from a screen, because
+a 34-column and a 53-column table are not things anyone retypes correctly, and
+a column missing from the target does not announce itself: the insert node
+simply drops that field and the row lands looking complete.
+
+The ledger count in an earlier revision of this document said 33. It is 34.
+The types are worth attention too, since most columns are strings but not all:
+`terminal` and `human_watched` are booleans, and `intent_level`, `attempts`,
+`artifact_count` and `trace_count` are numbers.
 
 Two rulings apply here.
 

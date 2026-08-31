@@ -1,0 +1,1010 @@
+{
+  "_": "Exact n8n data table schemas read from n8n Cloud on 2026-08-31, for recreation on the VPS (srv1936193, n8n.editforge.online). Column order is the source instance's index order. Source ids are recorded so a workflow node still pointing at one can be found; the target instance mints its own ids and every dataTable node must be repointed after import.",
+  "source": "thequietoperator.app.n8n.cloud",
+  "read_at": "2026-08-31",
+  "tables": [
+    {
+      "name": "devon_state_ledger",
+      "source_id": "VYyno7pDWmY6uxBz",
+      "column_count": 34,
+      "columns": [
+        {
+          "index": 0,
+          "name": "intent_id",
+          "type": "string"
+        },
+        {
+          "index": 1,
+          "name": "schema_version",
+          "type": "string"
+        },
+        {
+          "index": 2,
+          "name": "event_id",
+          "type": "string"
+        },
+        {
+          "index": 3,
+          "name": "parent_intent_id",
+          "type": "string"
+        },
+        {
+          "index": 4,
+          "name": "idempotency_key",
+          "type": "string"
+        },
+        {
+          "index": 5,
+          "name": "state",
+          "type": "string"
+        },
+        {
+          "index": 6,
+          "name": "state_reason",
+          "type": "string"
+        },
+        {
+          "index": 7,
+          "name": "terminal",
+          "type": "boolean"
+        },
+        {
+          "index": 8,
+          "name": "area",
+          "type": "string"
+        },
+        {
+          "index": 9,
+          "name": "actor_type",
+          "type": "string"
+        },
+        {
+          "index": 10,
+          "name": "actor_source",
+          "type": "string"
+        },
+        {
+          "index": 11,
+          "name": "on_behalf_of",
+          "type": "string"
+        },
+        {
+          "index": 12,
+          "name": "intent_summary",
+          "type": "string"
+        },
+        {
+          "index": 13,
+          "name": "intent_level",
+          "type": "number"
+        },
+        {
+          "index": 14,
+          "name": "blast_radius",
+          "type": "string"
+        },
+        {
+          "index": 15,
+          "name": "approval_state",
+          "type": "string"
+        },
+        {
+          "index": 16,
+          "name": "approval_scope",
+          "type": "string"
+        },
+        {
+          "index": 17,
+          "name": "approval_expires_at",
+          "type": "string"
+        },
+        {
+          "index": 18,
+          "name": "execution_state",
+          "type": "string"
+        },
+        {
+          "index": 19,
+          "name": "executor",
+          "type": "string"
+        },
+        {
+          "index": 20,
+          "name": "workflow_id",
+          "type": "string"
+        },
+        {
+          "index": 21,
+          "name": "execution_id",
+          "type": "string"
+        },
+        {
+          "index": 22,
+          "name": "attempts",
+          "type": "number"
+        },
+        {
+          "index": 23,
+          "name": "verification_state",
+          "type": "string"
+        },
+        {
+          "index": 24,
+          "name": "verification_method",
+          "type": "string"
+        },
+        {
+          "index": 25,
+          "name": "human_watched",
+          "type": "boolean"
+        },
+        {
+          "index": 26,
+          "name": "learning_state",
+          "type": "string"
+        },
+        {
+          "index": 27,
+          "name": "receipt_outcome",
+          "type": "string"
+        },
+        {
+          "index": 28,
+          "name": "artifact_count",
+          "type": "number"
+        },
+        {
+          "index": 29,
+          "name": "trace_count",
+          "type": "number"
+        },
+        {
+          "index": 30,
+          "name": "created_at",
+          "type": "string"
+        },
+        {
+          "index": 31,
+          "name": "updated_at",
+          "type": "string"
+        },
+        {
+          "index": 32,
+          "name": "ledger_written_at",
+          "type": "string"
+        },
+        {
+          "index": 33,
+          "name": "envelope",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "approval_queue",
+      "source_id": "u6wzeN5y9LNxROsN",
+      "column_count": 16,
+      "columns": [
+        {
+          "index": 0,
+          "name": "request_id",
+          "type": "string"
+        },
+        {
+          "index": 1,
+          "name": "status",
+          "type": "string"
+        },
+        {
+          "index": 2,
+          "name": "action_type",
+          "type": "string"
+        },
+        {
+          "index": 3,
+          "name": "project",
+          "type": "string"
+        },
+        {
+          "index": 4,
+          "name": "title",
+          "type": "string"
+        },
+        {
+          "index": 5,
+          "name": "what_happens",
+          "type": "string"
+        },
+        {
+          "index": 6,
+          "name": "blast_radius",
+          "type": "string"
+        },
+        {
+          "index": 7,
+          "name": "reversible",
+          "type": "string"
+        },
+        {
+          "index": 8,
+          "name": "evidence",
+          "type": "string"
+        },
+        {
+          "index": 9,
+          "name": "requested_by",
+          "type": "string"
+        },
+        {
+          "index": 10,
+          "name": "requested_at",
+          "type": "string"
+        },
+        {
+          "index": 11,
+          "name": "decided_at",
+          "type": "string"
+        },
+        {
+          "index": 12,
+          "name": "decision_note",
+          "type": "string"
+        },
+        {
+          "index": 13,
+          "name": "callback_url",
+          "type": "string"
+        },
+        {
+          "index": 14,
+          "name": "token",
+          "type": "string"
+        },
+        {
+          "index": 15,
+          "name": "expires_at",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "devon_soul_commit_log",
+      "source_id": "U9fnVy19Vc8kvQAw",
+      "column_count": 9,
+      "columns": [
+        {
+          "index": 0,
+          "name": "intent_id",
+          "type": "string"
+        },
+        {
+          "index": 1,
+          "name": "state",
+          "type": "string"
+        },
+        {
+          "index": 2,
+          "name": "request_id",
+          "type": "string"
+        },
+        {
+          "index": 3,
+          "name": "record_id",
+          "type": "string"
+        },
+        {
+          "index": 4,
+          "name": "claim",
+          "type": "string"
+        },
+        {
+          "index": 5,
+          "name": "area",
+          "type": "string"
+        },
+        {
+          "index": 6,
+          "name": "proposed_at",
+          "type": "string"
+        },
+        {
+          "index": 7,
+          "name": "resolved_at",
+          "type": "string"
+        },
+        {
+          "index": 8,
+          "name": "note",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "devon_github_checkpoints",
+      "source_id": "7OT3H8GzyqP5RgmJ",
+      "column_count": 7,
+      "columns": [
+        {
+          "index": 0,
+          "name": "repository",
+          "type": "string"
+        },
+        {
+          "index": 1,
+          "name": "bootstrapped",
+          "type": "boolean"
+        },
+        {
+          "index": 2,
+          "name": "checkpoint",
+          "type": "string"
+        },
+        {
+          "index": 3,
+          "name": "last_default_sha",
+          "type": "string"
+        },
+        {
+          "index": 4,
+          "name": "last_polled_at",
+          "type": "string"
+        },
+        {
+          "index": 5,
+          "name": "last_outcome",
+          "type": "string"
+        },
+        {
+          "index": 6,
+          "name": "notes",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "devon_heartbeat_log",
+      "source_id": "Adg1Gd9HML7Q4L3U",
+      "column_count": 6,
+      "columns": [
+        {
+          "index": 0,
+          "name": "beat_at",
+          "type": "string"
+        },
+        {
+          "index": 1,
+          "name": "kind",
+          "type": "string"
+        },
+        {
+          "index": 2,
+          "name": "vitals",
+          "type": "string"
+        },
+        {
+          "index": 3,
+          "name": "findings",
+          "type": "string"
+        },
+        {
+          "index": 4,
+          "name": "reflection",
+          "type": "string"
+        },
+        {
+          "index": 5,
+          "name": "emailed",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "devon_build12_feed_log",
+      "source_id": "QeoV4V4dYXXN8dBR",
+      "column_count": 6,
+      "columns": [
+        {
+          "index": 0,
+          "name": "intent_id",
+          "type": "string"
+        },
+        {
+          "index": 1,
+          "name": "fed_at",
+          "type": "string"
+        },
+        {
+          "index": 2,
+          "name": "webhook_status",
+          "type": "number"
+        },
+        {
+          "index": 3,
+          "name": "gate_decision",
+          "type": "string"
+        },
+        {
+          "index": 4,
+          "name": "claim",
+          "type": "string"
+        },
+        {
+          "index": 5,
+          "name": "area",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "devon_soul_setup",
+      "source_id": "VBW2nTLQcaZ8l74a",
+      "column_count": 4,
+      "columns": [
+        {
+          "index": 0,
+          "name": "host",
+          "type": "string"
+        },
+        {
+          "index": 1,
+          "name": "state",
+          "type": "string"
+        },
+        {
+          "index": 2,
+          "name": "create_status",
+          "type": "number"
+        },
+        {
+          "index": 3,
+          "name": "describe_status",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "name": "tqo_content",
+      "source_id": "tc2lBzham6J65EP7",
+      "column_count": 53,
+      "columns": [
+        {
+          "index": 0,
+          "name": "status",
+          "type": "string"
+        },
+        {
+          "index": 1,
+          "name": "system_status",
+          "type": "string"
+        },
+        {
+          "index": 2,
+          "name": "brand",
+          "type": "string"
+        },
+        {
+          "index": 3,
+          "name": "show",
+          "type": "string"
+        },
+        {
+          "index": 4,
+          "name": "content_id",
+          "type": "string"
+        },
+        {
+          "index": 5,
+          "name": "video_title",
+          "type": "string"
+        },
+        {
+          "index": 6,
+          "name": "body",
+          "type": "string"
+        },
+        {
+          "index": 7,
+          "name": "script",
+          "type": "string"
+        },
+        {
+          "index": 8,
+          "name": "description",
+          "type": "string"
+        },
+        {
+          "index": 9,
+          "name": "tags",
+          "type": "string"
+        },
+        {
+          "index": 10,
+          "name": "broll_keywords",
+          "type": "string"
+        },
+        {
+          "index": 11,
+          "name": "angle",
+          "type": "string"
+        },
+        {
+          "index": 12,
+          "name": "function",
+          "type": "string"
+        },
+        {
+          "index": 13,
+          "name": "notes",
+          "type": "string"
+        },
+        {
+          "index": 14,
+          "name": "episode_row",
+          "type": "string"
+        },
+        {
+          "index": 15,
+          "name": "last_feedback",
+          "type": "string"
+        },
+        {
+          "index": 16,
+          "name": "video_url",
+          "type": "string"
+        },
+        {
+          "index": 17,
+          "name": "published_url",
+          "type": "string"
+        },
+        {
+          "index": 18,
+          "name": "platform_packaging",
+          "type": "string"
+        },
+        {
+          "index": 19,
+          "name": "os_28_status",
+          "type": "string"
+        },
+        {
+          "index": 20,
+          "name": "cold_open",
+          "type": "string"
+        },
+        {
+          "index": 21,
+          "name": "hook_type",
+          "type": "string"
+        },
+        {
+          "index": 22,
+          "name": "ai_disclosure",
+          "type": "string"
+        },
+        {
+          "index": 23,
+          "name": "claim_validity",
+          "type": "string"
+        },
+        {
+          "index": 24,
+          "name": "recheck_by",
+          "type": "string"
+        },
+        {
+          "index": 25,
+          "name": "primary_subject",
+          "type": "string"
+        },
+        {
+          "index": 26,
+          "name": "thumbnail_headline",
+          "type": "string"
+        },
+        {
+          "index": 27,
+          "name": "est_seconds",
+          "type": "number"
+        },
+        {
+          "index": 28,
+          "name": "rubric_average",
+          "type": "number"
+        },
+        {
+          "index": 29,
+          "name": "correction_attempts",
+          "type": "number"
+        },
+        {
+          "index": 30,
+          "name": "render_attempts",
+          "type": "number"
+        },
+        {
+          "index": 31,
+          "name": "human_review",
+          "type": "string"
+        },
+        {
+          "index": 32,
+          "name": "qc_verdict",
+          "type": "string"
+        },
+        {
+          "index": 33,
+          "name": "qc_score",
+          "type": "number"
+        },
+        {
+          "index": 34,
+          "name": "qc_findings",
+          "type": "string"
+        },
+        {
+          "index": 35,
+          "name": "score_history",
+          "type": "string"
+        },
+        {
+          "index": 36,
+          "name": "manifest",
+          "type": "string"
+        },
+        {
+          "index": 37,
+          "name": "topic",
+          "type": "string"
+        },
+        {
+          "index": 38,
+          "name": "idea",
+          "type": "string"
+        },
+        {
+          "index": 39,
+          "name": "idea_score",
+          "type": "number"
+        },
+        {
+          "index": 40,
+          "name": "idea_score_breakdown",
+          "type": "string"
+        },
+        {
+          "index": 41,
+          "name": "routing",
+          "type": "string"
+        },
+        {
+          "index": 42,
+          "name": "channel",
+          "type": "string"
+        },
+        {
+          "index": 43,
+          "name": "asset_type",
+          "type": "string"
+        },
+        {
+          "index": 44,
+          "name": "parent_record",
+          "type": "string"
+        },
+        {
+          "index": 45,
+          "name": "aspect_ratio",
+          "type": "string"
+        },
+        {
+          "index": 46,
+          "name": "season",
+          "type": "string"
+        },
+        {
+          "index": 47,
+          "name": "episode",
+          "type": "string"
+        },
+        {
+          "index": 48,
+          "name": "attached_offer",
+          "type": "string"
+        },
+        {
+          "index": 49,
+          "name": "canonical_rule_id",
+          "type": "string"
+        },
+        {
+          "index": 50,
+          "name": "atomized_at",
+          "type": "string"
+        },
+        {
+          "index": 51,
+          "name": "live_links",
+          "type": "string"
+        },
+        {
+          "index": 52,
+          "name": "virality_score",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "name": "nco_content",
+      "source_id": "NTUtlcfrvNmS2oau",
+      "column_count": 53,
+      "columns": [
+        {
+          "index": 0,
+          "name": "status",
+          "type": "string"
+        },
+        {
+          "index": 1,
+          "name": "system_status",
+          "type": "string"
+        },
+        {
+          "index": 2,
+          "name": "brand",
+          "type": "string"
+        },
+        {
+          "index": 3,
+          "name": "show",
+          "type": "string"
+        },
+        {
+          "index": 4,
+          "name": "content_id",
+          "type": "string"
+        },
+        {
+          "index": 5,
+          "name": "video_title",
+          "type": "string"
+        },
+        {
+          "index": 6,
+          "name": "body",
+          "type": "string"
+        },
+        {
+          "index": 7,
+          "name": "script",
+          "type": "string"
+        },
+        {
+          "index": 8,
+          "name": "description",
+          "type": "string"
+        },
+        {
+          "index": 9,
+          "name": "tags",
+          "type": "string"
+        },
+        {
+          "index": 10,
+          "name": "broll_keywords",
+          "type": "string"
+        },
+        {
+          "index": 11,
+          "name": "angle",
+          "type": "string"
+        },
+        {
+          "index": 12,
+          "name": "function",
+          "type": "string"
+        },
+        {
+          "index": 13,
+          "name": "notes",
+          "type": "string"
+        },
+        {
+          "index": 14,
+          "name": "episode_row",
+          "type": "string"
+        },
+        {
+          "index": 15,
+          "name": "last_feedback",
+          "type": "string"
+        },
+        {
+          "index": 16,
+          "name": "video_url",
+          "type": "string"
+        },
+        {
+          "index": 17,
+          "name": "published_url",
+          "type": "string"
+        },
+        {
+          "index": 18,
+          "name": "platform_packaging",
+          "type": "string"
+        },
+        {
+          "index": 19,
+          "name": "os_28_status",
+          "type": "string"
+        },
+        {
+          "index": 20,
+          "name": "cold_open",
+          "type": "string"
+        },
+        {
+          "index": 21,
+          "name": "hook_type",
+          "type": "string"
+        },
+        {
+          "index": 22,
+          "name": "ai_disclosure",
+          "type": "string"
+        },
+        {
+          "index": 23,
+          "name": "claim_validity",
+          "type": "string"
+        },
+        {
+          "index": 24,
+          "name": "recheck_by",
+          "type": "string"
+        },
+        {
+          "index": 25,
+          "name": "primary_subject",
+          "type": "string"
+        },
+        {
+          "index": 26,
+          "name": "thumbnail_headline",
+          "type": "string"
+        },
+        {
+          "index": 27,
+          "name": "est_seconds",
+          "type": "number"
+        },
+        {
+          "index": 28,
+          "name": "rubric_average",
+          "type": "number"
+        },
+        {
+          "index": 29,
+          "name": "correction_attempts",
+          "type": "number"
+        },
+        {
+          "index": 30,
+          "name": "render_attempts",
+          "type": "number"
+        },
+        {
+          "index": 31,
+          "name": "human_review",
+          "type": "string"
+        },
+        {
+          "index": 32,
+          "name": "qc_verdict",
+          "type": "string"
+        },
+        {
+          "index": 33,
+          "name": "qc_score",
+          "type": "number"
+        },
+        {
+          "index": 34,
+          "name": "qc_findings",
+          "type": "string"
+        },
+        {
+          "index": 35,
+          "name": "score_history",
+          "type": "string"
+        },
+        {
+          "index": 36,
+          "name": "manifest",
+          "type": "string"
+        },
+        {
+          "index": 37,
+          "name": "topic",
+          "type": "string"
+        },
+        {
+          "index": 38,
+          "name": "idea",
+          "type": "string"
+        },
+        {
+          "index": 39,
+          "name": "idea_score",
+          "type": "number"
+        },
+        {
+          "index": 40,
+          "name": "idea_score_breakdown",
+          "type": "string"
+        },
+        {
+          "index": 41,
+          "name": "routing",
+          "type": "string"
+        },
+        {
+          "index": 42,
+          "name": "channel",
+          "type": "string"
+        },
+        {
+          "index": 43,
+          "name": "asset_type",
+          "type": "string"
+        },
+        {
+          "index": 44,
+          "name": "parent_record",
+          "type": "string"
+        },
+        {
+          "index": 45,
+          "name": "aspect_ratio",
+          "type": "string"
+        },
+        {
+          "index": 46,
+          "name": "season",
+          "type": "string"
+        },
+        {
+          "index": 47,
+          "name": "episode",
+          "type": "string"
+        },
+        {
+          "index": 48,
+          "name": "attached_offer",
+          "type": "string"
+        },
+        {
+          "index": 49,
+          "name": "canonical_rule_id",
+          "type": "string"
+        },
+        {
+          "index": 50,
+          "name": "atomized_at",
+          "type": "string"
+        },
+        {
+          "index": 51,
+          "name": "live_links",
+          "type": "string"
+        },
+        {
+          "index": 52,
+          "name": "virality_score",
+          "type": "number"
+        }
+      ]
+    }
+  ]
+}
