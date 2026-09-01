@@ -157,8 +157,17 @@ stop and say so. That is the tool working, not a fault.
 
 ## 5. Double execution, the thing that actually costs you
 
-32 of the 58 workflows are active on Cloud right now. Thirteen of those run on
-a timer or a poll rather than waiting to be called:
+32 of the 58 workflows were active on Cloud when this was written. A
+reconcile on 2026-09-01 found 31 active, with both the Heartbeat and the
+Error Alarm inactive and nothing recording who switched either off or why.
+The arithmetic does not let both deactivations postdate the 32 on their
+own: either one of the two was already off when this document counted, or
+both went off later and some third workflow was switched on, and every
+version of that story contains at least one unrecorded switch. Both were
+reactivated on 2026-09-01 on Tee's ruling, each the same version
+republished unchanged and read back active, so the Heartbeat's timer line
+below is current again and the live active count stands at 33.
+Thirteen ran on a timer or a poll rather than waiting to be called:
 
     DEVON Capture Nudge              daily
     DEVON Pipeline Watchdog          every 4 hours

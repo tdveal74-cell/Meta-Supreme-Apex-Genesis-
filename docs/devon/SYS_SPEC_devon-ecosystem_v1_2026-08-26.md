@@ -181,18 +181,23 @@ free plan cap of 100 deployments a day blocked the automatic production builds
 earlier in the day. `5f409cf` and repo main `44568cd` differ only by the merge
 commit; their trees are byte identical, so production carries main's content.
 
-Railway was four merges behind on 2026-08-26 and nothing noticed, because
-**autodeploy is disabled**: the Railway GitHub App is not installed on this
-repository, so no push to `main` triggers a build. The staleness was legitimate
-through `#70`-`#72` (docs, skills, `vercel.json` - none of which the API builds
-from) and became real at `#73`, which changed
-`services/agent_runtime/planner.py`. Deployment `a6c1908c` was created by hand
-from the current head at 13:00 UTC to close it.
+Railway was four merges behind on 2026-08-26 and nothing noticed. From that
+day until 2026-09-01 this section recorded autodeploy as disabled, on the
+observation that the Railway GitHub App was not installed, with a standing
+instruction to deploy every merge that touches container code by hand. The
+staleness it described was real: legitimate through `#70`-`#72` (docs, skills,
+`vercel.json`, none of which the API builds from), real at `#73`, closed by
+the hand made deployment `a6c1908c` at 13:00 UTC.
 
-Until the GitHub App is installed and autodeploy re-enabled, **every merge that
-touches container code needs a manual deployment**, and no alarm anywhere in the
-estate reports a stale surface. Do not read a merged PR as a shipped one on this
-project.
+The record then went stale the way this document warns everything does. By
+2026-08-31 autodeploy was working: deployment `5a86779f` built itself from the
+`#107` merge commit `abdc03b` with trigger `push`, and a read back on
+2026-09-01 confirmed recent merges to `main` deployed without hands. Nothing
+recorded when the GitHub App was installed or by whom. The manual deployment
+instruction is withdrawn; the read back rule is not. A merged PR is still not
+a shipped one until the deployment id, state and commit are read back, and
+`scripts/estate_reconcile.py` now pins this section's sentences so the next
+silent reversal fails a run instead of waiting for a session to trip over it.
 
 A `target` of `null` on a Vercel deployment means preview, not production. That
 distinction is written down here because reading a green preview as a shipped

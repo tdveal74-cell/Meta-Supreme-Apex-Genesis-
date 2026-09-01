@@ -350,14 +350,28 @@ WORKFLOWS = {
     # (approval tokens must not land in stored executions); truth lives in the
     # data tables and digest emails, read via the Table Reader.
     "Soul Committer": {"id": "lANs6wopaK0PkNhN", "state": "active, 15 minute poll"},
-    "Error Alarm": {"id": "XDQXwgFkUhYxoEjG", "state": "active, shared error workflow"},
+    # Found inactive on the live instance 2026-09-01 by the first estate
+    # reconcile; recorded active until then, deactivation unrecorded. An n8n
+    # error workflow fires when a caller names it whether or not it is
+    # active, so the lane likely kept working, but the record was wrong and
+    # nobody had said so. Reactivated later the same day on Tee's ruling
+    # ("Flip on"): the only version it has ever had (17239190, built
+    # 2026-08-25) republished unchanged, read back active.
+    "Error Alarm": {"id": "XDQXwgFkUhYxoEjG", "state": "active, shared error workflow, reactivated 2026-09-01"},
     "Learning Lane Table Reader": {"id": "we45pHkQHRmSRnZx", "state": "manual, read only"},
     # Build 13. The 6-hour pulse reads every organ (never approval_queue, whose
     # rows carry plaintext decision tokens), writes one beat row to
     # devon_heartbeat_log (Adg1Gd9HML7Q4L3U), and emails Tee on new findings or
     # roughly daily. Its partner is a claude.ai Routine (daily Reflection) that
     # writes reflection rows into the same table; the pulse flags its silence.
-    "Heartbeat": {"id": "dRgTNLod2s8BAcPg", "state": "active, 6 hour pulse"},
+    # Found inactive on the live instance 2026-09-01 by the first estate
+    # reconcile; recorded active until then, deactivation unrecorded, so the
+    # pulse was dead and nothing watched the organs. Reactivated the same day
+    # on Tee's ruling ("Reactivate"): the same version built 2026-08-26
+    # (ac7bdf78) was republished unchanged and the read back confirmed
+    # active. Who switched it off between 2026-08-31 and 2026-09-01 remains
+    # unrecorded.
+    "Heartbeat": {"id": "dRgTNLod2s8BAcPg", "state": "active, 6 hour pulse, reactivated 2026-09-01"},
     # Daily sweep: any ledger job still non-terminal past 96h is cancelled
     # THROUGH the guarded devon-ledger webhook, never by writing the table
     # directly, so legal-transition rules keep applying (VERIFYING two-steps
