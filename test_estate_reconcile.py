@@ -207,6 +207,14 @@ def test_an_amended_doc_retires_its_claim():
     assert finding.status == reconcile.RETIRED
 
 
+def test_a_missing_doc_is_drift_not_retirement():
+    """A deleted or renamed doc must not silently retire its tripwires."""
+    findings = reconcile.check(reconcile.doc_claims({}), {})
+    for finding in findings:
+        assert finding.status == reconcile.DRIFT
+        assert "does not exist" in finding.detail
+
+
 def test_the_spec_no_longer_claims_autodeploy_is_disabled():
     """The doc correction of 2026-09-01, pinned. If the old sentence comes
     back, the reconciler starts checking it again and this test fails too."""
@@ -234,6 +242,29 @@ def test_the_standing_autodeploy_claim_never_hard_fails():
         "repo": {"main_head": "f" * 40},
     }
     assert reconcile.check(claims, current)[0].status == reconcile.OK
+    failed_on_head = {
+        "railway": {
+            "deployments": [{"id": "x", "status": "FAILED", "commit_sha": "f" * 40}]
+        },
+        "repo": {"main_head": "f" * 40},
+    }
+    finding = reconcile.check(claims, failed_on_head)[0]
+    assert finding.status == reconcile.UNVERIFIED
+    assert "did not succeed" in finding.detail
+
+
+def test_a_failed_push_build_still_contradicts_autodeploy_disabled():
+    """For the disabled claim the trigger firing is the contradiction,
+    whatever became of the build afterwards."""
+    claims = reconcile.doc_claims({SPEC_DOC: "here autodeploy is disabled, still"})
+    failed_on_head = {
+        "railway": {
+            "deployments": [{"id": "x", "status": "FAILED", "commit_sha": "f" * 40}]
+        },
+        "repo": {"main_head": "f" * 40},
+    }
+    finding = _finding(reconcile.check(claims, failed_on_head), "autodeploy is disabled")
+    assert finding.status == reconcile.DRIFT
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +281,71 @@ def test_a_changed_workflow_count_demands_a_doc_amendment():
     fifty_eight = {str(i): {"name": str(i), "active": False} for i in range(58)}
     observations = _n8n_observation(workflows=fifty_eight, webhooks={})
     assert reconcile.check(claims, observations)[0].status == reconcile.OK
+
+
+# ---------------------------------------------------------------------------
+# The fetch layer's pure edges
+# ---------------------------------------------------------------------------
+
+
+def test_disabled_webhook_nodes_are_skipped():
+    """A disabled node on the claimed path must not shadow the enabled one."""
+    detail = {
+        "nodes": [
+            {
+                "type": "n8n-nodes-base.webhook",
+                "disabled": True,
+                "parameters": {"path": "devon-capture", "authentication": "none"},
+            },
+            {
+                "type": "n8n-nodes-base.webhook",
+                "parameters": {
+                    "path": "devon-capture",
+                    "authentication": "headerAuth",
+                    "httpMethod": "POST",
+                },
+            },
+            {"type": "n8n-nodes-base.set", "parameters": {}},
+        ]
+    }
+    nodes = reconcile.webhook_nodes(detail)
+    assert nodes == [{"path": "devon-capture", "auth": "headerAuth", "method": "POST"}]
+
+
+def test_a_self_referential_host_read_is_unverified():
+    """When the read defaulted to the vault's own host, agreement is an echo."""
+    claims = reconcile.vault_claims(webhooks={}, workflows={})
+    echo = {
+        "n8n": {
+            "host": "https://thequietoperator.app.n8n.cloud",
+            "host_source": "vault_default",
+            "workflows": {},
+            "webhooks": {},
+        }
+    }
+    finding = _finding(reconcile.check(claims, echo), "N8N_HOST")
+    assert finding.status == reconcile.UNVERIFIED
+    assert "falsifiable" in finding.detail
+
+    independent = {
+        "n8n": {
+            "host": "https://thequietoperator.app.n8n.cloud",
+            "host_source": "env",
+            "workflows": {},
+            "webhooks": {},
+        }
+    }
+    assert _finding(reconcile.check(claims, independent), "N8N_HOST").status == reconcile.OK
+
+    elsewhere = {
+        "n8n": {
+            "host": "https://n8n.editforge.online",
+            "host_source": "env",
+            "workflows": {},
+            "webhooks": {},
+        }
+    }
+    assert _finding(reconcile.check(claims, elsewhere), "N8N_HOST").status == reconcile.DRIFT
 
 
 # ---------------------------------------------------------------------------

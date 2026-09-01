@@ -232,16 +232,27 @@ DOC_CLAIMS: Tuple[Dict[str, Any], ...] = (
 
 
 def doc_claims(doc_texts: Dict[str, str]) -> List[Claim]:
-    """Claims pinned to document sentences. `doc_texts` maps repo path to content."""
+    """Claims pinned to document sentences. `doc_texts` maps repo path to content.
+
+    A doc that is present without the quote retired its claim by amendment.
+    A doc that is missing entirely is different: nothing was amended, the
+    record the registry points at is gone, and treating that as retirement
+    would let a deleted or renamed doc silently drop every tripwire in it.
+    """
     claims = []
     for pinned in DOC_CLAIMS:
         text = doc_texts.get(pinned["doc"])
-        present = text is not None and pinned["quote"] in text
+        if text is None:
+            verifier = "doc_missing"
+        elif pinned["quote"] in text:
+            verifier = pinned["verifier"]
+        else:
+            verifier = "quote_retired"
         claims.append(
             Claim(
                 record=f"{pinned['doc']} ({pinned['quote']!r})",
                 subject=pinned["quote"],
-                verifier=pinned["verifier"] if present else "quote_retired",
+                verifier=verifier,
                 expected=pinned["expected"],
             )
         )
@@ -282,6 +293,15 @@ def _check_n8n_host(claim: Claim, observations: Dict[str, Any]) -> Tuple[str, st
         return UNVERIFIED, why
     live = str(n8n["host"]).rstrip("/")
     if live == str(claim.expected).rstrip("/"):
+        if n8n.get("host_source") == "vault_default":
+            # The read defaulted to the vault's own value, so agreement is an
+            # echo, not evidence. The fetch succeeding there does prove the
+            # host serves an n8n API that accepts the key, and nothing more.
+            return UNVERIFIED, (
+                f"the read used the vault's own host value ({live}) because "
+                "N8N_SOURCE_URL is unset. The key worked there, but only an "
+                "independently configured URL makes this claim falsifiable."
+            )
         return OK, live
     return DRIFT, f"the vault records {claim.expected}, the live read used {live}"
 
@@ -326,34 +346,42 @@ def _check_workflow_state(claim: Claim, observations: Dict[str, Any]) -> Tuple[s
     return OK, "inactive"
 
 
-def _deploy_on_main_head(
+def _head_deployment(
     observations: Dict[str, Any],
-) -> Tuple[Optional[bool], str]:
-    """Whether a recent Railway deployment sits on the main head. None means unknowable."""
+) -> Tuple[Optional[Dict[str, Any]], bool, str]:
+    """The recent Railway deployment on the main head, if any.
+
+    Returns (deployment, knowable, detail): deployment is the matching entry
+    or None, knowable is False when the question cannot be answered at all
+    (no reads, no head), and detail says why or names what matched.
+    """
     railway = observations.get("railway") or {}
     if railway.get("error"):
-        return None, str(railway["error"])
+        return None, False, str(railway["error"])
     deployments = railway.get("deployments")
     if not deployments:
-        return None, "no Railway deployments were captured"
+        return None, False, "no Railway deployments were captured"
     head = (observations.get("repo") or {}).get("main_head") or ""
     if not head:
-        return None, "the main head is unknown, set RECONCILE_MAIN_HEAD"
+        return None, False, "the main head is unknown, set RECONCILE_MAIN_HEAD"
     for deployment in deployments:
         sha = str(deployment.get("commit_sha") or "")
         if sha and (sha.startswith(head) or head.startswith(sha)):
             status = deployment.get("status", "?")
-            return True, f"deployment {deployment.get('id', '?')} ({status}) is on {sha[:12]}"
-    return False, f"none of the {len(deployments)} recent deployments sit on {head[:12]}"
+            detail = f"deployment {deployment.get('id', '?')} ({status}) is on {sha[:12]}"
+            return deployment, True, detail
+    return None, True, f"none of the {len(deployments)} recent deployments sit on {head[:12]}"
 
 
 def _check_railway_autodeploy_off(
     claim: Claim, observations: Dict[str, Any]
 ) -> Tuple[str, str]:
-    on_head, detail = _deploy_on_main_head(observations)
-    if on_head is None:
+    deployment, knowable, detail = _head_deployment(observations)
+    if not knowable:
         return UNVERIFIED, detail
-    if on_head:
+    if deployment is not None:
+        # Any deployment on the head contradicts "no push triggers a build",
+        # whatever became of the build afterwards.
         return DRIFT, (
             "the doc says every merge needs a manual deployment, but " + detail + ". "
             "Either autodeploy is on or someone deployed by hand without recording "
@@ -368,11 +396,18 @@ def _check_railway_autodeploy_off(
 def _check_railway_autodeploy_on(
     claim: Claim, observations: Dict[str, Any]
 ) -> Tuple[str, str]:
-    on_head, detail = _deploy_on_main_head(observations)
-    if on_head is None:
+    deployment, knowable, detail = _head_deployment(observations)
+    if not knowable:
         return UNVERIFIED, detail
-    if on_head:
-        return OK, detail
+    if deployment is not None:
+        # "Deployed without hands" needs the build to have actually landed. A
+        # failed or crashed attempt proves the trigger fired and nothing more.
+        if deployment.get("status") == "SUCCESS":
+            return OK, detail
+        return UNVERIFIED, (
+            detail + ". A deployment triggered from the head but did not succeed, "
+            "read the build back by hand before trusting the surface."
+        )
     return UNVERIFIED, (
         detail + ". Either main just moved or autodeploy broke again, read the "
         "deployment back by hand before trusting either."
@@ -396,6 +431,13 @@ def _check_quote_retired(claim: Claim, observations: Dict[str, Any]) -> Tuple[st
     return RETIRED, "the quote is no longer in the doc, the claim retired itself"
 
 
+def _check_doc_missing(claim: Claim, observations: Dict[str, Any]) -> Tuple[str, str]:
+    return DRIFT, (
+        "the pinned doc does not exist. A deleted or renamed doc is not an "
+        "amendment: move the pin with the doc, or record why the doc is gone."
+    )
+
+
 CHECKERS = {
     "n8n_host": _check_n8n_host,
     "webhook_auth": _check_webhook_auth,
@@ -404,6 +446,7 @@ CHECKERS = {
     "railway_autodeploy_on": _check_railway_autodeploy_on,
     "n8n_total": _check_n8n_total,
     "quote_retired": _check_quote_retired,
+    "doc_missing": _check_doc_missing,
 }
 
 
@@ -485,7 +528,15 @@ def _request(
         raise ApiError(f"{url} returned HTTP {exc.code}: {detail}") from exc
     except urllib.error.URLError as exc:
         raise ApiError(f"{url} was unreachable: {exc.reason}") from exc
-    return json.loads(body) if body else {}
+    except (TimeoutError, OSError) as exc:
+        # A timeout mid-read arrives as the bare socket error, not URLError.
+        raise ApiError(f"{url} died mid-read: {exc}") from exc
+    if not body:
+        return {}
+    try:
+        return json.loads(body)
+    except ValueError as exc:
+        raise ApiError(f"{url} returned a non-JSON body: {body[:200]!r}") from exc
 
 
 def _paged_workflows(base: str, key: str) -> Iterator[Dict[str, Any]]:
@@ -500,6 +551,28 @@ def _paged_workflows(base: str, key: str) -> Iterator[Dict[str, Any]]:
         cursor = page.get("nextCursor")
         if not cursor:
             return
+
+
+def webhook_nodes(workflow_detail: Dict[str, Any]) -> List[Dict[str, str]]:
+    """The live webhook trigger nodes of one workflow detail read.
+
+    Disabled nodes are skipped: a disabled webhook serves nothing, and
+    letting one shadow the enabled node on the same path would verify the
+    wrong auth mode.
+    """
+    nodes = []
+    for node in workflow_detail.get("nodes", []):
+        if node.get("type") != "n8n-nodes-base.webhook" or node.get("disabled"):
+            continue
+        parameters = node.get("parameters") or {}
+        nodes.append(
+            {
+                "path": parameters.get("path", ""),
+                "auth": parameters.get("authentication") or "none",
+                "method": parameters.get("httpMethod", "GET"),
+            }
+        )
+    return nodes
 
 
 def fetch_n8n(base: str, key: str, detail_ids: Sequence[str]) -> Dict[str, Any]:
@@ -518,41 +591,42 @@ def fetch_n8n(base: str, key: str, detail_ids: Sequence[str]) -> Dict[str, Any]:
             f"{base.rstrip('/')}/api/v1/workflows/{workflow_id}",
             {"X-N8N-API-KEY": key},
         )
-        nodes = []
-        for node in detail.get("nodes", []):
-            if node.get("type") != "n8n-nodes-base.webhook":
-                continue
-            parameters = node.get("parameters") or {}
-            nodes.append(
-                {
-                    "path": parameters.get("path", ""),
-                    "auth": parameters.get("authentication") or "none",
-                    "method": parameters.get("httpMethod", "GET"),
-                }
-            )
-        webhooks[workflow_id] = nodes
+        webhooks[workflow_id] = webhook_nodes(detail)
     return {"host": base.rstrip("/"), "workflows": workflows, "webhooks": webhooks}
 
 
 def fetch_railway(
-    token: str, project: Optional[str] = None, service: Optional[str] = None
+    token: str,
+    project: Optional[str] = None,
+    service: Optional[str] = None,
+    environment: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """The five most recent deployments of the API service, newest first."""
+    """The five most recent deployments of the API service, newest first.
+
+    Without an environment id the window spans every environment of the
+    service, so PR environments could dilute it. Set RAILWAY_ENVIRONMENT_ID
+    to pin the read to production once that id is worth recording.
+    """
+    environment = environment or os.environ.get("RAILWAY_ENVIRONMENT_ID")
+    variables: Dict[str, Any] = {
+        "projectId": project or RAILWAY_PROJECT,
+        "serviceId": service or RAILWAY_SERVICE,
+    }
+    input_fields = "projectId: $projectId, serviceId: $serviceId"
+    declarations = "$projectId: String!, $serviceId: String!"
+    if environment:
+        variables["environmentId"] = environment
+        input_fields += ", environmentId: $environmentId"
+        declarations += ", $environmentId: String!"
     query = (
-        "query ($projectId: String!, $serviceId: String!) {"
-        " deployments(first: 5, input: {projectId: $projectId, serviceId: $serviceId})"
+        f"query ({declarations}) {{"
+        f" deployments(first: 5, input: {{{input_fields}}})"
         " { edges { node { id status createdAt meta } } } }"
     )
     body = _request(
         RAILWAY_GRAPHQL,
         {"Authorization": f"Bearer {token}"},
-        {
-            "query": query,
-            "variables": {
-                "projectId": project or RAILWAY_PROJECT,
-                "serviceId": service or RAILWAY_SERVICE,
-            },
-        },
+        {"query": query, "variables": variables},
     )
     if body.get("errors"):
         raise ApiError(f"Railway GraphQL: {body['errors'][0].get('message', body['errors'][0])}")
@@ -603,12 +677,14 @@ def gather_observations() -> Dict[str, Any]:
 
     observations: Dict[str, Any] = {"read_at": _now_iso()}
 
-    base = os.environ.get("N8N_SOURCE_URL") or vault.N8N_HOST
+    env_base = os.environ.get("N8N_SOURCE_URL")
+    base = env_base or vault.N8N_HOST
     key = os.environ.get("N8N_SOURCE_KEY")
     if key:
         detail_ids = [entry["workflow"] for entry in vault.WEBHOOKS.values()]
         try:
             observations["n8n"] = fetch_n8n(base, key, detail_ids)
+            observations["n8n"]["host_source"] = "env" if env_base else "vault_default"
         except ApiError as exc:
             observations["n8n"] = {"error": str(exc)}
     else:

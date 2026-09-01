@@ -158,11 +158,15 @@ stop and say so. That is the tool working, not a fault.
 ## 5. Double execution, the thing that actually costs you
 
 32 of the 58 workflows were active on Cloud when this was written. A
-reconcile on 2026-09-01 found 31: the Heartbeat and the Error Alarm had gone
-inactive with nothing recording who switched them off or why, so the
-Heartbeat's six hour pulse is not running and its line in the timer list
-below is the 2026-08-31 read, not the current one. Thirteen ran on a timer or
-a poll rather than waiting to be called:
+reconcile on 2026-09-01 found 31 active, with both the Heartbeat and the
+Error Alarm inactive and nothing recording who switched either off or why.
+The arithmetic does not let both deactivations postdate the 32 on their
+own: either one of the two was already off when this document counted, or
+both went off later and some third workflow was switched on, and every
+version of that story contains at least one unrecorded switch. Either way
+the Heartbeat's six hour pulse is not running now, and its line in the
+timer list below is the 2026-08-31 read, not the current one.
+Thirteen ran on a timer or a poll rather than waiting to be called:
 
     DEVON Capture Nudge              daily
     DEVON Pipeline Watchdog          every 4 hours
