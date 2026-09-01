@@ -352,10 +352,12 @@ WORKFLOWS = {
     "Soul Committer": {"id": "lANs6wopaK0PkNhN", "state": "active, 15 minute poll"},
     # Found inactive on the live instance 2026-09-01 by the first estate
     # reconcile; recorded active until then, deactivation unrecorded. An n8n
-    # error workflow fires when a caller names it whether or not it is active,
-    # so the alarm lane most likely still works, but the record was wrong and
-    # nobody had said so.
-    "Error Alarm": {"id": "XDQXwgFkUhYxoEjG", "state": "inactive, found 2026-09-01, shared error workflow"},
+    # error workflow fires when a caller names it whether or not it is
+    # active, so the lane likely kept working, but the record was wrong and
+    # nobody had said so. Reactivated later the same day on Tee's ruling
+    # ("Flip on"): the only version it has ever had (17239190, built
+    # 2026-08-25) republished unchanged, read back active.
+    "Error Alarm": {"id": "XDQXwgFkUhYxoEjG", "state": "active, shared error workflow, reactivated 2026-09-01"},
     "Learning Lane Table Reader": {"id": "we45pHkQHRmSRnZx", "state": "manual, read only"},
     # Build 13. The 6-hour pulse reads every organ (never approval_queue, whose
     # rows carry plaintext decision tokens), writes one beat row to
