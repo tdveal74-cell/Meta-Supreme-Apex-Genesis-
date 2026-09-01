@@ -1,6 +1,6 @@
 ---
 name: estate-reconcile
-description: Run the estate truth reconciler, check every record's claims against the live estate, and write back, dated, whatever drifted. Load when asked whether the records are true, before trusting vault.py or a spec sentence about live state, on any scheduled estate audit, after a migration or cutover, or the moment a session finds a record disagreeing with a live read. Compiled from 2026-08-31 to 2026-09-01, when five records were found stale and the first two were only caught by a session tripping over them.
+description: Run the estate truth reconciler, check every record's claims against the live estate, and write back, dated, whatever drifted. Load when asked whether the records are true, before trusting vault.py or a spec sentence about live state, on any scheduled estate audit, after a migration or cutover, or the moment a session finds a record disagreeing with a live read. Compiled from 2026-08-31 to 2026-09-01, when five records were found stale and the first three were only caught by a session tripping over them.
 ---
 
 # Estate truth reconciliation
@@ -34,7 +34,8 @@ data only, and every webhook auth mode, workflow state and the instance host
 become claims. Documents cannot be imported, so `DOC_CLAIMS` in the script
 pins each checkable sentence by exact quote: while the quote is in its doc
 the claim is checked, an amended doc retires its claim, and the retired pin
-stays as a tripwire so a resurrected sentence fails the next run.
+stays as a tripwire so a resurrected sentence is checked again on the next
+run, and the test suite pins the spec's corrected sentence unconditionally.
 
 Prose rulings have no machine readable shadow. Every run ends by listing the
 open rulings, and retiring one is human work: read it, check whether it still
@@ -129,9 +130,13 @@ Five stale records in nine days, for calibration:
 
 ## Traps
 
-- The local container fails ~30 pre-existing tests when `requirements.txt`
-  is not installed. Compare against a clean checkout before blaming the
-  write-back; CI installs the requirements.
+- A container without `requirements.txt` installed does not fail a tidy
+  handful of tests, it aborts collection outright, and even with the
+  missing modules stubbed in the pre-existing failure count runs to
+  hundreds. Never read any of that as damage from a write-back: run the
+  same pytest selection on a clean checkout (`git stash`, run, `git stash
+  pop`) and compare, because CI installs the requirements and sees none
+  of it.
 - Some MCP reads return HTML-escaped names (`&amp;`). Ids are the join key,
   never names; unescape before showing a name to a human.
 - An n8n error workflow fires when a caller names it whether or not it is
