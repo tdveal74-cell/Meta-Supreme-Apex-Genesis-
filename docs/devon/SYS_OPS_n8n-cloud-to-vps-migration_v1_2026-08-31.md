@@ -163,9 +163,11 @@ Error Alarm inactive and nothing recording who switched either off or why.
 The arithmetic does not let both deactivations postdate the 32 on their
 own: either one of the two was already off when this document counted, or
 both went off later and some third workflow was switched on, and every
-version of that story contains at least one unrecorded switch. Either way
-the Heartbeat's six hour pulse is not running now, and its line in the
-timer list below is the 2026-08-31 read, not the current one.
+version of that story contains at least one unrecorded switch. The
+Heartbeat was reactivated on 2026-09-01 on Tee's ruling, the same version
+republished unchanged and read back active, so its timer line below is
+current again and the live active count is 32 with the Error Alarm still
+inactive by observation.
 Thirteen ran on a timer or a poll rather than waiting to be called:
 
     DEVON Capture Nudge              daily

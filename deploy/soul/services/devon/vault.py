@@ -363,12 +363,13 @@ WORKFLOWS = {
     # roughly daily. Its partner is a claude.ai Routine (daily Reflection) that
     # writes reflection rows into the same table; the pulse flags its silence.
     # Found inactive on the live instance 2026-09-01 by the first estate
-    # reconcile; recorded active until then, deactivation unrecorded. While it
-    # is inactive the pulse does not run and NOTHING watches the organs, which
-    # is exactly the alarm gap this entry claimed was covered. Re-activation
-    # is an effect and Tee's call: switching it off may have been deliberate
-    # draining ahead of the Cloud to VPS cutover.
-    "Heartbeat": {"id": "dRgTNLod2s8BAcPg", "state": "inactive, found 2026-09-01, 6 hour pulse dead while inactive"},
+    # reconcile; recorded active until then, deactivation unrecorded, so the
+    # pulse was dead and nothing watched the organs. Reactivated the same day
+    # on Tee's ruling ("Reactivate"): the same version built 2026-08-26
+    # (ac7bdf78) was republished unchanged and the read back confirmed
+    # active. Who switched it off between 2026-08-31 and 2026-09-01 remains
+    # unrecorded.
+    "Heartbeat": {"id": "dRgTNLod2s8BAcPg", "state": "active, 6 hour pulse, reactivated 2026-09-01"},
     # Daily sweep: any ledger job still non-terminal past 96h is cancelled
     # THROUGH the guarded devon-ledger webhook, never by writing the table
     # directly, so legal-transition rules keep applying (VERIFYING two-steps
