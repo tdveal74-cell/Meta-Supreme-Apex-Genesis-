@@ -350,14 +350,25 @@ WORKFLOWS = {
     # (approval tokens must not land in stored executions); truth lives in the
     # data tables and digest emails, read via the Table Reader.
     "Soul Committer": {"id": "lANs6wopaK0PkNhN", "state": "active, 15 minute poll"},
-    "Error Alarm": {"id": "XDQXwgFkUhYxoEjG", "state": "active, shared error workflow"},
+    # Found inactive on the live instance 2026-09-01 by the first estate
+    # reconcile; recorded active until then, deactivation unrecorded. An n8n
+    # error workflow fires when a caller names it whether or not it is active,
+    # so the alarm lane most likely still works, but the record was wrong and
+    # nobody had said so.
+    "Error Alarm": {"id": "XDQXwgFkUhYxoEjG", "state": "inactive, found 2026-09-01, shared error workflow"},
     "Learning Lane Table Reader": {"id": "we45pHkQHRmSRnZx", "state": "manual, read only"},
     # Build 13. The 6-hour pulse reads every organ (never approval_queue, whose
     # rows carry plaintext decision tokens), writes one beat row to
     # devon_heartbeat_log (Adg1Gd9HML7Q4L3U), and emails Tee on new findings or
     # roughly daily. Its partner is a claude.ai Routine (daily Reflection) that
     # writes reflection rows into the same table; the pulse flags its silence.
-    "Heartbeat": {"id": "dRgTNLod2s8BAcPg", "state": "active, 6 hour pulse"},
+    # Found inactive on the live instance 2026-09-01 by the first estate
+    # reconcile; recorded active until then, deactivation unrecorded. While it
+    # is inactive the pulse does not run and NOTHING watches the organs, which
+    # is exactly the alarm gap this entry claimed was covered. Re-activation
+    # is an effect and Tee's call: switching it off may have been deliberate
+    # draining ahead of the Cloud to VPS cutover.
+    "Heartbeat": {"id": "dRgTNLod2s8BAcPg", "state": "inactive, found 2026-09-01, 6 hour pulse dead while inactive"},
     # Daily sweep: any ledger job still non-terminal past 96h is cancelled
     # THROUGH the guarded devon-ledger webhook, never by writing the table
     # directly, so legal-transition rules keep applying (VERIFYING two-steps
