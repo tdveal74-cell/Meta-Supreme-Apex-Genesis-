@@ -9,7 +9,21 @@ from __future__ import annotations
 import ast
 import pathlib
 
+import pytest
+
 from services.devon.assistant import Devon
+
+#: The approver's second credential. The JWT proposes; this key approves.
+RULING_KEY = "test-ruling-key-not-a-jwt"
+
+
+@pytest.fixture(autouse=True)
+def _ruling_key_env(monkeypatch):
+    monkeypatch.setenv("DEVON_RULING_KEY", RULING_KEY)
+
+
+def _ruled(auth_headers):
+    return {**auth_headers, "X-Devon-Ruling-Key": RULING_KEY}
 
 NETWORK_FORBIDDEN = {
     "requests",
@@ -89,7 +103,7 @@ async def test_approved_consume_once_commit_writes_ledger_and_refuses_replay(
 
     approved = await client.post(
         "/api/v1/soul/approve",
-        headers=auth_headers,
+        headers=_ruled(auth_headers),
         json={"request_id": request_id, "token": token, "decided_by": "Tee"},
     )
     assert approved.status_code == 200, approved.text
@@ -151,7 +165,7 @@ async def test_emergency_stop_blocks_action_started(client, auth_headers):
 
     approved = await client.post(
         "/api/v1/soul/approve",
-        headers=auth_headers,
+        headers=_ruled(auth_headers),
         json={"request_id": request_id, "token": token},
     )
     assert approved.status_code == 200, approved.text
@@ -206,7 +220,7 @@ async def _propose_approve_commit(client, auth_headers, text, *, kind="lesson"):
     token = proposed.json()["approval"]["token"]
     approved = await client.post(
         "/api/v1/soul/approve",
-        headers=auth_headers,
+        headers=_ruled(auth_headers),
         json={"request_id": request_id, "token": token, "decided_by": "Tee"},
     )
     assert approved.status_code == 200, approved.text
@@ -329,6 +343,170 @@ async def test_task_files_to_the_ledger_not_notion(client, auth_headers):
     assert hits[0]["kind"] == "task"
     assert hits[0]["rank"] == "operator-file"
     assert "D10" in (hits[0]["body"] or "")
+
+
+async def test_the_jwt_alone_cannot_approve(client, auth_headers):
+    """The gate the loop exists for: propose hands the token back, so the
+    token plus the same JWT must not be enough to approve. The ruling key is
+    the second credential, and a refusal for a missing or wrong key must
+    leave the single-use decision unspent."""
+    proposed = await client.post(
+        "/api/v1/soul/propose",
+        headers=auth_headers,
+        json={"text": "remember the gate needs two credentials"},
+    )
+    assert proposed.status_code == 201, proposed.text
+    request_id = proposed.json()["approval"]["request_id"]
+    token = proposed.json()["approval"]["token"]
+
+    bare = await client.post(
+        "/api/v1/soul/approve",
+        headers=auth_headers,
+        json={"request_id": request_id, "token": token},
+    )
+    assert bare.status_code == 403, bare.text
+    assert "ruling key" in bare.json()["detail"].lower()
+
+    wrong = await client.post(
+        "/api/v1/soul/approve",
+        headers={**auth_headers, "X-Devon-Ruling-Key": "not-the-key"},
+        json={"request_id": request_id, "token": token},
+    )
+    assert wrong.status_code == 403, wrong.text
+
+    # Both refusals happened before the decision was spent: the right key
+    # still approves the very same request.
+    ruled = await client.post(
+        "/api/v1/soul/approve",
+        headers=_ruled(auth_headers),
+        json={"request_id": request_id, "token": token},
+    )
+    assert ruled.status_code == 200, ruled.text
+    assert ruled.json()["approved"] is True
+
+
+async def test_approve_lane_fails_closed_when_no_ruling_key_is_configured(
+    client, auth_headers, monkeypatch
+):
+    monkeypatch.delenv("DEVON_RULING_KEY", raising=False)
+    proposed = await client.post(
+        "/api/v1/soul/propose",
+        headers=auth_headers,
+        json={"text": "remember the lane is propose-only without the key"},
+    )
+    assert proposed.status_code == 201, proposed.text
+    body = proposed.json()["approval"]
+    refused = await client.post(
+        "/api/v1/soul/approve",
+        headers=_ruled(auth_headers),
+        json={"request_id": body["request_id"], "token": body["token"]},
+    )
+    assert refused.status_code == 403, refused.text
+    assert "propose-only" in refused.json()["detail"]
+
+
+async def test_a_second_approve_repairs_rather_than_wedges(client, auth_headers):
+    """A commit that dies after a successful approve used to wedge: retrying
+    hit 'already approved' forever. Approve is idempotent with a valid token
+    now, so the HUD's retry path is approve again, then commit."""
+    proposed = await client.post(
+        "/api/v1/soul/propose",
+        headers=auth_headers,
+        json={"text": "remember the retry path must not wedge"},
+    )
+    assert proposed.status_code == 201, proposed.text
+    request_id = proposed.json()["approval"]["request_id"]
+    token = proposed.json()["approval"]["token"]
+
+    first = await client.post(
+        "/api/v1/soul/approve",
+        headers=_ruled(auth_headers),
+        json={"request_id": request_id, "token": token},
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["already_approved"] is False
+
+    second = await client.post(
+        "/api/v1/soul/approve",
+        headers=_ruled(auth_headers),
+        json={"request_id": request_id, "token": token},
+    )
+    assert second.status_code == 200, second.text
+    assert second.json()["already_approved"] is True
+
+    # A wrong token still refuses on the already-approved path.
+    forged = await client.post(
+        "/api/v1/soul/approve",
+        headers=_ruled(auth_headers),
+        json={"request_id": request_id, "token": "forged-token"},
+    )
+    assert forged.status_code == 403, forged.text
+
+    committed = await client.post(
+        "/api/v1/soul/commit",
+        headers=auth_headers,
+        json={"request_id": request_id},
+    )
+    assert committed.status_code == 200, committed.text
+    assert committed.json()["executed"] is True
+
+
+async def test_find_treats_ilike_metacharacters_as_literals(client, auth_headers):
+    await _propose_approve_commit(
+        client, auth_headers, "ESCTEST one hundred percent of the plan holds"
+    )
+    # A bare % used to be an all-wildcards pattern that matched everything.
+    wildcard = await client.get(
+        "/api/v1/soul/find", params={"q": "%"}, headers=auth_headers
+    )
+    assert wildcard.status_code == 200, wildcard.text
+    assert wildcard.json()["ledger"] == []
+
+    await _propose_approve_commit(
+        client, auth_headers, "ESCPCT Karrie holds 100% veto over her likeness"
+    )
+    literal = await client.get(
+        "/api/v1/soul/find", params={"q": "100% veto"}, headers=auth_headers
+    )
+    assert literal.status_code == 200, literal.text
+    hits = literal.json()["ledger"]
+    assert hits, literal.json()
+    assert "100% veto" in (hits[0]["body"] or "")
+
+
+async def test_multi_artifact_intents_do_not_crowd_out_matches(
+    client, auth_headers, db_session
+):
+    """The result window is limit DISTINCT intents. An intent carrying many
+    artifacts used to eat the whole raw-join window and silently drop other
+    matching captures."""
+    from sqlalchemy import select
+
+    from app.models.live_state_ledger import IntentRecord
+    from app.services.live_state_ledger import ledger
+
+    first = await _propose_approve_commit(client, auth_headers, "CROWDTEST alpha capture")
+    second = await _propose_approve_commit(client, auth_headers, "CROWDTEST beta capture")
+
+    row = await db_session.execute(
+        select(IntentRecord).where(IntentRecord.id == first["intent_id"])
+    )
+    owner_id = row.scalars().one().owner_id
+    for n in range(45):
+        await ledger.record_artifact(
+            db_session,
+            owner_id=owner_id,
+            intent_id=first["intent_id"],
+            path=f"estate://ledger/captures/test/crowd-{n}",
+            body="CROWDTEST alpha capture",
+            kind="lesson",
+        )
+
+    hits = await ledger.search_receipted_captures(
+        db_session, owner_id=owner_id, query="CROWDTEST", limit=2
+    )
+    found_intents = {hit["intent_id"] for hit in hits}
+    assert found_intents == {first["intent_id"], second["intent_id"]}, hits
 
 
 def test_services_memory_points_at_receipted_artifacts_not_localstorage():

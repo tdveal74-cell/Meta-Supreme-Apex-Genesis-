@@ -6,7 +6,9 @@ the effect, outside that package.
 
 The loop is: propose (enqueue plus Live State Ledger intent rows in
 PostgreSQL; no consume, no soul write) -> human approve (existing queue,
-hashed single-use token) -> consume-before-execute commit. Commit always
+hashed single-use token PLUS the out-of-band DEVON_RULING_KEY, so the
+JWT that proposed can never approve by itself) -> consume-before-execute
+commit. Commit always
 persists a Live State Ledger artifact *with body* and a receipt so "if it
 is not in the ledger it did not happen" is true even when Notion, Drive,
 n8n, and Pinecone are unset. PostgreSQL is the store; ``estate://`` is a
@@ -21,6 +23,7 @@ Missing connectors are named, never faked.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -78,6 +81,34 @@ def _queue() -> ApprovalQueue:
     from app.api.v1.devon import _queue as shared
 
     return shared
+
+
+def _require_ruling_key(presented: Optional[str]) -> None:
+    """The approver's second credential, out of band from the platform JWT.
+
+    The propose response hands the single-use token back to the proposer so
+    the HUD can render the pending card, which means the token alone must
+    never approve: a script holding one CurrentUser JWT would otherwise run
+    propose, approve, and commit with no human anywhere, exactly the lane
+    the deleted soul.py write endpoint was removed for. DEVON_RULING_KEY is
+    held by the approver and typed into the HUD, never returned by any
+    endpoint. Unset, the loop is propose-only and says so.
+    """
+    expected = (os.environ.get("DEVON_RULING_KEY") or "").strip()
+    if not expected:
+        raise KnowledgeLoopRefused(
+            "The approve lane is not configured: DEVON_RULING_KEY is unset on "
+            "this host, so the loop is propose-only. Set the key and hand it "
+            "to the approver out of band; the platform JWT alone must never "
+            "approve.",
+            status_code=403,
+        )
+    if not presented or not hmac.compare_digest(expected, presented.strip()):
+        raise KnowledgeLoopRefused(
+            "The ruling key does not match. The platform JWT alone does not "
+            "approve; the approver types DEVON_RULING_KEY into the HUD.",
+            status_code=403,
+        )
 
 
 def _n8n_env() -> tuple[str, str]:
@@ -226,6 +257,9 @@ class KnowledgeLoop:
         Writes Live State Ledger intent rows in PostgreSQL (open_intent,
         CONTEXT_LOADED, PLAN_CREATED, plan_action, APPROVAL_REQUESTED). Does
         not consume the approval. Does not write soul, Notion, or Drive.
+        The response carries the request's single-use token so the HUD can
+        render the pending card; the token alone approves nothing, approve
+        also demands DEVON_RULING_KEY, which no endpoint ever returns.
         """
         allowed, reason = ecosystem.check_layer_write(layer, approved_by_tee=False)
         if layer == 1:
@@ -353,41 +387,73 @@ class KnowledgeLoop:
         request_id: str,
         token: str,
         decided_by: str = "Tee",
+        ruling_key: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Human ruling through the existing approval queue. Not a second grantor."""
+        """Human ruling through the existing approval queue. Not a second grantor.
+
+        Two credentials, in this order: the ruling key (DEVON_RULING_KEY,
+        typed by the approver, never returned by any endpoint) and then the
+        request's single-use token. Everything that can refuse does so BEFORE
+        the queue decision is spent, so a refusal for any other reason leaves
+        the approval still spendable. And because a decision can succeed while
+        the ledger write after it fails, an already-APPROVED request with a
+        valid token repairs the missing APPROVAL_GRANTED event instead of
+        wedging on "already approved" forever.
+        """
+        _require_ruling_key(ruling_key)
+        # Resolve the intent first: a wrong owner or a broken mapping must
+        # refuse while the single-use decision is still unspent.
+        intent_id = await ledger.intent_id_for_approval_request(
+            db, owner_id=owner_id, request_id=request_id
+        )
         result = _queue().decide(request_id, token, "approve", decided_by)
-        if not result.approved:
+        already_approved = (
+            not result.ok and result.state is ApprovalState.APPROVED
+        )
+        # decide() verifies the token before it reports an already-decided
+        # state, so this branch is only reachable with the right token.
+        if not result.approved and not already_approved:
             raise KnowledgeLoopRefused(
                 result.message or "Approval refused.",
                 status_code=403,
             )
-        intent_id = await ledger.intent_id_for_approval_request(
-            db, owner_id=owner_id, request_id=request_id
-        )
-        await ledger.append_event(
-            db,
-            owner_id=owner_id,
-            intent_id=intent_id,
-            name="APPROVAL_GRANTED",
-            payload={"approval_request_id": request_id, "decided_by": decided_by},
-        )
-        held = _queue().get(request_id)
-        await ledger.record_approval(
-            db,
-            owner_id=owner_id,
-            intent_id=intent_id,
-            approval_request_id=request_id,
-            state="approved",
-            what_happens=held.what_happens if held else "remember",
-            decided_by=decided_by,
-        )
+
+        opened = await ledger.read_intent(db, owner_id=owner_id, intent_id=intent_id)
+        names = [event["name"] for event in opened["events"]]
+        granted_now = False
+        if "APPROVAL_GRANTED" not in names:
+            await ledger.append_event(
+                db,
+                owner_id=owner_id,
+                intent_id=intent_id,
+                name="APPROVAL_GRANTED",
+                payload={"approval_request_id": request_id, "decided_by": decided_by},
+            )
+            held = _queue().get(request_id)
+            await ledger.record_approval(
+                db,
+                owner_id=owner_id,
+                intent_id=intent_id,
+                approval_request_id=request_id,
+                state="approved",
+                what_happens=held.what_happens if held else "remember",
+                decided_by=decided_by,
+            )
+            granted_now = True
+
         return {
             "ok": True,
             "approved": True,
+            "already_approved": already_approved,
+            "repaired": already_approved and granted_now,
             "request_id": request_id,
             "intent_id": intent_id,
-            "state": result.state.value if result.state else "approved",
-            "message": result.message,
+            "state": "approved",
+            "message": (
+                "Already approved; the ledger grant now stands. Commit it."
+                if already_approved
+                else result.message
+            ),
             "executed": False,
         }
 

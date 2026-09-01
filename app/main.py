@@ -135,4 +135,12 @@ async def console():
     page = _newest_console()
     if page is None:
         raise HTTPException(status_code=404, detail="No console asset found")
-    return FileResponse(page, media_type="text/html")
+    # The HUD asset is byte-identical on both hosts, so the serving backend
+    # says which mode to render via a cookie rather than the page guessing
+    # from the hostname: localhost and preview deployments of the soul
+    # service used to render platform mode with the token field hidden.
+    response = FileResponse(page, media_type="text/html")
+    response.set_cookie(
+        "devon_host", "platform", path="/", samesite="strict", max_age=43200
+    )
+    return response

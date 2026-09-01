@@ -243,6 +243,36 @@ def test_pending_approvals_persist_in_session_storage_not_learning_v1():
     assert "Loop.commit" not in refuse_only
 
 
+def test_the_ruling_key_is_a_second_credential_in_the_hud():
+    """The JWT proposes; only the typed ruling key approves. No endpoint
+    returns it, so the HUD must source it from the operator's own input."""
+    assert 'id="ruleKey"' in CONSOLE
+    assert "devon.ruling.key" in CONSOLE
+    assert "X-Devon-Ruling-Key" in CONSOLE
+    assert "rulingKey()" in CONSOLE
+    approve = CONSOLE[CONSOLE.index("async approve(") : CONSOLE.index("async commit(")]
+    assert "X-Devon-Ruling-Key" in approve
+    gate = CONSOLE[CONSOLE.index("async function ruleLoop") : CONSOLE.index("function rule(")]
+    assert "rulingKey()" in gate
+
+
+def test_host_mode_comes_from_the_serving_backend_not_the_hostname_alone():
+    """Both hosts serve identical bytes, so the backend marks the mode with
+    the devon_host cookie; the hostname regex is only the unmarked fallback.
+    Guessing from the hostname rendered localhost and preview deployments of
+    the soul service in platform mode with the token field hidden."""
+    assert "servedHostRole" in CONSOLE
+    assert "devon_host" in CONSOLE
+    assert '"devon_host", "soul"' in MAIN
+    platform_main = (ROOT / "app" / "main.py").read_text()
+    assert '"devon_host", "platform"' in platform_main
+
+
+def test_the_door_does_not_promise_a_remember_path_the_code_refuses():
+    assert "Remember goes through the platform API when that base URL is set" not in MAIN
+    assert "Remember is refused on this host outright" in MAIN
+
+
 def test_console_same_origin_default_and_vercel_fail_close():
     assert "same origin" in CONSOLE
     assert "onVercelSoulHost" in CONSOLE

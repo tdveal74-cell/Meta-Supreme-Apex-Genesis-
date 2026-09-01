@@ -17,7 +17,7 @@ Find of a committed capture still works against the Live State Ledger.
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -176,8 +176,14 @@ async def soul_approve(
     body: SoulApproveBody,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
+    x_devon_ruling_key: Optional[str] = Header(default=None, alias="X-Devon-Ruling-Key"),
 ) -> Dict[str, Any]:
-    """Human ruling through the existing approval queue. Not a second grantor."""
+    """Human ruling through the existing approval queue. Not a second grantor.
+
+    Two credentials: the request's single-use token and the out-of-band
+    DEVON_RULING_KEY in X-Devon-Ruling-Key. The JWT that proposed cannot
+    approve by itself; without the key this lane is propose-only and says so.
+    """
     try:
         return await knowledge_loop.approve(
             db,
@@ -185,6 +191,7 @@ async def soul_approve(
             request_id=body.request_id,
             token=body.token,
             decided_by=body.decided_by,
+            ruling_key=x_devon_ruling_key,
         )
     except (KnowledgeLoopRefused, LedgerRefused) as exc:
         raise _loop_error(exc) from exc

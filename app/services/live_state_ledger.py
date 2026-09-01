@@ -631,17 +631,25 @@ class LiveStateLedger:
     async def intent_id_for_approval_request(
         self, db: AsyncSession, *, owner_id: str, request_id: str
     ) -> str:
-        """Find the intent that raised this approval. One request, one intent."""
+        """Find the intent that raised this approval. One request, one intent.
+
+        Filtered in SQL on the JSONB payload rather than scanning every
+        PLAN_CREATED event the owner has ever written into Python: this runs
+        on every approve and every commit, and the old scan grew without
+        bound as captures accumulated.
+        """
         result = await db.execute(
-            select(EventRecord).where(
+            select(EventRecord)
+            .where(
                 EventRecord.owner_id == owner_id,
                 EventRecord.name == "PLAN_CREATED",
+                EventRecord.payload["approval_request_id"].astext == request_id,
             )
+            .limit(1)
         )
-        for row in result.scalars().all():
-            payload = row.payload or {}
-            if payload.get("approval_request_id") == request_id:
-                return row.intent_id
+        row = result.scalars().first()
+        if row is not None:
+            return row.intent_id
         raise LedgerRefused(
             [f"No knowledge-loop plan on this owner's record for {request_id}."]
         )
@@ -660,15 +668,24 @@ class LiveStateLedger:
         Tee rulings outrank operator files, which outrank notes. Still ILIKE,
         not Pinecone soul-hierarchy recall. The artifact body is the payload;
         estate:// is a path label, not a blob store. Query * skips the text
-        filter so plate/brief can list receipted files.
+        filter so plate/brief can list receipted files. ILIKE metacharacters
+        in the query are escaped, so a literal % or _ is searched for rather
+        than rewriting the match. Rows are paged until `limit` DISTINCT
+        intents are collected: an intent can carry several artifacts, and
+        limiting the raw join let multi-artifact intents crowd matching
+        captures out of the window. Labeling (store, source, rank) belongs to
+        services.memory, not here.
         """
-        from services.memory import OPERATIONAL_KINDS, rank_label
+        from services.memory import OPERATIONAL_KINDS
 
         needle = (query or "").strip()
         if not needle:
             return []
         scan_all = needle in {"*", "all"}
-        pattern = f"%{needle}%"
+        escaped = (
+            needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        )
+        pattern = f"%{escaped}%"
         precedence = case(
             (ArtifactRecord.kind == "ruling", 0),
             (ArtifactRecord.kind.in_(tuple(sorted(OPERATIONAL_KINDS))), 1),
@@ -678,14 +695,14 @@ class LiveStateLedger:
         if not scan_all:
             filters.append(
                 or_(
-                    IntentRecord.stated.ilike(pattern),
-                    ArtifactRecord.body.ilike(pattern),
+                    IntentRecord.stated.ilike(pattern, escape="\\"),
+                    ArtifactRecord.body.ilike(pattern, escape="\\"),
                 )
             )
         wanted = (kind or "").strip().lower()
         if wanted:
             filters.append(ArtifactRecord.kind == wanted)
-        result = await db.execute(
+        base_query = (
             select(IntentRecord, UniversalReceiptRecord, ArtifactRecord)
             .join(
                 UniversalReceiptRecord,
@@ -694,33 +711,38 @@ class LiveStateLedger:
             .outerjoin(ArtifactRecord, ArtifactRecord.intent_id == IntentRecord.id)
             .where(*filters)
             .order_by(precedence.asc(), IntentRecord.created_at.desc())
-            .limit(limit)
         )
         found: list[dict] = []
         seen: set[str] = set()
-        for intent, receipt, artifact in result.all():
-            if intent.id in seen:
-                continue
-            seen.add(intent.id)
-            kind_name = artifact.kind if artifact is not None else "lesson"
-            body = (artifact.body if artifact is not None else "") or intent.stated
-            found.append(
-                {
-                    "intent_id": intent.id,
-                    "text": body,
-                    "body": body,
-                    "kind": kind_name,
-                    "rank": rank_label(kind_name),
-                    "state": intent.state,
-                    "artifact_path": artifact.path if artifact is not None else None,
-                    "receipt_id": receipt.id,
-                    "what_happened": receipt.what_happened,
-                    "source": "live-state-ledger",
-                    "store": "postgresql",
-                    "durable": True,
-                    "live": False,
-                }
-            )
+        page = max(limit * 2, 40)
+        offset = 0
+        while len(found) < limit:
+            result = await db.execute(base_query.offset(offset).limit(page))
+            rows = result.all()
+            if not rows:
+                break
+            offset += len(rows)
+            for intent, receipt, artifact in rows:
+                if intent.id in seen:
+                    continue
+                seen.add(intent.id)
+                kind_name = artifact.kind if artifact is not None else "lesson"
+                body = (artifact.body if artifact is not None else "") or intent.stated
+                found.append(
+                    {
+                        "intent_id": intent.id,
+                        "text": body,
+                        "body": body,
+                        "kind": kind_name,
+                        "state": intent.state,
+                        "artifact_path": artifact.path if artifact is not None else None,
+                        "receipt_id": receipt.id,
+                        "what_happened": receipt.what_happened,
+                        "durable": True,
+                    }
+                )
+                if len(found) >= limit:
+                    break
         return found
 
 
