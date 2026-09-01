@@ -1,26 +1,35 @@
 """
-Soul endpoints — recall over HTTP, honestly gated.
+Soul endpoints — recall over HTTP, honestly gated, plus the write lane.
 
-The read lane only. Recall queries both souls (tee-soul-layer, then
-devon-soul) and returns the records plus DEVON's phrased reply, hierarchy
-intact. The write lane (propose → approve → commit) deliberately has no HTTP
-surface yet: a devon-soul write is an effect, and its approval flow runs
-through the live queue, not through an endpoint that could be scripted.
+Recall queries both souls (tee-soul-layer, then devon-soul) and returns the
+records plus DEVON's phrased reply, hierarchy intact. The write lane is
+propose -> approve -> commit: propose enqueues and writes Live State Ledger
+intent rows in PostgreSQL (it does not consume, and it does not write soul,
+Notion, or Drive), approve is the existing hashed single-use approval queue
+(not a second grantor), commit consumes that approval and then persists an
+artifact body. Kind ruling may enter the ledger and outranks notes on find.
+Layer 1 Tee Soul is never written.
 
-Switched off, the lane says so with a 503 rather than pretending: soul
+Switched off, recall says so with a 503 rather than pretending: soul
 recall exists only when SOUL_RECALL_ENABLED and PINECONE_API_KEY are set.
+Find of a committed capture still works against the Live State Ledger.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.db.session import get_db
 from app.security.deps import CurrentUser
 from app.services import soul as soul_service
+from app.services.knowledge_loop import KnowledgeLoopRefused, knowledge_loop
+from app.services.live_state_ledger import LedgerRefused
 from services.devon.assistant import Devon
 from services.intelligence.providers.base import ProviderError
+from services.intelligence.soul import SoulWriteRefused
 
 router = APIRouter(prefix="/soul", tags=["Soul"])
 
@@ -105,3 +114,121 @@ async def soul_recall(
         devon_count=recall.devon_count,
         errors=recall.errors,
     )
+
+
+def _loop_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, KnowledgeLoopRefused):
+        return HTTPException(status_code=exc.status_code, detail=str(exc))
+    if isinstance(exc, LedgerRefused):
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"refused": True, "reasons": exc.reasons},
+        )
+    if isinstance(exc, SoulWriteRefused):
+        return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    raise exc
+
+
+class SoulProposeBody(BaseModel):
+    text: str = Field(..., min_length=1, max_length=20_000)
+    kind: str = Field(default="lesson", max_length=32)
+    area: Optional[str] = Field(default=None, max_length=64)
+    layer: int = Field(default=5, ge=1, le=5)
+
+
+class SoulApproveBody(BaseModel):
+    request_id: str = Field(..., min_length=1, max_length=64)
+    token: str = Field(..., min_length=1, max_length=512)
+    decided_by: str = Field(default="Tee", max_length=120)
+
+
+class SoulCommitBody(BaseModel):
+    request_id: str = Field(..., min_length=1, max_length=64)
+
+
+@router.post("/propose", status_code=status.HTTP_201_CREATED)
+async def soul_propose(
+    body: SoulProposeBody,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """Enqueue a remember. Returns an approval request.
+
+    Writes ledger intent rows in PostgreSQL. Does not consume. Does not
+    write soul, Notion, or Drive. This route lives on app.main, not on
+    the Vercel soul host (devon-soul.vercel.app has no Postgres).
+    """
+    try:
+        return await knowledge_loop.propose(
+            db,
+            owner_id=str(current_user.id),
+            text=body.text,
+            kind=body.kind,
+            area=body.area,
+            layer=body.layer,
+        )
+    except (KnowledgeLoopRefused, LedgerRefused, SoulWriteRefused) as exc:
+        raise _loop_error(exc) from exc
+
+
+@router.post("/approve")
+async def soul_approve(
+    body: SoulApproveBody,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+    x_devon_ruling_key: Optional[str] = Header(default=None, alias="X-Devon-Ruling-Key"),
+) -> Dict[str, Any]:
+    """Human ruling through the existing approval queue. Not a second grantor.
+
+    Two credentials: the request's single-use token and the out-of-band
+    DEVON_RULING_KEY in X-Devon-Ruling-Key. The JWT that proposed cannot
+    approve by itself; without the key this lane is propose-only and says so.
+    """
+    try:
+        return await knowledge_loop.approve(
+            db,
+            owner_id=str(current_user.id),
+            request_id=body.request_id,
+            token=body.token,
+            decided_by=body.decided_by,
+            ruling_key=x_devon_ruling_key,
+        )
+    except (KnowledgeLoopRefused, LedgerRefused) as exc:
+        raise _loop_error(exc) from exc
+
+
+@router.post("/commit")
+async def soul_commit(
+    body: SoulCommitBody,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """Consume-before-execute. Ledger always; devon-soul only when the layer is on."""
+    try:
+        return await knowledge_loop.commit(
+            db,
+            owner_id=str(current_user.id),
+            request_id=body.request_id,
+        )
+    except (KnowledgeLoopRefused, LedgerRefused, SoulWriteRefused) as exc:
+        raise _loop_error(exc) from exc
+
+
+@router.get("/find")
+async def soul_find(
+    current_user: CurrentUser,
+    q: str = Query(..., min_length=1, max_length=1000),
+    kind: Optional[str] = Query(default=None, max_length=32),
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """Find a committed capture in-estate. Does not require Pinecone.
+
+    ILIKE on stated+body. Optional kind filter. Tee rulings first.
+    """
+    try:
+        return await knowledge_loop.find(
+            db, owner_id=str(current_user.id), query=q, kind=kind
+        )
+    except (KnowledgeLoopRefused, LedgerRefused) as exc:
+        raise _loop_error(exc) from exc
+

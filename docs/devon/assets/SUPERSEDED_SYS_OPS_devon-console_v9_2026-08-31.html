@@ -505,10 +505,6 @@ input,select{font:inherit}
           <label for="platTok">JWT</label>
           <input id="platTok" type="password" placeholder="platform CurrentUser JWT. Not CONSOLE_TOKEN.">
         </div>
-        <div class="keyrow" id="ruleKeyRow">
-          <label for="ruleKey">RULING KEY</label>
-          <input id="ruleKey" type="password" placeholder="DEVON_RULING_KEY. Approves; the JWT alone never does.">
-        </div>
         <div class="keyrow">
           <button class="tgl" id="soulSave" type="button">SAVE</button>
           <button class="tgl" id="soulTest" type="button">TEST</button>
@@ -1401,22 +1397,7 @@ function flashArea(label){
 
 /* ---------------- the router, mirroring commands.py ---------------- */
 /* ---------------- soul layer (live recall) ---------------- */
-/* Which backend served this page. Both hosts serve the same bytes, so the
-   server says which mode to render via the devon_host cookie; the hostname
-   regex is only the fallback for a page opened without either marker.
-   Guessing from the hostname alone rendered localhost and Vercel preview
-   deployments of the soul service in platform mode with the CONSOLE_TOKEN
-   field hidden. */
-function servedHostRole() {
-  try {
-    const hit = document.cookie.match(/(?:^|;\s*)devon_host=([^;]*)/);
-    return hit ? decodeURIComponent(hit[1]).trim() : '';
-  } catch (e) { return ''; }
-}
 function onVercelSoulHost() {
-  const role = servedHostRole();
-  if (role === 'soul') return true;
-  if (role === 'platform') return false;
   try {
     return /devon-soul\.vercel\.app/i.test(String(location.hostname || location.host || ''));
   } catch (e) { return false; }
@@ -1429,18 +1410,6 @@ function keepOperatorJwt(v) {
   const handed = (v || '').trim();
   if (!handed) return;
   try { sessionStorage.setItem('devon.platform.jwt', handed); } catch (e) {}
-}
-/* The ruling key is the approver's second credential (DEVON_RULING_KEY on
-   the platform host). The JWT proposes; the ruling key approves. No endpoint
-   ever returns it: Tee types it here once per session. */
-function rulingKey() {
-  try { return (sessionStorage.getItem('devon.ruling.key') || '').trim(); }
-  catch (e) { return ''; }
-}
-function keepRulingKey(v) {
-  const handed = (v || '').trim();
-  if (!handed) return;
-  try { sessionStorage.setItem('devon.ruling.key', handed); } catch (e) {}
 }
 const Soul = {
   get(k, d) { try { return localStorage.getItem('devon.soul.' + k) || d; } catch (e) { return d; } },
@@ -1618,11 +1587,8 @@ const Loop = {
     return res.json();
   },
   async approve(requestId, token) {
-    const h = this.headers();
-    const key = rulingKey();
-    if (key) h['X-Devon-Ruling-Key'] = key;
     const res = await fetch(this.getBase() + '/api/v1/soul/approve', {
-      method: 'POST', headers: h,
+      method: 'POST', headers: this.headers(),
       body: JSON.stringify({ request_id: requestId, token: token, decided_by: 'Tee' })
     });
     if (!res.ok) throw new Error(await this.err(res));
@@ -1652,14 +1618,11 @@ function wireSoul() {
   Soul.reconcile();
   Loop.loadPending();
   const base = $('soulBase'), tok = $('soulTok'), plat = $('platTok'), st = $('soulState'), loop = $('loopBase');
-  const rkey = $('ruleKey');
   if (!base) return;
   const soulHost = onVercelSoulHost();
   const soulRow = $('soulTokRow'), platRow = $('platTokRow'), hostRow = $('soulHostRow');
-  const ruleRow = $('ruleKeyRow');
   if (soulRow) soulRow.style.display = soulHost ? '' : 'none';
   if (platRow) platRow.style.display = soulHost ? 'none' : '';
-  if (ruleRow) ruleRow.style.display = soulHost ? 'none' : '';
   if (hostRow) hostRow.style.display = soulHost ? '' : 'none';
   if (loop) {
     loop.placeholder = soulHost
@@ -1670,7 +1633,6 @@ function wireSoul() {
   base.value = Soul.get('base', '');
   if (tok) tok.value = Soul.token();
   if (plat) plat.value = operatorJwt();
-  if (rkey) rkey.value = rulingKey();
   function statusLabel(e) {
     if (!e) return 'UNREACHABLE';
     if (e.message === 'notoken') return soulHost ? 'NO CONSOLE_TOKEN ON HOST' : 'NO JWT';
@@ -1697,7 +1659,6 @@ function wireSoul() {
       if (!Soul.token()) { st.textContent = 'NOT CONFIGURED'; return; }
     } else {
       Loop.keepJwt(plat ? plat.value.trim() : '');
-      keepRulingKey(rkey ? rkey.value.trim() : '');
       if (!operatorJwt()) { st.textContent = 'NOT CONFIGURED'; return; }
     }
     st.textContent = 'CHECKING';
@@ -1889,15 +1850,7 @@ async function ruleLoop(id,token,decision){
     devonSays('Refused in this HUD. The server request was not spent. It stays pending until it expires.');
     return;
   }
-  if(!rulingKey()){
-    devonSays('Approving needs the ruling key, the second credential beside the JWT. Set it in the soul panel and click APPROVE again.');
-    return;
-  }
   try {
-    /* approve is idempotent on the server: an already-approved request
-       repairs its ledger grant and returns 200, so a commit that failed
-       after a successful approve is retried by clicking APPROVE again
-       rather than wedging on "already approved". */
     await Loop.approve(id, token);
     const committed = await Loop.commit(id);
     Loop.dropPending(id);

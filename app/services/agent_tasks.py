@@ -60,6 +60,7 @@ from services.intelligence.council_adapter import CouncilCapabilityAdapter
 from services.operator.agent_adapter import OperatorCapabilityAdapter
 
 github_client = GitHubRESTClient()
+# Process-local / not durable. Not Live. Durable follow-on is HermesExpansionRepository.
 schedule_store = InMemoryScheduleStore()
 skill_proposal_store = SkillProposalStore()
 expansion_adapter = ExpansionToolAdapter(

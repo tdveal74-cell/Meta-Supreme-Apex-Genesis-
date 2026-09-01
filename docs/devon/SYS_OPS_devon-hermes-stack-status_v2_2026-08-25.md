@@ -4,7 +4,7 @@ type: SYS_OPS
 version: 2
 date: 2026-08-25
 area: Systems
-status: operational-on-main
+status: ci-proven-not-operator-live
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 supersedes: SYS_OPS_devon-hermes-stack-status_v1_2026-08-24.md
 ---
@@ -29,14 +29,16 @@ the Build 12 banded conflict policy; PR 45 finished the ops polish.
 
 | Capability | Status |
 |---|---|
-| Agent runtime + leases + idempotency | Live, crash matrix proven |
-| Effect intents / receipts + orphan refusal | Live, intent durable before effect |
-| Cerebras voice / enrichment default | Live (key required) |
-| Subagents (durable parent-child links, schema 010) | Live |
-| Scheduler (create / due / materialize) | Live |
-| Browser allowlisted fetch + approved navigate | Live (live fetch opt-in) |
-| Skill proposals + human promote | Live, deduped by goal slug |
-| Soul conflict-search (Build 12 banded policy) | Live |
+| Agent runtime + leases + idempotency | CI-proven, crash matrix proven. Not operator-live. |
+| Effect intents / receipts + orphan refusal | CI-proven, intent durable before effect. Not operator-live. |
+| Cerebras voice / enrichment default | CI-proven (key required). Not operator-live. |
+| Subagents (durable parent-child links, schema 010) | CI-proven. Not operator-live. |
+| Scheduler (create / due / materialize) | CI-proven. Not operator-live. |
+| Browser allowlisted fetch + approved navigate | CI-proven (live fetch opt-in). Not operator-live. |
+| Skill proposals + human promote | CI-proven, deduped by goal slug. Not operator-live. |
+| Soul conflict-search (Build 12 banded policy) | CI-proven. Not operator-live. |
+
+Honest label: schema and CI green are not the same as a person running Hermes as the live operator. This stack is CI-proven / not operator-live.
 
 ## Governance invariants held
 
@@ -51,6 +53,7 @@ the Build 12 banded conflict policy; PR 45 finished the ops polish.
 
 ## Remaining manual item
 
-- Live verification in Tee's deployed environment (deployed DB at Alembic
-  head 010, one Cerebras voice turn, one materialize-run-complete path, one
-  propose-approve-promote path). Not reachable from CI or agent containers.
+- Operator-live verification in Tee's deployed environment (deployed DB at
+  Alembic head 010, one Cerebras voice turn, one materialize-run-complete
+  path, one propose-approve-promote path). Not reachable from CI or agent
+  containers. Until that lands, do not call this stack Live.

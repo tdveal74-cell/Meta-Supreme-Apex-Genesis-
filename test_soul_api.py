@@ -150,6 +150,8 @@ async def test_console_is_served_same_origin(client):
     assert "text/html" in response.headers["content-type"]
     assert "DEVON Console" in response.text
     assert "soulRecall" in response.text  # v4, with the soul lane wired
+    assert "Loop.propose" in response.text
+    assert "rememberThroughLoop" in response.text
 
 
 def test_newest_console_orders_by_numeric_version(tmp_path, monkeypatch):

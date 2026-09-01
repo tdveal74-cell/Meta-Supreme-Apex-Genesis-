@@ -147,9 +147,13 @@ def test_the_console_is_not_a_public_page(probe):
     assert probe["anonymous_body_has_airtable"] is False
 
 
-def test_the_console_opens_for_a_token_in_a_header_or_on_the_url(probe):
-    assert probe["console_query_token"] == 200
+def test_the_console_opens_for_a_header_or_cookie_not_query_param(probe):
+    assert probe["console_query_token"] == 401
+    assert probe["console_query_token_is_door"] is True
     assert probe["console_header_token"] == 200
+    assert probe["console_cookie_opens_it"] == 200
+    assert probe["status_query_token_alone"] == 401
+    assert probe["recall_query_token_alone"] == 401
 
 
 def test_an_anonymous_caller_is_refused_before_anything_is_validated(probe):
@@ -225,3 +229,15 @@ def test_an_unset_console_token_closes_the_service(probe):
     assert probe["no_token_status"] == 503
     assert probe["no_token_console"] == 503
     assert probe["no_token_console_body_has_state"] is False
+
+def test_unknown_paths_are_branded_html_not_fastapi_json(probe):
+    for key in ("health", "docs", "agents"):
+        assert probe[f"unknown_{key}_status"] == 404
+        assert "text/html" in (probe[f"unknown_{key}_content_type"] or "").lower()
+        assert probe[f"unknown_{key}_is_fastapi_json"] is False
+        body = probe[f"unknown_{key}_body"]
+        assert "#0A1628" in body
+        assert "#D4A017" in body
+        assert "healthy" not in body.lower()
+        assert "Return to the door" in body
+
