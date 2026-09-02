@@ -161,8 +161,10 @@ Still worth watching, in order:
 
 - **Event trigger dispatch.** `event` triggers validate and store; nothing
   fires them. The API reports `awaiting_dispatcher` and the UI says so in
-  words. (`schedule` triggers *do* fire as of 5.1 — cron, `python -m
-  app.cli.dispatch`, see the runbook §6.)
+  words. (`schedule` triggers *do* fire as of 5.1 by cron, `python
+  dispatch.py` at the repository root, see the runbook §6; amended
+  2026-09-02, the module path first written here never existed in the
+  root package.)
 - **Outbound delivery.** `export` renders into the run record and reports
   `delivered: false`. Email and webhooks need an outbound integration and, for
   inbound webhooks, an auth story that does not exist yet.

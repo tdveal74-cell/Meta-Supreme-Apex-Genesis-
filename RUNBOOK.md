@@ -271,7 +271,7 @@ Say these plainly when asked; each is deliberate and documented.
 Scheduled workflows fire from cron, not from inside the API:
 
 ```cron
-* * * * * cd /srv/app && python dispatch.py >> /var/log/dispatch.log 2>&1
+* * * * * cd /app && python dispatch.py >> /var/log/dispatch.log 2>&1
 ```
 
 Exit `0` means the batch ran (including "nothing due" and "another dispatcher

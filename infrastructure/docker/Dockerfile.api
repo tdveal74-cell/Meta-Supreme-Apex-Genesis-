@@ -18,6 +18,9 @@ COPY services/ ./services/
 COPY database/ ./database/
 COPY docs/ ./docs/
 COPY alembic.ini ./alembic.ini
+# The schedule dispatcher's entrypoint, so the documented cron line
+# (cd /app && python dispatch.py) runs inside this image.
+COPY dispatch.py ./dispatch.py
 
 EXPOSE 8000
 

@@ -15,7 +15,7 @@ signal to look at the logs.
 
 Suggested cron (every minute; the dispatcher is cheap when nothing is due):
 
-    * * * * * cd /srv/app && python dispatch.py >> /var/log/dispatch.log 2>&1
+    * * * * * cd /app && python dispatch.py >> /var/log/dispatch.log 2>&1
 """
 
 from __future__ import annotations

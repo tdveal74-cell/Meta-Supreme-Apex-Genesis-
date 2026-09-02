@@ -54,6 +54,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import textwrap
@@ -266,12 +267,15 @@ DOC_CLAIMS: Tuple[Dict[str, Any], ...] = (
         # The Hermes v2 status said head 010 while production ran 013, then 015.
         "doc": "docs/devon/SYS_OPS_devon-hermes-stack-status_v2_2026-08-25.md",
         "quote": "Alembic head 010",
-        "verifier": "alembic_head",
-        "expected": {"head": "010"},
+        "verifier": "superseded",
+        "expected": {"by": "Alembic head 015, dated 2026-09-02", "dated": "2026-09-02"},
     },
     {
-        # The standing head. A new migration lands, this reports DRIFT until
-        # the doc is amended, dated.
+        # The standing head, checked against what is deployed: the migrations
+        # directory at the commit of the newest successful Railway deployment
+        # (Dockerfile.api runs alembic upgrade head before the API takes
+        # traffic). Without a Railway read this is UNVERIFIED; the source
+        # tree alone says what the next deploy will apply, not what is deployed.
         "doc": "docs/devon/SYS_OPS_devon-hermes-stack-status_v2_2026-08-25.md",
         "quote": "Alembic head 015",
         "verifier": "alembic_head",
@@ -301,6 +305,21 @@ DOC_CLAIMS: Tuple[Dict[str, Any], ...] = (
         "quote": "python dispatch.py",
         "verifier": "repo_file",
         "expected": {"path": "dispatch.py", "present": True},
+    },
+    {
+        # The cron line runs inside the API image, so the image must ship the
+        # entrypoint; a file in the checkout that the Dockerfile does not copy
+        # is a command that exits before dispatching.
+        "doc": "OPERATING.md",
+        "quote": "python dispatch.py",
+        "verifier": "image_file",
+        "expected": {"path": "dispatch.py", "image": "infrastructure/docker/Dockerfile.api"},
+    },
+    {
+        "doc": "RUNBOOK.md",
+        "quote": "python dispatch.py",
+        "verifier": "image_file",
+        "expected": {"path": "dispatch.py", "image": "infrastructure/docker/Dockerfile.api"},
     },
 )
 
@@ -523,14 +542,47 @@ def _check_superseded(claim: Claim, observations: Dict[str, Any]) -> Tuple[str, 
 
 
 def _check_alembic_head(claim: Claim, observations: Dict[str, Any]) -> Tuple[str, str]:
-    head = (observations.get("repo") or {}).get("alembic_head")
-    if not head:
-        return UNVERIFIED, "the migrations directory was not read"
-    if head == claim.expected["head"]:
-        return OK, f"the migrations directory heads at {head}, as the doc records"
+    """The doc describes the deployed database, so the evidence is the
+    migrations directory at the commit of the newest successful Railway
+    deployment, never the source tree of this checkout."""
+    repo = observations.get("repo") or {}
+    deployed = repo.get("deployed_alembic_head")
+    if not deployed:
+        reason = repo.get("deployed_reason") or (
+            "no successful Railway deployment was read (RAILWAY_API_TOKEN unset, "
+            "or the read failed)"
+        )
+        return UNVERIFIED, (
+            f"the deployed head is unknown: {reason}. The source tree heads at "
+            f"{repo.get('alembic_head') or 'unknown'}, which says what the next "
+            "deploy will apply, not what is deployed."
+        )
+    where = (
+        f"Railway deployment {repo.get('deployed_deployment') or 'unknown'} at commit "
+        f"{str(repo.get('deployed_commit') or '')[:12]}"
+    )
+    if deployed == claim.expected["head"]:
+        return OK, (
+            f"{where} carries migrations up to {deployed}, applied by alembic upgrade "
+            "head before it took traffic, as the doc records"
+        )
     return DRIFT, (
-        f"the doc records Alembic head {claim.expected['head']}, the migrations "
-        f"directory heads at {head}. Amend the doc, dated."
+        f"the doc records Alembic head {claim.expected['head']}; {where} carries "
+        f"migrations up to {deployed}. Amend the doc, dated."
+    )
+
+
+def _check_image_file(claim: Claim, observations: Dict[str, Any]) -> Tuple[str, str]:
+    images = (observations.get("repo") or {}).get("image_files") or {}
+    image, path = claim.expected["image"], claim.expected["path"]
+    shipped = (images.get(image) or {}).get(path)
+    if shipped is None:
+        return UNVERIFIED, f"{image} was not read for {path}"
+    if shipped:
+        return OK, f"{image} copies {path} into the image, so the documented command exists where it runs"
+    return DRIFT, (
+        f"the doc's command needs {path}, which {image} does not copy into the image. "
+        "Ship it or amend the doc, dated."
     )
 
 
@@ -560,6 +612,7 @@ CHECKERS = {
     "superseded": _check_superseded,
     "alembic_head": _check_alembic_head,
     "repo_file": _check_repo_file,
+    "image_file": _check_image_file,
 }
 
 
@@ -789,6 +842,70 @@ def _alembic_head(root: pathlib.Path = REPO_ROOT) -> Optional[str]:
     return numbers[-1] if numbers else None
 
 
+def _image_copies(root: pathlib.Path = REPO_ROOT, image: str = "infrastructure/docker/Dockerfile.api") -> List[str]:
+    """The source paths a Dockerfile's COPY lines put into the image."""
+    path = pathlib.Path(root) / image
+    if not path.exists():
+        return []
+    sources: List[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        parts = line.split()
+        if len(parts) >= 3 and parts[0].upper() == "COPY":
+            sources.extend(
+                part.lstrip("./").rstrip("/") for part in parts[1:-1] if not part.startswith("--")
+            )
+    return sources
+
+
+def _pinned_image_files(root: pathlib.Path = REPO_ROOT) -> Dict[str, Dict[str, bool]]:
+    """Whether each image a doc claim names ships the path the claim needs."""
+    shipped: Dict[str, Dict[str, bool]] = {}
+    for pinned in DOC_CLAIMS:
+        if pinned["verifier"] != "image_file":
+            continue
+        image, path = pinned["expected"]["image"], pinned["expected"]["path"]
+        copies = _image_copies(root, image)
+        shipped.setdefault(image, {})[path] = any(
+            path == src or path.startswith(src + "/") for src in copies
+        )
+    return shipped
+
+
+def _deployed_alembic_head(railway: Dict[str, Any], root: pathlib.Path = REPO_ROOT) -> Dict[str, Any]:
+    """The migrations head at the commit of the newest successful Railway
+    deployment. Dockerfile.api runs alembic upgrade head before the API takes
+    traffic, so a SUCCESS deployment's commit says what the deployed database
+    is at; the source tree only says what the next deploy will apply."""
+    deployments = (railway or {}).get("deployments") or []
+    newest = next(
+        (d for d in deployments if d.get("status") == "SUCCESS" and d.get("commit_sha")), None
+    )
+    if newest is None:
+        return {}
+    sha = str(newest["commit_sha"])
+    found: Dict[str, Any] = {"deployed_commit": sha, "deployed_deployment": newest.get("id", "")}
+    try:
+        result = subprocess.run(
+            ["git", "ls-tree", "--name-only", sha, "database/migrations/versions/"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except OSError:
+        return {**found, "deployed_alembic_head": None, "deployed_reason": "git is unavailable"}
+    if result.returncode != 0:
+        return {
+            **found,
+            "deployed_alembic_head": None,
+            "deployed_reason": f"commit {sha[:12]} is not in this clone; fetch main and rerun",
+        }
+    names = [line.rsplit("/", 1)[-1] for line in result.stdout.splitlines()]
+    numbers = sorted(name[:3] for name in names if re.match(r"^\d{3}_.*\.py$", name))
+    return {**found, "deployed_alembic_head": numbers[-1] if numbers else None}
+
+
 def _pinned_files_present(root: pathlib.Path = REPO_ROOT) -> Dict[str, bool]:
     """Presence of every repository path a doc claim names."""
     paths = {
@@ -836,6 +953,8 @@ def gather_observations() -> Dict[str, Any]:
     observations["repo"] = {"main_head": head} if head else {}
     observations["repo"]["alembic_head"] = _alembic_head()
     observations["repo"]["files"] = _pinned_files_present()
+    observations["repo"]["image_files"] = _pinned_image_files()
+    observations["repo"].update(_deployed_alembic_head(observations.get("railway") or {}))
     return observations
 
 
