@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.devon import _queue as approval_queue
 from app.core.config import settings
+from app.core.exceptions import AppError
 from app.db.session import AsyncSessionLocal, get_db
 from app.models.agent import Agent, AgentRun
 from app.models.conversation import Conversation, Message
@@ -452,6 +453,12 @@ async def send_message_stream(
             await queue.put({"type": "error", "status": 503, "message": str(exc)})
         except (CouncilExecutionError, ProviderError) as exc:
             await queue.put({"type": "error", "status": 502, "message": str(exc)})
+        except AppError as exc:
+            # A typed refusal (the provider spend cap answers 429) keeps its
+            # status on the stream, where the exception handlers cannot reach.
+            await queue.put(
+                {"type": "error", "status": exc.status_code, "message": exc.message}
+            )
         except Exception:  # noqa: BLE001 — stream must always terminate cleanly
             logger.exception("streaming council run failed")
             await queue.put(

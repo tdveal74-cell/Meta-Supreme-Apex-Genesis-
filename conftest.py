@@ -74,6 +74,7 @@ _INCREMENTAL_SCHEMAS = (
     "013_approval_consumption.sql",
     "014_artifact_body.sql",
     "015_devon_approval_owner.sql",
+    "017_provider_usage.sql",
 )
 
 _DSN = TEST_DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
@@ -83,6 +84,7 @@ _TEST_DB_NAME = _DSN.rsplit("/", 1)[1]
 # Tables wiped between tests (order respects FKs; agents and executors stay
 # seeded, the latter by 012_live_state_ledger.sql).
 _DATA_TABLES = (
+    "provider_usage",
     "universal_receipts",
     "learning_candidates",
     "verifications",

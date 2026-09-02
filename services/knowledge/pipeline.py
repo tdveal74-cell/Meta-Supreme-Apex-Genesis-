@@ -27,14 +27,20 @@ logger = logging.getLogger(__name__)
 
 
 def _embedding_provider():
+    # Metered like the completion provider: embeddings reach the same keys.
+    # This module already reads app settings, so the app-layer wrapper is
+    # not a new dependency direction.
+    from app.services.provider_usage import MeteredEmbeddingProvider
+
     name = getattr(settings, "DEFAULT_EMBEDDING_PROVIDER", None) or getattr(
         settings, "DEFAULT_AI_PROVIDER", "mock"
     )
-    return create_embedding_provider(
+    provider = create_embedding_provider(
         name,
         openai_api_key=getattr(settings, "OPENAI_API_KEY", None),
         model=getattr(settings, "EMBEDDING_MODEL", None),
     )
+    return MeteredEmbeddingProvider(provider)
 
 
 def _completion_provider():

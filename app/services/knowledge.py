@@ -32,14 +32,20 @@ logger = logging.getLogger(__name__)
 
 
 def _embedding_provider():
-    """Build the configured embedding provider (OpenAI or deterministic mock)."""
-    return create_embedding_provider(
+    """Build the configured embedding provider (OpenAI or deterministic mock).
+
+    Metered like the completion provider: embeddings reach the same keys.
+    """
+    from app.services.provider_usage import MeteredEmbeddingProvider
+
+    provider = create_embedding_provider(
         settings.DEFAULT_EMBEDDING_PROVIDER
         if hasattr(settings, "DEFAULT_EMBEDDING_PROVIDER")
         else settings.DEFAULT_AI_PROVIDER,
         openai_api_key=getattr(settings, "OPENAI_API_KEY", None),
         model=getattr(settings, "EMBEDDING_MODEL", None),
     )
+    return MeteredEmbeddingProvider(provider)
 
 
 async def search_knowledge(

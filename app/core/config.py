@@ -185,6 +185,27 @@ class Settings(BaseSettings):
     COUNCIL_DELIBERATION_ROUNDS: int = 1  # 2 → always deliberate; per-request opt-in also supported
     COUNCIL_HISTORY_LIMIT: int = 10  # recent messages passed to agents
 
+    # Provider spend per account per UTC day, input plus output tokens, across
+    # every lane that reaches a provider: councils, agent turns, workflows,
+    # enrichment and embeddings all pass through the metered wrapper that
+    # app.services.intelligence installs on the provider, so no route enforces
+    # this on its own. The wrapper reads the account's provider_usage row
+    # before each call and refuses with 429 once the row has reached the cap;
+    # after each call it records what the provider reported. 0 disables the
+    # refusal; the ledger still records. Work no account asked for (startup
+    # jobs, service-layer calls outside a request) is counted and capped under
+    # the "system" bucket, so an attribution gap fills up and becomes visible
+    # instead of draining the key unbounded.
+    #
+    # Why 500,000: a full council run costs about 20,000 tokens at the limits
+    # above (nine agents plus synthesis), so the default allows about 25 of
+    # them, or several hundred agent turns, per account per day: more than a
+    # person uses and still a few dollars of provider credit if a login leaks,
+    # rather than the key's monthly limit. The mock provider counts a quarter
+    # token per character and the suite truncates the ledger between tests,
+    # so no test approaches it.
+    PROVIDER_DAILY_TOKEN_CAP: int = 500_000
+
     # Model tiers (None → provider default). Fast for intent classification,
     # synthesis for the final combination step.
     AI_MODEL_FAST: str | None = None

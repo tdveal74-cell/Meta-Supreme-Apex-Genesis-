@@ -7,6 +7,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.tenant_context import bind_tenant
 from app.db.session import get_db
 from app.models.user import User
 from app.security.jwt import decode_access_token
@@ -50,6 +51,10 @@ async def get_current_user(
             detail="User not found or inactive",
         )
 
+    # Every provider call made while serving this request is spent against
+    # this account, however deep in the services layer the call happens. The
+    # TenantContextMiddleware clears the binding when the request ends.
+    bind_tenant(user.id)
     return user
 
 
