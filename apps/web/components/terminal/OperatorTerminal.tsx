@@ -231,14 +231,21 @@ export function OperatorTerminal() {
     setBusy(true);
 
     try {
+      // The ruling is signed by the DEVON login, never by a name in the body.
+      let jwt = "";
+      try {
+        jwt = localStorage.getItem("devon-chat-token") || sessionStorage.getItem("devon-chat-token") || "";
+      } catch {
+        jwt = "";
+      }
+      if (!jwt) throw new Error("Sign in to DEVON first. A ruling needs the login, not just the operator key.");
       const decisionResponse = await fetch(`${API_BASE}/devon/approvals/decide`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
         body: JSON.stringify({
           request_id: current.requestId,
           token: current.token,
           decision,
-          decided_by: "Tee",
         }),
       });
 

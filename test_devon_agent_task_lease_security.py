@@ -77,6 +77,7 @@ async def test_approval_token_is_delivered_once_but_never_persisted_or_reissued(
     request_id = first.json()["task"]["plan"]["steps"][0]["approval_request_id"]
     decision = await client.post(
         "/api/v1/devon/approvals/decide",
+        headers=auth_headers,
         json={
             "request_id": request_id,
             "token": approval_token,

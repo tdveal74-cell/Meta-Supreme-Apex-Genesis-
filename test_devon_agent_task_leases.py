@@ -62,6 +62,7 @@ async def test_completed_effect_run_replays_by_idempotency_key_without_second_ef
 
     decision = await client.post(
         "/api/v1/devon/approvals/decide",
+        headers=auth_headers,
         json={
             "request_id": request_id,
             "token": token,

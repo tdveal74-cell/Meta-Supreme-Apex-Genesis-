@@ -14,7 +14,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -62,6 +62,10 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=128)
     full_name: str | None = Field(None, max_length=255)
+    # The invite. Registration is closed by default: the deployment holds
+    # DEVON_REGISTRATION_KEY and a caller must present it, here or in the
+    # X-Devon-Registration-Key header. Unset means nobody can register.
+    registration_key: str | None = Field(None, max_length=256)
 
 
 class LoginRequest(BaseModel):
@@ -172,12 +176,43 @@ async def _consume_challenge(
 # Password endpoints
 # ---------------------------------------------------------------------------
 
+MIN_REGISTRATION_KEY_LENGTH = 16
+
+
+def _require_registration_key(supplied: str | None) -> None:
+    """Refuse unless the caller holds the deployment's invite.
+
+    Same trust boundary as password recovery: a secret in the deployment
+    environment, compared in constant time, failing closed when it is not
+    configured. Without this any internet user could mint an owner-scoped
+    tenant and drive council runs against the operator's provider keys.
+    """
+    configured = os.getenv("DEVON_REGISTRATION_KEY", "").strip()
+    if len(configured) < MIN_REGISTRATION_KEY_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Registration is closed. Set DEVON_REGISTRATION_KEY to a random "
+                f"secret of at least {MIN_REGISTRATION_KEY_LENGTH} characters to open it."
+            ),
+        )
+    if not hmac.compare_digest(configured, (supplied or "").strip()):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registration key is not valid.",
+        )
+
+
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     payload: RegisterRequest,
     db: AsyncSession = Depends(get_db),
+    x_devon_registration_key: str | None = Header(
+        default=None, alias="X-Devon-Registration-Key"
+    ),
 ):
-    """Register a new user account."""
+    """Register a new user account. Closed unless the invite key is presented."""
+    _require_registration_key(payload.registration_key or x_devon_registration_key)
     existing = await db.execute(select(User).where(User.email == payload.email.lower()))
     if existing.scalar_one_or_none():
         raise HTTPException(

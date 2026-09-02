@@ -112,10 +112,10 @@ jobs:
 
       - name: The test fixture's schema and deploy migrations are present
         run: |
-          for f in 001_initial_schema 002_workflow_runs 003_schedule_dispatch 004_federated_knowledge_waist 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion 010_agent_subagent_links 011_passkeys 012_live_state_ledger 013_approval_consumption; do
+          for f in 001_initial_schema 002_workflow_runs 003_schedule_dispatch 004_federated_knowledge_waist 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion 010_agent_subagent_links 011_passkeys 012_live_state_ledger 013_approval_consumption 014_artifact_body 015_devon_approval_owner; do
             test -s "database/schemas/$f.sql" || { echo "::error::database/schemas/$f.sql is missing or empty"; exit 1; }
           done
-          for f in 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion 010_agent_subagent_links 011_passkeys 012_live_state_ledger 013_approval_consumption; do
+          for f in 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion 010_agent_subagent_links 011_passkeys 012_live_state_ledger 013_approval_consumption 014_artifact_body 015_devon_approval_owner; do
             test -s "database/migrations/versions/$f.py" || { echo "::error::database/migrations/versions/$f.py is missing or empty"; exit 1; }
           done
 
@@ -174,7 +174,7 @@ jobs:
                   missing = expected - present
                   assert not missing, f"missing migrated tables: {sorted(missing)}"
                   revision = await conn.fetchval("SELECT version_num FROM alembic_version")
-                  assert revision == "013_approval_consumption", revision
+                  assert revision == "015_devon_approval_owner", revision
               finally:
                   await conn.close()
 

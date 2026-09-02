@@ -109,6 +109,9 @@ export function DevonChat() {
   // session credential, so it lives only as long as the keystroke that spends it.
   const [recovering, setRecovering] = useState(false);
   const [recoveryKey, setRecoveryKey] = useState("");
+  // The invite. Registration is closed unless the deployment holds
+  // DEVON_REGISTRATION_KEY and the first sign-in presents it.
+  const [inviteKey, setInviteKey] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState("");
   const [status, setStatus] = useState<IntelligenceStatus | null>(null);
@@ -261,7 +264,12 @@ export function DevonChat() {
         const registered = await fetch(`${API_BASE}/auth/register`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password, full_name: "Tee" }),
+          body: JSON.stringify({
+            email,
+            password,
+            full_name: "Tee",
+            registration_key: inviteKey || undefined,
+          }),
         });
         if (!registered.ok && registered.status !== 409) {
           throw new Error(await readApiError(registered));
@@ -621,12 +629,11 @@ export function DevonChat() {
     try {
       const response = await fetch(`${API_BASE}/devon/approvals/decide`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           request_id: current.requestId,
           token: current.token,
           decision,
-          decided_by: "Tee",
         }),
       });
       if (!response.ok) throw new Error(await readApiError(response));
@@ -925,6 +932,18 @@ export function DevonChat() {
                   : "Sign in"}
             </button>
           </div>
+
+          {!recovering && (
+            <input
+              value={inviteKey}
+              onChange={(event) => setInviteKey(event.target.value)}
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="Invite key, only for the first sign-in on a deployment (DEVON_REGISTRATION_KEY)"
+              className="mt-3 min-h-11 w-full rounded-lg border border-amber-300/25 bg-black/30 px-3 font-mono text-sm text-white outline-none transition placeholder:text-white/25 focus:border-amber-300/40"
+            />
+          )}
 
           {recovering && (
             <input

@@ -95,6 +95,7 @@ async def test_effectful_task_requires_bound_approval_and_replays_once(
 
     decision = await client.post(
         "/api/v1/devon/approvals/decide",
+        headers=auth_headers,
         json={
             "request_id": request_id,
             "token": token,

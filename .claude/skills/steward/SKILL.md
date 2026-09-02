@@ -171,7 +171,10 @@ Check these before inventing new theories:
 
 ## Environment facts
 
-Env flags: `DEVON_AUTO_SKILL_PROPOSE` (default on),
+Env flags: `DEVON_REGISTRATION_KEY` (unset closes registration, at least 16
+characters opens it, sent as `registration_key` in the body or the
+`X-Devon-Registration-Key` header, conftest sets one and the `client` fixture
+sends it), `DEVON_AUTO_SKILL_PROPOSE` (default on),
 `DEVON_BROWSER_LIVE_FETCH` (default off), `DEVON_AGENT_TASK_LEASE_SECONDS`
 (default 120), `DEFAULT_AI_PROVIDER`/`ENRICHMENT_PROVIDER` (cerebras live,
 mock in CI). Alembic head as of 2026-08-27: `013_approval_consumption` (the

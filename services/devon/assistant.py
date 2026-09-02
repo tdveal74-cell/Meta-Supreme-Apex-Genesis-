@@ -132,8 +132,18 @@ class Devon:
             persona.PromptContext(platform="Claude", files_opened=files_opened or [])
         )
 
-    def ask(self, text: str, on_date: Optional[date_cls] = None) -> DevonResponse:
-        """Take one utterance and answer it."""
+    def ask(
+        self,
+        text: str,
+        on_date: Optional[date_cls] = None,
+        owner_id: str = "",
+    ) -> DevonResponse:
+        """Take one utterance and answer it.
+
+        owner_id is the account speaking. It is stamped on any approval card the
+        utterance raises so the API can scope the card to that account. DEVON
+        does not read it for anything else.
+        """
         command = parse(text)
         if not command.understood:
             return DevonResponse(
@@ -147,7 +157,7 @@ class Devon:
             )
 
         if command.requires_approval:
-            return self._gate(command)
+            return self._gate(command, owner_id)
 
         handler = getattr(self, f"_do_{command.name}", None)
         if handler is None:
@@ -199,7 +209,7 @@ class Devon:
 
     # -- gating ------------------------------------------------------------
 
-    def _gate(self, command: ParsedCommand) -> DevonResponse:
+    def _gate(self, command: ParsedCommand, owner_id: str = "") -> DevonResponse:
         """Route an effect to the approval queue instead of running it."""
         intent = command.intent
         assert intent is not None
@@ -215,6 +225,7 @@ class Devon:
             blast_radius=(
                 "machine state" if intent.name in ("shutdown", "restart") else "outside DEVON"
             ),
+            owner_id=owner_id,
         )
         return DevonResponse(
             reply=(

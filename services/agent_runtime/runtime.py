@@ -213,6 +213,7 @@ class AgentRuntime:
                     area=str(task.context.get("area") or "Systems"),
                     reversible=spec.reversible,
                     blast_radius=spec.blast_radius,
+                    owner_id=str(task.context.get("owner_id") or ""),
                 )
                 step.approval_request_id = record.request_id
                 step.state = StepState.WAITING_APPROVAL

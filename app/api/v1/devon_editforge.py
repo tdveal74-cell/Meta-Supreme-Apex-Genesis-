@@ -164,6 +164,7 @@ async def authorize_edit(body: EditDraftBody, user: CurrentUser) -> Dict[str, An
         area="Creation",
         reversible=True,
         blast_radius=f"project:{body.project_id}/cut:{body.cut_id}",
+        owner_id=user.id,
     )
     return {
         "state": "approval_required",

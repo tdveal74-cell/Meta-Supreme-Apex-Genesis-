@@ -136,6 +136,10 @@ fi
 # ---------------------------------------------------------------------------
 step 4 "Your settings"
 # ---------------------------------------------------------------------------
+# Registration is closed by default. The console account below is created
+# with this key, and the sign-in form asks for it on a new device.
+REG_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))' 2>/dev/null || openssl rand -hex 24)
+
 if [ -f .env ]; then
   ok ".env already exists, leaving your settings alone"
 else
@@ -144,6 +148,9 @@ else
 # in Drive. Secrets do not live in the vault.
 
 DATABASE_URL=postgresql+asyncpg://postgres:$PG_PASSWORD@localhost:$PG_PORT/$PG_DB
+
+# Who may create an account. Unset closes registration entirely.
+DEVON_REGISTRATION_KEY=$REG_KEY
 
 # The soul layer: recall from tee-soul-layer (your rulings) and devon-soul.
 SOUL_RECALL_ENABLED=true
@@ -184,6 +191,14 @@ EDITFORGE_TOKEN=
 EDITFORGEEOF
   ok "Added the local EditForge lane to your existing .env"
 fi
+
+# An .env written before registration was closed has no invite key. Add one
+# rather than leaving the console account impossible to create.
+if ! grep -q '^DEVON_REGISTRATION_KEY=' .env 2>/dev/null; then
+  printf '\n# Who may create an account. Unset closes registration entirely.\nDEVON_REGISTRATION_KEY=%s\n' "$REG_KEY" >> .env
+  ok "Added a registration key to your existing .env"
+fi
+REG_KEY=$(grep '^DEVON_REGISTRATION_KEY=' .env | head -1 | cut -d= -f2-)
 
 if grep -q '^PINECONE_API_KEY=$' .env 2>/dev/null; then
   printf "\n      DEVON needs your Pinecone key to recall from the soul layer.\n"
@@ -317,6 +332,7 @@ step 7 "Your console login"
 # ---------------------------------------------------------------------------
 if curl -sf -X POST "http://localhost:$API_PORT/api/v1/auth/register" \
      -H 'Content-Type: application/json' \
+     -H "X-Devon-Registration-Key: $REG_KEY" \
      -d "{\"email\":\"$CONSOLE_EMAIL\",\"password\":\"$CONSOLE_PASSWORD\",\"full_name\":\"Tee\"}" \
      >/dev/null 2>&1; then
   ok "Created your console account"

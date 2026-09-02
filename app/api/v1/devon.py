@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from app.security.deps import CurrentUser
 from app.services.devon_approval_store import build_approval_queue
 from services.devon import areas as areas_mod
 from services.devon import (
@@ -280,25 +281,45 @@ async def list_areas() -> Dict[str, Any]:
 
 
 class CommandBody(BaseModel):
-    text: str = Field(..., min_length=1, description="What was said to DEVON")
+    text: str = Field(
+        ..., min_length=1, max_length=4_000, description="What was said to DEVON"
+    )
 
 
 @router.post("/command")
-async def command(body: CommandBody) -> Dict[str, Any]:
-    """Route one utterance. Returns what DEVON understood and what he did not do."""
-    return _devon.ask(body.text).to_dict()
+async def command(body: CommandBody, current_user: CurrentUser) -> Dict[str, Any]:
+    """Route one utterance. Returns what DEVON understood and what he did not do.
+
+    Signed in only. An effect utterance raises a durable approval card, and a
+    card raised by nobody in particular is exactly what an anonymous caller
+    would use to fill the approval rail, so the speaker must be an account and
+    the card is stamped with it.
+    """
+    return _devon.ask(body.text, owner_id=current_user.id).to_dict()
 
 
 class DecideBody(BaseModel):
     request_id: Optional[str] = None
     token: Optional[str] = None
     decision: Optional[str] = Field(default=None, description="approve or refuse")
-    decided_by: str = "Tee"
+
+
+def _visible_to(record_owner: str, user_id: str) -> bool:
+    """A card is visible to its owner. A card with no owner (raised by a lane
+    that has no user in hand, such as the operator bridge) is visible to any
+    signed-in account."""
+    return not record_owner or record_owner == user_id
+
+
+def _principal_label(current_user: CurrentUser) -> str:
+    """Who ruled, taken from the login rather than from the request body."""
+    name = (current_user.full_name or "").strip()
+    return f"{name} <{current_user.email}>" if name else str(current_user.email)
 
 
 @router.get("/approvals")
-async def list_approvals() -> Dict[str, Any]:
-    """Everything awaiting a ruling."""
+async def list_approvals(current_user: CurrentUser) -> Dict[str, Any]:
+    """Everything awaiting a ruling from the signed-in account."""
     return {
         "pending": [
             {
@@ -310,6 +331,7 @@ async def list_approvals() -> Dict[str, Any]:
                 "expires_at": r.expires_at.isoformat(),
             }
             for r in _queue.pending()
+            if _visible_to(r.owner_id, current_user.id)
         ],
         "storage": _approval_storage_status(),
         "note": (
@@ -322,9 +344,26 @@ async def list_approvals() -> Dict[str, Any]:
 
 
 @router.post("/approvals/decide")
-async def decide(body: DecideBody) -> Dict[str, Any]:
-    """Rule on a pending request. Single use, expiring, fails closed."""
-    result = _queue.decide(body.request_id, body.token, body.decision, body.decided_by)
+async def decide(body: DecideBody, current_user: CurrentUser) -> Dict[str, Any]:
+    """Rule on a pending request. Single use, expiring, fails closed.
+
+    The ruling is signed by the login, never by text in the body. A card that
+    belongs to another account answers exactly as a card that does not exist,
+    so the route confirms nothing about other accounts' queues.
+    """
+    record = _queue.get(body.request_id) if body.request_id else None
+    if record is not None and not _visible_to(record.owner_id, current_user.id):
+        return {
+            "ok": False,
+            "approved": False,
+            "request_id": "NO_MATCH",
+            "state": None,
+            "reason": "no_match",
+            "message": "No request with that id for this account.",
+        }
+    result = _queue.decide(
+        body.request_id, body.token, body.decision, _principal_label(current_user)
+    )
     return {
         "ok": result.ok,
         "approved": result.approved,
