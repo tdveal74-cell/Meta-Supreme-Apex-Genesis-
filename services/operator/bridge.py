@@ -185,6 +185,13 @@ class OperatorBridge:
 
         resolved_cwd = self.resolve_cwd(cwd)
         risk, reason = self._classify(argv)
+        if risk is Risk.READ:
+            # The binary name says read-only; the arguments say where. A read
+            # of the process environment, a host file, or a dotfile is not the
+            # lane that runs without a human, whatever the binary is called.
+            denial = self._read_lane_denial(argv[1:], resolved_cwd)
+            if denial:
+                risk, reason = Risk.WRITE, denial
         return CommandPlan(
             command=raw,
             argv=argv,
@@ -358,6 +365,54 @@ class OperatorBridge:
             return Risk.WRITE, "docker command may change host or container state"
 
         return Risk.WRITE, "unknown or potentially mutating command fails closed to human approval"
+
+    def _read_lane_denial(self, args: tuple[str, ...], cwd: Path) -> str:
+        """Why these arguments may not run on the unattended read lane.
+
+        Every argument that names a path, including the value of an
+        option such as --git-dir=, must resolve inside the operator root
+        after symlinks, must not sit under /proc, /sys or /dev, and must not
+        name a dotfile in any component. A rev:path form is split on the
+        colon so `git show HEAD:.env` is judged on `.env`. Returns an empty
+        string when the read may run.
+        """
+        for arg in args:
+            if arg.startswith("-"):
+                if "=" not in arg:
+                    continue
+                values = [arg.split("=", 1)[1]]
+            else:
+                values = [arg]
+            for value in values:
+                for piece in value.split(":"):
+                    if not piece:
+                        continue
+                    pathlike = "/" in piece or piece.startswith((".", "~"))
+                    if not pathlike and not (cwd / piece).exists():
+                        continue
+                    for component in Path(piece).parts:
+                        if component.startswith(".") and component not in {".", ".."}:
+                            return f"the read lane does not read dotfiles: {piece}"
+                    target = Path(piece).expanduser()
+                    if not target.is_absolute():
+                        target = cwd / target
+                    resolved = target.resolve()
+                    if str(resolved).startswith(("/proc", "/sys", "/dev")):
+                        return (
+                            f"the read lane never reads {piece} (resolves to {resolved}); "
+                            "that is the host, not the operator root"
+                        )
+                    try:
+                        inside = resolved.relative_to(self.root)
+                    except ValueError:
+                        return (
+                            f"the read lane stays inside the operator root; {piece} "
+                            f"resolves to {resolved}"
+                        )
+                    for component in inside.parts:
+                        if component.startswith(".") and component not in {".", ".."}:
+                            return f"the read lane does not read dotfiles: {piece} -> {inside}"
+        return ""
 
     @staticmethod
     def _first_non_option(args: tuple[str, ...]) -> str:

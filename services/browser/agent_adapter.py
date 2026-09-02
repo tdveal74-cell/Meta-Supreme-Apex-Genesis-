@@ -101,6 +101,8 @@ class BrowserCapabilityAdapter:
             output=text,
             metadata={
                 "url": url,
+                # No redirect is ever followed, so the page read is the page asked for.
+                "final_url": url,
                 "bytes": len(text),
                 "provider_receipt_id": f"br-fetch-{receipt}",
             },
@@ -146,6 +148,10 @@ class BrowserCapabilityAdapter:
         host = (parsed.hostname or "").lower()
         if not host:
             raise ValueError("url host is missing")
+        if parsed.username is not None or parsed.password is not None:
+            # httpx turns user:pass@host into an Authorization header, which
+            # would send model-written credentials to the allowlisted host.
+            raise ValueError("url must not carry credentials (user:pass@host)")
         if not self._host_allowed(host):
             raise ValueError(f"host not in browser allowlist: {host}")
         if re.search(r"[\s<>]", url):

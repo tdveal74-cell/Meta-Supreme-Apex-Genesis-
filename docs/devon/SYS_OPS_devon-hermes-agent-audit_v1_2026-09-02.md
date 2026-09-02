@@ -147,7 +147,7 @@ Location: `services/operator/bridge.py:48` and `:152`. Reported as AAT-01 and CA
 
 Run: `OperatorBridge.plan('cat /proc/self/environ')` classifies as READ. `execute_read` returns the environment, which on the API host carries DATABASE_URL, DEVON_OPERATOR_KEY and DEVON_RULING_KEY when set. `printenv` is classified WRITE and gated, `cat /proc/self/environ` is not. Classification is by binary name only and validates only the cwd. A git-based write outside DEVON_OPERATOR_ROOT was also reproduced. tool_catalog already admits `cwd_confinement_is_os_sandbox: False`.
 
-Owner to fix: classify by resolved path against the root for every argument, deny `/proc`, `/sys`, dotfiles and anything outside the root on the READ lane.
+Owner to fix: classify by resolved path against the root for every argument, deny `/proc`, `/sys`, dotfiles and anything outside the root on the READ lane. Status 2026-09-02: fix PR 5 judges every path-like argument on the read lane, option values such as --git-dir= and rev:path forms included, after symlink resolution: outside the operator root, under /proc, /sys or /dev, or naming a dotfile in any component fails closed to human approval with the path in the reason. Verified by test_operator_bridge.py, including the audit's own `cat /proc/self/environ`.
 
 ### H5. Browser live fetch follows redirects off the allowlist (CAP-03, with CAP-05)
 
@@ -155,7 +155,7 @@ Location: `services/browser/http_fetcher.py:16` (`follow_redirects=True`), `serv
 
 Run: an allowlisted host answering 302 to `http://169.254.169.254/` or `http://localhost:5432` is followed, the body returned to the model as a READ result, and metadata records the original URL. Userinfo in the URL is forwarded as an Authorization Basic header (CAP-05, finder-only).
 
-Owner to fix: `follow_redirects=False`, or re-validate every hop against the allowlist and record the final URL.
+Owner to fix: `follow_redirects=False`, or re-validate every hop against the allowlist and record the final URL. Status 2026-09-02: fix PR 5 sets follow_redirects=False and refuses any 3xx with the location named, so the model can ask for that URL explicitly where the allowlist judges it; a URL carrying credentials is refused before any request (CAP-05); fetch metadata records final_url, which equals the URL asked for. Verified by test_devon_browser_fetch_boundary.py against an httpx mock transport.
 
 ### H6. The runtime expansion tools write to process-local stores, so an approved effect with a succeeded receipt does not exist anywhere
 
