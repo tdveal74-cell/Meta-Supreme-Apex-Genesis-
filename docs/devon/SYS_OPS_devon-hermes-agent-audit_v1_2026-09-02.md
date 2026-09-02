@@ -15,9 +15,9 @@ supersedes: none
 
 ## Verdict in one paragraph
 
-The build is real and most of what it claims about itself holds under attack. All four CI jobs pass locally at head, 1196 tests, ruff clean, Alembic round trip clean. The core runtime gate (approval bound to exact arguments, consumed once, races resolved to one winner, tokens hashed) held every attack thrown at it. All three production surfaces serve main head as of 2026-09-01 18:51Z. Against that, this audit confirmed three critical defects and a cluster of high ones that sit exactly where the docs say the product is strongest. The in-estate knowledge loop that PR #108 called closed can be driven end to end by the proposing JWT with no human ruling, its approval is not bound to the candidate that commits, and the columns it writes have no Alembic migration, so the production database very likely cannot commit a capture at all. The shared approval queue is readable and rulable with no login. The EditForge execute route never spends its approval. None of this is hidden by dishonest docs, but the docs are stale in a way that hides it: seven files still say production is at d2aff6d, and the Hermes status doc still says the deployed database is at Alembic head 010. Recommendation: do not call the knowledge loop live, do not call Hermes operator-live, and fix the eleven items in section 9 in the order given before the next honesty recut.
+The build is real and most of what it claims about itself holds under attack. All four CI jobs pass locally at head, 1196 tests, ruff clean, Alembic round trip clean. The core runtime gate (approval bound to exact arguments, consumed once, races resolved to one winner, tokens hashed) held every attack thrown at it. All three production surfaces serve main head as of 2026-09-01 18:51Z. Against that, this audit confirmed three critical defects and a cluster of high ones that sit exactly where the docs say the product is strongest. The in-estate knowledge loop that PR #108 called closed can be driven end to end by the proposing JWT with no human ruling, its approval is not bound to the candidate that commits, and the columns it writes have no Alembic migration, so the production database very likely cannot commit a capture at all. The shared approval queue is readable and rulable with no login. The EditForge execute route never spends its approval. None of this is hidden by dishonest docs, but the docs are stale in a way that hides it: three status documents (FLAGSHIP.md, COMPLETION.md, docs/GAUNTLET.md), seven lines between them, still say production is at d2aff6d, and the Hermes status doc still says the deployed database is at Alembic head 010. Recommendation: do not call the knowledge loop live, do not call Hermes operator-live, and work section 9 in the order given, items 1 to 5 first, before the next honesty recut.
 
-Gauntlet verdict on the DEVON and Hermes stack as a deliverable: not shippable as a second brain yet, cycle 1 of 3, route the findings and re-audit. Security scores 2 of 5 on confirmed, reproduced governance bypasses. Verification is 5 of 5: everything below was run, not read. The full score block is in section 11.
+Gauntlet verdict on the DEVON and Hermes stack as a deliverable: not shippable as a second brain yet, cycle 1 of 3, route the findings and re-audit. Security scores 2 of 5 on confirmed, reproduced governance bypasses. Verification is 5 of 5 for sections 1 to 3, where every finding was run by a second agent, not read. Section 2b carries the completeness critic's two high findings, one run once and one read, and they are scored as finder-only. The full score block is in section 11.
 
 ## Method
 
@@ -27,13 +27,13 @@ Three layers of evidence, in this order:
 
 1. Measured: every CI job reproduced locally against a fresh Postgres 16 + pgvector cluster, exit codes captured to files, never through a pipe.
 2. Read back: the three production surfaces read through the Railway and Vercel connectors, deployment id, state, target and commit recorded. No production credential was handled.
-3. Attacked: eleven independent finders, one per dimension, each given only its surface and the product's claims, told to break them and to reproduce before reporting. Every finding then went to adversarial verifiers told to refute it by running the reproduction; high and critical findings got two lenses (reproduce, consequence) and a tie-break lens (tests and docs) on a split. A finding appears below only with its verifier status. Refuted findings are listed separately so the reader can see what was tried and did not hold.
+3. Attacked: eleven independent finders, one per dimension, each given only its surface and the product's claims, told to break them and to reproduce before reporting. Every finding then went to adversarial verifiers told to refute it by running the reproduction. High and critical findings got two lenses (reproduce, consequence) and a tie-break lens (tests and docs) on a split. A finding appears below only with its verifier status. Refuted findings are listed separately so the reader can see what was tried and did not hold.
 
-Rules held throughout: read-only on the repository; scratch tests ran against their own database names, never the shared test database; nothing was marked live without a deployment id; nothing was scored that was not measured.
+Rules held throughout: read-only on the repository. Scratch tests ran against their own database names, never the shared test database. Nothing was marked live without a deployment id. Nothing was scored that was not measured.
 
 ## Measured receipts (this session, HEAD cf0d7ef, 2026-09-01)
 
-Environment: Python 3.11.15, fastapi 0.141.1, pydantic 2.13.5, SQLAlchemy 2.0.52, asyncpg 0.31.0, alembic 1.19.1, pytest 9.1.1, pytest-asyncio 1.4.0, PostgreSQL 16.13 + pgvector 0.6.0, ruff 0.16.5. Postgres cluster initialised fresh at /var/lib/pgtest; both databases created empty with the vector extension.
+Environment: Python 3.11.15, fastapi 0.141.1, pydantic 2.13.5, SQLAlchemy 2.0.52, asyncpg 0.31.0, alembic 1.19.1, pytest 9.1.1, pytest-asyncio 1.4.0, PostgreSQL 16.13 + pgvector 0.6.0, ruff 0.16.5. Postgres cluster initialised fresh at /var/lib/pgtest, and both databases created empty with the vector extension.
 
 | CI job (as .github/workflows/ci.yml runs it) | Command shape | Result | Exit |
 |---|---|---|---|
@@ -44,7 +44,7 @@ Environment: Python 3.11.15, fastapi 0.141.1, pydantic 2.13.5, SQLAlchemy 2.0.52
 | 4 lint | `ruff check .` | All checks passed | 0 |
 | 4 Alembic | `upgrade head; downgrade 004_federated_knowledge_waist; upgrade head` | head = 013_approval_consumption, matches the ci.yml pin at line 177 | 0 |
 
-Docker image build (job 2's first step) was not run here; the import contract it checks was run directly against the same interpreter.
+Docker image build (job 2's first step) was not run here. The import contract it checks was run directly against the same interpreter. With this document in the tree the api job collects 1197 tests, the extra case being test_devon_integrity's dash check on this file, which passes.
 
 ## Production readback (read-only, 2026-09-01, via Railway and Vercel connectors)
 
@@ -53,19 +53,19 @@ Docker image build (job 2's first step) was not run here; the import contract it
 | Railway `devon-api` / `api` (env production) | deployment `9e6c363e-059c-4aa2-96a8-232c790fd89d` SUCCESS, created 18:45:51Z, on commit `cf0d7ef` (main HEAD), trigger deploy. Deploy log at 18:51:06Z shows Alembic `Context impl PostgresqlImpl` / `Will assume transactional DDL` and no `Running upgrade` line, then `Application startup complete`, CORS allows 8 origins. HTTP log for this deployment: empty (no requests since deploy). | LIVE on main HEAD. Migration reported nothing pending at head 013. |
 | Vercel `devon-soul` (prj_RTiwmhndbWFWf1KH7go43rs2Acxn) | `dpl_Ux9eEZAFxHLfo99U96SZiHLfz17C` READY, target `production`, on `cf0d7ef`, created 2026-09-01T18:45:54Z. | LIVE on main HEAD. Every repo doc saying production is still `d2aff6d` is now stale. |
 | Vercel `meta-supreme-apex-genesis-web` (prj_tlXnTP7pZ2qzdDBdU0hNID7ystaw) | latest production `dpl_FvY3mCa7oi8U6k48qtWuvFbMq4NM` on `cf0d7ef` is CANCELED (ignoreCommand skip). Last READY production build: `dpl_B1JzaNq2UisgHHLTbyKyAunjaVQ8` on `797c15f` (#101), 2026-08-30. `git diff --stat 797c15f..cf0d7ef -- apps/web packages/ui package.json pnpm-lock.yaml pnpm-workspace.yaml` is empty. | LIVE at 797c15f, which equals main HEAD for every web-affecting path. Correct skip, not drift. |
-| Vercel project `meta-supreme-web` | Not present in `list_projects` (10 projects listed; none by that name). | Surface named in deploy-readback SKILL.md, DEPLOY.md and the ecosystem spec table no longer exists. |
+| Vercel project `meta-supreme-web` | Not present in `list_projects` (10 projects listed, none by that name). | Surface named in deploy-readback SKILL.md, DEPLOY.md and the ecosystem spec table no longer exists. |
 
-Not read from here, by design: the production `DATABASE_URL` and the production `artifacts` table. The deploy-readback rule forbids handling the production DSN; the migration question below is settled by one query the operator runs on the Railway Postgres shell.
+Not read from here, by design: the production `DATABASE_URL` and the production `artifacts` table. The deploy-readback rule forbids handling the production DSN. The migration question below is settled by one query the operator runs on the Railway Postgres shell.
 
 Web CI parity (job 5, path filtered): the frontend finder ran `pnpm install --frozen-lockfile`, `pnpm --filter @meta-supreme/web typecheck` and `pnpm --filter @meta-supreme/web build` at this head and all three exited 0.
 
-Verification coverage. Eleven finders returned 121 findings. By the strict rule (a finding's severity is the lowest any verifier gave it) the verified set is 2 critical, 16 high, 12 medium and 4 low, with 1 refuted and 86 finder-only. KLM-02 is counted high there and reported as critical in section 1, with the reason stated. First-round adversarial verification ran 31 verdicts before a usage limit cut the remaining verifiers off. A second round re-verified the twelve critical and high findings that were left without a vote. Every finding below carries one of three labels: verified (at least one independent refuter ran the reproduction and could not refute it), refuted (a refuter showed it does not hold as stated), or finder-only (the finder reproduced it and reported the command, but no second agent re-ran it). Finder-only items are real reproductions with output shown, not reads, but they did not get the second pair of hands and are held at one severity notch of doubt.
+Verification coverage. Eleven finders returned 121 findings. By the strict rule (a finding's severity is the lowest any verifier gave it) the verified set is 2 critical, 16 high, 12 medium and 4 low, with 1 refuted and 86 finder-only. KLM-02 is counted high there and reported as critical in section 1, with the reason stated. First-round adversarial verification ran 31 verdicts before a usage limit cut the remaining verifiers off. A second round re-verified the twelve critical and high findings that were left without a vote. Every finding below carries one of three labels: verified (at least one independent refuter ran the reproduction and could not refute it), refuted (a refuter showed it does not hold as stated), or finder-only (the finder reproduced it and reported the command, but no second agent re-ran it). Finder-only items carry the finder's own command and output. For code findings that is a run. For the docs-drift class it is a read of the cited line, which is the only check a doc claim admits. None of them got the second pair of hands, so each is held at one severity notch of doubt.
 
 ## 1. Critical findings (verified)
 
 Each item names the file and line, what was run, what was seen, the consequence, and the owner of the fix. "Verified" means an independent refuter re-ran the reproduction on a fresh database and could not refute it.
 
-### C1. The proposing JWT can approve and commit its own capture, with or without DEVON_RULING_KEY
+### C1. The proposing JWT can approve and commit its own capture, with or without DEVON_RULING_KEY (KLM-01)
 
 Location: `app/api/v1/devon.py:324` (decide route), `app/api/v1/ledger.py:98` (generic event append), `app/services/knowledge_loop.py:468` (commit check).
 
@@ -79,7 +79,7 @@ Consequence: a script holding one platform JWT runs the whole loop with no human
 
 Owner to fix: `app/api/v1/devon.py` (authenticate the decide route and bind it to the request's owner or to the ruling key), `app/services/knowledge_loop.py` (commit must verify the approvals row written by knowledge_loop.approve, never the event name), `app/api/v1/ledger.py` (refuse APPROVAL_GRANTED from the generic route).
 
-### C2. The approval is not bound to the candidate that commits
+### C2. The approval is not bound to the candidate that commits (KLM-02)
 
 Location: `app/services/live_state_ledger.py:641` (`intent_id_for_approval_request`), `app/services/knowledge_loop.py:496`.
 
@@ -91,7 +91,7 @@ Consequence: the human ruling is decoupled from what executes. A Tee ruling, whi
 
 Owner to fix: bind request_id to intent_id and to a hash of the candidate at propose time in the approvals table, resolve from there at approve and commit, and refuse PLAN_CREATED payloads that name an approval_request_id on the generic route.
 
-### C3. artifacts.body and artifacts.kind have no Alembic migration, so a database already at head 013 never gets them
+### C3. artifacts.body and artifacts.kind have no Alembic migration, so a database already at head 013 never gets them (SCD-01, duplicated by KLM-03 and DVC-01)
 
 Location: `database/schemas/014_artifact_body.sql` (conftest only), `database/schemas/012_live_state_ledger.sql:116` (amended in place by cf0d7ef), no `database/migrations/versions/014_*.py`.
 
@@ -99,7 +99,7 @@ What happened: commit cf0d7ef added the two columns to the 012 SQL file and ship
 
 Run (three finders and two verifiers agree): build a database at the pre-#108 shape (or drop the two columns from a fresh build), run `alembic upgrade head`, observe no upgrade steps and `artifacts` without body or kind. Exercise the loop: `record_artifact FAILED: UndefinedColumnError: column "body" of relation "artifacts" does not exist`, and find fails the same way. CI cannot see it because the suite runs against the SQL-file-built test database and the Alembic step asserts only 24 table names and the revision string.
 
-Production: the Railway `api` Postgres was created 2026-08-26 and reached 013 before #108. The cf0d7ef deployment log shows Alembic connect lines and no `Running upgrade` line. This audit did not read the production table, by rule. One query on the Railway Postgres shell settles it:
+Production: the Railway `devon-api` project was created 2026-08-26T03:11Z (list-projects readback) and its Postgres reached 013 before #108. The cf0d7ef deployment log shows Alembic connect lines and no `Running upgrade` line. This audit did not read the production table, by rule. One query on the Railway Postgres shell settles it:
 
 ```
 select column_name from information_schema.columns where table_name = 'artifacts' order by ordinal_position;
@@ -131,7 +131,7 @@ Consequence: one human approval renders N times and spends provider credit N tim
 
 Owner to fix: `_queue.consume` before the client call, compare requested_by to the caller, gate retry and cancel on the same approval record.
 
-### H3. SECRET_KEY defaults to a public string and nothing refuses to boot with it
+### H3. SECRET_KEY defaults to a public string and nothing refuses to boot with it (AAT-03)
 
 Location: `app/core/config.py:30`, `app/security/jwt.py:30`. Verified end to end.
 
@@ -147,7 +147,7 @@ Run: `OperatorBridge.plan('cat /proc/self/environ')` classifies as READ. `execut
 
 Owner to fix: classify by resolved path against the root for every argument, deny `/proc`, `/sys`, dotfiles and anything outside the root on the READ lane.
 
-### H5. Browser live fetch follows redirects off the allowlist
+### H5. Browser live fetch follows redirects off the allowlist (CAP-03, with CAP-05)
 
 Location: `services/browser/http_fetcher.py:16` (`follow_redirects=True`), `services/browser/agent_adapter.py` (validates the initial URL only). Verified. Only reachable when DEVON_BROWSER_LIVE_FETCH is on, default off.
 
@@ -165,7 +165,7 @@ Consequence: the tool descriptions, blast_radius strings and tool_catalog flags 
 
 Owner to fix: route the three handlers to the durable repositories through an injected session factory (the pattern LeasedEffectRecorder already uses), call the binding helper, or unregister the runtime tools until they are durable and say so in the catalog.
 
-### H7. The orphan check runs before the lease is taken, so a healthy in-flight effect is reported as ambiguous and the task row is clobbered
+### H7. The orphan check runs before the lease is taken, so a healthy in-flight effect is reported as ambiguous and the task row is clobbered (ELC-01)
 
 Location: `app/services/agent_tasks.py:384`. Verified under six-worker concurrency.
 
@@ -173,7 +173,7 @@ Run: worker A holds a live lease and is inside an approved async WRITE whose int
 
 Owner to fix: acquire the lease first, then check orphans filtered by execution generation.
 
-### H8. The knowledge loop spends the approval on a separate autocommit connection before any ledger row is durable
+### H8. The knowledge loop spends the approval on a separate autocommit connection before any ledger row is durable (KLM-04)
 
 Location: `app/services/knowledge_loop.py:513`, `app/services/devon_approval_store.py:132`. Verified.
 
@@ -181,35 +181,39 @@ Run: consume runs inside `psycopg.connect(...)`, which commits on block exit. AC
 
 Owner to fix: write the ledger rows first inside the request transaction and spend the approval last, or make the spend part of the same transaction.
 
-### H9. The FKR query route fails on every request
+### H9. The FKR query route fails on every request (KLM-05)
 
 Location: `services/knowledge/retrieval.py:44`. Verified.
 
 Run: `POST /api/v1/knowledge/query` with or without project_id returns 500. asyncpg raises AmbiguousParameterError on the untyped `:project_id` bound three times. No test exercises the route or the SQL. `CAST(:project_id AS uuid)` fixes it.
 
-### H10. knowledge_items.content exists only in the SQL twin, so knowledge ingest fails on every Alembic-built database
+### H10. knowledge_items.content exists only in the SQL twin, so knowledge ingest fails on every Alembic-built database (SCD-02)
 
 Location: `database/migrations/versions/004_federated_knowledge_waist.py:40` versus `database/schemas/004_federated_knowledge_waist.sql:34`. Verified with two lenses.
 
 Run: a fresh `alembic upgrade head` has no `content` column on knowledge_items. `app/models/knowledge.py:39` maps it and `app/services/knowledge.py:179` writes it. `POST /api/v1/knowledge` on that database is a masked 500. Production boots through `alembic upgrade head` (Dockerfile.api CMD), so this is the production shape unless someone applied the SQL twin by hand.
 
-### H11. CI never runs a test against an Alembic-built schema
+### H11. CI never runs a test against an Alembic-built schema (SCD-03)
 
 Location: `.github/workflows/ci.yml:122` and `:126`. Verified.
 
 The suite runs against conftest's SQL-file-built database. The later Alembic step asserts 24 table names and the head string. C3 and H10 are the two drifts that this shape cannot see. A single information_schema diff between the two builds, or running the ledger and knowledge suites against the migrated database, closes the gap.
 
-### H12. `make up` cannot start the API container
+### H12. `make up` cannot start the API container (SCD-04, and the completeness critic for start-devon.sh)
 
 Location: `infrastructure/docker/docker-compose.yml:16` and `:59`. Verified.
 
 compose seeds 001 through initdb, then the api command runs `alembic upgrade head`, whose 001_baseline re-executes the same non-idempotent DDL and fails with DuplicateTableError on `users`. The same class hits `start-devon.sh` step 5, which applies all fourteen SQL files raw and never stamps alembic_version, so the next documented step fails the same way (completeness critic, reproduced on a scratch database).
 
-### H13. The documented dispatcher command does not exist
+### H13. The documented dispatcher command does not exist (DVC-02)
 
 Location: `OPERATING.md:167`, `RUNBOOK.md:270`, `HANDOVER_FOR_CLAUDE.md:297`. Verified.
 
 `python -m app.cli.dispatch` has no `app/cli` in the root package, fails from the apps/api mirror too, and the shipped image contains neither it nor the working root `dispatch.py`. A scheduled-workflow deployment that follows the docs never dispatches.
+
+## 2b. High findings from the completeness critic (finder-only, not verified by a second agent)
+
+These two sit outside the verified count. H14 was run once, by the critic that found it. H15 is a read.
 
 ### H14. The workflow lane's approval binds to a step id, not to the previewed payload, and the definition can be edited while a run waits at the gate
 
@@ -221,7 +225,7 @@ Why it matters: AUDIT.md section 3 item 2 asks reviewers to attempt exactly this
 
 ### H15. Registration is open and nothing caps provider spend per tenant
 
-Location: `app/api/v1/auth.py:176`. Completeness critic, read and grepped, not exercised against production.
+Location: `app/api/v1/auth.py:175`. Completeness critic, read and grepped, not run and not exercised against production.
 
 No invite, flag or policy. `billing.py` limits are imported only by `standalone_api.py`. On the deployed API any internet user can mint a tenant, run councils against Tee's provider keys, and raise cards into the queue H1 already shows is shared. This is a policy gap, not a code defect, and needs Tee's ruling.
 
@@ -238,7 +242,7 @@ No invite, flag or policy. `billing.py` limits are imported only by `standalone_
 | GG-1 | medium | `services/agent_runtime/expansion_tools.py:88` | The three expansion handlers never verify the binding or consume the approval. Replay with the same or forged metadata runs them again. Approval row stays approved. |
 | GG-4 | medium | `app/api/v1/devon.py:325` | decided_by is caller-supplied, unbounded text stored as the audit trail. Part of H1. |
 | ELC-03 | medium | `services/operator/bridge.py:280` | The operator adapter runs subprocess.run synchronously on the event loop, so the lease heartbeat cannot renew during an approved command. Reachable only when the step passes a timeout above lease_seconds, up to the 300 second clamp. |
-| SCD-05 | medium | `Makefile:35` | `make test` collects zero tests, `make api` serves the stale apps/api mirror, `make install` omits 12 packages the root app imports. |
+| SCD-05 | medium | `Makefile:37` | `make test` collects zero tests, `make api` serves the stale apps/api mirror, `make install` omits 12 packages the root app imports. |
 | SCD-06 | medium | `VERIFY.md:24` | VERIFY.md and docker-compose.verify.yml call `scripts/verify.sh` and `scripts/verify-offline.sh`, which have never existed in the repository's history (checked through the GitHub commits API). |
 | SCD-07 | medium | `HOW_TO_TEST.md:6` | The four-package offline recipe cannot start `uvicorn standalone_api:app` because the module chain imports psycopg. CI cannot notice because its standalone job installs the full requirements. |
 | HX-03 | low | `app/api/v1/agent_expansion.py:193` | Approve with promote false is a dead end. No promote route exists and re-decide is 409. |
@@ -290,7 +294,7 @@ Schema and CI:
 
 ## 5. Finder-only findings
 
-These were reproduced by the finder with output shown, but the second agent that would have re-run them was cut off by the usage limit. They are listed with the finder's severity and a one-line claim. Treat each as one notch less certain than the sections above until someone re-runs it.
+These carry the finder's command and output, but the second agent that would have re-run them was cut off by the usage limit. They are listed with the finder's severity and a one-line claim. Treat each as one notch less certain than the sections above until someone re-runs it.
 
 Governance and API (GG, AAT, ELC, CAP):
 - GG-6 low `services/devon/approval.py:444`: an APPROVED but unexecuted approval never expires.
@@ -320,7 +324,7 @@ Knowledge, ledger, memory (KLM):
 
 Schema, CI, docs (SCD, DVC):
 - SCD-09 low `requirements.txt:30`: unpinned floors, and the pytest-asyncio floor predates the loop-scope options pytest.ini uses.
-- SCD-10 low `.github/workflows/ci.yml:110`: presence loops stop at 013, the steward skill and Makefile offline lists disagree with CI's.
+- SCD-10 low `.github/workflows/ci.yml:115`: presence loops stop at 013, the steward skill and Makefile offline lists disagree with CI's.
 - SCD-11 low `app/models/__init__.py:22`: Alembic autogenerate reports 133 diffs, env.py's target_metadata omits the ledger and passkey models.
 - SCD-12 low `.github/workflows/web-ci.yml:3`: web CI runs only on pull_request, never on push to main, and website/ has no CI.
 - SCD-13 info `infrastructure/docker/Dockerfile.api:1`: the image runs Python 3.12 while CI tests on 3.11 and carries the dev toolchain.
@@ -366,7 +370,7 @@ Frontend and operator surface (FOS):
 - FOS-6 medium `apps/web/components/command-center/UnifiedCommandCenter.tsx:79`: the Next.js command center is painted copper and teal, the palette the gauntlet scored 38 and repainted out of the console.
 - FOS-7 medium `apps/web/components/devon/DevonChat.tsx:208`: em dashes in user-visible and spoken copy across the React app and the website demo.
 - FOS-8 low `website/index.html:15`: the public site palette is a near miss of the house tokens.
-- FOS-9 low `docs/devon/SYS_OPS_devon-unified-command-center-handover_v2_2026-08-26.md:198`: a string in the repo's own capture-token shape is committed verbatim in two handover docs. Rotate if it is live.
+- FOS-9 low `docs/devon/SYS_OPS_devon-unified-command-center-handover_v2_2026-08-26.md:198`: a string in the repo's own capture-token shape is committed verbatim in two handover docs. Rotate if it is live. Section 10 puts the same question to this report's own receipt line.
 - FOS-10 low `apps/web/components/terminal/OperatorTerminal.tsx:99`: a comment claims /shell reads the same operator-key slot. It reads a different key.
 - FOS-11 low `apps/web/components/command-center/UnifiedCommandCenter.tsx:104`: a localStorage read outside try/catch.
 
@@ -386,7 +390,7 @@ Soul, planner, intelligence (SPI):
 A final agent read the findings index and the held-claims list, walked the tree, and named surfaces nobody attacked. It spot-checked each by reading or running. Two of them became H14 and H15 above and one folded into H12. The rest:
 
 - Dependency advisories. `pip-audit -r requirements.txt` reports ecdsa 0.19.2 PYSEC-2026-1325 via python-jose, the library that signs every JWT (HS256 in use, so the ECDSA path is not exercised, but it ships in every image). `pnpm audit` reports 4 high and 2 moderate advisories, all transitive through next 15.5.22 (sharp, postcss, nanoid). No CI job runs either audit.
-- RUNBOOK.md and getting-started.md were outside the docs sweep. RUNBOOK.md:337 sends operators to `apps/api/app/services/workflows.py` and two siblings that do not exist. getting-started.md:35 copies an `apps/web/.env.example` that is not in git. CHANGELOG.md:26 claims `awaiting_dispatcher` was corrected so schedules dispatch, while `services/workflows/definition.py:93` returns True for every non-manual trigger and `test_workflows_api.py:158` pins the opposite of the changelog.
+- RUNBOOK.md and getting-started.md were outside the docs sweep. RUNBOOK.md:337 sends operators to `apps/api/app/services/workflows.py` and two siblings that do not exist. getting-started.md:36 copies an `apps/web/.env.example` that is not in git. CHANGELOG.md:26 claims `awaiting_dispatcher` was corrected so schedules dispatch, while `services/workflows/definition.py:93` returns True for every non-manual trigger and `test_workflows_api.py:158` pins the opposite of the changelog.
 - `scripts/n8n_migrate.py` has zero tests, and its export writes the full workflow payload including pinData (captured execution payloads) to disk. It will run for the first time against the live estate of 33 active workflows.
 - Agent tooling committed to the repo: `.claude/settings.json` enables three community plugins with no version pin, and `.agents/skills/unlazy` vendors 37 files including a Stop hook installer. `skills-lock.json` hashes SKILL.md only. The hook is not installed today. Nobody has said whether this is intended.
 - Container hardening: Dockerfile.api has no USER instruction (root), compose hardcodes SECRET_KEY and POSTGRES_PASSWORD inline while `.env.example` asks the operator to set a password compose never reads, Dockerfile.web's CMD is `pnpm dev`, and `infrastructure/ci/github-actions.yml` is an inert placeholder outside `.github/workflows`.
@@ -395,7 +399,7 @@ A final agent read the findings index and the held-claims list, walked the tree,
 
 | Record | Says | Live read 2026-09-01 | Status |
 |---|---|---|---|
-| FLAGSHIP.md:47, COMPLETION.md:35, docs/GAUNTLET.md:23,35,48,58 | production devon-soul.vercel.app is still d2aff6d | `dpl_Ux9eEZAFxHLfo99U96SZiHLfz17C` READY production on cf0d7ef | stale since 18:45Z on 2026-09-01, amend |
+| FLAGSHIP.md:47, COMPLETION.md:35, docs/GAUNTLET.md:23,34,35,48,58 | production devon-soul.vercel.app is still d2aff6d | `dpl_Ux9eEZAFxHLfo99U96SZiHLfz17C` READY production on cf0d7ef | stale since 18:45Z on 2026-09-01, amend |
 | DEPLOY.md:132,162, `.claude/skills/deploy-readback/SKILL.md:25`, ecosystem spec table line 176 | a Vercel project `meta-supreme-web` serves apps/web | not in the project list. `meta-supreme-apex-genesis-web` serves apps/web. `docs/devon/SYS_OPS_presence-hardening-and-recovery_v1_2026-08-27.md:181` and `app/core/config.py:40` already record the retirement on 2026-08-27 | three records contradict two, amend the three |
 | Railway production CORS (deploy log) | allows 8 origins including three `meta-supreme-web` hosts | project retired | environment hygiene, remove three origins |
 | Hermes status v2 line 56 | deployed DB at Alembic head 010 | Alembic head 013 locally, Railway log shows nothing pending | stale, amend |
@@ -436,7 +440,7 @@ Items 1 to 5 are the ones that change what a stranger on the internet can do. It
 - Whether registration stays open on the deployed API, and whether an invite key is acceptable.
 - Whether the three `runtime.*` expansion tools should be made durable or removed from the catalog until they are.
 - Whether `.agents/skills/unlazy` and the unpinned community plugins in `.claude/settings.json` are intended repository content.
-- Whether the string in FOS-9 is a live capture token. If yes, rotate it and scrub the two docs.
+- Whether `dcp_` tokens are live capture credentials or identifiers. `test_deploy_soul.py:32` declares the `dcp_` shape a capture-token secret and `docs/devon/MERGE_MAP.md:130` says per-poster capture tokens gate the n8n capture endpoint, yet the standing DEVON RECEIPT instruction puts a `dcp_claude_` token into every filed document, this one included. The ruling decides FOS-9 (two handover docs carry a `dcp_chatgpt_` value) and the receipt convention together. If they are credentials, rotate both and change the convention.
 - Whether to run the C3 production query now or after the 014 migration ships.
 
 ## 11. Gauntlet score block for the DEVON and Hermes stack
@@ -447,18 +451,37 @@ Deliverable: DEVON second brain and Hermes agent runtime at cf0d7ef | Type: code
 Critic mode: subagent (eleven independent finders, thirty-one first-round refuters, fourteen second-round refuters, one completeness critic)
 Scores: scope fidelity 4 | correctness 3 | unverified claims 3 | security 2 | reversibility and blast radius 4 | silent failure resistance 3 | idempotency 3 | traceability 4 | observability 3 | completeness 3 | maintainability 3 | mean 3.2 | security 2 | verification 5 | flagship floor: MISSED
 Findings: sections 1, 2, 3, 5 and 6 above, each with location, problem, consequence and owner
-Receipts: four CI jobs reproduced locally with exit codes, 1196 tests passed, ruff clean, Alembic round trip clean, three production surfaces read back by deployment id, every listed finding reproduced with a command and output, every critical and high finding re-run by at least one independent refuter
+Receipts: four CI jobs reproduced locally with exit codes, 1196 tests passed, ruff clean, Alembic round trip clean, three production surfaces read back by deployment id, every listed finding carries the finder's command and output, H15 excepted, which is a read, every critical and high finding in sections 1 to 3 re-run by at least one independent refuter
 Conditions: the C3 production query, the C1 and C2 fixes, and the H1 auth change must land before any doc calls the knowledge loop closed or Hermes operator-live
 Recommendation: fix-then-ship, in the order of section 9. The human owns SHIP.
 ```
 
-Scoring notes. Security is 2 because two governance bypasses on the loop the product calls its centre were reproduced by three agents each, and because the approval rail is public. Correctness is 3 because the runtime lane, the doctrine core and the tenancy model hold under attack while two deploy-path schema drifts break two routes. Verification is 5 because nothing here was scored from a read. Flagship floor is missed on the "fixes the root" clause: the lanes were built and proven one at a time and the seams between them are where every critical sits.
+Scoring notes. Security is 2 because two governance bypasses on the loop the product calls its centre were reproduced by three agents each, and because the approval rail is public. Correctness is 3 because the runtime lane, the doctrine core and the tenancy model hold under attack while two deploy-path schema drifts break two routes. Verification is 5 because the score was set from sections 1 to 3 only, where every item was run at least twice. Flagship floor is missed on the "fixes the root" clause: the lanes were built and proven one at a time and the seams between them are where every critical sits.
 
 ## 12. Gauntlet of this report
 
 A fresh critic was given this document, the ask, and the repository, and told to attack it. Its verdict and what changed are recorded here.
 
-GAUNTLET_PLACEHOLDER
+```
+VERDICT: PASS-WITH-CONDITIONS
+Deliverable: this document | Type: docs, plan that will be acted on | Ask: audit DEVON, the second brain, and the Hermes-like agent
+Critic mode: subagent, fresh, given only the file, the ask and the repository
+Scores: scope fidelity 4 | correctness 4 | unverified claims 3 | security 5 | reversibility 5 | silent failure 3 | idempotency 4 | traceability 3 | observability 4 | completeness 4 | maintainability 3 | mean 3.8 | verification 5 | flagship floor: MISSED narrowly, on handed off clean
+Receipts: the critic reran CI jobs 1, 3 and 4 (133, 21 and 1197 passed), ruff, the Alembic round trip, the C3 simulation (zero upgrade steps, insert fails on body), and a scratch test reproducing H1, H3, H4 and H9, checked 45 file and line citations, reconciled the 34 verified, 1 refuted and 86 finder-only tally id by id against the workflow journals, confirmed no em or en dash and no non-ASCII byte in the file, confirmed the FOS-9 value is not reproduced here and no production credential appears
+Recommendation: fix-then-ship. The conclusions stood. The fixes were to the report's own presentation.
+```
+
+What the critic found and what changed in this revision:
+
+- The headline said seven files carry the stale production SHA. The evidence is three files and seven lines. Corrected in the verdict paragraph and in section 7, which now also lists docs/GAUNTLET.md line 34.
+- The next step was stated three ways (eleven items, fifteen items, items 1 to 5). It is now one way: work section 9 in order, items 1 to 5 first.
+- H14 and H15 sat under the verified header while their own text said finder-only and read. They now sit under section 2b with that label, and the verification claims in the verdict paragraph, the score notes and the receipt say which sections the 5 covers.
+- Twelve headings in sections 1 and 2 did not name their finder ids, so a reader could not find the votes in the evidence files. Every heading now carries its ids.
+- The FOS-9 ruling was under-scoped: the same dcp_ token shape sits in this report's own receipt by standing instruction. Section 10 now puts the question to the convention, not only to the two handovers.
+- Six semicolons in prose were restructured. Five line citations drifted by one to five lines and were corrected. The claim that finder-only items are all runs was narrowed to what the docs class admits.
+- The critic counted 1197 tests with this file in the tree against 1196 without it. The receipts table now says so.
+
+Conditions the critic set, carried forward: treat H14 as finder-only and H15 as a read before acting on them, and read the section 10 ruling on dcp_ tokens together with the receipt convention.
 
 ## DEVON RECEIPT
 
@@ -471,6 +494,6 @@ MEASURED: standalone 133 passed, engine 21 passed, api 1196 passed, ruff clean, 
 READ BACK: Railway api 9e6c363e SUCCESS on cf0d7ef, Vercel devon-soul dpl_Ux9eEZAFxHLfo99U96SZiHLfz17C READY production on cf0d7ef, Vercel meta-supreme-apex-genesis-web READY production at 797c15f which equals head for every web path
 FOUND: 34 verified (2 critical by the strict lowest-lens rule, KLM-01 and SCD-01, plus KLM-02 rated critical by one lens and high by the other and reported as critical in section 1, 16 high including KLM-02, 12 medium, 4 low), 1 refuted, 86 finder-only, 5 unchecked surfaces named
 HELD: 156 attacks withstood, condensed in section 4
-UNVERIFIED: the production artifacts table shape, production knowledge_items shape, whether FOS-9 is a live token
+UNVERIFIED: the production artifacts table shape, production knowledge_items shape, whether dcp_ tokens (FOS-9 and this receipt's own TOKEN line) are live credentials
 RULINGS NEEDED: section 10
 NEXT GATE: items 1 to 5 of section 9, then re-audit the touched surfaces
