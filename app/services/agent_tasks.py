@@ -17,6 +17,7 @@ from app.db.session import AsyncSessionLocal
 from app.services.agent_effect_receipts import EffectReceiptRepository
 from app.services.agent_runtime_persistence import (
     AgentLearningRepository,
+    AgentTaskExecutionClaim,
     AgentTaskRepository,
     AmbiguousEffectRefusal,
     TaskExecutionLeaseLost,
@@ -34,6 +35,7 @@ from app.services.subagent_links import SubagentLinkRepository
 from services.agent_runtime.contracts import (
     COUNCIL_TOOL_NAME,
     AgentTask,
+    AmbiguousOutcome,
     PlanStep,
     TaskState,
     ToolCall,
@@ -427,27 +429,6 @@ class DurableAgentTaskService:
     ) -> TaskRunOutcome:
         key = self._normalize_idempotency_key(idempotency_key)
 
-        orphans = await self.effects.find_orphan_intents(
-            db, owner_id=owner_id, task_id=task_id
-        )
-        if orphans:
-            task = await self.tasks.get_owned(db, owner_id=owner_id, task_id=task_id)
-            if task is not None and not task.done:
-                task.state = TaskState.FAILED
-                task.failure_reason = orphans[0].reason
-                task.touch()
-                await self.tasks.save(
-                    db,
-                    owner_id=owner_id,
-                    task=task,
-                    project_id=self._project_id(task),
-                )
-                await db.commit()
-            raise AmbiguousEffectRefusal(
-                f"ambiguous_external_effect: {orphans[0].detail} "
-                f"(intent_id={orphans[0].intent.intent_id})"
-            )
-
         lease_seconds = _lease_seconds()
         claim = await self.tasks.acquire_execution(
             db,
@@ -468,6 +449,23 @@ class DurableAgentTaskService:
             raise TaskExecutionLeaseLost("execution claim is missing its fenced task state")
 
         await db.commit()
+
+        # The orphan check runs only now, with the lease in hand. Every
+        # intent and receipt write is fenced by the live lease token and
+        # generation, so while this worker holds the lease no other worker
+        # can be between an intent and its receipt: a receipt-less intent
+        # belongs to a generation that lost its lease, and the refusal is
+        # real. Checked before the lease, a healthy in-flight effect on
+        # another worker read as an orphan, the task row was clobbered by an
+        # unfenced write, and the caller saw ambiguous_external_effect where
+        # TaskExecutionBusy was the truth (audit H7).
+        orphans = await self.effects.find_orphan_intents(
+            db, owner_id=owner_id, task_id=task_id
+        )
+        if orphans:
+            await self._refuse_orphaned_execution(
+                db, owner_id=owner_id, task_id=task_id, claim=claim, orphan=orphans[0]
+            )
 
         stop_heartbeat = asyncio.Event()
         lease_lost = asyncio.Event()
@@ -567,6 +565,47 @@ class DurableAgentTaskService:
             except Exception:
                 await db.rollback()
             raise
+
+    async def _refuse_orphaned_execution(
+        self,
+        db: AsyncSession,
+        *,
+        owner_id: str,
+        task_id: str,
+        claim: AgentTaskExecutionClaim,
+        orphan: AmbiguousOutcome,
+    ) -> None:
+        """Fail the task under the lease this worker holds, release it, refuse.
+
+        The task write is safe because the lease is ours; the run row is
+        closed through the fenced failure path so the same idempotency key
+        replays the refusal instead of re-running.
+        """
+        task = claim.task
+        detail = (
+            f"ambiguous_external_effect: {orphan.detail} "
+            f"(intent_id={orphan.intent.intent_id})"
+        )
+        if task is not None and not task.done:
+            task.state = TaskState.FAILED
+            task.failure_reason = orphan.reason
+            task.touch()
+            await self.tasks.save(
+                db,
+                owner_id=owner_id,
+                task=task,
+                project_id=self._project_id(task),
+            )
+        await self.tasks.fail_execution(
+            db,
+            owner_id=owner_id,
+            task_id=task_id,
+            run_id=claim.run_id,
+            lease_token=claim.lease_token or "",
+            error=detail,
+        )
+        await db.commit()
+        raise AmbiguousEffectRefusal(detail)
 
     async def cancel(
         self,

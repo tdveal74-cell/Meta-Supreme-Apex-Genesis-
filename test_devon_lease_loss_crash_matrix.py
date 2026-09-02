@@ -520,9 +520,12 @@ async def test_orphan_refusal_holds_under_concurrent_run_attempts(
                 return exc
 
     outcomes = await asyncio.gather(*(worker(i) for i in range(WORKERS)))
-    assert all(
-        isinstance(o, AmbiguousEffectRefusal) for o in outcomes
-    ), f"every attempt must refuse; got {[type(o).__name__ for o in outcomes]}"
+    kinds = [type(o).__name__ for o in outcomes]
+    # The lease is taken before the orphan check now (audit H7), so an
+    # attempt that lands while another attempt holds the lease is told
+    # busy, and whoever holds the lease refuses ambiguous. No attempt runs.
+    assert set(kinds) <= {"AmbiguousEffectRefusal", "TaskExecutionBusy"}, kinds
+    assert "AmbiguousEffectRefusal" in kinds, f"the lease holder must refuse; got {kinds}"
 
     row = (
         await db_session.execute(
@@ -532,3 +535,87 @@ async def test_orphan_refusal_holds_under_concurrent_run_attempts(
     assert row.lease_token is None, "no refusal may leave a claimed lease behind"
     assert row.payload["state"] == "failed"
     assert row.payload["failure_reason"] == "ambiguous_external_effect"
+
+
+@pytest.mark.asyncio
+async def test_in_flight_effect_on_another_worker_is_busy_not_ambiguous(
+    client,
+    auth_headers,
+    db_session,
+    configured_operator,
+):
+    """H7 as the audit ran it: worker A holds a live lease and is between an
+    approved write's intent and its receipt. Worker B's run must say busy,
+    touch neither the lease nor the task row, and A must still finish."""
+    from app.db.session import AsyncSessionLocal
+    from app.models.agent_runtime import AgentTaskRecord
+    from app.services.agent_effect_receipts import EffectReceiptRepository
+    from app.services.agent_runtime_persistence import (
+        AgentTaskRepository,
+        TaskExecutionBusy,
+    )
+    from app.services.agent_tasks import DurableAgentTaskService
+    from services.agent_runtime.contracts import EffectStatus
+
+    task_id = await _create_read_task(client, auth_headers, "In flight on worker A")
+    owner_id = await _owner_id(db_session)
+    tasks = AgentTaskRepository()
+    effects = EffectReceiptRepository()
+
+    async with AsyncSessionLocal() as a:
+        claim = await tasks.acquire_execution(
+            a,
+            owner_id=owner_id,
+            task_id=task_id,
+            idempotency_key="worker-a",
+            max_steps=3,
+            lease_owner="worker-a",
+            lease_seconds=60,
+        )
+        await a.commit()
+        intent = await effects.record_intent(
+            a,
+            owner_id=owner_id,
+            task_id=task_id,
+            step_id="STEP-01",
+            tool_name="operator.command",
+            arguments={"command": "pwd"},
+            idempotency_key="worker-a",
+            lease_token=claim.lease_token,
+            execution_generation=claim.execution_generation,
+        )
+        await a.commit()
+
+    async with AsyncSessionLocal() as b:
+        with pytest.raises(TaskExecutionBusy):
+            await DurableAgentTaskService().run_until_blocked(
+                b,
+                owner_id=owner_id,
+                task_id=task_id,
+                max_steps=3,
+                idempotency_key="worker-b",
+            )
+        await b.rollback()
+
+    row = (
+        await db_session.execute(
+            select(AgentTaskRecord).where(AgentTaskRecord.id == task_id)
+        )
+    ).scalar_one()
+    assert row.lease_token == claim.lease_token, "B must not touch A's lease"
+    assert row.execution_generation == claim.execution_generation
+    assert row.payload["state"] != "failed", "B must not clobber A's task row"
+
+    async with AsyncSessionLocal() as a:
+        await effects.record_receipt(
+            a,
+            owner_id=owner_id,
+            task_id=task_id,
+            intent_id=intent.intent_id,
+            status=EffectStatus.SUCCEEDED,
+            provider_receipt_id="op-1",
+            lease_token=claim.lease_token,
+            execution_generation=claim.execution_generation,
+        )
+        await a.commit()
+        assert await effects.find_orphan_intents(a, owner_id=owner_id, task_id=task_id) == []
