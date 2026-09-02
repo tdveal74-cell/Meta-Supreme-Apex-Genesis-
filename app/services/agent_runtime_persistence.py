@@ -385,6 +385,42 @@ class AgentTaskRepository:
         )
         return run_result.rowcount == 1
 
+    async def park_if_leased(
+        self,
+        db: AsyncSession,
+        *,
+        owner_id: str,
+        task: AgentTask,
+        lease_token: str,
+        project_id: Optional[str] = None,
+    ) -> bool:
+        """Write the task's state and payload only while this worker owns the lease.
+
+        The lease itself is left in place; the caller's failure path releases
+        it. Returns False, and writes nothing, when the lease is no longer ours.
+        """
+        result = await db.execute(
+            update(AgentTaskRecord)
+            .where(
+                AgentTaskRecord.id == task.task_id,
+                AgentTaskRecord.owner_id == owner_id,
+                AgentTaskRecord.lease_token == lease_token,
+            )
+            .values(
+                project_id=project_id,
+                goal=task.goal,
+                state=task.state.value,
+                current_step=task.current_step,
+                payload=task.to_dict(),
+                updated_at=task.updated_at,
+            )
+        )
+        if result.rowcount != 1:
+            return False
+        await self._save_checkpoints(db, owner_id=owner_id, task=task)
+        await db.flush()
+        return True
+
     async def complete_execution(
         self,
         db: AsyncSession,
