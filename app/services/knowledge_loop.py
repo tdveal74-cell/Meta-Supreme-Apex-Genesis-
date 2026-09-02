@@ -51,6 +51,9 @@ LEDGER_KINDS = frozenset(
 )
 
 LOOP = "knowledge_loop.v1"
+#: requested_by on every card this loop raises. The shared decide route
+#: refuses cards carrying it: they are ruled through the ruling-key lane.
+REQUESTED_BY = "knowledge-loop"
 DEFAULT_LAYER = 5  # Devon Soul
 SUBCONSCIOUS_LAYER = 4
 
@@ -239,6 +242,23 @@ def _candidate_from_payload(payload: Dict[str, Any]) -> SoulWriteCandidate:
     )
 
 
+def _plan_payload_for(events: list, request_id: str) -> Dict[str, Any]:
+    """The PLAN_CREATED that propose wrote for this request.
+
+    It is the one carrying this approval_request_id. PLAN_CREATED occurs at
+    most once per intent by ledger law, and the generic event route refuses
+    a plan that names a request id, so the plan found here is the proposer's
+    own and the candidate in it is the one the ruling was given to.
+    """
+    for event in events:
+        if event.get("name") != "PLAN_CREATED":
+            continue
+        payload = event.get("payload") or {}
+        if str(payload.get("approval_request_id") or "") == request_id:
+            return payload
+    return {}
+
+
 class KnowledgeLoop:
     """Propose, approve, consume, commit. One approval authority."""
 
@@ -302,7 +322,7 @@ class KnowledgeLoop:
         record, token = _queue().request(
             title=f"Remember: {payload_text[:80]}",
             what_happens=what,
-            requested_by="knowledge-loop",
+            requested_by=REQUESTED_BY,
             area=plan_area,
             reversible=True,
             blast_radius="devon-soul and live-state-ledger, never tee-soul-layer",
@@ -358,6 +378,19 @@ class KnowledgeLoop:
             action_id=action["action_id"],
             payload={"approval_request_id": record.request_id},
         )
+        # Bind the request to this intent on the ledger's own approvals row.
+        # UNIQUE(approval_request_id) makes the binding permanent: approve and
+        # commit resolve the intent from here, never from a PLAN_CREATED
+        # payload that a later writer could imitate.
+        await ledger.record_approval(
+            db,
+            owner_id=owner_id,
+            intent_id=intent_id,
+            approval_request_id=record.request_id,
+            state="pending",
+            what_happens=what,
+            action_id=action["action_id"],
+        )
 
         connectors = _connector_honesty(postgres_proven=True)
         return {
@@ -396,17 +429,26 @@ class KnowledgeLoop:
         typed by the approver, never returned by any endpoint) and then the
         request's single-use token. Everything that can refuse does so BEFORE
         the queue decision is spent, so a refusal for any other reason leaves
-        the approval still spendable. And because a decision can succeed while
-        the ledger write after it fails, an already-APPROVED request with a
-        valid token repairs the missing APPROVAL_GRANTED event instead of
-        wedging on "already approved" forever.
+        the approval still spendable. The ruling is then written onto the
+        ledger's own approvals row, which is what commit verifies. And
+        because a decision can succeed while the ledger write after it fails,
+        an already-APPROVED request with a valid token repairs the missing
+        ruling and APPROVAL_GRANTED event instead of wedging on "already
+        approved" forever.
         """
         _require_ruling_key(ruling_key)
-        # Resolve the intent first: a wrong owner or a broken mapping must
+        # Resolve the binding first: a wrong owner or a missing binding must
         # refuse while the single-use decision is still unspent.
-        intent_id = await ledger.intent_id_for_approval_request(
+        binding = await ledger.approval_binding(
             db, owner_id=owner_id, request_id=request_id
         )
+        intent_id = binding["intent_id"]
+        if binding["state"] not in ("pending", "approved"):
+            raise KnowledgeLoopRefused(
+                f"The ledger records this request as {binding['state']}, so it "
+                "cannot be approved. Propose it again.",
+                status_code=403,
+            )
         result = _queue().decide(request_id, token, "approve", decided_by)
         already_approved = (
             not result.ok and result.state is ApprovalState.APPROVED
@@ -419,6 +461,13 @@ class KnowledgeLoop:
                 status_code=403,
             )
 
+        # The ledger's own word that the ruling-key lane ruled. Commit reads
+        # this row and never an event name, so a queue decision made anywhere
+        # else (the shared decide route, a script holding the token) commits
+        # nothing.
+        ruled = await ledger.rule_approval(
+            db, owner_id=owner_id, request_id=request_id, decided_by=decided_by
+        )
         opened = await ledger.read_intent(db, owner_id=owner_id, intent_id=intent_id)
         names = [event["name"] for event in opened["events"]]
         granted_now = False
@@ -430,23 +479,13 @@ class KnowledgeLoop:
                 name="APPROVAL_GRANTED",
                 payload={"approval_request_id": request_id, "decided_by": decided_by},
             )
-            held = _queue().get(request_id)
-            await ledger.record_approval(
-                db,
-                owner_id=owner_id,
-                intent_id=intent_id,
-                approval_request_id=request_id,
-                state="approved",
-                what_happens=held.what_happens if held else "remember",
-                decided_by=decided_by,
-            )
             granted_now = True
 
         return {
             "ok": True,
             "approved": True,
             "already_approved": already_approved,
-            "repaired": already_approved and granted_now,
+            "repaired": already_approved and (granted_now or ruled["changed"]),
             "request_id": request_id,
             "intent_id": intent_id,
             "state": "approved",
@@ -465,7 +504,20 @@ class KnowledgeLoop:
         owner_id: str,
         request_id: str,
     ) -> Dict[str, Any]:
-        """Consume-before-execute. Ledger always; soul only when the layer is on."""
+        """Consume-before-execute. Ledger always; soul only when the layer is on.
+
+        Three things must agree before the approval is spent: the queue says
+        approved, the ledger's approvals row says approved (only ``approve``
+        above writes that, after the ruling key), and the plan that names
+        this request is on the bound intent. An APPROVAL_GRANTED event alone
+        proves nothing here.
+        """
+        # The owner-scoped binding comes first, so another account's request
+        # id learns nothing from the shared queue's state.
+        binding = await ledger.approval_binding(
+            db, owner_id=owner_id, request_id=request_id
+        )
+        intent_id = binding["intent_id"]
         record = _queue().get(request_id)
         if record is None:
             raise KnowledgeLoopRefused("No approval request with that id.", status_code=403)
@@ -485,9 +537,14 @@ class KnowledgeLoop:
                 status_code=403,
             )
 
-        intent_id = await ledger.intent_id_for_approval_request(
-            db, owner_id=owner_id, request_id=request_id
-        )
+        if binding["state"] != "approved":
+            raise KnowledgeLoopRefused(
+                "The ledger holds no ruling for this request. The queue may say "
+                "approved, but the approval did not come through the ruling-key "
+                "lane. Approve it with POST /api/v1/soul/approve, the single-use "
+                "token and DEVON_RULING_KEY.",
+                status_code=403,
+            )
         if await ledger.emergency_stopped(db, owner_id=owner_id):
             raise KnowledgeLoopRefused(
                 ecosystem.EMERGENCY_STOP_RULE,
@@ -495,10 +552,13 @@ class KnowledgeLoop:
             )
 
         opened = await ledger.read_intent(db, owner_id=owner_id, intent_id=intent_id)
-        plan_payload: Dict[str, Any] = {}
-        for event in opened["events"]:
-            if event["name"] == "PLAN_CREATED":
-                plan_payload = event.get("payload") or {}
+        plan_payload = _plan_payload_for(opened["events"], request_id)
+        if not plan_payload:
+            raise KnowledgeLoopRefused(
+                "No knowledge-loop plan on this intent names this request, so "
+                "there is no candidate the ruling was given to.",
+                status_code=403,
+            )
         layer = int(plan_payload.get("layer") or DEFAULT_LAYER)
         allowed, layer_reason = ecosystem.check_layer_write(layer, approved_by_tee=True)
         if not allowed:

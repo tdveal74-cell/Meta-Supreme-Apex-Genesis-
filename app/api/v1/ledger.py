@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.security.deps import CurrentUser
+from app.services.knowledge_loop import REQUESTED_BY as KNOWLEDGE_LOOP_REQUESTER
 from app.services.live_state_ledger import LedgerConflict, LedgerRefused, ledger
 from services.devon import ecosystem
 
@@ -37,6 +38,29 @@ def _conflict(exc: LedgerConflict) -> HTTPException:
         status_code=status.HTTP_409_CONFLICT,
         detail={"conflict": True, "reason": str(exc)},
     )
+
+
+def _reserved_event(name: str, payload: Dict[str, Any]) -> Optional[str]:
+    """Events this route may not write because a service owns them.
+
+    APPROVAL_GRANTED is the approval authority's word: the knowledge loop
+    appends it after the ruling key and the single-use token both checked
+    out. Accepting it here would let an owner grant their own effect with one
+    JWT. A PLAN_CREATED that names an approval request is written by the loop
+    at propose; accepting one here would let a later plan claim a ruling that
+    was given to a different candidate.
+    """
+    if name == "APPROVAL_GRANTED":
+        return (
+            "APPROVAL_GRANTED is written by the approval authority, never through "
+            "this route. Rule the request through its approval lane."
+        )
+    if name == "PLAN_CREATED" and "approval_request_id" in (payload or {}):
+        return (
+            "A PLAN_CREATED that names an approval_request_id is written by the "
+            "knowledge loop at propose, never through this route."
+        )
+    return None
 
 
 @router.get("/doctrine")
@@ -103,6 +127,9 @@ async def append_event(
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     """Append one universal event, or refuse and name the law it breaks."""
+    reserved = _reserved_event(body.name, body.payload)
+    if reserved:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=reserved)
     try:
         return await ledger.append_event(
             db,
@@ -158,7 +185,24 @@ async def record_approval(
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
-    """Record what the approval authority did. This route never grants."""
+    """Record what the approval authority did. This route never grants.
+
+    A knowledge-loop request is bound to its intent by the loop at propose,
+    and ruled on that row by approve. Accepting a row for one here would let
+    the owner bind the request to an intent of their choosing, or write the
+    ruling themselves, whenever the loop's own row is missing.
+    """
+    from app.api.v1.devon import _queue as approval_queue
+
+    held = approval_queue.get(body.approval_request_id)
+    if held is not None and held.requested_by == KNOWLEDGE_LOOP_REQUESTER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Approval rows for a knowledge-loop request are written by the "
+                "loop at propose and approve, never through this route."
+            ),
+        )
     try:
         return await ledger.record_approval(
             db,
