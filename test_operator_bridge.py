@@ -66,3 +66,73 @@ def test_operator_key_is_checked(bridge: OperatorBridge) -> None:
     bridge.authenticate("test-key")
     with pytest.raises(OperatorError, match="does not match"):
         bridge.authenticate("wrong-key")
+
+
+def test_read_lane_never_reads_the_process_environment(bridge: OperatorBridge) -> None:
+    """H4 as the audit ran it: cat is read-only by name, /proc/self/environ is
+    the host's secrets. It now fails closed to human approval."""
+    plan = bridge.plan("cat /proc/self/environ")
+    assert plan.risk is Risk.WRITE
+    assert plan.approval_required is True
+    assert "/proc/self/environ" in plan.reason
+    with pytest.raises(OperatorError, match="not read-only"):
+        bridge.execute_read(plan)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cat ../outside.txt",
+        "ls /",
+        "cat /etc/passwd",
+        "head -n 2 /sys/kernel/hostname",
+        "git --git-dir=/tmp/elsewhere/.git log",
+        "cat .env",
+        "git show HEAD:.env",
+        "ls .git/config",
+    ],
+)
+def test_read_lane_stays_inside_the_root_and_off_dotfiles(
+    bridge: OperatorBridge, command: str
+) -> None:
+    plan = bridge.plan(command)
+    assert plan.risk is Risk.WRITE, plan.reason
+    assert "read lane" in plan.reason
+
+
+def test_read_lane_still_reads_files_inside_the_root(bridge: OperatorBridge) -> None:
+    (bridge.root / "notes.txt").write_text("inside\n", encoding="utf-8")
+    (bridge.root / "sub").mkdir()
+    (bridge.root / "sub" / "deep.txt").write_text("deeper\n", encoding="utf-8")
+    for command in ("cat notes.txt", "ls -la", "head -n 1 sub/deep.txt", "wc -l ./notes.txt"):
+        plan = bridge.plan(command)
+        assert plan.risk is Risk.READ, plan.reason
+        assert bridge.execute_read(plan).returncode == 0
+
+
+@pytest.mark.parametrize("command", ["ps eww -p 1", "ps auxe", "ps -eo args"])
+def test_ps_left_the_read_lane(bridge: OperatorBridge, command: str) -> None:
+    """The fresh critic's finding on the first cut: ps takes no path argument
+    and reads /proc/<pid>/environ itself, so `ps eww` printed the process
+    environment on the unattended lane. It now waits for the human."""
+    plan = bridge.plan(command)
+    assert plan.risk is Risk.WRITE, plan.reason
+    assert plan.approval_required is True
+
+
+def test_host_paths_are_matched_by_component_not_prefix() -> None:
+    assert OperatorBridge._is_host_path(Path("/proc/self/environ"))
+    assert OperatorBridge._is_host_path(Path("/sys/kernel/hostname"))
+    assert OperatorBridge._is_host_path(Path("/dev"))
+    assert not OperatorBridge._is_host_path(Path("/devon/repo/notes.txt"))
+    assert not OperatorBridge._is_host_path(Path("/system/x"))
+    assert not OperatorBridge._is_host_path(Path("/procurement/y"))
+
+
+def test_read_lane_follows_symlinks_before_judging(bridge: OperatorBridge, tmp_path: Path) -> None:
+    outside = tmp_path.parent / f"{tmp_path.name}-outside.txt"
+    outside.write_text("secret\n", encoding="utf-8")
+    (bridge.root / "innocent.txt").symlink_to(outside)
+    plan = bridge.plan("cat innocent.txt")
+    assert plan.risk is Risk.WRITE
+    assert "operator root" in plan.reason
