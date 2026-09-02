@@ -15,6 +15,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy import select, update
 
+from services.agent_runtime.contracts import TaskState
+
 WORKERS = 6
 
 
@@ -243,7 +245,10 @@ async def test_stale_worker_cannot_write_intent_or_receipt_after_takeover(
         AgentEffectReceiptRecord,
         AgentTaskRecord,
     )
-    from app.services.agent_effect_receipts import EffectReceiptRepository
+    from app.services.agent_effect_receipts import (
+        EffectFenceRefused,
+        EffectReceiptRepository,
+    )
     from app.services.agent_runtime_persistence import AgentTaskRepository
     from services.agent_runtime.contracts import EffectStatus
 
@@ -286,7 +291,7 @@ async def test_stale_worker_cannot_write_intent_or_receipt_after_takeover(
     assert live.execution_generation > stale.execution_generation
 
     async with AsyncSessionLocal() as stale_intent_session:
-        with pytest.raises(RuntimeError, match="effect intent refused"):
+        with pytest.raises(EffectFenceRefused, match="effect intent refused"):
             await effects.record_intent(
                 stale_intent_session,
                 owner_id=owner_id,
@@ -316,7 +321,7 @@ async def test_stale_worker_cannot_write_intent_or_receipt_after_takeover(
         await live_intent_session.commit()
 
     async with AsyncSessionLocal() as stale_receipt_session:
-        with pytest.raises(RuntimeError, match="effect receipt refused"):
+        with pytest.raises(EffectFenceRefused, match="effect receipt refused"):
             await effects.record_receipt(
                 stale_receipt_session,
                 owner_id=owner_id,
@@ -371,7 +376,9 @@ async def test_crashed_write_leaves_durable_intent_and_next_worker_refuses(
     """
     from app.db.session import AsyncSessionLocal
     from app.models.agent_runtime import AgentEffectIntentRecord
-    from app.services.agent_effect_receipts import EffectReceiptRepository
+    from app.services.agent_effect_receipts import (
+        EffectReceiptRepository,
+    )
     from app.services.agent_runtime_persistence import (
         AgentTaskRepository,
         AmbiguousEffectRefusal,
@@ -526,6 +533,23 @@ async def test_orphan_refusal_holds_under_concurrent_run_attempts(
     # busy, and whoever holds the lease refuses ambiguous. No attempt runs.
     assert set(kinds) <= {"AmbiguousEffectRefusal", "TaskExecutionBusy"}, kinds
     assert "AmbiguousEffectRefusal" in kinds, f"the lease holder must refuse; got {kinds}"
+    # Each ambiguous refusal was made with the lease held, so each closed
+    # its run row as failed. Before the fix no refusal held a lease and no
+    # run row existed at all, which is how this assertion tells the two apart.
+    from app.models.agent_runtime import AgentTaskRunRecord
+
+    failed_runs = (
+        await db_session.execute(
+            select(AgentTaskRunRecord).where(
+                AgentTaskRunRecord.task_id == task_id,
+                AgentTaskRunRecord.state == "failed",
+            )
+        )
+    ).scalars().all()
+    assert len(failed_runs) == kinds.count("AmbiguousEffectRefusal"), (
+        len(failed_runs), kinds
+    )
+    assert all("ambiguous_external_effect" in (r.error or "") for r in failed_runs)
 
     row = (
         await db_session.execute(
@@ -549,7 +573,9 @@ async def test_in_flight_effect_on_another_worker_is_busy_not_ambiguous(
     touch neither the lease nor the task row, and A must still finish."""
     from app.db.session import AsyncSessionLocal
     from app.models.agent_runtime import AgentTaskRecord
-    from app.services.agent_effect_receipts import EffectReceiptRepository
+    from app.services.agent_effect_receipts import (
+        EffectReceiptRepository,
+    )
     from app.services.agent_runtime_persistence import (
         AgentTaskRepository,
         TaskExecutionBusy,
@@ -619,3 +645,71 @@ async def test_in_flight_effect_on_another_worker_is_busy_not_ambiguous(
         )
         await a.commit()
         assert await effects.find_orphan_intents(a, owner_id=owner_id, task_id=task_id) == []
+
+
+@pytest.mark.asyncio
+async def test_an_error_in_the_orphan_check_releases_the_lease(
+    client, auth_headers, db_session, configured_operator, monkeypatch
+):
+    """The critic's probe on the first cut: an exception between the
+    committed lease and the refusal left the task busy until the lease
+    expired. The check now runs inside the failure path, which closes the
+    run row and releases the lease."""
+    from app.models.agent_runtime import AgentTaskRecord, AgentTaskRunRecord
+    from app.services.agent_effect_receipts import EffectReceiptRepository
+    from app.services.agent_tasks import DurableAgentTaskService
+
+    task_id = await _create_read_task(client, auth_headers, "Check that blows up")
+    owner_id = await _owner_id(db_session)
+
+    async def broken(self, db, *, owner_id, task_id):
+        raise RuntimeError("orphan query lost its connection")
+
+    monkeypatch.setattr(EffectReceiptRepository, "find_orphan_intents", broken)
+    from app.db.session import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as session:
+        with pytest.raises(RuntimeError, match="lost its connection"):
+            await DurableAgentTaskService().run_until_blocked(
+                session, owner_id=owner_id, task_id=task_id, max_steps=3,
+                idempotency_key="blows-up",
+            )
+        await session.rollback()
+
+    row = (
+        await db_session.execute(select(AgentTaskRecord).where(AgentTaskRecord.id == task_id))
+    ).scalar_one()
+    assert row.lease_token is None, "the error path must release the lease"
+    run = (
+        await db_session.execute(
+            select(AgentTaskRunRecord).where(AgentTaskRunRecord.task_id == task_id)
+        )
+    ).scalar_one()
+    assert run.state == "failed" and "lost its connection" in (run.error or "")
+
+
+@pytest.mark.asyncio
+async def test_the_orphan_refusal_writes_nothing_without_the_lease(
+    client, auth_headers, db_session, configured_operator
+):
+    """The refusal's task write is fenced: with a token that is not the live
+    lease it changes nothing, so an expired lease cannot clobber the row."""
+    from app.models.agent_runtime import AgentTaskRecord
+    from app.services.agent_runtime_persistence import AgentTaskRepository
+
+    task_id = await _create_read_task(client, auth_headers, "Fenced park")
+    owner_id = await _owner_id(db_session)
+    tasks = AgentTaskRepository()
+    task = await tasks.get_owned(db_session, owner_id=owner_id, task_id=task_id)
+    assert task is not None
+    task.state = TaskState.FAILED
+    task.failure_reason = "ambiguous_external_effect"
+    parked = await tasks.park_if_leased(
+        db_session, owner_id=owner_id, task=task, lease_token="not-the-live-lease"
+    )
+    assert parked is False
+    await db_session.rollback()
+    row = (
+        await db_session.execute(select(AgentTaskRecord).where(AgentTaskRecord.id == task_id))
+    ).scalar_one()
+    assert row.payload["state"] != "failed"
