@@ -1,14 +1,14 @@
 {
   "enabledPlugins": {
-    "agentic-guardrails@claude-community": true,
-    "backend-security-skills@claude-community": true,
-    "test-generator@claude-community": true
+    "agentic-guardrails@meta-supreme-pinned": true,
+    "backend-security-skills@meta-supreme-pinned": true,
+    "test-generator@meta-supreme-pinned": true
   },
   "extraKnownMarketplaces": {
-    "claude-community": {
+    "meta-supreme-pinned": {
       "source": {
-        "source": "github",
-        "repo": "anthropics/claude-plugins-community"
+        "source": "directory",
+        "path": "."
       }
     }
   }
