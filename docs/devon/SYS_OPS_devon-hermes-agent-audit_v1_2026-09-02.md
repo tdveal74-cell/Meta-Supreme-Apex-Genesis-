@@ -187,7 +187,7 @@ Owner to fix: write the ledger rows first inside the request transaction and spe
 
 Location: `services/knowledge/retrieval.py:44`. Verified.
 
-Run: `POST /api/v1/knowledge/query` with or without project_id returns 500. asyncpg raises AmbiguousParameterError on the untyped `:project_id` bound three times. No test exercises the route or the SQL. `CAST(:project_id AS uuid)` fixes it.
+Run: `POST /api/v1/knowledge/query` with or without project_id returns 500. asyncpg raises AmbiguousParameterError on the untyped `:project_id` bound three times. No test exercises the route or the SQL. `CAST(:project_id AS uuid)` fixes it. Status 2026-09-02: fix PR 9 casts all three binds to uuid, and the route validates project_id as a uuid so a malformed value is 422 at the request model instead of 500 inside the SQL. Verified by test_devon_fkr_query_route.py (with and without a project filter, and the malformed case); against the old SQL the same tests reproduce AmbiguousParameterError on parameter $4.
 
 ### H10. knowledge_items.content exists only in the SQL twin, so knowledge ingest fails on every Alembic-built database (SCD-02)
 
