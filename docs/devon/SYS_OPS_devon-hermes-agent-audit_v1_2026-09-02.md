@@ -77,7 +77,7 @@ Run (two independent verifiers, fresh databases, DEVON_RULING_KEY both unset and
 
 Consequence: a script holding one platform JWT runs the whole loop with no human. The ledger records the capture as ruled by "Tee" because decided_by is caller text (see H1). A stranger holding only the token can rule the queue entry but cannot forge the ledger event or commit, so the bypass needs the proposer's JWT.
 
-Owner to fix: `app/api/v1/devon.py` (authenticate the decide route and bind it to the request's owner or to the ruling key), `app/services/knowledge_loop.py` (commit must verify the approvals row written by knowledge_loop.approve, never the event name), `app/api/v1/ledger.py` (refuse APPROVAL_GRANTED from the generic route).
+Owner to fix: `app/api/v1/devon.py` (authenticate the decide route and bind it to the request's owner or to the ruling key), `app/services/knowledge_loop.py` (commit must verify the approvals row written by knowledge_loop.approve, never the event name), `app/api/v1/ledger.py` (refuse APPROVAL_GRANTED from the generic route). Status 2026-09-02: the decide route was authenticated and owner-scoped in PR #111 (57fdddb). Fix PR 2 closes the rest: propose binds the request to its intent on the ledger approvals row, approve rules that row after the ruling key, commit verifies the row and refuses when only the queue says approved, the generic event route refuses APPROVAL_GRANTED, and the shared decide route refuses knowledge-loop cards. Verified by test_devon_knowledge_loop_binding.py, three of whose four tests fail on the code before the fix.
 
 ### C2. The approval is not bound to the candidate that commits (KLM-02)
 
@@ -89,7 +89,7 @@ Run (finder plus two verifiers): proposer creates a forged intent with candidate
 
 Consequence: the human ruling is decoupled from what executes. A Tee ruling, which outranks every note on find, can be minted by the proposer. One verifier rated this high rather than critical because it needs the owner's own JWT. It is listed as critical here because it defeats the one property the loop exists to provide.
 
-Owner to fix: bind request_id to intent_id and to a hash of the candidate at propose time in the approvals table, resolve from there at approve and commit, and refuse PLAN_CREATED payloads that name an approval_request_id on the generic route.
+Owner to fix: bind request_id to intent_id and to a hash of the candidate at propose time in the approvals table, resolve from there at approve and commit, and refuse PLAN_CREATED payloads that name an approval_request_id on the generic route. Status 2026-09-02: fix PR 2 binds request_id to intent_id on the ledger approvals row at propose (UNIQUE on approval_request_id, so the binding cannot be redirected), resolves approve and commit from that row, takes the candidate from the one PLAN_CREATED that names the request (single-occurrence by ledger law), and refuses a PLAN_CREATED naming an approval_request_id on the generic route. No candidate hash column was added: the binding row plus the route refusal make the plan the proposer's own. Note on the negative control: the forged-intent test passes on the old code in this environment because the old unordered limit(1) resolver happened to return the legitimate row first; the route-refusal test does fail on the old code.
 
 ### C3. artifacts.body and artifacts.kind have no Alembic migration, so a database already at head 013 never gets them (SCD-01, duplicated by KLM-03 and DVC-01)
 

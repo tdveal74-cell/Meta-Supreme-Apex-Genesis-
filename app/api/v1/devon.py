@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from app.security.deps import CurrentUser
 from app.services.devon_approval_store import build_approval_queue
+from app.services.knowledge_loop import REQUESTED_BY as KNOWLEDGE_LOOP_REQUESTER
 from services.devon import areas as areas_mod
 from services.devon import (
     filing,
@@ -352,7 +353,9 @@ async def decide(body: DecideBody, current_user: CurrentUser) -> Dict[str, Any]:
     belongs to another account gets the queue's own unknown-id refusal, byte
     for byte, so the route confirms nothing about other accounts' queues. A
     card with no owner (raised by the operator bridge, or by a task persisted
-    before owners existed) is rulable by any signed-in account.
+    before owners existed) is rulable by any signed-in account. A knowledge-
+    loop card is refused: that lane needs DEVON_RULING_KEY, which this route
+    never sees.
     """
     record = _queue.get(body.request_id) if body.request_id else None
     if record is not None and not _visible_to(record.owner_id, current_user.id):
@@ -361,6 +364,18 @@ async def decide(body: DecideBody, current_user: CurrentUser) -> Dict[str, Any]:
             NO_MATCH,
             reason=RefusalReason.UNKNOWN_ID,
             message=f"No request {body.request_id}.",
+        )
+    elif record is not None and record.requested_by == KNOWLEDGE_LOOP_REQUESTER:
+        # The proposing login holds this card's token, so a ruling here would
+        # be the one credential approving its own capture. The knowledge loop
+        # rules through a second credential the API never returns.
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "This card is a knowledge-loop capture. It is ruled through "
+                "POST /api/v1/soul/approve with its single-use token and "
+                "DEVON_RULING_KEY, never here."
+            ),
         )
     else:
         result = _queue.decide(

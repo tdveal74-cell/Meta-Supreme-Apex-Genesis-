@@ -53,7 +53,7 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python -m pytest -q \
   test_billing.py test_definition.py test_providers.py test_schedule.py \
   test_workflow_engine.py test_devon_hermes_expansion.py \
   test_devon_hermes_durable_followon.py test_devon_learning_loop.py \
-  test_devon_operating_layer.py
+  test_devon_operating_layer.py test_devon_editforge_execution.py
 
 # 2. container contract (the import check, without building the image)
 env -u PYTHONPATH DEFAULT_AI_PROVIDER=mock python -c "from app.main import app; \

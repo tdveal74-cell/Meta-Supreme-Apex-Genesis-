@@ -628,31 +628,92 @@ class LiveStateLedger:
             "receiptable_reason": receipt_reason,
         }
 
+    async def approval_binding(
+        self, db: AsyncSession, *, owner_id: str, request_id: str
+    ) -> Dict[str, Any]:
+        """The ledger's own record of which intent raised this approval and how
+        it was ruled.
+
+        Written at propose by the knowledge loop and changed only by
+        ``rule_approval``. UNIQUE(approval_request_id) makes the binding
+        permanent: a later PLAN_CREATED that names the same request id, on
+        this intent or any other, cannot redirect approve or commit. The
+        generic ``/approvals`` route can insert an observation for a request
+        id the ledger has never seen, but never a second row for one it has,
+        and it changes nothing.
+        """
+        result = await db.execute(
+            select(LedgerApprovalRecord).where(
+                LedgerApprovalRecord.owner_id == owner_id,
+                LedgerApprovalRecord.approval_request_id == request_id,
+            )
+        )
+        row = result.scalars().first()
+        if row is None:
+            raise LedgerRefused(
+                [
+                    f"No approval binding on this owner's record for {request_id}. "
+                    "The knowledge loop binds a request to its intent at propose; "
+                    "a request proposed before that binding existed cannot be "
+                    "ruled or committed. Propose it again."
+                ]
+            )
+        return {
+            "intent_id": str(row.intent_id),
+            "state": row.state,
+            "decided_by": row.decided_by,
+            "decided_at": row.decided_at,
+        }
+
     async def intent_id_for_approval_request(
         self, db: AsyncSession, *, owner_id: str, request_id: str
     ) -> str:
-        """Find the intent that raised this approval. One request, one intent.
+        """Find the intent that raised this approval. One request, one intent."""
+        binding = await self.approval_binding(
+            db, owner_id=owner_id, request_id=request_id
+        )
+        return binding["intent_id"]
 
-        Filtered in SQL on the JSONB payload rather than scanning every
-        PLAN_CREATED event the owner has ever written into Python: this runs
-        on every approve and every commit, and the old scan grew without
-        bound as captures accumulated.
+    async def rule_approval(
+        self,
+        db: AsyncSession,
+        *,
+        owner_id: str,
+        request_id: str,
+        decided_by: str,
+    ) -> Dict[str, Any]:
+        """Move the ledger's approval row from pending to approved.
+
+        Service-only: no route reaches this, so the row's state is the
+        knowledge loop's own word that the ruling-key lane ruled. Commit
+        reads this state, never an event name. Idempotent on a row that is
+        already approved, which is the repair path after a commit that died.
         """
         result = await db.execute(
-            select(EventRecord)
-            .where(
-                EventRecord.owner_id == owner_id,
-                EventRecord.name == "PLAN_CREATED",
-                EventRecord.payload["approval_request_id"].astext == request_id,
+            select(LedgerApprovalRecord).where(
+                LedgerApprovalRecord.owner_id == owner_id,
+                LedgerApprovalRecord.approval_request_id == request_id,
             )
-            .limit(1)
         )
         row = result.scalars().first()
-        if row is not None:
-            return row.intent_id
-        raise LedgerRefused(
-            [f"No knowledge-loop plan on this owner's record for {request_id}."]
-        )
+        if row is None:
+            raise LedgerRefused(
+                [f"No approval binding on this owner's record for {request_id}."]
+            )
+        if row.state == "approved":
+            return {"approval_id": row.id, "state": row.state, "changed": False}
+        if row.state != "pending":
+            raise LedgerRefused(
+                [
+                    f"Approval {request_id} is {row.state} on the ledger and "
+                    "cannot be approved now."
+                ]
+            )
+        row.state = "approved"
+        row.decided_at = _now()
+        row.decided_by = (decided_by or "").strip()[:120]
+        await db.flush()
+        return {"approval_id": row.id, "state": row.state, "changed": True}
 
     async def search_receipted_captures(
         self,

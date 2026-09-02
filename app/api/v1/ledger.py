@@ -39,6 +39,29 @@ def _conflict(exc: LedgerConflict) -> HTTPException:
     )
 
 
+def _reserved_event(name: str, payload: Dict[str, Any]) -> Optional[str]:
+    """Events this route may not write because a service owns them.
+
+    APPROVAL_GRANTED is the approval authority's word: the knowledge loop
+    appends it after the ruling key and the single-use token both checked
+    out. Accepting it here would let an owner grant their own effect with one
+    JWT. A PLAN_CREATED that names an approval request is written by the loop
+    at propose; accepting one here would let a later plan claim a ruling that
+    was given to a different candidate.
+    """
+    if name == "APPROVAL_GRANTED":
+        return (
+            "APPROVAL_GRANTED is written by the approval authority, never through "
+            "this route. Rule the request through its approval lane."
+        )
+    if name == "PLAN_CREATED" and "approval_request_id" in (payload or {}):
+        return (
+            "A PLAN_CREATED that names an approval_request_id is written by the "
+            "knowledge loop at propose, never through this route."
+        )
+    return None
+
+
 @router.get("/doctrine")
 async def ledger_doctrine() -> Dict[str, Any]:
     """The whole organism as inert structure: hierarchy, layers, events, rules."""
@@ -103,6 +126,9 @@ async def append_event(
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     """Append one universal event, or refuse and name the law it breaks."""
+    reserved = _reserved_event(body.name, body.payload)
+    if reserved:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=reserved)
     try:
         return await ledger.append_event(
             db,
