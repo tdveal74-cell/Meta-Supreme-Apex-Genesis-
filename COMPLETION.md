@@ -32,7 +32,7 @@
 - Filing: `executed: false`. Plans only; humans decide.
 - Soul recall: off by default until `SOUL_RECALL_ENABLED` and `PINECONE_API_KEY` are set.
 - Hermes: CI-proven / not operator-live. No Live badge for schema-only verification.
-- I serve the wired Loop HUD from app.main GET /console, same origin, CurrentUser JWT. CONSOLE_TOKEN stays on the Vercel soul host only. Public gate still production SHA d2aff6d (no Postgres on that host). Remember fail-closes there rather than storing localStorage as memory.
+- I serve the wired Loop HUD from app.main GET /console, same origin, CurrentUser JWT. CONSOLE_TOKEN stays on the Vercel soul host only. Public gate is production SHA 57fdddb as of 2026-09-02, the PR #111 merge (no Postgres on that host). Remember fail-closes there rather than storing localStorage as memory.
 - Tasks, projects, thread log, plate, and brief file the receipted Postgres ledger after consume-once. Notion/Drive/n8n are still missing. Find is ILIKE, Tee rulings first, not recall-at-plan-time. Layer 1 Tee Soul stays 403.
 - Ledger find ranks Tee rulings above operator files and notes. Artifact body lives on PostgreSQL artifacts.body.
 - `services/memory` points at those receipted artifacts. Not localStorage. No Live badge.

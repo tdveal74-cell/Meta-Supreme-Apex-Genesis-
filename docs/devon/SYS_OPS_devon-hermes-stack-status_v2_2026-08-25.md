@@ -56,6 +56,6 @@ Update 2026-09-02 (fix PR 3 of the DEVON and Hermes audit): the three runtime to
 ## Remaining manual item
 
 - Operator-live verification in Tee's deployed environment (deployed DB at
-  Alembic head 010, one Cerebras voice turn, one materialize-run-complete
+  Alembic head 015 as of 2026-09-02, amended from 010 on that date, one Cerebras voice turn, one materialize-run-complete
   path, one propose-approve-promote path). Not reachable from CI or agent
   containers. Until that lands, do not call this stack Live.

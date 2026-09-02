@@ -129,7 +129,7 @@ pnpm dev:web
 ## Vercel builds only when the project actually changed
 
 Two Vercel projects deploy from this repository, each with its own root
-directory: `meta-supreme-web` from `apps/web`, and `devon-soul` from
+directory: `meta-supreme-apex-genesis-web` from `apps/web` (amended 2026-09-02; the project was recorded here as `meta-supreme-web`, which no longer exists in the Vercel project list), and `devon-soul` from
 `deploy/soul`. Both used to rebuild on every commit to every branch, whether or
 not the change could possibly affect them. On 2026-08-26 a one file docs change
 triggered four builds across the two projects and none of them could have
@@ -159,7 +159,7 @@ that makes it expensive.
 
 | Project | Root | Builds when these change |
 |---|---|---|
-| meta-supreme-web | `apps/web` | `apps/web`, `packages/ui`, `pnpm-lock.yaml`, `pnpm-workspace.yaml` |
+| meta-supreme-apex-genesis-web | `apps/web` | `apps/web`, `packages/ui`, `pnpm-lock.yaml`, `pnpm-workspace.yaml` |
 | devon-soul | `deploy/soul` | `deploy/soul` |
 
 The web app's list is wider than its own root on purpose. It imports

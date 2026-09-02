@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **DEVON and Hermes audit of 2026-09-02** (`docs/devon/SYS_OPS_devon-hermes-agent-audit_v1_2026-09-02.md`, PR #110) and the fix PRs that followed it, each merged after a fresh critic pass and green CI:
+  - #111: the three `/devon` approval routes are authenticated and owner-scoped, `devon_approvals` carries an owner (migration 015), registration is closed behind `DEVON_REGISTRATION_KEY`, and migration 014 ships the artifact body column
+  - #113: the knowledge-loop ruling is bound to its intent and a candidate hash at propose, commit verifies the approvals row, and the generic ledger route refuses forged approval events
+  - #114: the three runtime expansion tools spend their approval and write the durable schedule, proposal and subagent tables
+  - #115: the EditForge HTTP lane spends its approval once, mints command ids and gates retry and cancel on the spent approval; a deployed process refuses to boot on the public default `SECRET_KEY`
+  - #116: the operator read lane judges every path argument after symlink resolution and `ps` left it; the browser fetcher refuses redirects and URL credentials
+  - #117: the vendored unlazy skill is gone and the three community plugins are pinned by commit through a repository-local marketplace
+  - #118: the agent task runtime takes its execution lease before the orphan check; effect fence refusals answer 409
+  - #119: the FKR query route casts `project_id` at the bind and validates it as a uuid, 422 where it was 500 on every request
+  - #120: the knowledge-loop ledger rows are durable before the approval is spent, everything after the spend runs inside a failure recorder that leaves ACTION_FAILED on the intent, and the refusal of a spent approval names the intent and its terminal event
+  - #121: a paused workflow run seals a sha256 of its rendered pending payload; approval refuses when the live rendering no longer matches it, decisions are accepted only for the pending step, PATCH refuses a definition change at the gate, and a rejection always closes the run
+  - #122: the 21 direct Python dependencies are pinned, a dependency-audit CI job runs pip-audit (root and soul-host requirements, Python 3.12) and pnpm audit on every push, and pnpm overrides move postcss, nanoid and sharp past their advisories
+
+### Changed
+- **Records written back** (audit item 14): production SHA 57fdddb in FLAGSHIP, COMPLETION and GAUNTLET, dated; `meta-supreme-apex-genesis-web` replaces the retired `meta-supreme-web` in DEPLOY.md, the deploy-readback skill and the ecosystem spec; Alembic head 015 in the Hermes v2 status; the cron entrypoint reads `python dispatch.py`; RUNBOOK paths follow the modules. `scripts/estate_reconcile.py` pins each retired sentence as a tripwire (DRIFT if it comes back) and checks the standing Alembic head and cron entrypoint against the repository on every run
+
 ## [0.5.1] — 2026-08-09 — Schedule dispatch and orphan recovery
 
 Closes the two gaps 0.5.0 shipped documented rather than fixed: scheduled
@@ -15,7 +32,7 @@ at `running` forever.
 
 ### Added
 - **Cadence parsing** (`services/workflows/schedule.py`): `hourly:MM`, `daily:HH:MM`, `weekly:DOW:HH:MM`, all UTC. Pure and clock-free — every function takes `now` explicitly, so slot arithmetic is testable without freezing time. Deliberately not cron: the expressiveness is a large surface to get right and nothing has asked for it
-- **Schedule dispatcher** (`app/services/dispatcher.py`, invoked by cron via `python -m app.cli.dispatch`) — never a thread inside the API, which would fire N times on N replicas and tie dispatch to API uptime. Safe to run concurrently: a Postgres advisory lock prevents overlap, and every run carries an idempotency key of `schedule:{slot}` against the UNIQUE index from 002, so a race is refused by the database rather than double-firing
+- **Schedule dispatcher** (`app/services/dispatcher.py`, invoked by cron via `python dispatch.py` at the repository root; amended 2026-09-02, the module path first written here never existed in the root package). Never a thread inside the API, which would fire N times on N replicas and tie dispatch to API uptime. Safe to run concurrently: a Postgres advisory lock prevents overlap, and every run carries an idempotency key of `schedule:{slot}` against the UNIQUE index from 002, so a race is refused by the database rather than double-firing
 - **Catch-up policy — fire once, then move on.** An hourly workflow whose dispatcher was down six hours fires once, not six times; `next_run_at` is recomputed from now. Firing the backlog would mean a burst of provider calls for stale slots and, with effect steps, six approval gates queued behind one another
 - **Orphan sweep** (`app/services/maintenance.py`) on API startup — a restart is both the likeliest cause of a stranded run and the moment it becomes visible. Threshold `WORKFLOW_ORPHAN_TIMEOUT_MINUTES` (default 30) must exceed the longest plausible run, or healthy in-flight runs get marked failed while they continue to execute
 - **Migration 003**: `workflows.next_run_at` / `last_fired_at` plus a partial index covering only active scheduled workflows, so the dispatcher's query stays an indexed range scan

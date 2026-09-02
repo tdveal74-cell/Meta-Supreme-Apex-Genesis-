@@ -174,7 +174,7 @@ merge. All three surfaces were verified current on 2026-08-26.
 | Surface | Deployment | Commit |
 |---|---|---|
 | Railway `api` | `a6c1908c` SUCCESS at 13:01:58 UTC, healthcheck passed, `alembic upgrade head` ran with nothing pending | `c0fa80c` |
-| Vercel `meta-supreme-web` | `dpl_Bf5QS6rzDyJoWBqf5msoX2vUitep`, READY, `target: "production"` | `5f409cf` |
+| Vercel `meta-supreme-apex-genesis-web` (recorded as `meta-supreme-web` until 2026-09-02; that project no longer exists) | `dpl_Bf5QS6rzDyJoWBqf5msoX2vUitep`, READY, `target: "production"` | `5f409cf` |
 | Vercel `devon-soul` | `dpl_6e6XWExoD7xSYb5uDKjT1t6C4mp1`, READY, `target: "production"` | `5f409cf` |
 
 The two Vercel surfaces reached production by promotion at 11:10 UTC after the

@@ -164,7 +164,7 @@ it worse.
 They only fire if cron is running the dispatcher. Install this once:
 
 ```cron
-* * * * * cd /srv/app && python -m app.cli.dispatch >> /var/log/dispatch.log 2>&1
+* * * * * cd /srv/app && python dispatch.py >> /var/log/dispatch.log 2>&1
 ```
 
 Without it, `schedule` triggers are stored, valid, and inert. The workflow will

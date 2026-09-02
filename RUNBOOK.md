@@ -271,7 +271,7 @@ Say these plainly when asked; each is deliberate and documented.
 Scheduled workflows fire from cron, not from inside the API:
 
 ```cron
-* * * * * cd /srv/app && python -m app.cli.dispatch >> /var/log/dispatch.log 2>&1
+* * * * * cd /srv/app && python dispatch.py >> /var/log/dispatch.log 2>&1
 ```
 
 Exit `0` means the batch ran (including "nothing due" and "another dispatcher
@@ -338,9 +338,9 @@ behaviour, not a bug, but it is worth telling the owner.
 |---|---|
 | What may a workflow contain, and why was this one rejected? | `services/workflows/definition.py` |
 | When exactly does a run stop? | `services/workflows/engine.py` |
-| What does a step actually do? | `apps/api/app/services/workflows.py` |
-| Why did the API return this status code? | `apps/api/app/api/v1/workflows.py` |
-| What is the intended behaviour? | `apps/api/tests/test_workflows_api.py` |
+| What does a step actually do? | `app/services/workflows.py` |
+| Why did the API return this status code? | `app/api/v1/workflows.py` |
+| What is the intended behaviour? | `test_workflows_api.py` |
 
 The tests are the specification. If an incident and a test disagree, the test is
 the intended behaviour and the incident is a bug — not the other way round.

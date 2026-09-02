@@ -228,6 +228,80 @@ DOC_CLAIMS: Tuple[Dict[str, Any], ...] = (
         "verifier": "n8n_total",
         "expected": {"total": 58},
     },
+    # Records the DEVON and Hermes audit of 2026-09-02 (item 14) found stale
+    # and corrected, dated. Each retired sentence stays pinned as a tripwire:
+    # a later edit that brings it back reports DRIFT, and the standing
+    # sentence that replaced it is checked against the repository.
+    {
+        "doc": "FLAGSHIP.md",
+        "quote": "production SHA is still d2aff6d",
+        "verifier": "superseded",
+        "expected": {"by": "57fdddb, the PR #111 merge", "dated": "2026-09-02"},
+    },
+    {
+        "doc": "COMPLETION.md",
+        "quote": "still production SHA d2aff6d",
+        "verifier": "superseded",
+        "expected": {"by": "57fdddb, the PR #111 merge", "dated": "2026-09-02"},
+    },
+    {
+        "doc": "docs/GAUNTLET.md",
+        "quote": "still d2aff6d",
+        "verifier": "superseded",
+        "expected": {"by": "57fdddb, the PR #111 merge", "dated": "2026-09-02"},
+    },
+    {
+        "doc": "docs/GAUNTLET.md",
+        "quote": "still SHA d2aff6d",
+        "verifier": "superseded",
+        "expected": {"by": "57fdddb, the PR #111 merge", "dated": "2026-09-02"},
+    },
+    {
+        "doc": "DEPLOY.md",
+        "quote": "| meta-supreme-web |",
+        "verifier": "superseded",
+        "expected": {"by": "meta-supreme-apex-genesis-web", "dated": "2026-09-02"},
+    },
+    {
+        # The Hermes v2 status said head 010 while production ran 013, then 015.
+        "doc": "docs/devon/SYS_OPS_devon-hermes-stack-status_v2_2026-08-25.md",
+        "quote": "Alembic head 010",
+        "verifier": "alembic_head",
+        "expected": {"head": "010"},
+    },
+    {
+        # The standing head. A new migration lands, this reports DRIFT until
+        # the doc is amended, dated.
+        "doc": "docs/devon/SYS_OPS_devon-hermes-stack-status_v2_2026-08-25.md",
+        "quote": "Alembic head 015",
+        "verifier": "alembic_head",
+        "expected": {"head": "015"},
+    },
+    {
+        # The cron line named a module that never existed in the root package.
+        "doc": "OPERATING.md",
+        "quote": "python -m app.cli.dispatch",
+        "verifier": "repo_file",
+        "expected": {"path": "app/cli/dispatch.py", "present": True},
+    },
+    {
+        "doc": "RUNBOOK.md",
+        "quote": "python -m app.cli.dispatch",
+        "verifier": "repo_file",
+        "expected": {"path": "app/cli/dispatch.py", "present": True},
+    },
+    {
+        "doc": "OPERATING.md",
+        "quote": "python dispatch.py",
+        "verifier": "repo_file",
+        "expected": {"path": "dispatch.py", "present": True},
+    },
+    {
+        "doc": "RUNBOOK.md",
+        "quote": "python dispatch.py",
+        "verifier": "repo_file",
+        "expected": {"path": "dispatch.py", "present": True},
+    },
 )
 
 
@@ -438,6 +512,42 @@ def _check_doc_missing(claim: Claim, observations: Dict[str, Any]) -> Tuple[str,
     )
 
 
+def _check_superseded(claim: Claim, observations: Dict[str, Any]) -> Tuple[str, str]:
+    """A sentence retired by a dated correction is back in its doc."""
+    expected = claim.expected or {}
+    return DRIFT, (
+        f"this sentence was retired on {expected.get('dated', 'an earlier date')}, "
+        f"superseded by {expected.get('by', 'a dated correction')}, and it came "
+        "back. Amend it, dated, or record there why the old fact returned."
+    )
+
+
+def _check_alembic_head(claim: Claim, observations: Dict[str, Any]) -> Tuple[str, str]:
+    head = (observations.get("repo") or {}).get("alembic_head")
+    if not head:
+        return UNVERIFIED, "the migrations directory was not read"
+    if head == claim.expected["head"]:
+        return OK, f"the migrations directory heads at {head}, as the doc records"
+    return DRIFT, (
+        f"the doc records Alembic head {claim.expected['head']}, the migrations "
+        f"directory heads at {head}. Amend the doc, dated."
+    )
+
+
+def _check_repo_file(claim: Claim, observations: Dict[str, Any]) -> Tuple[str, str]:
+    files = (observations.get("repo") or {}).get("files") or {}
+    path = claim.expected["path"]
+    if path not in files:
+        return UNVERIFIED, f"the repository was not read for {path}"
+    if files[path] == claim.expected["present"]:
+        state = "exists" if files[path] else "is absent"
+        return OK, f"{path} {state}, as the doc records"
+    state = "does not exist" if claim.expected["present"] else "exists"
+    return DRIFT, (
+        f"the doc names {path}, which {state} in the repository. Amend the doc, dated."
+    )
+
+
 CHECKERS = {
     "n8n_host": _check_n8n_host,
     "webhook_auth": _check_webhook_auth,
@@ -447,6 +557,9 @@ CHECKERS = {
     "n8n_total": _check_n8n_total,
     "quote_retired": _check_quote_retired,
     "doc_missing": _check_doc_missing,
+    "superseded": _check_superseded,
+    "alembic_head": _check_alembic_head,
+    "repo_file": _check_repo_file,
 }
 
 
@@ -666,6 +779,26 @@ def _main_head() -> Optional[str]:
     return None
 
 
+def _alembic_head(root: pathlib.Path = REPO_ROOT) -> Optional[str]:
+    """The highest numbered revision file under database/migrations/versions,
+    the head CI asserts and the docs quote."""
+    versions = pathlib.Path(root) / "database" / "migrations" / "versions"
+    if not versions.is_dir():
+        return None
+    numbers = sorted(path.name[:3] for path in versions.glob("[0-9][0-9][0-9]_*.py"))
+    return numbers[-1] if numbers else None
+
+
+def _pinned_files_present(root: pathlib.Path = REPO_ROOT) -> Dict[str, bool]:
+    """Presence of every repository path a doc claim names."""
+    paths = {
+        pinned["expected"]["path"]
+        for pinned in DOC_CLAIMS
+        if pinned["verifier"] == "repo_file"
+    }
+    return {path: (pathlib.Path(root) / path).exists() for path in sorted(paths)}
+
+
 def _now_iso() -> str:
     from datetime import datetime, timezone
 
@@ -701,6 +834,8 @@ def gather_observations() -> Dict[str, Any]:
 
     head = _main_head()
     observations["repo"] = {"main_head": head} if head else {}
+    observations["repo"]["alembic_head"] = _alembic_head()
+    observations["repo"]["files"] = _pinned_files_present()
     return observations
 
 
