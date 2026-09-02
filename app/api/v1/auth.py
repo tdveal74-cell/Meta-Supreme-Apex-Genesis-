@@ -196,7 +196,11 @@ def _require_registration_key(supplied: str | None) -> None:
                 f"secret of at least {MIN_REGISTRATION_KEY_LENGTH} characters to open it."
             ),
         )
-    if not hmac.compare_digest(configured, (supplied or "").strip()):
+    # Bytes, not str: compare_digest on str raises on non-ASCII input, which
+    # would turn a stray character into a 500 on an unauthenticated route.
+    if not hmac.compare_digest(
+        configured.encode("utf-8"), (supplied or "").strip().encode("utf-8")
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Registration key is not valid.",
@@ -301,7 +305,9 @@ async def reset_password(
             ),
         )
 
-    if not hmac.compare_digest(configured, payload.recovery_key):
+    if not hmac.compare_digest(
+        configured.encode("utf-8"), payload.recovery_key.encode("utf-8")
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Recovery key is not valid.",

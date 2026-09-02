@@ -259,8 +259,16 @@ export function DevonChat() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
+      if (response.status === 401 && !inviteKey) {
+        // A refused password on an existing account, or no account and no
+        // invite. Either way, registering would only answer with the
+        // deployment's registration policy, which is not what was asked.
+        throw new Error(
+          `${await readApiError(response)} New on this deployment? Enter the invite key to create the account.`,
+        );
+      }
       if (response.status === 401) {
-        // No account yet — create one, then sign in with the same credentials.
+        // No account yet and an invite in hand: create one, then sign in.
         const registered = await fetch(`${API_BASE}/auth/register`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },

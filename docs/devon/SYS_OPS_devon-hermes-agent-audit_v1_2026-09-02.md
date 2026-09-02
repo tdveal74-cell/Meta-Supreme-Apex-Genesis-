@@ -445,7 +445,7 @@ Asked on an inline card and answered the same day.
 | The three runtime expansion tools | Make them durable now, through the same repositories the HTTP routes use | Section 9 item 8 becomes a real change, roughly a day |
 | .agents/skills/unlazy and the unpinned community plugins | Remove unlazy, pin the three plugins by version | Small separate PR, no runtime effect |
 | dcp_ receipt tokens | Identifiers, not credentials. The n8n capture webhook authenticates with x-devon-key | No rotation. One sentence added to the receipt convention |
-| The C3 production query | Run it now, read-only, before the 014 migration ships | Result recorded here when it comes back |
+| The C3 production query | Run it now, read-only, before the 014 migration ships | PR #111 carries the 014 revision, so the query has to run before that PR merges. Result recorded here when it comes back |
 
 ## 11. Gauntlet score block for the DEVON and Hermes stack
 

@@ -29,5 +29,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP INDEX IF EXISTS ix_devon_approvals_owner_state")
     op.execute("ALTER TABLE devon_approvals DROP COLUMN IF EXISTS owner_id")

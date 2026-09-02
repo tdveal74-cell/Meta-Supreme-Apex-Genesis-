@@ -83,30 +83,85 @@ async def test_approval_cards_are_scoped_to_the_account_that_raised_them(client,
 async def test_ruling_is_signed_by_the_login_not_the_body(client, auth_headers):
     from app.api.v1.devon import _queue
 
-    raised = await client.post(
-        "/api/v1/devon/command",
-        json={"text": "Devon, restart the computer"},
-        headers=auth_headers,
+    me = await client.get("/api/v1/auth/me", headers=auth_headers)
+    assert me.status_code == 200, me.text
+    # /command never returns the plaintext token by design, so raise the
+    # card the way an adapter does and rule with the real token.
+    record, token = _queue.request(
+        title="Signed-by-login probe",
+        what_happens="Nothing runs. This card exists to see who signs it.",
+        requested_by="test",
+        owner_id=me.json()["id"],
     )
-    request_id = raised.json()["approval"]["request_id"]
-    # The plaintext token is not returned by /command by design, so refuse
-    # with a wrong token and check the recorded actor on the refusal path.
     ruling = await client.post(
         "/api/v1/devon/approvals/decide",
         json={
-            "request_id": request_id,
-            "token": "not-the-token",
+            "request_id": record.request_id,
+            "token": token,
             "decision": "refuse",
             "decided_by": "Someone Else",
         },
         headers=auth_headers,
     )
-    assert ruling.status_code == 200
-    assert ruling.json()["ok"] is False
-    record = _queue.get(request_id)
-    assert record is not None
-    assert record.owner_id
-    assert record.decided_by is None  # a wrong token rules nothing
+    assert ruling.status_code == 200, ruling.text
+    assert ruling.json()["ok"] is True
+    stored = _queue.get(record.request_id)
+    assert stored is not None
+    assert stored.decided_by == "Council Tester <council-tester@example.com>"
+
+
+@pytest.mark.asyncio
+async def test_other_account_gets_the_unknown_id_refusal_byte_for_byte(client, auth_headers):
+    from app.api.v1.devon import _queue
+
+    me = await client.get("/api/v1/auth/me", headers=auth_headers)
+    record, token = _queue.request(
+        title="Ownership probe",
+        what_happens="Nothing runs.",
+        requested_by="test",
+        owner_id=me.json()["id"],
+    )
+    bob = await _account(client, "bob-probe@example.com", "Bob")
+    theirs = await client.post(
+        "/api/v1/devon/approvals/decide",
+        json={"request_id": record.request_id, "token": token, "decision": "approve"},
+        headers=bob,
+    )
+    missing = await client.post(
+        "/api/v1/devon/approvals/decide",
+        json={"request_id": "REQ-DOESNOTEXIST", "token": token, "decision": "approve"},
+        headers=bob,
+    )
+    assert theirs.status_code == 200 and missing.status_code == 200
+    a, b = theirs.json(), missing.json()
+    assert a["ok"] is False and a["request_id"] == "NO_MATCH"
+    assert {k: a[k] for k in ("ok", "approved", "request_id", "state", "reason")} == {
+        k: b[k] for k in ("ok", "approved", "request_id", "state", "reason")
+    }
+    assert a["message"] == f"No request {record.request_id}."
+    assert _queue.get(record.request_id).state.value == "pending"
+
+
+@pytest.mark.asyncio
+async def test_soul_ruling_is_signed_by_the_login(client, auth_headers, monkeypatch):
+    monkeypatch.setenv("DEVON_RULING_KEY", "ruling-key-for-this-test-only-0123")
+    from app.api.v1.devon import _queue
+
+    proposed = await client.post(
+        "/api/v1/soul/propose",
+        json={"text": "remember the signed soul ruling probe"},
+        headers=auth_headers,
+    )
+    assert proposed.status_code == 201, proposed.text
+    request_id = proposed.json()["approval"]["request_id"]
+    token = proposed.json()["approval"]["token"]
+    approved = await client.post(
+        "/api/v1/soul/approve",
+        json={"request_id": request_id, "token": token, "decided_by": "Forged Signer"},
+        headers={**auth_headers, "X-Devon-Ruling-Key": "ruling-key-for-this-test-only-0123"},
+    )
+    assert approved.status_code == 200, approved.text
+    assert _queue.get(request_id).decided_by == "Council Tester <council-tester@example.com>"
 
 
 @pytest.mark.asyncio

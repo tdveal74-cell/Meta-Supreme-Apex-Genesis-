@@ -309,6 +309,9 @@ HEALTH="http://localhost:$API_PORT/api/v1/health"
 if curl -sf "$HEALTH" >/dev/null 2>&1; then
   ok "Already running on port $API_PORT, reusing it"
 else
+  # The API reads DEVON_REGISTRATION_KEY and DEVON_RECOVERY_KEY from the
+  # process environment, not from .env, so export the file before starting.
+  set -a; . ./.env; set +a
   "$VENV_PY" -m uvicorn app.main:app --port "$API_PORT" > /tmp/devon-api.log 2>&1 &
   API_PID=$!
   printf "      waiting for it to answer"
@@ -339,6 +342,7 @@ if curl -sf -X POST "http://localhost:$API_PORT/api/v1/auth/register" \
 else
   ok "Console account already exists"
 fi
+ok "Invite key for a new device or account: DEVON_REGISTRATION_KEY in .env"
 
 TOKEN=$(curl -sf -X POST "http://localhost:$API_PORT/api/v1/auth/login" \
   -H 'Content-Type: application/json' \

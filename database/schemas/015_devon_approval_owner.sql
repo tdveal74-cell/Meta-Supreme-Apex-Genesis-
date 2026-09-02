@@ -10,6 +10,3 @@
 
 ALTER TABLE devon_approvals
     ADD COLUMN IF NOT EXISTS owner_id VARCHAR(64) NOT NULL DEFAULT '';
-
-CREATE INDEX IF NOT EXISTS ix_devon_approvals_owner_state
-    ON devon_approvals(owner_id, state);

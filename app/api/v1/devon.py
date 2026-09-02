@@ -32,6 +32,7 @@ from services.devon import (
     receipts,
     vault,
 )
+from services.devon.approval import NO_MATCH, DecisionResult, RefusalReason
 from services.devon.assistant import Devon
 from services.devon.commands import ALL_INTENTS, approval_gated_intents
 from services.devon.precedence import Candidate, resolve
@@ -348,22 +349,23 @@ async def decide(body: DecideBody, current_user: CurrentUser) -> Dict[str, Any]:
     """Rule on a pending request. Single use, expiring, fails closed.
 
     The ruling is signed by the login, never by text in the body. A card that
-    belongs to another account answers exactly as a card that does not exist,
-    so the route confirms nothing about other accounts' queues.
+    belongs to another account gets the queue's own unknown-id refusal, byte
+    for byte, so the route confirms nothing about other accounts' queues. A
+    card with no owner (raised by the operator bridge, or by a task persisted
+    before owners existed) is rulable by any signed-in account.
     """
     record = _queue.get(body.request_id) if body.request_id else None
     if record is not None and not _visible_to(record.owner_id, current_user.id):
-        return {
-            "ok": False,
-            "approved": False,
-            "request_id": "NO_MATCH",
-            "state": None,
-            "reason": "no_match",
-            "message": "No request with that id for this account.",
-        }
-    result = _queue.decide(
-        body.request_id, body.token, body.decision, _principal_label(current_user)
-    )
+        result = DecisionResult(
+            False,
+            NO_MATCH,
+            reason=RefusalReason.UNKNOWN_ID,
+            message=f"No request {body.request_id}.",
+        )
+    else:
+        result = _queue.decide(
+            body.request_id, body.token, body.decision, _principal_label(current_user)
+        )
     return {
         "ok": result.ok,
         "approved": result.approved,
