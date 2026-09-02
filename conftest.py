@@ -21,6 +21,11 @@ os.environ["DEFAULT_AI_PROVIDER"] = "mock"
 os.environ["ENVIRONMENT"] = "test"
 os.environ["DEBUG"] = "false"
 os.environ["DEVON_APPROVAL_STORE"] = "postgres"
+# Registration is closed by default behind DEVON_REGISTRATION_KEY. The suite
+# opens it with a known key, and the `client` fixture sends that key on every
+# request so the seven tests that register directly keep working unchanged.
+TEST_REGISTRATION_KEY = "test-registration-key-not-for-production-0123456789"
+os.environ["DEVON_REGISTRATION_KEY"] = TEST_REGISTRATION_KEY
 
 import pytest  # noqa: E402
 
@@ -68,6 +73,7 @@ _INCREMENTAL_SCHEMAS = (
     "012_live_state_ledger.sql",
     "013_approval_consumption.sql",
     "014_artifact_body.sql",
+    "015_devon_approval_owner.sql",
 )
 
 _DSN = TEST_DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
@@ -179,7 +185,11 @@ async def client(_clean_tables):
     from app.main import app
 
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as c:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+        headers={"X-Devon-Registration-Key": TEST_REGISTRATION_KEY},
+    ) as c:
         yield c
 
 

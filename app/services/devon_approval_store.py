@@ -59,7 +59,8 @@ expires_at,
 state,
 decided_at,
 decided_by,
-token_hash
+token_hash,
+owner_id
 """
 
 
@@ -79,12 +80,12 @@ class PostgresApprovalStore:
             INSERT INTO devon_approvals (
                 request_id, title, what_happens, requested_by, area,
                 reversible, blast_radius, created_at, expires_at, state,
-                decided_at, decided_by, token_hash, updated_at
+                decided_at, decided_by, token_hash, owner_id, updated_at
             ) VALUES (
                 %(request_id)s, %(title)s, %(what_happens)s, %(requested_by)s,
                 %(area)s, %(reversible)s, %(blast_radius)s, %(created_at)s,
                 %(expires_at)s, %(state)s, %(decided_at)s, %(decided_by)s,
-                %(token_hash)s, NOW()
+                %(token_hash)s, %(owner_id)s, NOW()
             )
         """
         try:
@@ -207,6 +208,7 @@ class PostgresApprovalStore:
             "decided_at": request.decided_at,
             "decided_by": request.decided_by,
             "token_hash": request._token_hash,
+            "owner_id": request.owner_id,
         }
 
     @staticmethod
@@ -224,6 +226,7 @@ class PostgresApprovalStore:
             state=ApprovalState(str(row["state"])),
             decided_at=row["decided_at"],
             decided_by=str(row["decided_by"]) if row["decided_by"] is not None else None,
+            owner_id=str(row.get("owner_id") or ""),
             _token_hash=str(row["token_hash"]),
         )
 

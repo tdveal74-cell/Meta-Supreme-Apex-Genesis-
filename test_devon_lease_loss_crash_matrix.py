@@ -167,6 +167,7 @@ async def test_two_workers_race_an_approved_write_step_only_one_effect(
 
     decision = await client.post(
         "/api/v1/devon/approvals/decide",
+        headers=auth_headers,
         json={
             "request_id": request_id,
             "token": token,

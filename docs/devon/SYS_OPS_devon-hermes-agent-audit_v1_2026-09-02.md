@@ -435,13 +435,17 @@ None of this is dishonesty in the code. It is a set of seams between lanes that 
 
 Items 1 to 5 are the ones that change what a stranger on the internet can do. Items 6 to 11 change what an approved effect can do. Items 12 to 15 change what the records claim.
 
-## 10. Rulings needed from Tee
+## 10. Rulings from Tee, 2026-09-02
 
-- Whether registration stays open on the deployed API, and whether an invite key is acceptable.
-- Whether the three `runtime.*` expansion tools should be made durable or removed from the catalog until they are.
-- Whether `.agents/skills/unlazy` and the unpinned community plugins in `.claude/settings.json` are intended repository content.
-- Whether `dcp_` tokens are live capture credentials or identifiers. `test_deploy_soul.py:32` declares the `dcp_` shape a capture-token secret and `docs/devon/MERGE_MAP.md:130` says per-poster capture tokens gate the n8n capture endpoint, yet the standing DEVON RECEIPT instruction puts a `dcp_claude_` token into every filed document, this one included. The ruling decides FOS-9 (two handover docs carry a `dcp_chatgpt_` value) and the receipt convention together. If they are credentials, rotate both and change the convention.
-- Whether to run the C3 production query now or after the 014 migration ships.
+Asked on an inline card and answered the same day.
+
+| Question | Ruling | Consequence |
+|---|---|---|
+| Registration policy on the deployed API | Closed by default behind DEVON_REGISTRATION_KEY, checked with a constant-time compare, unset means refused | Lands in fix PR 1 with the approval route auth |
+| The three runtime expansion tools | Make them durable now, through the same repositories the HTTP routes use | Section 9 item 8 becomes a real change, roughly a day |
+| .agents/skills/unlazy and the unpinned community plugins | Remove unlazy, pin the three plugins by version | Small separate PR, no runtime effect |
+| dcp_ receipt tokens | Identifiers, not credentials. The n8n capture webhook authenticates with x-devon-key | No rotation. One sentence added to the receipt convention |
+| The C3 production query | Run it now, read-only, before the 014 migration ships | PR #111 carries the 014 revision, so the query has to run before that PR merges. Result recorded here when it comes back |
 
 ## 11. Gauntlet score block for the DEVON and Hermes stack
 

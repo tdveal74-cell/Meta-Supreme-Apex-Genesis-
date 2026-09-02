@@ -306,6 +306,7 @@ class KnowledgeLoop:
             area=plan_area,
             reversible=True,
             blast_radius="devon-soul and live-state-ledger, never tee-soul-layer",
+            owner_id=owner_id,
         )
 
         opened = await ledger.open_intent(

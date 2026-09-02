@@ -93,7 +93,10 @@ export function MissionAdvisor() {
 
     setState("loading");
     const [approvalResult, taskResult] = await Promise.allSettled([
-      fetch(`${API_BASE}/devon/approvals`, { cache: "no-store" }),
+      fetch(`${API_BASE}/devon/approvals`, {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${token}` },
+      }),
       fetch(`${API_BASE}/agent-tasks?limit=50&offset=0`, {
         cache: "no-store",
         headers: { Authorization: `Bearer ${token}` },

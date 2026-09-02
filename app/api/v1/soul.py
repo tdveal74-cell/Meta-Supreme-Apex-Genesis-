@@ -31,6 +31,13 @@ from services.devon.assistant import Devon
 from services.intelligence.providers.base import ProviderError
 from services.intelligence.soul import SoulWriteRefused
 
+
+def _principal_label(current_user: CurrentUser) -> str:
+    """Who ruled, taken from the login rather than from the request body."""
+    name = (current_user.full_name or "").strip()
+    return f"{name} <{current_user.email}>" if name else str(current_user.email)
+
+
 router = APIRouter(prefix="/soul", tags=["Soul"])
 
 
@@ -139,7 +146,6 @@ class SoulProposeBody(BaseModel):
 class SoulApproveBody(BaseModel):
     request_id: str = Field(..., min_length=1, max_length=64)
     token: str = Field(..., min_length=1, max_length=512)
-    decided_by: str = Field(default="Tee", max_length=120)
 
 
 class SoulCommitBody(BaseModel):
@@ -190,7 +196,7 @@ async def soul_approve(
             owner_id=str(current_user.id),
             request_id=body.request_id,
             token=body.token,
-            decided_by=body.decided_by,
+            decided_by=_principal_label(current_user),
             ruling_key=x_devon_ruling_key,
         )
     except (KnowledgeLoopRefused, LedgerRefused) as exc:

@@ -193,6 +193,9 @@ class DurableAgentTaskService:
 
         tools = build_tool_registry()
         merged_context = dict(context or {})
+        # The owner rides in the task context so the runtime can stamp it on
+        # every approval card it raises; the API scopes list and decide by it.
+        merged_context["owner_id"] = owner_id
         if project_id:
             merged_context["project_id"] = project_id
         merged_context["devon_learning"] = await self.learning.context_for(
