@@ -91,6 +91,7 @@ Laws, all enforced by one function so the checker and the writer cannot drift:
 1. Every intent opens with `INTENT_RECEIVED`, and is received exactly once.
 2. Each event names what must already stand on the intent before it.
 3. `ACTION_STARTED` on an effect intent requires `APPROVAL_GRANTED` first.
+4. Two events are reserved to services over HTTP, dated 2026-09-02: `APPROVAL_GRANTED`, and a `PLAN_CREATED` whose payload names an `approval_request_id`. `POST /api/v1/ledger/intents/{id}/events` refuses both with 403; the knowledge loop writes them at approve and propose. The intent read may still list `APPROVAL_GRANTED` as legal next; that is the ledger law, not the HTTP contract.
 4. No action starts while the emergency stop holds.
 5. Only the thirteen. The database carries the same list as a check constraint,
    so a caller that never touches the writer still cannot invent an event.

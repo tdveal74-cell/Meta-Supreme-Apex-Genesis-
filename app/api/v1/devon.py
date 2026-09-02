@@ -354,8 +354,8 @@ async def decide(body: DecideBody, current_user: CurrentUser) -> Dict[str, Any]:
     for byte, so the route confirms nothing about other accounts' queues. A
     card with no owner (raised by the operator bridge, or by a task persisted
     before owners existed) is rulable by any signed-in account. A knowledge-
-    loop card is refused: that lane needs DEVON_RULING_KEY, which this route
-    never sees.
+    loop card can be refused here but not approved: approval needs
+    DEVON_RULING_KEY, which this route never sees.
     """
     record = _queue.get(body.request_id) if body.request_id else None
     if record is not None and not _visible_to(record.owner_id, current_user.id):
@@ -365,10 +365,15 @@ async def decide(body: DecideBody, current_user: CurrentUser) -> Dict[str, Any]:
             reason=RefusalReason.UNKNOWN_ID,
             message=f"No request {body.request_id}.",
         )
-    elif record is not None and record.requested_by == KNOWLEDGE_LOOP_REQUESTER:
-        # The proposing login holds this card's token, so a ruling here would
-        # be the one credential approving its own capture. The knowledge loop
-        # rules through a second credential the API never returns.
+    elif (
+        record is not None
+        and record.requested_by == KNOWLEDGE_LOOP_REQUESTER
+        and (body.decision or "").strip().lower() != "refuse"
+    ):
+        # The proposing login holds this card's token, so an approval here
+        # would be the one credential approving its own capture. The knowledge
+        # loop approves through a second credential the API never returns. A
+        # refusal fails closed and needs no second credential, so it stays.
         raise HTTPException(
             status_code=403,
             detail=(

@@ -19,7 +19,7 @@ import pytest
 from sqlalchemy import text
 
 from app.api.v1.devon import _queue
-from app.services.live_state_ledger import ledger
+from app.services.live_state_ledger import LedgerRefused, ledger
 from services.devon.approval import ApprovalState
 
 RULING_KEY = "test-ruling-key-not-a-jwt"
@@ -230,3 +230,110 @@ async def test_a_forged_plan_cannot_redirect_the_ruling(client, auth_headers, db
     found = await client.get("/api/v1/soul/find?q=FORGED", headers=auth_headers)
     assert found.status_code == 200, found.text
     assert found.json()["ledger"] == []
+
+
+async def test_a_knowledge_loop_card_can_still_be_refused_on_the_shared_route(
+    client, auth_headers
+):
+    """A refusal fails closed and needs no second credential, so the owner
+    keeps it: a mistaken proposal does not have to wait out its expiry."""
+    _, request_id, token = await _propose(client, auth_headers, LEGIT)
+
+    refused = await client.post(
+        "/api/v1/devon/approvals/decide",
+        headers=auth_headers,
+        json={"request_id": request_id, "token": token, "decision": "refuse"},
+    )
+    assert refused.status_code == 200, refused.text
+    assert refused.json()["state"] == "refused"
+    assert _queue.get(request_id).state is ApprovalState.REFUSED
+
+    approved = await client.post(
+        "/api/v1/soul/approve",
+        headers=_ruled(auth_headers),
+        json={"request_id": request_id, "token": token},
+    )
+    assert approved.status_code == 403, approved.text
+
+
+async def test_the_generic_approvals_route_cannot_bind_a_knowledge_loop_request(
+    client, auth_headers, db_session
+):
+    """With the loop's own row missing (a request proposed before the binding
+    existed, or a propose whose ledger write rolled back), the owner must not
+    be able to bind the request to an intent of their choosing by hand."""
+    intent_id, request_id, _ = await _propose(client, auth_headers, LEGIT)
+    owner_id = await _owner_id(db_session)
+    await db_session.execute(
+        text("DELETE FROM approvals WHERE approval_request_id = :rid"), {"rid": request_id}
+    )
+    await db_session.commit()
+
+    forged = await client.post(
+        "/api/v1/ledger/intents",
+        headers=auth_headers,
+        json={"channel": "chat_voice", "stated": FORGED, "is_effect": True},
+    )
+    assert forged.status_code == 201, forged.text
+    bound_by_hand = await client.post(
+        f"/api/v1/ledger/intents/{forged.json()['intent_id']}/approvals",
+        headers=auth_headers,
+        json={"approval_request_id": request_id, "state": "approved", "what_happens": FORGED},
+    )
+    assert bound_by_hand.status_code == 403, bound_by_hand.text
+    assert "never through this route" in bound_by_hand.json()["detail"]
+
+    # An observation about a request the queue does not hold is still the
+    # owner's to record, so the refusal is about the loop, not the route.
+    observed = await client.post(
+        f"/api/v1/ledger/intents/{intent_id}/approvals",
+        headers=auth_headers,
+        json={"approval_request_id": "REQ-EXTERNAL-1", "state": "pending", "what_happens": "x"},
+    )
+    assert observed.status_code == 201, observed.text
+    with pytest.raises(LedgerRefused):
+        await ledger.approval_binding(db_session, owner_id=owner_id, request_id=request_id)
+
+
+async def test_a_non_pending_row_refuses_before_the_decision_is_spent(
+    client, auth_headers, db_session
+):
+    _, request_id, token = await _propose(client, auth_headers, LEGIT)
+    await db_session.execute(
+        text("UPDATE approvals SET state = 'refused' WHERE approval_request_id = :rid"),
+        {"rid": request_id},
+    )
+    await db_session.commit()
+
+    approved = await client.post(
+        "/api/v1/soul/approve",
+        headers=_ruled(auth_headers),
+        json={"request_id": request_id, "token": token},
+    )
+    assert approved.status_code == 403, approved.text
+    assert "refused" in approved.json()["detail"]
+    assert _queue.get(request_id).state is ApprovalState.PENDING, "the decision was not spent"
+
+
+async def test_another_account_learns_nothing_from_commit(client, auth_headers):
+    _, request_id, _ = await _propose(client, auth_headers, LEGIT)
+    email, password = "second-account@example.com", "another-strong-password-123"
+    registered = await client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": password, "full_name": "Second Account"},
+    )
+    assert registered.status_code == 201, registered.text
+    login = await client.post("/api/v1/auth/login", json={"email": email, "password": password})
+    assert login.status_code == 200, login.text
+    other = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    theirs = await client.post(
+        "/api/v1/soul/commit", headers=other, json={"request_id": request_id}
+    )
+    nobodys = await client.post(
+        "/api/v1/soul/commit", headers=other, json={"request_id": "REQ-DOESNOTEXIST"}
+    )
+    assert theirs.status_code == nobodys.status_code == 409, (theirs.text, nobodys.text)
+    assert theirs.json()["detail"].replace(request_id, "X") == nobodys.json()["detail"].replace(
+        "REQ-DOESNOTEXIST", "X"
+    )

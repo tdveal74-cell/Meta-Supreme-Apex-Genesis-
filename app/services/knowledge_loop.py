@@ -443,6 +443,12 @@ class KnowledgeLoop:
             db, owner_id=owner_id, request_id=request_id
         )
         intent_id = binding["intent_id"]
+        if binding["state"] not in ("pending", "approved"):
+            raise KnowledgeLoopRefused(
+                f"The ledger records this request as {binding['state']}, so it "
+                "cannot be approved. Propose it again.",
+                status_code=403,
+            )
         result = _queue().decide(request_id, token, "approve", decided_by)
         already_approved = (
             not result.ok and result.state is ApprovalState.APPROVED
@@ -506,6 +512,12 @@ class KnowledgeLoop:
         this request is on the bound intent. An APPROVAL_GRANTED event alone
         proves nothing here.
         """
+        # The owner-scoped binding comes first, so another account's request
+        # id learns nothing from the shared queue's state.
+        binding = await ledger.approval_binding(
+            db, owner_id=owner_id, request_id=request_id
+        )
+        intent_id = binding["intent_id"]
         record = _queue().get(request_id)
         if record is None:
             raise KnowledgeLoopRefused("No approval request with that id.", status_code=403)
@@ -525,10 +537,6 @@ class KnowledgeLoop:
                 status_code=403,
             )
 
-        binding = await ledger.approval_binding(
-            db, owner_id=owner_id, request_id=request_id
-        )
-        intent_id = binding["intent_id"]
         if binding["state"] != "approved":
             raise KnowledgeLoopRefused(
                 "The ledger holds no ruling for this request. The queue may say "
