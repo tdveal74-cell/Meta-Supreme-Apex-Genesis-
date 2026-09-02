@@ -26,7 +26,7 @@ from app.db.session import get_db
 from app.security.deps import CurrentUser
 from app.services import soul as soul_service
 from app.services.knowledge_loop import KnowledgeLoopRefused, knowledge_loop
-from app.services.live_state_ledger import LedgerRefused
+from app.services.live_state_ledger import LedgerConflict, LedgerRefused
 from services.devon.assistant import Devon
 from services.intelligence.providers.base import ProviderError
 from services.intelligence.soul import SoulWriteRefused
@@ -131,6 +131,10 @@ def _loop_error(exc: Exception) -> HTTPException:
             status_code=status.HTTP_409_CONFLICT,
             detail={"refused": True, "reasons": exc.reasons},
         )
+    if isinstance(exc, LedgerConflict):
+        # Another writer appended to the intent first: the caller re-reads
+        # and decides again. A race is a conflict, not a server error.
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     if isinstance(exc, SoulWriteRefused):
         return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     raise exc
@@ -173,7 +177,7 @@ async def soul_propose(
             area=body.area,
             layer=body.layer,
         )
-    except (KnowledgeLoopRefused, LedgerRefused, SoulWriteRefused) as exc:
+    except (KnowledgeLoopRefused, LedgerRefused, LedgerConflict, SoulWriteRefused) as exc:
         raise _loop_error(exc) from exc
 
 
@@ -199,7 +203,7 @@ async def soul_approve(
             decided_by=_principal_label(current_user),
             ruling_key=x_devon_ruling_key,
         )
-    except (KnowledgeLoopRefused, LedgerRefused) as exc:
+    except (KnowledgeLoopRefused, LedgerRefused, LedgerConflict) as exc:
         raise _loop_error(exc) from exc
 
 
@@ -216,7 +220,7 @@ async def soul_commit(
             owner_id=str(current_user.id),
             request_id=body.request_id,
         )
-    except (KnowledgeLoopRefused, LedgerRefused, SoulWriteRefused) as exc:
+    except (KnowledgeLoopRefused, LedgerRefused, LedgerConflict, SoulWriteRefused) as exc:
         raise _loop_error(exc) from exc
 
 
@@ -235,6 +239,6 @@ async def soul_find(
         return await knowledge_loop.find(
             db, owner_id=str(current_user.id), query=q, kind=kind
         )
-    except (KnowledgeLoopRefused, LedgerRefused) as exc:
+    except (KnowledgeLoopRefused, LedgerRefused, LedgerConflict) as exc:
         raise _loop_error(exc) from exc
 
