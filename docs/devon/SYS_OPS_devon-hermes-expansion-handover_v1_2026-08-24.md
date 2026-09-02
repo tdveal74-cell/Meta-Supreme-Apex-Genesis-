@@ -33,5 +33,5 @@ branch: feat/devon-hermes-expansion
 
 - Schedule store is process-local (durable DB schedule table is a later slice). Closed 2026-09-02: the runtime tools write the durable tables (fix PR 3 of the DEVON and Hermes audit)
 - Browser fetch uses offline stub unless a fetcher is injected
-- Subagent spawn records the child plan; parent→child durable link table is a later slice
+- Subagent spawn records the child plan; parent→child durable link table is a later slice. Closed 2026-09-02: runtime.spawn_subagent creates the durable child task and link (fix PR 3)
 - Skill approve path does not yet auto-call learning.upsert_skill (explicit promote API next)

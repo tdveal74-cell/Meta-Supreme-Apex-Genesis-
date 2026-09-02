@@ -658,7 +658,7 @@ class DurableAgentTaskService:
                 "skill_proposals": True,
                 "skill_promotion_requires_human": True,
                 "materialize_due_schedules": True,
-                "runtime_tools_durable": True,
+                "runtime_tools_durable": expansion_adapter.durable,
                 "auto_skill_propose_on_success": _auto_skill_propose_enabled(),
             },
             "execution": {

@@ -124,7 +124,7 @@ def test_expansion_tools_register_and_describe() -> None:
 @pytest.mark.asyncio
 async def test_spawn_subagent_tool_spends_its_approval_and_emits_receipt_id() -> None:
     queue = ApprovalQueue()
-    adapter = ExpansionToolAdapter(approvals=queue)
+    adapter = ExpansionToolAdapter(approvals=queue, process_local_ok=True)
     call = _approved_call(
         queue,
         tool="runtime.spawn_subagent",
@@ -146,7 +146,7 @@ async def test_spawn_subagent_tool_spends_its_approval_and_emits_receipt_id() ->
 
 @pytest.mark.asyncio
 async def test_expansion_tools_refuse_without_approval_metadata() -> None:
-    adapter = ExpansionToolAdapter(approvals=ApprovalQueue())
+    adapter = ExpansionToolAdapter(approvals=ApprovalQueue(), process_local_ok=True)
     for handler, arguments in (
         (adapter._spawn_subagent, {"parent_task_id": "TASK-1", "goal": "x"}),
         (adapter._schedule_goal, {"goal": "x", "delay_seconds": 0}),
@@ -161,11 +161,72 @@ async def test_expansion_tools_refuse_without_approval_metadata() -> None:
     assert not result.ok
     assert "approval authority" in (result.error or "").lower()
 
+    # Writers missing and no test opt-in: the in-memory store is refused, and
+    # the refusal comes before the binding so no approval could be spent.
+    queue = ApprovalQueue()
+    strict = ExpansionToolAdapter(approvals=queue)
+    call = _approved_call(queue, tool="runtime.schedule_goal", arguments={"goal": "x"})
+    result = await strict._schedule_goal(call)
+    assert not result.ok
+    assert "durable writer" in (result.error or "")
+    assert queue.get(call[APPROVAL_METADATA_KEY]["request_id"]).state is ApprovalState.APPROVED
+    assert strict.durable is False
+
+
+@pytest.mark.asyncio
+async def test_out_of_bounds_arguments_are_refused_before_the_approval_is_spent() -> None:
+    queue = ApprovalQueue()
+    adapter = ExpansionToolAdapter(approvals=queue, process_local_ok=True)
+    call = _approved_call(
+        queue,
+        tool="runtime.schedule_goal",
+        arguments={"goal": "far future", "delay_seconds": 10**15},
+    )
+    result = await adapter._schedule_goal(call)
+    assert not result.ok
+    assert "delay_seconds" in (result.error or "")
+    assert queue.get(call[APPROVAL_METADATA_KEY]["request_id"]).state is ApprovalState.APPROVED
+
+    call = _approved_call(
+        queue,
+        tool="runtime.propose_skill",
+        arguments={"goal": "x" * 20_001, "observations": []},
+    )
+    result = await adapter._propose_skill(call)
+    assert not result.ok
+    assert "goal" in (result.error or "")
+    assert queue.get(call[APPROVAL_METADATA_KEY]["request_id"]).state is ApprovalState.APPROVED
+
+
+@pytest.mark.asyncio
+async def test_spawn_and_propose_are_pinned_to_the_running_task() -> None:
+    queue = ApprovalQueue()
+    adapter = ExpansionToolAdapter(approvals=queue, process_local_ok=True)
+    call = _approved_call(
+        queue,
+        tool="runtime.spawn_subagent",
+        arguments={"parent_task_id": "TASK-OTHER", "goal": "Child"},
+        task_id="TASK-1",
+    )
+    result = await adapter._spawn_subagent(call)
+    assert not result.ok
+    assert "running task" in (result.error or "")
+
+    call = _approved_call(
+        queue,
+        tool="runtime.propose_skill",
+        arguments={"task_id": "TASK-OTHER", "goal": "Skill", "observations": []},
+        task_id="TASK-1",
+    )
+    result = await adapter._propose_skill(call)
+    assert not result.ok
+    assert "running task" in (result.error or "")
+
 
 @pytest.mark.asyncio
 async def test_schedule_goal_owner_comes_from_the_card_not_the_arguments() -> None:
     queue = ApprovalQueue()
-    adapter = ExpansionToolAdapter(approvals=queue)
+    adapter = ExpansionToolAdapter(approvals=queue, process_local_ok=True)
     binding = approval_binding(
         task_id="TASK-1",
         step_id="STEP-1",
