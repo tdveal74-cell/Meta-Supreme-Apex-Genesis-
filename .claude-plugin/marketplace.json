@@ -4,7 +4,7 @@
     "name": "Tee (Terrance Veal)"
   },
   "metadata": {
-    "description": "The three claude-community plugins this repository enables, pinned to the exact commits the community marketplace resolved them to at its commit a727be1c7bd6064419b6f60d71993a19198adc17 (2026-08-24). The community marketplace moves with every upstream bump; this file does not. Bump a sha here on purpose, as its own PR.",
+    "description": "The three claude-community plugins this repository enables, pinned to the exact commits the community marketplace resolved them to at its commit a727be1c7bd6064419b6f60d71993a19198adc17 (2026-08-24). The community marketplace moves with every upstream bump; this file does not. Each machine installs once: claude plugin install <name>@meta-supreme-pinned for the three names, from the main checkout of this repository (a worktree resolves this file against the main checkout), and removes any <name>@claude-community copy, which would otherwise load beside the pinned one and win. To bump: change the sha here as its own PR, then on each machine run claude plugin uninstall <name>@meta-supreme-pinned and install it again; claude plugin update does not move a plugin whose plugin.json version string did not change. The pin is visible as gitCommitSha in ~/.claude/plugins/installed_plugins.json, not in claude plugin list.",
     "version": "2026.09.02"
   },
   "plugins": [
