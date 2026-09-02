@@ -733,6 +733,7 @@ async def act_stream(
             turn_id=turn_id,
             approvals=approval_queue,
             actor=str(current_user.id),
+            owner_id=str(current_user.id),
         ),
         max_completion_tokens=settings.AI_MAX_TOKENS_AGENT_TURN,
         history_max_messages=settings.AI_TURN_HISTORY_MAX_MESSAGES,
