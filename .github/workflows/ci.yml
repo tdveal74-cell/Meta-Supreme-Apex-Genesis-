@@ -60,10 +60,12 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 10
+      # No `cache: pnpm` here: the audit reads the lockfile and installs
+      # nothing, so setup-node's post-step has no store to save and fails
+      # the job with "Path Validation Error" when the option is set.
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: pnpm
       - name: pnpm audit the locked workspace
         run: pnpm audit --audit-level=moderate
 
