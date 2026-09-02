@@ -1,35 +1,37 @@
+# Pinned on 2026-09-02 to the versions the full suite passed against
+# (audit section 9 item 15). Bump on purpose, in its own PR, with the
+# suite and pip-audit green on the new set.
 # Core
-fastapi>=0.115.0
-uvicorn[standard]>=0.32.0
-pydantic>=2.10.0
-pydantic-settings>=2.6.0
-email-validator>=2.2.0
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+pydantic==2.13.5
+pydantic-settings==2.15.0
+email-validator==2.3.0
 
 # Database
-sqlalchemy[asyncio]>=2.0.36
-asyncpg>=0.30.0
-psycopg[binary]>=3.2.0
-alembic>=1.14.0
-pgvector>=0.3.6
+sqlalchemy[asyncio]==2.0.52
+asyncpg==0.31.0
+psycopg[binary]==3.3.5
+alembic==1.19.1
+pgvector==0.5.0
 
 # Auth & Security
-python-jose[cryptography]>=3.3.0
-bcrypt>=4.2.0
-python-multipart>=0.0.17
-webauthn>=3.0.0
+python-jose[cryptography]==3.5.0
+bcrypt==5.0.0
+python-multipart==0.0.32
+webauthn==3.0.0
 
 # HTTP & Utils
-httpx>=0.28.0
-python-dotenv>=1.0.1
+httpx==0.28.1
+python-dotenv==1.2.3
 
 # Logging & Observability
-structlog>=24.4.0
+structlog==26.1.0
 
 # Testing
-pytest>=8.3.0
-pytest-asyncio>=0.24.0
-httpx>=0.28.0
+pytest==9.1.1
+pytest-asyncio==1.4.0
 
 # Development
-ruff>=0.8.0
-mypy>=1.13.0
+ruff==0.16.5
+mypy==2.3.1
