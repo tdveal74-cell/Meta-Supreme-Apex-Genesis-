@@ -52,7 +52,6 @@ async def _paused_run(client, auth_headers):
     run = started.json()
     assert run["status"] == "awaiting_approval"
     assert run["pending"]["preview"]["content"] == "Noted: EU pricing exposure"
-    assert len(run["pending"]["payload_sha256"]) == 64
     return workflow, run
 
 
@@ -133,6 +132,14 @@ async def test_a_step_retyped_behind_the_gate_cannot_execute(client, auth_header
 
 async def test_the_approver_can_name_the_payload_it_saw(client, auth_headers):
     workflow, run = await _paused_run(client, auth_headers)
+    assert len(run["pending"]["payload_sha256"]) == 64
+    assert run["pending"]["diverged"] is False
+    not_hex = await client.post(
+        f"/api/v1/workflows/{workflow['id']}/runs/{run['id']}/approve",
+        headers=auth_headers,
+        json={"decisions": {"remember": "approved"}, "expected_payload_sha256": "z" * 64},
+    )
+    assert not_hex.status_code == 422, not_hex.text
     wrong = await client.post(
         f"/api/v1/workflows/{workflow['id']}/runs/{run['id']}/approve",
         headers=auth_headers,
@@ -153,3 +160,170 @@ async def test_the_approver_can_name_the_payload_it_saw(client, auth_headers):
     assert right.json()["status"] == "completed"
     memories = await client.get("/api/v1/memory", headers=auth_headers)
     assert [m["content"] for m in memories.json()] == ["Noted: EU pricing exposure"]
+
+
+
+async def test_patch_with_the_unchanged_definition_passes_at_the_gate(client, auth_headers):
+    """Codex on the first cut: the guard fired on the presence of a definition,
+    so a client resending the current one with a rename was refused. Only a
+    changed definition is refused."""
+    workflow, run = await _paused_run(client, auth_headers)
+    resent = await client.patch(
+        f"/api/v1/workflows/{workflow['id']}",
+        headers=auth_headers,
+        json={"definition": copy.deepcopy(RISK_SCAN), "name": "Gate binding, resent"},
+    )
+    assert resent.status_code == 200, resent.text
+    assert resent.json()["name"] == "Gate binding, resent"
+
+    right = await client.post(
+        f"/api/v1/workflows/{workflow['id']}/runs/{run['id']}/approve",
+        headers=auth_headers,
+        json={
+            "decisions": {"remember": "approved"},
+            "expected_payload_sha256": run["pending"]["payload_sha256"],
+        },
+    )
+    assert right.status_code == 200, right.text
+    assert right.json()["status"] == "completed"
+
+
+async def test_a_stale_run_can_be_rejected_but_not_approved(client, auth_headers, db_session):
+    """Codex on the first cut: a run whose definition changed behind the gate
+    refused every decision, and with PATCH, delete and a second run all
+    refused while it waited, the owner could not close it without the
+    database. Rejection closes it; approval stays refused."""
+    workflow, run = await _paused_run(client, auth_headers)
+    swapped = copy.deepcopy(RISK_SCAN)
+    swapped["steps"][1]["config"]["content"] = "Swapped: {{ input }}"
+    await _swap_definition_behind_the_gate(db_session, workflow["id"], swapped)
+
+    approved = await client.post(
+        f"/api/v1/workflows/{workflow['id']}/runs/{run['id']}/approve",
+        headers=auth_headers,
+        json={"decisions": {"remember": "approved"}},
+    )
+    assert approved.status_code == 409, approved.text
+    assert "Reject this run" in approved.json()["detail"]
+
+    rejected = await client.post(
+        f"/api/v1/workflows/{workflow['id']}/runs/{run['id']}/approve",
+        headers=auth_headers,
+        json={"decisions": {"remember": "rejected"}},
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["status"] == "halted"
+    memories = await client.get("/api/v1/memory", headers=auth_headers)
+    assert memories.json() == [], "a rejection executes nothing"
+
+    # With the stale run closed, the owner can change the definition and run again.
+    repaired = await client.patch(
+        f"/api/v1/workflows/{workflow['id']}",
+        headers=auth_headers,
+        json={"definition": swapped},
+    )
+    assert repaired.status_code == 200, repaired.text
+    again = await client.post(
+        f"/api/v1/workflows/{workflow['id']}/runs",
+        headers=auth_headers,
+        json={"input": "EU pricing exposure"},
+    )
+    assert again.status_code == 201, again.text
+    assert again.json()["pending"]["preview"]["content"] == "Swapped: EU pricing exposure"
+
+
+
+TWO_GATES = {
+    "version": 1,
+    "trigger": {"type": "manual", "config": {}},
+    "steps": [
+        {
+            "id": "remember",
+            "type": "memory_write",
+            "config": {"content": "Noted: {{ input }}", "importance": 6},
+        },
+        {
+            "id": "draft",
+            "type": "decision_draft",
+            "config": {"question": "Decide: {{ input }}", "recommendation": "{{ input }}"},
+        },
+    ],
+}
+
+
+async def test_a_later_gate_cannot_be_decided_blind(client, auth_headers, db_session):
+    """The critic's attack on the first cut: the seal bound the pending step,
+    but a later effect step named in the same call executed unpreviewed,
+    with whatever the definition said by then."""
+    created = await client.post(
+        "/api/v1/workflows",
+        headers=auth_headers,
+        json={"name": "Two gates", "definition": TWO_GATES},
+    )
+    assert created.status_code == 201, created.text
+    workflow = created.json()
+    started = await client.post(
+        f"/api/v1/workflows/{workflow['id']}/runs",
+        headers=auth_headers,
+        json={"input": "EU pricing exposure"},
+    )
+    assert started.status_code == 201, started.text
+    run = started.json()
+    assert run["pending"]["step_id"] == "remember"
+
+    swapped = copy.deepcopy(TWO_GATES)
+    swapped["steps"][1]["config"]["question"] = "SWAPPED never previewed: {{ input }}"
+    await _swap_definition_behind_the_gate(db_session, workflow["id"], swapped)
+
+    blind = await client.post(
+        f"/api/v1/workflows/{workflow['id']}/runs/{run['id']}/approve",
+        headers=auth_headers,
+        json={"decisions": {"remember": "approved", "draft": "approved"}},
+    )
+    assert blind.status_code == 409, blind.text
+    assert "has not been previewed yet" in blind.json()["detail"]
+    memories = await client.get("/api/v1/memory", headers=auth_headers)
+    assert memories.json() == [], "the refusal executed nothing, not even the pending step"
+
+
+async def test_the_pending_view_shows_the_seal_and_names_divergence(
+    client, auth_headers, db_session
+):
+    workflow, run = await _paused_run(client, auth_headers)
+    sealed = run["pending"]["payload_sha256"]
+    swapped = copy.deepcopy(RISK_SCAN)
+    swapped["steps"][1]["config"]["content"] = "Swapped: {{ input }}"
+    await _swap_definition_behind_the_gate(db_session, workflow["id"], swapped)
+
+    view = await client.get(
+        f"/api/v1/workflows/{workflow['id']}/runs/{run['id']}", headers=auth_headers
+    )
+    assert view.status_code == 200, view.text
+    pending = view.json()["pending"]
+    assert pending["diverged"] is True
+    assert pending["payload_sha256"] == sealed, "the view carries the seal, not the live hash"
+    assert pending["preview"]["content"] == "Swapped: EU pricing exposure"
+
+
+async def test_a_definition_that_stops_holding_behind_the_gate_is_409_not_500(
+    client, auth_headers, db_session
+):
+    workflow, run = await _paused_run(client, auth_headers)
+    broken = copy.deepcopy(RISK_SCAN)
+    broken["steps"][1]["config"]["memory_type"] = "core"
+    await _swap_definition_behind_the_gate(db_session, workflow["id"], broken)
+
+    approved = await client.post(
+        f"/api/v1/workflows/{workflow['id']}/runs/{run['id']}/approve",
+        headers=auth_headers,
+        json={"decisions": {"remember": "approved"}},
+    )
+    assert approved.status_code == 409, approved.text
+    assert "no longer holds" in approved.json()["detail"]
+    rejected = await client.post(
+        f"/api/v1/workflows/{workflow['id']}/runs/{run['id']}/approve",
+        headers=auth_headers,
+        json={"decisions": {"remember": "rejected"}},
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["status"] == "halted"

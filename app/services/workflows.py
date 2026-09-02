@@ -45,6 +45,7 @@ from services.workflows import (
     WorkflowEngine,
     render_template,
 )
+from services.workflows.engine import StepResult, StepStatus
 
 logger = logging.getLogger(__name__)
 
@@ -340,7 +341,14 @@ def render_pending(
     preview = render_template(
         step.config, trigger_input=run.trigger_input or "", results=results
     )
-    return {"step_id": step.id, "step_type": step.type.value, "preview": preview}
+    # The write target is part of what the approver agrees to: a memory is
+    # filed under the workflow's project, so the project is in the seal.
+    return {
+        "step_id": step.id,
+        "step_type": step.type.value,
+        "preview": preview,
+        "project_id": str(workflow.project_id) if workflow.project_id else None,
+    }
 
 
 def pending_payload_sha256(rendered: Mapping[str, Any]) -> str:
@@ -412,7 +420,15 @@ async def resume_run(
             f"Run is {run.status!r}, not awaiting approval — nothing to approve"
         )
 
-    definition = parse_definition(workflow.definition)
+    try:
+        definition = parse_definition(workflow.definition)
+    except WorkflowDefinitionError:
+        # The definition changed behind the gate into one that does not hold.
+        # Nothing can execute from it, and the run must not stay trapped:
+        # the owner closes it by rejecting the pending step.
+        if run.pending_step_id and dict(decisions) == {run.pending_step_id: "rejected"}:
+            return await _halt_unparseable(db, workflow=workflow, run=run, actor_id=actor_id)
+        raise
     effect_ids = {s.id for s in definition.effect_steps}
 
     if not decisions:
@@ -426,19 +442,39 @@ async def resume_run(
             raise WorkflowStateError(
                 f"Decision for {step_id!r} must be 'approved' or 'rejected'"
             )
+        if run.pending_step_id and step_id != run.pending_step_id:
+            # A later gate renders its own preview when the run reaches it.
+            # Deciding it now would execute a payload nobody has seen.
+            raise WorkflowStateError(
+                f"This run is waiting on step {run.pending_step_id!r}; step "
+                f"{step_id!r} has not been previewed yet. Decide only the pending step."
+            )
     if run.pending_step_id and run.pending_step_id not in decisions:
         raise WorkflowStateError(
             f"This run is waiting on step {run.pending_step_id!r} — decide that one"
         )
-    if run.pending_step_id:
+    if run.pending_step_id and decisions[run.pending_step_id] == "approved":
+        # The seal binds the approval, not the rejection. A rejection closes
+        # the run without executing anything, so the owner can always close a
+        # run whose definition changed behind the gate; only an approval has
+        # to render what was previewed.
         sealed = (run.meta or {}).get(PENDING_HASH_KEY)
         rendered = render_pending(workflow, run, definition)
         live = pending_payload_sha256(rendered) if rendered is not None else None
         if sealed and live != sealed:
+            logger.warning(
+                "workflow gate seal mismatch: workflow=%s run=%s step=%s sealed=%s live=%s",
+                workflow.id,
+                run.id,
+                run.pending_step_id,
+                sealed,
+                live,
+            )
             raise WorkflowStateError(
                 "The pending step no longer renders what was previewed: the "
                 "definition changed while this run waited at the gate. Nothing "
-                "was written. Start a new run to preview it again."
+                "was written. Reject this run to close it, then start a new one "
+                "to preview the current definition."
             )
         if expected_payload_sha256 and expected_payload_sha256 != (sealed or live):
             raise WorkflowStateError(
@@ -456,6 +492,50 @@ async def resume_run(
     run.pending_step_id = None
     await db.flush()
     return await _advance(db, workflow=workflow, run=run, definition=definition)
+
+
+async def _halt_unparseable(
+    db: AsyncSession,
+    *,
+    workflow: Workflow,
+    run: WorkflowRun,
+    actor_id: str,
+) -> WorkflowRun:
+    """Close a run by rejection when its definition no longer parses.
+
+    The engine cannot run the definition, so the halt is written directly in
+    the shape the engine writes: the rejected step result, the recorded
+    decision, the seal removed, the run halted.
+    """
+    step_id = run.pending_step_id or ""
+    raw_steps = (workflow.definition or {}).get("steps") or []
+    raw = next(
+        (s for s in raw_steps if isinstance(s, dict) and s.get("id") == step_id), {}
+    )
+    now = datetime.now(timezone.utc)
+    run.approvals = {
+        **(run.approvals or {}),
+        step_id: {"decision": "rejected", "actor_id": actor_id, "at": now.isoformat()},
+    }
+    run.step_results = [
+        *(run.step_results or []),
+        StepResult(
+            step_id=step_id,
+            step_type=str(raw.get("type") or "effect"),
+            status=StepStatus.REJECTED,
+            summary=(
+                "Rejected by the workflow owner; the definition no longer holds, "
+                "run halted before this step."
+            ),
+        ).to_dict(),
+    ]
+    run.status = RunStatus.HALTED
+    run.pending_step_id = None
+    run.meta = {k: v for k, v in (run.meta or {}).items() if k != PENDING_HASH_KEY}
+    run.completed_at = now
+    await db.flush()
+    await db.refresh(run)
+    return run
 
 
 async def _advance(

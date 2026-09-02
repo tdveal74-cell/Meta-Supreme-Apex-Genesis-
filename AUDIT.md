@@ -30,8 +30,8 @@ Four places, in dependency order. A defect in any one of them breaks the claim.
 |---|---|---|---|
 | 1 | Classification | `services/workflows/definition.py` | `EFFECT_STEP_TYPES` is the *only* place a step is declared an effect. Nothing else decides. |
 | 2 | Execution | `services/workflows/engine.py` | An effect step with no approval decision returns `awaiting_approval` and executes nothing further. Pure, stateless, no database. |
-| 3 | Persistence | `apps/api/app/services/workflows.py` | The approval and the effect commit in the same transaction. An approval records actor and timestamp. |
-| 4 | Transport | `apps/api/app/api/v1/workflows.py` | Ownership on every route; the approve endpoint refuses decisions for steps the run is not waiting on. |
+| 3 | Persistence | `app/services/workflows.py` | The approval and the effect commit in the same transaction. An approval records actor and timestamp. |
+| 4 | Transport | `app/api/v1/workflows.py` | Ownership on every route; the approve endpoint refuses decisions for steps the run is not waiting on. |
 
 **The highest-value thing to attack is layer 2**, because it is where the rule
 actually lives, and because it is pure — you can drive it directly with no
@@ -46,9 +46,10 @@ Ordered by what would be most damaging if it worked.
 1. **Execute an effect with no approval.** Construct a definition where an
    effect step's approval could be inferred, defaulted, or skipped. Resume a
    run with a forged `prior_results` claiming the effect already ran.
-2. **Approve a different step than the one shown.** The gate preview is read
-   back from the recorded event; make the preview and the eventual write
-   diverge.
+2. **Approve a different step than the one shown.** The gate preview is
+   rendered from the live definition and sealed by a sha256 of that rendering
+   when the run pauses (since 2026-09-02); make the preview and the eventual
+   write diverge, or get a step the run is not waiting on decided.
 3. **Escalate across tenants.** Every workflow route is scoped by `owner_id`.
    Find one that is not. Try a run id belonging to another owner against your
    own workflow id, and vice versa.

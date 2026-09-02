@@ -174,8 +174,12 @@ WHERE workflow_id = '<id>' AND status = 'awaiting_approval';
 ```
 
 Then approve or reject via the UI or
-`POST /workflows/{id}/runs/{run_id}/approve`. Never resolve a gate on a user's
-behalf without asking them — the approval is recorded under *your* user id.
+`POST /workflows/{id}/runs/{run_id}/approve`, naming the `payload_sha256` the
+pending view showed as `expected_payload_sha256`. An approval whose pending
+payload no longer renders as previewed (the pending view says `diverged`) is
+refused 409; a rejection always closes the run, after which the definition can
+be changed and a new run started. Never resolve a gate on a user's
+behalf without asking them, since the approval is recorded under *your* user id.
 
 ### 4.3 `409` on delete — "This workflow has a run waiting for your approval"
 
