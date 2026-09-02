@@ -131,7 +131,7 @@ Run: approve one render. `POST /devon/editforge/execute` with the byte-identical
 
 Consequence: one human approval renders N times and spends provider credit N times. The runtime lane consumes correctly (verified), the HTTP lane does not.
 
-Owner to fix: `_queue.consume` before the client call, compare requested_by to the caller, gate retry and cancel on the same approval record.
+Owner to fix: `_queue.consume` before the client call, compare requested_by to the caller, gate retry and cancel on the same approval record. Status 2026-09-02: fix PR 4 spends the approval before the command leaves EditForge's door, returns the unknown-id 404 to any account that did not raise the approval, and gates retry and cancel on the caller's spent approval for that command id (a body field approval_id, so the bare control call is 422). Verified by test_devon_editforge_http_lane.py against a fake studio that counts commands.
 
 ### H3. SECRET_KEY defaults to a public string and nothing refuses to boot with it (AAT-03)
 
@@ -139,7 +139,7 @@ Location: `app/core/config.py:30`, `app/security/jwt.py:30`. Verified end to end
 
 Run: with SECRET_KEY unset, forge an HS256 token for an existing user id with the literal default. `GET /api/v1/auth/me` returns 200 as that user. No aud, no iss, no production guard anywhere in the repo. `infrastructure/docker/docker-compose.yml` ships the same literal inline.
 
-Owner to fix: refuse to start when ENVIRONMENT is production and SECRET_KEY equals the default, and drop the literal from compose.
+Owner to fix: refuse to start when ENVIRONMENT is production and SECRET_KEY equals the default, and drop the literal from compose. Status 2026-09-02: fix PR 4 adds a settings validator that refuses to construct when ENVIRONMENT is production and SECRET_KEY is the default or empty, and the compose file requires SECRET_KEY from the environment. Development and test keep the default so the offline paths run with no environment. On Railway a refusal fails the deploy's health check and the previous deployment keeps serving, so the guard cannot take production down silently. Verified by test_secret_key_boot_guard.py.
 
 ### H4. The operator "read" lane reads any file the process can read, including the process environment, with no JWT and no approval
 

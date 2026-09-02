@@ -29,7 +29,8 @@ services:
     environment:
       ENVIRONMENT: development
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/meta_supreme
-      SECRET_KEY: change-me-in-production-use-openssl-rand-hex-32
+      # Required. Compose refuses to start without it; generate one with `openssl rand -hex 32`.
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in the environment, generate one with openssl rand -hex 32}
       CORS_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000"]'
       DEFAULT_AI_PROVIDER: ${DEFAULT_AI_PROVIDER:-mock}
       ENRICHMENT_PROVIDER: ${ENRICHMENT_PROVIDER:-mock}

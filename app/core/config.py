@@ -6,10 +6,38 @@ Secrets are loaded from environment variables. Never hard-code them.
 from functools import lru_cache
 from typing import List
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from services.devon.persona import BOUNDARY as DEVON_PERSONA_BOUNDARY
 from services.devon.persona import REGISTER as DEVON_PERSONA_REGISTER
+
+DEFAULT_SECRET_KEY = "change-me-in-production-use-openssl-rand-hex-32"
+
+
+def secret_key_refusal(environment: str, secret_key: str) -> str:
+    """Why this process must not start, or an empty string when it may.
+
+    Only production is refused. Development and test keep the default so the
+    standalone and offline paths run with no environment at all, which is
+    the same reason the default exists.
+    """
+    if (environment or "").strip().lower() != "production":
+        return ""
+    key = (secret_key or "").strip()
+    if not key:
+        return (
+            "SECRET_KEY is empty and ENVIRONMENT is production. Refusing to start: "
+            "every JWT would verify against nothing. Set SECRET_KEY to the output "
+            "of `openssl rand -hex 32`."
+        )
+    if key == DEFAULT_SECRET_KEY:
+        return (
+            "SECRET_KEY is the public default and ENVIRONMENT is production. "
+            "Refusing to start: anyone holding the repository could mint a token "
+            "for any user. Set SECRET_KEY to the output of `openssl rand -hex 32`."
+        )
+    return ""
 
 
 class Settings(BaseSettings):
@@ -26,8 +54,10 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     API_V1_PREFIX: str = "/api/v1"
 
-    # Security
-    SECRET_KEY: str = "change-me-in-production-use-openssl-rand-hex-32"
+    # Security. The default exists so a fresh checkout can run offline. It is
+    # public, so a production process that still carries it would let anyone
+    # mint a JWT for any user id; the validator below refuses to start there.
+    SECRET_KEY: str = DEFAULT_SECRET_KEY
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     ALGORITHM: str = "HS256"
 
@@ -179,6 +209,13 @@ class Settings(BaseSettings):
 
     # Observability
     LOG_LEVEL: str = "INFO"
+
+    @model_validator(mode="after")
+    def _refuse_the_default_secret_in_production(self) -> "Settings":
+        refusal = secret_key_refusal(self.ENVIRONMENT, self.SECRET_KEY)
+        if refusal:
+            raise ValueError(refusal)
+        return self
 
 
 @lru_cache
