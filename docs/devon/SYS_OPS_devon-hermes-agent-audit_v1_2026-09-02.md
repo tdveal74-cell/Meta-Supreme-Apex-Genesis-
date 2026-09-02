@@ -165,7 +165,7 @@ Run: a plan step `runtime.schedule_goal` stops at the card, a human approves, th
 
 Consequence: the tool descriptions, blast_radius strings and tool_catalog flags (`scheduler: True`, `skill_proposals: True`, `durable_subagent_links: True`) promise a ledger the tools do not reach. The v1 handover stated this limit. The v2 status doc dropped it.
 
-Owner to fix: route the three handlers to the durable repositories through an injected session factory (the pattern LeasedEffectRecorder already uses), call the binding helper, or unregister the runtime tools until they are durable and say so in the catalog.
+Owner to fix: route the three handlers to the durable repositories through an injected session factory (the pattern LeasedEffectRecorder already uses), call the binding helper, or unregister the runtime tools until they are durable and say so in the catalog. Status 2026-09-02: fix PR 3 routes the three handlers through injected writers that use HermesExpansionRepository, SubagentLinkRepository and the durable task service in their own committed sessions, and every handler calls require_approved_runtime_binding first, so the approval is spent (closes GG-1). The owner of each row comes from the approval card, never from the arguments. The catalog gains runtime_tools_durable. The status docs named in HX-11 and DVC-12 carry dated lines. Verified by test_devon_expansion_tools_durable.py (the audit's run, per tool, through the HTTP surface) and the offline binding tests in test_devon_hermes_expansion.py.
 
 ### H7. The orphan check runs before the lease is taken, so a healthy in-flight effect is reported as ambiguous and the task row is clobbered (ELC-01)
 

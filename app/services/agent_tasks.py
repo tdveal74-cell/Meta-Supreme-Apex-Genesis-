@@ -39,11 +39,7 @@ from services.agent_runtime.contracts import (
     ToolCall,
 )
 from services.agent_runtime.effect_recorder import EffectRecorder
-from services.agent_runtime.expansion import (
-    InMemoryScheduleStore,
-    SkillProposalStore,
-    new_subagent_spec,
-)
+from services.agent_runtime.expansion import new_subagent_spec
 from services.agent_runtime.expansion_tools import ExpansionToolAdapter
 from services.agent_runtime.learning_loop import draft_skill_proposal_from_task
 from services.agent_runtime.planner import LLMPlanner, StaticPlanner
@@ -60,15 +56,62 @@ from services.intelligence.council_adapter import CouncilCapabilityAdapter
 from services.operator.agent_adapter import OperatorCapabilityAdapter
 
 github_client = GitHubRESTClient()
-# Process-local / not durable. Not Live. Durable follow-on is HermesExpansionRepository.
-schedule_store = InMemoryScheduleStore()
-skill_proposal_store = SkillProposalStore()
-expansion_adapter = ExpansionToolAdapter(
-    schedules=schedule_store,
-    skill_proposals=skill_proposal_store,
-)
 expansion_repo = HermesExpansionRepository()
 subagent_links = SubagentLinkRepository()
+
+
+async def _write_schedule(*, owner_id, goal, run_at, context):
+    """The runtime scheduler writes the table the HTTP routes read."""
+    async with AsyncSessionLocal() as session:
+        item = await expansion_repo.create_schedule(
+            session, owner_id=owner_id, goal=goal, run_at=run_at, context=context
+        )
+        await session.commit()
+        return item
+
+
+async def _write_skill_proposal(*, owner_id, proposal):
+    """Same table and same goal-slug dedupe as the auto-propose path."""
+    async with AsyncSessionLocal() as session:
+        if await expansion_repo.has_skill_proposal_named(
+            session, owner_id=owner_id, name=proposal.name
+        ):
+            raise ValueError(
+                f"a skill proposal named {proposal.name!r} already exists for this "
+                "owner; decide it before drafting another"
+            )
+        saved = await expansion_repo.save_skill_proposal(
+            session, owner_id=owner_id, proposal=proposal
+        )
+        await session.commit()
+        return saved
+
+
+async def _write_subagent(*, owner_id, parent_task_id, goal, max_steps, inherit_context_keys):
+    """Same durable child task and parent-child link as POST /agent-expansion/subagents."""
+    async with AsyncSessionLocal() as session:
+        child = await agent_tasks_service.spawn_subagent_task(
+            session,
+            owner_id=owner_id,
+            parent_task_id=parent_task_id,
+            goal=goal,
+            max_steps=max_steps,
+            inherit_context_keys=inherit_context_keys,
+        )
+        await session.commit()
+        return child.to_dict()
+
+
+# Each handler spends its runtime approval binding, then writes through the
+# repositories above in its own committed transaction, the way
+# LeasedEffectRecorder commits an intent: a worker crash after the write
+# leaves the row behind instead of losing an approved effect.
+expansion_adapter = ExpansionToolAdapter(
+    approvals=approvals,
+    schedule_writer=_write_schedule,
+    proposal_writer=_write_skill_proposal,
+    subagent_writer=_write_subagent,
+)
 # The provider resolves at call time, so the mock provider serves CI and the
 # live provider serves production through the same adapter instance.
 council_adapter = CouncilCapabilityAdapter(get_provider)
@@ -615,6 +658,7 @@ class DurableAgentTaskService:
                 "skill_proposals": True,
                 "skill_promotion_requires_human": True,
                 "materialize_due_schedules": True,
+                "runtime_tools_durable": True,
                 "auto_skill_propose_on_success": _auto_skill_propose_enabled(),
             },
             "execution": {

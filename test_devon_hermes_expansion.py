@@ -15,9 +15,38 @@ from services.agent_runtime.expansion import (
     schedule_in,
 )
 from services.agent_runtime.expansion_tools import ExpansionToolAdapter
+from services.agent_runtime.governance import (
+    APPROVAL_METADATA_KEY,
+    RUNTIME_REQUESTED_BY,
+    approval_binding,
+    approval_marker,
+)
 from services.agent_runtime.tools import ToolRegistry
 from services.browser.agent_adapter import BrowserCapabilityAdapter
-from services.devon.approval import ApprovalQueue
+from services.devon.approval import ApprovalQueue, ApprovalState
+
+
+def _approved_call(queue, *, tool, arguments, task_id="TASK-1", step_id="STEP-1"):
+    """Arguments carrying a spent-once approval, as the runtime hands them over."""
+    binding = approval_binding(
+        task_id=task_id, step_id=step_id, tool_name=tool, arguments=arguments
+    )
+    record, token = queue.request(
+        title="governed expansion",
+        what_happens=f"Run {tool}. {approval_marker(binding)}",
+        requested_by=RUNTIME_REQUESTED_BY,
+    )
+    assert queue.decide(record.request_id, token, "approve").approved is True
+    return {
+        **arguments,
+        APPROVAL_METADATA_KEY: {
+            "request_id": record.request_id,
+            "binding": binding,
+            "task_id": task_id,
+            "step_id": step_id,
+            "tool_name": tool,
+        },
+    }
 
 
 def test_subagent_spec_is_bounded() -> None:
@@ -93,17 +122,79 @@ def test_expansion_tools_register_and_describe() -> None:
 
 
 @pytest.mark.asyncio
-async def test_spawn_subagent_tool_emits_receipt_id() -> None:
-    adapter = ExpansionToolAdapter()
-    # WRITE tools need approval in the full runtime; unit-call the handler body
-    # after stripping the approval gate by invoking the private method with
-    # arguments only (approval is enforced by AgentRuntime before execute).
-    result = adapter._spawn_subagent(
-        {"parent_task_id": "TASK-1", "goal": "Child research", "max_steps": 4}
+async def test_spawn_subagent_tool_spends_its_approval_and_emits_receipt_id() -> None:
+    queue = ApprovalQueue()
+    adapter = ExpansionToolAdapter(approvals=queue)
+    call = _approved_call(
+        queue,
+        tool="runtime.spawn_subagent",
+        arguments={"parent_task_id": "TASK-1", "goal": "Child research", "max_steps": 4},
     )
-    assert result.ok
+    result = await adapter._spawn_subagent(call)
+    assert result.ok, result.error
     assert result.metadata is not None
     assert result.metadata["provider_receipt_id"].startswith("SUB-")
+    assert result.metadata["durable"] is False
+    request_id = call[APPROVAL_METADATA_KEY]["request_id"]
+    assert queue.get(request_id).state is ApprovalState.CONSUMED
+
+    # The same metadata cannot run the tool twice: the approval was spent.
+    replay = await adapter._spawn_subagent(call)
+    assert not replay.ok
+    assert "consumed" in (replay.error or "").lower()
+
+
+@pytest.mark.asyncio
+async def test_expansion_tools_refuse_without_approval_metadata() -> None:
+    adapter = ExpansionToolAdapter(approvals=ApprovalQueue())
+    for handler, arguments in (
+        (adapter._spawn_subagent, {"parent_task_id": "TASK-1", "goal": "x"}),
+        (adapter._schedule_goal, {"goal": "x", "delay_seconds": 0}),
+        (adapter._propose_skill, {"task_id": "TASK-1", "goal": "x", "observations": []}),
+    ):
+        result = await handler(arguments)
+        assert not result.ok
+        assert "metadata" in (result.error or "").lower()
+
+    bare = ExpansionToolAdapter()
+    result = await bare._schedule_goal({"goal": "x", "delay_seconds": 0})
+    assert not result.ok
+    assert "approval authority" in (result.error or "").lower()
+
+
+@pytest.mark.asyncio
+async def test_schedule_goal_owner_comes_from_the_card_not_the_arguments() -> None:
+    queue = ApprovalQueue()
+    adapter = ExpansionToolAdapter(approvals=queue)
+    binding = approval_binding(
+        task_id="TASK-1",
+        step_id="STEP-1",
+        tool_name="runtime.schedule_goal",
+        arguments={"goal": "Later", "delay_seconds": 0, "owner_id": "someone-else"},
+    )
+    record, token = queue.request(
+        title="schedule",
+        what_happens=f"Schedule. {approval_marker(binding)}",
+        requested_by=RUNTIME_REQUESTED_BY,
+        owner_id="the-real-owner",
+    )
+    assert queue.decide(record.request_id, token, "approve").approved is True
+    result = await adapter._schedule_goal(
+        {
+            "goal": "Later",
+            "delay_seconds": 0,
+            "owner_id": "someone-else",
+            APPROVAL_METADATA_KEY: {
+                "request_id": record.request_id,
+                "binding": binding,
+                "task_id": "TASK-1",
+                "step_id": "STEP-1",
+                "tool_name": "runtime.schedule_goal",
+            },
+        }
+    )
+    assert not result.ok
+    assert "does not match the owner" in (result.error or "")
 
 
 def test_schedule_future_not_due_yet() -> None:

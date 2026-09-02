@@ -40,6 +40,8 @@ the Build 12 banded conflict policy; PR 45 finished the ops polish.
 
 Honest label: schema and CI green are not the same as a person running Hermes as the live operator. This stack is CI-proven / not operator-live.
 
+Update 2026-09-02 (fix PR 3 of the DEVON and Hermes audit): the three runtime tools, runtime.spawn_subagent, runtime.schedule_goal and runtime.propose_skill, now spend their approval binding and write the same tables the HTTP routes read. Before that date the subagent, scheduler and skill-proposal rows above were true for the HTTP routes only; the runtime tool path was process-local (audit finding H6).
+
 ## Governance invariants held
 
 - DEVON core remains effect-free
