@@ -20,9 +20,9 @@ from services.devon.approval import ApprovalState
 HASH = "a" * 64
 
 
-def draft(command_id: str = "cmd-20260902-001") -> dict:
+def draft() -> dict:
+    """A draft as a client sends it to authorize: no command id, DEVON mints one."""
     return {
-        "command_id": command_id,
         "project_id": "project-tqo-001",
         "cut_id": "cut-tqo-001",
         "property": "tqo",
@@ -67,9 +67,12 @@ def studio(monkeypatch):
 
 
 async def _approved(client, auth_headers, body: dict) -> str:
+    """Authorize and approve; the minted command id is written into the draft."""
     raised = await client.post("/api/v1/devon/editforge/authorize", headers=auth_headers, json=body)
     assert raised.status_code == 200, raised.text
     request_id = raised.json()["request_id"]
+    body["command_id"] = raised.json()["command_id"]
+    assert body["command_id"].startswith("cmd-")
     ruled = await client.post(
         "/api/v1/devon/approvals/decide",
         headers=auth_headers,
@@ -118,7 +121,7 @@ async def test_one_approval_executes_once(client, auth_headers, studio):
 async def test_another_account_cannot_execute_with_someone_elses_approval(
     client, auth_headers, studio
 ):
-    body = draft("cmd-20260902-002")
+    body = draft()
     request_id = await _approved(client, auth_headers, body)
     other = await _second_account(client)
 
@@ -147,7 +150,7 @@ async def test_another_account_cannot_execute_with_someone_elses_approval(
 
 
 async def test_retry_and_cancel_are_gated_on_the_spent_approval(client, auth_headers, studio):
-    body = draft("cmd-20260902-003")
+    body = draft()
     request_id = await _approved(client, auth_headers, body)
     control = f"/api/v1/devon/editforge/executions/{body['command_id']}"
 
@@ -190,3 +193,79 @@ async def test_retry_and_cancel_are_gated_on_the_spent_approval(client, auth_hea
     )
     assert cancelled.status_code == 200, cancelled.text
     assert studio.actions == [(body["command_id"], "retry"), (body["command_id"], "cancel")]
+
+
+async def test_a_caller_chosen_command_id_is_refused_at_authorize(client, auth_headers):
+    """The critic's attack on the first cut: a second account authorized a draft
+    carrying the victim's command id, executed it (spent even when the studio
+    refused), and then cancelled the victim's command through the title match.
+    Ids are minted by authorize now, so no account can name another's."""
+    chosen = {**draft(), "command_id": "cmd-victims-id-777"}
+    refused = await client.post(
+        "/api/v1/devon/editforge/authorize", headers=auth_headers, json=chosen
+    )
+    assert refused.status_code == 422, refused.text
+    assert "minted" in refused.json()["detail"]
+
+
+async def test_another_account_cannot_control_a_command_it_did_not_mint(
+    client, auth_headers, studio
+):
+    victim = draft()
+    victim_id = await _approved(client, auth_headers, victim)
+    executed = await client.post(
+        "/api/v1/devon/editforge/execute",
+        headers=auth_headers,
+        json={"approval_id": victim_id, "draft": victim},
+    )
+    assert executed.status_code == 200, executed.text
+
+    other = await _second_account(client)
+    attacker = draft()
+    attacker_id = await _approved(client, other, attacker)
+    executed = await client.post(
+        "/api/v1/devon/editforge/execute",
+        headers=other,
+        json={"approval_id": attacker_id, "draft": attacker},
+    )
+    assert executed.status_code == 200, executed.text
+    assert attacker["command_id"] != victim["command_id"]
+
+    # The attacker's own spent approval names the attacker's minted id, never
+    # the victim's, so the victim's command cannot be reached from it.
+    hijack = await client.post(
+        f"/api/v1/devon/editforge/executions/{victim['command_id']}/cancel",
+        headers=other,
+        json={"approval_id": attacker_id},
+    )
+    assert hijack.status_code == 409, hijack.text
+    assert "does not name this command" in hijack.json()["detail"]
+    with_victims_approval = await client.post(
+        f"/api/v1/devon/editforge/executions/{victim['command_id']}/cancel",
+        headers=other,
+        json={"approval_id": victim_id},
+    )
+    assert with_victims_approval.status_code == 404, with_victims_approval.text
+    assert studio.actions == []
+
+
+async def test_execute_requires_the_minted_id_in_the_draft(client, auth_headers, studio):
+    body = draft()
+    request_id = await _approved(client, auth_headers, body)
+    without = {k: v for k, v in body.items() if k != "command_id"}
+    refused = await client.post(
+        "/api/v1/devon/editforge/execute",
+        headers=auth_headers,
+        json={"approval_id": request_id, "draft": without},
+    )
+    assert refused.status_code == 422, refused.text
+    forged = {**body, "command_id": "cmd-something-else"}
+    mismatched = await client.post(
+        "/api/v1/devon/editforge/execute",
+        headers=auth_headers,
+        json={"approval_id": request_id, "draft": forged},
+    )
+    assert mismatched.status_code == 409, mismatched.text
+    assert "does not match" in mismatched.json()["detail"]
+    assert _queue.get(request_id).state is ApprovalState.APPROVED, "nothing was spent"
+    assert studio.executed == []

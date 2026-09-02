@@ -3,8 +3,9 @@ Application configuration.
 Secrets are loaded from environment variables. Never hard-code them.
 """
 
+import os
 from functools import lru_cache
-from typing import List
+from typing import List, Mapping, Optional
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -14,28 +15,56 @@ from services.devon.persona import REGISTER as DEVON_PERSONA_REGISTER
 
 DEFAULT_SECRET_KEY = "change-me-in-production-use-openssl-rand-hex-32"
 
+#: Environments a developer runs on their own machine. Anything else is a
+#: deployment, staging included: it is reachable and it signs the same JWTs.
+LOCAL_ENVIRONMENTS = frozenset({"development", "dev", "test", "local", ""})
 
-def secret_key_refusal(environment: str, secret_key: str) -> str:
+#: Variables a hosting platform injects into every deployment it runs. Their
+#: presence means "deployed" whatever ENVIRONMENT says, so a service whose
+#: ENVIRONMENT was never set cannot boot on the public key by accident.
+PLATFORM_MARKERS = ("RAILWAY_ENVIRONMENT_NAME", "RAILWAY_PROJECT_ID", "VERCEL_ENV")
+
+
+def deployment_reason(
+    environment: str, environ: Optional[Mapping[str, str]] = None
+) -> str:
+    """Why this process counts as deployed, or an empty string when it is local."""
+    env = (environment or "").strip().lower()
+    if env not in LOCAL_ENVIRONMENTS:
+        return f"ENVIRONMENT is {env}"
+    variables = os.environ if environ is None else environ
+    for marker in PLATFORM_MARKERS:
+        if (variables.get(marker) or "").strip():
+            return f"{marker} is set, so this process runs on a hosting platform"
+    return ""
+
+
+def secret_key_refusal(
+    environment: str, secret_key: str, environ: Optional[Mapping[str, str]] = None
+) -> str:
     """Why this process must not start, or an empty string when it may.
 
-    Only production is refused. Development and test keep the default so the
-    standalone and offline paths run with no environment at all, which is
-    the same reason the default exists.
+    A deployed process (ENVIRONMENT outside the local set, or a hosting
+    platform's own marker present) is refused the public default and an
+    empty key. Development and test keep the default so the standalone and
+    offline paths run with no environment at all, which is the same reason
+    the default exists.
     """
-    if (environment or "").strip().lower() != "production":
+    deployed = deployment_reason(environment, environ)
+    if not deployed:
         return ""
     key = (secret_key or "").strip()
     if not key:
         return (
-            "SECRET_KEY is empty and ENVIRONMENT is production. Refusing to start: "
-            "every JWT would verify against nothing. Set SECRET_KEY to the output "
-            "of `openssl rand -hex 32`."
+            f"SECRET_KEY is empty and {deployed}. Refusing to start: every JWT "
+            "would verify against nothing. Set SECRET_KEY to the output of "
+            "`openssl rand -hex 32`."
         )
     if key == DEFAULT_SECRET_KEY:
         return (
-            "SECRET_KEY is the public default and ENVIRONMENT is production. "
-            "Refusing to start: anyone holding the repository could mint a token "
-            "for any user. Set SECRET_KEY to the output of `openssl rand -hex 32`."
+            f"SECRET_KEY is the public default and {deployed}. Refusing to start: "
+            "anyone holding the repository could mint a token for any user. Set "
+            "SECRET_KEY to the output of `openssl rand -hex 32`."
         )
     return ""
 

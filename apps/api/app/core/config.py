@@ -1,8 +1,31 @@
 """Application configuration. Secrets from environment only."""
 
+import os
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_SECRET_KEY = "dev-only-change-me-in-production"
+LOCAL_ENVIRONMENTS = frozenset({"development", "dev", "test", "local", ""})
+PLATFORM_MARKERS = ("RAILWAY_ENVIRONMENT_NAME", "RAILWAY_PROJECT_ID", "VERCEL_ENV")
+
+
+def secret_key_refusal(app_env: str, secret_key: str) -> str:
+    """The same rule as the root tree: a deployed process never boots on the default."""
+    env = (app_env or "").strip().lower()
+    deployed = env not in LOCAL_ENVIRONMENTS or any(
+        (os.environ.get(marker) or "").strip() for marker in PLATFORM_MARKERS
+    )
+    if not deployed:
+        return ""
+    key = (secret_key or "").strip()
+    if not key or key == DEFAULT_SECRET_KEY:
+        return (
+            "SECRET_KEY is the public default or empty on a deployed process. "
+            "Refusing to start. Set SECRET_KEY to the output of `openssl rand -hex 32`."
+        )
+    return ""
 
 
 class Settings(BaseSettings):
@@ -13,7 +36,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     API_PREFIX: str = "/api/v1"
 
-    SECRET_KEY: str = "dev-only-change-me-in-production"
+    SECRET_KEY: str = DEFAULT_SECRET_KEY
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
 
@@ -50,6 +73,13 @@ class Settings(BaseSettings):
     WORKFLOW_ORPHAN_TIMEOUT_MINUTES: int = 30
 
     LOG_LEVEL: str = "INFO"
+
+    @model_validator(mode="after")
+    def _refuse_the_default_secret_when_deployed(self) -> "Settings":
+        refusal = secret_key_refusal(self.APP_ENV, self.SECRET_KEY)
+        if refusal:
+            raise ValueError(refusal)
+        return self
 
 
 @lru_cache

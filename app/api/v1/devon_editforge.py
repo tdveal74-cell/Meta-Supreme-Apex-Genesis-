@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException
@@ -62,7 +63,11 @@ class OutputBody(BaseModel):
 
 
 class EditDraftBody(BaseModel):
-    command_id: str = Field(..., min_length=3, max_length=120)
+    # Minted by DEVON at authorize and returned to the caller; the draft
+    # carries it back into execute. A caller-chosen id is refused at
+    # authorize, because two accounts holding approvals for one id is how a
+    # second account gets to retry or cancel another account's command.
+    command_id: Optional[str] = Field(default=None, min_length=3, max_length=120)
     project_id: str = Field(..., min_length=3, max_length=120)
     cut_id: str = Field(..., min_length=3, max_length=120)
     property: Literal["tqo", "nco-forge", "tsws", "ascension-caudex"]
@@ -73,7 +78,7 @@ class EditDraftBody(BaseModel):
     operations: List[OperationBody] = Field(..., min_length=1, max_length=250)
     output: OutputBody
 
-    def to_intent(self) -> Dict[str, Any]:
+    def to_intent(self, *, command_id: Optional[str] = None) -> Dict[str, Any]:
         identity = None
         if self.identity:
             identity = {
@@ -92,7 +97,7 @@ class EditDraftBody(BaseModel):
         if self.output.upload_url:
             output["uploadUrl"] = self.output.upload_url
         return {
-            "commandId": self.command_id,
+            "commandId": command_id or self.command_id,
             "projectId": self.project_id,
             "cutId": self.cut_id,
             "property": self.property,
@@ -125,6 +130,11 @@ def _raised_by(record, user: CurrentUser) -> bool:
 
 def _command_title(command_id: str) -> str:
     return f"Execute EditForge command {command_id}"
+
+
+def _mint_command_id() -> str:
+    """Unguessable and owned: the approval's title names it and nothing else can."""
+    return f"cmd-{secrets.token_hex(8)}"
 
 
 def _client() -> EditForgeClient:
@@ -169,13 +179,27 @@ async def editforge_status(user: CurrentUser) -> Dict[str, Any]:
 
 @router.post("/authorize")
 async def authorize_edit(body: EditDraftBody, user: CurrentUser) -> Dict[str, Any]:
-    """Raise a single-use approval bound to the exact edit intent hash."""
-    intent = body.to_intent()
+    """Raise a single-use approval bound to the exact edit intent hash.
+
+    DEVON mints the command id here and hands it back; the same draft with
+    that id is what execute accepts, because the id is inside the hash the
+    approval was bound to.
+    """
+    if body.command_id:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "command_id is minted by DEVON at authorize. Send the draft without "
+                "one and carry the returned command_id into execute."
+            ),
+        )
+    command_id = _mint_command_id()
+    intent = body.to_intent(command_id=command_id)
     issues = validate_intent(intent)
     if issues:
         raise HTTPException(status_code=422, detail=issues)
     record, token = _queue.request(
-        title=_command_title(body.command_id),
+        title=_command_title(command_id),
         what_happens=approval_consequence(intent),
         requested_by=f"DEVON:{user.id}",
         area="Creation",
@@ -187,9 +211,13 @@ async def authorize_edit(body: EditDraftBody, user: CurrentUser) -> Dict[str, An
         "state": "approval_required",
         "request_id": record.request_id,
         "approval_token": token,
+        "command_id": command_id,
         "summary": record.summary(),
         "decision_endpoint": "/api/v1/devon/approvals/decide",
-        "note": "The token is returned once. Approval authorizes only this exact command hash.",
+        "note": (
+            "The token is returned once. Approval authorizes only this exact command "
+            "hash, which includes the minted command_id."
+        ),
     }
 
 
@@ -202,6 +230,11 @@ async def execute_edit(body: ExecuteBody, user: CurrentUser) -> Dict[str, Any]:
     refuses leaves the approval spent; a fresh authorize is the retry path,
     the same policy every runtime adapter follows.
     """
+    if not body.draft.command_id:
+        raise HTTPException(
+            status_code=422,
+            detail="draft.command_id must be the command_id that authorize returned",
+        )
     intent = body.draft.to_intent()
     record = _queue.get(body.approval_id)
     if record is None or not _raised_by(record, user):
@@ -274,8 +307,9 @@ async def control_execution(
     """Retry or cancel through EditForge, on the approval that ran the command.
 
     The caller names the approval it executed with. It must be the caller's
-    own, already spent by execute, and raised for this command id. Publication
-    and deletion are absent.
+    own, already spent by execute, and raised for this command id. The id was
+    minted by authorize, so no other account can hold an approval that names
+    it. Publication and deletion are absent.
     """
     record = _queue.get(body.approval_id)
     if record is None or not _raised_by(record, user):
