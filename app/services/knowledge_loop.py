@@ -28,6 +28,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services import soul as soul_service
@@ -240,6 +241,17 @@ def _candidate_from_payload(payload: Dict[str, Any]) -> SoulWriteCandidate:
         observed_on=str(raw.get("observed_on") or _now_date()),
         source_note=str(raw.get("source_note") or LOOP),
     )
+
+
+def _action_started_for(events: list, request_id: str) -> Dict[str, Any]:
+    """The ACTION_STARTED a commit of this request already wrote, if any."""
+    for event in events:
+        if event.get("name") != "ACTION_STARTED":
+            continue
+        payload = event.get("payload") or {}
+        if str(payload.get("approval_request_id") or "") == request_id:
+            return event
+    return {}
 
 
 def _plan_payload_for(events: list, request_id: str) -> Dict[str, Any]:
@@ -571,12 +583,27 @@ class KnowledgeLoop:
                 status_code=403,
             )
 
-        spent = _queue().consume(request_id, consumed_by="knowledge-loop")
-        if not spent.ok:
-            reason = spent.reason.value if spent.reason else spent.message
+        # The ledger rows that describe this commit are durable before the
+        # approval is spent, and the spend is the last thing before the
+        # effect. The approval store spends on its own connection and cannot
+        # join this transaction, so the order of durability is the guarantee:
+        # a failure after the spend leaves ACTION_STARTED and ACTION_FAILED on
+        # the intent instead of a spent approval, a fired webhook and no row.
+        # Commits of one request are serialized on the intent, and a second
+        # commit finds the first one's ACTION_STARTED under the lock.
+        await db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(CAST(:key AS text)))"),
+            {"key": f"knowledge-loop:{intent_id}"},
+        )
+        opened = await ledger.read_intent(db, owner_id=owner_id, intent_id=intent_id)
+        if _action_started_for(opened["events"], request_id):
             raise KnowledgeLoopRefused(
-                reason or "Approval could not be consumed.",
-                status_code=403,
+                "A commit of this approval already started: the ledger holds "
+                f"ACTION_STARTED for it on intent {intent_id}. If it ended without "
+                "ACTION_COMPLETED or ACTION_FAILED, the process died between the "
+                "ledger rows and the spend; raise a new proposal rather than "
+                "retrying this one.",
+                status_code=409,
             )
 
         started = await ledger.append_event(
@@ -584,7 +611,7 @@ class KnowledgeLoop:
             owner_id=owner_id,
             intent_id=intent_id,
             name="ACTION_STARTED",
-            payload={"approval_request_id": request_id, "consumed": True},
+            payload={"approval_request_id": request_id, "consumed": False},
         )
 
         candidate = _candidate_from_payload(plan_payload)
@@ -629,9 +656,42 @@ class KnowledgeLoop:
                 name="LEARNING_CAPTURED",
                 payload={"layer": SUBCONSCIOUS_LAYER},
             )
+        await db.commit()
 
-        soul_result = await self._maybe_write_soul(candidate, layer)
-        n8n_result = await self._maybe_route_n8n(candidate, filing_plan)
+        spent = _queue().consume(request_id, consumed_by="knowledge-loop")
+        if not spent.ok:
+            reason = spent.reason.value if spent.reason else spent.message
+            await self._record_failure(
+                db,
+                owner_id=owner_id,
+                intent_id=intent_id,
+                request_id=request_id,
+                consumed=False,
+                error=reason or "Approval could not be consumed.",
+            )
+            raise KnowledgeLoopRefused(
+                reason or "Approval could not be consumed.",
+                status_code=403,
+            )
+
+        try:
+            soul_result = await self._maybe_write_soul(candidate, layer)
+            n8n_result = await self._maybe_route_n8n(candidate, filing_plan)
+        except Exception as exc:
+            await self._record_failure(
+                db,
+                owner_id=owner_id,
+                intent_id=intent_id,
+                request_id=request_id,
+                consumed=True,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            raise KnowledgeLoopRefused(
+                f"The effect failed after the approval was spent: {exc}. The ledger "
+                f"holds ACTION_FAILED on intent {intent_id}; the approval stays "
+                "spent, so raise a new proposal.",
+                status_code=502,
+            ) from exc
 
         await ledger.append_event(
             db,
@@ -660,6 +720,7 @@ class KnowledgeLoop:
             learned=candidate.text[:400],
             next_steps="Find via GET /api/v1/soul/find. Pinecone recall only when the layer is on.",
         )
+        await db.commit()
 
         connectors = _connector_honesty(postgres_proven=True)
         pinecone_on = connectors["pinecone"]["configured"]
@@ -678,6 +739,31 @@ class KnowledgeLoop:
             "simulated": not (pinecone_on and soul_result.get("written")),
             "live": bool(pinecone_on and soul_result.get("written")),
         }
+
+    async def _record_failure(
+        self,
+        db: AsyncSession,
+        *,
+        owner_id: str,
+        intent_id: str,
+        request_id: str,
+        consumed: bool,
+        error: str,
+    ) -> None:
+        """ACTION_FAILED, committed on its own, so the trace survives the raise."""
+        await db.rollback()
+        await ledger.append_event(
+            db,
+            owner_id=owner_id,
+            intent_id=intent_id,
+            name="ACTION_FAILED",
+            payload={
+                "approval_request_id": request_id,
+                "consumed": consumed,
+                "error": error[:500],
+            },
+        )
+        await db.commit()
 
     async def find(
         self,
