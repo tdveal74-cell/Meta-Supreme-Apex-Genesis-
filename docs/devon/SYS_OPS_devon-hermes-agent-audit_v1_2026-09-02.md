@@ -107,7 +107,9 @@ select column_name from information_schema.columns where table_name = 'artifacts
 
 If body and kind are absent, every remember, file, thread, plate and brief commit on production is a 500 today.
 
-Owner to fix: add `014_artifact_body.py` executing the existing SQL (it is already `ADD COLUMN IF NOT EXISTS`), update the ci.yml presence loops and the head assertion, and add a CI step that runs the ledger and knowledge suites against an Alembic-built database.
+Outcome, 2026-09-02 08:35 UTC: the query was never run on the right host (section 10 has the detail). PR #111 merged as 57fdddb and Railway deployment 782b095d executed the 014 and 015 revisions: deploy log lines `Running upgrade 013_approval_consumption -> 014_artifact_body` and `Running upgrade 014_artifact_body -> 015_devon_approval_owner`, status SUCCESS, application started afterwards. Production now has both columns. The before-state was not captured and cannot be recovered from the log.
+
+Owner to fix: add `014_artifact_body.py` executing the existing SQL (it is already `ADD COLUMN IF NOT EXISTS`), update the ci.yml presence loops and the head assertion, and add a CI step that runs the ledger and knowledge suites against an Alembic-built database. Status 2026-09-02: the revision, the ci.yml pins and the head assertion shipped in PR #111 (57fdddb). The CI step against an Alembic-built database is still open.
 
 ## 2. High findings (verified)
 
@@ -445,7 +447,7 @@ Asked on an inline card and answered the same day.
 | The three runtime expansion tools | Make them durable now, through the same repositories the HTTP routes use | Section 9 item 8 becomes a real change, roughly a day |
 | .agents/skills/unlazy and the unpinned community plugins | Remove unlazy, pin the three plugins by version | Small separate PR, no runtime effect |
 | dcp_ receipt tokens | Identifiers, not credentials. The n8n capture webhook authenticates with x-devon-key | No rotation. One sentence added to the receipt convention |
-| The C3 production query | Run it now, read-only, before the 014 migration ships | PR #111 carries the 014 revision, so the query has to run before that PR merges. Result recorded here when it comes back |
+| The C3 production query | Run it now, read-only, before the 014 migration ships | Not captured. On 2026-09-02 the query was run on the EditForge VPS srv1936199, which holds no DEVON database (the DEVON database is the Postgres service in the Railway devon-api project), and Tee then ruled "Merge" without the before-state. PR #111 merged as 57fdddb. Railway deployment 782b095d (SUCCESS, 08:35 UTC) logged `Running upgrade 013_approval_consumption -> 014_artifact_body` and `Running upgrade 014_artifact_body -> 015_devon_approval_owner`, so production now carries artifacts.body, artifacts.kind and devon_approvals.owner_id at head 015. Whether body and kind were missing before that deploy is unknown and stays unknown: Alembic surfaces no Postgres notices, so the log's silence proves nothing either way |
 
 ## 11. Gauntlet score block for the DEVON and Hermes stack
 
