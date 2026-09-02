@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import os
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -42,6 +43,8 @@ from services.intelligence.soul import (
     SoulWriteCandidate,
     SoulWriteRefused,
 )
+
+logger = logging.getLogger(__name__)
 
 #: Ledger kinds include Tee rulings and operator files (task, project,
 #: thread, brief, plate, episode). Pinecone devon-soul still refuses
@@ -252,6 +255,68 @@ def _action_started_for(events: list, request_id: str) -> Dict[str, Any]:
         if str(payload.get("approval_request_id") or "") == request_id:
             return event
     return {}
+
+
+def _spent_detail(events: list, intent_id: str, request_id: str) -> str:
+    """Why a CONSUMED approval is refused: the intent and its terminal event.
+
+    The reason is in the ledger; the refusal points at it instead of saying
+    only "spent".
+    """
+    started_at = None
+    for index, event in enumerate(events):
+        if event.get("name") != "ACTION_STARTED":
+            continue
+        payload = event.get("payload") or {}
+        if str(payload.get("approval_request_id") or "") == request_id:
+            started_at = index
+    if started_at is None:
+        return (
+            f"This approval was already spent, and intent {intent_id} holds no "
+            "ACTION_STARTED for it: the spend did not come through this commit "
+            "path. Raise a new proposal."
+        )
+    for event in events[started_at + 1 :]:
+        if event.get("name") == "ACTION_COMPLETED":
+            return (
+                "This approval was already spent and its commit completed: intent "
+                f"{intent_id} holds ACTION_COMPLETED and a receipt. Nothing to retry."
+            )
+        if event.get("name") == "ACTION_FAILED":
+            error = (event.get("payload") or {}).get("error") or "no error recorded"
+            return (
+                "This approval was already spent and its commit failed: intent "
+                f"{intent_id} holds ACTION_FAILED ({error}). Raise a new proposal."
+            )
+    return (
+        f"This approval was already spent, and intent {intent_id} holds "
+        "ACTION_STARTED with no ACTION_COMPLETED or ACTION_FAILED: the commit died "
+        "in flight after the spend. Raise a new proposal."
+    )
+
+
+def _connector_outcome(result: Dict[str, Any], key: str) -> Dict[str, Any]:
+    """What the ledger keeps of a connector's answer: outcome and reason."""
+    kept: Dict[str, Any] = {key: bool(result.get(key)), "live": bool(result.get("live"))}
+    if result.get("reason"):
+        kept["reason"] = str(result["reason"])[:300]
+    if result.get("status_code") is not None:
+        kept["status_code"] = result["status_code"]
+    return kept
+
+
+_REDACTED_ENV = ("N8N_WEBHOOK_URL", "N8N_WEBHOOK_SECRET", "PINECONE_API_KEY")
+
+
+def _describe_error(exc: BaseException) -> str:
+    """The error as the ledger and the response may carry it: class, first
+    300 characters, and never a configured secret."""
+    described = f"{type(exc).__name__}: {str(exc)[:300]}"
+    for name in _REDACTED_ENV:
+        secret = (os.environ.get(name) or "").strip()
+        if secret and secret in described:
+            described = described.replace(secret, f"<{name}>")
+    return described
 
 
 def _plan_payload_for(events: list, request_id: str) -> Dict[str, Any]:
@@ -539,8 +604,9 @@ class KnowledgeLoop:
                 status_code=403,
             )
         if record.state is ApprovalState.CONSUMED:
+            spent_on = await ledger.read_intent(db, owner_id=owner_id, intent_id=intent_id)
             raise KnowledgeLoopRefused(
-                "This approval was already spent; raise a new one.",
+                _spent_detail(spent_on["events"], intent_id, request_id),
                 status_code=403,
             )
         if record.state is not ApprovalState.APPROVED:
@@ -611,7 +677,7 @@ class KnowledgeLoop:
             owner_id=owner_id,
             intent_id=intent_id,
             name="ACTION_STARTED",
-            payload={"approval_request_id": request_id, "consumed": False},
+            payload={"approval_request_id": request_id},
         )
 
         candidate = _candidate_from_payload(plan_payload)
@@ -674,53 +740,85 @@ class KnowledgeLoop:
                 status_code=403,
             )
 
+        # Everything after the spend runs inside the failure recorder: the
+        # connectors and the ledger rows that describe them. A connector that
+        # refuses (the soul layer off, n8n unreachable) is a completed capture,
+        # not a failure: the artifact was durable before the spend, and the
+        # refusal is written on ACTION_COMPLETED and returned in the response.
+        # An exception here, in a connector or in the ledger writes that
+        # follow, is a failure: ACTION_FAILED with the error, 502 naming the
+        # intent, and the approval stays spent.
         try:
             soul_result = await self._maybe_write_soul(candidate, layer)
             n8n_result = await self._maybe_route_n8n(candidate, filing_plan)
-        except Exception as exc:
-            await self._record_failure(
+            await ledger.append_event(
                 db,
                 owner_id=owner_id,
                 intent_id=intent_id,
-                request_id=request_id,
-                consumed=True,
-                error=f"{type(exc).__name__}: {exc}",
+                name="ACTION_COMPLETED",
+                payload={
+                    "approval_request_id": request_id,
+                    "consumed": True,
+                    "soul_written": bool(soul_result.get("written")),
+                    "n8n_routed": bool(n8n_result.get("routed")),
+                    "soul": _connector_outcome(soul_result, "written"),
+                    "n8n": _connector_outcome(n8n_result, "routed"),
+                },
             )
+            receipt = await ledger.issue_receipt(
+                db,
+                owner_id=owner_id,
+                intent_id=intent_id,
+                what_happened=(
+                    f"Remembered in-estate: {candidate.text[:400]}. "
+                    f"Ledger artifact {artifact['artifact_id']}."
+                ),
+                verification=(
+                    f"Read the ledger row back: intent {intent_id} is receipted, "
+                    f"artifact path {path}."
+                ),
+                provenance="app.services.knowledge_loop",
+                artifacts=[path],
+                learned=candidate.text[:400],
+                next_steps="Find via GET /api/v1/soul/find. Pinecone recall only when the layer is on.",
+            )
+            await db.commit()
+        except BaseException as exc:
+            described = _describe_error(exc)
+            logger.error(
+                "knowledge-loop commit failed after the spend on intent %s, request %s: %s",
+                intent_id,
+                request_id,
+                described,
+            )
+            try:
+                await self._record_failure(
+                    db,
+                    owner_id=owner_id,
+                    intent_id=intent_id,
+                    request_id=request_id,
+                    consumed=True,
+                    error=described,
+                )
+                trace = f"The ledger holds ACTION_FAILED on intent {intent_id}"
+            except Exception as record_exc:
+                logger.error(
+                    "ACTION_FAILED could not be written on intent %s: %s",
+                    intent_id,
+                    _describe_error(record_exc),
+                )
+                trace = (
+                    f"ACTION_FAILED could not be written on intent {intent_id} either "
+                    f"({_describe_error(record_exc)}); its ACTION_STARTED stands with "
+                    "no terminal event"
+                )
+            if not isinstance(exc, Exception):
+                raise
             raise KnowledgeLoopRefused(
-                f"The effect failed after the approval was spent: {exc}. The ledger "
-                f"holds ACTION_FAILED on intent {intent_id}; the approval stays "
-                "spent, so raise a new proposal.",
+                f"The effect failed after the approval was spent: {described}. "
+                f"{trace}; the approval stays spent, so raise a new proposal.",
                 status_code=502,
             ) from exc
-
-        await ledger.append_event(
-            db,
-            owner_id=owner_id,
-            intent_id=intent_id,
-            name="ACTION_COMPLETED",
-            payload={
-                "soul_written": bool(soul_result.get("written")),
-                "n8n_routed": bool(n8n_result.get("routed")),
-            },
-        )
-        receipt = await ledger.issue_receipt(
-            db,
-            owner_id=owner_id,
-            intent_id=intent_id,
-            what_happened=(
-                f"Remembered in-estate: {candidate.text[:400]}. "
-                f"Ledger artifact {artifact['artifact_id']}."
-            ),
-            verification=(
-                f"Read the ledger row back: intent {intent_id} is receipted, "
-                f"artifact path {path}."
-            ),
-            provenance="app.services.knowledge_loop",
-            artifacts=[path],
-            learned=candidate.text[:400],
-            next_steps="Find via GET /api/v1/soul/find. Pinecone recall only when the layer is on.",
-        )
-        await db.commit()
 
         connectors = _connector_honesty(postgres_proven=True)
         pinecone_on = connectors["pinecone"]["configured"]
