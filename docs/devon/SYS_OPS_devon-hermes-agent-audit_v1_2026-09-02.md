@@ -131,7 +131,7 @@ Run: approve one render. `POST /devon/editforge/execute` with the byte-identical
 
 Consequence: one human approval renders N times and spends provider credit N times. The runtime lane consumes correctly (verified), the HTTP lane does not.
 
-Owner to fix: `_queue.consume` before the client call, compare requested_by to the caller, gate retry and cancel on the same approval record.
+Owner to fix: `_queue.consume` before the client call, compare requested_by to the caller, gate retry and cancel on the same approval record. Status 2026-09-02: fix PR 4 spends the approval before the command leaves EditForge's door, returns the unknown-id 404 to any account that did not raise the approval, and gates retry and cancel on the caller's spent approval for that command id (a body field approval_id, so the bare control call is 422). The fresh critic showed the first cut's gate could be satisfied by a second account authorizing a draft with the victim's caller-chosen command id; the command id is now minted by authorize and returned, a caller-chosen one is refused, and execute requires the minted id in the draft, where the intent hash already binds it. Residuals, named: a command the studio refuses leaves the approval spent with no record of the refusal, so retry on it reaches the studio for a command that never ran; and GET /executions/{id} stays readable by any signed-in account. Verified by test_devon_editforge_http_lane.py against a fake studio that counts commands, including the critic's attack.
 
 ### H3. SECRET_KEY defaults to a public string and nothing refuses to boot with it (AAT-03)
 
@@ -139,7 +139,7 @@ Location: `app/core/config.py:30`, `app/security/jwt.py:30`. Verified end to end
 
 Run: with SECRET_KEY unset, forge an HS256 token for an existing user id with the literal default. `GET /api/v1/auth/me` returns 200 as that user. No aud, no iss, no production guard anywhere in the repo. `infrastructure/docker/docker-compose.yml` ships the same literal inline.
 
-Owner to fix: refuse to start when ENVIRONMENT is production and SECRET_KEY equals the default, and drop the literal from compose.
+Owner to fix: refuse to start when ENVIRONMENT is production and SECRET_KEY equals the default, and drop the literal from compose. Status 2026-09-02: fix PR 4 adds a settings validator that refuses to construct on a deployed process with the default or an empty SECRET_KEY. Deployed means ENVIRONMENT outside the local set (development, dev, test, local, empty), so staging counts, or a hosting platform's own marker present (RAILWAY_ENVIRONMENT_NAME, RAILWAY_PROJECT_ID, VERCEL_ENV), so a Railway service whose ENVIRONMENT was never set is still refused; the live value of ENVIRONMENT on Railway was not read and does not need to be. The compose file requires SECRET_KEY from the environment, both .env.example files carry an empty SECRET_KEY with the openssl hint, and the secondary apps/api tree carries the same guard on its own default. On Railway a refused boot fails the service's health check (healthcheckPath /api/v1/health, read from the service config on 2026-09-02) and the previous deployment keeps serving. Verified by test_secret_key_boot_guard.py.
 
 ### H4. The operator "read" lane reads any file the process can read, including the process environment, with no JWT and no approval
 
