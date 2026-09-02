@@ -7,6 +7,7 @@ POST /knowledge or POST /knowledge/search (pure-semantic remains).
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -44,7 +45,9 @@ class FederatedIngestResponse(BaseModel):
 class FederatedQueryRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000)
     limit: int = Field(6, ge=1, le=20)
-    project_id: Optional[str] = None
+    # A uuid or nothing: the ACL predicate casts it, and a string that is
+    # not a uuid must be refused here as 422, not inside the SQL as 500.
+    project_id: Optional[UUID] = None
     user_tokens: List[str] = Field(default_factory=list)
 
 
@@ -101,7 +104,7 @@ async def federated_query(
             owner_id=current_user.id,
             query=payload.query,
             limit=payload.limit,
-            project_id=payload.project_id,
+            project_id=str(payload.project_id) if payload.project_id else None,
             user_tokens=payload.user_tokens,
         )
     except ProviderConfigError as exc:
