@@ -36,11 +36,11 @@ Do not keep the 2026-08-14 overall that sat in the seventies. That number is ret
 | 2nd-brain | 60 | Operator console on app.main is the wired HUD, same-origin. Tasks/projects/thread/plate/brief file the ledger. Not Notion live. Not 80. Not 100. |
 | Human gates | 86 | Approval and effect receipts still hold. FilingPlan.executed stays false inside services/devon. |
 | DEVON | effect-free compiler; in-estate loop is the work | `services/devon` cannot open sockets or spawn. Filing `executed: false`. Executor outside devon writes ledger after consume-once approval. Console remember uses that loop same-origin. Not Notion live. Not 80. Not 100. |
-| Hermes | CI-proven, not operator-live | Wiring and tests. In-memory expansion stores are not durable. Not a person running Hermes as the live operator. |
+| Hermes | CI-proven, not operator-live | Wiring and tests. Since 2026-09-02 the runtime expansion tools spend their approval and write the durable schedule, proposal and subagent tables the HTTP routes read. Not a person running Hermes as the live operator. |
 | Vault | 2026-08-22 ID snapshot | Folder ids frozen in the console STATE blob. Not a live Drive read. |
 | Filing | executed: false in the compiler | Plans only inside services/devon. Humans decide. Executor receipt may report executed true after consume. |
 | Soul recall | off by default | Needs SOUL_RECALL_ENABLED and PINECONE_API_KEY. Do not invent live soul connectivity. |
-| Memory package | receipted ledger reads | `services/memory` points at receipted PostgreSQL artifacts. Not localStorage. Hermes defaults are still in-memory. No Live badge. |
+| Memory package | receipted ledger reads | `services/memory` points at receipted PostgreSQL artifacts. Not localStorage. Hermes runtime tools are durable since 2026-09-02; the in-memory stores remain for offline tests only. No Live badge. |
 | FKR implementation | schema only | `database/schemas/004_federated_knowledge_waist.sql` exists. 012 and 014 are the in-estate ledger, not FKR hybrid retrieve. Product is not live. Not a 2nd brain. |
 | FKR overall product | ~28 | Design-complete only |
 | **Meta Supreme overall** | **60** | Floor from the round-5 independent critic. Ledger floor. Honesty 72. 2nd-brain 60. Not 58. Not 80. Not 100. |
