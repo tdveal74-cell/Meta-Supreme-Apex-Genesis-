@@ -25,3 +25,6 @@ venv/
 *.log
 
 .claude/settings.local.json
+
+# Workflow and agent worktrees are never repository content
+.claude/worktrees/

@@ -17,17 +17,20 @@ eight merges landed on a red main because nobody looked.
 
 ## Local verification parity with CI
 
-CI is FOUR jobs in `.github/workflows/ci.yml`, chained
-`standalone -> {container, engine} -> api`: offline standalone, the Railway
-container contract, engine (council/security), and the PostgreSQL API suite.
+CI is FIVE jobs in `.github/workflows/ci.yml`: four chained
+`standalone -> {container, engine} -> api` (offline standalone, the Railway
+container contract, engine (council/security), and the PostgreSQL API suite)
+plus `dependency-audit`, which runs on every push with no dependency on the
+others (pip-audit on the pinned root requirements and the soul host's
+requirements on Python 3.12, and pnpm audit on the locked workspace).
 The api job also ends with `ruff check .`, so lint failures surface there rather
 than as a job of their own.
-Reproduce all four locally before any push; one validated push beats three
+Reproduce all of them locally before any push; one validated push beats three
 speculative ones. The full suite alone is not parity: the standalone job runs
 with NO `PYTHONPATH` and no database, so an import that only resolves under the
 test path passes locally and fails there.
 
-**A FIFTH job exists and is easy to miss, because it usually does not run.**
+**A SIXTH job, in its own workflow file, is easy to miss because it usually does not run.**
 `.github/workflows/web-ci.yml` runs `Next.js typecheck + build` and is path
 filtered to `apps/web/**`, `packages/ui/**`, the root `package.json`, the
 lockfile, the workspace file, and itself. Touch none of those and it never
@@ -68,6 +71,10 @@ python -m pytest test_council.py test_phase4_council.py test_security.py -q \
 # 4. api suite + migrations (needs Postgres 16 + pgvector)
 python -m pytest -q --tb=short
 ruff check .
+
+# 5. dependency audit (network to PyPI and the npm registry through the proxy)
+python -m pip_audit -r requirements.txt -r deploy/soul/requirements.txt --progress-spinner off --ignore-vuln PYSEC-2026-1325
+pnpm audit --audit-level=moderate
 alembic upgrade head && alembic downgrade 004_federated_knowledge_waist && alembic upgrade head
 ```
 

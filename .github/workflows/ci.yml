@@ -42,6 +42,37 @@ jobs:
             test_devon_operating_layer.py \
             test_devon_editforge_execution.py
 
+  dependency-audit:
+    name: Dependency audit (pip-audit + pnpm audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # The interpreter Dockerfile.api ships, so the audit resolves the
+          # same set Railway builds.
+          python-version: "3.12"
+      - name: pip-audit the pinned requirements and the soul host's
+        # PYSEC-2026-1325 is ecdsa, pulled in by python-jose, which the
+        # ecdsa maintainers say they will not fix. Owner: Tee (auth). The
+        # ignore goes away with python-jose itself (audit item 16, the
+        # PyJWT replacement); until then it is reviewed with each bump.
+        run: |
+          python -m pip install --quiet --upgrade pip pip-audit
+          python -m pip_audit -r requirements.txt -r deploy/soul/requirements.txt \
+            --progress-spinner off --ignore-vuln PYSEC-2026-1325
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      # No `cache: pnpm` here: the audit reads the lockfile and installs
+      # nothing, so setup-node's post-step has no store to save and fails
+      # the job with "Path Validation Error" when the option is set.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: pnpm audit the locked workspace
+        run: pnpm audit --audit-level=moderate
+
   container:
     name: Railway container contract
     runs-on: ubuntu-latest

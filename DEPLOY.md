@@ -73,7 +73,7 @@ configuration gap to be closed later:
   startup, seeding included.
 
 Deploy it as a container to somewhere that runs containers and has a managed
-Postgres attached. `apps/api/requirements.txt` is the full dependency set;
+Postgres attached. the root `requirements.txt` is the dependency set the image installs (pinned since 2026-09-02; `apps/api/requirements.txt` is a stale mirror nothing deploys from);
 `infrastructure/docker/Dockerfile.api` is the image definition.
 
 ---
