@@ -22,9 +22,12 @@ from app.models.workflow import Workflow, WorkflowRun
 from app.security.deps import CurrentUser
 from app.services.dispatcher import compute_next_run_at
 from app.services.workflows import (
+    PENDING_HASH_KEY,
     WorkflowStateError,
     describe_definition,
     parse_definition,
+    pending_payload_sha256,
+    render_pending,
     resume_run,
     start_run,
 )
@@ -32,7 +35,6 @@ from services.workflows import (
     StepType,
     TriggerType,
     WorkflowDefinitionError,
-    render_template,
 )
 from services.workflows.definition import EFFECT_STEP_TYPES
 
@@ -72,6 +74,9 @@ class RunStart(BaseModel):
 
 class RunApprove(BaseModel):
     decisions: Dict[str, str] = Field(default_factory=dict)
+    # Optional: the payload_sha256 the approver saw. When given, the run
+    # must still be waiting on exactly that payload.
+    expected_payload_sha256: Optional[str] = Field(None, pattern=r"^[0-9a-f]{64}$")
 
 
 class RunSummary(BaseModel):
@@ -99,6 +104,13 @@ class PendingStep(BaseModel):
     step_id: str
     step_type: str
     preview: Dict[str, Any]
+    project_id: Optional[str] = None
+    # The hash the approval binds to: the seal written when the run paused.
+    payload_sha256: str
+    # True when the live definition no longer renders the sealed payload. The
+    # preview shown is the live one; approval is refused until the run is
+    # rejected and started again.
+    diverged: bool = False
 
 
 class RunResponse(BaseModel):
@@ -152,30 +164,20 @@ def _workflow_to_response(
 
 def _pending_view(workflow: Workflow, run: WorkflowRun) -> Optional[PendingStep]:
     """
-    The rendered config of the step the run is paused in front of — the gate
-    shows exactly what would be written, not the template that produced it.
+    The rendered config of the step the run is paused in front of, and the
+    hash the approval binds to. The gate shows exactly what would be written,
+    not the template that produced it.
     """
-    if run.status != "awaiting_approval" or not run.pending_step_id:
+    rendered = render_pending(workflow, run)
+    if rendered is None:
         return None
-    try:
-        definition = parse_definition(workflow.definition)
-    except WorkflowDefinitionError:
-        return None
-    step = definition.step(run.pending_step_id)
-    if step is None:
-        return None
-    results = {
-        r["step_id"]: {
-            "summary": r.get("summary", ""),
-            "text": r.get("text") or r.get("summary", ""),
-        }
-        for r in (run.step_results or [])
-        if r.get("status") == "completed"
-    }
-    preview = render_template(
-        step.config, trigger_input=run.trigger_input or "", results=results
+    live = pending_payload_sha256(rendered)
+    sealed = (run.meta or {}).get(PENDING_HASH_KEY)
+    return PendingStep(
+        **rendered,
+        payload_sha256=sealed or live,
+        diverged=bool(sealed) and live != sealed,
     )
-    return PendingStep(step_id=step.id, step_type=step.type.value, preview=preview)
 
 
 def _run_to_response(workflow: Workflow, run: WorkflowRun) -> RunResponse:
@@ -381,7 +383,24 @@ async def update_workflow(
     """
     workflow = await _get_owned_workflow(workflow_id, current_user.id, db)
 
-    if payload.definition is not None:
+    if payload.definition is not None and payload.definition != workflow.definition:
+        # A run waiting at a gate previewed the live definition. Changing it
+        # underneath the gate would let the approval execute something else.
+        # Resending the current definition changes nothing and passes.
+        pending_result = await db.execute(
+            select(func.count(WorkflowRun.id)).where(
+                WorkflowRun.workflow_id == workflow.id,
+                WorkflowRun.status == "awaiting_approval",
+            )
+        )
+        if pending_result.scalar_one():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "This workflow has a run awaiting approval. Decide it before "
+                    "changing the definition."
+                ),
+            )
         try:
             parse_definition(payload.definition)
         except WorkflowDefinitionError as exc:
@@ -582,9 +601,17 @@ async def approve_workflow_run(
             run=run,
             decisions=payload.decisions,
             actor_id=current_user.id,
+            expected_payload_sha256=payload.expected_payload_sha256,
         )
     except WorkflowStateError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
+    except WorkflowDefinitionError as exc:
+        # The definition changed behind the gate into one that does not hold.
+        # Nothing executes; the run can still be rejected and started again.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"This workflow's definition no longer holds: {exc}. Reject this run.",
         ) from exc
     return _run_to_response(workflow, run)
