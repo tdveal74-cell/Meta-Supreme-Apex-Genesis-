@@ -19,6 +19,8 @@ Token usage is accumulated per run (`workflow_runs.token_usage`), joining
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional
@@ -39,7 +41,9 @@ from services.workflows import (
     StepOutput,
     StepType,
     WorkflowDefinition,
+    WorkflowDefinitionError,
     WorkflowEngine,
+    render_template,
 )
 
 logger = logging.getLogger(__name__)
@@ -302,6 +306,49 @@ def describe_definition(raw: Any) -> Dict[str, Any]:
 # Runs
 # ---------------------------------------------------------------------------
 
+PENDING_HASH_KEY = "pending_payload_sha256"
+
+
+def render_pending(
+    workflow: Workflow,
+    run: WorkflowRun,
+    definition: Optional[WorkflowDefinition] = None,
+) -> Optional[Dict[str, Any]]:
+    """The rendered config of the step a paused run is in front of.
+
+    This is what the gate shows and what the approval binds to: the step id,
+    its type and the rendered preview, from the live definition and the
+    completed results, never the template that produced it.
+    """
+    if run.status != RunStatus.AWAITING_APPROVAL or not run.pending_step_id:
+        return None
+    try:
+        definition = definition or parse_definition(workflow.definition)
+    except WorkflowDefinitionError:
+        return None
+    step = definition.step(run.pending_step_id)
+    if step is None:
+        return None
+    results = {
+        r["step_id"]: {
+            "summary": r.get("summary", ""),
+            "text": r.get("text") or r.get("summary", ""),
+        }
+        for r in (run.step_results or [])
+        if r.get("status") == "completed"
+    }
+    preview = render_template(
+        step.config, trigger_input=run.trigger_input or "", results=results
+    )
+    return {"step_id": step.id, "step_type": step.type.value, "preview": preview}
+
+
+def pending_payload_sha256(rendered: Mapping[str, Any]) -> str:
+    """One hash over exactly what the gate showed."""
+    canonical = json.dumps(rendered, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 async def start_run(
     db: AsyncSession,
     *,
@@ -352,6 +399,7 @@ async def resume_run(
     run: WorkflowRun,
     decisions: Mapping[str, str],
     actor_id: str,
+    expected_payload_sha256: Optional[str] = None,
 ) -> WorkflowRun:
     """
     Record approval decisions and continue the run.
@@ -382,6 +430,21 @@ async def resume_run(
         raise WorkflowStateError(
             f"This run is waiting on step {run.pending_step_id!r} — decide that one"
         )
+    if run.pending_step_id:
+        sealed = (run.meta or {}).get(PENDING_HASH_KEY)
+        rendered = render_pending(workflow, run, definition)
+        live = pending_payload_sha256(rendered) if rendered is not None else None
+        if sealed and live != sealed:
+            raise WorkflowStateError(
+                "The pending step no longer renders what was previewed: the "
+                "definition changed while this run waited at the gate. Nothing "
+                "was written. Start a new run to preview it again."
+            )
+        if expected_payload_sha256 and expected_payload_sha256 != (sealed or live):
+            raise WorkflowStateError(
+                "The approval names a pending payload hash that is not the one "
+                "this run is waiting on."
+            )
 
     recorded = dict(run.approvals or {})
     now = datetime.now(timezone.utc).isoformat()
@@ -431,6 +494,14 @@ async def _advance(
         "events": (history + events)[-60:],
         "latency_ms": outcome.latency_ms,
     }
+    # Seal what the gate shows. Approval later checks the live rendering
+    # against this, so a definition edited while the run waited cannot
+    # execute under the approval given to the previewed payload.
+    rendered = render_pending(workflow, run, definition)
+    if rendered is not None:
+        run.meta = {**run.meta, PENDING_HASH_KEY: pending_payload_sha256(rendered)}
+    else:
+        run.meta = {k: v for k, v in run.meta.items() if k != PENDING_HASH_KEY}
     run.completed_at = (
         datetime.now(timezone.utc) if outcome.is_terminal else None
     )
