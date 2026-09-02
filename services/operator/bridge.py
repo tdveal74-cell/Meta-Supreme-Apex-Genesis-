@@ -44,10 +44,16 @@ class Risk(str, Enum):
     BLOCKED = "blocked"
 
 
+# ps is absent on purpose: it takes no path argument and reads
+# /proc/<pid>/environ itself, so `ps eww` printed the process environment
+# on the unattended lane. It waits for the human like any unknown command.
 READ_ONLY_BINARIES = {
     "pwd", "ls", "cat", "head", "tail", "wc", "stat", "uname", "whoami",
-    "id", "date", "df", "du", "ps", "which", "whereis",
+    "id", "date", "df", "du", "which", "whereis",
 }
+#: Kernel and device trees the read lane never enters, matched by path
+#: component so an operator root under /devon or /system is not caught.
+HOST_ROOTS = (Path("/proc"), Path("/sys"), Path("/dev"))
 READ_ONLY_GIT = {
     "status", "log", "diff", "show", "rev-parse", "ls-files", "ls-tree",
     "describe", "shortlog",
@@ -397,7 +403,7 @@ class OperatorBridge:
                     if not target.is_absolute():
                         target = cwd / target
                     resolved = target.resolve()
-                    if str(resolved).startswith(("/proc", "/sys", "/dev")):
+                    if self._is_host_path(resolved):
                         return (
                             f"the read lane never reads {piece} (resolves to {resolved}); "
                             "that is the host, not the operator root"
@@ -413,6 +419,10 @@ class OperatorBridge:
                         if component.startswith(".") and component not in {".", ".."}:
                             return f"the read lane does not read dotfiles: {piece} -> {inside}"
         return ""
+
+    @staticmethod
+    def _is_host_path(resolved: Path) -> bool:
+        return any(resolved == root or root in resolved.parents for root in HOST_ROOTS)
 
     @staticmethod
     def _first_non_option(args: tuple[str, ...]) -> str:

@@ -36,7 +36,7 @@ def http_get_text(
             url,
             headers={"User-Agent": "DEVON-BrowserAdapter/1.0"},
         )
-        if response.is_redirect or 300 <= response.status_code < 400:
+        if 300 <= response.status_code < 400 and "location" in response.headers:
             location = response.headers.get("location", "")
             raise RedirectRefused(
                 f"{url} answered {response.status_code} with a redirect to "

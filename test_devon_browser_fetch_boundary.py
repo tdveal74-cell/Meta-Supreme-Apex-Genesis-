@@ -62,8 +62,11 @@ def test_credentials_in_the_url_are_refused_before_any_request():
     result = adapter._fetch({"url": "https://tee:secret@github.com/tdveal74-cell"})
     assert not result.ok
     assert "credentials" in (result.error or "")
-    result = adapter._navigate({"url": "https://tee:secret@github.com/tdveal74-cell"})
-    assert not result.ok
+    # navigate checks its approval binding before the URL, so the URL rule
+    # is exercised directly: an empty username is still credentials.
+    for url in ("https://tee:secret@github.com/x", "https://@github.com/x", "https://:pw@github.com/x"):
+        with pytest.raises(ValueError, match="credentials"):
+            adapter._require_url(url)
 
 
 def test_fetch_metadata_names_the_page_actually_read():
