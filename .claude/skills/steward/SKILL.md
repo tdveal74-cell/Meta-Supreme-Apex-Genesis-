@@ -73,8 +73,8 @@ python -m pytest -q --tb=short
 ruff check .
 
 # 5. dependency audit (network to PyPI and the npm registry through the proxy)
-python -m pip_audit -r requirements.txt --progress-spinner off --ignore-vuln PYSEC-2026-1325
-python -m pip_audit -r deploy/soul/requirements.txt --progress-spinner off --ignore-vuln PYSEC-2026-1325
+python -m pip_audit -r requirements.txt --progress-spinner off
+python -m pip_audit -r deploy/soul/requirements.txt --progress-spinner off
 pnpm audit --audit-level=moderate
 alembic upgrade head && alembic downgrade 004_federated_knowledge_waist && alembic upgrade head
 ```
