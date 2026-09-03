@@ -1,7 +1,7 @@
 """
 Schedule dispatcher — the thing that fires scheduled workflows.
 
-Invoked by cron (or a Kubernetes CronJob) via `app.cli.dispatch`, never as a
+Invoked by cron (or a Kubernetes CronJob) via `python dispatch.py` at the repository root, never as a
 thread inside the API. Three reasons, in order of how much they would hurt:
 
 1. An in-process scheduler fires N times when you run N API replicas.

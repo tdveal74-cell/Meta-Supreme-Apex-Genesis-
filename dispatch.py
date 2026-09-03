@@ -1,7 +1,7 @@
 """
 Cron entrypoint for the schedule dispatcher.
 
-    python -m app.cli.dispatch
+    python dispatch.py
 
 Exit codes are for the cron wrapper's benefit, not decoration:
 
@@ -15,7 +15,7 @@ signal to look at the logs.
 
 Suggested cron (every minute; the dispatcher is cheap when nothing is due):
 
-    * * * * * cd /srv/app && python -m app.cli.dispatch >> /var/log/dispatch.log 2>&1
+    * * * * * cd /app && python dispatch.py >> /var/log/dispatch.log 2>&1
 """
 
 from __future__ import annotations

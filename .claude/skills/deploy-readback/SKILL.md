@@ -22,12 +22,12 @@ honest answer is "unverified", not an optimistic one.
 | Surface | What it serves | How to read it |
 |---|---|---|
 | Railway `api` | The FastAPI app, the ledger, migrations | `list-deployments`, then `get-logs` on the deployment id |
-| Vercel `meta-supreme-web` | The web app and Command Center, root `apps/web` | `list_deployments` for the project |
+| Vercel `meta-supreme-apex-genesis-web` | The web app and Command Center, root `apps/web` (recorded as `meta-supreme-web` until 2026-09-02; that project no longer exists) | `list_deployments` for the project |
 | Vercel `devon-soul` | The phone lane, root `deploy/soul` | `list_deployments` for the project |
 
 **Count the Vercel projects before trusting any of this.** On 2026-08-27 a
 diagnosis assumed two and there were four, all deploying from this one
-repository: `meta-supreme-web` and `devon-soul` above, plus
+repository: `meta-supreme-web` (since retired) and `devon-soul` above, plus
 `meta-supreme-apex-genesis` and `meta-supreme-apex-genesis-web`, both imported
 on 2026-08-26. The third had no `ignoreCommand` and rebuilt on every push to
 every branch, which is what actually exhausted the cap; it was paused on Tee's
@@ -124,7 +124,7 @@ direction.** No previous SHA, or one this checkout does not contain, means
 build. A needless build costs one deployment. A wrong skip ships stale code and
 says nothing, and the silence is what makes that expensive.
 
-`meta-supreme-web` deliberately watches beyond its own root: it imports
+`meta-supreme-apex-genesis-web` deliberately watches beyond its own root: it imports
 `@meta-supreme/ui` from `packages/ui` in `tailwind.config.ts` and
 `app/layout.tsx`, so a theme change touching no file under `apps/web` still has
 to rebuild. Narrowing that rule would ship a stale brand and the skip would be
@@ -261,7 +261,7 @@ optimistic sentence.
 
 ```
 Railway api      LIVE   deployment <id> SUCCESS <time> on <commit>, migration <rev> applied
-meta-supreme-web LIVE   <dpl_id> READY target "production" on <commit>
+meta-supreme-apex-genesis-web LIVE   <dpl_id> READY target "production" on <commit>
 devon-soul       STALE  production still on <commit>; current main is <commit>
 ```
 

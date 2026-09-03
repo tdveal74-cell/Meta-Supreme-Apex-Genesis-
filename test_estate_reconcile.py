@@ -21,6 +21,7 @@ surfaced rather than trusted.
 from __future__ import annotations
 
 import pathlib
+import subprocess
 
 import pytest
 
@@ -406,3 +407,170 @@ def test_the_new_files_carry_no_banned_marks():
         text = path.read_text(encoding="utf-8")
         offenders = [line for line in text.splitlines() if any(m in line for m in banned)]
         assert not offenders, f"banned dash in {path.name}: {offenders[:3]}"
+
+
+# ---------------------------------------------------------------------------
+# The records the DEVON and Hermes audit of 2026-09-02 (item 14) corrected
+# ---------------------------------------------------------------------------
+
+HERMES_DOC = "docs/devon/SYS_OPS_devon-hermes-stack-status_v2_2026-08-25.md"
+
+
+def _repo_observations():
+    return {
+        "repo": {
+            "alembic_head": reconcile._alembic_head(),
+            "files": reconcile._pinned_files_present(),
+            "image_files": reconcile._pinned_image_files(),
+        }
+    }
+
+
+API_IMAGE = "infrastructure/docker/Dockerfile.api"
+DEPLOYED = {"deployed_alembic_head": "015", "deployed_commit": "e69e412d23b6", "deployed_deployment": "2c4c5fb7"}
+
+
+def test_a_resurrected_production_sha_is_caught():
+    """FLAGSHIP, COMPLETION and GAUNTLET called d2aff6d production three
+    merges after it moved. The corrected docs carry 57fdddb, dated, and the
+    retired sentence is pinned so it cannot come back unnoticed."""
+    claims = reconcile.doc_claims({"docs/GAUNTLET.md": "the live host is still d2aff6d, honest"})
+    finding = _finding(reconcile.check(claims, {}), "docs/GAUNTLET.md ('still d2aff6d')")
+    assert finding.status == reconcile.DRIFT
+    assert "2026-09-02" in finding.detail
+    assert "57fdddb" in finding.detail
+
+
+def test_the_status_docs_no_longer_call_d2aff6d_production():
+    for doc in ("FLAGSHIP.md", "COMPLETION.md", "docs/GAUNTLET.md"):
+        text = (ROOT / doc).read_text(encoding="utf-8")
+        assert "d2aff6d" not in text, doc
+        assert "57fdddb" in text, doc
+
+
+def test_a_resurrected_alembic_head_010_is_caught():
+    claims = reconcile.doc_claims({HERMES_DOC: "deployed at Alembic head 010, one turn"})
+    finding = _finding(reconcile.check(claims, {}), "Alembic head 010")
+    assert finding.status == reconcile.DRIFT
+    assert "2026-09-02" in finding.detail and "015" in finding.detail
+
+
+def test_the_standing_alembic_head_is_judged_on_the_deployed_commit():
+    """The doc describes the deployed database. The source tree is not
+    evidence for that: only the newest successful Railway deployment's
+    commit is, and without one the claim stays UNVERIFIED."""
+    claims = [
+        c for c in reconcile.doc_claims(reconcile._read_doc_texts()) if c.subject == "Alembic head 015"
+    ]
+    assert claims, "the standing Alembic head claim is missing from DOC_CLAIMS"
+    ok = reconcile.check(claims, {"repo": {"alembic_head": "015", **DEPLOYED}})[0]
+    assert ok.status == reconcile.OK
+    assert "2c4c5fb7" in ok.detail and "e69e412d23b6" in ok.detail
+    behind = reconcile.check(claims, {"repo": {"alembic_head": "016", **DEPLOYED}})[0]
+    assert behind.status == reconcile.OK, "a migration in the tree but not deployed does not change what is deployed"
+    moved = reconcile.check(claims, {"repo": {**DEPLOYED, "deployed_alembic_head": "016"}})[0]
+    assert moved.status == reconcile.DRIFT
+    source_only = reconcile.check(claims, {"repo": {"alembic_head": "015"}})[0]
+    assert source_only.status == reconcile.UNVERIFIED
+    assert "not what is deployed" in source_only.detail
+    assert reconcile.check(claims, {})[0].status == reconcile.UNVERIFIED
+
+
+def test_the_deployed_head_is_read_at_the_newest_successful_deployment():
+    head_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True
+    ).stdout.strip()
+    railway = {
+        "deployments": [
+            {"id": "failed-later", "status": "FAILED", "commit_sha": "0" * 40},
+            {"id": "good", "status": "SUCCESS", "commit_sha": head_sha},
+        ]
+    }
+    found = reconcile._deployed_alembic_head(railway)
+    assert found["deployed_deployment"] == "good"
+    assert found["deployed_commit"] == head_sha
+    assert found["deployed_alembic_head"] == reconcile._alembic_head()
+    unknown = reconcile._deployed_alembic_head(
+        {"deployments": [{"id": "x", "status": "SUCCESS", "commit_sha": "f" * 40}]}
+    )
+    assert unknown["deployed_alembic_head"] is None
+    assert "not in this clone" in unknown["deployed_reason"]
+    assert reconcile._deployed_alembic_head({}) == {}
+    assert reconcile._deployed_alembic_head({"error": "RAILWAY_API_TOKEN is not set"}) == {}
+
+
+def test_the_real_migrations_directory_heads_where_the_doc_says():
+    assert reconcile._alembic_head() == "015"
+    assert "Alembic head 015" in (ROOT / HERMES_DOC).read_text(encoding="utf-8")
+
+
+def test_the_cron_entrypoint_ships_in_the_api_image():
+    """Codex on the first cut: the checkout had dispatch.py, the image did
+    not, so the documented cron line exited before dispatching."""
+    shipped = reconcile._pinned_image_files()
+    assert shipped[API_IMAGE]["dispatch.py"] is True
+    assert "dispatch.py" in reconcile._image_copies()
+    claims = [
+        c for c in reconcile.doc_claims(reconcile._read_doc_texts()) if c.verifier == "image_file"
+    ]
+    assert len(claims) == 2
+    for finding in reconcile.check(claims, {"repo": {"image_files": {API_IMAGE: {"dispatch.py": False}}}}):
+        assert finding.status == reconcile.DRIFT
+        assert "does not copy" in finding.detail
+    for finding in reconcile.check(claims, {"repo": {"image_files": shipped}}):
+        assert finding.status == reconcile.OK
+    for finding in reconcile.check(claims, {}):
+        assert finding.status == reconcile.UNVERIFIED
+
+
+def test_a_cron_line_naming_a_missing_module_is_caught():
+    texts = {
+        "RUNBOOK.md": "cd /srv/app && python -m app.cli.dispatch >> log",
+        "OPERATING.md": "cd /srv/app && python dispatch.py >> log",
+    }
+    files = {"app/cli/dispatch.py": False, "dispatch.py": True}
+    findings = reconcile.check(reconcile.doc_claims(texts), {"repo": {"files": files}})
+    stale = [f for f in findings if f.claim.record.startswith("RUNBOOK.md") and f.claim.subject == "python -m app.cli.dispatch"]
+    assert stale[0].status == reconcile.DRIFT
+    assert "does not exist" in stale[0].detail
+    standing = [f for f in findings if f.claim.record.startswith("OPERATING.md") and f.claim.subject == "python dispatch.py"]
+    assert standing[0].status == reconcile.OK
+
+
+def test_the_standing_cron_line_names_a_file_that_exists():
+    present = reconcile._pinned_files_present()
+    assert present["dispatch.py"] is True
+    assert present["app/cli/dispatch.py"] is False
+    claims = [
+        c for c in reconcile.doc_claims(reconcile._read_doc_texts())
+        if c.subject == "python dispatch.py" and c.verifier == "repo_file"
+    ]
+    assert len(claims) == 2, "OPERATING.md and RUNBOOK.md each pin the cron line"
+    for finding in reconcile.check(claims, {"repo": {"files": present}}):
+        assert finding.status == reconcile.OK
+    for finding in reconcile.check(claims, {}):
+        assert finding.status == reconcile.UNVERIFIED
+
+
+def test_the_retired_vercel_project_row_is_caught():
+    claims = reconcile.doc_claims({"DEPLOY.md": "| meta-supreme-web | `apps/web` |"})
+    finding = _finding(reconcile.check(claims, {}), "| meta-supreme-web |")
+    assert finding.status == reconcile.DRIFT
+    assert "meta-supreme-apex-genesis-web" in finding.detail
+
+
+def test_every_audit_correction_holds_today():
+    """The tripwires against the docs as committed and the repository as
+    read: nothing retired came back, every standing sentence holds."""
+    findings = reconcile.check(reconcile.doc_claims(reconcile._read_doc_texts()), _repo_observations())
+    audited = [
+        f for f in findings
+        if f.claim.verifier in {"superseded", "alembic_head", "repo_file", "image_file", "quote_retired"}
+    ]
+    assert len(audited) >= 13
+    for finding in audited:
+        if finding.claim.verifier == "alembic_head":
+            # Deployed evidence needs a Railway read; without one it is unverified, never OK.
+            assert finding.status == reconcile.UNVERIFIED, finding
+            continue
+        assert finding.status in {reconcile.OK, reconcile.RETIRED}, finding

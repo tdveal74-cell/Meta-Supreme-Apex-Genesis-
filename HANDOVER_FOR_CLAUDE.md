@@ -294,7 +294,7 @@ Follow `CONTRIBUTING.md` strictly. Highlights:
 ## 8. Immediate Next Priorities
 
 1. **Verify Phase 5** — `make test`, `ruff check .`, `tsc --noEmit`, `pnpm build`, then the browser loop: create from a template → run → approve → confirm the memory row → run again → reject → confirm the halt is kept
-2. **Event trigger dispatch** — an internal event bus for `event` triggers (knowledge ingested, decision recorded), reusing the dispatcher's idempotency-key pattern. Schedule dispatch landed in 5.1; install the cron entry (`python -m app.cli.dispatch`, see the runbook §6) or scheduled workflows still will not fire
+2. **Event trigger dispatch**: an internal event bus for `event` triggers (knowledge ingested, decision recorded), reusing the dispatcher's idempotency-key pattern. Schedule dispatch landed in 5.1; install the cron entry (`python dispatch.py` at the repository root, which the API image ships at /app; amended 2026-09-02, the module path first written here never existed in the root package; see the runbook §6) or scheduled workflows still will not fire
 3. **Background execution** — runs currently execute inside the request that started them, as SSE council runs do. One background-job story fixes both
 4. **The workflow builder** — the canvas: add/remove/reorder steps, per-step config, gate preview. `GET /workflows/step-types` exists to feed it
 5. **Embedding-based memory recall** — add a vector column to `memories` via migration; replace the lexical scorer

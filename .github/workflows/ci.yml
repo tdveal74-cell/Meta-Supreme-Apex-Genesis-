@@ -57,9 +57,14 @@ jobs:
         # ecdsa maintainers say they will not fix. Owner: Tee (auth). The
         # ignore goes away with python-jose itself (audit item 16, the
         # PyJWT replacement); until then it is reviewed with each bump.
+        # Two resolutions on purpose: audited together, the root pins would
+        # override the soul host's floating versions and hide a newer
+        # vulnerable release the soul host would actually install.
         run: |
           python -m pip install --quiet --upgrade pip pip-audit
-          python -m pip_audit -r requirements.txt -r deploy/soul/requirements.txt \
+          python -m pip_audit -r requirements.txt \
+            --progress-spinner off --ignore-vuln PYSEC-2026-1325
+          python -m pip_audit -r deploy/soul/requirements.txt \
             --progress-spinner off --ignore-vuln PYSEC-2026-1325
       - uses: pnpm/action-setup@v4
         with:

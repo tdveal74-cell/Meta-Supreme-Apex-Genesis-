@@ -162,7 +162,10 @@ def test_gauntlet_ledger_floor_is_60_not_58_as_current_or_80():
     assert "2nd-brain" in GAUNTLET
     assert "Human gates" in GAUNTLET and "86" in GAUNTLET
     assert "| DEVON |" in GAUNTLET
-    assert "d2aff6d" in GAUNTLET
+    # The production SHA the records carry: 57fdddb since the 2026-09-02
+    # write-back (audit item 14); d2aff6d is retired and must not return.
+    assert "57fdddb" in GAUNTLET
+    assert "d2aff6d" not in GAUNTLET
     assert "Not 80. Not 100." in GAUNTLET
 
 
