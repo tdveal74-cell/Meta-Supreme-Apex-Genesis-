@@ -46,11 +46,14 @@ def _embedding_provider():
 def _completion_provider():
     """Best-effort completion provider for cross-encoder judging.
 
-    Metered like every other lane. The import below names a factory that does
-    not exist in this repository, so today this returns None and the judge
-    path falls back to the offline lexical score; the wrapper is here so that
-    whoever repairs that path repairs it already inside the cap, rather than
-    opening a second, unmetered way to a provider.
+    Metered like every other lane, through the same `MeteredProvider` the
+    Council uses, so this cannot become a second, unmetered way to a
+    provider. Built from `create_completion_provider`, which exists now and
+    mirrors `create_embedding_provider` above: a name and the matching keys
+    in, a configured provider out. A misconfigured or unreachable provider
+    (no key set, an unknown name) still lands here as None rather than
+    raising, so a query never hard-fails on the reranker; the caller falls
+    back to the offline lexical score exactly as it did before this existed.
     """
     try:
         from app.services.provider_usage import MeteredProvider
@@ -61,6 +64,7 @@ def _completion_provider():
             name,
             openai_api_key=getattr(settings, "OPENAI_API_KEY", None),
             anthropic_api_key=getattr(settings, "ANTHROPIC_API_KEY", None),
+            cerebras_api_key=getattr(settings, "CEREBRAS_API_KEY", None),
         )
         return None if provider is None else MeteredProvider(provider)
     except Exception:

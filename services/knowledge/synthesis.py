@@ -18,6 +18,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, List, Optional, Sequence
 
+from services.intelligence.providers.base import ChatMessage, CompletionRequest
 from services.knowledge.retrieval import RetrievalCandidate
 
 logger = logging.getLogger(__name__)
@@ -93,26 +94,30 @@ async def _llm_judge_score(
     content: str,
     provider: Any,
 ) -> tuple[float, str]:
-    """Single (query, document) judgment. Returns (score, reason)."""
+    """Single (query, document) judgment. Returns (score, reason).
+
+    Calls the real `AIProvider.complete(request)` contract from
+    `services.intelligence.providers.base`: one `CompletionRequest` carrying
+    the judge instructions as `system` and the query/document pair as a
+    single user message, same shape every other completion caller in this
+    codebase uses. Any failure here, including this account being at its
+    provider spend cap, is caught below and turned into the lowest score
+    rather than a hard failure, so one bad or refused judgment degrades this
+    document to the offline signal instead of failing the whole query.
+    """
     user_msg = f"Query: {query}\n\nDocument:\n{(content or '')[:1800]}"
     try:
-        if hasattr(provider, "complete"):
-            raw = await provider.complete(
-                system=_JUDGE_SYSTEM,
-                user=user_msg,
-                max_tokens=120,
-            )
-            text = raw if isinstance(raw, str) else getattr(raw, "text", str(raw))
-        elif hasattr(provider, "chat"):
-            raw = await provider.chat(
-                messages=[
-                    {"role": "system", "content": _JUDGE_SYSTEM},
-                    {"role": "user", "content": user_msg},
-                ]
-            )
-            text = raw if isinstance(raw, str) else getattr(raw, "content", str(raw))
-        else:
+        if not hasattr(provider, "complete"):
             return 0.0, "provider-unsupported"
+
+        request = CompletionRequest(
+            messages=[ChatMessage(role="user", content=user_msg)],
+            system=_JUDGE_SYSTEM,
+            max_tokens=120,
+            temperature=0.0,
+        )
+        response = await provider.complete(request)
+        text = response.text if hasattr(response, "text") else str(response)
 
         match = re.search(r"\{.*\}", text, re.DOTALL)
         if not match:

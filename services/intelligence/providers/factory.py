@@ -77,3 +77,34 @@ def create_provider(
         f"Unknown AI provider '{provider_name}'. "
         f"Supported providers: {', '.join(SUPPORTED_PROVIDERS)}."
     )
+
+
+def create_completion_provider(
+    provider_name: str,
+    *,
+    anthropic_api_key: Optional[str] = None,
+    openai_api_key: Optional[str] = None,
+    cerebras_api_key: Optional[str] = None,
+    model: Optional[str] = None,
+    timeout_seconds: float = 60.0,
+    max_retries: int = 2,
+) -> AIProvider:
+    """Build the configured completion provider: name in, provider out.
+
+    The completion-side counterpart to `create_embedding_provider` below,
+    kept under the name callers of a cross-encoder judge or any other
+    completion-only lane actually look for. There is nothing provider-
+    specific left to write here: `create_provider` already builds and tests
+    every one of these providers for the Council, so this delegates to it
+    rather than re-implementing the same per-provider construction (and
+    its own chance of drifting out of sync) a second time.
+    """
+    return create_provider(
+        provider_name,
+        anthropic_api_key=anthropic_api_key,
+        openai_api_key=openai_api_key,
+        cerebras_api_key=cerebras_api_key,
+        model=model,
+        timeout_seconds=timeout_seconds,
+        max_retries=max_retries,
+    )
