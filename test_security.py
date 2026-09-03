@@ -1,5 +1,6 @@
 """Security utility tests."""
 
+import base64
 from datetime import timedelta
 
 import jwt as pyjwt
@@ -34,13 +35,23 @@ def test_jwt_expired_token_is_rejected():
 
 
 def test_jwt_tampered_signature_is_rejected():
-    # Flip a character in the signature segment so the payload no longer
+    # Flip the first byte of the decoded signature so the payload no longer
     # matches what was signed. This must fail the same way an expired or
     # malformed token does: None, not an exception the caller has to catch.
+    #
+    # Substituting a character in the base64url text directly is not safe:
+    # a 32-byte HMAC-SHA256 signature encodes to 43 base64url characters,
+    # and the last character's two low bits are unused padding, so about
+    # one signature in sixteen has a last character whose top four bits
+    # already equal "A" or "B", making the substitution a no-op that
+    # leaves the real signature bytes, and the test's own premise, intact.
+    # Flipping a byte of the decoded signature has no such alignment case.
     token = create_access_token(subject="user-123")
     header, payload, signature = token.split(".")
-    tampered_char = "A" if signature[-1] != "A" else "B"
-    tampered_signature = signature[:-1] + tampered_char
+    padded = signature + "=" * (-len(signature) % 4)
+    raw = bytearray(base64.urlsafe_b64decode(padded))
+    raw[0] ^= 0xFF
+    tampered_signature = base64.urlsafe_b64encode(bytes(raw)).rstrip(b"=").decode()
     tampered_token = f"{header}.{payload}.{tampered_signature}"
     assert decode_access_token(tampered_token) is None
 
