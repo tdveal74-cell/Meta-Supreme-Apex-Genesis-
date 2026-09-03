@@ -550,6 +550,42 @@ the source tree, and `scripts/estate_reconcile.py` pins the retired head 015
 sentence as a tripwire. No production DSN was read at any point in the arc: the
 head is certified from the migrations present at the deployed commit.
 
+### The two Vercel surfaces at arc close, 2026-09-03
+
+The arc's production readback above covers the Railway API, which is the only
+surface it changed. Reading the other two afterwards found one of them stale,
+and it is recorded here rather than left for the next session to trip over.
+
+| Surface | State | Serving |
+|---|---|---|
+| `devon-soul` | current | `a6361d2`, deployment `smTqCt1C8yEbCNviDHNhzkCVekbQ`, READY, target production |
+| `meta-supreme-apex-genesis-web` | **stale** | `e69e412`, deployment `CqY6xRczPb5SrGE2dR5hRSB2b9eC`, READY, target production |
+
+`devon-soul` is current on its own terms: nothing under `deploy/soul` changed
+after `a6361d2`, so its later builds were correct `ignoreCommand` skips.
+
+The web project is behind, and the reason is the trap the deploy-readback skill
+names. Its ignore rule deliberately watches beyond its own root, including
+`pnpm-lock.yaml`, and `5b485ef` changed that lockfile after `e69e412` (the
+postcss and sharp bounds from the Codex review on fix PR 11). That change is
+owed to production. It did not ship because Vercel reported "Account is
+blocked" on both projects, and no Vercel deployment of any kind exists on
+either project after 2026-09-02 22:39Z: the merges of #123 through #127
+produced no deployment records at all, which is what a block looks like rather
+than what a skip looks like.
+
+Two lessons worth keeping. A surface can be stale with no failing check
+anywhere, which is the 2026-08-26 failure repeating in a new costume. And
+checking a project's own root directory is not enough to call it current when
+its ignore rule watches wider: the first pass of this readback checked
+`apps/web` alone, found it unchanged, and called the surface current. It was
+the lockfile that had moved.
+
+Clearing it needs one dashboard redeploy of `main` on that project. The account
+block being lifted is stated by Tee on 2026-09-03 and is not verified here:
+there is no quota endpoint in the tooling, and no deployment has been attempted
+since, so the next production build is what will settle it.
+
 ### What the arc found that the audit had not
 
 Two defects surfaced during the fixes rather than during the audit, both from
