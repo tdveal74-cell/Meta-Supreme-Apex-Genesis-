@@ -57,7 +57,13 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def app_error_handler(request: Request, exc: AppError):
         return JSONResponse(
             status_code=exc.status_code,
+            # A typed refusal may carry response headers, the way the spend
+            # cap carries Retry-After. Plain AppErrors carry none.
+            headers=getattr(exc, "headers", None),
             content={
+                # The same standard field the HTTP handler above writes, so a
+                # client reads one shape whichever handler answered.
+                "detail": exc.message,
                 "error": {
                     "code": exc.code,
                     "message": exc.message,

@@ -27,27 +27,42 @@ logger = logging.getLogger(__name__)
 
 
 def _embedding_provider():
+    # Metered like the completion provider: embeddings reach the same keys.
+    # This module already reads app settings, so the app-layer wrapper is
+    # not a new dependency direction.
+    from app.services.provider_usage import MeteredEmbeddingProvider
+
     name = getattr(settings, "DEFAULT_EMBEDDING_PROVIDER", None) or getattr(
         settings, "DEFAULT_AI_PROVIDER", "mock"
     )
-    return create_embedding_provider(
+    provider = create_embedding_provider(
         name,
         openai_api_key=getattr(settings, "OPENAI_API_KEY", None),
         model=getattr(settings, "EMBEDDING_MODEL", None),
     )
+    return MeteredEmbeddingProvider(provider)
 
 
 def _completion_provider():
-    """Best-effort completion provider for cross-encoder judging."""
+    """Best-effort completion provider for cross-encoder judging.
+
+    Metered like every other lane. The import below names a factory that does
+    not exist in this repository, so today this returns None and the judge
+    path falls back to the offline lexical score; the wrapper is here so that
+    whoever repairs that path repairs it already inside the cap, rather than
+    opening a second, unmetered way to a provider.
+    """
     try:
+        from app.services.provider_usage import MeteredProvider
         from services.intelligence.providers.factory import create_completion_provider
 
         name = getattr(settings, "DEFAULT_AI_PROVIDER", "mock")
-        return create_completion_provider(
+        provider = create_completion_provider(
             name,
             openai_api_key=getattr(settings, "OPENAI_API_KEY", None),
             anthropic_api_key=getattr(settings, "ANTHROPIC_API_KEY", None),
         )
+        return None if provider is None else MeteredProvider(provider)
     except Exception:
         return None
 

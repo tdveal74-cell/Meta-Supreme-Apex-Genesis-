@@ -185,8 +185,9 @@ characters opens it, sent as `registration_key` in the body or the
 sends it), `DEVON_AUTO_SKILL_PROPOSE` (default on),
 `DEVON_BROWSER_LIVE_FETCH` (default off), `DEVON_AGENT_TASK_LEASE_SECONDS`
 (default 120), `DEFAULT_AI_PROVIDER`/`ENRICHMENT_PROVIDER` (cerebras live,
-mock in CI). Alembic head as of 2026-09-02: `015_devon_approval_owner` (the
-skill said `010_agent_subagent_links`, then `012_live_state_ledger`; verify with
+mock in CI). Alembic head as of 2026-09-02: `017_provider_usage` (the skill said
+`010_agent_subagent_links`, `012_live_state_ledger`, then
+`015_devon_approval_owner`; verify with
 `alembic heads` rather than trusting this line).
 
 **A new migration touches ci.yml in THREE places, not two.** The two `for f in

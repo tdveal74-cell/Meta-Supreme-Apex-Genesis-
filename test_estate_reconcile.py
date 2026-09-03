@@ -499,9 +499,27 @@ def test_the_deployed_head_is_read_at_the_newest_successful_deployment():
     assert reconcile._deployed_alembic_head({"error": "RAILWAY_API_TOKEN is not set"}) == {}
 
 
-def test_the_real_migrations_directory_heads_where_the_doc_says():
-    assert reconcile._alembic_head() == "015"
-    assert "Alembic head 015" in (ROOT / HERMES_DOC).read_text(encoding="utf-8")
+def test_the_doc_records_the_deployed_head_not_the_head_in_the_tree():
+    """The tree runs ahead of production between a merge and its deploy.
+
+    This test asserted the two were equal, which made every migration a red
+    suite until someone edited the doc to claim a head that was not deployed
+    yet. The doc describes the deployed database, so the standing claim is
+    judged on the deployed commit (see the alembic_head verifier) and the
+    tree only says what the next deploy will apply."""
+    tree_head = reconcile._alembic_head()
+    assert tree_head is not None and tree_head.isdigit()
+    doc = (ROOT / HERMES_DOC).read_text(encoding="utf-8")
+    standing = [
+        c
+        for c in reconcile.doc_claims(reconcile._read_doc_texts())
+        if c.verifier == "alembic_head"
+    ]
+    assert len(standing) == 1, "exactly one standing head claim"
+    assert standing[0].subject in doc, "the standing claim must quote the doc"
+    assert standing[0].expected["head"] <= tree_head, (
+        "the deployed head cannot be ahead of the migrations in the tree"
+    )
 
 
 def test_the_cron_entrypoint_ships_in_the_api_image():

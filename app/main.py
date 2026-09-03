@@ -15,6 +15,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import setup_logging
+from app.core.tenant_context import TenantContextMiddleware
 
 
 @asynccontextmanager
@@ -91,6 +92,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Which account a request's provider calls are spent against. The auth
+# dependency binds it; this clears it when the request ends, so a test
+# client that serves requests in one task cannot carry a login across them.
+app.add_middleware(TenantContextMiddleware)
 
 # Mount versioned API
 app.include_router(api_router, prefix="/api/v1")
