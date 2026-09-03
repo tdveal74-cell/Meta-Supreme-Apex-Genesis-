@@ -50,6 +50,21 @@ from services.devon import ecosystem
 EMERGENCY_STOP_NAME = "emergency_stop"
 
 
+#: Every state an approval row may hold. 'consumed' is the state 013 taught the
+#: DEVON queue and 018 taught this table: an approved effect that has run. The
+#: ledger records the outcome; it never grants anything.
+_APPROVAL_STATES = ("pending", "approved", "consumed", "refused", "expired")
+
+#: The states settle_approval may move a row into, and the states a row must
+#: already hold for that move to be lawful. A move that is not listed here is
+#: refused rather than silently applied.
+_SETTLEMENTS = {
+    "consumed": ("approved",),
+    "refused": ("pending",),
+    "expired": ("pending",),
+}
+
+
 class LedgerRefused(RuntimeError):
     """A write the doctrine refuses. Carries every reason, never just the first."""
 
@@ -266,7 +281,7 @@ class LiveStateLedger:
     ) -> Dict[str, Any]:
         """Record what the approval authority did. This never grants anything."""
         await self._intent(db, owner_id=owner_id, intent_id=intent_id)
-        if state not in {"pending", "approved", "refused", "expired"}:
+        if state not in _APPROVAL_STATES:
             raise LedgerRefused([f"'{state}' is not an approval state the ledger records."])
         if not what_happens.strip():
             raise LedgerRefused(
@@ -673,6 +688,55 @@ class LiveStateLedger:
             db, owner_id=owner_id, request_id=request_id
         )
         return binding["intent_id"]
+
+    async def settle_approval(
+        self,
+        db: AsyncSession,
+        *,
+        request_id: str,
+        state: str,
+        decided_by: str = "",
+        owner_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Write what became of an approval the authority already decided.
+
+        The three settlements the ledger could not record before 018: an
+        approved effect that ran ('consumed'), a card the operator refused
+        ('refused'), and a card that timed out ('expired'). Callers reach this
+        holding a request id and nothing else, so the row is found by its
+        unique approval_request_id; pass owner_id to scope the lookup when the
+        caller has an account in hand.
+
+        Returns None when no ledger row exists for the request. That is the
+        normal case, not an error: only the knowledge loop opens ledger
+        approvals, and every other lane's cards live in the DEVON queue alone.
+        Idempotent on a row that already holds the target state, so a retried
+        commit or a second sweep does not raise.
+        """
+        if state not in _SETTLEMENTS:
+            raise LedgerRefused([f"'{state}' is not a settlement the ledger writes."])
+        conditions = [LedgerApprovalRecord.approval_request_id == request_id]
+        if owner_id is not None:
+            conditions.append(LedgerApprovalRecord.owner_id == owner_id)
+        result = await db.execute(select(LedgerApprovalRecord).where(*conditions))
+        row = result.scalars().first()
+        if row is None:
+            return None
+        if row.state == state:
+            return {"approval_id": row.id, "state": row.state, "changed": False}
+        if row.state not in _SETTLEMENTS[state]:
+            raise LedgerRefused(
+                [
+                    f"Approval {request_id} is {row.state} on the ledger and "
+                    f"cannot become {state} now."
+                ]
+            )
+        row.state = state
+        row.decided_at = _now()
+        if decided_by:
+            row.decided_by = decided_by.strip()[:120]
+        await db.flush()
+        return {"approval_id": row.id, "state": row.state, "changed": True}
 
     async def rule_approval(
         self,

@@ -14,15 +14,19 @@ is available for offline/local work only. Backend failures fail closed rather
 than silently downgrading to a process-local queue.
 """
 
+import logging
 import os
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.session import get_db
 from app.security.deps import CurrentUser
 from app.services.devon_approval_store import build_approval_queue
 from app.services.knowledge_loop import REQUESTED_BY as KNOWLEDGE_LOOP_REQUESTER
+from app.services.live_state_ledger import ledger
 from services.devon import areas as areas_mod
 from services.devon import (
     filing,
@@ -33,10 +37,17 @@ from services.devon import (
     receipts,
     vault,
 )
-from services.devon.approval import NO_MATCH, DecisionResult, RefusalReason
+from services.devon.approval import (
+    NO_MATCH,
+    ApprovalState,
+    DecisionResult,
+    RefusalReason,
+)
 from services.devon.assistant import Devon
 from services.devon.commands import ALL_INTENTS, approval_gated_intents
 from services.devon.precedence import Candidate, resolve
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/devon", tags=["DEVON"])
 
@@ -306,6 +317,34 @@ class DecideBody(BaseModel):
     decision: Optional[str] = Field(default=None, description="approve or refuse")
 
 
+async def _settle_ledger_refusal(
+    db: AsyncSession, result: DecisionResult, decided_by: str
+) -> None:
+    """Tell the Live State Ledger that a card it opened was refused.
+
+    Only the knowledge loop opens ledger approval rows, so for every other
+    card this settles nothing and returns. The refusal itself has already
+    happened in the queue and is authoritative: a ledger that cannot be
+    written is logged and does not turn a completed refusal into a 500.
+    """
+    if result.ok is not True or result.state is not ApprovalState.REFUSED:
+        return
+    try:
+        await ledger.settle_approval(
+            db,
+            request_id=result.request_id,
+            state="refused",
+            decided_by=decided_by,
+        )
+        await db.commit()
+    except Exception:  # noqa: BLE001 - the refusal stands either way
+        logger.exception(
+            "approval %s was refused but the ledger row could not be settled",
+            result.request_id,
+        )
+        await db.rollback()
+
+
 def _visible_to(record_owner: str, user_id: str) -> bool:
     """A card is visible to its owner. A card with no owner (raised by a lane
     that has no user in hand, such as the operator bridge) is visible to any
@@ -346,7 +385,11 @@ async def list_approvals(current_user: CurrentUser) -> Dict[str, Any]:
 
 
 @router.post("/approvals/decide")
-async def decide(body: DecideBody, current_user: CurrentUser) -> Dict[str, Any]:
+async def decide(
+    body: DecideBody,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
     """Rule on a pending request. Single use, expiring, fails closed.
 
     The ruling is signed by the login, never by text in the body. A card that
@@ -386,6 +429,7 @@ async def decide(body: DecideBody, current_user: CurrentUser) -> Dict[str, Any]:
         result = _queue.decide(
             body.request_id, body.token, body.decision, _principal_label(current_user)
         )
+        await _settle_ledger_refusal(db, result, _principal_label(current_user))
     return {
         "ok": result.ok,
         "approved": result.approved,

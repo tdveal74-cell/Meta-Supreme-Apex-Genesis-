@@ -740,6 +740,17 @@ class KnowledgeLoop:
                 status_code=403,
             )
 
+        # The authority's own row now says the approval was spent, not merely
+        # ruled. Before 018 the ledger stopped at 'approved' and stayed there
+        # forever, so the ledger disagreed with the queue about what happened.
+        await ledger.settle_approval(
+            db,
+            owner_id=owner_id,
+            request_id=request_id,
+            state="consumed",
+            decided_by="knowledge-loop",
+        )
+
         # Everything after the spend runs inside the failure recorder: the
         # connectors and the ledger rows that describe them. A connector that
         # refuses (the soul layer off, n8n unreachable) is a completed capture,
@@ -850,6 +861,17 @@ class KnowledgeLoop:
     ) -> None:
         """ACTION_FAILED, committed on its own, so the trace survives the raise."""
         await db.rollback()
+        if consumed:
+            # The rollback took the settlement written beside the spend with
+            # it. The approval is spent either way, so the ledger says so on
+            # the failure path too, in the same commit as ACTION_FAILED.
+            await ledger.settle_approval(
+                db,
+                owner_id=owner_id,
+                request_id=request_id,
+                state="consumed",
+                decided_by="knowledge-loop",
+            )
         await ledger.append_event(
             db,
             owner_id=owner_id,
