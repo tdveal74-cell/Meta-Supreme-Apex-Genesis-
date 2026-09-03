@@ -550,6 +550,48 @@ the source tree, and `scripts/estate_reconcile.py` pins the retired head 015
 sentence as a tripwire. No production DSN was read at any point in the arc: the
 head is certified from the migrations present at the deployed commit.
 
+### All three surfaces, read back 2026-09-03
+
+The arc's own readback above covered the Railway API, the only surface it
+changed. Reading the other two afterwards found one of them stale. It has since
+been cleared, and both the finding and the fix are recorded here because the
+finding is the part worth keeping.
+
+| Surface | State | Serving |
+|---|---|---|
+| Railway `api` | current | `6d1ac04`, deployment `da5a25fc`, SUCCESS 07:48:55Z |
+| `meta-supreme-apex-genesis-web` | current | `6d1ac04`, deployment `HfMY85yBtWB6y7ZtvcvLBekR5SRS`, READY, target production, ready 13:17:29Z, aliased to `meta-supreme-apex-genesis-web.vercel.app` |
+| `devon-soul` | current | `a6361d2`, deployment `smTqCt1C8yEbCNviDHNhzkCVekbQ`, READY, target production |
+
+`devon-soul` is current on its own terms rather than behind: nothing under
+`deploy/soul` changed after `a6361d2`, so its later builds were correct
+`ignoreCommand` skips.
+
+**What was found.** The web project served `e69e412` while main stood at
+`6d1ac04`. Its ignore rule deliberately watches beyond its own root, including
+`pnpm-lock.yaml`, and `5b485ef` changed that lockfile after `e69e412`, carrying
+the postcss and sharp bounds from the Codex review on fix PR 11. Those were
+owed to production. Nothing shipped them because Vercel answered "Account is
+blocked" on both projects, and no deployment record of any kind existed on
+either project between 2026-09-02 22:39Z and 2026-09-03 13:16Z: the merges of
+#123 through #127 produced nothing at all, which is what a block looks like
+rather than what a skip looks like.
+
+**How it cleared.** The block was lifted and `main` was deployed to production
+on that project at 13:16:53Z, reaching READY at 13:17:29Z on `6d1ac04`. The
+deployment carries its git metadata (`githubCommitSha`, ref `main`, root
+`apps/web`), so the ignore rule's comparison base is intact for the next build.
+That deployment is also what settles the block: a production deployment was
+created and completed, which no read of the tooling could have established on
+its own, since there is no quota endpoint.
+
+**The lesson.** The first pass of this readback checked `apps/web`, found it
+unchanged, and called the surface current. The lockfile was what had moved.
+Checking a project's own root is not enough when its ignore rule watches wider,
+and a surface can sit stale with no failing check anywhere. That is the
+2026-08-26 failure in a new costume, and the guard against it is to read the
+ignore rule's actual path list before calling any surface current.
+
 ### What the arc found that the audit had not
 
 Two defects surfaced during the fixes rather than during the audit, both from
