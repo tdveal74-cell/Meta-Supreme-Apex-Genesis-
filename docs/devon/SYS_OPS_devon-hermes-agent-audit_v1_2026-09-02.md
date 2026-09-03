@@ -623,6 +623,14 @@ tooling the audit asked for rather than from reading:
 - **The cross-encoder judge path** in `services/knowledge/pipeline.py` calls a
   factory that does not exist and a signature that does not match the provider
   contract. It is metered now, so repairing it is safe, but it is still broken.
+  Status 2026-09-03: repaired rather than removed, since `query_knowledge` is
+  the live body of `POST /api/v1/knowledge/query` and the judge branch is what
+  should run whenever `DEFAULT_AI_PROVIDER` names a real provider, not dead
+  code with no caller; `create_completion_provider` now exists in
+  `services/intelligence/providers/factory.py` and `_llm_judge_score` calls
+  the real `AIProvider.complete(CompletionRequest(...))` contract instead of
+  the invented one, still inside `MeteredProvider`, proven by
+  `test_devon_knowledge_cross_encoder_judge.py`.
 - **Provider spend residuals**, named in #125 and accepted: concurrent calls
   that all pass the check can overshoot by one completion each; a cap crossed
   mid-council refuses the next call of that request; attempts the inner
