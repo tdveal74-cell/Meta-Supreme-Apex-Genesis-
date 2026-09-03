@@ -427,7 +427,7 @@ def _repo_observations():
 
 
 API_IMAGE = "infrastructure/docker/Dockerfile.api"
-DEPLOYED = {"deployed_alembic_head": "015", "deployed_commit": "e69e412d23b6", "deployed_deployment": "2c4c5fb7"}
+DEPLOYED = {"deployed_alembic_head": "018", "deployed_commit": "5c9c27f48513", "deployed_deployment": "8b398b7b"}
 
 
 def test_a_resurrected_production_sha_is_caught():
@@ -460,13 +460,13 @@ def test_the_standing_alembic_head_is_judged_on_the_deployed_commit():
     evidence for that: only the newest successful Railway deployment's
     commit is, and without one the claim stays UNVERIFIED."""
     claims = [
-        c for c in reconcile.doc_claims(reconcile._read_doc_texts()) if c.subject == "Alembic head 015"
+        c for c in reconcile.doc_claims(reconcile._read_doc_texts()) if c.subject == "Alembic head 018"
     ]
     assert claims, "the standing Alembic head claim is missing from DOC_CLAIMS"
-    ok = reconcile.check(claims, {"repo": {"alembic_head": "015", **DEPLOYED}})[0]
+    ok = reconcile.check(claims, {"repo": {"alembic_head": "018", **DEPLOYED}})[0]
     assert ok.status == reconcile.OK
-    assert "2c4c5fb7" in ok.detail and "e69e412d23b6" in ok.detail
-    behind = reconcile.check(claims, {"repo": {"alembic_head": "016", **DEPLOYED}})[0]
+    assert "8b398b7b" in ok.detail and "5c9c27f48513" in ok.detail
+    behind = reconcile.check(claims, {"repo": {"alembic_head": "019", **DEPLOYED}})[0]
     assert behind.status == reconcile.OK, "a migration in the tree but not deployed does not change what is deployed"
     moved = reconcile.check(claims, {"repo": {**DEPLOYED, "deployed_alembic_head": "016"}})[0]
     assert moved.status == reconcile.DRIFT

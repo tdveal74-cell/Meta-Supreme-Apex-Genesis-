@@ -532,6 +532,24 @@ its head. Every merge deployed to Railway before the next one started.
 | PR 9 critic | #124 | 2b0aab9 | FKR ingest project_id typed and owner-checked |
 | 13 (H15) | #125 | 10e6cc5 | Per-tenant provider spend cap at the provider chokepoint |
 
+### Production, read back on the final main
+
+Railway deployment `8b398b7b` of `5c9c27f`, SUCCESS at 2026-09-03 07:23:03Z.
+Its pre-deploy ran the migration the arc's last PR added:
+
+```
+INFO  [alembic.runtime.migration] Running upgrade 017_provider_usage -> 018_schema_convergence
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8080
+```
+
+Startup complete at 07:23:00Z, so the deployed database now carries both the
+column every ingest path writes and the widened approval states. The Hermes v2
+status doc is written back to Alembic head 018 from that deployment, not from
+the source tree, and `scripts/estate_reconcile.py` pins the retired head 015
+sentence as a tripwire. No production DSN was read at any point in the arc: the
+head is certified from the migrations present at the deployed commit.
+
 ### What the arc found that the audit had not
 
 Two defects surfaced during the fixes rather than during the audit, both from
