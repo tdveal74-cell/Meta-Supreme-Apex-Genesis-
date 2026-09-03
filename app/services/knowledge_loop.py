@@ -749,6 +749,19 @@ class KnowledgeLoop:
         # follow, is a failure: ACTION_FAILED with the error, 502 naming the
         # intent, and the approval stays spent.
         try:
+            # The authority's own row now says the approval was spent, not
+            # merely ruled. Before 018 the ledger stopped at 'approved' and
+            # stayed there forever, so it disagreed with the queue about what
+            # happened. Inside the recorder: the approval is spent by now, so
+            # a settlement that fails is a failure of this commit, not an
+            # unhandled 500 over a durable spend.
+            await ledger.settle_approval(
+                db,
+                owner_id=owner_id,
+                request_id=request_id,
+                state="consumed",
+                decided_by="knowledge-loop",
+            )
             soul_result = await self._maybe_write_soul(candidate, layer)
             n8n_result = await self._maybe_route_n8n(candidate, filing_plan)
             await ledger.append_event(
@@ -850,6 +863,17 @@ class KnowledgeLoop:
     ) -> None:
         """ACTION_FAILED, committed on its own, so the trace survives the raise."""
         await db.rollback()
+        if consumed:
+            # The rollback took the settlement written beside the spend with
+            # it. The approval is spent either way, so the ledger says so on
+            # the failure path too, in the same commit as ACTION_FAILED.
+            await ledger.settle_approval(
+                db,
+                owner_id=owner_id,
+                request_id=request_id,
+                state="consumed",
+                decided_by="knowledge-loop",
+            )
         await ledger.append_event(
             db,
             owner_id=owner_id,

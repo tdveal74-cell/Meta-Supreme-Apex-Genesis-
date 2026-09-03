@@ -148,10 +148,10 @@ jobs:
 
       - name: The test fixture's schema and deploy migrations are present
         run: |
-          for f in 001_initial_schema 002_workflow_runs 003_schedule_dispatch 004_federated_knowledge_waist 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion 010_agent_subagent_links 011_passkeys 012_live_state_ledger 013_approval_consumption 014_artifact_body 015_devon_approval_owner 017_provider_usage; do
+          for f in 001_initial_schema 002_workflow_runs 003_schedule_dispatch 004_federated_knowledge_waist 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion 010_agent_subagent_links 011_passkeys 012_live_state_ledger 013_approval_consumption 014_artifact_body 015_devon_approval_owner 017_provider_usage 018_schema_convergence; do
             test -s "database/schemas/$f.sql" || { echo "::error::database/schemas/$f.sql is missing or empty"; exit 1; }
           done
-          for f in 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion 010_agent_subagent_links 011_passkeys 012_live_state_ledger 013_approval_consumption 014_artifact_body 015_devon_approval_owner 017_provider_usage; do
+          for f in 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion 010_agent_subagent_links 011_passkeys 012_live_state_ledger 013_approval_consumption 014_artifact_body 015_devon_approval_owner 017_provider_usage 018_schema_convergence; do
             test -s "database/migrations/versions/$f.py" || { echo "::error::database/migrations/versions/$f.py is missing or empty"; exit 1; }
           done
 
@@ -211,12 +211,62 @@ jobs:
                   missing = expected - present
                   assert not missing, f"missing migrated tables: {sorted(missing)}"
                   revision = await conn.fetchval("SELECT version_num FROM alembic_version")
-                  assert revision == "017_provider_usage", revision
+                  assert revision == "018_schema_convergence", revision
               finally:
                   await conn.close()
 
           asyncio.run(main())
           PY
+
+      - name: The Alembic build and the SQL build are the same database
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -c "CREATE DATABASE schema_alembic"
+          psql -h localhost -U postgres -c "CREATE DATABASE schema_sql"
+          psql -h localhost -U postgres -d schema_alembic -c "CREATE EXTENSION IF NOT EXISTS vector"
+          psql -h localhost -U postgres -d schema_sql -c "CREATE EXTENSION IF NOT EXISTS vector"
+
+          DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/schema_alembic \
+            alembic upgrade head
+
+          psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d schema_sql \
+            -f database/schemas/001_initial_schema.sql > /dev/null
+          for f in 002_workflow_runs 003_schedule_dispatch 004_federated_knowledge_waist \
+                   005_agent_runtime_persistence 006_devon_approval_store \
+                   007_agent_task_execution_leases 008_agent_effect_receipts \
+                   009_agent_hermes_expansion 010_agent_subagent_links 011_passkeys \
+                   012_live_state_ledger 013_approval_consumption 014_artifact_body \
+                   015_devon_approval_owner 017_provider_usage 018_schema_convergence; do
+            psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d schema_sql \
+              -f "database/schemas/$f.sql" > /dev/null
+          done
+
+          python scripts/schema_shape.py \
+            "postgresql://postgres:postgres@localhost:5432/schema_alembic" > shape_alembic.txt
+          python scripts/schema_shape.py \
+            "postgresql://postgres:postgres@localhost:5432/schema_sql" > shape_sql.txt
+          if ! diff -u shape_alembic.txt shape_sql.txt; then
+            echo "::error::The Alembic build and the SQL build disagree. Railway deploys the Alembic build; the tests run against the SQL build. Add the missing migration before merging."
+            exit 1
+          fi
+          echo "Both builds agree: $(wc -l < shape_alembic.txt) shape lines."
+
+      - name: Ledger and knowledge suites run against the Alembic build
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/meta_supreme
+          TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/schema_alembic
+          TEST_SCHEMA_PREBUILT: "1"
+          DEFAULT_AI_PROVIDER: mock
+          EMBEDDING_PROVIDER: mock
+          ENVIRONMENT: test
+        run: |
+          python -m pytest -q --tb=short \
+            test_live_state_ledger.py \
+            test_devon_knowledge_loop_durability.py \
+            test_devon_ledger_row_states.py \
+            test_knowledge.py \
+            test_devon_fkr_query_route.py
 
       - name: Failure summary
         if: failure()

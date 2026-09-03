@@ -75,6 +75,7 @@ _INCREMENTAL_SCHEMAS = (
     "014_artifact_body.sql",
     "015_devon_approval_owner.sql",
     "017_provider_usage.sql",
+    "018_schema_convergence.sql",
 )
 
 _DSN = TEST_DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
@@ -126,8 +127,23 @@ _DATA_TABLES = (
 )
 
 
+#: Set when the test database was built by something other than these scripts,
+#: which today means the CI step that builds it with `alembic upgrade head` and
+#: then runs the ledger and knowledge suites against it. Re-applying the SQL
+#: mirrors there would paper over exactly the divergence that step exists to
+#: catch, so with this set the schema is taken as it stands.
+_SCHEMA_PREBUILT = os.getenv("TEST_SCHEMA_PREBUILT", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+}
+
+
 async def _ensure_test_database() -> None:
     import asyncpg
+
+    if _SCHEMA_PREBUILT:
+        return
 
     admin = await asyncpg.connect(dsn=_ADMIN_DSN)
     try:
