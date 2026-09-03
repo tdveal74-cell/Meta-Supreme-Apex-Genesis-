@@ -32,6 +32,7 @@ exactly where an attribution gap would drain to.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -251,10 +252,15 @@ class MeteredProvider(AIProvider):
         tenant_id = spend_bucket()
         await refuse_if_capped(tenant_id)
         response = await self.inner.complete(request)
-        await _record_or_log(
-            tenant_id,
-            input_tokens=response.usage.input_tokens,
-            output_tokens=response.usage.output_tokens,
+        # Shielded: the provider has already been paid by the time this line
+        # runs, so a client that disconnects between the call and the record
+        # must not take the record with it.
+        await asyncio.shield(
+            _record_or_log(
+                tenant_id,
+                input_tokens=response.usage.input_tokens,
+                output_tokens=response.usage.output_tokens,
+            )
         )
         return response
 
@@ -282,7 +288,9 @@ class MeteredEmbeddingProvider(EmbeddingProvider):
         tenant_id = spend_bucket()
         await refuse_if_capped(tenant_id)
         response = await self.inner.embed(texts)
-        await _record_or_log(tenant_id, input_tokens=response.input_tokens, output_tokens=0)
+        await asyncio.shield(
+            _record_or_log(tenant_id, input_tokens=response.input_tokens, output_tokens=0)
+        )
         return response
 
     async def _embed_once(self, texts: List[str]) -> EmbeddingResponse:

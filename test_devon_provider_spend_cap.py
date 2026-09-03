@@ -350,3 +350,41 @@ async def test_the_stream_reports_the_refusal_as_429(client, auth_headers, monke
     assert errors and errors[-1]["status"] == 429, events
     assert "Provider spend cap reached" in errors[-1]["message"]
     assert seen == []
+
+
+async def test_a_cancelled_request_still_records_what_the_provider_was_paid(
+    db_session, monkeypatch
+):
+    """The critic's second condition: a cancellation between the provider call
+    and the usage record must not drop the spend. The provider has already
+    been paid by then, so the record is shielded."""
+    import asyncio
+
+    from app.services import provider_usage as usage_module
+
+    tenant = "cancel-tester"
+    provider = get_provider()
+    real_record = usage_module._record_or_log
+
+    async def slow_record(*args, **kwargs):
+        await asyncio.sleep(0.05)
+        return await real_record(*args, **kwargs)
+
+    monkeypatch.setattr(usage_module, "_record_or_log", slow_record)
+
+    token = bind_tenant(tenant)
+    try:
+        request = CompletionRequest(messages=[ChatMessage(role="user", content="cancel me")])
+        task = asyncio.create_task(provider.complete(request))
+        await asyncio.sleep(0.02)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        await asyncio.sleep(0.15)
+    finally:
+        reset_tenant(token)
+
+    rows = await db_session.execute(
+        text("SELECT calls FROM provider_usage WHERE user_id = :u"), {"u": tenant}
+    )
+    assert rows.scalar_one() == 1
