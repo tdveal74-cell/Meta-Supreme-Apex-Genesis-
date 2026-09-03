@@ -505,3 +505,91 @@ HELD: 156 attacks withstood, condensed in section 4
 UNVERIFIED: the production artifacts table shape, production knowledge_items shape, whether dcp_ tokens (FOS-9 and this receipt's own TOKEN line) are live credentials
 RULINGS NEEDED: section 10
 NEXT GATE: items 1 to 5 of section 9, then re-audit the touched surfaces
+
+## 13. Arc closure, 2026-09-03
+
+The audit merged as #110 on 2026-09-02 and named fifteen items in section 9.
+All fifteen are closed. Two follow-ups the fix PRs' own critics filed (items
+16 and 17) are open and carry their owner. Every fix PR was built, put through
+a fresh critic that had not seen the builder's reasoning, and merged only after
+the full API suite passed on PostgreSQL 16 with pgvector and CI was green on
+its head. Every merge deployed to Railway before the next one started.
+
+| Item | Fix PR | Merged | What closed |
+|---|---|---|---|
+| 1 | #111 | 57fdddb | Approval rail authenticated, registration closed behind an invite key, migrations 014 and 015 shipped |
+| 2 | #113 | 688c58b | Knowledge-loop ruling bound to its intent, queue-only commit closed |
+| 3 | #114, #126 | 04dace6, 5c9c27f | Runtime expansion tools spend their approval; the Alembic build and the SQL build converged and diffed in CI |
+| 4 | #115 | eba7320 | EditForge approval spent once, production refuses the public SECRET_KEY |
+| 5 | #116 | aa0c09f | Operator read lane judges every path, browser fetcher refuses redirects and URL credentials |
+| 6 | #117 | b6a48c2 | Vendored skill removed, three community plugins pinned |
+| 7 | #118 | a347c25 | Execution lease taken before the orphan check, orphans filtered by generation |
+| 9 | #119 | bc14386 | FKR query binds cast, project_id validated as a uuid |
+| 8 | #120 | 7f1b1a6 | Knowledge-loop ledger rows durable before the spend, ACTION_FAILED on a failed effect |
+| 14 (H) | #121 | a6361d2 | Workflow approval bound to the rendered pending payload, PATCH refused at the gate |
+| 15 (deps) | #122 | e69e412 | pip-audit and pnpm audit in CI, requirements pinned, six advisories overridden |
+| 14 (records) | #123 | 1aa12a9 | Stale records written back and pinned as reconcile tripwires |
+| PR 9 critic | #124 | 2b0aab9 | FKR ingest project_id typed and owner-checked |
+| 13 (H15) | #125 | 10e6cc5 | Per-tenant provider spend cap at the provider chokepoint |
+
+### Production, read back on the final main
+
+Railway deployment `8b398b7b` of `5c9c27f`, SUCCESS at 2026-09-03 07:23:03Z.
+Its pre-deploy ran the migration the arc's last PR added:
+
+```
+INFO  [alembic.runtime.migration] Running upgrade 017_provider_usage -> 018_schema_convergence
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8080
+```
+
+Startup complete at 07:23:00Z, so the deployed database now carries both the
+column every ingest path writes and the widened approval states. The Hermes v2
+status doc is written back to Alembic head 018 from that deployment, not from
+the source tree, and `scripts/estate_reconcile.py` pins the retired head 015
+sentence as a tripwire. No production DSN was read at any point in the arc: the
+head is certified from the migrations present at the deployed commit.
+
+### What the arc found that the audit had not
+
+Two defects surfaced during the fixes rather than during the audit, both from
+tooling the audit asked for rather than from reading:
+
+- **The deployed database was missing a column every ingest path writes.** The
+  CI step item 3 asked for, comparing the Alembic build against the SQL build,
+  found `knowledge_items.content` present in the mirrors and absent from the
+  Alembic chain on its very first run. Railway builds production with Alembic,
+  so every knowledge ingest on the deployed API was writing a column that
+  database did not have. The tests never saw it because they run against the
+  build that has the column. Closed by migration `018_schema_convergence`,
+  which also widens the ledger's approval states.
+- **A second, unmetered path to a provider.** The fix PR 15 critic found that
+  `services/knowledge/pipeline.py` builds a completion provider for
+  cross-encoder judging outside the metered chokepoint. It is inert today for
+  two independent reasons, which is why nothing caught it, and it sat one
+  repair away from being a live bypass of the spend cap. Wrapped before merge.
+
+### Open, with owners
+
+- **Item 16**: replace python-jose with PyJWT in `app/security/jwt.py`. python-jose
+  pulls ecdsa, whose maintainers will not fix PYSEC-2026-1325, so the CI ignore
+  never expires on its own. Owner: Tee, auth. Its own PR.
+- **Item 17**: compile the Python dependency set with hashes and install with
+  `--require-hashes` in `Dockerfile.api`, so the Railway image is byte-identical
+  to the audited set. Today the 21 direct dependencies are pinned and
+  transitives resolve at build time. Owner: Tee, infrastructure. Its own PR.
+- **The cross-encoder judge path** in `services/knowledge/pipeline.py` calls a
+  factory that does not exist and a signature that does not match the provider
+  contract. It is metered now, so repairing it is safe, but it is still broken.
+- **Provider spend residuals**, named in #125 and accepted: concurrent calls
+  that all pass the check can overshoot by one completion each; a cap crossed
+  mid-council refuses the next call of that request; attempts the inner
+  provider retries internally report no usage.
+
+### What the arc did not do
+
+- No production DSN was read or handled at any point. The standing Alembic head
+  is certified from the migrations present at the commit of the newest
+  successful Railway deployment, never from the source tree and never from the
+  database itself.
+- No test was skipped, disabled or quarantined to reach green.

@@ -271,15 +271,24 @@ DOC_CLAIMS: Tuple[Dict[str, Any], ...] = (
         "expected": {"by": "Alembic head 015, dated 2026-09-02", "dated": "2026-09-02"},
     },
     {
+        # 015 stood on 2026-09-02 and was superseded on 2026-09-03, once the
+        # deployment carrying 017 and 018 landed. The retired sentence coming
+        # back is drift, the same as the 010 above it.
+        "doc": "docs/devon/SYS_OPS_devon-hermes-stack-status_v2_2026-08-25.md",
+        "quote": "Alembic head 015 as of",
+        "verifier": "superseded",
+        "expected": {"by": "Alembic head 018, dated 2026-09-03", "dated": "2026-09-03"},
+    },
+    {
         # The standing head, checked against what is deployed: the migrations
         # directory at the commit of the newest successful Railway deployment
         # (Dockerfile.api runs alembic upgrade head before the API takes
         # traffic). Without a Railway read this is UNVERIFIED; the source
         # tree alone says what the next deploy will apply, not what is deployed.
         "doc": "docs/devon/SYS_OPS_devon-hermes-stack-status_v2_2026-08-25.md",
-        "quote": "Alembic head 015",
+        "quote": "Alembic head 018",
         "verifier": "alembic_head",
-        "expected": {"head": "015"},
+        "expected": {"head": "018"},
     },
     {
         # The cron line named a module that never existed in the root package.
