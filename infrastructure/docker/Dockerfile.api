@@ -10,8 +10,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # The repository-root API is the canonical DEVON runtime. Keeping Railway on
 # the same package CI exercises prevents the old apps/api mirror from drifting
 # away from passkeys, Cerebras, persona, approvals, and agent execution.
+#
+# requirements.txt is the pip-compile --generate-hashes output of
+# requirements.in (audit section 9 item 17): every direct and transitive
+# package, pinned and hashed. --require-hashes makes this build fail
+# outright, rather than silently resolve something else, if the file is
+# ever edited by hand instead of regenerated, or if a transitive version
+# moves between the compile and the build.
 COPY requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 
 COPY app/ ./app/
 COPY services/ ./services/
