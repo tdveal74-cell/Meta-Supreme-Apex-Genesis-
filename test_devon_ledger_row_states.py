@@ -174,3 +174,45 @@ async def test_settling_twice_does_not_raise(client, auth_headers, db_session):
     )
     assert first is not None and first["changed"] is True
     assert second is not None and second["changed"] is False
+
+
+async def test_the_expiry_sweep_carries_the_expiry_to_the_ledger(
+    client, auth_headers, db_session
+):
+    """The third settlement site, which the fresh critic found working when
+    driven by hand and untested. A card that times out in the DEVON queue
+    must not leave the ledger's own row saying 'pending' forever."""
+    import os
+
+    from app.services.devon_approval_store import PostgresApprovalStore
+
+    _intent_id, request_id, _token = await _proposed(
+        client, auth_headers, "Lesson: a card that times out is an outcome too."
+    )
+    assert await _row_state(db_session, request_id) == "pending"
+
+    # Age the queue's own row past its expiry. The sweep runs on the store's
+    # connection, so the row has to be durable before it can be swept.
+    # The table checks that expiry follows creation, so both move together.
+    await db_session.execute(
+        text(
+            "UPDATE devon_approvals "
+            "   SET created_at = NOW() - INTERVAL '3 hours', "
+            "       expires_at = NOW() - INTERVAL '1 hour' "
+            " WHERE request_id = :r"
+        ),
+        {"r": request_id},
+    )
+    await db_session.commit()
+
+    dsn = os.environ.get(
+        "TEST_DATABASE_URL",
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/meta_supreme_test",
+    ).replace("postgresql+asyncpg://", "postgresql://")
+    PostgresApprovalStore(dsn, connect_timeout_seconds=3).pending()
+
+    assert await _row_state(db_session, request_id) == "expired"
+    queued = await db_session.execute(
+        text("SELECT state FROM devon_approvals WHERE request_id = :r"), {"r": request_id}
+    )
+    assert queued.scalar_one() == "expired", "the queue and the ledger agree"

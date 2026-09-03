@@ -740,17 +740,6 @@ class KnowledgeLoop:
                 status_code=403,
             )
 
-        # The authority's own row now says the approval was spent, not merely
-        # ruled. Before 018 the ledger stopped at 'approved' and stayed there
-        # forever, so the ledger disagreed with the queue about what happened.
-        await ledger.settle_approval(
-            db,
-            owner_id=owner_id,
-            request_id=request_id,
-            state="consumed",
-            decided_by="knowledge-loop",
-        )
-
         # Everything after the spend runs inside the failure recorder: the
         # connectors and the ledger rows that describe them. A connector that
         # refuses (the soul layer off, n8n unreachable) is a completed capture,
@@ -760,6 +749,19 @@ class KnowledgeLoop:
         # follow, is a failure: ACTION_FAILED with the error, 502 naming the
         # intent, and the approval stays spent.
         try:
+            # The authority's own row now says the approval was spent, not
+            # merely ruled. Before 018 the ledger stopped at 'approved' and
+            # stayed there forever, so it disagreed with the queue about what
+            # happened. Inside the recorder: the approval is spent by now, so
+            # a settlement that fails is a failure of this commit, not an
+            # unhandled 500 over a durable spend.
+            await ledger.settle_approval(
+                db,
+                owner_id=owner_id,
+                request_id=request_id,
+                state="consumed",
+                decided_by="knowledge-loop",
+            )
             soul_result = await self._maybe_write_soul(candidate, layer)
             n8n_result = await self._maybe_route_n8n(candidate, filing_plan)
             await ledger.append_event(

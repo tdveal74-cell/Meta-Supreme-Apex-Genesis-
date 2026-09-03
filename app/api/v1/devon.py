@@ -318,12 +318,15 @@ class DecideBody(BaseModel):
 
 
 async def _settle_ledger_refusal(
-    db: AsyncSession, result: DecisionResult, decided_by: str
+    db: AsyncSession, result: DecisionResult, decided_by: str, owner_id: str
 ) -> None:
     """Tell the Live State Ledger that a card it opened was refused.
 
     Only the knowledge loop opens ledger approval rows, so for every other
-    card this settles nothing and returns. The refusal itself has already
+    card this settles nothing and returns. The lookup is scoped by owner as
+    well as by request id: the queue's own visibility check has already run,
+    and this second scope keeps the settlement correct on its own terms
+    rather than on an invariant enforced somewhere else. The refusal itself has already
     happened in the queue and is authoritative: a ledger that cannot be
     written is logged and does not turn a completed refusal into a 500.
     """
@@ -335,6 +338,7 @@ async def _settle_ledger_refusal(
             request_id=result.request_id,
             state="refused",
             decided_by=decided_by,
+            owner_id=owner_id,
         )
         await db.commit()
     except Exception:  # noqa: BLE001 - the refusal stands either way
@@ -429,7 +433,9 @@ async def decide(
         result = _queue.decide(
             body.request_id, body.token, body.decision, _principal_label(current_user)
         )
-        await _settle_ledger_refusal(db, result, _principal_label(current_user))
+        await _settle_ledger_refusal(
+            db, result, _principal_label(current_user), str(current_user.id)
+        )
     return {
         "ok": result.ok,
         "approved": result.approved,
