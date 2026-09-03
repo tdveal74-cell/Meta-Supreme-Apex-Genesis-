@@ -67,7 +67,13 @@ def _completion_provider():
             cerebras_api_key=getattr(settings, "CEREBRAS_API_KEY", None),
         )
         return None if provider is None else MeteredProvider(provider)
-    except Exception:
+    except Exception as exc:
+        # Same "never hard-fail" contract as above: this still returns None
+        # so the caller falls back to the offline lexical score. The log
+        # line is what tells a real misconfiguration (a typo'd provider
+        # name, a missing key) apart from "not configured on purpose" in
+        # production, where both used to look identical to an operator.
+        logger.warning("completion provider %r could not be built: %s", name, exc)
         return None
 
 
