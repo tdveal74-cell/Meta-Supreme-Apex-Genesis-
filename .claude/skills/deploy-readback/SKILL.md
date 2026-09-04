@@ -210,6 +210,42 @@ cap is near; a recycled branch does not, which is a quiet argument for the
 recycling convention. And the skips worth auditing are the ones on **main**,
 where the comparison base is production and a wrong skip ships stale code.
 
+**Two projects can answer differently on the same push, and that is still the
+guard rather than a broken rule.** On 2026-09-04, PR #133 pushed `d032283` to
+`claude/github-repo-install-5wtko6`, a records-only commit touching neither
+project's paths. `devon-soul` recorded Ignored. `meta-supreme-apex-genesis-web`
+built a preview to READY.
+
+What is proven, from the build log and from git:
+
+- The web rule ran and chose to build. Its log reads `Running "if [ -z
+  "$VERCEL_GIT_PREVIOUS_SHA" ...` and then `Running "vercel build"`, which is
+  the fail-open signature, not a skip.
+- It cannot have been a path match. `f476195..d032283` and `edaf03e..d032283`
+  are both empty over `apps/web`, `packages/ui`, `pnpm-lock.yaml` and
+  `pnpm-workspace.yaml`, so no plausible comparison base would have built.
+- So the guard fired: either the previous SHA was empty or `git cat-file -e`
+  could not find it in the checkout.
+- The difference between the two projects lines up with how far back each one's
+  last successful deployment sits. The web build restored cache from
+  `XeMEfHQZju83jE28yW2aovwk9Voq`, the production deployment on `f476195`, many
+  commits back, while `devon-soul` last built successfully at `edaf03e`, which
+  is `d032283`'s immediate parent.
+
+What is **not** proven: that the shallow clone is why `git cat-file -e` failed.
+That is the obvious explanation and it fits every observation here, but the log
+does not echo `VERCEL_GIT_PREVIOUS_SHA` and nothing in the tooling reports the
+clone depth, so it stays a hypothesis. Settling it would mean changing the
+`ignoreCommand` to echo the variable, which costs a build and has not been
+done.
+
+The practical reading, which does not depend on the hypothesis: a project whose
+last successful deployment is several commits back will tend to fail open and
+build, and a project that built recently will skip. That is the guard working
+in the safe direction. It costs a build; a wrong skip costs a silent stale
+production. Do not read such a build as a broken rule, and do not read the two
+projects disagreeing as one of them being wrong.
+
 ### Reading a skipped build correctly
 
 An ignored build is recorded as **`CANCELED`**, and the Vercel bot comments
