@@ -84,13 +84,24 @@ deployment from the current head.
 
 ## Vercel quota
 
-The free plan allows 100 deployments a day, counted across the account.
+**The account is on the Pro plan as of 2026-09-04**, read from `list_teams`,
+which reports `"plan": "pro"` for `tdveal74-5020s-projects`. Everything below
+about the free plan's 100 deployments a day is kept as history, because it is
+what shaped these rules and it explains the `ignoreCommand` that is still in
+both project roots. It no longer describes this account's limit. Read the plan
+from `list_teams` rather than assuming either one, and read the actual number
+from the dashboard Usage page, because there is still no quota endpoint in the
+tooling.
 
-**How it gets exhausted:** before 2026-08-26 both projects rebuilt on every
-commit to every branch regardless of whether the change could affect them. One
-docs-only commit produced four builds that could not have differed from their
-predecessors. The cap was then reached while shipping almost nothing, and it
-blocked the production deploys that mattered.
+The rules below survive the plan change on their own merit. A wrong skip ships
+stale code silently whatever the plan is, and that is the failure worth
+preventing, not the cost of a build.
+
+**How the free plan cap got exhausted:** before 2026-08-26 both projects
+rebuilt on every commit to every branch regardless of whether the change could
+affect them. One docs-only commit produced four builds that could not have
+differed from their predecessors. The cap was then reached while shipping
+almost nothing, and it blocked the production deploys that mattered.
 
 **The mitigation, already shipped:** each project root carries a `vercel.json`
 with an `ignoreCommand`. Vercel runs it before building; **exit 0 skips, any
@@ -220,7 +231,54 @@ Distinguish them by evidence, never by assumption:
 |---|---|
 | `CANCELED` plus an "Ignored" bot comment | The `ignoreCommand` skipped it. Correct. |
 | A bot comment naming `api-deployments-free-per-day` | The cap. Nothing will deploy until the window rolls. |
+| A commit status reading **"Account is blocked"** | An account-level block. See below. Not the cap, and not a build failure. |
 | A build that ran and reached `READY` | There was headroom **at that moment**. See below. |
+
+### An account block is a third thing, and it looks like neither
+
+Seen twice: 2026-09-02 into 2026-09-03, and again on 2026-09-04. The Vercel
+commit statuses on the head read `failure` with the description **"Account is
+blocked"**, pointing at
+`https://vercel.com/knowledge/why-is-my-account-deployment-blocked`.
+
+It is not the daily cap. The cap names itself (`api-deployments-free-per-day`)
+and it is a refusal of one deployment; a block is account wide and the tooling
+never names a reason. It is not a build failure either, so re-running, pushing
+an empty commit, or changing code does nothing. **Only a human on the Vercel
+account can clear it.**
+
+**Its signature is the absence of records.** While blocked, no deployment
+record of any kind is created on any project, so `list_deployments` simply has
+a gap. On 2026-09-02 that gap ran from 22:39Z to 13:16Z the next day on both
+projects. That absence is the tell, because a blocked account and a quiet
+account look identical in every status field.
+
+**So that is also how you verify it cleared**, and it is stronger evidence than
+any status turning green: push, then check that a deployment record was created
+at all. `CANCELED` is enough. On 2026-09-04 the merge of PR #132 created
+records on both projects at 19:24:57Z, which settled the block without needing
+a successful build.
+
+**Merging past a block is correct; shipping past one is not.** The `ci.yml`
+workflow is the merge gate, and these statuses are third-party. But while a
+block stands, nothing in the estate can deploy, so anything owed to a surface
+stays owed and silent. Say so, and check what is owed rather than assuming.
+
+### Verify a skip yourself rather than trusting it
+
+`CANCELED` means the rule chose to skip. It does not prove the rule was right,
+and a wrong skip is the expensive failure. Read each project's real
+`ignoreCommand` out of its own `vercel.json` (not out of this file, which can
+go stale) and run the same comparison by hand, from the commit of the last
+deployment that actually built to `main`:
+
+```
+git diff --stat <last built commit> <main> -- <that project's paths>
+```
+
+Empty means nothing is owed and the skip was correct. Anything listed is owed
+to production and nothing will tell you. Done on 2026-09-04 for both projects
+against `edaf03e`: both empty, both surfaces correct at a commit behind main.
 
 **A build succeeding does not mean the cap has reset.** The window is rolling,
 so a slot ageing out lets one or two builds through while the account is still

@@ -32,8 +32,15 @@ export DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/meta_s
 export TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/meta_supreme_test
 ```
 
+PostgreSQL 16 binaries are in the image but there is no initialised cluster and
+no pgvector, so a cold container needs
+`apt-get install -y postgresql-16-pgvector` and an `initdb` before anything
+touches the database.
+
 The cluster lives at `/var/lib/pgtest`, not at the empty Debian skeleton in
-`/var/lib/postgresql/16/main`. It does not survive a container restart:
+`/var/lib/postgresql/16/main`. Pointing `pg_ctl` at the skeleton fails with
+`could not access the server configuration file`, which reads like a broken
+install and is not one. The cluster does not survive a container restart:
 
 ```bash
 su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/pgtest -l /tmp/pg.log start"
