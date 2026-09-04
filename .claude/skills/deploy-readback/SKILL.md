@@ -239,12 +239,28 @@ clone depth, so it stays a hypothesis. Settling it would mean changing the
 `ignoreCommand` to echo the variable, which costs a build and has not been
 done.
 
+**The next push settled that it is not stable, and did not settle why.** Three
+minutes later `ec8ccd1` went to the same branch, another records-only commit,
+and **both** projects recorded Ignored, the web one included. So the same
+branch produced a build and then a skip on consecutive pushes with nothing
+relevant changing in the diff. The one thing that did change is that the web
+project now had a successful deployment of its own on this ref, at `d032283`,
+the immediate parent.
+
+That is consistent with the empty-variable reading and with the unreachable-SHA
+reading alike, so it is one more observation rather than a proof. It does kill
+the inference a reader would otherwise draw from the paragraph above, that this
+project simply builds and the other simply skips. Neither is a property of the
+project.
+
 The practical reading, which does not depend on the hypothesis: a project whose
 last successful deployment is several commits back will tend to fail open and
-build, and a project that built recently will skip. That is the guard working
-in the safe direction. It costs a build; a wrong skip costs a silent stale
-production. Do not read such a build as a broken rule, and do not read the two
-projects disagreeing as one of them being wrong.
+build, and a project that built recently will skip, so the same branch can
+answer differently from one push to the next. That is the guard working in the
+safe direction. It costs a build; a wrong skip costs a silent stale production.
+Do not read such a build as a broken rule, do not read two projects disagreeing
+as one of them being wrong, and do not read one push's outcome as a prediction
+of the next.
 
 ### Reading a skipped build correctly
 
