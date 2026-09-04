@@ -184,3 +184,83 @@ def test_default_cors_does_not_allow_the_vercel_soul_host() -> None:
     origins = Settings().CORS_ORIGINS
     assert "https://devon-soul.vercel.app" not in origins
     assert is_localhost_only(origins)
+
+
+# ---------------------------------------------------------------------------
+# Why loopback origins are tolerable in the production allowlist, guarded
+# ---------------------------------------------------------------------------
+#
+# Added 2026-09-04, after the three retired `meta-supreme-web` hosts were
+# removed from the production CORS_ORIGINS and the question "should the two
+# loopback entries go too" was actually investigated rather than answered from
+# the generic rule.
+#
+# The answer was no, and it rests on ONE property of this app: authentication
+# is a bearer token in the Authorization header, which a browser never attaches
+# automatically to a cross-origin request, and which a page at one origin
+# cannot read out of another origin's storage. There is no auth cookie. So an
+# origin on the allowlist gains no ambient authority, and `allow_credentials`
+# grants a hostile local page nothing it did not already have.
+#
+# That reasoning collapses the moment auth moves to a cookie. Then
+# `http://localhost:3000` in a deployed allowlist is a live CSRF path, and
+# nothing about the allowlist itself would look any different. These two tests
+# are the tripwire for exactly that refactor: they fail on the day it lands,
+# in the job that already runs test_security.py, and the failure says what to
+# do about the allowlist.
+
+
+def test_auth_is_a_bearer_header_so_allowlisted_origins_gain_no_ambient_authority() -> None:
+    from fastapi.security import HTTPBearer
+
+    from app.security import deps
+
+    assert isinstance(deps.security_scheme, HTTPBearer), (
+        "Authentication is no longer an Authorization header. A bearer token is "
+        "what makes the loopback entries in the production CORS allowlist safe: "
+        "a browser does not attach it cross-origin and a hostile page cannot "
+        "read it from another origin's storage. If auth now travels by cookie, "
+        "remove http://localhost:3000 and http://127.0.0.1:3000 from the "
+        "deployed CORS_ORIGINS before shipping, or the allowlist becomes a CSRF "
+        "path. See the comment above this test."
+    )
+
+
+def test_the_app_sets_no_authentication_cookie() -> None:
+    """The only cookie `app/` may set is the console's UI-mode hint.
+
+    Scanned from source rather than exercised through a client: a cookie added
+    on any route, including one no test happens to call, has the same effect on
+    the CORS reasoning.
+    """
+    import ast
+    import pathlib
+
+    root = pathlib.Path(__file__).parent / "app"
+    found: set[str] = set()
+    for path in sorted(root.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if not (isinstance(func, ast.Attribute) and func.attr == "set_cookie"):
+                continue
+            name = None
+            if node.args and isinstance(node.args[0], ast.Constant):
+                name = node.args[0].value
+            for keyword in node.keywords:
+                if keyword.arg == "key" and isinstance(keyword.value, ast.Constant):
+                    name = keyword.value.value
+            found.add(name if isinstance(name, str) else f"<dynamic in {path.name}>")
+
+    assert found == {"devon_host"}, (
+        f"app/ sets these cookies: {sorted(found)}. Only 'devon_host', the "
+        "console's UI-mode hint, is expected. A new cookie is fine unless it "
+        "carries authentication: an auth cookie is sent by the browser "
+        "automatically, which turns every entry in the deployed CORS allowlist "
+        "into ambient authority and makes the loopback entries a CSRF path. "
+        "Either keep auth in the Authorization header, or drop the loopback "
+        "origins from the production CORS_ORIGINS. See the comment above "
+        "test_auth_is_a_bearer_header_so_allowlisted_origins_gain_no_ambient_authority."
+    )
