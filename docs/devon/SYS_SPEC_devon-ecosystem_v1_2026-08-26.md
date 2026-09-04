@@ -169,7 +169,35 @@ the map can never become a second registry that drifts.
 ## Deployment, read back
 
 Merging is not deploying, so this section records the read back rather than the
-merge. All three surfaces were verified current on 2026-08-26.
+merge.
+
+**Standing read back, 2026-09-04, against main at `edaf03e`.** All three
+surfaces verified current.
+
+| Surface | Deployment | Commit |
+|---|---|---|
+| Railway `api` | `406809cc` SUCCESS at 19:31:41 UTC, container started, application startup complete at 19:31:34, `alembic upgrade head` ran in pre deploy with nothing pending | `edaf03e` |
+| Vercel `meta-supreme-apex-genesis-web` | `dpl_XeMEfHQZju83jE28yW2aovwk9Voq`, READY, `target: "production"` | `f476195` |
+| Vercel `devon-soul` | `dpl_9Uf6twCzfiTFXUogMJntNv4xHorG`, READY, `target: "production"` | `94c49af` |
+
+Both Vercel surfaces sit behind main on purpose and both are current on their
+own terms. Every production deployment since is `CANCELED`, which is the
+`ignoreCommand` skipping. The skips were not taken on trust: each project's
+real rule was read out of its own `vercel.json` and the same comparison run by
+hand, `f476195..edaf03e` over `apps/web`, `packages/ui`, `pnpm-lock.yaml` and
+`pnpm-workspace.yaml`, and `94c49af..edaf03e` over `deploy/soul`. Both empty,
+so nothing is owed to either surface.
+
+That day also carried the second account block. Vercel answered "Account is
+blocked" on the PR #132 head at 19:01Z, Tee cleared it, and the merge created
+deployment records on both projects at 19:24:57Z, which is what settles a block
+rather than any status turning green. `list_teams` on the same day reports the
+account on the Pro plan, so the free plan cap below is history and no longer
+the limit. When it moved is not recorded anywhere this repository can read, so
+do not date the move from this line; the reading is what is verified.
+
+**Superseded read back, 2026-08-26.** Kept because the promotion and the cap it
+describes are what the rules were built from.
 
 | Surface | Deployment | Commit |
 |---|---|---|

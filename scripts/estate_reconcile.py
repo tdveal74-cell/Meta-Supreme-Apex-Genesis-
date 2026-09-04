@@ -291,6 +291,18 @@ DOC_CLAIMS: Tuple[Dict[str, Any], ...] = (
         "expected": {"head": "018"},
     },
     {
+        # The deploy-readback skill opened its quota section on the free plan
+        # and built the rest of the section on that cap. list_teams reported
+        # "plan": "pro" for the account on 2026-09-04, so the sentence stopped
+        # describing the estate. The cap's history stays in the skill because
+        # it is why the ignoreCommand exists; the claim about the current
+        # limit does not.
+        "doc": ".claude/skills/deploy-readback/SKILL.md",
+        "quote": "The free plan allows 100 deployments a day",
+        "verifier": "superseded",
+        "expected": {"by": "the Pro plan, read from list_teams", "dated": "2026-09-04"},
+    },
+    {
         # The cron line named a module that never existed in the root package.
         "doc": "OPERATING.md",
         "quote": "python -m app.cli.dispatch",

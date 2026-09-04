@@ -84,13 +84,24 @@ deployment from the current head.
 
 ## Vercel quota
 
-The free plan allows 100 deployments a day, counted across the account.
+**The account is on the Pro plan as of 2026-09-04**, read from `list_teams`,
+which reports `"plan": "pro"` for `tdveal74-5020s-projects`. Everything below
+about the free plan's 100 deployments a day is kept as history, because it is
+what shaped these rules and it explains the `ignoreCommand` that is still in
+both project roots. It no longer describes this account's limit. Read the plan
+from `list_teams` rather than assuming either one, and read the actual number
+from the dashboard Usage page, because there is still no quota endpoint in the
+tooling.
 
-**How it gets exhausted:** before 2026-08-26 both projects rebuilt on every
-commit to every branch regardless of whether the change could affect them. One
-docs-only commit produced four builds that could not have differed from their
-predecessors. The cap was then reached while shipping almost nothing, and it
-blocked the production deploys that mattered.
+The rules below survive the plan change on their own merit. A wrong skip ships
+stale code silently whatever the plan is, and that is the failure worth
+preventing, not the cost of a build.
+
+**How the free plan cap got exhausted:** before 2026-08-26 both projects
+rebuilt on every commit to every branch regardless of whether the change could
+affect them. One docs-only commit produced four builds that could not have
+differed from their predecessors. The cap was then reached while shipping
+almost nothing, and it blocked the production deploys that mattered.
 
 **The mitigation, already shipped:** each project root carries a `vercel.json`
 with an `ignoreCommand`. Vercel runs it before building; **exit 0 skips, any
@@ -199,6 +210,58 @@ cap is near; a recycled branch does not, which is a quiet argument for the
 recycling convention. And the skips worth auditing are the ones on **main**,
 where the comparison base is production and a wrong skip ships stale code.
 
+**Two projects can answer differently on the same push, and that is still the
+guard rather than a broken rule.** On 2026-09-04, PR #133 pushed `d032283` to
+`claude/github-repo-install-5wtko6`, a records-only commit touching neither
+project's paths. `devon-soul` recorded Ignored. `meta-supreme-apex-genesis-web`
+built a preview to READY.
+
+What is proven, from the build log and from git:
+
+- The web rule ran and chose to build. Its log reads `Running "if [ -z
+  "$VERCEL_GIT_PREVIOUS_SHA" ...` and then `Running "vercel build"`, which is
+  the fail-open signature, not a skip.
+- It cannot have been a path match. `f476195..d032283` and `edaf03e..d032283`
+  are both empty over `apps/web`, `packages/ui`, `pnpm-lock.yaml` and
+  `pnpm-workspace.yaml`, so no plausible comparison base would have built.
+- So the guard fired: either the previous SHA was empty or `git cat-file -e`
+  could not find it in the checkout.
+- The difference between the two projects lines up with how far back each one's
+  last successful deployment sits. The web build restored cache from
+  `XeMEfHQZju83jE28yW2aovwk9Voq`, the production deployment on `f476195`, many
+  commits back, while `devon-soul` last built successfully at `edaf03e`, which
+  is `d032283`'s immediate parent.
+
+What is **not** proven: that the shallow clone is why `git cat-file -e` failed.
+That is the obvious explanation and it fits every observation here, but the log
+does not echo `VERCEL_GIT_PREVIOUS_SHA` and nothing in the tooling reports the
+clone depth, so it stays a hypothesis. Settling it would mean changing the
+`ignoreCommand` to echo the variable, which costs a build and has not been
+done.
+
+**The next push settled that it is not stable, and did not settle why.** Three
+minutes later `ec8ccd1` went to the same branch, another records-only commit,
+and **both** projects recorded Ignored, the web one included. So the same
+branch produced a build and then a skip on consecutive pushes with nothing
+relevant changing in the diff. The one thing that did change is that the web
+project now had a successful deployment of its own on this ref, at `d032283`,
+the immediate parent.
+
+That is consistent with the empty-variable reading and with the unreachable-SHA
+reading alike, so it is one more observation rather than a proof. It does kill
+the inference a reader would otherwise draw from the paragraph above, that this
+project simply builds and the other simply skips. Neither is a property of the
+project.
+
+The practical reading, which does not depend on the hypothesis: a project whose
+last successful deployment is several commits back will tend to fail open and
+build, and a project that built recently will skip, so the same branch can
+answer differently from one push to the next. That is the guard working in the
+safe direction. It costs a build; a wrong skip costs a silent stale production.
+Do not read such a build as a broken rule, do not read two projects disagreeing
+as one of them being wrong, and do not read one push's outcome as a prediction
+of the next.
+
 ### Reading a skipped build correctly
 
 An ignored build is recorded as **`CANCELED`**, and the Vercel bot comments
@@ -220,7 +283,54 @@ Distinguish them by evidence, never by assumption:
 |---|---|
 | `CANCELED` plus an "Ignored" bot comment | The `ignoreCommand` skipped it. Correct. |
 | A bot comment naming `api-deployments-free-per-day` | The cap. Nothing will deploy until the window rolls. |
+| A commit status reading **"Account is blocked"** | An account-level block. See below. Not the cap, and not a build failure. |
 | A build that ran and reached `READY` | There was headroom **at that moment**. See below. |
+
+### An account block is a third thing, and it looks like neither
+
+Seen twice: 2026-09-02 into 2026-09-03, and again on 2026-09-04. The Vercel
+commit statuses on the head read `failure` with the description **"Account is
+blocked"**, pointing at
+`https://vercel.com/knowledge/why-is-my-account-deployment-blocked`.
+
+It is not the daily cap. The cap names itself (`api-deployments-free-per-day`)
+and it is a refusal of one deployment; a block is account wide and the tooling
+never names a reason. It is not a build failure either, so re-running, pushing
+an empty commit, or changing code does nothing. **Only a human on the Vercel
+account can clear it.**
+
+**Its signature is the absence of records.** While blocked, no deployment
+record of any kind is created on any project, so `list_deployments` simply has
+a gap. On 2026-09-02 that gap ran from 22:39Z to 13:16Z the next day on both
+projects. That absence is the tell, because a blocked account and a quiet
+account look identical in every status field.
+
+**So that is also how you verify it cleared**, and it is stronger evidence than
+any status turning green: push, then check that a deployment record was created
+at all. `CANCELED` is enough. On 2026-09-04 the merge of PR #132 created
+records on both projects at 19:24:57Z, which settled the block without needing
+a successful build.
+
+**Merging past a block is correct; shipping past one is not.** The `ci.yml`
+workflow is the merge gate, and these statuses are third-party. But while a
+block stands, nothing in the estate can deploy, so anything owed to a surface
+stays owed and silent. Say so, and check what is owed rather than assuming.
+
+### Verify a skip yourself rather than trusting it
+
+`CANCELED` means the rule chose to skip. It does not prove the rule was right,
+and a wrong skip is the expensive failure. Read each project's real
+`ignoreCommand` out of its own `vercel.json` (not out of this file, which can
+go stale) and run the same comparison by hand, from the commit of the last
+deployment that actually built to `main`:
+
+```
+git diff --stat <last built commit> <main> -- <that project's paths>
+```
+
+Empty means nothing is owed and the skip was correct. Anything listed is owed
+to production and nothing will tell you. Done on 2026-09-04 for both projects
+against `edaf03e`: both empty, both surfaces correct at a commit behind main.
 
 **A build succeeding does not mean the cap has reset.** The window is rolling,
 so a slot ageing out lets one or two builds through while the account is still
