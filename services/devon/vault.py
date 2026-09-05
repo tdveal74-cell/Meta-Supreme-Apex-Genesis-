@@ -423,6 +423,17 @@ WORKFLOWS = {
     "Intake Former": {"id": "AEFgXee7IDJarNV7", "state": "active, webhook devon-intake"},
     "Job Driver": {"id": "TT4TfFXyH9O7lfdc", "state": "active, sub-workflow called by the Intake Former and the Driver Poll"},
     "Driver Poll": {"id": "mbIKJk4UuB7V27rP", "state": "active, hourly poll"},
+    # Build 15, the face. n8n hosted chat behind n8n user auth where Tee talks
+    # to DEVON from the phone. Cerebras answers with the live ledger, the last
+    # driver passes and the last heartbeat in front of it, plus this session's
+    # turns from devon_chat_log (nwnHN8o2dgHjtk7f). Status answers cite only
+    # measured context. A request to do something is filed through
+    # devon-intake, the same door every poster uses, so the same tags, brief,
+    # router, cards and ledger apply; an ambiguous ask becomes a dry run and
+    # waits for a plain yes. The face never decides a card and never reads
+    # approval_queue. The Cerebras credential is header auth, which the chat
+    # model subnodes cannot use, so the lane is an HTTP Request, not an Agent.
+    "Face": {"id": "LsmfRFMmI5feINs0", "state": "active, hosted chat, n8n user auth"},
     "TQO FINAL V5": {"id": "gsGJQan7a6ZufhYt", "state": "inactive by ruling"},
     "Capture Hook": {"id": "Cbd24ptTPWch3aZO", "state": "retired 2026-08-22"},
 }

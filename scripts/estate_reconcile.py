@@ -233,12 +233,13 @@ DOC_CLAIMS: Tuple[Dict[str, Any], ...] = (
     },
     {
         # The standing census after Build 14 (Intake Former, Job Driver,
-        # Driver Poll). Holds until the estate changes again, at which point
-        # the doc must be amended, dated, and a new pin added here.
+        # Driver Poll) and Build 15 (Face), both 2026-09-05. Holds until the
+        # estate changes again, at which point the doc must be amended, dated,
+        # and a new pin added here.
         "doc": "docs/devon/SYS_OPS_n8n-cloud-to-vps-migration_v1_2026-08-31.md",
-        "quote": "the 61 workflows",
+        "quote": "the 62 workflows",
         "verifier": "n8n_total",
-        "expected": {"total": 61},
+        "expected": {"total": 62},
     },
     # Records the DEVON and Hermes audit of 2026-09-02 (item 14) found stale
     # and corrected, dated. Each retired sentence stays pinned as a tripwire:

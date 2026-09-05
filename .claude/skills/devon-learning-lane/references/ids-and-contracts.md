@@ -28,6 +28,8 @@ before trusting in a much later session.
 | Job Driver workflow (Build 14) | `TT4TfFXyH9O7lfdc` | sub-workflow, no trigger of its own; one pass advances one job through the organs as far as it legally can and stops at every human gate; reads approval_queue only by evidence marker `intent <id>; card approval` or `card verify` and copies only request_id, status, timestamps (never the token column); execution data persistence OFF |
 | devon_driver_log table | `9VbICTCa4x4yhWZm` | one row per driver pass: intent_id, pass_at, execution_id, origin (intake or poll), entry_state, exit_state, outcome, steps, detail, approval_card, verify_card |
 | Driver Poll workflow (Build 14) | `mbIKJk4UuB7V27rP` | hourly; reads the ledger, hands every open non-terminal job (RECEIVED through VERIFYING; never FAILED or BLOCKED) to the Job Driver one at a time, skips rows written in the last 3 minutes; digest email only when a job moved or an organ refused |
+| Face workflow (Build 15) | `LsmfRFMmI5feINs0` | n8n hosted chat, n8n user auth; Cerebras gpt-oss-120b answers as DEVON with the ledger, driver log and heartbeat in context; files or dry-runs jobs through `devon-intake`; never reads approval_queue |
+| devon_chat_log table | `nwnHN8o2dgHjtk7f` | Face memory, one row per turn: session_id, role (user or assistant), content, at, action (none, file_job, dry_run), intent_id; no tokens, no secrets |
 
 ### Soul Committer v2 semantics (why it is shaped this way)
 

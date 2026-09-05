@@ -277,12 +277,12 @@ def test_a_changed_workflow_count_demands_a_doc_amendment():
     all_claims = reconcile.doc_claims(reconcile._read_doc_texts())
     claims = [c for c in all_claims if c.verifier == "n8n_total"]
     assert len(claims) == 1, "exactly one census sentence should be live in the migration doc"
-    assert claims[0].expected == {"total": 61}
-    sixty = {str(i): {"name": str(i), "active": False} for i in range(60)}
-    observations = _n8n_observation(workflows=sixty, webhooks={})
-    assert reconcile.check(claims, observations)[0].status == reconcile.DRIFT
+    assert claims[0].expected == {"total": 62}
     sixty_one = {str(i): {"name": str(i), "active": False} for i in range(61)}
     observations = _n8n_observation(workflows=sixty_one, webhooks={})
+    assert reconcile.check(claims, observations)[0].status == reconcile.DRIFT
+    sixty_two = {str(i): {"name": str(i), "active": False} for i in range(62)}
+    observations = _n8n_observation(workflows=sixty_two, webhooks={})
     assert reconcile.check(claims, observations)[0].status == reconcile.OK
     # The 2026-08-31 sentence was amended, not deleted from the registry: it
     # stays pinned so a later edit that brings "the 58 workflows" back revives
