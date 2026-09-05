@@ -117,6 +117,7 @@ _AUTH_PREFIXES: Tuple[Tuple[str, str], ...] = (
     ("basic", "basicAuth"),
     ("jwt", "jwtAuth"),
     ("single use token", "none"),
+    ("n8n user login", "n8nUserAuth"),
     ("none", "none"),
 )
 
@@ -752,6 +753,9 @@ def _paged_workflows(base: str, key: str) -> Iterator[Dict[str, Any]]:
             return
 
 
+CHAT_TRIGGER = "@n8n/n8n-nodes-langchain.chatTrigger"
+
+
 def webhook_nodes(workflow_detail: Dict[str, Any]) -> List[Dict[str, str]]:
     """The live webhook trigger nodes of one workflow detail read.
 
@@ -761,16 +765,28 @@ def webhook_nodes(workflow_detail: Dict[str, Any]) -> List[Dict[str, str]]:
     """
     nodes = []
     for node in workflow_detail.get("nodes", []):
-        if node.get("type") != "n8n-nodes-base.webhook" or node.get("disabled"):
+        if node.get("disabled"):
             continue
         parameters = node.get("parameters") or {}
-        nodes.append(
-            {
-                "path": parameters.get("path", ""),
-                "auth": parameters.get("authentication") or "none",
-                "method": parameters.get("httpMethod", "GET"),
-            }
-        )
+        if node.get("type") == "n8n-nodes-base.webhook":
+            nodes.append(
+                {
+                    "path": parameters.get("path", ""),
+                    "auth": parameters.get("authentication") or "none",
+                    "method": parameters.get("httpMethod", "GET"),
+                }
+            )
+        elif node.get("type") == CHAT_TRIGGER and parameters.get("public") is True:
+            # A public hosted chat is a live POST door at /webhook/<id>/chat.
+            # It carries its own auth parameter, so it is audited like any
+            # other webhook; a chat that is not public serves nothing.
+            nodes.append(
+                {
+                    "path": f"{node.get('webhookId', '')}/chat",
+                    "auth": parameters.get("authentication") or "none",
+                    "method": "POST",
+                }
+            )
     return nodes
 
 

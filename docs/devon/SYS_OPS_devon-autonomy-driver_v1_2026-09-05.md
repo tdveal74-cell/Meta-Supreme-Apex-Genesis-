@@ -4,7 +4,7 @@ type: SYS_OPS
 version: 1
 date: 2026-09-05
 area: Systems
-status: live-on-cloud-human-gated
+status: live-on-cloud-human-gated-pass-with-conditions
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 base: 70a0a12
 branch: claude/new-session-2f2yu2
@@ -274,10 +274,13 @@ worse than a reversible publish. Tee owns the ruling.
   (face, intake, driver). Cerebras answers in two to four seconds. The chat
   log is plain text in a data table; it holds what Tee typed and what DEVON
   answered, and nothing else, so it may be read by any session.
-- DEVON chooses a blast radius for a job he files from chat and the intake
-  trusts that field. The level 2 default sends every chat filed job to a
-  card, so a too narrow blast radius still passes Tee before anything runs;
-  it does not yet raise the blast radius floor, which is a router change.
+- DEVON chooses a blast radius for a job he files from chat. Two floors sit
+  under that choice, both in code: the intake raises any render to at least
+  reversible_write and any paid render to irreversible_write, and the Face
+  files every chat job at level 2 or higher. The router turns either into a
+  card. The Job Driver refuses a paid render outright unless the envelope
+  carries a granted, unexpired approval, so a mislabel cannot reach a
+  provider even if a future poster bypasses the intake.
 - Cerebras text can carry Unicode hyphens and typographic quotes. The Face
   replaces em and en dashes in a reply with commas before it is shown; other
   marks pass through.
@@ -311,7 +314,10 @@ header `x-devon-key` with the Devon Capture Key value, header
 reply says where the job stopped. Anything with a blast radius wider than none
 arrives as an approval card by email within seconds; a card takes two taps to
 decide, and no decision is a rejection after 72 hours. Add `"dry_run": true`
-to see the envelope DEVON would form without filing it.
+to see the envelope DEVON would form without filing it. Send an
+`idempotency_key` (the Shortcut can hash the text with the date) and a retry
+after a timeout returns the job that already exists instead of filing a
+second one.
 
 ## 8. Human runbooks
 
@@ -381,3 +387,62 @@ pages, both take a minute on the phone.
 5. Give the Face hands beyond filing: a read tool over the driver log and
    the heartbeat by id, and the same brief in the Heartbeat digest, both
    through Cerebras. Each is one more node on a proven lane, not a new organ.
+
+## 10. Gauntlet, cycle 1 of 3
+
+A fresh critic (a separate agent given only the ask, the diff and the live
+workflow ids, never the build rationale) attacked the deliverable on
+2026-09-05 with read only access to the repository, the four workflows and
+every cited execution. Its verdict on the first cut was QUARANTINE, on one
+high finding and four medium ones. Every claim it verified is listed in its
+report; the census, the receipts, the driver's persistence settings, the byte
+identical vault copies and the dash discipline all held.
+
+| Finding | Severity | Fix | Receipt |
+|---|---|---|---|
+| A paid EditForge render was reachable with no card: a poster or the Face's model could label it blast radius none and level 0 | HIGH, security | The intake raises any render to reversible_write and any paid render to irreversible_write before the router sees it (Apply Tags). The Job Driver refuses a paid render with FAILED and a plain reason unless approval.state is granted and unexpired (Decide, EXECUTING). Two independent paths, both in code | 5742, dry run: a runway render posted as blast none, level 0 came back irreversible_write, level 2, approval pending, with the note "blast radius raised from none to irreversible_write because the job renders with paid provider runway"; the brief itself recommended hold |
+| The doc claimed every chat job passes a card, but the model could emit level 0 | MEDIUM, unverified claim | Parse Reply floors every chat filed job at level 2 | 5754: Tee asked for a level 0 note; the dry run envelope carried level 2 |
+| An organ answering 200 with ledger_clean false let the driver advance in memory and raise a card one state ahead of the ledger | MEDIUM, silent failure | Absorb stops the pass on ledger_clean false and logs it; the next poll re-drives from the ledger | code read; not provoked live, the organs did not refuse during the session |
+| A retried POST or a second "file it" filed a second job under the same key | MEDIUM, idempotency | The intake reads the ledger for a supplied idempotency_key before tagging or driving and returns the existing job with duplicate true and HTTP 200. The Face derives its key from the session and the job summary | 5743 filed 01M1SC1BAA6ST4716GZ2N0DYS7 and drove it to COMPLETED in 13.5s; 5779, same key, returned duplicate true with the same id in 2.4s and called nothing |
+| A grant computed from decided_at plus 24h could reach the Action Router already expired, one refusal email per hour until the Janitor | MEDIUM, silent failure | Decide cancels with a plain receipt when the grant has already decayed, both at the approved read and at AUTHORIZED | code read; needs a missed poll to provoke |
+| Three organs republished without Tee watching | MEDIUM, process | Unchanged; the ruling is Tee's, section 4 | version ids in section 4 |
+| Memory rows of one turn shared a timestamp so the sort could invert them; "file it" re-derived the job from prose | LOW | Memory is ordered by row id; the dry run job is stored in a new `job` column and file_job reuses it verbatim when the summary matches or fields are missing | 5754 stored the proposal; the chat log now carries `job` |
+| payload.editforge.options reached the provider unbounded | LOW | Form Job bounds options to a flat object, 12 keys, plain names, scalar values | 5742: a nested key and a key with punctuation were dropped, duration and aspect_ratio kept |
+| The Face's chat door was a live public endpoint the reconciler never audited | LOW, registration | `scripts/estate_reconcile.py` reads public chat triggers as webhooks at `<id>/chat` with their auth; the vault registers the door with auth "n8n user login"; `test_chat_trigger_nodes_are_read_with_their_auth` | 163 passed |
+
+Self scored after the fixes, with the critic's rubric. Critic mode for
+this second pass is a narrow verifier on the fixed paths, not a second full
+gauntlet, and the two code read fixes are claims until provoked.
+
+| Dimension | Score |
+|---|---|
+| Scope fidelity | 4 |
+| Correctness | 4 |
+| Unverified claims | 4 |
+| Security | 5 |
+| Reversibility and blast radius | 4 |
+| Silent failure | 4 |
+| Idempotency | 4 |
+| Traceability | 4 |
+| Observability | 4 |
+| Completeness | 3 |
+| Maintainability | 3 |
+| Verification | 4 |
+| Flagship Bar | met: root fixed at the one door, simplest form that works, handed off with one next step |
+
+Mean 3.9. Verdict: PASS-WITH-CONDITIONS. Security is 5 by two code paths;
+the mean sits under 4.0 on completeness (the approve to verify hop and the
+EditForge lane are unproven live, and the only executor is the spine echo)
+and on maintainability (the JSON extraction and the vocabularies are copied
+across four Code nodes and the organ host is a constant in Decide).
+
+Conditions before anyone calls DEVON "running the ecosystem":
+
+1. Tee decides one live card and watches the next poll carry the job to a
+   verification card, then decides that. That proves the last hop.
+2. Tee ratifies or reverses the three organ publishes in section 4.
+3. One real executor on the Action Router allowlist, then one gated render
+   proof with Tee watching the output.
+4. A follow-up that lifts the shared JSON extraction and vocabularies into one
+   place, so a vocabulary change is one edit.
+

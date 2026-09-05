@@ -337,6 +337,17 @@ WEBHOOKS = {
         "auth": "header x-devon-key",
         "open_ruling": None,
     },
+    # Build 15, the Face's door. A public hosted chat is a POST endpoint at
+    # /webhook/<id>/chat like any other webhook, so it is registered and
+    # audited like one. The auth is n8n login: only a signed-in n8n user can
+    # open it, and there is no key to leak.
+    "71510ab0-07eb-42d8-9734-c0741b398d49/chat": {
+        "job": "the Face: hosted chat where Tee talks to DEVON",
+        "destination": "Cerebras, then devon-intake for any job Tee files; memory in devon_chat_log nwnHN8o2dgHjtk7f",
+        "workflow": "LsmfRFMmI5feINs0",
+        "auth": "n8n user login",
+        "open_ruling": None,
+    },
 }
 
 WEBHOOK_RULE = (

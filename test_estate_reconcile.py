@@ -297,6 +297,32 @@ def test_a_changed_workflow_count_demands_a_doc_amendment():
 # ---------------------------------------------------------------------------
 
 
+def test_chat_trigger_nodes_are_read_with_their_auth():
+    """A public hosted chat is a live door and must be audited like a webhook."""
+    detail = {
+        "nodes": [
+            {
+                "type": reconcile.CHAT_TRIGGER,
+                "webhookId": "71510ab0-07eb-42d8-9734-c0741b398d49",
+                "parameters": {"public": True, "authentication": "n8nUserAuth"},
+            },
+            {
+                "type": reconcile.CHAT_TRIGGER,
+                "webhookId": "not-public",
+                "parameters": {"public": False},
+            },
+        ]
+    }
+    assert reconcile.webhook_nodes(detail) == [
+        {
+            "path": "71510ab0-07eb-42d8-9734-c0741b398d49/chat",
+            "auth": "n8nUserAuth",
+            "method": "POST",
+        }
+    ]
+    assert reconcile.node_auth_for("n8n user login") == "n8nUserAuth"
+
+
 def test_disabled_webhook_nodes_are_skipped():
     """A disabled node on the claimed path must not shadow the enabled one."""
     detail = {
