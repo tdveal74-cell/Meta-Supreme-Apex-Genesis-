@@ -288,9 +288,11 @@ Distinguish them by evidence, never by assumption:
 
 ### An account block is a third thing, and it looks like neither
 
-Seen twice: 2026-09-02 into 2026-09-03, and again on 2026-09-04. The Vercel
-commit statuses on the head read `failure` with the description **"Account is
-blocked"**, pointing at
+Seen three times: 2026-09-02 into 2026-09-03, again on 2026-09-04, and again
+on 2026-09-05 from some point between 18:55Z (the last record created on both
+projects, commit 21caa65) and 19:23Z (the push of 88a002d, which created
+none). The Vercel commit statuses on the head read `failure` with the
+description **"Account is blocked"**, pointing at
 `https://vercel.com/knowledge/why-is-my-account-deployment-blocked`.
 
 It is not the daily cap. The cap names itself (`api-deployments-free-per-day`)
