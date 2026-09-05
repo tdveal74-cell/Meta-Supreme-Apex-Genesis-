@@ -157,7 +157,13 @@ stop and say so. That is the tool working, not a fault.
 
 ## 5. Double execution, the thing that actually costs you
 
-32 of the 58 workflows were active on Cloud when this was written. A
+32 of 58 workflows were active on Cloud when this was written. Amended
+2026-09-05: Build 14 added three workflows, the Intake Former
+(AEFgXee7IDJarNV7), the Job Driver (TT4TfFXyH9O7lfdc) and the Driver Poll
+(mbIKJk4UuB7V27rP), all active, so the Cloud estate now holds the 61 workflows
+the reconciler expects and the live active count stands at 36.
+Every 58 and every 33 below this line was true on 2026-08-31 and is the
+record of that day, not the live number. A
 reconcile on 2026-09-01 found 31 active, with both the Heartbeat and the
 Error Alarm inactive and nothing recording who switched either off or why.
 The arithmetic does not let both deactivations postdate the 32 on their

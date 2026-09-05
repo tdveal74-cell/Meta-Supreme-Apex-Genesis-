@@ -222,12 +222,23 @@ DOC_CLAIMS: Tuple[Dict[str, Any], ...] = (
         "expected": None,
     },
     {
-        # The migration pre-flight inventory. Holds until cutover changes the
-        # Cloud estate, at which point the doc must be amended, dated.
+        # The migration pre-flight inventory as written on 2026-08-31. Retired
+        # by amendment on 2026-09-05 when Build 14 added three workflows to the
+        # Cloud estate. Kept as a tripwire: if the old sentence comes back the
+        # check revives and fails against the live count.
         "doc": "docs/devon/SYS_OPS_n8n-cloud-to-vps-migration_v1_2026-08-31.md",
         "quote": "the 58 workflows",
         "verifier": "n8n_total",
         "expected": {"total": 58},
+    },
+    {
+        # The standing census after Build 14 (Intake Former, Job Driver,
+        # Driver Poll). Holds until the estate changes again, at which point
+        # the doc must be amended, dated, and a new pin added here.
+        "doc": "docs/devon/SYS_OPS_n8n-cloud-to-vps-migration_v1_2026-08-31.md",
+        "quote": "the 61 workflows",
+        "verifier": "n8n_total",
+        "expected": {"total": 61},
     },
     # Records the DEVON and Hermes audit of 2026-09-02 (item 14) found stale
     # and corrected, dated. Each retired sentence stays pinned as a tripwire:

@@ -24,6 +24,10 @@ before trusting in a much later session.
 | Daily Reflection Routine | `trig_01XCKFGEbojhkPRnNbMd8yCP` | claude.ai Routine, 11:30 UTC, writes one reflection row; see `references/heartbeat.md` |
 | Ledger Janitor workflow | `HKNEDVy7PUKPtsrN` | daily 02:30 UTC; sweeps jobs non-terminal past 96h to CANCELLED through the guarded `devon-ledger` webhook (legal transitions enforced; VERIFYING two-steps FAILED then CANCELLED); envelope history preserved plus a janitor trace note; digest email only when it acted |
 | Weekly Table Backup workflow | `qCfGZ1CwmpK9vOta` | Sundays 03:10 UTC; read-only export of the four learning-lane tables to CSV, one Gmail with four attachments; approval_queue EXCLUDED on purpose (plaintext decision tokens — mailing them would let inbox access approve soul writes) |
+| Intake Former workflow (Build 14) | `AEFgXee7IDJarNV7` | webhook `devon-intake` (POST, x-devon-key); forms one v1 envelope at RECEIVED from `{text}` (Cerebras tags, vocabulary validated, no Area means refused) or a structured job, then calls the Job Driver synchronously and answers with where the job stopped; `dry_run: true` returns the envelope without driving it |
+| Job Driver workflow (Build 14) | `TT4TfFXyH9O7lfdc` | sub-workflow, no trigger of its own; one pass advances one job through the organs as far as it legally can and stops at every human gate; reads approval_queue only by evidence marker `intent <id>; card approval` or `card verify` and copies only request_id, status, timestamps (never the token column); execution data persistence OFF |
+| devon_driver_log table | `9VbICTCa4x4yhWZm` | one row per driver pass: intent_id, pass_at, execution_id, origin (intake or poll), entry_state, exit_state, outcome, steps, detail, approval_card, verify_card |
+| Driver Poll workflow (Build 14) | `mbIKJk4UuB7V27rP` | hourly; reads the ledger, hands every open non-terminal job (RECEIVED through VERIFYING; never FAILED or BLOCKED) to the Job Driver one at a time, skips rows written in the last 3 minutes; digest email only when a job moved or an organ refused |
 
 ### Soul Committer v2 semantics (why it is shaped this way)
 
