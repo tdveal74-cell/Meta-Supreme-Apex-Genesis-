@@ -243,6 +243,7 @@ it back.
 | Approval Queue `syRVj0G47mA1b0Xn` | 741605d7 | 0d139380 | every card since about 2026-09-01 was stored pending and no email left; the gate failed silent, not open |
 | Heartbeat `dRgTNLod2s8BAcPg` | ac7bdf78 | 44e07ab4 | every retained run from 2026-08-29 errored at the send; nine days, no pulse email |
 | Error Alarm `XDQXwgFkUhYxoEjG` | 17239190 | 8d4a8f7b | crash alerts could not be delivered |
+| Approval Queue `syRVj0G47mA1b0Xn` (second repair) | 0d139380 | b598e4a3 | the decide page was blank on the first tap and on every refusal: the sentinel request id matched no row, the update emitted nothing, and the response node never ran (execution 5800). No card could be confirmed from a phone since the two tap confirm was added on 2026-08-25. A Decided? gate now answers the browser on every path; proven with a fake id, execution 5801 |
 
 Objection logged once: these are production organs and the house rule is
 that nothing ships without a human watching. The alternative was a live
@@ -458,8 +459,13 @@ Live at 18:21Z, with Tee having tapped approve on a card from the phone: two
 decide taps reached the Approval Queue (executions 5781 and 5782, both
 success) and two hand run polls (5783 and 5787) still read all three cards
 pending. The decide page records nothing on the first tap by design; the
-second tap on "Confirm APPROVE" is the decision. Until that lands, the
-approve to verify hop stays unproven, which is condition 1 below.
+second tap on "Confirm APPROVE" is the decision. Tee then reported the
+page after the first tap was blank white. Measured: the Approval Queue's
+Record Decision node emits no item when the sentinel matches no row, so
+Respond Decided never ran and the phone got an empty reply. Repaired and
+republished as b598e4a3 (section 4, second repair) and proven with a fake
+id. Until Tee's confirm lands on the repaired page, the approve to verify
+hop stays unproven, which is condition 1 below.
 
 Conditions before anyone calls DEVON "running the ecosystem":
 

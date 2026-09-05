@@ -303,7 +303,18 @@ WEBHOOKS = {
         "destination": "n8n data table approval_queue u6wzeN5y9LNxROsN",
         "workflow": "syRVj0G47mA1b0Xn",
         "auth": "single use token in the link, 72 hour expiry",
-        "open_ruling": None,
+        "open_ruling": (
+            "Found blank on 2026-09-05 when Tee tapped APPROVE from the phone: the "
+            "first tap and every refusal carry a sentinel request id, the Record "
+            "Decision update matched no row and emitted nothing, so the Respond "
+            "node never ran and the browser got an empty reply (execution 5800). "
+            "Every card since the two tap confirm was added on 2026-08-25 was "
+            "undecidable from the email. Fixed the same day, version b598e4a3: a "
+            "Decided? gate sends valid decisions through Record Decision then the "
+            "response, and everything else straight to the response. Write before "
+            "answer still holds on the recorded path. Proven with a fake id "
+            "(execution 5801, NOT RECORDED page returned)."
+        ),
     },
     "devon-ledger": {
         "job": "Build 02 state ledger writes, one row per intent",
