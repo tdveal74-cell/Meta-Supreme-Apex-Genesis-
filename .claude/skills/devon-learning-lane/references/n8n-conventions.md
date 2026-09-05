@@ -51,8 +51,17 @@ senderName naming the organ; activity emails only — silence means idle.
 ## Registration and secrets
 
 Every new webhook/workflow is registered in `services/devon/vault.py` in the
-same change (one path, one job). Credentials are n8n credentials by id
-(Devon Capture Key `FYRvkRTOcROEYZ9P` for x-devon-key, Pinecone account
-`3XjKfxbS7zFWEa48`, Gmail account `vsTKuAilHmpYCc5L`) — never literal tokens
-in parameters, notes, or code nodes. Sticky notes on the canvas document what
-the workflow does and why its guards exist; keep them truthful when editing.
+same change (one path, one job). Credentials are n8n credentials by id, never
+literal tokens in parameters, notes, or code nodes: Devon Capture Key
+`FYRvkRTOcROEYZ9P` for x-devon-key, Pinecone account `3XjKfxbS7zFWEa48`, and
+for outbound mail the SMTP account `mu7nJRSpkAfkzLdF`. Sticky notes on the
+canvas document what the workflow does and why its guards exist; keep them
+truthful when editing.
+
+**Mail moved off Gmail OAuth on 2026-09-05.** Gmail account `vsTKuAilHmpYCc5L`
+went invalid on its own and took the Heartbeat, the Error Alarm and every other
+lane that emails down with it, unnoticed for nine days. The Heartbeat and Error
+Alarm now use `n8n-nodes-base.emailSend` on the SMTP credential, proven by
+execution 5600 returning a real `250 2.0.0 OK` from gsmtp. Other workflows still
+carry the dead Gmail credential and each one is a silent failure until moved.
+An OAuth refresh token expires with no warning; an SMTP password does not.
