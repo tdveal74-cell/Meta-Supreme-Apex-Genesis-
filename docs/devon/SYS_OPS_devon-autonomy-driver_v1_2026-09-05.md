@@ -31,9 +31,10 @@ card by its evidence marker, and sent nothing because nothing moved. Three
 organs that had been failing silent on the dead Gmail credential (Approval
 Queue, Heartbeat, Error Alarm) had SMTP fixes sitting in unpublished drafts;
 those drafts are now live, and that is a ruling Tee can reverse. What DEVON
-still cannot do on his own is real work beyond the spine echo: the Action
-Router allowlist carries one executor, and EditForge voice and avatar renders
-wait on a host env file only a human can edit. Those four human runbooks are
+still cannot do on his own is real work beyond a draft: the Action Router
+allowlist carries two executors by the end of the day (the spine echo and the
+Drive draft writer), and EditForge voice and avatar renders wait on a host env
+file only a human can edit. Those four human runbooks are
 in section 8.
 
 Later the same day, on Tee's two asks ("Devon needs a face" and "enrich him
@@ -126,7 +127,7 @@ as it applies to everything else.
 | UNDERSTANDING | runtime, to PLANNING |
 | PLANNING | router, to AUTHORIZED or WAITING_APPROVAL or ESCALATED |
 | WAITING_APPROVAL, ESCALATED | raise one approval card, record its id on the envelope, then stop and wait; approved means APPROVAL_GRANTED and AUTHORIZED with a 24 hour grant; rejected, expired, or absent past 96 hours means CANCELLED with a receipt |
-| AUTHORIZED | action router with spine.echo, to EXECUTING |
+| AUTHORIZED | action router with the action bound to the grant, to EXECUTING |
 | EXECUTING | EditForge handoff when the payload carries an editforge block, otherwise spine, to VERIFYING |
 | VERIFYING | auto verify only when blast radius is none, no artifacts and no EditForge job: COMPLETED with human_watched false and method auto_no_artifact; otherwise raise a verification card and wait; Tee approving writes VERIFICATION_PASSED, COMPLETED and human_watched true; rejected or expired writes FAILED |
 | terminal states | nothing |
@@ -270,6 +271,16 @@ it back.
 | Action Router `ecLqrxALuLDdF2BN` (critic pass) | c95d7449 | 681d1239 | from the fresh critic in section 10, cycle 3: the dispatch branch now requires refused false and a target url (fail closed), an unreadable or absent expiry on a granted approval is refused, the no-envelope reason is reachable, the allowlist-miss reason carries no ruling prose, Return Refusal echoes the gate's own item, and the shared Error Alarm is named as the error workflow (set, not yet proven by a fault) |
 | Job Driver `TT4TfFXyH9O7lfdc` | 865f1d5e | b545109d | Decide names drive.draft for a draft-like reversible write with no EditForge payload and spine.echo otherwise; the decay cancellation no longer claims the driver could not act; Absorb reads the router's refused flag and keeps the reason in full (organ_refused), stops on a dispatch whose executor returned nothing usable (executor_failed) instead of looping the pass, and names an unreachable organ organ_unreachable |
 | Action Router `ecLqrxALuLDdF2BN` (allowlist) | 681d1239 | eb154eef | drive.draft added at ceiling reversible_write, workflow J7Ly7riwXEd95D9a, on Tee's ruling ("do it", then "create it"); the ceiling refusal now lists every known action with its ceiling |
+| Spine `Oi7o1sTEqhxhOaJL` | 9550c0d1 | 9d0d1c21 | Tee's ruling 3: a hop that finds execution.state succeeded leaves the block alone rather than overwriting the executor's workflow and execution ids with its own, and it clears state_reason on a clean advance; an EXECUTING envelope whose execution failed is refused |
+| Action Router `ecLqrxALuLDdF2BN` (quarantine) | eb154eef | 1625efe9 | the fourth critic cycle's two HIGH findings put drive.draft back off the allowlist within the hour; the same version taught Report Dispatch to carry an executor refusal as data and post the reason into the ledger, refuses a write-capable target when approval is not granted, refuses an unknown blast radius, and sets the dispatch and bus timeouts |
+| Drive Draft Writer `J7Ly7riwXEd95D9a` | acb89e72 | 7ff4d7d4 | the cycle 4 conditions: a granted, unexpired approval is required on every envelope whatever the blast radius label says; a single flight lock refuses a second pass inside ten minutes; nothing is written unless the ledger took the entry report; the created file is read back under its key so the artifact records whether the idempotency properties persisted; the slug cuts at a word boundary; the search matches the intent id as well as the key |
+| Job Driver `TT4TfFXyH9O7lfdc` (cycle 4 and rulings 1 and 4) | b545109d | 45315316 | the executor is chosen once, when the approval card is raised, named on the card in plain words and written into intent.payload.action, and at AUTHORIZED the driver dispatches that bound action and nothing else; a router refusal that never reached the bus is posted as ACTION_FAILED at the same state with state_reason "Parked at AUTHORIZED: reason", and not posted again when the row already carries it; Read Last Pass and Attach Last Pass carry the previous driver log row so a repeated refusal is flagged; the verification card lists each artifact by name, folder and word count and says the executor did not check the done-when lines |
+| Driver Poll `mbIKJk4UuB7V27rP` | aedde9d5 | e1395422 | Tee's ruling 4: a refusal whose reason line repeats the previous pass is listed under STILL WAITING and not mailed again; a new reason mails |
+| Action Router `ecLqrxALuLDdF2BN` (quarantine lifted) | 1625efe9 | b2a3bf4b | drive.draft restored at ceiling reversible_write once the card named the executor and the executor required a granted grant on every envelope |
+| Job Driver `TT4TfFXyH9O7lfdc` (cycle 5) | 45315316 | 3bb71fce | keeps a succeeded execution block at COMPLETED and FAILED; re-derives the bound action at dispatch and parks on a mismatch; stores the card's executor sentence as approval.card_executor; shows the filer's note on the card; stops promising an EditForge render the router will refuse; dedupes the park mark and the repeat flag on a normalized reason; treats a refusal body as a refusal only at HTTP 200; matches the last driver log row by this job's intent id |
+| Drive Draft Writer `J7Ly7riwXEd95D9a` (cycle 5) | 7ff4d7d4 | dfea7e7c | the existing-draft search also matches the deterministic document name, whose date comes from the job rather than the clock, and a name match is adopted only when the file's properties do not name another job; the single flight lock treats an unreadable updated_at as held; a reused draft records how it was matched |
+| Driver Poll `mbIKJk4UuB7V27rP` (cycle 5) | e1395422 | 1c9b2407 | the digest classifies on the driver's outcome vocabulary, so an unreachable organ is mailed and a cancellation is not mailed as a failure |
+| Eleven organs, success execution data | saved | not saved | Tee's ruling 2: every workflow whose webhook takes the x-devon-key header stops saving successful executions, so the header value no longer sits in stored run data. Error executions are still saved on purpose. The rotation itself is Tee's hands; `vault.KEY_ROTATION` names every holder outside n8n |
 
 Objection logged once: these are production organs and the house rule is
 that nothing ships without a human watching. The alternative was a live
@@ -282,37 +293,69 @@ worse than a reversible publish. Tee owns the ruling.
   read, a certification echo) and drive.draft (ceiling reversible_write, one
   Google Doc). A job above reversible_write, or a reversible write the driver
   does not read as draft-like, still has no executor: the router refuses it
-  as data, the job parks at AUTHORIZED with the reason in the driver log, is
-  re-dispatched every hour (one log row and one digest email each) and is
-  cancelled with a receipt when its grant decays at decided_at plus 24 hours.
-  Further executors (an Airtable row, a render) pass the same allowlist and
-  ceiling.
-- The envelope's execution block names the last organ that touched it, not
-  the executor: the Spine's EXECUTING to VERIFYING hop overwrote workflow_id
-  and execution_id with its own (ledger row 13 says Oi7o1sTEqhxhOaJL and
-  5888, not J7Ly7riwXEd95D9a and 5881). The executor's identity survives in
-  the artifact (by drive.draft, drive_file_id) and in two trace entries. A
-  Spine change to leave a succeeded execution block alone is a Build 01
-  edit, recorded here, not made.
-- A refusal at the router leaves no mark in the ledger: the job's row still
-  says AUTHORIZED, granted, unexpired, with no reason it is not moving. The
-  reason lives in devon_driver_log and in the hourly digest. Which organ should
-  post it to the bus as a same state event is a ruling for Tee; the
-  recommendation is the driver, because it owns the pass.
-- Every organ with a header-auth webhook saves its executions, and each saved
-  trigger item carries the x-devon-key value in plaintext (the router's 5810,
-  5815, 5821 and 5839 included). The Job Driver has saving off for this
-  reason. Pre-existing and estate wide, found by the critic; the fix is a
-  ruling: rotate the key and turn success execution saving off on every organ
-  that takes it, or accept the exposure to anyone with execution read access.
-  Nothing in this arc changes it.
+  as data, the job parks at AUTHORIZED with the reason in the ledger row and
+  the driver log, is re-dispatched every hour (one log row each, and one
+  digest email per distinct reason, not one per pass) and is cancelled with a
+  receipt when its grant decays at decided_at plus 24 hours. Further executors
+  (an Airtable row, a render) pass the same allowlist and ceiling.
+- The EditForge lane is not merely unproven, it is unreachable through the
+  driver, which the fifth critic cycle found by reading rather than by running.
+  The driver dispatches an action at AUTHORIZED; the only action an EditForge
+  job selects is spine.echo, whose ceiling is read; the intake floors every
+  render at reversible_write; so the router refuses it and the job parks
+  before it can ever reach EXECUTING, where the Build 07 handoff lives. The
+  approval card now says that in words instead of promising a render. Making
+  the lane reachable is a design ruling for Tee, not a fix: either the driver
+  goes straight to the Spine for an EditForge job, or an editforge action joins
+  the allowlist and Build 07 learns to accept AUTHORIZED.
+- CLOSED by Tee's ruling 3. The envelope's execution block used to name the
+  last organ that touched it rather than the executor: the Spine's EXECUTING
+  to VERIFYING hop overwrote workflow_id and execution_id with its own (ledger
+  row 13 still says Oi7o1sTEqhxhOaJL and 5888, not J7Ly7riwXEd95D9a and 5881).
+  The Spine now leaves a succeeded execution block alone (9d0d1c21). Row 13
+  is not rewritten; the executor's identity was already in the artifact and in
+  two trace entries there.
+- CLOSED by Tee's rulings 1 and 4. A router refusal used to leave no mark in
+  the ledger. Two paths now do. When the router itself refuses, the refusal
+  never reaches the bus, so the driver posts ACTION_FAILED at the same state
+  with state_reason "Parked at AUTHORIZED: reason" and does not post it again
+  while the row carries it. When the executor refuses, the router holds the
+  reason at the moment it is final and posts the mark itself, and the receipt
+  says marked true so the driver does not double post. The digest mails a
+  refusal once per distinct reason and lists an unchanged one as still
+  waiting.
+- PARTLY CLOSED by Tee's ruling 2, and the open half is the urgent one. Every
+  workflow whose webhook takes the x-devon-key header now runs with success
+  execution data off, so a successful run stores no header. Two things that
+  setting does not do, both stated plainly because the first draft of this
+  bullet overclaimed: executions saved before 2026-09-05 still carry the
+  current key in their trigger items, and error executions are still saved on
+  purpose, so the FIRST failed run on any of those webhooks writes the key back
+  into stored run data, including a key that has just been rotated. Rotation
+  retires the old value; it does not make the new one unstorable.
+- The shared key is approval-equivalent for a write, and no document said so
+  until the fifth critic cycle asked. Both write gates read the envelope in
+  front of them and nothing about the caller, so anyone holding the header
+  value can POST an AUTHORIZED envelope to devon-action or devon-drive-draft
+  and cause a Google Doc to be written with no card ever raised. That is the
+  real weight behind ruling 2: rotating the key is a security act, not
+  housekeeping. `vault.KEY_ROTATION` carries it, along with the outside
+  holders that break and how to prove none was missed. The next hardening
+  worth building is the executor re-reading its own approval_queue row by
+  approval.queue_row_id and confirming the status, which is a status read and
+  touches no token column.
 - The EditForge lane in the driver is wired and unproven live. The Build 07
   organ posts to `editforge.vercel.app/api/jobs`; voice and avatar renders
   need the host env described in runbook A.
-- Card REQ-20260905-f5kEZj (job 01M1S84TTY) exists in the queue with no email
-  behind it, because it was raised before the Approval Queue republish. It
-  expires 2026-09-08T16:59:10Z and the driver will then cancel the job as
-  expired with a receipt. Nothing to do.
+- Cards REQ-20260905-f5kEZj (job 01M1S84TTY) and REQ-20260905-TwrTv3 (job
+  01M1S8CZ37) are proof jobs still waiting in the queue; the first has no
+  email behind it because it was raised before the Approval Queue republish.
+  Both carry the old card text, "nothing physical runs", and with the bound
+  action rule that text is now literally true for them: neither envelope
+  carries intent.payload.action, so approving one dispatches spine.echo and
+  nothing else, and the router refuses it at its read ceiling. Either answer
+  is safe. They expire 2026-09-08 and the driver then cancels them with a
+  receipt.
 - Cerebras output can carry Unicode punctuation (the dry run summary used a
   non-breaking hyphen). That text lands in the ledger and in cards, never in
   canon; a job that files canon still passes a human.
@@ -612,3 +655,122 @@ REQ-20260905-0Mq1q1 with the document link. The Google Drive credential's
 first live write is that document. Unexercised live: the reuse branch (a
 second call under the same key), the executor's own refusal branches, and
 the Cerebras and Drive failure branches; all are code read only.
+
+### Cycle 4, the critic on the first real executor
+
+A fourth agent was given only the executor, the router allowlist change, the
+ask and the touched surface, and told to attack them. Verdict QUARANTINE, two
+HIGH findings, both about the same thing: the gate a human reads and the gate
+the code enforces did not describe the same act.
+
+| Finding | Severity | Disposition |
+|---|---|---|
+| the approval card said "none, the job is a governed record and nothing physical runs" while the driver would dispatch drive.draft, so Tee approved a sentence that was false for exactly the jobs that now write | HIGH | the executor is chosen once, when the card is raised, named on the card in plain words (which folder, what the document is called, that trashing it undoes it), and written into intent.payload.action; at AUTHORIZED the driver dispatches that bound action and nothing else, so a job with no bound action runs the echo only and its card's sentence stays true (driver 45315316, live card REQ-20260905-xMdv3X) |
+| the executor required a grant only when the blast radius label said reversible_write or wider, so an envelope labelled read or none would have been written without one | HIGH | the executor always writes, so it now requires approval.state granted with a readable, unexpired expires_at on every envelope, whatever the label says (executor 7ff4d7d4, pinned run 5916 refuses an expired grant) |
+
+drive.draft came off the router allowlist within the hour (1625efe9) and went
+back on at 20:45Z (b2a3bf4b) once both were live and proven. While it was off,
+an approved draft job parked at AUTHORIZED with the allowlist reason, which is
+the same failure mode the lane had all afternoon and is safe.
+
+The conditions attached to the quarantine were executed with it:
+
+- Nothing is written unless the ledger took the entry report. A refusal there
+  means the row has moved on or the bus is unreachable, and either way the
+  pass writes nothing and the next one retries (pinned run 5918).
+- A single flight lock. The entry report marks the ledger row execution.state
+  running under this workflow with its execution id; a second pass reading
+  that row inside ten minutes refuses rather than write a second draft under
+  the same key (pinned run 5917).
+- The created file is read back under its own idempotency key, so the
+  artifact records properties_verified true or false rather than assuming the
+  properties persisted, and the trace says so when they did not (pinned runs
+  5921 and 5922).
+- The artifact carries the executor's own execution id, the Drive creation
+  time and the word count, and is deduped by file id so a re-entered advance
+  cannot push the same document twice.
+- The verification card lists each artifact by name, folder and word count,
+  and says in one line that the executor did not check the brief's done-when
+  lines, so Tee judges the artifact rather than a claim about it.
+- The slug cuts at a word boundary instead of mid-word at sixty characters,
+  and the existing-draft search matches the intent id as well as the key.
+
+Proofs, all pinned so no external service was touched: executor runs 5916
+(expired grant refused), 5917 (lock held), 5918 (ledger refused the entry
+report), 5919 (a short answer refused under the 120 word floor), 5920 (the
+reuse branch, an existing draft adopted with properties_verified true), 5921
+(the write branch with the properties confirmed), 5922 (the write branch with
+the properties NOT confirmed, recorded as such in the artifact and the trace);
+driver runs 5923 (a router refusal posts the mark), 5924 (the same refusal on
+a row that already carries it posts nothing), 5925 (the approval card names
+the Drive Draft Writer and the TQO scripts folder), 5926 (the card raise binds
+intent.payload.action), and 5949 with 5950, the one pair run against the real
+driver log rather than a pinned one: the first pass wrote its row, the second
+read it back through Read Last Pass and returned repeat_refusal true with
+last_pass_at 20:55:32Z. That pair leaves one row in devon_driver_log under
+intent 01M1TESTREPEATREFUSAL000NA with origin test, which is deliberate and is
+the evidence; every other pinned run had its log write pinned and wrote
+nothing. Poll run 5927 closes the loop: a repeated refusal is listed as still
+waiting, a new one is mailed. Live: job 01M1SN5X4ETKEPPCC4JT61TE5V went from
+intake to card REQ-20260905-xMdv3X at 20:46Z with drive.draft bound into the
+envelope and the executor named on the card. It waits for Tee.
+
+One pinned run also caught a small thing worth fixing rather than recording:
+the card read "recommends approve: Reversible draft in the scripts folder.."
+when the brief's reason already ended in a full stop. The trailing stop is
+trimmed now.
+
+### Tee's four rulings, 2026-09-05, answered on an inline card
+
+| Ruling | Answer | Where it lives now |
+|---|---|---|
+| who posts a router refusal to the ledger | the Job Driver, as a same state event, so the row carries the reason | driver 45315316; the router posts it instead when the refusal came from the executor, and says marked true so the driver does not double post |
+| the shared key in saved executions | rotate it and stop saving successful executions on every organ that takes the header | eleven organs republished with success data off; `vault.KEY_ROTATION` is the rotation runbook and the rotation is Tee's hands |
+| the execution block overwritten by a later hop | the Spine leaves a succeeded execution block alone | Spine 9d0d1c21 |
+| how often a refusal is mailed | once per distinct reason | driver flags a repeat, poll e1395422 lists it as still waiting |
+
+### Registry gap the new tests caught
+
+The allowlist test compares every action the router can dispatch against the
+vault's workflow registry, and it failed on the first run: the Spine, the
+Runtime, the Intelligence Router, the Event Bus and the EditForge Handoff
+have been live since 2026-08-23 and 08-24 and were never in `vault.WORKFLOWS`.
+The router has been dispatching to a workflow the registry did not know
+existed. All five are registered now, with their webhook and their execution
+saving state. The reconciler checks each of them against the live estate on
+its next run, which is five more claims than it could make before.
+
+### Cycle 5, the critic on the rulings and the quarantine conditions
+
+A fifth agent was given the four rulings, the previous cycle's two HIGH
+findings, the repo diff and the n8n sources, and told to attack them. Verdict
+DO-NOT-SHIP as recorded, five HIGH findings, nine MEDIUM, nine LOW. Two of the
+HIGH findings were defects in code shipped by this arc, one was a real
+idempotency hole, and two were the record claiming more than the artifacts
+support. Every one is closed below, or recorded as a limit in section 5.
+
+| Finding | Severity | Disposition |
+|---|---|---|
+| half of ruling 1 was unreviewable: the driver branches on a `marked` flag whose only definition lived in prose, and neither failure mode could be told apart from the repo | HIGH | the router's Report Dispatch and Reconcile Exit Envelope are now in `n8n/devon/action-router/`, and the contract is written where the branch is: marked true means the router's exit report persisted the reason, so the driver stops; false or absent means nothing durable carries it, so the driver posts its own mark. Exactly one of the two writes it |
+| ruling 3 had no artifact, and the driver broke it one hop later: complete() and fail() rewrote a succeeded execution block, so a verification Tee rejected recorded the execution as failed while a real Google Doc existed | HIGH | the Spine's two Code nodes are in `n8n/devon/spine/` where the ruling can be read; the driver keeps a succeeded block and records the outcome in verification, which exists for it (pinned run 5961: state FAILED, verification failed, execution still succeeded on workflow J7Ly7riwXEd95D9a execution 5881 with its own finish time, and the receipt names the document to trash) |
+| a retry wrote a SECOND Google Doc whenever the properties did not persist: the search matched only on app properties, and properties_verified was a report rather than a gate | HIGH | the search also matches the deterministic document name, and Check Existing accepts a name match only when the file's properties do not name a different job; the name's date comes from the job's created_at so a retry after midnight still matches (pinned run 5959 adopts the existing document, matched_by deterministic_name, properties_verified false, and writes nothing) |
+| the bound action was dispatched without being re-checked, and the card sentence was never persisted, so a rewritten intent.payload.action would run an act the card did not name | HIGH | the choice is re-derived at dispatch and a mismatch parks the job with the reason instead of running (pinned run 5962, outcome bound_action_mismatch); the card sentence is stored on the envelope as approval.card_executor, so the ledger can answer what Tee read |
+| ruling 2's record overclaimed: it said the setting change plus rotation retires the exposure, when error executions still store the key, and it never said that the key is approval equivalent for a write | HIGH | both corrected in section 5 and in `vault.KEY_ROTATION`, with the count stated exactly (thirteen webhook paths, thirteen workflows) |
+| the approval card promised an EditForge render the router will always refuse; the lane is unreachable, not merely unproven | MEDIUM | the card says so in words, and section 5 records the design ruling that would make it reachable |
+| Attach Last Pass filtered on any row that had an intent id, not on this job's | MEDIUM | it matches the job's own id |
+| the digest classified by substring: an unreachable organ sent no email at all, and a cancellation Tee caused was mailed as a failure | MEDIUM | both the driver and the digest classify on the driver's own outcome vocabulary, which the driver returns as bad_pass |
+| the README claimed two tests pin the repo against n8n; they pin it against the vault | MEDIUM | the README says what the tests do and names the human step that keeps the copies equal |
+| the park dedupe compared rendered sentences, so a reason carrying a timestamp re-marked the ledger and re-mailed every pass | MEDIUM | both comparisons run on a normalized shape, with times and long numbers replaced |
+| the single flight lock fell open on an unreadable updated_at | MEDIUM | unreadable counts as held (pinned run 5960) |
+| four contradictions in the record: an eleven that was thirteen, a bullet saying one digest email per pass, a table row saying spine.echo, a verdict saying one executor | MEDIUM | all four corrected |
+| AREA_FOLDER_LABEL was a third, unpinned copy of the folder map, and it is the sentence Tee reads | MEDIUM | the folder test now pins the card's labels to the executor's folder names |
+| the filer's note steers what gets written and never appeared on the card | MEDIUM | the card carries it, truncated |
+| nine LOW findings: a park lost on the step budget path, steps counting log lines, state_reason cleared on a clean advance, case sensitive Area, a refusal flag honoured at any status code, the skipped list dropped when every row is skipped, a comment overclaiming that no approval_queue field travels, a create error asserting nothing was written, prompt text reaching Drive with only 300 characters of it on the card | LOW | the refusal flag now requires HTTP 200, the comment and the create-error sentence are corrected, and the rest are recorded here rather than changed: each is narrow, and three of them are properties of the ledger and the log rather than defects |
+
+What the critic could not clear, quoted here because it is the honest boundary
+of this review: the repo carries the Code nodes of five workflows out of the
+thirteen this lane depends on, so the Event Bus, the Intelligence Router, the
+Intake Former and the Approval Queue were reviewed only through their contracts,
+and every execution id in this document is a claim a reader has to check in n8n
+for themselves.
+

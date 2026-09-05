@@ -354,7 +354,13 @@ WEBHOOKS = {
             "with a read ceiling, so an approved reversible_write job parks at "
             "AUTHORIZED with that reason in devon_driver_log until its grant "
             "decays. drive.draft (Drive Draft Writer J7Ly7riwXEd95D9a) joined the "
-            "allowlist the same evening at ceiling reversible_write on Tee's ruling."
+            "allowlist the same evening at ceiling reversible_write on Tee's ruling, "
+            "was quarantined off it hours later by the fourth critic cycle, and was "
+            "restored at 20:45Z once the card named the executor and the executor "
+            "required a granted grant on every envelope (router version b2a3bf4b). "
+            "A refusal the router itself raised never reaches the bus, so the driver "
+            "posts the mark: ACTION_FAILED at the same state with state_reason "
+            "Parked at AUTHORIZED, once per distinct reason (Tee's ruling, ruling 1)."
         ),
     },
     "devon-drive-draft": {
@@ -370,7 +376,13 @@ WEBHOOKS = {
             "writing, and refuses as data. Reversible by trashing the document. "
             "Proven live 2026-09-05 19:34Z on job 01M1SAK59GF0511GR7B78Y06A9: "
             "execution 5881 wrote one Google Doc into TQO/01_SCRIPTS and the job "
-            "reached verification card REQ-20260905-0Mq1q1."
+            "reached verification card REQ-20260905-0Mq1q1. Hardened at 20:35Z "
+            "(version 7ff4d7d4) after the fourth critic cycle: a granted, unexpired "
+            "approval is required on every envelope whatever the blast radius label "
+            "says, a single flight lock refuses a second pass inside ten minutes, "
+            "nothing is written unless the ledger took the entry report, and the "
+            "created file is read back under its key so the artifact records whether "
+            "the idempotency properties persisted."
         ),
     },
     "devon-ledger": {
@@ -424,6 +436,43 @@ WEBHOOK_RULE = (
     "routes to whichever workflow was published first."
 )
 
+# Ruled by Tee 2026-09-05 (ruling 2, rotate and stop saving). Every workflow whose
+# webhook takes the x-devon-key header receives that key inside the request headers,
+# and a saved successful execution keeps those headers where anyone who can read
+# executions can read the key. Thirteen webhook paths take the header:
+# devon-capture, devon-inbox, devon-approve-request, devon-action,
+# devon-drive-draft, devon-ledger, devon-build12-upstream, devon-intake,
+# devon-spine-n8n, devon-runtime, devon-route, devon-event and devon-editforge.
+# (devon-approve-decide is the exception: its auth is the single use token in the
+# emailed link, not this header.) They live in thirteen workflows, since the
+# Approval Queue serves two paths, and all thirteen now run with success
+# execution data OFF, as does the Job Driver, which has no webhook of its own.
+# Error executions are still saved, on purpose: a failure with no body is not
+# debuggable, and a failed run is the one a human reads. That means the FIRST
+# failed run after a rotation writes the new key back into stored run data, so
+# this setting reduces the exposure and does not end it. The rotation itself is
+# Tee's hands in the n8n UI; KEY_ROTATION names what has to move with it and why
+# it is urgent.
+KEY_ROTATION = (
+    "The key is approval equivalent for a write. Both write gates, the Action "
+    "Router and the Drive Draft Writer, read the envelope in front of them and "
+    "nothing about the caller, so whoever holds this header value can POST an "
+    "AUTHORIZED envelope and cause a Google Doc to be written with no approval "
+    "card ever raised. Rotating it is a security act, not housekeeping. "
+    "Rotating the shared key (credential Devon Capture Key FYRvkRTOcROEYZ9P) is one "
+    "edit in n8n and then every holder outside n8n. Order matters: edit the "
+    "credential first, because every organ reads the same credential and they all "
+    "cut over together, then update the outside holders, which are the only places "
+    "that break. Known holders: the iPhone Shortcut that posts to devon-capture and "
+    "devon-inbox, any Apple Routine or automation that posts to devon-intake, and "
+    "any saved curl or HTTP client on a laptop. Nothing in this repository stores "
+    "the key. After rotating, post one capture from the phone and read the reply: a "
+    "401 means a holder was missed. Old successful executions saved before "
+    "2026-09-05 still carry the previous key in their headers, so rotate rather "
+    "than rely on the setting alone, and error executions still store whatever key "
+    "was current when a run failed."
+)
+
 WORKFLOWS = {
     "iPhone Inbox Capture": {"id": "5s6CwWWelffqszQe", "state": "active"},
     "Capture Webhook": {"id": "pPIt2cELH2RVZktS", "state": "active"},
@@ -435,6 +484,17 @@ WORKFLOWS = {
     "Duplicate Sweep": {"id": "X7OGXWHBx57CIG42", "state": "active"},
     "OS Error Handler": {"id": "rqYmaQh91iCce8DJ", "state": "active"},
     "Live State Ledger": {"id": "z9j2I8h0RnbDKGBO", "state": "active"},
+    # Builds 01, 03, 04, 06 and 07, the organs the driver walks a job through.
+    # Live since 2026-08-23 and 08-24 but never registered here until 2026-09-05,
+    # which the new allowlist test caught: the Action Router dispatches to the
+    # Spine and this map did not know the Spine existed. All five run with
+    # successful execution data off since Tee's ruling 2 the same day, because
+    # their webhooks take the x-devon-key header.
+    "Spine Conformance Executor": {"id": "Oi7o1sTEqhxhOaJL", "state": "active, webhook devon-spine-n8n, advances one legal state, successful executions not saved"},
+    "Conscious and Subconscious Runtime": {"id": "5Nc9yh6WSqBJ41ok", "state": "active, webhook devon-runtime, UNDERSTANDING to PLANNING, successful executions not saved"},
+    "Intelligence Router": {"id": "xh3EkLmgTDJFhzGH", "state": "active, webhook devon-route, PLANNING to AUTHORIZED or WAITING_APPROVAL or ESCALATED, successful executions not saved"},
+    "Event Bus": {"id": "Bvy0grTSIyEmPwFA", "state": "active, webhook devon-event, fourteen event types, persists to the ledger, successful executions not saved"},
+    "EditForge Handoff": {"id": "OFIhA7zdFv9UoyCv", "state": "active, webhook devon-editforge, EXECUTING only, completed maps to VERIFYING, successful executions not saved"},
     "Build 12 Upstream Test": {"id": "VznESplSFCs8ldph", "state": "active"},
     "Build 12 Ledger Feeder": {"id": "6hQD8YhiYzR1FFda", "state": "active, 15 minute poll"},
     # Sole devon-soul writer, approval gated. First draft Wo7zPxpGH8kiBRy8 was
@@ -502,10 +562,10 @@ WORKFLOWS = {
     # Build 05, n8n lane. Dispatches an AUTHORIZED envelope to an allowlisted
     # executor and reports to the bus twice. Zapier lane never built. Refusals
     # answer as data since 2026-09-05; see WEBHOOKS devon-action.
-    "Action Router": {"id": "ecLqrxALuLDdF2BN", "state": "active, webhook devon-action, allowlist spine.echo at ceiling read and drive.draft at ceiling reversible_write"},
+    "Action Router": {"id": "ecLqrxALuLDdF2BN", "state": "active, webhook devon-action, allowlist spine.echo at ceiling read and drive.draft at ceiling reversible_write, successful executions not saved"},
     # Build 16, the first real executor. One Google Doc draft per job, idempotent
     # by key, folder by Area from DRAFT_FOLDERS. See WEBHOOKS devon-drive-draft.
-    "Drive Draft Writer": {"id": "J7Ly7riwXEd95D9a", "state": "active, webhook devon-drive-draft, executor drive.draft at ceiling reversible_write"},
+    "Drive Draft Writer": {"id": "J7Ly7riwXEd95D9a", "state": "active, webhook devon-drive-draft, executor drive.draft at ceiling reversible_write, successful executions not saved"},
     "Intake Former": {"id": "AEFgXee7IDJarNV7", "state": "active, webhook devon-intake"},
     "Job Driver": {"id": "TT4TfFXyH9O7lfdc", "state": "active, sub-workflow called by the Intake Former and the Driver Poll"},
     "Driver Poll": {"id": "mbIKJk4UuB7V27rP", "state": "active, hourly poll"},
