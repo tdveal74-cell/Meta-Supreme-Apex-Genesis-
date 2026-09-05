@@ -145,10 +145,11 @@ Postgres is not internet reachable. Tee SSHes here as user `tee`, not root.
 two 1backend containers, all `unless-stopped`.
 
 Both boxes are fully patched as of 2026-09-05 06:09 and 06:47 UTC. Both are
-running a kernel that has since been superseded and auto removed, so **both need
-a reboot**. Both are reboot safe. cloud-init is held back on purpose on
-srv1936193; that is the "1 update could not be installed automatically" in the
-MOTD, and it is not a failure.
+running a kernel that has since been superseded and auto removed, so both
+needed a reboot. **Both were rebooted on 2026-09-05**, srv1936193 verified by
+direct read, srv1936199 not yet read back. Both are reboot safe. cloud-init is
+held back on purpose on srv1936193; that is the "1 update could not be
+installed automatically" in the MOTD, and it is not a failure.
 
 **Google Cloud project 828264336169 holds three OAuth clients, not one:** Gmail
 and Drive created 2026-08-30, n8n Youtube Client created 2026-06-30. Each
@@ -244,7 +245,15 @@ the drift check on Mon and Thu, are also the ones that succeed.
 
 ## 8. Still open
 
-1. Both VPSs need a reboot for the new kernel.
+1. DONE 2026-09-05. Both VPSs were rebooted. srv1936193 VERIFIED by direct
+   read at 14:13:49 UTC: uptime 25 minutes, and all six containers back up on
+   their own restart policy (traefik, n8n, postgres, searxng, sandbox-api all
+   at 25 minutes; sandbox-runner at 22, which is the dependency order, not a
+   fault). srv1936199 was rebooted on the same pass but has NOT been read back
+   yet, so it is his word rather than a measurement. Small gap found while
+   reading the output: only postgres and sandbox-api report a health status,
+   so for traefik and n8n itself "Up" is the only signal there is. A container
+   that is up and not serving would look identical to a healthy one.
 2. The cloud to VPS cutover is on a clock. Burn rate estimated at roughly 120
    executions a day from execution id deltas, about 3,600 a month. If the plan
    caps at 2,500 the wall returns around 2026-09-21. ESTIMATE, not a
