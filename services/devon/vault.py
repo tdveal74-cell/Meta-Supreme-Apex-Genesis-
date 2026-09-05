@@ -125,6 +125,25 @@ SHOW_TREES: Dict[str, Dict[str, str]] = {
     },
 }
 
+# Where DEVON's drive.draft executor (Build 16) may write a draft, by Area: the
+# show's scripts folder for the two shows with a tree, the Area folder for the
+# rest, the capture inbox for an Area it does not know. Mirrored in the
+# executor's Code node because n8n cannot import this file: a change here is a
+# change there too. Ruled 2026-09-05 on Tee's "do it"; reversible, the draft
+# is one document that can be trashed.
+DRAFT_FOLDERS: Dict[str, str] = {
+    "TQO": SHOW_TREES["TQO"]["01_SCRIPTS"],
+    "Podcast": SHOW_TREES["TSWS"]["01_SCRIPTS"],
+    "NCO": AREA_FOLDERS["NCO"],
+    "ACX": AREA_FOLDERS["ACX"],
+    "Systems": AREA_FOLDERS["Systems"],
+    "Learning": AREA_FOLDERS["Learning"],
+    "Family": AREA_FOLDERS["Family"],
+    "Money": AREA_FOLDERS["Money"],
+    "Health": AREA_FOLDERS["Health"],
+    "_unknown": CAPTURE_INBOX["id"],
+}
+
 # Restricted, untouched by every sweep. Never read, list, or move without a ruling.
 RESTRICTED: Dict[str, str] = {
     "TSWS MEMOIR VAULT": "1j88Euvldadd3wouVK2cxHZadaRQZ3p32",
@@ -320,6 +339,24 @@ WEBHOOKS = {
             "door is proven from the phone end to end."
         ),
     },
+    "devon-action": {
+        "job": "dispatch one AUTHORIZED envelope to an allowlisted executor",
+        "destination": "the executor named by the allowlist, spine.echo today",
+        "workflow": "ecLqrxALuLDdF2BN",
+        "auth": "header x-devon-key",
+        "open_ruling": (
+            "Repaired 2026-09-05, version c95d7449 and the critic pass after it: a "
+            "gate refusal used to be a thrown error, so the webhook answered with "
+            "an empty body and the driver logged http 200 null (execution 5810). "
+            "A refusal is now data with the reason, intent id, state, action and "
+            "the known actions, HTTP 200, and the dispatch branch requires "
+            "refused false plus a target url. The allowlist carries spine.echo "
+            "with a read ceiling, so an approved reversible_write job parks at "
+            "AUTHORIZED with that reason in devon_driver_log until its grant "
+            "decays. The next executor, drive.draft, is Tee's ruling of the same "
+            "day and is recorded under Drive Draft Writer once it exists."
+        ),
+    },
     "devon-ledger": {
         "job": "Build 02 state ledger writes, one row per intent",
         "destination": "n8n data table devon_state_ledger VYyno7pDWmY6uxBz",
@@ -446,6 +483,10 @@ WORKFLOWS = {
     # approves that second card, so human_watched is never claimed by a
     # machine. The Driver Poll resumes every open job hourly and emails only
     # when a job moved or an organ refused.
+    # Build 05, n8n lane. Dispatches an AUTHORIZED envelope to an allowlisted
+    # executor and reports to the bus twice. Zapier lane never built. Refusals
+    # answer as data since 2026-09-05; see WEBHOOKS devon-action.
+    "Action Router": {"id": "ecLqrxALuLDdF2BN", "state": "active, webhook devon-action, allowlist spine.echo at ceiling read"},
     "Intake Former": {"id": "AEFgXee7IDJarNV7", "state": "active, webhook devon-intake"},
     "Job Driver": {"id": "TT4TfFXyH9O7lfdc", "state": "active, sub-workflow called by the Intake Former and the Driver Poll"},
     "Driver Poll": {"id": "mbIKJk4UuB7V27rP", "state": "active, hourly poll"},
