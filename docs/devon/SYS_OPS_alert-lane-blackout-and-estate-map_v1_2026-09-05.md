@@ -214,10 +214,33 @@ to a specific prior session and its prompt opens with "full context is in this
 conversation". If that session is gone, enabling it is not sufficient.
 
 A diagnostic run of Devon Morning Briefing was fired manually on 2026-09-05 to
-capture the actual error. One hypothesis worth testing rather than assuming: the
-Routine carries 29 MCP connectors for a briefing that reads only Notion and
-Airtable, and several connectors in this estate were observed flapping during
-this same session.
+capture the actual error. VERIFIED, session cse_01TJvcVK5z4tZkvR9jP2MG7s:
+
+    session_status  SESSION_STATUS_IDLE
+    status_bucket   REVIEW_READY
+    rate_limit      allowed
+    model           claude-fable-5, effort_level max
+    tokens          224,862 used of 1,000,000; 29,156 output
+    cost            $8.072114
+    12:57:49Z to 13:04:50Z
+
+**It succeeded.** The prompt works, the connectors resolve, the output is
+readable and sitting unread. So the failure is not in the Routine's definition.
+It is in the scheduled run environment, and the standing hypothesis, that 29 MCP
+connectors for a briefing which reads two databases is what breaks it, is
+weaker now, not stronger. That was said in advance of the run rather than after
+it.
+
+The run produced a second finding nobody was looking for. One morning briefing
+costs $8.07 at effort_level max. Weekdays, that is roughly $170 a month for a
+scheduled read of Notion and Airtable. Whether that is worth paying is Tee's
+call, but it should be a decision rather than an accident.
+
+The better hypothesis to test next, UNVERIFIED: Devon Morning Briefing and
+Supreme Trader Watchlist both fire weekdays at 12:00 and both failed on the same
+day, 09-04. Two consecutive max effort sessions in one five hour window is a
+plausible way to exhaust it. The two Routines that did not collide on a slot,
+the drift check on Mon and Thu, are also the ones that succeed.
 
 ## 8. Still open
 
@@ -232,7 +255,12 @@ this same session.
    failure until moved. The Weekly Table Backup is a known one.
 5. Whether cloud's Gmail credential pointed at the 2026-08-30 client or a
    deleted one.
-6. Five failing Routines, pending the diagnostic run.
+6. Five failing Routines. The diagnostic run cleared the prompt and the
+   connectors, so the cause is in the scheduled environment. Next test is the
+   12:00 weekday collision between Devon Morning Briefing and Supreme Trader
+   Watchlist.
+7. Whether $8.07 per scheduled briefing at effort_level max is a price worth
+   paying, or whether these Routines should drop to a lower effort level.
 
 ## 9. Corrections logged against Claude in this arc
 
