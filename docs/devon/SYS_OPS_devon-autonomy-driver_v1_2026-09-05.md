@@ -186,6 +186,19 @@ use, so the language lane is an HTTP Request rather than an Agent node; that
 is a deliberate departure from the n8n chatbot guidance and the reason is in
 the workflow's sticky note.
 
+The Face has a visible face as well as a voice. `docs/devon/assets/devon-mark.svg`
+is an original emblem, owned outright: charcoal ground, a quiet green lens
+with a single pulse, a D in the centre. No stock, no rented persona, no
+synthetic human. It is inlined into the chat page as a data URI through the
+trigger's custom CSS with the house palette (charcoal header, light bot
+bubbles, green user bubbles), published as Face version af7db714. The mark
+was rendered at 192, 64 and 32 pixels and in a mock of the n8n chat layout
+before publishing; the live page sits behind n8n login, so the last look is
+Tee's on the phone. A human looking face for DEVON is a ruling for Tee under
+the owned identity rule: the only likeness lane the studio owns is Tee's own
+avatar and voice, and DEVON borrowing them would blur who is speaking. The
+recommendation is to keep the mark.
+
 ## 3. Measured receipts (n8n Cloud, 2026-09-05, all times UTC)
 
 | Execution | What | Result |
@@ -209,7 +222,10 @@ Repository receipts at this head: `env -u PYTHONPATH python3 -c "import
 standalone_api"` exit 0; the standalone pytest set 137 passed, exit 0; the full
 api suite 1321 passed in 161.9s, exit 0; `ruff check .` clean;
 `test_estate_reconcile.py` and `test_devon_integrity.py` together 161 passed.
-All exit codes captured to files, never through a pipe.
+All exit codes captured to files, never through a pipe. Rerun after Build 15:
+standalone import exit 0, standalone set 137 passed, full suite 1322 passed in
+164.6s (the extra test is this document's own dash check), ruff clean, the
+two targeted files 162 passed.
 
 ## 4. Three rulings taken for Tee, each reversible
 

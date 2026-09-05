@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="DEVON mark">
+  <title>DEVON mark</title>
+  <desc>An original emblem for DEVON, the second brain of the studio run by Tee. Charcoal ground, a quiet green lens, a single pulse. Owned outright; no stock, no likeness.</desc>
+  <defs>
+    <radialGradient id="g" cx="50%" cy="42%" r="62%">
+      <stop offset="0" stop-color="#1c2129"/>
+      <stop offset="1" stop-color="#0d1015"/>
+    </radialGradient>
+  </defs>
+  <rect x="0" y="0" width="256" height="256" rx="56" fill="url(#g)"/>
+  <circle cx="128" cy="128" r="78" fill="none" stroke="#2c343f" stroke-width="10"/>
+  <circle cx="128" cy="128" r="78" fill="none" stroke="#7fd1ae" stroke-width="10" stroke-linecap="round" stroke-dasharray="368 122" transform="rotate(-100 128 128)"/>
+  <path d="M104 88 H128 A40 40 0 0 1 128 168 H104 Z" fill="none" stroke="#e8edf2" stroke-width="12" stroke-linejoin="round"/>
+  <circle cx="176" cy="66" r="9" fill="#7fd1ae"/>
+</svg>
