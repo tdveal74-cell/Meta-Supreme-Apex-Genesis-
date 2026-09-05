@@ -323,6 +323,20 @@ WEBHOOKS = {
         "auth": "header x-devon-key",
         "open_ruling": None,
     },
+    # Build 14, the mouth of the autonomy lane. One POST forms one v1 job
+    # envelope at RECEIVED and hands it to the Job Driver in the same call, so
+    # the poster gets back where the job stopped. Free text is tagged by
+    # Cerebras and every tag is validated against the closed vocabularies:
+    # no Area means refused, never guessed; no blast radius defaults to
+    # reversible_write, which sends the job to Tee. dry_run returns the
+    # envelope without driving it.
+    "devon-intake": {
+        "job": "form one v1 job envelope from a capture and drive it through the organs",
+        "destination": "Job Driver TT4TfFXyH9O7lfdc, then the Build 02 ledger by way of the organs",
+        "workflow": "AEFgXee7IDJarNV7",
+        "auth": "header x-devon-key",
+        "open_ruling": None,
+    },
 }
 
 WEBHOOK_RULE = (
@@ -386,6 +400,40 @@ WORKFLOWS = {
     # plaintext decision tokens, and mailing them would let anyone with inbox
     # access approve soul writes. Never add it to this or any export.
     "Weekly Table Backup": {"id": "qCfGZ1CwmpK9vOta", "state": "active, weekly Sun 03:10"},
+    # Build 14, the autonomy lane, built and proven live 2026-09-05. Before it
+    # the organs existed but nothing formed jobs, walked them between organs,
+    # bridged approval cards back into the ledger, observed EditForge, or
+    # owned VERIFYING to COMPLETED; every job needed a hand on every hop.
+    # The Job Driver is a sub-workflow, never a trigger of its own: one pass
+    # advances one job through the organs as far as it legally can (spine,
+    # runtime, router, approval card, action, EditForge, verification card)
+    # and stops at every human gate. It reads approval_queue only by the
+    # evidence marker "intent <id>; card <kind>", copies only request_id,
+    # status and timestamps into memory, never the token column, and its
+    # execution data persistence is off for the same reason the Soul
+    # Committer's is. It writes one row per pass to devon_driver_log
+    # (9VbICTCa4x4yhWZm). Proof: a level 0 job with blast radius none ran
+    # RECEIVED to COMPLETED in one pass of 14 seconds with no human card
+    # (intent 01M1S81K3WDD0JSKY6KPAY43K1). A job with any wider blast radius
+    # stops at WAITING_APPROVAL with a card in Tee's inbox and, once executed,
+    # at VERIFYING with a second card; COMPLETED is written only after Tee
+    # approves that second card, so human_watched is never claimed by a
+    # machine. The Driver Poll resumes every open job hourly and emails only
+    # when a job moved or an organ refused.
+    "Intake Former": {"id": "AEFgXee7IDJarNV7", "state": "active, webhook devon-intake"},
+    "Job Driver": {"id": "TT4TfFXyH9O7lfdc", "state": "active, sub-workflow called by the Intake Former and the Driver Poll"},
+    "Driver Poll": {"id": "mbIKJk4UuB7V27rP", "state": "active, hourly poll"},
+    # Build 15, the face. n8n hosted chat behind n8n user auth where Tee talks
+    # to DEVON from the phone. Cerebras answers with the live ledger, the last
+    # driver passes and the last heartbeat in front of it, plus this session's
+    # turns from devon_chat_log (nwnHN8o2dgHjtk7f). Status answers cite only
+    # measured context. A request to do something is filed through
+    # devon-intake, the same door every poster uses, so the same tags, brief,
+    # router, cards and ledger apply; an ambiguous ask becomes a dry run and
+    # waits for a plain yes. The face never decides a card and never reads
+    # approval_queue. The Cerebras credential is header auth, which the chat
+    # model subnodes cannot use, so the lane is an HTTP Request, not an Agent.
+    "Face": {"id": "LsmfRFMmI5feINs0", "state": "active, hosted chat, n8n user auth"},
     "TQO FINAL V5": {"id": "gsGJQan7a6ZufhYt", "state": "inactive by ruling"},
     "Capture Hook": {"id": "Cbd24ptTPWch3aZO", "state": "retired 2026-08-22"},
 }

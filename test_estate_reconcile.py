@@ -274,14 +274,22 @@ def test_a_failed_push_build_still_contradicts_autodeploy_disabled():
 
 
 def test_a_changed_workflow_count_demands_a_doc_amendment():
-    claims = [c for c in reconcile.doc_claims(reconcile._read_doc_texts()) if c.verifier == "n8n_total"]
-    assert claims, "the census claim is missing from DOC_CLAIMS"
-    fifty_seven = {str(i): {"name": str(i), "active": False} for i in range(57)}
-    observations = _n8n_observation(workflows=fifty_seven, webhooks={})
+    all_claims = reconcile.doc_claims(reconcile._read_doc_texts())
+    claims = [c for c in all_claims if c.verifier == "n8n_total"]
+    assert len(claims) == 1, "exactly one census sentence should be live in the migration doc"
+    assert claims[0].expected == {"total": 62}
+    sixty_one = {str(i): {"name": str(i), "active": False} for i in range(61)}
+    observations = _n8n_observation(workflows=sixty_one, webhooks={})
     assert reconcile.check(claims, observations)[0].status == reconcile.DRIFT
-    fifty_eight = {str(i): {"name": str(i), "active": False} for i in range(58)}
-    observations = _n8n_observation(workflows=fifty_eight, webhooks={})
+    sixty_two = {str(i): {"name": str(i), "active": False} for i in range(62)}
+    observations = _n8n_observation(workflows=sixty_two, webhooks={})
     assert reconcile.check(claims, observations)[0].status == reconcile.OK
+    # The 2026-08-31 sentence was amended, not deleted from the registry: it
+    # stays pinned so a later edit that brings "the 58 workflows" back revives
+    # the old check and fails it against the live count.
+    retired = [c for c in all_claims if c.subject == "the 58 workflows"]
+    assert len(retired) == 1
+    assert retired[0].verifier == "quote_retired"
 
 
 # ---------------------------------------------------------------------------
