@@ -436,6 +436,31 @@ EditForge lane are unproven live, and the only executor is the spine echo)
 and on maintainability (the JSON extraction and the vocabularies are copied
 across four Code nodes and the organ host is a constant in Decide).
 
+### Cycle 2, the verifier
+
+A second agent was given only the five fixes and told to refute them by
+reading the live code and the cited executions. Four held. One was refuted in
+a corner: the EditForge branch of Absorb still advanced on ledger_clean
+false. It also found seven defects in the fixed code. All are closed in the
+versions now live (driver 865f1d5e, intake 4ac16e0e, face 387d0837):
+
+| Verifier finding | Fix |
+|---|---|
+| Absorb's EditForge branch ignored ledger_clean false | stops the pass like the generic branch |
+| The Face had no line for a duplicate receipt, so a repeat "file it" read as "the intake did not answer" | "That job already exists: id (state). Nothing new was filed." |
+| A filed proposal stayed the last proposal for up to eight turns and could be swapped into an unrelated job | a file_job row resets the proposal; the swap happens only on a matching summary |
+| Level had a floor but no ceiling | clamped to 2 through 4 |
+| cancel() on a decayed grant overwrote who decided and when | the original decided_at and decided_by are kept |
+| options could carry a key named provider, which the handoff might honour | keys naming provider, kind, prompt, model, token, key, secret, auth or url are dropped |
+| a ledger read error during the idempotency check failed open | the post is refused with a plain reason; refusals short circuit through Duplicate? |
+
+Live at 18:21Z, with Tee having tapped approve on a card from the phone: two
+decide taps reached the Approval Queue (executions 5781 and 5782, both
+success) and two hand run polls (5783 and 5787) still read all three cards
+pending. The decide page records nothing on the first tap by design; the
+second tap on "Confirm APPROVE" is the decision. Until that lands, the
+approve to verify hop stays unproven, which is condition 1 below.
+
 Conditions before anyone calls DEVON "running the ecosystem":
 
 1. Tee decides one live card and watches the next poll carry the job to a
