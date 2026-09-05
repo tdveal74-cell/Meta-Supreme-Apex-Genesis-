@@ -48,6 +48,14 @@ brief on every job at intake (plan, done when, risks, proceed or hold with a
 reason), the brief rides in the envelope and in the approval card, and a hold
 raises the level so the router sends the job to Tee.
 
+Later still, Tee approved a card from the phone. The approval reached the
+ledger and the next poll moved the job to AUTHORIZED, where the Action Router
+refused it because no allowlisted executor may carry a reversible write. That
+refusal surfaced a third silent defect, an empty reply where a reason
+belonged, repaired the same day. The job now parks with its reason on record
+until the grant decays. The approve hop is proven from the phone; the execute
+hop waits on a real executor.
+
 ## 1. The gap this build closes
 
 The organs existed and each one was proven in isolation on 2026-08-23 and
@@ -213,6 +221,10 @@ recommendation is to keep the mark.
 | 5713 (intake) | level 2, reversible_write, idempotency build15-proof-brief-card-20260905 | success in 10.7s; intent 01M1SAK59GF0511GR7B78Y06A9 at WAITING_APPROVAL; approval card REQ-20260905-12yaAZ raised, expires 2026-09-08T17:41:57Z; the driver's card text now carries the brief (plan, done when, risks, recommendation), which only Tee can read, in the email |
 | 5733 (face) | chat: where do things stand, what is waiting on me | success in 3.0s; action none; reply listed the three WAITING_APPROVAL jobs by id, area, summary and card expiry, every id present in the context block, nothing invented; two memory rows written |
 | 5734 (face) | chat: what would you do if I asked for the NCO Forge episode 3 outline, show me, do not file it | success in 2.1s; action dry_run; the reply carried a six section outline, then the intake dry run (File Job 200 in 1.1s) returned envelope 01M1SAR231Q1XYQFS526TXCQZM at RECEIVED, area NCO, level 2, with a Cerebras brief; the reply ended with the plan, the done-when checks, the recommendation and "Say file it and I will." Nothing filed |
+| 5802, 5803 (approval queue) | Tee's two decide taps from the phone on card REQ-20260905-12yaAZ, after the decide page repair | both success; the second tap recorded the decision at 18:33:39Z, decided_by tee, grant expires 2026-09-06T18:33:39Z |
+| 5804 (poll, run by hand) | first poll after the approval | success; driver pass 5807 read the card approved and the bus APPROVAL_GRANTED moved job 01M1SAK59GF0511GR7B78Y06A9 WAITING_APPROVAL to AUTHORIZED (ledger row 13). The Action Router then answered with an empty body: its execution 5810 errored on the blast radius ceiling (a reversible_write job against the read ceiling of spine.echo) and the driver could only log "action REFUSED or unreachable: http 200 null" |
+| 5817 (poll, run by hand) | the same job after the router repair, version c95d7449 | success; router execution 5821 took the Refused? true branch and answered refused, reason, intent_id, state, action and known_actions; driver pass 5820 parked the job at AUTHORIZED with outcome organ_refused and the reason verbatim, driver log row 28 |
+| 5822 (intake) | level 0, blast none, auto_verify, idempotency build05-refusal-repair-accepted-20260905, the accepted path through the new gate | success in 13.7s; intent 01M1SEBXAXR48STXRVRHDAMG6T RECEIVED to COMPLETED, 6 steps, no card; router execution 5839 took the Refused? false branch, dispatched to spine.echo and reconciled with ledger_clean true; ledger row 15 terminal true, 20 trace events; driver log row 29 |
 
 Ledger census at 17:05Z: two non-terminal rows in the whole table, both
 proof jobs above. The 18:00Z poll and every one after it will touch nothing
@@ -244,6 +256,7 @@ it back.
 | Heartbeat `dRgTNLod2s8BAcPg` | ac7bdf78 | 44e07ab4 | every retained run from 2026-08-29 errored at the send; nine days, no pulse email |
 | Error Alarm `XDQXwgFkUhYxoEjG` | 17239190 | 8d4a8f7b | crash alerts could not be delivered |
 | Approval Queue `syRVj0G47mA1b0Xn` (second repair) | 0d139380 | b598e4a3 | the decide page was blank on the first tap and on every refusal: the sentinel request id matched no row, the update emitted nothing, and the response node never ran (execution 5800). No card could be confirmed from a phone since the two tap confirm was added on 2026-08-25. A Decided? gate now answers the browser on every path; proven with a fake id, execution 5801 |
+| Action Router `ecLqrxALuLDdF2BN` (third repair) | 2555e671 | c95d7449 | every gate refusal was a thrown error, so the webhook answered with an empty body and an ERROR execution (5810), and the driver could not tell a refusal from a crash ("http 200 null"). The gate now emits a refusal as data with the reason, the intent id and the known actions; a Refused? node answers the caller, an accepted envelope dispatches unchanged, and a genuine fault still throws so the Error Alarm still fires. Proven both ways: refusal in 5821, dispatch in 5839. An intermediate version 127d9674 routed the node's error output to the response instead; it was live for nine minutes (poll 5811, router 5815, driver log row 25) and was replaced because it turned faults into refusals and lost the intent id. The allowlist and the ceilings are untouched |
 
 Objection logged once: these are production organs and the house rule is
 that nothing ships without a human watching. The alternative was a live
@@ -252,10 +265,16 @@ worse than a reversible publish. Tee owns the ruling.
 
 ## 5. Known limits, stated plainly
 
-- The Action Router allowlist carries one executor, spine.echo. A job that
-  reaches AUTHORIZED today runs a certification echo, not real work. Real
-  executors (a Drive write, an Airtable row, a render) are the next build and
-  each one will pass the same allowlist and blast radius ceiling.
+- The Action Router allowlist carries one executor, spine.echo, with a read
+  ceiling. A job at blast radius none or read that reaches AUTHORIZED runs a
+  certification echo, not real work. A job above the ceiling that reaches
+  AUTHORIZED is refused by the router with the reason as data, parks at
+  AUTHORIZED with that reason in the driver log, is re-dispatched every hour
+  (one log row each, no email, no alarm) and is cancelled with a receipt when
+  its grant decays at decided_at plus 24 hours. Job 01M1SAK59GF0511GR7B78Y06A9
+  is in exactly that state now. Real executors (a Drive write, an Airtable
+  row, a render) are the next build and each one will pass the same allowlist
+  and blast radius ceiling.
 - The EditForge lane in the driver is wired and unproven live. The Build 07
   organ posts to `editforge.vercel.app/api/jobs`; voice and avatar renders
   need the host env described in runbook A.
@@ -377,13 +396,16 @@ pages, both take a minute on the phone.
 
 ## 9. Next build, recommended order
 
-1. Tee decides card REQ-20260905-TwrTv3 either way, then watches the next
-   poll carry the job to a verification card. That is the last unproven hop
-   in the human-gated path.
-2. Runbook A, then one real voice render through the lane.
-3. A second executor on the Action Router allowlist (a Drive draft write,
+1. A second executor on the Action Router allowlist (a Drive draft write,
    reversible, blast radius reversible_write) so an approved job produces an
-   artifact.
+   artifact and the last hop, AUTHORIZED to a verification card, can run.
+   Approved job 01M1SAK59GF0511GR7B78Y06A9 waits on this until its grant
+   decays at 2026-09-06T18:33:39Z. Adding the entry is a deliberate allowlist
+   change under Tee's ruling, not a runtime decision.
+2. Tee decides card REQ-20260905-TwrTv3 either way, and once item 1 is live,
+   watches the next poll carry an approved job to a verification card and
+   decides that.
+3. Runbook A, then one real voice render through the lane.
 4. Runbook C before the ceiling.
 5. Give the Face hands beyond filing: a read tool over the driver log and
    the heartbeat by id, and the same brief in the Heartbeat digest, both
@@ -464,13 +486,32 @@ page after the first tap was blank white. Measured: the Approval Queue's
 Record Decision node emits no item when the sentinel matches no row, so
 Respond Decided never ran and the phone got an empty reply. Repaired and
 republished as b598e4a3 (section 4, second repair) and proven with a fake
-id. Until Tee's confirm lands on the repaired page, the approve to verify
-hop stays unproven, which is condition 1 below.
+id.
+
+Tee's confirm then landed on the repaired page (executions 5802 and 5803,
+18:33Z). The next poll read the card approved and moved the job to
+AUTHORIZED (poll 5804, driver pass 5807), which proves the approve hop from
+the phone. The job cannot go further: it is a reversible_write, the only
+allowlisted executor is spine.echo with a read ceiling, and the Action Router
+refuses it by design. That refusal exposed one more defect of the same class
+as the decide page: the router threw the refusal, the webhook answered with
+nothing, and the driver logged "http 200 null" (router execution 5810).
+Repaired and republished as c95d7449 (section 4, third repair): a refusal is
+now data with its reason, and the job parks at AUTHORIZED with that reason
+in the driver log (row 28) until its grant decays at 2026-09-06T18:33:39Z,
+when the driver cancels it with a receipt. The accepted path was proven
+through the same gate right after (intent 01M1SEBXAXR48STXRVRHDAMG6T,
+RECEIVED to COMPLETED). The approve to verify hop is therefore proven up to
+AUTHORIZED and blocked at the executor, which is condition 3 below, not a
+driver defect.
 
 Conditions before anyone calls DEVON "running the ecosystem":
 
-1. Tee decides one live card and watches the next poll carry the job to a
-   verification card, then decides that. That proves the last hop.
+1. Proven to AUTHORIZED on 2026-09-05 (card REQ-20260905-12yaAZ, executions
+   5802, 5803 and 5807). The last hop, AUTHORIZED to a verification card and
+   Tee's decision on it, waits on condition 3: no allowlisted executor can
+   carry a reversible_write job, so the approved job parks with its reason
+   until the grant decays.
 2. Tee ratifies or reverses the three organ publishes in section 4.
 3. One real executor on the Action Router allowlist, then one gated render
    proof with Tee watching the output.

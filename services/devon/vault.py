@@ -313,7 +313,11 @@ WEBHOOKS = {
             "Decided? gate sends valid decisions through Record Decision then the "
             "response, and everything else straight to the response. Write before "
             "answer still holds on the recorded path. Proven with a fake id "
-            "(execution 5801, NOT RECORDED page returned)."
+            "(execution 5801, NOT RECORDED page returned). Tee's real confirm "
+            "landed at 18:33Z the same day (executions 5802 and 5803, both "
+            "success) and the next poll read the card approved and moved job "
+            "01M1SAK59GF0511GR7B78Y06A9 to AUTHORIZED (execution 5807). The "
+            "door is proven from the phone end to end."
         ),
     },
     "devon-ledger": {
