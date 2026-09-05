@@ -125,6 +125,25 @@ SHOW_TREES: Dict[str, Dict[str, str]] = {
     },
 }
 
+# Where DEVON's drive.draft executor (Build 16) may write a draft, by Area: the
+# show's scripts folder for the two shows with a tree, the Area folder for the
+# rest, the capture inbox for an Area it does not know. Mirrored in the
+# executor's Code node because n8n cannot import this file: a change here is a
+# change there too. Ruled 2026-09-05 on Tee's "do it"; reversible, the draft
+# is one document that can be trashed.
+DRAFT_FOLDERS: Dict[str, str] = {
+    "TQO": SHOW_TREES["TQO"]["01_SCRIPTS"],
+    "Podcast": SHOW_TREES["TSWS"]["01_SCRIPTS"],
+    "NCO": AREA_FOLDERS["NCO"],
+    "ACX": AREA_FOLDERS["ACX"],
+    "Systems": AREA_FOLDERS["Systems"],
+    "Learning": AREA_FOLDERS["Learning"],
+    "Family": AREA_FOLDERS["Family"],
+    "Money": AREA_FOLDERS["Money"],
+    "Health": AREA_FOLDERS["Health"],
+    "_unknown": CAPTURE_INBOX["id"],
+}
+
 # Restricted, untouched by every sweep. Never read, list, or move without a ruling.
 RESTRICTED: Dict[str, str] = {
     "TSWS MEMOIR VAULT": "1j88Euvldadd3wouVK2cxHZadaRQZ3p32",
@@ -303,7 +322,56 @@ WEBHOOKS = {
         "destination": "n8n data table approval_queue u6wzeN5y9LNxROsN",
         "workflow": "syRVj0G47mA1b0Xn",
         "auth": "single use token in the link, 72 hour expiry",
-        "open_ruling": None,
+        "open_ruling": (
+            "Found blank on 2026-09-05 when Tee tapped APPROVE from the phone: the "
+            "first tap and every refusal carry a sentinel request id, the Record "
+            "Decision update matched no row and emitted nothing, so the Respond "
+            "node never ran and the browser got an empty reply (execution 5800). "
+            "Every card since the two tap confirm was added on 2026-08-25 was "
+            "undecidable from the email. Fixed the same day, version b598e4a3: a "
+            "Decided? gate sends valid decisions through Record Decision then the "
+            "response, and everything else straight to the response. Write before "
+            "answer still holds on the recorded path. Proven with a fake id "
+            "(execution 5801, NOT RECORDED page returned). Tee's real confirm "
+            "landed at 18:33Z the same day (executions 5802 and 5803, both "
+            "success) and the next poll read the card approved and moved job "
+            "01M1SAK59GF0511GR7B78Y06A9 to AUTHORIZED (execution 5807). The "
+            "door is proven from the phone end to end."
+        ),
+    },
+    "devon-action": {
+        "job": "dispatch one AUTHORIZED envelope to an allowlisted executor",
+        "destination": "the executor named by the allowlist, spine.echo today",
+        "workflow": "ecLqrxALuLDdF2BN",
+        "auth": "header x-devon-key",
+        "open_ruling": (
+            "Repaired 2026-09-05, version c95d7449 and the critic pass after it: a "
+            "gate refusal used to be a thrown error, so the webhook answered with "
+            "an empty body and the driver logged http 200 null (execution 5810). "
+            "A refusal is now data with the reason, intent id, state, action and "
+            "the known actions, HTTP 200, and the dispatch branch requires "
+            "refused false plus a target url. The allowlist carries spine.echo "
+            "with a read ceiling, so an approved reversible_write job parks at "
+            "AUTHORIZED with that reason in devon_driver_log until its grant "
+            "decays. drive.draft (Drive Draft Writer J7Ly7riwXEd95D9a) joined the "
+            "allowlist the same evening at ceiling reversible_write on Tee's ruling."
+        ),
+    },
+    "devon-drive-draft": {
+        "job": "write one Google Doc draft for an AUTHORIZED job and advance it to EXECUTING",
+        "destination": "Google Drive, the folder DRAFT_FOLDERS names for the job's Area",
+        "workflow": "J7Ly7riwXEd95D9a",
+        "auth": "header x-devon-key",
+        "open_ruling": (
+            "Build 16, created 2026-09-05 on Tee's ruling (do it, then create it). "
+            "The first real executor: called only by the Action Router as action "
+            "drive.draft at ceiling reversible_write. Checks the grant again, reports "
+            "to the bus twice, finds an existing draft by idempotency key before "
+            "writing, and refuses as data. Reversible by trashing the document. "
+            "Proven live 2026-09-05 19:34Z on job 01M1SAK59GF0511GR7B78Y06A9: "
+            "execution 5881 wrote one Google Doc into TQO/01_SCRIPTS and the job "
+            "reached verification card REQ-20260905-0Mq1q1."
+        ),
     },
     "devon-ledger": {
         "job": "Build 02 state ledger writes, one row per intent",
@@ -321,6 +389,31 @@ WEBHOOKS = {
         # automatic feed changed; an anonymous POST now gets 403 instead of
         # reaching the Candidate Former.
         "auth": "header x-devon-key",
+        "open_ruling": None,
+    },
+    # Build 14, the mouth of the autonomy lane. One POST forms one v1 job
+    # envelope at RECEIVED and hands it to the Job Driver in the same call, so
+    # the poster gets back where the job stopped. Free text is tagged by
+    # Cerebras and every tag is validated against the closed vocabularies:
+    # no Area means refused, never guessed; no blast radius defaults to
+    # reversible_write, which sends the job to Tee. dry_run returns the
+    # envelope without driving it.
+    "devon-intake": {
+        "job": "form one v1 job envelope from a capture and drive it through the organs",
+        "destination": "Job Driver TT4TfFXyH9O7lfdc, then the Build 02 ledger by way of the organs",
+        "workflow": "AEFgXee7IDJarNV7",
+        "auth": "header x-devon-key",
+        "open_ruling": None,
+    },
+    # Build 15, the Face's door. A public hosted chat is a POST endpoint at
+    # /webhook/<id>/chat like any other webhook, so it is registered and
+    # audited like one. The auth is n8n login: only a signed-in n8n user can
+    # open it, and there is no key to leak.
+    "71510ab0-07eb-42d8-9734-c0741b398d49/chat": {
+        "job": "the Face: hosted chat where Tee talks to DEVON",
+        "destination": "Cerebras, then devon-intake for any job Tee files; memory in devon_chat_log nwnHN8o2dgHjtk7f",
+        "workflow": "LsmfRFMmI5feINs0",
+        "auth": "n8n user login",
         "open_ruling": None,
     },
 }
@@ -386,6 +479,47 @@ WORKFLOWS = {
     # plaintext decision tokens, and mailing them would let anyone with inbox
     # access approve soul writes. Never add it to this or any export.
     "Weekly Table Backup": {"id": "qCfGZ1CwmpK9vOta", "state": "active, weekly Sun 03:10"},
+    # Build 14, the autonomy lane, built and proven live 2026-09-05. Before it
+    # the organs existed but nothing formed jobs, walked them between organs,
+    # bridged approval cards back into the ledger, observed EditForge, or
+    # owned VERIFYING to COMPLETED; every job needed a hand on every hop.
+    # The Job Driver is a sub-workflow, never a trigger of its own: one pass
+    # advances one job through the organs as far as it legally can (spine,
+    # runtime, router, approval card, action, EditForge, verification card)
+    # and stops at every human gate. It reads approval_queue only by the
+    # evidence marker "intent <id>; card <kind>", copies only request_id,
+    # status and timestamps into memory, never the token column, and its
+    # execution data persistence is off for the same reason the Soul
+    # Committer's is. It writes one row per pass to devon_driver_log
+    # (9VbICTCa4x4yhWZm). Proof: a level 0 job with blast radius none ran
+    # RECEIVED to COMPLETED in one pass of 14 seconds with no human card
+    # (intent 01M1S81K3WDD0JSKY6KPAY43K1). A job with any wider blast radius
+    # stops at WAITING_APPROVAL with a card in Tee's inbox and, once executed,
+    # at VERIFYING with a second card; COMPLETED is written only after Tee
+    # approves that second card, so human_watched is never claimed by a
+    # machine. The Driver Poll resumes every open job hourly and emails only
+    # when a job moved or an organ refused.
+    # Build 05, n8n lane. Dispatches an AUTHORIZED envelope to an allowlisted
+    # executor and reports to the bus twice. Zapier lane never built. Refusals
+    # answer as data since 2026-09-05; see WEBHOOKS devon-action.
+    "Action Router": {"id": "ecLqrxALuLDdF2BN", "state": "active, webhook devon-action, allowlist spine.echo at ceiling read and drive.draft at ceiling reversible_write"},
+    # Build 16, the first real executor. One Google Doc draft per job, idempotent
+    # by key, folder by Area from DRAFT_FOLDERS. See WEBHOOKS devon-drive-draft.
+    "Drive Draft Writer": {"id": "J7Ly7riwXEd95D9a", "state": "active, webhook devon-drive-draft, executor drive.draft at ceiling reversible_write"},
+    "Intake Former": {"id": "AEFgXee7IDJarNV7", "state": "active, webhook devon-intake"},
+    "Job Driver": {"id": "TT4TfFXyH9O7lfdc", "state": "active, sub-workflow called by the Intake Former and the Driver Poll"},
+    "Driver Poll": {"id": "mbIKJk4UuB7V27rP", "state": "active, hourly poll"},
+    # Build 15, the face. n8n hosted chat behind n8n user auth where Tee talks
+    # to DEVON from the phone. Cerebras answers with the live ledger, the last
+    # driver passes and the last heartbeat in front of it, plus this session's
+    # turns from devon_chat_log (nwnHN8o2dgHjtk7f). Status answers cite only
+    # measured context. A request to do something is filed through
+    # devon-intake, the same door every poster uses, so the same tags, brief,
+    # router, cards and ledger apply; an ambiguous ask becomes a dry run and
+    # waits for a plain yes. The face never decides a card and never reads
+    # approval_queue. The Cerebras credential is header auth, which the chat
+    # model subnodes cannot use, so the lane is an HTTP Request, not an Agent.
+    "Face": {"id": "LsmfRFMmI5feINs0", "state": "active, hosted chat, n8n user auth"},
     "TQO FINAL V5": {"id": "gsGJQan7a6ZufhYt", "state": "inactive by ruling"},
     "Capture Hook": {"id": "Cbd24ptTPWch3aZO", "state": "retired 2026-08-22"},
 }

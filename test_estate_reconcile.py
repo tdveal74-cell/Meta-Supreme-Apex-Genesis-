@@ -274,19 +274,53 @@ def test_a_failed_push_build_still_contradicts_autodeploy_disabled():
 
 
 def test_a_changed_workflow_count_demands_a_doc_amendment():
-    claims = [c for c in reconcile.doc_claims(reconcile._read_doc_texts()) if c.verifier == "n8n_total"]
-    assert claims, "the census claim is missing from DOC_CLAIMS"
-    fifty_seven = {str(i): {"name": str(i), "active": False} for i in range(57)}
-    observations = _n8n_observation(workflows=fifty_seven, webhooks={})
+    all_claims = reconcile.doc_claims(reconcile._read_doc_texts())
+    claims = [c for c in all_claims if c.verifier == "n8n_total"]
+    assert len(claims) == 1, "exactly one census sentence should be live in the migration doc"
+    assert claims[0].expected == {"total": 63}
+    sixty_two = {str(i): {"name": str(i), "active": False} for i in range(62)}
+    observations = _n8n_observation(workflows=sixty_two, webhooks={})
     assert reconcile.check(claims, observations)[0].status == reconcile.DRIFT
-    fifty_eight = {str(i): {"name": str(i), "active": False} for i in range(58)}
-    observations = _n8n_observation(workflows=fifty_eight, webhooks={})
+    sixty_three = {str(i): {"name": str(i), "active": False} for i in range(63)}
+    observations = _n8n_observation(workflows=sixty_three, webhooks={})
     assert reconcile.check(claims, observations)[0].status == reconcile.OK
+    # The 2026-08-31 sentence was amended, not deleted from the registry: it
+    # stays pinned so a later edit that brings "the 58 workflows" back revives
+    # the old check and fails it against the live count.
+    retired = [c for c in all_claims if c.subject == "the 58 workflows"]
+    assert len(retired) == 1
+    assert retired[0].verifier == "quote_retired"
 
 
 # ---------------------------------------------------------------------------
 # The fetch layer's pure edges
 # ---------------------------------------------------------------------------
+
+
+def test_chat_trigger_nodes_are_read_with_their_auth():
+    """A public hosted chat is a live door and must be audited like a webhook."""
+    detail = {
+        "nodes": [
+            {
+                "type": reconcile.CHAT_TRIGGER,
+                "webhookId": "71510ab0-07eb-42d8-9734-c0741b398d49",
+                "parameters": {"public": True, "authentication": "n8nUserAuth"},
+            },
+            {
+                "type": reconcile.CHAT_TRIGGER,
+                "webhookId": "not-public",
+                "parameters": {"public": False},
+            },
+        ]
+    }
+    assert reconcile.webhook_nodes(detail) == [
+        {
+            "path": "71510ab0-07eb-42d8-9734-c0741b398d49/chat",
+            "auth": "n8nUserAuth",
+            "method": "POST",
+        }
+    ]
+    assert reconcile.node_auth_for("n8n user login") == "n8nUserAuth"
 
 
 def test_disabled_webhook_nodes_are_skipped():

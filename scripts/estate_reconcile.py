@@ -117,6 +117,7 @@ _AUTH_PREFIXES: Tuple[Tuple[str, str], ...] = (
     ("basic", "basicAuth"),
     ("jwt", "jwtAuth"),
     ("single use token", "none"),
+    ("n8n user login", "n8nUserAuth"),
     ("none", "none"),
 )
 
@@ -222,12 +223,33 @@ DOC_CLAIMS: Tuple[Dict[str, Any], ...] = (
         "expected": None,
     },
     {
-        # The migration pre-flight inventory. Holds until cutover changes the
-        # Cloud estate, at which point the doc must be amended, dated.
+        # The migration pre-flight inventory as written on 2026-08-31. Retired
+        # by amendment on 2026-09-05 when Build 14 added three workflows to the
+        # Cloud estate. Kept as a tripwire: if the old sentence comes back the
+        # check revives and fails against the live count.
         "doc": "docs/devon/SYS_OPS_n8n-cloud-to-vps-migration_v1_2026-08-31.md",
         "quote": "the 58 workflows",
         "verifier": "n8n_total",
         "expected": {"total": 58},
+    },
+    {
+        # The census after Build 14 (Intake Former, Job Driver, Driver Poll)
+        # and Build 15 (Face), both 2026-09-05. Retired by amendment the same
+        # evening when Build 16 added the Drive Draft Writer. Kept as a
+        # tripwire like the 58 above it.
+        "doc": "docs/devon/SYS_OPS_n8n-cloud-to-vps-migration_v1_2026-08-31.md",
+        "quote": "the 62 workflows",
+        "verifier": "n8n_total",
+        "expected": {"total": 62},
+    },
+    {
+        # The standing census after Build 16 (Drive Draft Writer, the first
+        # real executor), 2026-09-05. Holds until the estate changes again, at
+        # which point the doc must be amended, dated, and a new pin added here.
+        "doc": "docs/devon/SYS_OPS_n8n-cloud-to-vps-migration_v1_2026-08-31.md",
+        "quote": "the 63 workflows",
+        "verifier": "n8n_total",
+        "expected": {"total": 63},
     },
     # Records the DEVON and Hermes audit of 2026-09-02 (item 14) found stale
     # and corrected, dated. Each retired sentence stays pinned as a tripwire:
@@ -740,6 +762,9 @@ def _paged_workflows(base: str, key: str) -> Iterator[Dict[str, Any]]:
             return
 
 
+CHAT_TRIGGER = "@n8n/n8n-nodes-langchain.chatTrigger"
+
+
 def webhook_nodes(workflow_detail: Dict[str, Any]) -> List[Dict[str, str]]:
     """The live webhook trigger nodes of one workflow detail read.
 
@@ -749,16 +774,28 @@ def webhook_nodes(workflow_detail: Dict[str, Any]) -> List[Dict[str, str]]:
     """
     nodes = []
     for node in workflow_detail.get("nodes", []):
-        if node.get("type") != "n8n-nodes-base.webhook" or node.get("disabled"):
+        if node.get("disabled"):
             continue
         parameters = node.get("parameters") or {}
-        nodes.append(
-            {
-                "path": parameters.get("path", ""),
-                "auth": parameters.get("authentication") or "none",
-                "method": parameters.get("httpMethod", "GET"),
-            }
-        )
+        if node.get("type") == "n8n-nodes-base.webhook":
+            nodes.append(
+                {
+                    "path": parameters.get("path", ""),
+                    "auth": parameters.get("authentication") or "none",
+                    "method": parameters.get("httpMethod", "GET"),
+                }
+            )
+        elif node.get("type") == CHAT_TRIGGER and parameters.get("public") is True:
+            # A public hosted chat is a live POST door at /webhook/<id>/chat.
+            # It carries its own auth parameter, so it is audited like any
+            # other webhook; a chat that is not public serves nothing.
+            nodes.append(
+                {
+                    "path": f"{node.get('webhookId', '')}/chat",
+                    "auth": parameters.get("authentication") or "none",
+                    "method": "POST",
+                }
+            )
     return nodes
 
 
