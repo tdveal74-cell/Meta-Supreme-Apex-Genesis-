@@ -233,14 +233,23 @@ DOC_CLAIMS: Tuple[Dict[str, Any], ...] = (
         "expected": {"total": 58},
     },
     {
-        # The standing census after Build 14 (Intake Former, Job Driver,
-        # Driver Poll) and Build 15 (Face), both 2026-09-05. Holds until the
-        # estate changes again, at which point the doc must be amended, dated,
-        # and a new pin added here.
+        # The census after Build 14 (Intake Former, Job Driver, Driver Poll)
+        # and Build 15 (Face), both 2026-09-05. Retired by amendment the same
+        # evening when Build 16 added the Drive Draft Writer. Kept as a
+        # tripwire like the 58 above it.
         "doc": "docs/devon/SYS_OPS_n8n-cloud-to-vps-migration_v1_2026-08-31.md",
         "quote": "the 62 workflows",
         "verifier": "n8n_total",
         "expected": {"total": 62},
+    },
+    {
+        # The standing census after Build 16 (Drive Draft Writer, the first
+        # real executor), 2026-09-05. Holds until the estate changes again, at
+        # which point the doc must be amended, dated, and a new pin added here.
+        "doc": "docs/devon/SYS_OPS_n8n-cloud-to-vps-migration_v1_2026-08-31.md",
+        "quote": "the 63 workflows",
+        "verifier": "n8n_total",
+        "expected": {"total": 63},
     },
     # Records the DEVON and Hermes audit of 2026-09-02 (item 14) found stale
     # and corrected, dated. Each retired sentence stays pinned as a tripwire:

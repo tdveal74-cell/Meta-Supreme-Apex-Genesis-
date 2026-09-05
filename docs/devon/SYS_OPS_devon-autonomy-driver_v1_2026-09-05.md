@@ -4,7 +4,7 @@ type: SYS_OPS
 version: 1
 date: 2026-09-05
 area: Systems
-status: live-on-cloud-human-gated-pass-with-conditions
+status: live-on-cloud-human-gated-first-job-completed
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 base: 70a0a12
 branch: claude/new-session-2f2yu2
@@ -54,9 +54,13 @@ refused it because no allowlisted executor may carry a reversible write. That
 refusal surfaced a third silent defect, an empty reply where a reason
 belonged, repaired the same day. The job now parks with its reason on record
 until the grant decays. The approve hop is proven from the phone; the execute
-hop waits on a real executor. Tee then ruled for that executor. It is built
-and validated as a Drive draft writer; its creation on n8n Cloud was held by
-the session's permission gate and waits on his word.
+hop waits on a real executor. Tee then ruled for that executor, twice: once
+for the build and once past a permission gate that held its creation. The
+Drive Draft Writer went live the same evening, and the approved job wrote its
+draft to TQO/01_SCRIPTS as a Google Doc and stopped at a verification card
+with the link. Tee read it and approved the card, and the job closed
+COMPLETED with human_watched true. Every gate on the path has now been
+crossed live, each by the hand that owns it.
 
 ## 1. The gap this build closes
 
@@ -229,6 +233,8 @@ recommendation is to keep the mark.
 | 5822 (intake) | level 0, blast none, auto_verify, idempotency build05-refusal-repair-accepted-20260905, the accepted path through the new gate | success in 13.7s; intent 01M1SEBXAXR48STXRVRHDAMG6T RECEIVED to COMPLETED, 6 steps, no card; router execution 5839 took the Refused? false branch, dispatched to spine.echo and reconciled with ledger_clean true; ledger row 15 terminal true, 20 trace events; driver log row 29 |
 | 5864 to 5867 (router, hand run) | four gate probes on version 681d1239: no envelope, WAITING_APPROVAL state, unknown action drive.draft, unreadable approval.expires_at | all four answered through the Accepted? false branch with their own reason, intent id, state and known actions; nothing posted to the bus |
 | 5868 (poll, run by hand) | the parked job after the driver publish b545109d | success; driver pass 5871 named drive.draft for the draft-like reversible write, the router refused it as not on the allowlist, and Absorb kept the reason in full: driver log row 35 reads "action drive.draft refused: REFUSED: action drive.draft is not on the allowlist. Known actions: spine.echo." That is the honest state until the executor exists |
+| 5874 (poll, run by hand) | the parked job after the executor publish acb89e72 and the router allowlist eb154eef | success in 15.7s; driver pass 5877 went AUTHORIZED to EXECUTING through drive.draft: executor execution 5881 in 5.0s found no prior draft under the key, Cerebras wrote 491 words, Google Doc 1xKry9iQc2hzK3ewk2szlWn02_Y0uJsDn7MkEUk89ocs was created in TQO/01_SCRIPTS, both bus reports persisted, ledger_clean true; then spine EXECUTING to VERIFYING; then verification card REQ-20260905-0Mq1q1 raised with the document link, expires 2026-09-08T19:34:57Z. Ledger row 13: VERIFYING, execution succeeded, artifact_count 1, verification pending human_watch, 22 trace events. Driver log row 38 |
+| 5898 (poll, run by hand) | after Tee read the draft and approved verification card REQ-20260905-0Mq1q1 from the phone | success in 6.0s; driver pass 5901 read the card approved and the bus VERIFICATION_PASSED moved the job VERIFYING to COMPLETED (driver log row 41). Ledger row 13: COMPLETED, terminal true, verification passed by human_watch with human_watched true at 19:38:43Z, receipt outcome completed ("Tee verified the output end to end and approved card REQ-20260905-0Mq1q1 at 2026-09-05T19:37:29.438Z"), artifact_count 1, 23 trace events. The first job DEVON carried from capture through an approval card, a real artifact and a human verification to a terminal receipt |
 
 Ledger census at 17:05Z: two non-terminal rows in the whole table, both
 proof jobs above. The 18:00Z poll and every one after it will touch nothing
@@ -263,6 +269,7 @@ it back.
 | Action Router `ecLqrxALuLDdF2BN` (third repair) | 2555e671 | c95d7449 | every gate refusal was a thrown error, so the webhook answered with an empty body and an ERROR execution (5810), and the driver could not tell a refusal from a crash ("http 200 null"). The gate now emits a refusal as data with the reason, the intent id and the known actions; a Refused? node answers the caller, an accepted envelope dispatches unchanged, and a genuine fault still throws so the Error Alarm still fires. Proven both ways: refusal in 5821, dispatch in 5839. An intermediate version 127d9674 routed the node's error output to the response instead; it was live for nine minutes (poll 5811, router 5815, driver log row 25) and was replaced because it turned faults into refusals and lost the intent id. The allowlist and the ceilings are untouched |
 | Action Router `ecLqrxALuLDdF2BN` (critic pass) | c95d7449 | 681d1239 | from the fresh critic in section 10, cycle 3: the dispatch branch now requires refused false and a target url (fail closed), an unreadable or absent expiry on a granted approval is refused, the no-envelope reason is reachable, the allowlist-miss reason carries no ruling prose, Return Refusal echoes the gate's own item, and the shared Error Alarm is named as the error workflow (set, not yet proven by a fault) |
 | Job Driver `TT4TfFXyH9O7lfdc` | 865f1d5e | b545109d | Decide names drive.draft for a draft-like reversible write with no EditForge payload and spine.echo otherwise; the decay cancellation no longer claims the driver could not act; Absorb reads the router's refused flag and keeps the reason in full (organ_refused), stops on a dispatch whose executor returned nothing usable (executor_failed) instead of looping the pass, and names an unreachable organ organ_unreachable |
+| Action Router `ecLqrxALuLDdF2BN` (allowlist) | 681d1239 | eb154eef | drive.draft added at ceiling reversible_write, workflow J7Ly7riwXEd95D9a, on Tee's ruling ("do it", then "create it"); the ceiling refusal now lists every known action with its ceiling |
 
 Objection logged once: these are production organs and the house rule is
 that nothing ships without a human watching. The alternative was a live
@@ -271,16 +278,22 @@ worse than a reversible publish. Tee owns the ruling.
 
 ## 5. Known limits, stated plainly
 
-- The Action Router allowlist carries one executor, spine.echo, with a read
-  ceiling. A job at blast radius none or read that reaches AUTHORIZED runs a
-  certification echo, not real work. A job above the ceiling that reaches
-  AUTHORIZED is refused by the router with the reason as data, parks at
-  AUTHORIZED with that reason in the driver log, is re-dispatched every hour
-  (one log row each, no email, no alarm) and is cancelled with a receipt when
-  its grant decays at decided_at plus 24 hours. Job 01M1SAK59GF0511GR7B78Y06A9
-  is in exactly that state now. Real executors (a Drive write, an Airtable
-  row, a render) are the next build and each one will pass the same allowlist
-  and blast radius ceiling.
+- The Action Router allowlist carries two executors: spine.echo (ceiling
+  read, a certification echo) and drive.draft (ceiling reversible_write, one
+  Google Doc). A job above reversible_write, or a reversible write the driver
+  does not read as draft-like, still has no executor: the router refuses it
+  as data, the job parks at AUTHORIZED with the reason in the driver log, is
+  re-dispatched every hour (one log row and one digest email each) and is
+  cancelled with a receipt when its grant decays at decided_at plus 24 hours.
+  Further executors (an Airtable row, a render) pass the same allowlist and
+  ceiling.
+- The envelope's execution block names the last organ that touched it, not
+  the executor: the Spine's EXECUTING to VERIFYING hop overwrote workflow_id
+  and execution_id with its own (ledger row 13 says Oi7o1sTEqhxhOaJL and
+  5888, not J7Ly7riwXEd95D9a and 5881). The executor's identity survives in
+  the artifact (by drive.draft, drive_file_id) and in two trace entries. A
+  Spine change to leave a succeeded execution block alone is a Build 01
+  edit, recorded here, not made.
 - A refusal at the router leaves no mark in the ledger: the job's row still
   says AUTHORIZED, granted, unexpired, with no reason it is not moving. The
   reason lives in devon_driver_log and in the hourly digest. Which organ should
@@ -414,12 +427,11 @@ pages, both take a minute on the phone.
 
 ## 9. Next build, recommended order
 
-1. Create and publish the Drive Draft Writer (Build 16, section 10), add
-   drive.draft to the Action Router allowlist at ceiling reversible_write,
-   register it in the vault and the census, and prove it on approved job
-   01M1SAK59GF0511GR7B78Y06A9 before its grant decays at
-   2026-09-06T18:33:39Z. Tee ruled for it ("do it"); the creation call was
-   held by the session's permission gate and waits on his word.
+1. Done: Tee read the draft and approved verification card
+   REQ-20260905-0Mq1q1; job 01M1SAK59GF0511GR7B78Y06A9 is COMPLETED with
+   human_watched true. Next: a second draft job filed from the Face, end to
+   end without a session's hand on the poll, to prove the hourly cadence
+   alone carries it.
 2. Tee decides card REQ-20260905-TwrTv3 either way, and once item 1 is live,
    watches the next poll carry an approved job to a verification card and
    decides that.
@@ -525,18 +537,18 @@ driver defect.
 
 Conditions before anyone calls DEVON "running the ecosystem":
 
-1. Proven to AUTHORIZED on 2026-09-05 (card REQ-20260905-12yaAZ, executions
-   5802, 5803 and 5807). The last hop, AUTHORIZED to a verification card and
-   Tee's decision on it, waits on condition 3: no allowlisted executor can
-   carry a reversible_write job, so the approved job parks with its reason
-   until the grant decays.
+1. Done 2026-09-05: card REQ-20260905-12yaAZ approved from the phone (5802,
+   5803), AUTHORIZED (5807), the draft written and the job stopped at
+   verification card REQ-20260905-0Mq1q1 with the document link (5874, 5877,
+   5881), Tee read the draft and approved the card, and the poll closed the
+   job COMPLETED with human_watched true (5898, 5901). Every hop of the
+   human-gated path has now run live.
 2. Tee ratifies or reverses the three organ publishes in section 4.
-3. The Drive Draft Writer (Build 16, section 10) is built and validated but
-   not yet created on n8n Cloud: the session's permission gate refused the
-   creation call. Tee's word, or a permission rule, lets it be created,
-   published, allowlisted as drive.draft and proven on the parked job before
-   its grant decays at 2026-09-06T18:33:39Z. Then one gated render proof with
-   Tee watching the output.
+3. Done for drafts: the Drive Draft Writer (Build 16, section 10) is live,
+   allowlisted as drive.draft, and proven on the approved job. Its idempotent
+   reuse branch and its refusal branches have run only in code reading, not
+   live. A gated render proof with Tee watching the output still waits on
+   runbook A.
 4. A follow-up that lifts the shared JSON extraction and vocabularies into one
    place, so a vocabulary change is one edit.
 
@@ -564,7 +576,7 @@ Verdict PASS-WITH-CONDITIONS, four conditions, fifteen findings. Disposition:
 | the change was uncommitted and the router had no vault entry | LOW | committed as 21caa65; devon-action and the Action Router registered in both vault copies |
 | the intake proof went through the MCP path, not the authenticated door | informational | noted; the router call it produced went through the real door |
 
-### Build 16, the first real executor, built and held at the door
+### Build 16, the first real executor, live and proven to the card
 
 On the recommendation that an approved job needs a real executor, Tee ruled
 "do it". The Drive Draft Writer is built as SDK source (20 nodes, validated
@@ -583,13 +595,20 @@ the envelope returns as the ledger holds it. The driver then moves it to
 VERIFYING and raises a verification card with the document link, and only
 Tee's approval of that card completes the job. Reversible: trash the document.
 
-The creation call on n8n Cloud was refused by the session's permission gate,
-so nothing was created, published or allowlisted. The driver already names
-drive.draft for draft-like reversible writes and the router refuses it
-honestly (driver log row 35). What it takes to finish: Tee allows the
-creation (a word here, or a permission rule), then create, set the error
-workflow, publish, add the allowlist entry with ceiling reversible_write,
-register the webhook and workflow in both vault copies and the census (62 to
-63), and run the poll on the parked job before 2026-09-06T18:33:39Z. The
-Google Drive credential in n8n (WMz320icjnur7rDL) has not been exercised
-this session; its first live write is part of that proof.
+The first creation call on n8n Cloud was refused by the session's
+permission gate; on Tee's "create it" the second was allowed. Created as
+J7Ly7riwXEd95D9a, error workflow and 120s timeout set, every outbound node
+read back with its credential, published as acb89e72; drive.draft added to
+the router allowlist at ceiling reversible_write (eb154eef); registered in
+both vault copies, the learning lane registry and the census (62 to 63).
+Proof, all on 2026-09-05 at 19:34Z: the hand run poll 5874 carried the
+approved job from AUTHORIZED through the router to the executor (5881),
+which found no prior draft under the idempotency key, had Cerebras write
+491 words, created the Google Doc in TQO/01_SCRIPTS with the key and the
+intent id in its app properties, advanced the envelope to EXECUTING with the
+artifact, and reported both halves to the bus with the ledger clean; the
+spine took it to VERIFYING and the driver raised verification card
+REQ-20260905-0Mq1q1 with the document link. The Google Drive credential's
+first live write is that document. Unexercised live: the reuse branch (a
+second call under the same key), the executor's own refusal branches, and
+the Cerebras and Drive failure branches; all are code read only.

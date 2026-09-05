@@ -353,8 +353,24 @@ WEBHOOKS = {
             "refused false plus a target url. The allowlist carries spine.echo "
             "with a read ceiling, so an approved reversible_write job parks at "
             "AUTHORIZED with that reason in devon_driver_log until its grant "
-            "decays. The next executor, drive.draft, is Tee's ruling of the same "
-            "day and is recorded under Drive Draft Writer once it exists."
+            "decays. drive.draft (Drive Draft Writer J7Ly7riwXEd95D9a) joined the "
+            "allowlist the same evening at ceiling reversible_write on Tee's ruling."
+        ),
+    },
+    "devon-drive-draft": {
+        "job": "write one Google Doc draft for an AUTHORIZED job and advance it to EXECUTING",
+        "destination": "Google Drive, the folder DRAFT_FOLDERS names for the job's Area",
+        "workflow": "J7Ly7riwXEd95D9a",
+        "auth": "header x-devon-key",
+        "open_ruling": (
+            "Build 16, created 2026-09-05 on Tee's ruling (do it, then create it). "
+            "The first real executor: called only by the Action Router as action "
+            "drive.draft at ceiling reversible_write. Checks the grant again, reports "
+            "to the bus twice, finds an existing draft by idempotency key before "
+            "writing, and refuses as data. Reversible by trashing the document. "
+            "Proven live 2026-09-05 19:34Z on job 01M1SAK59GF0511GR7B78Y06A9: "
+            "execution 5881 wrote one Google Doc into TQO/01_SCRIPTS and the job "
+            "reached verification card REQ-20260905-0Mq1q1."
         ),
     },
     "devon-ledger": {
@@ -486,7 +502,10 @@ WORKFLOWS = {
     # Build 05, n8n lane. Dispatches an AUTHORIZED envelope to an allowlisted
     # executor and reports to the bus twice. Zapier lane never built. Refusals
     # answer as data since 2026-09-05; see WEBHOOKS devon-action.
-    "Action Router": {"id": "ecLqrxALuLDdF2BN", "state": "active, webhook devon-action, allowlist spine.echo at ceiling read"},
+    "Action Router": {"id": "ecLqrxALuLDdF2BN", "state": "active, webhook devon-action, allowlist spine.echo at ceiling read and drive.draft at ceiling reversible_write"},
+    # Build 16, the first real executor. One Google Doc draft per job, idempotent
+    # by key, folder by Area from DRAFT_FOLDERS. See WEBHOOKS devon-drive-draft.
+    "Drive Draft Writer": {"id": "J7Ly7riwXEd95D9a", "state": "active, webhook devon-drive-draft, executor drive.draft at ceiling reversible_write"},
     "Intake Former": {"id": "AEFgXee7IDJarNV7", "state": "active, webhook devon-intake"},
     "Job Driver": {"id": "TT4TfFXyH9O7lfdc", "state": "active, sub-workflow called by the Intake Former and the Driver Poll"},
     "Driver Poll": {"id": "mbIKJk4UuB7V27rP", "state": "active, hourly poll"},
