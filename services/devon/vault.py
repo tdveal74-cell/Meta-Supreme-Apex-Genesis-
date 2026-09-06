@@ -690,7 +690,11 @@ WORKFLOWS = {
     # rebuild that shipped. Its execution data persistence is off on purpose
     # (approval tokens must not land in stored executions); truth lives in the
     # data tables and digest emails, read via the Table Reader.
-    "Soul Committer": {"id": "lANs6wopaK0PkNhN", "state": "active, 15 minute poll"},
+    # Ruled by Tee 2026-09-06 ("hourly") once the burn was measured: the 15 minute
+    # poll cost 96 executions a day against a commit log holding one row since
+    # 2026-08-25. Hourly since version 49007534; one proposal and one commit per
+    # poll unchanged, failure alert damping retuned to every 4th attempt.
+    "Soul Committer": {"id": "lANs6wopaK0PkNhN", "state": "active, hourly poll (15 minute poll until 2026-09-06), one proposal and one commit per poll"},
     # Found inactive on the live instance 2026-09-01 by the first estate
     # reconcile; recorded active until then, deactivation unrecorded. An n8n
     # error workflow fires when a caller names it whether or not it is

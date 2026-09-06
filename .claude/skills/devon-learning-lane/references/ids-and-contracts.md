@@ -15,7 +15,7 @@ before trusting in a much later session.
 | Build 12 Upstream Test workflow | `VznESplSFCs8ldph` | webhook `devon-build12-upstream`; header auth `x-devon-key` ON since 2026-08-26 (credential Devon Capture Key); MCP-available since 2026-08-26 |
 | Approval Queue workflow | `syRVj0G47mA1b0Xn` | webhooks `devon-approve-request` (POST, x-devon-key) and `devon-approve-decide` (GET, token in link) |
 | approval_queue table | `u6wzeN5y9LNxROsN` | status pending/approved/rejected; 72h expiry; contains a plaintext token column — never read it |
-| Soul Committer workflow | `lANs6wopaK0PkNhN` | 15-min poll; propose + resolve branches; first draft `Wo7zPxpGH8kiBRy8` archived unpublished after adversarial review |
+| Soul Committer workflow | `lANs6wopaK0PkNhN` | hourly poll since 2026-09-06 (15-min before; Tee's ruling on the execution burn, version `49007534`); propose + resolve branches; first draft `Wo7zPxpGH8kiBRy8` archived unpublished after adversarial review |
 | devon_soul_commit_log table | `U9fnVy19Vc8kvQAw` | intent_id, state (PROPOSED/COMMITTED/REJECTED/EXPIRED/REVERTED), request_id, record_id, claim, area, proposed_at, resolved_at, note |
 | Error Alarm workflow | `XDQXwgFkUhYxoEjG` | shared error workflow; emails Tee when a workflow that names it crashes out-of-band |
 | Learning Lane Table Reader | `we45pHkQHRmSRnZx` | manual, read-only view of feed log, commit log, state ledger, heartbeat log; deliberately never reads approval_queue (token column) |
@@ -36,7 +36,7 @@ before trusting in a much later session.
 ### Soul Committer v2 semantics (why it is shaped this way)
 
 - One new approval POST per poll and one devon-soul commit per poll (oldest
-  first): HTTP-response pairing stays 1:1, and a run cannot outlast the 15-min
+  first): HTTP-response pairing stays 1:1, and a run cannot outlast the poll
   schedule (executionTimeout 300s backs this).
 - Before POSTing, the propose lane reconciles against approval_queue itself:
   an existing `requested_by: soul-committer` row whose `evidence` starts with
