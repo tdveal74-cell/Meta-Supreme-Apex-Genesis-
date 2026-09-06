@@ -350,6 +350,15 @@ WEBHOOKS = {
         "auth": "header x-devon-key",
         "open_ruling": None,
     },
+    # Registered 2026-09-06 with its workflow. The one GET door in the estate;
+    # it reads the ledger and writes nothing.
+    "devon-health": {
+        "job": "organism health from the ledger: open against terminal, stuck jobs, failure concentration",
+        "destination": "the caller, as JSON; nothing is written",
+        "workflow": "M3H2mVPZJpDyIzrl",
+        "auth": "header x-devon-key",
+        "open_ruling": None,
+    },
     "devon-approve-request": {
         "job": "raise a high impact action for approval",
         "destination": "n8n data table approval_queue u6wzeN5y9LNxROsN",
@@ -692,6 +701,32 @@ WORKFLOWS = {
     "Face": {"id": "LsmfRFMmI5feINs0", "state": "active, hosted chat, n8n user auth"},
     "TQO FINAL V5": {"id": "gsGJQan7a6ZufhYt", "state": "inactive by ruling"},
     "Capture Hook": {"id": "Cbd24ptTPWch3aZO", "state": "retired 2026-08-22"},
+    # Registered 2026-09-06, ruled by Tee after the operational report found
+    # ten DEVON named workflows on the instance and not in this map, four of
+    # them active and unwatched by the reconciler since they were built.
+    # Record side only: nothing was activated, deactivated or archived. Each
+    # state was read from the workflow's trigger that morning; the six
+    # inactive ones are one shots, probes and manual tools, and stay
+    # registered so a quiet reactivation reports DRIFT instead of passing.
+    "Health and Observability Console": {
+        "id": "M3H2mVPZJpDyIzrl",
+        "state": "active, webhook devon-health GET, reads the ledger, read only",
+    },
+    "Monthly Credential Review": {
+        "id": "yro0wBRGghMjkZhj",
+        "state": "active, monthly on the 1st 08:00 New York",
+    },
+    "Notion Buffer Drain": {
+        "id": "X3sKmPj6yHJu4xWu",
+        "state": "active, daily 07:00 New York, Airtable Thread Receipts to the Notion Thread Log",
+    },
+    "To Delete Auto-Purge": {"id": "0soYvqnSKYlFn3gr", "state": "active, weekly Sunday 10:00 New York"},
+    "Soul Index Setup": {"id": "vYr35jqNNaAztGhQ", "state": "inactive, one shot setup"},
+    "Build 08 Credential Probe": {"id": "pm5hoO4eFpGhlAb4", "state": "inactive, throwaway probe"},
+    "End to End Watch Harness": {"id": "ktZ0fnrgxvCNY9xH", "state": "inactive, watch harness"},
+    "Master Index": {"id": "ocU2Zep8WyRmbsIk", "state": "inactive"},
+    "Purge List": {"id": "Epcmuep1JnBaSrrr", "state": "manual, purge list"},
+    "Vault Comparison": {"id": "mhI1YAoqrITtuB1M", "state": "inactive"},
 }
 
 
