@@ -13,7 +13,9 @@ page 3d368ff50db6811ca2b3cab91a4d52eb (this session's log).
 
 Every claim below is labelled. VERIFIED means read from a live system this
 morning with the id shown. RULED means Tee decided it. UNVERIFIED means believed
-from a record and not measured today. ESTIMATE means arithmetic on a reading.
+from a record and not measured today. RECORDED means taken from a record this
+estate wrote earlier and not re-read today. ESTIMATE means arithmetic on a
+reading.
 Ids are the join key throughout; names are shown for a human and were unescaped
 from the API.
 
@@ -33,8 +35,9 @@ every pass since 03:00Z, the six hourly pulse was arriving on SMTP, and the
 estate had produced zero error executions in the fourteen hours before the
 read. The gaps are equally plain: two executors and no more, a registry that
 misses four active organs so the reconciler does not watch them, a cloud to
-VPS cutover on a clock with an estimated wall of 2026-09-21, and one stale
-approval card that will cancel itself on 2026-09-08.
+VPS cutover on a clock whose wall this morning's own execution ids put nearer
+2026-09-10 than the recorded 09-21, and one stale approval card that will
+cancel itself on 2026-09-08.
 
 ## 2. What DEVON is made of
 
@@ -56,7 +59,11 @@ of 63 with `count` 63, aggregated by script from a TSV rather than by eye.
 ### The organs, by function
 
 Names are given without the instance's em dash separator; the id is the
-identity.
+identity. Cadences were read from the trigger rule itself this morning for the
+Driver Poll, the Weekly Table Backup and the Notion Buffer Drain, and from the
+trigger node name and the workflow description for the Capture Nudge, the
+Precedence Guard and the Ledger Janitor; every other cadence below is RECORDED
+from the vault.
 
 **Spine and ledger.** Live State Ledger `z9j2I8h0RnbDKGBO` (door `devon-ledger`),
 Event Bus and Universal Receipts `Bvy0grTSIyEmPwFA` (door `devon-event`), Spine
@@ -113,17 +120,34 @@ named workflows the vault does not carry: Soul Index Setup one shot
 Watch Harness `ktZ0fnrgxvCNY9xH`, Master Index `ocU2Zep8WyRmbsIk`, Purge List
 `Epcmuep1JnBaSrrr`, Vault Comparison `mhI1YAoqrITtuB1M`.
 
-### The data he keeps, VERIFIED
+### The data he keeps
+
+The project holds 11 data tables, VERIFIED by listing them this morning. Read
+today means rows were read in this session.
 
 | Store | Id | Read today |
 |---|---|---|
-| State ledger | n8n data table `VYyno7pDWmY6uxBz`, 37 columns | yes, all 17 rows aggregated |
-| Approval queue | n8n data table `u6wzeN5y9LNxROsN` | no, on purpose; it carries the single use decide tokens in plaintext |
-| Driver log | n8n data table `9VbICTCa4x4yhWZm` | no |
-| Chat log | n8n data table `nwnHN8o2dgHjtk7f` | no |
-| Capture buffer | Airtable Thread Receipts `tblEhgEZoNr2ztbB3` in base `app28z7XnKzjfTXwc` | yes, drained to empty |
+| State ledger `devon_state_ledger` | `VYyno7pDWmY6uxBz`, 37 columns | yes, all 17 rows |
+| Approval queue `approval_queue` | `u6wzeN5y9LNxROsN` | no, on purpose; it carries the single use decide tokens in plaintext |
+| Driver log `devon_driver_log` | `9VbICTCa4x4yhWZm` | no |
+| Chat log `devon_chat_log` | `nwnHN8o2dgHjtk7f` | no |
+| Build 12 feed log | `QeoV4V4dYXXN8dBR` | no |
+| Soul commit log | `U9fnVy19Vc8kvQAw` | no |
+| Heartbeat log | `Adg1Gd9HML7Q4L3U` | no |
+| GitHub checkpoints | `7OT3H8GzyqP5RgmJ` | no |
+| Soul setup | `VBW2nTLQcaZ8l74a` | no |
+| TQO content, NCO content | `tc2lBzham6J65EP7`, `NTUtlcfrvNmS2oau` | no |
+| Capture buffer | Airtable Thread Receipts `tblEhgEZoNr2ztbB3` in base `app28z7XnKzjfTXwc`; the same base carries Inbox Captures `tbl4ziFRbl5mnUcKc` and Conflicts `tblbenoy1QF9KAftn`, RECORDED from the vault | the receipts table, yes, drained to empty |
 | Memory | Notion Thread Log, data source `a5bcfbf5-ce1d-493b-9992-a11bc2a03dc4` | yes, two pages written |
 | Shared key | n8n credential Devon Capture Key `FYRvkRTOcROEYZ9P`, header `x-devon-key` | rotated 2026-09-06, three proofs in hand (RULED and VERIFIED, PR #143) |
+
+The Weekly Table Backup mails four of these (ledger, feed log, commit log,
+heartbeat log) every Sunday and excludes the approval queue on purpose. A
+ledger row from 2026-09-03 (`01M1KAEBPXJZMZSWC6MM02E2HA`, actor claude-cowork,
+COMPLETED, verification passed) records that nine tables and 38 rows were
+already copied to the self hosted instance at n8n.editforge.online. RECORDED,
+not re-read on the VPS today; it means the runbook's "installed and empty" is
+stale at least as far as the tables go.
 
 ### Off n8n
 
@@ -141,8 +165,8 @@ and are UNVERIFIED today, the container has no egress to either.
 Each line is a ledger row or an execution, not a description of intent.
 
 - **A level 0 job, end to end, unattended.** Job `01M1S81K3WDD0JSKY6KPAY43K1`
-  ran RECEIVED to COMPLETED in 14 seconds on 2026-09-05 (execution 5629,
-  VERIFIED from the receipt logged that day; not re-read this morning).
+  ran RECEIVED to COMPLETED in 14 seconds on 2026-09-05 (execution 5629;
+  RECORDED in the receipt logged that day, not re-read this morning).
 - **A gated job with a real artifact.** Job `01M1SAK59GF0511GR7B78Y06A9`
   (TQO, level 2, reversible_write): card `REQ-20260905-12yaAZ` raised at
   17:41:59Z, approved by Tee at 18:33:39Z, dispatched as `drive.draft` at
@@ -220,16 +244,34 @@ empty, and `cb01b7a` is the last commit that actually built that project.
   Ten minute polling waits for the VPS, where executions are free.
 - **No silent capture.** Nothing watches a chat on any platform. Capture is a
   receipt at the end of a thread, posted or pasted (thread log skill).
-- **Learning is not captured.** `learning_state` was `not_captured` on every
-  ledger row read in full this morning (3 of 17) and on every row in the
-  2026-09-05 receipts. UNVERIFIED for the other 14 rows; the census did not
-  aggregate that column.
+- **Learning is barely captured.** `learning_state` across all 17 ledger rows,
+  VERIFIED this morning by a filtered read: 8 `not_captured`, 8 empty (the
+  eight August end to end watch jobs the Janitor swept), 1 `captured`
+  (`01M1KAEBPXJZMZSWC6MM02E2HA`, the 2026-09-03 table migration a Cowork
+  session logged after the fact). No job the driver has run has captured
+  learning. The fresh critic cited a 2026-09-05 ruling that the soul index
+  stays deliberately unfed; this report could not find that ruling in the
+  repository and does not rely on it.
+- **The taught reconciler has not run keyed.** The body gate check merged in
+  #146 has never run against the live instance with a key: this container has
+  no egress to the n8n host and no `N8N_SOURCE_KEY` is set. The pin was
+  confirmed three ways (two independent transcriptions and the critic's
+  fingerprint computed in place from the MCP payload), and the first keyed
+  `snapshot` run is still the authoritative confirmation.
 - **Four active organs are unwatched.** The reconciler checks workflow state
   for the 31 registered ids only, so the Health Console, the Credential
   Review, the Buffer Drain and the Auto-Purge can go inactive without a DRIFT.
-- **The clock.** Cloud execution burn was ESTIMATED on 2026-09-05 at about 120
-  a day, wall about 2026-09-21 if the plan caps at 2,500. Read the real cap on
-  n8n's usage page; this report did not.
+- **The clock, and it runs faster than the record says.** The 2026-09-05
+  blackout doc ESTIMATED cloud execution burn at about 120 a day and a wall
+  around 2026-09-21. This morning's own execution ids say otherwise: the
+  Driver Poll's passes sit at 6088 (04:00Z), 6097, 6104, 6119 and 6132
+  (08:00Z), which is 44 executions in four quiet hours, about 11 an hour and
+  about 260 a day, and three 15 minute polls alone account for 288 a day if
+  every pass fires. ESTIMATE from id deltas, not from the usage page. At that
+  rate a 2,500 execution month is spent in nine to ten days, so if the plan
+  caps there and the month reset on 2026-09-01 the wall is nearer 2026-09-10
+  than 09-21. Read the real cap and the real count on n8n's usage page today;
+  this report did not.
 
 ## 6. Findings from this read, graded before raising
 
@@ -257,15 +299,35 @@ empty, and `cb01b7a` is the last commit that actually built that project.
    of every webhook execution, `x-devon-key` included, in plaintext, readable
    by anyone with workflow read on the instance. Graded low: an n8n login
    already confers workflow edit, which is a larger power than the key, and
-   the value seen this morning was the retired one. Not a finding to act on
-   alone; it is a reason to prefer per execution data retention settings on
-   the Router and the Capture Webhook if the instance ever gains a second
-   user. Owner: Tee's ruling.
+   the value seen this morning was the retired one. The Capture Webhook
+   already sets `saveDataSuccessExecution` to none, so a successful receipt
+   post leaves no saved data; the Router's error executions do keep their
+   headers, and 5810 was one. Not a finding to act on alone; it is a reason
+   to prefer the same retention setting on the Router if the instance ever
+   gains a second user. The critic also noted that a receipt block filed
+   straight into the Thread Log by a session, `TOKEN:` line included, as one
+   2026-09-05 page was, carries a poster token the webhook path would have
+   stripped. That is the receipt design Tee ruled on 2026-09-06 (the value
+   has to be known outside n8n), graded the same way, receipt pollution and
+   not an approval bypass, and it is noted here rather than raised. Owner:
+   Tee's ruling.
 4. **One stale card.** `REQ-20260905-f5kEZj` self cancels on 2026-09-08. No
    action unless Tee wants to decide it, which would prove nothing new.
-5. **Dead Gmail carriers, UNVERIFIED today.** The blackout doc lists the Weekly
-   Table Backup as still carrying the invalid Gmail credential. Its next run is
-   Sunday 03:10Z; this report did not read its credential.
+5. **The Weekly Table Backup is on SMTP, and the record that said otherwise
+   is stale.** `qCfGZ1CwmpK9vOta` sends on SMTP credential `mu7nJRSpkAfkzLdF`;
+   its sticky note dates the move off the dead Gmail credential to
+   2026-09-05, after the blackout doc listed it as a remaining carrier.
+   VERIFIED this morning by reading the node. Next run Sunday 03:10Z; nothing
+   to do. Whatever other Gmail carriers that doc had in mind were not
+   enumerated today.
+7. **The body gate is checked by fingerprint, not by wiring.** The critic
+   found that `gate_nodes()` reads a workflow's nodes and never its
+   connections, so a trigger rewired straight past Check Token leaves the node
+   present, enabled and byte identical, and the reconciler reports OK while
+   the gate checks nothing. Same class as the defect #146 set out to close.
+   Fixed in the PR that follows this report: the snapshot now records whether
+   every enabled door in the workflow feeds the gate and nothing else, and the
+   check reports DRIFT when one does not.
 6. **A mislabelled failure row.** The Buffer Drain's `Log Sync Failure` node
    hard codes `Type: Ambiguous date` on every sync failure it files. Cosmetic,
    but a reader triaging that table would be misled. Owner: the workflow edit
@@ -275,12 +337,13 @@ empty, and `cb01b7a` is the last commit that actually built that project.
 
 A recommendation. Tee rules.
 
-1. Close the registry gap (finding 1). Record side, cheap, and it puts the
+1. Runbook C before the wall, and read the usage page first: mint the VPS API
+   key, `n8n_migrate.py` export and import from a machine with egress to both
+   hosts, repoint the MCP connector, re-run the reconcile and both lane proofs
+   on the VPS, then tighten the poll to ten minutes. Moved to the top because
+   the burn estimate in section 5 puts the wall days away, not weeks.
+2. Close the registry gap (finding 1). Record side, cheap, and it puts the
    whole estate under the reconciler.
-2. Runbook C before the wall: mint the VPS API key, `n8n_migrate.py` export and
-   import from a machine with egress to both hosts, repoint the MCP connector,
-   re-run the reconcile and both lane proofs on the VPS, then tighten the poll
-   to ten minutes.
 3. A third executor at reversible_write, an Airtable row write, through the
    same allowlist and ceiling. It is the smallest executor that is not a
    document.
@@ -297,8 +360,15 @@ A recommendation. Tee rules.
 - Executions read: 5810 (router refusal, full data), 5583, 5598, 5591, 5585,
   5681 (error list), 6045 to 6132 (poll), 5623, 5969, 6092 (pulse), 4873 to
   5589 (drain).
-- Workflow details read: `X3sKmPj6yHJu4xWu` full, `mbIKJk4UuB7V27rP` full,
-  `ecLqrxALuLDdF2BN` full, `pPIt2cELH2RVZktS` (the pin, PR #146).
+- Workflow details read: `X3sKmPj6yHJu4xWu`, `mbIKJk4UuB7V27rP`,
+  `ecLqrxALuLDdF2BN`, `qCfGZ1CwmpK9vOta` and `pPIt2cELH2RVZktS` in full;
+  `YHueoBK7TSLdTlfF`, `W5rlpAt6hsJAExU6`, `HKNEDVy7PUKPtsrN` at trigger level.
+- Ledger filtered read on `learning_state` (9 rows returned, 17 total); the 11
+  data tables listed by id.
+- A fresh critic with no build context reproduced 12 claims of this report
+  against the live estate and the repository and returned nine findings; the
+  ones that changed this text are sections 2, 5 and 6 and the recommendation
+  order in section 7.
 - GitHub: PR #146 merged as `a719ecd` at about 08:44Z with all six checks
   green on `1b59b56`; designated branch restarted from main.
 - Railway deployment `c5f389cd-b8c9-439b-a65a-9311227c0655` SUCCESS on `a719ecd`; Vercel devon-soul `dpl_2hUqKkdKti2YBHEoNapGeGtGVvFm` READY production on `a719ecd`; web `dpl_8jWAx3yHecZDeQUZF949o6YfoUMY` CANCELED production on `a719ecd` (skip verified).
