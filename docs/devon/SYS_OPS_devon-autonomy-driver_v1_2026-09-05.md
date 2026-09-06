@@ -839,11 +839,21 @@ model ignored part of it. Read the file before saying where something lives.
 The negative test the runbook now demands could not be run from the session that
 wrote it: the environment's network policy denies egress to
 `thequietoperator.app.n8n.cloud`, so no request carrying the old key could leave.
-It is still owed, and it is Tee's to run from the phone or a laptop: post the old
-key at any path below and require a 401.
 
-What could be done instead was a read only audit, and it is the weaker proof of
-the two. Every webhook node and every organ to organ HTTP node across twenty two
+**Tee ran it himself on 2026-09-06. The old key returned a 401, and he then
+deleted the old value.** That is the proof the credential edit propagated and the
+old secret is dead, and it is the one proof neither positive test could give. All
+three proofs of this rotation are now in hand.
+
+Worth keeping, because it is the reusable lesson rather than the result: the
+runbook did not ask for the 401 until after the rotation was already done. For
+most of a day the estate had two passing tests, a phone capture and a clean level
+0 job, and no evidence at all that the old key had stopped working. Both of those
+tests answer "does the new key work". Neither answers "is the old one dead", and
+only the second question is the security question. Ask for the 401 first next
+time.
+
+The read only audit below stands as the weaker, structural half of the proof. Every webhook node and every organ to organ HTTP node across twenty two
 workflows was read. All of them bind credential `FYRvkRTOcROEYZ9P` by id. None
 binds any of the ten unrelated `Header Auth account N` credentials sitting in the
 same project. Since the binding is by id, one in place value edit reaches all of
