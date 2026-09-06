@@ -728,6 +728,24 @@ WORKFLOWS = {
     "Master Index": {"id": "ocU2Zep8WyRmbsIk", "state": "inactive"},
     "Purge List": {"id": "Epcmuep1JnBaSrrr", "state": "manual, purge list"},
     "Vault Comparison": {"id": "mhI1YAoqrITtuB1M", "state": "inactive"},
+    # The six active TSWS pipeline workflows, registered 2026-09-06 on Tee's
+    # ruling that the map watches every active workflow on the instance, not
+    # only the DEVON organs. The 16 inactive seeds, one shots and bootstraps
+    # that share the project stay unregistered on the same ruling. Each state
+    # was read from the instance that day: 00 and 02 to 05 are sub-workflows
+    # called by the master and carry an Execute Workflow trigger, so they have
+    # no schedule of their own; 01 describes itself as the drop folder watcher
+    # and its trigger node was not read. 01 also had a draft ahead of its
+    # active version that day, which the reconciler does not check.
+    "TSWS 00 Render Job": {"id": "o4ctniOsIq2VSfgm", "state": "active, sub-workflow called by TSWS 01"},
+    "TSWS 01 Post-Production Master": {
+        "id": "Zbq6gS77PRauqb1I",
+        "state": "active, drop folder watcher per its description, trigger node not read",
+    },
+    "TSWS 02 Narration and Sound Bed": {"id": "v6E12rr1fg1azVHi", "state": "active, sub-workflow called by TSWS 01"},
+    "TSWS 03 Visual Assembly": {"id": "TL6ssgJjJLdvxrUp", "state": "active, sub-workflow called by TSWS 01"},
+    "TSWS 04 Detail Recovery": {"id": "wl6XAUp84fiq50sj", "state": "active, sub-workflow called by TSWS 01"},
+    "TSWS 05 Conform and Grain": {"id": "QaXpPiVFubsOkDD1", "state": "active, sub-workflow called by TSWS 01"},
 }
 
 
