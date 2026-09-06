@@ -1,110 +1,173 @@
-// Parses the Cerebras answer into the draft text. Too little text refuses; a
-// refusal here costs nothing because nothing has been written yet.
+// Parses the Cerebras answer into the draft text. Nothing has been written when
+// this node runs, so a refusal here costs nothing and a wrong guess costs a
+// corrupted document in Tee's Drive that nobody reads before it lands.
 //
-// The normalise chain exists because the model writes for a markdown reader even
-// when the system prompt asks for plain text. The first live draft (job
-// 01M1SN5X4ETKEPPCC4JT61TE5V, written 2026-09-06T01:58:58Z) reached Tee's Drive
-// carrying a literal backslash on every list line and non breaking hyphens
-// inside compound words: 25 bullet markers, 9 ordered markers, 10 hyphens, and
-// zero em or en dashes, so the one rule the model already honoured was Tee's.
+// RULED BY TEE 2026-09-06, after two gauntlet cycles quarantined two different
+// versions of this file in one night: STOP SCRUBBING, START REFUSING.
 //
-// REWRITTEN 2026-09-06 after a gauntlet cycle reproduced four ways the first
-// version destroyed legitimate text. Every rule below is now the narrowest one
-// that fixes an OBSERVED defect. The first version widened on speculation and
-// each widening cost something real:
+// Both quarantined versions tried to rewrite an em or en dash into what the
+// author probably meant. Both were wrong, in ways only an executed test found:
 //
-//   The dash class used \s on both sides, and \s matches a newline, so a dash
-//   opening a line swallowed the line break. A block of dialogue collapsed into
-//   one run-on line and so did a dash bulleted checklist. Drafts land in a
-//   show's 01_SCRIPTS folder, which is exactly where a line opening dash lives.
-//   The class also gained U+2012, the figure dash, which exists for numerals,
-//   so 555<figure dash>0100 became "555, 0100"; and U+2015, the horizontal bar,
-//   which is the character used to open a line of dialogue. Neither appeared in
-//   the reported defect. Both are gone, the class is back to the em and en dash
-//   Tee's rule actually names, and no rule may now cross a newline.
+//   v1 used \s on both sides of the dash class, and \s matches a newline, so a
+//   dash opening a line ate the line break and a block of dialogue collapsed
+//   into one run on line.
 //
-//   The escape strip ran over the whole document against a wide punctuation
-//   class, so a regex written in prose lost its meaning (\. became .), LaTeX
-//   delimiters were stripped to bare brackets, and a Windows path lost its
-//   separator whenever the next segment opened with punctuation. The observed
-//   defect was list markers alone, so that is all it strips now, anchored to
-//   the start of a line where a markdown list marker is the only thing a
-//   backslash can be escaping.
+//   v2 narrowed that, then added a rule saying digits either side of a dash
+//   mean a range. "The offer was 120 <em dash> 30% above my last one" became
+//   "120-30%", inventing a number in career strategy content. Its fallback rule
+//   deleted the dash and substituted nothing, so "Revenue grew 40% <em dash>
+//   the biggest jump yet" ran the clause on, and a trailing dash, which is how
+//   an interruption is written in a two character podcast, vanished silently.
 //
-//   The code fence rule ate the lowercase run after an inline triple backtick,
-//   deleting a word outright, and left an uppercase language tag behind as
-//   stray prose. It now removes a fence only when the fence is its own line.
+// The pattern is the finding. A rule that decides what a dash MEANT is a guess,
+// and a guess that lands unread in a script folder is worse than no draft. So
+// this version keeps only the transformations that CANNOT change meaning, and
+// refuses the draft outright when a dash is present. The lane retries, and the
+// system prompt (validate_and_plan.js, the same repository) is what has to earn
+// the pass.
 //
-// Not folded, on purpose. U+2212 is the minus sign: it renders like a dash but
-// it is arithmetic, and "the delta is <minus>5" must survive. Tee's rule names
-// the em dash and the en dash, and this is neither.
+// Refusing is affordable here because the model already honours this rule. The
+// first live draft (job 01M1SN5X4ETKEPPCC4JT61TE5V, 2026-09-06T01:58:58Z)
+// carried 25 escaped bullet markers, 9 escaped ordered markers and 10 non
+// breaking hyphens, and ZERO em or en dashes. The prompt's dash instruction
+// works; its "no markdown symbols" instruction is the one being ignored, and
+// markdown symbols are exactly what the safe rules below remove.
+//
+// WHAT IS SAFE TO CHANGE, and why each one cannot alter meaning:
+//   U+00A0 to a space         an invisible space becomes a visible one
+//   U+00AD removed            a soft hyphen is invisible and advisory
+//   U+2010 U+2011 to '-'      these ARE hyphens; only the code point changes
+//   a fence line removed      the marker is markup, the code inside is kept
+//   a leading '\' before a
+//     list marker removed     the backslash is markdown escaping, not text
+//   trailing space trimmed    whitespace at end of line carries nothing
+//
+// WHAT IS NOT TOUCHED, on purpose:
+//   U+2212, the minus sign, is arithmetic. "the delta is <minus>5" survives.
+//   U+2015 and U+2012 are neither an em nor an en dash. v2 folded them on
+//   speculation and broke dialogue and phone numbers. Tee's rule names two
+//   characters; this file acts on exactly those two.
+//   Indentation inside a code sample. v2 had a "space before punctuation" rule
+//   with no observed defect behind it, and it flattened every indented line.
+//
+// ORDER IS LOAD BEARING. Character normalisation runs BEFORE the escape strip,
+// because HYPHENS turns "\<U+2010> First point" into "\- First point", which is
+// the shape the escape strip is looking for. v2 ran them the other way round
+// and the backslash reached Drive.
 //
 // The character classes are built with fromCharCode. Those code points are
-// invisible or near enough on screen, so a literal class cannot be reviewed in
-// a diff, and a backslash u escape does not survive the round trip through the
-// n8n API. Building them keeps this file and the live node byte identical and
-// pure ASCII.
-const EM_EN = String.fromCharCode(0x2014, 0x2013);
+// invisible in a diff, and a backslash u escape does not survive the round trip
+// through the n8n API, so building them keeps this file and the live node byte
+// identical and pure ASCII.
+const NBSP = new RegExp(String.fromCharCode(0x00a0), 'g');
 const SOFT_HYPHEN = new RegExp(String.fromCharCode(0x00ad), 'g');
 const HYPHENS = new RegExp('[' + String.fromCharCode(0x2010, 0x2011) + ']', 'g');
-// A fence on a line of its own, language tag or not. Never mid line.
-const FENCE = /^[ \t]*```[A-Za-z0-9+#.-]*[ \t]*\r?\n?/gm;
-// The two markdown list markers the model actually escaped, at a line start.
+// The two characters Tee's rule names, and nothing else.
+const BANNED = new RegExp('[' + String.fromCharCode(0x2014, 0x2013) + ']', 'g');
+// A fence on a line of its own. {3,} is greedy so a run of six backticks is
+// consumed whole; v2 took three and left three behind, so a second pass would
+// have produced a different document from the first.
+const FENCE = /^[ \t]*`{3,}[A-Za-z0-9+#.-]*[ \t]*(?:\r?\n|$)/gm;
+// The two markdown list markers the model actually escaped, at a line start,
+// where a backslash can only be escaping a list marker.
 const ESC_BULLET = /^([ \t]*)\\([-*+])(?=[ \t])/gm;
 const ESC_ORDERED = /^([ \t]*\d+)\\(\.)(?=[ \t])/gm;
-// Four dash rules, none of which may cross a newline: [ \t] never matches one.
-// A line opening dash is a bullet, so it becomes one and the line survives.
-const DASH_LINE = new RegExp('^[ \\t]*[' + EM_EN + '][ \\t]*', 'gm');
-// Digits on both sides are a range whether or not the dash is spaced, so it
-// keeps a hyphen. A comma turns "pages 10 to 20" into two page numbers, which
-// is the same class of damage as the figure dash removed above.
-const DASH_NUM_RANGE = new RegExp('(\\d)[ \\t]*[' + EM_EN + '][ \\t]*(?=\\d)', 'g');
-// Spaced between words is the parenthetical use, and a comma carries it.
-const DASH_SPACED = new RegExp('([A-Za-z0-9,;:)\\]}"\'])[ \\t]+[' + EM_EN + '][ \\t]+(?=[A-Za-z0-9("\'\\[{])', 'g');
-// Tight between alphanumerics is a range or a compound: 1914<dash>1918, so a
-// hyphen keeps the meaning where a comma would split it into two numbers.
-const DASH_TIGHT = new RegExp('([A-Za-z0-9])[' + EM_EN + '](?=[A-Za-z0-9])', 'g');
-// Anything still standing is a stray. Drop it rather than let it reach Drive.
-const DASH_REST = new RegExp('[ \\t]*[' + EM_EN + '][ \\t]*', 'g');
-const SPACE_BEFORE_PUNCT = /[ \t]+([.,;:!?])/g;
-const TRAILING_SPACE = /[ \t]+$/gm;
+
+const FLOOR = 120;
 
 const c = $('Check Existing').first().json;
 const res = $input.first().json || {};
+function refuse(reason) {
+  return [{ json: { refused: true, outcome: 'refused', action: 'drive.draft',
+    intent_id: c.intent_id, state: 'AUTHORIZED', reason: reason } }];
+}
+
 const code = res.statusCode;
-function refuse(reason) { return [{ json: { refused: true, outcome: 'refused', action: 'drive.draft', intent_id: c.intent_id, state: 'AUTHORIZED', reason: reason } }]; }
-if (code !== 200) { return refuse('REFUSED: the language lane answered HTTP ' + String(code || 'no response') + '; nothing was written. The next pass retries.'); }
+if (code !== 200) {
+  return refuse('REFUSED: the language lane answered HTTP ' + String(code || 'no response') + '; nothing was written. The next pass retries.');
+}
 const body = res.body || {};
 const choice = (body.choices && body.choices[0]) || {};
-const raw = String((choice.message && choice.message.content) || '').trim();
+// Type guard. v2 called String() on whatever came back, so a content array
+// stringified to "[object Object]" and the refusal reported 2 words for a full
+// answer. A shape this node cannot read is a fault in the lane, not a short
+// draft, and it says so.
+const content = choice.message && choice.message.content;
+if (typeof content !== 'string') {
+  return refuse('REFUSED: the language lane returned message.content as ' + (content === undefined ? 'nothing' : Array.isArray(content) ? 'an array' : typeof content) + ' rather than a string, so this pass cannot read the draft; nothing was written. The next pass retries.');
+}
+const raw = content.trim();
 
-// The floor is measured on what the lane returned, before any substitution.
-// The first version measured after, and the substitutions move the count in
-// both directions: a spaced dash becomes a comma and loses a token, a tight one
-// gains one, a fence ate a word. A 119 word answer was accepted while the
-// refusal reported 122, and a 122 word answer was refused as 119. The number in
-// the refusal sentence is now the number the lane actually produced.
+// Measured on what the lane returned, before any substitution, so the number in
+// the refusal sentence is the number the lane actually produced.
 const rawWords = raw.split(/\s+/).filter(Boolean).length;
-if (rawWords < 120) { return refuse('REFUSED: the language lane returned ' + rawWords + ' words, under the 120 word floor for a draft; nothing was written. The next pass retries.'); }
+if (rawWords < FLOOR) {
+  return refuse('REFUSED: the language lane returned ' + rawWords + ' words, under the ' + FLOOR + ' word floor for a draft; nothing was written. The next pass retries.');
+}
 
-const txt = raw
-  .replace(FENCE, '')
-  .replace(ESC_BULLET, '$1$2')
-  .replace(ESC_ORDERED, '$1$2')
+// Counted before the strip so the artifact records what the model actually did,
+// which is the only signal that says whether the prompt is being honoured.
+function count(s, re) { const m = s.match(re); return m ? m.length : 0; }
+const fired = {
+  nbsp: count(raw, NBSP),
+  soft_hyphen: count(raw, SOFT_HYPHEN),
+  unicode_hyphens: count(raw, HYPHENS),
+  fences: count(raw, FENCE),
+  escaped_bullets: count(raw, ESC_BULLET),
+  escaped_ordered: count(raw, ESC_ORDERED)
+};
+
+const normalised = raw
+  .replace(NBSP, ' ')
   .replace(SOFT_HYPHEN, '')
   .replace(HYPHENS, '-')
-  .replace(DASH_LINE, '- ')
-  .replace(DASH_NUM_RANGE, '$1-')
-  .replace(DASH_SPACED, '$1, ')
-  .replace(DASH_TIGHT, '$1-')
-  .replace(DASH_REST, ' ')
-  .replace(SPACE_BEFORE_PUNCT, '$1')
-  .replace(TRAILING_SPACE, '');
+  .replace(ESC_BULLET, '$1$2')
+  .replace(ESC_ORDERED, '$1$2')
+  .replace(FENCE, '');
 
-// The document's own length, which is what the artifact reports. It is not
-// rawWords: the gate above answers "did the lane write enough", this answers
-// "how long is the thing in Tee's Drive". Both are true and they differ.
-const words = txt.split(/\s+/).filter(Boolean).length;
+// trimEnd, not a regex, and the distinction is the whole point. v2 used
+// /[ \t]+$/gm, which is quadratic on a run of spaces: 10k took 272ms, 80k took
+// 14.9s, four times the cost per doubling, on input the model controls, so a
+// repetition loop in a degenerate answer blocked the n8n worker for a minute
+// instead of refusing. A greedy run followed by an anchor backtracks once per
+// start position. Rewriting it as /[ \t\r]+$/ per line does NOT fix that, it
+// just moves it, which is what the first attempt at this fix did. trimEnd is a
+// native scan backwards from the end: linear, and it cannot backtrack at all.
+const txt = normalised.split('\n').map(function (line) { return line.trimEnd(); }).join('\n').trim();
+
+// THE RULING. Not a rewrite, a refusal. The reason names the count and shows one
+// site with the character replaced by a label, so the retry has something to act
+// on and this sentence does not itself carry the character Tee's rule forbids.
+const banned = txt.match(BANNED);
+if (banned) {
+  const at = txt.search(BANNED);
+  const from = Math.max(0, at - 45);
+  const window = txt.slice(from, at + 45).replace(BANNED, ' [EM OR EN DASH] ').replace(/\s+/g, ' ').trim();
+  return refuse('REFUSED: the draft contains ' + banned.length + ' em or en dash' + (banned.length === 1 ? '' : 'es') + ', which the house rule forbids and this executor will not rewrite. Rewriting one is a guess at what the sentence meant, and two earlier versions of this node corrupted numbers and deleted dialogue doing exactly that. Nothing was written. First site: "' + window + '". The next pass retries; the system prompt in Validate and Plan is what has to stop producing them.');
+}
+
+// Rechecked after normalisation. v2 measured only before, so an answer of 130
+// lines of nothing but code fences scored 130 raw words, cleared the floor, and
+// wrote a document whose body was the empty string.
+const bodyWords = txt.split(/\s+/).filter(Boolean).length;
+if (bodyWords < FLOOR) {
+  return refuse('REFUSED: the lane returned ' + rawWords + ' words but only ' + bodyWords + ' survived removing markdown markup, under the ' + FLOOR + ' word floor; the answer was mostly markup. Nothing was written. The next pass retries.');
+}
+
 const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
 const header = 'DEVON DRAFT. Job ' + c.intent_id + ', written ' + now + ' UTC by DEVON through drive.draft. A working draft for Tee to edit. Nothing in it has been published, sent, rendered or verified.\n\n';
-return [{ json: Object.assign({}, c, { draft_text: header + txt, draft_words: words, draft_lane_words: rawWords, draft_by: 'cerebras ' + String(body.model || 'gpt-oss-120b') }) }];
+const draftText = header + txt;
+
+// draft_words is the length of the DOCUMENT, header included, because that is
+// what lands in Drive and what the artifact claims. v2 counted the body only
+// and understated every draft by the 28 words of the header it did not count.
+return [{ json: Object.assign({}, c, {
+  refused: false,
+  outcome: 'written',
+  draft_text: draftText,
+  draft_words: draftText.split(/\s+/).filter(Boolean).length,
+  draft_body_words: bodyWords,
+  draft_lane_words: rawWords,
+  draft_normalised: fired,
+  draft_by: 'cerebras ' + String(body.model || 'gpt-oss-120b')
+}) }];

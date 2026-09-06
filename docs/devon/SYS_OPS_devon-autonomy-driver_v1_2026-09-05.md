@@ -815,74 +815,21 @@ draft, the ledger was clean, the artifact was real, and the output was still
 not what it should have been. Reading the artifact is the check. Nothing else
 in the lane was ever going to find this.
 
-## 12. Gauntlet cycle 6, and the parser that passed every check while breaking scripts
+## 12. The parser arc moved to its own record
 
-Tee asked for the night's work to be run through the gauntlet. A fresh critic
-with no build context and a separate verifier that executes were both spawned;
-the critic returned fifteen findings and the verifier reproduced them on real
-input. The verdict on the parser was quarantine, and the parser was mine, shipped
-four hours earlier with all six CI jobs green.
+Gauntlet cycles 6 and 7 both landed on `parse_draft.js`, and the arc outgrew a
+section here. It has its own dated status doc:
+`SYS_OPS_devon-draft-parser_v1_2026-09-06.md`. That record carries both
+quarantines, the reproductions, and the ruling that ended it.
 
-The finding that mattered: the dash rule was written `\s*[dash]\s*`, and `\s`
-matches a newline. A dash opening a line swallowed the line break. Reproduced on
-a TSWS shaped dialogue block:
-
-```
-AUREN
-<bar> We do not open the door.
-
-VESPERA
-<bar> Then we starve.
-```
-
-became `AUREN, We do not open the door.` on one line, the speaker folded into
-the line. A dash bulleted checklist collapsed the same way. I had made it worse
-than I found it: the class I widened gained U+2015, the horizontal bar, which is
-the character used to open a line of dialogue, and U+2012, the figure dash, which
-exists for numerals, so a phone number became two numbers. Neither character
-appeared in the defect I was fixing.
-
-Four more the verifier reproduced: the escape strip ran document wide, so a regex
-written in prose lost its meaning and a Windows path lost a separator, which is
-the exact case my own comment claimed was safe; the fence rule deleted the word
-after an inline backtick run; the word floor was measured after substitution, so
-a 119 word answer was accepted while the refusal reported 122; and a spaced en
-dash turned a page range into a list.
-
-Every rule is now the narrowest one that fixes an observed defect, and none may
-cross a newline. What that cost to learn is the point: the executor's own gates
-all passed, the ledger was clean, the artifact was real, the tests were green,
-and the output was still wrong. Nothing in the lane looks at the thing it made.
-
-Three durable changes came out of it. The CI standalone job now parses every
-`n8n/**/*.js`, proven by a deliberate syntax error that the guard caught, because
-until 2026-09-06 nothing in CI touched those files at all. `vault.KEY_ROTATION`
-gained the negative test it never had: posting the OLD key and requiring a 401,
-because both of its proofs demonstrated that the new key works and neither showed
-the old one was dead. And this section exists because ask two produced a runbook
-edit and no dated record, which the critic caught by reading the repo against
-itself.
-
-| Finding | Where | Disposition |
-|---|---|---|
-| the dash rule crossed newlines and collapsed dialogue and dash bullets | `parse_draft.js` | four rules, none crossing a newline; a line opening dash becomes a plain bullet and the line survives |
-| U+2012 and U+2015 folded to a comma on speculation | `parse_draft.js` | both removed; the class is the em and en dash Tee's rule names |
-| the escape strip mangled regexes, LaTeX and Windows paths | `parse_draft.js` | anchored to line leading list markers, the only defect observed |
-| the fence rule ate the following word | `parse_draft.js` | a fence is removed only on a line of its own |
-| the word floor counted after substitution, so the refusal reported a false number | `parse_draft.js` | the floor reads what the lane returned; the artifact reports the document's own length |
-| a spaced en dash turned a range into a list | `parse_draft.js` | digits on both sides keep a hyphen |
-| soft hyphens survived, the invisible class the chain exists to remove | `parse_draft.js` | stripped; the minus sign is deliberately left, being arithmetic |
-| no CI job parsed the n8n sources | `ci.yml` | the standalone job parses all of them, negative control run |
-| the rotation runbook had no negative test | `vault.KEY_ROTATION` | post the old key, require a 401 |
-| a rotator working the WEBHOOKS map covers eight of thirteen | `vault.KEY_ROTATION` | the paths named in the runbook as a checklist, and the checklist itself then found wrong, see below |
-| the repo contradicted itself on whether the rotation happened | this doc, `vault.py` | both corrected here |
-| "the thirteen cut over whole" was inferred from a six organ proof | `vault.KEY_ROTATION` | states what was executed and what was inferred |
-
-Open and not fixed: the root cause is the system prompt in the live n8n node,
-which asks for plain text and gets markdown, and it is not in this repository at
-all, so the parser remains a scrubber on untrusted output rather than a fix. The
-frontmatter of this document still carries its 2026-09-05 date and base commit
-while now describing events of 2026-09-06.
+One correction belongs here, because this document is where the wrong sentence
+was written. Section 12 previously said the system prompt behind those defects
+"is not in this repository at all". That was false, and it was repeated three
+times before anyone read the workflow. The prompt is version controlled at
+`n8n/devon/drive-draft-writer/validate_and_plan.js`, in the `system` array, and
+it already carried the rule the model was breaking. The real finding is not that
+the prompt was unversioned; it is that the prompt said the right thing and the
+model ignored part of it. Read the file before saying where something lives.
 
 ## 13. The checklist was wrong the day it was written
 
