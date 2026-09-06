@@ -41,3 +41,12 @@ scrollcraft/
 *.mp4
 *.mov
 *.webm
+
+# n8n estate exports and the id maps a cutover writes beside them. The export
+# is every workflow body including every webhook path in full; it belongs
+# outside the checkout, and this is the seatbelt.
+n8n-export/
+inspect.txt
+creds-map.json
+tables-map.json
+_id_map.json

@@ -168,8 +168,10 @@ cancellation through the ledger webhook.
    including this one reaches the instance; Tee's bookmark for the Face's
    chat page; and every approval email already sent, whose links are
    absolute and Cloud only. Not posters, verified this pass: the Railway
-   `api` service carries no `N8N_*` variable (read 2026-09-06, names only),
-   and nothing under `deploy/soul` or `apps/web` references either host.
+   `api` service carries no `N8N_*` variable (read 2026-09-06, names only);
+   under `deploy/soul` the only reference to either host is the vault copy's
+   `N8N_HOST` line, data that hazard 8 covers, and nothing under `apps/web`
+   references either.
 8. **The repository's own record of the estate.** `services/devon/vault.py`
    carries `N8N_HOST`, a workflow id on every `WEBHOOKS` entry and on all
    48 `WORKFLOWS` entries, and `scripts/estate_reconcile.py` checks them
@@ -427,9 +429,10 @@ successful runs, headers included.
 Three things in that table matter for the burn and for the cutover. The
 Soul Layer Write-Back is a Notion polling trigger every 15 minutes; a
 polling trigger only starts an execution when it finds new items, and its
-last-seen state lives in workflow static data, which an export does not
-carry, so its first poll on the VPS may re-ship or skip entries and must be
-watched. The TSWS 00 Wait node resumes through a webhook, so the VPS needs
+last-seen state lives in workflow static data. The export carries it,
+because the API returns it, but `import` sends only name, nodes,
+connections and settings, so it does not reach the target; its first poll
+on the VPS may re-ship or skip entries and must be watched. The TSWS 00 Wait node resumes through a webhook, so the VPS needs
 a correct `WEBHOOK_URL`. The Job Driver, TSWS 00 and TSWS 02 to 05 have
 no trigger of their own and only run when called.
 
@@ -525,6 +528,12 @@ anywhere. Nothing before step 6 changes what Cloud does.
 5. Register the VPS OAuth redirect URI in Google Cloud per v1 (the callback
    section). 4.5 shows Google Drive is the only OAuth credential an active
    workflow binds, so one consent flow, not three.
+5a. On Cloud, change the webhook path of `DEVON Soul Index Setup
+   (one-shot)` (`vYr35jqNNaAztGhQ`), or delete the workflow. It is
+   inactive and its own gate checks a setup token as well, so nothing is
+   open today, but its path is unauthenticated by design and the full
+   string reached two commits of this repository's history before being
+   elided. Rotating the path is the fix that does not depend on git.
 6. Set the VPS instance's environment before anything is imported, because
    three things in 4.8 and 4.4 depend on it and none of them fails loudly:
    `WEBHOOK_URL` and `N8N_EDITOR_BASE_URL` to `https://n8n.editforge.online`
@@ -549,6 +558,15 @@ anywhere. Nothing before step 6 changes what Cloud does.
     python3 scripts/n8n_migrate.py export ./n8n-export
     python3 scripts/n8n_migrate.py inspect ./n8n-export > inspect.txt
 
+Run those from outside the repository checkout, or leave them where the
+repository ignores them. The export is every workflow body on the instance,
+including every webhook path in full, and `inspect.txt` prints those paths
+again; this repository is public, and one `git add -A` in the wrong
+directory publishes the estate's whole door list. `.gitignore` carries
+`n8n-export/`, `inspect.txt`, `creds-map.json` and `tables-map.json` for
+exactly this, which is a seatbelt and not a reason to work inside the
+checkout.
+
 Read `inspect.txt` against section 4. The counts must agree: hosts marked
 MOVES by workflow and node, sub-workflow targets, error workflow settings,
 credentials with types, data tables, webhook paths. A line in `inspect.txt`
@@ -564,7 +582,9 @@ move the files you do not want into a subfolder first. Recommended set: the
 utility and every retired TQO version can be imported later if wanted.
 
 **Step 2, credentials on the VPS.** Create the ones section 4 lists for the
-active set, same names, and write `creds-map.json`:
+active set, same names, and write `creds-map.json`, kept outside the
+export directory (the tool treats every JSON file in there as a workflow
+and refuses one that is not):
 `{"<Cloud credential id>": {"id": "<VPS credential id>", "name": "<name>"}}`.
 The VPS credential id is in the URL of the credential's page. Header
 credentials take the same secret values; the Devon Capture Key value is the
@@ -582,16 +602,23 @@ data it destroys is a 2026-09-03 snapshot that Cloud has superseded.
     python3 scripts/n8n_migrate.py import ./n8n-export \
         --rewrite-host thequietoperator.app.n8n.cloud=n8n.editforge.online
 
-That is the dry run. It prints the rewrite plan per node and creates
-nothing; its "in nodes" count must equal the 4.2 total for the files being
+That is the dry run. If the export knows its source (it does, from
+`_export_meta.json`) and any workflow would be created still carrying that
+host in a node, the tool refuses and names them, because a VPS estate that
+calls the Cloud bus is the failure this runbook exists to prevent;
+`--keep-source-host` is the deliberate way past it and should never be
+needed here. It prints the rewrite plan per node and creates nothing; its "in nodes" count must equal the 4.2 total for the files being
 imported (26 for the active set) and its sticky note count must be 0,
 because inspect and import now count with the same matcher. Then the same
 command with `--confirm`, which creates everything INACTIVE, reads each
 workflow back and compares node names, webhook ids, the settings it sent
 and the absence of the Cloud host (a `READ BACK DIFFERS` line and exit 2
 if anything was silently dropped), and writes `./n8n-export/_id_map.json`
-after every creation, so a run that dies half way leaves a map and a re-run
-skips what exists. If the VPS already holds workflows, the tool checks them
+before the read back and after every creation, so a run that dies half way,
+in the POST or in the read back, leaves a map and a re-run skips what
+exists. If the map names a workflow the target no longer holds, which is
+what a snapshot restore leaves behind, the run says so and exits 2 rather
+than reporting a quiet success over an empty instance. If the VPS already holds workflows, the tool checks them
 first: a webhook path or a workflow name that this run would duplicate is
 a refusal with the list, whatever flags are set; an unrelated population
 is a refusal that says so and asks for `--allow-existing`. A 400 naming a
@@ -604,8 +631,10 @@ it governs who may call a sub-workflow.
     python3 scripts/n8n_migrate.py repoint ./n8n-export \
         --credential-map creds-map.json --table-map tables-map.json
 
-Dry run again. Read every `STILL AT THE SOURCE` line: with both maps
-complete the expected remainder is empty, because everything the tool
+Dry run again. The tool refuses a map whose target id is itself a source
+id (a shifted row) and warns when two sources map to one target. Read
+every `STILL AT THE SOURCE` line: with both maps complete the expected
+remainder is empty, because everything the tool
 rewrites (Execute Workflow targets, error workflow settings, credential
 ids, data table ids) is in those maps; any line printed is a map entry to
 add or a reference to fix by hand. The ids inside Code nodes (4.9) are not
@@ -614,6 +643,10 @@ each workflow back, reads it again and reports any rewrite that did not
 stick. The tool exits 2 while anything still points at Cloud and 0 when
 nothing does, and a second run is 0 on a correct estate: a reference that
 already carries a target id is reported as already done, not as dangling.
+One thing the first real run will settle: if the VPS re-linked credentials
+by name when the workflows were created, repoint prints those as already
+done instead of as rewrites; either output is acceptable, and the read
+back after the PUT is what says the binding holds.
 
 **Step 5, the hand edits the tool cannot make.** The Code node workflow ids
 in 4.9, each against `_id_map.json`. The Face's chat trigger URL is derived
@@ -621,8 +654,10 @@ from its `webhookId`; whether the public API keeps that id on create is one
 of the things the import read back checks (a `READ BACK DIFFERS` line names
 it), and if it was reissued the new URL is on the Chat In node. The error
 workflow setting on any workflow that named a Cloud id the map lacks.
-Workflow tags are not carried by the create call (`CREATE_FIELDS`); the
-census shows no tags on the estate, so nothing is lost today.
+Workflow tags are not carried by the create call (`CREATE_FIELDS`). The
+census readers were not asked about tags; the one reading available is
+the `search_workflows` listing of 2026-09-06, which returned an empty tags
+list on every one of the 64, so nothing is lost today on that reading.
 
 **Step 6, drain, copy, switch.**
 
@@ -645,8 +680,9 @@ census shows no tags on the estate, so nothing is lost today.
    copy from the Cloud table pages, small at today's counts (the driver
    log at 92 rows is the largest).
 3. Switch, one group per sitting, Cloud off first then VPS on, never both:
-   (a) the DEVON job lane: Live State Ledger, Event Bus, Spine, Runtime,
-   Intelligence Router, Action Router, the three executors, EditForge
+   (a) the DEVON job lane: Live State Ledger, Event Bus, Runtime,
+   Intelligence Router, Action Router, the three executors (Spine, Drive
+   Draft Writer, Airtable Row Writer), EditForge
    Handoff, Intake Former, Job Driver, Driver Poll, Approval Queue, Error
    Alarm, Face, Health Console; (b) the learning lane: Ledger Feeder, Build
    12 Upstream, Soul Committer, Ledger Janitor, Weekly Table Backup,
@@ -691,6 +727,11 @@ All on the VPS unless marked. Each is a receipt, not a claim.
 6. The Heartbeat's next beat row on the VPS names the VPS host in its
    vitals, and the Ledger Feeder's next daily run feeds nothing new and
    errors nothing.
+7. `grep -R thequietoperator` over the VPS export of the imported estate
+   (export from the VPS with the same tool and read it) returns nothing in
+   any node parameter. The import refuses to create the source host, so
+   this is a belt on that brace, and it is the one check that reads the
+   new instance rather than the plan.
 
 ## 7. What is unverified in this document
 
@@ -716,8 +757,24 @@ A fresh critic graded the first version of this pass PASS-WITH-CONDITIONS
 (idempotency 2, correctness 3): repoint red on a second run, blank map
 values written as empty ids, no map after a partial import, three sentences
 in this runbook describing the tool wrongly, and no read back after a
-write. All of those are closed above and in the tool; the second pass is
-recorded in the PR.
+write. A second fresh critic confirmed fifteen of those sixteen closed by
+running them and graded the result PASS-WITH-CONDITIONS again (idempotency
+5, security 4): the elided door suffix still sat in two commits of the
+branch history, a map target that is itself a Cloud id produced a false
+green, the map was written after the read back rather than before, an
+empty export directory read as success, and two sentences here overstated
+what was verified. Those are closed in the tool and in this text. The
+branch was rewritten so the suffix is in no commit a reviewer reads, and a
+third critic then made the honest correction: the two force pushed commits
+are still fetchable from GitHub by their SHA, so rewriting the branch moved
+the string, it did not unpublish it. The root fix is one field on the
+instance and it is Tee's, not this repository's: change that one shot
+workflow's webhook path, or delete the workflow, before it is ever
+imported or activated. Blast radius today is small, the workflow is
+inactive on Cloud and its own gate node also checks a hardcoded setup
+token, which is why this is a step in section 6 rather than an alarm.
+The third pass also closed five tool findings and one about where an
+export lands, all recorded below.
 
 
 - `scripts/n8n_migrate.py`: host census in `inspect`, `--rewrite-host` on
@@ -727,8 +784,19 @@ recorded in the PR.
   populated target refusal, a same-host guard from `_export_meta.json`,
   settings keys the target refuses dropped one at a time and named, blank
   map values refused, `repoint` idempotent with a read back after every
-  PUT, and a read back after every create. `test_n8n_migrate.py`: thirty
-  three tests.
+  PUT, and a read back after every create. After the second pass: a map
+  target that is itself a source id refused and two-to-one maps warned, the
+  map entry written before the read back, an empty export directory and a
+  non-workflow file in it refused, the id map's shape validated with the
+  repair shape in the message, the same-host guard also reading
+  `N8N_SOURCE_URL`, chained rewrite pairs refused. After the third pass:
+  an import that would create the source host verbatim in a node refused
+  unless `--keep-source-host` is passed, a 400 that refuses settings
+  without naming the key handled by paring to the documented keys and
+  naming every one dropped, map entries the target no longer holds named
+  with exit 2, a data table addressed by name reported as travelling by
+  name instead of demanded in the map, and `_export_meta.json` written
+  before the first fetch. `test_n8n_migrate.py`: forty four tests.
 - `docs/devon/n8n-datatable-schemas.json`: re-read live, eleven tables.
 - `docs/devon/SYS_OPS_n8n-cloud-to-vps-migration_v1_2026-08-31.md`: amended
   in place, dated (status block, the table count, section 2).

@@ -135,10 +135,16 @@ def _env(name: str) -> str:
 
 
 def _exports(directory: pathlib.Path) -> Iterator[Tuple[pathlib.Path, Dict[str, Any]]]:
+    """Every workflow file in the directory; the tool's own files start with an underscore."""
     for path in sorted(directory.glob("*.json")):
         if path.name.startswith("_"):
             continue
-        yield path, json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict) or "nodes" not in data or not isinstance(data.get("nodes") or [], list):
+            sys.exit(f"{path.name} is not a workflow export (no nodes list). Move files that are not "
+                     "workflows out of the export directory, or name them with a leading underscore.")
+        data["nodes"] = data.get("nodes") or []
+        yield path, data
 
 
 # ---------------------------------------------------------------------------
@@ -235,14 +241,30 @@ def _parse_pairs(raw: Optional[List[str]]) -> List[Tuple[str, str]]:
         if "=" not in item:
             sys.exit(f"--rewrite-host wants OLD=NEW, got {item!r}")
         old, new = item.split("=", 1)
+        old, new = old.strip(), new.strip()
         if not old or not new:
             sys.exit(f"--rewrite-host wants OLD=NEW with both sides present, got {item!r}")
         pairs.append((old, new))
+    # Pairs apply in order, so a NEW that contains any OLD would be rewritten
+    # again by a later pair (or read back as still carrying the source) and the
+    # plan would count it twice. Refuse rather than guess what was meant.
+    for _, new in pairs:
+        for old, _ in pairs:
+            if _literal_re(old).search(new):
+                sys.exit(f"--rewrite-host {old}={new}: NEW contains OLD as a whole host, so the rewrite would "
+                         "chain or be counted twice. Use hosts that do not contain each other.")
     return pairs
 
 
-def _load_map(path: Optional[str]) -> Dict[str, Dict[str, Optional[str]]]:
-    """A JSON map of {old_id: new_id} or {old_id: {id, name}}, normalised."""
+def _load_map(path: Optional[str], export_ids: Optional[set] = None) -> Dict[str, Dict[str, Optional[str]]]:
+    """A JSON map of {old_id: new_id} or {old_id: {id, name}}, normalised.
+
+    A target id that is itself a source id (a key of the map, or any id the
+    export binds) is refused: that is what a row-shifted transcription looks
+    like, and repoint would report the shifted reference as already done.
+    Two sources mapped to one target are printed, because a credential map
+    with duplicates is usually a slip too.
+    """
     if not path:
         return {}
     raw = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
@@ -257,7 +279,27 @@ def _load_map(path: Optional[str]) -> Dict[str, Dict[str, Optional[str]]]:
         else:
             sys.exit(f"{path}: entry {old!r} must be a non-empty new id or an object with a non-empty id; "
                      "a blank would unbind the reference on the target and report success")
+    sources = set(out) | set(export_ids or ())
+    for old, new in out.items():
+        if new["id"] in sources:
+            sys.exit(f"{path}: entry {old!r} maps to {new['id']!r}, which is a SOURCE id (a key of this map or an id "
+                     "the export binds). That is what a shifted row looks like; fix the map before repointing.")
+    seen: Dict[str, str] = {}
+    for old, new in out.items():
+        if new["id"] in seen:
+            print(f"WARNING {path}: {old!r} and {seen[new['id']]!r} both map to {new['id']!r}; two sources, one target.")
+        seen[new["id"]] = old
     return out
+
+
+def _load_id_map(path: pathlib.Path) -> Dict[str, Dict[str, Any]]:
+    """_id_map.json as import writes it: {source id: {name, new_id, ...}}."""
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict) or any(not isinstance(v, dict) for v in raw.values()):
+        sys.exit(f"{path} must be an object of source id to entry, each entry an object like "
+                 '{"name": "Organ A", "new_id": "abc123", "was_active_on_source": true}. '
+                 "A hand repair takes that shape; a bare string value does not.")
+    return raw
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +310,11 @@ def cmd_export(args: argparse.Namespace) -> int:
     base, key = _env("N8N_SOURCE_URL"), _env("N8N_SOURCE_KEY")
     out = pathlib.Path(args.directory)
     out.mkdir(parents=True, exist_ok=True)
+    # Written first: an export that dies half way still names the instance it
+    # came from, which is what the import guard reads.
+    (out / "_export_meta.json").write_text(
+        json.dumps({"source_url": base, "source_host": urllib.parse.urlparse(base).hostname}, indent=2),
+        encoding="utf-8")
 
     written = 0
     index: List[Dict[str, Any]] = []
@@ -288,11 +335,6 @@ def cmd_export(args: argparse.Namespace) -> int:
         print(f"  {full.get('name')}  ({workflow_id})")
 
     (out / "_index.json").write_text(json.dumps(index, indent=2), encoding="utf-8")
-    # The source host travels with the export so import can refuse to create the
-    # estate a second time on the instance it came from.
-    (out / "_export_meta.json").write_text(
-        json.dumps({"source_url": base, "source_host": urllib.parse.urlparse(base).hostname}, indent=2),
-        encoding="utf-8")
     print(f"\nExported {written} workflow(s) to {out}/")
     print(f"{sum(1 for w in index if w['active'])} of them are active on the source.")
     return 0
@@ -437,7 +479,7 @@ def cmd_inspect(args: argparse.Namespace) -> int:
             print(f"    {host}  in {', '.join(sorted(set(w for w, _, _ in refs)))}")
     # Counted with the matcher import uses, over every parameter string, so this
     # number and import's plan are the same measurement.
-    for host in moving_hosts:
+    for host in sorted(set(h.lower() for h in moving_hosts)):
         nodes = sticky = 0
         for _, data in _exports(directory):
             for node in data.get("nodes", []):
@@ -482,6 +524,15 @@ def cmd_inspect(args: argparse.Namespace) -> int:
 
 _REFUSED_SETTING = re.compile(r"settings[./]([A-Za-z0-9_]+)")
 
+# What the n8n public API documents on a workflow's settings. Used only as the
+# last resort when a 400 says settings carries something extra but will not say
+# which key, which is what an unnamed additionalProperties failure looks like.
+DOCUMENTED_SETTINGS = (
+    "executionOrder", "errorWorkflow", "timezone", "executionTimeout",
+    "saveDataErrorExecution", "saveDataSuccessExecution",
+    "saveManualExecutions", "saveExecutionProgress",
+)
+
 
 def _create_workflow(base: str, key: str, payload: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str], Dict[str, Any]]:
     """POST one workflow, dropping settings keys the target's API schema refuses.
@@ -501,11 +552,25 @@ def _create_workflow(base: str, key: str, payload: Dict[str, Any]) -> Tuple[Dict
         try:
             return _request(base, key, "/api/v1/workflows", method="POST", payload=payload), dropped, payload
         except ApiError as exc:
-            match = _REFUSED_SETTING.search(str(exc))
-            if "400" not in str(exc) or not match or match.group(1) not in settings:
+            text = str(exc)
+            if "400" not in text:
                 raise
-            dropped.append(match.group(1))
-            settings.pop(match.group(1))
+            match = _REFUSED_SETTING.search(text)
+            if match and match.group(1) in settings:
+                dropped.append(match.group(1))
+                settings.pop(match.group(1))
+                continue
+            # The validator can refuse settings without naming the key. Pare to
+            # what the API documents rather than stopping the whole import, and
+            # name every key removed so a dropped callerPolicy is not silent.
+            if "settings" in text and any(w in text for w in ("additional", "allowed", "unknown")):
+                extra = [k for k in settings if k not in DOCUMENTED_SETTINGS]
+                if extra:
+                    dropped.extend(extra)
+                    for key in extra:
+                        settings.pop(key)
+                    continue
+            raise
     raise ApiError("the target kept refusing settings keys; nothing created for this workflow")
 
 
@@ -516,12 +581,17 @@ def cmd_import(args: argparse.Namespace) -> int:
     base, key = _env("N8N_TARGET_URL"), _env("N8N_TARGET_KEY")
     pairs = _parse_pairs(getattr(args, "rewrite_host", None))
 
+    target_host = str(urllib.parse.urlparse(base).hostname or "").lower()
+    source_hosts = set()
     meta_path = directory / "_export_meta.json"
     if meta_path.is_file():
-        source_host = str(json.loads(meta_path.read_text(encoding="utf-8")).get("source_host") or "").lower()
-        if source_host and source_host == str(urllib.parse.urlparse(base).hostname or "").lower():
-            sys.exit(f"N8N_TARGET_URL points at {source_host}, which is where this export came from. "
-                     "Importing here would create every workflow a second time on the source.")
+        source_hosts.add(str(json.loads(meta_path.read_text(encoding="utf-8")).get("source_host") or "").lower())
+    if os.environ.get("N8N_SOURCE_URL", "").strip():
+        source_hosts.add(str(urllib.parse.urlparse(os.environ["N8N_SOURCE_URL"].strip()).hostname or "").lower())
+    source_hosts.discard("")
+    if target_host in source_hosts:
+        sys.exit(f"N8N_TARGET_URL points at {target_host}, which is where this export came from. "
+                 "Importing here would create every workflow a second time on the source.")
 
     # The id map is read first and written after every creation, so a run that
     # dies half way leaves a map of what it made, and a re-run skips those
@@ -529,16 +599,25 @@ def cmd_import(args: argparse.Namespace) -> int:
     out = directory / "_id_map.json"
     mapping: Dict[str, Dict[str, Any]] = {}
     if out.is_file():
-        mapping = json.loads(out.read_text(encoding="utf-8"))
+        mapping = _load_id_map(out)
     already_created = {str(v.get("new_id")) for v in mapping.values() if v.get("new_id")}
+    missing_from_target: List[str] = []
 
     exports = list(_exports(directory))
+    if not exports:
+        sys.exit(f"{directory} holds no workflow files (only the tool's own underscore files, or nothing). "
+                 "Nothing to import; check the directory before trusting an empty run.")
     pending = [(path, data) for path, data in exports if not mapping.get(str(data.get("id")), {}).get("new_id")]
 
     # Collisions are checked before the populated-target refusal, and only for
     # the workflows this run would create, so the refusal can say whether the
     # target is merely populated or actually in the way.
-    existing = [w for w in _paged_workflows(base, key) if str(w.get("id")) not in already_created]
+    on_target = list(_paged_workflows(base, key))
+    target_ids = {str(w.get("id")) for w in on_target}
+    for source_id, entry in mapping.items():
+        if entry.get("new_id") and str(entry["new_id"]) not in target_ids:
+            missing_from_target.append(f"{entry.get('name', source_id)} ({source_id} -> {entry['new_id']})")
+    existing = [w for w in on_target if str(w.get("id")) not in already_created]
     if existing:
         taken_paths: Dict[str, str] = {}
         taken_names: Dict[str, str] = {}
@@ -592,6 +671,31 @@ def cmd_import(args: argparse.Namespace) -> int:
             for item in plans.get(str(data.get("id")), []):
                 print(f"  {data.get('name')} / {item['node']}  x{item['occurrences']}{'  (sticky note)' if item['sticky_note'] else ''}")
 
+    # The source host left in a node is the failure this whole runbook exists to
+    # prevent, and a confirm run that forgot --rewrite-host would create it
+    # silently and then read back clean, because nothing asked for a rewrite.
+    unrewritten: List[Tuple[str, str, int]] = []
+    for host in sorted(source_hosts):
+        if any(_literal_re(old).search(host) for old, _ in pairs):
+            continue
+        for _, data in pending:
+            # Nodes only. A sticky note carrying the old host is stale prose on
+            # the new instance, not a call to the old one.
+            hits = sum(_count_literal(node.get("parameters") or {}, host)
+                       for node in data.get("nodes") or []
+                       if not str(node.get("type", "")).lower().endswith("stickynote"))
+            if hits:
+                unrewritten.append((str(data.get("name", "")), host, hits))
+    if unrewritten and not getattr(args, "keep_source_host", False):
+        total = sum(n for _, _, n in unrewritten)
+        print(f"Refusing to import. {total} occurrence(s) of the source host would be created verbatim in nodes on "
+              f"{base}, so the new estate would call the old one:")
+        for name, host, hits in unrewritten:
+            print(f"  {name}  {host} x{hits}")
+        print(f"Pass --rewrite-host {sorted(source_hosts)[0]}=<target host> to rewrite them, "
+              "or --keep-source-host if calling the source really is what you want.")
+        return 2
+
     if not args.confirm:
         print(f"Would create {len(pending)} workflow(s) on {base}, all inactive"
               + (f", skipping {len(exports) - len(pending)} already in _id_map.json" if len(pending) != len(exports) else "") + ".")
@@ -625,15 +729,23 @@ def cmd_import(args: argparse.Namespace) -> int:
                   "fix the cause and re-run, the ones already created will be skipped.")
             raise
         new_id = str(created.get("id", ""))
-        diffs = _read_back(base, key, new_id, sent, [old for old, _ in pairs])
+        # The map entry lands before the read back, so a GET that dies still
+        # leaves the created workflow recorded rather than orphaned.
         mapping[source_id] = {
             "name": data.get("name", ""),
             "new_id": new_id,
             "was_active_on_source": bool(data.get("active", False)),
             "host_rewrites": plans.get(source_id, []),
             "dropped_settings": dropped,
-            "read_back": diffs or "ok",
+            "read_back": "not read back",
         }
+        out.write_text(json.dumps(mapping, indent=2), encoding="utf-8")
+        try:
+            diffs = _read_back(base, key, new_id, sent, [old for old, _ in pairs])
+        except ApiError as exc:
+            print(f"  created  {data.get('name')}  {source_id} -> {new_id}, recorded, but the read back failed: {exc}")
+            raise
+        mapping[source_id]["read_back"] = diffs or "ok"
         out.write_text(json.dumps(mapping, indent=2), encoding="utf-8")
         created_now += 1
         print(f"  created  {data.get('name')}  {source_id} -> {new_id}")
@@ -645,6 +757,12 @@ def cmd_import(args: argparse.Namespace) -> int:
                 print(f"           READ BACK DIFFERS: {line}")
 
     print(f"\nCreated {created_now} workflow(s), all INACTIVE, skipped {skipped} already in the map. Id map: {out}")
+    if missing_from_target:
+        print(f"{len(missing_from_target)} map entry(s) name a workflow the target does not hold. The map and the "
+              "instance disagree, which is what a restore or a hand delete leaves behind; delete those entries "
+              "from _id_map.json to recreate them:")
+        for line in missing_from_target:
+            print(f"  {line}")
     if readback_failures:
         print(f"{readback_failures} workflow(s) read back different from what was sent; see the READ BACK DIFFERS lines. "
               "The map records them; fix them in the editor before repoint.")
@@ -657,7 +775,7 @@ def cmd_import(args: argparse.Namespace) -> int:
     print("  4. Smoke one lane end to end while the source is still the live one.")
     print("  5. Deactivate on the source BEFORE activating here. Never both at once.")
     print("  6. Update services/devon/vault.py: N8N_HOST and every webhook entry.")
-    return 2 if readback_failures else 0
+    return 2 if (readback_failures or missing_from_target) else 0
 
 
 def _read_back(base: str, key: str, workflow_id: str, sent: Dict[str, Any], old_hosts: Sequence[str]) -> List[str]:
@@ -759,7 +877,13 @@ def _repoint_workflow(workflow: Dict[str, Any],
             ref = _ref_id(params.get(field))
             if not ref:
                 continue
-            if ref in table_map:
+            locator = params.get(field)
+            if isinstance(locator, dict) and str(locator.get("mode", "")) == "name":
+                # A table addressed by name resolves on the target instance, so
+                # there is no id to rewrite; writing one in would look the table
+                # up by an id used as a name.
+                done.append(f"{node_name}: data table {ref} travels by name, nothing to repoint")
+            elif ref in table_map:
                 new = table_map[ref]
                 params[field] = _set_ref_id(params[field], ref, new["id"], new["name"])
                 changed.append(f"{node_name}: data table {ref} -> {new['id']}")
@@ -789,14 +913,15 @@ def cmd_repoint(args: argparse.Namespace) -> int:
     id_map_path = directory / "_id_map.json"
     if not id_map_path.is_file():
         sys.exit(f"{id_map_path} not found. Run import --confirm first; it writes the id map.")
-    id_map = json.loads(id_map_path.read_text(encoding="utf-8"))
+    id_map = _load_id_map(id_map_path)
     workflow_ids = {old: str(v["new_id"]) for old, v in id_map.items() if v.get("new_id")}
     workflow_names = {old: str(v.get("name", "")) for old, v in id_map.items()}
     for old, v in id_map.items():
         if not v.get("new_id"):
             print(f"NOT ON THE TARGET: {v.get('name', old)} ({old}) has no new id in the map; import did not create it")
-    cred_map = _load_map(getattr(args, "credential_map", None))
-    table_map = _load_map(getattr(args, "table_map", None))
+    scan = _scan(directory)
+    cred_map = _load_map(getattr(args, "credential_map", None), set(scan.credentials))
+    table_map = _load_map(getattr(args, "table_map", None), set(scan.tables))
     base, key = _env("N8N_TARGET_URL"), _env("N8N_TARGET_KEY")
 
     written = 0
@@ -874,6 +999,9 @@ def main() -> int:
     p_import.add_argument("--rewrite-host", action="append", metavar="OLD=NEW",
                           help="replace the literal OLD with NEW in every node parameter before "
                                "creating; repeatable; every touched node is printed")
+    p_import.add_argument("--keep-source-host", action="store_true",
+                          help="create workflows that still carry the source host; without this, an import "
+                               "that would do so is refused, because the new estate would call the old one")
     p_import.set_defaults(func=cmd_import)
 
     p_repoint = sub.add_parser("repoint", help="rewrite ids on the target from the maps")

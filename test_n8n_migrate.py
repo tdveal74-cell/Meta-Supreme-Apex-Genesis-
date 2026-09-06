@@ -174,6 +174,87 @@ def test_literal_matcher_is_a_whole_host_and_case_blind():
     assert n == 0 and SOURCE in out["b"] and SOURCE in out["c"] and SOURCE in out["d"]
 
 
+def test_load_map_refuses_a_target_that_is_a_source_id_and_warns_on_two_to_one(tmp_path: pathlib.Path, capsys):
+    path = tmp_path / "map.json"
+    path.write_text(json.dumps({"cred1": "cred2", "cred2": "c2"}), encoding="utf-8")
+    with pytest.raises(SystemExit, match="SOURCE id"):
+        migrate._load_map(str(path))
+    path.write_text(json.dumps({"cred1": "cred9"}), encoding="utf-8")
+    with pytest.raises(SystemExit, match="SOURCE id"):
+        migrate._load_map(str(path), export_ids={"cred9"})
+    path.write_text(json.dumps({"cred1": "c-same", "cred2": "c-same"}), encoding="utf-8")
+    assert migrate._load_map(str(path)) == {"cred1": {"id": "c-same", "name": None}, "cred2": {"id": "c-same", "name": None}}
+    assert "both map to 'c-same'" in capsys.readouterr().out
+
+
+def test_parse_pairs_refuses_pairs_that_chain_or_contain_themselves():
+    with pytest.raises(SystemExit, match="NEW contains OLD"):
+        migrate._parse_pairs([f"{SOURCE}={SOURCE}:8443"])
+    with pytest.raises(SystemExit, match="NEW contains OLD"):
+        migrate._parse_pairs(["a.example=b.example", "b.example=c.example"])
+    assert migrate._parse_pairs([f" {SOURCE} = {TARGET} "]) == [(SOURCE, TARGET)]
+
+
+def test_id_map_must_be_an_object_of_entries(export_dir, target, tmp_path):
+    for bad in ([], "str", {"wfA": "new1"}):
+        (export_dir / "_id_map.json").write_text(json.dumps(bad), encoding="utf-8")
+        with pytest.raises(SystemExit, match="hand repair takes that shape"):
+            migrate.cmd_import(_import_args(export_dir, confirm=True))
+        with pytest.raises(SystemExit, match="hand repair takes that shape"):
+            migrate.cmd_repoint(argparse.Namespace(directory=str(export_dir), credential_map=None, table_map=None, confirm=False))
+
+
+def test_import_refuses_an_export_directory_with_no_workflows(tmp_path, target):
+    (tmp_path / "_index.json").write_text("[]", encoding="utf-8")
+    with pytest.raises(SystemExit, match="holds no workflow files"):
+        migrate.cmd_import(_import_args(tmp_path, confirm=True))
+    assert not (tmp_path / "_id_map.json").exists()
+
+
+def test_exports_refuse_a_file_that_is_not_a_workflow_and_normalise_null_nodes(tmp_path):
+    (tmp_path / "map.json").write_text(json.dumps({"a": "b"}), encoding="utf-8")
+    with pytest.raises(SystemExit, match="not a workflow export"):
+        list(migrate._exports(tmp_path))
+    (tmp_path / "map.json").unlink()
+    (tmp_path / "w.json").write_text(json.dumps({"id": "w", "name": "W", "nodes": None, "settings": {}}), encoding="utf-8")
+    [(_, data)] = list(migrate._exports(tmp_path))
+    assert data["nodes"] == []
+    scan = migrate._scan(tmp_path)
+    assert scan.ids == {"w"}
+
+
+def test_import_records_the_created_workflow_before_the_read_back(export_dir, monkeypatch, capsys):
+    class DyingRead(FakeTarget):
+        def request(self, base, key, path, method="GET", payload=None):
+            if method == "GET" and path == "/api/v1/workflows/new2":
+                raise migrate.ApiError("GET /api/v1/workflows/new2 could not reach the target: reset")
+            return super().request(base, key, path, method, payload)
+    fake = DyingRead()
+    monkeypatch.setattr(migrate, "_request", fake.request)
+    monkeypatch.setenv("N8N_TARGET_URL", f"https://{TARGET}")
+    monkeypatch.setenv("N8N_TARGET_KEY", "k")
+    with pytest.raises(migrate.ApiError):
+        migrate.cmd_import(_import_args(export_dir, confirm=True))
+    id_map = json.loads((export_dir / "_id_map.json").read_text(encoding="utf-8"))
+    assert {k: v["new_id"] for k, v in id_map.items()} == {"wfA": "new1", "wfB": "new2"}
+    assert id_map["wfB"]["read_back"] == "not read back" and id_map["wfA"]["read_back"] == "ok"
+    assert "recorded, but the read back failed" in capsys.readouterr().out
+    # The re-run skips both and creates the third: no refusal, no duplicate.
+    fake2 = FakeTarget()
+    fake2.workflows = fake.workflows
+    fake2.counter = fake.counter
+    monkeypatch.setattr(migrate, "_request", fake2.request)
+    assert migrate.cmd_import(_import_args(export_dir, confirm=True)) == 0
+    assert len(fake2.workflows) == 3
+
+
+def test_import_same_host_guard_also_reads_the_source_url(export_dir, target, monkeypatch):
+    monkeypatch.setenv("N8N_SOURCE_URL", f"https://{TARGET.upper()}/")
+    with pytest.raises(SystemExit, match="where this export came from"):
+        migrate.cmd_import(_import_args(export_dir, confirm=True))
+    assert not [c for c in target.calls if c[0] == "POST"]
+
+
 def test_load_map_rejects_a_blank_new_id(tmp_path: pathlib.Path):
     for bad in ({"cred1": ""}, {"cred1": "   "}, {"cred1": {"id": "", "name": "x"}}):
         path = tmp_path / "map.json"
@@ -296,7 +377,8 @@ def target(monkeypatch):
 
 
 def _import_args(directory, **overrides):
-    base = {"directory": str(directory), "confirm": False, "allow_existing": False, "rewrite_host": None}
+    base = {"directory": str(directory), "confirm": False, "allow_existing": False, "rewrite_host": None,
+            "keep_source_host": False}
     base.update(overrides)
     return argparse.Namespace(**base)
 
@@ -338,10 +420,55 @@ def test_import_rewrites_the_host_in_what_it_posts_and_records_it_in_the_id_map(
     assert SOURCE in json.dumps(on_disk)
 
 
-def test_import_without_a_rewrite_posts_the_source_host_verbatim(export_dir, target):
+def test_import_without_a_rewrite_posts_the_source_host_when_no_source_is_known(export_dir, target):
+    """No _export_meta.json and no N8N_SOURCE_URL: the tool cannot know what to guard."""
     migrate.cmd_import(_import_args(export_dir, confirm=True))
     posted = [c[2] for c in target.calls if c[0] == "POST"]
     assert any(SOURCE in json.dumps(p) for p in posted)
+
+
+def test_import_refuses_to_create_the_source_host_verbatim_once_it_knows_the_source(export_dir, target, capsys):
+    (export_dir / "_export_meta.json").write_text(json.dumps({"source_url": f"https://{SOURCE}", "source_host": SOURCE}), encoding="utf-8")
+    assert migrate.cmd_import(_import_args(export_dir, confirm=True)) == 2
+    out = capsys.readouterr().out
+    assert "3 occurrence(s) of the source host would be created verbatim in nodes" in out, "the sticky note does not count"
+    assert f"Organ A  {SOURCE} x3" in out
+    assert f"Pass --rewrite-host {SOURCE}=<target host>" in out
+    assert not [c for c in target.calls if c[0] == "POST"]
+    # The flag is the deliberate way through, and the rewrite is the other.
+    assert migrate.cmd_import(_import_args(export_dir, confirm=True, keep_source_host=True)) == 0
+    assert len([c for c in target.calls if c[0] == "POST"]) == 3
+
+
+def test_import_says_when_the_map_names_a_workflow_the_target_lost(export_dir, target, capsys):
+    assert migrate.cmd_import(_import_args(export_dir, confirm=True)) == 0
+    target.workflows.pop("new2")          # a restore, or a hand delete
+    capsys.readouterr()
+    assert migrate.cmd_import(_import_args(export_dir, confirm=True, allow_existing=True)) == 2
+    out = capsys.readouterr().out
+    assert "1 map entry(s) name a workflow the target does not hold" in out
+    assert "Organ B (wfB -> new2)" in out
+
+
+def test_create_workflow_pares_settings_when_the_400_names_no_key(monkeypatch):
+    seen = []
+
+    def refuse(base, key, path, method="GET", payload=None):
+        seen.append(sorted((payload or {}).get("settings") or {}))
+        extra = [k for k in (payload or {}).get("settings", {}) if k not in migrate.DOCUMENTED_SETTINGS]
+        if extra:
+            raise migrate.ApiError("POST /api/v1/workflows returned HTTP 400: request/body/settings must NOT have additional properties")
+        return {"id": "new1"}
+
+    monkeypatch.setattr(migrate, "_request", refuse)
+    created, dropped, sent = migrate._create_workflow("https://x", "k", {
+        "name": "n", "nodes": [], "connections": {},
+        "settings": {"executionOrder": "v1", "callerPolicy": "workflowsFromSameOwner", "availableInMCP": True},
+    })
+    assert created == {"id": "new1"}
+    assert sorted(dropped) == ["availableInMCP", "callerPolicy"]
+    assert sent["settings"] == {"executionOrder": "v1"}
+    assert len(seen) == 2, "one refusal, then one accepted call"
 
 
 def test_import_refuses_a_path_collision_before_asking_about_the_populated_target(export_dir, monkeypatch, capsys):
@@ -520,9 +647,13 @@ def test_repoint_workflow_is_idempotent_and_tolerates_null_settings_and_table_by
     ids = {"wfB": "new2"}
     creds = {"cred1": {"id": "c-new", "name": None}}
     tables = {"tbl1": {"id": "t1", "name": None}}
+    workflow["nodes"].append({"name": "By Name", "type": "n8n-nodes-base.dataTable",
+                              "parameters": {"dataTableId": {"__rl": True, "mode": "name", "value": "tqo_content"}}})
     out, changed, dangling, done = migrate._repoint_workflow(workflow, ids, {}, creds, tables)
+    assert "By Name: data table tqo_content travels by name, nothing to repoint" in done
     assert changed == ["Old Style: data table tbl1 -> t1"]
-    assert done == ["Run B: Execute Workflow already at new2", "Door: credential httpHeaderAuth already at c-new"]
+    assert "Run B: Execute Workflow already at new2" in done
+    assert "Door: credential httpHeaderAuth already at c-new" in done
     assert dangling == ["Loose: credential smtp is bound with no id; bind it by hand"]
     assert out["settings"] == {}
     # A second pass over the result changes nothing and dangles the same one line.
@@ -533,9 +664,11 @@ def test_repoint_workflow_is_idempotent_and_tolerates_null_settings_and_table_by
 def test_repoint_end_to_end_writes_only_with_confirm_and_returns_2_while_anything_dangles(export_dir, target, capsys, tmp_path):
     migrate.cmd_import(_import_args(export_dir, confirm=True))
     capsys.readouterr()
-    cred_map = tmp_path / "creds.json"
+    maps = tmp_path / "maps"
+    maps.mkdir(exist_ok=True)
+    cred_map = maps / "creds.json"
     cred_map.write_text(json.dumps({"cred1": "c1", "cred2": "c2", "cred3": "c3"}), encoding="utf-8")
-    table_map = tmp_path / "tables.json"
+    table_map = maps / "tables.json"
     table_map.write_text(json.dumps({"tbl1": {"id": "t1", "name": "ledger"}, "tbl2": "t2"}), encoding="utf-8")
 
     dry = argparse.Namespace(directory=str(export_dir), credential_map=str(cred_map), table_map=str(table_map), confirm=False)
@@ -569,9 +702,11 @@ def test_repoint_returns_0_once_every_reference_is_mapped(export_dir, target, ca
     target.workflows["newE"] = {"id": "newE", "name": "Error Alarm", "nodes": [], "connections": {}, "settings": {}}
     target.workflows["newZ"] = {"id": "newZ", "name": "Z", "nodes": [], "connections": {}, "settings": {}}
     (export_dir / "_id_map.json").write_text(json.dumps(id_map), encoding="utf-8")
-    cred_map = tmp_path / "creds.json"
+    maps = tmp_path / "maps"
+    maps.mkdir(exist_ok=True)
+    cred_map = maps / "creds.json"
     cred_map.write_text(json.dumps({"cred1": "c1", "cred2": "c2", "cred3": "c3"}), encoding="utf-8")
-    table_map = tmp_path / "tables.json"
+    table_map = maps / "tables.json"
     table_map.write_text(json.dumps({"tbl1": "t1", "tbl2": "t2"}), encoding="utf-8")
     args = argparse.Namespace(directory=str(export_dir), credential_map=str(cred_map), table_map=str(table_map), confirm=True)
     assert migrate.cmd_repoint(args) == 0
