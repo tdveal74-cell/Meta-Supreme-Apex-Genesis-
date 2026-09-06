@@ -280,7 +280,7 @@ it back.
 | Job Driver `TT4TfFXyH9O7lfdc` (cycle 5) | 45315316 | 3bb71fce | keeps a succeeded execution block at COMPLETED and FAILED; re-derives the bound action at dispatch and parks on a mismatch; stores the card's executor sentence as approval.card_executor; shows the filer's note on the card; stops promising an EditForge render the router will refuse; dedupes the park mark and the repeat flag on a normalized reason; treats a refusal body as a refusal only at HTTP 200; matches the last driver log row by this job's intent id |
 | Drive Draft Writer `J7Ly7riwXEd95D9a` (cycle 5) | 7ff4d7d4 | dfea7e7c | the existing-draft search also matches the deterministic document name, whose date comes from the job rather than the clock, and a name match is adopted only when the file's properties do not name another job; the single flight lock treats an unreadable updated_at as held; a reused draft records how it was matched |
 | Driver Poll `mbIKJk4UuB7V27rP` (cycle 5) | e1395422 | 1c9b2407 | the digest classifies on the driver's outcome vocabulary, so an unreachable organ is mailed and a cancellation is not mailed as a failure |
-| Eleven organs, success execution data | saved | not saved | Tee's ruling 2: every workflow whose webhook takes the x-devon-key header stops saving successful executions, so the header value no longer sits in stored run data. Error executions are still saved on purpose. The rotation itself is Tee's hands; `vault.KEY_ROTATION` names every holder outside n8n |
+| Thirteen organs, success execution data | saved | not saved | Tee's ruling 2: every workflow whose webhook takes the x-devon-key header stops saving successful executions, so the header value no longer sits in stored run data. Error executions are still saved on purpose. Tee rotated the key himself on 2026-09-06 and the internal cutover was proven by job 01M1TB5RAJHF0FJEN91QMKYYK7; `vault.KEY_ROTATION` names every holder outside n8n and now carries the negative test the first version lacked |
 
 Objection logged once: these are production organs and the house rule is
 that nothing ships without a human watching. The alternative was a live
@@ -725,7 +725,7 @@ trimmed now.
 | Ruling | Answer | Where it lives now |
 |---|---|---|
 | who posts a router refusal to the ledger | the Job Driver, as a same state event, so the row carries the reason | driver 45315316; the router posts it instead when the refusal came from the executor, and says marked true so the driver does not double post |
-| the shared key in saved executions | rotate it and stop saving successful executions on every organ that takes the header | eleven organs republished with success data off; `vault.KEY_ROTATION` is the rotation runbook and the rotation is Tee's hands |
+| the shared key in saved executions | rotate it and stop saving successful executions on every organ that takes the header | thirteen organs republished with success data off; `vault.KEY_ROTATION` is the rotation runbook, and Tee rotated the key on 2026-09-06 |
 | the execution block overwritten by a later hop | the Spine leaves a succeeded execution block alone | Spine 9d0d1c21 |
 | how often a refusal is mailed | once per distinct reason | driver flags a repeat, poll e1395422 lists it as still waiting |
 
@@ -814,3 +814,72 @@ The lesson worth keeping: the executor's own checks all passed on the first
 draft, the ledger was clean, the artifact was real, and the output was still
 not what it should have been. Reading the artifact is the check. Nothing else
 in the lane was ever going to find this.
+
+## 12. Gauntlet cycle 6, and the parser that passed every check while breaking scripts
+
+Tee asked for the night's work to be run through the gauntlet. A fresh critic
+with no build context and a separate verifier that executes were both spawned;
+the critic returned fifteen findings and the verifier reproduced them on real
+input. The verdict on the parser was quarantine, and the parser was mine, shipped
+four hours earlier with all six CI jobs green.
+
+The finding that mattered: the dash rule was written `\s*[dash]\s*`, and `\s`
+matches a newline. A dash opening a line swallowed the line break. Reproduced on
+a TSWS shaped dialogue block:
+
+```
+AUREN
+<bar> We do not open the door.
+
+VESPERA
+<bar> Then we starve.
+```
+
+became `AUREN, We do not open the door.` on one line, the speaker folded into
+the line. A dash bulleted checklist collapsed the same way. I had made it worse
+than I found it: the class I widened gained U+2015, the horizontal bar, which is
+the character used to open a line of dialogue, and U+2012, the figure dash, which
+exists for numerals, so a phone number became two numbers. Neither character
+appeared in the defect I was fixing.
+
+Four more the verifier reproduced: the escape strip ran document wide, so a regex
+written in prose lost its meaning and a Windows path lost a separator, which is
+the exact case my own comment claimed was safe; the fence rule deleted the word
+after an inline backtick run; the word floor was measured after substitution, so
+a 119 word answer was accepted while the refusal reported 122; and a spaced en
+dash turned a page range into a list.
+
+Every rule is now the narrowest one that fixes an observed defect, and none may
+cross a newline. What that cost to learn is the point: the executor's own gates
+all passed, the ledger was clean, the artifact was real, the tests were green,
+and the output was still wrong. Nothing in the lane looks at the thing it made.
+
+Three durable changes came out of it. The CI standalone job now parses every
+`n8n/**/*.js`, proven by a deliberate syntax error that the guard caught, because
+until 2026-09-06 nothing in CI touched those files at all. `vault.KEY_ROTATION`
+gained the negative test it never had: posting the OLD key and requiring a 401,
+because both of its proofs demonstrated that the new key works and neither showed
+the old one was dead. And this section exists because ask two produced a runbook
+edit and no dated record, which the critic caught by reading the repo against
+itself.
+
+| Finding | Where | Disposition |
+|---|---|---|
+| the dash rule crossed newlines and collapsed dialogue and dash bullets | `parse_draft.js` | four rules, none crossing a newline; a line opening dash becomes a plain bullet and the line survives |
+| U+2012 and U+2015 folded to a comma on speculation | `parse_draft.js` | both removed; the class is the em and en dash Tee's rule names |
+| the escape strip mangled regexes, LaTeX and Windows paths | `parse_draft.js` | anchored to line leading list markers, the only defect observed |
+| the fence rule ate the following word | `parse_draft.js` | a fence is removed only on a line of its own |
+| the word floor counted after substitution, so the refusal reported a false number | `parse_draft.js` | the floor reads what the lane returned; the artifact reports the document's own length |
+| a spaced en dash turned a range into a list | `parse_draft.js` | digits on both sides keep a hyphen |
+| soft hyphens survived, the invisible class the chain exists to remove | `parse_draft.js` | stripped; the minus sign is deliberately left, being arithmetic |
+| no CI job parsed the n8n sources | `ci.yml` | the standalone job parses all of them, negative control run |
+| the rotation runbook had no negative test | `vault.KEY_ROTATION` | post the old key, require a 401 |
+| a rotator working the WEBHOOKS map covers eight of thirteen | `vault.KEY_ROTATION` | all thirteen paths named in the runbook as a checklist |
+| the repo contradicted itself on whether the rotation happened | this doc, `vault.py` | both corrected here |
+| "the thirteen cut over whole" was inferred from a six organ proof | `vault.KEY_ROTATION` | states what was executed and what was inferred |
+
+Open and not fixed: the root cause is the system prompt in the live n8n node,
+which asks for plain text and gets markdown, and it is not in this repository at
+all, so the parser remains a scrubber on untrusted output rather than a fix. The
+frontmatter of this document still carries its 2026-09-05 date and base commit
+while now describing events of 2026-09-06.
