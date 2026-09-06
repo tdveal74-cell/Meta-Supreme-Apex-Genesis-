@@ -280,7 +280,7 @@ it back.
 | Job Driver `TT4TfFXyH9O7lfdc` (cycle 5) | 45315316 | 3bb71fce | keeps a succeeded execution block at COMPLETED and FAILED; re-derives the bound action at dispatch and parks on a mismatch; stores the card's executor sentence as approval.card_executor; shows the filer's note on the card; stops promising an EditForge render the router will refuse; dedupes the park mark and the repeat flag on a normalized reason; treats a refusal body as a refusal only at HTTP 200; matches the last driver log row by this job's intent id |
 | Drive Draft Writer `J7Ly7riwXEd95D9a` (cycle 5) | 7ff4d7d4 | dfea7e7c | the existing-draft search also matches the deterministic document name, whose date comes from the job rather than the clock, and a name match is adopted only when the file's properties do not name another job; the single flight lock treats an unreadable updated_at as held; a reused draft records how it was matched |
 | Driver Poll `mbIKJk4UuB7V27rP` (cycle 5) | e1395422 | 1c9b2407 | the digest classifies on the driver's outcome vocabulary, so an unreachable organ is mailed and a cancellation is not mailed as a failure |
-| Eleven organs, success execution data | saved | not saved | Tee's ruling 2: every workflow whose webhook takes the x-devon-key header stops saving successful executions, so the header value no longer sits in stored run data. Error executions are still saved on purpose. The rotation itself is Tee's hands; `vault.KEY_ROTATION` names every holder outside n8n |
+| Thirteen organs, success execution data | saved | not saved | Tee's ruling 2: every workflow whose webhook takes the x-devon-key header stops saving successful executions, so the header value no longer sits in stored run data. Error executions are still saved on purpose. Tee rotated the key himself on 2026-09-06 and the internal cutover was proven by job 01M1TB5RAJHF0FJEN91QMKYYK7; `vault.KEY_ROTATION` names every holder outside n8n and now carries the negative test the first version lacked |
 
 Objection logged once: these are production organs and the house rule is
 that nothing ships without a human watching. The alternative was a live
@@ -725,7 +725,7 @@ trimmed now.
 | Ruling | Answer | Where it lives now |
 |---|---|---|
 | who posts a router refusal to the ledger | the Job Driver, as a same state event, so the row carries the reason | driver 45315316; the router posts it instead when the refusal came from the executor, and says marked true so the driver does not double post |
-| the shared key in saved executions | rotate it and stop saving successful executions on every organ that takes the header | eleven organs republished with success data off; `vault.KEY_ROTATION` is the rotation runbook and the rotation is Tee's hands |
+| the shared key in saved executions | rotate it and stop saving successful executions on every organ that takes the header | thirteen organs republished with success data off; `vault.KEY_ROTATION` is the rotation runbook, and Tee rotated the key on 2026-09-06 |
 | the execution block overwritten by a later hop | the Spine leaves a succeeded execution block alone | Spine 9d0d1c21 |
 | how often a refusal is mailed | once per distinct reason | driver flags a repeat, poll e1395422 lists it as still waiting |
 
@@ -814,3 +814,68 @@ The lesson worth keeping: the executor's own checks all passed on the first
 draft, the ledger was clean, the artifact was real, and the output was still
 not what it should have been. Reading the artifact is the check. Nothing else
 in the lane was ever going to find this.
+
+## 12. The parser arc moved to its own record
+
+Gauntlet cycles 6 and 7 both landed on `parse_draft.js`, and the arc outgrew a
+section here. Tee ruled it out of this arc's pull request entirely, so the parser,
+the system prompt behind it, and their record ship separately on branch
+`claude/parser-refuse-on-dash`. That record is
+`SYS_OPS_devon-draft-parser_v1_2026-09-06.md` and it carries both quarantines,
+the reproductions, and the ruling that ended them. It arrives with that branch,
+so this reference is forward looking until it merges.
+
+One correction belongs here, because this document is where the wrong sentence
+was written. Section 12 previously said the system prompt behind those defects
+"is not in this repository at all". That was false, and it was repeated three
+times before anyone read the workflow. The prompt is version controlled at
+`n8n/devon/drive-draft-writer/validate_and_plan.js`, in the `system` array, and
+it already carried the rule the model was breaking. The real finding is not that
+the prompt was unversioned; it is that the prompt said the right thing and the
+model ignored part of it. Read the file before saying where something lives.
+
+## 13. The checklist was wrong the day it was written
+
+The negative test the runbook now demands could not be run from the session that
+wrote it: the environment's network policy denies egress to
+`thequietoperator.app.n8n.cloud`, so no request carrying the old key could leave.
+It is still owed, and it is Tee's to run from the phone or a laptop: post the old
+key at any path below and require a 401.
+
+What could be done instead was a read only audit, and it is the weaker proof of
+the two. Every webhook node and every organ to organ HTTP node across twenty two
+workflows was read. All of them bind credential `FYRvkRTOcROEYZ9P` by id. None
+binds any of the ten unrelated `Header Auth account N` credentials sitting in the
+same project. Since the binding is by id, one in place value edit reaches all of
+them at once, which grounds the inference the runbook was carrying about the
+organs no execution had touched. It proves the wiring, not the cutover.
+
+The audit also broke the checklist written four hours earlier in the same arc.
+Fifteen paths take `x-devon-key`, not thirteen:
+
+| path | workflow | state | in the old checklist |
+|---|---|---|---|
+| devon-health | Health and Observability Console `M3H2mVPZJpDyIzrl` | ACTIVE, GET | no |
+| devon-capture-file | Capture Hook `Cbd24ptTPWch3aZO` | INACTIVE | no |
+
+`devon-health` is live and a rotator working my list would have walked past it.
+The count was taken from this lane's dependency list rather than from the estate,
+which is the same mistake that made it eleven before it was thirteen. Both are
+now named in `vault.KEY_ROTATION`, with the instruction to rebuild the list by
+reading webhook nodes rather than by counting organs. Neither was part of the
+ruling 2 change that turned successful execution saving off, so both may still be
+storing the header in run data.
+
+Two findings handed back rather than acted on, because they are Tee's call:
+
+- `devon-approve-decide` carries no header auth at all. That is deliberate and
+  the workflow says so, since an emailed link cannot carry a header and the
+  single use token is the auth. It does mean rotating this key rotates nothing
+  guarding an approval decision, and the record now says that in the one place a
+  rotator reads.
+- the Capture Webhook's `Check Token` node holds four per poster capture tokens
+  as plaintext literals in its JavaScript, a second secret layer behind the
+  `x-devon-key` door. Rotating the credential leaves them untouched, and anyone
+  with workflow read access can see them. Recommend rotating them into a
+  credential on the next pass; not done here, and not urgent enough to do
+  unasked.

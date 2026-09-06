@@ -28,6 +28,19 @@ jobs:
           python -m pip install --quiet -r requirements.txt
       - name: The documented offline entry point still imports
         run: python -c "import standalone_api; print(standalone_api.app.title)"
+      # n8n Cloud runs these Code node bodies; this repo is where they are read
+      # and diffed. Nothing executed them until 2026-09-06, when a gauntlet
+      # found a regex in parse_draft.js that silently merged lines in every
+      # draft DEVON writes, on a commit where all six jobs were green. A parse
+      # check is not a behaviour test, but a syntax error or an unclosed class
+      # can no longer reach the estate with CI reporting success.
+      - name: The n8n Code node sources parse
+        run: |
+          shopt -s globstar nullglob
+          files=(n8n/**/*.js)
+          if [ ${#files[@]} -eq 0 ]; then echo "no n8n sources found, refusing to pass silently"; exit 1; fi
+          for f in "${files[@]}"; do echo "checking $f"; node --check "$f"; done
+          echo "${#files[@]} file(s) parsed"
       - name: Offline suite (no database, no keys)
         run: |
           python -m pytest -q --tb=short \
