@@ -51,6 +51,7 @@ Enumerated every run, they cannot rot silently.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import pathlib
@@ -189,6 +190,24 @@ def vault_claims(
                 },
             )
         )
+        gate = entry.get("body_gate")
+        if gate:
+            # A second layer the trigger's auth parameter says nothing about.
+            # Pinned by fingerprint, not presence: see gate_nodes.
+            claims.append(
+                Claim(
+                    record=f"vault.WEBHOOKS[{path!r}].body_gate",
+                    subject=f"body gate {gate['node']} on workflow {entry['workflow']}",
+                    verifier="body_gate",
+                    expected={
+                        "workflow": entry["workflow"],
+                        "node": gate["node"],
+                        "type": gate["type"],
+                        "sha256": gate["sha256"],
+                        "pinned": gate.get("pinned", ""),
+                    },
+                )
+            )
     for name in sorted(workflows):
         entry = workflows[name]
         claims.append(
@@ -463,6 +482,37 @@ def _check_webhook_auth(claim: Claim, observations: Dict[str, Any]) -> Tuple[str
     )
 
 
+def _check_body_gate(claim: Claim, observations: Dict[str, Any]) -> Tuple[str, str]:
+    n8n, why = _n8n_or_none(observations, "gates")
+    if n8n is None:
+        return UNVERIFIED, why
+    expected = claim.expected
+    pinned = expected.get("pinned") or "an unrecorded date"
+    nodes = (n8n.get("gates") or {}).get(expected["workflow"])
+    if nodes is None:
+        return DRIFT, f"workflow {expected['workflow']} was not found on the instance"
+    for node in nodes:
+        if node.get("name") != expected["node"]:
+            continue
+        if node.get("type") != expected["type"]:
+            return DRIFT, (
+                f"the vault records a {expected['type']} node, the live node is "
+                f"{node.get('type')}"
+            )
+        if node.get("sha256") == expected["sha256"]:
+            return OK, f"enabled, code unchanged since the pin of {pinned}"
+        return DRIFT, (
+            f"the code of {expected['node']} changed since the pin of {pinned}. "
+            "Read the node, confirm it still refuses an untokened post, and re-pin "
+            "the fingerprint dated today."
+        )
+    return DRIFT, (
+        f"no enabled {expected['type']} node named {expected['node']} on workflow "
+        f"{expected['workflow']}: it was deleted or disabled, and the door no "
+        "longer checks a body token"
+    )
+
+
 def _check_workflow_state(claim: Claim, observations: Dict[str, Any]) -> Tuple[str, str]:
     n8n, why = _n8n_or_none(observations, "workflows")
     if n8n is None:
@@ -646,6 +696,7 @@ def _check_repo_file(claim: Claim, observations: Dict[str, Any]) -> Tuple[str, s
 CHECKERS = {
     "n8n_host": _check_n8n_host,
     "webhook_auth": _check_webhook_auth,
+    "body_gate": _check_body_gate,
     "workflow_state": _check_workflow_state,
     "railway_autodeploy_off": _check_railway_autodeploy_off,
     "railway_autodeploy_on": _check_railway_autodeploy_on,
@@ -763,6 +814,7 @@ def _paged_workflows(base: str, key: str) -> Iterator[Dict[str, Any]]:
 
 
 CHAT_TRIGGER = "@n8n/n8n-nodes-langchain.chatTrigger"
+CODE_NODE = "n8n-nodes-base.code"
 
 
 def webhook_nodes(workflow_detail: Dict[str, Any]) -> List[Dict[str, str]]:
@@ -799,6 +851,42 @@ def webhook_nodes(workflow_detail: Dict[str, Any]) -> List[Dict[str, str]]:
     return nodes
 
 
+def code_fingerprint(code: str) -> str:
+    """sha256 of a Code node body, insensitive to line endings and trailing whitespace.
+
+    The same code reaches this tool two ways, the REST read and a transcription
+    of an MCP read, and they can differ in exactly those two respects. Neither
+    a rotated token nor a flipped switch is hidden by this normalisation.
+    """
+    lines = [line.rstrip() for line in str(code).replace("\r\n", "\n").split("\n")]
+    return hashlib.sha256("\n".join(lines).rstrip("\n").encode("utf-8")).hexdigest()
+
+
+def gate_nodes(workflow_detail: Dict[str, Any]) -> List[Dict[str, str]]:
+    """The enabled Code nodes of one workflow detail read, by name and fingerprint.
+
+    A body gate is a Code node that refuses a request the trigger's auth let
+    through, so its absence, its disabling and any edit to it (a flipped
+    switch, a rotated token) all change what the door does. Disabled nodes are
+    skipped for the reason webhook_nodes skips them: a disabled gate gates
+    nothing. Only the fingerprint is recorded, never the code, so a snapshot
+    file does not become another copy of whatever secrets the node holds.
+    """
+    nodes = []
+    for node in workflow_detail.get("nodes", []):
+        if node.get("disabled") or node.get("type") != CODE_NODE:
+            continue
+        parameters = node.get("parameters") or {}
+        nodes.append(
+            {
+                "name": str(node.get("name", "")),
+                "type": CODE_NODE,
+                "sha256": code_fingerprint(parameters.get("jsCode", "")),
+            }
+        )
+    return nodes
+
+
 def fetch_n8n(base: str, key: str, detail_ids: Sequence[str]) -> Dict[str, Any]:
     """Workflow census plus the webhook nodes of the claimed workflows."""
     workflows: Dict[str, Dict[str, Any]] = {}
@@ -808,6 +896,7 @@ def fetch_n8n(base: str, key: str, detail_ids: Sequence[str]) -> Dict[str, Any]:
             "active": bool(workflow.get("active")),
         }
     webhooks: Dict[str, List[Dict[str, str]]] = {}
+    gates: Dict[str, List[Dict[str, str]]] = {}
     for workflow_id in sorted(set(detail_ids)):
         if workflow_id not in workflows:
             continue  # absence is the state checker's finding, not a fetch error
@@ -816,7 +905,13 @@ def fetch_n8n(base: str, key: str, detail_ids: Sequence[str]) -> Dict[str, Any]:
             {"X-N8N-API-KEY": key},
         )
         webhooks[workflow_id] = webhook_nodes(detail)
-    return {"host": base.rstrip("/"), "workflows": workflows, "webhooks": webhooks}
+        gates[workflow_id] = gate_nodes(detail)
+    return {
+        "host": base.rstrip("/"),
+        "workflows": workflows,
+        "webhooks": webhooks,
+        "gates": gates,
+    }
 
 
 def fetch_railway(

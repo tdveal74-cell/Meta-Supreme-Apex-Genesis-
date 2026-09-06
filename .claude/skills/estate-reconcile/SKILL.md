@@ -59,6 +59,9 @@ done. Fan the reads out in parallel, never mutate anything, and assemble:
         "workflows": {"<id>": {"name": "<name>", "active": true}},
         "webhooks": {"<workflow id>": [
           {"path": "<path>", "auth": "headerAuth|none", "method": "POST"}
+        ]},
+        "gates": {"<workflow id>": [
+          {"name": "<node name>", "type": "n8n-nodes-base.code", "sha256": "<fingerprint>"}
         ]}
       },
       "railway": {"deployments": [
@@ -72,8 +75,15 @@ done. Fan the reads out in parallel, never mutate anything, and assemble:
 ones, or the count claim checks a fiction. `webhooks` needs entries for the
 workflows `vault.WEBHOOKS` names; read each workflow's detail and keep only
 its Webhook trigger nodes, recording the `authentication` parameter as the
-node carries it, absent meaning `none`. Railway needs the five most recent
-deployments of the API service with the commit each built from.
+node carries it, absent meaning `none`. `gates` needs an entry for every
+workflow whose vault entry pins a `body_gate`: list its enabled Code nodes by
+name, and for each record `code_fingerprint(jsCode)` from the script, never
+the code itself, so the snapshot does not become another copy of whatever
+secrets the node holds. A snapshot without `gates` reports those claims
+UNVERIFIED, which is the honest reading of an older file, and fails a
+`--strict` run for the same reason a missing key does. Railway needs the
+five most recent deployments of the API service with the commit each built
+from.
 
 ## Reading a run
 

@@ -21,6 +21,7 @@ surfaced rather than trusted.
 from __future__ import annotations
 
 import pathlib
+import re
 import subprocess
 
 import pytest
@@ -82,9 +83,11 @@ def test_the_real_vault_yields_a_claim_per_entry():
     from services.devon import vault
 
     claims = reconcile.vault_claims()
-    assert len(claims) == 1 + len(vault.WEBHOOKS) + len(vault.WORKFLOWS)
+    gates = sum(1 for entry in vault.WEBHOOKS.values() if entry.get("body_gate"))
+    assert gates >= 1, "devon-capture pins a body gate; if that moved, this test moves with it"
+    assert len(claims) == 1 + len(vault.WEBHOOKS) + gates + len(vault.WORKFLOWS)
     verifiers = {claim.verifier for claim in claims}
-    assert verifiers == {"n8n_host", "webhook_auth", "workflow_state"}
+    assert verifiers == {"n8n_host", "webhook_auth", "body_gate", "workflow_state"}
 
 
 # ---------------------------------------------------------------------------
@@ -626,3 +629,117 @@ def test_every_audit_correction_holds_today():
             assert finding.status == reconcile.UNVERIFIED, finding
             continue
         assert finding.status in {reconcile.OK, reconcile.RETIRED}, finding
+
+
+# ---------------------------------------------------------------------------
+# Body gates: a Code node the trigger's auth parameter says nothing about
+# ---------------------------------------------------------------------------
+
+GATE_CODE = "const LEGACY_GRACE = false;\nreturn out;"
+GATE_WORKFLOW = "pPIt2cELH2RVZktS"
+
+
+def _gate_webhooks(sha):
+    return {
+        "devon-capture": {
+            "workflow": GATE_WORKFLOW,
+            "auth": "header x-devon-key",
+            "body_gate": {
+                "node": "Check Token",
+                "type": reconcile.CODE_NODE,
+                "sha256": sha,
+                "pinned": "2026-09-06",
+            },
+        }
+    }
+
+
+def _gate_observation(gates):
+    observations = _n8n_observation(
+        workflows={},
+        webhooks={GATE_WORKFLOW: [{"path": "devon-capture", "auth": "headerAuth", "method": "POST"}]},
+    )
+    observations["n8n"]["gates"] = gates
+    return observations
+
+
+def test_gate_nodes_fingerprint_enabled_code_nodes_and_never_store_code():
+    detail = {
+        "nodes": [
+            {"name": "Check Token", "type": reconcile.CODE_NODE, "parameters": {"jsCode": GATE_CODE}},
+            {
+                "name": "Old Gate",
+                "type": reconcile.CODE_NODE,
+                "disabled": True,
+                "parameters": {"jsCode": GATE_CODE},
+            },
+            {"name": "Receipt In (POST)", "type": "n8n-nodes-base.webhook", "parameters": {}},
+        ]
+    }
+    nodes = reconcile.gate_nodes(detail)
+    assert [node["name"] for node in nodes] == ["Check Token"]
+    assert nodes[0]["sha256"] == reconcile.code_fingerprint(GATE_CODE)
+    assert set(nodes[0]) == {"name", "type", "sha256"}, "the snapshot must not carry the code"
+
+
+def test_code_fingerprint_forgives_line_endings_and_trailing_space_only():
+    base = reconcile.code_fingerprint("const LEGACY_GRACE = false;\nreturn out;")
+    assert reconcile.code_fingerprint("const LEGACY_GRACE = false;   \r\nreturn out;\n") == base
+    assert reconcile.code_fingerprint("const LEGACY_GRACE = true;\nreturn out;") != base
+
+
+def test_a_body_gate_with_unchanged_code_passes():
+    sha = reconcile.code_fingerprint(GATE_CODE)
+    claims = reconcile.vault_claims(webhooks=_gate_webhooks(sha), workflows={})
+    observations = _gate_observation(
+        {GATE_WORKFLOW: [{"name": "Check Token", "type": reconcile.CODE_NODE, "sha256": sha}]}
+    )
+    finding = _finding(reconcile.check(claims, observations), "body_gate")
+    assert finding.status == reconcile.OK
+    assert "2026-09-06" in finding.detail
+
+
+def test_a_deleted_or_disabled_body_gate_is_drift():
+    """A disabled gate is skipped by the reader, so it looks deleted. Both are drift."""
+    sha = reconcile.code_fingerprint(GATE_CODE)
+    claims = reconcile.vault_claims(webhooks=_gate_webhooks(sha), workflows={})
+    finding = _finding(reconcile.check(claims, _gate_observation({GATE_WORKFLOW: []})), "body_gate")
+    assert finding.status == reconcile.DRIFT
+    assert "deleted or disabled" in finding.detail
+
+
+def test_a_bypassed_body_gate_is_drift():
+    """Flipping LEGACY_GRACE to true leaves the node present and enabled. The fingerprint catches it."""
+    pinned = reconcile.code_fingerprint(GATE_CODE)
+    live = reconcile.code_fingerprint(GATE_CODE.replace("false", "true"))
+    assert live != pinned
+    claims = reconcile.vault_claims(webhooks=_gate_webhooks(pinned), workflows={})
+    observations = _gate_observation(
+        {GATE_WORKFLOW: [{"name": "Check Token", "type": reconcile.CODE_NODE, "sha256": live}]}
+    )
+    finding = _finding(reconcile.check(claims, observations), "body_gate")
+    assert finding.status == reconcile.DRIFT
+    assert "re-pin" in finding.detail
+
+
+def test_a_snapshot_without_gates_reports_the_gate_unverified_not_ok():
+    """An older snapshot lacks the key. The gap is named, never silently passed."""
+    sha = reconcile.code_fingerprint(GATE_CODE)
+    claims = reconcile.vault_claims(webhooks=_gate_webhooks(sha), workflows={})
+    observations = _n8n_observation(
+        workflows={},
+        webhooks={GATE_WORKFLOW: [{"path": "devon-capture", "auth": "headerAuth", "method": "POST"}]},
+    )
+    finding = _finding(reconcile.check(claims, observations), "body_gate")
+    assert finding.status == reconcile.UNVERIFIED
+
+
+def test_the_real_capture_gate_is_pinned_by_a_real_fingerprint():
+    from services.devon import vault
+
+    gate = vault.WEBHOOKS["devon-capture"]["body_gate"]
+    assert gate["node"] == "Check Token"
+    assert gate["type"] == reconcile.CODE_NODE
+    assert re.fullmatch(r"[0-9a-f]{64}", gate["sha256"]), "a placeholder is not a pin"
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", gate["pinned"])
+

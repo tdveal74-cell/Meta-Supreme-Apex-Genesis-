@@ -289,18 +289,29 @@ WEBHOOKS = {
         "workflow": "pPIt2cELH2RVZktS",
         # Stays the single checkable phrase. node_auth_for() in the reconciler
         # matches by PREFIX, so any second clause added here is silently
-        # discarded and the field would assert a layer nothing verifies. The
-        # body token gate is recorded below as prose and as an explicitly
-        # unverified claim, which is what it is until a check exists for it.
+        # discarded. The second layer has its own field and its own checker.
         "auth": "header x-devon-key",
-        "auth_unverified_second_layer": (
-            "A per poster token in the request body, checked by the Check Token "
-            "code node of workflow pPIt2cELH2RVZktS. NOT VERIFIED by the estate "
-            "reconciler: webhook_nodes() reads trigger node authentication only "
-            "and never looks at a code node, so deleting or disabling Check Token "
-            "would leave this entry still reporting healthy. Treat as a claim, "
-            "not a fact, until a check covers it."
-        ),
+        # The body token gate, checked by the estate reconciler since 2026-09-06
+        # (verifier body_gate). It pins a fingerprint of the Check Token node's
+        # code rather than the node's presence, because presence is not the
+        # gate: the switch is `const LEGACY_GRACE = false;` inside the code, and
+        # flipping it reopens the door with the node still there and enabled.
+        # Any edit, a bypass or a single rotated poster token alike, changes
+        # the fingerprint and reports DRIFT until a human re-reads the node and
+        # re-pins it dated. The snapshot records only the hash, never the code,
+        # so obs.json is not a fifth copy of the four tokens.
+        # Fingerprint provenance: sha256 over the jsCode with line endings and
+        # trailing whitespace normalised (code_fingerprint in the reconciler),
+        # taken 2026-09-06 from two independent transcriptions of the MCP read
+        # that agreed. The first keyed `snapshot` run is the authoritative
+        # confirmation; if it reports DRIFT with the node unchanged, re-pin
+        # from that read and note it here.
+        "body_gate": {
+            "node": "Check Token",
+            "type": "n8n-nodes-base.code",
+            "sha256": "74fdf22a12cee9c8fede22e02061b82d8348b6cf48ae4ba115d7ae6cae7a38e9",
+            "pinned": "2026-09-06",
+        },
         "open_ruling": (
             "Header auth enforced live 2026-08-23, credential Devon Capture Key "
             "FYRvkRTOcROEYZ9P. This entry carried auth None until 2026-08-31, so "
