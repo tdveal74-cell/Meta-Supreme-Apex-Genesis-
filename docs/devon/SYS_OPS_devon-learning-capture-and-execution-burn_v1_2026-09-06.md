@@ -4,7 +4,7 @@ type: SYS_OPS
 version: 1
 date: 2026-09-06
 area: Systems
-status: build-18-live-and-proven-wall-measured-levers-await-ruling
+status: build-18-live-and-proven-wall-measured-committer-hourly
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 base: b1fe283
 branch: claude/new-session-2f2yu2
@@ -168,7 +168,13 @@ above.
    day (27 percent of the steady burn). Cost: a soul proposal waits up to
    an hour instead of fifteen minutes to be raised as a card, and the
    commit log shows nothing has been proposed in twelve days, so the
-   latency is theoretical today. Recommended.
+   latency is theoretical today. Recommended. RULED by Tee at 13:09Z
+   ("hourly") and done at 13:11Z: trigger node renamed Every Hour, rule
+   hourly, the failure alert damping retuned from every 16th to every 4th
+   attempt so it keeps its roughly four hour cadence, digest wording and
+   the settings sticky note say hourly; version `49007534`, read back with
+   the trigger showing Every Hour. Vault (both copies) and the learning
+   lane skill amended in the same commit.
 2. **Decide the stale card `REQ-20260905-f5kEZj`** on job
    `01M1S84TTY4DMC4D0VCHTJB672` from the email (reject; it was a proof).
    Saves about 24 a day until it self cancels on 2026-09-08, and it is a
@@ -192,7 +198,9 @@ above.
 Levers 1 and 2 together take the steady state to about 168 a day, about
 5,000 a month: under a 10,000 cap with room, still over a 2,500 cap by the
 middle of the month. They buy days, not the month. Only the usage page says
-which plan this is, and only Runbook C removes the ceiling.
+which plan this is, and only Runbook C removes the ceiling. Lever 1 is in
+force from 13:11Z; the next quiet window measurement should read about 8
+an hour instead of 11.
 
 ## 6. Records moved with this build
 
