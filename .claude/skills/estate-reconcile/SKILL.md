@@ -61,7 +61,8 @@ done. Fan the reads out in parallel, never mutate anything, and assemble:
           {"path": "<path>", "auth": "headerAuth|none", "method": "POST"}
         ]},
         "gates": {"<workflow id>": [
-          {"name": "<node name>", "type": "n8n-nodes-base.code", "sha256": "<fingerprint>"}
+          {"name": "<node name>", "type": "n8n-nodes-base.code",
+           "sha256": "<fingerprint>", "wired": true}
         ]}
       },
       "railway": {"deployments": [
@@ -70,6 +71,12 @@ done. Fan the reads out in parallel, never mutate anything, and assemble:
       ]},
       "repo": {"main_head": "<full sha of origin/main>"}
     }
+
+`wired` is true only when every enabled door in that workflow (its webhook
+triggers and public chat triggers) feeds the gate node and nothing else, read
+from the workflow's `connections`. A trigger rewired past the gate leaves the
+node byte identical, so the fingerprint alone would pass it; a snapshot that
+lacks the key reports the gate UNVERIFIED rather than OK.
 
 `workflows` must be the complete census, every workflow including inactive
 ones, or the count claim checks a fiction. `webhooks` needs entries for the

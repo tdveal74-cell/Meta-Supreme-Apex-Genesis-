@@ -674,12 +674,72 @@ def test_gate_nodes_fingerprint_enabled_code_nodes_and_never_store_code():
                 "parameters": {"jsCode": GATE_CODE},
             },
             {"name": "Receipt In (POST)", "type": "n8n-nodes-base.webhook", "parameters": {}},
-        ]
+        ],
+        "connections": {"Receipt In (POST)": {"main": [[_edge("Check Token")]]}},
     }
     nodes = reconcile.gate_nodes(detail)
     assert [node["name"] for node in nodes] == ["Check Token"]
     assert nodes[0]["sha256"] == reconcile.code_fingerprint(GATE_CODE)
-    assert set(nodes[0]) == {"name", "type", "sha256"}, "the snapshot must not carry the code"
+    assert nodes[0]["wired"] is True
+    assert set(nodes[0]) == {"name", "type", "sha256", "wired"}, "the snapshot must not carry the code"
+
+
+def _edge(target):
+    return {"node": target, "type": "main", "index": 0}
+
+
+def _door_detail(edges, door=True):
+    """The Capture Webhook's shape: one door, the gate, then the parser."""
+    nodes = [
+        {"name": "Check Token", "type": reconcile.CODE_NODE, "parameters": {"jsCode": GATE_CODE}},
+        {"name": "Parse Receipt", "type": reconcile.CODE_NODE, "parameters": {"jsCode": "return 1;"}},
+    ]
+    if door:
+        nodes.append(
+            {"name": "Receipt In (POST)", "type": "n8n-nodes-base.webhook", "parameters": {"path": "x"}}
+        )
+    return {"nodes": nodes, "connections": {"Receipt In (POST)": {"main": [edges]}}}
+
+
+def _gate(detail):
+    return next(node for node in reconcile.gate_nodes(detail) if node["name"] == "Check Token")
+
+
+def test_a_gate_is_wired_only_when_every_door_feeds_it_and_nothing_else():
+    """Rewiring the trigger past Check Token changes no byte of the node. The wiring catches it."""
+    assert _gate(_door_detail([_edge("Check Token")]))["wired"] is True
+    # the trigger wired straight past the gate
+    assert _gate(_door_detail([_edge("Parse Receipt")]))["wired"] is False
+    # a second edge around the gate, with the gate still connected
+    assert _gate(_door_detail([_edge("Check Token"), _edge("Parse Receipt")]))["wired"] is False
+    # a second output of the trigger feeding the parser
+    detail = _door_detail([_edge("Check Token")])
+    detail["connections"]["Receipt In (POST)"]["main"].append([_edge("Parse Receipt")])
+    assert _gate(detail)["wired"] is False
+    # no enabled door at all: nothing feeds the gate, so it is not wired
+    assert _gate(_door_detail([_edge("Check Token")], door=False))["wired"] is False
+    # a disabled door does not count as a door
+    detail = _door_detail([_edge("Parse Receipt")])
+    detail["nodes"][-1]["disabled"] = True
+    assert _gate(detail)["wired"] is False
+
+
+def test_a_public_chat_door_is_a_door_for_the_wiring_check():
+    detail = {
+        "nodes": [
+            {"name": "Gate", "type": reconcile.CODE_NODE, "parameters": {"jsCode": GATE_CODE}},
+            {
+                "name": "Chat",
+                "type": reconcile.CHAT_TRIGGER,
+                "webhookId": "abc",
+                "parameters": {"public": True},
+            },
+        ],
+        "connections": {"Chat": {"main": [[_edge("Gate")]]}},
+    }
+    assert reconcile.gate_nodes(detail)[0]["wired"] is True
+    detail["nodes"][1]["parameters"]["public"] = False
+    assert reconcile.gate_nodes(detail)[0]["wired"] is False
 
 
 def test_code_fingerprint_forgives_line_endings_and_trailing_space_only():
@@ -691,12 +751,46 @@ def test_code_fingerprint_forgives_line_endings_and_trailing_space_only():
 def test_a_body_gate_with_unchanged_code_passes():
     sha = reconcile.code_fingerprint(GATE_CODE)
     claims = reconcile.vault_claims(webhooks=_gate_webhooks(sha), workflows={})
+    observations = _gate_observation({GATE_WORKFLOW: [_live_gate(sha)]})
+    finding = _finding(reconcile.check(claims, observations), "body_gate")
+    assert finding.status == reconcile.OK
+    assert "2026-09-06" in finding.detail
+    assert "wired" in finding.detail
+
+
+def _live_gate(sha, wired=True):
+    return {"name": "Check Token", "type": reconcile.CODE_NODE, "sha256": sha, "wired": wired}
+
+
+def test_a_rewired_body_gate_is_drift_even_with_the_code_unchanged():
+    """The critic's case on #146: present, enabled, byte identical, and gating nothing."""
+    sha = reconcile.code_fingerprint(GATE_CODE)
+    claims = reconcile.vault_claims(webhooks=_gate_webhooks(sha), workflows={})
+    observations = _gate_observation({GATE_WORKFLOW: [_live_gate(sha, wired=False)]})
+    finding = _finding(reconcile.check(claims, observations), "body_gate")
+    assert finding.status == reconcile.DRIFT
+    assert "restore the wiring" in finding.detail
+
+
+def test_a_snapshot_that_predates_the_wiring_check_is_unverified_not_ok():
+    """A #146 era snapshot carries the fingerprint and no wiring. The gap is named."""
+    sha = reconcile.code_fingerprint(GATE_CODE)
+    claims = reconcile.vault_claims(webhooks=_gate_webhooks(sha), workflows={})
     observations = _gate_observation(
         {GATE_WORKFLOW: [{"name": "Check Token", "type": reconcile.CODE_NODE, "sha256": sha}]}
     )
     finding = _finding(reconcile.check(claims, observations), "body_gate")
-    assert finding.status == reconcile.OK
-    assert "2026-09-06" in finding.detail
+    assert finding.status == reconcile.UNVERIFIED
+    assert "rebuild the snapshot" in finding.detail
+
+
+def test_a_snapshot_missing_one_key_names_the_key_rather_than_the_whole_read():
+    observations = _n8n_observation(workflows={}, webhooks={})
+    n8n, why = reconcile._n8n_or_none(observations, "gates")
+    assert n8n is None
+    assert "'gates'" in why and "rebuild the snapshot" in why
+    n8n, why = reconcile._n8n_or_none({}, "gates")
+    assert n8n is None and why == "no n8n observation was captured"
 
 
 def test_a_deleted_or_disabled_body_gate_is_drift():
@@ -714,9 +808,7 @@ def test_a_bypassed_body_gate_is_drift():
     live = reconcile.code_fingerprint(GATE_CODE.replace("false", "true"))
     assert live != pinned
     claims = reconcile.vault_claims(webhooks=_gate_webhooks(pinned), workflows={})
-    observations = _gate_observation(
-        {GATE_WORKFLOW: [{"name": "Check Token", "type": reconcile.CODE_NODE, "sha256": live}]}
-    )
+    observations = _gate_observation({GATE_WORKFLOW: [_live_gate(live)]})
     finding = _finding(reconcile.check(claims, observations), "body_gate")
     assert finding.status == reconcile.DRIFT
     assert "re-pin" in finding.detail

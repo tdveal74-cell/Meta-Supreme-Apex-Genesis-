@@ -296,10 +296,14 @@ WEBHOOKS = {
         # code rather than the node's presence, because presence is not the
         # gate: the switch is `const LEGACY_GRACE = false;` inside the code, and
         # flipping it reopens the door with the node still there and enabled.
-        # Any edit, a bypass or a single rotated poster token alike, changes
-        # the fingerprint and reports DRIFT until a human re-reads the node and
-        # re-pins it dated. The snapshot records only the hash, never the code,
-        # so obs.json is not a fifth copy of the four tokens.
+        # Any edit, the grace switch flipped or a single rotated poster token
+        # alike, changes the fingerprint and reports DRIFT until a human
+        # re-reads the node and re-pins it dated. A rewiring bypass changes no
+        # byte of the node, so since the second pass of 2026-09-06 the snapshot
+        # also records whether the door feeds Check Token and nothing else, and
+        # a trigger wired past it reports DRIFT the same way. The snapshot
+        # records only the hash and the wiring, never the code, so obs.json is
+        # not a fifth copy of the four tokens.
         # Fingerprint provenance: sha256 over the jsCode with line endings and
         # trailing whitespace normalised (code_fingerprint in the reconciler),
         # taken 2026-09-06 from two independent transcriptions of the MCP read
