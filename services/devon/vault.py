@@ -287,12 +287,45 @@ WEBHOOKS = {
         "job": "cross platform receipts",
         "destination": "Airtable Thread Receipts tblEhgEZoNr2ztbB3",
         "workflow": "pPIt2cELH2RVZktS",
+        # Stays the single checkable phrase. node_auth_for() in the reconciler
+        # matches by PREFIX, so any second clause added here is silently
+        # discarded and the field would assert a layer nothing verifies. The
+        # body token gate is recorded below as prose and as an explicitly
+        # unverified claim, which is what it is until a check exists for it.
         "auth": "header x-devon-key",
+        "auth_unverified_second_layer": (
+            "A per poster token in the request body, checked by the Check Token "
+            "code node of workflow pPIt2cELH2RVZktS. NOT VERIFIED by the estate "
+            "reconciler: webhook_nodes() reads trigger node authentication only "
+            "and never looks at a code node, so deleting or disabling Check Token "
+            "would leave this entry still reporting healthy. Treat as a claim, "
+            "not a fact, until a check covers it."
+        ),
         "open_ruling": (
             "Header auth enforced live 2026-08-23, credential Devon Capture Key "
             "FYRvkRTOcROEYZ9P. This entry carried auth None until 2026-08-31, so "
             "anything reasoned from it before that date treated the lane as open. "
-            "Posters that cannot attach a custom header now need a shim."
+            "Posters that cannot attach a custom header now need a shim. "
+            "THE SECOND LAYER IS DELIBERATE, AND AN AUDIT HAS ALREADY MIS-FLAGGED "
+            "IT ONCE. The Check Token node holds four per poster tokens as "
+            "plaintext literals in its JavaScript, one each for ChatGPT, Grok, "
+            "Gemini and Claude. Ruled by Tee 2026-09-06: they exist so each of "
+            "those platforms can file the work done on it as a receipt, so the "
+            "value HAS to be known outside n8n, pasted into that platform's own "
+            "custom instruction or project. Moving them into a credential would "
+            "not remove the secret from the world; it would only remove one copy "
+            "from the workflow JSON. Four separate tokens rather than one shared "
+            "value is the point: a single platform can be cut off without "
+            "breaking the other three. "
+            "Blast radius, worked out rather than assumed: a body token alone "
+            "gets nothing, because it sits behind the header key. Someone holding "
+            "both could file a false receipt into the Thread Log. That is receipt "
+            "pollution, not an approval bypass, and it is a long way from what "
+            "the header key can do at the write gates. A 2026-09-06 audit raised "
+            "these as a security finding alongside the header key, which was an "
+            "over-call, and it was withdrawn. Do not raise it again. The copy "
+            "worth worrying about is the one stored on each external platform, "
+            "under that platform's retention, not the one in the node."
         ),
     },
     "devon-inbox": {

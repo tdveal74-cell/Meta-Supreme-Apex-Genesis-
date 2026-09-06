@@ -3,6 +3,49 @@
 Project memory for Meta Supreme Apex Genesis. Read this first, then load the
 `steward` skill before touching CI or a PR.
 
+## The first law: check before you claim
+
+Ruled by Tee 2026-09-06, after a single night produced five assertions that a
+cheap check would have caught. This governs everything below it.
+
+**Do not state anything as fact when a check is available and you have not run
+it.** Not "probably", not "should be", not a number you remember. Either verify
+it or label it unverified. "Unverified" is always an acceptable answer here;
+a confident wrong one never is.
+
+The failure mode is not guessing in the abstract. It is asserting when the
+check was cheap and sitting right there:
+
+| what was claimed | what it cost to check | what was true |
+|---|---|---|
+| "the system prompt is not in this repository at all", written three times | opening one file | it is in `validate_and_plan.js` and already carried the rule |
+| digits either side of a dash mean a range, so rewrite it | one test case | "120 [dash] 30% above my last one" became "120-30%", a fabricated number |
+| the quadratic regex is fixed | re-running the timing | it was not; the per-line rewrite only moved the backtracking |
+| thirteen webhook paths take the key | reading the webhook nodes | fifteen, and the miss was an ACTIVE door |
+| the capture tokens are a security finding | working out the blast radius | they are a deliberate design, and the flag was withdrawn |
+
+Rules that follow from it:
+
+- **Read the file before saying where something lives.** A path is not a memory.
+- **Count from the estate, not from the lane.** That count has now been wrong
+  twice in the same direction, eleven then thirteen, because it was taken from
+  a dependency list instead of from the workflows themselves.
+- **A fix is not fixed until it is re-measured.** Reproduce the failure, apply
+  the change, show the same measurement clean. Three of the entries above
+  passed every gate the estate had and were still wrong.
+- **Never widen a rule on speculation about intent.** If a transformation could
+  change a number, a name, a path or a line of dialogue, refuse instead. A
+  refusal costs a retry; a wrong guess lands unread in Tee's Drive.
+- **Grade your own findings before raising them.** Work out the actual blast
+  radius. Over-calling a finding spends Tee's attention and is its own error.
+- **Green is not correct.** CI passed on every one of those. Tests do not read
+  the artifact; a human or an executed adversarial case does.
+
+When a check genuinely cannot be run here, say so with the reason and name who
+can run it. The 2026-09-06 rotation negative test is the model: the network
+policy blocked it, that was stated plainly rather than papered over, and Tee
+ran it himself and got the 401.
+
 ## What this is
 
 An intelligence operating system, not a chatbot. A FastAPI service under
