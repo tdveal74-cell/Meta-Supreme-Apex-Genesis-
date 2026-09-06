@@ -678,7 +678,13 @@ WORKFLOWS = {
     "Event Bus": {"id": "Bvy0grTSIyEmPwFA", "state": "active, webhook devon-event, fourteen event types, persists to the ledger, successful executions not saved"},
     "EditForge Handoff": {"id": "OFIhA7zdFv9UoyCv", "state": "active, webhook devon-editforge, EXECUTING only, completed maps to VERIFYING, successful executions not saved"},
     "Build 12 Upstream Test": {"id": "VznESplSFCs8ldph", "state": "active"},
-    "Build 12 Ledger Feeder": {"id": "6hQD8YhiYzR1FFda", "state": "active, 15 minute poll"},
+    # Recorded as a 15 minute poll until 2026-09-06; the live trigger had been
+    # daily (02:00 instance time) since 2026-09-05, found by reading the node
+    # for Build 18. Build 18 (2026-09-06, learning capture): the feeder now
+    # mirrors its feed log onto the job envelope as one LEARNING_CAPTURED event
+    # per fed job through the Event Bus, a same state COMPLETED update, so
+    # learning.state reads captured with the feed time and the gate decision.
+    "Build 12 Ledger Feeder": {"id": "6hQD8YhiYzR1FFda", "state": "active, daily poll, feeds COMPLETED jobs once each and marks the envelope captured, versions 7bef0e3b"},
     # Sole devon-soul writer, approval gated. First draft Wo7zPxpGH8kiBRy8 was
     # archived unpublished after adversarial review; lANs6wopaK0PkNhN is the
     # rebuild that shipped. Its execution data persistence is off on purpose
