@@ -1,7 +1,8 @@
-// Advance half, mirrors the Spine adapter. n8n MAY write execution, artifacts,
-// trace and state within legal transitions. It MUST NOT write approval.state or
-// soul_refs; neither is touched below. The bus returned envelope is authoritative
-// after every report (ruled 2026-08-23), so the advance starts from it.
+// Advance half, mirrors the Spine adapter and the Drive Draft Writer. n8n MAY write
+// execution, artifacts, trace and state within legal transitions. It MUST NOT write
+// approval.state or soul_refs; neither is touched below. The bus returned envelope
+// is authoritative after every report (ruled 2026-08-23), so the advance starts
+// from it.
 const B32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 function ulid() {
   let t = Date.now();
@@ -33,20 +34,20 @@ function busResult(raw, intentId) {
 
 const v = $('Validate and Plan').first().json;
 const inp = $input.first().json || {};
-let fileId = '';
+let recordId = '';
 let reused = false;
-let name = v.doc_name;
+let title = v.title;
 let createdAt = '';
 let verified = null;
-if (inp.existing_file_id) { fileId = String(inp.existing_file_id); reused = true; name = inp.existing_name || name; createdAt = String(inp.existing_created || ''); verified = String(inp.existing_matched_by || '') === 'idempotency_properties'; }
-else { fileId = String(inp.id || ''); name = String(inp.name || name); createdAt = String(inp.created_time || ''); verified = inp.properties_verified === true; }
-if (!fileId) { throw new Error('Advance Envelope reached with no Drive file id. This is a fault, not a refusal.'); }
+if (inp.existing_record_id) { recordId = String(inp.existing_record_id); reused = true; title = inp.existing_title || title; createdAt = String(inp.existing_created || ''); verified = true; }
+else { recordId = String(inp.id || ''); title = String(inp.title || title); createdAt = String(inp.created_time || ''); verified = inp.key_verified === true; }
+if (!recordId) { throw new Error('Advance Envelope reached with no Airtable record id. This is a fault, not a refusal.'); }
 
 const entry = busResult($('Report Entry to Bus').first().json, v.intent_id);
 const env = entry.envelope || v.envelope;
 const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
 const eventId = ulid();
-const uri = 'https://docs.google.com/document/d/' + fileId + '/edit';
+const uri = v.record_url_base + recordId;
 
 env.state = 'EXECUTING';
 env.state_reason = null;
@@ -64,21 +65,18 @@ env.execution = {
   finished_at: now
 };
 if (!Array.isArray(env.artifacts)) { env.artifacts = []; }
-const already = env.artifacts.some(function (a) { return a && String(a.drive_file_id || '') === fileId; });
+const already = env.artifacts.some(function (a) { return a && String(a.record_id || '') === recordId; });
 if (!already) {
-  const art = { kind: 'google_doc', uri: uri, name: name, drive_file_id: fileId, folder_id: v.folder_id, folder_name: v.folder_name,
-    created_at: createdAt || now, by: 'drive.draft', executor_execution_id: String($execution.id), reused: reused, properties_verified: verified };
-  if (reused) { art.matched_by = String(inp.existing_matched_by || ''); }
-  if (typeof inp.draft_words === 'number') { art.words = inp.draft_words; }
-  env.artifacts.push(art);
+  env.artifacts.push({ kind: 'airtable_record', uri: uri, name: title, record_id: recordId, base_id: v.base_id, table_id: v.table_id, table: v.table,
+    fields: v.field_names, created_at: createdAt || now, by: 'airtable.row', executor_execution_id: String($execution.id), reused: reused, key_verified: verified });
 }
 if (!Array.isArray(env.trace)) { env.trace = []; }
 env.trace.push({ event_id: eventId, at: now, type: 'ACTION_STARTED', actor: 'n8n',
-  note: 'AUTHORIZED to EXECUTING on workflow ' + $workflow.id + ' execution ' + String($execution.id) + ': ' + (reused ? ('existing draft reused (matched by ' + String(inp.existing_matched_by || 'unknown') + '), ') : 'draft written, ') + name + ' in ' + v.folder_name + ', ' + uri + (verified === false ? ' (idempotency properties NOT confirmed on the file)' : '') });
+  note: 'AUTHORIZED to EXECUTING on workflow ' + $workflow.id + ' execution ' + String($execution.id) + ': ' + (reused ? 'existing row reused (matched by DEVON key and DEVON job), ' : 'row written, ') + title + ' in ' + v.table + ', ' + uri + (verified === false ? ' (DEVON key NOT confirmed on the record)' : '') });
 
 return [{ json: {
   envelope: env, intent_id: env.intent_id, from_state: 'AUTHORIZED', to_state: 'EXECUTING',
-  artifact_uri: uri, artifact_name: name, reused: reused,
+  artifact_uri: uri, artifact_name: title, reused: reused,
   entry_bus_reconciled: entry.envelope !== null,
   entry_ledger_persisted: entry.persisted,
   entry_ledger_outcome: entry.outcome,

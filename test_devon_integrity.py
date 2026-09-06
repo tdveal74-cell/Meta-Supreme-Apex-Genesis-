@@ -315,6 +315,55 @@ def test_draft_folders_match_the_executor_folder_map() -> None:
         )
 
 
+def test_airtable_row_tables_match_the_executor_table_map() -> None:
+    """The Airtable Row Writer carries its own copy of AIRTABLE_ROW_TABLES.
+
+    n8n cannot import the vault, so Build 17's Validate and Plan node holds the
+    same table allowlist inline: the table id, the two stamp fields and the
+    writable fields. The repo copy of that node lives under
+    ``n8n/devon/airtable-row-writer/``. If the two drift, DEVON writes a row
+    into a table or a field the vault does not permit and nothing else
+    notices. This pins them together, and pins the base id to AIRTABLE.
+    """
+    from services.devon import vault
+
+    source = pathlib.Path(__file__).parent / "n8n" / "devon" / "airtable-row-writer" / "validate_and_plan.js"
+    assert source.exists(), f"{source} is missing; the executor source must live in the repo"
+    body = source.read_text(encoding="utf-8")
+
+    base = re.search(r"const BASE = '([^']+)';", body)
+    assert base, "BASE not found in the executor source"
+    assert base.group(1) == vault.AIRTABLE["live_base"], "the executor writes to a base the vault does not name as live"
+
+    block = re.search(r"const TABLES = \{(.*?)\n\};", body, re.S)
+    assert block, "TABLES map not found in the executor source"
+    tables = {}
+    for name, entry in re.findall(r"'([^']+)': \{\s*\n(.*?)\n  \}", block.group(1), re.S):
+        table_id = re.search(r"id: '([^']+)'", entry)
+        key_field = re.search(r"key_field: '([^']+)'", entry)
+        job_field = re.search(r"job_field: '([^']+)'", entry)
+        rules = re.search(r"rules: \{(.*?)\n    \}", entry, re.S)
+        assert table_id and key_field and job_field and rules, f"table {name} is missing id, stamp fields or rules"
+        writable = tuple(re.findall(r"'([^']+)': \{ kind:", rules.group(1)))
+        tables[name] = {
+            "id": table_id.group(1),
+            "key_field": key_field.group(1),
+            "job_field": job_field.group(1),
+            "writable": writable,
+        }
+    assert tables, "no tables parsed from the executor source"
+    assert tables == vault.AIRTABLE_ROW_TABLES, (
+        "the executor's table allowlist and vault.AIRTABLE_ROW_TABLES disagree; change both or neither"
+    )
+    for name, entry in tables.items():
+        assert vault.AIRTABLE["tables"].get(name) == entry["id"], (
+            f"table {name} is on the row writer's allowlist with id {entry['id']} but AIRTABLE.tables records it differently"
+        )
+        assert entry["key_field"] not in entry["writable"] and entry["job_field"] not in entry["writable"], (
+            f"table {name} lets the job set a stamp field; the executor must own both stamps"
+        )
+
+
 def test_action_router_allowlist_matches_the_vault_state() -> None:
     """Every allowlisted action names a workflow the vault records.
 

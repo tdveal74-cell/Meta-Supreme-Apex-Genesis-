@@ -31,13 +31,52 @@ const arts = Array.isArray(env.artifacts) ? env.artifacts : [];
 const DRAFT_WORDS = /\b(draft|outline|script|memo|brief|synopsis|treatment|checklist|essay|one[ -]?pager|one page)\b/i;
 const NOT_DRAFT = /\b(airtable|notion|sheet|row|calendar|email|mail|send|publish|upload|deploy|delete|render|tweet|post to)\b/i;
 const AREA_FOLDER_LABEL = { TQO: 'the TQO scripts folder (TQO/01_SCRIPTS)', Podcast: 'the TSWS scripts folder (TSWS/01_SCRIPTS)' };
+// Executor selection, Build 17. A structural Airtable payload (intent.payload.airtable
+// carrying a table name and a fields object) binds airtable.row. The executor holds
+// the table and field allowlist, so a payload naming a table it does not permit
+// parks the job with that reason rather than writing anywhere. Structure is tested
+// before the keyword rule on purpose: a summary is prose and prose is guessed at, a
+// payload is a declared intent. Both need a reversible write and no EditForge payload.
+function airtablePayload() {
+  const a = p.airtable;
+  if (!a || typeof a !== 'object' || Array.isArray(a)) { return null; }
+  if (typeof a.table !== 'string' || !a.table.trim()) { return null; }
+  if (!a.fields || typeof a.fields !== 'object' || Array.isArray(a.fields)) { return null; }
+  return a;
+}
 function selectAction() {
   const ef = (p.editforge && typeof p.editforge === 'object') ? p.editforge : null;
   const br = String(intent.blast_radius || 'none');
+  if (!ef && br === 'reversible_write' && airtablePayload()) { return 'airtable.row'; }
   if (!ef && br === 'reversible_write' && DRAFT_WORDS.test(summary) && !NOT_DRAFT.test(summary)) { return 'drive.draft'; }
   return 'spine.echo';
 }
+// A fingerprint of the Airtable payload (FNV-1a, 32 bits, over its canonical JSON
+// with keys sorted). Not a secret and not a signature: eight hex characters on
+// the card and in approval.card_executor so the ledger can say which values Tee
+// approved, and so dispatch can tell a payload rewritten after the card from the
+// one the card described. The card also quotes how the Body begins, because a
+// list of field names is not consent to a value nobody saw (critic, 2026-09-06).
+function canon(v) {
+  if (Array.isArray(v)) { return '[' + v.map(canon).join(',') + ']'; }
+  if (v && typeof v === 'object') { return '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + canon(v[k]); }).join(',') + '}'; }
+  return JSON.stringify(v === undefined ? null : v);
+}
+function fingerprint(v) {
+  const str = canon(v);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return ('0000000' + h.toString(16)).slice(-8);
+}
 function executorLine(action) {
+  if (action === 'airtable.row') {
+    const a = airtablePayload() || { table: '', fields: {} };
+    const names = Object.keys(a.fields).join(', ');
+    const title = String(a.fields.Title || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+    const body = (typeof a.fields.Body === 'string') ? a.fields.Body.replace(/\s+/g, ' ').trim() : '';
+    const excerpt = body.length > 160 ? body.slice(0, 160) + ' [' + body.length + ' characters in all]' : body;
+    return 'Airtable Row Writer (airtable.row): one row will be written into the ' + String(a.table).trim() + ' table of the DEVON base (payload fingerprint ' + fingerprint(a) + ')' + (title ? ', titled ' + title : '') + ', carrying the fields ' + (names || 'none') + ' as the job declares them plus DEVON key and DEVON job' + (excerpt ? '. Body begins: ' + excerpt : '') + '. Reversible by deleting the row. Nothing is published or sent';
+  }
   if (action === 'drive.draft') {
     const area = String(env.area || '');
     const where = AREA_FOLDER_LABEL[area] || (area ? 'the ' + area + ' Area folder' : 'the capture inbox');
@@ -69,7 +108,8 @@ if (state === 'AUTHORIZED') {
     return cancel(ga, 'expired', 'The grant on card ' + String(ga.queue_row_id || 'unknown') + ' decayed at ' + ga.expires_at + ' with the job still at AUTHORIZED. Each driver pass since the approval, and what the executor answered, is in devon_driver_log. A fresh card is needed to run it again.', ga.queue_row_id, ga.decided_at || now);
   }
   // A refusal from the router this pass leaves its mark in the ledger before the
-  // pass ends (Tee's ruling, 2026-09-05): same state, state_reason set, one trace entry.
+  // pass ends (Tee's ruling, 2026-09-05): same state, state_reason set, one trace
+  // entry, and only when the row does not already carry that reason.
   if (mem.park && mem.park.intent_id === env.intent_id) {
     const park = mem.park;
     delete mem.park;
@@ -96,6 +136,18 @@ if (state === 'AUTHORIZED') {
     return busPlan('ACTION_FAILED', e, e.state_reason, 'stop', 'bound_action_mismatch');
   }
   const action = bound || 'spine.echo';
+  // The values are bound too, not only the action name. The card carried the
+  // payload fingerprint; a payload that no longer produces it was changed after
+  // Tee read the card, and the grant does not cover what it now says.
+  if (action === 'airtable.row') {
+    const carded = String((env.approval && env.approval.card_executor) || '').match(/payload fingerprint ([0-9a-f]{8})/);
+    const nowFp = fingerprint(airtablePayload());
+    if (carded && carded[1] !== nowFp) {
+      const e = copy(env);
+      e.state_reason = ('Parked at ' + state + ': the Airtable payload no longer matches the one the approval card described (fingerprint ' + carded[1] + ' on the card, ' + nowFp + ' now). Tee approved one row; nothing runs until a human looks.').slice(0, 500);
+      return busPlan('ACTION_FAILED', e, e.state_reason, 'stop', 'bound_payload_mismatch');
+    }
+  }
   return plan({ call: true, kind: 'action', url: HOST + 'devon-action', body: { envelope: env, action: action } });
 }
 
