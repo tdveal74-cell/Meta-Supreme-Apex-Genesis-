@@ -439,14 +439,26 @@ WEBHOOK_RULE = (
 # Ruled by Tee 2026-09-05 (ruling 2, rotate and stop saving). Every workflow whose
 # webhook takes the x-devon-key header receives that key inside the request headers,
 # and a saved successful execution keeps those headers where anyone who can read
-# executions can read the key. Thirteen webhook paths take the header:
+# executions can read the key. FIFTEEN webhook paths take the header, not the
+# thirteen recorded here until 2026-09-06. Thirteen belong to this lane:
 # devon-capture, devon-inbox, devon-approve-request, devon-action,
 # devon-drive-draft, devon-ledger, devon-build12-upstream, devon-intake,
 # devon-spine-n8n, devon-runtime, devon-route, devon-event and devon-editforge.
-# (devon-approve-decide is the exception: its auth is the single use token in the
-# emailed link, not this header.) They live in thirteen workflows, since the
-# Approval Queue serves two paths, and all thirteen now run with success
-# execution data OFF, as does the Job Driver, which has no webhook of its own.
+# Two more sit outside it and were missed by a count taken from the lane's own
+# dependency list rather than from the estate: devon-health (Health and
+# Observability Console M3H2mVPZJpDyIzrl, ACTIVE, GET) and devon-capture-file
+# (Capture Hook Cbd24ptTPWch3aZO, INACTIVE, so it serves nothing today and would
+# the moment it is activated). This count has now been wrong twice, first as
+# eleven and then as thirteen, both times by counting the lane instead of the
+# estate. Read it from the workflows before trusting it again.
+# (devon-approve-decide is the exception that takes no header at all: its auth is
+# the single use token in the emailed link. Confirmed 2026-09-06 by reading the
+# node, which carries no credential. Rotating this key does not rotate anything
+# guarding an approval decision.) The thirteen lane paths live in thirteen
+# workflows, since the Approval Queue serves two paths, and all thirteen now run
+# with success execution data OFF, as does the Job Driver, which has no webhook
+# of its own. devon-health and devon-capture-file were NOT part of that setting
+# change and may still save successful executions carrying the header.
 # Error executions are still saved, on purpose: a failure with no body is not
 # debuggable, and a failed run is the one a human reads. That means the FIRST
 # failed run after a rotation writes the new key back into stored run data, so
@@ -462,7 +474,7 @@ KEY_ROTATION = (
     "Rotating the shared key (credential Devon Capture Key FYRvkRTOcROEYZ9P) is one "
     "edit in n8n and then every holder outside n8n. Order matters: edit the "
     "credential first, because every organ reads the same credential for both its "
-    "own webhook auth and its calls to the other organs, so all thirteen cut over "
+    "own webhook auth and its calls to the other organs, so all fifteen cut over "
     "together and there is no partial state, then update the outside holders, "
     "which are the only places that break. Known holders: the iPhone Shortcut that "
     "posts to devon-capture and devon-inbox, any Apple Routine or automation that "
@@ -479,12 +491,17 @@ KEY_ROTATION = (
     "off Railway production on 2026-09-06 and neither is set, so Railway held no "
     "copy at the 2026-09-06 rotation. Check them again before the next one rather "
     "than trusting this line. "
-    "The thirteen paths, so a rotator has a checklist rather than a count: "
+    "The fifteen paths, so a rotator has a checklist rather than a count: "
     "devon-capture, devon-inbox, devon-intake, devon-approve-request, devon-action, "
     "devon-drive-draft, devon-ledger, devon-event, devon-spine-n8n, devon-runtime, "
-    "devon-route, devon-editforge, devon-build12-upstream. Only eight of those "
-    "carry an auth field in the WEBHOOKS map below; the other five are recorded in "
-    "prose, so working the map alone covers eight of thirteen and feels finished. "
+    "devon-route, devon-editforge, devon-build12-upstream, and the two outside this "
+    "lane, devon-health and devon-capture-file. Only eight of those carry an auth "
+    "field in the WEBHOOKS map below; the rest are recorded in prose, so working "
+    "the map alone covers eight of fifteen and feels finished. The first version of "
+    "this checklist, written 2026-09-06, itself said thirteen and omitted the last "
+    "two, which is the failure it was written to prevent: it was built from the "
+    "lane's dependency list. Rebuild it by reading every workflow's webhook node "
+    "and its bound credential, not by counting organs. "
     "After rotating, prove it THREE ways, and the third is the one a rotation "
     "cannot skip. One, post a capture from the phone with the new key: a 401 means "
     "an outside holder was missed. Two, file one level 0 job with blast radius none "
@@ -498,9 +515,14 @@ KEY_ROTATION = (
     "01M1TB5RAJHF0FJEN91QMKYYK7 ran RECEIVED to COMPLETED in one pass of six steps "
     "with the Action Router dispatching to the Spine on execution 6069 and no hop "
     "reporting unclean, which exercised the Intake Former, Spine, Runtime, "
-    "Intelligence Router, Action Router and Event Bus. That is six of the thirteen "
-    "proven by execution; the rest are inferred from their sharing the one "
-    "credential, and the negative test was NOT run on 2026-09-06. "
+    "Intelligence Router, Action Router and Event Bus. That is six of the fifteen "
+    "proven by execution. The rest are inferred, but the inference was grounded on "
+    "2026-09-06 by reading every webhook node and every organ to organ HTTP node "
+    "across twenty two workflows: all of them bind credential FYRvkRTOcROEYZ9P by "
+    "id, none binds any of the ten unrelated Header Auth account credentials in the "
+    "project, so an in place value edit reaches all of them at once. That is "
+    "structure, not behaviour. The behavioural negative test was NOT run on "
+    "2026-09-06 and is still owed. "
     "Old successful executions saved before "
     "2026-09-05 still carry the previous key in their headers, so rotate rather "
     "than rely on the setting alone, and error executions still store whatever key "

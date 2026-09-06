@@ -874,7 +874,7 @@ itself.
 | soft hyphens survived, the invisible class the chain exists to remove | `parse_draft.js` | stripped; the minus sign is deliberately left, being arithmetic |
 | no CI job parsed the n8n sources | `ci.yml` | the standalone job parses all of them, negative control run |
 | the rotation runbook had no negative test | `vault.KEY_ROTATION` | post the old key, require a 401 |
-| a rotator working the WEBHOOKS map covers eight of thirteen | `vault.KEY_ROTATION` | all thirteen paths named in the runbook as a checklist |
+| a rotator working the WEBHOOKS map covers eight of thirteen | `vault.KEY_ROTATION` | the paths named in the runbook as a checklist, and the checklist itself then found wrong, see below |
 | the repo contradicted itself on whether the rotation happened | this doc, `vault.py` | both corrected here |
 | "the thirteen cut over whole" was inferred from a six organ proof | `vault.KEY_ROTATION` | states what was executed and what was inferred |
 
@@ -883,3 +883,49 @@ which asks for plain text and gets markdown, and it is not in this repository at
 all, so the parser remains a scrubber on untrusted output rather than a fix. The
 frontmatter of this document still carries its 2026-09-05 date and base commit
 while now describing events of 2026-09-06.
+
+## 13. The checklist was wrong the day it was written
+
+The negative test the runbook now demands could not be run from the session that
+wrote it: the environment's network policy denies egress to
+`thequietoperator.app.n8n.cloud`, so no request carrying the old key could leave.
+It is still owed, and it is Tee's to run from the phone or a laptop: post the old
+key at any path below and require a 401.
+
+What could be done instead was a read only audit, and it is the weaker proof of
+the two. Every webhook node and every organ to organ HTTP node across twenty two
+workflows was read. All of them bind credential `FYRvkRTOcROEYZ9P` by id. None
+binds any of the ten unrelated `Header Auth account N` credentials sitting in the
+same project. Since the binding is by id, one in place value edit reaches all of
+them at once, which grounds the inference the runbook was carrying about the
+organs no execution had touched. It proves the wiring, not the cutover.
+
+The audit also broke the checklist written four hours earlier in the same arc.
+Fifteen paths take `x-devon-key`, not thirteen:
+
+| path | workflow | state | in the old checklist |
+|---|---|---|---|
+| devon-health | Health and Observability Console `M3H2mVPZJpDyIzrl` | ACTIVE, GET | no |
+| devon-capture-file | Capture Hook `Cbd24ptTPWch3aZO` | INACTIVE | no |
+
+`devon-health` is live and a rotator working my list would have walked past it.
+The count was taken from this lane's dependency list rather than from the estate,
+which is the same mistake that made it eleven before it was thirteen. Both are
+now named in `vault.KEY_ROTATION`, with the instruction to rebuild the list by
+reading webhook nodes rather than by counting organs. Neither was part of the
+ruling 2 change that turned successful execution saving off, so both may still be
+storing the header in run data.
+
+Two findings handed back rather than acted on, because they are Tee's call:
+
+- `devon-approve-decide` carries no header auth at all. That is deliberate and
+  the workflow says so, since an emailed link cannot carry a header and the
+  single use token is the auth. It does mean rotating this key rotates nothing
+  guarding an approval decision, and the record now says that in the one place a
+  rotator reads.
+- the Capture Webhook's `Check Token` node holds four per poster capture tokens
+  as plaintext literals in its JavaScript, a second secret layer behind the
+  `x-devon-key` door. Rotating the credential leaves them untouched, and anyone
+  with workflow read access can see them. Recommend rotating them into a
+  credential on the next pass; not done here, and not urgent enough to do
+  unasked.
