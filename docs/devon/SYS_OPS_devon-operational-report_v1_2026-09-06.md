@@ -325,9 +325,11 @@ empty, and `cb01b7a` is the last commit that actually built that project.
    connections, so a trigger rewired straight past Check Token leaves the node
    present, enabled and byte identical, and the reconciler reports OK while
    the gate checks nothing. Same class as the defect #146 set out to close.
-   Fixed in the PR that follows this report: the snapshot now records whether
+   Fixed in the same PR as this report: the snapshot now records whether
    every enabled door in the workflow feeds the gate and nothing else, and the
-   check reports DRIFT when one does not.
+   check reports DRIFT when one does not. Six tests cover the rewired trigger,
+   the second edge around the gate, the missing door, the public chat door
+   and the older snapshot that lacks the key.
 6. **A mislabelled failure row.** The Buffer Drain's `Log Sync Failure` node
    hard codes `Type: Ambiguous date` on every sync failure it files. Cosmetic,
    but a reader triaging that table would be misled. Owner: the workflow edit
