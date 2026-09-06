@@ -6,6 +6,12 @@
             currently empty of workflows
     tool: scripts/n8n_migrate.py
     read from the live Cloud estate on 2026-08-31
+    amended 2026-09-06: superseded for the cutover itself by
+            docs/devon/SYS_OPS_n8n-cloud-to-vps-cutover_v2_2026-09-06.md,
+            which carries the node level census and the runbook. The target
+            line above was true on 2026-08-31. Tee stated on 2026-09-06 that
+            nine data tables are on the VPS; this sandbox has no egress to
+            the VPS, so that and the workflow count there are unverified here.
 
 ## What travels and what does not
 
@@ -17,6 +23,7 @@ ids on the target and the imported JSON still names the old ones.
     class                     count on Cloud   what breaks
     credentials                          28    every node that authenticates
     data tables                           9    every dataTable node
+                          (11 since 2026-09-05, see the amendment in section 2)
     sub-workflow calls           see below     Execute Workflow nodes
     error workflow settings      see below     crash notification routing
 
@@ -63,7 +70,19 @@ redirect URI, just the token pasted like any other API key. Read credential
 types rather than names here: several of the names in this estate suggest an
 auth model the credential does not use.
 
-## 2. Data tables, 9 of them
+## 2. Data tables, 9 of them on 2026-08-31, 11 since 2026-09-05
+
+Amended 2026-09-06. Two tables were created on 2026-09-05 by Build 14 and
+Build 15 and did not exist when this section was written:
+
+    devon_driver_log          9VbICTCa4x4yhWZm   11 columns
+    devon_chat_log            nwnHN8o2dgHjtk7f    7 columns
+
+The schema file named below was re-read live on 2026-09-06 and now carries
+all eleven; the nine below were identical column for column to the
+2026-08-31 read. A VPS that holds nine tables, which is what Tee reported on
+2026-09-06, is missing these two, and the Driver Poll, the Job Driver and the
+Face all write to them.
 
 Schema and rows both stay behind. Create the table, then decide separately
 whether its contents move.
@@ -211,7 +230,11 @@ default is a safety property. Do not override it to save clicks.
    section below. Nothing else proceeds until this is done, and it is the only
    step that waits on a third party.
 2. Create all 28 credentials on the VPS. Record the new id beside the old one.
+   (Amended 2026-09-06: the active set binds 11 of them; v2 section 4.5 lists
+   which, and `repoint --credential-map` does the re-linking.)
 3. Create all 9 data tables. `approval_queue` empty, always.
+   (Amended 2026-09-06: 11 tables, and the VPS already holds nine with a
+   stale row copy that v2 says to wipe; see v2 hazards 1 and 2.)
 4. Let Cloud drain to terminal states, per the ruling above. Check the ledger
    for non-terminal rows and wait them out rather than copying them.
 5. `n8n_migrate.py export` from Cloud, then `inspect` the export. Inspect

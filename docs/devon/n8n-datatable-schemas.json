@@ -1,7 +1,7 @@
 {
-  "_": "Exact n8n data table schemas read from n8n Cloud on 2026-08-31, for recreation on the VPS (srv1936193, n8n.editforge.online). Column order is the source instance's index order. Source ids are recorded so a workflow node still pointing at one can be found; the target instance mints its own ids and every dataTable node must be repointed after import.",
+  "_": "Exact n8n data table schemas read from n8n Cloud on 2026-08-31 and re-read on 2026-09-06, for recreation on the VPS (srv1936193, n8n.editforge.online). Column order is the source instance's index order. Source ids are recorded so a workflow node still pointing at one can be found; the target instance mints its own ids and every dataTable node must be repointed after import. Two tables, devon_driver_log and devon_chat_log, were created on 2026-09-05 and did not exist at the 2026-08-31 read.",
   "source": "thequietoperator.app.n8n.cloud",
-  "read_at": "2026-08-31",
+  "read_at": "2026-09-06",
   "tables": [
     {
       "name": "devon_state_ledger",
@@ -1003,6 +1003,110 @@
           "index": 52,
           "name": "virality_score",
           "type": "number"
+        }
+      ]
+    },
+    {
+      "name": "devon_chat_log",
+      "source_id": "nwnHN8o2dgHjtk7f",
+      "column_count": 7,
+      "columns": [
+        {
+          "index": 0,
+          "name": "session_id",
+          "type": "string"
+        },
+        {
+          "index": 1,
+          "name": "role",
+          "type": "string"
+        },
+        {
+          "index": 2,
+          "name": "content",
+          "type": "string"
+        },
+        {
+          "index": 3,
+          "name": "at",
+          "type": "string"
+        },
+        {
+          "index": 4,
+          "name": "action",
+          "type": "string"
+        },
+        {
+          "index": 5,
+          "name": "intent_id",
+          "type": "string"
+        },
+        {
+          "index": 6,
+          "name": "job",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "devon_driver_log",
+      "source_id": "9VbICTCa4x4yhWZm",
+      "column_count": 11,
+      "columns": [
+        {
+          "index": 0,
+          "name": "intent_id",
+          "type": "string"
+        },
+        {
+          "index": 1,
+          "name": "pass_at",
+          "type": "string"
+        },
+        {
+          "index": 2,
+          "name": "execution_id",
+          "type": "string"
+        },
+        {
+          "index": 3,
+          "name": "origin",
+          "type": "string"
+        },
+        {
+          "index": 4,
+          "name": "entry_state",
+          "type": "string"
+        },
+        {
+          "index": 5,
+          "name": "exit_state",
+          "type": "string"
+        },
+        {
+          "index": 6,
+          "name": "outcome",
+          "type": "string"
+        },
+        {
+          "index": 7,
+          "name": "steps",
+          "type": "number"
+        },
+        {
+          "index": 8,
+          "name": "detail",
+          "type": "string"
+        },
+        {
+          "index": 9,
+          "name": "approval_card",
+          "type": "string"
+        },
+        {
+          "index": 10,
+          "name": "verify_card",
+          "type": "string"
         }
       ]
     }
