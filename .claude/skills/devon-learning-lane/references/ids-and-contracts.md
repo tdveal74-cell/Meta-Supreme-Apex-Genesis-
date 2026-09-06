@@ -10,7 +10,7 @@ before trusting in a much later session.
 |---|---|---|
 | Live State Ledger workflow (Build 02) | `z9j2I8h0RnbDKGBO` | webhook `devon-ledger`, header `x-devon-key`; states RECEIVED→…→COMPLETED/CANCELLED (terminal); legal transitions enforced |
 | devon_state_ledger data table | `VYyno7pDWmY6uxBz` | one row per intent; `learning_state` belongs to the envelope and is rewritten on every upsert — never use it as a foreign marker |
-| Ledger Feeder workflow | `6hQD8YhiYzR1FFda` | 15-min poll; feeds COMPLETED jobs once each |
+| Ledger Feeder workflow | `6hQD8YhiYzR1FFda` | daily poll at 02:00 instance time (15-min until 2026-09-05); feeds COMPLETED jobs once each; since Build 18 (2026-09-06) a second branch off Fetch Feed Log posts one `LEARNING_CAPTURED` per fed, unmarked job to `devon-event` with `learning` set to `{state: captured, captured_at, by: ledger-feeder, gate_decision, feed_status}`, a COMPLETED to COMPLETED same state update; the feed log stays the only dedupe key, a mark the bus did not persist emails Tee and is retried next run; source in `n8n/devon/ledger-feeder/` |
 | devon_build12_feed_log table | `QeoV4V4dYXXN8dBR` | intent_id, fed_at, webhook_status, gate_decision, claim, area (area may be empty; parse `. Area: X.` from claim as fallback) |
 | Build 12 Upstream Test workflow | `VznESplSFCs8ldph` | webhook `devon-build12-upstream`; header auth `x-devon-key` ON since 2026-08-26 (credential Devon Capture Key); MCP-available since 2026-08-26 |
 | Approval Queue workflow | `syRVj0G47mA1b0Xn` | webhooks `devon-approve-request` (POST, x-devon-key) and `devon-approve-decide` (GET, token in link) |

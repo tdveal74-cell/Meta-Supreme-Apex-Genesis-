@@ -22,7 +22,9 @@ past. Every stage below is live and was proven end to end on 2026-08-25.
 
 ```
 Build 02 state ledger (n8n data table, jobs one row per intent)
-  → Ledger Feeder (15-min poll: COMPLETED jobs, fed once each)
+  → Ledger Feeder (daily poll since 2026-09-05: COMPLETED jobs, fed once each;
+     since 2026-09-06 it also marks each fed job's envelope learning.state
+     captured through the Event Bus, one LEARNING_CAPTURED per job)
     → devon-build12-upstream webhook
       → Candidate Former → Conflict-Search Issuer → Learning Gate
         (issuer = POST /api/v1/soul/conflict-search on devon-soul.vercel.app,
@@ -65,7 +67,7 @@ policy semantics, every live id, and every payload contract:
 | Component | Where | Detail |
 |---|---|---|
 | Conflict policy b12.1 | repo `deploy/soul/main.py` (tests: `test_deploy_soul_conflict_policy.py`) | code + tests are canonical |
-| Ledger Feeder | n8n workflow, 15-min poll | ids in reference |
+| Ledger Feeder | n8n workflow, daily poll (15-min until 2026-09-05) | feeds once each, then mirrors the feed log onto the envelope as LEARNING_CAPTURED (Build 18, 2026-09-06); ids in reference |
 | Upstream gate | n8n workflow (webhook, x-devon-key since 2026-08-26) | receipt contract in reference |
 | Soul Committer | n8n workflow, 15-min poll | state machine in reference |
 | Vault map | repo `services/devon/vault.py` WEBHOOKS/WORKFLOWS | keep truthful on every change |
