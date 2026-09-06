@@ -4,7 +4,7 @@ type: SYS_OPS
 version: 1
 date: 2026-09-06
 area: Systems
-status: live-on-cloud-first-job-completed
+status: merged-to-main-first-job-completed
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 base: b8fffb1
 branch: claude/new-session-2f2yu2
@@ -205,6 +205,8 @@ its repo file after publishing: all identical.
 | Face dry run | execution 6194: asked to show what it would file, the model returned action `dry_run` with an `airtable` object (Title, Captured, Kind, Source, Area, Body), Parse Reply carried it into `payload.airtable`, the intake formed envelope `01M1V6VN93D9V3EVQRZ613ATJT` with the payload intact and filed nothing |
 | Census | 64 workflows, 39 active, from the project listing at 11:07Z |
 | Deploy read back of the previous merge | Railway `941318bb` SUCCESS on `b8fffb1` with the alembic context lines; devon-soul `dpl_44y1ogZqxPyVdw7mhVaCQmHdZTUa` READY production on `b8fffb1`; nothing owed to the web project |
+| Merge | PR #151 merged on Tee's word ("merge it and restart the branch") at 12:23Z as merge commit `de52d76` on head `ea6c9a0`, all six checks green; branch `claude/new-session-2f2yu2` restarted from `origin/main` at `de52d76` under the same name (force with lease); the PR subscription and the check-in routine were closed |
+| Deploy read back of this merge | devon-soul `dpl_DCD147pLwmeGZrXRTfCFQwrGfaSN` READY, target production, on `de52d76` (created 12:23:47Z). Web project: production record `dpl_9atXLHX3R1LxVNHjfETPanMDWa7L` CANCELED on `de52d76`, the ignoreCommand skip, and correct: `git diff --stat b8fffb1 de52d76` over apps/web, packages/ui, the lockfile and the workspace file is empty, so nothing is owed. Railway api: deployment `d1f60ec3-b8c7-4f33-92b1-07869ca0252e` on `de52d76`, status WAITING from its creation at 12:23:43Z through a read at 12:28Z with no build started, then SUCCESS at 12:29:36Z (read back at 12:31Z); the deploy log carries the alembic context lines (`Context impl PostgresqlImpl`, `Will assume transactional DDL`) and no upgrade line, which is right, since this merge adds no migration. The api surface serves `de52d76` |
 | Repository | This row first read "199 tests pass, ruff clean" against commit 4c14e3f and again against 5c94df5. That was false, and the critic re-measured it: at 4c14e3f, dac7859 and 5c94df5 the same selection was 1 failed, 198 passed, the failure being the census pin test that still said 63 while the pin and this doc said 64. The commit that moved the pin did not run the test that guards it. Fixed in aac9d5e; CI green on all six checks from that commit. Amended 2026-09-06 rather than rewritten, because the first law says a wrong claim gets dated, not deleted |
 
 ## 3. Drifts found and closed
@@ -336,13 +338,17 @@ and docs/devon/SYS_OPS_devon-operational-report_v1_2026-09-06.md. Load the
 steward skill before touching CI or a PR, estate-reconcile before checking
 records, devon-learning-lane before touching the Build 12 lane.
 
-Where things stand on 2026-09-06 at about 12:00Z:
-- Branch claude/new-session-2f2yu2 carries PR #151 (draft): Build 17, the
-  Airtable Row Writer, plus the Face and Intake edits. Drive it green, merge
-  it under Tee's standing operational merge permission when all six checks
-  pass, then restart the branch from origin/main under the same name. Merge
-  commits are titled "Merge PR #151: <title>". Read the head SHA with git
-  rev-parse origin/<branch> before merging, never from a doc.
+Where things stand on 2026-09-06 at about 12:30Z:
+- PR #151 (Build 17, the Airtable Row Writer, plus the Face and Intake
+  edits) is MERGED: merge commit de52d76 on main, all six checks green on
+  the head ea6c9a0, merged on Tee's word at 12:23Z. The branch
+  claude/new-session-2f2yu2 was restarted from origin/main at de52d76 under
+  the same name. Deploy read back is in the Build 17 doc, section 2: devon-soul
+  production READY on de52d76, the web project correctly skipped, Railway api
+  deployment d1f60ec3 SUCCESS on de52d76 at 12:29:36Z. All three surfaces
+  read back, none owed. Merge commits are titled
+  "Merge PR #N: <title>". Read the head SHA with git rev-parse
+  origin/<branch> before merging anything, never from a doc.
 - Job 01M1V6M3XG0RQR191QFF7W74WJ is COMPLETED (12:08:11Z, driver pass 6238,
   human_watched true). The row recKhlOqdAG0Zju30 exists in Inbox Captures
   (base app28z7XnKzjfTXwc, table tbl4ziFRbl5mnUcKc), artifact key_verified
@@ -394,9 +400,9 @@ Standing rules in force, beyond CLAUDE.md:
   are a deliberate design, ruled; do not raise them again. Do not touch PR
   #145.
 
-Start by reading the two docs, then TaskList. Nothing on the proof job is
-open; the first question for Tee is whether PR #151 merges now (six checks
-green on the head, read them yourself) and whether build b starts.
+Start by reading the two docs, then TaskList. Nothing on the proof job or
+on PR #151 is open; the first question for Tee is whether build b starts
+now or the gap sweep's item 1 (the execution wall) comes first.
 ```
 
 ## 7. Gauntlet
