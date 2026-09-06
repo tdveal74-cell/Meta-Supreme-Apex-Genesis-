@@ -818,9 +818,12 @@ in the lane was ever going to find this.
 ## 12. The parser arc moved to its own record
 
 Gauntlet cycles 6 and 7 both landed on `parse_draft.js`, and the arc outgrew a
-section here. It has its own dated status doc:
-`SYS_OPS_devon-draft-parser_v1_2026-09-06.md`. That record carries both
-quarantines, the reproductions, and the ruling that ended it.
+section here. Tee ruled it out of this arc's pull request entirely, so the parser,
+the system prompt behind it, and their record ship separately on branch
+`claude/parser-refuse-on-dash`. That record is
+`SYS_OPS_devon-draft-parser_v1_2026-09-06.md` and it carries both quarantines,
+the reproductions, and the ruling that ended them. It arrives with that branch,
+so this reference is forward looking until it merges.
 
 One correction belongs here, because this document is where the wrong sentence
 was written. Section 12 previously said the system prompt behind those defects
