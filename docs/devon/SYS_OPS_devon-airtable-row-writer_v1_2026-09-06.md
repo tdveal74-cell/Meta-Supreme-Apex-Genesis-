@@ -4,7 +4,7 @@ type: SYS_OPS
 version: 1
 date: 2026-09-06
 area: Systems
-status: live-on-cloud-first-row-written-verification-card-pending
+status: live-on-cloud-first-job-completed
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 base: b8fffb1
 branch: claude/new-session-2f2yu2
@@ -41,10 +41,15 @@ card at 11:32:16Z, a hand run of the Driver Poll (execution 6200, driver
 pass 6202) carried the job to AUTHORIZED, through the router, into the
 executor (execution 6208), and to VERIFYING. The row exists:
 `recKhlOqdAG0Zju30` in Inbox Captures, both stamp fields read back directly
-from Airtable, artifact `key_verified true`, `ledger_clean true`. The
-verification card `REQ-20260906-vED3ik` waits on Tee; the job is not
-COMPLETED until he decides it. A fresh critic then read the whole diff and
-its findings were closed the same hour (section 7).
+from Airtable, artifact `key_verified true`, `ledger_clean true`. Tee
+approved the verification card `REQ-20260906-vED3ik` at 12:04:12Z, and
+driver pass 6238 (Driver Poll run 6236, 12:08:11Z) closed the job COMPLETED
+with `verification.state passed`, `method human_watch`, `human_watched
+true` and a completed receipt. That is the whole lane, end to end, on a
+real job: intake, spine, runtime, route, card, grant, router, executor,
+row, verification card, human watch, terminal state. A fresh critic read
+the whole diff in between and its findings were closed the same hour
+(section 7).
 
 ## 1. What was built
 
@@ -193,6 +198,8 @@ its repo file after publishing: all identical.
 | Face published | `LsmfRFMmI5feINs0` active `1ccd11b9` |
 | Live gated job | intent `01M1V6M3XG0RQR191QFF7W74WJ`, filed through the intake at 11:10:57Z (driver pass 6175, origin intake, RECEIVED to WAITING_APPROVAL in five steps), card `REQ-20260906-8kt8Vj` expires 2026-09-09T11:11:04Z, `intent.payload.action` bound to `airtable.row`, `approval.card_executor` names the Inbox Captures table, the title and the seven fields, brief by Cerebras recommends proceed |
 | The first real row | Tee approved `REQ-20260906-8kt8Vj` at 11:32:16Z (decided_by tee, grant decays 2026-09-07T11:32:16Z). Driver Poll hand run 6200 at 11:36:18Z; driver pass 6202 (origin poll, six steps, WAITING_APPROVAL to VERIFYING, `ledger_clean true`): APPROVAL_GRANTED, router dispatched `airtable.row` to `ps2S6dWcTIpq5bvr` execution 6208, row written, Spine EXECUTING to VERIFYING, verification card `REQ-20260906-vED3ik` raised (expires 2026-09-09T11:36:28Z). Ledger artifact: kind `airtable_record`, `recKhlOqdAG0Zju30`, seven fields, `reused false`, `key_verified true`, created 11:36:25Z. Direct Airtable read of the record: Title, Captured 2026-09-06, Kind Note, Source Other, Area Systems, Body, Notes as declared, `DEVON key build17-proof-20260906-airtable-row`, `DEVON job 01M1V6M3XG0RQR191QFF7W74WJ`. The same pass found the other open job's card `REQ-20260905-f5kEZj` still pending (pass 6201) |
+| The close | Tee approved verification card `REQ-20260906-vED3ik` at 12:04:12Z. Driver Poll hand run 6236 at 12:08:11Z; driver pass 6238 (origin poll, two steps, VERIFYING to COMPLETED): queue read approved, bus VERIFICATION_PASSED, ledger update accepted. Ledger row: `state COMPLETED`, `terminal true`, `verification passed / human_watch / human_watched true / verified_at 12:08:11Z`, `execution succeeded` on `ps2S6dWcTIpq5bvr` execution 6208 (kept, per Tee's ruling 3), `receipt.outcome completed`, `artifact_count 1`, `trace_count 23`, `learning.state not_captured` (build b's target). The same pass found card `REQ-20260905-f5kEZj` still pending (pass 6237) |
+| ACX on the Area field | Tee added the option in the Airtable UI after ruling on it at about 12:05Z; read back at 12:08Z: `fldpbMPz2xBcEo0Ia` now carries nine choices, ACX as `selu5krZ25DLbIMi4` |
 | Pinned runs, the Write? guard | execution 6224: Find Existing Row pinned to HTTP 429, Check Existing refused, `Existing?` false, `Write?` false, Return Refusal answered the reason, Write Row never ran. Execution 6225: entry report pinned `persisted false`, same path, Write Row never ran. Execution 6226: happy path through `Write?` true, Row Result `key_verified true`, Return Envelope, `ledger_clean true` |
 | Republished after the critic | executor `486c243d` (11:41Z), Face `1c9e6662` (11:48Z), Job Driver `f33c65ed` (11:49Z), Intake Former `207ae1cc` (11:50Z); all 23 live Code nodes of the four workflows diffed against `n8n/devon/` after publishing: identical |
 | Face dry run | execution 6194: asked to show what it would file, the model returned action `dry_run` with an `airtable` object (Title, Captured, Kind, Source, Area, Body), Parse Reply carried it into `payload.airtable`, the intake formed envelope `01M1V6VN93D9V3EVQRZ613ATJT` with the payload intact and filed nothing |
@@ -225,10 +232,10 @@ and it is worth running at the start of any session that will edit a node.
 ## 4. What is not proven, stated plainly
 
 - **The first real row.** Proven at 11:36Z (section 2, "The first real
-  row"); this bullet said "no row has been written" until then. What is
-  still not proven is the close: the verification card
-  `REQ-20260906-vED3ik` waits on Tee, and the job reads COMPLETED only after
-  he approves it and the next driver pass runs.
+  row"); this bullet said "no row has been written" until then, and until
+  12:08Z it said the close was not proven. It is: Tee approved the
+  verification card at 12:04:12Z and pass 6238 closed the job COMPLETED
+  (section 2, "The close"). Nothing about the proof job is unproven now.
 - **The refusal and reuse branches live.** Proven on pinned data only (6172,
   6173, 6224, 6225). The live path has run once, on the happy branch.
 - **The payload fingerprint on a live card.** The driver change at 11:49Z is
@@ -300,10 +307,10 @@ report of the same morning (`SYS_OPS_devon-operational-report_v1_2026-09-06`).
     card, be approved, and park at AUTHORIZED on Airtable's 422 with the
     grant spent. RULED 2026-09-06 by Tee, on a card: add ACX to the field in
     Airtable. The Airtable connector cannot add a select option (its field
-    update takes a name, a description or a formula only), so it is Tee's
-    click in the Airtable UI; the successor chat confirms it by reading the
-    field schema (`get_table_schema` on `fldpbMPz2xBcEo0Ia`) and records
-    the date here. The Kind, Source and Area vocabularies of Inbox Captures
+    update takes a name, a description or a formula only), so it was Tee's
+    click in the Airtable UI, done and read back at 12:08Z: nine choices,
+    ACX as `selu5krZ25DLbIMi4`. CLOSED. The Kind, Source and Area
+    vocabularies of Inbox Captures
     are recorded nowhere in the vault; adding them is a record without a
     check until a keyed reconcile can read the Airtable schema, so it waits
     on item 3.
@@ -336,24 +343,18 @@ Where things stand on 2026-09-06 at about 12:00Z:
   pass, then restart the branch from origin/main under the same name. Merge
   commits are titled "Merge PR #151: <title>". Read the head SHA with git
   rev-parse origin/<branch> before merging, never from a doc.
-- Job 01M1V6M3XG0RQR191QFF7W74WJ is at VERIFYING. Tee approved the approval
-  card at 11:32:16Z; the row recKhlOqdAG0Zju30 exists in Inbox Captures
+- Job 01M1V6M3XG0RQR191QFF7W74WJ is COMPLETED (12:08:11Z, driver pass 6238,
+  human_watched true). The row recKhlOqdAG0Zju30 exists in Inbox Captures
   (base app28z7XnKzjfTXwc, table tbl4ziFRbl5mnUcKc), artifact key_verified
-  true, executor execution 6208, driver pass 6202. The verification card
-  REQ-20260906-vED3ik (expires 2026-09-09T11:36:28Z) waits on Tee. After he
-  decides it, the next hourly Driver Poll (or a hand run of mbIKJk4UuB7V27rP
-  in production mode, trigger node Every Hour) closes the job COMPLETED with
-  human_watched true; read the ledger row in data table VYyno7pDWmY6uxBz
-  (project rM0TNTE2fNXErglU) and the driver log 9VbICTCa4x4yhWZm to confirm,
-  then add the COMPLETED pass id to the open ruling in vault.py (both copies)
-  and to the Build 17 doc, section 2.
+  true, executor execution 6208. The whole lane has run end to end on a real
+  job once. It carries learning.state not_captured, which is exactly what
+  build b (task 27) exists to change; use it as the first fed job.
 - The critic's findings on Build 17 were closed live at 11:41Z to 11:50Z
   (executor 486c243d, Face 1c9e6662, driver f33c65ed, intake 207ae1cc) and
   every live Code node of those four workflows reads back identical to
   n8n/devon/. Tee ruled on 2026-09-06 that ACX goes onto the Inbox Captures
-  Area field, by his own click in the Airtable UI (Build 17 doc, section 5,
-  item 10). Confirm it landed by reading the field schema; if it has not,
-  remind him once.
+  Area field and added it himself; read back at 12:08Z as selu5krZ25DLbIMi4
+  (Build 17 doc, section 5, item 10, closed).
 - Then build b: learning capture on COMPLETED jobs (task 27). Design notes in
   the Build 17 doc, section 5, item 2. Read the Ledger Feeder 6hQD8YhiYzR1FFda
   and the ledger z9j2I8h0RnbDKGBO before designing; never relax the terminal
@@ -393,9 +394,9 @@ Standing rules in force, beyond CLAUDE.md:
   are a deliberate design, ruled; do not raise them again. Do not touch PR
   #145.
 
-Start by reading the two docs, then TaskList, then ask Tee on one card
-whether the verification card REQ-20260906-vED3ik has been decided and
-whether he has added ACX to the Inbox Captures Area field.
+Start by reading the two docs, then TaskList. Nothing on the proof job is
+open; the first question for Tee is whether PR #151 merges now (six checks
+green on the head, read them yourself) and whether build b starts.
 ```
 
 ## 7. Gauntlet
