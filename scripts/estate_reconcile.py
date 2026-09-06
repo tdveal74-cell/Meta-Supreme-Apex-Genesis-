@@ -63,7 +63,7 @@ import urllib.error
 import urllib.request
 from collections import Counter
 from dataclasses import dataclass
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Tuple
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -438,7 +438,12 @@ def _n8n_or_none(observations: Dict[str, Any], needs: str) -> Tuple[Optional[Dic
     if n8n.get("error"):
         return None, str(n8n["error"])
     if needs not in n8n:
-        return None, "no n8n observation was captured"
+        if not n8n:
+            return None, "no n8n observation was captured"
+        return None, (
+            f"the n8n observation carries no {needs!r} key; it predates the check "
+            "that needs it, so rebuild the snapshot with the current reconciler"
+        )
     return n8n, ""
 
 
@@ -499,8 +504,23 @@ def _check_body_gate(claim: Claim, observations: Dict[str, Any]) -> Tuple[str, s
                 f"the vault records a {expected['type']} node, the live node is "
                 f"{node.get('type')}"
             )
+        wired = node.get("wired")
+        if wired is None:
+            return UNVERIFIED, (
+                f"the snapshot records the code of {expected['node']} but not whether "
+                "the door feeds it; rebuild the snapshot with the current reconciler"
+            )
+        if not wired:
+            return DRIFT, (
+                f"the door's trigger no longer feeds {expected['node']} and nothing "
+                "else: a post can reach the parser without passing the gate. Read the "
+                "workflow's connections and restore the wiring before trusting the door."
+            )
         if node.get("sha256") == expected["sha256"]:
-            return OK, f"enabled, code unchanged since the pin of {pinned}"
+            return OK, (
+                f"enabled, wired as the door's only next step, code unchanged since "
+                f"the pin of {pinned}"
+            )
         return DRIFT, (
             f"the code of {expected['node']} changed since the pin of {pinned}. "
             "Read the node, confirm it still refuses an untokened post, and re-pin "
@@ -815,6 +835,7 @@ def _paged_workflows(base: str, key: str) -> Iterator[Dict[str, Any]]:
 
 CHAT_TRIGGER = "@n8n/n8n-nodes-langchain.chatTrigger"
 CODE_NODE = "n8n-nodes-base.code"
+WEBHOOK_NODE = "n8n-nodes-base.webhook"
 
 
 def webhook_nodes(workflow_detail: Dict[str, Any]) -> List[Dict[str, str]]:
@@ -829,7 +850,7 @@ def webhook_nodes(workflow_detail: Dict[str, Any]) -> List[Dict[str, str]]:
         if node.get("disabled"):
             continue
         parameters = node.get("parameters") or {}
-        if node.get("type") == "n8n-nodes-base.webhook":
+        if node.get("type") == WEBHOOK_NODE:
             nodes.append(
                 {
                     "path": parameters.get("path", ""),
@@ -862,8 +883,34 @@ def code_fingerprint(code: str) -> str:
     return hashlib.sha256("\n".join(lines).rstrip("\n").encode("utf-8")).hexdigest()
 
 
-def gate_nodes(workflow_detail: Dict[str, Any]) -> List[Dict[str, str]]:
-    """The enabled Code nodes of one workflow detail read, by name and fingerprint.
+def _door_names(workflow_detail: Dict[str, Any]) -> List[str]:
+    """Names of the enabled trigger nodes that are doors: webhooks and public chats."""
+    names = []
+    for node in workflow_detail.get("nodes", []):
+        if node.get("disabled"):
+            continue
+        parameters = node.get("parameters") or {}
+        if node.get("type") == WEBHOOK_NODE or (
+            node.get("type") == CHAT_TRIGGER and parameters.get("public") is True
+        ):
+            names.append(str(node.get("name", "")))
+    return names
+
+
+def _main_targets(workflow_detail: Dict[str, Any], source: str) -> Set[str]:
+    """The node names a source node's main outputs feed, across every output."""
+    connections = workflow_detail.get("connections") or {}
+    outputs = (connections.get(source) or {}).get("main") or []
+    targets: Set[str] = set()
+    for output in outputs:
+        for edge in output or []:
+            if isinstance(edge, dict) and edge.get("node"):
+                targets.add(str(edge["node"]))
+    return targets
+
+
+def gate_nodes(workflow_detail: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The enabled Code nodes of one workflow detail read: name, fingerprint, wiring.
 
     A body gate is a Code node that refuses a request the trigger's auth let
     through, so its absence, its disabling and any edit to it (a flipped
@@ -871,17 +918,27 @@ def gate_nodes(workflow_detail: Dict[str, Any]) -> List[Dict[str, str]]:
     skipped for the reason webhook_nodes skips them: a disabled gate gates
     nothing. Only the fingerprint is recorded, never the code, so a snapshot
     file does not become another copy of whatever secrets the node holds.
+
+    The fingerprint alone misses one bypass: a trigger rewired straight past
+    the gate, or a second edge around it, leaves the node present, enabled and
+    byte identical while it gates nothing. So each node also records whether
+    every enabled door in the workflow feeds it and nothing else, read from the
+    workflow's connections. A workflow with no enabled door has no wired gate.
     """
+    doors = _door_names(workflow_detail)
     nodes = []
     for node in workflow_detail.get("nodes", []):
         if node.get("disabled") or node.get("type") != CODE_NODE:
             continue
         parameters = node.get("parameters") or {}
+        name = str(node.get("name", ""))
         nodes.append(
             {
-                "name": str(node.get("name", "")),
+                "name": name,
                 "type": CODE_NODE,
                 "sha256": code_fingerprint(parameters.get("jsCode", "")),
+                "wired": bool(doors)
+                and all(_main_targets(workflow_detail, door) == {name} for door in doors),
             }
         )
     return nodes
