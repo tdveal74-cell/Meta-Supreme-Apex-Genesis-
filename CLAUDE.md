@@ -178,11 +178,29 @@ production; load the `deploy-readback` skill before saying any surface is live.
 
 ## Skills in this repository
 
-`.claude/skills/` carries four: `steward` (CI and PR conventions, load it for
-anything touching either), `deploy-readback` (what the production surfaces are
-actually serving), `estate-reconcile` (checking records against the live
-estate), `devon-learning-lane` (the Build 12 learning lane and the n8n house
-conventions).
+`.claude/skills/` carries five. Four are ours: `steward` (CI and PR
+conventions, load it for anything touching either), `deploy-readback` (what the
+production surfaces are actually serving), `estate-reconcile` (checking records
+against the live estate), `devon-learning-lane` (the Build 12 learning lane and
+the n8n house conventions).
+
+The fifth, `scroll-craft`, is vendored third-party work: Nate Herk's
+scroll-driven landing page skill, MIT, copied from `nateherkai/scroll-craft`.
+Never edit it in place, fixes go upstream, and `test_vendored_skills.py`
+enforces that against `MANIFEST.sha256` rather than trusting the prose. Read
+`.claude/skills/scroll-craft/UPSTREAM.md` before syncing it, which also means
+regenerating that manifest, and before adding `nateherk-design` to the pinned
+marketplace, which would double load the same skill name. Its scripts want
+Node 18+, a full ffmpeg, and `playwright-core` plus Chrome;
+`node .claude/skills/scroll-craft/scripts/doctor.mjs` says which are present.
+None of them are pinned or installed by this repository.
+
+A pinned plugin is not a substitute here. `.claude/settings.json` enabling a
+plugin does not install it, and in a Claude Code on the web session
+`~/.claude/plugins/installed_plugins.json` reads empty while all three pinned
+plugins show as enabled. `~/.claude/skills/` is no better: `$HOME` is in the
+ephemeral container. Anything that has to load in a web session is committed
+under `.claude/skills/`.
 
 `.claude/settings.json` also pins three community plugins through the
 `meta-supreme-pinned` marketplace in `.claude-plugin/marketplace.json`. Each

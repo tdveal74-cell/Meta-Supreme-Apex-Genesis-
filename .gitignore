@@ -28,3 +28,16 @@ venv/
 
 # Workflow and agent worktrees are never repository content
 .claude/worktrees/
+
+# scroll-craft build output. The skill resolves its workspace from
+# SCROLLCRAFT_HOME, then the nearest .scrollcraft.json, then
+# <project root>/scrollcraft, so ignoring the default location alone leaves the
+# other two paths exposed. Upstream reports a single build with ten video legs
+# at 300MB+ and a working lab directory at 12GB, and committing one puts it in
+# history permanently, so the video extensions are ignored by content as well as
+# by location. The repository tracks no .mp4, .mov or .webm today.
+scrollcraft/
+.scrollcraft.json
+*.mp4
+*.mov
+*.webm
