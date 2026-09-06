@@ -28,3 +28,8 @@ venv/
 
 # Workflow and agent worktrees are never repository content
 .claude/worktrees/
+
+# scroll-craft build workspace. The skill resolves it to <project root>/scrollcraft
+# unless SCROLLCRAFT_HOME or a .scrollcraft.json says otherwise. A single build
+# with video legs is 300MB+, and committing one puts it in history permanently.
+scrollcraft/

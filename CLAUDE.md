@@ -178,11 +178,20 @@ production; load the `deploy-readback` skill before saying any surface is live.
 
 ## Skills in this repository
 
-`.claude/skills/` carries four: `steward` (CI and PR conventions, load it for
-anything touching either), `deploy-readback` (what the production surfaces are
-actually serving), `estate-reconcile` (checking records against the live
-estate), `devon-learning-lane` (the Build 12 learning lane and the n8n house
-conventions).
+`.claude/skills/` carries five. Four are ours: `steward` (CI and PR
+conventions, load it for anything touching either), `deploy-readback` (what the
+production surfaces are actually serving), `estate-reconcile` (checking records
+against the live estate), `devon-learning-lane` (the Build 12 learning lane and
+the n8n house conventions).
+
+The fifth, `scroll-craft`, is vendored third-party work: Nate Herk's
+scroll-driven landing page skill, MIT, copied from
+`nateherkai/scroll-craft`. Never edit it in place, fixes go upstream. Read
+`.claude/skills/scroll-craft/UPSTREAM.md` before syncing it or before adding
+`nateherk-design` to the pinned marketplace, which would double load the same
+skill name. Its scripts want Node 18+, a full ffmpeg, and `playwright-core`
+plus Chrome; `node .claude/skills/scroll-craft/scripts/doctor.mjs` says which
+are present. None of them are pinned or installed by this repository.
 
 `.claude/settings.json` also pins three community plugins through the
 `meta-supreme-pinned` marketplace in `.claude-plugin/marketplace.json`. Each
