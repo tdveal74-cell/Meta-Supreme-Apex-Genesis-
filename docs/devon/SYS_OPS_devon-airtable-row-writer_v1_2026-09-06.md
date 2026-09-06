@@ -298,10 +298,15 @@ report of the same morning (`SYS_OPS_devon-operational-report_v1_2026-09-06`).
     NCO, Health, Money, Family, Learning, Systems, and no ACX. The Face and
     the intake accept nine Areas, so a chat filed ACX capture would raise a
     card, be approved, and park at AUTHORIZED on Airtable's 422 with the
-    grant spent. Owner: Tee's ruling, then one option added in Airtable.
-    The Kind, Source and Area vocabularies of Inbox Captures are recorded
-    nowhere in the vault; adding them is a record without a check until a
-    keyed reconcile can read the Airtable schema, so it waits on item 3.
+    grant spent. RULED 2026-09-06 by Tee, on a card: add ACX to the field in
+    Airtable. The Airtable connector cannot add a select option (its field
+    update takes a name, a description or a formula only), so it is Tee's
+    click in the Airtable UI; the successor chat confirms it by reading the
+    field schema (`get_table_schema` on `fldpbMPz2xBcEo0Ia`) and records
+    the date here. The Kind, Source and Area vocabularies of Inbox Captures
+    are recorded nowhere in the vault; adding them is a record without a
+    check until a keyed reconcile can read the Airtable schema, so it waits
+    on item 3.
 11. **Small ones the critic named and this session left.** The Face key
     hashes the summary only, so two captures with the same wording in one
     session collide at Dedupe (reported, not silent). The chat log stores
@@ -345,9 +350,10 @@ Where things stand on 2026-09-06 at about 12:00Z:
 - The critic's findings on Build 17 were closed live at 11:41Z to 11:50Z
   (executor 486c243d, Face 1c9e6662, driver f33c65ed, intake 207ae1cc) and
   every live Code node of those four workflows reads back identical to
-  n8n/devon/. One ruling is open for Tee: whether to add ACX to the Inbox
-  Captures Area field (Build 17 doc, section 5, item 10). Put it on a card if
-  he has not answered.
+  n8n/devon/. Tee ruled on 2026-09-06 that ACX goes onto the Inbox Captures
+  Area field, by his own click in the Airtable UI (Build 17 doc, section 5,
+  item 10). Confirm it landed by reading the field schema; if it has not,
+  remind him once.
 - Then build b: learning capture on COMPLETED jobs (task 27). Design notes in
   the Build 17 doc, section 5, item 2. Read the Ledger Feeder 6hQD8YhiYzR1FFda
   and the ledger z9j2I8h0RnbDKGBO before designing; never relax the terminal
@@ -389,7 +395,7 @@ Standing rules in force, beyond CLAUDE.md:
 
 Start by reading the two docs, then TaskList, then ask Tee on one card
 whether the verification card REQ-20260906-vED3ik has been decided and
-whether ACX goes onto the Inbox Captures Area field.
+whether he has added ACX to the Inbox Captures Area field.
 ```
 
 ## 7. Gauntlet
