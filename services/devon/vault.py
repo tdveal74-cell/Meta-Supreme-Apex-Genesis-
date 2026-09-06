@@ -275,6 +275,25 @@ AIRTABLE = {
     ),
 }
 
+# Where DEVON's airtable.row executor (Build 17) may write a row, by table. The
+# executor (n8n/devon/airtable-row-writer/validate_and_plan.js) carries the same
+# map inline because n8n cannot import this file; test_devon_integrity pins the
+# two together. Every table here carries the two stamp fields the executor writes
+# on every row and reads back before writing again: DEVON key holds the job's
+# idempotency key, DEVON job holds the intent id. Both were created on Inbox
+# Captures on 2026-09-06 (fldvp5UiTnGhRunAs, fldM2r96swSZsxH8x). The base is
+# AIRTABLE["live_base"]. Adding a table or a field is a deliberate act: create the
+# two stamp fields on the table first, then change this map and the executor in
+# the same change.
+AIRTABLE_ROW_TABLES = {
+    "Inbox Captures": {
+        "id": "tbl4ziFRbl5mnUcKc",
+        "key_field": "DEVON key",
+        "job_field": "DEVON job",
+        "writable": ("Title", "Captured", "Kind", "Source", "Area", "Body", "Notes"),
+    },
+}
+
 
 # ---------------------------------------------------------------------------
 # n8n
@@ -442,6 +461,31 @@ WEBHOOKS = {
             "the idempotency properties persisted."
         ),
     },
+    "devon-airtable-row": {
+        "job": "write one row into an allowlisted Airtable table for an AUTHORIZED job and advance it to EXECUTING",
+        "destination": "Airtable base AIRTABLE live_base, the tables AIRTABLE_ROW_TABLES names (Inbox Captures today)",
+        "workflow": "ps2S6dWcTIpq5bvr",
+        "auth": "header x-devon-key",
+        "open_ruling": (
+            "Build 17, created 2026-09-06 on Tee's ruling (the third executor, first "
+            "of the three builds in the recommended order). The second real executor: "
+            "called only by the Action Router as action airtable.row at ceiling "
+            "reversible_write, and bound by the Job Driver only when the job carries a "
+            "structural intent.payload.airtable (table and fields), never from words "
+            "in the summary. Same gates as the Drive Draft Writer: a granted, unexpired "
+            "approval on every envelope, the single flight lock in the entry report, "
+            "nothing written unless the ledger took that report, an existing row found "
+            "by DEVON key and DEVON job before writing, the created record read back so "
+            "the artifact records key_verified, refusals as data. Never sends typecast, "
+            "so an option that does not exist on a select field is refused by Airtable "
+            "and the job parks with that reason. Reversible by deleting the row. The "
+            "Intake Former passes payload.airtable through since the same day; before "
+            "that edit the executor was unreachable from any poster. Live proof: the "
+            "code bodies were read back byte identical to the repository on creation; "
+            "the first gated job through it waits on Tee's approval card, and the "
+            "execution ids belong here once it runs."
+        ),
+    },
     "devon-ledger": {
         "job": "Build 02 state ledger writes, one row per intent",
         "destination": "n8n data table devon_state_ledger VYyno7pDWmY6uxBz",
@@ -496,11 +540,13 @@ WEBHOOK_RULE = (
 # Ruled by Tee 2026-09-05 (ruling 2, rotate and stop saving). Every workflow whose
 # webhook takes the x-devon-key header receives that key inside the request headers,
 # and a saved successful execution keeps those headers where anyone who can read
-# executions can read the key. FIFTEEN webhook paths take the header, not the
-# thirteen recorded here until 2026-09-06. Thirteen belong to this lane:
-# devon-capture, devon-inbox, devon-approve-request, devon-action,
-# devon-drive-draft, devon-ledger, devon-build12-upstream, devon-intake,
-# devon-spine-n8n, devon-runtime, devon-route, devon-event and devon-editforge.
+# executions can read the key. SIXTEEN webhook paths take the header as of
+# 2026-09-06, when Build 17 added devon-airtable-row (fifteen earlier that day,
+# and thirteen recorded here until the same morning). Fourteen belong to this
+# lane: devon-capture, devon-inbox, devon-approve-request, devon-action,
+# devon-drive-draft, devon-airtable-row, devon-ledger, devon-build12-upstream,
+# devon-intake, devon-spine-n8n, devon-runtime, devon-route, devon-event and
+# devon-editforge.
 # Two more sit outside it and were missed by a count taken from the lane's own
 # dependency list rather than from the estate: devon-health (Health and
 # Observability Console M3H2mVPZJpDyIzrl, ACTIVE, GET) and devon-capture-file
@@ -511,8 +557,8 @@ WEBHOOK_RULE = (
 # (devon-approve-decide is the exception that takes no header at all: its auth is
 # the single use token in the emailed link. Confirmed 2026-09-06 by reading the
 # node, which carries no credential. Rotating this key does not rotate anything
-# guarding an approval decision.) The thirteen lane paths live in thirteen
-# workflows, since the Approval Queue serves two paths, and all thirteen now run
+# guarding an approval decision.) The fourteen lane paths live in fourteen
+# workflows, since the Approval Queue serves two paths, and all fourteen now run
 # with success execution data OFF, as does the Job Driver, which has no webhook
 # of its own. devon-health and devon-capture-file were NOT part of that setting
 # change and may still save successful executions carrying the header.
@@ -523,15 +569,15 @@ WEBHOOK_RULE = (
 # Tee's hands in the n8n UI; KEY_ROTATION names what has to move with it and why
 # it is urgent.
 KEY_ROTATION = (
-    "The key is approval equivalent for a write. Both write gates, the Action "
-    "Router and the Drive Draft Writer, read the envelope in front of them and "
-    "nothing about the caller, so whoever holds this header value can POST an "
-    "AUTHORIZED envelope and cause a Google Doc to be written with no approval "
-    "card ever raised. Rotating it is a security act, not housekeeping. "
+    "The key is approval equivalent for a write. The three write gates, the Action "
+    "Router, the Drive Draft Writer and the Airtable Row Writer, read the envelope "
+    "in front of them and nothing about the caller, so whoever holds this header "
+    "value can POST an AUTHORIZED envelope and cause a Google Doc or an Airtable "
+    "row to be written with no approval card ever raised. Rotating it is a security act, not housekeeping. "
     "Rotating the shared key (credential Devon Capture Key FYRvkRTOcROEYZ9P) is one "
     "edit in n8n and then every holder outside n8n. Order matters: edit the "
     "credential first, because every organ reads the same credential for both its "
-    "own webhook auth and its calls to the other organs, so all fifteen cut over "
+    "own webhook auth and its calls to the other organs, so all sixteen cut over "
     "together and there is no partial state, then update the outside holders, "
     "which are the only places that break. Known holders: the iPhone Shortcut that "
     "posts to devon-capture and devon-inbox, any Apple Routine or automation that "
@@ -548,14 +594,15 @@ KEY_ROTATION = (
     "off Railway production on 2026-09-06 and neither is set, so Railway held no "
     "copy at the 2026-09-06 rotation. Check them again before the next one rather "
     "than trusting this line. "
-    "The fifteen paths, so a rotator has a checklist rather than a count: "
+    "The sixteen paths, so a rotator has a checklist rather than a count: "
     "devon-capture, devon-inbox, devon-intake, devon-approve-request, devon-action, "
-    "devon-drive-draft, devon-ledger, devon-event, devon-spine-n8n, devon-runtime, "
-    "devon-route, devon-editforge, devon-build12-upstream, and the two outside this "
-    "lane, devon-health and devon-capture-file. Nine of those carry an auth "
-    "field in the WEBHOOKS map below (eight until devon-health was registered on "
-    "2026-09-06); the rest are recorded in prose, so working the map alone "
-    "covers nine of fifteen and feels finished. The first version of "
+    "devon-drive-draft, devon-airtable-row, devon-ledger, devon-event, "
+    "devon-spine-n8n, devon-runtime, devon-route, devon-editforge, "
+    "devon-build12-upstream, and the two outside this lane, devon-health and "
+    "devon-capture-file. Ten of those carry an auth field in the WEBHOOKS map "
+    "below (eight until devon-health was registered on 2026-09-06, nine until "
+    "devon-airtable-row was added later that day); the rest are recorded in "
+    "prose, so working the map alone covers ten of sixteen and feels finished. The first version of "
     "this checklist, written 2026-09-06, itself said thirteen and omitted the last "
     "two, which is the failure it was written to prevent: it was built from the "
     "lane's dependency list. Rebuild it by reading every workflow's webhook node "
@@ -573,12 +620,14 @@ KEY_ROTATION = (
     "01M1TB5RAJHF0FJEN91QMKYYK7 ran RECEIVED to COMPLETED in one pass of six steps "
     "with the Action Router dispatching to the Spine on execution 6069 and no hop "
     "reporting unclean, which exercised the Intake Former, Spine, Runtime, "
-    "Intelligence Router, Action Router and Event Bus. That is six of the fifteen "
+    "Intelligence Router, Action Router and Event Bus. That is six of the sixteen "
     "proven by execution. The rest are inferred, but the inference was grounded on "
     "2026-09-06 by reading every webhook node and every organ to organ HTTP node "
     "across twenty two workflows: all of them bind credential FYRvkRTOcROEYZ9P by "
     "id, none binds any of the ten unrelated Header Auth account credentials in the "
-    "project, so an in place value edit reaches all of them at once. That is "
+    "project, so an in place value edit reaches all of them at once. The Airtable "
+    "Row Writer, added after that read, binds the same credential by id on its "
+    "door and its two bus reports, read back on 2026-09-06 after creation. That is "
     "structure, not behaviour. The behavioural negative test WAS run, by Tee, on "
     "2026-09-06: he posted the old key and got a 401, then deleted the old value. "
     "That is the proof the credential edit propagated and the old secret is dead, "
@@ -682,10 +731,14 @@ WORKFLOWS = {
     # Build 05, n8n lane. Dispatches an AUTHORIZED envelope to an allowlisted
     # executor and reports to the bus twice. Zapier lane never built. Refusals
     # answer as data since 2026-09-05; see WEBHOOKS devon-action.
-    "Action Router": {"id": "ecLqrxALuLDdF2BN", "state": "active, webhook devon-action, allowlist spine.echo at ceiling read and drive.draft at ceiling reversible_write, successful executions not saved"},
+    "Action Router": {"id": "ecLqrxALuLDdF2BN", "state": "active, webhook devon-action, allowlist spine.echo at ceiling read, drive.draft at ceiling reversible_write and airtable.row at ceiling reversible_write, successful executions not saved"},
     # Build 16, the first real executor. One Google Doc draft per job, idempotent
     # by key, folder by Area from DRAFT_FOLDERS. See WEBHOOKS devon-drive-draft.
     "Drive Draft Writer": {"id": "J7Ly7riwXEd95D9a", "state": "active, webhook devon-drive-draft, executor drive.draft at ceiling reversible_write, successful executions not saved"},
+    # Build 17, the second real executor. One row per job into a table
+    # AIRTABLE_ROW_TABLES permits, idempotent by DEVON key and DEVON job. See
+    # WEBHOOKS devon-airtable-row.
+    "Airtable Row Writer": {"id": "ps2S6dWcTIpq5bvr", "state": "active, webhook devon-airtable-row, executor airtable.row at ceiling reversible_write, successful executions not saved"},
     "Intake Former": {"id": "AEFgXee7IDJarNV7", "state": "active, webhook devon-intake"},
     "Job Driver": {"id": "TT4TfFXyH9O7lfdc", "state": "active, sub-workflow called by the Intake Former and the Driver Poll"},
     "Driver Poll": {"id": "mbIKJk4UuB7V27rP", "state": "active, hourly poll"},

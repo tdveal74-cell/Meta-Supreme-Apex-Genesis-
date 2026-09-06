@@ -31,13 +31,33 @@ const arts = Array.isArray(env.artifacts) ? env.artifacts : [];
 const DRAFT_WORDS = /\b(draft|outline|script|memo|brief|synopsis|treatment|checklist|essay|one[ -]?pager|one page)\b/i;
 const NOT_DRAFT = /\b(airtable|notion|sheet|row|calendar|email|mail|send|publish|upload|deploy|delete|render|tweet|post to)\b/i;
 const AREA_FOLDER_LABEL = { TQO: 'the TQO scripts folder (TQO/01_SCRIPTS)', Podcast: 'the TSWS scripts folder (TSWS/01_SCRIPTS)' };
+// Executor selection, Build 17. A structural Airtable payload (intent.payload.airtable
+// carrying a table name and a fields object) binds airtable.row. The executor holds
+// the table and field allowlist, so a payload naming a table it does not permit
+// parks the job with that reason rather than writing anywhere. Structure is tested
+// before the keyword rule on purpose: a summary is prose and prose is guessed at, a
+// payload is a declared intent. Both need a reversible write and no EditForge payload.
+function airtablePayload() {
+  const a = p.airtable;
+  if (!a || typeof a !== 'object' || Array.isArray(a)) { return null; }
+  if (typeof a.table !== 'string' || !a.table.trim()) { return null; }
+  if (!a.fields || typeof a.fields !== 'object' || Array.isArray(a.fields)) { return null; }
+  return a;
+}
 function selectAction() {
   const ef = (p.editforge && typeof p.editforge === 'object') ? p.editforge : null;
   const br = String(intent.blast_radius || 'none');
+  if (!ef && br === 'reversible_write' && airtablePayload()) { return 'airtable.row'; }
   if (!ef && br === 'reversible_write' && DRAFT_WORDS.test(summary) && !NOT_DRAFT.test(summary)) { return 'drive.draft'; }
   return 'spine.echo';
 }
 function executorLine(action) {
+  if (action === 'airtable.row') {
+    const a = airtablePayload() || { table: '', fields: {} };
+    const names = Object.keys(a.fields).join(', ');
+    const title = String(a.fields.Title || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+    return 'Airtable Row Writer (airtable.row): one row will be written into the ' + String(a.table).trim() + ' table of the DEVON base' + (title ? ', titled ' + title : '') + ', carrying the fields ' + (names || 'none') + ' exactly as the job declares them plus DEVON key and DEVON job, reversible by deleting the row. Nothing is published or sent';
+  }
   if (action === 'drive.draft') {
     const area = String(env.area || '');
     const where = AREA_FOLDER_LABEL[area] || (area ? 'the ' + area + ' Area folder' : 'the capture inbox');
@@ -69,7 +89,8 @@ if (state === 'AUTHORIZED') {
     return cancel(ga, 'expired', 'The grant on card ' + String(ga.queue_row_id || 'unknown') + ' decayed at ' + ga.expires_at + ' with the job still at AUTHORIZED. Each driver pass since the approval, and what the executor answered, is in devon_driver_log. A fresh card is needed to run it again.', ga.queue_row_id, ga.decided_at || now);
   }
   // A refusal from the router this pass leaves its mark in the ledger before the
-  // pass ends (Tee's ruling, 2026-09-05): same state, state_reason set, one trace entry.
+  // pass ends (Tee's ruling, 2026-09-05): same state, state_reason set, one trace
+  // entry, and only when the row does not already carry that reason.
   if (mem.park && mem.park.intent_id === env.intent_id) {
     const park = mem.park;
     delete mem.park;

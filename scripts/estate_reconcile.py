@@ -262,13 +262,23 @@ DOC_CLAIMS: Tuple[Dict[str, Any], ...] = (
         "expected": {"total": 62},
     },
     {
-        # The standing census after Build 16 (Drive Draft Writer, the first
-        # real executor), 2026-09-05. Holds until the estate changes again, at
-        # which point the doc must be amended, dated, and a new pin added here.
+        # The census after Build 16 (Drive Draft Writer, the first real
+        # executor), 2026-09-05. Retired by amendment on 2026-09-06 when Build
+        # 17 added the Airtable Row Writer. Kept as a tripwire like the two
+        # above it.
         "doc": "docs/devon/SYS_OPS_n8n-cloud-to-vps-migration_v1_2026-08-31.md",
         "quote": "the 63 workflows",
         "verifier": "n8n_total",
         "expected": {"total": 63},
+    },
+    {
+        # The standing census after Build 17 (Airtable Row Writer, the second
+        # real executor), 2026-09-06. Holds until the estate changes again, at
+        # which point the doc must be amended, dated, and a new pin added here.
+        "doc": "docs/devon/SYS_OPS_n8n-cloud-to-vps-migration_v1_2026-08-31.md",
+        "quote": "the 64 workflows",
+        "verifier": "n8n_total",
+        "expected": {"total": 64},
     },
     # Records the DEVON and Hermes audit of 2026-09-02 (item 14) found stale
     # and corrected, dated. Each retired sentence stays pinned as a tripwire:

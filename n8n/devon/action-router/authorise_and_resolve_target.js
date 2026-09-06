@@ -40,6 +40,13 @@ const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 // once the Drive Draft Writer (version 7ff4d7d4) and the Job Driver carried the fixes,
 // proven by pinned runs 5916 to 5926. The card now names the executor and the driver
 // dispatches only the action bound to the grant.
+//
+// RULED 2026-09-06 by Tee (the third executor, first of three builds in the order
+// recommended): airtable.row is the second real executor. Build 17 accepts
+// AUTHORIZED, writes one row into a table its own allowlist permits (Inbox Captures
+// today), stamped with the idempotency key and the intent id, and advances the
+// envelope to EXECUTING with the artifact. The driver binds it only when the job
+// carries a structural intent.payload.airtable, never from words in the summary.
 const TARGETS = {
   'spine.echo': {
     url: 'https://thequietoperator.app.n8n.cloud/webhook/devon-spine-n8n',
@@ -52,6 +59,12 @@ const TARGETS = {
     workflow_id: 'J7Ly7riwXEd95D9a',
     max_blast_radius: 'reversible_write',
     description: 'Drive Draft Writer, Build 16. Writes one Google Doc draft and advances AUTHORIZED to EXECUTING.'
+  },
+  'airtable.row': {
+    url: 'https://thequietoperator.app.n8n.cloud/webhook/devon-airtable-row',
+    workflow_id: 'ps2S6dWcTIpq5bvr',
+    max_blast_radius: 'reversible_write',
+    description: 'Airtable Row Writer, Build 17. Writes one row into an allowlisted table of the DEVON base and advances AUTHORIZED to EXECUTING.'
   }
 };
 

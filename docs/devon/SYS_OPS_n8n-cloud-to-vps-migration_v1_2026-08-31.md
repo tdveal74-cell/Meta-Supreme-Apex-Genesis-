@@ -162,8 +162,10 @@ stop and say so. That is the tool working, not a fault.
 (AEFgXee7IDJarNV7), the Job Driver (TT4TfFXyH9O7lfdc) and the Driver Poll
 (mbIKJk4UuB7V27rP), and Build 15 added the Face (LsmfRFMmI5feINs0), all
 four active. Amended again the same evening: Build 16 added the Drive
-Draft Writer (J7Ly7riwXEd95D9a), active, so the Cloud estate now holds
-the 63 workflows the reconciler expects and the live active count is 38.
+Draft Writer (J7Ly7riwXEd95D9a), active, so the Cloud estate then held
+63 workflows with 38 active. Amended again on 2026-09-06: Build 17 added
+the Airtable Row Writer (ps2S6dWcTIpq5bvr), active, so the Cloud estate now
+holds the 64 workflows the reconciler expects and the live active count is 39.
 Every 58 and every 33 below this line was true on 2026-08-31 and is the
 record of that day, not the live number. A
 reconcile on 2026-09-01 found 31 active, with both the Heartbeat and the
