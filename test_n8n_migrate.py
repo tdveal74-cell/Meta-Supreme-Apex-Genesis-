@@ -150,12 +150,36 @@ def test_ref_id_reads_bare_strings_and_resource_locators():
     assert migrate._ref_id(None) == ""
 
 
-def test_set_ref_id_keeps_the_locator_shape_and_refreshes_the_cached_name():
-    locator = {"__rl": True, "mode": "list", "value": "old", "cachedResultName": "Old Name"}
-    out = migrate._set_ref_id(locator, "new", "New Name")
-    assert out == {"__rl": True, "mode": "list", "value": "new", "cachedResultName": "New Name"}
+def test_set_ref_id_keeps_the_locator_shape_and_refreshes_the_cached_name_and_url():
+    locator = {"__rl": True, "mode": "list", "value": "old", "cachedResultName": "Old Name",
+               "cachedResultUrl": f"https://{TARGET}/workflow/old"}
+    out = migrate._set_ref_id(locator, "old", "new", "New Name")
+    assert out == {"__rl": True, "mode": "list", "value": "new", "cachedResultName": "New Name",
+                   "cachedResultUrl": f"https://{TARGET}/workflow/new"}
     assert locator["value"] == "old"
-    assert migrate._set_ref_id("old", "new", None) == "new"
+    assert migrate._set_ref_id("old", "old", "new", None) == "new"
+
+
+def test_literal_matcher_is_a_whole_host_and_case_blind():
+    hits = migrate._count_literal({
+        "a": f"https://{SOURCE}/webhook/x",
+        "b": f"my{SOURCE}/x",
+        "c": f"{SOURCE}.evil.com",
+        "d": f"mail@{SOURCE}",
+        "e": f"'{SOURCE.upper()}'",
+        "f": f"{SOURCE}",
+    }, SOURCE)
+    assert hits == 3, "a, e and f only"
+    out, n = migrate._rewrite_strings({"b": f"my{SOURCE}/x", "c": f"{SOURCE}.evil.com", "d": f"mail@{SOURCE}"}, [(SOURCE, TARGET)])
+    assert n == 0 and SOURCE in out["b"] and SOURCE in out["c"] and SOURCE in out["d"]
+
+
+def test_load_map_rejects_a_blank_new_id(tmp_path: pathlib.Path):
+    for bad in ({"cred1": ""}, {"cred1": "   "}, {"cred1": {"id": "", "name": "x"}}):
+        path = tmp_path / "map.json"
+        path.write_text(json.dumps(bad), encoding="utf-8")
+        with pytest.raises(SystemExit, match="non-empty"):
+            migrate._load_map(str(path))
 
 
 def test_parse_pairs_rejects_half_a_pair():
@@ -209,7 +233,7 @@ def test_inspect_marks_the_source_host_and_the_targets_the_export_never_saw(expo
     assert f"{SOURCE}  3 occurrence(s) in 2 node(s)  <-- MOVES" in out
     assert "api.airtable.com  1 occurrence(s) in 1 node(s)\n" in out
     assert "Sticky notes only" in out
-    assert "3 occurrence(s) would be rewritten" in out
+    assert f"{SOURCE}: --rewrite-host would replace 3 occurrence(s) in nodes plus 1 in sticky notes." in out
     assert "wfZ  <-- NOT IN THIS EXPORT" in out
     assert "wfB\n      called by Organ A / Run B" in out
     assert "wfE  <-- NOT IN THIS EXPORT  named by 1: Organ A" in out
@@ -231,10 +255,12 @@ def test_inspect_source_host_flag_overrides_the_n8n_cloud_guess(export_dir, caps
 class FakeTarget:
     """Just enough of the n8n public API for import and repoint."""
 
-    def __init__(self, existing=None):
+    def __init__(self, existing=None, fail_on_post=None, refuse_settings=()):
         self.workflows = {w["id"]: w for w in (existing or [])}
         self.calls = []
         self.counter = 0
+        self.fail_on_post = fail_on_post      # the Nth POST raises, like a network drop
+        self.refuse_settings = set(refuse_settings)  # settings keys the API schema rejects
 
     def request(self, base, key, path, method="GET", payload=None):
         self.calls.append((method, path, payload))
@@ -243,6 +269,12 @@ class FakeTarget:
         if method == "GET" and path.startswith("/api/v1/workflows/"):
             return json.loads(json.dumps(self.workflows[path.rsplit("/", 1)[1]]))
         if method == "POST" and path == "/api/v1/workflows":
+            posts = sum(1 for c in self.calls if c[0] == "POST")
+            if self.fail_on_post == posts:
+                raise migrate.ApiError("POST /api/v1/workflows could not reach the target: connection reset")
+            refused = sorted(self.refuse_settings & set((payload or {}).get("settings") or {}))
+            if refused:
+                raise migrate.ApiError(f"POST /api/v1/workflows returned HTTP 400: request/body/settings/{refused[0]} must NOT have additional properties")
             self.counter += 1
             new_id = f"new{self.counter}"
             self.workflows[new_id] = {"id": new_id, **payload}
@@ -272,10 +304,10 @@ def _import_args(directory, **overrides):
 def test_import_dry_run_prints_the_rewrite_plan_and_creates_nothing(export_dir, target, capsys):
     assert migrate.cmd_import(_import_args(export_dir, rewrite_host=[f"{SOURCE}={TARGET}"])) == 0
     out = capsys.readouterr().out
-    assert "Host rewrite plan, 4 occurrence(s) across 1 workflow(s):" in out
+    assert "Host rewrite plan, 3 occurrence(s) in nodes plus 1 in sticky notes, across 1 workflow(s):" in out
     assert "Organ A / Call B  x1" in out
     assert "Organ A / Decide  x2" in out
-    assert "Organ A / Sticky  x1" in out
+    assert "Organ A / Sticky  x1  (sticky note)" in out
     assert "Would create 3 workflow(s)" in out
     assert not [c for c in target.calls if c[0] == "POST"]
     assert not (export_dir / "_id_map.json").exists()
@@ -294,10 +326,11 @@ def test_import_rewrites_the_host_in_what_it_posts_and_records_it_in_the_id_map(
     assert "active" not in organ_a
     id_map = json.loads((export_dir / "_id_map.json").read_text(encoding="utf-8"))
     assert id_map["wfA"]["host_rewrites"] == [
-        {"node": "Call B", "occurrences": 1},
-        {"node": "Decide", "occurrences": 2},
-        {"node": "Sticky", "occurrences": 1},
+        {"node": "Call B", "occurrences": 1, "sticky_note": False},
+        {"node": "Decide", "occurrences": 2, "sticky_note": False},
+        {"node": "Sticky", "occurrences": 1, "sticky_note": True},
     ]
+    assert id_map["wfA"]["read_back"] == "ok"
     assert id_map["wfA"]["was_active_on_source"] is True
     assert id_map["wfC"]["host_rewrites"] == []
     # The export on disk is untouched, so the rewrite is reversible by re-import.
@@ -311,7 +344,7 @@ def test_import_without_a_rewrite_posts_the_source_host_verbatim(export_dir, tar
     assert any(SOURCE in json.dumps(p) for p in posted)
 
 
-def test_import_refuses_a_populated_target_and_a_path_collision(export_dir, monkeypatch, capsys):
+def test_import_refuses_a_path_collision_before_asking_about_the_populated_target(export_dir, monkeypatch, capsys):
     fake = FakeTarget(existing=[{
         "id": "live1", "name": "Live Door",
         "nodes": [{"name": "Door", "type": "n8n-nodes-base.webhook", "parameters": {"path": "devon-a"}}],
@@ -319,12 +352,122 @@ def test_import_refuses_a_populated_target_and_a_path_collision(export_dir, monk
     monkeypatch.setattr(migrate, "_request", fake.request)
     monkeypatch.setenv("N8N_TARGET_URL", f"https://{TARGET}")
     monkeypatch.setenv("N8N_TARGET_KEY", "k")
-    with pytest.raises(SystemExit):
-        migrate.cmd_import(_import_args(export_dir, confirm=True))
+    assert migrate.cmd_import(_import_args(export_dir, confirm=True)) == 2
+    out = capsys.readouterr().out
+    assert "webhook path /devon-a  (held by Live Door" in out
+    assert migrate.cmd_import(_import_args(export_dir, confirm=True, allow_existing=True)) == 2, "the flag does not override a collision"
+    assert not [c for c in fake.calls if c[0] == "POST"]
+
+
+def test_import_refuses_a_name_already_on_the_target_as_a_lost_map(export_dir, monkeypatch, capsys):
+    fake = FakeTarget(existing=[{"id": "live9", "name": "Organ B", "nodes": [], "connections": {}, "settings": {}}])
+    monkeypatch.setattr(migrate, "_request", fake.request)
+    monkeypatch.setenv("N8N_TARGET_URL", f"https://{TARGET}")
+    monkeypatch.setenv("N8N_TARGET_KEY", "k")
     assert migrate.cmd_import(_import_args(export_dir, confirm=True, allow_existing=True)) == 2
     out = capsys.readouterr().out
-    assert "/devon-a  (held by Live Door)" in out
+    assert "workflow named 'Organ B'  (target id live9" in out
     assert not [c for c in fake.calls if c[0] == "POST"]
+
+
+def test_import_needs_the_flag_for_an_unrelated_populated_target(export_dir, monkeypatch, capsys):
+    fake = FakeTarget(existing=[{"id": "other", "name": "Unrelated", "nodes": [], "connections": {}, "settings": {}}])
+    monkeypatch.setattr(migrate, "_request", fake.request)
+    monkeypatch.setenv("N8N_TARGET_URL", f"https://{TARGET}")
+    monkeypatch.setenv("N8N_TARGET_KEY", "k")
+    with pytest.raises(SystemExit, match="none of them colliding"):
+        migrate.cmd_import(_import_args(export_dir, confirm=True))
+    assert migrate.cmd_import(_import_args(export_dir, confirm=True, allow_existing=True)) == 0
+    assert len([c for c in fake.calls if c[0] == "POST"]) == 3
+
+
+def test_import_reads_back_what_it_created_and_reports_a_silent_drop(export_dir, monkeypatch, capsys):
+    class Dropping(FakeTarget):
+        def request(self, base, key, path, method="GET", payload=None):
+            if method == "POST":
+                payload = json.loads(json.dumps(payload))
+                for node in payload["nodes"]:
+                    node.pop("webhookId", None)
+                payload["settings"].pop("errorWorkflow", None)
+            return super().request(base, key, path, method, payload)
+    fake = Dropping()
+    monkeypatch.setattr(migrate, "_request", fake.request)
+    monkeypatch.setenv("N8N_TARGET_URL", f"https://{TARGET}")
+    monkeypatch.setenv("N8N_TARGET_KEY", "k")
+    data = _workflow_a()
+    data["nodes"][0]["webhookId"] = "hook-1"
+    (export_dir / migrate._slug(data["name"], data["id"])).write_text(json.dumps(data), encoding="utf-8")
+    assert migrate.cmd_import(_import_args(export_dir, confirm=True)) == 2
+    out = capsys.readouterr().out
+    assert "READ BACK DIFFERS: webhook ids differ: sent ['hook-1'], stored []" in out
+    assert "READ BACK DIFFERS: settings.errorWorkflow sent 'wfE', stored None" in out
+    id_map = json.loads((export_dir / "_id_map.json").read_text(encoding="utf-8"))
+    assert len(id_map["wfA"]["read_back"]) == 2 and id_map["wfB"]["read_back"] == "ok"
+
+
+def test_import_refuses_to_create_the_estate_on_the_instance_it_came_from(export_dir, target):
+    (export_dir / "_export_meta.json").write_text(json.dumps({"source_url": f"https://{TARGET}", "source_host": TARGET}), encoding="utf-8")
+    with pytest.raises(SystemExit) as caught:
+        migrate.cmd_import(_import_args(export_dir, confirm=True))
+    assert "where this export came from" in str(caught.value)
+    assert not [c for c in target.calls if c[0] == "POST"]
+
+
+def test_import_twice_creates_nothing_the_second_time(export_dir, target, capsys):
+    assert migrate.cmd_import(_import_args(export_dir, confirm=True)) == 0
+    first = [c for c in target.calls if c[0] == "POST"]
+    assert len(first) == 3
+    # The target is populated now, so the second run has to say --allow-existing.
+    assert migrate.cmd_import(_import_args(export_dir, confirm=True, allow_existing=True)) == 0
+    out = capsys.readouterr().out
+    assert len([c for c in target.calls if c[0] == "POST"]) == 3, "no duplicate created"
+    assert "Created 0 workflow(s), all INACTIVE, skipped 3 already in the map" in out
+    assert "skipped  Organ A  already created as" in out
+
+
+def test_import_keeps_the_map_of_what_it_made_when_a_post_dies(export_dir, monkeypatch, capsys):
+    fake = FakeTarget(fail_on_post=2)
+    monkeypatch.setattr(migrate, "_request", fake.request)
+    monkeypatch.setenv("N8N_TARGET_URL", f"https://{TARGET}")
+    monkeypatch.setenv("N8N_TARGET_KEY", "k")
+    with pytest.raises(migrate.ApiError):
+        migrate.cmd_import(_import_args(export_dir, confirm=True))
+    out = capsys.readouterr().out
+    assert "Stopped at" in out and "1 created before it" in out
+    id_map = json.loads((export_dir / "_id_map.json").read_text(encoding="utf-8"))
+    assert list(id_map) == ["wfA"] and id_map["wfA"]["new_id"] == "new1"
+    # The re-run skips the one that exists and creates the other two, once each.
+    fake.fail_on_post = None
+    assert migrate.cmd_import(_import_args(export_dir, confirm=True, allow_existing=True)) == 0
+    id_map = json.loads((export_dir / "_id_map.json").read_text(encoding="utf-8"))
+    assert {k: v["new_id"] for k, v in id_map.items()} == {"wfA": "new1", "wfB": "new2", "wfC": "new3"}
+    assert len(fake.workflows) == 3
+
+
+def test_import_drops_only_the_settings_keys_the_target_refuses_and_says_so(export_dir, monkeypatch, capsys):
+    data = _workflow_a()
+    data["settings"] = {"executionOrder": "v1", "errorWorkflow": "wfE", "callerPolicy": "workflowsFromSameOwner", "availableInMCP": True}
+    (export_dir / migrate._slug(data["name"], data["id"])).write_text(json.dumps(data), encoding="utf-8")
+    fake = FakeTarget(refuse_settings={"callerPolicy", "availableInMCP"})
+    monkeypatch.setattr(migrate, "_request", fake.request)
+    monkeypatch.setenv("N8N_TARGET_URL", f"https://{TARGET}")
+    monkeypatch.setenv("N8N_TARGET_KEY", "k")
+    assert migrate.cmd_import(_import_args(export_dir, confirm=True)) == 0
+    out = capsys.readouterr().out
+    organ_a = next(w for w in fake.workflows.values() if w["name"] == "Organ A")
+    assert organ_a["settings"] == {"executionOrder": "v1", "errorWorkflow": "wfE"}
+    assert "dropped settings.availableInMCP" in out and "dropped settings.callerPolicy" in out
+    id_map = json.loads((export_dir / "_id_map.json").read_text(encoding="utf-8"))
+    assert sorted(id_map["wfA"]["dropped_settings"]) == ["availableInMCP", "callerPolicy"]
+    assert id_map["wfB"]["dropped_settings"] == []
+
+
+def test_create_workflow_gives_up_on_a_400_that_names_no_settings_key(monkeypatch):
+    def refuse(base, key, path, method="GET", payload=None):
+        raise migrate.ApiError("POST /api/v1/workflows returned HTTP 400: request/body/nodes/0/type must be string")
+    monkeypatch.setattr(migrate, "_request", refuse)
+    with pytest.raises(migrate.ApiError, match="nodes/0/type"):
+        migrate._create_workflow("https://x", "k", {"name": "n", "nodes": [], "connections": {}, "settings": {"a": 1}})
 
 
 # ---------------------------------------------------------------------------
@@ -337,7 +480,8 @@ def test_repoint_workflow_rewrites_every_mapped_reference_and_names_the_rest():
     names = {"wfA": "Organ A", "wfB": "Organ B"}
     creds = {"cred1": {"id": "c-new", "name": "Devon Capture Key (VPS)"}}
     tables = {}
-    out, changed, dangling = migrate._repoint_workflow(workflow, ids, names, creds, tables)
+    out, changed, dangling, done = migrate._repoint_workflow(workflow, ids, names, creds, tables)
+    assert done == []
 
     run_b = next(n for n in out["nodes"] if n["name"] == "Run B")
     assert run_b["parameters"]["workflowId"] == {"__rl": True, "mode": "list", "value": "new2", "cachedResultName": "Organ B"}
@@ -358,9 +502,32 @@ def test_repoint_workflow_rewrites_every_mapped_reference_and_names_the_rest():
 def test_repoint_workflow_reports_an_expression_target_for_a_human():
     workflow = {"nodes": [{"name": "Dyn", "type": "n8n-nodes-base.executeWorkflow",
                            "parameters": {"workflowId": {"__rl": True, "mode": "list"}}}], "settings": {}}
-    _, changed, dangling = migrate._repoint_workflow(workflow, {}, {}, {}, {})
+    _, changed, dangling, _ = migrate._repoint_workflow(workflow, {}, {}, {}, {})
     assert changed == []
     assert dangling == ["Dyn: Execute Workflow target is set by expression or name; check it by hand"]
+
+
+def test_repoint_workflow_is_idempotent_and_tolerates_null_settings_and_table_by_name_node():
+    workflow = {
+        "settings": None,
+        "nodes": [
+            {"name": "Run B", "type": "n8n-nodes-base.executeWorkflow", "parameters": {"workflowId": "new2"}},
+            {"name": "Door", "type": "n8n-nodes-base.webhook", "parameters": {}, "credentials": {"httpHeaderAuth": {"id": "c-new", "name": "k"}}},
+            {"name": "Old Style", "type": "n8n-nodes-base.dataTable", "parameters": {"table": "tbl1"}},
+            {"name": "Loose", "type": "n8n-nodes-base.emailSend", "parameters": {}, "credentials": {"smtp": {"name": "no id here"}}},
+        ],
+    }
+    ids = {"wfB": "new2"}
+    creds = {"cred1": {"id": "c-new", "name": None}}
+    tables = {"tbl1": {"id": "t1", "name": None}}
+    out, changed, dangling, done = migrate._repoint_workflow(workflow, ids, {}, creds, tables)
+    assert changed == ["Old Style: data table tbl1 -> t1"]
+    assert done == ["Run B: Execute Workflow already at new2", "Door: credential httpHeaderAuth already at c-new"]
+    assert dangling == ["Loose: credential smtp is bound with no id; bind it by hand"]
+    assert out["settings"] == {}
+    # A second pass over the result changes nothing and dangles the same one line.
+    out2, changed2, dangling2, done2 = migrate._repoint_workflow(out, ids, {}, creds, tables)
+    assert changed2 == [] and dangling2 == dangling and "Old Style: data table already at t1" in done2
 
 
 def test_repoint_end_to_end_writes_only_with_confirm_and_returns_2_while_anything_dangles(export_dir, target, capsys, tmp_path):
@@ -410,6 +577,36 @@ def test_repoint_returns_0_once_every_reference_is_mapped(export_dir, target, ca
     assert migrate.cmd_repoint(args) == 0
     assert "Every reference the tool understands now points at the target." in capsys.readouterr().out
     assert target.workflows["new1"]["settings"]["errorWorkflow"] == "newE"
+    puts_before = len([c for c in target.calls if c[0] == "PUT"])
+    # Second run: nothing to write, everything reported as already done, still exit 0.
+    assert migrate.cmd_repoint(args) == 0
+    out = capsys.readouterr().out
+    assert len([c for c in target.calls if c[0] == "PUT"]) == puts_before
+    assert "already done: Run B: Execute Workflow already at new2" in out
+    assert "STILL AT THE SOURCE" not in out
+
+
+def test_repoint_names_the_map_entries_that_import_never_created(export_dir, target, capsys):
+    migrate.cmd_import(_import_args(export_dir, confirm=True))
+    id_map = json.loads((export_dir / "_id_map.json").read_text(encoding="utf-8"))
+    id_map["wfC"]["new_id"] = ""
+    (export_dir / "_id_map.json").write_text(json.dumps(id_map), encoding="utf-8")
+    capsys.readouterr()
+    migrate.cmd_repoint(argparse.Namespace(directory=str(export_dir), credential_map=None, table_map=None, confirm=False))
+    out = capsys.readouterr().out
+    assert "NOT ON THE TARGET: Orphan Caller (wfC) has no new id in the map" in out
+
+
+def test_export_meta_names_the_source_host(monkeypatch, tmp_path):
+    fake = FakeTarget(existing=[{"id": "s1", "name": "One", "nodes": [], "connections": {}, "settings": {}, "active": True}])
+    monkeypatch.setattr(migrate, "_request", fake.request)
+    monkeypatch.setenv("N8N_SOURCE_URL", "https://source.app.n8n.cloud/")
+    monkeypatch.setenv("N8N_SOURCE_KEY", "k")
+    assert migrate.cmd_export(argparse.Namespace(directory=str(tmp_path))) == 0
+    meta = json.loads((tmp_path / "_export_meta.json").read_text(encoding="utf-8"))
+    assert meta["source_host"] == "source.app.n8n.cloud"
+    assert (tmp_path / "_index.json").exists()
+    assert (tmp_path / migrate._slug("One", "s1")).exists()
 
 
 def test_repoint_needs_the_id_map(tmp_path, target):
@@ -419,6 +616,7 @@ def test_repoint_needs_the_id_map(tmp_path, target):
 
 def test_no_banned_dashes_in_the_tool_or_this_file():
     banned = (chr(0x2014), chr(0x2013))
-    for path in (pathlib.Path("scripts/n8n_migrate.py"), pathlib.Path(__file__)):
+    here = pathlib.Path(__file__).resolve().parent
+    for path in (here / "scripts" / "n8n_migrate.py", pathlib.Path(__file__)):
         text = path.read_text(encoding="utf-8")
         assert not any(ch in text for ch in banned), path
