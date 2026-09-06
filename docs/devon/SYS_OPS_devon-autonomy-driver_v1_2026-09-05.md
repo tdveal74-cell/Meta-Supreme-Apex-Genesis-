@@ -4,7 +4,7 @@ type: SYS_OPS
 version: 1
 date: 2026-09-05
 area: Systems
-status: live-on-cloud-human-gated-first-job-completed
+status: live-on-cloud-human-gated-two-jobs-completed
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 base: 70a0a12
 branch: claude/new-session-2f2yu2
@@ -774,3 +774,43 @@ Intake Former and the Approval Queue were reviewed only through their contracts,
 and every execution id in this document is a claim a reader has to check in n8n
 for themselves.
 
+
+## 11. The second job, and the defect the artifact showed
+
+Tee approved card `REQ-20260905-xMdv3X` at 2026-09-06T01:53:37Z. The poll pass
+that followed carried job `01M1SN5X4ETKEPPCC4JT61TE5V` the whole way in about
+eleven seconds: APPROVAL_GRANTED to AUTHORIZED, `drive.draft` dispatched to the
+Drive Draft Writer on execution 6010, one Google Doc of 439 words written into
+TQO/01_SCRIPTS with `properties_verified` true, EXECUTING to VERIFYING, and
+verification card `REQ-20260906-J3bTiR` raised. He approved that at 02:19:25Z
+and the next pass closed the job COMPLETED with `human_watched` true and a
+receipt.
+
+Two rulings proved themselves in that run rather than in a pinned one. The
+ledger row still holds `execution.state succeeded, workflow J7Ly7riwXEd95D9a,
+execution 6010, finished 2026-09-06T01:59:01Z` at COMPLETED, which is the block
+the driver used to rewrite a hop later. And the artifact carries `words` and
+`properties_verified`, which cycle 5 added.
+
+Then the document was read, and it carried a defect no test would have caught.
+Every list line began with a literal backslash, `\- Brief reminder` and
+`1\. Receipts show`, and the compound words held non breaking hyphens rather
+than hyphens. The model writes for a markdown reader even when the system
+prompt says plain text only, and the one rule it did honour was the one about
+dashes. All of it is cosmetic and all of it is visible the moment the document
+opens, which is the worst combination: nothing fails, and a human cleans it by
+hand on every draft.
+
+Parse Draft now strips a backslash before markdown punctuation, folds U+2010 and
+U+2011 to a plain hyphen, and widens the dash rule to the figure dash and the
+horizontal bar. A backslash before anything else, a Windows path for instance,
+survives. Pinned run 6041 shows the exact defect going in and clean text coming
+out; pinned run 6042 repeats it after the character classes were rebuilt with
+`String.fromCharCode`, because a literal class is unreviewable in a diff and a
+backslash u escape does not survive the round trip through the n8n API. Both
+copies are pure ASCII and identical.
+
+The lesson worth keeping: the executor's own checks all passed on the first
+draft, the ledger was clean, the artifact was real, and the output was still
+not what it should have been. Reading the artifact is the check. Nothing else
+in the lane was ever going to find this.
