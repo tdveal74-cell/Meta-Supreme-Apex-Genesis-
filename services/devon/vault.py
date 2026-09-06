@@ -287,9 +287,19 @@ WEBHOOKS = {
         "job": "cross platform receipts",
         "destination": "Airtable Thread Receipts tblEhgEZoNr2ztbB3",
         "workflow": "pPIt2cELH2RVZktS",
-        "auth": (
-            "header x-devon-key, PLUS a per poster token in the body checked by "
-            "the Check Token node"
+        # Stays the single checkable phrase. node_auth_for() in the reconciler
+        # matches by PREFIX, so any second clause added here is silently
+        # discarded and the field would assert a layer nothing verifies. The
+        # body token gate is recorded below as prose and as an explicitly
+        # unverified claim, which is what it is until a check exists for it.
+        "auth": "header x-devon-key",
+        "auth_unverified_second_layer": (
+            "A per poster token in the request body, checked by the Check Token "
+            "code node of workflow pPIt2cELH2RVZktS. NOT VERIFIED by the estate "
+            "reconciler: webhook_nodes() reads trigger node authentication only "
+            "and never looks at a code node, so deleting or disabling Check Token "
+            "would leave this entry still reporting healthy. Treat as a claim, "
+            "not a fact, until a check covers it."
         ),
         "open_ruling": (
             "Header auth enforced live 2026-08-23, credential Devon Capture Key "
