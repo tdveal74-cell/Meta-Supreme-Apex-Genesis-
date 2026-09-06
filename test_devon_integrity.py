@@ -263,3 +263,85 @@ def test_unrecognised_capture_types_are_parked_not_guessed():
     destination, recognised = vault.route_capture("pdf")
     assert recognised
     assert "Documents" in destination
+
+
+def test_draft_folders_match_the_executor_folder_map() -> None:
+    """The Drive Draft Writer carries its own copy of DRAFT_FOLDERS.
+
+    n8n cannot import the vault, so Build 16's Validate and Plan node holds the
+    same Area to folder map inline. The repo copy of that node lives under
+    ``n8n/devon/drive-draft-writer/``. If the two drift, DEVON writes a draft
+    into a folder the vault does not permit for the Area and nothing else
+    notices. This pins them together.
+    """
+    from services.devon import vault
+
+    Path = pathlib.Path
+    source = Path(__file__).parent / "n8n" / "devon" / "drive-draft-writer" / "validate_and_plan.js"
+    assert source.exists(), f"{source} is missing; the executor source must live in the repo"
+    body = source.read_text(encoding="utf-8")
+
+    block = re.search(r"const FOLDERS = \{(.*?)\n\};", body, re.S)
+    assert block, "FOLDERS map not found in the executor source"
+    pairs = dict(re.findall(r"'([A-Za-z]+)':\s*\{\s*id:\s*'([^']+)'", block.group(1)))
+
+    inbox = re.search(r"const INBOX = \{\s*id:\s*'([^']+)'", body)
+    assert inbox, "INBOX fallback not found in the executor source"
+    pairs["_unknown"] = inbox.group(1)
+
+    assert pairs == vault.DRAFT_FOLDERS, (
+        "the executor's folder map and vault.DRAFT_FOLDERS disagree; "
+        "change both or neither"
+    )
+
+    # The approval card names the folder in words, from a third copy of the map
+    # inside the driver's Decide node. That sentence is the one thing Tee reads
+    # about where the document lands, so it is pinned to the folder NAMES the
+    # executor actually writes to, not just to the ids.
+    names = dict(re.findall(r"'([A-Za-z]+)':\s*\{[^}]*?name:\s*'([^']+)'", block.group(1)))
+    decide = Path(__file__).parent / "n8n" / "devon" / "job-driver" / "decide.js"
+    assert decide.exists(), f"{decide} is missing; the driver source must live in the repo"
+    labels = dict(
+        re.findall(
+            r"(\w+):\s*'the [^']*?\(([^)]+)\)'",
+            re.search(r"const AREA_FOLDER_LABEL = \{(.*?)\};", decide.read_text(encoding="utf-8"), re.S).group(1),
+        )
+    )
+    assert labels, "AREA_FOLDER_LABEL not found in the driver source"
+    for area, folder in labels.items():
+        assert names.get(area) == folder, (
+            f"the approval card tells Tee a {area} draft lands in {folder}, "
+            f"but the executor writes it to {names.get(area)}"
+        )
+
+
+def test_action_router_allowlist_matches_the_vault_state() -> None:
+    """Every allowlisted action names a workflow the vault records.
+
+    The router dispatches only to the names in TARGETS. A name that reaches
+    production without a vault entry is a capability nobody wrote down.
+    """
+    from services.devon import vault
+
+    source = pathlib.Path(__file__).parent / "n8n" / "devon" / "action-router" / "authorise_and_resolve_target.js"
+    assert source.exists(), f"{source} is missing; the router source must live in the repo"
+    body = source.read_text(encoding="utf-8")
+
+    targets = dict(re.findall(r"'([a-z.]+)':\s*\{[^}]*?workflow_id:\s*'([^']+)'", body, re.S))
+    assert targets, "no TARGETS entries found in the router source"
+
+    known = {entry["id"] for entry in vault.WORKFLOWS.values()}
+    for action, workflow_id in targets.items():
+        assert workflow_id in known, f"action {action} dispatches to unregistered workflow {workflow_id}"
+
+    ceilings = dict(
+        re.findall(r"'([a-z.]+)':\s*\{[^}]*?max_blast_radius:\s*'([^']+)'", body, re.S)
+    )
+    router_state = vault.WORKFLOWS["Action Router"]["state"]
+    for action in targets:
+        assert action in router_state, f"action {action} is live but the vault state does not name it"
+        ceiling = ceilings.get(action)
+        assert ceiling, f"action {action} has no ceiling in the router source"
+        assert ceiling in router_state, (
+            f"action {action} dispatches at ceiling {ceiling}, which the vault state does not record"
+        )

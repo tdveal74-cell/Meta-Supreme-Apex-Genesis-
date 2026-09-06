@@ -171,7 +171,23 @@ the map can never become a second registry that drifts.
 Merging is not deploying, so this section records the read back rather than the
 merge.
 
-**Standing read back, 2026-09-04, against main at `edaf03e`.** All three
+**Standing read back, 2026-09-05 at 20:50Z, against main at `077d7b5`.** All
+three surfaces verified current, after the third account block cleared.
+
+| Surface | Deployment | Commit |
+|---|---|---|
+| Railway `api` | `38d5d387` SUCCESS, created 19:56:13Z and finished 20:02:21Z; the deploy log carries the alembic context lines from the pre deploy hook | `077d7b5` |
+| Vercel `devon-soul` | `dpl_E9Whg4NdDRbntcBxp1sik356MEg3`, READY, `target: "production"` | `077d7b5` |
+| Vercel `meta-supreme-apex-genesis-web` | `dpl_7pK6tCvCMGB7wVhub9Y36bbxF79v`, CANCELED, `target: "production"`, which is the `ignoreCommand` skipping | `077d7b5` |
+
+The web skip was verified by hand rather than trusted: `cb01b7a..origin/main`
+over `apps/web`, `packages/ui`, `pnpm-lock.yaml` and `pnpm-workspace.yaml` is
+empty, and `cb01b7a` is the last commit that actually built that project. So
+nothing is owed to the web surface and it is current on its own terms. The
+block that stood earlier in the evening is settled by these records existing at
+all, which is the only signature a block leaves.
+
+**Superseded read back, 2026-09-04, against main at `edaf03e`.** All three
 surfaces verified current.
 
 | Surface | Deployment | Commit |
