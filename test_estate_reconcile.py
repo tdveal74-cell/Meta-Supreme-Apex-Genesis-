@@ -280,12 +280,15 @@ def test_a_changed_workflow_count_demands_a_doc_amendment():
     all_claims = reconcile.doc_claims(reconcile._read_doc_texts())
     claims = [c for c in all_claims if c.verifier == "n8n_total"]
     assert len(claims) == 1, "exactly one census sentence should be live in the migration doc"
-    assert claims[0].expected == {"total": 63}
-    sixty_two = {str(i): {"name": str(i), "active": False} for i in range(62)}
-    observations = _n8n_observation(workflows=sixty_two, webhooks={})
-    assert reconcile.check(claims, observations)[0].status == reconcile.DRIFT
+    # 64 since Build 17 (the Airtable Row Writer) on 2026-09-06; 63 after
+    # Build 16, 62 after Builds 14 and 15, 58 on 2026-08-31. A new workflow
+    # moves this number, the pin in DOC_CLAIMS and the migration doc together.
+    assert claims[0].expected == {"total": 64}
     sixty_three = {str(i): {"name": str(i), "active": False} for i in range(63)}
     observations = _n8n_observation(workflows=sixty_three, webhooks={})
+    assert reconcile.check(claims, observations)[0].status == reconcile.DRIFT
+    sixty_four = {str(i): {"name": str(i), "active": False} for i in range(64)}
+    observations = _n8n_observation(workflows=sixty_four, webhooks={})
     assert reconcile.check(claims, observations)[0].status == reconcile.OK
     # The 2026-08-31 sentence was amended, not deleted from the registry: it
     # stays pinned so a later edit that brings "the 58 workflows" back revives
