@@ -73,7 +73,12 @@ function clean(name, rule, value) {
     return t;
   }
   if (rule.kind === 'date') {
-    if (typeof value !== 'string' || !DATE.test(value) || Number.isNaN(Date.parse(value + 'T00:00:00Z'))) { return { bad: name + ' must be a date written YYYY-MM-DD' }; }
+    // A date that parses is not a date that exists: V8 reads 2026-02-30 as March 2
+    // and Airtable refuses it, so the value must come back out of the parser as it
+    // went in.
+    if (typeof value !== 'string' || !DATE.test(value)) { return { bad: name + ' must be a date written YYYY-MM-DD' }; }
+    const ms = Date.parse(value + 'T00:00:00Z');
+    if (Number.isNaN(ms) || new Date(ms).toISOString().slice(0, 10) !== value) { return { bad: name + ' is not a calendar date that exists' }; }
     return value;
   }
   if (rule.kind === 'select') {
@@ -113,11 +118,17 @@ for (const it of $input.all()) {
   const expMs = Date.parse(String(appr.expires_at || ''));
   if (Number.isNaN(expMs)) { out.push(refusal(e, 'REFUSED: approval.expires_at ' + String(appr.expires_at) + ' is not a readable time, so the grant cannot be trusted.')); continue; }
   if (expMs < Date.now()) { out.push(refusal(e, 'REFUSED: the approval expired at ' + String(appr.expires_at) + '. An expired grant is not a grant.')); continue; }
-  // Single flight, the same rule as the Drive Draft Writer. The entry report marks
-  // the ledger row execution.state running under this workflow's id; a second pass
-  // that reads the row inside ten minutes steps back. An unreadable updated_at is a
-  // lock still held: a time that cannot be read cannot be trusted, and failing
-  // open here writes a second row.
+  // Single flight, best effort, the same rule as the Drive Draft Writer. The entry
+  // report marks the ledger row execution.state running under this workflow's id,
+  // and a second pass that reads the row inside ten minutes steps back. An
+  // unreadable updated_at is a lock still held: a time that cannot be read cannot
+  // be trusted, and failing open here writes a second row. Stated plainly (critic,
+  // 2026-09-06): this mark lives only in the ledger row, and the router's failure
+  // exit rewrites that row from its pre dispatch envelope, so the mark does not
+  // survive a failed pass. What actually stops a second row is the driver poll
+  // skipping a job touched inside three minutes and the search by DEVON key and
+  // DEVON job before every write. The residual window is two passes loading the
+  // row before either entry report lands.
   const ex = isObj(e.execution) ? e.execution : {};
   if (ex.state === 'running' && ex.workflow_id === $workflow.id) {
     const lockAge = Date.now() - Date.parse(String(e.updated_at || ''));
@@ -125,8 +136,10 @@ for (const it of $input.all()) {
       out.push(refusal(e, 'REFUSED: another pass began writing this row at ' + String(e.updated_at) + ' (execution ' + String(ex.execution_id || 'unknown') + '); this pass steps back. The lock ages out ten minutes after a readable updated_at, and an unreadable one counts as held.')); continue;
     }
   }
-  const idem = s(e.idempotency_key);
-  if (idem.length < 8 || idem.length > 128 || /['"\\{}]/.test(idem)) { out.push(refusal(e, 'REFUSED: idempotency_key must be 8 to 128 characters with no quotes, braces or backslashes before this executor writes anything; it is quoted into an Airtable formula.')); continue; }
+  // The key is stamped on the row exactly as the ledger holds it, so it is never
+  // rewritten here: whitespace anywhere in it is refused rather than collapsed.
+  const idem = String(e.idempotency_key === undefined || e.idempotency_key === null ? '' : e.idempotency_key);
+  if (idem.length < 8 || idem.length > 128 || /[\s'"\\{}]/.test(idem)) { out.push(refusal(e, 'REFUSED: idempotency_key must be 8 to 128 characters with no whitespace, quotes, braces or backslashes before this executor writes anything; it is quoted into an Airtable formula and stamped on the row verbatim.')); continue; }
   const p = isObj(intent.payload) ? intent.payload : {};
   if (isObj(p.editforge)) { out.push(refusal(e, 'REFUSED: this job carries an EditForge payload; renders go through the Build 07 handoff, not the row writer.')); continue; }
 

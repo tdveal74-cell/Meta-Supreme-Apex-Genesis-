@@ -4,7 +4,7 @@ type: SYS_OPS
 version: 1
 date: 2026-09-06
 area: Systems
-status: live-on-cloud-proof-waits-on-card
+status: live-on-cloud-first-row-written-verification-card-pending
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 base: b8fffb1
 branch: claude/new-session-2f2yu2
@@ -32,41 +32,69 @@ executor unreachable or unrecorded were found by reading rather than assumed
 and closed in the same arc: the Intake Former dropped `payload.airtable`
 before this build, the Face did not know either real executor existed, and
 the live Absorb node had never received a guard the repository said it had.
-Pinned runs 6171 to 6173 prove the write, the refusal and the reuse branches;
-a live gated job (`01M1V6M3XG0RQR191QFF7W74WJ`) is parked at
+Pinned runs 6171 to 6173 prove the write, the refusal and the reuse branches.
+The live gated job (`01M1V6M3XG0RQR191QFF7W74WJ`) was parked at
 WAITING_APPROVAL on card `REQ-20260906-8kt8Vj` with the executor bound and
-named, and the first real row waits on Tee's tap. Nothing in this document
-claims that row exists.
+named when this document was first written, and it said so: nothing in it
+claimed the row existed. Amended the same day at 11:36Z: Tee approved the
+card at 11:32:16Z, a hand run of the Driver Poll (execution 6200, driver
+pass 6202) carried the job to AUTHORIZED, through the router, into the
+executor (execution 6208), and to VERIFYING. The row exists:
+`recKhlOqdAG0Zju30` in Inbox Captures, both stamp fields read back directly
+from Airtable, artifact `key_verified true`, `ledger_clean true`. The
+verification card `REQ-20260906-vED3ik` waits on Tee; the job is not
+COMPLETED until he decides it. A fresh critic then read the whole diff and
+its findings were closed the same hour (section 7).
 
 ## 1. What was built
 
 ### The executor, `ps2S6dWcTIpq5bvr`
 
-Sixteen nodes, created from validated SDK source and read back node by node.
+Sixteen functional nodes plus one sticky note, created from validated SDK
+source and read back node by node (fifteen functional nodes until 11:41Z,
+when the `Write?` guard below was added on the critic's finding).
 Door `Row In (POST)` at path `devon-airtable-row`, header auth on credential
 `FYRvkRTOcROEYZ9P` (Devon Capture Key, by id). `Validate and Plan` holds the
 gates the Drive Draft Writer holds (schema 1.0.0, ULID, AUTHORIZED only,
 blast radius no wider than `reversible_write`, a granted and unexpired
-approval on every envelope whatever the label says, the ten minute single
-flight lock, an idempotency key of 8 to 128 characters with no quotes, braces
-or backslashes because it is quoted into an Airtable formula, no EditForge
-payload) and then the allowlist: `TABLES` maps a table name to its id, the two
+approval on every envelope whatever the label says, the single flight mark
+described below, an idempotency key of 8 to 128 characters with no
+whitespace, quotes, braces or backslashes because it is quoted into an
+Airtable formula and stamped on the row verbatim (whitespace added 11:41Z; a
+key was collapsed before, so the stamp could differ from the ledger key), no
+EditForge payload) and then the allowlist: `TABLES` maps a table name to its id, the two
 stamp fields and a rule per writable field (text with a length cap, date as
 YYYY-MM-DD, select as one option name, multi select as a list of option
-names). Anything outside it refuses with the writable tables or fields
-named. The executor never sends `typecast`, so an option that does not exist
-on a select field is Airtable's 422 and comes back as a refusal naming
-Airtable's own error type. It never defaults a field the job did not name.
+names; a date must also be a calendar date that exists, since V8 reads
+2026-02-30 as March 2 and Airtable would refuse it). Anything outside it
+refuses with the writable tables or fields named. The executor never sends
+`typecast`, so an option that does not exist on a select field is Airtable's
+422 and comes back as a refusal naming Airtable's own error type. It never
+defaults a field the job did not name.
 
 `Report Entry to Bus` posts INTENT_RECEIVED with `execution.state running`
-under this workflow id, which is the lock. `Find Existing Row` is an HTTP
+under this workflow id. That mark is the single flight rule, and this
+document first called it a ten minute lock, which overclaims (critic,
+2026-09-06): the mark lives only in the ledger row, and the router's failure
+exit rewrites that row from its pre dispatch envelope, so it does not
+survive a failed pass. What actually stops a second row is the Driver Poll
+skipping any job touched inside three minutes and the search by both stamp
+fields before every write. The residual window is two passes loading the
+row before either entry report lands, which the hourly poll plus a hand run
+inside the same seconds could produce. `Find Existing Row` is an HTTP
 GET on the Airtable API with the predefined Airtable token credential
 `OyuQtrelq7zP2mTy` (by id), `filterByFormula` on both stamp fields and
 `maxRecords` 3, full response, never error. `Check Existing` refuses unless
 the ledger persisted the entry report, refuses unless the search answered
 200, and re-reads both stamp fields on every hit so a row carrying this key
-under another job's id is ignored rather than adopted. `Write Row` is an
-HTTP POST of `{ fields }` with the same credential. `Row Result` refuses on
+under another job's id is ignored rather than adopted. `Write?` (added
+11:41Z) sits between `Existing?` and the write: a Check Existing refusal
+used to flow straight into `Write Row`, which had no url to call and threw,
+so a designed refusal became an execution error and the reason was lost.
+It now reaches `Return Refusal` as data; pinned runs 6224 (search answers
+429) and 6225 (ledger refuses the entry report) prove it, and 6226 proves
+the write path still passes through the guard. `Write Row` is an HTTP POST
+of `{ fields }` with the same credential. `Row Result` refuses on
 anything but 200 with a record id and sets `key_verified` only when the
 record Airtable returned carries this job's key and intent id. `Advance
 Envelope` moves AUTHORIZED to EXECUTING with an artifact of kind
@@ -77,7 +105,7 @@ carries both persistence flags and `ledger_clean`; `Return Envelope` answers
 `[envelope]`, which is what the router's Report Dispatch parses; `Return
 Refusal` answers HTTP 200 with the refusal as data. Settings: error workflow
 `XDQXwgFkUhYxoEjG`, 120 second timeout, successful executions not saved.
-Active version `d16f002c`.
+Active version `d16f002c` at first publish, `486c243d` since 11:41Z.
 
 The two stamp fields were created on Inbox Captures `tbl4ziFRbl5mnUcKc`
 before the workflow: `DEVON key` (`fldvp5UiTnGhRunAs`) and `DEVON job`
@@ -95,19 +123,36 @@ payload only when `intent.payload.airtable` is an object with a string table
 and an object of fields; `selectAction()` tests it before the draft keyword
 rule, so structure beats prose; `executorLine('airtable.row')` reads
 "Airtable Row Writer (airtable.row): one row will be written into the
-Inbox Captures table of the DEVON base, titled X, carrying the fields A, B,
-C exactly as the job declares them plus DEVON key and DEVON job, reversible
-by deleting the row. Nothing is published or sent". The binding into
-`intent.payload.action` at card time and the mismatch park at AUTHORIZED are
-unchanged. Active version `ea93e3ac`.
+Inbox Captures table of the DEVON base (payload fingerprint 65a13f8e),
+titled X, carrying the fields A, B, C as the job declares them plus DEVON
+key and DEVON job. Body begins: ... Reversible by deleting the row. Nothing
+is published or sent". The fingerprint (FNV-1a over the canonical payload,
+eight hex characters, not a secret) and the Body excerpt were added at
+11:49Z on the critic's finding that a list of field names is not consent to
+a value nobody saw; the same line is kept in `approval.card_executor`, and
+at AUTHORIZED the driver recomputes the fingerprint and parks the job
+(`bound_payload_mismatch`) when the payload no longer produces the one the
+card carried. The binding into `intent.payload.action` at card time and the
+action mismatch park are unchanged. Active version `ea93e3ac` at first
+publish, `f33c65ed` since 11:49Z.
 
 Intake Former `AEFgXee7IDJarNV7`: Form Job keeps a structural
 `payload.airtable` (table name, a flat fields object of strings, lists of
-strings, numbers or booleans, at most 12 fields, 20000 characters per value)
-and Apply Tags floors any Airtable row job at `reversible_write` so a card is
-always raised. Before this edit the intake kept only `editforge`,
-`auto_verify` and `note` from a poster's payload, so the executor built an
-hour earlier was unreachable from every door. Active version `0a6cf6c0`.
+strings, numbers or booleans, at most 12 fields, 20000 characters per value,
+20 items per list) and Apply Tags floors any Airtable row job at
+`reversible_write` so a card is always raised. Before this edit the intake
+kept only `editforge`, `auto_verify` and `note` from a poster's payload, so
+the executor built an hour earlier was unreachable from every door. Active
+version `0a6cf6c0`. Amended at 11:50Z on the critic's findings (`207ae1cc`):
+a value over a bound is refused with the bound named rather than cut to fit
+(the first version sliced a 20001 character Body to 20000 and dropped a
+thirteenth field silently, a transformation the first law says to refuse);
+an idempotency key carrying whitespace, quotes, braces or backslashes is
+refused at the door, the union of what both executors refuse, so a bad key
+cannot pass the intake, raise a card, and burn the grant at the executor;
+and an Airtable row job labelled wider than `reversible_write` is refused,
+because the driver binds `airtable.row` at exactly that radius and a wider
+label would card the job as a spine echo and park it with the grant spent.
 
 Face `LsmfRFMmI5feINs0`: the system prompt said "a Drive draft is next" a
 day after the draft writer went live. It now names the three executors and
@@ -115,7 +160,9 @@ what selects each, and the reply format lets the model attach an `airtable`
 object (table Inbox Captures, the seven permitted fields, substance in
 Body). Parse Reply carries that object into the job payload untouched; the
 intake bounds it and the executor holds the allowlist. Active version
-`1ccd11b9`.
+`1ccd11b9`; `1c9e6662` since 11:48Z, when Attach Receipt was taught to show
+the table, the Title, the field names and how the Body begins on a dry run,
+so what Tee says "file it" to is what the card will carry.
 
 ### The registry, the tests, the copies
 
@@ -145,10 +192,13 @@ its repo file after publishing: all identical.
 | Intake published | `AEFgXee7IDJarNV7` active `0a6cf6c0` |
 | Face published | `LsmfRFMmI5feINs0` active `1ccd11b9` |
 | Live gated job | intent `01M1V6M3XG0RQR191QFF7W74WJ`, filed through the intake at 11:10:57Z (driver pass 6175, origin intake, RECEIVED to WAITING_APPROVAL in five steps), card `REQ-20260906-8kt8Vj` expires 2026-09-09T11:11:04Z, `intent.payload.action` bound to `airtable.row`, `approval.card_executor` names the Inbox Captures table, the title and the seven fields, brief by Cerebras recommends proceed |
+| The first real row | Tee approved `REQ-20260906-8kt8Vj` at 11:32:16Z (decided_by tee, grant decays 2026-09-07T11:32:16Z). Driver Poll hand run 6200 at 11:36:18Z; driver pass 6202 (origin poll, six steps, WAITING_APPROVAL to VERIFYING, `ledger_clean true`): APPROVAL_GRANTED, router dispatched `airtable.row` to `ps2S6dWcTIpq5bvr` execution 6208, row written, Spine EXECUTING to VERIFYING, verification card `REQ-20260906-vED3ik` raised (expires 2026-09-09T11:36:28Z). Ledger artifact: kind `airtable_record`, `recKhlOqdAG0Zju30`, seven fields, `reused false`, `key_verified true`, created 11:36:25Z. Direct Airtable read of the record: Title, Captured 2026-09-06, Kind Note, Source Other, Area Systems, Body, Notes as declared, `DEVON key build17-proof-20260906-airtable-row`, `DEVON job 01M1V6M3XG0RQR191QFF7W74WJ`. The same pass found the other open job's card `REQ-20260905-f5kEZj` still pending (pass 6201) |
+| Pinned runs, the Write? guard | execution 6224: Find Existing Row pinned to HTTP 429, Check Existing refused, `Existing?` false, `Write?` false, Return Refusal answered the reason, Write Row never ran. Execution 6225: entry report pinned `persisted false`, same path, Write Row never ran. Execution 6226: happy path through `Write?` true, Row Result `key_verified true`, Return Envelope, `ledger_clean true` |
+| Republished after the critic | executor `486c243d` (11:41Z), Face `1c9e6662` (11:48Z), Job Driver `f33c65ed` (11:49Z), Intake Former `207ae1cc` (11:50Z); all 23 live Code nodes of the four workflows diffed against `n8n/devon/` after publishing: identical |
 | Face dry run | execution 6194: asked to show what it would file, the model returned action `dry_run` with an `airtable` object (Title, Captured, Kind, Source, Area, Body), Parse Reply carried it into `payload.airtable`, the intake formed envelope `01M1V6VN93D9V3EVQRZ613ATJT` with the payload intact and filed nothing |
 | Census | 64 workflows, 39 active, from the project listing at 11:07Z |
 | Deploy read back of the previous merge | Railway `941318bb` SUCCESS on `b8fffb1` with the alembic context lines; devon-soul `dpl_44y1ogZqxPyVdw7mhVaCQmHdZTUa` READY production on `b8fffb1`; nothing owed to the web project |
-| Repository | 199 tests pass, ruff clean; PR #151 draft |
+| Repository | This row first read "199 tests pass, ruff clean" against commit 4c14e3f and again against 5c94df5. That was false, and the critic re-measured it: at 4c14e3f, dac7859 and 5c94df5 the same selection was 1 failed, 198 passed, the failure being the census pin test that still said 63 while the pin and this doc said 64. The commit that moved the pin did not run the test that guards it. Fixed in aac9d5e; CI green on all six checks from that commit. Amended 2026-09-06 rather than rewritten, because the first law says a wrong claim gets dated, not deleted |
 
 ## 3. Drifts found and closed
 
@@ -174,15 +224,24 @@ and it is worth running at the start of any session that will edit a node.
 
 ## 4. What is not proven, stated plainly
 
-- **The first real row.** No row has been written by the executor. The
-  gated job waits on card `REQ-20260906-8kt8Vj`. After Tee approves, the
-  next hourly poll (or a hand run of the Driver Poll `mbIKJk4UuB7V27rP`)
-  carries it AUTHORIZED, through the router, into the executor, to
-  VERIFYING and a verification card. The proof is the ledger row's artifact
-  with `key_verified true`, the Airtable row under `DEVON key
-  build17-proof-20260906-airtable-row`, and the executor execution id. Task
-  28 in the session task list is that proof.
-- **The refusal and reuse branches live.** Proven on pinned data only.
+- **The first real row.** Proven at 11:36Z (section 2, "The first real
+  row"); this bullet said "no row has been written" until then. What is
+  still not proven is the close: the verification card
+  `REQ-20260906-vED3ik` waits on Tee, and the job reads COMPLETED only after
+  he approves it and the next driver pass runs.
+- **The refusal and reuse branches live.** Proven on pinned data only (6172,
+  6173, 6224, 6225). The live path has run once, on the happy branch.
+- **The payload fingerprint on a live card.** The driver change at 11:49Z is
+  proven in a Node harness (card carries the fingerprint and the Body
+  excerpt, same payload dispatches, a changed Body parks with
+  `bound_payload_mismatch`, key order does not matter, a card without a
+  fingerprint dispatches as before) and by the live node reading back
+  identical; no job has been carded through it live yet. The proof job's
+  card predates it and carries no fingerprint, which is the legacy path.
+- **The intake refusals live.** Same: harnessed on the exact node bodies
+  (20001 characters refused, 13 fields refused, 21 items refused, a key with
+  a quote or a space refused, an irreversible airtable job refused) and read
+  back identical; not yet exercised through the door.
 - **An Airtable 422.** Never observed. The refusal text for it is code read
   only.
 - **A chat filed row job.** The Face path is proven as a dry run only.
@@ -234,6 +293,23 @@ report of the same morning (`SYS_OPS_devon-operational-report_v1_2026-09-06`).
 9. **The Face's stale line about EditForge** ("wait on the host env") is
    true today and will go stale the day runbook A is done; the prompt is in
    `n8n/devon/face/compose_prompt.js`.
+10. **ACX is missing from the Inbox Captures Area field.** Read live by the
+    critic: the field (`fldpbMPz2xBcEo0Ia`) has eight options, TQO, Podcast,
+    NCO, Health, Money, Family, Learning, Systems, and no ACX. The Face and
+    the intake accept nine Areas, so a chat filed ACX capture would raise a
+    card, be approved, and park at AUTHORIZED on Airtable's 422 with the
+    grant spent. Owner: Tee's ruling, then one option added in Airtable.
+    The Kind, Source and Area vocabularies of Inbox Captures are recorded
+    nowhere in the vault; adding them is a record without a check until a
+    keyed reconcile can read the Airtable schema, so it waits on item 3.
+11. **Small ones the critic named and this session left.** The Face key
+    hashes the summary only, so two captures with the same wording in one
+    session collide at Dedupe (reported, not silent). The chat log stores
+    the dry run job cut at 4000 characters, so a very long Body makes the
+    stored proposal unparseable and "file it" files the model's
+    re-derivation. `card_executor` is kept at 500 characters, so a long
+    Title plus the Body excerpt loses the tail in the ledger (the card
+    itself is whole). `Area` allows nine items against eight options.
 
 ## 6. Handover prompt for the next chat
 
@@ -248,26 +324,30 @@ and docs/devon/SYS_OPS_devon-operational-report_v1_2026-09-06.md. Load the
 steward skill before touching CI or a PR, estate-reconcile before checking
 records, devon-learning-lane before touching the Build 12 lane.
 
-Where things stand on 2026-09-06 at about 11:20Z:
+Where things stand on 2026-09-06 at about 12:00Z:
 - Branch claude/new-session-2f2yu2 carries PR #151 (draft): Build 17, the
   Airtable Row Writer, plus the Face and Intake edits. Drive it green, merge
   it under Tee's standing operational merge permission when all six checks
   pass, then restart the branch from origin/main under the same name. Merge
   commits are titled "Merge PR #151: <title>". Read the head SHA with git
   rev-parse origin/<branch> before merging, never from a doc.
-- Job 01M1V6M3XG0RQR191QFF7W74WJ waits at WAITING_APPROVAL on card
-  REQ-20260906-8kt8Vj (expires 2026-09-09T11:11:04Z). Tee approves it from
-  the email. Then hand run the Driver Poll mbIKJk4UuB7V27rP (execute_workflow,
-  manual mode) or wait for the hourly poll, and read back: the ledger row in
-  data table VYyno7pDWmY6uxBz (project rM0TNTE2fNXErglU) should carry an
-  artifact of kind airtable_record with key_verified true; Airtable base
-  app28z7XnKzjfTXwc table tbl4ziFRbl5mnUcKc should hold one row with DEVON
-  key build17-proof-20260906-airtable-row; the executor ps2S6dWcTIpq5bvr
-  will have one production execution (successes are not saved, so read the
-  ledger, not the execution list). A verification card follows; Tee approves
-  it after looking at the row; the job closes COMPLETED. Record the execution
-  ids in vault.py WEBHOOKS devon-airtable-row open_ruling (both copies, byte
-  identical) and in the Build 17 doc, section 2, in the same PR or the next.
+- Job 01M1V6M3XG0RQR191QFF7W74WJ is at VERIFYING. Tee approved the approval
+  card at 11:32:16Z; the row recKhlOqdAG0Zju30 exists in Inbox Captures
+  (base app28z7XnKzjfTXwc, table tbl4ziFRbl5mnUcKc), artifact key_verified
+  true, executor execution 6208, driver pass 6202. The verification card
+  REQ-20260906-vED3ik (expires 2026-09-09T11:36:28Z) waits on Tee. After he
+  decides it, the next hourly Driver Poll (or a hand run of mbIKJk4UuB7V27rP
+  in production mode, trigger node Every Hour) closes the job COMPLETED with
+  human_watched true; read the ledger row in data table VYyno7pDWmY6uxBz
+  (project rM0TNTE2fNXErglU) and the driver log 9VbICTCa4x4yhWZm to confirm,
+  then add the COMPLETED pass id to the open ruling in vault.py (both copies)
+  and to the Build 17 doc, section 2.
+- The critic's findings on Build 17 were closed live at 11:41Z to 11:50Z
+  (executor 486c243d, Face 1c9e6662, driver f33c65ed, intake 207ae1cc) and
+  every live Code node of those four workflows reads back identical to
+  n8n/devon/. One ruling is open for Tee: whether to add ACX to the Inbox
+  Captures Area field (Build 17 doc, section 5, item 10). Put it on a card if
+  he has not answered.
 - Then build b: learning capture on COMPLETED jobs (task 27). Design notes in
   the Build 17 doc, section 5, item 2. Read the Ledger Feeder 6hQD8YhiYzR1FFda
   and the ledger z9j2I8h0RnbDKGBO before designing; never relax the terminal
@@ -308,19 +388,52 @@ Standing rules in force, beyond CLAUDE.md:
   #145.
 
 Start by reading the two docs, then TaskList, then ask Tee on one card
-whether the card REQ-20260906-8kt8Vj has been approved.
+whether the verification card REQ-20260906-vED3ik has been decided and
+whether ACX goes onto the Inbox Captures Area field.
 ```
 
 ## 7. Gauntlet
 
-Filled in after the fresh critic runs; see the session's VERDICT block and
-the PR thread.
+A fresh critic (a subagent given the diff b8fffb1..aac9d5e, the ask and the
+touched surfaces, none of the build rationale) read every node body under
+`n8n/devon/`, both vault copies, the test, this doc and the reconciler,
+read the four live workflows and the Inbox Captures schema read only, ran
+the pinned tests at each commit in a scratch clone, and drove a Node
+harness against the actual `validate_and_plan.js` and `decide.js`. It
+wrote nothing. Verdict as returned: **PASS-WITH-CONDITIONS**, scores scope
+fidelity 4, correctness 3, unverified claims 2, security 4, reversibility
+5, silent failure 3, idempotency 4, traceability 3, observability 4,
+completeness 4, maintainability 4, Flagship Bar 3.
+
+What it found and what was done, all on 2026-09-06:
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Merge condition. `Existing?` false wired straight into `Write Row`, so a Check Existing refusal (non 200 search, entry report not persisted) reached the HTTP node with no url and threw: the designed refusal became an execution error, the Error Alarm mailed, and the reason was lost. Inferred from the graph, and confirmed here by reading the live connections. | Fixed live 11:41Z: `Write?` If node routes a refused item to `Return Refusal`. Pinned 6224 (429 search), 6225 (entry report refused), 6226 (happy path). Executor `486c243d`. |
+| 2 | Merge condition. "199 tests pass, ruff clean" was false at 4c14e3f, dac7859 and 5c94df5 (1 failed, 198 passed, the census pin test). | Amended in section 2, dated, with the re-measurement. |
+| 3 | The intake truncated silently (Body to 20000, a 13th field dropped, a 21st list item dropped). | Fixed live 11:50Z: every bound refuses with the bound named. Harnessed. Intake `207ae1cc`. |
+| 4 | Idempotency key charset checked at the wrong door: a key with a quote or a brace passed the intake, raised a card, and was refused by the executor with the grant burned. | Fixed live 11:50Z: the intake refuses whitespace, quotes, braces and backslashes, the union of both executors. The executor also refuses whitespace instead of collapsing it (the stamp must equal the ledger key). |
+| 5 | Inbox Captures `Area` has eight options and no ACX; the Face offers nine. | Ruling for Tee, section 5 item 10. Not changed. |
+| 6 | The card named fields, never values; Body written unseen; the dispatch check compared the action name only. | Fixed live 11:49Z: fingerprint and Body excerpt on the card and in `card_executor`; dispatch parks on a changed payload. Face dry run receipt shows the values (11:48Z). Harnessed. Driver `f33c65ed`, Face `1c9e6662`. |
+| 7 | A Face filed airtable job labelled `irreversible_write` was carded as a spine echo and would park at the router with the grant spent. | Fixed live 11:50Z: Apply Tags refuses an airtable job wider than `reversible_write`. Harnessed. |
+| 8 | "Ten minute single flight lock" overclaimed. | Reworded in the executor comment, section 1 and the vault ruling: what the mark covers and what actually prevents a second row. |
+| 9 | Nits: 4000 character chat log cut, Face key collision, `2026-02-30` accepted, whitespace collapsed in the key, nine Area items against eight options, "sixteen nodes". | Date and key fixed live; the rest recorded in section 5 item 11 and section 1. |
+| 10 | Verified as claimed: KEY_ROTATION counts, byte identical vault copies, the test regex, the File Job forward, pinned run 6171, zero dashes, blast radius one row, the header key holder's reach as KEY_ROTATION states it. | No action. |
+
+Re-verification after the fixes: harnesses on the exact node bodies for
+the executor gates, Decide, Form Job, Apply Tags and Attach Receipt; pinned
+runs 6224 to 6226 on the published executor; every live Code node of the
+four republished workflows diffed against `n8n/devon/`, identical; the
+199 test selection and ruff on the amended tree (receipt in the commit).
+The VERDICT block for the whole deliverable is in the session's final
+message and repeated in the PR thread.
 
 ## 8. How this was read, and what was not touched
 
 Every id above was read from the instance, the ledger data table, the
 driver log table, the Airtable schema or the repository during the session,
-not from memory. Nothing was written to Airtable except the two schema
-fields on Inbox Captures; the pinned runs pinned the write node. Nothing was
-read from approval_queue. The proof job is a real ledger row and a real
-card in Tee's inbox; that was the point.
+not from memory. Nothing was written to Airtable by hand except the two
+schema fields on Inbox Captures; the one row that exists was written by the
+executor through the approved job, and the pinned runs pinned the write
+node. Nothing was read from approval_queue. The proof job is a real ledger
+row, a real card Tee approved, and a real record; that was the point.

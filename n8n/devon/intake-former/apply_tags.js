@@ -66,11 +66,18 @@ if (d.payload && d.payload.editforge && typeof d.payload.editforge === 'object')
 }
 // A row is never a note either (Build 17). Any Airtable row job floors at
 // reversible_write, which raises a card; the poster's or the model's label can
-// raise the radius, never lower it below what the payload does.
+// raise the radius, never lower it below what the payload does. It cannot raise
+// it above reversible_write either: the driver binds airtable.row only at exactly
+// that radius, and a wider label would card the job as a spine echo, be approved
+// as one, and park at the router with the grant spent (critic, 2026-09-06). A row
+// is a reversible write; a job that says otherwise is refused at the door.
 if (d.payload && d.payload.airtable && typeof d.payload.airtable === 'object') {
   if (BLAST.indexOf(d.blast_radius) < BLAST.indexOf('reversible_write')) {
     notes.push('blast radius raised from ' + d.blast_radius + ' to reversible_write because the job writes an Airtable row');
     d.blast_radius = 'reversible_write';
+  }
+  if (BLAST.indexOf(d.blast_radius) > BLAST.indexOf('reversible_write')) {
+    return [{ json: { refused: true, reason: 'An Airtable row job is a reversible write and this one is labelled ' + d.blast_radius + '. The row writer runs at reversible_write only, so the job would be carded as something else and never write. Post it as reversible_write or drop the airtable payload. Nothing was filed. Notes: ' + notes.join(' ') } }];
   }
 }
 const gated = d.blast_radius === 'irreversible_write' || d.blast_radius === 'destructive';

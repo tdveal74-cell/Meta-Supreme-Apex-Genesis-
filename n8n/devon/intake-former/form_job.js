@@ -57,27 +57,37 @@ if (payloadIn.editforge && typeof payloadIn.editforge === 'object') {
 }
 if (payloadIn.auto_verify === true) { payload.auto_verify = true; }
 if (s(payloadIn.note)) { payload.note = s(payloadIn.note).slice(0, 1000); }
-// Build 17: a structural Airtable row request rides through as the poster declared
-// it, bounded here for shape only. The Airtable Row Writer holds the table and
-// field allowlist and refuses anything outside it; this node keeps a table name,
-// a flat fields object of strings, lists of strings, numbers or booleans, at most
-// 12 fields and 20000 characters per value. It never adds a field the poster did
-// not name, so the approval card lists exactly what will be written.
+// Build 17: a structural Airtable row request rides through exactly as the poster
+// declared it. The Airtable Row Writer holds the table and field allowlist and
+// refuses anything outside it; this node checks shape only: a table name, a flat
+// fields object of strings, lists of strings, numbers or booleans, at most 12
+// fields, 20000 characters per value, 20 items per list. Anything over a bound is
+// REFUSED with the bound named, never cut to fit (critic, 2026-09-06: a silent
+// truncation is a value the card never showed). It never adds a field the poster
+// did not name, so the approval card lists exactly what will be written.
 if (payloadIn.airtable && typeof payloadIn.airtable === 'object' && !Array.isArray(payloadIn.airtable)) {
   const at = payloadIn.airtable;
-  const table = s(at.table).slice(0, 80);
+  const table = s(at.table);
   if (!table) { return refuse('payload.airtable.table is required. Nothing was filed.'); }
+  if (table.length > 80) { return refuse('payload.airtable.table is ' + table.length + ' characters, over the 80 limit. Nothing was filed.'); }
   if (!at.fields || typeof at.fields !== 'object' || Array.isArray(at.fields)) { return refuse('payload.airtable.fields must be an object of field name to value. Nothing was filed.'); }
   const fields = {}; let n = 0;
   for (const k of Object.keys(at.fields)) {
-    const key = String(k).trim().slice(0, 80);
+    const key = String(k).trim();
     if (!key) { continue; }
+    if (key.length > 80) { return refuse('payload.airtable.fields has a field name of ' + key.length + ' characters, over the 80 limit. Nothing was filed.'); }
+    if (n >= 12) { return refuse('payload.airtable.fields names more than 12 fields. Nothing was filed.'); }
     const v = at.fields[k];
-    if (typeof v === 'string') { fields[key] = v.slice(0, 20000); }
-    else if (Array.isArray(v) && v.every(function (x) { return typeof x === 'string'; })) { fields[key] = v.slice(0, 20).map(function (x) { return x.slice(0, 80); }); }
-    else if (typeof v === 'number' || typeof v === 'boolean') { fields[key] = v; }
+    if (typeof v === 'string') {
+      if (v.length > 20000) { return refuse('payload.airtable.fields.' + key + ' is ' + v.length + ' characters, over the 20000 limit. Nothing was filed.'); }
+      fields[key] = v;
+    } else if (Array.isArray(v) && v.every(function (x) { return typeof x === 'string'; })) {
+      if (v.length > 20) { return refuse('payload.airtable.fields.' + key + ' lists ' + v.length + ' items, over the 20 limit. Nothing was filed.'); }
+      for (const x of v) { if (x.length > 80) { return refuse('payload.airtable.fields.' + key + ' has an item of ' + x.length + ' characters, over the 80 limit. Nothing was filed.'); } }
+      fields[key] = v.slice();
+    } else if (typeof v === 'number' || typeof v === 'boolean') { fields[key] = v; }
     else { return refuse('payload.airtable.fields.' + key + ' must be a string, a list of strings, a number or a boolean. Nothing was filed.'); }
-    n++; if (n >= 12) { break; }
+    n++;
   }
   if (!n) { return refuse('payload.airtable.fields is empty. Nothing was filed.'); }
   payload.airtable = { table: table, fields: fields };
@@ -91,8 +101,12 @@ const needsTagging = !summaryIn || !area || !blast;
 
 const id = ulid();
 const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+// The key is checked here, at the door, to the union of what the executors refuse
+// (quotes, braces, backslashes, whitespace): a key that passes the intake and fails
+// an executor burns a grant Tee already gave. The default key is safe by construction.
 const idem = s(b.idempotency_key) || ('intake-' + id);
 if (idem.length < 8 || idem.length > 128) { return refuse('idempotency_key must be 8 to 128 characters. Nothing was filed.'); }
+if (/[\s'"\\{}]/.test(idem)) { return refuse('idempotency_key must not contain whitespace, quotes, braces or backslashes; the executors quote it into a search and stamp it on the artifact verbatim. Nothing was filed.'); }
 
 return [{ json: {
   refused: false,

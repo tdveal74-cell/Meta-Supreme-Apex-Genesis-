@@ -16,6 +16,13 @@ if (code === 200 && body.filed === true) {
 } else if (code === 200 && body.dry_run === true && body.envelope) {
   const e = body.envelope; const it = e.intent || {}; const b = (it.payload && it.payload.brief) || null;
   lines.push('Dry run, nothing filed. I would file: ' + String(it.summary) + ' | area ' + String(e.area) + ' | level ' + String(it.level) + ' | blast radius ' + String(it.blast_radius) + '.');
+  // A row job shows the values, not only the field names: what Tee says "file it"
+  // to is what the card will carry and what the writer will write.
+  const at = (it.payload && it.payload.airtable && typeof it.payload.airtable === 'object') ? it.payload.airtable : null;
+  if (at && at.fields && typeof at.fields === 'object') {
+    const f = at.fields; const body = (typeof f.Body === 'string') ? f.Body.replace(/\s+/g, ' ').trim() : '';
+    lines.push('Row it would write into ' + String(at.table) + ': Title ' + String(f.Title || '(none)') + ' | fields ' + Object.keys(f).join(', ') + (body ? ' | Body begins: ' + (body.length > 160 ? body.slice(0, 160) + ' [' + body.length + ' characters in all]' : body) : '') + '.');
+  }
   if (b && Array.isArray(b.plan) && b.plan.length) { lines.push(planLine(b)); if (Array.isArray(b.done_when) && b.done_when.length) { lines.push('Done when: ' + b.done_when.map(s => String(s).trim().replace(/[.]+$/, '')).join('; ') + '.'); } lines.push('I recommend ' + String(b.recommendation) + why(b) + '.'); }
   lines.push('Say file it and I will.');
 } else if (code === 200 && body.duplicate === true) {
