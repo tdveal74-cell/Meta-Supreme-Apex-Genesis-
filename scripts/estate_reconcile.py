@@ -757,6 +757,119 @@ def exit_code(findings: Sequence[Finding], strict: bool = False) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# The score, and the only reason it exists
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Score:
+    """How much of the estate is verified true on this run, 0 to 100.
+
+    Deliberately not a gate. `exit_code` still fails on drift alone, so a run
+    can score 96 and exit 1, and that is correct: one wrong record is worth
+    failing on whatever the rest of the estate looks like.
+
+    The score answers the other half. Between 2026-08-23 and 2026-09-01 five
+    records went stale, and every run that could have caught one looked purely
+    local, because there was nothing to compare a run against. A number written
+    down on every run turns an incident into a slope, which is the shape the
+    drift class is actually visible in.
+
+    UNVERIFIED counts against the score rather than being set aside. A source
+    with no key is not a passing source, which is the rule `--strict` already
+    enforces on the exit code, and a score that quietly rose when keys went
+    missing would be worse than no score at all.
+
+    RETIRED is left out of the denominator. A retired claim is a tripwire on a
+    sentence that no longer exists, so it has nothing live to be true about.
+    """
+
+    verified: int
+    unverified: int
+    drift: int
+    retired: int
+
+    @property
+    def checkable(self) -> int:
+        return self.verified + self.unverified + self.drift
+
+    @property
+    def value(self) -> int:
+        """An estate with nothing checkable scores 0, not 100. No claims is
+        not the same as no drift, and the friendlier reading would let the
+        score climb by deleting claims."""
+        if not self.checkable:
+            return 0
+        return round(100 * self.verified / self.checkable)
+
+    def as_row(self, when: str) -> Dict[str, Any]:
+        return {
+            "at": when,
+            "score": self.value,
+            "verified": self.verified,
+            "unverified": self.unverified,
+            "drift": self.drift,
+            "retired": self.retired,
+        }
+
+
+def score(findings: Sequence[Finding]) -> Score:
+    counts = Counter(finding.status for finding in findings)
+    return Score(
+        verified=counts[OK],
+        unverified=counts[UNVERIFIED],
+        drift=counts[DRIFT],
+        retired=counts[RETIRED],
+    )
+
+
+def read_history(path: pathlib.Path) -> List[Dict[str, Any]]:
+    """Every row ever appended, oldest first.
+
+    A malformed line is skipped rather than fatal. A corrupt history is a poor
+    reason to lose a run, and the findings this run reports do not depend on it.
+    """
+    if not path.exists():
+        return []
+    rows: List[Dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return rows
+
+
+def append_history(
+    path: pathlib.Path, current: Score, when: Optional[str] = None
+) -> Dict[str, Any]:
+    """Append one row. JSON lines rather than a rewritten document, so a run
+    can only add to the record and can never edit what an earlier run found."""
+    row = current.as_row(when or _now_iso())
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(row, sort_keys=True) + "\n")
+    return row
+
+
+def render_score(current: Score, previous: Optional[Dict[str, Any]] = None) -> str:
+    lines = [
+        f"Verified score: {current.value}/100 "
+        f"({current.verified} verified of {current.checkable} checkable, "
+        f"{current.retired} retired)"
+    ]
+    if previous:
+        delta = current.value - int(previous.get("score", 0))
+        direction = "up" if delta > 0 else "down" if delta < 0 else "level"
+        lines.append(f"  {direction} {abs(delta)} since {previous.get('at', 'the last run')}")
+    lines.append("  The score is a trend, not a gate. Drift still fails the run on its own.")
+    return "\n".join(lines)
+
+
 _STATUS_ORDER = {DRIFT: 0, UNVERIFIED: 1, RETIRED: 2, OK: 3}
 
 
@@ -1213,6 +1326,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         action="store_true",
         help="an UNVERIFIED source also fails, for runs that are supposed to hold keys",
     )
+    checker.add_argument(
+        "--history",
+        help=(
+            "append this run's score to a JSON lines file and report the move "
+            "since the previous row"
+        ),
+    )
 
     args = parser.parse_args(argv)
 
@@ -1230,6 +1350,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     claims = vault_claims() + doc_claims(_read_doc_texts())
     findings = check(claims, observations)
     print(render(findings, open_rulings()))
+
+    current = score(findings)
+    previous = None
+    history_path = pathlib.Path(args.history) if args.history else None
+    if history_path is not None:
+        rows = read_history(history_path)
+        previous = rows[-1] if rows else None
+    print()
+    print(render_score(current, previous))
+    # Appended after the report is printed, so a run that fails on drift still
+    # records the score it failed at. The trend is most useful on the bad runs.
+    if history_path is not None:
+        append_history(history_path, current)
+
     return exit_code(findings, strict=args.strict)
 
 

@@ -178,13 +178,14 @@ production; load the `deploy-readback` skill before saying any surface is live.
 
 ## Skills in this repository
 
-`.claude/skills/` carries five. Four are ours: `steward` (CI and PR
+`.claude/skills/` carries six. Five are ours: `steward` (CI and PR
 conventions, load it for anything touching either), `deploy-readback` (what the
 production surfaces are actually serving), `estate-reconcile` (checking records
 against the live estate), `devon-learning-lane` (the Build 12 learning lane and
-the n8n house conventions).
+the n8n house conventions), `devon-grill` (interviewing Tee for the context no
+file holds, filed as `docs/devon/CAPTURE_*`).
 
-The fifth, `scroll-craft`, is vendored third-party work: Nate Herk's
+The sixth, `scroll-craft`, is vendored third-party work: Nate Herk's
 scroll-driven landing page skill, MIT, copied from `nateherkai/scroll-craft`.
 Never edit it in place, fixes go upstream, and `test_vendored_skills.py`
 enforces that against `MANIFEST.sha256` rather than trusting the prose. Read

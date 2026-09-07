@@ -20,6 +20,7 @@ surfaced rather than trusted.
 
 from __future__ import annotations
 
+import json
 import pathlib
 import re
 import subprocess
@@ -838,3 +839,112 @@ def test_the_real_capture_gate_is_pinned_by_a_real_fingerprint():
     assert re.fullmatch(r"[0-9a-f]{64}", gate["sha256"]), "a placeholder is not a pin"
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", gate["pinned"])
 
+
+# ---------------------------------------------------------------------------
+# The score. It is a trend, and it must never quietly become the gate.
+# ---------------------------------------------------------------------------
+
+
+def _scored_finding(status, record="vault.X"):
+    claim = reconcile.Claim(record=record, subject="s", verifier="v", expected=None)
+    return reconcile.Finding(claim=claim, status=status, detail="d")
+
+
+def test_the_score_counts_each_status_into_its_own_bucket():
+    findings = [
+        _scored_finding(reconcile.OK),
+        _scored_finding(reconcile.OK),
+        _scored_finding(reconcile.UNVERIFIED),
+        _scored_finding(reconcile.DRIFT),
+        _scored_finding(reconcile.RETIRED),
+    ]
+    scored = reconcile.score(findings)
+    assert (scored.verified, scored.unverified, scored.drift, scored.retired) == (2, 1, 1, 1)
+
+
+def test_an_unverified_source_drags_the_score_down_rather_than_being_set_aside():
+    """A source with no key is not a passing source. If UNVERIFIED were
+    excluded, losing every key would read as a perfect estate."""
+    with_key = reconcile.score([_scored_finding(reconcile.OK), _scored_finding(reconcile.OK)])
+    key_lost = reconcile.score([_scored_finding(reconcile.OK), _scored_finding(reconcile.UNVERIFIED)])
+    assert with_key.value == 100
+    assert key_lost.value == 50
+
+
+def test_a_retired_claim_leaves_the_denominator_alone():
+    """A retired claim is a tripwire on a sentence that no longer exists, so
+    it has nothing live to be true about and must not move the number."""
+    without = reconcile.score([_scored_finding(reconcile.OK), _scored_finding(reconcile.DRIFT)])
+    with_retired = reconcile.score(
+        [_scored_finding(reconcile.OK), _scored_finding(reconcile.DRIFT)] + [_scored_finding(reconcile.RETIRED)] * 9
+    )
+    assert without.value == with_retired.value == 50
+
+
+def test_an_estate_with_nothing_checkable_scores_zero_not_a_hundred():
+    """The friendlier reading would let the score climb by deleting claims."""
+    assert reconcile.score([]).value == 0
+    assert reconcile.score([_scored_finding(reconcile.RETIRED)]).value == 0
+
+
+def test_the_history_appends_and_never_rewrites(tmp_path):
+    path = tmp_path / "nested" / "history.jsonl"
+    reconcile.append_history(path, reconcile.score([_scored_finding(reconcile.OK)]), when="2026-09-01T00:00:00Z")
+    reconcile.append_history(
+        path,
+        reconcile.score([_scored_finding(reconcile.OK), _scored_finding(reconcile.DRIFT)]),
+        when="2026-09-07T00:00:00Z",
+    )
+    rows = reconcile.read_history(path)
+    assert [row["score"] for row in rows] == [100, 50]
+    assert [row["at"] for row in rows] == ["2026-09-01T00:00:00Z", "2026-09-07T00:00:00Z"]
+
+
+def test_a_corrupt_history_line_costs_a_row_not_the_run(tmp_path):
+    path = tmp_path / "history.jsonl"
+    path.write_text('{"at": "2026-09-01T00:00:00Z", "score": 90}\nnot json at all\n', encoding="utf-8")
+    rows = reconcile.read_history(path)
+    assert [row["score"] for row in rows] == [90]
+
+
+def test_a_missing_history_is_an_empty_one(tmp_path):
+    assert reconcile.read_history(tmp_path / "never-written.jsonl") == []
+
+
+def test_the_report_names_the_move_since_the_previous_run():
+    current = reconcile.score([_scored_finding(reconcile.OK), _scored_finding(reconcile.DRIFT)])
+    text = reconcile.render_score(current, {"at": "2026-09-01T00:00:00Z", "score": 90})
+    assert "50/100" in text
+    assert "down 40" in text
+    assert "2026-09-01T00:00:00Z" in text
+
+
+def test_the_first_run_reports_a_score_without_inventing_a_previous_one():
+    text = reconcile.render_score(reconcile.score([_scored_finding(reconcile.OK)]), None)
+    assert "100/100" in text
+    assert "since" not in text
+
+
+def test_the_score_never_becomes_the_gate():
+    """A run can score well and still be a failing run. One wrong record is
+    worth failing on whatever the rest of the estate looks like."""
+    findings = [_scored_finding(reconcile.OK)] * 99 + [_scored_finding(reconcile.DRIFT)]
+    assert reconcile.score(findings).value == 99
+    assert reconcile.exit_code(findings) == 1
+
+
+def test_the_score_is_reported_and_recorded_on_a_failing_run(tmp_path, capsys):
+    """The trend is most useful on the bad runs, so the row is appended after
+    the report prints rather than being skipped when the run fails."""
+    observations = _n8n_observation({}, {})
+    saved = tmp_path / "obs.json"
+    saved.write_text(json.dumps(observations), encoding="utf-8")
+    history = tmp_path / "history.jsonl"
+
+    code = reconcile.main(
+        ["check", "--observations", str(saved), "--history", str(history)]
+    )
+
+    assert code == 1, "a snapshot with no live estate must still fail on drift"
+    assert "Verified score:" in capsys.readouterr().out
+    assert len(reconcile.read_history(history)) == 1
