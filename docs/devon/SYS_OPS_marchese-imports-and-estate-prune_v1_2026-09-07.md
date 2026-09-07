@@ -115,10 +115,13 @@ that exception in practice. It is not pruned; the recommendation is the
 opposite, that it should be running. Activating it is Tee's call because it
 adds executions against a cap the estate is already walking toward.
 
-## What was not done
+## The Gumroad guard, also done
 
-The Gumroad payload guard, still owed from
-`SYS_OPS_tqo-v5-webhook-auth_v1_2026-09-07.md`, is not in this document.
+Recorded in `SYS_OPS_tqo-v5-webhook-auth_v1_2026-09-07.md` rather than here.
+It turned out to need no graph surgery: the node the webhook feeds was already
+the validation point, so the guard extends it. Connections and node set
+verified identical before and after, and the refusal proven by running a forged
+payload through it.
 
 ## DEVON RECEIPT
 

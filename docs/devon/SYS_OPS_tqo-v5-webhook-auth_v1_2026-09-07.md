@@ -4,7 +4,7 @@ type: SYS_OPS
 version: 1
 date: 2026-09-07
 area: TQO
-status: doors-closed-differentiated-per-caller-workflow-still-dark
+status: doors-closed-differentiated-per-caller-gumroad-guarded-workflow-still-dark
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 base: db66927
 branch: claude/video-analysis-incorporation-9h6rtc
@@ -142,18 +142,42 @@ Counting doors and counting key holders are different questions. `vault.py`
 now answers them separately, because conflating them is how a checklist that
 looks complete leaves something open.
 
-## Still owed, and deliberately not done
+## The Gumroad guard, built and proven the same day
 
-**A payload guard on the Gumroad ping.** Gumroad signs nothing, so an
-unguessable URL is the only barrier, and a leaked URL is a forged sale. The
-guard is a Code node after `Gumroad Ping (Sale)` refusing any body whose
-seller id is not Tee's.
+Gumroad signs nothing, so the unguessable path is the only barrier at the door
+and a leaked URL is a forged sale. That gap is now closed.
 
-It was not built. Inserting a node means rewiring connections inside a 220
-node workflow whose graph has not been read, and a blind structural edit is
-the exact failure this estate's first law exists to prevent. It is a bounded
-piece of work once someone reads that branch, and it is safe to defer because
-the workflow is dark. It is named here so it is owed rather than forgotten.
+It needed no graph surgery after all. `Gumroad: Normalise Sale`, the single
+node the webhook feeds, was **already the validation point**: it throws on a
+missing sale id and on a missing email. So the guard extends the check that was
+already there rather than splicing a new node into a 220 node graph. One
+parameter changed, no rewiring, no structural edit.
+
+It runs before any parsing, because provenance is a cheaper question than
+content, and it fails closed. If `GUMROAD_SELLER_ID` cannot be read, whether
+unset or because Code node environment access is blocked on the instance, the
+run refuses rather than trusting the ping.
+
+**Proven by execution against a real forged input**, not asserted:
+
+| Case | Result |
+|---|---|
+| Real sale, seller matches | passes through, order `S1`, 2500 cents read as 25 |
+| Forged sale, wrong seller | REFUSED, sale not recorded |
+| Ping carrying no seller id | REFUSED |
+| `GUMROAD_SELLER_ID` unset | REFUSED, fails closed |
+
+**Proven not to have disturbed anything else.** The workflow was read in full
+before and after and compared: connections identical, node set identical, 220
+nodes both sides, and exactly one node's parameters different.
+
+Tee has to set `GUMROAD_SELLER_ID` in the n8n instance environment before V5 is
+published, or every ping refuses. That is the intended posture for a guard, and
+the refusal names itself loudly enough to diagnose in one read.
+
+This also happens to be the first thing built after the two conventions written
+today, and it obeys both: it breaks before it spends, and its refusal names
+what is missing and what was not written.
 
 ## What was not verified
 
@@ -173,7 +197,7 @@ ARTIFACT: SYS_OPS_tqo-v5-webhook-auth_v1_2026-09-07
 DATE: 2026-09-07
 DECISIONS: Tee ruled hold V5 and secure it as its own arc; doors closed, publish withheld
 FINDINGS: seven webhooks had no auth at all, including GET system-pause and system-resume; four now require x-devon-key and three that cannot send a header sit on unguessable paths; key rotation checklist moved sixteen to twenty-three to twenty, because secret path doors are not key holders
-OPEN: a payload guard on the Gumroad ping is still owed; Gumroad signs nothing so a leaked URL is a forged sale
+OPEN: Tee must set GUMROAD_SELLER_ID in the n8n instance environment before V5 is published, or every Gumroad ping refuses by design
 STATUS: workflow still dark, activeVersionId null
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
