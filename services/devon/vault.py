@@ -607,19 +607,27 @@ KEY_ROTATION = (
     "off Railway production on 2026-09-06 and neither is set, so Railway held no "
     "copy at the 2026-09-06 rotation. Check them again before the next one rather "
     "than trusting this line. "
-    "The sixteen paths, so a rotator has a checklist rather than a count: "
+    "The twenty-three paths, so a rotator has a checklist rather than a count: "
     "devon-capture, devon-inbox, devon-intake, devon-approve-request, devon-action, "
     "devon-drive-draft, devon-airtable-row, devon-ledger, devon-event, "
     "devon-spine-n8n, devon-runtime, devon-route, devon-editforge, "
     "devon-build12-upstream, and the two outside this lane, devon-health and "
-    "devon-capture-file. Ten of those carry an auth field in the WEBHOOKS map "
+    "devon-capture-file. Seven more joined on 2026-09-07 when TQO FINAL V5 "
+    "(gsGJQan7a6ZufhYt) had header auth put on every one of its webhooks, which "
+    "until then had none at all: run-tqo-pipeline, run-nco-pipeline, gumroad-sale, "
+    "run-tqo, run-nco, system-pause and system-resume. That workflow is INACTIVE, "
+    "so those seven doors are not live and a rotation cannot prove them from the "
+    "outside; they still hold the credential and must be reproven the moment it is "
+    "published. Ten of the twenty-three carry an auth field in the WEBHOOKS map "
     "below (eight until devon-health was registered on 2026-09-06, nine until "
     "devon-airtable-row was added later that day); the rest are recorded in "
-    "prose, so working the map alone covers ten of sixteen and feels finished. The first version of "
+    "prose, so working the map alone covers ten of twenty-three and feels finished. The first version of "
     "this checklist, written 2026-09-06, itself said thirteen and omitted the last "
     "two, which is the failure it was written to prevent: it was built from the "
-    "lane's dependency list. Rebuild it by reading every workflow's webhook node "
-    "and its bound credential, not by counting organs. "
+    "lane's dependency list. The 2026-09-07 jump from sixteen to twenty-three is "
+    "the same class of drift caught early: adding auth to a workflow adds holders "
+    "of the key, and the checklist has to move with it. Rebuild it by reading every "
+    "workflow's webhook node and its bound credential, not by counting organs. "
     "After rotating, prove it THREE ways, and the third is the one a rotation "
     "cannot skip. One, post a capture from the phone with the new key: a 401 means "
     "an outside holder was missed. Two, file one level 0 job with blast radius none "
@@ -776,7 +784,7 @@ WORKFLOWS = {
     # approval_queue. The Cerebras credential is header auth, which the chat
     # model subnodes cannot use, so the lane is an HTTP Request, not an Agent.
     "Face": {"id": "LsmfRFMmI5feINs0", "state": "active, hosted chat, n8n user auth"},
-    "TQO FINAL V5": {"id": "gsGJQan7a6ZufhYt", "state": "inactive by ruling"},
+    "TQO FINAL V5": {"id": "gsGJQan7a6ZufhYt", "state": "inactive by ruling; all 7 webhooks put on header x-devon-key 2026-09-07, previously unauthenticated"},
     "Capture Hook": {"id": "Cbd24ptTPWch3aZO", "state": "retired 2026-08-22"},
     # Registered 2026-09-06, ruled by Tee after the operational report found
     # ten DEVON named workflows on the instance and not in this map, four of
