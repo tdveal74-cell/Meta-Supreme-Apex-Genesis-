@@ -5,10 +5,11 @@ anything else pointed at this repository.
 
 **`CLAUDE.md` is authoritative. Read it in full before you change anything.**
 
-This file is deliberately not a copy of it. Two files carrying the same 216
-lines is exactly the failure class the first law below exists to stop: one gets
+This file is deliberately not a copy of it. Two files carrying the same content
+is exactly the failure class the first law below exists to stop: one gets
 updated, the other goes stale, and the stale one is still confidently read
-aloud. What is inlined here is the part that is unsafe to learn one hop late.
+aloud. A line count written into prose here would be the same mistake in
+miniature, so there is not one. What is inlined here is the part that is unsafe to learn one hop late.
 Everything else is a pointer.
 
 ## The first law: check before you claim
