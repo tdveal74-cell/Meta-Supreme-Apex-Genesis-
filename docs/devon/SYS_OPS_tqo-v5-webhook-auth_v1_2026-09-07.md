@@ -4,7 +4,7 @@ type: SYS_OPS
 version: 1
 date: 2026-09-07
 area: TQO
-status: doors-closed-workflow-still-dark-publish-blocked-on-callers
+status: doors-closed-differentiated-per-caller-workflow-still-dark
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 base: db66927
 branch: claude/video-analysis-incorporation-9h6rtc
@@ -104,6 +104,57 @@ caused it rather than at the next rotation.
 Those seven cannot be proven from outside while the workflow is inactive, so
 the entry says so. They must be reproven the moment V5 is published.
 
+## Second ruling, same day: differentiated per caller
+
+Tee ruled on the open question later on 2026-09-07. One mechanism for all
+seven was the wrong shape, because the risk is not evenly spread. The final
+state:
+
+| Endpoint | Method | Protection | Why this one |
+|---|---|---|---|
+| `run-tqo-pipeline` | POST | `x-devon-key` | dashboard is code Tee controls, it can send a header |
+| `run-nco-pipeline` | POST | `x-devon-key` | same |
+| `system-pause` | GET | `x-devon-key` | highest consequence, prefetchable, rarely used; driven from the Face now, not a bookmark |
+| `system-resume` | GET | `x-devon-key` | same |
+| `run-tqo-<16 hex>` | GET | unguessable path | a bookmark cannot send a header; a stray run is recoverable |
+| `run-nco-<16 hex>` | GET | unguessable path | same |
+| `gumroad-sale-<16 hex>` | POST | unguessable path | Gumroad has no header facility at all |
+
+The two run links lose nothing but one re-bookmark. Pause and resume lose the
+bookmark entirely and that is the point: convenience is worth least exactly
+where consequence is highest, and the Face already exists, already talks to
+DEVON, and leaves an audit trail a bookmark never will.
+
+The public repository problem turned out to be already solved in this estate
+rather than needing a new convention. The census records
+`devon-soul-setup-<16 character suffix, elided>`, so secret suffixed paths
+recorded with the secret elided is an existing pattern. The three new paths
+follow it. Live values live in the workflow and nowhere in git.
+
+## The rotation count moved twice in one day
+
+Sixteen to twenty-three when all seven went on the header, then back to twenty
+when three moved to secret paths. The second move is the instructive one:
+those three are doors but not key holders. A key rotation does not touch them,
+and their rotation is changing the path and repointing the caller.
+
+Counting doors and counting key holders are different questions. `vault.py`
+now answers them separately, because conflating them is how a checklist that
+looks complete leaves something open.
+
+## Still owed, and deliberately not done
+
+**A payload guard on the Gumroad ping.** Gumroad signs nothing, so an
+unguessable URL is the only barrier, and a leaked URL is a forged sale. The
+guard is a Code node after `Gumroad Ping (Sale)` refusing any body whose
+seller id is not Tee's.
+
+It was not built. Inserting a node means rewiring connections inside a 220
+node workflow whose graph has not been read, and a blind structural edit is
+the exact failure this estate's first law exists to prevent. It is a bounded
+piece of work once someone reads that branch, and it is safe to defer because
+the workflow is dark. It is named here so it is owed rather than forgotten.
+
 ## What was not verified
 
 - The doors were verified shut by reading the triggers back. No request was
@@ -121,8 +172,8 @@ TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_tqo-v5-webhook-auth_v1_2026-09-07
 DATE: 2026-09-07
 DECISIONS: Tee ruled hold V5 and secure it as its own arc; doors closed, publish withheld
-FINDINGS: seven webhooks had no auth at all, including GET system-pause and system-resume; all seven now require x-devon-key; key rotation checklist moved from sixteen paths to twenty-three
-OPEN: Gumroad and phone bookmarks cannot send headers, so publishing needs Tee's ruling on a secret path or a payload signature
+FINDINGS: seven webhooks had no auth at all, including GET system-pause and system-resume; four now require x-devon-key and three that cannot send a header sit on unguessable paths; key rotation checklist moved sixteen to twenty-three to twenty, because secret path doors are not key holders
+OPEN: a payload guard on the Gumroad ping is still owed; Gumroad signs nothing so a leaked URL is a forged sale
 STATUS: workflow still dark, activeVersionId null
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
