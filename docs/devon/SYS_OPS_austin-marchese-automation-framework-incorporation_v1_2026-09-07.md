@@ -4,7 +4,7 @@ type: SYS_OPS
 version: 1
 date: 2026-09-07
 area: Systems
-status: analysis-complete-three-imports-proposed-awaiting-ruling
+status: analysis-complete-timezone-finding-closed-three-imports-awaiting-ruling
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 base: 3f0bf4c
 branch: claude/video-analysis-incorporation-9h6rtc
@@ -136,29 +136,52 @@ correct answer here and is already the answer in place.
 Recording this explicitly so a later session does not read his rule as
 guidance and try to move a lane local.
 
-## The live finding
+## The live finding, now measured and fixed
 
-Six of the thirteen active scheduled workflows set no workflow level timezone,
-so their hour resolves in the instance default rather than an intended one.
-Read from the 2026-09-06 census, which is the record and not the instance:
+**Resolved 2026-09-07.** The census-based finding was directionally right and
+wrong in its detail. What the instance actually says:
 
-| Workflow | Schedule | Census note |
-|---|---|---|
-| DEVON Build 12 Ledger Feeder | daily 02:00 | no workflow timezone set |
-| DEVON Capture Nudge | daily 08:00 | no workflow timezone set, resolves in instance default |
-| DEVON Ledger Janitor | daily 02:30 | sets no timezone, the description says UTC |
-| DEVON Pipeline Watchdog | every 4 hours | no workflow timezone set |
-| DEVON Precedence Guard | daily 07:00 | no workflow timezone set |
-| DEVON Weekly Table Backup | weekly Sunday 03:10 | sets no timezone, the description says UTC |
+Six of the thirteen active scheduled workflows set no workflow level timezone
+and inherited the instance default. That default was never read; it was
+assumed. Measuring it from real execution times settles it:
 
-Others in the same estate do set it explicitly to `America/New_York`, which is
-what makes this a drift rather than a house convention. The risk is not
-theoretical after the n8n Cloud to VPS cutover, because the instance default
-is a property of the host and the host changed.
+| Workflow | Configured | Actually fired | Means |
+|---|---|---|---|
+| Ledger Janitor `HKNEDVy7PUKPtsrN` | daily 02:30 | 06:30:44 UTC on executions 5202, 5318, 5450, 5566, 6117, 6330 | 02:30 America/New_York |
+| Weekly Table Backup `qCfGZ1CwmpK9vOta` | Sun 03:10 | 07:10:20 UTC, Sunday 2026-09-06, execution 6126 | 03:10 America/New_York |
+| Precedence Guard `W5rlpAt6hsJAExU6` | daily 07:00 | 11:00:54 UTC on executions 6170, 6350 | 07:00 America/New_York |
 
-**Unverified.** This is read from a census one day old. The live instance is
-the authority and has not been read in this session. Confirm against the
-instance before changing anything.
+So the instance default is `America/New_York`, and nothing was running at the
+wrong time. Two real defects sat underneath the one that was reported:
+
+1. **Two records stated the wrong timezone.** The Ledger Janitor's workflow
+   description said "Daily 02:30 UTC" and the Weekly Table Backup's said
+   "Sun 03:10 UTC". Both actually run in New York, four hours later than the
+   text claimed. The `devon-learning-lane` skill repeated the same false claim
+   in three files. Anyone scheduling around those numbers was working from a
+   lie the estate told itself.
+2. **The timezone was implicit, and the cutover is the event that breaks it.**
+   Inheritance holds only while the instance default holds. The n8n Cloud to
+   VPS move is precisely when a host default changes, and every one of these
+   six would have shifted silently, with no error and no alert.
+
+**What was done.** All six now pin `timezone: America/New_York` explicitly.
+This is a zero behavior change: it records what they already do, and makes it
+survive the cutover. The two false descriptions are corrected in place, and so
+are `SKILL.md`, `references/ids-and-contracts.md` and `references/runbook.md`.
+Read back on all six: `versionId` equals `activeVersionId` and `active` is
+true, so the pin is live rather than sitting in a draft.
+
+One honest subtraction: **Pipeline Watchdog was never actually at risk.** It
+runs on an every-4-hours interval, not a fixed time of day, so an instance
+timezone change would not have moved it. It was pinned for consistency, and
+its version note says so. Counting it as a defect was an over-call.
+
+One thing worth knowing for next time: a settings-only update does **not**
+create a new n8n workflow version. All six `versionId` values are byte
+identical to the ones the 2026-09-06 census recorded. The change is real, and
+`updatedAt` moved, but n8n's version history holds no rationale for it. That
+is why this document and `vault.py` are the durable record.
 
 ## Second incorporation path: the format, for TQO
 
@@ -196,8 +219,8 @@ What to leave:
 
 ## Recommended order, smallest surface first
 
-1. Confirm the six timezone entries against the live instance, then set them.
-   Cheapest, and it is a correctness fix, not a feature.
+1. ~~Confirm the six timezone entries against the live instance, then set
+   them.~~ Done 2026-09-07, see above.
 2. Write the explicit outcome rule into the house conventions in the
    `devon-learning-lane` skill, then apply it to the scheduled lanes one at a
    time, starting with the Ledger Feeder.
@@ -242,7 +265,7 @@ ARTIFACT: SYS_OPS_austin-marchese-automation-framework-incorporation_v1_2026-09-
 DATE: 2026-09-07
 SOURCE: youtube ktY1b2-OKRA, Austin Marchese, full transcript read
 DECISIONS: none, three imports proposed and one rejection recorded, all awaiting Tee's ruling
-FINDINGS: six of thirteen active scheduled workflows carry no workflow timezone, unverified against the live instance
-STATUS: analysis complete, nothing executed
+FINDINGS: six of thirteen active scheduled workflows carried no workflow timezone; measured, pinned to America/New_York, and two false UTC records corrected
+STATUS: analysis complete; the timezone finding is measured and closed against the live instance
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```

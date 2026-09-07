@@ -658,9 +658,9 @@ KEY_ROTATION = (
 WORKFLOWS = {
     "iPhone Inbox Capture": {"id": "5s6CwWWelffqszQe", "state": "active"},
     "Capture Webhook": {"id": "pPIt2cELH2RVZktS", "state": "active"},
-    "Pipeline Watchdog": {"id": "wndFo6uJCqVuINaV", "state": "active"},
-    "Precedence Guard": {"id": "W5rlpAt6hsJAExU6", "state": "active, daily 07:00"},
-    "Capture Nudge": {"id": "YHueoBK7TSLdTlfF", "state": "active, daily 08:00"},
+    "Pipeline Watchdog": {"id": "wndFo6uJCqVuINaV", "state": "active, every 4h, timezone pinned America/New_York 2026-09-07"},
+    "Precedence Guard": {"id": "W5rlpAt6hsJAExU6", "state": "active, daily 07:00 America/New_York, timezone pinned 2026-09-07"},
+    "Capture Nudge": {"id": "YHueoBK7TSLdTlfF", "state": "active, daily 08:00 America/New_York, timezone pinned 2026-09-07"},
     "Soul Layer Write-Back": {"id": "edIJx7Q3FXTawg9J", "state": "active, 15 minute poll"},
     "Approval Queue": {"id": "syRVj0G47mA1b0Xn", "state": "active"},
     "Duplicate Sweep": {"id": "X7OGXWHBx57CIG42", "state": "active"},
@@ -684,7 +684,7 @@ WORKFLOWS = {
     # mirrors its feed log onto the job envelope as one LEARNING_CAPTURED event
     # per fed job through the Event Bus, a same state COMPLETED update, so
     # learning.state reads captured with the feed time and the gate decision.
-    "Build 12 Ledger Feeder": {"id": "6hQD8YhiYzR1FFda", "state": "active, daily poll, feeds COMPLETED jobs once each and marks the envelope captured, versions 7bef0e3b"},
+    "Build 12 Ledger Feeder": {"id": "6hQD8YhiYzR1FFda", "state": "active, daily 02:00 America/New_York (timezone pinned 2026-09-07), feeds COMPLETED jobs once each and marks the envelope captured, versions 7bef0e3b"},
     # Sole devon-soul writer, approval gated. First draft Wo7zPxpGH8kiBRy8 was
     # archived unpublished after adversarial review; lANs6wopaK0PkNhN is the
     # rebuild that shipped. Its execution data persistence is off on purpose
@@ -724,13 +724,13 @@ WORKFLOWS = {
     # trace note. Digest email only when it acted; unreadable envelopes are
     # skipped and named, and the Heartbeat keeps alerting on them
     # (stuck_jobs) until repaired by hand.
-    "Ledger Janitor": {"id": "HKNEDVy7PUKPtsrN", "state": "active, daily 02:30"},
+    "Ledger Janitor": {"id": "HKNEDVy7PUKPtsrN", "state": "active, daily 02:30 America/New_York, timezone pinned 2026-09-07, previously mis-documented as UTC"},
     # Weekly read-only export: the four learning-lane tables (state ledger,
     # feed log, soul commit log, heartbeat log) each to CSV, one Gmail with
     # four attachments. approval_queue is EXCLUDED on purpose: its rows carry
     # plaintext decision tokens, and mailing them would let anyone with inbox
     # access approve soul writes. Never add it to this or any export.
-    "Weekly Table Backup": {"id": "qCfGZ1CwmpK9vOta", "state": "active, weekly Sun 03:10"},
+    "Weekly Table Backup": {"id": "qCfGZ1CwmpK9vOta", "state": "active, weekly Sun 03:10 America/New_York, timezone pinned 2026-09-07, previously mis-documented as UTC"},
     # Build 14, the autonomy lane, built and proven live 2026-09-05. Before it
     # the organs existed but nothing formed jobs, walked them between organs,
     # bridged approval cards back into the ledger, observed EditForge, or
