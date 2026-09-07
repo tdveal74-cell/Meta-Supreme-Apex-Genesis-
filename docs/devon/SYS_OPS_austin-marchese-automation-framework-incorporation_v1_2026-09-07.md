@@ -15,16 +15,18 @@ supersedes: none
 
 ## Verdict in one paragraph
 
-Roughly eighty percent of this video is already built in this estate, and
-built harder. His headline architectural insight, skill driven automation,
-is this repository's existing design and is documented in `CLAUDE.md` for a
-stronger reason than the one he gives. His reusable utility pattern is in
-production as sub workflow `o4ctniOsIq2VSfgm`, called from more than twenty
-nodes across TSWS 00 to 05. Three ideas are worth importing, one piece of
-his advice should be rejected outright for this operation, and one question
-he asks lands on a live defect in five active scheduled workflows. The video
-is good general teaching. It is not a blueprint for a 64 workflow estate,
-and adopting his stack wholesale would be a downgrade.
+Five of the nine points in his framework are already in place here, one is
+half in place, and three are not. The five already in place are the load
+bearing ones, and they are built harder here than in his stack. His headline
+architectural insight, skill driven automation, is this repository's existing
+design and is documented in `CLAUDE.md` for a stronger reason than the one he
+gives. His reusable utility pattern is in production as sub workflow
+`o4ctniOsIq2VSfgm`, called from 27 nodes across TSWS 01 to 05. Three ideas are
+worth importing, one piece of his advice should be rejected outright for this
+operation, and one question he asks lands on a live defect in six active
+scheduled workflows. The video is good general teaching. It is not a blueprint
+for a 64 workflow estate, and adopting his stack wholesale would be a
+downgrade.
 
 ## Source record
 
@@ -35,7 +37,7 @@ and adopting his stack wholesale would be a downgrade.
 | Video id | `ktY1b2-OKRA` |
 | Duration | 22:34 |
 | Published | 2026-09-07 13:45Z |
-| Read at | 2026-09-07, 3,215 views, 84 likes, 19 comments, 459 views per hour |
+| Read at | 2026-09-07 search snapshot: 3,215 views, 84 likes, 19 comments, 459 views per hour. The vidiq hourly series near the same time reports 487 views per hour; the two are not reconciled here |
 | Sponsor | CodeRabbit, mid roll at about the 25 percent mark |
 | Evidence | Full transcript pulled through vidiq and read end to end, not skimmed |
 
@@ -50,10 +52,10 @@ setups lose on maintenance cost, not on capability.
 |---|---|---|
 | 1. Automation spike: build the ugliest end to end version first to prove no blockers | Practised informally, never named or required | no repository hit for the pattern |
 | 2. Make results transferable: the routine references a skill file, so updating the skill updates the routine | Already the architecture, for a better reason | `.claude/skills/` carries six committed skills; `CLAUDE.md` records that `~/.claude/skills/` is ephemeral in a web session, so anything that must load is committed |
-| 3. When, how often, where to run | Sixteen active scheduled workflows exist; five of them carry a real defect, see below | `docs/devon/n8n-cloud-census_2026-09-06.json` |
+| 3. When, how often, where to run | Thirteen active workflows run on an enabled schedule trigger; six of them carry a real defect, see below | `docs/devon/n8n-cloud-census_2026-09-06.json` |
 | 4a. Calibrate, net new features, output format | Ordinary practice here | not a gap |
 | 4b. Self correcting and self breaking systems | Half present. Failure is caught after the spend, not before it | DEVON Error Alarm and OS Error Handler are both error triggers, which fire on a crash that already happened |
-| 5a. Utility skills, so one fix propagates | Already in production at scale | `o4ctniOsIq2VSfgm` called from more than twenty nodes across TSWS 00 to 05; TSWS 00 Render Job is a shared sub workflow called by TSWS 01 through 05 |
+| 5a. Utility skills, so one fix propagates | Already in production at scale | `o4ctniOsIq2VSfgm` is TSWS 00 Render Job, called from 27 nodes across TSWS 01 to 05 (01 six, 02 nine, 03 three, 04 five, 05 four) |
 | 5b. Consolidate notifications to one place you actually check | Present | SMTP to Tee, plus the approval queue |
 | 5c. Explicit updates, his "green light drift" | Absent as a rule, and the estate has already been bitten by it | see import one |
 | 6. Constraint driven versus enhancement automation, and prune the rest | Absent as a filter | 64 workflows, 39 active, throwaways still resident |
@@ -96,10 +98,12 @@ has already crashed. A preflight gate is a different thing and is not present
 as a named pattern.
 
 This lands directly on an open ruling. The 2026-09-06 burn document measured
-314 saved executions in 24 hours, about 264 an hour in steady state, and left
-the levers to cut it as Tee's decision. A preflight that refuses a run whose
-dependencies are down is one of those levers, and it is the one that costs
-nothing in capability.
+314 saved executions in 24 hours, and from the quiet window 11 an hour, about
+264 a day (that document, lines 144 and 156). Its own verdict paragraph words
+this as "264 an hour by hour steady state", which reads as a rate and is not
+one; the body is authoritative. The levers to cut it were left as Tee's
+decision. A preflight that refuses a run whose dependencies are down is one of
+those levers, and it is the one that costs nothing in capability.
 
 ### 3. Constraint versus enhancement, and pruning
 
@@ -121,20 +125,22 @@ be imported even as a default.
 
 His reasoning is sound in general: an external machine adds variables you have
 not tested. His own stated exception is that work which cannot miss a run
-belongs in the cloud. This estate is entirely inside that exception. The
-primary device is an iPhone 15 Pro, so there is no always on local machine to
-host a trigger, and the scheduled lanes carry ledger feeding, backups, purges
-and watchdogs where a missed run is a real cost. Cloud is already the correct
-answer here and is already the answer in place.
+belongs in the cloud. This estate is entirely inside that exception. There is
+no always on local host to hang a trigger on (Tee's stated primary device is
+an iPhone 15 Pro; no repository file records a device, and the Chromebook line
+in `docs/FLAGSHIP_SPEC.md` is the product's rendering viewport, not an
+operator machine), and the scheduled lanes carry ledger feeding, backups,
+purges and watchdogs where a missed run is a real cost. Cloud is already the
+correct answer here and is already the answer in place.
 
 Recording this explicitly so a later session does not read his rule as
 guidance and try to move a lane local.
 
 ## The live finding
 
-Five active scheduled workflows set no workflow level timezone, so their hour
-resolves in the instance default timezone rather than an intended one. Read
-from the 2026-09-06 census, which is the record and not the instance:
+Six of the thirteen active scheduled workflows set no workflow level timezone,
+so their hour resolves in the instance default rather than an intended one.
+Read from the 2026-09-06 census, which is the record and not the instance:
 
 | Workflow | Schedule | Census note |
 |---|---|---|
@@ -143,6 +149,7 @@ from the 2026-09-06 census, which is the record and not the instance:
 | DEVON Ledger Janitor | daily 02:30 | sets no timezone, the description says UTC |
 | DEVON Pipeline Watchdog | every 4 hours | no workflow timezone set |
 | DEVON Precedence Guard | daily 07:00 | no workflow timezone set |
+| DEVON Weekly Table Backup | weekly Sunday 03:10 | sets no timezone, the description says UTC |
 
 Others in the same estate do set it explicitly to `America/New_York`, which is
 what makes this a drift rather than a house convention. The risk is not
@@ -156,24 +163,30 @@ instance before changing anything.
 ## Second incorporation path: the format, for TQO
 
 Austin is a direct peer in the TQO lane, presenter led AI teaching, 88,200
-subscribers, with a video at 207,667 views carrying an outlier score of 4.3.
-His format is worth reading as a competitive artifact, not only as content.
+subscribers. His ceiling is higher than one video: his top three long form are
+845,043 views (breakout 28.38), 560,384 (50.17) and 380,732 (276.34), with
+207,667 (4.3) fourth. Two are over 500,000. His format is worth reading as a
+competitive artifact, not only as content, and he should be read as a serious
+operator in this lane rather than a mid tier one.
 
-What his format confirms about the existing TQO spec:
+What his format confirms about the TQO standard. That standard is Tee's
+stated operating preference (learning objective in the first 30 seconds, a
+three to five step checklist); no file in this repository carries it, which is
+itself worth fixing:
 
 - He states the learning objective inside the first 30 seconds, at 0:00 to
-  0:29, before any teaching. TQO already requires this.
+  0:29, before any teaching. Same rule.
 - He carries a numbered checklist through the whole runtime and recaps it
-  twice, at step six and at the close. TQO already requires three to five
-  steps. His six is at the ceiling of that range and he needs two recaps to
-  hold it, which is an argument for staying at the lower end.
+  twice, at step six and at the close. His six is above the three to five
+  range and he needs two recaps to hold it, which is an argument for staying
+  at the lower end.
 
 The one beat worth taking:
 
 - **"On screen is a prompt you can run."** He repeats this at every step. It
   converts a teaching video into an artifact the viewer leaves with, and it is
-  proof rather than claim, which fits the anti hype positioning exactly. TQO
-  has the checklist but not the takeaway asset.
+  proof rather than claim, which fits the anti hype positioning exactly. The
+  stated TQO format has the checklist but no takeaway asset.
 
 What to leave:
 
@@ -183,7 +196,7 @@ What to leave:
 
 ## Recommended order, smallest surface first
 
-1. Confirm the five timezone entries against the live instance, then set them.
+1. Confirm the six timezone entries against the live instance, then set them.
    Cheapest, and it is a correctness fix, not a feature.
 2. Write the explicit outcome rule into the house conventions in the
    `devon-learning-lane` skill, then apply it to the scheduled lanes one at a
@@ -201,8 +214,24 @@ What to leave:
 - No workflow was inspected node by node for whether it already reports
   counts. The green light drift item is a proposal for a house rule, not a
   defect report against a named workflow.
+- The TQO format claims come from Tee's stated operating preference, not from
+  any file in this repository. No repository artifact records the TQO video
+  format, and `TQO FINAL V5` is marked inactive in the census while
+  `OPERATOR.md` line 113 still lists it active. That drift predates this
+  document and is not addressed by it.
+- The device premise behind the rejection is Tee's stated preference, not a
+  repository fact. The argument only needs "no always on local host", which
+  holds on any candidate device.
+- The two views per hour figures (459 and 487) come from different vidiq
+  surfaces at close times and were not reconciled.
 - Nothing in this document was executed, changed or deployed. It is analysis
   and a set of recommendations. Every item above is Tee's ruling.
+
+This version corrects four errors caught by an adversarial review before
+commit: a burn rate stated per hour that the source states per day, an active
+scheduled workflow count of sixteen where the census supports thirteen, a
+timezone finding that listed five of the six affected workflows, and an
+underived "eighty percent" carrying the verdict.
 
 ## DEVON RECEIPT
 
@@ -213,7 +242,7 @@ ARTIFACT: SYS_OPS_austin-marchese-automation-framework-incorporation_v1_2026-09-
 DATE: 2026-09-07
 SOURCE: youtube ktY1b2-OKRA, Austin Marchese, full transcript read
 DECISIONS: none, three imports proposed and one rejection recorded, all awaiting Tee's ruling
-FINDINGS: five active scheduled workflows carry no workflow timezone, unverified against the live instance
+FINDINGS: six of thirteen active scheduled workflows carry no workflow timezone, unverified against the live instance
 STATUS: analysis complete, nothing executed
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
