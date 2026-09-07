@@ -65,3 +65,52 @@ Alarm now use `n8n-nodes-base.emailSend` on the SMTP credential, proven by
 execution 5600 returning a real `250 2.0.0 OK` from gsmtp. Other workflows still
 carry the dead Gmail credential and each one is a silent failure until moved.
 An OAuth refresh token expires with no warning; an SMTP password does not.
+
+## Say what you did, with counts, or the digest is a green light with nothing behind it
+
+Compiled 2026-09-07 from Austin Marchese's automation framework, where the
+failure mode is named green light drift: an automation reports success for work
+it did not do. It is the first law of `CLAUDE.md` pointed at machines instead of
+at a session. That law governs what a session may assert. Until now nothing
+governed what a workflow may assert, and the estate has already paid for the
+gap: the Build 12 envelope read `not_captured` forever, and the Face, the
+Heartbeat and the operational report all repeated it. Three surfaces
+confidently reporting a wrong state.
+
+So a terminal notification never says only that it ran. It names what it
+touched, with numbers, and where the numbers came from:
+
+- not "daily brief ran", but "analysed 41 of 41 emails from the Inbox view,
+  200 Slack messages, 10 calendar events"
+- not "sweep complete", but "read 128 ledger rows, 3 non-terminal past 96h,
+  3 cancelled, 0 refused"
+
+The number is the point. An operator who sees "1 of 1 emails" on a day they
+know they got forty has caught a broken automation in one glance, and no
+alerting rule would have fired, because nothing failed. A count that cannot be
+produced is itself the finding: report the refusal, never a bare success.
+
+The quiet path is not exempt. A zero item run says "0 of 128 rows matched",
+not silence, because silence and a broken read look identical.
+
+## Break before you spend, not after
+
+The estate catches failure after the money is gone. `DEVON Error Alarm` and
+`OS Error Handler` are both Error Triggers, which by definition fire on a crash
+that has already happened. Nothing refuses a run whose dependencies are down
+before it starts consuming executions.
+
+So a workflow that depends on a credential, a table, a host or a connector
+checks that they answer BEFORE it does any work, and refuses the run with a
+message naming what is missing and how to fix it. A refusal is data, not a
+crash: it takes the quiet path, emails once, and does not retry into the same
+wall.
+
+This is a burn lever as much as a correctness one. The 2026-09-06 measurement
+put the instance at 314 saved executions in 24 hours, 11 an hour, about 264 a
+day, against a cap that the cutover runbook expects to hit between 2026-09-17
+and 2026-09-25. A lane that discovers at node 30 that its credential died has
+spent thirty nodes to learn what node 1 could have told it.
+
+Preflight what the run cannot proceed without, not everything. The test is
+whether the run is guaranteed to fail without it.
