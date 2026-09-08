@@ -1,8 +1,11 @@
 # SYS_OPS: OS 29 Platform Policy Sensor, the capture was hollow and the record said watched
 
 Date: 2026-09-08, later the same night
-Workflow: `7WyIarNoJa2irx2r`, active, `activeVersionId 9a235eaa`
-Supersedes: `SYS_OPS_os29-platform-policy-sensor_v1_2026-09-08` on the coverage claim only.
+Workflow: `7WyIarNoJa2irx2r`, active, `activeVersionId 38857d14` (was `9a235eaa` when this
+doc was first written; republished at about 05:56 UTC with the changes recorded below)
+Supersedes: `SYS_OPS_os29-platform-policy-sensor_v1_2026-09-08` on the coverage claim, on the
+scrape count (five a sweep and about 150 a month, not four and 120), and on the timing of the
+first scheduled firing.
 Amended 2026-09-08 after merge (#165), on a fresh critic's findings against the raw execution
 data. The first version of this doc inverted the silencing timeline, omitted that the sensor
 had erased its own material verdicts, and overstated stability. Each is corrected in place.
@@ -13,7 +16,7 @@ the comparison; add the X successor as a watched source and leave his curated no
 
 The v1 doc says eight of eight sources watched, execution 6414, all Stable, real
 fingerprints. That was true of the fetch and false of the capture. Meta Content
-Monetization Policies came back HTTP 200 with 14,926 characters of markdown (execution 6420; the figure moves
+Monetization Policies came back HTTP 200 with 14,919 characters of markdown (execution 6420; the figure moves
 by a few characters per scan), and three
 whole policy sections inside it were a heading, a lead-in sentence, and nothing:
 
@@ -40,7 +43,7 @@ capture. Only a per-heading completeness check can, and that check is not built 
 
 Three of nine rows flipped to Changed inside one hour with no policy movement behind
 them. Two renders three minutes apart settled that it was not real change: Meta Partner
-returned to fingerprint `7fcf18d2`, byte for byte the value from seventy minutes
+returned to fingerprint `7fcf18d2`, the identical value from seventy minutes
 earlier, and pages are not edited back into an identical prior state.
 
 The first diagnosis was cosmetic jitter from a support chat widget, and a block-level
@@ -88,16 +91,16 @@ plus `requestOptions.timeout` 120000 so the request budget covers the Firecrawl 
 Custom body was chosen over the `scrapeOptions` collection because every fixed
 collection is hidden under it, so the empty container 400 from execution 6410 cannot
 recur by construction. `url` stays out of the body on purpose: it is the expression
-`{{ $json.url }}` serving all four Firecrawl sources, and a literal there would have
-silently repointed TikTok and both X pages at the Facebook page while all four kept
-reporting Stable. The research converge step caught that in one researcher's
+`{{ $json.url }}` serving all five Firecrawl sources, and a literal there would have
+silently repointed TikTok, both X pages and the other Meta page at the Facebook page
+while all five kept reporting Stable. The research converge step caught that in one researcher's
 recommendation and refused it.
 
 `rawHtml` was carried so the same scrape could say which default mattered: markdown is
 derived from it, so body text in rawHtml but not markdown would mean the filter, absent
 from both would mean timing. That readout was never done, and because both defaults were
 flipped in one body it could not have attributed the hollowing to one of them anyway. The
-result is 2.6 MB of rawHtml stored per sweep with no consumer, since `Fingerprint
+result is 2.3 MB of rawHtml stored per sweep, 2,292,773 characters on 6430, with no consumer, since `Fingerprint
 Rendered` reads only markdown. It should be dropped; see the open items.
 
 ## The test was fixed before the run, and it passed
@@ -115,7 +118,7 @@ invented. On execution 6430:
 | hollow sections on the page | 3 | 0 |
 
 `rawHtml` came back on all five Firecrawl sources, proving the custom body reached
-Firecrawl. Meta Content went 14,926 to 29,578 characters of markdown and 54 to 162
+Firecrawl. Meta Content went 14,919 to 29,578 characters of markdown and 54 to 162
 normalised blocks. Four of the five Firecrawl sources gained blocks; TikTok gained none, unchanged at 99,
 so its capture was already complete. `onlyMainContent` had been stripping the other
 four, not just the one with the visible hollow headings.
@@ -127,14 +130,15 @@ Stability across the next scan, 6430 to 6431:
 | X Creator Revenue Sharing | 85, 85 | none |
 | X Original Content Rewards | 144, 144 | none |
 | TikTok Creator Rewards | 99, 99 | none |
-| Meta Content | 162, 163 | the support chat widget |
-| Meta Partner | 110, 111 | the same widget |
+| Meta Content | 162, 163 | the support chat promo |
+| Meta Partner | 110, 111 | the chat promo leaving, two feedback prompts returning |
 
 Three sources returned identical normalised fingerprints across three scans in thirteen
 minutes. That is fingerprint stability over lowercased, date and hash stripped, deduplicated
 block text, not byte identity, and two consecutive pairs is not a determinism proof. The two
 Meta pages still move by two or three blocks between scans, and every instance inspected
-was the support chat widget.
+was chrome: the support chat promo, and on Meta Partner the two feedback prompts, "have a
+moment?" and "tell us how we're doing".
 
 ## The learning had already silenced policy, and was reset
 
@@ -172,8 +176,7 @@ before it is learned again.
 
 ## The sensor erased its own material verdicts, and I did it
 
-Execution 6430 fired the assessment on four sources. Two came back MATERIAL, the first
-this sensor has ever produced. Meta Content Monetization, 04:25:18: `tragedy or conflict`,
+Execution 6430 fired the assessment on four sources. Two came back MATERIAL. Meta Content Monetization, 04:25:18: `tragedy or conflict`,
 `debated social issues` and `objectionable activity` now reduce or disable monetization
 "even for fictional or discussion-only depictions", affects NCO Forge and TSWS, action is
 to audit NCO Forge framing and thumbnails toward the one carve-out, "explicitly uplifting
@@ -182,10 +185,23 @@ follower and video count minimums for in-stream ads, and a connected entity liab
 under which one show's violation can strip monetization from the others, affects all
 three. Both were mailed and both were written to `AI Verdict`.
 
+They were not the first. Execution 6424 at 03:56, on the last hollow capture before the fix,
+had already fired two MATERIAL verdicts, and both were false alarms manufactured by the
+missing sections. Meta Content, 03:56:33, confidence high: Meta "adds three new prohibited
+monetisation formats", looping videos, text montages and embedded ads, which had merely
+reappeared in that capture. Meta Partner, 03:56:56: Meta "removed the established presence
+monetization eligibility requirement and the political/government entity ineligibility
+rules", which had merely dropped out of that capture. Nothing was added or removed on Meta's
+side. Both were mailed as MATERIAL, both went through Record Change, and both were then
+overwritten by the 6430 verdicts through the same last write wins path. So the inbox holds
+four MATERIAL mails from tonight: the two from 6424 are wrong and the two from 6430 are
+right, and nothing in the record said so until this amendment. A hollow capture does not
+only hide policy; it invents removals.
+
 Execution 6431, my determinism run five minutes later, fired on the support chat widget and
 wrote "not material" over both cells. Execution 6432, the re-baseline, set both rows to
-Stable. The only material verdicts the sensor has produced then existed in Tee's inbox and
-in execution 6430 and nowhere in the record. Both were restored verbatim at 05:35 UTC, above
+Stable. The 6430 verdicts then existed in Tee's inbox and in execution 6430 and nowhere in
+the record. Both were restored verbatim at 05:35 UTC, above
 the verdicts that overwrote them with a dated note between, and both rows were put back to
 the Changed unreviewed status.
 
@@ -196,7 +212,8 @@ data back, not by the run reporting success.
 
 ## What the fix recovered
 
-From the previously hollow `Restricted categories`, verbatim:
+From the previously hollow `Restricted categories`. The words are the page's; the heading
+is folded into the first line and the paragraph break before "However" is collapsed:
 
 > Tragedy or conflict. We define "tragedy or conflict" as "physical or emotional
 > distress, such as death, injury, abuse, illness, or destructive events." Depictions or
@@ -251,27 +268,79 @@ non existent sale id. Gumroad answered HTTP 200 with `success: false, The sale w
 found`, and the guard refused with nothing written. Gumroad returns 200, not 404, for a
 missing sale; a guard checking only the status code would have sailed past it.
 
+## The sensor's writes, changed the same night on Tee's ruling
+
+Tee ruled all three sensor changes and the completeness rule at about 05:30 UTC. All four
+landed in one workflow update and were proved by manual run before publishing.
+
+**`AI Verdict` is append-only.** `Record Change` now writes the new verdict, a blank line,
+then whatever the cell already held, capped at 60,000 characters, newest on top. A quiet
+scan can no longer erase a material one. Proving run 6436 exercised it on Spotify, which
+fired a not-material verdict onto an empty cell; the two restored MATERIAL verdicts on the
+Meta rows were untouched because those rows did not fire.
+
+**A silencing is no longer invisible.** Both fingerprint nodes now emit the text of every
+block that crosses the two-flip threshold. A new branch on the unchanged path, `Newly
+Volatile?`, routes any such row through `Build Silencing Note` and `Record Silencing`,
+which prepend a dated note naming the silenced lines to `AI Verdict`, set the row to
+Changed unreviewed, and pass it to `Notify`. The note says how to re-arm a line that turns
+out to be policy: clear the row's Block Index. On 6436 the branch ran seven times and
+fired zero times, as it should with every counter freshly reset.
+
+**`rawHtml` is out of the custom body.** Formats are `["markdown"]` only.
+
+**The completeness rule.** In both fingerprint nodes, after the 1,000 character floor: a
+line ending in a colon that is answered by a heading at the same level or shallower than
+the section it sits in makes the capture a reported failure, never a baseline. On the
+plain HTTP path, `<h1>` to `<h6>` are turned into markdown headings before tags are
+stripped so the rule can see structure there too. Measured on the ten real captures on
+disk before deployment: three hits on the known hollow capture, zero on the nine complete
+ones. A first version also treated an empty level 2 heading as a hole. Proving run 6436
+refused YouTube Shorts on both paths for "Learn more about YouTube Shorts monetization",
+a real heading with nothing under it. That clause never produced a true positive and was
+removed; re-measured at three and zero.
+
+**Proving run 6436, the rest of it.** Meta Content came back from Firecrawl as `Bad
+gateway - the service failed to handle your request`, a 502 on one page while the same
+body worked on four others. The node reported it, carried the index forward, and set the
+row to Fetch failing with one consecutive failure, rather than baselining on nothing.
+Spotify and TikTok each fired a not-material verdict on one-block footer churn. Nothing
+was silenced.
+
+**Proving run 6437, after the clause was removed.** Success, 05:49:09 to 05:51:12. All
+four plain HTTP pages fingerprinted, YouTube Shorts back at 115 blocks with no hollow
+hit. All five Firecrawl pages fingerprinted, Meta Content recovered from the 502 at 186
+blocks. `rawHtml` absent on every Firecrawl response, markdown intact. The silencing
+branch ran eight times and fired zero. Meta Content fired one verdict, not material, on
++71/-45 blocks that turned out to be Meta serving the en-GB spelling of the same page:
+monetisation for monetization, behaviours for behaviors, centre for center. Append-only
+held: that verdict sits above the restored MATERIAL one, which is untouched. Published
+on that receipt at about 05:56 UTC as `activeVersionId 38857d14`.
+
 ## Stated, not papered over
 
+- The completeness rule was measured on the five Firecrawl pages before deployment and on
+  the four plain HTTP pages only by proving run. A false positive there shows as Fetch
+  failing; 6436 produced exactly one, since fixed.
+- Meta serves its help pages in more than one English locale and Firecrawl gets whichever
+  it gets. 6437 saw the en-GB spelling and read it as 116 moved blocks. The verdict caught
+  it, and append-only means it cost a Claude call and nothing else, but every locale flip
+  will fire until the scrape pins `location` to a country and language. Not added tonight:
+  one more untested option four hours before the first scheduled scan is the wrong trade.
 - YouTube Advertiser-friendly guidelines runs at 733 blocks and 76,868 characters, over
   the 30,000 character snippet cap, so on that page a removed block is reported as a
   count and its text is not retained. The prompt says so and forbids guessing what it
   said. Every other watched page is under the cap and keeps removed text.
-- `AI Verdict` is last write wins. Until it is append only, any quiet scan can erase a
-  material verdict, and it did once tonight.
-- A block going volatile is written nowhere a human reads. Until the newly volatile note
-  reaches the notify path, the sensor can silence a policy line in silence.
-- `rawHtml` is still in the custom body: 2.6 MB per sweep, no consumer. Drop it.
 - `onlyMainContent: false` admitted roughly 28 footer blocks on each X page. A footer
   edit on X now fires a verdict until the learning classes those blocks as chrome.
 - The Firecrawl node note still says roughly 120 scrapes a month; with five Firecrawl
   sources it is 150.
-- The per-heading completeness assertion is not built. Until it is, a future partial
-  capture will pass the 1,000 character floor and read Stable.
 - `view_sales` on the Gumroad token is inferred from the endpoint accepting it, not
   proven by a successful sale read.
-- TQO FINAL V5 remains unpublished by choice. Publishing activates six schedules and
-  seven webhooks across two shows, which is not the same act as attaching a credential.
+- TQO FINAL V5 was published at 05:35 UTC on Tee's ruling with its six schedule triggers
+  disabled first, `activeVersionId 73efec8d`, trigger count seven: the webhooks behind his
+  Shortcuts, the run links and the Gumroad guard are live, and nothing runs unattended.
+  Each schedule is re-enabled as its own named act.
 - The DEVON thread log entry for this session was not filed. A safety classifier in the
   session blocked the Notion write and a local file write of the same content.
 - The Context Pill needs updating: TQO and NCO Forge are presenter led with owned
@@ -287,8 +356,8 @@ TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_os29-platform-policy-sensor_v2_2026-09-08
 DATE: 2026-09-08
 DECISIONS: Tee ruled a block-level diff with self-learned volatile blocks over a similarity threshold; fix the Firecrawl capture rather than the comparison; watch the X successor as a new row and leave his curated note alone; Systems primary and Money cross-reference for the Gumroad credential; no calendar rotation for the Gumroad token, scope reduction and exposure triggers instead; the Gumroad Application ID and Secret stay unwired
-FINDINGS: the v1 coverage claim was true of fetch and false of capture, Meta Content Monetization had three hollow policy sections since the sensor was built; root cause was waitFor 0 and onlyMainContent true, both Firecrawl defaults in force because the node sent no options; the fix's own first two runs pushed seven real policy blocks on Meta Partner over the two flip threshold and silenced them for eleven minutes until the indexes were cleared, and the mechanism is standing, with no signal to a human when it fires; execution 6430 produced the sensor's first two MATERIAL verdicts and execution 6431 overwrote both, restored by hand at 05:35 UTC; the Tragedy or conflict restriction governing NCO Forge on Facebook was never captured before tonight; the March 3 2026 AI conflict disclosure rule carries over into X Original Content Rewards verbatim; validate_node_config returns valid for anything on community nodes; Gumroad returns 200 not 404 for a missing sale
-OPEN: AI Verdict must become append only; newly volatile events must reach the notify path; rawHtml should be dropped from the custom body; per-heading completeness assertion not built; view_sales inferred not proven; V5 unpublished by choice; thread log entry unfiled after a classifier block; Context Pill stale on the faceless framing; X automated means exclusion needs a ruling
-STATUS: OS 29 active, activeVersionId 9a235eaa, daily 06:00 America/New_York, nine sources watched, three with identical normalised fingerprints across three scans and the two Meta pages moving only on chrome, zero volatile blocks after the reset, two rows at Changed unreviewed carrying restored MATERIAL verdicts; the first scheduled firing is 10:00 UTC on 2026-09-09 and a check-in is armed for 10:20 UTC
+FINDINGS: the v1 coverage claim was true of fetch and false of capture, Meta Content Monetization had three hollow policy sections since the sensor was built; root cause was waitFor 0 and onlyMainContent true, both Firecrawl defaults in force because the node sent no options; the fix's own first two runs pushed seven real policy blocks on Meta Partner over the two flip threshold and silenced them for eleven minutes until the indexes were cleared, and the mechanism is standing, with no signal to a human when it fires; execution 6424 produced two false MATERIAL alarms from the hollow capture, one of them reporting a removal that never happened, and execution 6430 produced two real MATERIAL verdicts which execution 6431 overwrote, restored by hand at 05:35 UTC; the Tragedy or conflict restriction governing NCO Forge on Facebook was never captured before tonight; the March 3 2026 AI conflict disclosure rule carries over into X Original Content Rewards verbatim; validate_node_config returns valid for anything on community nodes; Gumroad returns 200 not 404 for a missing sale
+OPEN: view_sales inferred not proven; V5 published with schedules disabled, activeVersionId 73efec8d; thread log entry unfiled after a classifier block; Context Pill stale on the faceless framing; X automated means exclusion needs a ruling
+STATUS: OS 29 active, activeVersionId 38857d14, daily 06:00 America/New_York, nine sources watched, completeness rule live on both paths, AI Verdict append only, silencing routed to the notify path, rawHtml dropped, zero volatile blocks, both restored MATERIAL verdicts intact with newer verdicts stacked above them; the first scheduled firing is 10:00 UTC on 2026-09-08, the same morning, and a check-in is armed for 10:20 UTC that day
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
