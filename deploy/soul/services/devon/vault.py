@@ -885,6 +885,18 @@ WORKFLOWS = {
     "TSWS 03 Visual Assembly": {"id": "TL6ssgJjJLdvxrUp", "state": "active, sub-workflow called by TSWS 01"},
     "TSWS 04 Detail Recovery": {"id": "wl6XAUp84fiq50sj", "state": "active, sub-workflow called by TSWS 01"},
     "TSWS 05 Conform and Grain": {"id": "QaXpPiVFubsOkDD1", "state": "active, sub-workflow called by TSWS 01"},
+    # Registered 2026-09-08. A manual only helper in Tee's personal project
+    # that reads, previews, publishes or clears the custom landing page on
+    # Gumroad product gxcyjr through credential K1D8KUvTcWDcdrV0, built
+    # because the container this repository is worked from cannot reach
+    # gumroad.com. Its Job node refuses to send a payload whose sha256 prefix
+    # and byte length differ from the constants it carries, so the bytes that
+    # reach Gumroad are the bytes that were reviewed. It has no trigger but
+    # the manual one and has never been published.
+    "Gumroad Landing Page Helper (gxcyjr)": {
+        "id": "vrcLMw802tgf3MpY",
+        "state": "manual, never published, reads previews publishes or clears the gxcyjr landing page on Tee's word",
+    },
 }
 
 
