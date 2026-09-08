@@ -396,7 +396,7 @@ its exemplar library as 1.1.0 is a Tee-owned step named in section 10.
 | Notion Thread Log page, the twelve rulings | created 2026-09-08 15:28:32 UTC on Tee's ruling ("ok, soul layer and file it"), page id `3d568ff5-0db6-81ac-b2e4-f817cc57a833`, twelve numbered Decisions, Area TQO, NCO, Systems; read back in rows mode with the twelve lines separated by line breaks before the 15:30:59 poll | https://app.notion.com/p/3d568ff50db681acb2e4f817cc57a833 |
 | `tee-soul-layer`, namespace `rulings`, records `-d1` to `-d12` | written by workflow `edIJx7Q3FXTawg9J` execution 6513 (trigger, 15:30:59.032Z to 15:31:04.182Z, status success): Split Rulings emitted twelve items with ids `3d568ff5-0db6-81ac-b2e4-f817cc57a833-d1` to `-d12`, none truncated, area "TQO, NCO, Systems"; Upsert To Soul Layer received HTTP 201 Created at 15:31:02 GMT with `x-pinecone-request-lsn: 15` and 795 ms latency; Confirm Or Alert reported "Soul Layer: 12 ruling(s) filed" and the Notify node emailed Tee | the execution record, read in this session through the n8n MCP (R-12); the Pinecone console is the only proof a record exists, and only Tee can open it |
 | Notion Thread Log page, the correction to ruling 9 | created 2026-09-08 about 15:42:30 UTC on the critic's finding, page id `3d568ff5-0db6-8144-99a5-ce38122e4b31`, one numbered Decision that names the superseded record, Area TQO, NCO, Systems | https://app.notion.com/p/3d568ff50db6814499a5ce38122e4b31 |
-| `tee-soul-layer` record `3d568ff5-0db6-8144-99a5-ce38122e4b31-d1` | written by the poll after 15:42:30 UTC | execution proof: see the line added below once the poll ran |
+| `tee-soul-layer` record `3d568ff5-0db6-8144-99a5-ce38122e4b31-d1` | written by execution 6514 (trigger, 15:45:59.190Z to 15:46:03.590Z, status success): Split Rulings emitted one item with that id, not truncated, area "TQO, NCO, Systems"; Upsert To Soul Layer received HTTP 201 Created at 15:46:02 GMT with `x-pinecone-request-lsn: 16` and 648 ms latency; Confirm Or Alert reported "Soul Layer: 1 ruling(s) filed" and the Notify node emailed Tee | the execution record, read in this session through the n8n MCP (R-19); the console remains the proof |
 | `devon-soul`, `devon-subconscious` | untouched | by design: the committer is approval-gated and the subconscious takes only the learning lane |
 
 **Reversal and correction.** A wrong record is one Pinecone record: delete it
@@ -480,6 +480,7 @@ Records this work disagrees with, named by path and left for a ruling. Per
 | R-15 | The correction page exists: id `3d568ff5-0db6-8144-99a5-ce38122e4b31`, one numbered Decision, Area TQO, NCO, Systems | Notion create response, 2026-09-08 about 15:42:30 UTC | TOOL_VERIFIED |
 | R-16 | The Notion Trigger node's `event` defaults to page added to database, and the live Write-Back node sets no `event` | n8n Knowledge node schema for `n8n-nodes-base.notionTrigger` (default `pageAddedToDatabase`, options page added and page updated) and the workflow definition read in R-08 | TOOL_VERIFIED |
 | R-17 | The studio-qa checklist lines under Contradicts, and Tee's standing rule on likeness and voice | the two checklist files read in this session; the standing rule as given to this session by Tee on 2026-09-08 | SOURCE_VERIFIED (files) and STATED (Tee's rule) |
+| R-19 | Execution 6514: one record split with id `3d568ff5-0db6-8144-99a5-ce38122e4b31-d1`, HTTP 201 from Pinecone, one filed, email sent | n8n `get_workflow_execution("edIJx7Q3FXTawg9J", "6514")` with node data, read 2026-09-08 about 15:47 UTC | TOOL_VERIFIED |
 | R-18 | The fresh critic's verdict and findings | subagent report received 2026-09-08 about 15:40 UTC: QUARANTINE on the ruling 9 and 11 premises, PASS-WITH-CONDITIONS on the document and evidence file, mean 3.6, security 5; findings H1 to H4, M1 to M7, L1 to L5 | RECEIVED, each finding re-checked before it was acted on |
 | R-10 | Canon figures in section 8's left column | `aaa-flagship-canon/provenance-ledger.md` rows PL-01, PL-06 | SOURCE_VERIFIED (read this session) |
 | R-11 | Format labels, the mechanic table, and the rulings | Claude's reading of R-03 and R-05 | INFERRED, labelled |
@@ -505,10 +506,10 @@ PR #175 is a draft and merges only on Tee's word.
 aaa-flagship-canon 1.1.0: merge the re-post and interview-clip findings and the delta table into the account-level skill; Tee-owned because the skill store is not writable from a web session.
 The devon-thread-log skill lists eight Areas while the Notion schema carries nine (ACX); already open on the 2026-09-08 sensor page.
 artifacts:
-docs/devon/TQO_CANON_sisinty-benchmark-refresh_v1_2026-09-08.md (PR #175, commits 7ded440, 831dca9, f55d782 and the corrections commit)
+docs/devon/TQO_CANON_sisinty-benchmark-refresh_v1_2026-09-08.md (PR #175, commits 7ded440, 831dca9, f55d782, 7b33ff3 and the proof commit after this line)
 docs/devon/assets/TQO_PROOF_sisinty-benchmark-pull_v1_2026-09-08.json (channel stats, 50 long, 50 Shorts, linked video metadata, balance reads, quoted lines verbatim, two interview clips in full, re-post check)
 Notion Thread Log pages https://app.notion.com/p/3d568ff50db681acb2e4f817cc57a833 and https://app.notion.com/p/3d568ff50db6814499a5ce38122e4b31
-tee-soul-layer records 3d568ff5-0db6-81ac-b2e4-f817cc57a833-d1 to -d12 (n8n execution 6513, HTTP 201) and 3d568ff5-0db6-8144-99a5-ce38122e4b31-d1 (execution named in section 9)
+tee-soul-layer records 3d568ff5-0db6-81ac-b2e4-f817cc57a833-d1 to -d12 (n8n execution 6513, HTTP 201) and 3d568ff5-0db6-8144-99a5-ce38122e4b31-d1 (n8n execution 6514, HTTP 201)
 unverified:
 That the thirteen records exist in Pinecone (console only).
 That fCEpoioDzQA and jIPIy5XbYb0 are comment gated and that tYnuf6-kXT8 is an interview clip (transcripts not pulled).
