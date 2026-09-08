@@ -9,3 +9,11 @@ export const API_BASE =
 
 // Same origin as API_BASE, spoken over WebSocket.
 export const WS_BASE = API_BASE.replace(/^http/, "ws");
+
+// The presence server (avatar frames, speech, barge-in) is its own service.
+// NEXT_PUBLIC_PRESENCE_URL wins when set; otherwise the local default.
+export const PRESENCE_BASE =
+  process.env.NEXT_PUBLIC_PRESENCE_URL?.replace(/\/$/, "") || "http://localhost:8010";
+
+// Same origin as PRESENCE_BASE, spoken over WebSocket.
+export const PRESENCE_WS_BASE = PRESENCE_BASE.replace(/^http/, "ws");
