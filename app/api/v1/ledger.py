@@ -113,6 +113,28 @@ async def read_intent(
         ) from exc
 
 
+@router.get("/intents/{intent_id}/provenance")
+async def verify_provenance(
+    intent_id: str,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """The signed verification payload for one intent.
+
+    Walks the event hash chain and checks the receipt's signature, recomputing
+    everything from the stored rows. Read only: a verdict is reported, never
+    repaired. A chain that does not verify names every break.
+    """
+    try:
+        return await ledger.verify_provenance(
+            db, owner_id=str(current_user.id), intent_id=intent_id
+        )
+    except LedgerRefused as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail={"reasons": exc.reasons}
+        ) from exc
+
+
 class EventAppend(BaseModel):
     name: str = Field(..., min_length=1, max_length=32)
     action_id: Optional[str] = Field(default=None, max_length=64)

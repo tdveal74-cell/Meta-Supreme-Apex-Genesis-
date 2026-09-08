@@ -25,14 +25,16 @@ raised and ruled in ``services.devon.approval`` and its shared store; a row in
 
 from __future__ import annotations
 
+import json
 import secrets
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
-from sqlalchemy import case, or_, select
+from sqlalchemy import case, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.live_state_ledger import (
     ActionRecord,
     ArtifactRecord,
@@ -46,6 +48,7 @@ from app.models.live_state_ledger import (
     VerificationRecord,
 )
 from services.devon import ecosystem
+from services.devon import provenance as hashchain
 
 EMERGENCY_STOP_NAME = "emergency_stop"
 
@@ -85,6 +88,125 @@ def _new_id(prefix: str) -> str:
     return f"{prefix}-{secrets.token_hex(8).upper()}"
 
 
+def _signing_key() -> str:
+    """The key that signs receipts. Read at call time so a rotation takes
+    effect without a restart of this module's state.
+
+    A dedicated RECEIPT_SIGNING_KEY when set; otherwise a key derived from
+    SECRET_KEY, so a receipt is never signed under the JWT key itself.
+    """
+    dedicated = (settings.RECEIPT_SIGNING_KEY or "").strip()
+    if dedicated:
+        return dedicated
+    return hashchain.derive_receipt_key(settings.SECRET_KEY)
+
+
+def _signing_ring() -> List[str]:
+    """The current key first, then every key a receipt may still have been
+    signed under.
+
+    The key derived from the current SECRET_KEY is always in the ring, so
+    moving from the derived default to a dedicated key keeps every earlier
+    receipt verifying. Entries in RECEIPT_SIGNING_KEYS_PREVIOUS are raw keys,
+    or ``secret:<old SECRET_KEY>`` for a secret that was rotated while no
+    dedicated key was set, which the ring derives the same way the writer did.
+    """
+    ring: List[str] = [_signing_key()]
+    if settings.SECRET_KEY:
+        ring.append(hashchain.derive_receipt_key(settings.SECRET_KEY))
+    for entry in (settings.RECEIPT_SIGNING_KEYS_PREVIOUS or "").split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        if entry.startswith("secret:"):
+            old_secret = entry[len("secret:"):].strip()
+            if old_secret:
+                ring.append(hashchain.derive_receipt_key(old_secret))
+        else:
+            ring.append(entry)
+    seen: List[str] = []
+    for key in ring:
+        if key not in seen:
+            seen.append(key)
+    return seen
+
+
+def _link(row: EventRecord) -> hashchain.ChainLink:
+    """One stored event as the verifier sees it. Nothing inferred."""
+    return hashchain.ChainLink(
+        sequence_no=row.sequence_no,
+        name=row.name,
+        prev_hash=row.prev_hash or "",
+        hash=row.hash or "",
+        action_id=row.action_id,
+        payload=dict(row.payload or {}),
+        occurred_at=hashchain.format_time(row.occurred_at),
+    )
+
+
+async def _as_stored(db: AsyncSession, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """The payload as the database will hand it back, decoded the way the ORM
+    decodes the stored column.
+
+    PostgreSQL renders jsonb numerics its own way (``1e16`` becomes
+    ``10000000000000000``, ``-0.0`` becomes ``0.0``), so a hash over Python's
+    rendering never matches the stored row. One round trip through
+    ``CAST(... AS jsonb)`` before the insert makes the writer and the verifier
+    hash the same bytes. The refusal for NaN, infinity and unencodable text
+    lands here, before the insert, with a reason the caller can read.
+    """
+    problem = hashchain.check_payload(payload)
+    if problem is not None:
+        raise LedgerRefused([problem])
+    rendered = await db.execute(
+        text("SELECT CAST(CAST(:payload AS jsonb) AS text)"),
+        {"payload": hashchain.canonical(payload)},
+    )
+    return json.loads(rendered.scalar_one())
+
+
+async def _hashed_event(
+    db: AsyncSession,
+    *,
+    intent_id: str,
+    owner_id: str,
+    name: str,
+    sequence_no: int,
+    prev_hash: str,
+    action_id: Optional[str],
+    payload: Dict[str, Any],
+) -> EventRecord:
+    """Build one event with its hash computed over exactly what will be stored.
+
+    ``occurred_at`` is minted here rather than left to the database default,
+    because the hash covers it and the verifier recomputes from the stored
+    value: the two have to be the same instant to the microsecond. The payload
+    is hashed as stored, for the same reason.
+    """
+    stored = await _as_stored(db, payload)
+    occurred_at = _now()
+    digest = hashchain.event_hash(
+        prev_hash=prev_hash,
+        intent_id=intent_id,
+        sequence_no=sequence_no,
+        name=name,
+        action_id=action_id,
+        payload=stored,
+        occurred_at=hashchain.format_time(occurred_at),
+    )
+    return EventRecord(
+        intent_id=intent_id,
+        owner_id=owner_id,
+        name=name,
+        sequence_no=sequence_no,
+        action_id=action_id,
+        payload=stored,
+        occurred_at=occurred_at,
+        prev_hash=prev_hash,
+        hash=digest,
+    )
+
+
 class LiveStateLedger:
     """Owner scoped reads and writes over the present tense of DEVON."""
 
@@ -122,13 +244,25 @@ class LiveStateLedger:
         # committed: a state nothing could legally follow.
         await db.flush()
         db.add(
-            EventRecord(
+            await _hashed_event(
+                db,
                 intent_id=intent.intent_id,
                 owner_id=owner_id,
                 name="INTENT_RECEIVED",
                 sequence_no=1,
-                payload={"channel": intent.channel},
-                occurred_at=_now(),
+                prev_hash=hashchain.GENESIS,
+                action_id=None,
+                # The opening event binds the intent's identity into the
+                # chain: who asked, through which channel, for what, and
+                # whether it was an effect. A row later handed to another
+                # owner, rerouted, reworded or reflagged no longer matches
+                # its own first hash, and the verifier says so.
+                payload={
+                    "channel": intent.channel,
+                    "owner_id": owner_id,
+                    "stated": intent.stated,
+                    "is_effect": is_effect,
+                },
             )
         )
         await db.flush()
@@ -163,6 +297,16 @@ class LiveStateLedger:
         )
         return [row[0] for row in result.all()]
 
+    async def _event_rows(
+        self, db: AsyncSession, *, intent_id: str
+    ) -> List[EventRecord]:
+        result = await db.execute(
+            select(EventRecord)
+            .where(EventRecord.intent_id == intent_id)
+            .order_by(EventRecord.sequence_no)
+        )
+        return list(result.scalars().all())
+
     async def emergency_stopped(self, db: AsyncSession, *, owner_id: str) -> bool:
         """Whether the stop holds for this owner right now."""
         result = await db.execute(
@@ -186,7 +330,8 @@ class LiveStateLedger:
     ) -> Dict[str, Any]:
         """Append one universal event, or refuse and say which law it breaks."""
         intent = await self._intent(db, owner_id=owner_id, intent_id=intent_id)
-        seen = await self._event_names(db, intent_id=intent_id)
+        rows = await self._event_rows(db, intent_id=intent_id)
+        seen = [row.name for row in rows]
         stopped = await self.emergency_stopped(db, owner_id=owner_id)
 
         violations = ecosystem.check_event(
@@ -198,14 +343,32 @@ class LiveStateLedger:
         if violations:
             raise LedgerRefused(violations)
 
-        record = EventRecord(
+        # Nothing is appended to a chain that does not verify. A broken link,
+        # an altered row or an unhashed row planted after hashed ones is named
+        # here, before a new event could link to it and lend it legitimacy.
+        verdict = hashchain.verify_chain(intent_id, [_link(row) for row in rows])
+        if not verdict.intact:
+            raise LedgerRefused(
+                [
+                    "The event chain on this intent does not verify, so nothing can be "
+                    "appended to it: " + "; ".join(verdict.findings)
+                ]
+            )
+
+        # The new event links to the hash of the last one. A last event with no
+        # hash was written before 019 (the verdict above has just proved every
+        # unhashed row is a prefix), and the chain starts from genesis here
+        # rather than linking to a hash that never existed.
+        prev_hash = rows[-1].hash if rows and rows[-1].hash else hashchain.GENESIS
+        record = await _hashed_event(
+            db,
             intent_id=intent_id,
             owner_id=owner_id,
             name=name,
             sequence_no=len(seen) + 1,
+            prev_hash=prev_hash,
             action_id=action_id,
-            payload=payload or {},
-            occurred_at=_now(),
+            payload=dict(payload or {}),
         )
         db.add(record)
 
@@ -230,6 +393,8 @@ class LiveStateLedger:
             "event": name,
             "sequence_no": record.sequence_no,
             "state": intent.state,
+            "hash": record.hash,
+            "prev_hash": record.prev_hash,
         }
 
     async def plan_action(
@@ -440,17 +605,32 @@ class LiveStateLedger:
     ) -> Dict[str, Any]:
         """Close an intent with its one Universal Receipt.
 
-        Three gates, in order: the intent must have reached something a receipt
-        can honestly report, the receipt must carry its required content, and
-        the intent must not already hold one. The third is checked here and
-        again by a unique constraint, so a race loses rather than overwrites.
+        Four gates, in order: the intent must have reached something a receipt
+        can honestly report, the chain of events it would certify must be
+        intact, the receipt must carry its required content, and the intent
+        must not already hold one. The last is checked here and again by a
+        unique constraint, so a race loses rather than overwrites.
+
+        The receipt binds to the chain head and is signed under the estate key,
+        so a later reader can prove that this text was issued over exactly
+        these events and has not been touched since.
         """
         intent = await self._intent(db, owner_id=owner_id, intent_id=intent_id)
-        seen = await self._event_names(db, intent_id=intent_id)
+        rows = await self._event_rows(db, intent_id=intent_id)
+        seen = [row.name for row in rows]
 
         receiptable, reason = ecosystem.intent_is_receiptable(seen, effect=intent.is_effect)
         if not receiptable:
             raise LedgerRefused([reason])
+
+        verdict = hashchain.verify_chain(intent_id, [_link(row) for row in rows])
+        if not verdict.intact:
+            raise LedgerRefused(
+                [
+                    "The event chain on this intent does not verify, so no receipt can "
+                    "honestly certify it: " + "; ".join(verdict.findings)
+                ]
+            )
 
         existing = await db.execute(
             select(UniversalReceiptRecord.intent_id).where(
@@ -472,6 +652,20 @@ class LiveStateLedger:
         if failures:
             raise LedgerRefused(failures)
 
+        issued_at = _now()
+        key = _signing_key()
+        digest = hashchain.receipt_digest(
+            intent_id=intent_id,
+            head_hash=verdict.head_hash,
+            chain_length=verdict.length,
+            what_happened=receipt.what_happened.strip(),
+            verification=receipt.verification.strip(),
+            provenance=receipt.provenance.strip(),
+            artifacts=list(receipt.artifacts),
+            learned=learned,
+            next_steps=next_steps,
+            issued_at=hashchain.format_time(issued_at),
+        )
         record = UniversalReceiptRecord(
             id=_new_id("RCP"),
             intent_id=intent_id,
@@ -482,7 +676,11 @@ class LiveStateLedger:
             artifacts=list(receipt.artifacts),
             learned=learned,
             next_steps=next_steps,
-            issued_at=_now(),
+            issued_at=issued_at,
+            head_hash=verdict.head_hash,
+            chain_length=verdict.length,
+            signature=hashchain.sign(digest, key),
+            signature_key_id=hashchain.key_id(key),
         )
         db.add(record)
         intent.state = ecosystem.IntentState.RECEIPTED.value
@@ -495,7 +693,169 @@ class LiveStateLedger:
                 f"Intent {intent_id} already holds its one receipt. "
                 "An amendment is a new intent, never a second receipt."
             ) from exc
-        return {"receipt_id": record.id, "intent_id": intent_id, "state": intent.state}
+        return {
+            "receipt_id": record.id,
+            "intent_id": intent_id,
+            "state": intent.state,
+            "head_hash": record.head_hash,
+            "chain_length": record.chain_length,
+            "digest": digest,
+            "signature": record.signature,
+            "signature_key_id": record.signature_key_id,
+        }
+
+    async def verify_provenance(
+        self, db: AsyncSession, *, owner_id: str, intent_id: str
+    ) -> Dict[str, Any]:
+        """The signed verification payload: walk the chain and check the receipt.
+
+        Everything here is recomputed from the stored rows. The chain verdict
+        needs no key; the signature check needs the estate key and says
+        whether the receipt was signed under the key this process holds, so a
+        receipt from before a rotation reads as ``signed_with_current_key``
+        false rather than as forged.
+        """
+        intent = await self._intent(db, owner_id=owner_id, intent_id=intent_id)
+        rows = await self._event_rows(db, intent_id=intent_id)
+        verdict = hashchain.verify_chain(intent_id, [_link(row) for row in rows])
+        receipt = await db.execute(
+            select(UniversalReceiptRecord).where(
+                UniversalReceiptRecord.intent_id == intent_id
+            )
+        )
+        row = receipt.scalar_one_or_none()
+
+        # The intent row against its own chain. The opening event hashes who
+        # asked, through which channel, for what, and whether it was an
+        # effect; the state column is derived from the events. A row that
+        # disagrees with either was moved by hand behind the writer, and the
+        # verifier names the column rather than reading the row on trust.
+        identity_findings: List[str] = []
+        if rows and rows[0].name == "INTENT_RECEIVED" and rows[0].hash:
+            opening = dict(rows[0].payload or {})
+            if "owner_id" in opening and opening["owner_id"] != str(intent.owner_id):
+                identity_findings.append(
+                    "the intent row names a different owner than its opening event: "
+                    "the row was handed to another account after the fact"
+                )
+            if "channel" in opening and opening["channel"] != intent.channel:
+                identity_findings.append(
+                    "the intent row's channel differs from its opening event: "
+                    "the row was rerouted after the fact"
+                )
+            if "stated" in opening and opening["stated"] != intent.stated:
+                identity_findings.append(
+                    "the intent row's statement differs from its opening event: "
+                    "the row was reworded after the fact"
+                )
+            if "is_effect" in opening and bool(opening["is_effect"]) != bool(intent.is_effect):
+                identity_findings.append(
+                    "the intent row's effect flag differs from its opening event: "
+                    "the flag was flipped after the fact"
+                )
+        if rows:
+            expected_state = (
+                ecosystem.IntentState.RECEIPTED.value
+                if row is not None
+                else ecosystem.derive_state([event.name for event in rows]).value
+            )
+            if intent.state != expected_state:
+                identity_findings.append(
+                    f"the intent row reads state '{intent.state}' while its events "
+                    f"derive '{expected_state}': the state column was moved by hand"
+                )
+        if identity_findings:
+            verdict = hashchain.ChainVerdict(
+                intact=False,
+                complete=False,
+                length=verdict.length,
+                hashed=verdict.hashed,
+                unhashed=verdict.unhashed,
+                head_hash=verdict.head_hash,
+                findings=(*verdict.findings, *identity_findings),
+            )
+
+        ring = _signing_ring()
+        current_key_id = hashchain.key_id(ring[0])
+        receipt_report: Dict[str, Any]
+        if row is None:
+            receipt_report = {
+                "present": False,
+                "verified": False,
+                "findings": ["the intent holds no receipt yet; nothing certifies this chain"],
+            }
+        else:
+            digest = hashchain.receipt_digest(
+                intent_id=intent_id,
+                head_hash=row.head_hash,
+                chain_length=row.chain_length,
+                what_happened=row.what_happened,
+                verification=row.verification,
+                provenance=row.provenance,
+                artifacts=list(row.artifacts or []),
+                learned=row.learned,
+                next_steps=row.next_steps,
+                issued_at=hashchain.format_time(row.issued_at),
+            )
+            findings: List[str] = []
+            signed_by = hashchain.find_signing_key(digest, row.signature, ring)
+            if not row.signature:
+                findings.append("the receipt carries no signature (issued before 019)")
+            elif signed_by is None:
+                findings.append(
+                    "the receipt's signature verifies under none of the keys this "
+                    "process holds (the current key and the rotation ring): either "
+                    "the receipt text was altered after issue, or it was signed under "
+                    f"key {row.signature_key_id or 'unknown'}, which is not in the ring"
+                )
+            if row.head_hash != verdict.head_hash:
+                findings.append(
+                    f"the receipt certifies chain head {row.head_hash[:12] or 'none'} "
+                    f"but the chain now ends at {verdict.head_hash[:12] or 'none'}: "
+                    "events were added, removed or altered after the receipt was issued"
+                )
+            if row.chain_length != verdict.length:
+                findings.append(
+                    f"the receipt certifies {row.chain_length} events but the intent "
+                    f"holds {verdict.length}"
+                )
+            receipt_report = {
+                "present": True,
+                "receipt_id": row.id,
+                "issued_at": hashchain.format_time(row.issued_at),
+                "head_hash": row.head_hash,
+                "chain_length": row.chain_length,
+                "digest": digest,
+                "signature": row.signature,
+                "signature_algorithm": hashchain.SIGNATURE_ALGORITHM,
+                "signature_key_id": row.signature_key_id,
+                "verified_with_key_id": hashchain.key_id(signed_by) if signed_by else "",
+                "signed_with_current_key": signed_by is not None
+                and hashchain.key_id(signed_by) == current_key_id,
+                "verified": not findings,
+                "findings": findings,
+            }
+
+        # ``verified`` is the whole claim: a complete chain (every row hashed,
+        # every link sound) AND a receipt that certifies exactly that chain.
+        # An intent with no receipt is not verified, and neither is one whose
+        # prefix predates the chain: the verifier cannot tell pre 019 history
+        # from rows planted to look like it, so it does not claim to.
+        # ``receipted`` and ``chain.complete`` say which half is missing.
+        if verdict.intact and not verdict.complete and verdict.length:
+            receipt_report.setdefault("findings", [])
+            receipt_report["findings"].append(
+                f"{verdict.unhashed} event(s) predate the chain and carry no hash; "
+                "the receipt certifies them on trust, not on proof"
+            )
+        return {
+            "intent_id": intent_id,
+            "verified": verdict.complete and row is not None and receipt_report["verified"],
+            "receipted": row is not None,
+            "chain": verdict.to_dict(),
+            "receipt": receipt_report,
+            "verified_at": hashchain.format_time(_now()),
+        }
 
     async def engage_emergency_stop(
         self,
@@ -601,6 +961,9 @@ class LiveStateLedger:
                     "sequence_no": row.sequence_no,
                     "action_id": row.action_id,
                     "payload": row.payload,
+                    "occurred_at": hashchain.format_time(row.occurred_at),
+                    "prev_hash": row.prev_hash,
+                    "hash": row.hash,
                 }
                 for row in event_rows
             ],
@@ -632,6 +995,11 @@ class LiveStateLedger:
                     "artifacts": receipt_row.artifacts,
                     "learned": receipt_row.learned,
                     "next_steps": receipt_row.next_steps,
+                    "issued_at": hashchain.format_time(receipt_row.issued_at),
+                    "head_hash": receipt_row.head_hash,
+                    "chain_length": receipt_row.chain_length,
+                    "signature": receipt_row.signature,
+                    "signature_key_id": receipt_row.signature_key_id,
                 }
                 if receipt_row is not None
                 else None

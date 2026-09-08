@@ -206,6 +206,15 @@ class Settings(BaseSettings):
     # so no test approaches it.
     PROVIDER_DAILY_TOKEN_CAP: int = 500_000
 
+    # Universal Receipt signing (migration 019). Empty derives a key from
+    # SECRET_KEY, so receipts are never signed under the JWT key itself; a
+    # dedicated value is the setting to prefer in production, because it is
+    # the one the presence service never receives and so cannot leak. The
+    # previous list is the rotation ring: receipts signed under an earlier key
+    # still verify and report which key signed them. Comma separated.
+    RECEIPT_SIGNING_KEY: str = ""
+    RECEIPT_SIGNING_KEYS_PREVIOUS: str = ""
+
     # Model tiers (None → provider default). Fast for intent classification,
     # synthesis for the final combination step.
     AI_MODEL_FAST: str | None = None

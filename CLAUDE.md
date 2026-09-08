@@ -155,12 +155,18 @@ Check it before inventing a new theory.
 
 ## Adding a migration
 
-A new migration touches three places in `ci.yml`, not two: the two `for f in
-001... ; do test -s` existence loops, and the `assert revision == "<head>"`
-inside the Python heredoc of the "Fresh Alembic deploy" step. It also touches
-two lists in `conftest.py`: `_INCREMENTAL_SCHEMAS` and `_DATA_TABLES`, where FK
-order matters. Miss either list and every test touching the new tables fails
-with `relation "agent_..." does not exist`.
+A new migration touches four places in `ci.yml`, not three: the two `for f in
+001... ; do test -s` existence loops, the `assert revision == "<head>"`
+inside the Python heredoc of the "Fresh Alembic deploy" step, and the `for f
+in 002_workflow_runs ...` loop in the "same database" step that applies the
+SQL scripts beside the Alembic build. The fourth arrived with 018 and this
+paragraph said three until 019 counted from the file (2026-09-08), which is
+the same miss the first law describes. It also touches two lists in
+`conftest.py`: `_INCREMENTAL_SCHEMAS` and `_DATA_TABLES`, where FK order
+matters. Miss either list and every test touching the new tables fails with
+`relation "agent_..." does not exist`. Count the places with
+`grep -n "<previous head>" .github/workflows/ci.yml` before editing, never
+from this paragraph.
 
 Confirm the current head with `alembic heads`, never from a doc.
 

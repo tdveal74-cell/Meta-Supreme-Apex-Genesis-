@@ -76,6 +76,7 @@ _INCREMENTAL_SCHEMAS = (
     "015_devon_approval_owner.sql",
     "017_provider_usage.sql",
     "018_schema_convergence.sql",
+    "019_event_hash_chain.sql",
 )
 
 _DSN = TEST_DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")

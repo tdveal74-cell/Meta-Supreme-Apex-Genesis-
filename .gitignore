@@ -19,6 +19,7 @@ venv/
 # Environment — never commit real secrets
 .env
 .env.local
+.env.prod
 
 # OS / editor
 .DS_Store
