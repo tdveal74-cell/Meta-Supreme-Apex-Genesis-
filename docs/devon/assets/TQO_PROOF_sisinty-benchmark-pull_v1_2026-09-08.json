@@ -1,6 +1,6 @@
 {
  "pulled": "2026-09-08",
- "source": "vidIQ MCP: channel_stats, channel_videos(long,popular), channel_videos(short,popular), video_transcript x15",
+ "source": "vidIQ MCP on 2026-09-08: get_videos_by_ids(6OmqsFrRv4I), channel_stats, channel_videos(long, popular), channel_videos(short, popular), video_transcript x14 (language en), balance x2",
  "channel": {
   "channelId": "UClXAalunTPaX1YV185DWUeg",
   "title": "Vaibhav Sisinty",
@@ -1124,59 +1124,270 @@
  "transcripts": {
   "YYAMwM-F30o": {
    "format": "weekly roundup",
-   "gate": null
+   "gate": null,
+   "quoted_lines_verbatim": [
+    "A few days ago, a mysterious free AI model called Ox Alpha appeared online and it was already beating Claude's most powerful and expensive model, Claude Fable 5. And nobody knew who made it.",
+    "But Google did something even bigger this week because they are giving away 12 months of Gemini AI's paid version completely free.",
+    "And those are just two of the 21 things that happened this week",
+    "Now, at the end of the video, we try Ox Alpha ourselves.",
+    "if any section gets too technical, just jump to the next update you care about.",
+    "So OpenAI isn't just building AI models anymore. It's now building the chips that run them too.",
+    "Can India soon be able to compete with the US? Let us know in the comments.",
+    "Subscribe if you haven't yet so YouTube will bring it to your feed when it drops.",
+    "Zcode creates a complete 22 slide deck",
+    "And all of this used only around 6% of its 1 million token context window.",
+    "Zcode is currently offering around 3 million free tokens",
+    "It costs around 7 cents per million input tokens and 25 cents per million output tokens.",
+    "The design and gameplay still needs some improvement.",
+    "70% of the people watching this are not subscribed yet. So, YouTube will not show you the next AI updates video we drop."
+   ]
   },
   "KjNsnE_vsyc": {
    "format": "framework",
-   "gate": null
+   "gate": null,
+   "quoted_lines_verbatim": [
+    "There's a five-letter word that's going to decide your paycheck for the next decade. It's not agents. It's not coding. It's adapt.",
+    "couldn't understand half the words his own team was using",
+    "A 22-year-old intern on your team is finishing in 2 hours what used to take you two full days of work.",
+    "I'm going to show you the one stage where 94 out of every 100 people quit forever.",
+    "their co-workers are making 56% more money doing the exact same job at the exact same desk",
+    "Hi, I'm Vibbhav. I run three AI companies and train people across 150 plus countries.",
+    "MIT published a study. 11.7% of every job today can already be automated.",
+    "think of it as a USB port for AI",
+    "The result was that out of 1,000 plus calls handled per day, 70% fully resolved by the agent.",
+    "The agent would pick up the phone in 0.8 seconds",
+    "Quick thing for the founders watching. Me and my team actually run corporate AI trainings.",
+    "AI will code. Humans will program.",
+    "if you are not subscribed yet, 70% of the people watching this are not."
+   ]
   },
   "HJN3husu1oM": {
    "format": "sponsored tool demo",
-   "gate": null
+   "gate": null,
+   "quoted_lines_verbatim": [
+    "Most people think running a business means hiring a big team.",
+    "But what if one AI could quietly handle half that org chart?",
+    "Give me the next 15 minutes of your time",
+    "I run three companies using AI and I've tested basically every agent there is.",
+    "We're running two real experiments.",
+    "If it can do that, it can literally change how someone starts a company.",
+    "with a real company, you can tell immediately when advice is generic",
+    "It's like 3 minutes of setup, so just stay with me.",
+    "This video was sponsored by them",
+    "About 70% of you watching aren't subscribed yet, which means YouTube isn't going to show you the next one I make."
+   ]
   },
   "ROmtgqTefAw": {
    "format": "free tools list",
-   "gate": null
+   "gate": null,
+   "quoted_lines_verbatim": [
+    "Stop paying for AI. I mean it.",
+    "This is the guide Google doesn't want you to see. Let's go.",
+    "All right, so it's 10 p.m. Your exam is tomorrow.",
+    "Think about what just happened. You just hacked your exam for free.",
+    "I'm going to show you the pro tip 99% of people miss.",
+    "Although this comes with a price tag",
+    "Now, it's not going to replace a $50,000 design agency",
+    "I've put links to all six of these tools down in the description. Go get them and go build something. Thanks for watching. See you in the next one."
+   ]
   },
   "_0xa6RVqTC8": {
    "format": "tutorial",
-   "gate": null
+   "gate": null,
+   "quoted_lines_verbatim": [
+    "People are building 3D models in Blender just by typing. Filing taxes automatically. Scraping Instagram for restaurant recommendations all with one tool.",
+    "I'm not technical at all. I avoided this for months thinking it wasn't for me.",
+    "By the end of this video, you'll have one, a personal AI assistant that remembers everything about your projects. Two, your first AI agent built and deployed. Three, a full content army working on autopilot. All with just three commands.",
+    "Now, most of you might be thinking, \"Oh, Vehav, Claude in the browser works just fine for me. Why should I even switch to Claude code?\"",
+    "You can get started with Claude Pro that cost $20 per month.",
+    "it's only available on Mac and you need a $100 Claude Max subscription to run it",
+    "I've put together a complete command cheat sheet. I'm sharing it in my WhatsApp community.",
+    "If you want a video on that, drop it in the comments and I'll make it happen. All right, go build your AI army."
+   ]
   },
   "L110osBj5Kk": {
    "format": "career workflow",
-   "gate": null
+   "gate": null,
+   "quoted_lines_verbatim": [
+    "Here's something nobody tells you about job hunting. You're not losing because you're underqualified. You're losing because the system was never designed to find the best person. It was designed to filter out the most people as fast as possible.",
+    "I run three companies myself and we hire hundreds of candidates a year.",
+    "So today, we're going to break this down into four stages.",
+    "And I want you to copy this type of prompt because the specificity is what makes it work.",
+    "Whenever you use AI, know that it's 80% the final output.",
+    "send this to them. It might actually change their week.",
+    "70% of the people watching this are not subscribed yet.",
+    "we had promised you that we would make a few videos when we reached 500,000."
+   ]
   },
   "btLZQzynfoA": {
    "format": "career roadmap",
-   "gate": null
+   "gate": null,
+   "quoted_lines_verbatim": [
+    "A post just went viral. 50 million views from the CEO of an AI company and it's scaring everyone.",
+    "I've worked at Uber, built three startups, raised 5 million from Sequoia. I use AI 8 to 10 hours a day.",
+    "Level five is the one nobody sees coming.",
+    "Quick check. Where are you right now? Drop a comment. Are you a cook, chef, or orchestrator?",
+    "Think of it as USBC for AI.",
+    "68% of you watching right now aren't subscribed yet.",
+    "Replace 700 customer support people with AI agents.",
+    "So what did Clara do? They hired humans back",
+    "I'm going to reveal all of it. But only when we hit 500,000 subscribers on this channel.",
+    "Which of these income paths would you start with? Comment on your pick."
+   ]
   },
   "6OmqsFrRv4I": {
    "format": "weekly roundup (the linked video)",
-   "gate": null
+   "gate": null,
+   "quoted_lines_verbatim": [
+    "OpenAI just dropped GPT6 and it raises a question. Are we really moving towards AGI?",
+    "Those are just five of the 12 biggest AI updates this week.",
+    "At the end, I'll show you what I asked for and what was on my screen about an hour later.",
+    "Timestamps are in the description. Just jump to the next one.",
+    "comment below with what I should build next",
+    "But is it really worth the hype? Let us know in the comments.",
+    "If you're finding these updates useful, then subscribe.",
+    "around 70% of the people watching are still not subscribed. So, if you want YouTube actually to show you the next AI updates video when it drops, hit that subscribe button now."
+   ]
   },
   "KxAGWENTUpw": {
    "format": "interview clip",
-   "gate": null
+   "gate": null,
+   "text_verbatim": "For somebody who is want to get started in this world of AI, how much money do I need to spend per month to get started? Zero. >> No. But to at least get the good subscriptions of these AI models, I have to spend 2K. You >> can do that for free as well. >> How? Chad GP plus is 2,000 a month. >> No. Install a software called as Olama. If you have a basic computer which has basic GPU, you have 50,000 laptop or Windows or Mac doesn't matter. You can almost run any decent open-source AI model directly on your computer for free without internet access unlimited. If you're a student, you can generate an ID card using AI and upload that and Gemini is free for you for one year. If you are a subscriber, >> yeah, >> perplexity is free for you. And a lot of people don't understand the power of perplexity. You know what? You can do everything that you're doing with chat GPT with perplexity by going to settings and playing with all the bloody models that are out"
   },
   "01hUKhzYL5Q": {
-   "format": "interview clip (repost of KxAGWENTUpw, transcript identical)",
-   "gate": null
+   "format": "interview clip: the same clip as KxAGWENTUpw re-posted 109 days later, three seconds shorter; the spoken words match after the opening clause and the auto-captions differ only in punctuation, casing, one repeated word and 'one year' against '1 year' (see repost_check)",
+   "gate": null,
+   "text_verbatim": "In this world of AI, how much money do I need to spend per month to get started? Zero. >> No, but to at least get the good subscriptions of these AI models, I have to spend spend 2K. You >> can do that for free as well. >> How? Chad GP plus is 2,000 a month. >> No. Install a software called as Olama. If you have a basic computer which has basic GPU if you have 50,000 laptop or Windows or Mac doesn't matter. You can almost run any decent open-source AI model directly on your computer for free without internet access unlimited. If you're a student, you can generate an ID card using AI and upload that and Gemini is free for you for 1 year. If you are a subscriber, >> yeah, >> perplexity is free for you. And a lot of people don't understand the power of perplexity. You know what? You can do everything that you're doing with Chad GPT with Perplexity by going to settings and playing with all the bloody models that are out"
   },
   "2vKU3J29FJw": {
    "format": "story short",
-   "gate": "job"
+   "gate": "job",
+   "quoted_lines_verbatim": [
+    "This guy just landed ahead of AI role by vibe coding and AI system that evaluated 700 jobs for him and automated his job hunt.",
+    "Here's what happened.",
+    "By the way, this is crazy AI update of the day, and today is day 16.",
+    "740 plus. That's how many jobs this system evaluated. Over a 100 custom RS generated",
+    "It scans 45 plus companies on its own.",
+    "7,000 people have already grabbed it in 2 days.",
+    "If you know someone who's looking for a job right now, send them this reel. Comment job and I will send you the link to my WhatsApp community"
+   ]
   },
   "fVIfAOJF9xc": {
    "format": "list short",
-   "gate": "link"
+   "gate": "link",
+   "quoted_lines_verbatim": [
+    "This is how you can use Claude, GPT and Gemini for free in one place.",
+    "Comment link and I'll send you all three links directly. I drop new AI tools every day in my free WhatsApp community to join link in bio."
+   ]
   },
   "WmeEd3A64AU": {
    "format": "tool short",
-   "gate": "printer"
+   "gate": "printer",
+   "quoted_lines_verbatim": [
+    "One Chinese developer replaced an entire video production team with one free tool.",
+    "And you can run it on a basic CPU with 4 GB of RAM",
+    "So, I tested it by giving it just one word, \"health\", and within minutes it dropped me a 60-second video with voice over and matching footage",
+    "And the setup literally takes 10 seconds.",
+    "Comment \"printer\" and I'll share the complete setup guide with you. Follow for more content like this."
+   ]
   },
   "nq8qpjroHm8": {
    "format": "interview clip",
-   "gate": null
+   "gate": null,
+   "quoted_lines_verbatim": [
+    "It is scary when I read it.",
+    "Elon Musk has access to a million GPUs and he says it will go to a 10 million GPUs.",
+    "How many GPUs do you think India has? >> 10,000 15,000",
+    "It's funny that you can't buy them directly right now because Nvidia is a US company."
+   ]
   }
- }
+ },
+ "title_normalisation": "IDs, dates, counts and durations are exactly as vidIQ returned them. Titles had emoji, rupee signs, curly quotes, a word joiner and em dashes stripped for the repo's ASCII and dash conventions (em dashes became 'and', '.' or '...'); wording is otherwise as returned. The raw vidIQ responses were not saved.",
+ "linked_video": {
+  "id": "6OmqsFrRv4I",
+  "title": "GPT-6 Astra Just Did What Claude Fable 5.1 Couldn't (+14 AI Updates)",
+  "channelId": "UClXAalunTPaX1YV185DWUeg",
+  "publishedAt": "2026-09-08T13:33:52Z",
+  "duration": "PT11M57S",
+  "viewCount": 2648,
+  "likeCount": 199,
+  "commentCount": 15,
+  "pulled_about": "2026-09-08T15:05Z",
+  "description_disclaimer_verbatim": "This video was created with the assistance of AI tools. The script, voiceover, visuals and some editing elements were generated or enhanced using AI, with human oversight applied to fact-check and structure the content.",
+  "description_timestamps": [
+   "01:15 GPT-6 Astra",
+   "02:20 Claude Fable 5.1 + Lovable",
+   "03:16 Gemini 3.8 Flash + Flash Cyber",
+   "04:06 NVIDIA Acquires Hugging Face",
+   "04:39 Uber Robotaxis in London",
+   "05:15 Google Pics",
+   "06:14 Gemini Agentic Video Understanding",
+   "07:04 Grok Bot Templates",
+   "07:26 Meta Muse Voice Transcribe",
+   "08:11 OpenClaw 2.0",
+   "08:50 Hermes Agent: Pantheon Release",
+   "10:02 Perplexity Hybrid Compute + Coinbase Integration"
+  ]
+ },
+ "balance_reads": [
+  {
+   "when": "before the first transcript call",
+   "totalCredits": 172,
+   "renewableCredits": 70,
+   "addOnCredits": 102
+  },
+  {
+   "when": "after the last transcript call",
+   "totalCredits": 102,
+   "renewableCredits": 0,
+   "addOnCredits": 102
+  },
+  {
+   "charged": 70,
+   "calls": 14,
+   "per_call_listed": 5,
+   "note": "70 equals 14 times 5 exactly"
+  }
+ ],
+ "repost_check": {
+  "method": "lowercase, strip punctuation and speaker markers, collapse an immediately repeated word, then difflib.SequenceMatcher over the word lists (autojunk off)",
+  "word_count_KxAGWENTUpw": 185,
+  "word_count_01hUKhzYL5Q": 178,
+  "similarity_ratio": 0.9642,
+  "differences": [
+   {
+    "op": "delete",
+    "KxAGWENTUpw": "for somebody who is want to get started",
+    "01hUKhzYL5Q": ""
+   },
+   {
+    "op": "insert",
+    "KxAGWENTUpw": "",
+    "01hUKhzYL5Q": "if"
+   },
+   {
+    "op": "replace",
+    "KxAGWENTUpw": "one",
+    "01hUKhzYL5Q": "1"
+   },
+   {
+    "op": "replace",
+    "KxAGWENTUpw": "chat",
+    "01hUKhzYL5Q": "chad"
+   }
+  ],
+  "reading": "The 2026 upload drops the opening clause 'for somebody who is want to get started' and its captions carry an extra 'if', '1 year' for 'one year' and 'chad' for 'chat'; every other word matches in order. Same clip, re-cut three seconds shorter, published 109 days later.",
+  "durations": {
+   "KxAGWENTUpw": "PT44S",
+   "01hUKhzYL5Q": "PT41S"
+  },
+  "published": {
+   "KxAGWENTUpw": "2025-09-20",
+   "01hUKhzYL5Q": "2026-01-07"
+  },
+  "gap_days": 109,
+  "sha256_KxAGWENTUpw": "fbe2628f6ebcf44598c1964280590867fd43ad1740546649153fa7096cdd30cd",
+  "sha256_01hUKhzYL5Q": "72d72ae46bb96df84054268182033a30b0f8819cd39c0d6848105568a36c586d"
+ },
+ "transcripts_note": "Fourteen transcripts were pulled (vidIQ video_transcript, language en). Full texts are held out of the repository as third-party captions, except the two short interview clips kept in full for the re-post check; every line quoted in the benchmark doc is stored here verbatim under quoted_lines_verbatim, auto-caption mishearings included. A re-pull costs 5 vidIQ credits per video."
 }
