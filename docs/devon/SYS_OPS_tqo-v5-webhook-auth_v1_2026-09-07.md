@@ -142,42 +142,84 @@ Counting doors and counting key holders are different questions. `vault.py`
 now answers them separately, because conflating them is how a checklist that
 looks complete leaves something open.
 
-## The Gumroad guard, built and proven the same day
+## The Gumroad guard, built, found unworkable, and rebuilt
 
-Gumroad signs nothing, so the unguessable path is the only barrier at the door
-and a leaked URL is a forged sale. That gap is now closed.
+Amended 2026-09-08. Gumroad signs nothing, so the unguessable path is the only
+barrier at the door and a leaked URL is a forged sale. That gap is now closed,
+but not by the design this document first recorded.
 
-It needed no graph surgery after all. `Gumroad: Normalise Sale`, the single
-node the webhook feeds, was **already the validation point**: it throws on a
-missing sale id and on a missing email. So the guard extends the check that was
-already there rather than splicing a new node into a 220 node graph. One
-parameter changed, no rewiring, no structural edit.
+### The first design, and why it could never have worked
 
-It runs before any parsing, because provenance is a cheaper question than
-content, and it fails closed. If `GUMROAD_SELLER_ID` cannot be read, whether
-unset or because Code node environment access is blocked on the instance, the
-run refuses rather than trusting the ping.
+The first guard compared the ping's `seller_id` against
+`$env.GUMROAD_SELLER_ID` inside `Gumroad: Normalise Sale`, the single node the
+webhook feeds. It was proven by running the code against forged inputs, and the
+logic was sound. The mechanism was not.
 
-**Proven by execution against a real forged input**, not asserted:
+This instance is n8n Cloud. Cloud has no environment for an operator to set, and
+it blocks `$env` inside Code nodes by default through a setting a managed
+service does not expose. So the guard refused every ping, correctly and
+permanently, and the instruction to "set `GUMROAD_SELLER_ID` in the n8n instance
+environment" named an action that cannot be taken.
 
-| Case | Result |
+Measured, not reasoned: execution 6398 fed the branch a forged seller id and got
+back the unreadable variable refusal rather than the seller mismatch refusal.
+The four case table this document first carried proved the code, not the
+instance. Running code is not the same as running it where it has to live, and
+the gap between those two is exactly where the first law lives.
+
+A second lesson is smaller and worth keeping. A seller id comparison is a shared
+secret dressed as a check. Anyone holding the leaked URL who can also learn the
+seller id defeats it. It was never the strong answer, only the quick one.
+
+### The rebuilt guard, 2026-09-08
+
+The ping is now treated as a rumour that a sale happened. Gumroad's own API is
+the record of whether it did, and every recorded value is taken from that API
+rather than from the ping. Three nodes, the workflow going 220 to 222:
+
+| Node | Job |
 |---|---|
-| Real sale, seller matches | passes through, order `S1`, 2500 cents read as 25 |
-| Forged sale, wrong seller | REFUSED, sale not recorded |
-| Ping carrying no seller id | REFUSED |
-| `GUMROAD_SELLER_ID` unset | REFUSED, fails closed |
+| `Gumroad: Preflight Ping` | Refuses a ping with no sale id, or one that is not a plausible id, before it costs an API call. Keeps untrusted input out of the URL path. |
+| `Gumroad: Verify Sale` | `GET /v2/sales/:id` with `neverError` and `fullResponse`, per the house convention that a success response is a claim and not a receipt. |
+| `Gumroad: Normalise Sale` | Reads the status code back and refuses on anything but 200, `success: true`, a matching sale id, and a present numeric price. |
 
-**Proven not to have disturbed anything else.** The workflow was read in full
-before and after and compared: connections identical, node set identical, 220
-nodes both sides, and exactly one node's parameters different.
+The credential is the proof. `/v2/sales/:id` is scoped to the token's own
+account, so a sale that is not ours cannot come back 200. A forged ping can at
+most cause a harmless re-read of a sale that is genuinely ours. No shared secret
+is compared anywhere, which is why this is a different kind of check and not a
+better version of the old one.
 
-Tee has to set `GUMROAD_SELLER_ID` in the n8n instance environment before V5 is
-published, or every ping refuses. That is the intended posture for a guard, and
-the refusal names itself loudly enough to diagnose in one read.
+**Verified.** 28 adversarial cases run against both node bodies, 28 passed,
+including the one that matters most: a missing or null price refuses rather than
+silently filing a real sale as zero revenue. Path traversal and query injection
+in `sale_id` are refused before any URL is built. Live executions 6399 and 6400
+confirm the wiring on the instance. 6399 refused `../../v2/user` at the
+preflight, naming the length and the first four characters. 6400 passed a
+plausible id through and stopped at `Gumroad: Verify Sale` with
+`Credentials not found`. Nothing was written on either.
 
-This also happens to be the first thing built after the two conventions written
-today, and it obeys both: it breaks before it spends, and its refusal names
-what is missing and what was not written.
+**Not disturbed.** The version diff between `8aac2bb1` and `f4758a79` shows two
+nodes added, none removed, one modified in `jsCode` alone, three connections
+added and one removed. No other node changed.
+
+### What is still open on the guard
+
+The Gumroad API credential does not exist yet and cannot be created from a
+session, because it holds a secret. Until it is attached to
+`Gumroad: Verify Sale`, every ping fails closed with `Credentials not found`.
+That is safe and it is loud, but the sale path is dead rather than merely
+unconfigured.
+
+The Gumroad API response contract is **unverified**. Egress to `api.gumroad.com`
+and `app.gumroad.com` is blocked from the build container, so the field names
+this guard reads could not be confirmed against the live API. The code is
+written so that a wrong assumption produces a named refusal listing the keys it
+actually saw, never a silent bad write. The first real ping settles it, and the
+refusal it would produce is itself the diagnostic.
+
+Gumroad's own test ping will now be refused with a 404, because a test ping is
+not a real sale and cannot be verified. The refusal says exactly that by name.
+Correct behaviour, and a deliberate loss of the test button.
 
 ## What was not verified
 
@@ -196,8 +238,8 @@ TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_tqo-v5-webhook-auth_v1_2026-09-07
 DATE: 2026-09-07
 DECISIONS: Tee ruled hold V5 and secure it as its own arc; doors closed, publish withheld
-FINDINGS: seven webhooks had no auth at all, including GET system-pause and system-resume; four now require x-devon-key and three that cannot send a header sit on unguessable paths; key rotation checklist moved sixteen to twenty-three to twenty, because secret path doors are not key holders
-OPEN: Tee must set GUMROAD_SELLER_ID in the n8n instance environment before V5 is published, or every Gumroad ping refuses by design
+FINDINGS: the first Gumroad guard read $env.GUMROAD_SELLER_ID, which can never resolve on n8n Cloud, and was rebuilt 2026-09-08 to verify each sale against Gumroad's own API instead; seven webhooks had no auth at all, including GET system-pause and system-resume; four now require x-devon-key and three that cannot send a header sit on unguessable paths; key rotation checklist moved sixteen to twenty-three to twenty, because secret path doors are not key holders
+OPEN: Tee must create a Gumroad API token and attach it to Gumroad: Verify Sale before V5 is published, or every ping fails closed on Credentials not found; the Gumroad API response contract stays unverified until the first real ping, because egress to api.gumroad.com is blocked from the build container
 STATUS: workflow still dark, activeVersionId null
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
