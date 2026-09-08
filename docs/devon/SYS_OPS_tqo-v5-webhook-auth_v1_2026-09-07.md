@@ -4,7 +4,7 @@ type: SYS_OPS
 version: 1
 date: 2026-09-07
 area: TQO
-status: doors-closed-differentiated-per-caller-gumroad-guarded-workflow-still-dark
+status: published-2026-09-08-schedules-dark-gumroad-guard-live-sale-id-shape-corrected
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 base: db66927
 branch: claude/video-analysis-incorporation-9h6rtc
@@ -204,6 +204,9 @@ added and one removed. No other node changed.
 
 ### What is still open on the guard
 
+Written 2026-09-08 early; superseded the same day by the section below, which
+records the credential, the publish and the corrected id check.
+
 The Gumroad API credential does not exist yet and cannot be created from a
 session, because it holds a secret. Until it is attached to
 `Gumroad: Verify Sale`, every ping fails closed with `Credentials not found`.
@@ -221,6 +224,51 @@ Gumroad's own test ping will now be refused with a 404, because a test ping is
 not a real sale and cannot be verified. The refusal says exactly that by name.
 Correct behaviour, and a deliberate loss of the test button.
 
+## Published, credential attached, and the sale id shape corrected, 2026-09-08
+
+Tee created the Gumroad OAuth application and entered the token into the n8n
+credential `K1D8KUvTcWDcdrV0` (Gumroad OAuth - DEVON OS 29, Header Auth) himself;
+no session ever saw it. `Gumroad: Verify Sale` runs on that credential by id.
+
+V5 was published at 05:35 UTC on Tee's ruling with all six schedule triggers
+disabled first, `activeVersionId 73efec8d`, trigger count seven: the four
+`x-devon-key` webhooks behind his Shortcuts, the two secret-path run links and
+the Gumroad guard are live, and nothing runs unattended. Each schedule comes
+up as its own named act, Tee watching its first firing (ruled on the 2026-09-08
+card).
+
+**The response contract is no longer unverified.** Execution 6422 (05:xx UTC,
+a made-up id) and 6451 (07:12 UTC) both reached Gumroad through the credential
+and got HTTP 200 with `{"success": false, "message": "The sale was not found."}`.
+So the earlier line that a missing sale returns 404 was wrong: Gumroad answers
+200 and says no in the body, and the guard's `success !== true` branch is the
+one that refuses it. A wrong or missing token would have returned 401, so the
+200 also shows the token authenticates.
+
+**The id check would have refused every real sale.** Reading the API
+documentation before the proving test: Gumroad ids are base64 with padding and
+end in two equals signs (`B28UKN-dvxYabdavG97Y-Q==` in Gumroad's own example).
+The Preflight regex allowed only letters, digits, underscore and hyphen, so a
+real ping would have died at the door as "not a plausible Gumroad id". 6422 had
+passed only because its invented id carried no equals sign. On Tee's ruling
+("fix") the regex now admits up to two trailing equals signs and nothing else
+changed. Proved on two manual executions: 6451, id `AAAAAAAAAAAAAAAAAAAAAA==`,
+passed preflight, was encoded into the path, reached Gumroad, and was refused
+by Normalise Sale on Gumroad's own "not found", nothing downstream ran; 6452,
+id `AAAA=AAAA===`, was refused at preflight with no API call. Published as
+`activeVersionId bde7ddec`; the version diff against `73efec8d` shows the one
+Code node changed and the six schedule triggers still disabled.
+
+**What is still unproven.** `view_sales` on a real sale: no real sale id has
+been run through the lane, so the success path of Normalise Sale and everything
+after it (offer match, duplicate check, the Airtable customer write, the
+MailerLite sync, revenue attribution) has executed on no real input. The test
+is Tee's: a Shortcut calling `GET /v2/sales` with the token proves the scope
+without side effects, and a real minimum-price purchase from a second email is
+the only test that exercises Gumroad's actual ping. Whether Gumroad's Ping URL
+points at the `gumroad-sale` path is visible only on Tee's Gumroad settings
+page and was not verified from a session.
+
 ## What was not verified
 
 - The doors were verified shut by reading the triggers back. No request was
@@ -228,7 +276,8 @@ Correct behaviour, and a deliberate loss of the test button.
   to send a request to.
 - Whether the dashboard's Run buttons can send a header was not established.
   It needs someone to look at the dashboard, which is outside this repository.
-- Nothing was published. `activeVersionId` is null and stays null.
+- Nothing was published as of 2026-09-07. Superseded: published 2026-09-08,
+  see the section above.
 
 ## DEVON RECEIPT
 
@@ -238,8 +287,8 @@ TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_tqo-v5-webhook-auth_v1_2026-09-07
 DATE: 2026-09-07
 DECISIONS: Tee ruled hold V5 and secure it as its own arc; doors closed, publish withheld
-FINDINGS: the first Gumroad guard read $env.GUMROAD_SELLER_ID, which can never resolve on n8n Cloud, and was rebuilt 2026-09-08 to verify each sale against Gumroad's own API instead; seven webhooks had no auth at all, including GET system-pause and system-resume; four now require x-devon-key and three that cannot send a header sit on unguessable paths; key rotation checklist moved sixteen to twenty-three to twenty, because secret path doors are not key holders
-OPEN: Tee must create a Gumroad API token and attach it to Gumroad: Verify Sale before V5 is published, or every ping fails closed on Credentials not found; the Gumroad API response contract stays unverified until the first real ping, because egress to api.gumroad.com is blocked from the build container
-STATUS: workflow still dark, activeVersionId null
+FINDINGS: the first Gumroad guard read $env.GUMROAD_SELLER_ID, which can never resolve on n8n Cloud, and was rebuilt 2026-09-08 to verify each sale against Gumroad's own API instead; the rebuilt guard's id check rejected the two trailing equals signs every real Gumroad id carries and would have refused every real sale, fixed and proved 2026-09-08; Gumroad answers a missing sale with 200 and success false, not 404; seven webhooks had no auth at all, including GET system-pause and system-resume; four now require x-devon-key and three that cannot send a header sit on unguessable paths; key rotation checklist moved sixteen to twenty-three to twenty, because secret path doors are not key holders
+OPEN: view_sales on a real sale is unproven, no real sale id has been through the lane; the success path of Normalise Sale and the Airtable, MailerLite and revenue writes after it have run on no real input; whether Gumroad's Ping URL points at the gumroad-sale path is visible only to Tee; the six schedules come up one at a time on Tee's watch
+STATUS: published 2026-09-08, activeVersionId bde7ddec (73efec8d at 05:35 UTC, then the sale id regex fix), six schedule triggers disabled, seven webhooks live, Gumroad guard live on credential K1D8KUvTcWDcdrV0, missing sale answered 200 with success false and refused, executions 6422, 6451, 6452
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
