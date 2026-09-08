@@ -127,8 +127,9 @@ on the monthly cadence ruled earlier the same day.
   inside n8n only.
 - A real sale. No real sale id has been through this door or the V5 guard.
 - Why the phone could not reach `api.gumroad.com` directly.
-- The Shortcut itself on Tee's phone. The door's header check is proved from
-  outside on probe execution 6494 (below), but no phone has called it.
+- A 404 from the phone. The phone reached the door at 13:47 UTC (below) and
+  was refused at Preflight by a Shortcuts quirk, so the made-up-id 404 from
+  the phone is still to come.
 - The three 502 branches against a real Gumroad reply: no answer, 401 or 403,
   and success true with no sale object. 6489 proved the last on a pinned
   reply; none has run against Gumroad itself.
@@ -175,6 +176,31 @@ the door side of the 404 call left no execution; the probe's record is the
 receipt. What the probe does not prove is Tee's phone: the Shortcut on it has
 still not called the door.
 
+## First call from the phone, 2026-09-08 13:47 UTC
+
+Tee rebuilt the Shortcut from a copy of DEVON Pause while the session watched
+over screenshots: door URL, POST, one header `x-devon-key`, JSON body
+`sale_id`, Quick Look on the answer, the Authorization Bearer row deleted.
+Three corrections on the way, each caught from a screenshot before a run: the
+old Shortcut had been calling `/v2/sales` with no id (Gumroad's list endpoint,
+not a sale check), the body key was `sale id` with a space, and the
+Authorization row survived one edit. On the first run Quick Look showed:
+
+```
+"sale_id" : "Provided Input", "http_status" : 400,
+"message" : "REFUSED before any work: sale_id is not a plausible Gumroad id ..."
+```
+
+That is the receipt for three things at once. The phone's path to the door
+works, and the header was accepted, since a wrong key answers 403 before
+Preflight can run. Preflight refused before any request left, exactly as
+built. And Shortcuts renders a non-2xx JSON body in Quick Look rather than
+throwing, which closes the presentation question above. The refusal itself is a
+Shortcuts quirk: the body value was the typed text "Provided Input" rather than
+the magic variable from Ask for Input, so the door was handed the literal
+string. After that the phone held no Gumroad token. The 404 for a made-up id
+from the phone follows the variable fix.
+
 ## DEVON RECEIPT
 
 ```
@@ -184,7 +210,7 @@ ARTIFACT: SYS_OPS_gumroad-sale-check_v1_2026-09-08
 DATE: 2026-09-08
 DECISIONS: RULED route the Gumroad sale check through n8n, the token leaves the phone; RULED the July 2026 Gumroad token is gone, its registry row retired; RULED the Firecrawl failure path writes its reason into the row with no email (recorded in the OS 29 doc); RULED wait for tomorrow's firing before touching the volatility rule
 FINDINGS: the phone timed out twice against api.gumroad.com with Private Relay off and no VPN while n8n answered in 250 ms; the door refuses an implausible id before any request and turns Gumroad's 200 success false into a 404
-OPEN: the first call from the repointed Shortcut on Tee's phone; a real sale through the door or the V5 guard; the phone's own path to api.gumroad.com
-STATUS: live, workflow 7bDqKNdMHY8sxoXa activeVersionId e187e828 (8c50cbb8 at first publish), proved on executions 6482 and 6483 (manual) and 6489 and 6490 (pinned Gumroad replies), successful executions not saved, header check proved from outside on probe execution 6494 (404 with the key, 403 without), one x-devon-key holder added, twenty-one in the checklist, fresh critic PASS-WITH-CONDITIONS with every condition applied the same hour
+OPEN: the made-up-id 404 from the phone after the variable fix; a real sale through the door or the V5 guard; the phone's own path to api.gumroad.com
+STATUS: live, workflow 7bDqKNdMHY8sxoXa activeVersionId e187e828 (8c50cbb8 at first publish), proved on executions 6482 and 6483 (manual) and 6489 and 6490 (pinned Gumroad replies), successful executions not saved, header check proved from outside on probe execution 6494 (404 with the key, 403 without) and from Tee's phone at 13:47 UTC (400 at Preflight, the key accepted, the Gumroad token off the phone), one x-devon-key holder added, twenty-one in the checklist, fresh critic PASS-WITH-CONDITIONS with every condition applied the same hour
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
