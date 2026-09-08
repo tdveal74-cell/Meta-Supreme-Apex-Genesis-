@@ -69,6 +69,12 @@ class EventRecord(Base):
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    # 019: the chain. prev_hash is the hash of the event before this one on the
+    # same intent (empty for the first), hash is SHA-256 over this event's own
+    # material. Both are computed by services.devon.provenance and written
+    # once; a BEFORE UPDATE trigger refuses any later change to the row.
+    prev_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
 
 
 class ActionRecord(Base):
@@ -281,3 +287,12 @@ class UniversalReceiptRecord(Base):
     issued_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    # 019: the signed verification payload. head_hash is the hash of the last
+    # event on the intent when the receipt was issued, chain_length how many
+    # events that chain held, signature the HMAC-SHA256 of the receipt digest
+    # under the estate key, and signature_key_id names that key without
+    # revealing it. Rows issued before 019 carry empty strings and a zero.
+    head_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    chain_length: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    signature: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    signature_key_id: Mapped[str] = mapped_column(String(16), nullable=False, default="")

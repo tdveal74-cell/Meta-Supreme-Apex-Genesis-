@@ -190,7 +190,7 @@ mock in CI). Alembic head as of 2026-09-02: `017_provider_usage` (the skill said
 `015_devon_approval_owner`; verify with
 `alembic heads` rather than trusting this line).
 
-**A new migration touches ci.yml in THREE places, not two.** The two `for f in
+**A new migration touches ci.yml in FOUR places, not three.** The two `for f in
 001... ; do test -s` loops check that the schema and migration files exist, and
 they are the obvious ones. The third is an assertion inside the Python heredoc
 of the "Fresh Alembic deploy" step: `assert revision == "<head>"`. On
@@ -198,6 +198,10 @@ of the "Fresh Alembic deploy" step: `assert revision == "<head>"`. On
 job went red on `AssertionError: 013_approval_consumption` after 1043 tests had
 passed and the upgrade/downgrade/upgrade round trip had worked. The failure
 names the new head, which reads like the migration broke rather than like a
-pinned expectation went stale.
+pinned expectation went stale. The fourth is the `for f in 002_workflow_runs
+...` loop in the "same database" step, which applies every SQL script beside
+the Alembic build and diffs the two shapes; it arrived with 018 and this
+paragraph said three until 019 counted from the file on 2026-09-08. Count with
+`grep -n "<previous head>" .github/workflows/ci.yml` before editing.
 Live-environment verification (deployed DB, Cerebras key) cannot run from CI
 or agent containers; it is always a manual item for Tee.

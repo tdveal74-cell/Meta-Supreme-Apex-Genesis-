@@ -33,6 +33,7 @@ from sqlalchemy import case, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.live_state_ledger import (
     ActionRecord,
     ArtifactRecord,
@@ -46,6 +47,7 @@ from app.models.live_state_ledger import (
     VerificationRecord,
 )
 from services.devon import ecosystem
+from services.devon import provenance as hashchain
 
 EMERGENCY_STOP_NAME = "emergency_stop"
 
@@ -85,6 +87,64 @@ def _new_id(prefix: str) -> str:
     return f"{prefix}-{secrets.token_hex(8).upper()}"
 
 
+def _signing_key() -> str:
+    """The estate key that signs receipts. Read at call time so a rotated key
+    takes effect without a restart of this module's state."""
+    return settings.SECRET_KEY
+
+
+def _link(row: EventRecord) -> hashchain.ChainLink:
+    """One stored event as the verifier sees it. Nothing inferred."""
+    return hashchain.ChainLink(
+        sequence_no=row.sequence_no,
+        name=row.name,
+        prev_hash=row.prev_hash or "",
+        hash=row.hash or "",
+        action_id=row.action_id,
+        payload=dict(row.payload or {}),
+        occurred_at=hashchain.format_time(row.occurred_at),
+    )
+
+
+def _hashed_event(
+    *,
+    intent_id: str,
+    owner_id: str,
+    name: str,
+    sequence_no: int,
+    prev_hash: str,
+    action_id: Optional[str],
+    payload: Dict[str, Any],
+) -> EventRecord:
+    """Build one event with its hash computed over exactly what will be stored.
+
+    ``occurred_at`` is minted here rather than left to the database default,
+    because the hash covers it and the verifier recomputes from the stored
+    value: the two have to be the same instant to the microsecond.
+    """
+    occurred_at = _now()
+    digest = hashchain.event_hash(
+        prev_hash=prev_hash,
+        intent_id=intent_id,
+        sequence_no=sequence_no,
+        name=name,
+        action_id=action_id,
+        payload=payload,
+        occurred_at=hashchain.format_time(occurred_at),
+    )
+    return EventRecord(
+        intent_id=intent_id,
+        owner_id=owner_id,
+        name=name,
+        sequence_no=sequence_no,
+        action_id=action_id,
+        payload=payload,
+        occurred_at=occurred_at,
+        prev_hash=prev_hash,
+        hash=digest,
+    )
+
+
 class LiveStateLedger:
     """Owner scoped reads and writes over the present tense of DEVON."""
 
@@ -122,13 +182,14 @@ class LiveStateLedger:
         # committed: a state nothing could legally follow.
         await db.flush()
         db.add(
-            EventRecord(
+            _hashed_event(
                 intent_id=intent.intent_id,
                 owner_id=owner_id,
                 name="INTENT_RECEIVED",
                 sequence_no=1,
+                prev_hash=hashchain.GENESIS,
+                action_id=None,
                 payload={"channel": intent.channel},
-                occurred_at=_now(),
             )
         )
         await db.flush()
@@ -163,6 +224,16 @@ class LiveStateLedger:
         )
         return [row[0] for row in result.all()]
 
+    async def _event_rows(
+        self, db: AsyncSession, *, intent_id: str
+    ) -> List[EventRecord]:
+        result = await db.execute(
+            select(EventRecord)
+            .where(EventRecord.intent_id == intent_id)
+            .order_by(EventRecord.sequence_no)
+        )
+        return list(result.scalars().all())
+
     async def emergency_stopped(self, db: AsyncSession, *, owner_id: str) -> bool:
         """Whether the stop holds for this owner right now."""
         result = await db.execute(
@@ -186,7 +257,8 @@ class LiveStateLedger:
     ) -> Dict[str, Any]:
         """Append one universal event, or refuse and say which law it breaks."""
         intent = await self._intent(db, owner_id=owner_id, intent_id=intent_id)
-        seen = await self._event_names(db, intent_id=intent_id)
+        rows = await self._event_rows(db, intent_id=intent_id)
+        seen = [row.name for row in rows]
         stopped = await self.emergency_stopped(db, owner_id=owner_id)
 
         violations = ecosystem.check_event(
@@ -198,14 +270,18 @@ class LiveStateLedger:
         if violations:
             raise LedgerRefused(violations)
 
-        record = EventRecord(
+        # The new event links to the hash of the last one. A last event with no
+        # hash was written before 019, and the chain restarts from genesis at
+        # this event rather than linking to a hash that never existed.
+        prev_hash = rows[-1].hash if rows and rows[-1].hash else hashchain.GENESIS
+        record = _hashed_event(
             intent_id=intent_id,
             owner_id=owner_id,
             name=name,
             sequence_no=len(seen) + 1,
+            prev_hash=prev_hash,
             action_id=action_id,
-            payload=payload or {},
-            occurred_at=_now(),
+            payload=dict(payload or {}),
         )
         db.add(record)
 
@@ -230,6 +306,8 @@ class LiveStateLedger:
             "event": name,
             "sequence_no": record.sequence_no,
             "state": intent.state,
+            "hash": record.hash,
+            "prev_hash": record.prev_hash,
         }
 
     async def plan_action(
@@ -440,17 +518,32 @@ class LiveStateLedger:
     ) -> Dict[str, Any]:
         """Close an intent with its one Universal Receipt.
 
-        Three gates, in order: the intent must have reached something a receipt
-        can honestly report, the receipt must carry its required content, and
-        the intent must not already hold one. The third is checked here and
-        again by a unique constraint, so a race loses rather than overwrites.
+        Four gates, in order: the intent must have reached something a receipt
+        can honestly report, the chain of events it would certify must be
+        intact, the receipt must carry its required content, and the intent
+        must not already hold one. The last is checked here and again by a
+        unique constraint, so a race loses rather than overwrites.
+
+        The receipt binds to the chain head and is signed under the estate key,
+        so a later reader can prove that this text was issued over exactly
+        these events and has not been touched since.
         """
         intent = await self._intent(db, owner_id=owner_id, intent_id=intent_id)
-        seen = await self._event_names(db, intent_id=intent_id)
+        rows = await self._event_rows(db, intent_id=intent_id)
+        seen = [row.name for row in rows]
 
         receiptable, reason = ecosystem.intent_is_receiptable(seen, effect=intent.is_effect)
         if not receiptable:
             raise LedgerRefused([reason])
+
+        verdict = hashchain.verify_chain(intent_id, [_link(row) for row in rows])
+        if not verdict.intact:
+            raise LedgerRefused(
+                [
+                    "The event chain on this intent does not verify, so no receipt can "
+                    "honestly certify it: " + "; ".join(verdict.findings)
+                ]
+            )
 
         existing = await db.execute(
             select(UniversalReceiptRecord.intent_id).where(
@@ -472,6 +565,20 @@ class LiveStateLedger:
         if failures:
             raise LedgerRefused(failures)
 
+        issued_at = _now()
+        key = _signing_key()
+        digest = hashchain.receipt_digest(
+            intent_id=intent_id,
+            head_hash=verdict.head_hash,
+            chain_length=verdict.length,
+            what_happened=receipt.what_happened.strip(),
+            verification=receipt.verification.strip(),
+            provenance=receipt.provenance.strip(),
+            artifacts=list(receipt.artifacts),
+            learned=learned,
+            next_steps=next_steps,
+            issued_at=hashchain.format_time(issued_at),
+        )
         record = UniversalReceiptRecord(
             id=_new_id("RCP"),
             intent_id=intent_id,
@@ -482,7 +589,11 @@ class LiveStateLedger:
             artifacts=list(receipt.artifacts),
             learned=learned,
             next_steps=next_steps,
-            issued_at=_now(),
+            issued_at=issued_at,
+            head_hash=verdict.head_hash,
+            chain_length=verdict.length,
+            signature=hashchain.sign(digest, key),
+            signature_key_id=hashchain.key_id(key),
         )
         db.add(record)
         intent.state = ecosystem.IntentState.RECEIPTED.value
@@ -495,7 +606,97 @@ class LiveStateLedger:
                 f"Intent {intent_id} already holds its one receipt. "
                 "An amendment is a new intent, never a second receipt."
             ) from exc
-        return {"receipt_id": record.id, "intent_id": intent_id, "state": intent.state}
+        return {
+            "receipt_id": record.id,
+            "intent_id": intent_id,
+            "state": intent.state,
+            "head_hash": record.head_hash,
+            "chain_length": record.chain_length,
+            "digest": digest,
+            "signature": record.signature,
+            "signature_key_id": record.signature_key_id,
+        }
+
+    async def verify_provenance(
+        self, db: AsyncSession, *, owner_id: str, intent_id: str
+    ) -> Dict[str, Any]:
+        """The signed verification payload: walk the chain and check the receipt.
+
+        Everything here is recomputed from the stored rows. The chain verdict
+        needs no key; the signature check needs the estate key and says
+        whether the receipt was signed under the key this process holds, so a
+        receipt from before a rotation reads as ``signed_with_current_key``
+        false rather than as forged.
+        """
+        await self._intent(db, owner_id=owner_id, intent_id=intent_id)
+        rows = await self._event_rows(db, intent_id=intent_id)
+        verdict = hashchain.verify_chain(intent_id, [_link(row) for row in rows])
+
+        receipt = await db.execute(
+            select(UniversalReceiptRecord).where(
+                UniversalReceiptRecord.intent_id == intent_id
+            )
+        )
+        row = receipt.scalar_one_or_none()
+        key = _signing_key()
+        receipt_report: Dict[str, Any]
+        if row is None:
+            receipt_report = {"present": False}
+        else:
+            digest = hashchain.receipt_digest(
+                intent_id=intent_id,
+                head_hash=row.head_hash,
+                chain_length=row.chain_length,
+                what_happened=row.what_happened,
+                verification=row.verification,
+                provenance=row.provenance,
+                artifacts=list(row.artifacts or []),
+                learned=row.learned,
+                next_steps=row.next_steps,
+                issued_at=hashchain.format_time(row.issued_at),
+            )
+            findings: List[str] = []
+            if not row.signature:
+                findings.append("the receipt carries no signature (issued before 019)")
+            elif not hashchain.verify_signature(digest, row.signature, key):
+                findings.append(
+                    "the receipt's signature does not verify under the current key: "
+                    "either the receipt text was altered after issue, or it was "
+                    "signed under a key this process no longer holds"
+                )
+            if row.head_hash != verdict.head_hash:
+                findings.append(
+                    f"the receipt certifies chain head {row.head_hash[:12] or 'none'} "
+                    f"but the chain now ends at {verdict.head_hash[:12] or 'none'}: "
+                    "events were added, removed or altered after the receipt was issued"
+                )
+            if row.chain_length != verdict.length:
+                findings.append(
+                    f"the receipt certifies {row.chain_length} events but the intent "
+                    f"holds {verdict.length}"
+                )
+            receipt_report = {
+                "present": True,
+                "receipt_id": row.id,
+                "issued_at": hashchain.format_time(row.issued_at),
+                "head_hash": row.head_hash,
+                "chain_length": row.chain_length,
+                "digest": digest,
+                "signature": row.signature,
+                "signature_algorithm": hashchain.SIGNATURE_ALGORITHM,
+                "signature_key_id": row.signature_key_id,
+                "signed_with_current_key": row.signature_key_id == hashchain.key_id(key),
+                "verified": not findings,
+                "findings": findings,
+            }
+
+        return {
+            "intent_id": intent_id,
+            "verified": verdict.intact and (receipt_report.get("verified", True)),
+            "chain": verdict.to_dict(),
+            "receipt": receipt_report,
+            "verified_at": hashchain.format_time(_now()),
+        }
 
     async def engage_emergency_stop(
         self,
@@ -601,6 +802,9 @@ class LiveStateLedger:
                     "sequence_no": row.sequence_no,
                     "action_id": row.action_id,
                     "payload": row.payload,
+                    "occurred_at": hashchain.format_time(row.occurred_at),
+                    "prev_hash": row.prev_hash,
+                    "hash": row.hash,
                 }
                 for row in event_rows
             ],
@@ -632,6 +836,11 @@ class LiveStateLedger:
                     "artifacts": receipt_row.artifacts,
                     "learned": receipt_row.learned,
                     "next_steps": receipt_row.next_steps,
+                    "issued_at": hashchain.format_time(receipt_row.issued_at),
+                    "head_hash": receipt_row.head_hash,
+                    "chain_length": receipt_row.chain_length,
+                    "signature": receipt_row.signature,
+                    "signature_key_id": receipt_row.signature_key_id,
                 }
                 if receipt_row is not None
                 else None
