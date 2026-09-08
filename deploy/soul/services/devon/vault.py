@@ -706,17 +706,24 @@ WORKFLOWS = {
     "OS Error Handler": {"id": "rqYmaQh91iCce8DJ", "state": "active"},
     # Switched on 2026-09-08 by Tee's ruling, after the prune found a policy
     # sensor sitting inactive, which his own rules make an exception path for a
-    # compliance item. Its cron was implicit and was pinned the same day. Do not
-    # read the coverage number as eight: the first sweep, execution 6401,
-    # recorded baselines for three sources that fetch 200 and normalise to 79, 75
-    # and 14 characters of readable text, because they are JavaScript rendered.
-    # A fingerprint that short can never move, so all three would have read
-    # Stable forever while nothing was watched. The node now refuses anything
-    # under 1000 characters of text, so they report as failures instead of
-    # lying. Honest coverage is FOUR of eight. The other four need a rendering
-    # service; plain HTTP will never see their text, and swapping URLs was tried
-    # on execution 6407 and made it worse.
-    "OS 29 Platform Policy Sensor": {"id": "7WyIarNoJa2irx2r", "state": "active since 2026-09-08, daily 06:00 America/New_York, timezone pinned the same day, watches 4 of 8 sources honestly and reports the other 4 as fetch failures"},
+    # compliance item. Its cron was implicit and was pinned the same day.
+    # Coverage was FOUR of eight for most of that night and is now eight of
+    # eight, and the history matters more than the number. The first sweep,
+    # execution 6401, reported success and recorded baselines for three sources
+    # that fetch 200 and normalise to 79, 75 and 14 characters of readable text,
+    # because Meta and TikTok serve JavaScript applications with no server
+    # rendered policy text. A fingerprint that short can never move, so all
+    # three would have read Stable forever while nothing was watched. The node
+    # now refuses anything under 1000 characters. A browser User-Agent and
+    # substitute URLs were both tried and reverted, executions 6403 and 6407.
+    # What fixed it was a Firecrawl fallback on Gateway credits, which renders
+    # JavaScript and also cleared X's 403; it runs ONLY on a source plain HTTP
+    # already failed, so roughly four scrapes a sweep and not eight. Assess
+    # Materiality runs on a MANAGED anthropicApi credential, so this workflow
+    # holds no key: it is not a key holder and never enters the twenty.
+    # Machine verdicts write to AI Verdict; the Assessment column is Tee's
+    # research and the workflow must never write it again.
+    "OS 29 Platform Policy Sensor": {"id": "7WyIarNoJa2irx2r", "state": "active since 2026-09-08, daily 06:00 America/New_York, timezone pinned the same day, eight of eight sources watched with a Firecrawl fallback on Gateway credits for the four plain HTTP cannot read"},
     "Live State Ledger": {"id": "z9j2I8h0RnbDKGBO", "state": "active"},
     # Builds 01, 03, 04, 06 and 07, the organs the driver walks a job through.
     # Live since 2026-08-23 and 08-24 but never registered here until 2026-09-05,
