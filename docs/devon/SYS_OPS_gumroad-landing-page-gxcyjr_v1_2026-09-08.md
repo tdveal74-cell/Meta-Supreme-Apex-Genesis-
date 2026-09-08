@@ -71,7 +71,7 @@ and those are the only facts it states.
 
 ## What was built
 
-`landing.html`, third revision, 17,944 bytes, sha256 prefix `9707a38d3dbd90b2`. One `<main>`
+`landing.html`, fourth revision, 18,046 bytes, sha256 prefix `34788939bdf17e2a`. One `<main>`
 with an inline `<style>` and one inline `<script>`, no external script, style,
 font or image host, no Tailwind. What is on it:
 
@@ -135,7 +135,7 @@ parameter, note or code, and none was typed by a session.
 
 ## What the sanitizer said
 
-Execution 6472 at 10:09 UTC, action `preview` on the third revision, HTTP 200:
+Execution 6474 at 10:28 UTC, action `preview` on the fourth revision, HTTP 200:
 
 ```
 success: true
@@ -144,9 +144,10 @@ message: null
 sanitization_report: {removed_tags: [], removed_attributes: [], total_removed: 0, truncated: false}
 ```
 
-The second revision had returned the same empty report on 6464 at 09:23 UTC.
-Execution 6471 is a stray `read` run before the third payload was loaded; it
-changed nothing and is on the instance. Nothing removed on either preview. Gumroad normalised the markup on the way through: SVG
+The second and third revisions had returned the same empty report on 6464 at
+09:23 UTC and 6472 at 10:09 UTC. Execution 6471 is a stray `read` run before
+the third payload was loaded; it changed nothing and is on the instance.
+Nothing removed on any of the three previews. Gumroad normalised the markup on the way through: SVG
 `viewBox` came back lowercased, self closing SVG elements were expanded to
 open and close pairs, the star entity was decoded, and whitespace inside the
 three cards changed. Lowercase `viewbox` is corrected by the HTML parser's
@@ -197,9 +198,26 @@ double click posts once, the hint appears after four seconds; a chip click
 leaves focus on the chip; an emptied description hides its section and a
 rich one renders inside it; reduced motion leaves every section at opacity 1.
 
-The same critic was handed the third revision to re-verify each finding
-against the new file. That re-verification was in flight when this record
-was committed; its result is added below the moment it lands.
+The same critic was then handed the third revision to re-verify each finding
+against the new file, told not to assume anything had been fixed. Its second
+report marked all six majors and all nine minors FIXED, each with its own
+measurement, found no regression across the chips, sticky bar, skip link,
+reduced motion, rating fill and rich description cases, agreed that the
+mid-transition axe reads are sampling artefacts, and returned
+PASS-WITH-CONDITIONS with the flagship bar met and every remaining condition
+outside the file: attach a deliverable to the product (or a ruling that a
+placeholder may sell) before `publish`, then the live click through. It left
+three small items, taken in a fourth revision the same hour: the second buy
+door rendered 22 px tall, under the 24 px target size minimum, and now
+renders at 24; the `:has()` rule and the `.hide` rule shared one declaration,
+so a browser without `:has()` would have dropped both, and they are now
+separate; and the price input had no upper bound, so `1e21` posted a
+twenty-one digit price, and it now carries `max="99999"` with a message that
+names the range. The hint after a buy click also now names the second door by
+its own text. Measured in Chromium before the fourth preview: the door is 24
+px tall, `.hide` works on its own, `1e21` and `100000` are refused with the
+range message, `12.5` still posts, the hint reads as written, and axe stays
+clean in all four settled renders.
 
 ## Why the publish is held
 
@@ -233,9 +251,9 @@ Each is the same act: open workflow `vrcLMw802tgf3MpY`, set the one word in
 the `Action` node, run it, read the `Read back` node.
 
 1. `publish`: expect HTTP 200, `success: true`, `warning: null`, and the same
-   empty sanitizer report as 6472. The report on a publish reflects what
+   empty sanitizer report as 6474. The report on a publish reflects what
    actually shipped.
-2. `read`: expect `custom_html_length` near 17,944 (the sanitizer normalises
+2. `read`: expect `custom_html_length` near 18,046 (the sanitizer normalises
    the markup, so the stored length may differ) and `landing_url` unchanged.
 3. Load `https://tdveal.gumroad.com/l/gxcyjr` on the phone in both light and
    dark mode, enter a price, tap "I want this", and confirm the Gumroad
@@ -267,8 +285,8 @@ TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_gumroad-landing-page-gxcyjr_v1_2026-09-08
 DATE: 2026-09-08
 DECISIONS: publish held for Tee's ruling; helper workflow vrcLMw802tgf3MpY registered in the vault as manual and never published; the sha256 and byte length gate on the payload is the rule for anything a session sends to Gumroad
-FINDINGS: product gxcyjr is an empty shell, no files, no description, no covers, zero sales, custom_html null, read on 6465; landing.html third revision 17,944 bytes sha 9707a38d3dbd90b2 passed the sanitizer with total_removed 0 on 6472 after a fresh critic found six majors in the second revision (price section hidden without JS, second buy door not a link, empty description box, delivery promise on a product with no files, buy status stuck, input boundary contrast), all fixed and re-measured; the container cannot reach gumroad.com so preview, publish and read back run through n8n on credential K1D8KUvTcWDcdrV0; lowercase viewbox from the sanitizer is restored by the HTML parser, checked in Chromium
+FINDINGS: product gxcyjr is an empty shell, no files, no description, no covers, zero sales, custom_html null, read on 6465; landing.html fourth revision 18,046 bytes sha 34788939bdf17e2a passed the sanitizer with total_removed 0 on 6474, after a fresh critic found six majors in the second revision (price section hidden without JS, second buy door not a link, empty description box, delivery promise on a product with no files, buy status stuck, input boundary contrast), all fixed and confirmed fixed by the same critic's second pass, whose three leftovers (24 px target size, coupled :has() rule, unbounded price input) went into the fourth revision; the container cannot reach gumroad.com so preview, publish and read back run through n8n on credential K1D8KUvTcWDcdrV0; lowercase viewbox from the sanitizer is restored by the HTML parser, checked in Chromium
 OPEN: whether to publish on an empty product, and if so whether the delivery line and the four price chips stand; the live page and checkout click through are Tee's; description interpolation with rich markup and the rating fallback on a reviewed product are unobserved
-STATUS: built, sanitizer clean, not published, one word in the Action node from live and one word from rolled back
+STATUS: built, fourth revision sanitizer clean on 6474, critic PASS-WITH-CONDITIONS with every condition outside the file, not published, one word in the Action node from live and one word from rolled back
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
