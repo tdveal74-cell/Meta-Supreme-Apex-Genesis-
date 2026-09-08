@@ -257,7 +257,7 @@ finding, with what happened to it:
 
 | finding | consequence | done |
 |---|---|---|
-| manual executions 6505 (and 6482 from the first arc) store Gumroad's response headers, set-cookie strings included, because manual runs are saved regardless of the door's setting | session material in the execution store for as long as the executions exist | no session tool deletes an execution: Tee deletes 6505 and 6482 in the n8n Executions view; the note now says real-Gumroad proofs go through a production probe |
+| manual executions 6505 (and 6482 from the first arc) store Gumroad's response headers, set-cookie strings included, because manual runs are saved regardless of the door's setting | session material in the execution store for as long as the executions exist | no session tool deletes an execution; Tee deleted both at about 15:28 UTC, verified not found from a session; the note now says real-Gumroad proofs go through a production probe |
 | the five-cap had never been exercised | the headline number rested on one line of code | proved on 6506, five of seven |
 | the list answer carries `id`, which the check job turns into the buyer's email | "nothing about the customer" holds for the list body, not the door as a whole | Tee's ruling, below; kept meanwhile |
 | six fields beyond the ruled four (id, permalink, quantity, two refund flags, disputed), none customer data | scope creep, harmless in content | kept, recorded; Tee may trim |
@@ -283,8 +283,8 @@ returned." with `count_in_page` 0.
   job's email field stays with it, as designed from the first publish. The
   door therefore carries one path to a buyer's email, through the check job
   on a known id, and the record says so plainly.
-- Executions 6505 and 6482: Tee deletes them in n8n (Executions, filter by
-  this workflow). Manual runs against real Gumroad stop here.
+- Executions 6505 and 6482: deleted by Tee at about 15:28 UTC, verified not
+  found from a session. Manual runs against real Gumroad stop here.
 - Newest-first against real Gumroad, and the list from the phone: both wait
   on the first real sale and the second Shortcut.
 
@@ -297,7 +297,7 @@ ARTIFACT: SYS_OPS_gumroad-sale-check_v1_2026-09-08
 DATE: 2026-09-08
 DECISIONS: RULED route the Gumroad sale check through n8n, the token leaves the phone; RULED the July 2026 Gumroad token is gone, its registry row retired; RULED the Firecrawl failure path writes its reason into the row with no email (recorded in the OS 29 doc); RULED wait for tomorrow's firing before touching the volatility rule; RULED (third card, about 14:15 UTC) the door gets a list job, last five sales, no buyer email; RULED no rotation on the key fragments the screenshots showed; RULED leave the Codex review bot; RULED V5 schedules stay dark for now; RULED (about 15:25 UTC) id stays in the list answer
 FINDINGS: the phone timed out twice against api.gumroad.com with Private Relay off and no VPN while n8n answered in 250 ms; the door refuses an implausible id before any request and turns Gumroad's 200 success false into a 404
-OPEN: Tee deletes manual executions 6505 and 6482 in n8n; newest-first against real Gumroad and the list from the phone wait on the first real sale and the second Shortcut; a real sale through the door or the V5 guard; the phone's own path to api.gumroad.com; the door's 502 branches against Gumroad itself
+OPEN: newest-first against real Gumroad and the list from the phone wait on the first real sale and the second Shortcut; a real sale through the door or the V5 guard; the phone's own path to api.gumroad.com; the door's 502 branches against Gumroad itself
 STATUS: live, workflow 7bDqKNdMHY8sxoXa activeVersionId 8e26df1d (8c50cbb8 at first publish, e187e828 after the first critic, 8e26df1d with the list job), two jobs; check proved on 6482, 6483, 6489, 6490, probe 6494 and from Tee's phone at 13:47 and 13:58 UTC; list proved on 6501 to 6507 including the five-cap and a production probe; successful executions not saved; the Gumroad token off the phone; one x-devon-key holder added, twenty-one in the checklist; two fresh critics, both PASS-WITH-CONDITIONS, every session-owned condition applied the same hour
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
