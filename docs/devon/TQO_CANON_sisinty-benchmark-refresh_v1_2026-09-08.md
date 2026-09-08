@@ -356,8 +356,8 @@ its exemplar library as 1.1.0 is a Tee-owned step named in section 10.
 | Destination | State | Proof |
 |---|---|---|
 | This document and the evidence JSON | committed on the designated branch, draft PR | commit and PR in the receipt |
-| Notion Thread Log page | created by this session with the twelve numbered Decisions, Area TQO, NCO, Systems | page URL in the receipt |
-| `tee-soul-layer`, namespace `rulings` | written by workflow `edIJx7Q3FXTawg9J` on its next quarter-hour poll, twelve records with ids `<pageId>-d1` to `-d12` | the workflow's execution record (status, HTTP code, count) is read back in this session and stated in the receipt; the Pinecone console is the only proof a record exists, and only Tee can open it |
+| Notion Thread Log page | created 2026-09-08 15:28:32 UTC on Tee's ruling ("ok, soul layer and file it"), page id `3d568ff5-0db6-81ac-b2e4-f817cc57a833`, twelve numbered Decisions, Area TQO, NCO, Systems; read back in rows mode with the twelve lines separated by line breaks before the 15:30:59 poll | https://app.notion.com/p/3d568ff50db681acb2e4f817cc57a833 |
+| `tee-soul-layer`, namespace `rulings` | written by workflow `edIJx7Q3FXTawg9J` on its next quarter-hour poll after 15:28:32 UTC, twelve records with ids `3d568ff5-0db6-81ac-b2e4-f817cc57a833-d1` to `-d12` | the workflow's execution record (status, HTTP code, count) is read back in this session and stated in the receipt; the Pinecone console is the only proof a record exists, and only Tee can open it |
 | `devon-soul`, `devon-subconscious` | untouched | by design: the committer is approval-gated and the subconscious takes only the learning lane |
 
 Boundary note. The Write-Back's sticky note records the 2026-08-20 ruling
