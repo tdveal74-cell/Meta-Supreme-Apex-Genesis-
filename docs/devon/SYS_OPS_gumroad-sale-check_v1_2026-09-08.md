@@ -4,7 +4,7 @@ type: SYS_OPS
 version: 1
 date: 2026-09-08
 area: TQO
-status: live-2026-09-08-proved-from-the-phone-2026-09-08
+status: live-2026-09-08-two-jobs-proved-from-the-phone-and-from-inside-n8n
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 base: 3d68476
 branch: claude/video-analysis-incorporation-9h6rtc
@@ -206,6 +206,88 @@ Provided Input arriving as typed text, is reached through Select Variable and
 the blue Ask for Input pill under the ask action, not through the keyboard
 row, which offered no such variable.
 
+## List job, ruled 2026-09-08 about 14:15 UTC
+
+Tee's third rulings card of the day: "Add list, no buyer email", the last five
+sales (product, price, date, refunded flag) for a phone glance, because the old
+Shortcut had been asking Gumroad for the sales list, not one sale. Same card:
+no rotation on the key fragments the screenshots showed (a prefix is not a
+key; Gumroad rotates on schedule 2026-10-08), the Codex review bot is left
+alone (it never gated a merge), and the V5 schedules stay dark.
+
+What was built, on the same workflow, published as `8e26df1d` at about 14:55
+UTC after the critic below (`e187e828` before it):
+
+1. `Preflight` reads `job` from the JSON body or the query: `check` (the
+   default when a `sale_id` is present) or `list`. Any other job, or a body
+   with neither, is refused 400 before any request leaves. The list cap, 5,
+   is set here once as `limit`.
+2. `List?` (IF on `job` equals `list`) routes list to `Gumroad GET sales`,
+   `GET https://api.gumroad.com/v2/sales` on the same credential
+   `K1D8KUvTcWDcdrV0` by id, `fullResponse`, `neverError`, 20 s timeout. The
+   false branch is the unchanged check path.
+3. `Summarise list` whitelists ten fields per sale and drops everything else:
+   `id`, `created_at`, `product_name`, `product_permalink`,
+   `formatted_total_price` (computed from cents when Gumroad omits it),
+   `price_cents`, `quantity`, `refunded`, `partially_refunded`, `disputed`.
+   No email, no name, no address, nothing about the buyer. It sorts the page
+   newest first, takes `limit`, and answers 200 with counts in the message
+   (`Last 5 of 7 sales on the page Gumroad returned` or `No sales yet: 0 in
+   the page Gumroad returned`). No answer, a refused credential, or a body
+   without a sales list answer 502.
+4. `Respond with result` is shared by both jobs. The sticky note carries the
+   exact field list and the rule that proofs against real Gumroad go through
+   a production probe, never a manual run (below).
+
+| execution | input | result |
+|---|---|---|
+| 6501 | pinned list, three synthetic sales with `email` and `full_name`, unsorted | 200, three back newest first, no email or name, the price formatted from cents where Gumroad gave none |
+| 6502 | pinned empty list | 200, "No sales yet: 0 in the page Gumroad returned." |
+| 6503 | pinned check path, a made-up id | 404, unchanged |
+| 6504 | `{"job": "nope"}` | 400 before any request, through the refusal branch |
+| 6505 | real Gumroad, manual mode, `{"job": "list"}` | Gumroad HTTP 200, `success: true`, zero sales; the door answered 200 with the zero count |
+| 6506 | pinned list, seven synthetic sales, unsorted, one refunded, `next_page_key` set | 200 with five, newest first, `count_in_page` 7, `more_pages` true |
+| 6507 | throwaway probe `i6Pb60eSlAes4VJx` (archived after the run) at the published door with the key | list: 200, zero sales, clean keys; check: 404, "The sale was not found." |
+
+### Fresh critic on the list job, about 14:50 UTC
+
+A cold subagent given only the draft, the versions diff, the executions and
+the conventions returned PASS-WITH-CONDITIONS (mean 4.2, security 4). Every
+finding, with what happened to it:
+
+| finding | consequence | done |
+|---|---|---|
+| manual executions 6505 (and 6482 from the first arc) store Gumroad's response headers, set-cookie strings included, because manual runs are saved regardless of the door's setting | session material in the execution store for as long as the executions exist | no session tool deletes an execution: Tee deletes 6505 and 6482 in the n8n Executions view; the note now says real-Gumroad proofs go through a production probe |
+| the five-cap had never been exercised | the headline number rested on one line of code | proved on 6506, five of seven |
+| the list answer carries `id`, which the check job turns into the buyer's email | "nothing about the customer" holds for the list body, not the door as a whole | Tee's ruling, below; kept meanwhile |
+| six fields beyond the ruled four (id, permalink, quantity, two refund flags, disputed), none customer data | scope creep, harmless in content | kept, recorded; Tee may trim |
+| an empty POST now gets the two-job refusal wording, not "no sale_id"; status 400 either way, every 2xx, 404 and 502 body byte-identical in the diff | one message changed on the check path | recorded |
+| the sticky note under-described the list fields | a reader undercounts what the phone receives | note rewritten with the exact list |
+| newest-first against real Gumroad is unproved, the account has zero sales | the in-page sort is proved on synthetic data only | open until a sale exists |
+| a non-JSON answer is reported as "did not answer" with the HTTP status lost | mislabelled 502, not silent | message now names the unreadable-answer case; the status stays lost there |
+| the cap was defined in two places | drift risk | Summarise list reads Preflight's `limit` |
+| the vault registration named one job | stale record | both vault copies updated in this commit |
+
+### Tee's phone, the second Shortcut
+
+Duplicate Gumroad Sale Check and name it Gumroad Recent Sales. Delete the Ask
+for Text action. In the Request Body, delete the `sale_id` field and add one
+Text field, key `job`, value `list`. Keep the `x-devon-key` header and Quick
+Look. Until a sale exists it shows "No sales yet: 0 in the page Gumroad
+returned." with `count_in_page` 0.
+
+### Open after this arc
+
+- Tee's ruling on `id` in the list answer. Recommendation: keep it, since it
+  is the handle for the check job and for Gumroad's own dashboard, and the
+  check job's email field was part of the door's design from the first
+  publish; if he wants the door to carry no path to an email at all, both
+  `id` here and `email` on the check path come out together.
+- Executions 6505 and 6482: Tee deletes them in n8n (Executions, filter by
+  this workflow). Manual runs against real Gumroad stop here.
+- Newest-first against real Gumroad, and the list from the phone: both wait
+  on the first real sale and the second Shortcut.
+
 ## DEVON RECEIPT
 
 ```
@@ -213,9 +295,9 @@ AREA: TQO
 TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_gumroad-sale-check_v1_2026-09-08
 DATE: 2026-09-08
-DECISIONS: RULED route the Gumroad sale check through n8n, the token leaves the phone; RULED the July 2026 Gumroad token is gone, its registry row retired; RULED the Firecrawl failure path writes its reason into the row with no email (recorded in the OS 29 doc); RULED wait for tomorrow's firing before touching the volatility rule
+DECISIONS: RULED route the Gumroad sale check through n8n, the token leaves the phone; RULED the July 2026 Gumroad token is gone, its registry row retired; RULED the Firecrawl failure path writes its reason into the row with no email (recorded in the OS 29 doc); RULED wait for tomorrow's firing before touching the volatility rule; RULED (third card, about 14:15 UTC) the door gets a list job, last five sales, no buyer email; RULED no rotation on the key fragments the screenshots showed; RULED leave the Codex review bot; RULED V5 schedules stay dark for now
 FINDINGS: the phone timed out twice against api.gumroad.com with Private Relay off and no VPN while n8n answered in 250 ms; the door refuses an implausible id before any request and turns Gumroad's 200 success false into a 404
-OPEN: a real sale through the door or the V5 guard; the phone's own path to api.gumroad.com; the door's 502 branches against Gumroad itself; whether the door gets a list job for a phone glance at recent sales, which waits on a ruling
-STATUS: live, workflow 7bDqKNdMHY8sxoXa activeVersionId e187e828 (8c50cbb8 at first publish), proved on executions 6482 and 6483 (manual) and 6489 and 6490 (pinned Gumroad replies), successful executions not saved, header check proved from outside on probe execution 6494 (404 with the key, 403 without) and from Tee's phone at 13:47 UTC (400 at Preflight) and 13:58 UTC (the 404 end to end), the Gumroad token off the phone, one x-devon-key holder added, twenty-one in the checklist, fresh critic PASS-WITH-CONDITIONS with every condition applied the same hour
+OPEN: Tee's ruling on id in the list answer (recommendation: keep); Tee deletes manual executions 6505 and 6482 in n8n; newest-first against real Gumroad and the list from the phone wait on the first real sale and the second Shortcut; a real sale through the door or the V5 guard; the phone's own path to api.gumroad.com; the door's 502 branches against Gumroad itself
+STATUS: live, workflow 7bDqKNdMHY8sxoXa activeVersionId 8e26df1d (8c50cbb8 at first publish, e187e828 after the first critic, 8e26df1d with the list job), two jobs; check proved on 6482, 6483, 6489, 6490, probe 6494 and from Tee's phone at 13:47 and 13:58 UTC; list proved on 6501 to 6507 including the five-cap and a production probe; successful executions not saved; the Gumroad token off the phone; one x-devon-key holder added, twenty-one in the checklist; two fresh critics, both PASS-WITH-CONDITIONS, every session-owned condition applied the same hour
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
