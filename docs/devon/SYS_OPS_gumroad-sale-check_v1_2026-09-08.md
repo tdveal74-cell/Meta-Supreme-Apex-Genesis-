@@ -84,6 +84,7 @@ store. Error executions still save.
 | 6483 | `AAAA=AAAA===`, an implausible id | Preflight refused it, the Gumroad node did not run, the door answered 400 |
 | 6489 | `B28UKN-dvxYabdavG97Y-Q==` with the Gumroad reply pinned to HTTP 200, `success: true`, no `sale` object | Summarise answered 502 naming the shape; before the guard this shape answered "Sale found." with every field undefined |
 | 6490 | the same id with the Gumroad reply pinned to a found sale | the door answered 200 with the thirteen-field summary, the first time the found-sale branch ran anywhere |
+| 6494 | throwaway probe workflow `D29SrhWXAxCZc9Ix`, archived after this one run: two real production POSTs at the door from inside n8n | with the Devon Capture Key credential by id: HTTP 404, "The sale was not found.", through the whole production path; without any header: HTTP 403, "Authorization data is wrong!", n8n's own header-auth refusal |
 
 Both ran in manual mode with the request body supplied to the trigger, so
 the header check itself was not exercised by them; it is the same credential
@@ -126,9 +127,8 @@ on the monthly cadence ruled earlier the same day.
   inside n8n only.
 - A real sale. No real sale id has been through this door or the V5 guard.
 - Why the phone could not reach `api.gumroad.com` directly.
-- The header check from outside: every proof ran in manual mode with the body
-  pinned. A POST without `x-devon-key` should get 401 and one with it and a
-  made-up id should get 404; those are Tee's first two calls.
+- The Shortcut itself on Tee's phone. The door's header check is proved from
+  outside on probe execution 6494 (below), but no phone has called it.
 - The three 502 branches against a real Gumroad reply: no answer, 401 or 403,
   and success true with no sale object. 6489 proved the last on a pinned
   reply; none has run against Gumroad itself.
@@ -153,6 +153,28 @@ Left as the critic scored it: the Monthly Credential Review counts a Retired
 row as tracked and current (cosmetic, pre-existing), and the OS 29 same-day
 rerun would double-append a failure line (pre-existing behaviour).
 
+## Probe from inside n8n, 2026-09-08 13:20 UTC
+
+Tee said "just run the shortcut" at about 13:15 UTC. A session cannot run a
+Shortcut on a phone, does not hold the `x-devon-key` value, and the container's
+proxy refuses a tunnel to the n8n webhook host (CONNECT 403, measured twice).
+What a session can do is have n8n call its own production door. A throwaway
+workflow, `D29SrhWXAxCZc9Ix`, made two POSTs at
+`/webhook/devon-gumroad-sale-check` on execution 6494 and was archived straight
+after, so it is not a standing key holder:
+
+| call | answer |
+|---|---|
+| with the Devon Capture Key credential `FYRvkRTOcROEYZ9P` by id, body `{"sale_id": "AAAAAAAAAAAAAAAAAAAAAA=="}` | HTTP 404, `The sale was not found.`, `gumroad_status` 200, in about 0.9 s |
+| the same body with no header at all | HTTP 403, `Authorization data is wrong!`, from n8n's header check before the workflow ran |
+
+Two corrections from the measurement. A missing key gets 403, not the 401
+written in the earlier draft of this doc and in the session's report to Tee.
+And the door's own successful executions are not saved (by design, above), so
+the door side of the 404 call left no execution; the probe's record is the
+receipt. What the probe does not prove is Tee's phone: the Shortcut on it has
+still not called the door.
+
 ## DEVON RECEIPT
 
 ```
@@ -162,7 +184,7 @@ ARTIFACT: SYS_OPS_gumroad-sale-check_v1_2026-09-08
 DATE: 2026-09-08
 DECISIONS: RULED route the Gumroad sale check through n8n, the token leaves the phone; RULED the July 2026 Gumroad token is gone, its registry row retired; RULED the Firecrawl failure path writes its reason into the row with no email (recorded in the OS 29 doc); RULED wait for tomorrow's firing before touching the volatility rule
 FINDINGS: the phone timed out twice against api.gumroad.com with Private Relay off and no VPN while n8n answered in 250 ms; the door refuses an implausible id before any request and turns Gumroad's 200 success false into a 404
-OPEN: the first call from the repointed Shortcut, which is also the only proof of the header check from outside; a real sale through the door or the V5 guard; the phone's own path to api.gumroad.com
-STATUS: live, workflow 7bDqKNdMHY8sxoXa activeVersionId e187e828 (8c50cbb8 at first publish), proved on executions 6482 and 6483 (manual) and 6489 and 6490 (pinned Gumroad replies), successful executions not saved, one x-devon-key holder added, twenty-one in the checklist, fresh critic PASS-WITH-CONDITIONS with every condition applied the same hour
+OPEN: the first call from the repointed Shortcut on Tee's phone; a real sale through the door or the V5 guard; the phone's own path to api.gumroad.com
+STATUS: live, workflow 7bDqKNdMHY8sxoXa activeVersionId e187e828 (8c50cbb8 at first publish), proved on executions 6482 and 6483 (manual) and 6489 and 6490 (pinned Gumroad replies), successful executions not saved, header check proved from outside on probe execution 6494 (404 with the key, 403 without), one x-devon-key holder added, twenty-one in the checklist, fresh critic PASS-WITH-CONDITIONS with every condition applied the same hour
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
