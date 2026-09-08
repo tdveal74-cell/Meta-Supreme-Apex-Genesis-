@@ -34,10 +34,15 @@ def downgrade() -> None:
     # an 018 writer would leave stale on the next append, which is worse than
     # no hash at all.
     op.execute("DROP TRIGGER IF EXISTS trg_events_append_only ON events")
+    op.execute("DROP TRIGGER IF EXISTS trg_events_no_delete ON events")
     op.execute(
         "DROP TRIGGER IF EXISTS trg_universal_receipts_append_only ON universal_receipts"
     )
+    op.execute(
+        "DROP TRIGGER IF EXISTS trg_universal_receipts_no_delete ON universal_receipts"
+    )
     op.execute("DROP FUNCTION IF EXISTS ledger_refuse_update()")
+    op.execute("DROP FUNCTION IF EXISTS ledger_refuse_delete()")
     op.execute("ALTER TABLE events DROP COLUMN IF EXISTS prev_hash")
     op.execute("ALTER TABLE events DROP COLUMN IF EXISTS hash")
     op.execute("ALTER TABLE universal_receipts DROP COLUMN IF EXISTS head_hash")

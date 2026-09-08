@@ -117,10 +117,11 @@ async def test_the_receipt_binds_to_the_chain_head_and_verifies(db_session):
     assert issued["head_hash"] == read["events"][-1]["hash"]
     assert issued["chain_length"] == 5
     assert len(issued["signature"]) == 64
-    assert issued["signature_key_id"] == provenance.key_id(settings.SECRET_KEY)
-    assert provenance.verify_signature(
-        issued["digest"], issued["signature"], settings.SECRET_KEY
-    )
+    # Signed under the receipt key, which is derived from SECRET_KEY when no
+    # dedicated key is set, and is never SECRET_KEY itself.
+    receipt_key = provenance.derive_receipt_key(settings.SECRET_KEY)
+    assert issued["signature_key_id"] == provenance.key_id(receipt_key)
+    assert provenance.verify_signature(issued["digest"], issued["signature"], receipt_key)
 
     payload = await ledger.verify_provenance(
         db_session, owner_id=owner_id, intent_id=intent_id
@@ -229,7 +230,7 @@ async def test_a_receipt_altered_after_issue_fails_its_signature(db_session):
     assert payload["chain"]["intact"] is True
     assert payload["receipt"]["verified"] is False
     assert payload["verified"] is False
-    assert any("signature does not verify" in f for f in payload["receipt"]["findings"])
+    assert any("verifies under none of the keys" in f for f in payload["receipt"]["findings"])
 
 
 async def test_an_event_appended_after_the_receipt_is_reported(db_session):
@@ -319,3 +320,239 @@ async def test_the_provenance_route_returns_the_signed_payload(client, auth_head
         f"/api/v1/ledger/intents/{uuid.uuid4()}/provenance", headers=auth_headers
     )
     assert missing.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# What the 2026-09-08 gauntlet added. Each of these was a confirmed finding.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "value",
+    [-0.0, 1e16, 1e21, 1.2345678901234567e19, 1.5e300, 1e-7, 0.1, 100.0, 12345678901234567890123],
+)
+async def test_numbers_hash_the_way_the_database_stores_them(db_session, value):
+    """Python renders 1e16 as 1e+16 and JSONB renders it as 10000000000000000.
+    The first cut hashed Python's rendering and every such event read as
+    altered on verification. The writer now hashes what the database stores."""
+    owner_id = await _owner(db_session)
+    opened = await ledger.open_intent(
+        db_session, owner_id=owner_id, channel="chat_voice", stated="numbers"
+    )
+    intent_id = opened["intent_id"]
+    await ledger.append_event(
+        db_session,
+        owner_id=owner_id,
+        intent_id=intent_id,
+        name="CONTEXT_LOADED",
+        payload={"v": value, "nested": {"list": [value, {"again": value}]}},
+    )
+    payload = await ledger.verify_provenance(
+        db_session, owner_id=owner_id, intent_id=intent_id
+    )
+    assert payload["chain"]["intact"] is True, payload["chain"]["findings"]
+    assert payload["chain"]["complete"] is True
+    # The stored payload is what the writer hashed, and it round trips again.
+    await ledger.append_event(
+        db_session, owner_id=owner_id, intent_id=intent_id, name="PLAN_CREATED"
+    )
+    again = await ledger.verify_provenance(
+        db_session, owner_id=owner_id, intent_id=intent_id
+    )
+    assert again["chain"]["intact"] is True
+
+
+async def test_a_payload_json_cannot_carry_is_refused_before_the_insert(db_session):
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id, [])
+    for bad in ({"v": float("nan")}, {"v": float("inf")}, {"text": "lone \udcff surrogate"}):
+        with pytest.raises(LedgerRefused) as caught:
+            await ledger.append_event(
+                db_session,
+                owner_id=owner_id,
+                intent_id=intent_id,
+                name="CONTEXT_LOADED",
+                payload=bad,
+            )
+        assert any("payload carries" in reason for reason in caught.value.reasons)
+    # Nothing was written: the intent still holds only its opening event.
+    read = await ledger.read_intent(db_session, owner_id=owner_id, intent_id=intent_id)
+    assert [event["name"] for event in read["events"]] == ["INTENT_RECEIVED"]
+
+
+async def test_a_nan_payload_over_http_is_a_refusal_not_a_500(client, auth_headers):
+    opened = await client.post(
+        "/api/v1/ledger/intents",
+        json={"channel": "chat_voice", "stated": "nan over http"},
+        headers=auth_headers,
+    )
+    intent_id = opened.json()["intent_id"]
+    # json.loads at the API door accepts NaN; the ledger must refuse it by name.
+    response = await client.post(
+        f"/api/v1/ledger/intents/{intent_id}/events",
+        content='{"name": "CONTEXT_LOADED", "payload": {"x": NaN}}',
+        headers={**auth_headers, "Content-Type": "application/json"},
+    )
+    assert response.status_code == 409, response.text
+    assert "cannot represent" in response.text
+
+
+async def test_the_database_refuses_a_direct_delete_of_an_event_or_a_receipt(db_session):
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id)
+    await _receipt(db_session, owner_id, intent_id)
+    with pytest.raises(DBAPIError) as caught:
+        await db_session.execute(
+            text("DELETE FROM events WHERE intent_id = :i AND sequence_no >= 4"),
+            {"i": intent_id},
+        )
+    assert "may not be deleted" in str(caught.value)
+    # The refusal aborted the transaction, and the rollback that clears it
+    # also takes the uncommitted intent and receipt with it. Build them again
+    # so the second DELETE has a row to aim at; a DELETE that matches nothing
+    # fires no trigger and would pass this test for the wrong reason.
+    await db_session.rollback()
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id)
+    await _receipt(db_session, owner_id, intent_id)
+    with pytest.raises(DBAPIError) as caught:
+        await db_session.execute(
+            text("DELETE FROM universal_receipts WHERE intent_id = :i"), {"i": intent_id}
+        )
+    assert "may not be deleted" in str(caught.value)
+    await db_session.rollback()
+
+
+async def test_removing_the_intent_or_the_owner_still_cascades(db_session):
+    """An owner's right to be removed outranks the audit trail: the cascade
+    is admitted, only a statement aimed at the ledger tables is refused."""
+    owner_id = await _owner(db_session)
+    first = await _open_and_walk(db_session, owner_id)
+    await _receipt(db_session, owner_id, first)
+    second = await _open_and_walk(db_session, owner_id, ["CONTEXT_LOADED"])
+
+    await db_session.execute(text("DELETE FROM intents WHERE id = :i"), {"i": first})
+    left = await db_session.execute(
+        text("SELECT COUNT(*) FROM events WHERE intent_id = :i"), {"i": first}
+    )
+    assert left.scalar_one() == 0
+    receipts = await db_session.execute(
+        text("SELECT COUNT(*) FROM universal_receipts WHERE intent_id = :i"), {"i": first}
+    )
+    assert receipts.scalar_one() == 0
+
+    await db_session.execute(text("DELETE FROM users WHERE id = :o"), {"o": owner_id})
+    left = await db_session.execute(
+        text("SELECT COUNT(*) FROM events WHERE intent_id = :i"), {"i": second}
+    )
+    assert left.scalar_one() == 0
+
+
+async def test_a_tail_deleted_behind_the_trigger_is_named_and_cannot_be_appended_to(db_session):
+    """Negative control for the DELETE trigger: disable it, remove the tail
+    and the receipt, and the receipt's head no longer exists. Verification
+    reports the receipt as gone, and the chain that remains is still intact
+    only because it is a prefix; a receipt certifying the missing head can
+    no longer be produced by the writer since one receipt per intent already
+    stood (the row is gone, so a new one is possible, and that is the
+    residual exposure a role that disables triggers has by definition)."""
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id)
+    issued = await _receipt(db_session, owner_id, intent_id)
+
+    await db_session.execute(text("ALTER TABLE events DISABLE TRIGGER trg_events_no_delete"))
+    try:
+        await db_session.execute(
+            text("DELETE FROM events WHERE intent_id = :i AND sequence_no >= 4"),
+            {"i": intent_id},
+        )
+    finally:
+        await db_session.execute(text("ALTER TABLE events ENABLE TRIGGER trg_events_no_delete"))
+
+    payload = await ledger.verify_provenance(
+        db_session, owner_id=owner_id, intent_id=intent_id
+    )
+    assert payload["verified"] is False
+    assert payload["receipt"]["head_hash"] == issued["head_hash"]
+    assert any("after the receipt was issued" in f for f in payload["receipt"]["findings"])
+    assert any("certifies 5 events" in f for f in payload["receipt"]["findings"])
+
+
+async def test_an_unhashed_row_planted_after_hashed_rows_is_a_break_and_blocks_appends(db_session):
+    """The second gauntlet finding: an INSERT with an empty hash used to read
+    as pre-chain history and the next append linked to genesis behind it."""
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id, ["CONTEXT_LOADED"])
+    await db_session.execute(
+        text(
+            "INSERT INTO events (intent_id, owner_id, name, sequence_no, payload, hash, prev_hash) "
+            "VALUES (:i, :o, 'PLAN_CREATED', 3, '{}'::jsonb, '', '')"
+        ),
+        {"i": intent_id, "o": owner_id},
+    )
+    payload = await ledger.verify_provenance(
+        db_session, owner_id=owner_id, intent_id=intent_id
+    )
+    assert payload["chain"]["intact"] is False
+    assert any("written around the writer" in f for f in payload["chain"]["findings"])
+
+    with pytest.raises(LedgerRefused) as caught:
+        await ledger.append_event(
+            db_session, owner_id=owner_id, intent_id=intent_id, name="ACTION_STARTED"
+        )
+    assert any("nothing can be appended" in reason for reason in caught.value.reasons)
+
+
+async def test_an_intent_without_a_receipt_is_not_verified(db_session):
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id)
+    payload = await ledger.verify_provenance(
+        db_session, owner_id=owner_id, intent_id=intent_id
+    )
+    assert payload["chain"]["intact"] is True
+    assert payload["receipted"] is False
+    assert payload["verified"] is False
+    assert payload["receipt"]["present"] is False
+    assert any("no receipt" in f for f in payload["receipt"]["findings"])
+
+
+async def test_receipts_are_signed_under_a_key_that_is_not_the_jwt_key(db_session, monkeypatch):
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id)
+    monkeypatch.setattr(settings, "RECEIPT_SIGNING_KEY", "")
+    issued = await _receipt(db_session, owner_id, intent_id)
+    assert issued["signature_key_id"] != provenance.key_id(settings.SECRET_KEY)
+    assert issued["signature_key_id"] == provenance.key_id(
+        provenance.derive_receipt_key(settings.SECRET_KEY)
+    )
+    assert not provenance.verify_signature(issued["digest"], issued["signature"], settings.SECRET_KEY)
+
+
+async def test_a_rotated_key_still_verifies_through_the_ring(db_session, monkeypatch):
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id)
+    old_key = "receipt-key-of-last-quarter-0123456789abcdef0123456789"
+    new_key = "receipt-key-of-this-quarter-0123456789abcdef0123456789"
+
+    monkeypatch.setattr(settings, "RECEIPT_SIGNING_KEY", old_key)
+    monkeypatch.setattr(settings, "RECEIPT_SIGNING_KEYS_PREVIOUS", "")
+    issued = await _receipt(db_session, owner_id, intent_id)
+    assert issued["signature_key_id"] == provenance.key_id(old_key)
+
+    # Rotate: the new key signs, the old one stays in the ring.
+    monkeypatch.setattr(settings, "RECEIPT_SIGNING_KEY", new_key)
+    monkeypatch.setattr(settings, "RECEIPT_SIGNING_KEYS_PREVIOUS", f" {old_key} ,")
+    payload = await ledger.verify_provenance(
+        db_session, owner_id=owner_id, intent_id=intent_id
+    )
+    assert payload["verified"] is True
+    assert payload["receipt"]["verified"] is True
+    assert payload["receipt"]["signed_with_current_key"] is False
+    assert payload["receipt"]["verified_with_key_id"] == provenance.key_id(old_key)
+
+    # Drop the old key from the ring and the receipt no longer verifies, by name.
+    monkeypatch.setattr(settings, "RECEIPT_SIGNING_KEYS_PREVIOUS", "")
+    payload = await ledger.verify_provenance(
+        db_session, owner_id=owner_id, intent_id=intent_id
+    )
+    assert payload["verified"] is False
+    assert any("not in the ring" in f for f in payload["receipt"]["findings"])

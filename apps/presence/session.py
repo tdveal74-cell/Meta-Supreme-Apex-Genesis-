@@ -71,6 +71,17 @@ logger = logging.getLogger(__name__)
 SendFn = Callable[[Dict[str, Any]], Awaitable[None]]
 
 
+def _check_timeline(at_ms: float) -> None:
+    """A chunk's place on the audio timeline has to be a real, non negative
+    number. An infinite ``at_ms`` would hold the drain loop open forever, and
+    NaN would reach the wire as a token JSON does not have; both fail the turn
+    by name instead."""
+    if not isinstance(at_ms, (int, float)) or isinstance(at_ms, bool):
+        raise FrameValidationError(f"chunk at_ms must be a number, got {at_ms!r}")
+    if at_ms != at_ms or at_ms in (float("inf"), float("-inf")) or at_ms < 0:
+        raise FrameValidationError(f"chunk at_ms must be finite and not negative, got {at_ms!r}")
+
+
 class SessionState(str, Enum):
     IDLE = "idle"
     LISTENING = "listening"
@@ -309,16 +320,19 @@ class PresenceSession:
             async for chunk in self.speech.synthesize(reply, turn_id):
                 if chunk.kind == CHUNK_FRAME:
                     weights = validate_frame(chunk.weights)
+                    _check_timeline(chunk.at_ms)
                     buffer.push(chunk.at_ms, weights, chunk.priority)
                     timeline_end = max(timeline_end, chunk.at_ms)
                     frames_ready.set()
                 elif chunk.kind == CHUNK_AUDIO:
                     # Audio is never buffered: it leaves the moment it exists.
+                    _check_timeline(chunk.at_ms)
                     timeline_end = max(timeline_end, chunk.at_ms + chunk.audio_duration_ms)
                     if self.send_audio:
                         await self.emit(audio_message(turn_id, audio_seq, chunk.at_ms, chunk.pcm))
                         audio_seq += 1
                 elif chunk.kind == CHUNK_STATE:
+                    _check_timeline(chunk.at_ms)
                     timeline_end = max(timeline_end, chunk.at_ms)
 
         producer = asyncio.create_task(produce())

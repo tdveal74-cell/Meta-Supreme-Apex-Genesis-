@@ -423,35 +423,95 @@ def test_livekit_token_mints_when_configured_and_audio_leaves_the_socket():
     )
     client = fast_app(settings=settings)
 
-    response = client.post(
+    # A room the caller has no presence session for is refused: the token
+    # would otherwise let one signed-in user join any room the estate's
+    # LiveKit project holds.
+    foreign = client.post(
         "/livekit/token", json={"room": "devon"}, headers={"Authorization": f"Bearer {mint()}"}
     )
-    assert response.status_code == 200
-    body = response.json()
-    assert body["url"] == "wss://example.livekit.cloud"
-    assert body["room"] == "devon"
-    assert body["identity"] == "user-1"
-    assert body["expires_at"].endswith("Z")
-    claims = decode_livekit_token(
-        body["token"], "APIkey", "livekit-secret-0123456789abcdef0123456789abcdef"
-    )
-    assert claims["sub"] == "user-1" and claims["video"]["room"] == "devon"
-
-    custom = client.post(
-        "/livekit/token",
-        json={"room": "devon", "identity": "tee-laptop"},
-        headers={"Authorization": f"Bearer {mint()}"},
-    ).json()
-    assert custom["identity"] == "tee-laptop"
+    assert foreign.status_code == 403
+    assert "session_id" in foreign.json()["detail"]
 
     assert client.get("/health").json()["audio_over_websocket"] is False
     with client.websocket_connect("/ws/presence") as ws:
         ready = hello(ws, mint())
         assert ready["livekit"] == {"configured": True, "url": "wss://example.livekit.cloud"}
         ws.receive_json()
+        room = ready["session_id"]
+
+        response = client.post(
+            "/livekit/token", json={"room": room}, headers={"Authorization": f"Bearer {mint()}"}
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["url"] == "wss://example.livekit.cloud"
+        assert body["room"] == room
+        assert body["identity"] == "user-1"
+        assert body["expires_at"].endswith("Z")
+        claims = decode_livekit_token(
+            body["token"], "APIkey", "livekit-secret-0123456789abcdef0123456789abcdef"
+        )
+        assert claims["sub"] == "user-1" and claims["video"]["room"] == room
+
+        # The identity is the verified user, never a caller's choice: a
+        # supplied identity is ignored rather than honoured.
+        other = client.post(
+            "/livekit/token",
+            json={"room": room, "identity": "tee-laptop"},
+            headers={"Authorization": f"Bearer {mint()}"},
+        ).json()
+        assert other["identity"] == "user-1"
+
+        # Another signed-in user cannot mint for this session's room.
+        stranger = client.post(
+            "/livekit/token",
+            json={"room": room},
+            headers={"Authorization": f"Bearer {mint(sub='user-2')}"},
+        )
+        assert stranger.status_code == 403
+
         messages = run_turn(ws, "turn-12", "hi")
         assert not [m for m in messages if m["t"] == "audio"]
         assert [m for m in messages if m["t"] == "frame"]
+
+    # The session is forgotten when the socket closes, so the room dies with it.
+    closed = client.post(
+        "/livekit/token", json={"room": room}, headers={"Authorization": f"Bearer {mint()}"}
+    )
+    assert closed.status_code == 403
+
+
+class _HostileSpeech:
+    """A synthesiser that puts a frame off the end of time, then a NaN."""
+
+    name = "hostile"
+
+    def __init__(self, at_ms: float) -> None:
+        self._at_ms = at_ms
+
+    async def synthesize(self, text: str, turn: str):
+        from apps.presence.speech import CHUNK_FRAME, CHUNK_STATE, STATE_SPEAKING, SpeechChunk
+
+        yield SpeechChunk(kind=CHUNK_STATE, at_ms=0.0, state=STATE_SPEAKING)
+        yield SpeechChunk(kind=CHUNK_FRAME, at_ms=0.0, weights={"jawOpen": 0.5})
+        yield SpeechChunk(kind=CHUNK_FRAME, at_ms=self._at_ms, weights={"jawOpen": 0.6})
+
+
+@pytest.mark.parametrize("at_ms", [float("inf"), float("nan"), -5.0])
+def test_a_frame_off_the_timeline_fails_the_turn_by_name_and_never_reaches_the_wire(at_ms):
+    """An infinite at_ms held the drain loop open forever and a NaN went out
+    as a token JSON does not have. Both now fail the turn with an error that
+    names the value, and the session lands back on listening."""
+    client = fast_app(speech=_HostileSpeech(at_ms))
+    with open_ready(client) as ws:
+        ws.send_json({"t": "say", "turn_id": "turn-hostile", "text": "hi"})
+        messages = collect_until(ws, is_listening)
+    errors = [m for m in messages if m["t"] == "error"]
+    assert errors, messages
+    assert "at_ms" in errors[0]["message"]
+    for message in messages:
+        if message["t"] == "frame":
+            assert message["at_ms"] == 0.0
 
 
 # ---------------------------------------------------------------------------

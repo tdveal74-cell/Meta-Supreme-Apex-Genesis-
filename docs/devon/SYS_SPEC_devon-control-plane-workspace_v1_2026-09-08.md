@@ -120,7 +120,7 @@ Meta-Supreme-Apex-Genesis-/
 | WebGL avatar viewport, `@react-three/fiber`, morph targets driven by frames | built | `apps/web/components/presence/DevonAvatarCanvas.tsx` |
 | Rigged likeness with ARKit blendshapes | not built | an owned asset gate. The canvas loads a GLB from `NEXT_PUBLIC_DEVON_AVATAR_URL` when one exists and otherwise renders a procedural placeholder head so the frame pipeline can be watched end to end. No stock humanoid ships here: DEVON's face is Tee's call, and "voice and identity owned, never rented" applies to the face as much as the voice |
 | WebSocket frame listener with sliding window | built | `usePresenceSocket.ts`, `lib/presence/frame-buffer.ts` |
-| WebRTC audio via LiveKit | built, unverified live | `useLiveKitAudio.ts` types against `livekit-client` 2.22.3 and the token route mints the documented claim layout; no LiveKit server was reachable in this build, so the join path has not been exercised |
+| WebRTC audio via LiveKit | built, unverified live | `useLiveKitAudio.ts` types against `livekit-client` 2.22.3 and the token route mints the documented claim layout for the caller's own presence session only, with the identity fixed to the verified user; no LiveKit server was reachable in this build, so the join path has not been exercised |
 | Barge in: client VAD, instant local flush, interrupt over the wire | built | `useBargeIn.ts`, `lib/presence/vad.ts`. The HUD shows the measured local reaction time; the 50 ms target is a target until a human measures it in a browser with a microphone |
 | Cerebras text at 450 tok/s streamed to speech | not built as streaming | the provider base class has no streaming API; `ProviderTokenStreamer` completes then yields word tokens. SSE against `api.cerebras.ai` is the next gate |
 | Cartesia or Hume EVI phoneme to viseme | not built | `speech.py` carries the adapter seam and a mock that produces ARKit frames from text; the vendor response shapes were not verified here and nothing pretends they were |
@@ -144,6 +144,7 @@ Meta-Supreme-Apex-Genesis-/
 |---|---|---|
 | Embedded xterm.js terminal | lives | `apps/web/components/terminal/RealShell.tsx`, `app/api/v1/operator_shell.py` |
 | Signed requests before a terminal operation | lives, differently | the shell requires a valid DEVON JWT (HMAC-SHA256 under `SECRET_KEY`) and a separate shell key compared in constant time. That is two factors, not a per request HMAC over the command body. A per request signature is not built and this document does not call the existing gate one |
+| One HS256 key verifying sessions in two services | open ruling for Tee | the presence service verifies DEVON JWTs under the same `SECRET_KEY` as the API, and with HS256 a verifier can also sign. Receipts are no longer signed under it. Closing the rest means asymmetric tokens or the presence service asking the API to verify; the recommendation is asymmetric tokens, and the call is Tee's |
 | Ephemeral password and secret vault, zero knowledge generator, injection into executors | not built | nothing in the repository generates or stores secrets, on purpose: every key lives in the environment, and `app/core/config.py` refuses to start in production on the public default. A vault is a design decision for Tee, not a file to add quietly |
 
 ## The four safeguards
@@ -162,22 +163,42 @@ JSON of the chain version, the previous hash, the intent id, the sequence
 number, the event name, the action id, the payload and the occurrence time to
 the microsecond. The first event of an intent links to the empty string.
 
+The payload is hashed as the database stores it, not as Python first rendered
+it. The first cut hashed Python's rendering, and a gauntlet fed it `1e16` and
+`-0.0`: JSONB renders those `10000000000000000` and `0.0`, so every such
+event read as altered and the intent could never be receipted. The writer now
+asks PostgreSQL to render the payload through `jsonb` before hashing and
+decodes that rendering the way the ORM decodes the stored column, so the
+writer and the verifier hash the same bytes by construction. NaN, infinity
+and text UTF-8 cannot encode are refused at the door with a reason, never a
+500 at the insert.
+
 The receipt carries `head_hash`, `chain_length`, `signature` and
-`signature_key_id`. The signature is HMAC-SHA256 under `SECRET_KEY` over a
-digest of the intent id, the head hash, the chain length, the six receipt
-fields and the issue time. Rotating the key changes the key id on new receipts;
-old receipts still verify their chain and report that they were signed under
-another key, rather than reading as forged.
+`signature_key_id`. The signature is HMAC-SHA256 over a digest of the intent
+id, the head hash, the chain length, the six receipt fields and the issue
+time. The signing key is `RECEIPT_SIGNING_KEY`, or a key derived from
+`SECRET_KEY` when none is set; it is never `SECRET_KEY` itself, and the
+compose stack passes it to the API only. `RECEIPT_SIGNING_KEYS_PREVIOUS` is
+the rotation ring: a receipt signed under an earlier key still verifies and
+reports which key signed it, and one signed under a key no longer in the ring
+is named as such rather than reading as forged.
 
-The database refuses an UPDATE on `events` and on `universal_receipts` with a
-BEFORE UPDATE trigger. DELETE is left to the cascade from `intents` and `users`
-because an owner's right to be removed outranks the audit trail; a removed row
-still shows, because the verifier reports the gap. Rows written before 019
-carry an empty hash and are counted as unhashed, never backfilled: a backfilled
-hash would claim a provenance those rows never had.
+The database refuses UPDATE on `events` and on `universal_receipts`, and
+refuses a DELETE aimed at either table while admitting the cascade from
+`intents` and `users`, because an owner's right to be removed outranks the
+audit trail. The two are told apart by `pg_trigger_depth()`. Rows written
+before 019 carry an empty hash and are counted as unhashed, never backfilled,
+and only as a prefix: an unhashed row standing after hashed rows was written
+around the writer and is named as a break.
 
-The writer refuses to issue a receipt over a chain that does not verify. The
-verdict names every break by sequence number.
+The writer refuses to append to a chain that does not verify and refuses to
+issue a receipt over one. The verdict names every break by sequence number.
+`verified` on the provenance payload means an intact chain and a receipt that
+certifies exactly that chain; an intent without a receipt reports
+`receipted: false` and `verified: false`.
+
+A role that can disable those triggers can rewrite anything. That is the table
+owner, and the boundary is stated rather than pretended away.
 
 ## Wire protocol v1
 
@@ -228,6 +249,35 @@ provisioned for the real time relay and nothing opens it yet; the compose file
 says so in its own header rather than letting a running container imply a
 wired one.
 
+Providers default to `mock` in the example env and in the compose file, so the
+stack starts with the keys still blank and `/health` says simulated out loud.
+The first cut shipped `cerebras` with a blank key, which refused to start the
+presence service and, because the web container waits on its health, the web
+surface with it. A provider named without its key still refuses, and the
+refusal now names `PRESENCE_INFERENCE` rather than the API's variable.
+
+## The gauntlet, and what it changed
+
+A fresh critic with no build context attacked the branch on 2026-09-08 and
+returned QUARANTINE. Every check the branch had was green at the time; none of
+them fed the chain a float, a DELETE, or the example env. The confirmed
+findings and their fixes, all re-measured:
+
+| Finding | Was | Now |
+|---|---|---|
+| The hash did not survive its own storage: `1e16`, `-0.0`, `1.5e300` written by the writer read as altered on verification | hashed Python's rendering | hashed as PostgreSQL renders the jsonb; nine numeric cases in `test_live_state_ledger_provenance.py` |
+| History was rewritable through DELETE: drop the tail and the receipt, append, re-issue, `verified true` | DELETE open | BEFORE DELETE trigger refusing a direct statement and admitting the cascade; direct delete and cascade both proved |
+| The pre 019 grace laundered a planted unhashed row and the next append linked to genesis behind it | any empty hash reset the chain | unhashed rows only as a prefix; the writer refuses to append to a chain that does not verify |
+| The example env named `cerebras` with a blank key, so the stack did not start | `cerebras` default | `mock` default, and the refusal names `PRESENCE_INFERENCE` |
+| One HS256 key signed sessions and receipts in two services | receipts under `SECRET_KEY` | receipts under a derived or dedicated key the presence service never receives, with a rotation ring; the shared session key is an open ruling |
+| A signed in user could mint a LiveKit token for any room under any identity | caller named both | room must be the caller's own open session; identity is the verified user |
+| A synthesiser frame at `at_ms` infinity held the drain loop open forever and NaN reached the wire | weights validated only | timeline validated, NaN refused on the wire, the turn fails by name and lands on listening |
+| `verified: true` on an intent with no receipt | chain alone | receipt required; `receipted` says which half is missing |
+| NaN in an HTTP payload was a 500 at the insert | unhandled | refused at the door with a reason, 409 |
+
+The critic's scores before the fixes: correctness 2, security 3, flagship 2,
+mean 3.5. The second pass is recorded in the receipts below.
+
 ## Receipts for this arc
 
 Every line is a command that was run in this session on the branch head, with
@@ -235,25 +285,26 @@ the exit code captured directly rather than through a pipe.
 
 | Check | Command | Result |
 |---|---|---|
-| Pure provenance, integrity, ecosystem | `python3 -m pytest -q test_devon_provenance.py test_devon_integrity.py test_devon_ecosystem.py` | 225 passed, exit 0 |
-| Ledger against PostgreSQL 16, with negative controls | `python3 -m pytest -q test_live_state_ledger_provenance.py test_live_state_ledger.py test_devon_knowledge_loop_binding.py` | 39 passed, exit 0 |
-| Alembic round trip | `alembic upgrade head`, `alembic downgrade 018_schema_convergence`, `alembic upgrade head` on a fresh database | all three exit 0, head reads `019_event_hash_chain` |
-| The two schema builds agree | `scripts/schema_shape.py` on the Alembic build and on the SQL build, diffed | identical, both triggers present |
+| Pure provenance, integrity, ecosystem | `python3 -m pytest -q test_devon_provenance.py test_devon_integrity.py test_devon_ecosystem.py` | 232 passed, exit 0 |
+| Ledger against PostgreSQL 16, with negative controls | `python3 -m pytest -q test_live_state_ledger_provenance.py test_live_state_ledger.py test_devon_knowledge_loop_binding.py` | 57 passed, exit 0, on a test database rebuilt from the schema files |
+| Alembic round trip | `alembic upgrade head`, `alembic downgrade 018_schema_convergence`, `alembic upgrade head` on a fresh database | all three exit 0, head reads `019_event_hash_chain`, the downgrade removes both trigger pairs and both functions |
+| The two schema builds agree | `scripts/schema_shape.py` on the Alembic build and on the SQL build, diffed | identical; `019_event_hash_chain.sql` applied twice in a row without error; all four triggers present |
 | Standalone job, exactly as CI runs it | `env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q` over the ten offline files | 137 passed, exit 0 |
 | Container contract import | `env -u PYTHONPATH DEFAULT_AI_PROVIDER=mock python3 -c "from app.main import app; ..."` | exit 0 |
 | Engine job | `python3 -m pytest -q test_council.py test_phase4_council.py test_security.py` with the two deselects | 25 passed, exit 0 |
 | Soul host vendoring | `python3 -m pytest -q test_deploy_soul.py test_deploy_soul_operator.py test_deploy_soul_conflict_policy.py` | 112 passed, exit 0 (`provenance.py` vendored byte for byte) |
 | Production compose | `docker compose --env-file <filled example> -f infrastructure/docker/docker-compose.prod.yml --profile executor config -q` | exit 0; six services with the profile, five without; a missing `SECRET_KEY` refuses with its own message |
+| The example env starts the presence service | `PresenceSettings.from_env()` under the filled example with `ENVIRONMENT=production`, then `create_app` | starts, inference `mock`, no fallback; the same with `PRESENCE_INFERENCE=cerebras` and no key refuses and names `PRESENCE_INFERENCE` |
 | Web typecheck and build | `npx tsc --noEmit`; `npx next build` | both exit 0; route `/presence` 1.44 kB first load 107 kB |
 | Pure presence modules | `node --experimental-strip-types scripts/presence-check.ts` | 12 checks passed, exit 0 |
 | Workspace audit | `pnpm audit --audit-level=moderate` | no known vulnerabilities, exit 0 |
 | Headless render, no presence server | Playwright against `next start`, Chromium on SwiftShader (`ANGLE Vulkan SwiftShader`) | canvas 800 by 499, rig `procedural head`, socket `locked`, state `idle`, 28 fps on the software renderer |
-| Presence service, offline, as the standalone job would run it | `env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q test_presence_buffer.py test_presence_breaker.py test_presence_livekit_token.py test_presence_service.py` | 51 passed, exit 0 |
+| Presence service, offline, as the standalone job would run it | `env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q test_presence_buffer.py test_presence_breaker.py test_presence_livekit_token.py test_presence_service.py` | 54 passed, exit 0 |
 | Presence service, live | `uvicorn apps.presence.main:app --port 8010`, then `GET /health` | `status ok`, `inference mock`, `speech mock`, `livekit_configured false`, `audio_over_websocket true`, breaker `closed`; `POST /livekit/token` without a bearer answers 401 |
-| Headless browser through the live presence service | Playwright against `next start` and the mock presence service, with a DEVON JWT minted under the service's key placed in the shared storage slot | socket `ready`; `say` reached `speaking` after 251 ms; 55 frames received, the freshest shown and 33 skipped by the software renderer at 19 fps; face age 10 ms, behind 94 ms; the HUD Interrupt button acked by the server in 0.3 ms with 823 frames flushed server side and 12 client side; state back to `listening`; server metrics reconcile at 70 sent plus 823 dropped |
+| Headless browser through the live presence service, on the post gauntlet code | Playwright against `next start` and the mock presence service, with a DEVON JWT minted under the service's key placed in the shared storage slot | socket `ready`; `say` reached `speaking` after 262 ms; 62 frames received, the freshest shown and 37 skipped by the software renderer at 17 fps; face age 1 ms, behind 68 ms; the HUD Interrupt button acked by the server in 0.7 ms with 823 frames flushed server side and 13 client side; state back to `listening`; server metrics reconcile at 70 sent plus 823 dropped; a LiveKit token asked for a foreign room answers 503 while LiveKit is unset, and 403 once it is configured (proved in `test_presence_service.py`) |
 | Headless browser with a fake microphone | the same run with Chromium's fake media device | the microphone opened (`live`) but the fake device delivered silence (rms 0.000), so the voice trigger never fired; the mic reaction figure stays unmeasured and only the manual path is proved |
 | Dash ban | `grep -rn` for the two banned marks over every file this arc wrote | clean |
-| Full API suite, presence tests included | `python3 -m pytest -q --tb=short` | 1497 passed, exit 0, 179 s |
+| Full API suite, presence tests included | `python3 -m pytest -q --tb=short` | 1524 passed, exit 0, 172 s |
 | Lint | `python3 -m ruff check .` | All checks passed, exit 0 |
 
 The 28 fps figure is the software renderer in a container and says nothing

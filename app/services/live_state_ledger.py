@@ -25,11 +25,12 @@ raised and ruled in ``services.devon.approval`` and its shared store; a row in
 
 from __future__ import annotations
 
+import json
 import secrets
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
-from sqlalchemy import case, or_, select
+from sqlalchemy import case, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -88,9 +89,26 @@ def _new_id(prefix: str) -> str:
 
 
 def _signing_key() -> str:
-    """The estate key that signs receipts. Read at call time so a rotated key
-    takes effect without a restart of this module's state."""
-    return settings.SECRET_KEY
+    """The key that signs receipts. Read at call time so a rotation takes
+    effect without a restart of this module's state.
+
+    A dedicated RECEIPT_SIGNING_KEY when set; otherwise a key derived from
+    SECRET_KEY, so a receipt is never signed under the JWT key itself.
+    """
+    dedicated = (settings.RECEIPT_SIGNING_KEY or "").strip()
+    if dedicated:
+        return dedicated
+    return hashchain.derive_receipt_key(settings.SECRET_KEY)
+
+
+def _signing_ring() -> List[str]:
+    """The current key first, then every previous key still allowed to verify."""
+    previous = [
+        key.strip()
+        for key in (settings.RECEIPT_SIGNING_KEYS_PREVIOUS or "").split(",")
+        if key.strip()
+    ]
+    return [_signing_key(), *previous]
 
 
 def _link(row: EventRecord) -> hashchain.ChainLink:
@@ -106,7 +124,29 @@ def _link(row: EventRecord) -> hashchain.ChainLink:
     )
 
 
-def _hashed_event(
+async def _as_stored(db: AsyncSession, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """The payload as the database will hand it back, decoded the way the ORM
+    decodes the stored column.
+
+    PostgreSQL renders jsonb numerics its own way (``1e16`` becomes
+    ``10000000000000000``, ``-0.0`` becomes ``0.0``), so a hash over Python's
+    rendering never matches the stored row. One round trip through
+    ``CAST(... AS jsonb)`` before the insert makes the writer and the verifier
+    hash the same bytes. The refusal for NaN, infinity and unencodable text
+    lands here, before the insert, with a reason the caller can read.
+    """
+    problem = hashchain.check_payload(payload)
+    if problem is not None:
+        raise LedgerRefused([problem])
+    rendered = await db.execute(
+        text("SELECT CAST(CAST(:payload AS jsonb) AS text)"),
+        {"payload": hashchain.canonical(payload)},
+    )
+    return json.loads(rendered.scalar_one())
+
+
+async def _hashed_event(
+    db: AsyncSession,
     *,
     intent_id: str,
     owner_id: str,
@@ -120,8 +160,10 @@ def _hashed_event(
 
     ``occurred_at`` is minted here rather than left to the database default,
     because the hash covers it and the verifier recomputes from the stored
-    value: the two have to be the same instant to the microsecond.
+    value: the two have to be the same instant to the microsecond. The payload
+    is hashed as stored, for the same reason.
     """
+    stored = await _as_stored(db, payload)
     occurred_at = _now()
     digest = hashchain.event_hash(
         prev_hash=prev_hash,
@@ -129,7 +171,7 @@ def _hashed_event(
         sequence_no=sequence_no,
         name=name,
         action_id=action_id,
-        payload=payload,
+        payload=stored,
         occurred_at=hashchain.format_time(occurred_at),
     )
     return EventRecord(
@@ -138,7 +180,7 @@ def _hashed_event(
         name=name,
         sequence_no=sequence_no,
         action_id=action_id,
-        payload=payload,
+        payload=stored,
         occurred_at=occurred_at,
         prev_hash=prev_hash,
         hash=digest,
@@ -182,7 +224,8 @@ class LiveStateLedger:
         # committed: a state nothing could legally follow.
         await db.flush()
         db.add(
-            _hashed_event(
+            await _hashed_event(
+                db,
                 intent_id=intent.intent_id,
                 owner_id=owner_id,
                 name="INTENT_RECEIVED",
@@ -270,11 +313,25 @@ class LiveStateLedger:
         if violations:
             raise LedgerRefused(violations)
 
+        # Nothing is appended to a chain that does not verify. A broken link,
+        # an altered row or an unhashed row planted after hashed ones is named
+        # here, before a new event could link to it and lend it legitimacy.
+        verdict = hashchain.verify_chain(intent_id, [_link(row) for row in rows])
+        if not verdict.intact:
+            raise LedgerRefused(
+                [
+                    "The event chain on this intent does not verify, so nothing can be "
+                    "appended to it: " + "; ".join(verdict.findings)
+                ]
+            )
+
         # The new event links to the hash of the last one. A last event with no
-        # hash was written before 019, and the chain restarts from genesis at
-        # this event rather than linking to a hash that never existed.
+        # hash was written before 019 (the verdict above has just proved every
+        # unhashed row is a prefix), and the chain starts from genesis here
+        # rather than linking to a hash that never existed.
         prev_hash = rows[-1].hash if rows and rows[-1].hash else hashchain.GENESIS
-        record = _hashed_event(
+        record = await _hashed_event(
+            db,
             intent_id=intent_id,
             owner_id=owner_id,
             name=name,
@@ -638,10 +695,15 @@ class LiveStateLedger:
             )
         )
         row = receipt.scalar_one_or_none()
-        key = _signing_key()
+        ring = _signing_ring()
+        current_key_id = hashchain.key_id(ring[0])
         receipt_report: Dict[str, Any]
         if row is None:
-            receipt_report = {"present": False}
+            receipt_report = {
+                "present": False,
+                "verified": False,
+                "findings": ["the intent holds no receipt yet; nothing certifies this chain"],
+            }
         else:
             digest = hashchain.receipt_digest(
                 intent_id=intent_id,
@@ -656,13 +718,15 @@ class LiveStateLedger:
                 issued_at=hashchain.format_time(row.issued_at),
             )
             findings: List[str] = []
+            signed_by = hashchain.find_signing_key(digest, row.signature, ring)
             if not row.signature:
                 findings.append("the receipt carries no signature (issued before 019)")
-            elif not hashchain.verify_signature(digest, row.signature, key):
+            elif signed_by is None:
                 findings.append(
-                    "the receipt's signature does not verify under the current key: "
-                    "either the receipt text was altered after issue, or it was "
-                    "signed under a key this process no longer holds"
+                    "the receipt's signature verifies under none of the keys this "
+                    "process holds (the current key and the rotation ring): either "
+                    "the receipt text was altered after issue, or it was signed under "
+                    f"key {row.signature_key_id or 'unknown'}, which is not in the ring"
                 )
             if row.head_hash != verdict.head_hash:
                 findings.append(
@@ -685,14 +749,21 @@ class LiveStateLedger:
                 "signature": row.signature,
                 "signature_algorithm": hashchain.SIGNATURE_ALGORITHM,
                 "signature_key_id": row.signature_key_id,
-                "signed_with_current_key": row.signature_key_id == hashchain.key_id(key),
+                "verified_with_key_id": hashchain.key_id(signed_by) if signed_by else "",
+                "signed_with_current_key": signed_by is not None
+                and hashchain.key_id(signed_by) == current_key_id,
                 "verified": not findings,
                 "findings": findings,
             }
 
+        # ``verified`` is the whole claim: an intact chain AND a receipt that
+        # certifies exactly that chain. An intent with no receipt is not
+        # verified, whatever its chain looks like; ``receipted`` says which
+        # half is missing.
         return {
             "intent_id": intent_id,
-            "verified": verdict.intact and (receipt_report.get("verified", True)),
+            "verified": verdict.intact and row is not None and receipt_report["verified"],
+            "receipted": row is not None,
             "chain": verdict.to_dict(),
             "receipt": receipt_report,
             "verified_at": hashchain.format_time(_now()),

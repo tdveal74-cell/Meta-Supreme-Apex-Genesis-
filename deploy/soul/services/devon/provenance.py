@@ -23,22 +23,37 @@ WHAT THE HASH COVERS
 Each event's hash is SHA-256 over a canonical JSON document holding the chain
 version, the previous event's hash, the intent id, the sequence number, the
 event name, the action id, the payload, and the time the event occurred. The
-first event of an intent links to ``GENESIS``, the empty string. Because the
-payload is stored as JSONB and read back through it, the canonical form sorts
-keys and uses the tightest separators, which is the one form both sides can
-reproduce. Payloads stay JSON native; a value that json cannot serialise is
-refused rather than coerced, because a coerced value hashes to something the
-verifier could never recompute.
+first event of an intent links to ``GENESIS``, the empty string.
+
+The payload is hashed as the database will hand it back, never as Python first
+serialised it. A gauntlet on 2026-09-08 fed the writer ``{"v": 1e16}`` and
+``{"v": -0.0}``: Python renders those ``1e+16`` and ``-0.0``, JSONB stores
+numerics and renders ``10000000000000000`` and ``0.0``, and the verifier,
+reading the stored row, found every such event "altered". So the writer asks
+PostgreSQL to render the payload through ``jsonb`` before hashing, decodes that
+rendering the same way the ORM decodes the stored column, and hashes the
+result; the verifier does the same to the stored row. Both sides now hash the
+same bytes by construction. The canonical form sorts keys and uses the
+tightest separators, and it refuses NaN and infinity, which JSON cannot carry
+and PostgreSQL would reject at the insert.
 
 WHAT THE SIGNATURE COVERS
 
 The receipt digest is SHA-256 over the intent id, the head hash of the chain,
 the chain length, the receipt's six fields and its issue time. The signature is
-HMAC-SHA256 of that digest under the estate's secret key. A verifier holding the
+HMAC-SHA256 of that digest under the receipt signing key. A verifier holding the
 key checks both; a reader without the key can still recompute the digest and
 the chain, which is the point of keeping the two separate. ``key_id`` names the
-key without revealing it so a receipt signed under a rotated key is reported
-as such rather than as forged.
+key without revealing it, and a verifier may hold a ring of previous keys, so
+a receipt signed before a rotation still verifies and reports which key it was
+signed under rather than reading as forged.
+
+The receipt key is not the JWT key. ``derive_receipt_key`` turns the estate
+secret into a distinct signing key when no dedicated ``RECEIPT_SIGNING_KEY``
+is set, so a service that only verifies tokens never needs to hold the key that
+signs receipts. Derivation does not shrink the blast radius of a leaked estate
+secret; a dedicated key that the presence service never receives does, and
+that is the setting the compose stack passes only to the API.
 
 ROWS THAT PREDATE THE CHAIN
 
@@ -47,6 +62,20 @@ reported as ``unhashed`` rather than treated as broken: refusing every receipt
 on every intent that was open at deploy time would be a false alarm, and
 backfilling a hash would claim a provenance those rows never had. A verdict is
 ``complete`` only when every link is hashed.
+
+The grace is a prefix, not a licence. Unhashed rows may only stand at the start
+of an intent, where a pre 019 writer put them. An unhashed row after a hashed
+one was written around the writer, and the verifier names it as a break rather
+than letting the chain restart from genesis behind it. That was the second
+gauntlet finding of 2026-09-08.
+
+WHAT THE DATABASE OWNS
+
+Migration 019 refuses UPDATE on events and receipts outright, and refuses a
+direct DELETE while admitting the cascade from intents and users, because an
+owner's right to be removed outranks the audit trail. A role that can disable
+those triggers can rewrite anything; that is the table owner, and the
+boundary is stated rather than pretended away.
 """
 
 from __future__ import annotations
@@ -85,10 +114,33 @@ def canonical(value: Any) -> str:
     """The one serialisation both the writer and the verifier can reproduce.
 
     Keys sorted, no whitespace, non ASCII kept as is. Anything json cannot
-    represent raises ``TypeError`` on purpose: coercing it would produce a hash
-    the verifier cannot recompute from the stored row.
+    represent raises on purpose: an unserialisable object raises ``TypeError``
+    and NaN or infinity raise ``ValueError``. Coercing either would produce a
+    hash the verifier cannot recompute from the stored row, and PostgreSQL
+    refuses NaN in jsonb anyway, so the refusal lands before the insert.
     """
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    )
+
+
+def check_payload(payload: Any) -> Optional[str]:
+    """Why this payload cannot be hashed, or None when it can.
+
+    A payload has to survive the trip through canonical JSON and UTF-8, which
+    is what the database and the hash both need. A lone surrogate passes
+    ``json.dumps`` and then fails to encode; NaN passes ``json.loads`` at the
+    API door and then fails here. Naming the reason at the door turns a 500
+    at the insert into a refusal the caller can read.
+    """
+    # UnicodeEncodeError is a ValueError, so it is caught first or never.
+    try:
+        canonical(payload).encode("utf-8")
+    except UnicodeEncodeError as exc:
+        return f"payload carries text UTF-8 cannot encode: {exc.reason}"
+    except (TypeError, ValueError) as exc:
+        return f"payload carries a value JSON cannot represent: {exc}"
+    return None
 
 
 def format_time(moment: datetime) -> str:
@@ -167,11 +219,12 @@ def verify_chain(intent_id: str, links: Sequence[ChainLink]) -> ChainVerdict:
     """Walk the chain and report every break, never just the first.
 
     A break is a sequence gap or reorder, a link whose ``prev_hash`` is not the
-    hash before it, or a link whose stored hash is not what its own material
-    recomputes to. Unhashed links (empty hash, written before the chain) are
-    counted separately and do not break the chain; they only stop it being
-    complete. The verdict's head hash is the last stored hash, which is what a
-    receipt binds to.
+    hash before it, a link whose stored hash is not what its own material
+    recomputes to, or an unhashed link standing after a hashed one. Unhashed
+    links at the start of the chain (written before 019) are counted
+    separately and do not break it; they only stop it being complete. The
+    verdict's head hash is the last stored hash, which is what a receipt binds
+    to.
     """
     findings: List[str] = []
     hashed = 0
@@ -186,6 +239,12 @@ def verify_chain(intent_id: str, links: Sequence[ChainLink]) -> ChainVerdict:
             )
         if not link.hash:
             unhashed += 1
+            if hashed:
+                findings.append(
+                    f"sequence {link.sequence_no} ({link.name}) carries no hash but "
+                    "stands after hashed events: it was written around the writer, "
+                    "not before the chain"
+                )
             expected_prev = GENESIS
             continue
         hashed += 1
@@ -276,3 +335,28 @@ def key_id(key: str) -> str:
         return ""
     material = b"devon-receipt-signing-key:" + key.encode("utf-8")
     return hashlib.sha256(material).hexdigest()[:16]
+
+
+RECEIPT_KEY_LABEL = "devon:receipt-signing:v1"
+
+
+def derive_receipt_key(secret_key: str) -> str:
+    """A receipt signing key distinct from the estate secret, when no dedicated
+    key is configured. HMAC-SHA256 of a fixed label under the secret, hex."""
+    if not secret_key:
+        raise ValueError("a receipt key cannot be derived from an empty secret")
+    return hmac.new(
+        secret_key.encode("utf-8"), RECEIPT_KEY_LABEL.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+
+
+def find_signing_key(digest: str, signature: str, keys: Sequence[str]) -> Optional[str]:
+    """The first key in the ring that verifies this signature, or None.
+
+    The ring is the current key first, then previous keys, so a receipt signed
+    before a rotation still verifies and the caller can say which key did it.
+    """
+    for key in keys:
+        if key and verify_signature(digest, signature, key):
+            return key
+    return None

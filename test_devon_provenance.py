@@ -4,7 +4,7 @@
 walk every break the verifier is supposed to name and prove the signature
 holds only over the exact text it was issued for. The database half (the
 append-only triggers, the writer applying this on every row) is proved in
-``test_live_state_ledger.py``.
+``test_live_state_ledger_provenance.py``.
 """
 
 from __future__ import annotations
@@ -304,3 +304,55 @@ def test_the_key_id_names_the_key_without_revealing_it():
 def test_the_module_declares_where_it_came_from():
     assert provenance.SOURCE["supplied_by"] == "Tee"
     assert provenance.SOURCE["file_as"].startswith("SYS_SPEC_")
+
+
+# ---------------------------------------------------------------------------
+# What the 2026-09-08 gauntlet added
+# ---------------------------------------------------------------------------
+
+def test_nan_and_infinity_are_refused_at_the_door():
+    for value in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(ValueError):
+            provenance.canonical({"v": value})
+        assert "cannot represent" in (provenance.check_payload({"v": value}) or "")
+
+
+def test_a_lone_surrogate_is_refused_by_name():
+    problem = provenance.check_payload({"text": "bad \udcff text"})
+    assert problem is not None
+    assert "UTF-8" in problem
+
+
+def test_a_clean_payload_passes_the_door():
+    assert provenance.check_payload({"n": 1e16, "z": -0.0, "s": "caf\u00e9", "l": [1, {"k": None}]}) is None
+
+
+def test_an_unhashed_row_after_hashed_rows_is_a_break_not_a_grace():
+    """The pre 019 grace is a prefix. A planted empty hash behind hashed
+    rows was written around the writer and the verifier says so."""
+    links = _chain(["INTENT_RECEIVED", "CONTEXT_LOADED", "PLAN_CREATED"])
+    planted = _replace(links[2], prev_hash="", hash="")
+    verdict = provenance.verify_chain(INTENT, [links[0], links[1], planted])
+    assert not verdict.intact
+    assert verdict.unhashed == 1
+    assert any("written around the writer" in f for f in verdict.findings)
+
+
+def test_the_receipt_key_is_derived_from_the_secret_and_is_not_the_secret():
+    derived = provenance.derive_receipt_key(KEY)
+    assert len(derived) == 64
+    assert derived != KEY
+    assert derived == provenance.derive_receipt_key(KEY)
+    assert derived != provenance.derive_receipt_key(KEY + "x")
+    with pytest.raises(ValueError, match="empty secret"):
+        provenance.derive_receipt_key("")
+
+
+def test_the_ring_finds_the_key_that_signed_and_reports_none_otherwise():
+    digest = _digest()
+    old_key = "an-older-receipt-key-000000000000000000000000"
+    signature = provenance.sign(digest, old_key)
+    assert provenance.find_signing_key(digest, signature, [KEY, old_key]) == old_key
+    assert provenance.find_signing_key(digest, signature, [KEY]) is None
+    assert provenance.find_signing_key(digest, signature, ["", old_key]) == old_key
+    assert provenance.find_signing_key(digest, "", [KEY, old_key]) is None

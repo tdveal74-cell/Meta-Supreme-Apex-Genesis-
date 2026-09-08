@@ -38,6 +38,7 @@ from services.intelligence.providers.base import (
     AIProvider,
     ChatMessage,
     CompletionRequest,
+    ProviderConfigError,
 )
 from services.intelligence.providers.factory import create_provider
 
@@ -159,12 +160,24 @@ def build_streamer(name: str, settings: PresenceSettings) -> Optional[TokenStrea
     chosen = (name or "").strip().lower()
     if not chosen:
         return None
-    provider = create_provider(
-        chosen,
-        anthropic_api_key=settings.ANTHROPIC_API_KEY,
-        openai_api_key=settings.OPENAI_API_KEY,
-        cerebras_api_key=settings.CEREBRAS_API_KEY,
-        timeout_seconds=PROVIDER_TIMEOUT_SECONDS,
-        max_retries=0,
-    )
+    try:
+        provider = create_provider(
+            chosen,
+            anthropic_api_key=settings.ANTHROPIC_API_KEY,
+            openai_api_key=settings.OPENAI_API_KEY,
+            cerebras_api_key=settings.CEREBRAS_API_KEY,
+            timeout_seconds=PROVIDER_TIMEOUT_SECONDS,
+            max_retries=0,
+        )
+    except ProviderConfigError as exc:
+        # The factory's message names DEFAULT_AI_PROVIDER, the API's variable.
+        # This service is configured by PRESENCE_INFERENCE and
+        # PRESENCE_FALLBACK_INFERENCE, and the refusal has to send the reader
+        # to the right line.
+        raise ProviderConfigError(
+            f"presence inference '{chosen}' cannot start: {exc} Set the key, or "
+            "set PRESENCE_INFERENCE (and PRESENCE_FALLBACK_INFERENCE) to mock "
+            "until it exists.",
+            provider=chosen,
+        ) from exc
     return ProviderTokenStreamer(provider)

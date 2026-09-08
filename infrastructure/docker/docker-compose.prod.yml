@@ -42,8 +42,12 @@ x-python-env: &python-env
   REDIS_URL: redis://redis:6379/0
   SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set, generate one with openssl rand -hex 32}
   CORS_ORIGINS: ${CORS_ORIGINS:-["https://devon.example.invalid"]}
-  DEFAULT_AI_PROVIDER: ${DEFAULT_AI_PROVIDER:-cerebras}
-  ENRICHMENT_PROVIDER: ${ENRICHMENT_PROVIDER:-cerebras}
+  # Providers default to mock so the stack starts with the keys still blank
+  # and /health says "simulated" out loud. Set cerebras (and the key) in
+  # .env.prod to go live; a provider named without its key refuses to start
+  # and takes the web container down with it, because web waits on health.
+  DEFAULT_AI_PROVIDER: ${DEFAULT_AI_PROVIDER:-mock}
+  ENRICHMENT_PROVIDER: ${ENRICHMENT_PROVIDER:-mock}
   CEREBRAS_API_KEY: ${CEREBRAS_API_KEY:-}
   CEREBRAS_MODEL: ${CEREBRAS_MODEL:-gpt-oss-120b}
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
@@ -99,6 +103,11 @@ services:
     environment:
       <<: *python-env
       PORT: "8000"
+      # Receipt signing keys reach the API only. The presence container holds
+      # SECRET_KEY to verify sessions and never sees these, so a compromised
+      # presence container cannot forge a Universal Receipt.
+      RECEIPT_SIGNING_KEY: ${RECEIPT_SIGNING_KEY:-}
+      RECEIPT_SIGNING_KEYS_PREVIOUS: ${RECEIPT_SIGNING_KEYS_PREVIOUS:-}
       DEVON_REGISTRATION_KEY: ${DEVON_REGISTRATION_KEY:-}
       DEVON_SHELL_KEY: ${DEVON_SHELL_KEY:-}
       PASSKEY_RP_ID: ${PASSKEY_RP_ID:?PASSKEY_RP_ID must be the public hostname}
@@ -130,8 +139,8 @@ services:
       <<: *python-env
       PORT: "8010"
       PRESENCE_CORS_ORIGINS: ${CORS_ORIGINS:-["https://devon.example.invalid"]}
-      PRESENCE_INFERENCE: ${PRESENCE_INFERENCE:-cerebras}
-      PRESENCE_FALLBACK_INFERENCE: ${PRESENCE_FALLBACK_INFERENCE:-anthropic}
+      PRESENCE_INFERENCE: ${PRESENCE_INFERENCE:-mock}
+      PRESENCE_FALLBACK_INFERENCE: ${PRESENCE_FALLBACK_INFERENCE:-}
       PRESENCE_SPEECH: ${PRESENCE_SPEECH:-mock}
       PRESENCE_TTFT_THRESHOLD_MS: ${PRESENCE_TTFT_THRESHOLD_MS:-500}
       PRESENCE_WINDOW_MS: ${PRESENCE_WINDOW_MS:-250}

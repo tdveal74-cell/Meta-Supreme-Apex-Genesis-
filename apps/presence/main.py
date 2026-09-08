@@ -30,7 +30,7 @@ import json
 import logging
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -70,6 +70,11 @@ class Runtime:
     router: InferenceRouter
     speech: SpeechSynthesizer
     pacer: Pacer
+    #: Open presence sessions, session id to the DEVON user id that opened
+    #: it. A LiveKit token is minted only for a room named here and only to
+    #: the user who owns it, so a signed-in user cannot mint a join token
+    #: for a room the estate's LiveKit project holds for someone else.
+    sessions: Dict[str, str] = field(default_factory=dict)
 
     @property
     def send_audio_over_websocket(self) -> bool:
@@ -94,8 +99,14 @@ def decode_devon_token(token: str, settings: PresenceSettings) -> Optional[Dict[
 
 
 class LiveKitTokenRequest(BaseModel):
+    """The room is the presence session id the server issued in ``ready``.
+
+    There is no identity field. The participant identity is always the
+    DEVON user id from the verified token: a caller-chosen identity would let
+    one signed-in user evict another from the room by claiming their name.
+    """
+
     room: str = Field(min_length=1, max_length=128)
-    identity: Optional[str] = Field(default=None, max_length=128)
 
 
 def create_app(
@@ -174,7 +185,16 @@ def create_app(
                     "delivered over the presence WebSocket."
                 ),
             )
-        identity = (body.identity or "").strip() or str(payload["sub"])
+        identity = str(payload["sub"])
+        owner = runtime.sessions.get(body.room)
+        if owner is None or owner != identity:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "the room must be the session_id of a presence session this user "
+                    "holds open; open the WebSocket first and use the id from ready"
+                ),
+            )
         now = time.time()
         token = mint_livekit_token(
             settings.LIVEKIT_API_KEY,
@@ -198,7 +218,7 @@ def create_app(
         await ws.accept()
 
         async def send_json(message: Dict[str, Any]) -> None:
-            await ws.send_text(json.dumps(message))
+            await ws.send_text(json.dumps(message, allow_nan=False))
 
         # -- hello, within the timeout -------------------------------------
         try:
@@ -245,6 +265,7 @@ def create_app(
                 livekit_url=settings.LIVEKIT_URL or None,
             )
         )
+        runtime.sessions[session.session_id] = session.user_id
         await session.open()
 
         # -- conversation ----------------------------------------------------
@@ -272,6 +293,7 @@ def create_app(
         except WebSocketDisconnect:
             pass
         finally:
+            runtime.sessions.pop(session.session_id, None)
             await session.close()
             try:
                 await ws.close()
