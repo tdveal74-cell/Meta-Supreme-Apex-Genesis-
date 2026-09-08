@@ -39,8 +39,9 @@ recorded here so nobody spends an evening on it by accident.
 ## What was built
 
 Workflow `7bDqKNdMHY8sxoXa`, "DEVON Gumroad Sale Check", in the personal
-project, published as `8c50cbb8` at about 11:53 UTC. Eight nodes including
-the note:
+project, published as `8c50cbb8` at about 11:53 UTC and republished as `e187e828`
+at about 12:19 UTC after the fresh critic below (an empty-sale guard, successful
+executions no longer saved). Eight nodes including the note:
 
 1. `Sale Check (Webhook)`: POST, path `devon-gumroad-sale-check`, header
    auth on the Devon Capture Key credential `FYRvkRTOcROEYZ9P`, responds
@@ -56,8 +57,9 @@ the note:
    timeout.
 4. `Summarise`: the status code is the receipt. Gumroad's own 200 with
    `success: false` becomes a 404 with Gumroad's message; 401 or 403 becomes
-   a 502 naming the credential to check; no answer becomes a 502; a found sale
-   answers 200 with id, created_at, product name and permalink, formatted
+   a 502 naming the credential to check; no answer becomes a 502; success true
+   with no sale object becomes a 502 (added after the fresh critic on the first
+   publish); a found sale answers 200 with id, created_at, product name and permalink, formatted
    total, price in cents, currency symbol, quantity, buyer email, refunded,
    disputed, dispute won and order id, plus `source` naming the endpoint and
    the credential so the answer says where it came from.
@@ -69,16 +71,25 @@ Error workflow `rqYmaQh91iCce8DJ`, timezone America/New_York. Registered in
 change, with the stale line saying V5 was inactive corrected while it was
 open.
 
+Successful executions are not saved, the house setting on fourteen of the
+sixteen sibling `x-devon-key` doors, because `fullResponse` would otherwise
+keep Gumroad's response headers and a real buyer's email in the execution
+store. Error executions still save.
+
 ## What was proved
 
 | execution | input | what happened |
 |---|---|---|
 | 6482 | `AAAAAAAAAAAAAAAAAAAAAA==`, a made-up but plausible id | Preflight passed it, Gumroad answered HTTP 200 with `success: false` and "The sale was not found." in 250 ms, the door answered 404 with that message |
 | 6483 | `AAAA=AAAA===`, an implausible id | Preflight refused it, the Gumroad node did not run, the door answered 400 |
+| 6489 | `B28UKN-dvxYabdavG97Y-Q==` with the Gumroad reply pinned to HTTP 200, `success: true`, no `sale` object | Summarise answered 502 naming the shape; before the guard this shape answered "Sale found." with every field undefined |
+| 6490 | the same id with the Gumroad reply pinned to a found sale | the door answered 200 with the thirteen-field summary, the first time the found-sale branch ran anywhere |
 
 Both ran in manual mode with the request body supplied to the trigger, so
 the header check itself was not exercised by them; it is the same credential
-and mechanism as the four V5 doors proved on 2026-09-07.
+and mechanism as the four V5 doors proved on 2026-09-07. 6489 and 6490 pinned
+the Gumroad node, so no request reached Gumroad; they prove the Summarise code,
+not the credential.
 
 ## Tee's Shortcut, the change
 
@@ -89,8 +100,12 @@ Replace the Get Contents of URL action's target and header:
 | URL | `https://thequietoperator.app.n8n.cloud/webhook/devon-gumroad-sale-check` |
 | method | POST |
 | header | `x-devon-key`, the value the Pause and Resume Shortcuts already send |
-| body | JSON, `{"sale_id": "<the id>"}` |
+| body | Request Body set to JSON, one key: `{"sale_id": "<the id>"}` |
 | show | Quick Look on the response |
+
+Quick Look shows the JSON the door answers. How Shortcuts presents a 400, 404
+or 502 body, as the JSON or as an error, is unverified from a session; the
+`message` field carries the reason either way.
 
 The `Authorization: Bearer` header and the Gumroad token come out of the
 Shortcut. After that the phone holds no Gumroad token at all, which is one
@@ -111,6 +126,32 @@ on the monthly cadence ruled earlier the same day.
   inside n8n only.
 - A real sale. No real sale id has been through this door or the V5 guard.
 - Why the phone could not reach `api.gumroad.com` directly.
+- The header check from outside: every proof ran in manual mode with the body
+  pinned. A POST without `x-devon-key` should get 401 and one with it and a
+  made-up id should get 404; those are Tee's first two calls.
+- The three 502 branches against a real Gumroad reply: no answer, 401 or 403,
+  and success true with no sale object. 6489 proved the last on a pinned
+  reply; none has run against Gumroad itself.
+
+## Fresh critic, 2026-09-08 about 12:05 UTC
+
+A cold subagent given only the diff, the live workflows and the executions
+returned PASS-WITH-CONDITIONS (mean 4.00, security 4, correctness 5). What it
+found and what happened to each:
+
+| finding | consequence | done |
+|---|---|---|
+| the vault and the sticky note said the token had left the phone | a rotator trusting the record undercounts holders | reworded to pending in both, true when Tee's first call lands |
+| registry row `recsutD24MMpzTamX` still told the rotator to re-enter the token in the Shortcut, and did not list this door as a consumer | the 2026-10-08 rotation would put the token back on the phone | row rewritten: n8n credential only, door listed, Shortcut marked as leaving |
+| Summarise answered "Sale found." for success true with no sale object | one misleading read | guard added, proved on 6489, republished as `e187e828` |
+| successful executions were saved with Gumroad's full response headers | set-cookie strings and a real buyer's email in the execution store | saving off for successes, proved on the published settings |
+| the OS 29 doc carried two activeVersionIds for one workflow | a reader cannot tell which is live | header and STATUS now say `36b3170c`, V5 says `bde7ddec` |
+| "proved on 6482 and 6483" without the manual-mode caveat | the header check reads as proved when it is not | caveat carried into the vault and this doc |
+| the Shortcut table did not say Request Body JSON or what a non-2xx looks like | a stalled first call | body row amended, presentation marked unverified |
+
+Left as the critic scored it: the Monthly Credential Review counts a Retired
+row as tracked and current (cosmetic, pre-existing), and the OS 29 same-day
+rerun would double-append a failure line (pre-existing behaviour).
 
 ## DEVON RECEIPT
 
@@ -121,7 +162,7 @@ ARTIFACT: SYS_OPS_gumroad-sale-check_v1_2026-09-08
 DATE: 2026-09-08
 DECISIONS: RULED route the Gumroad sale check through n8n, the token leaves the phone; RULED the July 2026 Gumroad token is gone, its registry row retired; RULED the Firecrawl failure path writes its reason into the row with no email (recorded in the OS 29 doc); RULED wait for tomorrow's firing before touching the volatility rule
 FINDINGS: the phone timed out twice against api.gumroad.com with Private Relay off and no VPN while n8n answered in 250 ms; the door refuses an implausible id before any request and turns Gumroad's 200 success false into a 404
-OPEN: the first call from the repointed Shortcut; a real sale through the door or the V5 guard; the phone's own path to api.gumroad.com
-STATUS: live, workflow 7bDqKNdMHY8sxoXa activeVersionId 8c50cbb8, proved on executions 6482 and 6483, one x-devon-key holder added, twenty-one in the checklist
+OPEN: the first call from the repointed Shortcut, which is also the only proof of the header check from outside; a real sale through the door or the V5 guard; the phone's own path to api.gumroad.com
+STATUS: live, workflow 7bDqKNdMHY8sxoXa activeVersionId e187e828 (8c50cbb8 at first publish), proved on executions 6482 and 6483 (manual) and 6489 and 6490 (pinned Gumroad replies), successful executions not saved, one x-devon-key holder added, twenty-one in the checklist, fresh critic PASS-WITH-CONDITIONS with every condition applied the same hour
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```

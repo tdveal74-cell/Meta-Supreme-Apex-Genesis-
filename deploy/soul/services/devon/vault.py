@@ -533,12 +533,15 @@ WEBHOOKS = {
     },
     # Ruled by Tee 2026-09-08 after his phone timed out twice against
     # api.gumroad.com while n8n reached it in half a second: the Gumroad sale
-    # check moved off the phone. The token stays in n8n credential
-    # K1D8KUvTcWDcdrV0; the caller sends only x-devon-key and a sale_id, and
-    # Preflight refuses an implausible id before any request leaves. Proved on
-    # executions 6482 (a made-up id: Gumroad answered 200 with success false,
-    # the door answered 404) and 6483 (an implausible id: refused 400, no
-    # request made). It reads and writes nothing; it is one more key holder.
+    # check moves off the phone once he repoints the Shortcut to this door. The
+    # token stays in n8n credential K1D8KUvTcWDcdrV0; the caller sends only
+    # x-devon-key and a sale_id, and Preflight refuses an implausible id before
+    # any request leaves. Proved on executions 6482 (a made-up id: Gumroad
+    # answered 200 with success false, the door answered 404) and 6483 (an
+    # implausible id: refused 400, no request made), both manual with the body
+    # pinned, so the header check ran on neither; 6489 and 6490 (pinned Gumroad
+    # replies) proved the empty-sale 502 and the found-sale 200. It reads and
+    # writes nothing; it is one more key holder.
     "devon-gumroad-sale-check": {
         "job": "read one Gumroad sale back from GET /v2/sales/:id for Tee's phone",
         "destination": "api.gumroad.com through credential K1D8KUvTcWDcdrV0, answered to the caller, nothing written",
@@ -858,7 +861,7 @@ WORKFLOWS = {
     # model subnodes cannot use, so the lane is an HTTP Request, not an Agent.
     "Face": {"id": "LsmfRFMmI5feINs0", "state": "active, hosted chat, n8n user auth"},
     "TQO FINAL V5": {"id": "gsGJQan7a6ZufhYt", "state": "active since 2026-09-08, published on Tee's ruling with all six schedule triggers disabled, each re-enabled as its own named act on his watch; activeVersionId bde7ddec; seven webhooks live: four on header x-devon-key (run-tqo-pipeline, run-nco-pipeline, system-pause, system-resume) and three on secret paths (run-tqo, run-nco, gumroad-sale); the Gumroad guard verifies each ping against GET /v2/sales/:id on credential K1D8KUvTcWDcdrV0, refuses a missing sale on Gumroad's 200 success false, and accepts the two trailing equals signs real ids carry since the same-day fix; view_sales on a real sale still unproven"},
-    "DEVON Gumroad Sale Check": {"id": "7bDqKNdMHY8sxoXa", "state": "active since 2026-09-08, activeVersionId 8c50cbb8, webhook devon-gumroad-sale-check on header x-devon-key, reads one sale from GET /v2/sales/:id on credential K1D8KUvTcWDcdrV0 and writes nothing; proved on executions 6482 and 6483; Tee's Shortcut is repointed to it and the Gumroad token leaves the phone"},
+    "DEVON Gumroad Sale Check": {"id": "7bDqKNdMHY8sxoXa", "state": "active since 2026-09-08, activeVersionId e187e828 (8c50cbb8 at first publish, republished the same day with an empty-sale guard and successful executions not saved); webhook devon-gumroad-sale-check on header x-devon-key, reads one sale from GET /v2/sales/:id on credential K1D8KUvTcWDcdrV0 and writes nothing; proved on executions 6482 and 6483 (manual, body pinned, header check not exercised) and 6489 and 6490 (pinned Gumroad replies: empty sale 502, found sale 200); the repoint of Tee's Shortcut is pending and the Gumroad token leaves the phone when his first call lands"},
     "Capture Hook": {"id": "Cbd24ptTPWch3aZO", "state": "retired 2026-08-22"},
     # Registered 2026-09-06, ruled by Tee after the operational report found
     # ten DEVON named workflows on the instance and not in this map, four of
