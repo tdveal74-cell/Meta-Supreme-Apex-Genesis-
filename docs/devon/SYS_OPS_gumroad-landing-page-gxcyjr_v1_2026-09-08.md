@@ -4,7 +4,7 @@ type: SYS_OPS
 version: 1
 date: 2026-09-08
 area: TQO
-status: preview-clean-publish-held-for-ruling
+status: ruled-2026-09-08-hold-until-a-file-and-description-exist-chips-kept
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 base: c31a7fe
 branch: claude/video-analysis-incorporation-9h6rtc
@@ -245,6 +245,18 @@ and Tee should either own them or replace them before they meet a buyer.
 Underneath all three: nothing ships without a human watching it end to end,
 and the end here is the checkout on the live page, which only Tee can reach.
 
+## Ruled, 2026-09-08 about 10:45 UTC
+
+Tee answered the card. **Hold the publish until the product has a file and a
+description.** Nothing is written to the live product; the page stays built,
+sanitizer clean on 6474, and one word in the Action node from live. **Keep the
+four chips** (free, five, fifteen, thirty) as a starting point, not a floor.
+**Merge the record**: PR #169 merged as `e1ffb07` on main and the branch was
+restarted from it. On the same card he resolved the Gumroad token rotation
+conflict, which is recorded in the OS 29 sensor doc where the conflict was
+first written down, and in the Credentials registry row
+`recsutD24MMpzTamX` that the Monthly Credential Review reads.
+
 ## To publish, to check, to roll back
 
 Each is the same act: open workflow `vrcLMw802tgf3MpY`, set the one word in
@@ -284,9 +296,9 @@ AREA: TQO
 TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_gumroad-landing-page-gxcyjr_v1_2026-09-08
 DATE: 2026-09-08
-DECISIONS: publish held for Tee's ruling; helper workflow vrcLMw802tgf3MpY registered in the vault as manual and never published; the sha256 and byte length gate on the payload is the rule for anything a session sends to Gumroad
+DECISIONS: RULED 2026-09-08 hold the publish until the product has a file and a description; RULED keep the four price chips; RULED merge, PR #169 merged as e1ffb07; helper workflow vrcLMw802tgf3MpY registered in the vault as manual and never published; the sha256 and byte length gate on the payload is the rule for anything a session sends to Gumroad
 FINDINGS: product gxcyjr is an empty shell, no files, no description, no covers, zero sales, custom_html null, read on 6465; landing.html fourth revision 18,046 bytes sha 34788939bdf17e2a passed the sanitizer with total_removed 0 on 6474, after a fresh critic found six majors in the second revision (price section hidden without JS, second buy door not a link, empty description box, delivery promise on a product with no files, buy status stuck, input boundary contrast), all fixed and confirmed fixed by the same critic's second pass, whose three leftovers (24 px target size, coupled :has() rule, unbounded price input) went into the fourth revision; the container cannot reach gumroad.com so preview, publish and read back run through n8n on credential K1D8KUvTcWDcdrV0; lowercase viewbox from the sanitizer is restored by the HTML parser, checked in Chromium
-OPEN: whether to publish on an empty product, and if so whether the delivery line and the four price chips stand; the live page and checkout click through are Tee's; description interpolation with rich markup and the rating fallback on a reviewed product are unobserved
-STATUS: built, fourth revision sanitizer clean on 6474, critic PASS-WITH-CONDITIONS with every condition outside the file, not published, one word in the Action node from live and one word from rolled back
+OPEN: the day a file and a description exist, publish is one word in the Action node, then the live page and checkout click through are Tee's; description interpolation with rich markup and the rating fallback on a reviewed product are unobserved
+STATUS: built, fourth revision sha 34788939bdf17e2a sanitizer clean on 6474, critic PASS-WITH-CONDITIONS with every condition outside the file, not published on Tee's ruling of 2026-09-08, one word in the Action node from live and one word from rolled back
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
