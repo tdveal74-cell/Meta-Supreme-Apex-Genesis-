@@ -1,13 +1,14 @@
 # SYS_OPS: OS 29 Platform Policy Sensor, the capture was hollow and the record said watched
 
 Date: 2026-09-08, later the same night
-Workflow: `7WyIarNoJa2irx2r`, active, `activeVersionId 38857d14` (was `9a235eaa` when this
-doc was first written; republished at about 05:56 UTC with the changes recorded below)
+Workflow: `7WyIarNoJa2irx2r`, active, `activeVersionId 138e7ceb` (was `9a235eaa` when this
+doc was first written, `38857d14` from about 05:56 UTC, and republished at about 06:33 UTC
+with the Firecrawl cache bypass recorded below)
 Supersedes: `SYS_OPS_os29-platform-policy-sensor_v1_2026-09-08` on the coverage claim, on the
 scrape count (five a sweep and about 150 a month, not four and 120), and on the timing of the
 first scheduled firing.
 Amended 2026-09-08 after merge (#165), on a fresh critic's findings against the raw execution
-data. The first version of this doc inverted the silencing timeline, omitted that the sensor
+data, and again after merge (#166) when the locale pin exposed Firecrawl's default cache. The first version of this doc inverted the silencing timeline, omitted that the sensor
 had erased its own material verdicts, and overstated stability. Each is corrected in place.
 Ruled by Tee: block-level diff with self-learned volatile blocks; fix the capture rather than
 the comparison; add the X successor as a watched source and leave his curated note alone.
@@ -317,34 +318,79 @@ monetisation for monetization, behaviours for behaviors, centre for center. Appe
 held: that verdict sits above the restored MATERIAL one, which is untouched. Published
 on that receipt at about 05:56 UTC as `activeVersionId 38857d14`.
 
+## Firecrawl was serving cached copies, found while pinning the locale
+
+Amended 2026-09-08 after #166 merged, when the open items were being closed.
+
+The locale pin was applied first, on its own: `location: { "country": "US",
+"languages": ["en-US"] }` added to the custom body and proved on execution 6442. It did
+not work. Meta Content came back in en-GB again, 40 British spellings and no American
+ones, the same as 6437, while Meta Partner came back in en-US on the same sweep.
+
+Reading Firecrawl's documentation for why gave the actual defect. The scrape endpoint
+returns a cached copy of a URL whenever one exists that is younger than `maxAge`, and the
+documented default for `maxAge` is 172,800,000 milliseconds, two days. The sensor never
+set it. So on every sweep, before the custom body and after it, each of the five
+Firecrawl sources could be served a copy up to two days old rather than the page as it
+stood that morning. A daily policy sensor cannot run on that: a rule changed on a Monday
+could read Stable on the Tuesday and the Wednesday. The locale flips fit the same cause.
+The cache is keyed on the URL, so whichever English Meta happened to serve the last fresh
+render is what the following sweeps got back, and the pin could not reach a copy that was
+never re-rendered. Whether that cache is shared beyond this account is not stated in the
+documentation and is unverified.
+
+`maxAge: 0`, which the documentation names as the way to force a fresh scrape, was added
+to the custom body and proved on execution 6443. All five Firecrawl sources came back
+fresh with status 200. Meta Content came back in en-US for the first time in three sweeps,
+no British spellings and 41 American, 29,127 characters of markdown, all three lead-ins
+answered by body text, the Tragedy or conflict section present, no hollow sections. The
+diff read 45 blocks added and 70 removed, which the verdict called a spelling swap plus a
+cookie banner leaving, not material, and filed to the row. Meta Partner, both X pages and
+TikTok were unchanged against their baselines.
+
+Whether `location` now holds the locale steady cannot be proven from one fresh sweep. The
+claim on record is narrower: with the cache bypassed, one render came back en-US. The
+10:00 UTC scheduled firing is the second sample.
+
+What this costs. A fresh scrape is slower and Firecrawl's documentation says it fails more
+often. 6443 took 2 minutes 5 seconds against 6442's 2 minutes 9 seconds, so no cost showed
+on this run. A failure is reported on the row as Fetch failing, never silently, and the
+next morning retries.
+
+What the earlier figures in this doc still mean. Every Firecrawl-path result recorded
+above, 6430 through 6437, was produced without `maxAge` set. The 6430 capture itself was
+fresh, because it differed from every capture before it, but the stability figures from
+6430 to 6437 may include cache hits and are weaker evidence of page stability than they
+read as above. The pre-registered grep test was re-run on 6443 and passed on a capture
+that is known to be fresh.
+
+The Firecrawl node note now reads 150 scrapes a month, names `maxAge` as load bearing, and
+records why. Published as `activeVersionId 138e7ceb` at about 06:33 UTC, before
+the first scheduled firing at 10:00 UTC.
+
 ## Stated, not papered over
 
 - The completeness rule was measured on the five Firecrawl pages before deployment and on
   the four plain HTTP pages only by proving run. A false positive there shows as Fetch
   failing; 6436 produced exactly one, since fixed.
-- Meta serves its help pages in more than one English locale and Firecrawl gets whichever
-  it gets. 6437 saw the en-GB spelling and read it as 116 moved blocks. The verdict caught
-  it, and append-only means it cost a Claude call and nothing else, but every locale flip
-  will fire until the scrape pins `location` to a country and language. Not added tonight:
-  one more untested option four hours before the first scheduled scan is the wrong trade.
+- Meta's locale flips, read as 116 moved blocks on 6437, traced to Firecrawl's two day
+  default cache rather than to Meta alone; see the section above. `maxAge: 0` and a US
+  English `location` are live; only the cache bypass is proven, the pin has one sample.
 - YouTube Advertiser-friendly guidelines runs at 733 blocks and 76,868 characters, over
   the 30,000 character snippet cap, so on that page a removed block is reported as a
   count and its text is not retained. The prompt says so and forbids guessing what it
   said. Every other watched page is under the cap and keeps removed text.
 - `onlyMainContent: false` admitted roughly 28 footer blocks on each X page. A footer
   edit on X now fires a verdict until the learning classes those blocks as chrome.
-- The Firecrawl node note still says roughly 120 scrapes a month; with five Firecrawl
-  sources it is 150.
 - `view_sales` on the Gumroad token is inferred from the endpoint accepting it, not
   proven by a successful sale read.
 - TQO FINAL V5 was published at 05:35 UTC on Tee's ruling with its six schedule triggers
   disabled first, `activeVersionId 73efec8d`, trigger count seven: the webhooks behind his
   Shortcuts, the run links and the Gumroad guard are live, and nothing runs unattended.
   Each schedule is re-enabled as its own named act.
-- The DEVON thread log entry for this session was not filed. A safety classifier in the
-  session blocked the Notion write and a local file write of the same content.
-- The Context Pill needs updating: TQO and NCO Forge are presenter led with owned
-  likeness and cloned voice; the faceless framing is retired.
+- The DEVON thread log for this arc was filed on 2026-09-08 after #166 merged, two pages:
+  Tee's Gumroad credential receipt verbatim, and the sensor arc. The Context Pill pointer
+  was revised the same morning: faceless framing retired, OS 29 live, V5 published dark.
 - X's "created or posted using automated means" exclusion is unresolved against an AI
   scripted, AI voiced pipeline and needs a ruling before TQO plans X revenue.
 
@@ -356,8 +402,8 @@ TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_os29-platform-policy-sensor_v2_2026-09-08
 DATE: 2026-09-08
 DECISIONS: Tee ruled a block-level diff with self-learned volatile blocks over a similarity threshold; fix the Firecrawl capture rather than the comparison; watch the X successor as a new row and leave his curated note alone; Systems primary and Money cross-reference for the Gumroad credential; no calendar rotation for the Gumroad token, scope reduction and exposure triggers instead; the Gumroad Application ID and Secret stay unwired
-FINDINGS: the v1 coverage claim was true of fetch and false of capture, Meta Content Monetization had three hollow policy sections since the sensor was built; root cause was waitFor 0 and onlyMainContent true, both Firecrawl defaults in force because the node sent no options; the fix's own first two runs pushed seven real policy blocks on Meta Partner over the two flip threshold and silenced them for eleven minutes until the indexes were cleared, and the mechanism is standing, with no signal to a human when it fires; execution 6424 produced two false MATERIAL alarms from the hollow capture, one of them reporting a removal that never happened, and execution 6430 produced two real MATERIAL verdicts which execution 6431 overwrote, restored by hand at 05:35 UTC; the Tragedy or conflict restriction governing NCO Forge on Facebook was never captured before tonight; the March 3 2026 AI conflict disclosure rule carries over into X Original Content Rewards verbatim; validate_node_config returns valid for anything on community nodes; Gumroad returns 200 not 404 for a missing sale
-OPEN: view_sales inferred not proven; V5 published with schedules disabled, activeVersionId 73efec8d; thread log entry unfiled after a classifier block; Context Pill stale on the faceless framing; X automated means exclusion needs a ruling
-STATUS: OS 29 active, activeVersionId 38857d14, daily 06:00 America/New_York, nine sources watched, completeness rule live on both paths, AI Verdict append only, silencing routed to the notify path, rawHtml dropped, zero volatile blocks, both restored MATERIAL verdicts intact with newer verdicts stacked above them; the first scheduled firing is 10:00 UTC on 2026-09-08, the same morning, and a check-in is armed for 10:20 UTC that day
+FINDINGS: the v1 coverage claim was true of fetch and false of capture, Meta Content Monetization had three hollow policy sections since the sensor was built; root cause was waitFor 0 and onlyMainContent true, both Firecrawl defaults in force because the node sent no options; the fix's own first two runs pushed seven real policy blocks on Meta Partner over the two flip threshold and silenced them for eleven minutes until the indexes were cleared, and the mechanism is standing, with no signal to a human when it fires; execution 6424 produced two false MATERIAL alarms from the hollow capture, one of them reporting a removal that never happened, and execution 6430 produced two real MATERIAL verdicts which execution 6431 overwrote, restored by hand at 05:35 UTC; the Tragedy or conflict restriction governing NCO Forge on Facebook was never captured before tonight; the March 3 2026 AI conflict disclosure rule carries over into X Original Content Rewards verbatim; validate_node_config returns valid for anything on community nodes; Gumroad returns 200 not 404 for a missing sale; Firecrawl's documented default maxAge of two days meant every Firecrawl sourced sweep could be served a cached copy, fixed with maxAge 0 and proven fresh on execution 6443
+OPEN: view_sales inferred not proven; V5 published with schedules disabled, activeVersionId 73efec8d, each schedule re-enabled as its own named act when Tee can watch it; the location pin has one fresh sample and the 10:00 UTC firing is the second; X automated means exclusion needs a ruling
+STATUS: OS 29 active, activeVersionId 138e7ceb, daily 06:00 America/New_York, nine sources watched, Firecrawl on a custom body with maxAge 0 and US English location, completeness rule live on both paths, AI Verdict append only, silencing routed to the notify path, rawHtml dropped, zero volatile blocks, both restored MATERIAL verdicts intact with newer verdicts stacked above them; the first scheduled firing is 10:00 UTC on 2026-09-08, the same morning, and a check-in is armed for 10:20 UTC that day
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
