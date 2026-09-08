@@ -723,7 +723,7 @@ WORKFLOWS = {
     # holds no key: it is not a key holder and never enters the twenty.
     # Machine verdicts write to AI Verdict; the Assessment column is Tee's
     # research and the workflow must never write it again.
-    "OS 29 Platform Policy Sensor": {"id": "7WyIarNoJa2irx2r", "state": "active since 2026-09-08, daily 06:00 America/New_York, timezone pinned the same day, eight of eight sources watched with a Firecrawl fallback on Gateway credits for the four plain HTTP cannot read"},
+    "OS 29 Platform Policy Sensor": {"id": "7WyIarNoJa2irx2r", "state": "active since 2026-09-08, daily 06:00 America/New_York, timezone pinned the same day, nine sources watched once the X Original Content Rewards successor was added, activeVersionId 9a235eaa; the Firecrawl fallback on Gateway credits runs with a custom body (waitFor 15000, onlyMainContent false, rawHtml carried) because the node defaults captured hollow policy sections on Meta Content Monetization from the day the sensor was built, found and fixed the same night; comparison is a block level diff with a two flip volatile rule; the per heading completeness assertion that would catch a future partial capture is NOT built"},
     "Live State Ledger": {"id": "z9j2I8h0RnbDKGBO", "state": "active"},
     # Builds 01, 03, 04, 06 and 07, the organs the driver walks a job through.
     # Live since 2026-08-23 and 08-24 but never registered here until 2026-09-05,
