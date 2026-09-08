@@ -4,7 +4,7 @@ type: TQO_CANON
 version: 1
 date: 2026-09-08
 area: TQO (NCO and Systems cross reference)
-status: benchmark-pulled-and-read-rulings-filed-to-thread-log-soul-write-pending-proof
+status: benchmark-pulled-and-read-twelve-rulings-in-tee-soul-layer-per-execution-6513-console-count-owed
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 base: 17e1ce5
 branch: claude/youtube-content-analysis-2z323s
@@ -30,9 +30,10 @@ count in this document was computed from that file by script, not remembered.
 Twelve rulings for TQO and NCO were derived from the read and filed to the
 Notion Thread Log as numbered Decisions, which is the only sanctioned path
 into `tee-soul-layer`: the Soul Layer Write-Back polls that log and embeds one
-record per numbered ruling. The Pinecone write is therefore automatic and
-proven only by the workflow's execution record and the console, and section 9
-says which of those this session could read.
+record per numbered ruling. Tee ruled "ok, soul layer and file it" at 15:27 UTC; the page went in at
+15:28:32, the 15:30:59 poll picked it up as execution 6513, and Pinecone
+answered HTTP 201 for twelve records. Section 9 carries that proof and the one
+step only the console can supply.
 
 ## 1. What was pulled, and what was not
 
@@ -357,7 +358,7 @@ its exemplar library as 1.1.0 is a Tee-owned step named in section 10.
 |---|---|---|
 | This document and the evidence JSON | committed on the designated branch, draft PR | commit and PR in the receipt |
 | Notion Thread Log page | created 2026-09-08 15:28:32 UTC on Tee's ruling ("ok, soul layer and file it"), page id `3d568ff5-0db6-81ac-b2e4-f817cc57a833`, twelve numbered Decisions, Area TQO, NCO, Systems; read back in rows mode with the twelve lines separated by line breaks before the 15:30:59 poll | https://app.notion.com/p/3d568ff50db681acb2e4f817cc57a833 |
-| `tee-soul-layer`, namespace `rulings` | written by workflow `edIJx7Q3FXTawg9J` on its next quarter-hour poll after 15:28:32 UTC, twelve records with ids `3d568ff5-0db6-81ac-b2e4-f817cc57a833-d1` to `-d12` | the workflow's execution record (status, HTTP code, count) is read back in this session and stated in the receipt; the Pinecone console is the only proof a record exists, and only Tee can open it |
+| `tee-soul-layer`, namespace `rulings` | written by workflow `edIJx7Q3FXTawg9J` execution 6513 (trigger, 15:30:59.032Z to 15:31:04.182Z, status success): Split Rulings emitted twelve items with ids `3d568ff5-0db6-81ac-b2e4-f817cc57a833-d1` to `-d12`, none truncated, area "TQO, NCO, Systems"; Upsert To Soul Layer received HTTP 201 Created at 15:31:02 GMT with `x-pinecone-request-lsn: 15` and 795 ms latency; Confirm Or Alert reported "Soul Layer: 12 ruling(s) filed" and the Notify node emailed Tee | the execution record above, read in this session through the n8n MCP; the Pinecone console is the only proof a record exists, and only Tee can open it |
 | `devon-soul`, `devon-subconscious` | untouched | by design: the committer is approval-gated and the subconscious takes only the learning lane |
 
 Boundary note. The Write-Back's sticky note records the 2026-08-20 ruling
@@ -371,7 +372,8 @@ not open either.
 ## 10. Unverified, open, and what the next session does
 
 - Whether the twelve records exist in Pinecone is proven by the console, not
-  by the workflow's 200. Tee opens the console once and counts.
+  by the workflow's 201. Tee opens the console once and counts records whose
+  id starts with `3d568ff5-0db6-81ac-b2e4-f817cc57a833`.
 - `fCEpoioDzQA` and `jIPIy5XbYb0` are assumed comment-gated from title and
   count; their transcripts were not pulled.
 - `tYnuf6-kXT8` is assumed to be an interview clip from its title and its
@@ -403,5 +405,39 @@ not open either.
 | R-07 | The AI disclosure block on the linked video | its description as returned by `get_videos_by_ids` | TOOL_VERIFIED |
 | R-08 | The Write-Back's mechanics: polls the Thread Log every 15 minutes, reads only Decisions, splits on numbered lines, caps 6,000 characters, upserts to `tee-soul-layer` namespace `rulings` on credential `3XjKfxbS7zFWEa48` | n8n `get_workflow_details("edIJx7Q3FXTawg9J")` 2026-09-08, active version `a760bbc2` | TOOL_VERIFIED |
 | R-09 | Recent Write-Back executions succeed in about four seconds at the quarter hour (6473 at 10:15:59Z, 6446, 6445 today) | n8n `search_workflow_executions` 2026-09-08 | TOOL_VERIFIED |
+| R-12 | Execution 6513: twelve records split, HTTP 201 from Pinecone, twelve filed, email sent | n8n `get_workflow_execution("edIJx7Q3FXTawg9J", "6513")` with node data, read 2026-09-08 about 15:32 UTC | TOOL_VERIFIED |
+| R-13 | The Thread Log page exists with twelve numbered Decisions separated by line breaks, Area TQO, NCO, Systems, logged 15:28:32Z | Notion rows-mode query on `collection://a5bcfbf5-ce1d-493b-9992-a11bc2a03dc4` after the create | TOOL_VERIFIED |
 | R-10 | Canon figures in section 8's left column | `aaa-flagship-canon/provenance-ledger.md` rows PL-01, PL-06 | SOURCE_VERIFIED (read this session) |
 | R-11 | Format labels, the mechanic table, and the rulings | Claude's reading of R-03 and R-05 | INFERRED, labelled |
+
+## 12. DEVON RECEIPT
+
+```
+DEVON RECEIPT
+platform: Claude
+date: 2026-09-08
+area: TQO, NCO, Systems
+files_opened: CLAUDE.md; docs/devon/SYS_SPEC_devon-ecosystem_v1_2026-08-26.md (memory index section); docs/devon/SYS_OPS_devon-learning-capture-and-execution-burn_v1_2026-09-06.md (head); docs/devon/DEVON.md (grep for capture); services/devon/vault.py (devon-capture entry); services/devon/receipts.py; services/devon/naming.py; services/devon/ecosystem.py (memory index section); services/devon/areas.py (labels); app/services/soul.py; app/core/config.py (grep); .claude/skills/devon-learning-lane/SKILL.md and references/ids-and-contracts.md, n8n-conventions.md, runbook.md (Pinecone sections); .claude/skills/devon-grill/SKILL.md; .claude/skills/steward/SKILL.md; aaa-flagship-canon SKILL.md, references/exemplar-library.md, changelog.md, manifest.json, provenance-ledger.md; devon-thread-log SKILL.md; n8n workflow edIJx7Q3FXTawg9J definition and execution 6513; Notion Thread Log schema and its four newest entries
+summary: Tee linked one Vaibhav Sisinty video and asked for his top performing videos and Shorts to be read as the model for TQO and NCO content and saved to the Pinecone index DEVON recalls from. vidIQ supplied channel stats, the fifty most popular long forms, the fifty most popular Shorts and fifteen transcripts; the pull is saved as an evidence JSON and every count in the record was computed from it by script. Twelve rulings were derived, Tee ruled soul layer and file it, and the Thread Log page carrying them was upserted to tee-soul-layer by the Write-Back with HTTP 201 for twelve records.
+decisions:
+Tee ruled 2026-09-08: soul layer, file it. The rulings go to tee-soul-layer, not to devon-subconscious, and the analysis body stays out of the soul index as world knowledge.
+Twelve TQO and NCO content rulings adopted as filed on Thread Log page 3d568ff5-0db6-81ac-b2e4-f817cc57a833 (cold open with numbered Learning Objective inside 30 seconds; one-line credibility beat after the hook; the weekly roundup shape; a real-stakes test with pass criteria and a limitation beat; one analogy per new term; recap plus one ask plus next episode; one comment keyword per Short delivered within 24 hours; interview clips first and re-post after 90 days; named-entity titles with a series suffix; the compliance line with disclosure up front; filing through the Write-Back only). Each is Claude derived on Tee's instruction and Tee can overrule any line.
+The benchmark refresh is recorded as docs/devon/TQO_CANON_sisinty-benchmark-refresh_v1_2026-09-08.md, extending aaa-flagship-canon 1.0.0 rather than superseding it.
+open_threads:
+Tee opens the Pinecone console once and counts the records whose id starts with the page id; the 201 is the workflow's claim, the console is the proof.
+The fresh critic pass on the doc had not reported when Tee ruled to file; its findings land as a further commit on PR #175, and a finding against a ruling means deleting that record by id and editing the Decisions line.
+PR #175 is a draft and merges only on Tee's word.
+aaa-flagship-canon 1.1.0: merge the re-post and interview-clip findings and the delta table into the account-level skill; Tee-owned because the skill store is not writable from a web session.
+The devon-thread-log skill lists eight Areas while the Notion schema carries nine (ACX); already open on the 2026-09-08 sensor page.
+artifacts:
+docs/devon/TQO_CANON_sisinty-benchmark-refresh_v1_2026-09-08.md (PR #175, commits 7ded440, 831dca9 and the proof commit after this line)
+docs/devon/assets/TQO_PROOF_sisinty-benchmark-pull_v1_2026-09-08.json
+Notion Thread Log page https://app.notion.com/p/3d568ff50db681acb2e4f817cc57a833
+tee-soul-layer records 3d568ff5-0db6-81ac-b2e4-f817cc57a833-d1 to -d12 (n8n execution 6513, HTTP 201)
+unverified:
+That the twelve records exist in Pinecone (console only).
+That fCEpoioDzQA and jIPIy5XbYb0 are comment gated and that tYnuf6-kXT8 is an interview clip (transcripts not pulled).
+The benchmark's own figures (11.7 percent, 56 percent, 94 percent, 50 million, 700 Klarna staff).
+Why the vidIQ meter charged 70 credits for fifteen transcript calls listed at 5 each.
+TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
+```
