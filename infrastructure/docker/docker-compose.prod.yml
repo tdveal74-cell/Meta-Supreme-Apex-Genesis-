@@ -83,10 +83,15 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d meta_supreme"]
+      # Over TCP on purpose. While the initdb scripts run on a fresh volume
+      # the image serves a temporary server on the unix socket only, so a
+      # socket check reads healthy before the roles exist and migrate would
+      # start against a server that refuses its connection.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d meta_supreme"]
       interval: 5s
       timeout: 5s
       retries: 12
+      start_period: 30s
     command:
       - postgres
       - -c

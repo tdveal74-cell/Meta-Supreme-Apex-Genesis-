@@ -954,3 +954,95 @@ async def test_the_written_out_escape_for_nul_is_ordinary_text(db_session):
     )
     payload = await ledger.verify_provenance(db_session, owner_id=owner_id, intent_id=intent_id)
     assert payload["chain"]["intact"] is True
+
+
+# ---------------------------------------------------------------------------
+# What the fourth gauntlet pass added (2026-09-08).
+# ---------------------------------------------------------------------------
+
+
+async def test_a_row_on_another_owners_intent_leaves_with_its_own_owner(db_session):
+    """An event carries its own owner as well as its intent, and both foreign
+    keys cascade. The fourth pass planted a row owned by B on A's intent and
+    found that B could no longer be deleted: the guard asked about the intent
+    only. It now admits the delete when either parent is gone, and still
+    refuses the row while both stand."""
+    owner_id = await _owner(db_session)
+    other = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id)
+    issued = await _receipt(db_session, owner_id, intent_id)
+    await db_session.execute(
+        text(
+            "INSERT INTO events (intent_id, owner_id, name, sequence_no, payload) "
+            "VALUES (:i, :o, 'CONTEXT_LOADED', 99, '{}'::jsonb)"
+        ),
+        {"i": intent_id, "o": other},
+    )
+    # Planted, the row is named: an unhashed row after hashed ones.
+    payload = await ledger.verify_provenance(db_session, owner_id=owner_id, intent_id=intent_id)
+    assert payload["verified"] is False
+    # Aimed at directly, it is refused while its intent and its owner stand.
+    refusal = await _refused(
+        db_session, f"DELETE FROM events WHERE intent_id = '{intent_id}' AND sequence_no = 99"
+    )
+    assert "may not be deleted" in refusal
+    # Its own owner's removal takes it, and A's chain is whole again.
+    await db_session.execute(text("DELETE FROM users WHERE id = :u"), {"u": other})
+    left = await db_session.execute(
+        text("SELECT COUNT(*) FROM events WHERE intent_id = :i AND sequence_no = 99"),
+        {"i": intent_id},
+    )
+    assert left.scalar_one() == 0
+    payload = await ledger.verify_provenance(db_session, owner_id=owner_id, intent_id=intent_id)
+    assert payload["verified"] is True
+    assert payload["chain"]["length"] == 5
+    assert payload["receipt"]["head_hash"] == issued["head_hash"]
+    await db_session.rollback()
+
+
+async def test_a_rerouted_intent_or_a_flipped_effect_flag_is_named_by_the_verifier(db_session):
+    """Negative control behind the intents trigger: the channel and the effect
+    flag are hashed in the opening event, so a change to either behind the
+    trigger is named rather than read on trust."""
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id)
+    await _receipt(db_session, owner_id, intent_id)
+    await db_session.execute(text("ALTER TABLE intents DISABLE TRIGGER trg_intents_state_only"))
+    try:
+        await db_session.execute(
+            text("UPDATE intents SET channel = 'email', is_effect = TRUE WHERE id = :i"),
+            {"i": intent_id},
+        )
+    finally:
+        await db_session.execute(
+            text("ALTER TABLE intents ENABLE ALWAYS TRIGGER trg_intents_state_only")
+        )
+    payload = await ledger.verify_provenance(db_session, owner_id=owner_id, intent_id=intent_id)
+    assert payload["verified"] is False
+    assert payload["chain"]["intact"] is False
+    assert any("rerouted" in f for f in payload["chain"]["findings"])
+    assert any("effect flag" in f for f in payload["chain"]["findings"])
+    await db_session.rollback()
+
+
+async def test_a_state_moved_by_hand_is_named_by_the_verifier(db_session):
+    """The trigger admits a state move because the writer makes them. A state
+    the events do not derive is a hand on the row, from any role with
+    UPDATE, and the verifier says so. The writer's own moves still verify."""
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id)
+    read = await ledger.read_intent(db_session, owner_id=owner_id, intent_id=intent_id)
+    assert read["intent"]["state"] == "completed"
+    await _receipt(db_session, owner_id, intent_id)
+    payload = await ledger.verify_provenance(db_session, owner_id=owner_id, intent_id=intent_id)
+    assert payload["verified"] is True
+
+    await db_session.execute(
+        text("UPDATE intents SET state = 'received' WHERE id = :i"), {"i": intent_id}
+    )
+    payload = await ledger.verify_provenance(db_session, owner_id=owner_id, intent_id=intent_id)
+    assert payload["verified"] is False
+    assert any(
+        "'received'" in f and "'receipted'" in f and "moved by hand" in f
+        for f in payload["chain"]["findings"]
+    )

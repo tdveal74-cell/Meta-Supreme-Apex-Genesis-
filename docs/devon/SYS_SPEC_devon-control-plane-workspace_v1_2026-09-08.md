@@ -190,15 +190,21 @@ is named as such rather than reading as forged.
 
 The database refuses UPDATE on `events` and on `universal_receipts`, and on
 `intents` admits a change to `state` and `updated_at` only: the opening event
-hashes the owner and the statement, so a row handed to another account or
-reworded no longer matches its own first hash and the verifier says so. A
-DELETE on `events` or `universal_receipts` is admitted only once the intent
-is gone, and on `intents` only once the owner is gone: that is what a
-cascade is, the parent has already left the transaction when the referential
-action reaches the child, and a statement aimed at the child while the
-parent stands is refused from any trigger depth. The third gauntlet pass
-showed why depth was the wrong test: a temporary table's trigger deletes at
-depth 2. Every trigger is `ENABLE ALWAYS`, so replica mode does not silence
+hashes the owner, the channel, the statement and the effect flag, so a row
+handed to another account, rerouted, reworded or reflagged no longer matches
+its own first hash and the verifier names the column; a `state` the events do
+not derive is named the same way. The id and the creation time are held by
+the trigger alone and are not hashed, which is the owner credential's
+boundary. A DELETE on `events` or `universal_receipts` is admitted only once
+the intent or the row's own owner is gone, and on `intents` only once the
+owner is gone: that is what a cascade is, the parent has already left the
+transaction when the referential action reaches the child, and a statement
+aimed at the child while every parent stands is refused from any trigger
+depth. The third gauntlet pass showed why depth was the wrong test: a
+temporary table's trigger deletes at depth 2. The fourth showed why a child
+row has two parents: an event owned by one account on another account's
+intent wedged the first account's removal while the guard asked about the
+intent alone. Every trigger is `ENABLE ALWAYS`, so replica mode does not silence
 it. Rows written before 019 carry an empty hash and are counted as unhashed,
 never backfilled, and only as a prefix: an unhashed row standing after
 hashed rows was written around the writer and is named as a break.
@@ -352,7 +358,24 @@ ships. Each door was closed at the root and re-measured:
 | A 400 digit integer in a wire number overflowed `float()` and killed the socket | finite check after the cast | the overflow is caught and refused by name, the socket stays up |
 | The six ordinary characters of a written out NUL escape were refused as a NUL | the check read the rendered text | the check walks the values themselves |
 
-The fourth pass is recorded in the receipts below.
+A fourth fresh critic attacked the third fix commit and returned
+PASS-WITH-CONDITIONS: security 5, verification 4, every dimension 4 or
+above, mean 4.5. It confirmed every third pass fix, ran its battery as a real
+`devon_api` login rather than a role switch, and found no path from the
+shipped role to a verified rewrite or an erasure. Its four conditions were
+low blast radius (one denial, two completeness gaps in the verifier, one doc
+over claim, one plausible first boot race) and were closed in the commit after
+0b7c36b and re-measured. The three revise cycles the gauntlet allows were
+spent on the passes above, so this closure is author verified with
+reproducing tests and was not put before a fifth critic. Tee rules whether
+that is enough.
+
+| Condition | Was | Now |
+|---|---|---|
+| An event or receipt owned by B on A's intent could not be taken by B's removal: the delete guard asked about the intent only, so deleting the user was refused | one parent checked | either parent's removal admits the delete and both standing refuses it; the planted row itself is named by the verifier; proved with a negative control |
+| The verifier compared the owner and the statement only, while the opening event also hashed the channel; a `state` moved by hand read `verified true` | two columns compared | the opening event hashes the effect flag too; the verifier compares owner, channel, statement and effect flag against the opening event, and the state column against what the events derive, and names each |
+| The 019 header and the trigger message said the effect flag and the creation time were certified by the chain; only the trigger held them | doc over claim | the effect flag is hashed; the id and the creation time are stated as trigger held and not hashed |
+| The postgres healthcheck answered over the unix socket, which the image's first boot init server also serves, so `migrate` could start before the roles existed (plausible; no daemon here to run it) | socket check | `pg_isready -h 127.0.0.1` with a 30 s start period; the init server does not listen on TCP |
 
 ## Receipts for this arc
 
@@ -362,15 +385,15 @@ the exit code captured directly rather than through a pipe.
 | Check | Command | Result |
 |---|---|---|
 | Pure provenance, integrity, ecosystem | `python3 -m pytest -q test_devon_provenance.py test_devon_integrity.py test_devon_ecosystem.py` | 232 passed, exit 0 |
-| Ledger against PostgreSQL 16, with negative controls | `python3 -m pytest -q test_live_state_ledger_provenance.py test_live_state_ledger.py test_devon_knowledge_loop_binding.py` | 71 passed, exit 0, on a test database rebuilt from the schema files; includes the `devon_api` role built from its two SQL files and refused on create, temporary table, temporary function, truncate, disable trigger, replica mode, `alembic_version`, deleting users and every direct ledger delete, while a workflow delete succeeds; and the depth 2 trigger attack itself, run as the owner, refused by the parent-gone rule |
+| Ledger against PostgreSQL 16, with negative controls | `python3 -m pytest -q test_live_state_ledger_provenance.py test_live_state_ledger.py test_devon_knowledge_loop_binding.py` | 74 passed, exit 0, on a test database rebuilt from the schema files; includes the `devon_api` role built from its two SQL files and refused on create, temporary table, temporary function, truncate, disable trigger, replica mode, `alembic_version`, deleting users and every direct ledger delete, while a workflow delete succeeds; the depth 2 trigger attack itself, run as the owner, refused by the parent-gone rule; a foreign owner's row taken only by that owner's removal; a rerouted channel, a flipped effect flag and a state moved by hand each named by the verifier |
 | Alembic round trip | `alembic upgrade head`, `alembic downgrade 018_schema_convergence`, `alembic upgrade head` on a fresh database | all three exit 0, head reads `019_event_hash_chain`, the downgrade removes all six triggers and all three functions, the upgrade restores all six as `ENABLE ALWAYS` |
-| The two schema builds agree | `scripts/schema_shape.py` on the Alembic build and on the SQL build, diffed | identical; `019_event_hash_chain.sql` applied twice in a row without error; all six triggers present |
+| The two schema builds agree | `scripts/schema_shape.py` on the Alembic build and on the SQL build, diffed | identical at 687 shape lines; `019_event_hash_chain.sql` applied twice in a row without error; all six triggers `ENABLE ALWAYS` and the delete guard's body byte identical in both builds |
 | The role and grants scripts as shipped | `psql -v api_password=... -f initdb/sql/api-role.sql` (real psql interpolation, through `set_config`), then `python3 database/grants/apply_devon_api.py` as the owner, on the SQL built test database and on an Alembic built one | both exit 0, seven grant statements; as `devon_api`: DELETE on `workflows` true, on `events` and `users` false, `alembic_version` SELECT true and UPDATE false, TEMP false, CREATE on the schema false |
 | Standalone job, exactly as CI runs it | `env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q` over the ten offline files | 137 passed, exit 0 |
 | Container contract import | `env -u PYTHONPATH DEFAULT_AI_PROVIDER=mock python3 -c "from app.main import app; ..."` | exit 0 |
 | Engine job | `python3 -m pytest -q test_council.py test_phase4_council.py test_security.py` with the two deselects | 25 passed, exit 0 |
 | Soul host vendoring | `python3 -m pytest -q test_deploy_soul.py test_deploy_soul_operator.py test_deploy_soul_conflict_policy.py` | 112 passed, exit 0 (`provenance.py` vendored byte for byte) |
-| Production compose | `docker compose --env-file <filled example> -f infrastructure/docker/docker-compose.prod.yml --profile executor config -q` | exit 0; seven services with the profile, six without (`migrate` added); a missing `SECRET_KEY` refuses with its own message; read back from the resolved file: only `migrate` holds the owner URL, `api` holds `devon_api` and the receipt keys, `presence` holds no database URL, `n8n` connects as `n8n` |
+| Production compose | `docker compose --env-file <filled example> -f infrastructure/docker/docker-compose.prod.yml --profile executor config -q` | exit 0; seven services with the profile, six without (`migrate` added); a missing `SECRET_KEY` refuses with its own message; read back from the resolved file: only `migrate` holds the owner URL, `api` holds `devon_api` and the receipt keys, `presence` holds no database URL, `n8n` connects as `n8n`, and the postgres healthcheck resolves to `pg_isready -h 127.0.0.1` with a 30 s start period |
 | The example env starts the presence service | `PresenceSettings.from_env()` under the filled example with `ENVIRONMENT=production`, then `create_app` | starts, inference `mock`, no fallback; the same with `PRESENCE_INFERENCE=cerebras` and no key refuses and names `PRESENCE_INFERENCE` |
 | Web typecheck and build | `npx tsc --noEmit`; `npx next build` | both exit 0; route `/presence` 1.44 kB first load 107 kB |
 | Pure presence modules | `node --experimental-strip-types scripts/presence-check.ts` | 12 checks passed, exit 0 |
@@ -381,7 +404,7 @@ the exit code captured directly rather than through a pipe.
 | Headless browser through the live presence service, on the post gauntlet code | Playwright against `next start` and the mock presence service, with a DEVON JWT minted under the service's key placed in the shared storage slot | socket `ready`; `say` reached `speaking` after 262 ms; 62 frames received, the freshest shown and 37 skipped by the software renderer at 17 fps; face age 1 ms, behind 68 ms; the HUD Interrupt button acked by the server in 0.7 ms with 823 frames flushed server side and 13 client side; state back to `listening`; server metrics reconcile at 70 sent plus 823 dropped; a LiveKit token asked for a foreign room answers 503 while LiveKit is unset, and 403 once it is configured (proved in `test_presence_service.py`) |
 | Headless browser with a fake microphone | the same run with Chromium's fake media device | the microphone opened (`live`) but the fake device delivered silence (rms 0.000), so the voice trigger never fired; the mic reaction figure stays unmeasured and only the manual path is proved |
 | Dash ban | `grep -rn` for the two banned marks over every file this arc wrote | clean |
-| Full API suite, presence tests included | `python3 -m pytest -q --tb=short` | 1541 passed, exit 0, 174 s |
+| Full API suite, presence tests included | `python3 -m pytest -q --tb=short` | 1544 passed, exit 0, 170 s |
 | Lint | `python3 -m ruff check .` | All checks passed, exit 0 |
 
 The 28 fps figure is the software renderer in a container and says nothing

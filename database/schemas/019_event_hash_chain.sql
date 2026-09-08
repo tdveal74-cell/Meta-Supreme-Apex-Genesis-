@@ -33,11 +33,14 @@
 --   to delete users can open it.
 --
 --   BEFORE UPDATE on intents admits changes to state and updated_at, which
---   are the two columns the writer moves, and refuses every other column:
---   the intent's id, owner, channel, statement, effect flag and creation
---   time are part of what the chain certifies (the opening event hashes the
---   owner and the statement), and an intent handed to another owner or
---   reworded after the fact is a rewrite.
+--   are the two columns the writer moves, and refuses every other column.
+--   The owner, channel, statement and effect flag are certified by the
+--   chain (the opening event hashes them) and the verifier names a row that
+--   disagrees with its own first event; the id and the creation time are
+--   held by this trigger alone and are not hashed, so a change to them
+--   behind the trigger is the owner credential's boundary, not something
+--   the verifier can see. The state column is derived from the events, and
+--   the verifier names a row whose state its events do not derive.
 --
 --   Every trigger is ENABLE ALWAYS, so session_replication_role = replica,
 --   which silences ordinary triggers, does not silence these.
@@ -88,22 +91,29 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- A child row may leave only once its parent is already gone. During a
+-- A row may leave only once one of its parents is already gone. During a
 -- cascade the referential action runs after the parent's own delete, so the
 -- parent is absent from this transaction's view; a statement aimed at the
--- child, from any depth, still sees the parent standing and is refused.
+-- row itself, from any depth, still sees every parent standing and is
+-- refused. An intent has one parent, its owner. An event or a receipt has
+-- two, its intent and its own owner, and both foreign keys cascade: the
+-- fourth gauntlet showed that asking about the intent alone wedged the
+-- removal of a user who owned a row on someone else's intent.
 CREATE OR REPLACE FUNCTION ledger_refuse_delete() RETURNS TRIGGER AS $$
 DECLARE
-    parent_present BOOLEAN;
+    every_parent_present BOOLEAN;
 BEGIN
     IF TG_TABLE_NAME = 'intents' THEN
-        SELECT EXISTS (SELECT 1 FROM users WHERE id = OLD.owner_id) INTO parent_present;
+        SELECT EXISTS (SELECT 1 FROM users WHERE id = OLD.owner_id)
+            INTO every_parent_present;
     ELSE
-        SELECT EXISTS (SELECT 1 FROM intents WHERE id = OLD.intent_id) INTO parent_present;
+        SELECT EXISTS (SELECT 1 FROM intents WHERE id = OLD.intent_id)
+            AND EXISTS (SELECT 1 FROM users WHERE id = OLD.owner_id)
+            INTO every_parent_present;
     END IF;
-    IF parent_present THEN
+    IF every_parent_present THEN
         RAISE EXCEPTION 'ledger table % is append only: row % may not be deleted. '
-            'Only the cascade from a removed intent or owner may take it.',
+            'Only the cascade from a removed intent or a removed owner may take it.',
             TG_TABLE_NAME, OLD.id
             USING ERRCODE = 'integrity_constraint_violation';
     END IF;
@@ -120,7 +130,8 @@ BEGIN
         OR NEW.is_effect IS DISTINCT FROM OLD.is_effect
         OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
         RAISE EXCEPTION 'intent % may only move its state: its owner, channel, '
-            'statement, effect flag and creation time are certified by its chain.',
+            'statement and effect flag are certified by its chain, and its id '
+            'and creation time are held by this trigger.',
             OLD.id
             USING ERRCODE = 'integrity_constraint_violation';
     END IF;

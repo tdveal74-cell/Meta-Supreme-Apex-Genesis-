@@ -253,13 +253,15 @@ class LiveStateLedger:
                 prev_hash=hashchain.GENESIS,
                 action_id=None,
                 # The opening event binds the intent's identity into the
-                # chain: who asked, and for what. A row later handed to
-                # another owner or reworded no longer matches its own first
-                # hash, and the verifier says so.
+                # chain: who asked, through which channel, for what, and
+                # whether it was an effect. A row later handed to another
+                # owner, rerouted, reworded or reflagged no longer matches
+                # its own first hash, and the verifier says so.
                 payload={
                     "channel": intent.channel,
                     "owner_id": owner_id,
                     "stated": intent.stated,
+                    "is_effect": is_effect,
                 },
             )
         )
@@ -716,6 +718,18 @@ class LiveStateLedger:
         intent = await self._intent(db, owner_id=owner_id, intent_id=intent_id)
         rows = await self._event_rows(db, intent_id=intent_id)
         verdict = hashchain.verify_chain(intent_id, [_link(row) for row in rows])
+        receipt = await db.execute(
+            select(UniversalReceiptRecord).where(
+                UniversalReceiptRecord.intent_id == intent_id
+            )
+        )
+        row = receipt.scalar_one_or_none()
+
+        # The intent row against its own chain. The opening event hashes who
+        # asked, through which channel, for what, and whether it was an
+        # effect; the state column is derived from the events. A row that
+        # disagrees with either was moved by hand behind the writer, and the
+        # verifier names the column rather than reading the row on trust.
         identity_findings: List[str] = []
         if rows and rows[0].name == "INTENT_RECEIVED" and rows[0].hash:
             opening = dict(rows[0].payload or {})
@@ -724,10 +738,31 @@ class LiveStateLedger:
                     "the intent row names a different owner than its opening event: "
                     "the row was handed to another account after the fact"
                 )
+            if "channel" in opening and opening["channel"] != intent.channel:
+                identity_findings.append(
+                    "the intent row's channel differs from its opening event: "
+                    "the row was rerouted after the fact"
+                )
             if "stated" in opening and opening["stated"] != intent.stated:
                 identity_findings.append(
                     "the intent row's statement differs from its opening event: "
                     "the row was reworded after the fact"
+                )
+            if "is_effect" in opening and bool(opening["is_effect"]) != bool(intent.is_effect):
+                identity_findings.append(
+                    "the intent row's effect flag differs from its opening event: "
+                    "the flag was flipped after the fact"
+                )
+        if rows:
+            expected_state = (
+                ecosystem.IntentState.RECEIPTED.value
+                if row is not None
+                else ecosystem.derive_state([event.name for event in rows]).value
+            )
+            if intent.state != expected_state:
+                identity_findings.append(
+                    f"the intent row reads state '{intent.state}' while its events "
+                    f"derive '{expected_state}': the state column was moved by hand"
                 )
         if identity_findings:
             verdict = hashchain.ChainVerdict(
@@ -740,12 +775,6 @@ class LiveStateLedger:
                 findings=(*verdict.findings, *identity_findings),
             )
 
-        receipt = await db.execute(
-            select(UniversalReceiptRecord).where(
-                UniversalReceiptRecord.intent_id == intent_id
-            )
-        )
-        row = receipt.scalar_one_or_none()
         ring = _signing_ring()
         current_key_id = hashchain.key_id(ring[0])
         receipt_report: Dict[str, Any]
