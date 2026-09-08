@@ -135,11 +135,16 @@ def check_payload(payload: Any) -> Optional[str]:
     """
     # UnicodeEncodeError is a ValueError, so it is caught first or never.
     try:
-        canonical(payload).encode("utf-8")
+        rendered = canonical(payload)
+        rendered.encode("utf-8")
     except UnicodeEncodeError as exc:
         return f"payload carries text UTF-8 cannot encode: {exc.reason}"
     except (TypeError, ValueError) as exc:
         return f"payload carries a value JSON cannot represent: {exc}"
+    # json.dumps escapes a NUL as \u0000, which UTF-8 carries and jsonb does
+    # not: PostgreSQL refuses it at the cast, mid transaction. Refuse it here.
+    if "\\u0000" in rendered:
+        return "payload carries a NUL character, which jsonb cannot store"
     return None
 
 

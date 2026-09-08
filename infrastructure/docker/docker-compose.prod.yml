@@ -14,9 +14,11 @@
 #              API and the presence service read REDIS_URL but neither opens
 #              it yet, and that is stated here rather than implied by a
 #              running container.
+#   migrate    One shot: `alembic upgrade head` as the database owner. A
+#              failed migration keeps the API down on purpose.
 #   api        The FastAPI control plane (Council, ledger, approvals, agent
-#              runtime, operator shell). Runs `alembic upgrade head` before it
-#              accepts traffic; a failed migration keeps it down on purpose.
+#              runtime, operator shell), connected as the devon_api role,
+#              which cannot create, truncate, own or disable anything.
 #   presence   The streaming middleware: DEVON JWT auth, LiveKit token
 #              minting, the WebSocket frame protocol, the sliding window
 #              buffer and the inference circuit breaker.
@@ -31,6 +33,10 @@
 #
 # Every port binds to 127.0.0.1. A TLS terminator (Caddy, Traefik, the host's
 # nginx) fronts this stack; nothing here is meant to face the internet bare.
+# The postgres volume is initialised once: the initdb scripts (n8n database,
+# API role) run on the first start only, which is the image's documented
+# behaviour, so a stack brought up before this revision needs the role
+# created by hand from initdb/sql/api-role.sql.
 # Every secret is `${VAR:?}`: compose refuses to start rather than start with
 # an empty key. Every image is pinned to a digest-stable tag; bump on purpose.
 
@@ -62,6 +68,8 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRES_DB: meta_supreme
+      # Read by initdb/020-api-role.sh on first init to create the runtime role.
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?API_DB_PASSWORD must be set}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # Creates the n8n database and the vector extension on first init only.
@@ -94,14 +102,34 @@ services:
       timeout: 3s
       retries: 12
 
+  # Migrations run as the database owner, once, before the API starts. The
+  # API image's own command also runs alembic; it is overridden below so the
+  # runtime container never holds owner credentials.
+  migrate:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.api
+    image: devon-api:local
+    environment:
+      <<: *python-env
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
     build:
       context: ../..
       dockerfile: infrastructure/docker/Dockerfile.api
     image: devon-api:local
     restart: unless-stopped
+    command: ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
     environment:
       <<: *python-env
+      # The runtime role: DML on every table, no CREATE, no TRUNCATE, no
+      # ownership, no superuser. Created by initdb/020-api-role.sh. This is
+      # what makes the ledger triggers a boundary rather than a suggestion.
+      DATABASE_URL: postgresql+asyncpg://devon_api:${API_DB_PASSWORD:?API_DB_PASSWORD must be set}@postgres:5432/meta_supreme
       PORT: "8000"
       # Receipt signing keys reach the API only. The presence container holds
       # SECRET_KEY to verify sessions and never sees these, so a compromised
@@ -122,6 +150,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3).status == 200 else 1)\""]
       interval: 15s

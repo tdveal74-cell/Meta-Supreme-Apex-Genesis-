@@ -12,24 +12,39 @@
 -- signing live in services/devon/provenance.py; the writer applies them on
 -- every append and every receipt.
 --
--- The database owns the other half, in two triggers per table:
+-- The database owns the other half, in triggers:
 --
---   BEFORE UPDATE refuses any rewrite of an event or a receipt. The ledger
+--   BEFORE UPDATE on events and receipts refuses any rewrite. The ledger
 --   reports the worse truth by appending, never by editing.
 --
---   BEFORE DELETE refuses a statement aimed at the table and admits the
---   cascade from intents and users, because an owner's right to be removed
---   outranks the audit trail. The two are told apart by pg_trigger_depth():
---   a direct DELETE fires this trigger at depth 1, a cascade arrives inside
---   the referential integrity trigger at depth 2 or more. The gauntlet of
---   2026-09-08 showed why the first cut, which left DELETE open, was not
---   enough: deleting the tail of an intent and its receipt, then appending
---   and re-issuing, read as a verified chain.
+--   BEFORE DELETE on events and receipts refuses a statement aimed at the
+--   table and admits the cascade from intents and users. BEFORE DELETE on
+--   intents refuses a statement aimed at intents and admits only the cascade
+--   from users, because an owner's right to be removed outranks the audit
+--   trail while nothing else may take an intent out from under its chain.
+--   Direct and cascade are told apart by pg_trigger_depth(): a direct DELETE
+--   fires the row trigger at depth 1, a cascade arrives inside the
+--   referential integrity trigger at depth 2 or more. The first gauntlet of
+--   2026-09-08 showed why DELETE could not stay open (delete the tail and
+--   the receipt, append, re-issue, verified). The second showed why the
+--   parent needed the same guard (delete the intent, re-insert its id,
+--   replay a different history, verified).
 --
--- TRUNCATE (what the test fixture uses) fires no row trigger and is
--- unaffected. A role that can disable these triggers can rewrite anything;
--- that is the table owner, and the boundary is stated here rather than
--- pretended away.
+--   Every trigger is ENABLE ALWAYS, so session_replication_role = replica,
+--   which silences ordinary triggers, does not silence these.
+--
+-- What the database cannot own is stated rather than pretended away. A role
+-- that can disable or drop these triggers, TRUNCATE the tables, or create a
+-- table with a trigger of its own that deletes at depth 2 can rewrite
+-- history; that is the table owner or a role with CREATE on the schema. The
+-- production compose runs the API as a dedicated role with none of those
+-- rights (infrastructure/docker/initdb/sql/api-role.sql) and runs
+-- migrations as the owner in a separate one-shot step. Proving history to a
+-- reader who does not trust the database at all needs the chain heads
+-- anchored outside it, which is a later gate.
+--
+-- TRUNCATE (what the test fixture uses) fires no row trigger and is a
+-- privilege the runtime role does not hold.
 --
 -- Re-runnable on purpose. Existing rows keep an empty hash and an empty
 -- signature: that is the honest state of a row written before the chain
@@ -79,18 +94,29 @@ DROP TRIGGER IF EXISTS trg_events_append_only ON events;
 CREATE TRIGGER trg_events_append_only
     BEFORE UPDATE ON events
     FOR EACH ROW EXECUTE FUNCTION ledger_refuse_update();
+ALTER TABLE events ENABLE ALWAYS TRIGGER trg_events_append_only;
 
 DROP TRIGGER IF EXISTS trg_events_no_delete ON events;
 CREATE TRIGGER trg_events_no_delete
     BEFORE DELETE ON events
     FOR EACH ROW EXECUTE FUNCTION ledger_refuse_delete();
+ALTER TABLE events ENABLE ALWAYS TRIGGER trg_events_no_delete;
 
 DROP TRIGGER IF EXISTS trg_universal_receipts_append_only ON universal_receipts;
 CREATE TRIGGER trg_universal_receipts_append_only
     BEFORE UPDATE ON universal_receipts
     FOR EACH ROW EXECUTE FUNCTION ledger_refuse_update();
+ALTER TABLE universal_receipts ENABLE ALWAYS TRIGGER trg_universal_receipts_append_only;
 
 DROP TRIGGER IF EXISTS trg_universal_receipts_no_delete ON universal_receipts;
 CREATE TRIGGER trg_universal_receipts_no_delete
     BEFORE DELETE ON universal_receipts
     FOR EACH ROW EXECUTE FUNCTION ledger_refuse_delete();
+ALTER TABLE universal_receipts ENABLE ALWAYS TRIGGER trg_universal_receipts_no_delete;
+
+-- The parent. An intent may leave only inside the cascade from its owner.
+DROP TRIGGER IF EXISTS trg_intents_no_delete ON intents;
+CREATE TRIGGER trg_intents_no_delete
+    BEFORE DELETE ON intents
+    FOR EACH ROW EXECUTE FUNCTION ledger_refuse_delete();
+ALTER TABLE intents ENABLE ALWAYS TRIGGER trg_intents_no_delete;

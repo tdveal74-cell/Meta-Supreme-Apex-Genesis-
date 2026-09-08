@@ -219,7 +219,12 @@ def _require_number(message: Mapping[str, Any], key: str) -> float:
     value = message.get(key)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ProtocolError(f"{message.get('t')}: {key} must be a number")
-    return float(value)
+    number = float(value)
+    # json.loads admits NaN and Infinity. Neither can go back out (the sender
+    # refuses them) and an infinite behind_ms poisoned every later turn.
+    if number != number or number in (float("inf"), float("-inf")):
+        raise ProtocolError(f"{message.get('t')}: {key} must be a finite number")
+    return number
 
 
 def parse_client_message(raw: str) -> Dict[str, Any]:

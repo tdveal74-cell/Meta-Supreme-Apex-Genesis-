@@ -2,19 +2,22 @@
 
 The pure laws are proved in ``test_devon_provenance.py``. These prove the
 writer applies them on every row it writes, that the receipt binds to the chain
-head and verifies under the estate key, and that the two invariants migration
-019 gave the database hold even for a caller that goes around the writer:
+head and verifies under the receipt key, and that the invariants migration 019
+gave the database hold even for a caller that goes around the writer:
 
-* an event or a receipt cannot be rewritten in place (BEFORE UPDATE trigger), and
-* a rewrite that does get past the trigger is named by the verifier, not hidden.
+* an event or a receipt cannot be rewritten in place (BEFORE UPDATE trigger),
+* an event, a receipt or an intent cannot be deleted except inside the cascade
+  from its owner (BEFORE DELETE triggers, ENABLE ALWAYS), and
+* a rewrite that does get past a trigger is named by the verifier, not hidden.
 
-The negative controls disable the trigger for one statement, which only the
+The negative controls disable a trigger for one statement, which only the
 table owner can do, and re-enable it before the test ends. That is the model
 CLAUDE.md asks for: a fix without a negative control is not proven.
 """
 
 from __future__ import annotations
 
+import pathlib
 import uuid
 
 import pytest
@@ -422,29 +425,29 @@ async def test_the_database_refuses_a_direct_delete_of_an_event_or_a_receipt(db_
     await db_session.rollback()
 
 
-async def test_removing_the_intent_or_the_owner_still_cascades(db_session):
+async def test_removing_the_owner_still_cascades(db_session):
     """An owner's right to be removed outranks the audit trail: the cascade
-    is admitted, only a statement aimed at the ledger tables is refused."""
+    from users is admitted through intents, events and receipts. A statement
+    aimed at any of those three tables is refused (proved separately)."""
     owner_id = await _owner(db_session)
     first = await _open_and_walk(db_session, owner_id)
     await _receipt(db_session, owner_id, first)
     second = await _open_and_walk(db_session, owner_id, ["CONTEXT_LOADED"])
 
-    await db_session.execute(text("DELETE FROM intents WHERE id = :i"), {"i": first})
-    left = await db_session.execute(
-        text("SELECT COUNT(*) FROM events WHERE intent_id = :i"), {"i": first}
-    )
-    assert left.scalar_one() == 0
+    await db_session.execute(text("DELETE FROM users WHERE id = :o"), {"o": owner_id})
+    for intent_id in (first, second):
+        intents = await db_session.execute(
+            text("SELECT COUNT(*) FROM intents WHERE id = :i"), {"i": intent_id}
+        )
+        assert intents.scalar_one() == 0
+        left = await db_session.execute(
+            text("SELECT COUNT(*) FROM events WHERE intent_id = :i"), {"i": intent_id}
+        )
+        assert left.scalar_one() == 0
     receipts = await db_session.execute(
         text("SELECT COUNT(*) FROM universal_receipts WHERE intent_id = :i"), {"i": first}
     )
     assert receipts.scalar_one() == 0
-
-    await db_session.execute(text("DELETE FROM users WHERE id = :o"), {"o": owner_id})
-    left = await db_session.execute(
-        text("SELECT COUNT(*) FROM events WHERE intent_id = :i"), {"i": second}
-    )
-    assert left.scalar_one() == 0
 
 
 async def test_a_tail_deleted_behind_the_trigger_is_named_and_cannot_be_appended_to(db_session):
@@ -556,3 +559,219 @@ async def test_a_rotated_key_still_verifies_through_the_ring(db_session, monkeyp
     )
     assert payload["verified"] is False
     assert any("not in the ring" in f for f in payload["receipt"]["findings"])
+
+
+# ---------------------------------------------------------------------------
+# What the second gauntlet pass added (2026-09-08).
+# ---------------------------------------------------------------------------
+
+async def test_a_nul_in_a_payload_is_refused_at_the_door(db_session):
+    """jsonb refuses a NUL escape at the cast, mid transaction, which was a
+    500. The door refuses it first, by name, and nothing is written."""
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id, [])
+    with pytest.raises(LedgerRefused) as caught:
+        await ledger.append_event(
+            db_session,
+            owner_id=owner_id,
+            intent_id=intent_id,
+            name="CONTEXT_LOADED",
+            payload={"k": "a\u0000b"},
+        )
+    assert any("NUL" in reason for reason in caught.value.reasons)
+    # The transaction is still usable: the refusal happened before any SQL.
+    read = await ledger.read_intent(db_session, owner_id=owner_id, intent_id=intent_id)
+    assert len(read["events"]) == 1
+
+
+async def test_a_nul_over_http_is_a_409(client, auth_headers):
+    opened = await client.post(
+        "/api/v1/ledger/intents",
+        json={"channel": "chat_voice", "stated": "nul over http"},
+        headers=auth_headers,
+    )
+    intent_id = opened.json()["intent_id"]
+    response = await client.post(
+        f"/api/v1/ledger/intents/{intent_id}/events",
+        json={"name": "CONTEXT_LOADED", "payload": {"k": "a\u0000b"}},
+        headers=auth_headers,
+    )
+    assert response.status_code == 409, response.text
+    assert "NUL" in response.text
+
+
+async def test_the_database_refuses_a_direct_delete_of_an_intent(db_session):
+    """The parent row: deleting it, re-inserting its id and replaying a
+    different history read as verified in the second pass."""
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id)
+    with pytest.raises(DBAPIError) as caught:
+        await db_session.execute(text("DELETE FROM intents WHERE id = :i"), {"i": intent_id})
+    assert "intents" in str(caught.value) and "may not be deleted" in str(caught.value)
+    await db_session.rollback()
+
+
+async def test_replica_mode_does_not_silence_the_ledger_triggers(db_session):
+    """session_replication_role = replica disables ordinary triggers. Every
+    ledger trigger is ENABLE ALWAYS, so it still fires there. Only a
+    superuser can set the role at all, and the test runs as one."""
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id)
+    await db_session.execute(text("SET LOCAL session_replication_role = replica"))
+    with pytest.raises(DBAPIError) as caught:
+        await db_session.execute(
+            text("UPDATE events SET payload = '{}'::jsonb WHERE intent_id = :i"),
+            {"i": intent_id},
+        )
+    assert "append only" in str(caught.value)
+    await db_session.rollback()
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id)
+    await db_session.execute(text("SET LOCAL session_replication_role = replica"))
+    with pytest.raises(DBAPIError) as caught:
+        await db_session.execute(
+            text("DELETE FROM events WHERE intent_id = :i"), {"i": intent_id}
+        )
+    assert "may not be deleted" in str(caught.value)
+    await db_session.rollback()
+
+
+async def test_a_pre_chain_prefix_is_receipted_on_trust_not_on_proof(db_session):
+    """An intent whose first rows predate the chain can still be receipted,
+    but the verifier says the prefix is unproved rather than calling the
+    whole thing verified: it cannot tell pre 019 history from rows planted
+    to look like it."""
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id, [])
+    await db_session.execute(text("ALTER TABLE events DISABLE TRIGGER trg_events_append_only"))
+    try:
+        await db_session.execute(
+            text("UPDATE events SET hash = '', prev_hash = '' WHERE intent_id = :i"),
+            {"i": intent_id},
+        )
+    finally:
+        await db_session.execute(
+            text("ALTER TABLE events ENABLE ALWAYS TRIGGER trg_events_append_only")
+        )
+    for name in WALK:
+        await ledger.append_event(db_session, owner_id=owner_id, intent_id=intent_id, name=name)
+    await _receipt(db_session, owner_id, intent_id)
+    payload = await ledger.verify_provenance(db_session, owner_id=owner_id, intent_id=intent_id)
+    assert payload["chain"]["intact"] is True
+    assert payload["chain"]["complete"] is False
+    assert payload["chain"]["unhashed"] == 1
+    assert payload["receipt"]["verified"] is True
+    assert payload["verified"] is False
+    assert any("on trust" in f for f in payload["receipt"]["findings"])
+
+
+async def test_moving_from_the_derived_key_to_a_dedicated_one_keeps_old_receipts(
+    db_session, monkeypatch
+):
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id)
+    monkeypatch.setattr(settings, "RECEIPT_SIGNING_KEY", "")
+    monkeypatch.setattr(settings, "RECEIPT_SIGNING_KEYS_PREVIOUS", "")
+    issued = await _receipt(db_session, owner_id, intent_id)
+
+    monkeypatch.setattr(
+        settings, "RECEIPT_SIGNING_KEY", "a-dedicated-key-0123456789abcdef0123456789abcdef"
+    )
+    payload = await ledger.verify_provenance(db_session, owner_id=owner_id, intent_id=intent_id)
+    assert payload["verified"] is True
+    assert payload["receipt"]["signed_with_current_key"] is False
+    assert payload["receipt"]["verified_with_key_id"] == issued["signature_key_id"]
+
+
+async def test_a_rotated_secret_verifies_through_a_secret_entry_in_the_ring(
+    db_session, monkeypatch
+):
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id)
+    old_secret = "an-old-estate-secret-0123456789abcdef0123456789abcdef"
+    monkeypatch.setattr(settings, "SECRET_KEY", old_secret)
+    monkeypatch.setattr(settings, "RECEIPT_SIGNING_KEY", "")
+    monkeypatch.setattr(settings, "RECEIPT_SIGNING_KEYS_PREVIOUS", "")
+    await _receipt(db_session, owner_id, intent_id)
+
+    monkeypatch.setattr(
+        settings, "SECRET_KEY", "a-new-estate-secret-0123456789abcdef0123456789abcdef"
+    )
+    payload = await ledger.verify_provenance(db_session, owner_id=owner_id, intent_id=intent_id)
+    assert payload["verified"] is False
+
+    monkeypatch.setattr(settings, "RECEIPT_SIGNING_KEYS_PREVIOUS", f"secret:{old_secret}")
+    payload = await ledger.verify_provenance(db_session, owner_id=owner_id, intent_id=intent_id)
+    assert payload["verified"] is True
+    assert payload["receipt"]["verified_with_key_id"] == provenance.key_id(
+        provenance.derive_receipt_key(old_secret)
+    )
+
+
+ROLE_SQL = (
+    pathlib.Path(__file__).parent / "infrastructure" / "docker" / "initdb" / "sql" / "api-role.sql"
+)
+
+
+def _role_statements() -> list[str]:
+    """The compose stack's role script with its psql variables bound for the
+    test database, split into statements. Comments are dropped line by line
+    so a semicolon in prose cannot split a statement, and a dollar quoted
+    body is kept whole."""
+    script = (
+        ROLE_SQL.read_text(encoding="utf-8")
+        .replace(":'api_password'", "'role-test-password'")
+        .replace(':"target_database"', '"meta_supreme_test"')
+        .replace(':"owner_role"', '"postgres"')
+    )
+    lines = [line for line in script.splitlines() if not line.strip().startswith("--")]
+    statements: list[str] = []
+    buffer: list[str] = []
+    in_body = False
+    for line in lines:
+        buffer.append(line)
+        if line.count("$$") == 1:
+            in_body = not in_body
+        if line.rstrip().endswith(";") and not in_body:
+            statements.append("\n".join(buffer).strip())
+            buffer = []
+    return [statement for statement in statements if statement]
+
+
+async def test_the_runtime_role_from_the_compose_stack_cannot_rewrite_history(db_session):
+    """The production compose connects the API as devon_api, created by
+    initdb/sql/api-role.sql. Run that file against the test database and
+    prove the role's limits: it can write the ledger and cannot create a
+    table, truncate one, disable a trigger, enter replica mode, or delete
+    an event, a receipt or an intent directly."""
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id)
+    await _receipt(db_session, owner_id, intent_id)
+
+    for statement in _role_statements():
+        await db_session.execute(text(statement))
+    await db_session.execute(text("SET LOCAL ROLE devon_api"))
+    assert (await db_session.execute(text("SELECT current_user"))).scalar_one() == "devon_api"
+
+    # DML works: the role can append through the writer.
+    await ledger.append_event(
+        db_session, owner_id=owner_id, intent_id=intent_id, name="VERIFICATION_PASSED"
+    )
+
+    refusals = {
+        "create table": "CREATE TABLE scratch_for_a_trigger (id int)",
+        "truncate": "TRUNCATE events",
+        "disable trigger": "ALTER TABLE events DISABLE TRIGGER trg_events_no_delete",
+        "replica mode": "SET session_replication_role = replica",
+        "delete event": f"DELETE FROM events WHERE intent_id = '{intent_id}'",
+        "delete receipt": f"DELETE FROM universal_receipts WHERE intent_id = '{intent_id}'",
+        "delete intent": f"DELETE FROM intents WHERE id = '{intent_id}'",
+    }
+    for label, statement in refusals.items():
+        await db_session.execute(text("SAVEPOINT probe"))
+        with pytest.raises(DBAPIError):
+            await db_session.execute(text(statement))
+        await db_session.execute(text("ROLLBACK TO SAVEPOINT probe"))
+        assert label
+    await db_session.execute(text("RESET ROLE"))
+    await db_session.rollback()

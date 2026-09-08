@@ -538,3 +538,21 @@ def test_default_app_verifies_against_secret_key_from_the_environment(monkeypatc
     finally:
         monkeypatch.undo()
         importlib.reload(presence_main)
+
+
+@pytest.mark.parametrize(
+    "raw",
+    ['{"t":"ping","at_ms":NaN}', '{"t":"render","turn_id":"t","behind_ms":Infinity,"fps":60}'],
+)
+def test_non_finite_numbers_from_the_client_are_refused_by_name(raw):
+    """json.loads admits NaN and Infinity. A NaN ping used to kill the socket
+    on the way back out and an infinite behind_ms poisoned every later turn."""
+    client = fast_app()
+    with open_ready(client) as ws:
+        ws.send_text(raw)
+        reply = ws.receive_json()
+        assert reply["t"] == "error"
+        assert "finite" in reply["message"]
+        # The socket is still alive and a turn still runs.
+        messages = run_turn(ws, "turn-after-nan", "hi")
+        assert [m for m in messages if m["t"] == "frame"]

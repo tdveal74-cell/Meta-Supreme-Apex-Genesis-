@@ -102,13 +102,33 @@ def _signing_key() -> str:
 
 
 def _signing_ring() -> List[str]:
-    """The current key first, then every previous key still allowed to verify."""
-    previous = [
-        key.strip()
-        for key in (settings.RECEIPT_SIGNING_KEYS_PREVIOUS or "").split(",")
-        if key.strip()
-    ]
-    return [_signing_key(), *previous]
+    """The current key first, then every key a receipt may still have been
+    signed under.
+
+    The key derived from the current SECRET_KEY is always in the ring, so
+    moving from the derived default to a dedicated key keeps every earlier
+    receipt verifying. Entries in RECEIPT_SIGNING_KEYS_PREVIOUS are raw keys,
+    or ``secret:<old SECRET_KEY>`` for a secret that was rotated while no
+    dedicated key was set, which the ring derives the same way the writer did.
+    """
+    ring: List[str] = [_signing_key()]
+    if settings.SECRET_KEY:
+        ring.append(hashchain.derive_receipt_key(settings.SECRET_KEY))
+    for entry in (settings.RECEIPT_SIGNING_KEYS_PREVIOUS or "").split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        if entry.startswith("secret:"):
+            old_secret = entry[len("secret:"):].strip()
+            if old_secret:
+                ring.append(hashchain.derive_receipt_key(old_secret))
+        else:
+            ring.append(entry)
+    seen: List[str] = []
+    for key in ring:
+        if key not in seen:
+            seen.append(key)
+    return seen
 
 
 def _link(row: EventRecord) -> hashchain.ChainLink:
@@ -756,13 +776,21 @@ class LiveStateLedger:
                 "findings": findings,
             }
 
-        # ``verified`` is the whole claim: an intact chain AND a receipt that
-        # certifies exactly that chain. An intent with no receipt is not
-        # verified, whatever its chain looks like; ``receipted`` says which
-        # half is missing.
+        # ``verified`` is the whole claim: a complete chain (every row hashed,
+        # every link sound) AND a receipt that certifies exactly that chain.
+        # An intent with no receipt is not verified, and neither is one whose
+        # prefix predates the chain: the verifier cannot tell pre 019 history
+        # from rows planted to look like it, so it does not claim to.
+        # ``receipted`` and ``chain.complete`` say which half is missing.
+        if verdict.intact and not verdict.complete and verdict.length:
+            receipt_report.setdefault("findings", [])
+            receipt_report["findings"].append(
+                f"{verdict.unhashed} event(s) predate the chain and carry no hash; "
+                "the receipt certifies them on trust, not on proof"
+            )
         return {
             "intent_id": intent_id,
-            "verified": verdict.intact and row is not None and receipt_report["verified"],
+            "verified": verdict.complete and row is not None and receipt_report["verified"],
             "receipted": row is not None,
             "chain": verdict.to_dict(),
             "receipt": receipt_report,
