@@ -1,10 +1,10 @@
 # SYS_OPS: OS 29 Platform Policy Sensor, the capture was hollow and the record said watched
 
 Date: 2026-09-08, later the same night
-Workflow: `7WyIarNoJa2irx2r`, active, `activeVersionId bf617877` (was `9a235eaa` when this
-doc was first written, `38857d14` from about 05:56 UTC, `138e7ceb` from about 06:33 UTC with
-the Firecrawl cache bypass recorded below, and `bf617877` from about 06:57 UTC, a note-only
-republish that withdraws a wrong diagnosis)
+Workflow: `7WyIarNoJa2irx2r`, active, `activeVersionId 36b3170c` since about 11:49 UTC with
+the failure path recorded below (was `9a235eaa` when this doc was first written, `38857d14`
+from about 05:56 UTC, `138e7ceb` from about 06:33 UTC with the Firecrawl cache bypass,
+`bf617877` from about 06:57 UTC, a note-only republish that withdraws a wrong diagnosis)
 Supersedes: `SYS_OPS_os29-platform-policy-sensor_v1_2026-09-08` on the coverage claim, on the
 scrape count (five a sweep and about 150 a month, not four and 120), and on the timing of the
 first scheduled firing.
@@ -427,6 +427,33 @@ pin as unproven, and the failure path as unmailed.
 - X's "created or posted using automated means" exclusion is unresolved against an AI
   scripted, AI voiced pipeline and needs a ruling before TQO plans X revenue.
 
+## Failure path ruled and built, 2026-09-08 about 11:35 to 11:49 UTC
+
+Tee ruled on the card: when a fetch fails, the reason goes into the row and
+nobody is emailed. Built the same hour. A new IF, `Fetch Failed?`, sits after
+`Newly Volatile?` on the unchanged path. A failed item now goes to
+`Record Fetch Failure`, which writes Status Fetch failing and the counters as
+before and prepends a dated FETCH FAILED line with the reason to AI Verdict,
+append-only and capped at 60,000 characters, the same write shape as
+`Record Change`. Stable items still go to `Record Checked`, untouched. The
+Firecrawl node was re-added with the same parameters so its note could tell
+the truth.
+
+Proved before publish on execution 6481, against a sandbox row created for
+the purpose with a URL that cannot resolve and the sweep's search scoped to
+that one record for the run: plain fetch failed (HTTP 0), Firecrawl answered
+`SCRAPE_DNS_RESOLUTION_ERROR`, the row came back Status Fetch failing,
+Consecutive Failures 1, and AI Verdict began "FETCH FAILED, this source was
+NOT watched today. Firecrawl returned no readable markdown." No email went
+out and no real row was touched. The search filter was restored to
+`{Watch} = 1`, the version diff against bf617877 showed exactly the two new
+nodes, the re-added Firecrawl node and the rewiring, and the draft was
+published as `36b3170c`. The sandbox row was deleted.
+
+On the same card Tee ruled to wait for tomorrow's firing before touching the
+volatility rule over the chat-widget churn seen on the first scheduled
+firing. Nothing was changed there.
+
 ## DEVON RECEIPT
 
 ```
@@ -436,7 +463,7 @@ ARTIFACT: SYS_OPS_os29-platform-policy-sensor_v2_2026-09-08
 DATE: 2026-09-08
 DECISIONS: Tee ruled a block-level diff with self-learned volatile blocks over a similarity threshold; fix the Firecrawl capture rather than the comparison; watch the X successor as a new row and leave his curated note alone; Systems primary and Money cross-reference for the Gumroad credential; no calendar rotation for the Gumroad token, scope reduction and exposure triggers instead (superseded the same day at about 10:45 UTC: rotate monthly, ruled on the card, registry row recsutD24MMpzTamX); the Gumroad Application ID and Secret stay unwired; on the 2026-09-08 rulings card, hold X revenue and treat X as distribution only until X clarifies its automated means exclusion, bring the V5 schedules up one at a time with Tee watching each first firing, retire the Drive files still carrying the faceless framing per Filing Law 6 in a separate session, and check the Gumroad app page for a scope picker; maxAge 0 on the Firecrawl body was the session's judgement inside the close-out, not a ruling
 FINDINGS: the v1 coverage claim was true of fetch and false of capture, Meta Content Monetization had three hollow policy sections since the sensor was built; root cause was waitFor 0 and onlyMainContent true, both Firecrawl defaults in force because the node sent no options; the fix's own first two runs pushed seven real policy blocks on Meta Partner over the two flip threshold and silenced them for eleven minutes until the indexes were cleared, and the mechanism is standing, with no signal to a human when it fires; execution 6424 produced two false MATERIAL alarms from the hollow capture, one of them reporting a removal that never happened, and execution 6430 produced two real MATERIAL verdicts which execution 6431 overwrote, restored by hand at 05:35 UTC; the Tragedy or conflict restriction governing NCO Forge on Facebook was never captured before tonight; the March 3 2026 AI conflict disclosure rule carries over into X Original Content Rewards verbatim; validate_node_config returns valid for anything on community nodes; Gumroad returns 200 not 404 for a missing sale; Firecrawl's documented default maxAge of two days meant a sweep whose request matched a cached entry could be served a stale copy, fixed by the session with maxAge 0 and proven fresh on execution 6443; the location pin is unproven after two fresh samples, one en-GB (6442, shown fresh by its 23 second render and absent cacheState) and one en-US (6443); the first diagnosis that 6442 was a cache hit was wrong and is withdrawn; a Firecrawl failure reaches the row without an email or a persisted reason
-OPEN: view_sales inferred not proven; V5 published with schedules disabled, activeVersionId 73efec8d, each schedule re-enabled as its own named act when Tee can watch it; the location pin has three fresh samples after the 10:00 UTC firing, two en-US (6443, 6467) and one en-GB (6442), still not proof; the Firecrawl failure path emails nothing and needs a ruling; the Gumroad rotation conflict is resolved, monthly; PR #167 carrying this amendment waits on Tee's merge
-STATUS: OS 29 active, activeVersionId bf617877, daily 06:00 America/New_York, nine sources watched, Firecrawl on a custom body with maxAge 0 and a US English location that is unproven, completeness rule live on both paths, AI Verdict append only, silencing routed to the notify path, rawHtml dropped, zero volatile blocks, both restored MATERIAL verdicts intact with newer verdicts stacked above them; the first scheduled firing is 10:00 UTC on 2026-09-08, the same morning, and a check-in is armed for 10:20 UTC that day
+OPEN: view_sales inferred not proven; V5 published with schedules disabled, activeVersionId bde7ddec since the same-day Gumroad guard fix (73efec8d at publish), each schedule re-enabled as its own named act when Tee can watch it; the location pin has three fresh samples after the 10:00 UTC firing, two en-US (6443, 6467) and one en-GB (6442), still not proof; the Firecrawl failure path was ruled 2026-09-08 (reason in the row, no email) and is live as 36b3170c, proved on 6481; the Gumroad rotation conflict is resolved, monthly; PR #167 carrying this amendment waits on Tee's merge
+STATUS: OS 29 active, activeVersionId 36b3170c since 2026-09-08 about 11:49 UTC (bf617877 before it), daily 06:00 America/New_York, nine sources watched, Firecrawl on a custom body with maxAge 0 and a US English location that is unproven, completeness rule live on both paths, AI Verdict append only, silencing routed to the notify path, rawHtml dropped, zero volatile blocks, both restored MATERIAL verdicts intact with newer verdicts stacked above them; the first scheduled firing is 10:00 UTC on 2026-09-08, the same morning, and a check-in is armed for 10:20 UTC that day; the failure path writes its reason into AI Verdict and sends no email, proved on 6481
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```

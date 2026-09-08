@@ -531,6 +531,24 @@ WEBHOOKS = {
         "auth": "header x-devon-key",
         "open_ruling": None,
     },
+    # Ruled by Tee 2026-09-08 after his phone timed out twice against
+    # api.gumroad.com while n8n reached it in half a second: the Gumroad sale
+    # check moves off the phone once he repoints the Shortcut to this door. The
+    # token stays in n8n credential K1D8KUvTcWDcdrV0; the caller sends only
+    # x-devon-key and a sale_id, and Preflight refuses an implausible id before
+    # any request leaves. Proved on executions 6482 (a made-up id: Gumroad
+    # answered 200 with success false, the door answered 404) and 6483 (an
+    # implausible id: refused 400, no request made), both manual with the body
+    # pinned, so the header check ran on neither; 6489 and 6490 (pinned Gumroad
+    # replies) proved the empty-sale 502 and the found-sale 200. It reads and
+    # writes nothing; it is one more key holder.
+    "devon-gumroad-sale-check": {
+        "job": "read one Gumroad sale back from GET /v2/sales/:id for Tee's phone",
+        "destination": "api.gumroad.com through credential K1D8KUvTcWDcdrV0, answered to the caller, nothing written",
+        "workflow": "7bDqKNdMHY8sxoXa",
+        "auth": "header x-devon-key",
+        "open_ruling": None,
+    },
     # Build 15, the Face's door. A public hosted chat is a POST endpoint at
     # /webhook/<id>/chat like any other webhook, so it is registered and
     # audited like one. The auth is n8n login: only a signed-in n8n user can
@@ -607,14 +625,16 @@ KEY_ROTATION = (
     "off Railway production on 2026-09-06 and neither is set, so Railway held no "
     "copy at the 2026-09-06 rotation. Check them again before the next one rather "
     "than trusting this line. "
-    "The twenty paths, so a rotator has a checklist rather than a count: "
+    "The twenty-one paths, so a rotator has a checklist rather than a count: "
     "devon-capture, devon-inbox, devon-intake, devon-approve-request, devon-action, "
     "devon-drive-draft, devon-airtable-row, devon-ledger, devon-event, "
     "devon-spine-n8n, devon-runtime, devon-route, devon-editforge, "
     "devon-build12-upstream, and the two outside this lane, devon-health and "
     "devon-capture-file. Four more joined on 2026-09-07 when TQO FINAL V5 "
     "(gsGJQan7a6ZufhYt) had auth put on its webhooks, which until then had none at "
-    "all: run-tqo-pipeline, run-nco-pipeline, system-pause and system-resume. "
+    "all: run-tqo-pipeline, run-nco-pipeline, system-pause and system-resume. A "
+    "twenty-first joined on 2026-09-08: devon-gumroad-sale-check (7bDqKNdMHY8sxoXa), "
+    "the sale check Tee's phone could not make directly, ruled the same day. "
     "This number moved twice in one day and the second move is the instructive "
     "one. It went sixteen to twenty-three when all seven V5 webhooks were put on "
     "the header, then back to twenty when Tee ruled the three callers that cannot "
@@ -622,13 +642,13 @@ KEY_ROTATION = (
     "key holders and a key rotation does not touch them; they have their own "
     "rotation, which is changing the path, and they are listed under SECRET PATH "
     "WEBHOOKS below. Counting doors and counting key holders are different "
-    "questions and this line answers only the second. That workflow is INACTIVE, "
-    "so these four doors are not live and a rotation cannot prove them from the "
-    "outside; they still hold the credential and must be reproven the moment it is "
-    "published. Ten of the twenty carry an auth field in the WEBHOOKS map "
+    "questions and this line answers only the second. That workflow was published "
+    "2026-09-08, so these four doors are live and a rotation proves them from the "
+    "outside like the rest. Eleven of the twenty-one carry an auth field in the WEBHOOKS map "
     "below (eight until devon-health was registered on 2026-09-06, nine until "
-    "devon-airtable-row was added later that day); the rest are recorded in "
-    "prose, so working the map alone covers ten of twenty and feels finished. The first version of "
+    "devon-airtable-row was added later that day, ten until devon-gumroad-sale-check "
+    "on 2026-09-08); the rest are recorded in "
+    "prose, so working the map alone covers eleven of twenty-one and feels finished. The first version of "
     "this checklist, written 2026-09-06, itself said thirteen and omitted the last "
     "two, which is the failure it was written to prevent: it was built from the "
     "lane's dependency list. The 2026-09-07 jump from sixteen to twenty-three is "
@@ -652,8 +672,9 @@ KEY_ROTATION = (
     "response rather than from the ping. The credential is the proof, since "
     "that endpoint is scoped to the token own account. That adds a SECOND "
     "secret to the estate, a Gumroad API token held as an n8n credential, and "
-    "it is NOT one of the twenty above: it rotates on Gumroad schedule, not "
-    "with x-devon-key, and the twenty count only x-devon-key holders. Do not "
+    "it is NOT one of the twenty-one above: it rotates on its own monthly cadence, "
+    "ruled 2026-09-08 and filed in the Credentials registry, not with x-devon-key, "
+    "and the twenty-one count only x-devon-key holders. Do not "
     "let it inflate that number, which has already been wrong twice. The first "
     "design of this guard compared seller_id against $env.GUMROAD_SELLER_ID "
     "and could never have worked, because this instance is n8n Cloud, which "
@@ -727,7 +748,7 @@ WORKFLOWS = {
     # holds no key: it is not a key holder and never enters the twenty.
     # Machine verdicts write to AI Verdict; the Assessment column is Tee's
     # research and the workflow must never write it again.
-    "OS 29 Platform Policy Sensor": {"id": "7WyIarNoJa2irx2r", "state": "active since 2026-09-08, daily 06:00 America/New_York, timezone pinned the same day, nine sources watched once the X Original Content Rewards successor was added, activeVersionId bf617877; the Firecrawl fallback on Gateway credits runs with a custom body (waitFor 15000, onlyMainContent false, rawHtml dropped, maxAge 0 added by the close-out session on 2026-09-08 as its own judgement, location US en-US which is UNPROVEN after two fresh samples one each way) because the node defaults captured hollow policy sections on Meta Content Monetization from the day the sensor was built and its documented two day default cache could serve a matching request a stale copy, both found 2026-09-08; comparison is a block level diff with a two flip volatile rule, a completeness rule refuses a hollow capture on both paths, AI Verdict is append only"},
+    "OS 29 Platform Policy Sensor": {"id": "7WyIarNoJa2irx2r", "state": "active since 2026-09-08, daily 06:00 America/New_York, timezone pinned the same day, nine sources watched once the X Original Content Rewards successor was added, activeVersionId 36b3170c since 2026-09-08 about 11:49 UTC, when a failed fetch began writing its reason into AI Verdict with no email on Tee's ruling, proved on execution 6481 against a sandbox row that was then deleted; the Firecrawl fallback on Gateway credits runs with a custom body (waitFor 15000, onlyMainContent false, rawHtml dropped, maxAge 0 added by the close-out session on 2026-09-08 as its own judgement, location US en-US which is UNPROVEN after three fresh samples, two en-US and one en-GB) because the node defaults captured hollow policy sections on Meta Content Monetization from the day the sensor was built and its documented two day default cache could serve a matching request a stale copy, both found 2026-09-08; comparison is a block level diff with a two flip volatile rule, a completeness rule refuses a hollow capture on both paths, AI Verdict is append only"},
     "Live State Ledger": {"id": "z9j2I8h0RnbDKGBO", "state": "active"},
     # Builds 01, 03, 04, 06 and 07, the organs the driver walks a job through.
     # Live since 2026-08-23 and 08-24 but never registered here until 2026-09-05,
@@ -840,6 +861,7 @@ WORKFLOWS = {
     # model subnodes cannot use, so the lane is an HTTP Request, not an Agent.
     "Face": {"id": "LsmfRFMmI5feINs0", "state": "active, hosted chat, n8n user auth"},
     "TQO FINAL V5": {"id": "gsGJQan7a6ZufhYt", "state": "active since 2026-09-08, published on Tee's ruling with all six schedule triggers disabled, each re-enabled as its own named act on his watch; activeVersionId bde7ddec; seven webhooks live: four on header x-devon-key (run-tqo-pipeline, run-nco-pipeline, system-pause, system-resume) and three on secret paths (run-tqo, run-nco, gumroad-sale); the Gumroad guard verifies each ping against GET /v2/sales/:id on credential K1D8KUvTcWDcdrV0, refuses a missing sale on Gumroad's 200 success false, and accepts the two trailing equals signs real ids carry since the same-day fix; view_sales on a real sale still unproven"},
+    "DEVON Gumroad Sale Check": {"id": "7bDqKNdMHY8sxoXa", "state": "active since 2026-09-08, activeVersionId e187e828 (8c50cbb8 at first publish, republished the same day with an empty-sale guard and successful executions not saved); webhook devon-gumroad-sale-check on header x-devon-key, reads one sale from GET /v2/sales/:id on credential K1D8KUvTcWDcdrV0 and writes nothing; proved on executions 6482 and 6483 (manual, body pinned, header check not exercised) and 6489 and 6490 (pinned Gumroad replies: empty sale 502, found sale 200); the repoint of Tee's Shortcut is pending and the Gumroad token leaves the phone when his first call lands"},
     "Capture Hook": {"id": "Cbd24ptTPWch3aZO", "state": "retired 2026-08-22"},
     # Registered 2026-09-06, ruled by Tee after the operational report found
     # ten DEVON named workflows on the instance and not in this map, four of
