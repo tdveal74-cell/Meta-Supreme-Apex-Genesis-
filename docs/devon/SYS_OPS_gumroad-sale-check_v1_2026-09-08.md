@@ -4,7 +4,7 @@ type: SYS_OPS
 version: 1
 date: 2026-09-08
 area: TQO
-status: live-2026-09-08-first-call-from-the-phone-pending
+status: live-2026-09-08-proved-from-the-phone-2026-09-08
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 base: 3d68476
 branch: claude/video-analysis-incorporation-9h6rtc
@@ -127,9 +127,6 @@ on the monthly cadence ruled earlier the same day.
   inside n8n only.
 - A real sale. No real sale id has been through this door or the V5 guard.
 - Why the phone could not reach `api.gumroad.com` directly.
-- A 404 from the phone. The phone reached the door at 13:47 UTC (below) and
-  was refused at Preflight by a Shortcuts quirk, so the made-up-id 404 from
-  the phone is still to come.
 - The three 502 branches against a real Gumroad reply: no answer, 401 or 403,
   and success true with no sale object. 6489 proved the last on a pinned
   reply; none has run against Gumroad itself.
@@ -198,8 +195,16 @@ built. And Shortcuts renders a non-2xx JSON body in Quick Look rather than
 throwing, which closes the presentation question above. The refusal itself is a
 Shortcuts quirk: the body value was the typed text "Provided Input" rather than
 the magic variable from Ask for Input, so the door was handed the literal
-string. After that the phone held no Gumroad token. The 404 for a made-up id
-from the phone follows the variable fix.
+string. After that the phone held no Gumroad token.
+
+At 13:58 UTC, with the variable in place, Quick Look showed `ok: false`, the
+`source` line naming GET /v2/sales/:id on credential `K1D8KUvTcWDcdrV0`, and
+`gumroad_status` 200: the door went through to Gumroad from the phone and came
+back with the not-found answer. That is the whole path end to end from the
+phone, and the last open condition on this door. The Shortcut's own quirk,
+Provided Input arriving as typed text, is reached through Select Variable and
+the blue Ask for Input pill under the ask action, not through the keyboard
+row, which offered no such variable.
 
 ## DEVON RECEIPT
 
@@ -210,7 +215,7 @@ ARTIFACT: SYS_OPS_gumroad-sale-check_v1_2026-09-08
 DATE: 2026-09-08
 DECISIONS: RULED route the Gumroad sale check through n8n, the token leaves the phone; RULED the July 2026 Gumroad token is gone, its registry row retired; RULED the Firecrawl failure path writes its reason into the row with no email (recorded in the OS 29 doc); RULED wait for tomorrow's firing before touching the volatility rule
 FINDINGS: the phone timed out twice against api.gumroad.com with Private Relay off and no VPN while n8n answered in 250 ms; the door refuses an implausible id before any request and turns Gumroad's 200 success false into a 404
-OPEN: the made-up-id 404 from the phone after the variable fix; a real sale through the door or the V5 guard; the phone's own path to api.gumroad.com
-STATUS: live, workflow 7bDqKNdMHY8sxoXa activeVersionId e187e828 (8c50cbb8 at first publish), proved on executions 6482 and 6483 (manual) and 6489 and 6490 (pinned Gumroad replies), successful executions not saved, header check proved from outside on probe execution 6494 (404 with the key, 403 without) and from Tee's phone at 13:47 UTC (400 at Preflight, the key accepted, the Gumroad token off the phone), one x-devon-key holder added, twenty-one in the checklist, fresh critic PASS-WITH-CONDITIONS with every condition applied the same hour
+OPEN: a real sale through the door or the V5 guard; the phone's own path to api.gumroad.com; the door's 502 branches against Gumroad itself; whether the door gets a list job for a phone glance at recent sales, which waits on a ruling
+STATUS: live, workflow 7bDqKNdMHY8sxoXa activeVersionId e187e828 (8c50cbb8 at first publish), proved on executions 6482 and 6483 (manual) and 6489 and 6490 (pinned Gumroad replies), successful executions not saved, header check proved from outside on probe execution 6494 (404 with the key, 403 without) and from Tee's phone at 13:47 UTC (400 at Preflight) and 13:58 UTC (the 404 end to end), the Gumroad token off the phone, one x-devon-key holder added, twenty-one in the checklist, fresh critic PASS-WITH-CONDITIONS with every condition applied the same hour
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
