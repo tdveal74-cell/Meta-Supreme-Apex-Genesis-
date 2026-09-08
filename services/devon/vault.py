@@ -839,7 +839,7 @@ WORKFLOWS = {
     # approval_queue. The Cerebras credential is header auth, which the chat
     # model subnodes cannot use, so the lane is an HTTP Request, not an Agent.
     "Face": {"id": "LsmfRFMmI5feINs0", "state": "active, hosted chat, n8n user auth"},
-    "TQO FINAL V5": {"id": "gsGJQan7a6ZufhYt", "state": "inactive by ruling; all 7 webhooks put on header x-devon-key 2026-09-07, previously unauthenticated"},
+    "TQO FINAL V5": {"id": "gsGJQan7a6ZufhYt", "state": "active since 2026-09-08, published on Tee's ruling with all six schedule triggers disabled, each re-enabled as its own named act on his watch; activeVersionId bde7ddec; seven webhooks live: four on header x-devon-key (run-tqo-pipeline, run-nco-pipeline, system-pause, system-resume) and three on secret paths (run-tqo, run-nco, gumroad-sale); the Gumroad guard verifies each ping against GET /v2/sales/:id on credential K1D8KUvTcWDcdrV0, refuses a missing sale on Gumroad's 200 success false, and accepts the two trailing equals signs real ids carry since the same-day fix; view_sales on a real sale still unproven"},
     "Capture Hook": {"id": "Cbd24ptTPWch3aZO", "state": "retired 2026-08-22"},
     # Registered 2026-09-06, ruled by Tee after the operational report found
     # ten DEVON named workflows on the instance and not in this map, four of
