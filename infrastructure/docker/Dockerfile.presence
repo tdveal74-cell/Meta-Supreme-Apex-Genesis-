@@ -1,0 +1,30 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# The presence service installs the SAME hashed closure as the API image
+# (Dockerfile.api), on purpose. It needs a strict subset of it (fastapi,
+# uvicorn, websockets, pyjwt, httpx) but carving out a second requirements
+# file would create a second dependency set to pin, hash and audit, and the
+# dependency-audit lane only reads requirements.txt and deploy/soul. One
+# closure, one audit. --require-hashes fails the build outright if the file
+# is edited by hand instead of regenerated.
+COPY requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
+
+# apps/ is a PEP 420 namespace package: no apps/__init__.py, on purpose.
+# services/ ships because the presence lane reuses the provider factory and
+# the DEVON persona from it. Nothing under app/ is copied; the service does
+# not import it (see apps/presence/settings.py for why the secret key rule
+# is a copy and not an import).
+COPY apps/presence/ ./apps/presence/
+COPY services/ ./services/
+
+EXPOSE 8010
+
+CMD ["sh", "-c", "exec uvicorn apps.presence.main:app --host 0.0.0.0 --port ${PORT:-8010}"]
