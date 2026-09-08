@@ -18,7 +18,9 @@
 #              failed migration keeps the API down on purpose.
 #   api        The FastAPI control plane (Council, ledger, approvals, agent
 #              runtime, operator shell), connected as the devon_api role,
-#              which cannot create, truncate, own or disable anything.
+#              which cannot create (tables or temporary tables), truncate,
+#              own or disable anything, and cannot delete users, intents,
+#              events or receipts.
 #   presence   The streaming middleware: DEVON JWT auth, LiveKit token
 #              minting, the WebSocket frame protocol, the sliding window
 #              buffer and the inference circuit breaker.
@@ -42,9 +44,10 @@
 
 name: devon-control-plane
 
+# Shared by every Python container: no database URL, no owner credential,
+# no receipt key. Each service adds exactly the credentials it uses below.
 x-python-env: &python-env
   ENVIRONMENT: production
-  DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/meta_supreme
   REDIS_URL: redis://redis:6379/0
   SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set, generate one with openssl rand -hex 32}
   CORS_ORIGINS: ${CORS_ORIGINS:-["https://devon.example.invalid"]}
@@ -70,6 +73,9 @@ services:
       POSTGRES_DB: meta_supreme
       # Read by initdb/020-api-role.sh on first init to create the runtime role.
       API_DB_PASSWORD: ${API_DB_PASSWORD:?API_DB_PASSWORD must be set}
+      # Read by initdb/010-n8n-database.sh on first init; empty skips the n8n
+      # role and database, which is right when the executor profile is off.
+      N8N_DB_PASSWORD: ${N8N_DB_PASSWORD:-}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # Creates the n8n database and the vector extension on first init only.
@@ -102,9 +108,11 @@ services:
       timeout: 3s
       retries: 12
 
-  # Migrations run as the database owner, once, before the API starts. The
-  # API image's own command also runs alembic; it is overridden below so the
-  # runtime container never holds owner credentials.
+  # Migrations run as the database owner, once, before the API starts, and
+  # the runtime role's grants are applied in the same step so every table a
+  # migration creates is granted as it appears. This is the only container
+  # that holds the owner credential. The API image's own command also runs
+  # alembic; it is overridden below.
   migrate:
     build:
       context: ../..
@@ -112,7 +120,8 @@ services:
     image: devon-api:local
     environment:
       <<: *python-env
-    command: ["alembic", "upgrade", "head"]
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/meta_supreme
+    command: ["sh", "-c", "alembic upgrade head && python database/grants/apply_devon_api.py"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -221,8 +230,11 @@ services:
       DB_POSTGRESDB_HOST: postgres
       DB_POSTGRESDB_PORT: "5432"
       DB_POSTGRESDB_DATABASE: n8n
-      DB_POSTGRESDB_USER: postgres
-      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      # Its own role, owning its own database, created on first init when
+      # N8N_DB_PASSWORD is set. The executor never holds the ledger owner's
+      # credential.
+      DB_POSTGRESDB_USER: n8n
+      DB_POSTGRESDB_PASSWORD: ${N8N_DB_PASSWORD:-}
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?N8N_ENCRYPTION_KEY must be set and never rotated casually, credentials are sealed under it}
       N8N_HOST: ${N8N_HOST:-localhost}
       N8N_PORT: "5678"

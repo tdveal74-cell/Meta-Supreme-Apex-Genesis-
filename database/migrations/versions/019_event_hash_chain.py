@@ -33,6 +33,7 @@ def downgrade() -> None:
     # columns are dropped because a row written under 019 carries a hash that
     # an 018 writer would leave stale on the next append, which is worse than
     # no hash at all.
+    op.execute("DROP TRIGGER IF EXISTS trg_intents_state_only ON intents")
     op.execute("DROP TRIGGER IF EXISTS trg_intents_no_delete ON intents")
     op.execute("DROP TRIGGER IF EXISTS trg_events_append_only ON events")
     op.execute("DROP TRIGGER IF EXISTS trg_events_no_delete ON events")
@@ -44,6 +45,7 @@ def downgrade() -> None:
     )
     op.execute("DROP FUNCTION IF EXISTS ledger_refuse_update()")
     op.execute("DROP FUNCTION IF EXISTS ledger_refuse_delete()")
+    op.execute("DROP FUNCTION IF EXISTS ledger_refuse_intent_rewrite()")
     op.execute("ALTER TABLE events DROP COLUMN IF EXISTS prev_hash")
     op.execute("ALTER TABLE events DROP COLUMN IF EXISTS hash")
     op.execute("ALTER TABLE universal_receipts DROP COLUMN IF EXISTS head_hash")

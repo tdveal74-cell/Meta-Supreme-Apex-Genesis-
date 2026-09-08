@@ -99,7 +99,10 @@ Meta-Supreme-Apex-Genesis-/
     Dockerfile.web.prod                built   next build, next start
     initdb/010-n8n-database.sh         built   n8n database on first init
     initdb/020-api-role.sh             built   the devon_api runtime role on first init
-    initdb/sql/api-role.sql            built   the role's grants, also run by the test suite
+    initdb/sql/api-role.sql            built   the role, CONNECT and USAGE, TEMP and CREATE revoked
+  database/grants/
+    devon_api.sql                      built   what the role may do to the tables, applied after every migration
+    apply_devon_api.py                 built   applies it as the owner from the migrate service
     .env.prod.example                  built   every variable, secrets blank
   n8n/devon/                           lives   Code node sources read by CI
   docs/devon/                          lives   the dated record; this file
@@ -185,16 +188,20 @@ the rotation ring: a receipt signed under an earlier key still verifies and
 reports which key signed it, and one signed under a key no longer in the ring
 is named as such rather than reading as forged.
 
-The database refuses UPDATE on `events` and on `universal_receipts`, refuses
-a DELETE aimed at either table while admitting the cascade from `intents` and
-`users`, and refuses a DELETE aimed at `intents` while admitting only the
-cascade from `users`, because an owner's right to be removed outranks the
-audit trail while nothing else may take an intent out from under its chain.
-Direct and cascade are told apart by `pg_trigger_depth()`. Every trigger is
-`ENABLE ALWAYS`, so replica mode does not silence it. Rows written before 019
-carry an empty hash and are counted as unhashed, never backfilled, and only
-as a prefix: an unhashed row standing after hashed rows was written around
-the writer and is named as a break.
+The database refuses UPDATE on `events` and on `universal_receipts`, and on
+`intents` admits a change to `state` and `updated_at` only: the opening event
+hashes the owner and the statement, so a row handed to another account or
+reworded no longer matches its own first hash and the verifier says so. A
+DELETE on `events` or `universal_receipts` is admitted only once the intent
+is gone, and on `intents` only once the owner is gone: that is what a
+cascade is, the parent has already left the transaction when the referential
+action reaches the child, and a statement aimed at the child while the
+parent stands is refused from any trigger depth. The third gauntlet pass
+showed why depth was the wrong test: a temporary table's trigger deletes at
+depth 2. Every trigger is `ENABLE ALWAYS`, so replica mode does not silence
+it. Rows written before 019 carry an empty hash and are counted as unhashed,
+never backfilled, and only as a prefix: an unhashed row standing after
+hashed rows was written around the writer and is named as a break.
 
 The writer refuses to append to a chain that does not verify and refuses to
 issue a receipt over one. The verdict names every break by sequence number.
@@ -206,15 +213,22 @@ not on proof, because the verifier cannot tell pre 019 history from rows
 planted to look like it.
 
 What the database cannot own is stated rather than pretended away. A role
-that can disable or drop the triggers, TRUNCATE the tables, or create a
-table with a trigger of its own that deletes at depth 2 can rewrite history.
-The production compose therefore runs the API as `devon_api`, a role with
-DML on every table and no CREATE, TRUNCATE, ownership or superuser, and runs
-migrations as the owner in a one shot `migrate` service; the role script is
-`infrastructure/docker/initdb/sql/api-role.sql` and the test suite runs it
-against the test database to prove each refusal. Proving history to a reader
-who does not trust the database at all needs the chain heads anchored outside
-it, which is a later gate.
+that can disable or drop the triggers, TRUNCATE the tables, or delete users
+can rewrite or erase history. The production compose therefore runs the API
+as `devon_api`, a role that reads and writes every table, deletes only where
+the application deletes (workflows, memories, knowledge items, agent tasks
+and what hangs off them), never deletes users, intents, events or receipts,
+and holds no CREATE, no TEMP, no TRUNCATE, no ownership and no superuser.
+The role is created on first init by `infrastructure/docker/initdb/sql/api-role.sql`
+and granted after every migration by `database/grants/devon_api.sql` through
+`database/grants/apply_devon_api.py`, run by the one shot `migrate` service,
+which is the only container that holds the owner credential; the presence
+container holds no database credential at all and n8n has its own role and
+database. The test suite runs both SQL files against the test database, takes
+the role, appends through the writer, and proves each refusal, including the
+temporary table and the temporary function. Proving history to a reader who
+does not trust the database at all needs the chain heads anchored outside it,
+which is a later gate.
 
 ## Wire protocol v1
 
@@ -265,12 +279,15 @@ provisioned for the real time relay and nothing opens it yet; the compose file
 says so in its own header rather than letting a running container imply a
 wired one.
 
-Migrations run as the owner in the one shot `migrate` service; the API runs
-as `devon_api`, created by `initdb/020-api-role.sh` on the first start of the
-postgres volume, which is the image's documented behaviour. A stack whose
-volume predates this revision creates the role by hand from
-`initdb/sql/api-role.sql`. `API_DB_PASSWORD` is required beside
-`POSTGRES_PASSWORD`.
+Migrations run as the owner in the one shot `migrate` service, which then
+applies `database/grants/devon_api.sql` so every table a migration creates is
+granted as it appears; the API runs as `devon_api`, created by
+`initdb/020-api-role.sh` on the first start of the postgres volume, which is
+the image's documented behaviour. A stack whose volume predates this
+revision creates the role by hand from `initdb/sql/api-role.sql`.
+`API_DB_PASSWORD` is required beside `POSTGRES_PASSWORD`; `N8N_DB_PASSWORD`
+must be set before the first start when the executor profile will be used,
+because the n8n role and database are created at that moment only.
 
 Providers default to `mock` in the example env and in the compose file, so the
 stack starts with the keys still blank and `/health` says simulated out loud.
@@ -318,7 +335,24 @@ One design residual is recorded, not fixed: the writer accepts a lawful late
 event after a receipt (`ACTION_FAILED` after `ACTION_COMPLETED`), and the
 verifier then reports growth past the receipt the same way it reports
 tampering. Distinguishing the two needs a second receipt law and is a ruling
-for Tee. The third pass is recorded in the receipts below.
+for Tee.
+
+A third fresh critic attacked the second fix commit and returned QUARANTINE a
+third time, with security 2 and a mean of 3.4. It confirmed every second
+pass fix and then rewrote a receipted history as the very role the stack
+ships. Each door was closed at the root and re-measured:
+
+| Finding | Was | Now |
+|---|---|---|
+| The runtime role could create a temporary table with a trigger that deleted events and the receipt at trigger depth 2, which the guard admitted, then re-receipt to `verified true` | the delete guard asked how deep the call stack was; TEMP is granted to PUBLIC by default | the guard asks whether the parent row is already gone, which is what a cascade means, from any depth; TEMP is revoked from PUBLIC on the database; both proved, the depth 2 attack itself is a negative control in the suite |
+| The runtime role held DELETE on every table, including `users`, so the owner cascade was plain DML: delete the user, re-insert, replay | one broad grant | DELETE granted only where the application deletes; `users`, `intents`, `events` and `receipts` never; a new delete path fails loudly with permission denied |
+| The owner credential still shipped to the presence container through the shared env, and n8n connected as the owner | one env anchor for every Python container | the shared anchor carries no database URL; only `migrate` holds the owner credential, `api` holds `devon_api`, presence holds none, n8n has its own role and database |
+| The intent row was unbound: `owner_id` and `stated` could be rewritten and the thief's read of the chain was `verified true` | the opening event hashed the channel only | the opening event hashes the owner and the statement; a BEFORE UPDATE trigger on `intents` admits `state` and `updated_at` only; a handed over or reworded row is named by the verifier |
+| The runtime role could rewrite `alembic_version` and wedge the next migration | default privileges | the role reads `alembic_version` and nothing else |
+| A 400 digit integer in a wire number overflowed `float()` and killed the socket | finite check after the cast | the overflow is caught and refused by name, the socket stays up |
+| The six ordinary characters of a written out NUL escape were refused as a NUL | the check read the rendered text | the check walks the values themselves |
+
+The fourth pass is recorded in the receipts below.
 
 ## Receipts for this arc
 
@@ -328,25 +362,26 @@ the exit code captured directly rather than through a pipe.
 | Check | Command | Result |
 |---|---|---|
 | Pure provenance, integrity, ecosystem | `python3 -m pytest -q test_devon_provenance.py test_devon_integrity.py test_devon_ecosystem.py` | 232 passed, exit 0 |
-| Ledger against PostgreSQL 16, with negative controls | `python3 -m pytest -q test_live_state_ledger_provenance.py test_live_state_ledger.py test_devon_knowledge_loop_binding.py` | 65 passed, exit 0, on a test database rebuilt from the schema files; includes the `devon_api` role run from its own script and refused on create, truncate, disable trigger, replica mode and every direct delete |
-| Alembic round trip | `alembic upgrade head`, `alembic downgrade 018_schema_convergence`, `alembic upgrade head` on a fresh database | all three exit 0, head reads `019_event_hash_chain`, the downgrade removes all five triggers and both functions, the upgrade restores all five as `ENABLE ALWAYS` |
-| The two schema builds agree | `scripts/schema_shape.py` on the Alembic build and on the SQL build, diffed | identical; `019_event_hash_chain.sql` applied twice in a row without error; all five triggers present |
+| Ledger against PostgreSQL 16, with negative controls | `python3 -m pytest -q test_live_state_ledger_provenance.py test_live_state_ledger.py test_devon_knowledge_loop_binding.py` | 71 passed, exit 0, on a test database rebuilt from the schema files; includes the `devon_api` role built from its two SQL files and refused on create, temporary table, temporary function, truncate, disable trigger, replica mode, `alembic_version`, deleting users and every direct ledger delete, while a workflow delete succeeds; and the depth 2 trigger attack itself, run as the owner, refused by the parent-gone rule |
+| Alembic round trip | `alembic upgrade head`, `alembic downgrade 018_schema_convergence`, `alembic upgrade head` on a fresh database | all three exit 0, head reads `019_event_hash_chain`, the downgrade removes all six triggers and all three functions, the upgrade restores all six as `ENABLE ALWAYS` |
+| The two schema builds agree | `scripts/schema_shape.py` on the Alembic build and on the SQL build, diffed | identical; `019_event_hash_chain.sql` applied twice in a row without error; all six triggers present |
+| The role and grants scripts as shipped | `psql -v api_password=... -f initdb/sql/api-role.sql` (real psql interpolation, through `set_config`), then `python3 database/grants/apply_devon_api.py` as the owner, on the SQL built test database and on an Alembic built one | both exit 0, seven grant statements; as `devon_api`: DELETE on `workflows` true, on `events` and `users` false, `alembic_version` SELECT true and UPDATE false, TEMP false, CREATE on the schema false |
 | Standalone job, exactly as CI runs it | `env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q` over the ten offline files | 137 passed, exit 0 |
 | Container contract import | `env -u PYTHONPATH DEFAULT_AI_PROVIDER=mock python3 -c "from app.main import app; ..."` | exit 0 |
 | Engine job | `python3 -m pytest -q test_council.py test_phase4_council.py test_security.py` with the two deselects | 25 passed, exit 0 |
 | Soul host vendoring | `python3 -m pytest -q test_deploy_soul.py test_deploy_soul_operator.py test_deploy_soul_conflict_policy.py` | 112 passed, exit 0 (`provenance.py` vendored byte for byte) |
-| Production compose | `docker compose --env-file <filled example> -f infrastructure/docker/docker-compose.prod.yml --profile executor config -q` | exit 0; seven services with the profile, six without (`migrate` added); a missing `SECRET_KEY` refuses with its own message; `RECEIPT_SIGNING_KEY` resolves under `api` only and the API's `DATABASE_URL` names `devon_api` |
+| Production compose | `docker compose --env-file <filled example> -f infrastructure/docker/docker-compose.prod.yml --profile executor config -q` | exit 0; seven services with the profile, six without (`migrate` added); a missing `SECRET_KEY` refuses with its own message; read back from the resolved file: only `migrate` holds the owner URL, `api` holds `devon_api` and the receipt keys, `presence` holds no database URL, `n8n` connects as `n8n` |
 | The example env starts the presence service | `PresenceSettings.from_env()` under the filled example with `ENVIRONMENT=production`, then `create_app` | starts, inference `mock`, no fallback; the same with `PRESENCE_INFERENCE=cerebras` and no key refuses and names `PRESENCE_INFERENCE` |
 | Web typecheck and build | `npx tsc --noEmit`; `npx next build` | both exit 0; route `/presence` 1.44 kB first load 107 kB |
 | Pure presence modules | `node --experimental-strip-types scripts/presence-check.ts` | 12 checks passed, exit 0 |
 | Workspace audit | `pnpm audit --audit-level=moderate` | no known vulnerabilities, exit 0 |
 | Headless render, no presence server | Playwright against `next start`, Chromium on SwiftShader (`ANGLE Vulkan SwiftShader`) | canvas 800 by 499, rig `procedural head`, socket `locked`, state `idle`, 28 fps on the software renderer |
-| Presence service, offline, as the standalone job would run it | `env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q test_presence_buffer.py test_presence_breaker.py test_presence_livekit_token.py test_presence_service.py` | 56 passed, exit 0 |
+| Presence service, offline, as the standalone job would run it | `env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q test_presence_buffer.py test_presence_breaker.py test_presence_livekit_token.py test_presence_service.py` | 57 passed, exit 0 |
 | Presence service, live | `uvicorn apps.presence.main:app --port 8010`, then `GET /health` | `status ok`, `inference mock`, `speech mock`, `livekit_configured false`, `audio_over_websocket true`, breaker `closed`; `POST /livekit/token` without a bearer answers 401 |
 | Headless browser through the live presence service, on the post gauntlet code | Playwright against `next start` and the mock presence service, with a DEVON JWT minted under the service's key placed in the shared storage slot | socket `ready`; `say` reached `speaking` after 262 ms; 62 frames received, the freshest shown and 37 skipped by the software renderer at 17 fps; face age 1 ms, behind 68 ms; the HUD Interrupt button acked by the server in 0.7 ms with 823 frames flushed server side and 13 client side; state back to `listening`; server metrics reconcile at 70 sent plus 823 dropped; a LiveKit token asked for a foreign room answers 503 while LiveKit is unset, and 403 once it is configured (proved in `test_presence_service.py`) |
 | Headless browser with a fake microphone | the same run with Chromium's fake media device | the microphone opened (`live`) but the fake device delivered silence (rms 0.000), so the voice trigger never fired; the mic reaction figure stays unmeasured and only the manual path is proved |
 | Dash ban | `grep -rn` for the two banned marks over every file this arc wrote | clean |
-| Full API suite, presence tests included | `python3 -m pytest -q --tb=short` | 1534 passed, exit 0, 172 s |
+| Full API suite, presence tests included | `python3 -m pytest -q --tb=short` | 1541 passed, exit 0, 174 s |
 | Lint | `python3 -m ruff check .` | All checks passed, exit 0 |
 
 The 28 fps figure is the software renderer in a container and says nothing

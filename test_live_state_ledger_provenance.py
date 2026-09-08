@@ -713,31 +713,6 @@ ROLE_SQL = (
 )
 
 
-def _role_statements() -> list[str]:
-    """The compose stack's role script with its psql variables bound for the
-    test database, split into statements. Comments are dropped line by line
-    so a semicolon in prose cannot split a statement, and a dollar quoted
-    body is kept whole."""
-    script = (
-        ROLE_SQL.read_text(encoding="utf-8")
-        .replace(":'api_password'", "'role-test-password'")
-        .replace(':"target_database"', '"meta_supreme_test"')
-        .replace(':"owner_role"', '"postgres"')
-    )
-    lines = [line for line in script.splitlines() if not line.strip().startswith("--")]
-    statements: list[str] = []
-    buffer: list[str] = []
-    in_body = False
-    for line in lines:
-        buffer.append(line)
-        if line.count("$$") == 1:
-            in_body = not in_body
-        if line.rstrip().endswith(";") and not in_body:
-            statements.append("\n".join(buffer).strip())
-            buffer = []
-    return [statement for statement in statements if statement]
-
-
 async def test_the_runtime_role_from_the_compose_stack_cannot_rewrite_history(db_session):
     """The production compose connects the API as devon_api, created by
     initdb/sql/api-role.sql. Run that file against the test database and
@@ -748,10 +723,7 @@ async def test_the_runtime_role_from_the_compose_stack_cannot_rewrite_history(db
     intent_id = await _open_and_walk(db_session, owner_id)
     await _receipt(db_session, owner_id, intent_id)
 
-    for statement in _role_statements():
-        await db_session.execute(text(statement))
-    await db_session.execute(text("SET LOCAL ROLE devon_api"))
-    assert (await db_session.execute(text("SELECT current_user"))).scalar_one() == "devon_api"
+    await _become_devon_api(db_session)
 
     # DML works: the role can append through the writer.
     await ledger.append_event(
@@ -775,3 +747,210 @@ async def test_the_runtime_role_from_the_compose_stack_cannot_rewrite_history(db
         assert label
     await db_session.execute(text("RESET ROLE"))
     await db_session.rollback()
+
+
+# ---------------------------------------------------------------------------
+# What the third gauntlet pass added (2026-09-08).
+# ---------------------------------------------------------------------------
+
+GRANTS_SQL = pathlib.Path(__file__).parent / "database" / "grants" / "devon_api.sql"
+
+
+def _sql_statements(script: str) -> list[str]:
+    """Split a script into statements, dropping comment lines and keeping a
+    dollar quoted body whole."""
+    lines = [line for line in script.splitlines() if not line.strip().startswith("--")]
+    statements: list[str] = []
+    buffer: list[str] = []
+    in_body = False
+    for line in lines:
+        buffer.append(line)
+        if line.count("$$") == 1:
+            in_body = not in_body
+        if line.rstrip().endswith(";") and not in_body:
+            statements.append("\n".join(buffer).strip())
+            buffer = []
+    return [statement for statement in statements if statement]
+
+
+async def _become_devon_api(db) -> None:
+    """Run the role script and the grants file the way the compose stack
+    does (role at init, grants after migration), then take the role."""
+    role_script = (
+        ROLE_SQL.read_text(encoding="utf-8")
+        .replace(":'api_password'", "'role-test-password'")
+        .replace(':"target_database"', '"meta_supreme_test"')
+    )
+    grants_script = GRANTS_SQL.read_text(encoding="utf-8").replace(':"owner_role"', '"postgres"')
+    # The SQL built test database has no alembic_version; production does,
+    # and the grants file guards it. Give the test the table so the guard's
+    # branch runs and the probe below has something to be refused on.
+    await db.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS alembic_version "
+            "(version_num VARCHAR(32) NOT NULL PRIMARY KEY)"
+        )
+    )
+    for statement in _sql_statements(role_script) + _sql_statements(grants_script):
+        await db.execute(text(statement))
+    await db.execute(text("SET LOCAL ROLE devon_api"))
+    assert (await db.execute(text("SELECT current_user"))).scalar_one() == "devon_api"
+
+
+async def _refused(db, statement: str) -> str:
+    await db.execute(text("SAVEPOINT probe"))
+    with pytest.raises(DBAPIError) as caught:
+        await db.execute(text(statement))
+    await db.execute(text("ROLLBACK TO SAVEPOINT probe"))
+    return str(caught.value)
+
+
+async def test_the_runtime_role_cannot_make_a_temporary_table_or_a_function_of_its_own(db_session):
+    """The third pass deleted a receipted history through a temporary table's
+    trigger: TEMP is granted to PUBLIC by default, and the delete fired at
+    trigger depth 2 was admitted. TEMP is revoked from PUBLIC and the
+    delete guard no longer asks about depth at all."""
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id)
+    await _receipt(db_session, owner_id, intent_id)
+    await _become_devon_api(db_session)
+
+    assert "permission denied" in await _refused(db_session, "CREATE TEMP TABLE zz (id int)")
+    assert "permission denied" in await _refused(
+        db_session,
+        "CREATE FUNCTION pg_temp.wipe() RETURNS trigger AS $f$ BEGIN RETURN OLD; END $f$ LANGUAGE plpgsql",
+    )
+    await db_session.execute(text("RESET ROLE"))
+    await db_session.rollback()
+
+
+async def test_a_trigger_that_deletes_at_depth_two_is_refused_while_the_parent_stands(db_session):
+    """Negative control for the guard itself, as the owner: build the exact
+    scratch table and trigger the third pass used, and fire it. The events
+    and receipt triggers now ask whether the intent is gone, not how deep
+    the call stack is, so the delete is refused and the chain stands."""
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id)
+    issued = await _receipt(db_session, owner_id, intent_id)
+
+    await db_session.execute(text("CREATE TEMP TABLE zz_probe (id int)"))
+    await db_session.execute(
+        text(
+            "CREATE FUNCTION pg_temp.zz_wipe() RETURNS trigger AS $f$ BEGIN "
+            f"DELETE FROM events WHERE intent_id = '{intent_id}' AND sequence_no > 4; "
+            f"DELETE FROM universal_receipts WHERE intent_id = '{intent_id}'; "
+            "RETURN OLD; END $f$ LANGUAGE plpgsql"
+        )
+    )
+    await db_session.execute(
+        text("CREATE TRIGGER zz_fire BEFORE DELETE ON zz_probe FOR EACH ROW EXECUTE FUNCTION pg_temp.zz_wipe()")
+    )
+    await db_session.execute(text("INSERT INTO zz_probe VALUES (1)"))
+    refusal = await _refused(db_session, "DELETE FROM zz_probe")
+    assert "may not be deleted" in refusal
+
+    payload = await ledger.verify_provenance(db_session, owner_id=owner_id, intent_id=intent_id)
+    assert payload["verified"] is True
+    assert payload["chain"]["length"] == 5
+    assert payload["receipt"]["head_hash"] == issued["head_hash"]
+    await db_session.rollback()
+
+
+async def test_the_runtime_role_cannot_delete_users_but_can_delete_what_the_app_deletes(db_session):
+    """The owner cascade is the one door through the ledger's guards, and
+    the runtime role is not allowed through it: no DELETE on users. Where
+    the application does delete (a workflow and its runs), the role can."""
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id)
+    await _receipt(db_session, owner_id, intent_id)
+    workflow_id = str(uuid.uuid4())
+    await db_session.execute(
+        text(
+            "INSERT INTO workflows (id, owner_id, name, definition) "
+            "VALUES (:w, :o, 'probe', '{}'::jsonb)"
+        ),
+        {"w": workflow_id, "o": owner_id},
+    )
+    await _become_devon_api(db_session)
+
+    assert "permission denied" in await _refused(
+        db_session, f"DELETE FROM users WHERE id = '{owner_id}'"
+    )
+    assert "permission denied" in await _refused(
+        db_session, "UPDATE alembic_version SET version_num = '000_bogus'"
+    )
+    await db_session.execute(text("DELETE FROM workflows WHERE id = :w"), {"w": workflow_id})
+    left = await db_session.execute(
+        text("SELECT COUNT(*) FROM workflows WHERE id = :w"), {"w": workflow_id}
+    )
+    assert left.scalar_one() == 0
+
+    # And the chain it could not touch still verifies.
+    payload = await ledger.verify_provenance(db_session, owner_id=owner_id, intent_id=intent_id)
+    assert payload["verified"] is True
+    await db_session.execute(text("RESET ROLE"))
+    await db_session.rollback()
+
+
+async def test_an_intent_row_may_move_its_state_and_nothing_else(db_session):
+    owner_id = await _owner(db_session)
+    thief = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id)
+    for column, value in (
+        ("owner_id", f"'{thief}'"),
+        ("stated", "'something else'"),
+        ("channel", "'email'"),
+        ("is_effect", "TRUE"),
+        ("created_at", "NOW()"),
+    ):
+        refusal = await _refused(
+            db_session, f"UPDATE intents SET {column} = {value} WHERE id = '{intent_id}'"
+        )
+        assert "may only move its state" in refusal, column
+    # The writer's own moves are admitted.
+    await db_session.execute(
+        text("UPDATE intents SET state = 'failed', updated_at = NOW() WHERE id = :i"),
+        {"i": intent_id},
+    )
+    await db_session.rollback()
+
+
+async def test_a_handed_over_or_reworded_intent_is_named_by_the_verifier(db_session):
+    """Negative control behind the intents trigger: disable it, hand the row
+    to another owner, and the opening event's hash no longer matches the
+    row. The thief's read of the chain is not verified, and says why."""
+    owner_id = await _owner(db_session)
+    thief = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id)
+    await _receipt(db_session, owner_id, intent_id)
+
+    await db_session.execute(text("ALTER TABLE intents DISABLE TRIGGER trg_intents_state_only"))
+    try:
+        await db_session.execute(
+            text("UPDATE intents SET owner_id = :t, stated = 'x' WHERE id = :i"),
+            {"t": thief, "i": intent_id},
+        )
+    finally:
+        await db_session.execute(
+            text("ALTER TABLE intents ENABLE ALWAYS TRIGGER trg_intents_state_only")
+        )
+
+    payload = await ledger.verify_provenance(db_session, owner_id=thief, intent_id=intent_id)
+    assert payload["verified"] is False
+    assert payload["chain"]["intact"] is False
+    assert any("different owner" in f for f in payload["chain"]["findings"])
+    assert any("reworded" in f for f in payload["chain"]["findings"])
+
+
+async def test_the_written_out_escape_for_nul_is_ordinary_text(db_session):
+    owner_id = await _owner(db_session)
+    intent_id = await _open_and_walk(db_session, owner_id, [])
+    await ledger.append_event(
+        db_session,
+        owner_id=owner_id,
+        intent_id=intent_id,
+        name="CONTEXT_LOADED",
+        payload={"k": "the six characters backslash u 0 0 0 0: \\u0000"},
+    )
+    payload = await ledger.verify_provenance(db_session, owner_id=owner_id, intent_id=intent_id)
+    assert payload["chain"]["intact"] is True

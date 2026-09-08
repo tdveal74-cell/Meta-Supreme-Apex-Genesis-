@@ -252,7 +252,15 @@ class LiveStateLedger:
                 sequence_no=1,
                 prev_hash=hashchain.GENESIS,
                 action_id=None,
-                payload={"channel": intent.channel},
+                # The opening event binds the intent's identity into the
+                # chain: who asked, and for what. A row later handed to
+                # another owner or reworded no longer matches its own first
+                # hash, and the verifier says so.
+                payload={
+                    "channel": intent.channel,
+                    "owner_id": owner_id,
+                    "stated": intent.stated,
+                },
             )
         )
         await db.flush()
@@ -705,9 +713,32 @@ class LiveStateLedger:
         receipt from before a rotation reads as ``signed_with_current_key``
         false rather than as forged.
         """
-        await self._intent(db, owner_id=owner_id, intent_id=intent_id)
+        intent = await self._intent(db, owner_id=owner_id, intent_id=intent_id)
         rows = await self._event_rows(db, intent_id=intent_id)
         verdict = hashchain.verify_chain(intent_id, [_link(row) for row in rows])
+        identity_findings: List[str] = []
+        if rows and rows[0].name == "INTENT_RECEIVED" and rows[0].hash:
+            opening = dict(rows[0].payload or {})
+            if "owner_id" in opening and opening["owner_id"] != str(intent.owner_id):
+                identity_findings.append(
+                    "the intent row names a different owner than its opening event: "
+                    "the row was handed to another account after the fact"
+                )
+            if "stated" in opening and opening["stated"] != intent.stated:
+                identity_findings.append(
+                    "the intent row's statement differs from its opening event: "
+                    "the row was reworded after the fact"
+                )
+        if identity_findings:
+            verdict = hashchain.ChainVerdict(
+                intact=False,
+                complete=False,
+                length=verdict.length,
+                hashed=verdict.hashed,
+                unhashed=verdict.unhashed,
+                head_hash=verdict.head_hash,
+                findings=(*verdict.findings, *identity_findings),
+            )
 
         receipt = await db.execute(
             select(UniversalReceiptRecord).where(

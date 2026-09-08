@@ -556,3 +556,19 @@ def test_non_finite_numbers_from_the_client_are_refused_by_name(raw):
         # The socket is still alive and a turn still runs.
         messages = run_turn(ws, "turn-after-nan", "hi")
         assert [m for m in messages if m["t"] == "frame"]
+
+
+def test_an_integer_too_large_for_a_float_is_refused_by_name_and_the_socket_lives():
+    huge = "9" * 400
+    client = fast_app()
+    with open_ready(client) as ws:
+        for raw in (
+            '{"t":"ping","at_ms":' + huge + "}",
+            '{"t":"render","turn_id":"t","behind_ms":' + huge + ',"fps":60}',
+        ):
+            ws.send_text(raw)
+            reply = ws.receive_json()
+            assert reply["t"] == "error"
+            assert "finite" in reply["message"]
+        messages = run_turn(ws, "turn-after-huge", "hi")
+        assert [m for m in messages if m["t"] == "frame"]
