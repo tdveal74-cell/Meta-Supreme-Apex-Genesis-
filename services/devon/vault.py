@@ -707,8 +707,12 @@ WORKFLOWS = {
     # Switched on 2026-09-08 by Tee's ruling, after the prune found a policy
     # sensor sitting inactive, which his own rules make an exception path for a
     # compliance item. Its cron was implicit and was pinned the same day.
-    # Coverage was FOUR of eight for most of that night and is now eight of
-    # eight, and the history matters more than the number. The first sweep,
+    # Coverage was FOUR of eight for most of that night, was called eight of
+    # eight by the v1 doc, and one of those eight was hollow: Meta Content
+    # Monetization captured three policy sections as heading plus lead-in and
+    # nothing, fixed the same night with a Firecrawl custom body, see the v2
+    # doc. Nine watched since the X successor row was added. The history
+    # matters more than the number. The first sweep,
     # execution 6401, reported success and recorded baselines for three sources
     # that fetch 200 and normalise to 79, 75 and 14 characters of readable text,
     # because Meta and TikTok serve JavaScript applications with no server
@@ -718,7 +722,7 @@ WORKFLOWS = {
     # substitute URLs were both tried and reverted, executions 6403 and 6407.
     # What fixed it was a Firecrawl fallback on Gateway credits, which renders
     # JavaScript and also cleared X's 403; it runs ONLY on a source plain HTTP
-    # already failed, so roughly four scrapes a sweep and not eight. Assess
+    # already failed, so roughly five scrapes a sweep and not nine. Assess
     # Materiality runs on a MANAGED anthropicApi credential, so this workflow
     # holds no key: it is not a key holder and never enters the twenty.
     # Machine verdicts write to AI Verdict; the Assessment column is Tee's
