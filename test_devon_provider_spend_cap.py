@@ -380,7 +380,19 @@ async def test_a_cancelled_request_still_records_what_the_provider_was_paid(
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
-        await asyncio.sleep(0.15)
+        # The shielded write lands on its own schedule, so wait for it rather
+        # than guess. A fixed 0.15s wait here failed on a loaded CI runner
+        # (2026-09-08): the row had not arrived and scalar_one() below raised
+        # NoResultFound. Polling to a deadline keeps a genuinely dropped write
+        # failing, it just no longer races a stopwatch.
+        deadline = asyncio.get_running_loop().time() + 5.0
+        while asyncio.get_running_loop().time() < deadline:
+            probe = await db_session.execute(
+                text("SELECT calls FROM provider_usage WHERE user_id = :u"), {"u": tenant}
+            )
+            if probe.scalar_one_or_none() is not None:
+                break
+            await asyncio.sleep(0.02)
     finally:
         reset_tenant(token)
 
