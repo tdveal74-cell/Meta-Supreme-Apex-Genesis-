@@ -56,7 +56,8 @@ jobs:
             test_devon_editforge_execution.py \
             test_devon_hermes_surface.py \
             test_devon_receipts.py \
-            test_devon_capture_enrichment.py
+            test_devon_capture_enrichment.py \
+            test_presence_cartesia.py
 
   dependency-audit:
     name: Dependency audit (pip-audit + pnpm audit)

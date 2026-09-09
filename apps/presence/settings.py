@@ -43,6 +43,18 @@ PLATFORM_MARKERS = ("RAILWAY_ENVIRONMENT_NAME", "RAILWAY_PROJECT_ID", "VERCEL_EN
 
 INFERENCE_CHOICES = ("mock", "cerebras", "anthropic", "openai")
 SPEECH_CHOICES = ("mock", "cartesia")
+
+#: The voice is a compliance item in this estate rather than a default anyone
+#: may fill in. Tee's standing rule is that identity is owned and never rented:
+#: his own cloned voice, or a character he and his wife voice under recorded
+#: consent. So a Cartesia lane with no voice named is refused at startup, and
+#: no stock voice id is ever written into this repository as a fallback.
+CARTESIA_VOICE_RULE = (
+    "PRESENCE_SPEECH is cartesia but CARTESIA_VOICE_ID is empty. This estate's "
+    "standing rule is that the voice is owned and never rented, so there is no "
+    "default here and there will not be one: set CARTESIA_VOICE_ID to Tee's own "
+    "cloned voice, or to a character voiced under recorded consent."
+)
 DEFAULT_CORS_ORIGINS: Tuple[str, ...] = ("http://localhost:3000", "http://127.0.0.1:3000")
 LIVEKIT_VARIABLES = ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET")
 
@@ -140,6 +152,9 @@ class PresenceSettings:
     OPENAI_API_KEY: str = ""
     PRESENCE_SPEECH: str = "mock"
     CARTESIA_API_KEY: str = ""
+    CARTESIA_VOICE_ID: str = ""
+    CARTESIA_MODEL: str = "sonic-3"
+    CARTESIA_LANGUAGE: str = "en"
     LIVEKIT_URL: str = ""
     LIVEKIT_API_KEY: str = ""
     LIVEKIT_API_SECRET: str = ""
@@ -182,6 +197,19 @@ class PresenceSettings:
                 f"PRESENCE_SPEECH is {self.PRESENCE_SPEECH!r}; it must be one of "
                 f"{', '.join(SPEECH_CHOICES)}."
             )
+        if self.PRESENCE_SPEECH == "cartesia":
+            # Refused here as well as in build_speech, because these two answer
+            # different questions. build_speech refuses to hand back a
+            # synthesiser that cannot speak; this refuses to call the
+            # configuration valid at all, which is what the settings tests and
+            # any future caller of validate() read.
+            if not self.CARTESIA_API_KEY:
+                raise PresenceConfigError(
+                    "PRESENCE_SPEECH is cartesia but CARTESIA_API_KEY is empty. Set the "
+                    "key or switch PRESENCE_SPEECH to mock."
+                )
+            if not self.CARTESIA_VOICE_ID:
+                raise PresenceConfigError(CARTESIA_VOICE_RULE)
         if self.PRESENCE_TTFT_THRESHOLD_MS <= 0:
             raise PresenceConfigError("PRESENCE_TTFT_THRESHOLD_MS must be greater than zero.")
         if self.PRESENCE_WINDOW_MS <= 0:
@@ -222,6 +250,9 @@ class PresenceSettings:
             OPENAI_API_KEY=text("OPENAI_API_KEY"),
             PRESENCE_SPEECH=text("PRESENCE_SPEECH", "mock").lower() or "mock",
             CARTESIA_API_KEY=text("CARTESIA_API_KEY"),
+            CARTESIA_VOICE_ID=text("CARTESIA_VOICE_ID"),
+            CARTESIA_MODEL=text("CARTESIA_MODEL", "sonic-3") or "sonic-3",
+            CARTESIA_LANGUAGE=text("CARTESIA_LANGUAGE", "en") or "en",
             LIVEKIT_URL=text("LIVEKIT_URL"),
             LIVEKIT_API_KEY=text("LIVEKIT_API_KEY"),
             LIVEKIT_API_SECRET=text("LIVEKIT_API_SECRET"),

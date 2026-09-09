@@ -22,6 +22,7 @@ import {
   type RenderTelemetry,
   type RigInfo,
 } from "./DevonAvatarCanvas";
+import { useAudioPlayback, type PlaybackDiagnostics } from "./useAudioPlayback";
 import { useBargeIn } from "./useBargeIn";
 import { useLiveKitAudio } from "./useLiveKitAudio";
 import { readDevonToken, TOKEN_SLOT, usePresenceSocket } from "./usePresenceSocket";
@@ -40,6 +41,13 @@ type HudSample = {
   audioChunksIgnored: number;
   micLevel: number;
   telemetry: RenderTelemetry | null;
+};
+
+const EMPTY_PLAYBACK: PlaybackDiagnostics = {
+  scheduled: 0,
+  late: 0,
+  malformed: 0,
+  seconds: 0,
 };
 
 const EMPTY_HUD: HudSample = {
@@ -98,7 +106,11 @@ export function PresenceStage() {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  const socket = usePresenceSocket(token);
+  // Raw PCM playback. The presence service has never published audio into a
+  // LiveKit room, so this is the only path by which anything is heard, and
+  // before it existed every chunk was counted and dropped.
+  const playback = useAudioPlayback();
+  const socket = usePresenceSocket(token, { onAudio: playback.play });
   const { buffer, connection, ready, presence, caption, metrics, lastAck, rttMs, say, interrupt, sendRender, diagnostics } = socket;
 
   // Local "listening" override set by barge-in; the next server state clears it.
@@ -158,11 +170,20 @@ export function PresenceStage() {
   }, [livekitClockMs, override]);
 
   // Barge-in.
+  const stopPlayback = playback.stop;
   const onBargeIn = useCallback(() => {
     const flushed = buffer.flush();
+    // The voice, not only the face. A fresh critic measured this gap on
+    // 2026-09-09: flushing the frame buffer froze the mouth instantly while
+    // every AudioBufferSourceNode already scheduled played on, because the
+    // presence service sends audio unpaced and the browser can be holding
+    // seconds of the reply ahead. So barge-in stopped the face and let DEVON
+    // keep talking over the interruption, until the next turn's first chunk
+    // happened to trigger the turn-change stop inside play().
+    stopPlayback();
     setOverride({ atMs: performance.now() });
     return flushed;
-  }, [buffer]);
+  }, [buffer, stopPlayback]);
   const sendInterrupt = useCallback(
     (atMs: number) => {
       interrupt(atMs);
@@ -187,7 +208,9 @@ export function PresenceStage() {
 
   // HUD refresh from the refs that change every animation frame.
   const [hud, setHud] = useState<HudSample>(EMPTY_HUD);
+  const [playbackHud, setPlaybackHud] = useState<PlaybackDiagnostics>(EMPTY_PLAYBACK);
   const { getMicLevel } = bargeIn;
+  const playbackDiagnostics = playback.diagnostics;
   useEffect(() => {
     const id = window.setInterval(() => {
       const counters = buffer.counters();
@@ -198,9 +221,10 @@ export function PresenceStage() {
         micLevel: getMicLevel(),
         telemetry: telemetryRef.current,
       });
+      setPlaybackHud(playbackDiagnostics());
     }, HUD_REFRESH_MS);
     return () => window.clearInterval(id);
-  }, [buffer, diagnostics, getMicLevel]);
+  }, [buffer, diagnostics, getMicLevel, playbackDiagnostics]);
 
   const driver = useMemo<AvatarDriver>(
     () => ({
@@ -381,6 +405,29 @@ export function PresenceStage() {
           {bargeIn.message ? <p className="mt-2 text-[11px] leading-5 text-red-200/90">{bargeIn.message}</p> : null}
         </Panel>
 
+        <Panel title="Voice">
+          <Stat
+            label="Playback"
+            value={playback.status}
+            tone={playback.status === "playing" ? "good" : playback.status === "blocked" ? "wait" : playback.status === "unsupported" ? "bad" : "off"}
+          />
+          <Stat label="Chunks scheduled" value={String(playbackHud.scheduled)} />
+          <Stat label="Chunks arriving late" value={String(playbackHud.late)} />
+          <Stat label="Chunks that would not decode" value={String(playbackHud.malformed)} />
+          <Stat label="Audio scheduled" value={`${playbackHud.seconds.toFixed(1)}s`} />
+          <button
+            type="button"
+            onClick={() => void playback.unlock()}
+            className="mt-2 border border-cyan-400/40 bg-cyan-400/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-cyan-200 transition hover:border-cyan-300/60"
+          >
+            Start audio
+          </button>
+          <p className="mt-2 text-[11px] leading-4 text-[#718898]">
+            A browser will not start audio without a tap, so press this once a session. Scheduled is
+            what left for the speakers, not what was heard: a muted device looks identical from here.
+          </p>
+        </Panel>
+
         <Panel title="LiveKit">
           <Stat label="Status" value={livekit.status} tone={livekit.status === "connected" ? "good" : livekit.status === "not configured" || livekit.status === "idle" ? "off" : livekit.status === "error" || livekit.status === "disconnected" ? "bad" : "wait"} />
           <Stat label="URL" value={ready?.livekit.url ?? "n/a"} />
@@ -394,7 +441,9 @@ export function PresenceStage() {
           ) : null}
           {livekit.detail ? <p className="mt-2 text-[11px] leading-5 text-red-200/90">{livekit.detail}</p> : null}
           <p className="mt-2 text-[11px] leading-4 text-[#718898]">
-            The LiveKit path has not been exercised against a live server in this build; the raw audio fallback is counted, not played.
+            LiveKit is a transport this service can mint tokens for and has never published into, so
+            the raw audio path above is the one that carries the voice. This panel stays because a
+            configured LiveKit would silence that path, and a reader needs to see which is live.
           </p>
         </Panel>
 
