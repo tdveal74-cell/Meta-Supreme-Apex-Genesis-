@@ -9,7 +9,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "check:presence": "node --experimental-strip-types scripts/presence-check.ts",
-    "check:control": "node --experimental-strip-types scripts/control-check.ts"
+    "check:control": "node --experimental-strip-types scripts/control-check.ts",
+    "check:audio": "node --experimental-strip-types scripts/audio-check.mjs"
   },
   "dependencies": {
     "@meta-supreme/ui": "workspace:*",

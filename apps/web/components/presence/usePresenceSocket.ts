@@ -20,6 +20,7 @@ import { FrameBuffer } from "@/lib/presence/frame-buffer";
 import {
   PROTOCOL_VERSION,
   parseServerMessage,
+  type AudioMessage,
   type ClientMessage,
   type InterruptAckMessage,
   type MetricsMessage,
@@ -80,7 +81,22 @@ function describe(value: unknown): string {
   return String(value);
 }
 
-export function usePresenceSocket(token: string) {
+export type PresenceSocketOptions = {
+  /**
+   * Called for every audio chunk, in arrival order.
+   *
+   * The socket does not own playback: an AudioContext needs a user gesture and
+   * a component's lifetime, neither of which belongs in a WebSocket effect. It
+   * is a ref rather than a dependency so changing the handler does not tear the
+   * socket down and reconnect.
+   */
+  onAudio?: (message: AudioMessage) => void;
+};
+
+export function usePresenceSocket(token: string, options: PresenceSocketOptions = {}) {
+  const onAudioRef = useRef<PresenceSocketOptions["onAudio"]>(undefined);
+  onAudioRef.current = options.onAudio;
+
   const bufferRef = useRef<FrameBuffer | null>(null);
   if (bufferRef.current === null) bufferRef.current = new FrameBuffer();
   const buffer = bufferRef.current;
@@ -201,14 +217,26 @@ export function usePresenceSocket(token: string) {
             weights: message.weights,
           });
           return;
-        case "audio":
-          // Raw PCM only arrives when LiveKit is not configured. This build
-          // does not decode or play it, so the message is counted and
-          // dropped, and the frame timeline runs on the wall clock from the
-          // moment the speaking state arrived. Playback through an
-          // AudioContext queue keyed by at_ms is the follow-on.
-          diagnosticsRef.current.audioChunksIgnored += 1;
+        case "audio": {
+          // Raw PCM arrives only when LiveKit is not configured, which is every
+          // deployment so far: the presence service mints join tokens and has
+          // never published audio into a room. Until this handler existed the
+          // chunk was counted and dropped, so nothing in the estate could be
+          // heard whether or not the synthesiser worked.
+          if (!turnIsCurrent(message.turn_id)) {
+            // A chunk from a turn that was interrupted. Playing it would talk
+            // over whatever replaced it.
+            diagnosticsRef.current.audioChunksIgnored += 1;
+            return;
+          }
+          const handler = onAudioRef.current;
+          if (!handler) {
+            diagnosticsRef.current.audioChunksIgnored += 1;
+            return;
+          }
+          handler(message);
           return;
+        }
         case "interrupt_ack":
           setLastAck(message);
           return;

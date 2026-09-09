@@ -9,6 +9,7 @@
  */
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   ARKIT_BLENDSHAPES,
   isBlendshape,
@@ -28,6 +29,14 @@ import {
   vertexCount,
   writeDepthColors,
 } from "../components/presence/face-mesh.ts";
+import {
+  PCM_RATE,
+  PLAYBACK_LEAD_S,
+  base64ToBytes,
+  durationSeconds,
+  pcmToFloat32,
+  placeChunk,
+} from "../lib/presence/pcm-player.ts";
 
 let checks = 0;
 function check(name: string, run: () => void): void {
@@ -363,6 +372,115 @@ check("the lattice can actually resolve the narrowest feature", () => {
     `the narrowest feature spans ${spans.toFixed(2)} cells; under about 2.5 it disappears. ` +
       "Tighten a feature and you must add columns in the same commit.",
   );
+});
+
+
+/* pcm player: the path by which anything is actually heard */
+
+check("base64 decodes to the exact bytes, and refuses garbage", () => {
+  assert.deepEqual(Array.from(base64ToBytes("AAECAw==")), [0, 1, 2, 3]);
+  assert.deepEqual(Array.from(base64ToBytes("AAEC")), [0, 1, 2]);
+  // Malformed input costs one chunk of audio, never the turn.
+  for (const bad of ["!!!", "A", "====", "AA*A"]) {
+    assert.equal(base64ToBytes(bad).length, 0, `${bad} decoded to something`);
+  }
+  assert.equal(base64ToBytes("").length, 0);
+});
+
+check("PCM converts signed little endian to the full Float32 range", () => {
+  // -32768, 32767, 0. Written as bytes so the endianness is in the test rather
+  // than inherited from the host.
+  const samples = pcmToFloat32(new Uint8Array([0x00, 0x80, 0xff, 0x7f, 0x00, 0x00]));
+  assert.equal(samples.length, 3);
+  assert.equal(samples[0], -1);
+  assert.ok(Math.abs(samples[1] - 1) < 0.0001);
+  assert.equal(samples[2], 0);
+  // A negative sample read unsigned would come back positive, which is silence
+  // turned into a click and the single most likely mistake here.
+  const negative = pcmToFloat32(new Uint8Array([0x18, 0xfc]));
+  assert.ok(negative[0] < 0, `expected a negative sample, got ${negative[0]}`);
+  // A trailing odd byte is not a sample.
+  assert.equal(pcmToFloat32(new Uint8Array([0x01])).length, 0);
+});
+
+check("a chunk is placed on the turn's own origin, not on its arrival", () => {
+  const start = 10;
+  // Arrival order does not matter: at_ms decides the slot.
+  assert.equal(placeChunk(0, start, 9).when, 10);
+  assert.equal(placeChunk(250, start, 9).when, 10.25);
+  assert.equal(placeChunk(1000, start, 9).when, 11);
+  assert.equal(placeChunk(250, start, 9).late, false);
+});
+
+check("a chunk whose slot has passed plays now rather than being dropped", () => {
+  const placement = placeChunk(100, 10, 10.5);
+  assert.equal(placement.when, 10.5);
+  assert.equal(placement.late, true);
+  // A silent drop would be the worse answer: a late syllable still carries a word.
+  assert.ok(Number.isFinite(placement.when));
+});
+
+check("a chunk with a broken at_ms plays now and is counted late", () => {
+  for (const bad of [Number.NaN, Number.POSITIVE_INFINITY]) {
+    const placement = placeChunk(bad, 10, 12);
+    assert.equal(placement.when, 12);
+    assert.equal(placement.late, true);
+  }
+});
+
+check("the lead is enough to absorb jitter and short enough not to be heard", () => {
+  assert.ok(PLAYBACK_LEAD_S > 0, "a zero lead schedules the first chunk in the past");
+  assert.ok(PLAYBACK_LEAD_S < 0.2, "a lead over 200 ms is audible as delay");
+});
+
+check("the socket hands audio to a player and the stage supplies one", () => {
+  // The pure module above can be perfect while nothing calls it, which is the
+  // state this repository was actually in: the socket counted every chunk and
+  // dropped it. So the wiring is read out of the real files. Both are asserted
+  // non trivial first, because a path that no longer exists would otherwise
+  // read as an empty string and match nothing forever.
+  const socket = readFileSync(
+    new URL("../components/presence/usePresenceSocket.ts", import.meta.url),
+    "utf8",
+  );
+  const stage = readFileSync(
+    new URL("../components/presence/PresenceStage.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.ok(socket.length > 2000, "usePresenceSocket.ts did not read");
+  assert.ok(stage.length > 2000, "PresenceStage.tsx did not read");
+  // Both halves, and this is why. The first version of this check looked only
+  // for /onAudioRef\.current/, and a mutation that replaced the handler with a
+  // null literal still passed: the ref ASSIGNMENT at the top of the hook also
+  // matches that pattern. An assertion that survives the mutation it names is
+  // not an assertion. So the read and the CALL are both required.
+  assert.ok(
+    /const handler = onAudioRef\.current/.test(socket),
+    "the socket no longer reads the audio handler",
+  );
+  assert.ok(
+    /\bhandler\(message\)/.test(socket),
+    "the socket reads an audio handler and never calls it",
+  );
+  assert.ok(
+    /case "audio"/.test(socket) && !/does not decode or play it/.test(socket),
+    "the socket still describes itself as dropping audio",
+  );
+  assert.ok(
+    /onAudio:\s*playback\.play/.test(stage),
+    "PresenceStage no longer supplies a player to the socket",
+  );
+  assert.ok(
+    /playback\.unlock/.test(stage),
+    "PresenceStage offers no way to satisfy the autoplay gesture",
+  );
+});
+
+check("duration is read from the bytes at the presence rate", () => {
+  assert.equal(PCM_RATE, 16000);
+  // 100 ms at 16 kHz is 1600 samples, which is 3200 bytes.
+  assert.ok(Math.abs(durationSeconds(new Uint8Array(3200)) - 0.1) < 1e-9);
+  assert.equal(durationSeconds(new Uint8Array(0)), 0);
 });
 
 console.log(`presence-check: ${checks} checks passed`);
