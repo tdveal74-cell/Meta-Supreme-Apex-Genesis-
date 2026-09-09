@@ -115,14 +115,56 @@ failed on wrong needles rather than real defects, once on a case difference,
 which is a reminder that a failing check is a claim about the check as much as
 about the code.
 
+## Correction, 2026-09-09 after the merge: it IS deployed
+
+The paragraph below said nothing was deployed, and this session repeated that to
+Tee. It was wrong, and the read back rather than an assumption is what found it.
+Merging triggered a production build on both surfaces, so the sentence was false
+from 03:48Z onward and was restated after that.
+
+| Surface | Evidence | Commit |
+|---|---|---|
+| Vercel `meta-supreme-apex-genesis-web` | `dpl_5jXDgUBDeEyo4eVRFGrC3kNhWoz9`, READY, `target: "production"`, 05:35:18Z | `6a27a4e` |
+| Railway `api` | `6fcbae6c-5d84-4e54-b4c9-8ea30eb0165f` SUCCESS, 05:35:15Z to 05:41:29Z, application startup complete | `6a27a4e` |
+
+`/control` first reached production as `dpl_5LFcgr7qVXgLRVWe8QQuMDtxvGV4`, READY,
+`target: "production"`, on `e03f4a2` at 03:48:29Z, which is the merge of PR #181.
+Both surfaces now sit on `6a27a4e`, the same commit, which is current main.
+
+Two things the read back settled that this document had left open, and one it
+found that nobody had asked about.
+
+The CORS question below is answered and the answer is yes. The running
+application's own startup log reads `CORS allows 5 origin(s)` and names
+`https://meta-supreme-apex-genesis-web.vercel.app` among them. That is read from
+the process rather than inferred from the default in `app/core/config.py`, which
+is loopback only; Railway overrides it.
+
+The alembic pre deploy hook ran (`Context impl PostgresqlImpl`, `Will assume
+transactional DDL`) with no upgrade line, which is correct: migration 019 landed
+in an earlier deploy and nothing was pending on this one.
+
+**The surface is behind Vercel Authentication, which no document here had
+recorded.** `get_project_deployment_protection` reports `ssoProtection` enabled
+with `deploymentType: "all_except_custom_domains"`. Every domain on this project
+is a `.vercel.app` domain, so every one of them is protected. A person tapping
+the production link on a phone gets a Vercel login, not the control plane, unless
+that browser already holds a Vercel session for this account. So "deployed" and
+"openable" are different claims, and only the first was in question until now.
+Clearing it is a ruling for Tee: sign in to Vercel on the device, turn the
+protection off for production, or bind a custom domain, which the setting exempts
+by name. The third choice moves `PASSKEY_RP_ID`, currently
+`meta-supreme-apex-genesis-web.vercel.app`, so a custom domain breaks passkey
+sign in until that variable follows it.
+
 ## What is not verified
 
-Nothing is deployed. This is a route in a repository, not a live surface, and a
-green preview would not change that. No LiveKit, Cartesia or live Cerebras
+No presence service is deployed at all. Railway carries two services, `api` and
+`Postgres`, and `PRESENCE_BASE` falls back to `http://localhost:8010`, so the
+avatar tier cannot connect from a phone and will show as disconnected. That is
+the honest state, not a fault in the panel. No LiveKit, Cartesia or live Cerebras
 endpoint was reached, so the voice path of the cognitive tier is typed and
-tested against mocks and nothing more. The n8n tier has no data source. The
-API's CORS allowlist defaults to port 3000 and whether the deployed web origin
-is allowed is a deployment setting this session cannot read.
+tested against mocks and nothing more. The n8n tier has no data source.
 
 ## The next gate
 
