@@ -457,7 +457,7 @@ firing. Nothing was changed there.
 ## DEVON RECEIPT
 
 ```
-AREA: OS
+AREA: Systems
 TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_os29-platform-policy-sensor_v2_2026-09-08
 DATE: 2026-09-08
