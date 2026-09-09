@@ -463,111 +463,177 @@ check("every text input on the surface carries a label", () => {
  * it fails rather than passes.
  */
 
-/** Comment bodies removed. A fix left in a comment must not satisfy a check. */
-function codeOnly(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split("\n")
-    .filter((line) => !line.trim().startsWith("//"))
-    .join("\n");
-}
-
-/**
- * String literal CONTENTS blanked, delimiters kept.
+/*
+ * WHY THIS CHECK PARSES INSTEAD OF GREPPING
  *
- * The structural pass runs on this so that a body replaced by one string
- * carrying every matched token has nothing left to match. Path literals are
- * checked separately, against the unblanked source, because that is the one
- * thing that legitimately lives inside quotes.
+ * Three text-based versions of this guard were beaten in one evening, each by
+ * a critic, each shipping the capture lane dead at 26 checks passed and tsc 0:
+ *
+ *   1. presence assertions inside a name-sliced region: a no-op early return,
+ *      a body replaced by one string carrying every token, a decoy declaration
+ *      earlier in the file, and a dead neighbour inside the slice
+ *   2. a uniqueness count on one exact declaration string: beaten by a
+ *      neighbour under ANY other name, still inside the slice
+ *   3. a hand written string blanker: three independent quote regexes mis-pair
+ *      on apostrophes in JSX prose, and the replacement scanner mis-parsed a
+ *      template literal containing a nested expression. Measured: the handler
+ *      declaration this check exists to find dropped to zero occurrences. A
+ *      guard that erases its own subject fails for reasons that are entirely
+ *      its own.
+ *
+ * Text analysis cannot tell code from a string without parsing, and every
+ * attempt to fake it added a new way to be wrong. TypeScript is already a
+ * dependency because tsc runs in this same job, so the guard now asks the real
+ * parser. A token inside a string literal is a StringLiteral node, not a
+ * CallExpression, and no amount of clever quoting changes that.
  */
-function withoutStringBodies(code: string): string {
-  return code
-    .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
-    .replace(/'(?:[^'\\\n]|\\.)*'/g, "''")
-    .replace(/`(?:[^`\\]|\\.)*`/g, "``");
+
+import ts from "typescript";
+
+function parse(relative: string): ts.SourceFile {
+  const path = join(HERE, "..", relative);
+  return ts.createSourceFile(
+    path,
+    readFileSync(path, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+    relative.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
 }
 
-function occurrences(haystack: string, needle: string): number {
-  return haystack.split(needle).length - 1;
+function collect(node: ts.Node, hit: (n: ts.Node) => boolean): ts.Node[] {
+  const found: ts.Node[] = [];
+  const walk = (n: ts.Node) => {
+    if (hit(n)) found.push(n);
+    ts.forEachChild(n, walk);
+  };
+  walk(node);
+  return found;
+}
+
+/** Every `foo(...)` call in a subtree whose callee is exactly `name`. */
+function callsTo(root: ts.Node, name: string): ts.CallExpression[] {
+  return collect(
+    root,
+    (n) => ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === name,
+  ) as ts.CallExpression[];
+}
+
+/** The initialiser of `const <name> = ...`, or null. */
+function declarationsNamed(root: ts.Node, name: string): ts.VariableDeclaration[] {
+  return collect(
+    root,
+    (n) => ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === name,
+  ) as ts.VariableDeclaration[];
 }
 
 check("DEVON chat can still reach the capture endpoint", () => {
-  const source = readFileSync(
-    join(HERE, "..", "components/devon/DevonChat.tsx"),
-    "utf8",
-  );
-  assert.ok(source.length > 2000, "DevonChat.tsx did not read");
-  const code = codeOnly(source);
+  const file = parse("components/devon/DevonChat.tsx");
 
-  // Unique, so a decoy declared earlier fails rather than shadowing the real
-  // one, and a dead neighbour cannot supply the tokens.
+  // 1. Find the handler the keep mode actually dispatches to, from the AST
+  //    rather than by assuming a name. A guard checking a name nothing
+  //    dispatches to is checking nothing.
+  const keepBranches = collect(file, (n) => {
+    if (!ts.isBinaryExpression(n)) return false;
+    if (n.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken) return false;
+    return ts.isStringLiteral(n.right) && n.right.text === "keep";
+  });
   assert.equal(
-    occurrences(code, "const remember = useCallback("),
+    keepBranches.length,
     1,
-    "DevonChat must declare exactly one remember handler; a second one means this check may be reading the wrong one",
-  );
-  const from = code.indexOf("const remember = useCallback(");
-  const to = code.indexOf("const send = useCallback(", from);
-  assert.ok(to > from, "the remember handler is no longer followed by send; the slice bound moved");
-  const handler = code.slice(from, to);
-  const structure = withoutStringBodies(handler);
-
-  // Structural: these have to be code, not text inside a string.
-  assert.ok(
-    /await\s+authedFetch\(/.test(structure),
-    "remember does not await authedFetch as code. This guard blanks string bodies, so a handler whose body is a string literal fails here by design",
-  );
-  assert.ok(
-    /response\.ok/.test(structure),
-    "remember no longer checks response.ok, so a refusal would be rendered as a success",
+    "expected exactly one `=== \"keep\"` comparison; more than one means this check cannot tell which branch dispatches",
   );
 
-  // Nothing may return before the call. A no-op guard above the fetch leaves
-  // every token in place and files nothing.
-  const callAt = structure.indexOf("authedFetch(");
-  const before = structure.slice(0, callAt);
-  assert.ok(
-    !/\breturn\b/.test(before),
-    "remember returns before it reaches authedFetch, so for some input it files nothing while every other assertion here still passes",
-  );
+  // The enclosing if/else block, and the handler awaited inside it.
+  let branch: ts.Node = keepBranches[0];
+  while (branch.parent && !ts.isIfStatement(branch.parent)) branch = branch.parent;
+  assert.ok(branch.parent && ts.isIfStatement(branch.parent), "the keep comparison is not the test of an if statement");
+  const thenBlock = (branch.parent as ts.IfStatement).thenStatement;
+  const awaited = collect(thenBlock, (n) => ts.isAwaitExpression(n)) as ts.AwaitExpression[];
+  assert.equal(awaited.length, 1, "the keep branch does not await exactly one call");
+  const awaitedCall = awaited[0].expression;
+  assert.ok(ts.isCallExpression(awaitedCall) && ts.isIdentifier(awaitedCall.expression),
+    "the keep branch awaits something this check cannot resolve to a named handler");
+  const handlerName = (awaitedCall.expression as ts.Identifier).text;
 
-  // Literal: the path is the one thing that legitimately lives in quotes.
+  // 2. That handler must be declared exactly once, so a decoy or a dead
+  //    neighbour under any name cannot stand in for it.
+  const decls = declarationsNamed(file, handlerName);
   assert.equal(
-    occurrences(handler, "/soul/propose"),
+    decls.length,
     1,
-    "remember must name /soul/propose exactly once, inline. This guard reads the path literally, so an extracted constant fails here even though the code would work",
+    `${handlerName} is declared ${decls.length} times; a second declaration means this check may be reading the wrong one`,
   );
-  assert.ok(
-    /method:\s*["'`]POST["'`]/.test(handler),
-    "remember no longer POSTs, so propose would never be reached",
+  const handler = decls[0];
+
+  // 3. Inside THAT declaration's own subtree, an authedFetch call whose first
+  //    argument is the literal path. A string containing this text is a
+  //    StringLiteral, not a CallExpression, so a body replaced by one string
+  //    fails here by construction rather than by regex.
+  const fetches = callsTo(handler, "authedFetch");
+  const proposeCalls = fetches.filter(
+    (c) => c.arguments.length > 0 && ts.isStringLiteral(c.arguments[0]) &&
+      (c.arguments[0] as ts.StringLiteral).text === "/soul/propose",
   );
-  assert.ok(
-    /area:\s*null/.test(handler),
-    "remember now supplies an area, which closes the enrichment gate: suggest_area only runs when area is None",
+  assert.equal(
+    proposeCalls.length,
+    1,
+    `${handlerName} must call authedFetch("/soul/propose") exactly once as real code. This check parses the file, so a token inside a string or a comment cannot satisfy it, and an extracted path constant fails here even though the code would work`,
   );
-  assert.ok(
-    /what_happens/.test(structure) || /what_happens/.test(handler),
-    "remember no longer renders what_happens, which is where the model's labelled gloss is shown",
+  const call = proposeCalls[0];
+
+  // 4. Nothing may return before that call. Walked as statements in the
+  //    handler's own body, so a decoy call elsewhere cannot shift a text window.
+  const returnsBefore = collect(handler, (n) => ts.isReturnStatement(n)).filter(
+    (n) => n.getStart() < call.getStart(),
+  );
+  assert.equal(
+    returnsBefore.length,
+    0,
+    `${handlerName} returns before it reaches authedFetch("/soul/propose"), so for some input it files nothing while every other assertion here still passes`,
   );
 
-  // And the handler has to be reachable by a person. A live function nothing
-  // dispatches to, or a button wired to nothing, is the same failure moved.
+  // 5. The request has to be a POST that leaves the Area unset, or the
+  //    enrichment gate never opens: suggest_area only runs when area is None.
+  const init = call.arguments[1];
+  assert.ok(init && ts.isObjectLiteralExpression(init), "the authedFetch options are not an object literal this check can read");
+  const options = init as ts.ObjectLiteralExpression;
+  const method = options.properties.find(
+    (pr) => ts.isPropertyAssignment(pr) && pr.name.getText() === "method",
+  ) as ts.PropertyAssignment | undefined;
   assert.ok(
-    /mode === ["'`]keep["'`][\s\S]{0,120}?await remember\(/.test(code),
-    "no mode dispatches to remember, so the handler exists and nobody can reach it",
+    method && ts.isStringLiteral(method.initializer) && method.initializer.text === "POST",
+    `${handlerName} no longer POSTs, so propose would never be reached`,
   );
-  const modes = /\(\[([^\]]*)\] as const\)\.map\(\(option\)/.exec(code);
+  const bodyText = options.getText();
   assert.ok(
-    modes !== null,
-    "the mode button list is no longer a literal this check can read",
+    /area:\s*null/.test(bodyText),
+    `${handlerName} now supplies an area, which closes the enrichment gate: suggest_area only runs when area is None`,
   );
   assert.ok(
-    /["'`]keep["'`]/.test(modes[1]),
+    handler.getText().includes("what_happens"),
+    `${handlerName} no longer renders what_happens, which is where the model's labelled gloss is shown`,
+  );
+
+  // 6. And a person has to be able to select it. One mode list, containing
+  //    keep, with buttons that actually call setMode.
+  const modeLists = collect(file, (n) => {
+    if (!ts.isArrayLiteralExpression(n)) return false;
+    return n.elements.some((e) => ts.isStringLiteral(e) && e.text === "auto") &&
+      n.elements.some((e) => ts.isStringLiteral(e) && e.text === "ask");
+  }) as ts.ArrayLiteralExpression[];
+  assert.equal(
+    modeLists.length,
+    1,
+    `expected exactly one mode list; ${modeLists.length} means a decoy could be read while another one renders`,
+  );
+  assert.ok(
+    modeLists[0].elements.some((e) => ts.isStringLiteral(e) && e.text === "keep"),
     "the keep mode is not offered as a button, so no person can select it",
   );
   assert.ok(
-    /onClick=\{\(\)\s*=>\s*setMode\(/.test(code),
-    "the mode buttons no longer call setMode, so every one of them is inert and keep can never be selected",
+    callsTo(file, "setMode").length > 0,
+    "nothing calls setMode, so every mode button is inert and keep can never be selected",
   );
 });
 
@@ -591,10 +657,30 @@ check("DEVON chat can still reach the capture endpoint", () => {
  * cannot stand in for it.
  */
 
+/*
+ * Counted from the ESTATE, not from the lane.
+ *
+ * The first version of this list held three files under apps/web, and the
+ * check it printed claimed "no surface". A critic found deploy/soul/console.html
+ * still running the identical rented-voice implementation, served in production
+ * by deploy/soul/main.py and by app.main GET /console. It titles itself DEVON
+ * and labels its output lines DEVON, so it is a DEVON surface by any reading.
+ *
+ * That was the third count taken from a lane rather than the estate in one
+ * evening, which is the miss CLAUDE.md's first law is written about. The list
+ * is now every served surface that could speak, and the paths are relative to
+ * apps/web so the two roots sit side by side rather than one being forgotten.
+ *
+ * docs/devon/assets/SYS_OPS_devon-console_v*.html is the same file: app.main
+ * serves the newest of them and test_deploy_soul.py holds it byte identical to
+ * deploy/soul/console.html, so guarding one guards both. The SUPERSEDED_ copies
+ * are archives and are not served.
+ */
 const VOICE_SURFACES = [
   "components/devon/DevonChat.tsx",
   "components/presence/PresenceStage.tsx",
   "components/presence/useAudioPlayback.ts",
+  "../../deploy/soul/console.html",
 ] as const;
 
 check("no surface speaks as DEVON in a rented browser voice", () => {

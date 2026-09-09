@@ -201,6 +201,13 @@ def create_app(
             "inference": runtime.router.primary.name,
             "fallback": runtime.router.fallback_name,
             "speech": runtime.speech.name,
+            # Readable because it is otherwise unknowable from outside, and it
+            # fails silently: the chat's POST /tts is the first cross origin
+            # request the web app makes to this service, so a localhost only
+            # list means the browser discards a 200 and DEVON goes quiet with
+            # no error anywhere. A critic measured that shape on 2026-09-09.
+            # These are the estate's own public web origins, not a secret.
+            "cors_origins": list(settings.PRESENCE_CORS_ORIGINS),
             "livekit_configured": settings.livekit_configured,
             "audio_over_websocket": runtime.send_audio_over_websocket,
             "breaker": runtime.router.breaker.snapshot(),
