@@ -100,9 +100,14 @@ on every push). The sixth is `.github/workflows/web-ci.yml`, path filtered to
 the web workspace, so a run of Python-only PRs makes CI look like five.
 `ruff check .` runs at the end of the api job, not as a job of its own.
 
-The standalone job runs with **no** `PYTHONPATH` and no database. An import
-that only resolves under the test path passes locally and fails there, so
-reproduce it exactly:
+The standalone job runs with no database. This paragraph said it also runs
+with **no** `PYTHONPATH` until 2026-09-09, when a worktree agent read the file
+and found otherwise: `ci.yml` sets `PYTHONPATH` in its top level `env:` block
+(line 14), which applies to every job, and `standalone` declares no override.
+Reproducing it with the variable unset is therefore **stricter than CI, not
+equal to it**, which is why the commands below are still the ones to run: they
+catch an import CI would let through. Keep the list of files in step with the
+job, which is the real thing the local run mirrors.
 
 ```bash
 env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -c "import standalone_api"
@@ -110,7 +115,8 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_billing.py test_definition.py test_providers.py test_schedule.py \
   test_workflow_engine.py test_devon_hermes_expansion.py \
   test_devon_hermes_durable_followon.py test_devon_learning_loop.py \
-  test_devon_operating_layer.py test_devon_editforge_execution.py
+  test_devon_operating_layer.py test_devon_editforge_execution.py \
+  test_devon_hermes_surface.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .
@@ -227,11 +233,26 @@ Two things that are already handled, so nobody re-derives them:
 `.claude/worktrees/` is in `.gitignore`, and the worktree is removed on its own
 when the agent leaves it unchanged.
 
-The isolation is of the filesystem only. Every worktree still shares this
-container's one PostgreSQL cluster, so two agents running the full suite at
-once are writing the same `meta_supreme_test`. That has not been observed to
-corrupt a run here and is reasoning rather than a measurement, but it is the
-first thing to suspect behind an unreproducible failure while a critic is out.
+**The isolation is of the filesystem only, and the database bites.** Every
+worktree shares this container's one PostgreSQL cluster, so two agents running
+the full suite are writing the same `meta_supreme_test`, and `conftest.py`
+truncates one global `_DATA_TABLES` list after every test. Measured on
+2026-09-09, when this was written as a caution and then promptly happened: a
+worktree agent's suite returned `8 failed, 1493 passed, 56 errors`, the errors
+reading `duplicate key value violates unique constraint "users_email_key"`,
+with a second session running the identical suite from another worktree. The
+retry collided with a third session, both blocked in `pg_stat_activity` on
+`Lock / relation` with one `TRUNCATE` waiting on the other. On a private
+database the same commit returned `1557 passed`. So a suite that fails only
+while a critic is out is the cluster, not the branch. Give a concurrent run
+its own database rather than re-running into the same collision, and know that
+`test_live_state_ledger_provenance.py` hardcodes `meta_supreme_test` for the
+TEMP privilege check, so that one test alone must run against the real name.
+
+**Check `PYTHONPATH` before running anything in a worktree.** The inherited
+value points at the main checkout, so pytest imports the parent's code while
+the run appears to be testing the worktree. Same shape as the wrong base
+commit above: a green that means nothing. Set it to absolute worktree paths.
 
 ## Skills in this repository
 
