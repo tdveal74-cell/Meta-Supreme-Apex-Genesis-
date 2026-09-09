@@ -42,16 +42,26 @@ Honest label: schema and CI green are not the same as a person running Hermes as
 
 Update 2026-09-02 (fix PR 3 of the DEVON and Hermes audit): the three runtime tools, runtime.spawn_subagent, runtime.schedule_goal and runtime.propose_skill, now spend their approval binding and write the same tables the HTTP routes read. Before that date the subagent, scheduler and skill-proposal rows above were true for the HTTP routes only; the runtime tool path was process-local (audit finding H6).
 
-Update 2026-09-09: the capability table above is no longer maintained by
-hand alone. `docs/devon/hermes-surface.json` records the Hermes agent
-surface (the three runtime tools with their risk class and blast radius,
-the nine agent-expansion routes, the ten agent runtime tables, and the two
-expansion state machines), and `test_devon_hermes_surface.py` derives that
-surface from the code on every run and fails when the two disagree. A tool,
-route, table or state added without amending this record now fails CI and
-names the records to move. It closes the gap the 2026-09-02 audit found by
-hand: this document carried a superseded schema head for weeks while
-production had moved past it, and nothing failed.
+Update 2026-09-09: the Hermes agent surface is now machine checked against
+this record. `docs/devon/hermes-surface.json` pins it, and
+`test_devon_hermes_surface.py` re-derives it from the code on every run,
+failing when the two disagree and naming exactly what moved. It covers 20
+governed tools (the whole registry the running service builds, across all six
+adapters, each with its risk class, reversibility and blast radius), 22
+governed routes (the agent-expansion and agent-tasks HTTP surface), 101
+governed columns (every agent runtime table and the columns it carries), 9
+governed states (the two expansion state machines) and 18 governed migrations
+(each revision and the one it follows). Regenerating the manifest does not on
+its own clear a failure: those five counts are read back out of this paragraph
+and checked against the code, so this document has to move with it.
+
+What it does not cover, stated plainly so nobody reads more into it. The
+Status column of the table above is a human judgement and stays one. The
+behaviour behind a tool is unpinned, so a rewritten implementation under an
+unchanged name, risk class and blast radius still passes. The migration list
+is read from the source tree, which says what the next deploy will apply and
+not what production runs; the deployed estate stays the job of
+`scripts/estate_reconcile.py` and stays UNVERIFIED without a Railway read.
 
 ## Governance invariants held
 
