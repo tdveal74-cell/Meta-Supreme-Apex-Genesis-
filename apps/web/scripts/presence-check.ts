@@ -510,4 +510,119 @@ check("duration is read from the bytes at the presence rate", () => {
   assert.equal(durationSeconds(new Uint8Array(0)), 0);
 });
 
+/* base URL resolution */
+
+/*
+ * A deployed page has to reach the services it talks to. Until 2026-09-09
+ * PRESENCE_BASE had no production branch, so a production build resolved it to
+ * http://localhost:8010 and /presence dialled whichever machine was viewing it.
+ *
+ * The first version of this guard asserted that the declaration contained a
+ * NODE_ENV branch and that SOME url in it was non loopback https. A fresh
+ * critic broke it three ways on 2026-09-09 and each one shipped the original
+ * bug to the browser with the guard reporting green:
+ *
+ *   1. Swap the ternary arms. Production points at localhost, the block still
+ *      contains a good looking https url, 31 checks passed.
+ *   2. Revert the code and leave the fix in a comment underneath. The slice ran
+ *      to the next declaration, so it swallowed the comment.
+ *   3. Group the WebSocket bases at the bottom. API_BASE's slice then swallowed
+ *      PRESENCE_BASE's evidence and API_BASE itself went unguarded.
+ *
+ * So this version strips comments, bounds each declaration at its own
+ * semicolon, and reads the PRODUCTION arm of the ternary specifically. It also
+ * checks that the env override is consulted before the fallback, because
+ * reversing that order silently kills NEXT_PUBLIC_PRESENCE_URL, which the
+ * compose deployment requires.
+ *
+ * The cost of reading the arm literally is that the ternary has to stay inline.
+ * Extracting it into a helper is a legitimate refactor that this guard refuses,
+ * and the message says so rather than reporting a missing branch.
+ */
+
+const SERVICE_BASES = [
+  { name: "API_BASE", env: "NEXT_PUBLIC_API_URL" },
+  { name: "PRESENCE_BASE", env: "NEXT_PUBLIC_PRESENCE_URL" },
+] as const;
+
+function withoutComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("//"))
+    .join("\n");
+}
+
+function declarationBody(source: string, name: string): string {
+  const at = source.indexOf(`export const ${name} =`);
+  assert.ok(at >= 0, `${name} is not declared in lib/api-base.ts`);
+  const end = source.indexOf(";", at);
+  assert.ok(end > at, `${name}'s declaration never terminates with a semicolon`);
+  return source.slice(at, end + 1);
+}
+
+function unreachableFromABrowser(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return (
+    host === "localhost" ||
+    host === "0.0.0.0" ||
+    host === "::1" ||
+    host === "host.docker.internal" ||
+    host.endsWith(".local") ||
+    /^127\./.test(host) ||
+    /^10\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+  );
+}
+
+check("each service base reaches a real host in a production build", () => {
+  const source = withoutComments(
+    readFileSync(new URL("../lib/api-base.ts", import.meta.url), "utf8"),
+  );
+  assert.ok(source.length > 200, "lib/api-base.ts did not read");
+
+  for (const { name, env } of SERVICE_BASES) {
+    const body = declarationBody(source, name);
+
+    const envAt = body.indexOf(`process.env.${env}`);
+    const branchAt = body.indexOf("process.env.NODE_ENV");
+    assert.ok(envAt >= 0, `${name} no longer reads ${env}, so nothing can override it`);
+    assert.ok(
+      branchAt >= 0,
+      `${name} has no inline NODE_ENV ternary. This guard reads the production arm ` +
+        `literally, so the ternary must stay inline in the declaration.`,
+    );
+    assert.ok(
+      envAt < branchAt,
+      `${name} consults NODE_ENV before ${env}, so setting ${env} would never win`,
+    );
+
+    const ternary = body.match(
+      /process\.env\.NODE_ENV\s*===\s*(['"`])production\1\s*\?\s*(['"`])([^'"`]*)\2\s*:\s*(['"`])([^'"`]*)\4/,
+    );
+    assert.ok(
+      ternary !== null,
+      `${name}'s production branch is not a literal ternary this guard can read`,
+    );
+    const production = ternary[3];
+    const development = ternary[5];
+
+    assert.ok(
+      production.startsWith("https://"),
+      `${name}'s PRODUCTION arm is ${JSON.stringify(production)}, which an https page cannot reach`,
+    );
+    assert.ok(
+      !production.endsWith("/"),
+      `${name}'s PRODUCTION arm has a trailing slash, so every path built from it doubles the separator`,
+    );
+    const hostname = new URL(production).hostname;
+    assert.ok(
+      !unreachableFromABrowser(hostname),
+      `${name}'s PRODUCTION arm is ${JSON.stringify(production)}, an address no deployed browser can reach`,
+    );
+    assert.ok(development.length > 0, `${name}'s development arm is empty`);
+  }
+});
+
 console.log(`presence-check: ${checks} checks passed`);
