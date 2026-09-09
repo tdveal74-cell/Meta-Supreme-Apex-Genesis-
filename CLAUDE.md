@@ -182,6 +182,57 @@ A handover's "CI green" is a claim, not a fact. Check the Actions history for
 the claimed head SHA before building on it. A green Vercel preview is not
 production; load the `deploy-readback` skill before saying any surface is live.
 
+## Running a critic
+
+Every arc here closes with a fresh critic, and a critic earns its verdict by
+mutating the real source: registering a tool that should not exist, deleting a
+guard, feeding an input nothing else feeds it, then reverting. That is the
+method working rather than a critic misbehaving.
+
+**Spawn it with `isolation: "worktree"`.** A critic, or any subagent told to
+mutate the source, gets its own checkout. The session's own tree is not scratch
+space, and a critic that shares it costs three ways. All three happened in one
+session, 2026-09-09, PR #177:
+
+- The stop hook reported uncommitted changes that were the critic's.
+  `app/api/v1/router.py`, a new `app/api/v1/agent_skills.py` and
+  `app/api/v1/agent_tasks.py` each appeared and reverted inside three commands.
+  Committing them would have pushed a throwaway probe as if it were the work.
+- Any check the parent runs while a critic holds a mutation is measuring the
+  critic's source, not the branch's. A green run in that window proves nothing
+  and has to be thrown away and repeated.
+- A critic that stops mid mutation leaves dirt with no owner, and the next
+  session cannot tell it from real work.
+
+If foreign changes do turn up in the tree, do not commit them and do not
+revert them blind. Ask whether the path is in your own diff first, with
+`git diff --name-only <base>..HEAD`, and leave alone anything that is not.
+A path you did not touch belongs to something still running.
+
+**The worktree does not start on your HEAD.** Measured on 2026-09-09: the
+parent sat on `b8fd28b` and the new worktree came up on `2b09dbd`, which is
+`origin/main`, so `test_devon_hermes_surface.py` did not exist in the critic's
+checkout at all. A critic handed the wrong commit reviews code the branch does
+not have and reports green, which is the most expensive answer it can give.
+Check the commit out yourself as the first instruction in the prompt, and make
+the agent echo `git rev-parse --short HEAD` back in its report so a wrong base
+shows up in the receipt rather than in the verdict:
+
+```
+git fetch origin <branch> && git checkout -B verify <sha>
+git rev-parse --short HEAD    # must match the sha you meant
+```
+
+Two things that are already handled, so nobody re-derives them:
+`.claude/worktrees/` is in `.gitignore`, and the worktree is removed on its own
+when the agent leaves it unchanged.
+
+The isolation is of the filesystem only. Every worktree still shares this
+container's one PostgreSQL cluster, so two agents running the full suite at
+once are writing the same `meta_supreme_test`. That has not been observed to
+corrupt a run here and is reasoning rather than a measurement, but it is the
+first thing to suspect behind an unreproducible failure while a critic is out.
+
 ## Skills in this repository
 
 `.claude/skills/` carries six. Five are ours: `steward` (CI and PR
