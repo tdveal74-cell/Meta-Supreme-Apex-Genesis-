@@ -123,11 +123,11 @@ export function KnowledgePanel() {
   return (
     <div className="space-y-4">
       {corpus.state === "loading" ? (
-        <p className="text-xs text-white/45">Reading the corpus.</p>
+        <p className="text-xs text-white/50">Reading the corpus.</p>
       ) : null}
 
       {corpus.state === "signed-out" ? (
-        <p className="text-xs leading-relaxed text-white/45">
+        <p className="text-xs leading-relaxed text-white/50">
           No session token in this browser. The corpus is per account, so nothing is shown
           rather than an empty one.
         </p>
@@ -136,7 +136,7 @@ export function KnowledgePanel() {
       {corpus.state === "error" ? (
         <div className="space-y-2">
           <p className="text-xs text-red-300">The corpus could not be read: {corpus.detail}.</p>
-          <p className="text-xs text-white/40">
+          <p className="text-xs text-white/50">
             This is a failed read. It does not mean the corpus is empty.
           </p>
           <button
@@ -160,7 +160,7 @@ export function KnowledgePanel() {
           </div>
 
           {corpus.items.length === 0 ? (
-            <p className="text-xs leading-relaxed text-white/45">
+            <p className="text-xs leading-relaxed text-white/50">
               This account has no knowledge items. That is a real empty corpus, read from
               the route, not a failed request.
             </p>
@@ -172,7 +172,7 @@ export function KnowledgePanel() {
                     key={source}
                     className="rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-[11px] text-white/60"
                   >
-                    {source} <span className="tabular-nums text-white/40">{count}</span>
+                    {source} <span className="tabular-nums text-white/50">{count}</span>
                   </span>
                 ))}
               </div>
@@ -184,7 +184,7 @@ export function KnowledgePanel() {
                     className="rounded-lg border border-white/5 bg-black/20 px-2.5 py-2"
                   >
                     <p className="truncate text-xs text-white/80">{item.title}</p>
-                    <p className="mt-0.5 text-[11px] text-white/40">
+                    <p className="mt-0.5 text-[11px] text-white/50">
                       {item.source_type}
                       {item.status !== "ready" ? `, ${item.status}` : ""}
                       {item.chunk_count ? `, ${item.chunk_count} chunks` : ", not chunked"}
@@ -193,7 +193,7 @@ export function KnowledgePanel() {
                 ))}
               </ul>
               {corpus.items.length > 5 ? (
-                <p className="text-[11px] text-white/35">
+                <p className="text-[11px] text-white/50">
                   Showing the 5 most recent of {corpus.items.length}.
                 </p>
               ) : null}
@@ -211,7 +211,7 @@ export function KnowledgePanel() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search the corpus"
-          className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-white/85 outline-none transition placeholder:text-white/25 focus:border-white/25"
+          className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-white/85 outline-none transition placeholder:text-white/50 focus:border-white/25"
         />
         <button
           type="submit"
@@ -222,14 +222,14 @@ export function KnowledgePanel() {
       </form>
 
       {search.state === "running" ? (
-        <p className="text-xs text-white/45">Searching.</p>
+        <p className="text-xs text-white/50">Searching.</p>
       ) : null}
       {search.state === "error" ? (
         <p className="text-xs text-red-300">Search failed: {search.detail}.</p>
       ) : null}
       {search.state === "done" ? (
         search.hits.length === 0 ? (
-          <p className="text-xs text-white/45">
+          <p className="text-xs text-white/50">
             Nothing matched {`"${search.query}"`}. The search ran and returned no rows.
           </p>
         ) : (
@@ -241,7 +241,7 @@ export function KnowledgePanel() {
               >
                 <div className="flex items-baseline justify-between gap-2">
                   <p className="truncate text-xs text-white/80">{hit.title}</p>
-                  <span className="shrink-0 tabular-nums text-[11px] text-white/40">
+                  <span className="shrink-0 tabular-nums text-[11px] text-white/50">
                     distance {hit.distance.toFixed(3)}
                   </span>
                 </div>
@@ -254,7 +254,7 @@ export function KnowledgePanel() {
         )
       ) : null}
 
-      <p className="text-xs leading-relaxed text-white/35">
+      <p className="text-xs leading-relaxed text-white/50">
         No route exposes vector activations or edges between the Drive, Notion and Pinecone
         namespaces, so no graph is drawn. Distance is the raw distance the search route
         returns, where smaller is nearer, not a confidence score.
@@ -266,7 +266,7 @@ export function KnowledgePanel() {
 function Figure({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">
         {label}
       </p>
       <p className="mt-1 text-lg font-semibold tabular-nums text-white">{value}</p>

@@ -4,7 +4,7 @@
 export {
   AgentReadinessMatrix,
   type AgentReadinessMatrixProps,
-} from "./AgentReadinessMatrix";
+} from "./AgentReadinessMatrix.tsx";
 export {
   TASK_STATES,
   TOOL_RISKS,
@@ -16,8 +16,8 @@ export {
   type ToolRisk,
   type ToolCatalogEntry,
   type ToolCatalogResponse,
-} from "./readiness-types";
-export { PINNED_TOOL_RISK, PINNED_TOOL_COUNT } from "./pinned-tool-risk";
+} from "./readiness-types.ts";
+export { PINNED_TOOL_RISK, PINNED_TOOL_COUNT } from "./pinned-tool-risk.ts";
 export {
   RISK_LABEL,
   ageLabel,
@@ -27,4 +27,4 @@ export {
   type ResolvedTool,
   type RiskSource,
   type TaskRiskSummary,
-} from "./risk-resolution";
+} from "./risk-resolution.ts";

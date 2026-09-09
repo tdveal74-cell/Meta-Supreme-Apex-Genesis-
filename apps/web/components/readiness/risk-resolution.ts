@@ -5,13 +5,13 @@ import {
   PINNED_TOOL_RISK,
   approvalRequiredForRisk,
   type PinnedTool,
-} from "./pinned-tool-risk";
+} from "./pinned-tool-risk.ts";
 import {
   isToolRisk,
   type AgentTaskView,
   type ToolCatalogEntry,
   type ToolRisk,
-} from "./readiness-types";
+} from "./readiness-types.ts";
 
 // Where a risk answer came from. Displayed, because a pinned answer and a live
 // one are not the same claim.

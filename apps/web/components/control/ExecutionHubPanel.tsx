@@ -51,7 +51,7 @@ export function ExecutionHubPanel() {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">
           DEVON API
         </p>
         <p className="mt-1 flex items-center gap-2 text-sm text-white/80">
@@ -72,7 +72,7 @@ export function ExecutionHubPanel() {
         </p>
       </div>
 
-      <div className="space-y-2 text-xs leading-relaxed text-white/45">
+      <div className="space-y-2 text-xs leading-relaxed text-white/50">
         <p>
           Execution telemetry, the retry and queue viewer, and version sync against GitHub are
           not built. The executor of record is the n8n instance at n8n.editforge.online, and no

@@ -113,6 +113,18 @@ async def test_usage_is_read_only_on_the_surface():
     for path, spec in usage.items():
         methods = {m.lower() for m in spec} & {"post", "put", "patch", "delete"}
         assert not methods, f"{path} exposes {sorted(methods)}"
+        # A GET with no parameters cannot be steered. The scoping to the caller
+        # lives in the dependency rather than in an argument, so a query or path
+        # parameter appearing here would be a way to ask for somebody else's
+        # ledger and the assertion above would not catch it.
+        for operation, detail in spec.items():
+            if operation.lower() != "get":
+                continue
+            params = detail.get("parameters", [])
+            assert params == [], (
+                f"{path} GET takes {[p.get('name') for p in params]}; the caller's "
+                "own row is the only readable row, so it takes no input"
+            )
 
 
 async def test_the_route_refuses_an_unauthenticated_read(client):

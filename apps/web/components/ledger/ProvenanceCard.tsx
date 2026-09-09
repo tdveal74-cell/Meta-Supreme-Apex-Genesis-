@@ -22,7 +22,7 @@ import {
   shortHash,
   type ProvenancePayload,
   type VerdictTone,
-} from "./provenance-payload";
+} from "./provenance-payload.ts";
 
 const TOKEN_SLOT = "devon-chat-token";
 
@@ -113,14 +113,14 @@ function Shell({
     >
       <header className="flex items-start justify-between gap-3 border-b border-[#22384a] px-4 py-3">
         <div className="min-w-0">
-          <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#c77b4a]">
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#c77b4a]">
             Live State Ledger
           </p>
           <p className="mt-1 text-xs font-semibold text-white">Provenance verdict</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {status ? (
-            <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#526979]">
+            <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-[#718898]">
               {status}
             </span>
           ) : null}
@@ -128,7 +128,7 @@ function Shell({
             <button
               type="button"
               onClick={onRefresh}
-              className="border border-[#22384a] px-2 py-1 font-mono text-[9px] uppercase tracking-[0.12em] text-[#93a6b5] hover:border-[#c77b4a]/60 hover:text-white"
+              className="border border-[#22384a] px-2 py-1 font-mono text-[11px] uppercase tracking-[0.12em] text-[#93a6b5] hover:border-[#c77b4a]/60 hover:text-white"
             >
               Re-verify
             </button>
@@ -163,11 +163,11 @@ function Fact({
           : "text-white";
   return (
     <div className="min-w-0 border-t border-[#22384a] pt-2.5">
-      <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#526979]">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[#718898]">{label}</p>
       <p className={`mt-1 break-words font-mono text-[11px] leading-4 ${valueTone}`} title={title}>
         {value}
       </p>
-      {note ? <p className="mt-1 text-[10px] leading-4 text-[#6f8494]">{note}</p> : null}
+      {note ? <p className="mt-1 text-[11px] leading-4 text-[#6f8494]">{note}</p> : null}
     </div>
   );
 }
@@ -181,7 +181,7 @@ function Findings({
 }) {
   return (
     <div>
-      <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#c77b4a]">
+      <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[#c77b4a]">
         {heading} ({findings.length})
       </p>
       {findings.length === 0 ? (
@@ -337,7 +337,7 @@ export function ProvenanceCard({
             <span className="h-2 w-2 animate-pulse rounded-full bg-amber-300" />
             Walking the chain...
           </p>
-          <p className="mt-2 font-mono text-[10px] leading-4 text-[#526979]">{id}</p>
+          <p className="mt-2 font-mono text-[11px] leading-4 text-[#718898]">{id}</p>
           <p className="mt-2 text-[11px] leading-5 text-[#6f8494]">
             The verifier recomputes every hash and the receipt digest from the stored rows. No
             verdict is shown until it answers.
@@ -366,7 +366,7 @@ export function ProvenanceCard({
       <Shell className={className} onRefresh={reVerify} status="404">
         <div className="px-4 py-5">
           <p className="text-sm font-medium text-[#e8c256]">No such intent on this record.</p>
-          <p className="mt-2 font-mono text-[10px] leading-4 text-[#526979]">{id}</p>
+          <p className="mt-2 font-mono text-[11px] leading-4 text-[#718898]">{id}</p>
           {state.reasons.length > 0 ? (
             <ul className="mt-2.5 space-y-1.5">
               {state.reasons.map((reason, index) => (
@@ -405,7 +405,7 @@ export function ProvenanceCard({
               ? "The provenance read did not reach the API."
               : `The provenance read failed with HTTP ${state.status}.`}
           </p>
-          <p className="mt-2 font-mono text-[10px] leading-4 text-[#526979]">{id}</p>
+          <p className="mt-2 font-mono text-[11px] leading-4 text-[#718898]">{id}</p>
           <p className="mt-2.5 whitespace-pre-wrap break-words border-l-2 border-rose-400/45 bg-[#0b1a24]/70 px-2.5 py-1.5 font-mono text-[11px] leading-[1.45] text-[#dbe6ee]">
             {state.message}
           </p>
@@ -435,19 +435,19 @@ export function ProvenanceCard({
       <div className={`border-b bg-[#0a141c]/70 px-4 py-3.5 ${TONE_RULE[verdict.tone]}`}>
         <div className="flex flex-wrap items-center gap-2">
           <span
-            className={`inline-flex border px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] ${TONE_BADGE[verdict.tone]}`}
+            className={`inline-flex border px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.14em] ${TONE_BADGE[verdict.tone]}`}
           >
             {verdict.label}
           </span>
-          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#526979]">
+          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-[#718898]">
             payload verified: {String(payload.verified)}
           </span>
-          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#526979]">
+          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-[#718898]">
             receipted: {String(payload.receipted)}
           </span>
         </div>
         <p className="mt-2 text-[11px] leading-5 text-[#c8d6e0]">{verdict.sentence}</p>
-        <p className="mt-2 break-all font-mono text-[10px] leading-4 text-[#526979]">
+        <p className="mt-2 break-all font-mono text-[11px] leading-4 text-[#718898]">
           {payload.intent_id}
         </p>
       </div>
@@ -559,7 +559,7 @@ export function ProvenanceCard({
         <Findings heading="Receipt findings" findings={receipt.findings} />
       </div>
 
-      <footer className="border-t border-[#22384a] px-4 py-2.5 text-[9px] leading-4 text-[#526979]">
+      <footer className="border-t border-[#22384a] px-4 py-2.5 text-[11px] leading-4 text-[#718898]">
         Read only. Every field is recomputed from the stored rows by the verifier and reported
         verbatim here; a verdict is never repaired, and no finding is summarised away.
       </footer>

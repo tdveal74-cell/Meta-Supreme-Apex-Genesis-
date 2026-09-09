@@ -71,12 +71,12 @@ export function CostPanel() {
   }, [read]);
 
   if (load.state === "loading") {
-    return <p className="text-xs text-white/45">Reading today's usage.</p>;
+    return <p className="text-xs text-white/50">Reading today's usage.</p>;
   }
 
   if (load.state === "signed-out") {
     return (
-      <p className="text-xs leading-relaxed text-white/45">
+      <p className="text-xs leading-relaxed text-white/50">
         No session token in this browser, so usage cannot be read. Usage is per account
         and this panel will not guess at a total.
       </p>
@@ -87,7 +87,7 @@ export function CostPanel() {
     return (
       <div className="space-y-2">
         <p className="text-xs text-red-300">Usage could not be read: {load.detail}.</p>
-        <p className="text-xs leading-relaxed text-white/40">
+        <p className="text-xs leading-relaxed text-white/50">
           This is a failed read, not a zero. Nothing below is being shown as spend.
         </p>
         <button
@@ -125,14 +125,14 @@ export function CostPanel() {
               style={{ width: `${Math.round(used * 100)}%` }}
             />
           </div>
-          <p className="text-xs leading-relaxed text-white/45">
+          <p className="text-xs leading-relaxed text-white/50">
             {integer(payload.remaining_tokens ?? 0)} tokens left before the cap refuses with
             a 429. The window is the UTC day {payload.date} and resets at{" "}
             {payload.resets_at.slice(11, 16)} UTC.
           </p>
         </div>
       ) : (
-        <p className="text-xs leading-relaxed text-white/45">
+        <p className="text-xs leading-relaxed text-white/50">
           No daily cap is configured, so nothing refuses on budget today. The window is the
           UTC day {payload.date}.
         </p>
@@ -143,7 +143,7 @@ export function CostPanel() {
         <Split label="Output tokens" value={integer(payload.output_tokens)} />
       </dl>
 
-      <div className="space-y-1 text-xs leading-relaxed text-white/35">
+      <div className="space-y-1 text-xs leading-relaxed text-white/50">
         {!payload.providers_available ? (
           <p>
             The ledger records one row per account per day and carries no provider column,
@@ -162,7 +162,7 @@ export function CostPanel() {
 function Figure({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">
         {label}
       </p>
       <p className="mt-1 text-lg font-semibold tabular-nums text-white">{value}</p>
@@ -173,7 +173,7 @@ function Figure({ label, value }: { label: string; value: string }) {
 function Split({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between rounded-lg border border-white/5 bg-black/20 px-2.5 py-1.5">
-      <dt className="text-white/40">{label}</dt>
+      <dt className="text-white/50">{label}</dt>
       <dd className="tabular-nums text-white/75">{value}</dd>
     </div>
   );

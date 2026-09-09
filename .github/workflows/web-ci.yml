@@ -29,5 +29,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Typecheck
         run: pnpm --filter @meta-supreme/web typecheck
+      - name: Presence protocol checks
+        run: pnpm --filter @meta-supreme/web check:presence
+      - name: Control plane honesty checks
+        run: pnpm --filter @meta-supreme/web check:control
       - name: Production build
         run: pnpm --filter @meta-supreme/web build

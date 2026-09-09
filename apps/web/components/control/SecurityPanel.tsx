@@ -42,12 +42,12 @@ export function SecurityPanel() {
             <p className="text-sm font-medium text-white/85 group-hover:text-white">
               {door.label}
             </p>
-            <p className="mt-1 text-xs leading-relaxed text-white/45">{door.note}</p>
+            <p className="mt-1 text-xs leading-relaxed text-white/50">{door.note}</p>
           </Link>
         ))}
       </div>
 
-      <div className="space-y-2 text-xs leading-relaxed text-white/45">
+      <div className="space-y-2 text-xs leading-relaxed text-white/50">
         <p>
           The shell is not embedded here on purpose. A bug on this page should not
           be able to reach a shell on the API container, so the door stays its own
