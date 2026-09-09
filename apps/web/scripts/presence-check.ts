@@ -17,7 +17,9 @@ import {
 import { FrameBuffer, lerpWeights } from "../lib/presence/frame-buffer.ts";
 import { VoiceActivityDetector } from "../lib/presence/vad.ts";
 import {
+  CELL_WIDTH,
   DEFAULT_GRID,
+  NARROWEST_FEATURE_RADIUS,
   ambientWave,
   applyField,
   buildGridEdges,
@@ -348,6 +350,19 @@ check("every lattice index points at a real vertex", () => {
   for (let i = 0; i < indices.length; i += 1) {
     assert.ok(indices[i] < total, `index ${indices[i]} is outside ${total} vertices`);
   }
+});
+
+check("the lattice can actually resolve the narrowest feature", () => {
+  // The bug this exists for: the nose was tightened to a radius smaller than a
+  // grid cell, so it fell between vertices and rendered as nothing, and the
+  // sharpened face came out blurrier than the blunt one it replaced. A feature
+  // cannot be sharper than the lattice that samples it.
+  const spans = (NARROWEST_FEATURE_RADIUS * 2) / CELL_WIDTH;
+  assert.ok(
+    spans >= 2.5,
+    `the narrowest feature spans ${spans.toFixed(2)} cells; under about 2.5 it disappears. ` +
+      "Tighten a feature and you must add columns in the same commit.",
+  );
 });
 
 console.log(`presence-check: ${checks} checks passed`);

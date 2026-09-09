@@ -67,7 +67,7 @@ export type AvatarDriver = {
   onTelemetry?: (telemetry: RenderTelemetry) => void;
 };
 
-const STAGE_BACKGROUND = "#050a0e";
+const STAGE_BACKGROUND = "#04070d";
 /** Lag tolerated before FrameBuffer.compress starts shedding detail. */
 const COMPRESS_WINDOW_MS = 250;
 /** After this long without a frame, the energy fallback drives the jaw. */
@@ -355,7 +355,7 @@ function PlaceholderHead({ driver, onRigInfo }: { driver: AvatarDriver; onRigInf
   });
 
   return (
-    <group ref={root} position={[0, 0.02, 0]} scale={0.5}>
+    <group ref={root} position={[0, 0.02, 0]} scale={0.62}>
       {/* The field behind everything, so the mesh sits in space. */}
       {glowTexture ? (
         <mesh position={[0, -0.02, -0.7]} scale={[2.6, 2.9, 1]}>

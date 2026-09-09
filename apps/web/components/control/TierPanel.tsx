@@ -23,11 +23,11 @@ const BADGE: Record<PanelSourcing, { label: string; className: string }> = {
     // it had no session and could read nothing. The badge is about where the
     // data comes from; the panel body owns whether a read just succeeded.
     label: "Fully sourced",
-    className: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
+    className: "border-cyan-400/30 bg-cyan-400/10 text-cyan-200",
   },
   partial: {
     label: "Partly sourced",
-    className: "border-amber-400/30 bg-amber-400/10 text-amber-200",
+    className: "border-cyan-400/30 bg-cyan-400/10 text-cyan-200",
   },
   unwired: {
     label: "No route yet",

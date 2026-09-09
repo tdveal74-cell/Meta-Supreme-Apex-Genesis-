@@ -363,7 +363,7 @@ export function AgentReadinessMatrix({
     >
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-[#22384a] px-4 py-3">
         <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#c77b4a]">
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#67e8f9]">
             DEVON agent readiness
           </p>
           <h2 className="mt-1 text-sm font-semibold text-white">Task state and tool risk matrix</h2>
@@ -381,7 +381,7 @@ export function AgentReadinessMatrix({
           <button
             type="button"
             onClick={() => void refresh()}
-            className="border border-[#22384a] px-2 py-1 font-mono text-[11px] uppercase tracking-[0.12em] text-[#93a6b5] transition hover:border-[#c77b4a]/60 hover:text-white"
+            className="border border-[#22384a] px-2 py-1 font-mono text-[11px] uppercase tracking-[0.12em] text-[#93a6b5] transition hover:border-[#67e8f9]/60 hover:text-white"
           >
             Refresh
           </button>
@@ -481,7 +481,7 @@ export function AgentReadinessMatrix({
                     <tr>
                       <td
                         colSpan={7}
-                        className="bg-black/25 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[#c77b4a]"
+                        className="bg-black/25 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[#67e8f9]"
                       >
                         {group.label} ({group.rows.length})
                       </td>

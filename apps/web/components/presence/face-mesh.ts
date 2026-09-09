@@ -43,11 +43,28 @@ export type GridSpec = {
  * inside rather than as a rectangle floating in one.
  */
 export const DEFAULT_GRID: GridSpec = {
-  columns: 54,
-  rows: 38,
-  halfWidth: 3.2,
-  halfHeight: 2.1,
+  columns: 104,
+  rows: 72,
+  halfWidth: 2.25,
+  halfHeight: 1.55,
 };
+
+/*
+ * WHY THESE NUMBERS, measured rather than chosen.
+ *
+ * A feature cannot be sharper than the lattice that samples it. The first
+ * sharpening pass tightened the nose to a 0.062 radius, which is 0.124 units
+ * across, on a grid whose cell was 6.4/54 = 0.119 units. The nose was one cell
+ * wide, so it fell between vertices and rendered as nothing, and the face came
+ * out softer than the blunt version it replaced.
+ *
+ * At these extents the cell is 4.5/104 = 0.043 units, so the narrowest feature
+ * in faceRelief, the nose ridge, spans about three cells and the mouth line
+ * about two. That is the floor: tightening any feature further means adding
+ * columns in the same commit, or it will silently vanish.
+ */
+export const CELL_WIDTH = (DEFAULT_GRID.halfWidth * 2) / (DEFAULT_GRID.columns - 1);
+export const NARROWEST_FEATURE_RADIUS = 0.062;
 
 /** A soft bump, 1 at the centre and falling to 0 by `radius`. */
 function bump(dx: number, dy: number, radiusX: number, radiusY: number): number {
@@ -75,38 +92,50 @@ export function faceRelief(x: number, y: number, weights: Weights = {}): number 
   const pucker = weights.mouthPucker ?? 0;
   const browUp = weights.browInnerUp ?? 0;
 
-  // The cranium itself.
-  let z = 0.78 * mask;
+  // The cranium. Deliberately shallower than the features that sit on it: a
+  // tall dome swamps everything else and the face reads as an egg, which is
+  // what the first sharpening pass looked like.
+  let z = 0.46 * mask;
 
-  // Brow ridges, lifting with the expression.
+  // Brow ridges: tight and pronounced, and they carry the expression.
   for (const side of [-1, 1]) {
-    z += (0.09 + 0.05 * browUp) * bump(x - side * 0.3, y - (0.44 + browUp * 0.05), 0.3, 0.13);
+    z += (0.19 + 0.08 * browUp) * bump(x - side * 0.29, y - (0.45 + browUp * 0.05), 0.24, 0.085);
   }
 
-  // Eye sockets. A closed lid fills the socket back in, so a blink reads as the
-  // surface smoothing over rather than as the eye vanishing.
+  // Eye sockets, cut hard so the brow above them has something to sit over. A
+  // closed lid fills the socket back in, so a blink reads as the surface
+  // smoothing rather than as the eye vanishing.
   for (const side of [-1, 1] as const) {
     const blink = side < 0 ? (weights.blinkLeft ?? 0) : (weights.blinkRight ?? 0);
-    z -= 0.2 * (1 - 0.85 * blink) * bump(x - side * 0.31, y - 0.24, 0.19, 0.12);
+    z -= 0.3 * (1 - 0.85 * blink) * bump(x - side * 0.3, y - 0.25, 0.16, 0.1);
+    // The eyeball itself, so the socket is not an empty pit.
+    z += 0.12 * (1 - blink) * bump(x - side * 0.3, y - 0.25, 0.085, 0.055);
   }
 
-  // The nose: a ridge down the midline and a tip.
-  z += 0.24 * bump(x, y + 0.06, 0.1, 0.32);
-  z += 0.1 * bump(x, y + 0.28, 0.13, 0.09);
-
-  // Cheeks.
+  // The nose: a narrow ridge and a defined tip, the strongest vertical feature.
+  z += 0.3 * bump(x, y + 0.04, 0.062, 0.3);
+  z += 0.17 * bump(x, y + 0.26, 0.1, 0.075);
+  // Nostril shadows, which is what stops the tip reading as a beak.
   for (const side of [-1, 1]) {
-    z += 0.07 * bump(x - side * 0.46, y + 0.12, 0.26, 0.24);
+    z -= 0.09 * bump(x - side * 0.1, y + 0.3, 0.05, 0.045);
   }
 
-  // The mouth, which is the part the visemes drive. It is a recess at rest and
-  // deepens and widens as the jaw opens.
-  const mouthWidth = 0.3 * (1 - 0.35 * pucker + 0.2 * funnel);
-  const mouthHeight = 0.075 + 0.16 * open;
-  z -= (0.1 + 0.48 * open) * bump(x, y + 0.56 + open * 0.05, mouthWidth, mouthHeight);
+  // Cheekbones: higher and tighter than before so they catch light as edges.
+  for (const side of [-1, 1]) {
+    z += 0.14 * bump(x - side * 0.45, y - 0.06, 0.2, 0.16);
+  }
 
-  // Chin and jaw.
-  z += 0.08 * bump(x, y + 0.86, 0.28, 0.2);
+  // The mouth. A cut line at rest, opening into a deep well as the jaw drops,
+  // with a lip ridge above and below so the opening has edges.
+  const mouthWidth = 0.27 * (1 - 0.35 * pucker + 0.2 * funnel);
+  const mouthHeight = 0.045 + 0.17 * open;
+  z += 0.08 * bump(x, y + 0.48, mouthWidth * 1.15, 0.055);
+  z += 0.07 * bump(x, y + 0.66, mouthWidth * 1.15, 0.06);
+  z -= (0.16 + 0.55 * open) * bump(x, y + 0.57 + open * 0.05, mouthWidth, mouthHeight);
+
+  // Chin, and the jaw line under it.
+  z += 0.13 * bump(x, y + 0.85, 0.24, 0.16);
+  z -= 0.05 * bump(x, y + 0.74, 0.3, 0.05);
 
   return z;
 }

@@ -113,7 +113,7 @@ function Shell({
     >
       <header className="flex items-start justify-between gap-3 border-b border-[#22384a] px-4 py-3">
         <div className="min-w-0">
-          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#c77b4a]">
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#67e8f9]">
             Live State Ledger
           </p>
           <p className="mt-1 text-xs font-semibold text-white">Provenance verdict</p>
@@ -128,7 +128,7 @@ function Shell({
             <button
               type="button"
               onClick={onRefresh}
-              className="border border-[#22384a] px-2 py-1 font-mono text-[11px] uppercase tracking-[0.12em] text-[#93a6b5] hover:border-[#c77b4a]/60 hover:text-white"
+              className="border border-[#22384a] px-2 py-1 font-mono text-[11px] uppercase tracking-[0.12em] text-[#93a6b5] hover:border-[#67e8f9]/60 hover:text-white"
             >
               Re-verify
             </button>
@@ -181,7 +181,7 @@ function Findings({
 }) {
   return (
     <div>
-      <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[#c77b4a]">
+      <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[#67e8f9]">
         {heading} ({findings.length})
       </p>
       {findings.length === 0 ? (

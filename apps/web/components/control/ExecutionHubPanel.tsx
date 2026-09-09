@@ -58,9 +58,9 @@ export function ExecutionHubPanel() {
           <span
             className={`h-2 w-2 rounded-full ${
               health.state === "up"
-                ? "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,.7)]"
+                ? "bg-cyan-400 shadow-[0_0_10px_rgba(52,211,153,.7)]"
                 : health.state === "checking"
-                  ? "animate-pulse bg-amber-300"
+                  ? "animate-pulse bg-cyan-300"
                   : "bg-red-400"
             }`}
           />

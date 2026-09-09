@@ -64,8 +64,8 @@ export function SessionDoor() {
 
   if (hasToken) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1.5 text-[11px] font-medium text-emerald-200">
-        <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" aria-hidden />
+      <span className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1.5 text-[11px] font-medium text-cyan-200">
+        <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" aria-hidden />
         Session on this device
       </span>
     );
@@ -73,8 +73,8 @@ export function SessionDoor() {
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400/30 bg-amber-400/10 px-2.5 py-1.5 text-[11px] font-medium text-amber-200">
-        <span className="h-1.5 w-1.5 rounded-full bg-amber-300" aria-hidden />
+      <span className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1.5 text-[11px] font-medium text-cyan-200">
+        <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" aria-hidden />
         No session on this device
       </span>
       <Link
