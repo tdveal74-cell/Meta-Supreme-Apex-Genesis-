@@ -510,4 +510,57 @@ check("duration is read from the bytes at the presence rate", () => {
   assert.equal(durationSeconds(new Uint8Array(0)), 0);
 });
 
+/* base URL resolution */
+
+/*
+ * A deployed page has to be able to reach the services it talks to. Until
+ * 2026-09-09 PRESENCE_BASE had no production branch, so a production build
+ * resolved it to http://localhost:8010 and /presence dialled whichever
+ * machine was viewing it. Nothing failed loudly, which is what made it
+ * survive an entire arc that claimed to be about being heard.
+ *
+ * The declaration is sliced out by name rather than searched for across the
+ * file, because API_BASE two declarations above already carries a compliant
+ * production branch and a file wide regex would pass on that one while
+ * PRESENCE_BASE stayed broken.
+ */
+function declaration(source: string, name: string, next: string): string {
+  const from = source.indexOf(`export const ${name} =`);
+  const to = source.indexOf(`export const ${next}`);
+  assert.ok(from >= 0, `${name} is not declared in lib/api-base.ts`);
+  assert.ok(to > from, `${next} does not follow ${name} in lib/api-base.ts`);
+  return source.slice(from, to);
+}
+
+check("both service bases carry a non loopback production fallback", () => {
+  const source = readFileSync(new URL("../lib/api-base.ts", import.meta.url), "utf8");
+  assert.ok(source.length > 200, "lib/api-base.ts did not read");
+
+  for (const [name, next] of [
+    ["API_BASE", "WS_BASE"],
+    ["PRESENCE_BASE", "PRESENCE_WS_BASE"],
+  ] as const) {
+    const block = declaration(source, name, next);
+    assert.ok(
+      /process\.env\.NODE_ENV === "production"/.test(block),
+      `${name} has no production branch, so a deployed build falls back to a dev address`,
+    );
+    const urls = block.match(/"https?:\/\/[^"]+"/g) ?? [];
+    assert.ok(urls.length >= 2, `${name} declares fewer than two fallback URLs`);
+    const production = urls.filter(
+      (url) => !/localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]/.test(url),
+    );
+    assert.ok(
+      production.length >= 1,
+      `every fallback URL in ${name} is a loopback address, so no deployed build can reach the service`,
+    );
+    for (const url of production) {
+      assert.ok(
+        url.startsWith('"https://'),
+        `${name} would reach ${url} over plain http from an https page`,
+      );
+    }
+  }
+});
+
 console.log(`presence-check: ${checks} checks passed`);
