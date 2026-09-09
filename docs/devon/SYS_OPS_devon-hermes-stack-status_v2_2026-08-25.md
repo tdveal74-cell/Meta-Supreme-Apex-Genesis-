@@ -42,6 +42,44 @@ Honest label: schema and CI green are not the same as a person running Hermes as
 
 Update 2026-09-02 (fix PR 3 of the DEVON and Hermes audit): the three runtime tools, runtime.spawn_subagent, runtime.schedule_goal and runtime.propose_skill, now spend their approval binding and write the same tables the HTTP routes read. Before that date the subagent, scheduler and skill-proposal rows above were true for the HTTP routes only; the runtime tool path was process-local (audit finding H6).
 
+Update 2026-09-09: the Hermes agent surface is machine checked against this
+record. `docs/devon/hermes-surface.json` pins it, and
+`test_devon_hermes_surface.py` re-derives it from the code on every run,
+failing when the two disagree and naming exactly what moved.
+
+Tools come from `build_tool_registry()`, the registry the running service
+builds, each with its risk class, reversibility and blast radius. Routes are
+read from every v1 router whose prefix begins `/agent`, discovered by walking
+the package rather than from a list, and read from the routers themselves
+rather than from the OpenAPI schema, because the schema omits a route declared
+`include_in_schema=False` and such a route still answers. Columns cover every
+agent table declared anywhere under `app/models`, not one module. Migrations
+cover those that touch one of those tables, and a migration file that declares
+no readable revision fails the run rather than being skipped, which is how the
+repository's own `alembic revision` template slipped past the first cut.
+
+These counts are the gate. Regenerating the manifest does not clear a failure
+on its own, because the test reads this block and checks it against the code,
+so a surface change has to move this document too:
+
+```hermes-surface-counts
+tools 20
+routes 24
+columns 126
+states 9
+migrations 7
+```
+
+What it does not cover, stated plainly so nobody reads more into a green run.
+The Status column of the table above is a human judgement and stays one. The
+behaviour behind a tool is unpinned, so a rewritten implementation under an
+unchanged name, risk class and blast radius still passes. A column added by
+raw SQL under `database/schemas/` that no model declares is not seen, and
+neither is a rewritten migration body under an unchanged revision. The
+migration list is read from the source tree, which says what the next deploy
+will apply and not what production runs; the deployed estate stays the job of
+`scripts/estate_reconcile.py` and stays UNVERIFIED without a Railway read.
+
 ## Governance invariants held
 
 - DEVON core remains effect-free

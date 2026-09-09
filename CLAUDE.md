@@ -100,9 +100,14 @@ on every push). The sixth is `.github/workflows/web-ci.yml`, path filtered to
 the web workspace, so a run of Python-only PRs makes CI look like five.
 `ruff check .` runs at the end of the api job, not as a job of its own.
 
-The standalone job runs with **no** `PYTHONPATH` and no database. An import
-that only resolves under the test path passes locally and fails there, so
-reproduce it exactly:
+The standalone job runs with no database. This paragraph said it also runs
+with **no** `PYTHONPATH` until 2026-09-09, when a worktree agent read the file
+and found otherwise: `ci.yml` sets `PYTHONPATH` in its top level `env:` block
+(line 14), which applies to every job, and `standalone` declares no override.
+Reproducing it with the variable unset is therefore **stricter than CI, not
+equal to it**, which is why the commands below are still the ones to run: they
+catch an import CI would let through. Keep the list of files in step with the
+job, which is the real thing the local run mirrors.
 
 ```bash
 env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -c "import standalone_api"
@@ -110,7 +115,8 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_billing.py test_definition.py test_providers.py test_schedule.py \
   test_workflow_engine.py test_devon_hermes_expansion.py \
   test_devon_hermes_durable_followon.py test_devon_learning_loop.py \
-  test_devon_operating_layer.py test_devon_editforge_execution.py
+  test_devon_operating_layer.py test_devon_editforge_execution.py \
+  test_devon_hermes_surface.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .
@@ -181,6 +187,72 @@ log receipt.
 A handover's "CI green" is a claim, not a fact. Check the Actions history for
 the claimed head SHA before building on it. A green Vercel preview is not
 production; load the `deploy-readback` skill before saying any surface is live.
+
+## Running a critic
+
+Every arc here closes with a fresh critic, and a critic earns its verdict by
+mutating the real source: registering a tool that should not exist, deleting a
+guard, feeding an input nothing else feeds it, then reverting. That is the
+method working rather than a critic misbehaving.
+
+**Spawn it with `isolation: "worktree"`.** A critic, or any subagent told to
+mutate the source, gets its own checkout. The session's own tree is not scratch
+space, and a critic that shares it costs three ways. All three happened in one
+session, 2026-09-09, PR #177:
+
+- The stop hook reported uncommitted changes that were the critic's.
+  `app/api/v1/router.py`, a new `app/api/v1/agent_skills.py` and
+  `app/api/v1/agent_tasks.py` each appeared and reverted inside three commands.
+  Committing them would have pushed a throwaway probe as if it were the work.
+- Any check the parent runs while a critic holds a mutation is measuring the
+  critic's source, not the branch's. A green run in that window proves nothing
+  and has to be thrown away and repeated.
+- A critic that stops mid mutation leaves dirt with no owner, and the next
+  session cannot tell it from real work.
+
+If foreign changes do turn up in the tree, do not commit them and do not
+revert them blind. Ask whether the path is in your own diff first, with
+`git diff --name-only <base>..HEAD`, and leave alone anything that is not.
+A path you did not touch belongs to something still running.
+
+**The worktree does not start on your HEAD.** Measured on 2026-09-09: the
+parent sat on `b8fd28b` and the new worktree came up on `2b09dbd`, which is
+`origin/main`, so `test_devon_hermes_surface.py` did not exist in the critic's
+checkout at all. A critic handed the wrong commit reviews code the branch does
+not have and reports green, which is the most expensive answer it can give.
+Check the commit out yourself as the first instruction in the prompt, and make
+the agent echo `git rev-parse --short HEAD` back in its report so a wrong base
+shows up in the receipt rather than in the verdict:
+
+```
+git fetch origin <branch> && git checkout -B verify <sha>
+git rev-parse --short HEAD    # must match the sha you meant
+```
+
+Two things that are already handled, so nobody re-derives them:
+`.claude/worktrees/` is in `.gitignore`, and the worktree is removed on its own
+when the agent leaves it unchanged.
+
+**The isolation is of the filesystem only, and the database bites.** Every
+worktree shares this container's one PostgreSQL cluster, so two agents running
+the full suite are writing the same `meta_supreme_test`, and `conftest.py`
+truncates one global `_DATA_TABLES` list after every test. Measured on
+2026-09-09, when this was written as a caution and then promptly happened: a
+worktree agent's suite returned `8 failed, 1493 passed, 56 errors`, the errors
+reading `duplicate key value violates unique constraint "users_email_key"`,
+with a second session running the identical suite from another worktree. The
+retry collided with a third session, both blocked in `pg_stat_activity` on
+`Lock / relation` with one `TRUNCATE` waiting on the other. On a private
+database the same commit returned `1557 passed`. So a suite that fails only
+while a critic is out is the cluster, not the branch. Give a concurrent run
+its own database rather than re-running into the same collision, and know that
+`test_live_state_ledger_provenance.py` hardcodes `meta_supreme_test` for the
+TEMP privilege check, so that one test alone must run against the real name.
+
+**Check `PYTHONPATH` before running anything in a worktree.** The inherited
+value points at the main checkout, so pytest imports the parent's code while
+the run appears to be testing the worktree. Same shape as the wrong base
+commit above: a green that means nothing. Set it to absolute worktree paths.
 
 ## Skills in this repository
 

@@ -53,7 +53,8 @@ jobs:
             test_devon_hermes_durable_followon.py \
             test_devon_learning_loop.py \
             test_devon_operating_layer.py \
-            test_devon_editforge_execution.py
+            test_devon_editforge_execution.py \
+            test_devon_hermes_surface.py
 
   dependency-audit:
     name: Dependency audit (pip-audit + pnpm audit)
