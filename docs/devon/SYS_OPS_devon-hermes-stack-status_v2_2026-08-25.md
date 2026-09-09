@@ -42,6 +42,17 @@ Honest label: schema and CI green are not the same as a person running Hermes as
 
 Update 2026-09-02 (fix PR 3 of the DEVON and Hermes audit): the three runtime tools, runtime.spawn_subagent, runtime.schedule_goal and runtime.propose_skill, now spend their approval binding and write the same tables the HTTP routes read. Before that date the subagent, scheduler and skill-proposal rows above were true for the HTTP routes only; the runtime tool path was process-local (audit finding H6).
 
+Update 2026-09-09: the capability table above is no longer maintained by
+hand alone. `docs/devon/hermes-surface.json` records the Hermes agent
+surface (the three runtime tools with their risk class and blast radius,
+the nine agent-expansion routes, the ten agent runtime tables, and the two
+expansion state machines), and `test_devon_hermes_surface.py` derives that
+surface from the code on every run and fails when the two disagree. A tool,
+route, table or state added without amending this record now fails CI and
+names the records to move. It closes the gap the 2026-09-02 audit found by
+hand: this document carried a superseded schema head for weeks while
+production had moved past it, and nothing failed.
+
 ## Governance invariants held
 
 - DEVON core remains effect-free

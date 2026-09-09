@@ -1,0 +1,71 @@
+{
+  "_readme": [
+    "DEVON's manifest of the Hermes agent surface. Generated from the code, never hand typed.",
+    "test_devon_hermes_surface.py fails when the code and this file disagree, so no Hermes agent update reaches main without DEVON recording it.",
+    "Regenerate after a deliberate change: PYTHONPATH=$PWD python3 -m test_devon_hermes_surface",
+    "A regeneration is not the whole amendment. Move these records in the same pull request:",
+    "  1. this manifest",
+    "  2. docs/devon/SYS_OPS_devon-hermes-stack-status_v2_2026-08-25.md, the On main table",
+    "  3. a dated docs/devon/SYS_OPS_*.md closing the arc",
+    "  4. scripts/estate_reconcile.py DOC_CLAIMS, if a pinned sentence changed",
+    "Standing since 2026-09-09. The gap this closes is the one the 2026-09-02 audit found: the record carried a superseded schema head while production had moved past it, and nothing failed."
+  ],
+  "tools": [
+    {
+      "name": "runtime.propose_skill",
+      "risk": "write",
+      "reversible": true,
+      "blast_radius": "one SkillProposal row awaiting human decision"
+    },
+    {
+      "name": "runtime.schedule_goal",
+      "risk": "write",
+      "reversible": true,
+      "blast_radius": "one delayed goal row in the schedule table"
+    },
+    {
+      "name": "runtime.spawn_subagent",
+      "risk": "write",
+      "reversible": true,
+      "blast_radius": "one child AgentTask row and one parent-child link"
+    }
+  ],
+  "routes": [
+    "GET /agent-expansion/schedules",
+    "GET /agent-expansion/schedules/due",
+    "GET /agent-expansion/skill-proposals",
+    "GET /agent-expansion/subagents",
+    "POST /agent-expansion/schedules",
+    "POST /agent-expansion/schedules/materialize",
+    "POST /agent-expansion/skill-proposals",
+    "POST /agent-expansion/skill-proposals/{proposal_id}/decide",
+    "POST /agent-expansion/subagents"
+  ],
+  "tables": [
+    "agent_effect_intents",
+    "agent_effect_receipts",
+    "agent_runtime_memories",
+    "agent_runtime_skills",
+    "agent_schedules",
+    "agent_skill_proposals",
+    "agent_subagent_links",
+    "agent_task_checkpoints",
+    "agent_task_runs",
+    "agent_tasks"
+  ],
+  "states": {
+    "ScheduleState": [
+      "cancelled",
+      "completed",
+      "due",
+      "failed",
+      "pending",
+      "running"
+    ],
+    "SkillProposalState": [
+      "approved",
+      "proposed",
+      "rejected"
+    ]
+  }
+}
