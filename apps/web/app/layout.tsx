@@ -3,7 +3,7 @@ import { brand } from "@meta-supreme/ui";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: `${brand.name} — ${brand.category}`,
+  title: `${brand.name}: ${brand.category}`,
   description: brand.principle,
 };
 

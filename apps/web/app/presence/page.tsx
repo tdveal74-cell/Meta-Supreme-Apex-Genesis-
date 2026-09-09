@@ -20,6 +20,12 @@ export default function PresencePage() {
             <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1.5">Protocol v1</span>
             <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1.5">Human final</span>
             <Link
+              href="/control"
+              className="rounded-lg border border-white/10 px-3 py-2 font-medium text-white/70 transition hover:border-white/20 hover:text-white"
+            >
+              Control plane
+            </Link>
+            <Link
               href="/terminal"
               className="rounded-lg border border-white/10 px-3 py-2 font-medium text-white/70 transition hover:border-white/20 hover:text-white"
             >

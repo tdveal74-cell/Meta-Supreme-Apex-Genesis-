@@ -4,7 +4,7 @@ const pillars = [
   {
     title: "AI Council",
     description:
-      "Nine specialized agents collaborate — Oracle, Analyst, Strategist, Architect, Engineer, Guardian, Creator, Librarian, and Skeptic.",
+      "Nine specialized agents collaborate: Oracle, Analyst, Strategist, Architect, Engineer, Guardian, Creator, Librarian, and Skeptic.",
   },
   {
     title: "Knowledge + Memory",
@@ -19,7 +19,7 @@ const pillars = [
   {
     title: "Workflows with gates",
     description:
-      "Reads run unattended. Writes wait for your approval — every time. Automation never acts in your name alone.",
+      "Reads run unattended. Writes wait for your approval, every time. Automation never acts in your name alone.",
   },
 ];
 
@@ -49,6 +49,12 @@ export default function HomePage() {
               Council
             </Link>
             <Link
+              href="/control"
+              className="hidden text-sm font-medium text-navy/70 transition hover:text-navy sm:inline"
+            >
+              Control plane
+            </Link>
+            <Link
               href="/command-center"
               className="rounded-lg bg-navy px-4 py-2 text-sm font-medium text-surface shadow-soft transition hover:bg-navy-800 focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-2"
             >
@@ -75,9 +81,9 @@ export default function HomePage() {
                 <span className="block text-navy/80">Keep the final call human.</span>
               </h1>
               <p className="mx-auto mt-6 max-w-2xl text-balance text-base leading-relaxed text-navy/65 sm:text-lg">
-                Multi-agent council, knowledge, memory, and gated workflows —
-                built for clear thinking, not chat noise. Simulated intelligence
-                is always labeled.
+                Multi-agent council, knowledge, memory, and gated workflows,
+                built for clear thinking rather than chat noise. Simulated
+                intelligence is always labeled.
               </p>
               <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
                 <Link
@@ -109,7 +115,7 @@ export default function HomePage() {
               </h2>
               <p className="mt-3 text-sm leading-relaxed text-navy/65 sm:text-base">
                 Humans provide values and responsibility. The system provides
-                analysis, structure, and execution support — never silent
+                analysis, structure, and execution support, never silent
                 automation on effects.
               </p>
             </div>

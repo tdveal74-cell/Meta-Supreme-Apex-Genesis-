@@ -3,7 +3,7 @@
 /**
  * A real terminal: xterm.js in the browser, WebSocket to the API's
  * /operator/shell endpoint, bash in a PTY on the server. Pipes, redirects,
- * arrow keys, interactive programs — everything a local terminal gives.
+ * arrow keys, interactive programs, everything a local terminal gives.
  *
  * This is the human operator's door. DEVON's own gated command path is a
  * separate surface and stays approval-gated.
@@ -55,7 +55,7 @@ export function RealShell() {
     if (!key || state === "connecting" || state === "live") return;
     if (!token) {
       setState("error");
-      setNote("Sign in on the Command Center or Talk to DEVON first — the shell needs a valid session as well as the key.");
+      setNote("Sign in on the Command Center or Talk to DEVON first. The shell needs a valid session as well as the key.");
       return;
     }
     setState("connecting");
@@ -63,7 +63,7 @@ export function RealShell() {
     try {
       localStorage.setItem(SHELL_KEY_SLOT, key);
     } catch {
-      // Fine — the key still works for this visit.
+      // Fine, the key still works for this visit.
     }
 
     const host = containerRef.current;
@@ -171,7 +171,7 @@ export function RealShell() {
               live ? "bg-emerald-400" : state === "connecting" ? "bg-amber-400" : "bg-red-400/80"
             }`}
           />
-          <span className="font-mono text-white/60">tee@devon — real shell</span>
+          <span className="font-mono text-white/60">tee@devon real shell</span>
         </div>
         <div className="flex items-center gap-2">
           <input
@@ -211,7 +211,7 @@ export function RealShell() {
               {note ||
                 (state === "connecting"
                   ? "Opening the PTY…"
-                  : "Sign in first, then enter your shell key and Connect. This is a full bash shell on the DEVON API container — pipes, redirects, everything.")}
+                  : "Sign in first, then enter your shell key and Connect. This is a full bash shell on the DEVON API container with pipes, redirects, everything.")}
             </p>
           </div>
         )}
@@ -220,7 +220,7 @@ export function RealShell() {
       <p className="border-t border-white/10 bg-black/25 px-4 py-2.5 text-[11px] leading-4 text-white/30">
         Two-factor: a valid session AND the shell key (separate from the operator
         key). No per-command gate once in, and it closes after 15 min idle. The
-        container filesystem is ephemeral — redeploys reset anything outside the
+        container filesystem is ephemeral, so redeploys reset anything outside the
         database. DEVON's own execution stays approval-gated on the other terminal.
       </p>
     </section>

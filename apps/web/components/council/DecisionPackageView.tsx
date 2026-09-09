@@ -78,7 +78,7 @@ export function DecisionPackageView({ pkg, onDecision }: Props) {
         </ul>
       </section>
 
-      {/* Strongest Dissent — protected */}
+      {/* Strongest Dissent, protected */}
       <section className="mb-8 rounded-lg border-l-[3px] border-border-strong bg-surface-muted p-5">
         <p className="mb-4 text-[11px] font-medium uppercase tracking-widest text-amber">
           Strongest dissent

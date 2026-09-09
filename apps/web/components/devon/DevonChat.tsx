@@ -208,7 +208,7 @@ export function DevonChat() {
     );
     append(
       "devon",
-      "DEVON online. Ask me anything, or tell me what needs doing — reads run on my say-so, writes wait on yours.",
+      "DEVON online. Ask me anything, or tell me what needs doing. Reads run on my say-so, writes wait on yours.",
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -230,7 +230,7 @@ export function DevonChat() {
     [token],
   );
 
-  // Once signed in, learn whether the mind is live or simulated — and say so.
+  // Once signed in, learn whether the mind is live or simulated, and say so.
   useEffect(() => {
     if (!token) return;
     let active = true;
@@ -392,7 +392,7 @@ export function DevonChat() {
         const reason = String(task.failure_reason || state);
         const line =
           state === "cancelled"
-            ? `Understood — standing down. ${reason}`
+            ? `Understood. Standing down. ${reason}`
             : `That one didn't land: ${reason}`;
         append("devon", line);
         speak(line);
@@ -474,7 +474,7 @@ export function DevonChat() {
             break;
 
           case "turn_resumed":
-            append("system", `Resuming — running ${String(event.tool || "")}.`);
+            append("system", `Resuming, running ${String(event.tool || "")}.`);
             break;
 
           case "tool_started":
@@ -482,7 +482,7 @@ export function DevonChat() {
             // waiting on a summary of it.
             append(
               "system",
-              `${String(event.tool || "")}${event.why ? ` — ${String(event.why)}` : ""}`,
+              `${String(event.tool || "")}${event.why ? `: ${String(event.why)}` : ""}`,
             );
             break;
 
@@ -741,7 +741,7 @@ export function DevonChat() {
   const mindLabel = useMemo(() => {
     if (!status) return "";
     return status.simulated
-      ? "Simulated mind (mock provider) — add a live key in Railway for the real one"
+      ? "Simulated mind (mock provider). Add a live key in Railway for the real one"
       : `Live mind: ${status.provider} · ${status.model}`;
   }, [status]);
 

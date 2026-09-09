@@ -19,9 +19,24 @@ import re
 
 import pytest
 
-PACKAGE = pathlib.Path(__file__).parent / "services" / "devon"
+ROOT = pathlib.Path(__file__).parent
+PACKAGE = ROOT / "services" / "devon"
 SOURCE_FILES = sorted(PACKAGE.glob("*.py"))
-DOC_FILES = sorted((pathlib.Path(__file__).parent / "docs" / "devon").glob("*.md"))
+DOC_FILES = sorted((ROOT / "docs" / "devon").glob("*.md"))
+
+# The web surface, added 2026-09-09. Tee's first hard rule is studio wide and
+# says "no exceptions", but this file only ever read services/devon and
+# docs/devon, so twenty two banned marks had accumulated in the product surface
+# a reader actually sees, including the homepage headline. Restructured rather
+# than repunctuated, and now checked so it cannot come back. Build output is
+# excluded: .next is generated and not authored.
+WEB = ROOT / "apps" / "web"
+WEB_FILES = sorted(
+    path
+    for pattern in ("**/*.ts", "**/*.tsx")
+    for path in WEB.glob(pattern)
+    if ".next" not in path.parts and "node_modules" not in path.parts
+)
 
 
 def test_the_package_has_the_expected_modules():
@@ -71,6 +86,18 @@ def test_no_em_dashes_in_the_source(path):
 def test_no_em_dashes_in_the_docs(path):
     offenders = _offending_lines(path.read_text(encoding="utf-8"))
     assert not offenders, f"banned dash in {path.name}: {offenders[:3]}"
+
+
+@pytest.mark.parametrize("path", WEB_FILES, ids=lambda p: p.name)
+def test_no_em_dashes_in_the_web_surface(path):
+    """Hard rule 1 reaches the surface a reader sees, not only the doctrine."""
+    offenders = _offending_lines(path.read_text(encoding="utf-8"))
+    assert not offenders, f"banned dash in {path.name}: {offenders[:3]}"
+
+
+def test_the_web_surface_is_actually_being_read():
+    """A glob that silently matched nothing would pass this file forever."""
+    assert len(WEB_FILES) > 40, f"only {len(WEB_FILES)} web files found; the glob is wrong"
 
 
 def test_exemptions_are_rare_and_explicit():
