@@ -116,8 +116,7 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_workflow_engine.py test_devon_hermes_expansion.py \
   test_devon_hermes_durable_followon.py test_devon_learning_loop.py \
   test_devon_operating_layer.py test_devon_editforge_execution.py \
-  test_devon_hermes_surface.py test_devon_receipts.py \
-  test_devon_doc_receipts.py
+  test_devon_hermes_surface.py test_devon_receipts.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .
