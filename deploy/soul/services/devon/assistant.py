@@ -44,9 +44,9 @@ from services.devon.vault import AREA_FOLDERS, NOTION, VERIFY_BEFORE_AUTOMATION
 # This is a list of names rather than something derived from the handlers,
 # because the handlers pass force_area positionally inside a call expression and
 # there is nothing to introspect without parsing the source. That makes it a
-# thing that can drift, so test_devon_area_enrichment.py holds both halves shut:
-# every name here must actually file with provenance "fixed by intent", and
-# every capture intent absent from it must actually consult the suggestion.
+# thing that can drift, so test_devon_capture_enrichment.py holds both halves
+# shut: every name here must actually file with provenance "fixed by intent",
+# and every capture intent absent from it must actually consult the suggestion.
 FIXED_AREA_INTENTS = frozenset({"episode_idea"})
 
 

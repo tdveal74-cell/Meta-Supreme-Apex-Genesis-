@@ -48,7 +48,7 @@ socket.
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from app.core.config import settings
 from services.devon.assistant import Devon
@@ -74,8 +74,50 @@ _DEVON = Devon()
 
 
 def enrichment_is_configured() -> bool:
-    """Whether asking a provider for an Area is worth a call at all."""
-    return settings.ENRICHMENT_PROVIDER not in NON_ENRICHING_PROVIDERS
+    """Whether asking a provider for an Area is worth a call at all.
+
+    Normalised the same way `create_provider` normalises it
+    (`services/intelligence/providers/factory.py:41`, `.strip().lower()`),
+    because a gate that disagrees with the factory is worse than no gate. A
+    fresh critic measured it on 2026-09-09: with `ENRICHMENT_PROVIDER=Mock` the
+    unnormalised gate said enrich, the factory lowercased the name and built a
+    MockProvider anyway, and every capture then spent a metered call and a cap
+    check on an answer discarded on the next line. That is exactly the waste
+    this gate exists to prevent.
+    """
+    return settings.ENRICHMENT_PROVIDER.strip().lower() not in NON_ENRICHING_PROVIDERS
+
+
+#: Set the first time the factory hands back a provider, so a status route can
+#: tell "configured" from "configured and reached at least once". A boolean
+#: rather than a count: this is an observability signal, not a meter, and the
+#: provider usage ledger already counts calls.
+_provider_built = False
+
+
+def status() -> Dict[str, Any]:
+    """What this lane is set to do, and whether it has ever managed to.
+
+    F4 from the 2026-09-09 critic: with `get_enrichment_provider` raising
+    unconditionally, which is the production shape of a missing or invalid
+    CEREBRAS_API_KEY, every enrichment test still passed and the only signal was
+    one log warning per capture. A lane that can stop running silently is the
+    shape of DCD-07 itself, so it gets a reading rather than a promise.
+
+    `provider_built` False while `enrichment_configured` is True means the
+    factory has never succeeded, or nothing has asked yet. It does not
+    distinguish those two, and says so here rather than implying it does.
+    """
+    return {
+        "enrichment_provider": settings.ENRICHMENT_PROVIDER,
+        "enrichment_configured": enrichment_is_configured(),
+        "provider_built": _provider_built,
+        "note": (
+            "configured names the setting, not a working key. provider_built "
+            "False can mean the factory failed or that no capture has asked "
+            "yet. Only a live readback settles which."
+        ),
+    }
 
 
 async def suggest_area(
@@ -94,6 +136,15 @@ async def suggest_area(
     is the same input `Devon.ask` received before this lane existed, so the
     caller needs no separate failure branch.
     """
+    # The gate first, then the parse. `parse` is pure but not cheap: on 4000
+    # characters that match no intent it runs the full fuzzy pass, measured at
+    # 276 ms of blocking CPU by a critic on 2026-09-09. Asking the gate first
+    # means the offline lane, where no provider is configured, pays nothing at
+    # all rather than parsing twice per request. An injected provider still
+    # bypasses the gate: a test that passes one has said which it means.
+    if provider is None and not enrichment_is_configured():
+        return None
+
     tag_this = _DEVON.area_suggestion_text(utterance)
     if tag_this is None:
         # Not a capture, or a capture whose Area the intent already fixes, or an
@@ -102,8 +153,6 @@ async def suggest_area(
         return None
 
     if provider is None:
-        if not enrichment_is_configured():
-            return None
         # Imported here rather than at module import: the factory reads settings
         # and is lru_cached, and binding it at import time would freeze the
         # provider for the process before a test could touch the setting.
@@ -117,6 +166,8 @@ async def suggest_area(
                 exc_info=True,
             )
             return None
+        global _provider_built
+        _provider_built = True
 
     try:
         result = await enrich_capture(tag_this, provider)
@@ -129,9 +180,29 @@ async def suggest_area(
         )
         return None
 
-    # The summary half of the result has no destination in the filing plan, so
-    # it is logged here and written into the PLAN_CREATED payload by the
-    # knowledge loop. Without this line a generated summary would be produced,
-    # paid for and dropped on the floor with nothing recording that it existed.
-    logger.info("capture enrichment: %s", result.to_dict())
+    # The summary is DEBUG, not INFO, and that split is the whole point.
+    #
+    # A fresh critic put a card number, a password and a medical detail into a
+    # capture on 2026-09-09 and read them back out of the INFO log, quoted by
+    # the model inside its own summary. Before this module existed no capture
+    # content reached application logs at any level. Four of the nine Areas are
+    # Health, Money, Family and Learning, so "the paraphrase of every capture,
+    # wherever logs aggregate" is not an acceptable default.
+    #
+    # What stays at INFO is everything needed to answer "is this lane running,
+    # and is it any good": the Area, how it was decided, the model, the
+    # provider, the cost and the latency. None of that is the capture.
+    logger.info(
+        "capture enrichment: area=%s provenance=%s model=%s provider=%s "
+        "tokens=%d latency_ms=%d declined=%s error=%s",
+        result.area_label,
+        result.area_provenance,
+        result.model,
+        result.provider,
+        result.tokens,
+        result.latency_ms,
+        result.declined,
+        result.error,
+    )
+    logger.debug("capture enrichment summary: %r", result.summary)
     return result

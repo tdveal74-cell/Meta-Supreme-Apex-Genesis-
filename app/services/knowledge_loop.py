@@ -36,7 +36,7 @@ from app.services import soul as soul_service
 from app.services.capture_enrichment import suggest_area
 from app.services.live_state_ledger import ledger
 from services import memory as memory_store
-from services.devon import ecosystem
+from services.devon import ecosystem, provenance
 from services.devon.approval import ApprovalQueue, ApprovalState
 from services.devon.assistant import Devon, FilingPlan
 from services.intelligence.soul import (
@@ -248,6 +248,43 @@ def _utterance_for(text: str) -> Optional[str]:
     if stripped.lower().startswith("remember"):
         return None
     return f"remember {stripped}"
+
+
+def _ledgerable(enrichment: Optional[Any]) -> Optional[Dict[str, Any]]:
+    """The enrichment block, or None when the ledger would refuse it.
+
+    THE BUG THIS EXISTS TO STOP, found by a fresh critic on 2026-09-09.
+
+    `summary` and `model_suggested_area` are third party model output copied
+    into a hash chained jsonb payload. `_clean_summary` collapses whitespace and
+    truncates; it does not remove a NUL or a lone surrogate, and
+    `provenance.check_payload` refuses both. So `append_event(PLAN_CREATED)`
+    refused, `propose` answered 409, and a perfectly good capture was lost
+    because a model's summary carried one bad byte. The critic reproduced it
+    through the live route with the model reply
+    `{"area": "ACX", "summary": "a widget \u0000 note"}`.
+
+    That contradicted this lane's own stated invariant, that a capture files
+    whether or not enrichment works. The broad guard in
+    `app/services/capture_enrichment.py` covers exceptions raised BY the call;
+    it cannot cover the CONTENT of a successful answer. This does.
+
+    Asking the ledger's own checker rather than stripping characters here is
+    deliberate: the refusal list is the ledger's to own, and a sanitiser written
+    beside it would be a second opinion that drifts. Losing the enrichment note
+    costs an audit trail on one capture. Losing the capture costs Tee data.
+    """
+    if enrichment is None:
+        return None
+    block = enrichment.to_dict()
+    refusal = provenance.check_payload(block)
+    if refusal is None:
+        return block
+    logger.warning(
+        "enrichment note dropped from the ledger event, the capture still files: %s",
+        refusal,
+    )
+    return None
 
 
 def _plan_from(
@@ -477,13 +514,14 @@ class KnowledgeLoop:
                     "source_note": candidate.source_note,
                 },
                 "filing_plan": plan_dict,
-                # What the model said, kept whole. The filing plan records the
-                # Area that survived validation; this records what was offered
-                # and how it was judged, which is the only way to tell a good
-                # tag from a lucky one when auditing a wrong Area later. It also
-                # gives the generated summary a destination: nothing else reads
-                # it, and a paid-for field dropped on the floor is waste.
-                "enrichment": enrichment.to_dict() if enrichment else None,
+                # What the model said, kept whole where it can be. The filing
+                # plan records the Area that survived validation; this records
+                # what was offered and how it was judged, which is the only way
+                # to tell a good tag from a lucky one when auditing a wrong Area
+                # later. It also gives the generated summary a destination:
+                # nothing else reads it, and a paid-for field dropped on the
+                # floor is waste.
+                "enrichment": _ledgerable(enrichment),
             },
         )
         action = await ledger.plan_action(

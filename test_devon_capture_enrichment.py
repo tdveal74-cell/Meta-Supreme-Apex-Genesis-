@@ -24,6 +24,7 @@ job's list.
 
 import asyncio
 import json
+import logging
 from datetime import date, datetime, timezone
 
 import httpx
@@ -346,3 +347,91 @@ async def test_an_area_outside_the_nine_is_discarded_not_filed():
     assert result.model_suggested_area == "Crypto"
     assert result.area_label is None
     assert "rejected" in result.area_provenance
+
+# -- what a fresh critic found on 2026-09-09 -------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", ["Mock", "MOCK", " mock ", "mock\n"])
+async def test_the_gate_normalises_the_provider_name_the_way_the_factory_does(
+    monkeypatch, name
+):
+    """F3. `create_provider` lowercases and strips; the gate must agree.
+
+    With `ENRICHMENT_PROVIDER=Mock` the unnormalised gate said enrich, the
+    factory built a MockProvider anyway, and every capture spent a metered call
+    and a cap check on an answer discarded on the next line.
+    """
+    monkeypatch.setattr(capture_enrichment.settings, "ENRICHMENT_PROVIDER", name)
+    assert not enrichment_is_configured(), f"{name!r} passed the gate"
+    assert await suggest_area(f"remember {NEUTRAL}") is None
+
+
+@pytest.mark.asyncio
+async def test_the_offline_lane_does_not_even_parse(monkeypatch):
+    """F5. The gate is asked before the parse, not after.
+
+    `parse` on 4000 characters that match no intent runs the full fuzzy pass,
+    measured at 276 ms of blocking CPU. On the lane that will never call a
+    provider, that must cost nothing at all.
+    """
+    monkeypatch.setattr(capture_enrichment.settings, "ENRICHMENT_PROVIDER", "mock")
+
+    def explode(_text):
+        raise AssertionError("the offline lane parsed the utterance")
+
+    monkeypatch.setattr(capture_enrichment._DEVON, "area_suggestion_text", explode)
+    assert await suggest_area(f"remember {NEUTRAL}") is None
+
+
+@pytest.mark.asyncio
+async def test_the_summary_never_reaches_an_info_log(caplog, monkeypatch):
+    """F2. A critic read a card number and a medical detail out of the INFO log.
+
+    The model quotes the capture inside its own summary, and four of the nine
+    Areas are Health, Money, Family and Learning. What stays at INFO is enough
+    to answer "is this lane running and is it any good" and none of it is the
+    capture.
+    """
+    secret = "amex 3782822463 10005 and the biopsy on Tuesday"
+    provider = _provider(json.dumps({"area": "Money", "summary": secret}))
+    with caplog.at_level(logging.INFO, logger="app.services.capture_enrichment"):
+        result = await suggest_area(f"remember {NEUTRAL}", provider=provider)
+    assert result is not None and result.summary == secret
+
+    info = [r for r in caplog.records if r.levelno >= logging.INFO]
+    assert info, "the lane logged nothing at INFO, so it cannot be read at all"
+    rendered = " ".join(r.getMessage() for r in info)
+    assert secret not in rendered, rendered
+    assert "3782822463" not in rendered
+    # The operational half must still be there, or the fix traded one blind
+    # spot for another.
+    assert "Money" in rendered
+    assert "provider=cerebras" in rendered
+    assert "tokens=" in rendered
+
+
+def test_the_status_reading_says_what_it_does_and_does_not_know(monkeypatch):
+    """F4. A lane that can stop running silently is what DCD-07 was."""
+    monkeypatch.setattr(capture_enrichment.settings, "ENRICHMENT_PROVIDER", "mock")
+    reading = capture_enrichment.status()
+    assert reading["enrichment_provider"] == "mock"
+    assert reading["enrichment_configured"] is False
+    assert "provider_built" in reading
+    # The reading must not imply a working key, because it has not seen one.
+    assert "not a working key" in reading["note"]
+
+
+@pytest.mark.asyncio
+async def test_a_built_provider_is_recorded_so_a_reader_can_tell(monkeypatch):
+    monkeypatch.setattr(capture_enrichment, "_provider_built", False)
+    monkeypatch.setattr(capture_enrichment.settings, "ENRICHMENT_PROVIDER", "cerebras")
+    import app.services.intelligence as intelligence
+
+    provider = _provider(json.dumps({"area": "ACX", "summary": "a note"}))
+    monkeypatch.setattr(intelligence, "get_enrichment_provider", lambda: provider)
+    assert capture_enrichment.status()["provider_built"] is False
+    result = await suggest_area(f"remember {NEUTRAL}")
+    assert result is not None and result.area_label == "ACX"
+    assert capture_enrichment.status()["provider_built"] is True
+

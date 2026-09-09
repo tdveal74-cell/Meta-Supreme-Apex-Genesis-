@@ -173,3 +173,101 @@ async def test_the_offline_default_asks_nobody(client, auth_headers, monkeypatch
     assert answered.status_code == 200, answered.text
     assert answered.json()["plan"]["area"] == "Podcast"
     assert answered.json()["plan"]["area_provenance"] == "keyword classification"
+
+# -- F1: a bad byte in the model's summary must not cost the capture -------
+
+
+@pytest.fixture
+def dirty_enricher(monkeypatch):
+    """A provider whose summary carries a NUL, which jsonb cannot store.
+
+    Found by a fresh critic on 2026-09-09 driving the live route: the block went
+    straight into a hash chained jsonb payload, `provenance.check_payload`
+    refused it, `append_event` refused, propose answered 409 and the capture was
+    lost. `_clean_summary` collapses whitespace and truncates; it removes
+    neither a NUL nor a lone surrogate.
+    """
+
+    import app.services.intelligence as intelligence
+
+    # Held before any patch, for the same reason the `enricher` fixture above
+    # holds it: monkeypatch restores the attribute on teardown and the plain
+    # function put in its place has no cache to clear.
+    factory = intelligence.get_enrichment_provider
+
+    def make(summary: str):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "model": DEFAULT_MODEL,
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps({"area": "ACX", "summary": summary})
+                            },
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 30, "completion_tokens": 20},
+                },
+            )
+
+        provider = CerebrasProvider(
+            api_key="test-key", transport=httpx.MockTransport(handler)
+        )
+        monkeypatch.setattr(
+            capture_enrichment.settings, "ENRICHMENT_PROVIDER", "cerebras"
+        )
+        factory.cache_clear()
+        monkeypatch.setattr(intelligence, "get_enrichment_provider", lambda: provider)
+        return provider
+
+    yield make
+    factory.cache_clear()
+
+
+@pytest.mark.parametrize(
+    "summary",
+    ["a widget \u0000 note", "a widget \ud800 note"],
+    ids=["nul", "lone-surrogate"],
+)
+async def test_a_summary_the_ledger_refuses_still_files_the_capture(
+    client, auth_headers, db_session, dirty_enricher, summary
+):
+    """The capture is what matters. The audit note is not worth losing it for."""
+    dirty_enricher(summary)
+    proposed = await client.post(
+        "/api/v1/soul/propose",
+        headers=auth_headers,
+        json={"text": NEUTRAL},
+    )
+    assert proposed.status_code == 201, proposed.text
+    body = proposed.json()
+
+    # The Area the model supplied still made it through: only the note was lost.
+    assert body["plan"]["area"] == "ACX"
+    assert body["plan"]["area_provenance"] == "supplied and validated"
+
+    payload = await _plan_created(db_session, body["approval"]["request_id"])
+    assert payload["enrichment"] is None, "a payload the ledger refuses was stored"
+
+
+async def test_a_clean_summary_is_still_kept_whole(
+    client, auth_headers, db_session, dirty_enricher
+):
+    """The negative control for the pair above.
+
+    Without it, dropping every enrichment block unconditionally would pass them.
+    """
+    dirty_enricher("a widget note")
+    proposed = await client.post(
+        "/api/v1/soul/propose",
+        headers=auth_headers,
+        json={"text": NEUTRAL},
+    )
+    assert proposed.status_code == 201, proposed.text
+    payload = await _plan_created(db_session, proposed.json()["approval"]["request_id"])
+    assert payload["enrichment"]["summary"] == "a widget note"
+    assert payload["enrichment"]["area"] == "ACX"
+

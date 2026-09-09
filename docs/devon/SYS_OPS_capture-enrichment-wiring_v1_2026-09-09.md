@@ -136,6 +136,75 @@ Also open, and unchanged by this arc: the n8n tier has no read route, warning
 thresholds on the budget are not built, and the Vercel Authentication wall on the
 web project stays with Tee.
 
+## What the fresh critic found, and what changed because of it
+
+Spawned on `316ec76` in its own worktree, told to mutate the source rather than
+read it. It echoed `316ec76` back, returned PASS-WITH-CONDITIONS, and found four
+things worth acting on. All four were reproduced by execution before they were
+raised, and all four are fixed in this arc.
+
+**A bad byte in the model's summary lost the capture.** `summary` and
+`model_suggested_area` are third party output copied into a hash chained jsonb
+payload, and `_clean_summary` collapses whitespace without removing a NUL or a
+lone surrogate. `provenance.check_payload` refuses both, so `append_event` for
+PLAN_CREATED refused, `propose` answered 409, and a clean capture was lost. The
+critic drove it through the live route with a model reply of
+`{"area": "ACX", "summary": "a widget \u0000 note"}` and got the 409 alongside a
+201 on the control. That contradicted this lane's own stated invariant. The fix
+is `_ledgerable`, which asks the ledger's own checker and drops the note when it
+refuses: losing an audit note costs one capture's provenance, losing the capture
+costs Tee data. Asking the ledger rather than sanitising here is deliberate, so
+there is one opinion about what jsonb accepts rather than two that drift.
+
+**The paraphrase of every capture was reaching application logs at INFO.** The
+critic put a card number, a password and a medical detail into a capture and read
+them back out of the log, quoted by the model inside its own summary. Before this
+module existed no capture content reached logs at any level, and four of the nine
+Areas are Health, Money, Family and Learning. The summary moved to DEBUG; what
+stays at INFO is the Area, the provenance, the model, the provider, the tokens and
+the latency, which is everything needed to answer whether the lane is running and
+none of it the capture.
+
+**The gate disagreed with the factory about a provider's name.**
+`create_provider` does `.strip().lower()`; the gate did not. So
+`ENRICHMENT_PROVIDER=Mock` passed the gate, the factory lowercased it and built a
+MockProvider anyway, and every capture spent a metered call and a cap check on an
+answer discarded on the next line, which is exactly the waste the gate exists to
+prevent. Measured across `Mock`, `MOCK`, `' mock '`, `'mock\n'`, `''`, a typo and
+`None`.
+
+**Nothing could tell that the lane had stopped running.** With
+`get_enrichment_provider` raising unconditionally, which is the production shape
+of a missing or invalid key, all 56 enrichment tests still passed and the only
+signal was one log warning per capture. That is DCD-07's own shape recurring. It
+was a disclosed residual rather than a hidden defect, and it is now readable:
+`GET /api/v1/devon` carries `capture_enrichment` with the configured provider,
+whether the gate lets it run, and whether a provider has ever actually been
+built. The reading says plainly that `provider_built` False cannot distinguish a
+failed factory from a lane nothing has asked yet, because it cannot.
+
+Two more, recorded rather than fixed. The command route now parses twice on text
+that matches no intent, which the critic measured at 276 ms of blocking CPU on a
+4000 character input; the gate moved ahead of the parse so the offline lane pays
+nothing, and the root cause, `parse` recomputing `normalize` per phrase per call,
+predates this arc. And a comment in `assistant.py` named
+`test_devon_area_enrichment.py`, a file that does not exist, inside the very
+comment that exists to point at a drift guard. Under a repository whose first law
+is to read the file before saying where something lives, that one stung.
+
+Six further negative controls were run on the fixes, each going red on the named
+test and green again on revert: the block reaching the ledger unchecked, the block
+being dropped unconditionally, the gate losing its normalisation, the summary
+returning to INFO, the gate moving back behind the parse, and `_provider_built`
+never being set. Seventeen negative controls across the arc in total.
+
+Three things the critic checked and found clean, worth recording so they are not
+re-derived: `Devon.ask` has exactly three non test call sites so no unenriched
+capture surface exists; `latency_ms` in a hash chained record is not a replay
+problem because `verify_chain` recomputes from the stored payload; and 200
+concurrent calls on the shared `_DEVON` produced one distinct result with the
+shared approval queue still empty.
+
 ## DEVON RECEIPT
 
 ```
@@ -144,8 +213,8 @@ TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_capture-enrichment-wiring_v1_2026-09-09
 DATE: 2026-09-09
 DECISIONS: gate the lane on ENRICHMENT_PROVIDER naming a real provider rather than on a new flag, so DEVON.md's sentence becomes true as written and the offline lane is untouched; resolve the utterance once and share it between the enrichment call and the plan rather than calling the selector twice; keep FIXED_AREA_INTENTS a hand written set and hold both of its halves shut with tests rather than deriving it from source; guard the call site with a broad except Exception and let CancelledError propagate; add no asyncio.wait_for, because the provider already carries the timeout and a wait_for would strand the shielded usage write; write the whole EnrichmentResult into the PLAN_CREATED payload so the generated summary has a destination
-FINDINGS: propose is fed prose that parses as nothing, so tagging the raw text would have left the entire knowledge loop unenriched while the finding read as closed, which is DCD-07 one layer in; ProviderSpendCapExceeded is an AppError and not a ProviderError, so enrich_capture's own handler does not cover the metered stack; the whole suite passes with suggest_area returning None, so no green run can evidence this wiring; test_deploy_soul.py caught the vendored soul copy of assistant.py drifting; an earlier claim in this session that settings.py fails to check the Cartesia key was over called, build_speech checks it at startup by name
-OPEN: DCD-07 is wired and unverified, not closed; a live Cerebras readback is the only remaining evidence and cannot run from CI or an agent container; nothing dedupes, so one capture is one provider call and a resubmission is another
-STATUS: app/services/capture_enrichment.py added with two callers wired; FIXED_AREA_INTENTS added to services/devon/assistant.py and the vendored soul copy synced; 33 new tests across two files, one of them database free and added to the offline CI job and to CLAUDE.md; eleven negative controls each went red on the named test and green again on revert; five CI jobs reproduced locally, 1,739 passed in the full api suite, ruff clean; CI run 643 on 316ec76 green on all five jobs
+FINDINGS: a fresh critic on 316ec76 returned PASS-WITH-CONDITIONS and found four things by executing them, all fixed here: a NUL or lone surrogate in the model's summary made the ledger refuse the PLAN_CREATED event and lost the capture, contradicting this lane's own invariant; the model's paraphrase of every capture was reaching application logs at INFO, card numbers and medical details included, where no capture content had ever gone before; the gate did not normalise the provider name the way create_provider does, so ENRICHMENT_PROVIDER=Mock spent a metered call per capture on an answer discarded on the next line; and with the factory raising unconditionally all 56 enrichment tests still passed, which is DCD-07's own shape recurring, now readable at GET /api/v1/devon. Also: propose is fed prose that parses as nothing, so tagging the raw text would have left the entire knowledge loop unenriched while the finding read as closed, which is DCD-07 one layer in; ProviderSpendCapExceeded is an AppError and not a ProviderError, so enrich_capture's own handler does not cover the metered stack; the whole suite passes with suggest_area returning None, so no green run can evidence this wiring; test_deploy_soul.py caught the vendored soul copy of assistant.py drifting; an earlier claim in this session that settings.py fails to check the Cartesia key was over called, build_speech checks it at startup by name
+OPEN: DCD-07 is wired and unverified, not closed; the command route still parses twice on text matching no intent, which is 276ms of blocking CPU on a 4000 character input, root caused to parse recomputing normalize per phrase and predating this arc; a live Cerebras readback is the only remaining evidence and cannot run from CI or an agent container; nothing dedupes, so one capture is one provider call and a resubmission is another
+STATUS: seventeen negative controls across the arc, each red on the named test and green again on revert; app/services/capture_enrichment.py added with two callers wired; FIXED_AREA_INTENTS added to services/devon/assistant.py and the vendored soul copy synced; 33 new tests across two files, one of them database free and added to the offline CI job and to CLAUDE.md; five CI jobs reproduced locally, 1,739 passed in the full api suite, ruff clean; CI run 643 on 316ec76 green on all five jobs
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
