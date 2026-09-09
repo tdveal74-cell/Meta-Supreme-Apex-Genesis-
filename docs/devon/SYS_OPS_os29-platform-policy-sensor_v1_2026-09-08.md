@@ -164,7 +164,7 @@ It is raised here and left for Tee: the note is his and was not edited.
 ## DEVON RECEIPT
 
 ```
-AREA: OS
+AREA: Systems
 TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_os29-platform-policy-sensor_v1_2026-09-08
 DATE: 2026-09-08

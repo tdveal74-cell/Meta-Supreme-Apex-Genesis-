@@ -23,6 +23,8 @@ import re
 
 import pytest
 
+from services.devon.areas import get_area
+
 DOCS = pathlib.Path(__file__).parent / "docs" / "devon"
 
 #: Every key a status doc's receipt must carry. Extra keys are allowed: a doc
@@ -151,6 +153,29 @@ def test_a_receipt_carries_the_capture_token(path):
     block = _receipt_block(path.read_text(encoding="utf-8"))
     assert f"TOKEN: {CAPTURE_TOKEN}" in block, (
         f"{path.name} receipt does not carry the capture token line verbatim"
+    )
+
+
+@pytest.mark.parametrize("path", BOUND, ids=lambda p: p.name)
+def test_the_receipt_area_is_one_of_the_nine(path):
+    """AREA present is not the same as AREA filable.
+
+    The canon requires the key. It does not say the value has to mean
+    anything, and `services/devon/areas.get_area` is what decides that:
+    `normalize_areas` refuses to file a receipt whose area is not one of the
+    nine, so an unfilable AREA is a receipt that passes this gate and then
+    never lands. Measured on 2026-09-09, before this test existed, two docs
+    carried `AREA: OS`, which is the workflow's name and not an area.
+    """
+    block = _receipt_block(path.read_text(encoding="utf-8"))
+    stated = re.search(r"^AREA:\s*(.+)$", block, re.MULTILINE)
+    assert stated, f"{path.name} receipt states no AREA"
+    tokens = [part.strip() for part in stated.group(1).split(",") if part.strip()]
+    unknown = [token for token in tokens if get_area(token) is None]
+    assert not unknown, (
+        f"{path.name} receipt carries AREA {unknown!r}, which is not one of the nine "
+        "DEVON areas, so normalize_areas would refuse to file it. Valid labels are "
+        "TQO, Podcast, NCO, ACX, Health, Money, Family, Learning and Systems."
     )
 
 

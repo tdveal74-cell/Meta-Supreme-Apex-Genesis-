@@ -174,3 +174,50 @@ def test_produced_a_decision_detects_none():
         "decisions: Filing laws are enforced in code rather than prose", "decisions: none"
     ))
     assert not receipt.produced_a_decision
+
+
+STATUS_DOC_SAMPLE = """DEVON RECEIPT
+
+AREA: Systems
+TYPE: SYS_OPS
+ARTIFACT: SYS_OPS_something_v1_2026-09-09
+DATE: 2026-09-09
+BUILT: a thing, and another thing
+STATUS: shipped
+TOKEN: dcp_claude_test
+"""
+
+
+def test_an_unknown_field_ends_the_previous_one_instead_of_being_absorbed():
+    """The corruption that made every status doc receipt unfilable.
+
+    TYPE, ARTIFACT, BUILT, STATUS and TOKEN are not in STANDING_KEYS. Before
+    2026-09-09 each fell to the continuation branch and was appended to the
+    field above it, so AREA held the whole rest of the block and split into
+    areas like 'ruff clean'. Measured across docs/devon at the time: seventeen
+    of eighteen receipts.
+    """
+    receipt = receipts.parse_receipt(STATUS_DOC_SAMPLE)
+    assert receipt.areas == ["Systems"]
+    assert "TYPE" not in "".join(receipt.areas)
+    assert "\n" not in "".join(receipt.areas)
+
+
+def test_a_multi_line_value_still_runs_across_its_following_lines():
+    """The behaviour the scanner exists for, unchanged by the fix above.
+
+    Ordinary prose is not in all caps, so a continuation line is still a
+    continuation line.
+    """
+    sample = (
+        "DEVON RECEIPT\n\n"
+        "AREA: Systems\n"
+        "SUMMARY: the first line of the summary\n"
+        "and a second line that continues it\n"
+        "TYPE: SYS_OPS\n"
+    )
+    receipt = receipts.parse_receipt(sample)
+    assert receipt.areas == ["Systems"]
+    assert receipt.summary == (
+        "the first line of the summary\nand a second line that continues it"
+    )
