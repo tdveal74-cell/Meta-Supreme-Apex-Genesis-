@@ -26,12 +26,13 @@ import asyncio
 import json
 import logging
 from datetime import date, datetime, timezone
+from pathlib import Path
 
 import httpx
 import pytest
 from sqlalchemy.exc import DBAPIError
 
-from app.services import capture_enrichment
+from app.services import capture_enrichment, knowledge_loop
 from app.services.capture_enrichment import (
     NON_ENRICHING_PROVIDERS,
     enrichment_is_configured,
@@ -41,7 +42,7 @@ from app.services.knowledge_loop import _plan_from, _utterance_for
 from app.services.provider_usage import ProviderSpendCapExceeded
 from services.devon.assistant import FIXED_AREA_INTENTS, Devon
 from services.devon.commands import ALL_INTENTS, Kind
-from services.intelligence.enrichment import DECLINE_TOKEN
+from services.intelligence.enrichment import DECLINE_TOKEN, EnrichmentResult
 from services.intelligence.providers import CerebrasProvider
 from services.intelligence.providers.cerebras_provider import DEFAULT_MODEL
 
@@ -435,3 +436,91 @@ async def test_a_built_provider_is_recorded_so_a_reader_can_tell(monkeypatch):
     assert result is not None and result.area_label == "ACX"
     assert capture_enrichment.status()["provider_built"] is True
 
+
+
+# ---------------------------------------------------------------------------
+# The summary's destination.
+#
+# Until 2026-09-09 `EnrichmentResult.summary` was produced on every enriched
+# capture and read by nothing. It reached a DEBUG log and a ledger blob whose
+# own comment said a paid for field dropped on the floor is waste. It now
+# reaches `what_happens` on the approval card, which the console renders.
+#
+# The rules these tests hold shut are the ones that make that safe rather than
+# merely useful: the title is never touched, the label is never dropped, and a
+# byte the ledger would refuse never reaches the card.
+# ---------------------------------------------------------------------------
+
+
+def _enriched(summary: str) -> EnrichmentResult:
+    return EnrichmentResult(area=None, area_provenance="test", summary=summary)
+
+
+def test_a_summary_reaches_the_card_labelled_as_the_model_s():
+    gloss = knowledge_loop._model_gloss(_enriched("A note about the widget."))
+    assert gloss is not None
+    assert gloss.startswith(knowledge_loop.GLOSS_LABEL)
+    assert "A note about the widget." in gloss
+
+
+def test_no_enrichment_and_no_summary_produce_no_gloss():
+    assert knowledge_loop._model_gloss(None) is None
+    assert knowledge_loop._model_gloss(_enriched("")) is None
+    assert knowledge_loop._model_gloss(_enriched("   ")) is None
+
+
+def test_the_label_is_not_optional():
+    """A gloss the approver cannot tell from Tee's own words is the failure.
+
+    Asserting the constant is non empty as well as present stops the label
+    being emptied to satisfy the prefix check.
+    """
+    assert knowledge_loop.GLOSS_LABEL.strip()
+    gloss = knowledge_loop._model_gloss(_enriched("anything at all"))
+    assert gloss is not None and gloss.startswith(knowledge_loop.GLOSS_LABEL)
+
+
+def test_a_nul_never_reaches_the_approval_card(caplog):
+    """The ledger's own checker owns the refusal, exactly as _ledgerable does.
+
+    A NUL in a model summary already cost a whole capture once (see
+    `_ledgerable`). The card is a second surface for the same bytes, so it gets
+    the same check rather than a sanitiser written beside it.
+    """
+    with caplog.at_level(logging.WARNING):
+        assert knowledge_loop._model_gloss(_enriched("a widget \x00 note")) is None
+    assert "kept off the approval card" in caplog.text
+
+
+def test_a_lone_surrogate_never_reaches_the_approval_card():
+    assert knowledge_loop._model_gloss(_enriched("a widget \ud800 note")) is None
+
+
+def test_a_long_summary_is_bounded_and_stays_labelled():
+    gloss = knowledge_loop._model_gloss(_enriched("x" * 4000))
+    assert gloss is not None
+    assert gloss.startswith(knowledge_loop.GLOSS_LABEL)
+    body = gloss[len(knowledge_loop.GLOSS_LABEL) :].strip()
+    assert len(body) <= knowledge_loop.GLOSS_LIMIT
+
+
+def test_the_gloss_is_additive_and_never_becomes_the_title():
+    """The title is what Tee consents to, so a model may not write it.
+
+    Read from the source rather than exercised through the route, because the
+    point is a property of the call: `title=` must be built from the capture's
+    own words. A model summary in that f-string would mean he approves a
+    paraphrase, which is the transformation the first law refuses outright.
+    """
+    source = Path(knowledge_loop.__file__).read_text(encoding="utf-8")
+    start = source.index("record, token = _queue().request(")
+    end = source.index(")", source.index("owner_id=owner_id", start))
+    call = source[start:end]
+    title_line = next(
+        line for line in call.splitlines() if line.strip().startswith("title=")
+    )
+    assert "payload_text" in title_line
+    assert "gloss" not in title_line and "summary" not in title_line
+    # And the gloss must still be reaching what_happens, or this lane is waste
+    # again with the title test passing for the wrong reason.
+    assert "what = f\"{what} {gloss}\"" in source

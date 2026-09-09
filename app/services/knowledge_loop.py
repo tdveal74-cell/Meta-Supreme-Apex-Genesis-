@@ -287,6 +287,59 @@ def _ledgerable(enrichment: Optional[Any]) -> Optional[Dict[str, Any]]:
     return None
 
 
+#: How much of a model's summary may reach the approval card. The card is read
+#: by a human deciding whether to consent, so a paragraph there buries the
+#: consequence it sits beside.
+GLOSS_LIMIT = 220
+
+#: Prefix on the model's line. Never dropped and never made conditional. An
+#: approver has to be able to tell Tee's own words from a model's paraphrase at
+#: a glance, because the two are about to be filed under one ruling.
+GLOSS_LABEL = "DEVON's read of it, written by the model and not by Tee:"
+
+
+def _model_gloss(enrichment: Optional[Any]) -> Optional[str]:
+    """The model's summary as one labelled line for the approval card, or None.
+
+    Until 2026-09-09 the enrichment call produced a summary on every enriched
+    capture and nothing read it. It reached a DEBUG log and a ledger blob, and
+    the ledger comment beside it said so in as many words: a paid for field
+    dropped on the floor is waste. This gives it the one destination where it
+    earns its cost, `what_happens` on the approval card, which
+    `deploy/soul/console.html:1855` renders.
+
+    Three rules, none of them negotiable.
+
+    It is ADDITIVE. `title` keeps Tee's own words, truncated but never
+    rewritten. A model summary that swapped a number, a name or a date into the
+    line he approves would be exactly the transformation the first law refuses,
+    and he would be consenting to the paraphrase rather than to the capture.
+
+    It is LABELLED. `GLOSS_LABEL` is not conditional. An unlabelled line on that
+    card reads as DEVON's own account of what Tee said.
+
+    It is CHECKED. The summary is third party model output heading for a surface
+    a human reads, so it goes through the ledger's own `check_payload` for the
+    same reason `_ledgerable` does. A NUL or a lone surrogate is dropped here
+    rather than being carried onto the card, and the capture still files.
+    """
+    if enrichment is None:
+        return None
+    summary = (getattr(enrichment, "summary", "") or "").strip()
+    if not summary:
+        return None
+    refusal = provenance.check_payload({"summary": summary})
+    if refusal is not None:
+        logger.warning(
+            "model summary kept off the approval card, the capture still files: %s",
+            refusal,
+        )
+        return None
+    if len(summary) > GLOSS_LIMIT:
+        summary = summary[: GLOSS_LIMIT - 1].rstrip() + "\u2026"
+    return f"{GLOSS_LABEL} {summary}"
+
+
 def _plan_from(
     utterance: Optional[str], suggested_area: Optional[str] = None
 ) -> Optional[FilingPlan]:
@@ -472,6 +525,13 @@ class KnowledgeLoop:
                 " Also persists a ledger artifact with body so the capture is "
                 "findable in-estate without Drive, Notion, or n8n sitting open."
             )
+        # The model's read goes on the card beside the consequence, never into
+        # the title. Tee approves his own words; the gloss is context for that
+        # decision, labelled so it cannot be mistaken for them.
+        gloss = _model_gloss(enrichment)
+        if gloss:
+            what = f"{what} {gloss}"
+
         record, token = _queue().request(
             title=f"Remember: {payload_text[:80]}",
             what_happens=what,

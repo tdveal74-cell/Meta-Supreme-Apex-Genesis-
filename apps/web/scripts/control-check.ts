@@ -433,4 +433,79 @@ check("every text input on the surface carries a label", () => {
   assert.equal(inputs, 4, "the input count moved; re-check that each one is labelled");
 });
 
+/* the capture lane's only reachable surface */
+
+/*
+ * WHAT THIS GUARDS, AND WHY IT IS NOT A STYLE CHECK
+ *
+ * POST /api/v1/soul/propose is the only caller of knowledge_loop.propose in the
+ * estate, and propose is the only thing that runs the Cerebras enrichment lane.
+ * Until 2026-09-09 the only human surface reaching it was the platform console,
+ * which wants a CurrentUser JWT pasted into a field by hand, so the lane wired
+ * in PR #186 had never run once in production. Nothing failed. No test went
+ * red. The capability existed and no person could trigger it.
+ *
+ * A capability nobody can reach is indistinguishable from one that does not
+ * exist, and the estate has now built that twice. So the reachability itself is
+ * the thing under test: if this call is removed, renamed away, or quietly
+ * detached from the mode that dispatches to it, this goes red.
+ *
+ * The handler is sliced out by name and the assertions are made INSIDE it, for
+ * the reason a critic proved on this repo the same day: a file wide regex
+ * passes on any occurrence anywhere, including a comment or a neighbouring
+ * function, so it can report green over the exact bug it was written to catch.
+ */
+
+check("DEVON chat can still reach the capture endpoint", () => {
+  const source = readFileSync(
+    join(HERE, "..", "components/devon/DevonChat.tsx"),
+    "utf8",
+  );
+  assert.ok(source.length > 2000, "DevonChat.tsx did not read");
+
+  // Comments are stripped first: the fix for this lane sitting in a commented
+  // out block would otherwise satisfy every assertion below.
+  const code = source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("//"))
+    .join("\n");
+
+  const from = code.indexOf("const remember = useCallback(");
+  assert.ok(from >= 0, "DevonChat no longer declares a remember handler, so nothing in the web app can file a capture");
+  const to = code.indexOf("const send = useCallback(", from);
+  assert.ok(to > from, "the remember handler is no longer followed by send; the slice bound moved");
+  const handler = code.slice(from, to);
+
+  assert.ok(
+    /authedFetch\(\s*["'`]\/soul\/propose["'`]/.test(handler),
+    "remember no longer calls /soul/propose, which is the only caller of knowledge_loop.propose",
+  );
+  assert.ok(
+    /method:\s*["'`]POST["'`]/.test(handler),
+    "remember no longer POSTs, so propose would never be reached",
+  );
+  assert.ok(
+    /area:\s*null/.test(handler),
+    "remember now supplies an area, which closes the enrichment gate: suggest_area only runs when area is None",
+  );
+  assert.ok(
+    /what_happens/.test(handler),
+    "remember no longer renders what_happens, which is where the model's labelled gloss is shown",
+  );
+
+  // And the handler has to be wired to something a person can press. A live
+  // function nothing dispatches to is the same failure in a different place.
+  assert.ok(
+    /mode === "keep"[\s\S]{0,120}?await remember\(/.test(code),
+    "no mode dispatches to remember, so the handler exists and nobody can reach it",
+  );
+  const modes = /\(\[([^\]]*)\] as const\)\.map\(\(option\)/.exec(code);
+  assert.ok(modes !== null, "the mode button list is no longer a literal this check can read");
+  assert.ok(
+    modes[1].includes('"keep"'),
+    "the keep mode is not offered as a button, so no person can select it",
+  );
+});
+
 console.log(`control-check: ${checks} checks passed`);

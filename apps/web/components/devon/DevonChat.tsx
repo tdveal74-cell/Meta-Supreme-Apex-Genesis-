@@ -119,7 +119,7 @@ export function DevonChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [mode, setMode] = useState<"auto" | "ask" | "do">("auto");
+  const [mode, setMode] = useState<"auto" | "ask" | "do" | "keep">("auto");
   const [pending, setPending] = useState<PendingApproval | null>(null);
   const [confirming, setConfirming] = useState<PendingConfirm | null>(null);
   const [turnId, setTurnId] = useState("");
@@ -588,6 +588,47 @@ export function DevonChat() {
     [append, authedFetch, speak],
   );
 
+  /**
+   * File a capture through the knowledge loop.
+   *
+   * THE GAP THIS CLOSES. `POST /api/v1/soul/propose` is the only caller of
+   * `knowledge_loop.propose` in the estate, and until 2026-09-09 the only human
+   * surface that reached it was the platform console, which needs a CurrentUser
+   * JWT pasted into a field by hand. So the Cerebras enrichment lane wired in
+   * PR #186 had never run once in production: not because nobody captures, but
+   * because the surface Tee actually uses could not reach the endpoint. This
+   * chat already holds a valid token, so capture belongs here.
+   *
+   * It proposes and stops. Approving needs DEVON_RULING_KEY, which no endpoint
+   * ever returns, so the ruling stays where it was: with Tee, in the console.
+   * Nothing here consumes the approval and nothing here writes soul.
+   */
+  const remember = useCallback(
+    async (utterance: string) => {
+      const response = await authedFetch("/soul/propose", {
+        method: "POST",
+        body: JSON.stringify({ text: utterance, kind: "lesson", area: null, layer: 5 }),
+      });
+      if (!response.ok) throw new Error(await readApiError(response));
+      const body = await response.json();
+      const approval = (body?.approval ?? {}) as Record<string, unknown>;
+      const requestId = String(approval.request_id || "");
+      const what = String(approval.what_happens || "");
+
+      // what_happens carries the model's labelled gloss when enrichment ran, so
+      // this is where Tee sees what Cerebras made of his words. Rendering the
+      // raw field rather than a rewrite of it keeps that label attached.
+      const lines = [
+        `Held as ${requestId || "an unnumbered request"}. Nothing is committed.`,
+        what,
+        "Approve it in the console. That needs the ruling key, which this chat never has.",
+      ].filter(Boolean);
+      append("devon", lines.join("\n\n"));
+      speak("I have it held, waiting on your ruling. Nothing is written yet.");
+    },
+    [append, authedFetch, speak],
+  );
+
   const send = useCallback(
     async (raw?: string) => {
       const text = (raw ?? input).trim();
@@ -613,6 +654,8 @@ export function DevonChat() {
           await ask(text);
         } else if (mode === "do") {
           await execute(text);
+        } else if (mode === "keep") {
+          await remember(text);
         } else {
           await converse(text);
         }
@@ -624,7 +667,7 @@ export function DevonChat() {
         setBusy(false);
       }
     },
-    [append, ask, busy, converse, execute, input, mode, primeVoice, speak, token],
+    [append, ask, busy, converse, execute, input, mode, primeVoice, remember, speak, token],
   );
 
   const sendRef = useRef(send);
@@ -988,7 +1031,7 @@ export function DevonChat() {
           className="border-t border-white/10 bg-black/25 p-4 sm:p-5"
         >
           <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]">
-            {(["auto", "ask", "do"] as const).map((option) => (
+            {(["auto", "ask", "do", "keep"] as const).map((option) => (
               <button
                 key={option}
                 type="button"
@@ -999,7 +1042,7 @@ export function DevonChat() {
                     : "border-white/10 bg-black/30 text-white/40"
                 }`}
               >
-                {option === "auto" ? "Auto" : option === "ask" ? "Answer" : "Execute"}
+                {option === "auto" ? "Auto" : option === "ask" ? "Answer" : option === "do" ? "Execute" : "Keep"}
               </button>
             ))}
             <span className="text-white/30">
