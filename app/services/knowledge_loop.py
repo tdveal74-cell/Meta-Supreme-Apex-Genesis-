@@ -33,6 +33,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services import soul as soul_service
+from app.services.capture_enrichment import suggest_area
 from app.services.live_state_ledger import ledger
 from services import memory as memory_store
 from services.devon import ecosystem
@@ -222,16 +223,45 @@ def _build_candidate(
     )
 
 
-def _plan_for(text: str) -> Optional[FilingPlan]:
-    """Compiler plan only. executed stays False inside services.devon."""
-    response = Devon().ask(text)
-    if response.plan is not None:
-        return response.plan
-    utterance = text.strip()
-    if not utterance.lower().startswith("remember"):
-        utterance = f"remember {utterance}"
-        return Devon().ask(utterance).plan
-    return None
+def _utterance_for(text: str) -> Optional[str]:
+    """The exact words DEVON will file, which is what enrichment has to tag.
+
+    Split out because the two consumers need it at different moments.
+    `_plan_from` needs it to build the plan; the enrichment lane needs it
+    *before* the plan exists, so the provider is asked about the phrasing that
+    will actually be parsed.
+
+    That distinction is the whole reason this function exists rather than the
+    raw text being passed straight to the enricher. `propose` is fed prose from
+    the HUD, not DEVON phrasing, so most of what arrives here parses as nothing
+    and only becomes a capture once "remember" is on the front. Tagging the raw
+    text would have returned None from `area_suggestion_text` for the entire
+    knowledge loop, and the lane would have read as wired while receiving no
+    enrichment at all.
+
+    Returns None when nothing will file: the text did not parse as a plan and
+    already began with "remember", so prefixing it again would change nothing.
+    """
+    if Devon().ask(text).plan is not None:
+        return text
+    stripped = text.strip()
+    if stripped.lower().startswith("remember"):
+        return None
+    return f"remember {stripped}"
+
+
+def _plan_from(
+    utterance: Optional[str], suggested_area: Optional[str] = None
+) -> Optional[FilingPlan]:
+    """Compiler plan only. executed stays False inside services.devon.
+
+    Takes the utterance rather than the raw text so the caller resolves it once
+    and enrichment and planning are demonstrably reading the same words. Two
+    calls to `_utterance_for` would agree today and are one edit away from not.
+    """
+    if utterance is None:
+        return None
+    return Devon().ask(utterance, suggested_area=suggested_area).plan
 
 
 def _candidate_from_payload(payload: Dict[str, Any]) -> SoulWriteCandidate:
@@ -367,7 +397,16 @@ class KnowledgeLoop:
         if layer not in (SUBCONSCIOUS_LAYER, DEFAULT_LAYER):
             raise KnowledgeLoopRefused(reason, status_code=422)
 
-        plan = _plan_for(text)
+        # Enrichment before planning, because the suggestion is an input to the
+        # plan rather than a note about it. An Area the caller supplied outranks
+        # anything a model could infer, so no call is spent when one is given.
+        utterance = _utterance_for(text)
+        enrichment = None
+        if area is None and utterance is not None:
+            enrichment = await suggest_area(utterance)
+        plan = _plan_from(
+            utterance, suggested_area=enrichment.area_label if enrichment else None
+        )
         payload_text = (plan.payload if plan is not None else text).strip()
         if not payload_text:
             raise KnowledgeLoopRefused(
@@ -438,6 +477,13 @@ class KnowledgeLoop:
                     "source_note": candidate.source_note,
                 },
                 "filing_plan": plan_dict,
+                # What the model said, kept whole. The filing plan records the
+                # Area that survived validation; this records what was offered
+                # and how it was judged, which is the only way to tell a good
+                # tag from a lucky one when auditing a wrong Area later. It also
+                # gives the generated summary a destination: nothing else reads
+                # it, and a paid-for field dropped on the floor is waste.
+                "enrichment": enrichment.to_dict() if enrichment else None,
             },
         )
         action = await ledger.plan_action(
