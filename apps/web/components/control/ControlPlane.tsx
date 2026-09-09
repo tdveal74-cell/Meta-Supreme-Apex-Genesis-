@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { ExecutionHubPanel } from "@/components/control/ExecutionHubPanel";
 import { CostPanel } from "@/components/control/CostPanel";
+import { SecurityPanel } from "@/components/control/SecurityPanel";
 import { TierPanel } from "@/components/control/TierPanel";
 
 /**
@@ -111,6 +112,15 @@ export function ControlPlane({ readiness, provenance, presence, knowledge }: Con
               }
             >
               {provenance}
+            </TierPanel>
+
+            <TierPanel
+              title="Security shell and secrets"
+              purpose="The two doors that can execute, and where secrets do and do not live."
+              sourcing="partial"
+              sourceNote="Both shells are live and predate this arc, so this panel points at them rather than embedding a PTY inside the control plane. There is no secret vault, by design, and whether one should exist is a ruling rather than an omission."
+            >
+              <SecurityPanel />
             </TierPanel>
           </Tier>
 
