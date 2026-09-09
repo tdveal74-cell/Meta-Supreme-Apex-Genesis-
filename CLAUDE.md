@@ -188,6 +188,35 @@ A handover's "CI green" is a claim, not a fact. Check the Actions history for
 the claimed head SHA before building on it. A green Vercel preview is not
 production; load the `deploy-readback` skill before saying any surface is live.
 
+**Tee's word in the session is the review of record.** Ruled 2026-09-09, after
+a close-out doc recorded the GitHub timeline carrying no `reviewed` event on
+PR #176 and six seconds between leaving draft and merging. GitHub review is not
+the gate here and a missing `reviewed` event is not a finding; do not wait on
+one, and do not write it up as a gap. His explicit authorization is still
+required to merge, and it arrives in chat.
+
+## The receipt on a status doc
+
+Ruled 2026-09-09. Every `docs/devon/SYS_OPS_*.md` carries a `## DEVON RECEIPT`
+block with nine keys, `AREA`, `TYPE`, `ARTIFACT`, `DATE`, `DECISIONS`,
+`FINDINGS`, `OPEN`, `STATUS` and `TOKEN`, the capture token line verbatim, and
+a `DATE` matching the date in the filename. Extra keys are welcome; those nine
+are the floor. `test_devon_receipt_shape.py` enforces it, so do not describe
+the rule in prose and hope.
+
+Enforcement is an exemption list of exact filenames, not a date cutoff, because
+a new doc can carry an old date in its name and a filename cannot be forged
+that way. The list is the migration backlog and it may only shrink: one test
+fails if it names a doc that no longer exists, another fails if a listed doc
+already satisfies the canon and is still listed. Forty five docs were exempt
+when the rule landed, most of them August handovers that may not be status docs
+at all, which is a call for Tee rather than forty guesses.
+
+`services/devon/receipts.py` is a different format for a different job, the
+thread log capture path. It reads a `=== DEVON RECEIPT v1 ===` block and
+`detect_format` returns None for every status doc. Do not try to make one
+satisfy the other.
+
 ## Running a critic
 
 Every arc here closes with a fresh critic, and a critic earns its verdict by
