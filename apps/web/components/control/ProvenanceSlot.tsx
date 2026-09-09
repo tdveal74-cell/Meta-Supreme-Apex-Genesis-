@@ -64,7 +64,7 @@ export function ProvenanceSlot() {
           placeholder="Intent id, for example 3f6c1e2a-..."
           spellCheck={false}
           autoComplete="off"
-          className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-xs text-white/85 outline-none transition placeholder:text-white/25 focus:border-white/25"
+          className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-xs text-white/85 outline-none transition placeholder:text-white/50 focus:border-white/25"
         />
         <button
           type="submit"
@@ -76,7 +76,7 @@ export function ProvenanceSlot() {
 
       <ProvenanceCard intentId={intentId} />
 
-      <p className="text-xs leading-relaxed text-white/35">
+      <p className="text-xs leading-relaxed text-white/50">
         No route lists an owner's intents, only a read of one by id, so this asks
         for the id instead of offering a picker it cannot populate. The last id is
         remembered on this device only.

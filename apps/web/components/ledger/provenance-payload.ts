@@ -47,7 +47,15 @@ export type ProvenanceChain = {
  */
 export type ProvenanceReceipt = {
   present: boolean;
-  /** No receipt finding. False whenever the receipt is absent. */
+  /**
+   * The receipt's own signature and counters agree. NOT "this receipt has no
+   * findings": the writer sets this from the receipt checks alone
+   * (`app/services/live_state_ledger.py:835`) and then appends the prefix
+   * finding afterwards without recomputing it, so a receipt over a chain whose
+   * older rows predate 019 arrives here as `verified: true` carrying a finding
+   * that says it certifies those rows on trust rather than on proof. Read
+   * `chain.complete` beside this before calling anything verified.
+   */
   verified: boolean;
   findings: string[];
   receipt_id?: string;

@@ -56,14 +56,14 @@ export function TierPanel({ title, purpose, sourcing, sourceNote, children }: Ti
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-semibold tracking-tight text-white">{title}</h3>
           <span
-            className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${badge.className}`}
+            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${badge.className}`}
           >
             {badge.label}
           </span>
         </div>
         <p className="text-xs leading-relaxed text-white/50">{purpose}</p>
         {sourceNote ? (
-          <p className="text-xs leading-relaxed text-white/40">{sourceNote}</p>
+          <p className="text-xs leading-relaxed text-white/50">{sourceNote}</p>
         ) : null}
       </header>
       {children ? (

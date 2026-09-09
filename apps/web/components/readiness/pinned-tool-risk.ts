@@ -14,7 +14,7 @@
 // Regenerating: re-run the manifest generator named in hermes-surface.json,
 // then rebuild this file from it. Do not edit a row by hand.
 
-import type { ToolRisk } from "./readiness-types";
+import type { ToolRisk } from "./readiness-types.ts";
 
 export type PinnedTool = {
   risk: ToolRisk;

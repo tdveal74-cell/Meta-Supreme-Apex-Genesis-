@@ -51,7 +51,7 @@ export function ControlPlane({ readiness, provenance, presence, knowledge }: Con
                 <span className="text-xs font-bold tracking-[0.16em] text-amber-300">DV</span>
               </div>
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-300/80">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-amber-300/80">
                   DEVON
                 </p>
                 <h1 className="text-base font-semibold tracking-tight text-white">
@@ -74,7 +74,7 @@ export function ControlPlane({ readiness, provenance, presence, knowledge }: Con
           </div>
         </header>
 
-        <p className="mb-6 max-w-3xl text-xs leading-relaxed text-white/45">
+        <p className="mb-6 max-w-3xl text-xs leading-relaxed text-white/50">
           Every panel says where its numbers come from. A panel marked as having no route is
           waiting on a backend read, not broken, and it shows nothing rather than a placeholder.
           Agents recommend and humans decide here as everywhere: nothing on this page approves a
@@ -137,7 +137,7 @@ export function ControlPlane({ readiness, provenance, presence, knowledge }: Con
               sourceNote="Frames, the sliding window buffer and the interrupt path are real against the presence service. The face is a procedural placeholder until an owned rig exists, and no LiveKit or Cartesia endpoint has been reached, so audio is unproven here."
             >
               {presence ?? (
-                <p className="text-xs text-white/45">
+                <p className="text-xs text-white/50">
                   The presence stage is not mounted on this build.{" "}
                   <Link href="/presence" className="underline decoration-white/30">
                     Open it on its own page
@@ -207,11 +207,11 @@ function Tier({
   return (
     <section id={id} className="scroll-mt-24">
       <div className="mb-3">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/35">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/50">
           {index}
         </p>
         <h2 className="mt-0.5 text-lg font-semibold tracking-tight text-white">{title}</h2>
-        <p className="mt-1 max-w-2xl text-xs leading-relaxed text-white/45">{summary}</p>
+        <p className="mt-1 max-w-2xl text-xs leading-relaxed text-white/50">{summary}</p>
       </div>
       <div className="grid min-w-0 gap-4 [&>*]:min-w-0 lg:grid-cols-2">{children}</div>
     </section>

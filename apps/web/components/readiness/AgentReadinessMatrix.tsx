@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { API_BASE } from "@/lib/api-base";
-import { PINNED_TOOL_COUNT } from "./pinned-tool-risk";
+import { PINNED_TOOL_COUNT } from "./pinned-tool-risk.ts";
 import {
   TASK_STATES,
   isTaskState,
@@ -11,7 +11,7 @@ import {
   type ToolCatalogEntry,
   type ToolCatalogResponse,
   type ToolRisk,
-} from "./readiness-types";
+} from "./readiness-types.ts";
 import {
   RISK_LABEL,
   ageLabel,
@@ -19,7 +19,7 @@ import {
   summarizeTaskRisk,
   type RiskSource,
   type TaskRiskSummary,
-} from "./risk-resolution";
+} from "./risk-resolution.ts";
 
 /**
  * Agent readiness matrix.
@@ -166,7 +166,7 @@ function transportFailure(reason: unknown): RequestFailure {
 function Chip({ className, children }: { className: string; children: ReactNode }) {
   return (
     <span
-      className={`inline-flex items-center border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] ${className}`}
+      className={`inline-flex items-center border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-[0.12em] ${className}`}
     >
       {children}
     </span>
@@ -177,7 +177,7 @@ function Unavailable({ title }: { title: string }) {
   return (
     <span
       title={title}
-      className="font-mono text-[9px] uppercase tracking-[0.1em] text-[#526979]"
+      className="font-mono text-[11px] uppercase tracking-[0.1em] text-[#718898]"
     >
       {UNAVAILABLE}
     </span>
@@ -187,7 +187,7 @@ function Unavailable({ title }: { title: string }) {
 function SourceMark({ source }: { source: RiskSource }) {
   if (source === "catalog") {
     return (
-      <span title="Risk read live from GET /agent-tasks/tools" className="text-[9px] text-emerald-300/70">
+      <span title="Risk read live from GET /agent-tasks/tools" className="text-[11px] text-emerald-300/70">
         live
       </span>
     );
@@ -196,7 +196,7 @@ function SourceMark({ source }: { source: RiskSource }) {
     return (
       <span
         title="Live tool catalog unavailable. Risk read from the pinned docs/devon/hermes-surface.json manifest"
-        className="text-[9px] text-amber-300/70"
+        className="text-[11px] text-amber-300/70"
       >
         pinned
       </span>
@@ -205,7 +205,7 @@ function SourceMark({ source }: { source: RiskSource }) {
   return (
     <span
       title="Neither the live catalog nor the pinned manifest knows this tool name"
-      className="text-[9px] text-[#526979]"
+      className="text-[11px] text-[#718898]"
     >
       unknown
     </span>
@@ -363,25 +363,25 @@ export function AgentReadinessMatrix({
     >
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-[#22384a] px-4 py-3">
         <div>
-          <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#c77b4a]">
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#c77b4a]">
             DEVON agent readiness
           </p>
           <h2 className="mt-1 text-sm font-semibold text-white">Task state and tool risk matrix</h2>
-          <p className="mt-1 font-mono text-[9px] leading-4 text-[#526979]">
+          <p className="mt-1 font-mono text-[11px] leading-4 text-[#718898]">
             Rows from GET /agent-tasks. Risk from GET /agent-tasks/tools, falling back to the{" "}
             {PINNED_TOOL_COUNT} tool manifest pinned in docs/devon/hermes-surface.json.
           </p>
         </div>
         <div className="flex items-center gap-2">
           {phase === "loading" && (
-            <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-amber-300">
+            <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-amber-300">
               reading
             </span>
           )}
           <button
             type="button"
             onClick={() => void refresh()}
-            className="border border-[#22384a] px-2 py-1 font-mono text-[9px] uppercase tracking-[0.12em] text-[#93a6b5] transition hover:border-[#c77b4a]/60 hover:text-white"
+            className="border border-[#22384a] px-2 py-1 font-mono text-[11px] uppercase tracking-[0.12em] text-[#93a6b5] transition hover:border-[#c77b4a]/60 hover:text-white"
           >
             Refresh
           </button>
@@ -401,10 +401,10 @@ export function AgentReadinessMatrix({
 
       {phase === "loading" && tasks.length === 0 && (
         <div className="px-4 py-6 text-xs leading-5">
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-amber-300">
+          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-amber-300">
             Reading the task list
           </p>
-          <p className="mt-1 text-[#526979]">
+          <p className="mt-1 text-[#718898]">
             No rows are shown while the request is open. A blank matrix here would be a guess.
           </p>
         </div>
@@ -412,10 +412,10 @@ export function AgentReadinessMatrix({
 
       {phase === "error" && taskFailure && (
         <div className="px-4 py-6 text-xs leading-5">
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-rose-300">
+          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-rose-300">
             The request for GET /agent-tasks failed
           </p>
-          <p className="mt-2 border border-rose-400/30 bg-rose-400/[0.06] px-3 py-2 font-mono text-[10px] text-rose-100">
+          <p className="mt-2 border border-rose-400/30 bg-rose-400/[0.06] px-3 py-2 font-mono text-[11px] text-rose-100">
             {taskFailure.status === null
               ? `no HTTP response: ${taskFailure.detail}`
               : `${taskFailure.status} ${taskFailure.statusText}${taskFailure.detail ? `: ${taskFailure.detail}` : ""}`}
@@ -435,7 +435,7 @@ export function AgentReadinessMatrix({
           <div className="grid grid-cols-2 gap-px overflow-hidden border border-[#22384a] bg-[#22384a] sm:grid-cols-3 lg:grid-cols-6">
             {TASK_STATES.map((state) => (
               <div key={state} className="bg-[#0b141b] px-3 py-2.5">
-                <p className="font-mono text-[8px] uppercase tracking-[0.14em] text-[#6f8494]">
+                <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[#6f8494]">
                   {STATE_LABEL[state]}
                 </p>
                 <p className="mt-1 font-mono text-base text-white">{counts.tally.get(state) ?? 0}</p>
@@ -444,7 +444,7 @@ export function AgentReadinessMatrix({
           </div>
 
           {counts.unrecognized > 0 && (
-            <p className="mt-2 font-mono text-[9px] text-amber-300">
+            <p className="mt-2 font-mono text-[11px] text-amber-300">
               {counts.unrecognized} task(s) reported a state outside the six TaskState values. They
               are grouped separately below and their state is printed verbatim.
             </p>
@@ -452,10 +452,10 @@ export function AgentReadinessMatrix({
 
           {rows.length === 0 ? (
             <div className="mt-4 border border-[#22384a] bg-[#0b141b] px-3 py-5 text-xs leading-5">
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-sky-200">
+              <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-sky-200">
                 The request succeeded and returned zero tasks
               </p>
-              <p className="mt-1 text-[#526979]">
+              <p className="mt-1 text-[#718898]">
                 This is an empty list from a 200, not a failed read and not a placeholder. The
                 authenticated owner has no agent tasks in the first {pageSize} rows.
               </p>
@@ -464,7 +464,7 @@ export function AgentReadinessMatrix({
             <div className="mt-4 overflow-x-auto border border-[#22384a]">
               <table className="w-full min-w-[820px] border-collapse text-left">
                 <thead>
-                  <tr className="bg-[#0b141b] font-mono text-[8px] uppercase tracking-[0.14em] text-[#6f8494]">
+                  <tr className="bg-[#0b141b] font-mono text-[11px] uppercase tracking-[0.14em] text-[#6f8494]">
                     <th className="px-3 py-2 font-normal">State</th>
                     <th className="px-3 py-2 font-normal">Task</th>
                     <th className="px-3 py-2 font-normal">Step</th>
@@ -481,7 +481,7 @@ export function AgentReadinessMatrix({
                     <tr>
                       <td
                         colSpan={7}
-                        className="bg-black/25 px-3 py-1.5 font-mono text-[8px] uppercase tracking-[0.18em] text-[#c77b4a]"
+                        className="bg-black/25 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[#c77b4a]"
                       >
                         {group.label} ({group.rows.length})
                       </td>
@@ -507,22 +507,22 @@ export function AgentReadinessMatrix({
                             <p className="truncate text-[11px] text-white" title={task.goal}>
                               {task.goal || "(no goal text)"}
                             </p>
-                            <p className="mt-0.5 font-mono text-[9px] text-[#526979]">
+                            <p className="mt-0.5 font-mono text-[11px] text-[#718898]">
                               {task.task_id}
                             </p>
                             {task.failure_reason ? (
-                              <p className="mt-0.5 text-[9px] text-rose-300/80" title={task.failure_reason}>
+                              <p className="mt-0.5 text-[11px] text-rose-300/80" title={task.failure_reason}>
                                 {task.failure_reason}
                               </p>
                             ) : null}
                           </td>
                           <td className="px-3 py-2.5">
-                            <p className="font-mono text-[10px] text-[#93a6b5]">
+                            <p className="font-mono text-[11px] text-[#93a6b5]">
                               {steps === 0 ? "no plan steps" : `${Math.min(task.current_step + 1, steps)} of ${steps}`}
                             </p>
                             {activeStep ? (
                               <p
-                                className="mt-0.5 max-w-[14rem] truncate text-[9px] text-[#526979]"
+                                className="mt-0.5 max-w-[14rem] truncate text-[11px] text-[#718898]"
                                 title={`${activeStep.title} (${activeStep.state})`}
                               >
                                 {activeStep.title}
@@ -539,14 +539,14 @@ export function AgentReadinessMatrix({
                                   <SourceMark source={risk.peak.source} />
                                 </div>
                                 <p
-                                  className="max-w-[14rem] truncate font-mono text-[9px] text-[#526979]"
+                                  className="max-w-[14rem] truncate font-mono text-[11px] text-[#718898]"
                                   title={risk.peak.blastRadius || risk.peak.name}
                                 >
                                   {risk.peak.name}
                                 </p>
                               </div>
                             ) : risk.toolNames.length === 0 ? (
-                              <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-[#526979]">
+                              <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-[#718898]">
                                 no tool call planned
                               </span>
                             ) : (
@@ -556,7 +556,7 @@ export function AgentReadinessMatrix({
                             )}
                             {risk.peak?.risk && risk.unresolved.length > 0 ? (
                               <p
-                                className="mt-1 font-mono text-[9px] text-amber-300/80"
+                                className="mt-1 font-mono text-[11px] text-amber-300/80"
                                 title={risk.unresolved.join(", ")}
                               >
                                 {risk.unresolved.length} tool name(s) unresolved
@@ -565,10 +565,10 @@ export function AgentReadinessMatrix({
                           </td>
                           <td className="px-3 py-2.5">
                             {risk.toolNames.length === 0 ? (
-                              <span className="font-mono text-[9px] text-[#526979]">not applicable</span>
+                              <span className="font-mono text-[11px] text-[#718898]">not applicable</span>
                             ) : risk.peak?.risk ? (
                               <span
-                                className={`font-mono text-[9px] uppercase tracking-[0.1em] ${
+                                className={`font-mono text-[11px] uppercase tracking-[0.1em] ${
                                   risk.approvalRequired ? "text-amber-200" : "text-[#6f8494]"
                                 }`}
                               >
@@ -582,10 +582,10 @@ export function AgentReadinessMatrix({
                             <Unavailable title="AgentTask.to_dict() carries no lease field, and no route exposes agent_tasks.lease_expires_at or the agent_task_runs rows" />
                           </td>
                           <td className="px-3 py-2.5">
-                            <p className="font-mono text-[10px] text-[#93a6b5]">
+                            <p className="font-mono text-[11px] text-[#93a6b5]">
                               {ageLabel(task.updated_at, clock) ?? UNAVAILABLE}
                             </p>
-                            <p className="mt-0.5 font-mono text-[9px] text-[#526979]">
+                            <p className="mt-0.5 font-mono text-[11px] text-[#718898]">
                               created {ageLabel(task.created_at, clock) ?? UNAVAILABLE} ago
                             </p>
                           </td>
@@ -598,7 +598,7 @@ export function AgentReadinessMatrix({
             </div>
           )}
 
-          <div className="mt-3 space-y-1.5 border-t border-[#22384a] pt-3 font-mono text-[9px] leading-4 text-[#526979]">
+          <div className="mt-3 space-y-1.5 border-t border-[#22384a] pt-3 font-mono text-[11px] leading-4 text-[#718898]">
             <p>
               <span className="text-[#6f8494]">Lease age is {UNAVAILABLE}.</span> The lease columns
               exist (agent_tasks.lease_token, lease_owner, lease_expires_at, and the agent_task_runs

@@ -117,6 +117,27 @@ Optional. Cerebras is already live in the studio's capture lane (credential
 `Cerebras Cloud YTVk8Dq2gYPAmUim`, model `gpt-oss-120b`, measured at 42ms), and
 the same lane is available here through the platform's provider abstraction.
 
+**Built as a capability, not yet running as behavior.** Read this section as a
+description of what exists and can be called, because setting
+`ENRICHMENT_PROVIDER=cerebras` does not currently cause a single capture to be
+tagged. `enrich_capture` is defined at `services/intelligence/enrichment.py:115`
+and covered by sixteen tests in `test_devon_cerebras.py`, and
+`get_enrichment_provider` is defined at `app/services/intelligence.py:77`, and
+as of 2026-09-09 neither has a caller anywhere outside those tests. Verify it
+rather than trusting this line:
+
+```
+grep -rn "enrich_capture\|get_enrichment_provider" --include=*.py app/ services/
+```
+
+The audit raised this as DCD-07 on 2026-09-02
+(`SYS_OPS_devon-hermes-agent-audit_v1_2026-09-02`) and it is still open. Ruled by
+Tee 2026-09-09: wire the call site in a following arc, and until then this
+document states the capability and the behavior separately rather than letting
+the environment variable imply a lane that does not run. The rest of this
+section describes the code as written, which is real, and not a path any capture
+currently takes.
+
 ```
 CEREBRAS_API_KEY=...
 ENRICHMENT_PROVIDER=cerebras     # tag captures with an Area and a summary

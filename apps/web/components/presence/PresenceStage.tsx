@@ -69,7 +69,7 @@ function signalClass(tone: "good" | "wait" | "hold" | "bad" | "off"): string {
 function Stat({ label, value, tone }: { label: string; value: string; tone?: "good" | "wait" | "hold" | "bad" | "off" }) {
   return (
     <div className="flex items-baseline justify-between gap-3 border-b border-[#2b4558]/50 py-1.5">
-      <span className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.2em] text-[#668092]">
+      <span className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] text-[#668092]">
         {tone ? <span className={`h-1.5 w-1.5 rounded-full ${signalClass(tone)}`} /> : null}
         {label}
       </span>
@@ -81,7 +81,7 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: "go
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="border border-[#2b4558]/90 bg-[linear-gradient(135deg,rgba(8,19,27,.94),rgba(5,10,14,.82)_48%,rgba(10,23,30,.9))] p-3">
-      <h2 className="mb-1 font-mono text-[9px] uppercase tracking-[0.24em] text-[#4fb3a5]">{title}</h2>
+      <h2 className="mb-1 font-mono text-[11px] uppercase tracking-[0.24em] text-[#4fb3a5]">{title}</h2>
       {children}
     </section>
   );
@@ -271,13 +271,13 @@ export function PresenceStage() {
         <div className="relative aspect-[16/10] w-full overflow-hidden border border-[#2b4558]/90 bg-[#050a0e] shadow-[0_24px_90px_rgba(0,0,0,.45)]">
           <DevonAvatarCanvas driver={driver} modelUrl={modelUrl} onModelError={onModelError} onRigInfo={onRigInfo} />
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#4fb3a5]/70 to-transparent" />
-          <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.2em] text-[#668092]">
+          <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] text-[#668092]">
             <span className={`h-1.5 w-1.5 rounded-full ${signalClass(stateTone)}`} />
             {effectiveState}
             {override ? " (local)" : ""}
           </div>
           {modelError ? (
-            <div className="absolute inset-x-3 bottom-3 border border-red-400/40 bg-[#0b1116]/90 px-3 py-2 font-mono text-[10px] text-red-200">
+            <div className="absolute inset-x-3 bottom-3 border border-red-400/40 bg-[#0b1116]/90 px-3 py-2 font-mono text-[11px] text-red-200">
               Model failed to load: {modelError}. Showing the procedural head.
             </div>
           ) : null}
@@ -289,17 +289,21 @@ export function PresenceStage() {
         </div>
 
         <div className="min-h-[3.5rem] border border-[#2b4558]/60 bg-black/30 px-3 py-2">
-          <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#668092]">Caption</div>
+          <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#668092]">Caption</div>
           <p className="mt-1 text-sm leading-6 text-[#ede7dc]/90">{caption || (lastTurn ? "Waiting for the first token." : "Nothing said yet.")}</p>
         </div>
 
         <form onSubmit={onSay} className="flex gap-2">
+          <label className="sr-only" htmlFor="presence-say">
+            Say something through DEVON
+          </label>
           <input
+            id="presence-say"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder={live ? "Say something through DEVON" : "Connect first"}
             disabled={!live}
-            className="min-w-0 flex-1 border border-[#2b4558]/90 bg-black/30 px-3 py-2 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#4fb3a5]/60 disabled:opacity-40"
+            className="min-w-0 flex-1 border border-[#2b4558]/90 bg-black/30 px-3 py-2 text-sm text-white outline-none transition placeholder:text-white/50 focus:border-[#4fb3a5]/60 disabled:opacity-40"
           />
           <button
             type="submit"
@@ -359,7 +363,7 @@ export function PresenceStage() {
           <Stat label="Server ack" value={lastAck ? `${lastAck.flushed_frames} flushed, ${ms(lastAck.server_latency_ms, 1)}` : "n/a"} />
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {bargeIn.mic === "live" ? (
-              <button type="button" onClick={bargeIn.stop} className="border border-white/15 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-white/70 transition hover:border-white/30 hover:text-white">
+              <button type="button" onClick={bargeIn.stop} className="border border-white/15 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-white/70 transition hover:border-white/30 hover:text-white">
                 Stop mic
               </button>
             ) : (
@@ -367,12 +371,12 @@ export function PresenceStage() {
                 type="button"
                 onClick={() => void bargeIn.start()}
                 disabled={bargeIn.mic === "requesting"}
-                className="border border-[#4fb3a5]/50 bg-[#4fb3a5]/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-[#9fe3d6] transition hover:bg-[#4fb3a5]/20 disabled:opacity-40"
+                className="border border-[#4fb3a5]/50 bg-[#4fb3a5]/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-[#9fe3d6] transition hover:bg-[#4fb3a5]/20 disabled:opacity-40"
               >
                 Start mic
               </button>
             )}
-            <span className="text-[10px] leading-4 text-[#718898]">Opens only on this click. Attack 40 ms, hangover 300 ms, threshold 0.02 RMS.</span>
+            <span className="text-[11px] leading-4 text-[#718898]">Opens only on this click. Attack 40 ms, hangover 300 ms, threshold 0.02 RMS.</span>
           </div>
           {bargeIn.message ? <p className="mt-2 text-[11px] leading-5 text-red-200/90">{bargeIn.message}</p> : null}
         </Panel>
@@ -384,29 +388,33 @@ export function PresenceStage() {
           <Stat label="Audio clock" value={livekit.audioClockMs() === null ? "wall clock from speaking state" : "remote audio"} />
           <Stat label="Raw audio chunks ignored" value={String(hud.audioChunksIgnored)} />
           {livekit.status === "playback blocked" ? (
-            <button type="button" onClick={() => void livekit.unlockPlayback()} className="mt-2 border border-amber-300/40 bg-amber-300/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-amber-200">
+            <button type="button" onClick={() => void livekit.unlockPlayback()} className="mt-2 border border-amber-300/40 bg-amber-300/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-amber-200">
               Unlock playback
             </button>
           ) : null}
           {livekit.detail ? <p className="mt-2 text-[11px] leading-5 text-red-200/90">{livekit.detail}</p> : null}
-          <p className="mt-2 text-[10px] leading-4 text-[#718898]">
+          <p className="mt-2 text-[11px] leading-4 text-[#718898]">
             The LiveKit path has not been exercised against a live server in this build; the raw audio fallback is counted, not played.
           </p>
         </Panel>
 
         <Panel title="Model">
           <form onSubmit={applyModel} className="flex gap-2">
+            <label className="sr-only" htmlFor="presence-model-url">
+              Avatar GLB URL
+            </label>
             <input
+              id="presence-model-url"
               value={modelDraft}
               onChange={(event) => setModelDraft(event.target.value)}
               placeholder="GLB URL (leave empty for the procedural head)"
-              className="min-w-0 flex-1 border border-[#2b4558]/90 bg-black/30 px-3 py-1.5 font-mono text-[11px] text-white outline-none transition placeholder:text-white/25 focus:border-[#4fb3a5]/60"
+              className="min-w-0 flex-1 border border-[#2b4558]/90 bg-black/30 px-3 py-1.5 font-mono text-[11px] text-white outline-none transition placeholder:text-white/50 focus:border-[#4fb3a5]/60"
             />
-            <button type="submit" className="border border-white/15 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-white/70 transition hover:border-white/30 hover:text-white">
+            <button type="submit" className="border border-white/15 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-white/70 transition hover:border-white/30 hover:text-white">
               Apply
             </button>
           </form>
-          <p className="mt-2 text-[10px] leading-4 text-[#718898]">
+          <p className="mt-2 text-[11px] leading-4 text-[#718898]">
             Default from NEXT_PUBLIC_DEVON_AVATAR_URL{DEFAULT_MODEL_URL ? "" : " (unset)"}. The rigged DEVON avatar is an owned-likeness asset behind its own gate and is not shipped here; the procedural head proves the pipeline in its place.
           </p>
         </Panel>

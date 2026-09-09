@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "check:presence": "node --experimental-strip-types scripts/presence-check.ts"
+    "check:presence": "node --experimental-strip-types scripts/presence-check.ts",
+    "check:control": "node --experimental-strip-types scripts/control-check.ts"
   },
   "dependencies": {
     "@meta-supreme/ui": "workspace:*",
