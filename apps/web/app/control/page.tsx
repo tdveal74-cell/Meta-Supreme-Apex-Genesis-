@@ -1,5 +1,7 @@
 import { ControlPlane } from "@/components/control/ControlPlane";
+import { ProvenanceSlot } from "@/components/control/ProvenanceSlot";
 import { PresenceStageLoader } from "@/components/presence/PresenceStageLoader";
+import { AgentReadinessMatrix } from "@/components/readiness";
 
 /**
  * The unified control plane route.
@@ -9,5 +11,11 @@ import { PresenceStageLoader } from "@/components/presence/PresenceStageLoader";
  * visibly unmounted instead of being faked inside the shell.
  */
 export default function ControlPage() {
-  return <ControlPlane presence={<PresenceStageLoader />} />;
+  return (
+    <ControlPlane
+      readiness={<AgentReadinessMatrix />}
+      provenance={<ProvenanceSlot />}
+      presence={<PresenceStageLoader />}
+    />
+  );
 }
