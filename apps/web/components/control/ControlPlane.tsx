@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { ExecutionHubPanel } from "@/components/control/ExecutionHubPanel";
 import { CostPanel } from "@/components/control/CostPanel";
 import { SecurityPanel } from "@/components/control/SecurityPanel";
+import { SessionDoor } from "@/components/control/SessionDoor";
 import { TierPanel } from "@/components/control/TierPanel";
 
 /**
@@ -60,17 +61,23 @@ export function ControlPlane({ readiness, provenance, presence, knowledge }: Con
               </div>
             </div>
 
-            <nav className="flex items-center gap-1.5 text-xs">
-              {TIERS.map((tier) => (
-                <a
-                  key={tier.id}
-                  href={`#${tier.id}`}
-                  className="rounded-lg border border-white/10 px-2.5 py-1.5 font-medium text-white/60 transition hover:border-white/25 hover:text-white"
-                >
-                  {tier.label}
-                </a>
-              ))}
-            </nav>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <nav className="flex items-center gap-1.5 text-xs">
+                {TIERS.map((tier) => (
+                  <a
+                    key={tier.id}
+                    href={`#${tier.id}`}
+                    className="rounded-lg border border-white/10 px-2.5 py-1.5 font-medium text-white/60 transition hover:border-white/25 hover:text-white"
+                  >
+                    {tier.label}
+                  </a>
+                ))}
+              </nav>
+              {/* Four panels below tell the reader to sign in. Until this
+                  landed, the page named that fix and offered no way to take
+                  it. */}
+              <SessionDoor />
+            </div>
           </div>
         </header>
 

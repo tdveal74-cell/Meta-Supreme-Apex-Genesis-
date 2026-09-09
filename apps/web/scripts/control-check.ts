@@ -363,6 +363,7 @@ const CONTROL_TREE = [
   "components/control/CostPanel.tsx",
   "components/control/ExecutionHubPanel.tsx",
   "components/control/SecurityPanel.tsx",
+  "components/control/SessionDoor.tsx",
   "components/control/ProvenanceSlot.tsx",
   "components/mind/KnowledgePanel.tsx",
   "components/readiness/AgentReadinessMatrix.tsx",
@@ -398,7 +399,7 @@ check("the legibility check is reading real files rather than an empty list", ()
   // A glob that silently matches nothing passes forever. This asserts the
   // files are on disk and carry the classes the check is written against, so a
   // rename cannot turn the guard above into a no-op.
-  assert.ok(CONTROL_TREE.length >= 11, "the control tree lost files");
+  assert.ok(CONTROL_TREE.length >= 12, "the control tree lost files");
   for (const relative of CONTROL_TREE) {
     const source = readFileSync(join(HERE, "..", relative), "utf8");
     assert.ok(source.length > 200, `${relative} is too small to be the real file`);
