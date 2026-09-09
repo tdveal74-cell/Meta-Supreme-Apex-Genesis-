@@ -36,6 +36,19 @@ from services.devon.commands import Kind, ParsedCommand, parse
 from services.devon.receipts import Receipt, ReceiptFormat, render_standing
 from services.devon.vault import AREA_FOLDERS, NOTION, VERIFY_BEFORE_AUTOMATION
 
+# Capture intents that name their own Area, so nothing a model could infer would
+# ever reach resolve_area for them. `_do_episode_idea` passes force_area="Podcast"
+# and _plan_capture branches straight into get_area, so a suggestion for that
+# utterance is a provider call whose answer is discarded before it is read.
+#
+# This is a list of names rather than something derived from the handlers,
+# because the handlers pass force_area positionally inside a call expression and
+# there is nothing to introspect without parsing the source. That makes it a
+# thing that can drift, so test_devon_capture_enrichment.py holds both halves
+# shut: every name here must actually file with provenance "fixed by intent",
+# and every capture intent absent from it must actually consult the suggestion.
+FIXED_AREA_INTENTS = frozenset({"episode_idea"})
+
 
 @dataclass
 class FilingPlan:
@@ -137,12 +150,19 @@ class Devon:
         text: str,
         on_date: Optional[date_cls] = None,
         owner_id: str = "",
+        suggested_area: Optional[str] = None,
     ) -> DevonResponse:
         """Take one utterance and answer it.
 
         owner_id is the account speaking. It is stamped on any approval card the
         utterance raises so the API can scope the card to that account. DEVON
         does not read it for anything else.
+
+        suggested_area is an Area a model proposed for a capture, supplied by
+        the caller. This package stays effect free, so it never asks a provider
+        for one: the async layer does that and hands the answer down. The
+        suggestion is a suggestion, and resolve_area still validates it against
+        the nine and falls back to keywords when it does not hold up.
         """
         command = parse(text)
         if not command.understood:
@@ -173,7 +193,33 @@ class Devon:
                 method=command.method.value,
                 reason="intent recognised, no handler",
             )
+        # Only capture handlers take a suggestion. Gating on the kind rather
+        # than on the handler's signature means a future capture intent whose
+        # handler lacks the kwarg raises TypeError here, loudly, instead of
+        # silently dropping enrichment on that lane. That is deliberate.
+        if command.intent is not None and command.intent.kind is Kind.CAPTURE:
+            return handler(command, on_date or date_cls.today(), suggested_area=suggested_area)
         return handler(command, on_date or date_cls.today())
+
+    def area_suggestion_text(self, text: str) -> Optional[str]:
+        """The text a model should be asked to tag, or None when asking is waste.
+
+        Pure, and the only reason it exists: the caller has to decide whether to
+        spend a provider call BEFORE it can hand a suggestion down, and that
+        decision needs the parse. Returns None unless the utterance is a capture
+        that would actually consult resolve_area, so a query, an effect, an empty
+        payload and an intent whose Area is fixed by the intent itself all cost
+        nothing.
+        """
+        command = parse(text)
+        if not command.understood or command.intent is None:
+            return None
+        if command.intent.kind is not Kind.CAPTURE:
+            return None
+        if command.name in FIXED_AREA_INTENTS:
+            return None
+        payload = command.payload.strip()
+        return payload or None
 
     def receipt_for(
         self,
@@ -429,22 +475,45 @@ class Devon:
 
     # -- handlers, captures ------------------------------------------------
 
-    def _do_capture(self, command: ParsedCommand, on_date: date_cls) -> DevonResponse:
+    def _do_capture(
+        self, command: ParsedCommand, on_date: date_cls, suggested_area: Optional[str] = None
+    ) -> DevonResponse:
         return self._plan_capture(
-            command, on_date, destination="Live State Ledger (Postgres). Notion Inbox, Notes and Ideas is missing", type_code="DOC"
+            command,
+            on_date,
+            destination="Live State Ledger (Postgres). Notion Inbox, Notes and Ideas is missing",
+            type_code="DOC",
+            suggested_area=suggested_area,
         )
 
-    def _do_add_task(self, command: ParsedCommand, on_date: date_cls) -> DevonResponse:
+    def _do_add_task(
+        self, command: ParsedCommand, on_date: date_cls, suggested_area: Optional[str] = None
+    ) -> DevonResponse:
         return self._plan_capture(
-            command, on_date, destination="Live State Ledger (Postgres). Notion Tasks is missing", type_code="DOC"
+            command,
+            on_date,
+            destination="Live State Ledger (Postgres). Notion Tasks is missing",
+            type_code="DOC",
+            suggested_area=suggested_area,
         )
 
-    def _do_start_project(self, command: ParsedCommand, on_date: date_cls) -> DevonResponse:
+    def _do_start_project(
+        self, command: ParsedCommand, on_date: date_cls, suggested_area: Optional[str] = None
+    ) -> DevonResponse:
         return self._plan_capture(
-            command, on_date, destination="Live State Ledger (Postgres). Notion Projects and Goals is missing", type_code="DOC"
+            command,
+            on_date,
+            destination="Live State Ledger (Postgres). Notion Projects and Goals is missing",
+            type_code="DOC",
+            suggested_area=suggested_area,
         )
 
-    def _do_episode_idea(self, command: ParsedCommand, on_date: date_cls) -> DevonResponse:
+    def _do_episode_idea(
+        self, command: ParsedCommand, on_date: date_cls, suggested_area: Optional[str] = None
+    ) -> DevonResponse:
+        # force_area wins: this intent names its own Area, which is a stronger
+        # signal than anything a model could infer. area_suggestion_text returns
+        # None for it so no call is spent on an answer that would be discarded.
         return self._plan_capture(
             command,
             on_date,
@@ -453,12 +522,15 @@ class Devon:
             force_area="Podcast",
         )
 
-    def _do_log_thread(self, command: ParsedCommand, on_date: date_cls) -> DevonResponse:
+    def _do_log_thread(
+        self, command: ParsedCommand, on_date: date_cls, suggested_area: Optional[str] = None
+    ) -> DevonResponse:
         return self._plan_capture(
             command,
             on_date,
             destination="Live State Ledger (Postgres). Notion Thread Log is missing",
             type_code="DOC",
+            suggested_area=suggested_area,
         )
 
     def _plan_capture(
@@ -468,6 +540,7 @@ class Devon:
         destination: str,
         type_code: str,
         force_area: Optional[str] = None,
+        suggested_area: Optional[str] = None,
     ) -> DevonResponse:
         """Build the filing plan for a capture without performing it."""
         payload = command.payload.strip()
@@ -478,7 +551,7 @@ class Devon:
             area = areas_mod.get_area(force_area)
             provenance = "fixed by intent"
         else:
-            area, provenance = areas_mod.resolve_area(None, payload)
+            area, provenance = areas_mod.resolve_area(suggested_area, payload)
 
         warnings: List[str] = []
         filename: Optional[str] = None

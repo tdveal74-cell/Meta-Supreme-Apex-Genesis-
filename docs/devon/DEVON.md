@@ -117,26 +117,37 @@ Optional. Cerebras is already live in the studio's capture lane (credential
 `Cerebras Cloud YTVk8Dq2gYPAmUim`, model `gpt-oss-120b`, measured at 42ms), and
 the same lane is available here through the platform's provider abstraction.
 
-**Built as a capability, not yet running as behavior.** Read this section as a
-description of what exists and can be called, because setting
-`ENRICHMENT_PROVIDER=cerebras` does not currently cause a single capture to be
-tagged. `enrich_capture` is defined at `services/intelligence/enrichment.py:115`
-and covered by sixteen tests in `test_devon_cerebras.py`, and
-`get_enrichment_provider` is defined at `app/services/intelligence.py:77`, and
-as of 2026-09-09 neither has a caller anywhere outside those tests. Verify it
-rather than trusting this line:
+**Wired 2026-09-09, and unproven against a real key until Tee reads back.**
+Those are two separate facts and this section keeps them apart, because the
+version of this paragraph that ran them together is what DCD-07 was.
+
+What is wired: `app/services/capture_enrichment.py` is the call site, and two
+callers reach it. `app/api/v1/devon.py` asks before routing an utterance, and
+`KnowledgeLoop.propose` in `app/services/knowledge_loop.py` asks before building
+the filing plan. Setting `ENRICHMENT_PROVIDER` to a real provider is what turns
+tagging on: the mock provider fabricates a value per JSON key without reading the
+capture, so the offline lane deliberately asks nobody and behaves exactly as it
+did before. Verify the callers rather than trusting this line:
 
 ```
-grep -rn "enrich_capture\|get_enrichment_provider" --include=*.py app/ services/
+grep -rn "suggest_area" --include=*.py app/
 ```
 
-The audit raised this as DCD-07 on 2026-09-02
-(`SYS_OPS_devon-hermes-agent-audit_v1_2026-09-02`) and it is still open. Ruled by
-Tee 2026-09-09: wire the call site in a following arc, and until then this
-document states the capability and the behavior separately rather than letting
-the environment variable imply a lane that does not run. The rest of this
-section describes the code as written, which is real, and not a path any capture
-currently takes.
+What is not proven: a green CI run says nothing about this working against
+Cerebras. The whole suite passes with `suggest_area` replaced by `return None`,
+because the offline lane never asks. `test_devon_capture_enrichment.py` and
+`test_devon_capture_enrichment_lane.py` close that by driving a real
+`CerebrasProvider` over an httpx MockTransport and asserting the Area reaches the
+filing plan, and eleven negative controls were run against them, but a mock
+transport is not a key. **The remaining evidence is a live readback**: set
+`ENRICHMENT_PROVIDER=cerebras` with a key on the deployment, file one capture
+whose words carry no keyword signal, and read `capture enrichment:` in the
+application log or the `enrichment` block on the intent's PLAN_CREATED event.
+Until that is done, DCD-07 is wired and unverified, not closed.
+
+The audit raised it on 2026-09-02
+(`SYS_OPS_devon-hermes-agent-audit_v1_2026-09-02`); Tee ruled on 2026-09-09 that
+the call site be wired in a following arc, which is this one.
 
 ```
 CEREBRAS_API_KEY=...

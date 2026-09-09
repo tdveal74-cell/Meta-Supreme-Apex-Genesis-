@@ -24,6 +24,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.security.deps import CurrentUser
+from app.services.capture_enrichment import status as enrichment_status
+from app.services.capture_enrichment import suggest_area
 from app.services.devon_approval_store import build_approval_queue
 from app.services.knowledge_loop import REQUESTED_BY as KNOWLEDGE_LOOP_REQUESTER
 from app.services.live_state_ledger import ledger
@@ -96,6 +98,10 @@ async def devon_identity() -> Dict[str, Any]:
         "intents": len(ALL_INTENTS),
         "approval_gated_intents": [i.name for i in approval_gated_intents()],
         "approval_storage": _approval_storage_status(),
+        # Whether captures are being tagged, and whether the provider behind
+        # that setting has ever actually been built. A lane that can stop
+        # running silently is what DCD-07 was.
+        "capture_enrichment": enrichment_status(),
         "guarantees": [
             "No route writes to Drive, Notion, Airtable or n8n.",
             "Captures return a filing plan. The caller executes it.",
@@ -307,8 +313,20 @@ async def command(body: CommandBody, current_user: CurrentUser) -> Dict[str, Any
     card raised by nobody in particular is exactly what an anonymous caller
     would use to fill the approval rail, so the speaker must be an account and
     the card is stamped with it.
+
+    A capture is offered an Area by the enrichment provider first. That costs a
+    call only when the utterance is a capture that would consult resolve_area
+    and ENRICHMENT_PROVIDER names a real provider; every other utterance,
+    including every query on the offline lane, spends nothing. The suggestion is
+    still validated against the nine inside DEVON, so the reply's
+    area_provenance says which rung of the ladder answered.
     """
-    return _devon.ask(body.text, owner_id=current_user.id).to_dict()
+    suggestion = await suggest_area(body.text)
+    return _devon.ask(
+        body.text,
+        owner_id=current_user.id,
+        suggested_area=suggestion.area_label if suggestion else None,
+    ).to_dict()
 
 
 class DecideBody(BaseModel):
