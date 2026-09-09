@@ -325,7 +325,20 @@ def _model_gloss(enrichment: Optional[Any]) -> Optional[str]:
     """
     if enrichment is None:
         return None
-    summary = (getattr(enrichment, "summary", "") or "").strip()
+    try:
+        raw = getattr(enrichment, "summary", "")
+    except Exception:  # pragma: no cover - a property that raises
+        logger.warning("enrichment.summary raised; the capture still files", exc_info=True)
+        return None
+    # isinstance before strip, so a non str summary is unreachable by
+    # construction rather than by auditing every construction site. A critic
+    # measured `_ledgerable` absorbing these through check_payload while this
+    # function raised on them, and an exception here escapes propose BEFORE the
+    # ledger writes, which loses the whole capture.
+    if not isinstance(raw, str):
+        logger.warning("enrichment.summary was %s, not str; the capture still files", type(raw).__name__)
+        return None
+    summary = raw.strip()
     if not summary:
         return None
     refusal = provenance.check_payload({"summary": summary})

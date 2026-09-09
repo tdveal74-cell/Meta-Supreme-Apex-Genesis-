@@ -32,11 +32,12 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, AsyncIterator, Dict, Optional
 
 import jwt
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from apps.presence import SERVICE_NAME
@@ -50,6 +51,7 @@ from apps.presence.protocol import (
     ERR_UNAUTHENTICATED,
     HELLO_TIMEOUT_SECONDS,
     ProtocolError,
+    audio_message,
     error_message,
     parse_client_message,
     pong_message,
@@ -57,7 +59,7 @@ from apps.presence.protocol import (
 )
 from apps.presence.session import Pacer, PresenceSession, RealTimePacer
 from apps.presence.settings import PresenceConfigError, PresenceSettings
-from apps.presence.speech import SpeechSynthesizer, build_speech
+from apps.presence.speech import CHUNK_AUDIO, SpeechSynthesizer, build_speech
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +98,46 @@ def decode_devon_token(token: str, settings: PresenceSettings) -> Optional[Dict[
     if not str(payload.get("sub") or "").strip():
         return None
     return payload
+
+def _require_devon_token(request: Request, settings: PresenceSettings) -> Dict[str, Any]:
+    """The verified DEVON claims, or 401. Shared by every authenticated route.
+
+    Written once rather than per route because two copies of an auth check are
+    one edit away from disagreeing, and the cheaper copy is always the one that
+    gets relaxed.
+    """
+    header = request.headers.get("authorization") or ""
+    scheme, _, raw_token = header.partition(" ")
+    if scheme.lower() != "bearer" or not raw_token.strip():
+        raise HTTPException(
+            status_code=401,
+            detail="Authorization: Bearer <DEVON access token> is required",
+        )
+    payload = decode_devon_token(raw_token.strip(), settings)
+    if payload is None:
+        raise HTTPException(status_code=401, detail="invalid or expired DEVON access token")
+    return payload
+
+
+
+#: The longest utterance this endpoint will speak in one call. A chat reply is
+#: a few sentences; anything past this is either a runaway generation or a
+#: caller using Tee's cloned voice as a free text to speech service, and both
+#: cost real Cartesia credits.
+TTS_TEXT_LIMIT = 1200
+
+
+class SpeakRequest(BaseModel):
+    """Text to say in DEVON's own voice.
+
+    No voice field, deliberately, and there will not be one. The voice is
+    CARTESIA_VOICE_ID on this service, which is Tee's own clone or a character
+    voiced under recorded consent. A caller-chosen voice id would turn this into
+    a rented-persona endpoint, which the estate's standing rule refuses outright
+    and which has no exception path.
+    """
+
+    text: str = Field(min_length=1, max_length=TTS_TEXT_LIMIT)
 
 
 class LiveKitTokenRequest(BaseModel):
@@ -166,16 +208,7 @@ def create_app(
 
     @app.post("/livekit/token")
     async def livekit_token(request: Request, body: LiveKitTokenRequest) -> Dict[str, Any]:
-        header = request.headers.get("authorization") or ""
-        scheme, _, raw_token = header.partition(" ")
-        if scheme.lower() != "bearer" or not raw_token.strip():
-            raise HTTPException(
-                status_code=401,
-                detail="Authorization: Bearer <DEVON access token> is required",
-            )
-        payload = decode_devon_token(raw_token.strip(), settings)
-        if payload is None:
-            raise HTTPException(status_code=401, detail="invalid or expired DEVON access token")
+        payload = _require_devon_token(request, settings)
         if not settings.livekit_configured:
             raise HTTPException(
                 status_code=503,
@@ -212,6 +245,49 @@ def create_app(
             "identity": identity,
             "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
         }
+
+    @app.post("/tts")
+    async def tts(request: Request, body: SpeakRequest) -> StreamingResponse:
+        """Speak one piece of text in DEVON's voice, as newline delimited JSON.
+
+        WHY THIS EXISTS. Tee opened /devon on 2026-09-09 and DEVON answered in a
+        stock female browser voice. DevonChat was calling window.speechSynthesis
+        and taking whatever the machine had installed, so the estate had two
+        surfaces speaking as DEVON with two different voices and only one of
+        them owned. The standing rule is voice and identity owned, never rented,
+        and it carries no exception path, so the browser voice comes out and the
+        chat borrows the clone the presence service already holds.
+
+        The wire format is the same audio message the socket sends, so the
+        browser decodes and schedules it with the same tested code rather than a
+        second copy that can drift. Face frames are not emitted: the chat has no
+        avatar to drive, and sending them would be bytes nobody reads.
+        """
+        _require_devon_token(request, settings)
+        text = body.text.strip()
+        if not text:
+            raise HTTPException(status_code=422, detail="nothing to say")
+
+        turn = f"tts-{uuid.uuid4().hex}"
+
+        async def lines() -> AsyncIterator[bytes]:
+            seq = 0
+            async for chunk in runtime.speech.synthesize(text, turn):
+                if chunk.kind != CHUNK_AUDIO or not chunk.pcm:
+                    continue
+                seq += 1
+                message = audio_message(turn, seq, chunk.at_ms, chunk.pcm)
+                yield (json.dumps(message, separators=(",", ":")) + "\n").encode("utf-8")
+
+        return StreamingResponse(
+            lines(),
+            media_type="application/x-ndjson",
+            # The voice is named on the response rather than in the body so a
+            # reader can tell a real clone from the mock adapter's silence
+            # without decoding a single chunk. Silence and a working voice are
+            # otherwise indistinguishable from the client side.
+            headers={"X-Devon-Speech": runtime.speech.name},
+        )
 
     @app.websocket("/ws/presence")
     async def presence_ws(ws: WebSocket) -> None:

@@ -445,16 +445,51 @@ check("every text input on the surface carries a label", () => {
  * in PR #186 had never run once in production. Nothing failed. No test went
  * red. The capability existed and no person could trigger it.
  *
- * A capability nobody can reach is indistinguishable from one that does not
- * exist, and the estate has now built that twice. So the reachability itself is
- * the thing under test: if this call is removed, renamed away, or quietly
- * detached from the mode that dispatches to it, this goes red.
+ * HOW THE FIRST VERSION OF THIS CHECK WAS BEATEN
  *
- * The handler is sliced out by name and the assertions are made INSIDE it, for
- * the reason a critic proved on this repo the same day: a file wide regex
- * passes on any occurrence anywhere, including a comment or a neighbouring
- * function, so it can report green over the exact bug it was written to catch.
+ * It sliced the handler by name and then asserted that each token was PRESENT
+ * somewhere in the slice. A fresh critic beat that four ways on 2026-09-09,
+ * each with the capture path genuinely broken and this check reporting ok:
+ *
+ *   1. A no-op early return above the fetch. Every token untouched.
+ *   2. The whole body replaced by one string literal carrying all four tokens.
+ *   3. A dead rememberLegacy neighbour inside the widened slice.
+ *   4. A decoy `const remember` declared earlier, so indexOf found it first.
+ *
+ * So presence is no longer enough. Strings are blanked before the structural
+ * pass, so a token inside a string literal cannot stand in for code. The
+ * declaration must be unique, so a decoy fails rather than shadows. And the
+ * handler must reach its fetch without returning first, so a no-op guard above
+ * it fails rather than passes.
  */
+
+/** Comment bodies removed. A fix left in a comment must not satisfy a check. */
+function codeOnly(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("//"))
+    .join("\n");
+}
+
+/**
+ * String literal CONTENTS blanked, delimiters kept.
+ *
+ * The structural pass runs on this so that a body replaced by one string
+ * carrying every matched token has nothing left to match. Path literals are
+ * checked separately, against the unblanked source, because that is the one
+ * thing that legitimately lives inside quotes.
+ */
+function withoutStringBodies(code: string): string {
+  return code
+    .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
+    .replace(/'(?:[^'\\\n]|\\.)*'/g, "''")
+    .replace(/`(?:[^`\\]|\\.)*`/g, "``");
+}
+
+function occurrences(haystack: string, needle: string): number {
+  return haystack.split(needle).length - 1;
+}
 
 check("DEVON chat can still reach the capture endpoint", () => {
   const source = readFileSync(
@@ -462,24 +497,45 @@ check("DEVON chat can still reach the capture endpoint", () => {
     "utf8",
   );
   assert.ok(source.length > 2000, "DevonChat.tsx did not read");
+  const code = codeOnly(source);
 
-  // Comments are stripped first: the fix for this lane sitting in a commented
-  // out block would otherwise satisfy every assertion below.
-  const code = source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split("\n")
-    .filter((line) => !line.trim().startsWith("//"))
-    .join("\n");
-
+  // Unique, so a decoy declared earlier fails rather than shadowing the real
+  // one, and a dead neighbour cannot supply the tokens.
+  assert.equal(
+    occurrences(code, "const remember = useCallback("),
+    1,
+    "DevonChat must declare exactly one remember handler; a second one means this check may be reading the wrong one",
+  );
   const from = code.indexOf("const remember = useCallback(");
-  assert.ok(from >= 0, "DevonChat no longer declares a remember handler, so nothing in the web app can file a capture");
   const to = code.indexOf("const send = useCallback(", from);
   assert.ok(to > from, "the remember handler is no longer followed by send; the slice bound moved");
   const handler = code.slice(from, to);
+  const structure = withoutStringBodies(handler);
 
+  // Structural: these have to be code, not text inside a string.
   assert.ok(
-    /authedFetch\(\s*["'`]\/soul\/propose["'`]/.test(handler),
-    "remember no longer calls /soul/propose, which is the only caller of knowledge_loop.propose",
+    /await\s+authedFetch\(/.test(structure),
+    "remember does not await authedFetch as code. This guard blanks string bodies, so a handler whose body is a string literal fails here by design",
+  );
+  assert.ok(
+    /response\.ok/.test(structure),
+    "remember no longer checks response.ok, so a refusal would be rendered as a success",
+  );
+
+  // Nothing may return before the call. A no-op guard above the fetch leaves
+  // every token in place and files nothing.
+  const callAt = structure.indexOf("authedFetch(");
+  const before = structure.slice(0, callAt);
+  assert.ok(
+    !/\breturn\b/.test(before),
+    "remember returns before it reaches authedFetch, so for some input it files nothing while every other assertion here still passes",
+  );
+
+  // Literal: the path is the one thing that legitimately lives in quotes.
+  assert.equal(
+    occurrences(handler, "/soul/propose"),
+    1,
+    "remember must name /soul/propose exactly once, inline. This guard reads the path literally, so an extracted constant fails here even though the code would work",
   );
   assert.ok(
     /method:\s*["'`]POST["'`]/.test(handler),
@@ -490,21 +546,108 @@ check("DEVON chat can still reach the capture endpoint", () => {
     "remember now supplies an area, which closes the enrichment gate: suggest_area only runs when area is None",
   );
   assert.ok(
-    /what_happens/.test(handler),
+    /what_happens/.test(structure) || /what_happens/.test(handler),
     "remember no longer renders what_happens, which is where the model's labelled gloss is shown",
   );
 
-  // And the handler has to be wired to something a person can press. A live
-  // function nothing dispatches to is the same failure in a different place.
+  // And the handler has to be reachable by a person. A live function nothing
+  // dispatches to, or a button wired to nothing, is the same failure moved.
   assert.ok(
-    /mode === "keep"[\s\S]{0,120}?await remember\(/.test(code),
+    /mode === ["'`]keep["'`][\s\S]{0,120}?await remember\(/.test(code),
     "no mode dispatches to remember, so the handler exists and nobody can reach it",
   );
   const modes = /\(\[([^\]]*)\] as const\)\.map\(\(option\)/.exec(code);
-  assert.ok(modes !== null, "the mode button list is no longer a literal this check can read");
   assert.ok(
-    modes[1].includes('"keep"'),
+    modes !== null,
+    "the mode button list is no longer a literal this check can read",
+  );
+  assert.ok(
+    /["'`]keep["'`]/.test(modes[1]),
     "the keep mode is not offered as a button, so no person can select it",
+  );
+  assert.ok(
+    /onClick=\{\(\)\s*=>\s*setMode\(/.test(code),
+    "the mode buttons no longer call setMode, so every one of them is inert and keep can never be selected",
+  );
+});
+
+/* the voice is owned, on every surface */
+
+/*
+ * WHAT THIS GUARDS. Tee opened /devon on 2026-09-09 and DEVON answered in a
+ * stock female browser voice. DevonChat was calling window.speechSynthesis,
+ * preferring an en-GB voice named daniel or arthur, and otherwise taking ANY
+ * installed English voice. So the estate had two surfaces speaking as DEVON in
+ * two different voices, and only /presence used the clone.
+ *
+ * The standing rule is voice and identity owned, never rented, and it carries
+ * no exception path. A browser stock voice is a rented persona by definition:
+ * it is whatever that machine happens to have installed, chosen by a vendor,
+ * and it changes between devices. That is the thing this refuses to let back
+ * in, on any surface, however convenient the API is.
+ *
+ * Comments are stripped first so the history above cannot satisfy the check,
+ * and the speak handler is read by name so a match somewhere else in the file
+ * cannot stand in for it.
+ */
+
+const VOICE_SURFACES = [
+  "components/devon/DevonChat.tsx",
+  "components/presence/PresenceStage.tsx",
+  "components/presence/useAudioPlayback.ts",
+] as const;
+
+check("no surface speaks as DEVON in a rented browser voice", () => {
+  for (const relative of VOICE_SURFACES) {
+    const source = readFileSync(join(HERE, "..", relative), "utf8");
+    const code = source
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("//"))
+      .join("\n");
+    assert.ok(
+      !/speechSynthesis|SpeechSynthesisUtterance/.test(code),
+      `${relative} reaches for the browser's speech synthesis, which is a rented voice`,
+    );
+    // getVoices is the tell for picking a voice off the machine even without
+    // naming speechSynthesis directly.
+    assert.ok(
+      !/\.getVoices\s*\(/.test(code),
+      `${relative} selects a voice from the machine's installed set`,
+    );
+  }
+});
+
+check("DEVON chat speaks through the presence service's clone", () => {
+  const source = readFileSync(
+    join(HERE, "..", "components/devon/DevonChat.tsx"),
+    "utf8",
+  );
+  const code = source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("//"))
+    .join("\n");
+
+  const from = code.indexOf("const speak = useCallback(");
+  assert.ok(from >= 0, "DevonChat no longer declares a speak handler");
+  const to = code.indexOf("useEffect(", from);
+  assert.ok(to > from, "the speak handler's slice bound moved");
+  const handler = code.slice(from, to);
+
+  assert.ok(
+    /\$\{PRESENCE_BASE\}\/tts/.test(handler),
+    "speak no longer streams from the presence service, so the chat is not using Tee's clone",
+  );
+  assert.ok(
+    /Authorization/.test(handler),
+    "speak calls the voice endpoint unauthenticated, which would 401 and go silent",
+  );
+  // The voice belongs to the service, never to the caller. A voice id sent from
+  // the browser would let this surface speak as anyone.
+  assert.ok(
+    !/voice_id|voiceId|CARTESIA_VOICE/.test(handler),
+    "speak names a voice, but the voice is the presence service's to choose and never the caller's",
   );
 });
 

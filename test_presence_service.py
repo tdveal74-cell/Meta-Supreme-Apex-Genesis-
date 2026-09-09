@@ -7,8 +7,10 @@ against. Streamers are scripted mocks and the audio clock is a
 seconds. The only real waits are the router's 20 ms first token threshold.
 """
 
+import base64
 import contextlib
 import importlib
+import json
 import time
 from typing import Any, Callable, Dict, List
 
@@ -20,8 +22,8 @@ from starlette.websockets import WebSocketDisconnect
 import apps.presence.main as presence_main
 from apps.presence.inference import MockTokenStreamer
 from apps.presence.livekit_token import decode_livekit_token
-from apps.presence.main import create_app
-from apps.presence.protocol import PRIORITY_OF, validate_frame
+from apps.presence.main import TTS_TEXT_LIMIT, SpeakRequest, create_app
+from apps.presence.protocol import AUDIO_CODEC, AUDIO_RATE, PRIORITY_OF, validate_frame
 from apps.presence.session import VirtualPacer
 from apps.presence.settings import PresenceConfigError, PresenceSettings
 from apps.presence.speech import MockSpeech
@@ -572,3 +574,104 @@ def test_an_integer_too_large_for_a_float_is_refused_by_name_and_the_socket_live
             assert "finite" in reply["message"]
         messages = run_turn(ws, "turn-after-huge", "hi")
         assert [m for m in messages if m["t"] == "frame"]
+
+
+# ---------------------------------------------------------------------------
+# POST /tts: DEVON's voice on a surface that has no socket.
+#
+# WHY THIS ROUTE EXISTS. Tee opened /devon on 2026-09-09 and DEVON answered in
+# a stock female browser voice, because DevonChat called
+# window.speechSynthesis and took whatever the machine had installed. Two
+# surfaces spoke as DEVON in two voices and only /presence used the clone. The
+# estate's standing rule is voice and identity owned, never rented, with no
+# exception path, so the chat now borrows this service's voice.
+#
+# The rules under test are the ones that keep it owned: it is authenticated,
+# the caller cannot name a voice, and the wire format is the socket's own audio
+# message so the browser decodes it with tested code rather than a second copy.
+# ---------------------------------------------------------------------------
+
+
+def _ndjson(response) -> List[Dict[str, Any]]:
+    return [json.loads(line) for line in response.text.splitlines() if line.strip()]
+
+
+def test_tts_refuses_without_a_token():
+    client = fast_app()
+    response = client.post("/tts", json={"text": "hello"})
+    assert response.status_code == 401
+    assert "Bearer" in response.json()["detail"]
+
+
+def test_tts_refuses_a_token_signed_with_another_secret():
+    client = fast_app()
+    response = client.post(
+        "/tts",
+        json={"text": "hello"},
+        headers={"Authorization": f"Bearer {mint(secret='a-different-secret-entirely-0123456789')}"},
+    )
+    assert response.status_code == 401
+
+
+def test_tts_streams_the_socket_s_own_audio_message_shape():
+    client = fast_app()
+    response = client.post(
+        "/tts",
+        json={"text": REPLY},
+        headers={"Authorization": f"Bearer {mint()}"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+    messages = _ndjson(response)
+    assert messages, "no audio was streamed"
+    for message in messages:
+        # Same keys the websocket sends, because the browser reuses one decoder.
+        assert message["t"] == "audio"
+        assert message["codec"] == AUDIO_CODEC
+        assert message["rate"] == AUDIO_RATE
+        assert isinstance(message["b64"], str) and message["b64"]
+        base64.b64decode(message["b64"])
+    # Sequence numbers are dense and ordered, or a dropped chunk is invisible.
+    assert [m["seq"] for m in messages] == list(range(1, len(messages) + 1))
+
+
+def test_tts_names_the_adapter_on_the_response():
+    """Silence from the mock adapter and silence from a broken key look alike.
+
+    The header is the only way a caller can tell which one it got without
+    decoding audio, and a reader who cannot tell will report mock as working.
+    """
+    client = fast_app()
+    response = client.post(
+        "/tts", json={"text": "hello"}, headers={"Authorization": f"Bearer {mint()}"}
+    )
+    assert response.headers["x-devon-speech"] == "mock"
+
+
+def test_tts_emits_no_face_frames():
+    """The chat has no avatar, so frames would be bytes nobody reads."""
+    client = fast_app()
+    response = client.post(
+        "/tts", json={"text": REPLY}, headers={"Authorization": f"Bearer {mint()}"}
+    )
+    assert all(m["t"] == "audio" for m in _ndjson(response))
+
+
+def test_tts_refuses_an_empty_or_oversized_utterance():
+    client = fast_app()
+    auth = {"Authorization": f"Bearer {mint()}"}
+    assert client.post("/tts", json={"text": ""}, headers=auth).status_code == 422
+    over = "x" * (TTS_TEXT_LIMIT + 1)
+    assert client.post("/tts", json={"text": over}, headers=auth).status_code == 422
+
+
+def test_the_caller_can_never_choose_the_voice():
+    """The rule this holds shut is a compliance one, not a preference.
+
+    A voice field on this endpoint would make it a rented-persona service: any
+    signed-in caller could speak as anybody Cartesia will synthesise. The voice
+    is CARTESIA_VOICE_ID on this service and nowhere else, so the request model
+    must carry no voice field at all and must not quietly accept one.
+    """
+    assert set(SpeakRequest.model_fields) == {"text"}
+    assert "voice" not in str(SpeakRequest.model_fields).lower()

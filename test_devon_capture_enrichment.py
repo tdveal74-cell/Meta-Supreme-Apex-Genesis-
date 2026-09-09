@@ -469,15 +469,43 @@ def test_no_enrichment_and_no_summary_produce_no_gloss():
     assert knowledge_loop._model_gloss(_enriched("   ")) is None
 
 
-def test_the_label_is_not_optional():
+def test_the_label_names_the_model_as_the_author():
     """A gloss the approver cannot tell from Tee's own words is the failure.
 
-    Asserting the constant is non empty as well as present stops the label
-    being emptied to satisfy the prefix check.
+    Non empty and present is not enough, and a critic proved it on 2026-09-09:
+    rewriting the constant to "In Tee's words:" passed every assertion here
+    while the card attributed a model paraphrase to Tee, which is worse than no
+    label at all. So the label has to say who wrote it.
     """
-    assert knowledge_loop.GLOSS_LABEL.strip()
+    label = knowledge_loop.GLOSS_LABEL
+    assert label.strip()
+    assert "model" in label.lower(), "the label must name the model as the author"
+    assert "not by tee" in label.lower(), "the label must say the words are not Tee's"
     gloss = knowledge_loop._model_gloss(_enriched("anything at all"))
-    assert gloss is not None and gloss.startswith(knowledge_loop.GLOSS_LABEL)
+    assert gloss is not None and gloss.startswith(label)
+
+
+def test_a_summary_that_is_not_a_string_never_reaches_the_card(caplog):
+    """An exception here escapes propose BEFORE the ledger writes.
+
+    That loses the whole capture, which is the exact failure `_ledgerable` was
+    written to prevent, and a critic measured this function raising on shapes
+    that `_ledgerable` absorbs. Unreachable through the current construction
+    sites; closed by construction rather than by audit.
+    """
+
+    class Raises:
+        @property
+        def summary(self):
+            raise RuntimeError("the model object blew up")
+
+    class Weird:
+        summary = ["not", "a", "string"]
+
+    with caplog.at_level(logging.WARNING):
+        assert knowledge_loop._model_gloss(Raises()) is None
+        assert knowledge_loop._model_gloss(Weird()) is None
+        assert knowledge_loop._model_gloss(_enriched("")) is None
 
 
 def test_a_nul_never_reaches_the_approval_card(caplog):
