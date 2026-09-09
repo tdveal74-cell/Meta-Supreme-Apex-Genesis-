@@ -153,17 +153,150 @@ browser check: the buffer declared at the context's rate, the source started at
 zero, and the sign read broken upstream in the real module, which rendered a DC
 offset with zero crossings and therefore no sound at all.
 
+## What the fresh critic found, and what changed because of it
+
+Spawned on `b17f098` in its own worktree, told to mutate the source rather than
+read it. It echoed `b17f098` back, ran 25 mutations of the real source, and
+returned PASS-WITH-CONDITIONS. It confirmed the vendor contract line by line
+against its own download of `cartesia==4.2.0`, matched `pcmToFloat32` against a
+reference on all 65,536 sample values and `base64ToBytes` against `atob` on 8,000
+valid strings with zero disagreements, and found no off by one in the frame
+slicing. It also found three things worth blocking on, all fixed here, and all
+reproduced by execution before they were raised.
+
+**Barge-in stopped the face and let DEVON keep talking.** `stop` was exported
+from the playback hook with a comment saying barge-in needed it, and nothing
+called it. `onBargeIn` flushed the frame buffer, so the mouth froze at rest at
+once, while every `AudioBufferSourceNode` already scheduled played on. The
+presence service sends audio unpaced by design, so the browser can be holding
+seconds of the reply, and the voice carried over the interruption until the next
+turn's first chunk happened to trigger the turn change stop inside `play`. The
+critic rendered the missing call working in real Chromium: a source started at
+0.5 s and then stopped renders exact silence. One line, and now a guard that goes
+red without it.
+
+**The face's frame rate depended on Cartesia's chunk size, and at small chunks
+the face never moved at all.** This is the worst of the three, because it is the
+same mistake the design was built to avoid, one layer down. The face was
+deliberately moved off word timings so it would not depend on vendor behaviour
+nobody here has observed, and then the frame grid was computed from the start of
+each chunk with the tail discarded, which made the rate depend on chunk size,
+which nobody here has observed either. The critic's measurement, two seconds of
+audio in every case:
+
+| samples per chunk | chunk ms | frames | fps |
+|---|---|---|---|
+| 128 | 8.00 | 0 | 0.0 |
+| 160 | 10.00 | 0 | 0.0 |
+| 265 | 16.56 | 0 | 0.0 |
+| 266 | 16.62 | 120 | 60.2 |
+| 320 | 20.00 | 100 | 50.0 |
+| 480 | 30.00 | 66 | 33.3 |
+| 1024 | 64.00 | 93 | 46.9 |
+
+Zero frames at three of the eight sizes: perfect audio and a completely still
+mouth, with nothing in the estate reporting it. `FrameSlicer` replaces the per
+chunk slicing and carries the residual, holding samples that do not fill a frame
+and prepending them to the next chunk, with frame boundaries at absolute
+positions in the turn. Re-measured over the critic's own sweep, every one of
+those eight sizes now gives exactly 60.0 fps with the audio byte identical, and
+`flush` covers a final tail shorter than a frame so no audio ever plays with no
+face over it. `push` also refuses a chunk that does not follow the last one,
+because a skipped or repeated chunk would put the face on a different clock in
+silence.
+
+**The claim that no stock voice id can be written into this repository was
+false.** The test asserted two Python defaults and scanned nothing. The critic
+planted a UUID shaped id as the compose default and again in the env example and
+the whole suite stayed green, 270 passed both times. The compose case is the one
+that bites: `${CARTESIA_VOICE_ID:-<id>}` is what an operator gets whenever they
+do not set the variable, so a rented voice would have been spoken with nothing
+objecting. The code had no hole, and the critic verified all five refusal paths
+including the two that skip `validate`. So the fix is the guard: the test now
+scans every file that can put a value in front of a deployment, asserts each one
+exists and read non empty, and fails on anything id shaped after the variable
+name. It caught a false positive on its first run, `CARTESIA_VOICE_ID=text("CARTESIA_VOICE_ID")`,
+and the fix was to remove that exact token from the tail rather than to loosen the
+shape.
+
+Three more, fixed in the same pass. Two late chunks were both clamped to `now`
+and summed: the critic rendered 200 ms of speech collapsing into 100 ms at a peak
+of 1.0 where one chunk peaks at 0.5, reachable whenever a throttled tab delivers
+a burst of queued messages in one task. `placeChunk` now takes `busyUntil` and
+late chunks queue, re-measured in Chromium at peak 0.5 over the full 200 ms. The
+vendor's error body was interpolated into an exception that `session.py` sends
+straight to the socket, and the critic put a 401 through it whose body echoed both
+the bearer token and the transcript and read both back out; the status and a hint
+keyed on the status alone go out now, and the body goes nowhere. And `aclosing`
+claimed to make the socket's lifetime the turn's lifetime, which the critic
+measured as true for a consumer that completes or is cancelled and false for one
+that breaks out and returns, so the comment now says what the mechanism does.
+
+**The guard that mattered most was the one on the browser check.** The critic
+mutated the shipped hook to declare its buffer at the context's own sample rate,
+which is the exact chipmunk bug this arc's own comments and status doc warn
+about, and every gate stayed green: `audio-check` 6 passed, `presence-check` 29
+passed, `tsc` clean. Then it did the same by removing the scheduling offset
+entirely, with the same result. The reason is that `audio-check.mjs` re-wrote the
+hook's Web Audio calls beside itself under a comment claiming they were exactly
+the calls the hook makes. They were, and that is not the same as being them.
+
+So those calls now live in `lib/presence/pcm-player.ts` as `scheduleChunk`
+against an `AudioSink` type, the hook calls it, and `audio-check.mjs` cuts that
+function out of the real file and evaluates it inside the page. Both mutations now
+turn the check red, and the render catches the rate one on its own with the static
+assertion relaxed, so the guard holds at two layers rather than one.
+
+## Numbers corrected rather than reconciled
+
+The critic found the api suite count written as 1,795 in the commit message and
+1,790 in this document, and correctly refused to settle it from a shared cluster.
+Re-measured on a quiet cluster at this head: **1,813 passed**, which is 1,795 plus
+the eighteen tests this round added. So 1,795 was right for `b17f098` and 1,790
+was a stale figure from an earlier run of the same tree. Every count in this
+document is now from the run recorded below.
+
+It also caught the drift prose understating its own measurement: 266.667 against
+266 is 0.25 percent, not a tenth of one, and over a minute it is 149.9 ms, which
+is nine frames at 60 fps rather than one. The assertion carried the true
+magnitude while the sentence beside it did not, which is the class the first law
+names. Both the comment and the test docstring now carry the measured figures.
+
+## Nine more negative controls on this round
+
+| mutation | test that went red |
+|---|---|
+| the residual is discarded, restoring per chunk slicing | `test_the_frame_rate_does_not_depend_on_the_vendor_chunk_size`, six sizes |
+| the contiguity check is removed | `test_the_slicer_refuses_a_chunk_that_does_not_follow_the_last_one` |
+| `flush` stops emitting the final partial frame | `test_a_tail_shorter_than_a_frame_still_gets_a_face` |
+| the frame step is truncated to a whole sample | the grid and late placement tests |
+| the vendor error body is forwarded again | the redaction test and four hint cases |
+| `b64decode` loses `validate=True` | `test_a_corrupted_chunk_is_dropped_rather_than_played_as_noise` |
+| the read timeout is removed | `test_the_stream_carries_a_read_timeout` |
+| barge-in stops calling `stopPlayback` | the presence-check barge-in guard |
+| late chunks stop queueing and sum again | the Chromium two late chunk check |
+
+Two of those survived on the first attempt and both were the test's fault rather
+than the code's, which is worth recording because it is the same failure as the
+guard above. The b64 mutation survived because `"!!!!not base64!!!!"` raises in
+both modes: stripping its illegal characters leaves seven, which is not a
+multiple of four. The discriminating input had to be one where the lax mode
+silently succeeds, measured as `b64decode("AAAA!!!!")` returning three zero bytes.
+And the residual mutation survived because the mutation itself was a bad
+reproduction of the original bug rather than the bug; rewriting it as the actual
+per chunk logic turned six parametrized cases red.
+
 ## Verification
 
 ```
-standalone   235 passed   offline list, PYTHONPATH and DATABASE_URL unset
-presence      33 passed   test_presence_cartesia.py
-presence     110 passed   every presence suite together
-api        1,790 passed
+standalone   253 passed   offline list, PYTHONPATH and DATABASE_URL unset
+presence      51 passed   test_presence_cartesia.py
+presence     128 passed   every presence suite together
+api        1,813 passed
 ruff         All checks passed
-presence-check  29 checks
+presence-check  30 checks
 control-check   23 checks
-audio-check      6 checks in real Chromium
+audio-check      8 checks in real Chromium
 tsc, next build  exit 0, /presence 1.45 kB, /control 20.7 kB
 compose config   renders with CARTESIA_VOICE_ID, MODEL and LANGUAGE
 presence app     builds with cartesia configured; refuses without a voice, by name
@@ -196,7 +329,7 @@ ARTIFACT: SYS_OPS_audible-presence_v1_2026-09-09
 DATE: 2026-09-09
 DECISIONS: read the Cartesia contract out of the vendor's own generated client from PyPI rather than from memory, because the documentation host is blocked and a remembered API is the exact claim this estate has been burned by; drive the face from the amplitude of the received audio rather than from word timings, so the design does not depend on an event ordering nobody has observed; ship no default Cartesia voice id ever, and refuse at startup naming the owned voice rule, because a default here could only be a stock voice; build the browser playback path in the same arc as the adapter, because an adapter alone would produce correct audio nothing plays; one httpx client per reply rather than one held on the object, since main.py has no lifespan hook to close it; keep audio-check.mjs out of CI and resolve Playwright and Chromium from the environment, because neither is pinned here
 FINDINGS: the queued item assumed a Cartesia key was the missing piece and it was not, the adapter was a stub that raised by name and the browser counted every audio chunk and dropped it, so no path existed by which anyone could hear DEVON with LiveKit or without it; CARTESIA_API_KEY was already set on the Railway presence service and its value is not readable through this connection, which is the intended posture; LiveKit is not required for the audible path because the protocol sends PCM precisely when LiveKit is absent; an earlier note in this session over called a settings validation gap that build_speech already covered; the first version of the wiring guard could not fail, because the ref assignment matched the same pattern as the ref read, and its own negative control caught that
-OPEN: nobody has heard this yet and that is the only thing left, requiring Tee to set CARTESIA_VOICE_ID to his own cloned voice, flip PRESENCE_SPEECH, open /presence, press Start audio and listen end to end; which Cartesia model the account is entitled to is unverified; whether timestamps events interleave with audio on the live wire is unverified and deliberately not depended on; the LiveKit publisher is unbuilt and unnecessary for this path; a stale worktree from an earlier session holds 473 MB and was left in place because nothing here can prove it unowned
-STATUS: CartesiaSpeech built against the vendor's own client with SSE streaming, raw pcm_s16le at 16000 and no new dependency; a browser playback path added as lib/presence/pcm-player.ts and components/presence/useAudioPlayback.ts, wired through usePresenceSocket into a Voice panel that states scheduled is not heard; twenty negative controls across the arc each red on the named test and green again on revert; 33 new Cartesia tests added to the offline CI job, 110 presence tests together, 1,790 in the full api suite, ruff clean, presence-check 29, control-check 23, audio-check 6 in real Chromium, tsc and next build exit 0
+OPEN: a fresh critic on b17f098 returned PASS-WITH-CONDITIONS and found three blocking things by executing them, all fixed: barge-in flushed the face and let the voice keep talking because the exported stop was never called; the frame grid was computed per chunk so the face's rate depended on Cartesia's chunk size, producing ZERO frames at 128, 160 and 265 sample chunks, which is the same mistake the design was built to avoid one layer down; and the no stock voice id claim was false, the test scanned nothing and a planted compose default stayed green. Plus three more fixed here: two late chunks summed instead of queueing, the vendor's error body reached the socket carrying a key and a transcript in the critic's reproduction, and the aclosing comment claimed more than the mechanism does. Its most valuable finding was that audio-check.mjs re-wrote the hook's Web Audio calls beside itself, so the chipmunk mutation this arc warns about passed every gate; those calls are now shared code the check executes. Still open: nobody has heard this yet and that is the only thing left, requiring Tee to set CARTESIA_VOICE_ID to his own cloned voice, flip PRESENCE_SPEECH, open /presence, press Start audio and listen end to end; which Cartesia model the account is entitled to is unverified; whether timestamps events interleave with audio on the live wire is unverified and deliberately not depended on; the LiveKit publisher is unbuilt and unnecessary for this path; a stale worktree from an earlier session holds 473 MB and was left in place because nothing here can prove it unowned
+STATUS: twenty nine negative controls across the arc, each red on the named test and green again on revert, two of which survived their first attempt because the mutation or the input was wrong rather than the code; CartesiaSpeech built against the vendor's own client with SSE streaming, raw pcm_s16le at 16000 and no new dependency; a browser playback path added as lib/presence/pcm-player.ts and components/presence/useAudioPlayback.ts, wired through usePresenceSocket into a Voice panel that states scheduled is not heard; 51 Cartesia tests added to the offline CI job, 128 presence tests together, 253 in the standalone list, 1,813 in the full api suite, ruff clean, presence-check 30, control-check 23, audio-check 8 in real Chromium, tsc and next build exit 0
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```

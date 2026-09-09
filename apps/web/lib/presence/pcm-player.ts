@@ -119,20 +119,87 @@ export type Placement = {
 /**
  * Where one chunk goes on the AudioContext clock.
  *
- * A chunk whose slot has passed is played immediately rather than dropped: a
- * late chunk still carries words, and silence is a worse answer than a
- * syllable that lands a few milliseconds tight. The `late` flag is returned so
- * the caller can count it instead of guessing whether the lane is healthy.
+ * A chunk whose slot has passed is played as soon as it can be rather than
+ * dropped: a late chunk still carries words, and silence is a worse answer than
+ * a syllable that lands tight. The `late` flag is returned so the caller can
+ * count it instead of guessing whether the lane is healthy.
+ *
+ * `busyUntil` is when the last chunk already scheduled stops sounding, and it
+ * is the fix for a bug a fresh critic measured on 2026-09-09. Without it two
+ * late chunks were both clamped to `now` and played on top of each other:
+ * 200 ms of speech collapsed into 100 ms at double amplitude, rendered in real
+ * Chromium as a peak of 1.0 where one chunk alone peaks at 0.5. Reachable
+ * whenever a burst of queued WebSocket messages is delivered in one task, which
+ * is what a throttled or backgrounded tab does. Late chunks now queue behind
+ * each other instead of summing.
  */
 export function placeChunk(
   atMs: number,
   timelineStart: number,
   now: number,
+  busyUntil = 0,
 ): Placement {
+  const floor = Math.max(now, busyUntil);
   const slot = timelineStart + atMs / 1000;
-  if (!Number.isFinite(slot)) return { when: now, late: true };
-  if (slot < now) return { when: now, late: true };
+  if (!Number.isFinite(slot)) return { when: floor, late: true };
+  if (slot < floor) return { when: floor, late: slot < now };
   return { when: slot, late: false };
+}
+
+/**
+ * The subset of AudioContext this module touches.
+ *
+ * Named so `scripts/audio-check.mjs` can drive the real scheduling code with a
+ * real OfflineAudioContext rather than re-writing these calls beside it. That
+ * matters: a critic mutated `createBuffer`'s rate to `ctx.sampleRate`, the exact
+ * chipmunk bug this module's comments warn about, and every gate stayed green
+ * because nothing executed the code that made the call. A guard that does not
+ * run over the shipped path is not a guard.
+ */
+export type AudioSink = {
+  readonly currentTime: number;
+  createBuffer(channels: number, length: number, sampleRate: number): AudioBuffer;
+  createBufferSource(): AudioBufferSourceNode;
+  readonly destination: AudioNode;
+};
+
+export type Scheduled = {
+  source: AudioBufferSourceNode;
+  /** When it starts, on the sink's clock. */
+  when: number;
+  /** When it stops sounding, which is the next chunk's floor. */
+  endsAt: number;
+  late: boolean;
+};
+
+/**
+ * Put one decoded chunk on the sink's clock, and say where it landed.
+ *
+ * The buffer is declared at PCM_RATE whatever the device's own rate is, and the
+ * graph resamples. Declaring it at the sink's rate instead would play 16 kHz
+ * audio at 48 kHz: a hundred milliseconds in thirty three, an octave and a half
+ * high, and nothing in a type system or a pure test would object.
+ */
+export function scheduleChunk(
+  sink: AudioSink,
+  samples: Float32Array<ArrayBuffer>,
+  atMs: number,
+  timelineStart: number,
+  busyUntil = 0,
+): Scheduled {
+  const buffer = sink.createBuffer(1, samples.length, PCM_RATE);
+  buffer.copyToChannel(samples, 0);
+  const source = sink.createBufferSource();
+  source.buffer = buffer;
+  source.connect(sink.destination);
+  const placement = placeChunk(atMs, timelineStart, sink.currentTime, busyUntil);
+  source.start(placement.when);
+  return {
+    source,
+    when: placement.when,
+    endsAt: placement.when + buffer.duration,
+    late: placement.late,
+  };
 }
 
 /** Seconds of audio in a PCM payload, at the presence rate. */

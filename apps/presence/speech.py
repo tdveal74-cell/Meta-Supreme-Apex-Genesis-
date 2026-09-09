@@ -454,6 +454,124 @@ def sse_payloads(lines: Sequence[str]) -> List[str]:
     return payloads
 
 
+class FrameSlicer:
+    """Cuts a stream of audio chunks into frames at a fixed rate, across boundaries.
+
+    THE BUG THIS EXISTS TO STOP, found by a fresh critic on 2026-09-09.
+
+    The first version of this sliced each chunk independently: frame boundaries
+    were computed from the start of the chunk and any tail shorter than a frame
+    was discarded. That made the face's frame rate a function of the vendor's
+    chunk size, which is the one thing about Cartesia this build could not
+    verify, and the critic measured what that costs. Two seconds of audio
+    delivered in 128, 160 or 265 sample chunks produced **zero** face frames:
+    perfect audio and a completely still mouth, with nothing anywhere saying so.
+    At 320 samples it produced 50 frames a second, at 480 it produced 33.
+
+    That was the same mistake the design was built to avoid one layer up. The
+    face was deliberately moved off word timings so it would not depend on an
+    event ordering nobody here has observed, and then it depended on a chunk
+    size nobody here has observed instead.
+
+    So the residual carries. Samples left over at the end of a chunk are held
+    and prepended to the next one, frame boundaries are absolute positions in
+    the turn rather than in the chunk, and the rate is exactly `fps` for any
+    chunk size the vendor cares to send. `flush` emits one final frame for a
+    tail shorter than a frame, so no audio ever plays with no face over it.
+    """
+
+    def __init__(self, fps: int = 60) -> None:
+        if fps <= 0:
+            raise ValueError("fps must be greater than zero")
+        self.fps = fps
+        #: Samples held back because they do not fill a whole frame yet.
+        self._held = bytearray()
+        #: Absolute sample index, within the turn, of `_held[0]`.
+        self._held_at = 0
+        #: How many frames this turn has emitted. The next frame is this index.
+        self.emitted = 0
+
+    @property
+    def samples_per_frame(self) -> float:
+        """Deliberately a float. 16000 / 60 is 266.67, and truncating it to 266
+        every frame runs 0.25 percent fast, which the measured case below puts at
+        149.9 ms, about nine frames, one minute into a reply."""
+        return AUDIO_RATE / self.fps
+
+    def _frame_at(self, index: int) -> int:
+        """Absolute sample index where frame `index` begins."""
+        return int(index * self.samples_per_frame)
+
+    def push(
+        self, pcm: bytes, at_samples: int, clock: "WordClock"
+    ) -> List[SpeechChunk]:
+        """Every whole frame this chunk completes, in timeline order.
+
+        `at_samples` is where this chunk sits in the turn. It is checked rather
+        than trusted: a caller that skipped or repeated samples would otherwise
+        put the face on a different timeline from the voice, silently.
+        """
+        expected = self._held_at + len(self._held) // 2
+        if at_samples != expected:
+            raise ValueError(
+                f"audio chunk starts at sample {at_samples} and the slicer is at "
+                f"{expected}; the face and the voice would be on different clocks"
+            )
+        self._held.extend(pcm)
+        return self._cut(clock, whole_frames_only=True)
+
+    def flush(self, clock: "WordClock") -> List[SpeechChunk]:
+        """One frame for a tail shorter than a frame, so no audio goes uncovered."""
+        return self._cut(clock, whole_frames_only=False)
+
+    def _cut(self, clock: "WordClock", *, whole_frames_only: bool) -> List[SpeechChunk]:
+        out: List[SpeechChunk] = []
+        while True:
+            low = self._frame_at(self.emitted)
+            high = self._frame_at(self.emitted + 1)
+            available = self._held_at + len(self._held) // 2
+            if low >= available:
+                break
+            if high > available:
+                if whole_frames_only:
+                    break
+                # The turn is over and this is the last partial frame. Measure
+                # what there is rather than dropping it.
+                high = available
+            offset = (low - self._held_at) * 2
+            end = (high - self._held_at) * 2
+            at_ms = low / AUDIO_RATE * 1000.0
+            envelope = envelope_from_rms(rms_of(bytes(self._held[offset:end])))
+            shape = clock.shape_at(at_ms)
+            if shape is None:
+                shape = _NEUTRAL_VOICED
+            out.append(
+                SpeechChunk(
+                    kind=CHUNK_FRAME,
+                    at_ms=round(at_ms, 3),
+                    weights=_blend(_REST, shape, envelope),
+                    priority=PRIORITY_LIP_SYNC,
+                )
+            )
+            blink = blink_weight(at_ms)
+            if blink > 0:
+                out.append(
+                    SpeechChunk(
+                        kind=CHUNK_FRAME,
+                        at_ms=round(at_ms, 3),
+                        weights={"eyeBlinkLeft": blink, "eyeBlinkRight": blink},
+                        priority=PRIORITY_EXPRESSION,
+                    )
+                )
+            self.emitted += 1
+            # Everything before the next frame's start is spent.
+            spent = (self._frame_at(self.emitted) - self._held_at) * 2
+            if spent > 0:
+                del self._held[:spent]
+                self._held_at += spent // 2
+        return out
+
+
 class CartesiaSpeech:
     """Cartesia over SSE, with the face driven by the audio that comes back.
 
@@ -523,10 +641,6 @@ class CartesiaSpeech:
     def configured(self) -> bool:
         return bool(self._api_key and self.voice_id)
 
-    @property
-    def samples_per_frame(self) -> float:
-        return AUDIO_RATE / self.fps
-
     def headers(self) -> Dict[str, str]:
         return {
             "Authorization": f"Bearer {self._api_key}",
@@ -547,51 +661,6 @@ class CartesiaSpeech:
             "context_id": turn,
         }
 
-    def frames_for(
-        self, pcm: bytes, start_samples: int, clock: "WordClock"
-    ) -> List[SpeechChunk]:
-        """Face frames for one audio chunk, on that chunk's own timeline.
-
-        The slice boundaries are computed from a float step so 60 frames per
-        second at 16000 Hz does not drift: 266.67 samples per frame truncated
-        to 266 every time would run about a tenth of a percent fast, which is a
-        frame of skew a minute into a reply.
-        """
-        total_samples = len(pcm) // 2
-        step = self.samples_per_frame
-        chunks: List[SpeechChunk] = []
-        index = 0
-        while True:
-            low = int(index * step)
-            high = int((index + 1) * step)
-            if high > total_samples:
-                break
-            at_ms = (start_samples + low) / AUDIO_RATE * 1000.0
-            envelope = envelope_from_rms(rms_of(pcm[low * 2 : high * 2]))
-            shape = clock.shape_at(at_ms)
-            if shape is None:
-                shape = _NEUTRAL_VOICED
-            chunks.append(
-                SpeechChunk(
-                    kind=CHUNK_FRAME,
-                    at_ms=round(at_ms, 3),
-                    weights=_blend(_REST, shape, envelope),
-                    priority=PRIORITY_LIP_SYNC,
-                )
-            )
-            blink = blink_weight(at_ms)
-            if blink > 0:
-                chunks.append(
-                    SpeechChunk(
-                        kind=CHUNK_FRAME,
-                        at_ms=round(at_ms, 3),
-                        weights={"eyeBlinkLeft": blink, "eyeBlinkRight": blink},
-                        priority=PRIORITY_EXPRESSION,
-                    )
-                )
-            index += 1
-        return chunks
-
     async def _events(self, text: str, turn: str) -> AsyncIterator[Dict[str, Any]]:
         """Every decoded SSE event from one request, in arrival order."""
         timeout = httpx.Timeout(
@@ -605,10 +674,23 @@ class CartesiaSpeech:
                 json=self.request_body(text, turn),
             ) as response:
                 if response.status_code >= 400:
-                    body = (await response.aread()).decode("utf-8", "replace")
+                    # The status and a fixed hint, never the vendor's body.
+                    #
+                    # A critic put a 401 through this on 2026-09-09 whose body
+                    # echoed both the Authorization header and the request, and
+                    # watched the key and Tee's transcript come out in the
+                    # exception text. `session.py:302` sends `str(exc)` to the
+                    # socket, and the only reason it missed the logger there is
+                    # that `run_turn` catches SpeechNotConfigured one frame
+                    # before `logger.exception`. Whether Cartesia really echoes
+                    # a bearer token is unverified and unlikely; forwarding
+                    # nothing is cheaper than finding out.
+                    await response.aread()
                     raise SpeechNotConfigured(
-                        f"Cartesia refused the request with HTTP {response.status_code}: "
-                        f"{body[:400]}"
+                        f"Cartesia refused the request with HTTP "
+                        f"{response.status_code}. The vendor's response body is "
+                        "not forwarded, because it can echo the request and the "
+                        f"key. {_status_hint(response.status_code)}"
                     )
                 block: List[str] = []
                 async for line in response.aiter_lines():
@@ -634,11 +716,24 @@ class CartesiaSpeech:
 
         clock = WordClock()
         cursor_samples = 0
+        # Per turn, not per chunk and not on self: the residual belongs to one
+        # reply, and a slicer held on the object would carry one turn's leftover
+        # samples into the next.
+        slicer = FrameSlicer(self.fps)
         # aclosing, not a bare `async for`: the loop below breaks on the done
-        # event and a barge-in cancels this generator outright, and in both
-        # cases an unclosed async generator holds the HTTP connection open
-        # until the event loop's finaliser gets round to it. Closing it here
-        # makes the socket's lifetime the turn's lifetime.
+        # event, and without this the inner generator would stay suspended with
+        # its client open until the event loop's finaliser got round to it.
+        #
+        # Scope, measured by a critic on 2026-09-09 rather than assumed. This
+        # protects `_events` from `synthesize`; it does not protect `synthesize`
+        # from its own consumer. Counting transport closes: a consumer that runs
+        # to completion closes immediately, a consumer cancelled at its own await
+        # closes after one loop turn, and a consumer that breaks out of the
+        # `async for` and returns closes only at garbage collection. The last
+        # case has no caller today, because `session.py` cancels the producer and
+        # then awaits it, which is the second shape. So the claim is "the socket
+        # does not outlive the turn by more than a loop turn", not "the socket's
+        # lifetime is the turn's".
         async with aclosing(self._events(spoken, turn)) as events:
             async for event in events:
                 kind = event.get("type")
@@ -660,12 +755,37 @@ class CartesiaSpeech:
                     continue
                 at_ms = cursor_samples / AUDIO_RATE * 1000.0
                 yield SpeechChunk(kind=CHUNK_AUDIO, at_ms=round(at_ms, 3), pcm=pcm)
-                for frame in self.frames_for(pcm, cursor_samples, clock):
+                for frame in slicer.push(pcm, cursor_samples, clock):
                     yield frame
                 cursor_samples += len(pcm) // 2
 
+        # A tail shorter than one frame still plays, so it still gets a face.
+        for frame in slicer.flush(clock):
+            yield frame
+
         total_ms = cursor_samples / AUDIO_RATE * 1000.0
         yield SpeechChunk(kind=CHUNK_STATE, at_ms=round(total_ms, 3), state=STATE_DONE)
+
+
+def _status_hint(status: int) -> str:
+    """What an operator should check, keyed on the status alone.
+
+    Deliberately from the status code rather than from the vendor's message: a
+    hint this module wrote cannot leak anything the vendor put in its body.
+    """
+    if status in (401, 403):
+        return "Check CARTESIA_API_KEY on the presence service."
+    if status == 402:
+        return "The Cartesia account may be out of credit."
+    if status == 404:
+        return "Check CARTESIA_MODEL and CARTESIA_VOICE_ID; one may not exist."
+    if status == 422:
+        return "Cartesia rejected the request shape, so this build's contract may be stale."
+    if status == 429:
+        return "Rate limited by Cartesia. The free tier is 5 requests a minute."
+    if status >= 500:
+        return "Cartesia is failing on its side. Retrying later is the only fix here."
+    return "Read the Cartesia dashboard for the request id."
 
 
 def _decode_event(payload: str) -> Optional[Dict[str, Any]]:

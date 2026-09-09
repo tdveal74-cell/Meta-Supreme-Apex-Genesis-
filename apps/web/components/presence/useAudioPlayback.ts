@@ -3,12 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AudioMessage } from "@/lib/presence/protocol";
 import {
-  PCM_RATE,
   PLAYBACK_LEAD_S,
   base64ToBytes,
   durationSeconds,
   pcmToFloat32,
-  placeChunk,
+  scheduleChunk,
 } from "@/lib/presence/pcm-player";
 
 /**
@@ -54,6 +53,8 @@ type Turn = {
   /** The AudioContext time this turn's `at_ms` zero sits on. */
   start: number;
   sources: AudioBufferSourceNode[];
+  /** When the last chunk scheduled stops sounding. A late chunk queues here. */
+  busyUntil: number;
 };
 
 function audioContextClass(): typeof AudioContext | null {
@@ -136,35 +137,37 @@ export function useAudioPlayback() {
       let turn = turnRef.current;
       if (!turn || turn.id !== message.turn_id) {
         stop();
-        turn = { id: message.turn_id, start: ctx.currentTime + PLAYBACK_LEAD_S, sources: [] };
+        turn = {
+          id: message.turn_id,
+          start: ctx.currentTime + PLAYBACK_LEAD_S,
+          sources: [],
+          busyUntil: 0,
+        };
         turnRef.current = turn;
       }
 
-      const samples = pcmToFloat32(bytes);
-      // The buffer is declared at the presence rate whatever the device's own
-      // rate is; the graph resamples. Declaring it at ctx.sampleRate instead
-      // would play 16 kHz audio at 48 kHz, which is a chipmunk, not a bug that
-      // announces itself.
-      const buffer = ctx.createBuffer(1, samples.length, PCM_RATE);
-      buffer.copyToChannel(samples, 0);
-
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(ctx.destination);
-
-      const placement = placeChunk(message.at_ms, turn.start, ctx.currentTime);
-      source.start(placement.when);
-      turn.sources.push(source);
-      source.onended = () => {
-        source.disconnect();
+      // Every Web Audio call lives in lib/presence/pcm-player.ts so the browser
+      // check can execute the same code path rather than a copy of it beside
+      // itself. See the AudioSink docstring for the bug that taught us.
+      const placed = scheduleChunk(
+        ctx,
+        pcmToFloat32(bytes),
+        message.at_ms,
+        turn.start,
+        turn.busyUntil,
+      );
+      turn.busyUntil = Math.max(turn.busyUntil, placed.endsAt);
+      turn.sources.push(placed.source);
+      placed.source.onended = () => {
+        placed.source.disconnect();
         const current = turnRef.current;
         if (!current) return;
-        const at = current.sources.indexOf(source);
+        const at = current.sources.indexOf(placed.source);
         if (at >= 0) current.sources.splice(at, 1);
       };
 
       diagnosticsRef.current.scheduled += 1;
-      if (placement.late) diagnosticsRef.current.late += 1;
+      if (placed.late) diagnosticsRef.current.late += 1;
       diagnosticsRef.current.seconds += durationSeconds(bytes);
       setStatus("playing");
     },

@@ -21,6 +21,17 @@
  * through an OfflineAudioContext, and the rendered samples are measured.
  * Offline rather than live because it is deterministic and needs no speakers.
  *
+ * IT DRIVES THE SHIPPED CODE, NOT A COPY OF IT
+ *
+ * The first version of this file re-wrote the hook's Web Audio calls inside
+ * `page.evaluate` under a comment claiming they were "exactly the calls
+ * useAudioPlayback.ts makes". A fresh critic mutated the shipped hook to declare
+ * the buffer at the context's own sample rate, the exact chipmunk bug this file
+ * exists to catch, and all six checks below still passed, because nothing here
+ * executed the code that made the call. Those calls now live in
+ * `lib/presence/pcm-player.ts` as `scheduleChunk`, its source is read and
+ * evaluated inside the page, and a mutation to it turns these checks red.
+ *
  * NOT IN CI, AND WHY THAT IS NOT AN OVERSIGHT
  *
  * This needs Playwright and a Chromium binary. Neither is pinned by this
@@ -34,6 +45,7 @@
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import {
   PCM_RATE,
   PLAYBACK_LEAD_S,
@@ -107,23 +119,73 @@ const samples = Array.from(pcmToFloat32(bytes));
 const placement = placeChunk(AT_MS, PLAYBACK_LEAD_S, 0);
 assert.equal(placement.late, false, "the fixture's own placement is already late");
 
+/**
+ * The shipped scheduler's own source, for evaluation inside the page.
+ *
+ * A browser cannot import a .ts module, and bundling for one check would put a
+ * build step between the code and its proof. So the two functions are cut out of
+ * the real file by name and their type annotations stripped. Both are asserted
+ * present first: a rename that silently matched nothing would leave these checks
+ * measuring an empty string and passing forever, which is the failure mode this
+ * whole file was written in response to.
+ */
+const MODULE_SOURCE = readFileSync(
+  new URL("../lib/presence/pcm-player.ts", import.meta.url),
+  "utf8",
+);
+
+function cutFunction(name) {
+  const start = MODULE_SOURCE.indexOf(`export function ${name}(`);
+  assert.notEqual(start, -1, `${name} is no longer exported from pcm-player.ts`);
+  // Functions in this module are top level, so the first line that is exactly a
+  // closing brace ends it.
+  const end = MODULE_SOURCE.indexOf("\n}\n", start);
+  assert.notEqual(end, -1, `could not find the end of ${name}`);
+  return MODULE_SOURCE.slice(start, end + 3);
+}
+
+const SHIPPED_SCHEDULER = [cutFunction("placeChunk"), cutFunction("scheduleChunk")]
+  .join("\n")
+  .replaceAll("export function", "function")
+  // Strip the type annotations a browser cannot parse. Deliberately narrow: only
+  // the annotations these two functions actually carry.
+  .replace(/:\s*Placement\b/g, "")
+  .replace(/:\s*Scheduled\b/g, "")
+  .replace(/(\w+)\s*:\s*AudioSink/g, "$1")
+  .replace(/(\w+)\s*:\s*Float32Array<ArrayBuffer>/g, "$1")
+  .replace(/(\w+)\s*:\s*number\s*=\s*0/g, "$1 = 0")
+  .replace(/(\w+)\s*:\s*number/g, "$1");
+
+assert.ok(
+  SHIPPED_SCHEDULER.includes("createBuffer(1, samples.length, PCM_RATE)"),
+  "scheduleChunk no longer declares the buffer at the presence rate",
+);
+assert.ok(
+  SHIPPED_SCHEDULER.includes("source.start(placement.when)"),
+  "scheduleChunk no longer starts the source at its placed slot",
+);
+
 const { chromium } = await loadPlaywright();
 const executablePath = findChromium();
 const browser = await chromium.launch({ executablePath });
 let result;
+let late;
 try {
   const page = await browser.newPage();
   result = await page.evaluate(
-    async ({ samples, when, rate, totalS }) => {
+    async ({ samples, rate, totalS, atMs, lead, scheduler }) => {
       const contextRate = 48000;
       const ctx = new OfflineAudioContext(1, Math.ceil(contextRate * totalS), contextRate);
-      // Exactly the calls components/presence/useAudioPlayback.ts makes.
-      const buffer = ctx.createBuffer(1, samples.length, rate);
-      buffer.copyToChannel(new Float32Array(samples), 0);
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(ctx.destination);
-      source.start(when);
+      // The shipped scheduler, evaluated. PCM_RATE is its one free variable.
+      const PCM_RATE = rate;
+      // eslint-disable-next-line no-new-func
+      const scheduleChunk = new Function(
+        "PCM_RATE",
+        `${scheduler}; return scheduleChunk;`,
+      )(PCM_RATE);
+      const placed = scheduleChunk(ctx, new Float32Array(samples), atMs, lead, 0);
+      const declaredRateFromShippedCall = placed.source.buffer.sampleRate;
+      const bufferDurationFromShippedCall = placed.source.buffer.duration;
       const rendered = await ctx.startRendering();
       const channel = rendered.getChannelData(0);
 
@@ -144,15 +206,66 @@ try {
       }
       return {
         contextRate,
-        declaredRate: buffer.sampleRate,
-        bufferDurationS: buffer.duration,
+        declaredRate: declaredRateFromShippedCall,
+        bufferDurationS: bufferDurationFromShippedCall,
+        startedAt: placed.when,
+        endsAt: placed.endsAt,
+        late: placed.late,
         firstLoudS: firstLoud < 0 ? null : firstLoud / contextRate,
         lastLoudS: lastLoud < 0 ? null : lastLoud / contextRate,
         peak,
         crossings,
       };
     },
-    { samples, when: placement.when, rate: PCM_RATE, totalS: 0.6 },
+    {
+      samples,
+      rate: PCM_RATE,
+      totalS: 0.6,
+      atMs: AT_MS,
+      lead: PLAYBACK_LEAD_S,
+      scheduler: SHIPPED_SCHEDULER,
+    },
+  );
+  // Two late chunks, which is what a throttled tab delivers in one task. They
+  // must queue behind each other rather than sum: a critic rendered 200 ms of
+  // speech collapsing into 100 ms at a peak of 1.0 before `busyUntil` existed.
+  late = await page.evaluate(
+    async ({ samples, rate, totalS, scheduler }) => {
+      const contextRate = 48000;
+      const ctx = new OfflineAudioContext(1, Math.ceil(contextRate * totalS), contextRate);
+      const PCM_RATE = rate;
+      // eslint-disable-next-line no-new-func
+      const scheduleChunk = new Function(
+        "PCM_RATE",
+        `${scheduler}; return scheduleChunk;`,
+      )(PCM_RATE);
+      const wave = new Float32Array(samples);
+      // A timeline origin in the past, so both chunks are already overdue.
+      const origin = -10;
+      let busy = 0;
+      for (const atMs of [100, 200]) {
+        const placed = scheduleChunk(ctx, wave, atMs, origin, busy);
+        busy = Math.max(busy, placed.endsAt);
+      }
+      const rendered = await ctx.startRendering();
+      const channel = rendered.getChannelData(0);
+      let first = -1;
+      let last = -1;
+      let peak = 0;
+      for (let index = 0; index < channel.length; index += 1) {
+        const magnitude = Math.abs(channel[index]);
+        if (magnitude > peak) peak = magnitude;
+        if (magnitude > 0.05) {
+          if (first < 0) first = index;
+          last = index;
+        }
+      }
+      return {
+        peak,
+        soundedS: first < 0 ? 0 : (last - first) / contextRate,
+      };
+    },
+    { samples, rate: PCM_RATE, totalS: 0.6, scheduler: SHIPPED_SCHEDULER },
   );
 } finally {
   await browser.close();
@@ -212,6 +325,30 @@ check("half scale PCM renders at half scale, so the sign read is right", () => {
   assert.ok(
     result.peak > 0.4 && result.peak < 0.6,
     `peak ${result.peak}, expected about 0.5`,
+  );
+});
+
+check("the shipped scheduler placed it, not this script", () => {
+  // If these came from anywhere but scheduleChunk, every check above is theatre.
+  assert.equal(result.startedAt, PLAYBACK_LEAD_S + AT_MS / 1000);
+  assert.equal(result.late, false);
+  assert.ok(
+    Math.abs(result.endsAt - (result.startedAt + DURATION_S)) < 0.001,
+    `endsAt ${result.endsAt} does not follow from startedAt ${result.startedAt}`,
+  );
+});
+
+check("two late chunks queue rather than play on top of each other", () => {
+  console.log(`  two late chunks: ${JSON.stringify(late)}`);
+  // Summing two half scale chunks peaks at 1.0. Queueing them keeps 0.5.
+  assert.ok(
+    late.peak > 0.4 && late.peak < 0.6,
+    `peak ${late.peak}: two late chunks summed instead of queueing`,
+  );
+  // And 200 ms of speech stays 200 ms rather than collapsing into 100.
+  assert.ok(
+    Math.abs(late.soundedS - DURATION_S * 2) < 0.01,
+    `sounded for ${late.soundedS}s, expected ${DURATION_S * 2}s`,
   );
 });
 

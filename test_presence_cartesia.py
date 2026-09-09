@@ -29,8 +29,11 @@ the mouth still tracks the voice.
 
 from __future__ import annotations
 
+import inspect
 import json
 import math
+import pathlib
+import re
 import struct
 
 import httpx
@@ -55,6 +58,7 @@ from apps.presence.speech import (
     STATE_DONE,
     STATE_SPEAKING,
     CartesiaSpeech,
+    FrameSlicer,
     MockSpeech,
     SpeechNotConfigured,
     WordClock,
@@ -194,48 +198,136 @@ def test_the_envelope_never_falls_as_the_audio_gets_louder():
     assert levels == sorted(levels)
 
 
+def lip_only(frames):
+    return [f for f in frames if f.priority == PRIORITY_LIP_SYNC]
+
+
 def test_frames_land_on_a_sixty_per_second_grid_without_drifting():
-    """266.67 samples a frame truncated to 266 would run a frame fast a minute in."""
-    synth = CartesiaSpeech(KEY, VOICE)
+    """The measured cost of truncating the step, not a remembered one.
+
+    A critic corrected the arithmetic in the original version of this docstring
+    on 2026-09-09: 266.667 against 266 is 0.25 percent, not a tenth of one, and
+    over a minute it is 149.9 ms, which is nine frames at 60 fps rather than one.
+    The assertion below carried the true magnitude while the prose beside it did
+    not, which is the class the first law names.
+    """
+    slicer = FrameSlicer()
     one_minute = AUDIO_RATE * 60
-    frames = synth.frames_for(tone(6000, one_minute), 0, WordClock())
-    lip = [f for f in frames if f.priority == PRIORITY_LIP_SYNC]
+    lip = lip_only(slicer.push(tone(6000, one_minute), 0, WordClock()))
     assert len(lip) == 3600, len(lip)
     # The ideal position of frame 3599 is 3599 * 1000/60 = 59983.33 ms. Frames
     # sit on real sample boundaries, so the measured value is a fifth of a
-    # sample early and that is correct rather than drift.
+    # sample early, and that is correct rather than drift.
     assert lip[-1].at_ms == pytest.approx(59983.33, abs=0.05)
-    # What the truncating version would have given, so the test states the bug
-    # it prevents rather than only a number: 266 samples a frame instead of
-    # 266.67 puts the last frame of a minute 150 ms early.
     truncated = 3599 * 266 / AUDIO_RATE * 1000.0
-    assert truncated == pytest.approx(59833.4, abs=0.1)
-    assert lip[-1].at_ms - truncated > 100.0
+    assert truncated == pytest.approx(59833.375, abs=0.05)
+    skew_ms = lip[-1].at_ms - truncated
+    assert skew_ms == pytest.approx(149.9, abs=0.2), skew_ms
+    assert skew_ms / (1000.0 / 60) == pytest.approx(9.0, abs=0.1)
 
 
 def test_a_chunk_that_starts_late_is_placed_late():
-    synth = CartesiaSpeech(KEY, VOICE)
-    frames = synth.frames_for(tone(6000, 1600), AUDIO_RATE, WordClock())
-    assert frames[0].at_ms == pytest.approx(1000.0)
+    slicer = FrameSlicer()
+    slicer.push(tone(6000, AUDIO_RATE), 0, WordClock())
+    frames = lip_only(slicer.push(tone(6000, 1600), AUDIO_RATE, WordClock()))
+    assert frames[0].at_ms == pytest.approx(1000.0, abs=0.02)
 
 
 def test_silence_shuts_the_mouth_and_speech_opens_it():
-    synth = CartesiaSpeech(KEY, VOICE)
-    quiet = synth.frames_for(pcm(*([0] * 1600)), 0, WordClock())
+    quiet = FrameSlicer().push(pcm(*([0] * 1600)), 0, WordClock())
     assert all(frame.weights.get("jawOpen", 0.0) == 0.0 for frame in quiet)
-    loud = synth.frames_for(tone(12000, 1600), 0, WordClock())
+    loud = FrameSlicer().push(tone(12000, 1600), 0, WordClock())
     assert max(frame.weights.get("jawOpen", 0.0) for frame in loud) > 0.3
 
 
 def test_every_frame_is_one_this_protocol_will_carry():
     """A blendshape name the protocol refuses fails the turn, not the frame."""
-    synth = CartesiaSpeech(KEY, VOICE)
     clock = WordClock()
     clock.extend({"words": ["mabufo"], "start": [0.0], "end": [0.4]})
-    for frame in synth.frames_for(tone(9000, 8000), 0, clock):
+    for frame in FrameSlicer().push(tone(9000, 8000), 0, clock):
         validate_frame(frame.weights)
         assert frame.at_ms >= 0.0
         assert math.isfinite(frame.at_ms)
+
+
+# -- the residual, which is what stops a still face over perfect audio ------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("samples_per_chunk", [128, 160, 265, 266, 320, 480, 1024, 1600])
+async def test_the_frame_rate_does_not_depend_on_the_vendor_chunk_size(samples_per_chunk):
+    """The bug a critic measured on 2026-09-09, now measured fixed.
+
+    Slicing each chunk from its own start and discarding the tail made the
+    face's frame rate a function of Cartesia's chunk size, which is the one
+    thing about the vendor this build could not verify. Two seconds of audio in
+    128, 160 or 265 sample chunks produced ZERO frames: perfect audio, a
+    completely still mouth, and nothing anywhere reporting it. 320 gave 50 fps,
+    480 gave 33.
+
+    The design had been moved off word timings so it would not depend on
+    unobserved vendor behaviour, and then depended on unobserved vendor
+    behaviour anyway. The residual carries now, so this is 60 either way.
+    """
+    total = AUDIO_RATE * 2
+    pieces = []
+    made = 0
+    while made < total:
+        count = min(samples_per_chunk, total - made)
+        pieces.append(tone(9000, count))
+        made += count
+
+    synth = speaker(sse([chunk_event(piece) for piece in pieces] + [DONE_EVENT]))
+    produced = await collect(synth)
+    frames = len(lip_only([c for c in produced if c.kind == CHUNK_FRAME]))
+    audio_samples = sum(len(c.pcm) // 2 for c in produced if c.kind == CHUNK_AUDIO)
+
+    assert audio_samples == total, "the audio itself must be byte exact regardless"
+    seconds = audio_samples / AUDIO_RATE
+    assert frames / seconds == pytest.approx(60.0, abs=0.6), (
+        f"{samples_per_chunk} sample chunks gave {frames / seconds:.1f} fps"
+    )
+
+
+def test_the_slicer_refuses_a_chunk_that_does_not_follow_the_last_one():
+    """A skipped or repeated chunk would put the face on another clock, silently."""
+    slicer = FrameSlicer()
+    slicer.push(tone(6000, 1600), 0, WordClock())
+    with pytest.raises(ValueError) as raised:
+        slicer.push(tone(6000, 1600), 9999, WordClock())
+    assert "different clocks" in str(raised.value)
+
+
+def test_a_tail_shorter_than_a_frame_still_gets_a_face():
+    """It plays, so it is covered. Otherwise the mouth stops before the voice."""
+    slicer = FrameSlicer()
+    # 100 samples is 6.25 ms, well under one frame at 60 fps.
+    assert slicer.push(tone(9000, 100), 0, WordClock()) == []
+    flushed = lip_only(slicer.flush(WordClock()))
+    assert len(flushed) == 1
+    assert flushed[0].at_ms == 0.0
+    assert flushed[0].weights.get("jawOpen", 0.0) > 0.0
+
+
+def test_the_slicer_never_reads_past_the_buffer_it_holds():
+    """The off-by-one a critic looked for. Checked at the awkward lengths."""
+    for length in (1, 2, 265, 266, 267, 532, 533, 1600, 16001):
+        slicer = FrameSlicer()
+        frames = lip_only(slicer.push(tone(9000, length), 0, WordClock()))
+        # A frame is emitted only once its own span is fully available, so the
+        # count is the number of k with int((k+1)*step) <= length. Computed the
+        # same way rather than as length/step, because those differ: at 266
+        # samples frame 0 spans [0, 266) and IS complete, while 266/266.667
+        # rounds to zero.
+        expected = 0
+        while int((expected + 1) * slicer.samples_per_frame) <= length:
+            expected += 1
+        assert len(frames) == expected, (length, len(frames), expected)
+        for index, frame in enumerate(frames):
+            # Rounded to three places on the wire, so compare to the rounded
+            # value rather than to the exact one: 33.3125 goes out as 33.312.
+            exact = int(index * slicer.samples_per_frame) / AUDIO_RATE * 1000.0
+            assert frame.at_ms == round(exact, 3), (length, index, frame.at_ms, exact)
 
 
 # -- the word clock --------------------------------------------------------
@@ -407,12 +499,85 @@ async def test_an_unknown_event_type_is_passed_over():
 
 
 @pytest.mark.asyncio
-async def test_an_http_refusal_names_the_status_and_the_body():
-    synth = speaker(b'{"error":"bad key"}', status=401)
+async def test_an_http_refusal_names_the_status_and_never_the_vendor_body():
+    """A critic put a key and a transcript through this on 2026-09-09.
+
+    It sent a 401 whose body echoed the Authorization header and the request,
+    and read both back out of the exception text. `session.py:302` sends
+    `str(exc)` straight to the socket. So the status and a hint this module
+    wrote go out, and the vendor's body goes nowhere.
+    """
+    leaky = (
+        b'{"error":{"message":"bad credentials for Bearer sk_car_LIVEKEYDONOTLEAK99",'
+        b'"request":{"transcript":"Tee\'s private reply about the acquisition"}}}'
+    )
+    synth = speaker(leaky, status=401)
     with pytest.raises(SpeechNotConfigured) as raised:
         await collect(synth)
-    assert "401" in str(raised.value)
-    assert "bad key" in str(raised.value)
+    message = str(raised.value)
+    assert "401" in message
+    assert "CARTESIA_API_KEY" in message, "an operator is told nothing useful"
+    assert "sk_car_LIVEKEYDONOTLEAK99" not in message
+    assert "acquisition" not in message
+    assert "bad credentials" not in message
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "status,needle",
+    [
+        (401, "CARTESIA_API_KEY"),
+        (402, "credit"),
+        (404, "CARTESIA_VOICE_ID"),
+        (429, "Rate limited"),
+        (503, "failing on its side"),
+    ],
+)
+async def test_the_hint_comes_from_the_status_not_from_the_vendor(status, needle):
+    """Keyed on the code alone, so a hint cannot carry what the body said."""
+    synth = speaker(b'{"secret":"NEVERLEAKTHIS"}', status=status)
+    with pytest.raises(SpeechNotConfigured) as raised:
+        await collect(synth)
+    assert needle in str(raised.value)
+    assert "NEVERLEAKTHIS" not in str(raised.value)
+
+
+@pytest.mark.asyncio
+async def test_a_corrupted_chunk_is_dropped_rather_than_played_as_noise():
+    """`validate=True` on the decode. Without it b64decode returns garbage.
+
+    A mutation removing it survived the whole suite when a critic tried it, and
+    the first version of this test did not catch it either: "!!!!not base64!!!!"
+    raises in both modes, because stripping its illegal characters leaves seven,
+    which is not a multiple of four. The input has to be one where the lax mode
+    silently SUCCEEDS. Measured: b64decode("AAAA!!!!") returns three zero bytes
+    without validate and raises with it. That is the discriminating case, so it
+    is the one used.
+    """
+    for payload in ("AAAA!!!!", "A!A!A!A!"):
+        body = sse([
+            {"type": "chunk", "data": payload, "done": False,
+             "status_code": 206, "step_time": 1.0},
+            DONE_EVENT,
+        ])
+        produced = await collect(speaker(body))
+        assert [c for c in produced if c.kind == CHUNK_AUDIO] == [], payload
+
+
+def test_the_stream_carries_a_read_timeout():
+    """A stalled stream would otherwise hold the session in SPEAKING forever.
+
+    A mutation setting the timeout to None survived when a critic tried it. The
+    bound is asserted here rather than exercised, because making a MockTransport
+    stall for the real 30 seconds would put 30 seconds into every CI run.
+    """
+    from apps.presence.speech import CARTESIA_CONNECT_TIMEOUT_S, CARTESIA_READ_TIMEOUT_S
+
+    assert 0 < CARTESIA_CONNECT_TIMEOUT_S <= 30
+    assert 0 < CARTESIA_READ_TIMEOUT_S <= 60
+    source = inspect.getsource(CartesiaSpeech._events)
+    assert "httpx.Timeout(" in source
+    assert "timeout=timeout" in source
 
 
 @pytest.mark.asyncio
@@ -476,12 +641,66 @@ def test_build_speech_hands_back_a_configured_cartesia():
     assert synth.voice_id == VOICE
 
 
-def test_no_stock_voice_id_is_written_into_this_repository():
-    """The rule is that identity is owned. A default here would rent one.
+#: Every file that can put a value in front of a deployment. A voice id in any
+#: one of them would be spoken; a voice id anywhere else would not.
+VOICE_ID_SURFACES = (
+    "apps/presence/settings.py",
+    "apps/presence/speech.py",
+    "infrastructure/docker/docker-compose.prod.yml",
+    "infrastructure/docker/.env.prod.example",
+    "infrastructure/docker/Dockerfile.presence",
+)
 
-    A voice id in a settings default would be a stock voice by construction:
+#: What a Cartesia voice id looks like. Loose on purpose: anything long enough
+#: to be an identifier rather than a placeholder.
+_VOICE_ID_SHAPED = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}|[A-Za-z0-9_-]{16,}")
+
+
+def test_no_stock_voice_id_is_written_into_this_repository():
+    """The rule is that identity is owned. A value here would rent one.
+
+    THIS TEST USED TO BE A LIE, and a fresh critic proved it on 2026-09-09.
+
+    It asserted two Python defaults and scanned nothing, while claiming in the
+    commit message and the status doc to guard the whole repository. The critic
+    planted a UUID shaped voice id as the compose default at
+    `docker-compose.prod.yml` and again in the env example, and the entire suite
+    stayed green, 270 passed both times. The compose one is the case that bites:
+    `${CARTESIA_VOICE_ID:-<planted id>}` is what an operator gets whenever they
+    do not set the variable, so a stock voice would actually have been spoken
+    with nothing objecting.
+
     Tee's own clone is account scoped and is never a value this repository can
-    know. So the default must stay empty and this test is the guard.
+    know, so any value found here is by construction a rented one. There is no
+    exception path for a compliance item, so this scans rather than asserts.
     """
+    root = pathlib.Path(__file__).parent
+    checked = 0
+    for name in VOICE_ID_SURFACES:
+        path = root / name
+        assert path.is_file(), f"{name} is gone; this guard now covers less than it says"
+        text = path.read_text(encoding="utf-8")
+        assert text.strip(), f"{name} read empty, so scanning it proves nothing"
+        checked += 1
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            if "CARTESIA_VOICE_ID" not in line:
+                continue
+            # Everything after the variable name on that line is where a value
+            # would sit, in a Python default, a compose default or a shell one.
+            # The name itself is removed from the tail first, because it is long
+            # enough to match the shape and it appears twice on the lines that
+            # read the variable: `CARTESIA_VOICE_ID=text("CARTESIA_VOICE_ID")`
+            # and `CARTESIA_VOICE_ID: ${CARTESIA_VOICE_ID:-}`. Removing exactly
+            # that token is narrow; loosening the shape would not be.
+            tail = line.split("CARTESIA_VOICE_ID", 1)[1].replace("CARTESIA_VOICE_ID", "")
+            found = _VOICE_ID_SHAPED.search(tail)
+            assert found is None, (
+                f"{name}:{line_number} carries what looks like a voice id "
+                f"({found.group(0)!r}). This estate's voice is owned and never "
+                f"rented, and any id this repository can know is a stock one."
+            )
+    assert checked == len(VOICE_ID_SURFACES)
+
+    # And the two Python defaults, which the scan cannot see as values.
     assert PresenceSettings().CARTESIA_VOICE_ID == ""
     assert PresenceSettings.from_env({"ENVIRONMENT": "test"}).CARTESIA_VOICE_ID == ""

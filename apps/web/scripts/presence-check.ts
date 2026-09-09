@@ -476,6 +476,33 @@ check("the socket hands audio to a player and the stage supplies one", () => {
   );
 });
 
+check("barge-in stops the voice, not only the face", () => {
+  // A fresh critic measured this gap on 2026-09-09: `stop` was exported with a
+  // comment saying barge-in needed it, and nothing called it. Flushing the frame
+  // buffer froze the mouth at once while every source already scheduled played
+  // on, and the presence service sends audio unpaced, so the browser can be
+  // holding seconds of the reply. DEVON talked over the interruption until the
+  // next turn's first chunk happened to trigger the turn-change stop.
+  const stage = readFileSync(
+    new URL("../components/presence/PresenceStage.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.ok(stage.length > 2000, "PresenceStage.tsx did not read");
+  const handler = stage.slice(
+    stage.indexOf("const onBargeIn = useCallback("),
+    stage.indexOf("const sendInterrupt = useCallback("),
+  );
+  assert.ok(handler.length > 40, "the onBargeIn handler could not be located");
+  assert.ok(
+    /buffer\.flush\(\)/.test(handler),
+    "barge-in no longer flushes the face frames",
+  );
+  assert.ok(
+    /stopPlayback\(\)|playback\.stop\(\)/.test(handler),
+    "barge-in flushes the face and leaves the voice talking",
+  );
+});
+
 check("duration is read from the bytes at the presence rate", () => {
   assert.equal(PCM_RATE, 16000);
   // 100 ms at 16 kHz is 1600 samples, which is 3200 bytes.

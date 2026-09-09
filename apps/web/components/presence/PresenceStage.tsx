@@ -170,11 +170,20 @@ export function PresenceStage() {
   }, [livekitClockMs, override]);
 
   // Barge-in.
+  const stopPlayback = playback.stop;
   const onBargeIn = useCallback(() => {
     const flushed = buffer.flush();
+    // The voice, not only the face. A fresh critic measured this gap on
+    // 2026-09-09: flushing the frame buffer froze the mouth instantly while
+    // every AudioBufferSourceNode already scheduled played on, because the
+    // presence service sends audio unpaced and the browser can be holding
+    // seconds of the reply ahead. So barge-in stopped the face and let DEVON
+    // keep talking over the interruption, until the next turn's first chunk
+    // happened to trigger the turn-change stop inside play().
+    stopPlayback();
     setOverride({ atMs: performance.now() });
     return flushed;
-  }, [buffer]);
+  }, [buffer, stopPlayback]);
   const sendInterrupt = useCallback(
     (atMs: number) => {
       interrupt(atMs);
