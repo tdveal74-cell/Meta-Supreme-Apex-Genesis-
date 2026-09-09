@@ -348,7 +348,7 @@ check("ageLabel reads the clock rather than inventing a number", () => {
 /* test_devon_integrity.py.                                           */
 /*                                                                    */
 /* The thresholds are computed, not taste. Against the page background */
-/* #05080c, white at 45% opacity is 4.48:1 and fails WCAG AA for body  */
+/* #04070d, white at 45% opacity is 4.48:1 and fails WCAG AA for body  */
 /* text by a hair, white at 50% is 5.35:1, and #526979 is 3.49:1 while */
 /* #718898 is 5.42:1. So the ban is on the classes below AA, not on a  */
 /* preference about how dim is too dim.                               */
@@ -375,8 +375,8 @@ const CONTROL_TREE = [
 /** Class patterns that render below WCAG AA on this background. */
 const BELOW_AA: Array<{ pattern: RegExp; why: string }> = [
   { pattern: /text-\[(?:[0-9]|10)px\]/g, why: "under 11px is unreadable on a phone" },
-  { pattern: /text-white\/(?:[0-9]|[1-3][0-9]|4[0-5])\b/g, why: "white at 45% or less is below 4.5:1 on #05080c" },
-  { pattern: /text-\[#526979\]/g, why: "#526979 is 3.49:1 on #05080c" },
+  { pattern: /text-white\/(?:[0-9]|[1-3][0-9]|4[0-5])\b/g, why: "white at 45% or less is below 4.5:1 on the ACX void" },
+  { pattern: /text-\[#526979\]/g, why: "#526979 is 3.49:1 on the ACX void" },
 ];
 
 check("no text in the control tree renders below the AA floor", () => {

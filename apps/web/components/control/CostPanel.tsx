@@ -120,7 +120,7 @@ export function CostPanel() {
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
             <div
               className={`h-full rounded-full transition-all ${
-                nearCap ? "bg-amber-400" : "bg-emerald-400"
+                nearCap ? "bg-cyan-400" : "bg-cyan-400"
               }`}
               style={{ width: `${Math.round(used * 100)}%` }}
             />

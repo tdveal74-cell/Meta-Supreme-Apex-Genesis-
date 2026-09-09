@@ -43,16 +43,36 @@ export type ControlPlaneProps = {
 
 export function ControlPlane({ readiness, provenance, presence, knowledge }: ControlPlaneProps) {
   return (
-    <main className="min-h-screen bg-[#05080c] text-[#e8edf2]">
+    <main className="min-h-screen bg-[#04070d] text-[#e8edf2]">
       <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col px-4 py-4 sm:px-6 lg:px-8">
-        <header className="sticky top-0 z-30 -mx-4 mb-5 border-b border-white/10 bg-[#05080c]/90 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <header className="sticky top-0 z-30 -mx-4 mb-5 border-b border-white/10 bg-[#04070d]/90 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-amber-400/30 bg-amber-400/10">
-                <span className="text-xs font-bold tracking-[0.16em] text-amber-300">DV</span>
+              {/* The Merkaba. ACX's own mark, read from the reference folder in
+                  Drive: the star tetrahedron that opens Node 01 and closes the
+                  loop in Episode 5. It replaces a placeholder that read "DV". */}
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/30 bg-cyan-400/10">
+                <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden focusable="false">
+                  <path
+                    d="M12 3 L20.5 18 L3.5 18 Z"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.3"
+                    strokeLinejoin="round"
+                    className="text-cyan-300"
+                  />
+                  <path
+                    d="M12 21 L3.5 6 L20.5 6 Z"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.3"
+                    strokeLinejoin="round"
+                    className="text-cyan-400/70"
+                  />
+                </svg>
               </div>
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-amber-300/80">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cyan-300/80">
                   DEVON
                 </p>
                 <h1 className="text-base font-semibold tracking-tight text-white">

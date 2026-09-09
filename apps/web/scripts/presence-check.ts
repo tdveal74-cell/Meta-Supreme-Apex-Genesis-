@@ -16,6 +16,18 @@ import {
 } from "../lib/presence/protocol.ts";
 import { FrameBuffer, lerpWeights } from "../lib/presence/frame-buffer.ts";
 import { VoiceActivityDetector } from "../lib/presence/vad.ts";
+import {
+  CELL_WIDTH,
+  DEFAULT_GRID,
+  NARROWEST_FEATURE_RADIUS,
+  ambientWave,
+  applyField,
+  buildGridEdges,
+  buildGridPlane,
+  faceRelief,
+  vertexCount,
+  writeDepthColors,
+} from "../components/presence/face-mesh.ts";
 
 let checks = 0;
 function check(name: string, run: () => void): void {
@@ -240,6 +252,117 @@ check("VAD honours a custom threshold and windows", () => {
   assert.equal(vad.feed(0.0, 30), null);
   assert.equal(vad.feed(0.0, 80), "speech_end");
   assert.equal(vad.feed(Number.NaN, 90), null, "NaN reads as silence");
+});
+
+/* ------------------------------------------------------------------ */
+/* The wire field and the face that emerges from it.                   */
+/*                                                                    */
+/* Ruled by Tee 2026-09-09: the background is the wire mesh and the    */
+/* face indents into it when DEVON is active. face-mesh.ts is kept     */
+/* pure precisely so that claim can be executed rather than eyeballed. */
+/* Three sculpted attempts before this one were judged only by looking */
+/* and all three shipped a toy.                                        */
+/* ------------------------------------------------------------------ */
+
+check("the field is flat everywhere outside the head", () => {
+  assert.equal(faceRelief(2.5, 0), 0, "far to the side");
+  assert.equal(faceRelief(0, 1.9), 0, "far above");
+  assert.ok(faceRelief(0, 0) > 0.5, "and stands proud at the centre of the face");
+});
+
+check("an idle field is nearly flat and an active one carries the face", () => {
+  const positions = buildGridPlane(DEFAULT_GRID);
+  const face = new Float32Array(vertexCount(DEFAULT_GRID));
+
+  applyField(positions, 0.14, 0, {}, DEFAULT_GRID, face);
+  const idle = face.reduce((m, v) => Math.max(m, v), 0);
+
+  applyField(positions, 1, 0, {}, DEFAULT_GRID, face);
+  const active = face.reduce((m, v) => Math.max(m, v), 0);
+
+  assert.ok(active > idle * 4, `the face must emerge: idle ${idle}, active ${active}`);
+});
+
+check("the mouth opens the surface rather than only moving it", () => {
+  const shut = faceRelief(0, -0.56, { jawOpen: 0 });
+  const open = faceRelief(0, -0.56, { jawOpen: 1 });
+  assert.ok(open < shut, "an open jaw must cut deeper into the sheet");
+});
+
+check("a closed lid fills the eye socket back in", () => {
+  const openEye = faceRelief(-0.31, 0.24, { blinkLeft: 0 });
+  const shutEye = faceRelief(-0.31, 0.24, { blinkLeft: 1 });
+  assert.ok(shutEye > openEye, "the socket smooths over on a blink");
+});
+
+check("the ambient wave moves and is bounded", () => {
+  assert.notEqual(ambientWave(0.4, 0.2, 0), ambientWave(0.4, 0.2, 3), "it must be alive");
+  for (let t = 0; t < 12; t += 0.7) {
+    for (const x of [-3, -1, 0, 1, 3]) {
+      assert.ok(Math.abs(ambientWave(x, x / 2, t)) < 0.1, "the aether never swamps the face");
+    }
+  }
+});
+
+check("the background carries no face light while the wave moves it", () => {
+  // THE regression, and the reason this assertion is shaped this way. Colouring
+  // by total z let the ambient wave light the whole sheet, so the face washed
+  // out into the background. A ratio test does not catch it: the wave lifts the
+  // idle and the active peak together and the ratio survives. What catches it is
+  // a vertex that is FAR OUTSIDE the head being asked whether it carries any
+  // face light at all, at a time when the wave is definitely moving it.
+  const positions = buildGridPlane(DEFAULT_GRID);
+  const face = new Float32Array(vertexCount(DEFAULT_GRID));
+  applyField(positions, 1, 4.2, { jawOpen: 0.5 }, DEFAULT_GRID, face);
+
+  let checkedOutside = 0;
+  for (let v = 0; v < face.length; v += 1) {
+    const x = positions[v * 3];
+    const y = positions[v * 3 + 1];
+    if (Math.hypot(x / 0.86, (y - 0.02) / 1.12) < 1.25) continue; // inside or near the face
+    checkedOutside += 1;
+    assert.equal(
+      face[v],
+      0,
+      `vertex at (${x.toFixed(2)}, ${y.toFixed(2)}) is outside the head and must carry no face light, got ${face[v]}`,
+    );
+  }
+  assert.ok(checkedOutside > 200, `the lattice must extend well past the face, only checked ${checkedOutside}`);
+  // And the field really was moving at that moment, so this is not a vacuous pass.
+  assert.notEqual(positions[2], 0, "the ambient wave must be displacing the sheet");
+});
+
+check("depth maps to light monotonically", () => {
+  const face = new Float32Array(4);
+  face.set([0, 0.2, 0.45, 0.62]);
+  const colors = new Float32Array(12);
+  writeDepthColors(face, colors, [0, 0, 0], [1, 1, 1], 0.62);
+  assert.equal(colors[0], 0, "a flat vertex stays dark");
+  assert.ok(colors[9] > 0.95, "a vertex at full relief is fully lit");
+  assert.ok(colors[3] < colors[6] && colors[6] < colors[9], "and it rises monotonically");
+});
+
+check("every lattice index points at a real vertex", () => {
+  const indices = buildGridEdges(DEFAULT_GRID);
+  const total = vertexCount(DEFAULT_GRID);
+  assert.ok(indices.length > 0);
+  assert.equal(indices.length % 2, 0, "line segments come in pairs");
+  for (let i = 0; i < indices.length; i += 1) {
+    assert.ok(indices[i] < total, `index ${indices[i]} is outside ${total} vertices`);
+  }
+});
+
+check("the lattice can actually resolve the narrowest feature", () => {
+  // The bug this exists for: the nose was tightened to a radius smaller than a
+  // grid cell, so it fell between vertices and rendered as nothing, and the
+  // sharpened face came out blurrier than the blunt one it replaced. A feature
+  // cannot be sharper than the lattice that samples it.
+  const spans = (NARROWEST_FEATURE_RADIUS * 2) / CELL_WIDTH;
+  assert.ok(
+    spans >= 2.5,
+    `the narrowest feature spans ${spans.toFixed(2)} cells; under about 2.5 it disappears. ` +
+      "Tighten a feature and you must add columns in the same commit.",
+  );
 });
 
 console.log(`presence-check: ${checks} checks passed`);

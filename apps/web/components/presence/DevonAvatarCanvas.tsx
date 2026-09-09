@@ -22,8 +22,20 @@
  */
 
 import { Component, Suspense, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
-import { Canvas, useFrame, useLoader } from "@react-three/fiber";
+import { Canvas, useFrame, useLoader, useThree } from "@react-three/fiber";
 import * as THREE from "three";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import {
+  DEFAULT_GRID,
+  applyField,
+  applyHeadRelief,
+  buildHeadCloud,
+  buildGridEdges,
+  buildGridPlane,
+  buildMotes,
+  vertexCount,
+  writeDepthColors,
+} from "@/components/presence/face-mesh";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { lerpWeights, type FrameBuffer } from "@/lib/presence/frame-buffer";
 import { ARKIT_BLENDSHAPES, type PresenceState, type Weights } from "@/lib/presence/protocol";
@@ -57,7 +69,7 @@ export type AvatarDriver = {
   onTelemetry?: (telemetry: RenderTelemetry) => void;
 };
 
-const STAGE_BACKGROUND = "#050a0e";
+const STAGE_BACKGROUND = "#04070d";
 /** Lag tolerated before FrameBuffer.compress starts shedding detail. */
 const COMPRESS_WINDOW_MS = 250;
 /** After this long without a frame, the energy fallback drives the jaw. */
@@ -174,6 +186,12 @@ function Lights() {
   return (
     <>
       <ambientLight intensity={0.22} />
+      {/* Metal has nothing to reflect without an environment, and a
+          meshStandardMaterial at metalness 0.95 with no IBL renders very nearly
+          black. Measured on 2026-09-09: the first pass of this restyle shipped
+          chrome that looked like dark grey plastic for exactly that reason.
+          RoomEnvironment ships with three, so this costs no dependency. */}
+      <MetalEnvironment />
       <directionalLight position={[2.5, 3, 3]} intensity={2.2} color="#fff1dc" />
       <directionalLight position={[-3, 1, 2.5]} intensity={0.7} color="#9fd3c7" />
       <directionalLight position={[0, 3, -4]} intensity={1.8} color="#4fb3a5" />
@@ -181,22 +199,151 @@ function Lights() {
   );
 }
 
-const SKIN = "#5f7385";
-const SKIN_DARK = "#3d4d5c";
-const EYE = "#4fb3a5";
+/*
+ * The placeholder's material language, ruled by Tee 2026-09-09 after he said the
+ * old head looked like Mr Potato Head: chrome and gold plating over a dark core,
+ * with a lit optic, taken from the cyborg concept he supplied.
+ *
+ * It is deliberately a MACHINE and not a face. The rigged DEVON avatar is to be
+ * Tee's own likeness, which is an owned asset and its own arc. A placeholder that
+ * wore somebody else's face, generated or otherwise, would be squatting on the
+ * identity the real asset is meant to carry, and "identity owned, never rented"
+ * has no exception path. So this reads as the shell that likeness will later sit
+ * inside, rather than as a stand in for a person.
+ */
+/** Generates a PMREM environment once and hands it to the scene. */
+function MetalEnvironment() {
+  const { gl, scene } = useThree();
+  useEffect(() => {
+    const pmrem = new THREE.PMREMGenerator(gl);
+    const texture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    const previous = scene.environment;
+    scene.environment = texture;
+    return () => {
+      scene.environment = previous;
+      texture.dispose();
+      pmrem.dispose();
+    };
+  }, [gl, scene]);
+  return null;
+}
+
+/**
+ * A radial falloff sprite, generated once and shared.
+ *
+ * Additive blending alone does not make a glow: a capsule filled with a flat
+ * colour renders a flat capsule however it is blended, which on 2026-09-09 put
+ * two nested grey boxes around each eye. Light needs a gradient, so this is the
+ * gradient, drawn into a canvas and used as an alpha map on a plane.
+ */
+function useGlowTexture() {
+  return useMemo(() => {
+    const size = 128;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    gradient.addColorStop(0, "rgba(255,255,255,1)");
+    gradient.addColorStop(0.35, "rgba(255,255,255,0.38)");
+    gradient.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }, []);
+}
+
+/** Bars in the mouth meter. Odd, so there is a true centre bar. */
+const MOUTH_BARS = 11;
+/** The cool interface accent, matching the estate's teal. */
+const ACCENT = "#4fb3a5";
+/** The lattice at rest, and where the face stands closest to the viewer. */
+const DIM = [0.05, 0.13, 0.16] as const;
+const LIT = [0.75, 1.0, 0.95] as const;
+/* The head runs bluer and brighter than the field, which is what the reference
+   board shows: a blue scan floating in front of a dim data ground. */
+const HEAD_DIM = [0.06, 0.28, 0.58] as const;
+const HEAD_LIT = [0.78, 1.0, 1.0] as const;
+
+const PLATE = "#c6ced6";        // brushed chrome, the primary shell
+const PLATE_DARK = "#404b56";   // shadowed plate and recesses
+const GOLD = "#c9a227";         // machined accents, the concept's second metal
+const CORE = "#2a3038";         // the dark body under the plating
+const EYE = "#7fe9dc";          // the lit trace of the face itself
+const SKIN = PLATE;             // kept so any older reference still resolves
+const SKIN_DARK = PLATE_DARK;
 
 function PlaceholderHead({ driver, onRigInfo }: { driver: AvatarDriver; onRigInfo?: (info: RigInfo) => void }) {
   const tick = useAvatarWeights(driver);
   const posture = usePosture(driver.state);
   const root = useRef<THREE.Group>(null);
-  const jaw = useRef<THREE.Group>(null);
-  const lidLeft = useRef<THREE.Group>(null);
-  const lidRight = useRef<THREE.Group>(null);
-  const lips = useRef<THREE.Mesh>(null);
-  const browLeft = useRef<THREE.Mesh>(null);
-  const browRight = useRef<THREE.Mesh>(null);
-  const eyeLeft = useRef<THREE.MeshStandardMaterial>(null);
-  const eyeRight = useRef<THREE.MeshStandardMaterial>(null);
+  const glowTexture = useGlowTexture();
+
+  const lineMaterial = useRef<THREE.LineBasicMaterial>(null);
+  const pointMaterial = useRef<THREE.PointsMaterial>(null);
+  const haloMaterial = useRef<THREE.MeshBasicMaterial>(null);
+  const emerged = useRef(0);
+  const motes = useRef<THREE.Points>(null);
+  const headMaterial = useRef<THREE.PointsMaterial>(null);
+  const headGroup = useRef<THREE.Group>(null);
+
+  // The flat lattice, built once as a real BufferGeometry so the lines and the
+  // vertices share one buffer: a node can then never disagree with the ends of
+  // the lines that meet it.
+  const {
+    positions,
+    colors,
+    faceOnly,
+    geom,
+    moteGeom,
+    headPos,
+    headTint,
+    headFace,
+    headGeom,
+  } = useMemo(() => {
+    const flat = buildGridPlane(DEFAULT_GRID);
+    const tint = new Float32Array(flat.length);
+    const face = new Float32Array(vertexCount(DEFAULT_GRID));
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(flat, 3));
+    g.setAttribute("color", new THREE.BufferAttribute(tint, 3));
+    g.setIndex(new THREE.BufferAttribute(buildGridEdges(DEFAULT_GRID), 1));
+
+    // The head: a dense cloud in the shape of a face, in front of the field.
+    const HEAD_POINTS = 7000;
+    const headPos = buildHeadCloud(HEAD_POINTS);
+    const headTint = new Float32Array(HEAD_POINTS * 3);
+    const headFace = new Float32Array(HEAD_POINTS);
+    const head = new THREE.BufferGeometry();
+    head.setAttribute("position", new THREE.BufferAttribute(headPos, 3));
+    head.setAttribute("color", new THREE.BufferAttribute(headTint, 3));
+
+    const motes = new THREE.BufferGeometry();
+    motes.setAttribute("position", new THREE.BufferAttribute(buildMotes(220, DEFAULT_GRID), 3));
+    return {
+      positions: flat,
+      colors: tint,
+      faceOnly: face,
+      geom: g,
+      moteGeom: motes,
+      headPos,
+      headTint,
+      headFace,
+      headGeom: head,
+    };
+  }, []);
+
+  useEffect(
+    () => () => {
+      geom.dispose();
+      moteGeom.dispose();
+      headGeom.dispose();
+    },
+    [geom, moteGeom, headGeom],
+  );
 
   useEffect(() => {
     onRigInfo?.({ source: "placeholder", meshes: 0, matched: 0 });
@@ -207,98 +354,157 @@ function PlaceholderHead({ driver, onRigInfo }: { driver: AvatarDriver; onRigInf
     const { smoothed: w } = tick(elapsed, delta);
     const { glow } = posture(root.current, elapsed, delta);
 
-    if (jaw.current) jaw.current.rotation.x = (w.jawOpen ?? 0) * 0.42;
-    if (lidLeft.current) lidLeft.current.rotation.x = (w.eyeBlinkLeft ?? 0) * (Math.PI / 2);
-    if (lidRight.current) lidRight.current.rotation.x = (w.eyeBlinkRight ?? 0) * (Math.PI / 2);
-    if (lips.current) {
-      const funnel = w.mouthFunnel ?? 0;
-      const pucker = w.mouthPucker ?? 0;
-      const open = w.jawOpen ?? 0;
-      lips.current.scale.set(
-        1 - 0.35 * pucker - 0.2 * funnel,
-        1 + 0.5 * funnel + 0.3 * pucker + 0.7 * open,
-        1 + 0.5 * funnel + 0.6 * pucker,
-      );
+    // How far the face has come out of the sheet. Idle leaves a breath of
+    // relief so the field is not dead flat; speaking pushes it fully out. The
+    // approach is eased rather than snapped, because a face that pops is a jump
+    // cut and a face that rises is presence.
+    const target = 0.14 + 0.86 * glow;
+    emerged.current += (target - emerged.current) * Math.min(1, delta * 3.2);
+
+    applyField(
+      positions,
+      emerged.current,
+      elapsed,
+      {
+        jawOpen: w.jawOpen ?? 0,
+        mouthFunnel: w.mouthFunnel ?? 0,
+        mouthPucker: w.mouthPucker ?? 0,
+        blinkLeft: w.eyeBlinkLeft ?? 0,
+        blinkRight: w.eyeBlinkRight ?? 0,
+        browInnerUp: w.browInnerUp ?? 0,
+      },
+      DEFAULT_GRID,
+      faceOnly,
+    );
+    // Depth written as light. The lattice is seen nearly face on, so relief
+    // alone is close to invisible: without this the field renders as graph
+    // paper, which is what it did before the aether landed.
+    writeDepthColors(faceOnly, colors, DIM, LIT, 0.62);
+
+    // The head cloud, on the same field so it can never disagree with the
+    // sheet it forms out of.
+    applyHeadRelief(
+      headPos,
+      emerged.current,
+      elapsed,
+      {
+        jawOpen: w.jawOpen ?? 0,
+        mouthFunnel: w.mouthFunnel ?? 0,
+        mouthPucker: w.mouthPucker ?? 0,
+        blinkLeft: w.eyeBlinkLeft ?? 0,
+        blinkRight: w.eyeBlinkRight ?? 0,
+        browInnerUp: w.browInnerUp ?? 0,
+      },
+      headFace,
+    );
+    writeDepthColors(headFace, headTint, HEAD_DIM, HEAD_LIT, 0.5);
+    headGeom.attributes.position.needsUpdate = true;
+    headGeom.attributes.color.needsUpdate = true;
+    if (headMaterial.current) headMaterial.current.opacity = 0.62 + 0.38 * emerged.current;
+
+    // Turn the head off axis. A depth map carries no information along the
+    // view axis, so a face rendered dead on is a silhouette however it is
+    // coloured: three passes of recolouring it proved that before the cause
+    // was named. A few degrees of yaw is what makes the nose, brow and cheek
+    // read as form rather than as brightness.
+    if (headGroup.current) {
+      headGroup.current.rotation.y = 0.34 + Math.sin(elapsed * 0.21) * 0.1;
+      headGroup.current.rotation.x = -0.05 + Math.sin(elapsed * 0.16) * 0.03;
     }
-    const innerUp = w.browInnerUp ?? 0;
-    if (browLeft.current) {
-      browLeft.current.position.y = 0.5 + innerUp * 0.1 - (w.browDownLeft ?? 0) * 0.06;
-      browLeft.current.rotation.z = 0.12 + innerUp * 0.25;
+    geom.attributes.position.needsUpdate = true;
+    geom.attributes.color.needsUpdate = true;
+    if (motes.current) {
+      motes.current.rotation.z = elapsed * 0.012;
+      motes.current.position.y = Math.sin(elapsed * 0.18) * 0.05;
     }
-    if (browRight.current) {
-      browRight.current.position.y = 0.5 + innerUp * 0.1 - (w.browDownRight ?? 0) * 0.06;
-      browRight.current.rotation.z = -0.12 - innerUp * 0.25;
-    }
-    if (eyeLeft.current) eyeLeft.current.emissiveIntensity = glow;
-    if (eyeRight.current) eyeRight.current.emissiveIntensity = glow;
+
+    if (lineMaterial.current) lineMaterial.current.opacity = 0.055 + 0.075 * emerged.current;
+    if (pointMaterial.current) pointMaterial.current.opacity = 0.03 + 0.09 * emerged.current;
+    if (haloMaterial.current) haloMaterial.current.opacity = 0.04 + 0.12 * glow;
   });
 
   return (
-    <group ref={root} position={[0, -0.05, 0]}>
-      {/* Cranium */}
-      <mesh position={[0, 0.15, 0]} scale={[1, 1.12, 1]}>
-        <sphereGeometry args={[0.72, 48, 32]} />
-        <meshStandardMaterial color={SKIN} roughness={0.55} metalness={0.25} />
-      </mesh>
-
-      {/* Lower jaw, hinged near the ear line */}
-      <group ref={jaw} position={[0, -0.05, -0.15]}>
-        <mesh position={[0, -0.42, 0.28]} scale={[0.95, 0.55, 0.9]}>
-          <sphereGeometry args={[0.5, 32, 16]} />
-          <meshStandardMaterial color={SKIN} roughness={0.55} metalness={0.25} />
+    <group ref={root} position={[0, 0.02, 0]} scale={0.62}>
+      {/* The field behind everything, so the mesh sits in space. */}
+      {glowTexture ? (
+        <mesh position={[0, -0.02, -0.7]} scale={[2.6, 2.9, 1]}>
+          <planeGeometry args={[1, 1]} />
+          <meshBasicMaterial
+            ref={haloMaterial}
+            map={glowTexture}
+            color={ACCENT}
+            transparent
+            opacity={0.1}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+          />
         </mesh>
+      ) : null}
+
+      {/* The lattice. */}
+      <lineSegments geometry={geom}>
+        <lineBasicMaterial
+          ref={lineMaterial}
+          vertexColors
+          transparent
+          opacity={0.5}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </lineSegments>
+
+      {/* Motes: the aether itself, drifting in front of the lattice so the
+          field has volume rather than being a single sheet. */}
+      {glowTexture ? (
+        <points ref={motes} geometry={moteGeom}>
+          <pointsMaterial
+            color={ACCENT}
+            size={0.07}
+            sizeAttenuation
+            map={glowTexture}
+            transparent
+            opacity={0.3}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+          />
+        </points>
+      ) : null}
+
+      {/* The head. Dense, glowing, and in front of the field it forms from. */}
+      <group ref={headGroup} position={[0, 0, 0.12]}>
+      <points geometry={headGeom}>
+        <pointsMaterial
+          ref={headMaterial}
+          vertexColors
+          size={0.027}
+          sizeAttenuation
+          map={glowTexture ?? undefined}
+          transparent
+          opacity={0.85}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </points>
       </group>
 
-      {/* Eyes and their upper lids */}
-      {[-1, 1].map((side) => (
-        <group key={side} position={[side * 0.27, 0.28, 0.62]}>
-          <mesh>
-            <sphereGeometry args={[0.1, 24, 16]} />
-            <meshStandardMaterial
-              ref={side < 0 ? eyeLeft : eyeRight}
-              color="#0b1418"
-              emissive={EYE}
-              emissiveIntensity={0.7}
-              roughness={0.2}
-            />
-          </mesh>
-          <group ref={side < 0 ? lidLeft : lidRight}>
-            <mesh>
-              <sphereGeometry args={[0.118, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
-              <meshStandardMaterial color={SKIN_DARK} roughness={0.6} side={THREE.DoubleSide} />
-            </mesh>
-          </group>
-        </group>
-      ))}
-
-      {/* Brows */}
-      <mesh ref={browLeft} position={[-0.27, 0.5, 0.6]} rotation={[0, 0, 0.12]}>
-        <boxGeometry args={[0.22, 0.035, 0.06]} />
-        <meshStandardMaterial color="#1f2b35" roughness={0.8} />
-      </mesh>
-      <mesh ref={browRight} position={[0.27, 0.5, 0.6]} rotation={[0, 0, -0.12]}>
-        <boxGeometry args={[0.22, 0.035, 0.06]} />
-        <meshStandardMaterial color="#1f2b35" roughness={0.8} />
-      </mesh>
-
-      {/* Lips */}
-      <mesh ref={lips} position={[0, -0.12, 0.68]}>
-        <torusGeometry args={[0.17, 0.045, 12, 32]} />
-        <meshStandardMaterial color="#7a5c62" roughness={0.5} />
-      </mesh>
-
-      {/* Neck and shoulders, so the lean reads as posture */}
-      <mesh position={[0, -0.85, -0.05]}>
-        <cylinderGeometry args={[0.28, 0.32, 0.5, 24]} />
-        <meshStandardMaterial color={SKIN_DARK} roughness={0.7} />
-      </mesh>
-      <mesh position={[0, -1.25, -0.1]}>
-        <boxGeometry args={[1.9, 0.35, 0.7]} />
-        <meshStandardMaterial color="#1a2731" roughness={0.9} />
-      </mesh>
+      {/* Its vertices, brightening as the face emerges. */}
+      <points geometry={geom}>
+        <pointsMaterial
+          ref={pointMaterial}
+          vertexColors
+          size={0.03}
+          sizeAttenuation
+          map={glowTexture ?? undefined}
+          transparent
+          opacity={0.5}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </points>
     </group>
   );
 }
+
 
 type MorphMesh = THREE.Mesh & {
   morphTargetDictionary: { [key: string]: number };
