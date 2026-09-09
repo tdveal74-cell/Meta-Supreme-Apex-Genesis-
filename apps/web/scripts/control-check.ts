@@ -21,7 +21,7 @@
  */
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -519,12 +519,84 @@ function callsTo(root: ts.Node, name: string): ts.CallExpression[] {
   ) as ts.CallExpression[];
 }
 
-/** The initialiser of `const <name> = ...`, or null. */
-function declarationsNamed(root: ts.Node, name: string): ts.VariableDeclaration[] {
-  return collect(
-    root,
-    (n) => ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === name,
-  ) as ts.VariableDeclaration[];
+/*
+ * `const <name> = ...` or `function <name>() {}`. Both forms, because a handler
+ * written as a function declaration is a refactor somebody will make and the
+ * first version of this helper read only the const form. It failed closed, which
+ * is right, and then explained itself as "declared 0 times; a second declaration
+ * means this check may be reading the wrong one", which is a sentence about the
+ * opposite problem. A guard that fails for a reason it cannot name costs the
+ * next reader an hour.
+ */
+function declarationsNamed(root: ts.Node, name: string): ts.Node[] {
+  return collect(root, (n) => {
+    if (ts.isVariableDeclaration(n)) return ts.isIdentifier(n.name) && n.name.text === name;
+    if (ts.isFunctionDeclaration(n)) return Boolean(n.name && n.name.text === name);
+    return false;
+  });
+}
+
+/*
+ * REACHABILITY, NOT PRESENCE.
+ *
+ * The fourth critic (2026-09-09) got past the AST rewrite three ways without
+ * touching a single token it asserts on, each one shipping the capture lane
+ * dead at 26 checks passed and tsc exit 0:
+ *
+ *   A. the propose call wrapped in a condition that is never satisfied,
+ *      `if (!utterance)`, which send() already guarantees is false
+ *   B. the mode list filtered before it renders, so the keep button that the
+ *      guard reads out of the array literal never reaches the page
+ *   C. real dispatch moved to a switch, with the `=== "keep"` the guard reads
+ *      left behind in a useCallback nothing calls
+ *
+ * A and B are the arc's ORIGINAL defect restated: a capability that exists and
+ * that no person can reach. Proving a node exists in a subtree proves nothing
+ * about whether control ever arrives there. The three helpers below are what
+ * the guard was missing.
+ */
+
+/** Conditional ancestors between `node` and `stop`, exclusive of `stop`. */
+function conditionalAncestors(node: ts.Node, stop: ts.Node): ts.Node[] {
+  const gates: ts.Node[] = [];
+  let at: ts.Node | undefined = node.parent;
+  while (at && at !== stop) {
+    if (
+      ts.isIfStatement(at) ||
+      ts.isConditionalExpression(at) ||
+      ts.isSwitchStatement(at) ||
+      ts.isCaseClause(at)
+    ) {
+      gates.push(at);
+    }
+    at = at.parent;
+  }
+  return gates;
+}
+
+/** Strips `as const`/parentheses upward so the real method call is visible. */
+function throughWrappers(node: ts.Node): ts.Node {
+  let at = node;
+  while (
+    at.parent &&
+    (ts.isAsExpression(at.parent) ||
+      ts.isParenthesizedExpression(at.parent) ||
+      ts.isSatisfiesExpression(at.parent))
+  ) {
+    at = at.parent;
+  }
+  return at;
+}
+
+/** The name of the `const <name> = ...` that encloses `node`, or null. */
+function enclosingDeclarationName(node: ts.Node): string | null {
+  let at: ts.Node | undefined = node.parent;
+  while (at) {
+    if (ts.isVariableDeclaration(at) && ts.isIdentifier(at.name)) return at.name.text;
+    if (ts.isFunctionDeclaration(at) && at.name) return at.name.text;
+    at = at.parent;
+  }
+  return null;
 }
 
 check("DEVON chat can still reach the capture endpoint", () => {
@@ -533,7 +605,17 @@ check("DEVON chat can still reach the capture endpoint", () => {
   // 1. Find the handler the keep mode actually dispatches to, from the AST
   //    rather than by assuming a name. A guard checking a name nothing
   //    dispatches to is checking nothing.
+  //
+  //    Counted over BOTH dispatch forms. The fourth critic moved real dispatch
+  //    into `switch (mode) { case "keep": ... }` and left the `=== "keep"` this
+  //    check reads in a useCallback nothing calls, so keep answered
+  //    conversationally and captured nothing at 26 checks passed. A guard that
+  //    knows only one of the two ways to branch on a string is a guard that
+  //    tells you which way to write the bug.
   const keepBranches = collect(file, (n) => {
+    if (ts.isCaseClause(n)) {
+      return ts.isStringLiteral(n.expression) && n.expression.text === "keep";
+    }
     if (!ts.isBinaryExpression(n)) return false;
     if (n.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken) return false;
     return ts.isStringLiteral(n.right) && n.right.text === "keep";
@@ -541,7 +623,20 @@ check("DEVON chat can still reach the capture endpoint", () => {
   assert.equal(
     keepBranches.length,
     1,
-    "expected exactly one `=== \"keep\"` comparison; more than one means this check cannot tell which branch dispatches",
+    `expected exactly one keep dispatch site, counting \`=== "keep"\` and \`case "keep":\` alike; found ${keepBranches.length}, so a live branch and a dead one could both exist and this check cannot tell which one runs`,
+  );
+
+  // 1b. And whatever encloses that dispatch has to be called. A `case "keep"`
+  //     inside a handler nothing invokes is unreachable however well formed it
+  //     is, which is bypass C stated exactly.
+  const dispatchOwner = enclosingDeclarationName(keepBranches[0]);
+  assert.ok(
+    dispatchOwner,
+    "the keep dispatch is not inside a named declaration, so this check cannot prove anything reaches it",
+  );
+  assert.ok(
+    callsTo(file, dispatchOwner as string).length > 0,
+    `the keep dispatch lives in ${dispatchOwner}, and nothing in this file calls ${dispatchOwner}, so no keystroke can reach it`,
   );
 
   // The enclosing if/else block, and the handler awaited inside it.
@@ -562,7 +657,9 @@ check("DEVON chat can still reach the capture endpoint", () => {
   assert.equal(
     decls.length,
     1,
-    `${handlerName} is declared ${decls.length} times; a second declaration means this check may be reading the wrong one`,
+    decls.length === 0
+      ? `the keep branch dispatches to ${handlerName} and no \`const ${handlerName} =\` or \`function ${handlerName}\` declaration exists in this file. A destructured or imported handler is out of this check's reach: declare it here`
+      : `${handlerName} is declared ${decls.length} times, and a second declaration means this check cannot tell which one the keep branch reaches`,
   );
   const handler = decls[0];
 
@@ -582,15 +679,27 @@ check("DEVON chat can still reach the capture endpoint", () => {
   );
   const call = proposeCalls[0];
 
-  // 4. Nothing may return before that call. Walked as statements in the
-  //    handler's own body, so a decoy call elsewhere cannot shift a text window.
+  // 4. Nothing may return before that call, and nothing may gate it. The
+  //    return walk closes an early exit above the fetch; the gate walk closes
+  //    the same defect written as a condition, which is what the fourth critic
+  //    used: `if (!utterance)` around the whole body, dead for every real input
+  //    because send() already refuses empty text. Both are the capture lane
+  //    shipping dead with every other assertion here still green.
+  //
+  //    A try/catch is not a gate and passes, which is the refactor that matters.
   const returnsBefore = collect(handler, (n) => ts.isReturnStatement(n)).filter(
     (n) => n.getStart() < call.getStart(),
   );
   assert.equal(
     returnsBefore.length,
     0,
-    `${handlerName} returns before it reaches authedFetch("/soul/propose"), so for some input it files nothing while every other assertion here still passes`,
+    `${handlerName} can return before it reaches authedFetch("/soul/propose"), so for some input it files nothing while every other assertion here still passes. A plain \`return\` in a nested callback trips this too: hoist it or restructure, this check reads statements and not control flow`,
+  );
+  const gates = conditionalAncestors(call, handler);
+  assert.equal(
+    gates.length,
+    0,
+    `authedFetch("/soul/propose") sits inside ${gates.length} condition(s) in ${handlerName}, so whether anything is ever captured depends on a test this check cannot evaluate. The call has to be on the handler's unconditional path`,
   );
 
   // 5. The request has to be a POST that leaves the Area unset, or the
@@ -635,6 +744,47 @@ check("DEVON chat can still reach the capture endpoint", () => {
     callsTo(file, "setMode").length > 0,
     "nothing calls setMode, so every mode button is inert and keep can never be selected",
   );
+
+  // 6b. And every element of that list has to reach a button. The fourth critic
+  //     put `.filter((option) => option !== "keep")` between the literal and the
+  //     map: the array still contained keep, this check still read it out of the
+  //     literal, and the button was gone from the page. Reading a literal is not
+  //     reading a rendering.
+  //
+  //     Traced through a binding as well as inline, because hoisting the list to
+  //     `const MODES = [...]` and mapping that is a refactor somebody will make.
+  //     The first version of this clause failed on exactly that and was caught
+  //     by its own control, which is the only reason it is not shipping.
+  const methodsOn = (subject: ts.Node): string[] =>
+    collect(file, (n) => {
+      if (!ts.isPropertyAccessExpression(n)) return false;
+      if (subject === n.expression) return true;
+      // `const MODES = [...]` then `MODES.map(...)` elsewhere in the file.
+      return (
+        ts.isIdentifier(subject) &&
+        ts.isIdentifier(n.expression) &&
+        n.expression.text === (subject as ts.Identifier).text
+      );
+    }).map((n) => (n as ts.PropertyAccessExpression).name.text);
+
+  const rendered = throughWrappers(modeLists[0]);
+  const bound =
+    rendered.parent && ts.isVariableDeclaration(rendered.parent) && ts.isIdentifier(rendered.parent.name)
+      ? rendered.parent.name
+      : rendered;
+  const methods = methodsOn(bound);
+  const dropping = methods.filter((m) =>
+    ["filter", "slice", "reduce", "flatMap", "splice", "find", "pop", "shift"].includes(m),
+  );
+  assert.deepEqual(
+    dropping,
+    [],
+    `the mode list has .${dropping[0]}() applied to it, which can drop an element, so the literal this check reads is not what a person sees. That is how the keep button disappeared while every assertion here still passed`,
+  );
+  assert.ok(
+    methods.includes("map"),
+    "nothing maps the mode list into buttons, so this check cannot prove the keep button reaches the page",
+  );
 });
 
 /* the voice is owned, on every surface */
@@ -676,16 +826,72 @@ check("DEVON chat can still reach the capture endpoint", () => {
  * deploy/soul/console.html, so guarding one guards both. The SUPERSEDED_ copies
  * are archives and are not served.
  */
-const VOICE_SURFACES = [
-  "components/devon/DevonChat.tsx",
-  "components/presence/PresenceStage.tsx",
-  "components/presence/useAudioPlayback.ts",
-  "../../deploy/soul/console.html",
-] as const;
+/*
+ * A FIXED LIST IS A LIST THAT THE NEXT FILE ESCAPES.
+ *
+ * The fourth critic (2026-09-09) did not attack the ban. It added
+ * components/devon/DevonVoiceFallback.tsx with window.speechSynthesis,
+ * synth.getVoices() and voices[0], the exact unfloored implementation this arc
+ * was opened to remove, and the check reported ok 25 at 26 checks passed.
+ *
+ * Four hardcoded paths guard four files. They cannot guard a fifth that does
+ * not exist yet, and the rule is about the estate rather than about those four.
+ * test_devon_integrity.py:24-40 already had the answer: glob, then assert a
+ * FLOOR on what the glob found, so a glob that silently matches nothing fails
+ * loudly instead of passing vacuously.
+ */
+function walk(dir: string, keep: (name: string) => boolean): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "node_modules" || entry.name === ".next") continue;
+      out.push(...walk(full, keep));
+    } else if (keep(entry.name)) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+function voiceSurfaces(): string[] {
+  // Named rather than globbed one level up, so a new top level directory is a
+  // deliberate addition here. walk() throws ENOENT on a missing one, which is
+  // the loud failure a silent skip would not be.
+  const web = ["components", "app", "lib"].flatMap((sub) =>
+    walk(join(HERE, "..", sub), (n) => n.endsWith(".ts") || n.endsWith(".tsx")),
+  );
+  assert.ok(
+    web.length >= 50,
+    `the web glob found ${web.length} source files and the estate has more than fifty, so this glob is wrong and the ban would pass over an unscanned tree`,
+  );
+
+  // The served HTML consoles. SUPERSEDED_ copies are archives that app.main's
+  // version picker excludes, so they keep their history; everything else under
+  // these two roots is servable and is held to the rule.
+  const html = [
+    join(HERE, "..", "..", "..", "deploy", "soul"),
+    join(HERE, "..", "..", "..", "docs", "devon", "assets"),
+  ].flatMap((dir) =>
+    walk(dir, (n) => n.endsWith(".html") && !n.startsWith("SUPERSEDED_")),
+  );
+  assert.ok(
+    html.length >= 3,
+    `the served-console glob found ${html.length} files and there are at least three, so this glob is wrong`,
+  );
+  for (const required of ["deploy/soul/console.html", "SYS_OPS_devon-console_v10_2026-09-01.html"]) {
+    assert.ok(
+      html.some((f) => f.replace(/\\/g, "/").endsWith(required)),
+      `${required} is a served DEVON surface and the glob did not reach it`,
+    );
+  }
+  return [...web, ...html];
+}
 
 check("no surface speaks as DEVON in a rented browser voice", () => {
-  for (const relative of VOICE_SURFACES) {
-    const source = readFileSync(join(HERE, "..", relative), "utf8");
+  for (const absolute of voiceSurfaces()) {
+    const relative = absolute.slice(absolute.indexOf("Meta-Supreme-Apex-Genesis-") + 27);
+    const source = readFileSync(absolute, "utf8");
     const code = source
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .split("\n")
@@ -704,22 +910,40 @@ check("no surface speaks as DEVON in a rented browser voice", () => {
   }
 });
 
+/*
+ * WHY THIS ONE PARSES TOO.
+ *
+ * It used to slice the file between indexOf("const speak = useCallback(") and
+ * the next indexOf("useEffect("). That is bypass shape 4 from the commit one
+ * check above, which the capture guard was rewritten to close and this one was
+ * left carrying: the fourth critic added an unmounted VoicePreview component
+ * earlier in the file with its own `const speak = useCallback(`, a
+ * `${PRESENCE_BASE}/tts` fetch and an Authorization header, then a `useEffect(`
+ * to close the slice. indexOf found the decoy, every assertion here passed at
+ * ok 26, and the real speak in DevonChat was a no-op. DEVON was silent on
+ * /devon with the whole gate green.
+ *
+ * Fixing one check and leaving its neighbour on the beaten mechanism is how a
+ * guard file ends up with a soft edge nobody remembers. Same treatment: resolve
+ * the declaration through the parser, require it unique so a decoy fails rather
+ * than shadows, and require something to call it so it cannot be a correct
+ * handler nothing reaches.
+ */
 check("DEVON chat speaks through the presence service's clone", () => {
-  const source = readFileSync(
-    join(HERE, "..", "components/devon/DevonChat.tsx"),
-    "utf8",
+  const file = parse("components/devon/DevonChat.tsx");
+  const decls = declarationsNamed(file, "speak");
+  assert.equal(
+    decls.length,
+    1,
+    decls.length === 0
+      ? "DevonChat has no `const speak =` or `function speak` declaration, so this check cannot find the handler. A destructured or imported one is out of its reach: declare it here"
+      : `DevonChat declares speak ${decls.length} times, and a second declaration is a decoy this check could read while the real handler stays silent`,
   );
-  const code = source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split("\n")
-    .filter((line) => !line.trim().startsWith("//"))
-    .join("\n");
-
-  const from = code.indexOf("const speak = useCallback(");
-  assert.ok(from >= 0, "DevonChat no longer declares a speak handler");
-  const to = code.indexOf("useEffect(", from);
-  assert.ok(to > from, "the speak handler's slice bound moved");
-  const handler = code.slice(from, to);
+  assert.ok(
+    callsTo(file, "speak").length > 0,
+    "nothing calls speak, so the handler is correct and unreachable and DEVON says nothing",
+  );
+  const handler = decls[0].getText();
 
   assert.ok(
     /\$\{PRESENCE_BASE\}\/tts/.test(handler),

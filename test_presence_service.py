@@ -108,6 +108,46 @@ def test_health_reports_wiring_and_breaker():
     assert body["breaker"]["state"] == "closed"
     assert body["breaker"]["ttft_threshold_ms"] == 20.0
 
+    # cors_origins was added on 2026-09-09 because a localhost only list makes
+    # the chat's POST /tts fail silently: the browser discards a 200 and DEVON
+    # goes quiet with no error anywhere. A critic then found nothing asserted it,
+    # so the one readback that diagnoses that failure could vanish unnoticed.
+    assert body["cors_origins"] == [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+    # The readback is only useful if it is the real list rather than a literal.
+    assert body["cors_origins"] == list(
+        PresenceSettings.from_env({}).PRESENCE_CORS_ORIGINS
+    )
+
+
+def test_health_says_only_these_things_and_no_more():
+    """
+    /health is unauthenticated, so its key set is a disclosure surface and not
+    only a convenience. Pinned exactly, the way test_deploy_soul.py:224 pins the
+    soul host's, so a field added here is a deliberate decision rather than
+    something that arrives with a debugging session and stays. The values are the
+    estate's public web origins and its provider names; a preview origin or an
+    internal hostname joining that list is the case that would matter.
+    """
+    body = fast_app().get("/health").json()
+    assert set(body) == {
+        "status",
+        "service",
+        "inference",
+        "fallback",
+        "speech",
+        "cors_origins",
+        "livekit_configured",
+        "audio_over_websocket",
+        "breaker",
+    }
+    # And nothing that reads like a credential, at any nesting depth.
+    flat = repr(body).lower()
+    for mark in ("key", "secret", "token", "password", "authorization"):
+        assert mark not in flat, f"/health leaks something named {mark}"
+
 
 def test_settings_refuse_the_public_default_and_an_empty_key_when_deployed():
     with pytest.raises(PresenceConfigError, match="public default"):

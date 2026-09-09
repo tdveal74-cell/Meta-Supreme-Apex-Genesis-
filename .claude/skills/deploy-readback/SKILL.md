@@ -1,6 +1,6 @@
 ---
 name: deploy-readback
-description: Verify what this estate's three production surfaces are actually serving, and diagnose Vercel deploy-quota exhaustion. Load before claiming anything is deployed or live, when asked whether production is current, when a Vercel deploy is blocked or skipped, when promoting a deployment to production, or when a status doc claims a deployment state. Compiled from the 2026-08-26 session where green previews were reported as production while all three surfaces sat stale.
+description: Verify what this estate's four production surfaces are actually serving (Railway api, Railway presence, and two Vercel projects), and diagnose Vercel deploy-quota exhaustion. Load before claiming anything is deployed or live, when asked whether production is current, when a Vercel deploy is blocked or skipped, when promoting a deployment to production, or when a status doc claims a deployment state. Compiled from the 2026-08-26 session where green previews were reported as production while all three surfaces sat stale.
 ---
 
 # Deployment read-back
@@ -17,13 +17,35 @@ deployment id, its state, and its commit. "The workflow passed" and "the PR
 merged" are not deployment evidence. If the evidence cannot be produced, the
 honest answer is "unverified", not an optimistic one.
 
-## The three surfaces
+## The four surfaces
+
+This section said **three** until 2026-09-09, when a critic counted from the
+estate and found a fourth. The presence service has been on its own Railway host
+since PR #188, `apps/web/lib/api-base.ts:26-29` hardcodes its production URL as
+the fallback, and DEVON's voice reaches Tee through it and through nothing else.
+It was simply never written down here, which is the count-from-the-lane miss
+CLAUDE.md's first law describes, in the file whose whole job is knowing what
+production serves.
 
 | Surface | What it serves | How to read it |
 |---|---|---|
 | Railway `api` | The FastAPI app, the ledger, migrations | `list-deployments`, then `get-logs` on the deployment id |
+| Railway `presence` | DEVON's voice and live inference, root `apps/presence`: `POST /tts`, the WebSocket lane, LiveKit tokens | `list-deployments`, then `GET /health` on the public host |
 | Vercel `meta-supreme-apex-genesis-web` | The web app and Command Center, root `apps/web` (recorded as `meta-supreme-web` until 2026-09-02; that project no longer exists) | `list_deployments` for the project |
 | Vercel `devon-soul` | The phone lane, root `deploy/soul` | `list_deployments` for the project |
+
+**The presence service reads itself back, which the other three cannot.**
+`GET /health` is unauthenticated and returns the nine keys pinned by
+`test_presence_service.py::test_health_says_only_these_things_and_no_more`:
+`inference` and `fallback` name the live providers, `speech` says whether the
+Cartesia clone or the mock is wired, `livekit_configured` is the deployed
+variable set rather than the repo default, `cors_origins` is the list whose being
+wrong makes the chat's `POST /tts` fail silently with a discarded 200, and
+`breaker` carries the live circuit state. So for this one surface the honest
+answer to "what is production serving" comes from the service itself rather than
+from a deployment record, and a claim about its wiring that was not read off
+`/health` is unverified. The key set is pinned deliberately: a field added there
+is published to anybody, so it is a decision and not a debugging leftover.
 
 **Count the Vercel projects before trusting any of this.** On 2026-08-27 a
 diagnosis assumed two and there were four, all deploying from this one
@@ -373,6 +395,7 @@ optimistic sentence.
 
 ```
 Railway api      LIVE   deployment <id> SUCCESS <time> on <commit>, migration <rev> applied
+Railway presence LIVE   deployment <id> SUCCESS <time>; /health speech=cartesia livekit_configured=false breaker=closed
 meta-supreme-apex-genesis-web LIVE   <dpl_id> READY target "production" on <commit>
 devon-soul       STALE  production still on <commit>; current main is <commit>
 ```

@@ -10,6 +10,15 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - ".github/workflows/web-ci.yml"
+      # check:control's owned-voice ban reads the served consoles under these two
+      # roots, and until 2026-09-09 neither triggered this workflow. A pull
+      # request restoring the rented voice in deploy/soul/console.html alone kept
+      # both copies byte identical, passed all 97 console tests, never ran this
+      # job, and would have landed green. The narrow fix is here; the load
+      # bearing one is test_devon_owned_voice.py in ci.yml, which has no path
+      # filter at all.
+      - "deploy/soul/**"
+      - "docs/devon/assets/**"
   workflow_dispatch:
 
 jobs:
