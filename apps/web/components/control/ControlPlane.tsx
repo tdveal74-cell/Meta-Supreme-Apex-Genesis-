@@ -153,7 +153,7 @@ export function ControlPlane({ readiness, provenance, presence, knowledge }: Con
               sourcing={knowledge ? "partial" : "unwired"}
               sourceNote={
                 knowledge
-                  ? "Items and search results are read from the knowledge routes. No route exposes vector activations or edges between the indexes, so no graph is drawn."
+                  ? "Items, the source breakdown and search all come from the knowledge routes. No route exposes vector activations or edges between the indexes, so no graph is drawn and none is implied."
                   : "The knowledge panel is not mounted on this build."
               }
             >
