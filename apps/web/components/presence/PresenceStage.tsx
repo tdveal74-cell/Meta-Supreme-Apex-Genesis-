@@ -292,7 +292,7 @@ export function PresenceStage() {
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)]">
       <div className="flex flex-col gap-3">
-        <div className="relative aspect-[16/10] w-full overflow-hidden border border-[#2b4558]/90 bg-[#050a0e] shadow-[0_24px_90px_rgba(0,0,0,.45)]">
+        <div className="relative aspect-[16/10] w-full overflow-hidden bg-[#050a0e] shadow-[0_24px_90px_rgba(0,0,0,.45)]">
           <DevonAvatarCanvas driver={driver} modelUrl={modelUrl} onModelError={onModelError} onRigInfo={onRigInfo} />
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#4fb3a5]/70 to-transparent" />
           <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] text-[#668092]">

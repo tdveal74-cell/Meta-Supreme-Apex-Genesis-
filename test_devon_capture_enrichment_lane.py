@@ -23,6 +23,7 @@ import pytest
 from sqlalchemy import text as sql_text
 
 from app.services import capture_enrichment
+from app.services.knowledge_loop import GLOSS_LABEL
 from services.intelligence.providers import CerebrasProvider
 from services.intelligence.providers.cerebras_provider import DEFAULT_MODEL
 
@@ -116,6 +117,53 @@ async def test_propose_tags_prose_that_does_not_parse_as_a_capture(
     assert payload["enrichment"]["summary"] == "a widget note"
     assert payload["enrichment"]["model_suggested_area"] == "ACX"
     assert payload["enrichment"]["provider"] == "cerebras"
+
+
+async def test_the_model_s_words_reach_the_card_and_never_the_title(
+    client, auth_headers, enricher
+):
+    """Both halves of the gloss rule, asserted on what the route produced.
+
+    A source reading test cannot hold this and one was proven not to. A fresh
+    critic on 2026-09-09 defeated `test_the_gloss_is_additive_and_never_becomes
+    _the_title` by widening `payload_text` one line ABOVE the request call:
+
+        if gloss:
+            payload_text = f"{payload_text} ({enrichment.summary})"
+        record, token = _queue().request(
+            title=f"Remember: {payload_text[:80]}",
+
+    The title line still read `payload_text` and still named no gloss, so the
+    test passed, ruff passed, and the whole 38 test file passed, while a model
+    fabricated number sat in the line Tee approves. That is the exact
+    transformation the first law refuses.
+
+    The same critic defeated the companion assertion, a whole file substring
+    check for the concatenation, by leaving the literal in a trailing comment
+    while the gloss stopped reaching the card at all.
+
+    So both are asserted here on the value the route returned, through a real
+    provider stub, where neither trick reaches.
+    """
+    proposed = await client.post(
+        "/api/v1/soul/propose",
+        headers=auth_headers,
+        json={"text": NEUTRAL},
+    )
+    assert proposed.status_code == 201, proposed.text
+    approval = proposed.json()["approval"]
+
+    # His words, whole, in the line he consents to.
+    assert approval["title"] == f"Remember: {NEUTRAL}"
+    assert "a widget note" not in approval["title"]
+
+    # And the model's read on the card, carrying its label.
+    assert GLOSS_LABEL in approval["what_happens"]
+    assert "a widget note" in approval["what_happens"]
+    # The label has to precede the summary or it labels nothing.
+    assert approval["what_happens"].index(GLOSS_LABEL) < approval[
+        "what_happens"
+    ].index("a widget note")
 
 
 async def test_an_area_the_caller_supplied_spends_no_call(

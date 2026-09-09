@@ -633,54 +633,31 @@ input,select{font:inherit}
 /* ---------- speech out ---------- */
 
 const Voice = {
-  synth: window.speechSynthesis || null,
-  voices: [],
-  chosen: null,
-  muted: false,
-  rate: 0.94,
-  pitch: 0.88,
-  supported: !!window.speechSynthesis,
+  /* THE RENTED VOICE THAT WAS HERE, AND WHY IT IS GONE.
+     Until 2026-09-09 this object read window.speechSynthesis, ranked the
+     machine's installed English voices by a name regex preferring male, and
+     fell back to voices[0] with no floor. A fresh critic found it still
+     serving after DevonChat's identical implementation was replaced, and
+     it is a served DEVON surface: this page titles itself DEVON and labels
+     its output lines DEVON.
 
-  init() {
-    if (!this.supported) return;
-    const load = () => {
-      this.voices = this.synth.getVoices().filter(v => v.lang && v.lang.startsWith('en'));
-      if (!this.voices.length) return;
-      // Prefer a lower, unhurried English voice. Nothing here is a claim about
-      // the persona's identity: it is the closest available instrument.
-      const rank = (v) => {
-        const n = v.name.toLowerCase();
-        let s = 0;
-        if (/\b(male|david|daniel|alex|fred|guy|ryan|aaron|tom|george)\b/.test(n)) s += 6;
-        if (v.lang === 'en-US') s += 3;
-        if (v.lang === 'en-GB') s += 1;
-        if (/natural|neural|enhanced|premium/.test(n)) s += 4;
-        if (/google/.test(n)) s += 2;
-        return s;
-      };
-      this.voices.sort((a, b) => rank(b) - rank(a));
-      this.chosen = this.voices[0];
-      if (typeof onVoicesReady === 'function') onVoicesReady();
-    };
-    load();
-    this.synth.onvoiceschanged = load;
-  },
+     Tee's standing rule is voice and identity owned, never rented, and it
+     carries no exception path for channel identity. A browser stock voice is
+     a rented persona by definition: a vendor picks it, and it changes between
+     machines, so DEVON sounded like whoever's laptop was open.
 
-  speak(text, onEnd) {
-    if (!this.supported || this.muted || !text) { if (onEnd) onEnd(); return; }
-    try {
-      this.synth.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      if (this.chosen) u.voice = this.chosen;
-      u.rate = this.rate;
-      u.pitch = this.pitch;
-      u.onend = () => { if (onEnd) onEnd(); };
-      u.onerror = () => { if (onEnd) onEnd(); };
-      this.synth.speak(u);
-    } catch (e) { if (onEnd) onEnd(); }
-  },
-
-  stop() { if (this.supported) { try { this.synth.cancel(); } catch (e) {} } }
+     It refuses rather than degrades. The estate's owned voice lives behind
+     POST /tts on the presence service, which needs a CurrentUser JWT and a
+     cross origin grant this host does not have yet. Wiring that up is real
+     work and is not done here; going quiet is correct in the meantime and a
+     silent console is cheaper than DEVON speaking as a stranger. */
+  supported: false,
+  muted: true,
+  reason: 'Voice out is off here. The owned voice is on the presence service; ' +
+          'this host has no grant to it, and a rented browser voice is refused.',
+  init() {},
+  speak(text, onEnd) { if (onEnd) onEnd(); },
+  stop() {}
 };
 
 /* ---------- speech in ---------- */
