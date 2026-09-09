@@ -18,7 +18,11 @@ export type PanelSourcing = "live" | "partial" | "unwired";
 
 const BADGE: Record<PanelSourcing, { label: string; className: string }> = {
   live: {
-    label: "Live data",
+    // Deliberately not "Live data". A browser run on 2026-09-09 showed this
+    // badge reading as a claim about the current numbers while the panel below
+    // it had no session and could read nothing. The badge is about where the
+    // data comes from; the panel body owns whether a read just succeeded.
+    label: "Fully sourced",
     className: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
   },
   partial: {
@@ -47,7 +51,7 @@ export type TierPanelProps = {
 export function TierPanel({ title, purpose, sourcing, sourceNote, children }: TierPanelProps) {
   const badge = BADGE[sourcing];
   return (
-    <section className="rounded-2xl border border-white/10 bg-white/[0.035] backdrop-blur">
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035] backdrop-blur">
       <header className="flex flex-col gap-2 border-b border-white/10 px-4 py-3 sm:px-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-semibold tracking-tight text-white">{title}</h3>
@@ -62,7 +66,9 @@ export function TierPanel({ title, purpose, sourcing, sourceNote, children }: Ti
           <p className="text-xs leading-relaxed text-white/40">{sourceNote}</p>
         ) : null}
       </header>
-      {children ? <div className="px-4 py-4 sm:px-5">{children}</div> : null}
+      {children ? (
+        <div className="min-w-0 overflow-x-auto px-4 py-4 sm:px-5">{children}</div>
+      ) : null}
     </section>
   );
 }

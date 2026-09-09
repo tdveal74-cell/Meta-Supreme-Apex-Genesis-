@@ -213,7 +213,7 @@ function Tier({
         <h2 className="mt-0.5 text-lg font-semibold tracking-tight text-white">{title}</h2>
         <p className="mt-1 max-w-2xl text-xs leading-relaxed text-white/45">{summary}</p>
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">{children}</div>
+      <div className="grid min-w-0 gap-4 [&>*]:min-w-0 lg:grid-cols-2">{children}</div>
     </section>
   );
 }
