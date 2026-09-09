@@ -306,3 +306,71 @@ export function buildMotes(count: number, grid: GridSpec = DEFAULT_GRID): Float3
   }
   return out;
 }
+
+/* ------------------------------------------------------------------ */
+/* The head itself: a dense point cloud, not a bulge in the sheet.     */
+/*                                                                    */
+/* Ruled by Tee 2026-09-09 from a board of digital face scan           */
+/* references. Every one of them is the same object: thousands of      */
+/* glowing points in the shape of a head, floating in a dark void,     */
+/* with the features legible. A relief in a background grid reads as a */
+/* disturbance; this reads as a face.                                  */
+/*                                                                    */
+/* The wire field stays behind it, so his earlier ruling still holds:  */
+/* the background IS the mesh, and the head forms out of it.           */
+/* ------------------------------------------------------------------ */
+
+/** Half extents of the head in the same units faceRelief is written in. */
+export const HEAD_HALF_WIDTH = 0.86;
+export const HEAD_HALF_HEIGHT = 1.12;
+
+/**
+ * Even, organic coverage of the head's silhouette.
+ *
+ * A sunflower distribution rather than a grid: the references show scattered
+ * points, and a grid sampled inside an ellipse shows its rows the moment the
+ * surface tilts. Deterministic, so the cloud is identical on every load.
+ */
+export function buildHeadCloud(count: number): Float32Array {
+  const out = new Float32Array(count * 3);
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < count; i += 1) {
+    const r = Math.sqrt((i + 0.5) / count);
+    const a = i * golden;
+    out[i * 3] = Math.cos(a) * r * HEAD_HALF_WIDTH;
+    out[i * 3 + 1] = Math.sin(a) * r * HEAD_HALF_HEIGHT + 0.02;
+    out[i * 3 + 2] = 0;
+  }
+  return out;
+}
+
+/**
+ * Write the head cloud's depth, and report each point's relief for lighting.
+ *
+ * Same field as the background sheet, so the head and the mesh it forms out of
+ * agree by construction rather than by two tunings that drift apart.
+ */
+export function applyHeadRelief(
+  positions: Float32Array,
+  activity: number,
+  time: number,
+  weights: Weights = {},
+  faceOnly?: Float32Array,
+): number {
+  const clamped = Math.max(0, Math.min(1, activity));
+  let peak = 0;
+  const count = positions.length / 3;
+  for (let i = 0; i < count; i += 1) {
+    const p = i * 3;
+    const x = positions[p];
+    const y = positions[p + 1];
+    const relief = faceRelief(x, y, weights);
+    // The head keeps a little of its own shape even at rest, so it is a head
+    // dissolving into the field rather than a flat disc of dots.
+    const z = relief * (0.32 + 0.68 * clamped) + ambientWave(x, y, time) * 0.5;
+    positions[p + 2] = z;
+    if (faceOnly) faceOnly[i] = relief * clamped;
+    if (relief > peak) peak = relief;
+  }
+  return peak;
+}

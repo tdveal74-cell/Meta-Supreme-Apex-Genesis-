@@ -28,6 +28,8 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import {
   DEFAULT_GRID,
   applyField,
+  applyHeadRelief,
+  buildHeadCloud,
   buildGridEdges,
   buildGridPlane,
   buildMotes,
@@ -261,6 +263,10 @@ const ACCENT = "#4fb3a5";
 /** The lattice at rest, and where the face stands closest to the viewer. */
 const DIM = [0.05, 0.13, 0.16] as const;
 const LIT = [0.75, 1.0, 0.95] as const;
+/* The head runs bluer and brighter than the field, which is what the reference
+   board shows: a blue scan floating in front of a dim data ground. */
+const HEAD_DIM = [0.06, 0.28, 0.58] as const;
+const HEAD_LIT = [0.78, 1.0, 1.0] as const;
 
 const PLATE = "#c6ced6";        // brushed chrome, the primary shell
 const PLATE_DARK = "#404b56";   // shadowed plate and recesses
@@ -281,11 +287,23 @@ function PlaceholderHead({ driver, onRigInfo }: { driver: AvatarDriver; onRigInf
   const haloMaterial = useRef<THREE.MeshBasicMaterial>(null);
   const emerged = useRef(0);
   const motes = useRef<THREE.Points>(null);
+  const headMaterial = useRef<THREE.PointsMaterial>(null);
+  const headGroup = useRef<THREE.Group>(null);
 
   // The flat lattice, built once as a real BufferGeometry so the lines and the
   // vertices share one buffer: a node can then never disagree with the ends of
   // the lines that meet it.
-  const { positions, colors, faceOnly, geom, moteGeom } = useMemo(() => {
+  const {
+    positions,
+    colors,
+    faceOnly,
+    geom,
+    moteGeom,
+    headPos,
+    headTint,
+    headFace,
+    headGeom,
+  } = useMemo(() => {
     const flat = buildGridPlane(DEFAULT_GRID);
     const tint = new Float32Array(flat.length);
     const face = new Float32Array(vertexCount(DEFAULT_GRID));
@@ -294,17 +312,37 @@ function PlaceholderHead({ driver, onRigInfo }: { driver: AvatarDriver; onRigInf
     g.setAttribute("color", new THREE.BufferAttribute(tint, 3));
     g.setIndex(new THREE.BufferAttribute(buildGridEdges(DEFAULT_GRID), 1));
 
+    // The head: a dense cloud in the shape of a face, in front of the field.
+    const HEAD_POINTS = 7000;
+    const headPos = buildHeadCloud(HEAD_POINTS);
+    const headTint = new Float32Array(HEAD_POINTS * 3);
+    const headFace = new Float32Array(HEAD_POINTS);
+    const head = new THREE.BufferGeometry();
+    head.setAttribute("position", new THREE.BufferAttribute(headPos, 3));
+    head.setAttribute("color", new THREE.BufferAttribute(headTint, 3));
+
     const motes = new THREE.BufferGeometry();
     motes.setAttribute("position", new THREE.BufferAttribute(buildMotes(220, DEFAULT_GRID), 3));
-    return { positions: flat, colors: tint, faceOnly: face, geom: g, moteGeom: motes };
+    return {
+      positions: flat,
+      colors: tint,
+      faceOnly: face,
+      geom: g,
+      moteGeom: motes,
+      headPos,
+      headTint,
+      headFace,
+      headGeom: head,
+    };
   }, []);
 
   useEffect(
     () => () => {
       geom.dispose();
       moteGeom.dispose();
+      headGeom.dispose();
     },
-    [geom, moteGeom],
+    [geom, moteGeom, headGeom],
   );
 
   useEffect(() => {
@@ -342,6 +380,37 @@ function PlaceholderHead({ driver, onRigInfo }: { driver: AvatarDriver; onRigInf
     // alone is close to invisible: without this the field renders as graph
     // paper, which is what it did before the aether landed.
     writeDepthColors(faceOnly, colors, DIM, LIT, 0.62);
+
+    // The head cloud, on the same field so it can never disagree with the
+    // sheet it forms out of.
+    applyHeadRelief(
+      headPos,
+      emerged.current,
+      elapsed,
+      {
+        jawOpen: w.jawOpen ?? 0,
+        mouthFunnel: w.mouthFunnel ?? 0,
+        mouthPucker: w.mouthPucker ?? 0,
+        blinkLeft: w.eyeBlinkLeft ?? 0,
+        blinkRight: w.eyeBlinkRight ?? 0,
+        browInnerUp: w.browInnerUp ?? 0,
+      },
+      headFace,
+    );
+    writeDepthColors(headFace, headTint, HEAD_DIM, HEAD_LIT, 0.5);
+    headGeom.attributes.position.needsUpdate = true;
+    headGeom.attributes.color.needsUpdate = true;
+    if (headMaterial.current) headMaterial.current.opacity = 0.62 + 0.38 * emerged.current;
+
+    // Turn the head off axis. A depth map carries no information along the
+    // view axis, so a face rendered dead on is a silhouette however it is
+    // coloured: three passes of recolouring it proved that before the cause
+    // was named. A few degrees of yaw is what makes the nose, brow and cheek
+    // read as form rather than as brightness.
+    if (headGroup.current) {
+      headGroup.current.rotation.y = 0.34 + Math.sin(elapsed * 0.21) * 0.1;
+      headGroup.current.rotation.x = -0.05 + Math.sin(elapsed * 0.16) * 0.03;
+    }
     geom.attributes.position.needsUpdate = true;
     geom.attributes.color.needsUpdate = true;
     if (motes.current) {
@@ -349,8 +418,8 @@ function PlaceholderHead({ driver, onRigInfo }: { driver: AvatarDriver; onRigInf
       motes.current.position.y = Math.sin(elapsed * 0.18) * 0.05;
     }
 
-    if (lineMaterial.current) lineMaterial.current.opacity = 0.16 + 0.4 * emerged.current;
-    if (pointMaterial.current) pointMaterial.current.opacity = 0.1 + 0.55 * emerged.current;
+    if (lineMaterial.current) lineMaterial.current.opacity = 0.055 + 0.075 * emerged.current;
+    if (pointMaterial.current) pointMaterial.current.opacity = 0.03 + 0.09 * emerged.current;
     if (haloMaterial.current) haloMaterial.current.opacity = 0.04 + 0.12 * glow;
   });
 
@@ -400,6 +469,23 @@ function PlaceholderHead({ driver, onRigInfo }: { driver: AvatarDriver; onRigInf
           />
         </points>
       ) : null}
+
+      {/* The head. Dense, glowing, and in front of the field it forms from. */}
+      <group ref={headGroup} position={[0, 0, 0.12]}>
+      <points geometry={headGeom}>
+        <pointsMaterial
+          ref={headMaterial}
+          vertexColors
+          size={0.027}
+          sizeAttenuation
+          map={glowTexture ?? undefined}
+          transparent
+          opacity={0.85}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </points>
+      </group>
 
       {/* Its vertices, brightening as the face emerges. */}
       <points geometry={geom}>
