@@ -218,6 +218,78 @@ nothing about `speech`, `livekit_configured`, `cors_origins` or `breaker`. Tee
 can settle it by opening
 `https://presence-production-d272.up.railway.app/health` on his phone.
 
+## The prose leak dig, 2026-09-10, and why it stops here
+
+Tee ruled keep digging for a clean rule. This is the dig, and it closes with a
+negative result rather than a rule. Recorded so nobody re-derives it.
+
+**The harness.** 299 triggers by 20 neutral tails is 5980 utterances, plus the
+19 real commands from `test_devon_commands.py`. Twenty tails rather than four so
+a candidate cannot be fitted to a handful. Current parser, measured:
+
+| | count |
+|---|---|
+| reach an approval gated EFFECT | 140 |
+| reach an ungated EFFECT | 420 |
+| reach a READ | 4340 |
+| real commands broken | 0 of 19 |
+
+**Correction to what the arc reported.** The leak was written up as seven
+routes. Seven is the count of GATED routes, and it is one intent rather than
+seven: all seven triggers belong to `send_message`. Counting every EFFECT the
+leak is 28 triggers across three intents, `send_message` (7, gated),
+`search_web` (11, ungated) and `play_youtube` (10, ungated). The three that leak
+are exactly the three payload taking effects that declare no
+`max_payload_words`, which is the bound this arc added. `open_app` declares 2
+and does not leak.
+
+**The blast radius, graded before being raised, and the safety reading
+withdrawn.** `services/devon` is effect free, which is a CLAUDE.md invariant and
+holds here. `_do_search_web` and `_do_play_youtube` both return
+`executed=False` with the reason "browser effects are proposed, never opened
+unattended", and `send_message` stops at an approval card. So all 560 EFFECT
+leaks produce a wrong sentence and zero actions. This is a conversational
+quality defect, not a safety one, and a rule was being hunted for it as though
+it were the latter.
+
+**The whole score based class of fixes is dead, and now for every margin rather
+than one.** The arc already recorded that making an anchored effect clear its
+own floor breaks `search for the grid spec`. Sweeping the margin from 0.00 to
+0.70 in eleven steps shows the curves cross and never separate:
+
+| margin | gated leaks | effect leaks | real commands broken |
+|---|---|---|---|
+| 0.00 | 0 | 0 | 10 |
+| 0.25 | 0 | 26 | 5 |
+| 0.30 | 7 | 53 | 4 |
+| 0.50 | 137 | 350 | 0 |
+| 0.70 | 140 | 420 | 0 |
+
+There is no value where both columns are zero. The score is not the
+discriminator.
+
+**A closed class opener rule gets 40 percent and is then defeated by the trigger
+table itself.** Refusing a remainder that OPENS with a member of a genuinely
+closed English class, the finite forms of be, have and do plus the modals, takes
+the gated leaks from 140 to 84 and the effect leaks from 420 to 260, breaking 0
+of 19 real commands. The class was chosen as a class rather than assembled from
+the tails, precisely so the misses would be honest evidence.
+
+The misses are two kinds, and the second is the one that settles it. First, open
+class verbs and adverbs no list can enumerate without being fitted: sounds,
+seems, means, matters, never, always, already, still, again. Second, and
+structural: `'look that up'` and `'look that up for me'` are BOTH triggers of
+`search_web`, so "look that up for me is on the list for tomorrow" anchors on
+the shorter one and the remainder opens with "for" instead of "is". Any rule
+about the remainder's first word is defeated wherever one trigger is a prefix of
+another, which is a property of the trigger table rather than of English.
+
+**The recommendation, and it is not to ship the 40 percent.** Forty percent of a
+politeness problem is not worth another rule and another word list in the
+parser's hot path, and a partial list invites the next session to add a few more
+words, which is the fitted list trap this file already warns about. The
+behaviour stays, the measurement is filed, and the dig is closed.
+
 ## Open
 
 - Seven trigger sweep routes still reach a gate on prose. They are pre existing
@@ -263,7 +335,10 @@ the figures it claims to summarise. And the smoke run's own first red blamed a
 panel for a CORS refusal the harness had caused.
 OPEN: The presence service's own /health is unread, this container's egress
 proxy refusing it with a 403, so what that service is wired to is unverified
-and Tee can settle it from a browser. Seven pre existing trigger sweep routes still gate on prose and
+and Tee can settle it from a browser. The prose leak dig is CLOSED with a
+negative result rather than a rule, and the recommendation is to leave the
+behaviour; a ruling from Tee to ship the measured 40 percent anyway would
+reopen it. Seven pre existing trigger sweep routes still gate on prose and
 need a ruling, not a guess. control-check's BELOW_AA still cannot see a non text
 indicator and the fix belongs in the panels. No contrast measured on a screen.
 dependency-audit not reproduced here; its inputs are unchanged.
