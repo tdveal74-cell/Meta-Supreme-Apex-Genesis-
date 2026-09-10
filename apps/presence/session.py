@@ -70,6 +70,29 @@ logger = logging.getLogger(__name__)
 
 SendFn = Callable[[Dict[str, Any]], Awaitable[None]]
 
+#: The name both the mock provider and the mock synthesiser answer to.
+#: `services/intelligence/providers/mock_provider.py` sets `name = "mock"` and
+#: `apps/presence/speech.py` sets the same on `MockSpeech`, so one constant
+#: reads both sides of the question below.
+MOCK_NAME = "mock"
+
+#: What DEVON says instead of speaking words nothing reasoned.
+#:
+#: Ruled by Tee 2026-09-10. A `/control` turn read `PROVIDER mock (fell back)`
+#: beside `SPEECH cartesia`, and the words that reached the speaker were
+#: "Simulated response for: hello". Cerebras had missed a 500 ms first token
+#: deadline by two milliseconds, the router covered the turn exactly as it was
+#: built to, and what it covered it with was invented. Spoken in a cloned voice
+#: that is Tee's own, that is an authorship problem rather than a latency one,
+#: and this estate has no exception path for authorship.
+#:
+#: It says what happened and it asks for the turn back. It does not apologise
+#: and it does not pretend the question was heard and considered.
+FABRICATION_REFUSAL = (
+    "I could not reach my provider in time, so I have nothing of my own to say "
+    "on that yet. Ask me again."
+)
+
 
 def _check_timeline(at_ms: float) -> None:
     """A chunk's place on the audio timeline has to be a real, non negative
@@ -288,6 +311,14 @@ class PresenceSession:
         parts: List[str] = []
         try:
             async for token in self.router.stream(text, metrics):
+                # The router settles `provider` before it yields anything, on
+                # both paths: `breaker.py` sets it beside `fell_back = False`
+                # after the primary's first token arrives in time, and sets it
+                # inside `_serve_fallback` before that generator is even
+                # created. So this question is answered once, ahead of the first
+                # token, and cannot flip halfway through a turn.
+                if self._would_lend_the_voice_to_a_fabrication(metrics):
+                    continue
                 parts.append(token)
                 await self.emit(token_message(turn_id, token))
         except InferenceUnavailable as exc:
@@ -295,7 +326,15 @@ class PresenceSession:
             await self._finish_turn()
             return
 
-        reply = "".join(parts)
+        if self._would_lend_the_voice_to_a_fabrication(metrics):
+            # The invented tokens were drained above rather than emitted, so the
+            # caption and the audio say the same thing. What the mock actually
+            # wrote is not lost: the metrics frame carries `provider` and
+            # `fell_back`, and the breaker's `last_reason` says why.
+            reply = FABRICATION_REFUSAL
+            await self.emit(token_message(turn_id, reply))
+        else:
+            reply = "".join(parts)
         await self._set_state(SessionState.SPEAKING, turn_id)
         try:
             await self._speak(turn_id, reply, buffer)
@@ -308,6 +347,23 @@ class PresenceSession:
                 )
             )
         await self._finish_turn()
+
+    def _would_lend_the_voice_to_a_fabrication(self, metrics: TurnMetrics) -> bool:
+        """True when the mock wrote this turn and a real voice would speak it.
+
+        Deliberately NOT keyed on `fell_back`. `PRESENCE_FALLBACK_INFERENCE`
+        accepts any name in `INFERENCE_CHOICES`, so a fallback to Anthropic or
+        OpenAI is honest intelligence that has every right to its voice. What is
+        refused is the mock's output, whether it arrived as the fallback or as
+        the configured primary; `PRESENCE_INFERENCE` defaults to "mock", so the
+        primary path is a real way to reach this.
+
+        Keyed on the SYNTHESISER too, and that half is not decoration. Mock
+        words through a mock voice lend nobody's identity to anything, and it is
+        what this repository's whole suite runs on. The hazard is one specific
+        pairing: invented words leaving in a voice that belongs to a person.
+        """
+        return metrics.provider == MOCK_NAME and self.speech.name != MOCK_NAME
 
     async def _speak(self, turn_id: str, reply: str, buffer: SlidingWindowBuffer) -> None:
         speech_start = self.pacer.now_ms()
