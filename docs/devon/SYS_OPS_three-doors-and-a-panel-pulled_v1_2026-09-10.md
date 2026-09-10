@@ -92,7 +92,7 @@ needs a browser and its own critic. Five items remain, the largest being that
 when it cannot build a provider, reads as real with no notice. That is the state
 a default `start-devon.sh` launch produces.
 
-## Three claims of mine that were false
+## Five claims of mine that were false
 
 Recorded because the first law is about the claiming, not the coding, and
 because two of them were in shipped files rather than only in a commit message.
@@ -126,6 +126,42 @@ throwaway `SELECT unnest(:p)` probe, which has no column to infer from.
 unreachable. They are registered at `router.py:56` and exercised by
 `test_devon_agent_tasks_api.py`. The true claim is that there was no web
 surface, which is sufficient and is one grep from being right.
+
+**The fifth was found while writing this document, and it was live on main.**
+Pulling the graph panel rewrote `KnowledgePanel.tsx`'s file docstring to say the
+edges are measured and nothing draws them, and rewrote `ControlPlane.tsx`'s tier
+note to say the same. The paragraph at the bottom of `KnowledgePanel.tsx`'s own
+render was not touched, and went on telling every reader that "the edges between
+these items are drawn in the knowledge graph panel below", pointing at a
+component that commit `8707362` had deleted. So the surface whose entire
+justification is refusing to state an unmeasured thing spent a commit directing
+people to a panel that was not there.
+
+Twenty eight checks in this file's own guard passed over it, and so did 61 Python
+voice tests, a typecheck and a production build, because every one of them reads
+a literal, a symbol or an import. The method note written earlier in this same
+arc was "a guard that reads a literal is not reading a rendering", and it was not
+applied to the rendering.
+
+The copy is now the honest statement. The guard added with it, check 29 in
+`apps/web/scripts/control-check.ts`, reads the rendering: it resolves prose out
+of the TypeScript AST, both `JsxText` and the string literals that JSX
+expressions carry, and for every "the <name> panel below" it requires apps/web to
+declare a matching component. Three negative controls, each confirmed to have
+changed the file first. Restoring the exact sentence that was live fails the
+check by name. Putting the same sentence in a line comment passes, which is
+deliberate and is why `TierPanel.tsx` is not a false positive: a reader of the
+source is not a reader of the page. Planting the reference in a JSX string
+literal, the shape `ControlPlane.tsx` uses for its longest prose, also fails, so
+the check is not limited to `JsxText`.
+
+It needs no Python backstop, and the reason is worth stating rather than
+assuming. The voice ban needed one because it reads served HTML under
+`deploy/soul` and `docs/devon/assets`, which sat outside `web-ci.yml`'s path
+filter. This check reads only `apps/web`, and that path is in the filter, so the
+defect cannot be introduced without triggering the job that catches it. What it
+still cannot do is resolve an unnamed reference: bare copy like "the panel below"
+names nothing to look up, and is left alone rather than guessed at.
 
 ## What the adversaries were for
 
@@ -197,7 +233,10 @@ AREA: Systems
 TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_three-doors-and-a-panel-pulled_v1_2026-09-10.md
 DATE: 2026-09-10
-DECISIONS: Three of four ruled doors opened, the skill proposal gate first and
+DECISIONS: The rendered copy pointing at the deleted graph panel corrected and
+guarded by a check that reads the AST's rendered prose, proved by three negative
+controls, with no Python backstop because the path it reads is inside web-ci's
+filter. Three of four ruled doors opened, the skill proposal gate first and
 the learning store second; approve and promote kept as two rulings because the
 API defaults promotion on; the knowledge graph router registered ahead of the
 item lookup with the ordering asserted rather than commented; the graph panel
@@ -214,7 +253,10 @@ it described; the learning write paths called unreachable when they were
 registered and tested routes; the learning panel's adapter unguarded, so a failed
 read rendered as an empty store; count_memories with no test while its docstring
 called the scope invariant load bearing; two suite runs unusable as evidence
-through a documented cluster collision.
+through a documented cluster collision; and, found while writing this document
+and live on main for one commit, a rendered paragraph still sending readers to
+the graph panel that had just been deleted, missed by every guard in the estate
+because all of them read literals and symbols rather than renderings.
 OPEN: Scheduler and workflow engine still stranded; n8n telemetry unintegrated
 and without an adversarial pass, with string execution ids to check; honesty
 fixes unintegrated and one landing page claim still untrue; check:audio in no

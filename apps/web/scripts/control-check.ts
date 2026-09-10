@@ -1373,4 +1373,200 @@ check("the skill proposal gate is mounted on the control plane", () => {
   );
 });
 
+/* ------------------------------------------------------------------ */
+/* Rendered copy may not point at a panel that is not there            */
+/* ------------------------------------------------------------------ */
+
+/*
+ * The defect this catches was mine, found on 2026-09-10 while writing the very
+ * status doc about it, and it was live on main for one commit.
+ *
+ * The graph panel was pulled in 8707362 for stating a measurement that had not
+ * run. KnowledgePanel.tsx's file docstring was rewritten to say so, and
+ * ControlPlane.tsx's tier note was rewritten to say so, and the paragraph at the
+ * bottom of KnowledgePanel.tsx's own render was not. It went on telling every
+ * reader that "the edges between these items are drawn in the knowledge graph
+ * panel below", pointing at a component that no longer existed in the tree.
+ *
+ * Twenty eight checks in this file passed over it, and so did 61 Python tests
+ * and a production build, because every one of them reads a literal, a symbol or
+ * an import. This arc's own method note was "a guard that reads a literal is not
+ * reading a rendering", written before the miss and not applied to it.
+ *
+ * So this check reads the rendering. It resolves prose out of the AST rather than
+ * out of the file text, because a source comment is allowed to name a pulled
+ * panel and this file's docstrings do: a reader of the source is not a reader of
+ * the page. TierPanel.tsx has "while the panel below it had no session" in a
+ * line comment, correct there and a false positive for any regex over raw text.
+ *
+ * WHAT IT CANNOT DO. It only resolves a NAMED panel, matching a determiner then
+ * one to four words then "panel" then a direction. Bare copy like "the panel
+ * below" names nothing this check can look up, and is left alone rather than
+ * guessed at. Widening it to unnamed references would mean speculating about
+ * which component was meant, which the first law here forbids.
+ */
+
+/** True when the node's ancestor chain reaches JSX, so its text reaches a browser. */
+function insideJsx(node: ts.Node): boolean {
+  let at: ts.Node | undefined = node.parent;
+  while (at) {
+    if (
+      ts.isJsxElement(at) ||
+      ts.isJsxFragment(at) ||
+      ts.isJsxSelfClosingElement(at) ||
+      ts.isJsxAttribute(at) ||
+      ts.isJsxExpression(at)
+    ) {
+      return true;
+    }
+    at = at.parent;
+  }
+  return false;
+}
+
+/**
+ * Every string a browser renders from this file, whitespace normalised so a
+ * phrase that wraps across two source lines still reads as one phrase.
+ *
+ * JsxText is the prose between tags. A string or template literal counts too once
+ * its ancestor chain reaches JSX, which is how ControlPlane.tsx carries its tier
+ * notes: they live in a ternary inside an expression container, not in JsxText,
+ * and a check that read only JsxText would pass over the longest prose on the
+ * control plane.
+ */
+function renderedProse(file: ts.SourceFile): string[] {
+  const out: string[] = [];
+  const visit = (n: ts.Node): void => {
+    if (ts.isJsxText(n)) {
+      const text = n.text.replace(/\s+/g, " ").trim();
+      if (text) out.push(text);
+    } else if (
+      (ts.isStringLiteral(n) ||
+        ts.isNoSubstitutionTemplateLiteral(n) ||
+        ts.isTemplateExpression(n)) &&
+      insideJsx(n)
+    ) {
+      const text = n.getText(file).replace(/\s+/g, " ").trim();
+      if (text) out.push(text);
+    }
+    ts.forEachChild(n, visit);
+  };
+  ts.forEachChild(file, visit);
+  return out;
+}
+
+/** Every identifier declared anywhere under apps/web, so a name can be resolved. */
+function webDeclaredNames(files: string[]): Set<string> {
+  const names = new Set<string>();
+  for (const absolute of files) {
+    const file = ts.createSourceFile(
+      absolute,
+      readFileSync(absolute, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+      absolute.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+    );
+    const visit = (n: ts.Node): void => {
+      if ((ts.isFunctionDeclaration(n) || ts.isClassDeclaration(n)) && n.name) {
+        names.add(n.name.text);
+      }
+      if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name)) names.add(n.name.text);
+      if (ts.isImportSpecifier(n)) names.add(n.name.text);
+      ts.forEachChild(n, visit);
+    };
+    ts.forEachChild(file, visit);
+  }
+  return names;
+}
+
+const NAMED_PANEL_NEARBY =
+  /\b(?:the|a|an)\s+((?:[a-z][a-z0-9]*\s+){1,4})panel\s+(below|above|to the (?:left|right)|on the (?:left|right))\b/gi;
+
+// Words that are grammar rather than a component's name. "Knowledge graph panel"
+// keeps both of its words; "the current numbers panel below" would keep both of
+// its own and fail, which is the right direction: an unresolvable name is a
+// finding, not a pass.
+const GRAMMAR = new Set([
+  "the", "a", "an", "this", "that", "its", "their", "in", "on", "at", "of", "and", "or",
+  "while", "same", "one", "each", "every", "other", "first", "second", "next", "last",
+]);
+
+check("no rendered copy points at a named panel the tree does not have", () => {
+  const files = ["components", "app", "lib"].flatMap((sub) =>
+    walk(join(HERE, "..", sub), (n) => n.endsWith(".ts") || n.endsWith(".tsx")),
+  );
+  assert.ok(
+    files.length >= 50,
+    `the web glob found ${files.length} source files and the estate has more than fifty, so this glob is wrong and the check would pass over an unscanned tree`,
+  );
+
+  const declared = webDeclaredNames(files);
+  // A floor on the resolver itself. An empty or tiny set would make every lookup
+  // below fail, and a resolver that silently returned nothing would make every
+  // lookup pass if the assertion were inverted. Name the shape it must have.
+  assert.ok(
+    declared.size >= 200,
+    `the declaration index holds ${declared.size} names and apps/web declares far more, so the resolver is broken and its answers mean nothing`,
+  );
+  assert.ok(
+    declared.has("KnowledgePanel") && declared.has("ControlPlane"),
+    "the declaration index cannot see KnowledgePanel or ControlPlane, so it is not reading the components tree",
+  );
+
+  let examined = 0;
+  for (const absolute of files) {
+    if (!absolute.endsWith(".tsx")) continue;
+    const relative = absolute.slice(absolute.indexOf("apps/web"));
+    const file = ts.createSourceFile(
+      absolute,
+      readFileSync(absolute, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    for (const prose of renderedProse(file)) {
+      for (const hit of prose.matchAll(NAMED_PANEL_NEARBY)) {
+        const words = hit[1].trim().split(/\s+/).filter((w) => !GRAMMAR.has(w.toLowerCase()));
+        if (words.length === 0) continue;
+        examined += 1;
+        const pascal = words.map((w) => w[0].toUpperCase() + w.slice(1)).join("");
+        const candidates = [`${pascal}Panel`, pascal, `${pascal}Card`];
+        assert.ok(
+          candidates.some((c) => declared.has(c)),
+          `${relative} renders "${hit[0]}", which sends the reader to a panel named ${candidates.join(" or ")}, and apps/web declares none of them. Either the panel was removed and this copy was not, or the copy names it wrongly. A pulled panel that copy still points at is the 2026-09-10 miss this check exists for`,
+        );
+      }
+    }
+  }
+
+  // Zero examined would make the loop above vacuous, the same shape as the
+  // pgvector assertion that ran zero times and let an L2 operator pass. There is
+  // no positional cross reference left in the estate after the 2026-09-10 fix, so
+  // zero is the correct answer today and the assertion is on the mechanism
+  // instead: prove the matcher fires on the exact sentence that was live.
+  const wasLive =
+    "The edges between these items are drawn in the knowledge graph panel below, read from GET /knowledge/graph.";
+  const proof = [...wasLive.matchAll(NAMED_PANEL_NEARBY)];
+  assert.equal(
+    proof.length,
+    1,
+    `the matcher no longer fires on the sentence this check was written for, so it is guarding nothing. Examined ${examined} live cross reference(s)`,
+  );
+  const proven = proof[0][1]
+    .trim()
+    .split(/\s+/)
+    .filter((w) => !GRAMMAR.has(w.toLowerCase()))
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join("");
+  assert.equal(
+    proven,
+    "KnowledgeGraph",
+    `the matcher resolved "${proven}" out of the sentence that was live, and it has to resolve KnowledgeGraph for the lookup to mean anything`,
+  );
+  assert.ok(
+    !declared.has("KnowledgeGraphPanel") && !declared.has("KnowledgeGraph"),
+    "apps/web now declares a KnowledgeGraph panel again. That is welcome, and it means this check's own proof case can no longer fail, so give the proof a name the tree does not have",
+  );
+});
+
 console.log(`control-check: ${checks} checks passed`);
