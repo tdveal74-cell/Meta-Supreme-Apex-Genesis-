@@ -1,15 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { DecisionPackage, HumanDecision } from "@/lib/council-types";
 import { ModeBadge } from "./ModeBadge";
 
 interface Props {
   pkg: DecisionPackage;
   onDecision?: (decision: HumanDecision) => void;
+  /**
+   * What became of the ruling, supplied by whoever handled onDecision.
+   *
+   * This block used to read "Decision recorded / The human gate has been closed
+   * for this run" the instant submit ran, over a handler that persisted nothing.
+   * This view cannot know what its caller did with the ruling, so it no longer
+   * guesses: the caller says, or the fallback below claims nothing.
+   */
+  outcome?: ReactNode;
 }
 
-export function DecisionPackageView({ pkg, onDecision }: Props) {
+export function DecisionPackageView({ pkg, onDecision, outcome }: Props) {
   const [selected, setSelected] = useState<"A" | "B" | "C" | "D" | null>(null);
   const [modification, setModification] = useState("");
   const [alternative, setAlternative] = useState("");
@@ -194,11 +203,13 @@ export function DecisionPackageView({ pkg, onDecision }: Props) {
           </button>
         </section>
       ) : (
-        <section className="rounded-lg border border-border bg-surface-muted p-5 text-center">
-          <p className="text-sm font-medium text-navy">Decision recorded</p>
-          <p className="mt-1 text-xs text-navy/55">
-            The human gate has been closed for this run.
-          </p>
+        <section className="rounded-lg border border-border bg-surface-muted p-5">
+          {outcome ?? (
+            <p className="text-sm leading-relaxed text-navy">
+              Your ruling was made. Nothing on this view knows whether it reached the decision
+              record, so nothing here claims it did.
+            </p>
+          )}
         </section>
       )}
 

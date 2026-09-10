@@ -46,5 +46,15 @@ jobs:
         run: pnpm --filter @meta-supreme/web check:honesty
       - name: Learning store honesty checks
         run: pnpm --filter @meta-supreme/web check:learning
+      - name: Workflow door honesty checks
+        run: pnpm --filter @meta-supreme/web check:workflow
+      - name: Decision record honesty checks
+        run: pnpm --filter @meta-supreme/web check:decisions
+      - name: Long term memory honesty checks
+        run: pnpm --filter @meta-supreme/web check:memory
+      - name: Projects door honesty checks
+        run: pnpm --filter @meta-supreme/web check:projects
+      - name: Agent roster honesty checks
+        run: pnpm --filter @meta-supreme/web check:roster
       - name: Production build
         run: pnpm --filter @meta-supreme/web build

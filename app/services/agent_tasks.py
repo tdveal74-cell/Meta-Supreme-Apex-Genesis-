@@ -179,6 +179,50 @@ def _auto_skill_propose_enabled() -> bool:
     }
 
 
+#: What the dock renders verbatim under the queued goals, one string per state.
+#:
+#: Both name the runner, because the runner is a fact of the image either way.
+#: They differ on the only thing that decides whether a recorded goal fires, and
+#: the unscheduled one says plainly that nothing does.
+_SCHEDULER_DETAIL_UNSCHEDULED = (
+    "Scheduled goals are recorded durably. A runner for them exists in this "
+    "image: dispatch.py lane 2 calls "
+    "app/services/agent_scheduler.materialize_due_agent_schedules, which turns "
+    "a due goal into a planned agent task and executes nothing. NOTHING IN THIS "
+    "DEPLOYMENT SCHEDULES THAT ENTRYPOINT, so a due goal stays inert until "
+    "somebody posts the materialize route above. Whether a cron runs in the "
+    "platform is not something this process can see, so it is read from "
+    "SCHEDULER_TICK_INSTALLED, which is unset here and defaults to claiming "
+    "nothing."
+)
+
+_SCHEDULER_DETAIL_SCHEDULED = (
+    "Due goals are materialized by the cron entrypoint dispatch.py, one owner "
+    "at a time, on that owner's own session and tenant binding, into durable "
+    "agent tasks. The runner never executes them: the task it creates is "
+    "planned and human gated, and running it is a separate authenticated call "
+    "to POST /api/v1/agent-tasks/{task_id}/run. The manual route above does the "
+    "same thing on demand for one owner. That the entrypoint is scheduled is "
+    "read from SCHEDULER_TICK_INSTALLED, which is an operator statement about "
+    "this one deployment rather than something this process can measure; it is "
+    "set only after a scheduled tick has been read back from the platform."
+)
+
+
+def _scheduler_tick_installed() -> bool:
+    """Whether this deployment schedules dispatch.py.
+
+    Read through `settings` rather than `os.getenv` so the value is the same one
+    the rest of the app validated, and read on every call rather than captured at
+    import so a test can set it without reloading the module. The import is local
+    for the same reason the EDITFORGE one at line 124 is: this module is imported
+    by tooling that does not always have a settings environment.
+    """
+    from app.core.config import settings
+
+    return bool(getattr(settings, "SCHEDULER_TICK_INSTALLED", False))
+
+
 def build_tool_registry() -> ToolRegistry:
     registry = ToolRegistry()
     OperatorCapabilityAdapter(operator_bridge, approvals).register(registry)
@@ -694,41 +738,75 @@ class DurableAgentTaskService:
             "expansion": {
                 "subagents": True,
                 "durable_subagent_links": True,
-                # Recording a goal for later and running one at that time are
-                # two capabilities, and this key claimed both. It read a bare
-                # True until 2026-09-10, and
+                # Recording a goal for later, being able to run one, and
+                # actually having something run one are THREE facts, and this
+                # key has now claimed each of the wrong ones in turn.
+                #
+                # It read a bare True until 2026-09-10 and
                 # apps/web/components/command-center/CapabilityDock.tsx lit a
                 # green Scheduler light from it directly above the rows that
-                # will never fire.
+                # would never fire. It was corrected to False that same day,
+                # which was honest and left the capability missing.
                 #
-                # Nothing runs a due agent schedule. materialize_due_schedules
-                # (line 361 of this file) has exactly one caller, the manual
-                # route at app/api/v1/agent_expansion.py:87, and the cron the
-                # API image ships (infrastructure/docker/Dockerfile.api:30,
-                # dispatch.py) drives app/services/dispatcher.py:111, which
-                # reads Workflow rows and never touches agent_schedules.
+                # A RUNNER LANDED later on 2026-09-10. dispatch.py, the cron
+                # entrypoint the API image already ships
+                # (infrastructure/docker/Dockerfile.api:30), now runs two lanes.
+                # Lane 1 is app/services/dispatcher.dispatch_due over Workflow
+                # rows, unchanged. Lane 2 is
+                # app/services/agent_scheduler.materialize_due_agent_schedules,
+                # which enumerates the owners holding a due agent_schedules row
+                # and calls materialize_due_schedules (line 361 of this file)
+                # once per owner, on that owner's own session and under that
+                # owner's tenant binding. It creates tasks and runs none:
+                # create_task plans and saves, and run_until_blocked is a
+                # different method reachable only from
+                # POST /api/v1/agent-tasks/{task_id}/run, so a materialized goal
+                # is still human gated before anything executes.
                 #
-                # False is the honest answer and it also fails safe: a consumer
-                # still reading this key as a plain flag goes grey rather than
-                # lighting green off a truthy object.
-                # test_devon_scheduler_honesty.py couples both keys below to
-                # the call graph, so restoring a runner without correcting them
-                # goes red, and so does correcting them without a runner.
-                "scheduler": False,
+                # AND THAT IS STILL NOT THE CLAIM THE DOCK LIGHTS. The first
+                # version of these keys flipped straight back to True on the
+                # strength of the runner existing, and an adversary caught it
+                # before it merged: the live Railway project held exactly three
+                # services (api, presence, Postgres), no cron or job service, a
+                # long running uvicorn container up since 03:14:30Z, and zero
+                # log lines mentioning dispatch over two hours against a
+                # documented per minute schedule. A runner in the image that
+                # nothing schedules fires nothing, and the tile would have gone
+                # green over goals that still could not run.
+                #
+                # So the two facts are reported apart. `runner` names the module
+                # and is coupled by test_devon_scheduler_honesty.py to the real
+                # call graph, read with ast. `runs_goals` and the plain
+                # `scheduler` flag follow SCHEDULER_TICK_INSTALLED, which is an
+                # operator statement about ONE deployment, defaults False, and is
+                # set only after a scheduled tick has been read back from the
+                # platform. Understating is the safe direction and it is the one
+                # this code takes.
+                "scheduler": _scheduler_tick_installed(),
                 "scheduler_status": {
                     "records_goals": True,
-                    "runs_goals": False,
-                    "runner": None,
+                    "runs_goals": _scheduler_tick_installed(),
+                    # Measured from the repository rather than from the
+                    # deployment: the module is on disk and dispatch.py calls
+                    # it. test_devon_agent_scheduler_runner.py asserts all three
+                    # of those, and test_devon_scheduler_honesty.py couples this
+                    # key to the ast call graph in both directions.
+                    "runner": (
+                        "dispatch.py lane 2, "
+                        "app/services/agent_scheduler."
+                        "materialize_due_agent_schedules"
+                    ),
+                    "runner_in_image": True,
+                    "tick_scheduled_in_this_deployment": (
+                        _scheduler_tick_installed()
+                    ),
                     "materialize_route": (
                         "POST /api/v1/agent-expansion/schedules/materialize"
                     ),
                     "detail": (
-                        "Scheduled goals are recorded durably and are not "
-                        "executed. No cron entry and no background loop calls "
-                        "materialize_due_schedules, so a due goal stays inert "
-                        "until somebody posts the materialize route, and the "
-                        "task that call creates is still human gated before it "
-                        "runs."
+                        _SCHEDULER_DETAIL_SCHEDULED
+                        if _scheduler_tick_installed()
+                        else _SCHEDULER_DETAIL_UNSCHEDULED
                     ),
                 },
                 "skill_proposals": True,

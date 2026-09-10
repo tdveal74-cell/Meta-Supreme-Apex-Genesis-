@@ -293,12 +293,12 @@ const CLAIMS = [
   {
     word: /workflow/i,
     needs: "/workflows",
-    why: "the workflow engine has ten routes and no way to create a workflow: no page under apps/web/app, no component calling /workflows, no agent tool",
+    why: "components/control/WorkflowDoor.tsx is the caller: it composes through POST /workflows, starts runs, reads run history and rules on the approval gate, mounted at /control and /control/workflows. If this fires again, that panel was removed and the engine has no way to be reached",
   },
   {
     word: /\bmemor(y|ies)\b/i,
     needs: "/memory",
-    why: "KnowledgePanel reads GET /knowledge and posts /knowledge/search. Nothing here calls /memory, and there is no editor and no delete",
+    why: "components/mind/MemoryPanel.tsx is the caller: GET /memory to read, POST to write, PATCH to edit and pause, DELETE to destroy, mounted at /control and /control/memory. If this fires again, that panel was removed and the Council is storing memories nobody can read",
   },
   {
     // Added 2026-09-10. The Decision Intelligence pillar claimed the site would
@@ -320,7 +320,7 @@ const CLAIMS = [
     // unambiguously mean "this is written down somewhere it can be read back".
     word: /\b(record|records|recorded|recording|persist|persists|persisted|save|saves|saved)\b[^.]{0,80}\b(decision|decisions|final call)\b/i,
     needs: "/decisions",
-    why: "app/api/v1/decisions.py is a real registered route and NOTHING under apps/web calls it. handleDecision in app/council/deliberate/page.tsx is a console.info, so no ruling made on this site is persisted anywhere",
+    why: "components/council/DecisionRecordPanel.tsx is the caller: GET /decisions, GET and PATCH /decisions/{id}, POST /decisions/from-message, mounted at /control and /control/decisions, and the deliberate page POSTs a decision then PATCHes the ruling onto it. If this fires again, a ruling made on this site lives in one browser tab",
   },
 ];
 
@@ -335,12 +335,28 @@ const CLAIMS = [
  * second assertion below keeps it from rotting: an exemption the page no longer
  * carries has to come out.
  */
-const DISCLAIMERS = [
-  "Ingestion and long-term memory are API side and have no page here yet.",
-  // The Decision Intelligence pillar's own disclaimer. It has to be exempted
-  // because it uses the very words the claim above bans, which is what saying
-  // "we do not do this" looks like.
-  "Recording the final call is an API route with no page here yet, so nothing on this site persists a decision.",
+const DISCLAIMERS: string[] = [
+  // EMPTY ON PURPOSE, since 2026-09-10, and empty is the healthy state.
+  //
+  // Two sentences lived here for part of that day. Both were the page saying
+  // "we do not do this" about a real subsystem with no caller, and both were
+  // deleted from the page when the caller shipped:
+  //
+  //   "Ingestion and long-term memory are API side and have no page here yet."
+  //   -> MemoryPanel.tsx now reads GET /memory and writes, edits, pauses and
+  //      hard deletes through the other three routes. The pillar names that,
+  //      and it still disclaims INGESTION, which is still true and which no
+  //      CLAIMS entry bans, so it needs no exemption.
+  //
+  //   "Recording the final call is an API route with no page here yet, so
+  //    nothing on this site persists a decision."
+  //   -> DecisionRecordPanel.tsx and the deliberate page now call the decision
+  //      routes, so the pillar makes the claim instead of disclaiming it.
+  //
+  // The loop below is a no-op while this list is empty, which is correct: a
+  // page that disclaims nothing needs no exemption. The CLAIMS entries above
+  // are what hold the line now, and they pass by being SATISFIED rather than
+  // by being exempted, which is the stronger of the two.
 ];
 
 check("the landing page names no capability a visitor cannot reach", () => {

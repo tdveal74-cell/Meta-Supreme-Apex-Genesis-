@@ -22,9 +22,43 @@ import Link from "next/link";
  *     delete, and no component here calls /memory at all.
  *
  * apps/web/scripts/honesty-check.ts holds the prose to that rule: a capability
- * word here has to have a matching path some component actually calls. The
- * engine and its tests stay where they are; a landing page is the wrong place
- * to advertise them.
+ * word here has to have a matching path some component actually calls.
+ *
+ * ALL THREE ARE ALLOWED AGAIN, AND THE DATE IS THE SAME DAY.
+ *
+ * The two paragraphs above are the history, kept because the correction is the
+ * reason the guard exists. Both bans were lifted later on 2026-09-10, when the
+ * six remaining doors were closed in one pass:
+ *
+ *   - apps/web/components/control/WorkflowDoor.tsx composes a workflow through
+ *     POST /workflows, starts a run, reads its history, and stands at the
+ *     approval gate: it renders the sealed payload a paused run would write and
+ *     sends that seal back with the ruling, so the server refuses an approval
+ *     given over a payload the run has moved past. Mounted at /control and at
+ *     /control/workflows.
+ *   - apps/web/components/mind/MemoryPanel.tsx reads GET /memory and writes,
+ *     edits, pauses and hard deletes through the other three routes. So
+ *     "long-term memory you can edit or delete" is true, and the sentence that
+ *     disclaimed it has come out of DISCLAIMERS in the same change.
+ *
+ * The engine and its tests stay where they are; what changed is that a visitor
+ * can now reach them.
+ *
+ * The Decision Intelligence pillar said this site "records the human final call
+ * so future decisions stay accountable", and it was corrected to say the
+ * opposite, because app/api/v1/decisions.py was a registered, tested subsystem
+ * with no caller anywhere under apps/web and handleDecision on the deliberate
+ * page was a console.info.
+ *
+ * That is no longer true. apps/web/components/council/DecisionRecordPanel.tsx
+ * reads GET /decisions, re-reads GET /decisions/{id}, records the call with
+ * PATCH /decisions/{id} and puts a Council exchange on the record with
+ * POST /decisions/from-message, and the deliberate page POSTs a decision and
+ * PATCHes the ruling onto it. So the claim below is restored, in the narrower
+ * shape that is actually true: the record is per account, so it is a signed-in
+ * visitor whose call is written. The correction that said there was no page has
+ * to come out of DISCLAIMERS in honesty-check.ts at the same time, because a
+ * disclaimer the page no longer carries fails that check on purpose.
  */
 const pillars = [
   {
@@ -35,17 +69,17 @@ const pillars = [
   {
     title: "Knowledge retrieval",
     description:
-      "Read the ingested corpus and search it by meaning from the control plane. Ingestion and long-term memory are API side and have no page here yet.",
+      "Read the ingested corpus and search it by meaning from the control plane, and read, edit, pause or destroy long-term memory in the same place. Ingestion is API side and has no page here yet.",
   },
   {
     title: "Decision Intelligence",
     description:
-      "Structure questions and surface tradeoffs on a Council run this site labels as simulated. Recording the final call is an API route with no page here yet, so nothing on this site persists a decision.",
+      "Structure questions and surface tradeoffs on a Council run this site labels as simulated. A signed-in visitor's final call is written to the decision record and read back from the control plane, so a past decision can be looked at again.",
   },
   {
     title: "Approval gate on effects",
     description:
-      "Reads run unattended. Writes wait for your approval, every time, on a card you rule on in the DEVON chat or the operator terminal. Automation never acts in your name alone.",
+      "Reads run unattended. Writes wait for your approval, every time, on a card you rule on in the DEVON chat or the operator terminal, and on the workflow door, where a paused run shows the exact sealed payload it would write before you rule on it. Automation never acts in your name alone.",
   },
 ];
 

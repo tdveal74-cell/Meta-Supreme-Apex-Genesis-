@@ -98,6 +98,106 @@ class HermesExpansionRepository:
         await db.flush()
         return out
 
+    async def owners_with_due_schedules(
+        self,
+        db: AsyncSession,
+        *,
+        now: Optional[datetime] = None,
+        limit: int = 200,
+    ) -> List[str]:
+        """Distinct owners holding a due schedule that no task has claimed.
+
+        The runner in app/services/agent_scheduler.py needs this because
+        `due_schedules` and `materialize_due_schedules` are both owner scoped,
+        and a cron has no owner. Enumerating from the table is the only answer
+        that cannot leak: the materializer is still called once per owner with
+        that owner's id, so a row can only ever become a task for the account
+        that recorded it.
+
+        Read only on purpose. `due_schedules` promotes PENDING to DUE and
+        flushes, which belongs in the per owner step inside that owner's own
+        transaction; a scan that mutated first would have moved rows for owners
+        it then failed to process.
+
+        `task_id IS NULL` mirrors the skip inside `materialize_due_schedules`,
+        so an owner whose only due rows are already attached is not enumerated
+        and costs no planner call.
+        """
+        moment = now or _utcnow()
+        result = await db.execute(
+            select(AgentScheduleRecord.owner_id)
+            .where(
+                AgentScheduleRecord.state.in_(
+                    [ScheduleState.PENDING.value, ScheduleState.DUE.value]
+                ),
+                AgentScheduleRecord.run_at <= moment,
+                AgentScheduleRecord.task_id.is_(None),
+            )
+            .group_by(AgentScheduleRecord.owner_id)
+            .order_by(AgentScheduleRecord.owner_id)
+            .limit(limit)
+        )
+        return [str(owner_id) for owner_id in result.scalars().all()]
+
+    async def defer_due_schedules(
+        self,
+        db: AsyncSession,
+        *,
+        owner_id: str,
+        until: datetime,
+        reason: str,
+        now: Optional[datetime] = None,
+    ) -> int:
+        """Push one owner's unclaimed due rows forward, and say why.
+
+        WHY THIS EXISTS
+
+        The runner in app/services/agent_scheduler.py rolls a failed owner's
+        transaction back and returns an outcome, and nothing advanced the rows.
+        So the same rows were due again on the next tick, and
+        `materialize_due_schedules` calls `create_task`, which PLANS THROUGH THE
+        PROVIDER before the failure happens. Measured by an adversary on
+        2026-09-10 over three real ticks with `attach_task` raising after the
+        plan: three planner calls, zero tasks committed, the schedule still
+        `due` with `task_id` NULL. On the documented `* * * * *` cron that is
+        1,440 provider calls a day for one broken schedule, indefinitely.
+
+        app/services/dispatcher.py:143 already knew this and says so in its own
+        comment: it advances `next_run_at` BEFORE attempting the run "so a
+        workflow that fails cannot spin on the same slot every minute". This is
+        the same rule for the schedule lane, applied after the failure rather
+        than before it, because a successful materialization must not have its
+        rows moved.
+
+        Returns the number of rows moved. Runs on a session of its own, because
+        the owner's session was rolled back.
+
+        The predicate mirrors `owners_with_due_schedules` exactly, so a row that
+        was never a candidate is never touched, and `task_id IS NULL` means a row
+        that DID get attached before the failure keeps its schedule.
+        """
+        moment = now or _utcnow()
+        result = await db.execute(
+            select(AgentScheduleRecord).where(
+                AgentScheduleRecord.owner_id == owner_id,
+                AgentScheduleRecord.state.in_(
+                    [ScheduleState.PENDING.value, ScheduleState.DUE.value]
+                ),
+                AgentScheduleRecord.run_at <= moment,
+                AgentScheduleRecord.task_id.is_(None),
+            )
+        )
+        rows = list(result.scalars().all())
+        for row in rows:
+            row.run_at = until
+            # The column is NOT NULL DEFAULT '', so a reason always fits. It is
+            # truncated rather than allowed to grow without bound because the
+            # text comes from an exception string.
+            row.failure_reason = (reason or "").strip()[:2000]
+            row.updated_at = moment
+        await db.flush()
+        return len(rows)
+
     async def attach_task(
         self,
         db: AsyncSession,

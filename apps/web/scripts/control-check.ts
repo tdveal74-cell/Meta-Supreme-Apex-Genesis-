@@ -381,6 +381,19 @@ const CONTROL_TREE = [
   "components/ledger/ProvenanceCard.tsx",
   "components/presence/PresenceStage.tsx",
   "components/presence/PresenceStageLoader.tsx",
+  // Six panels folded into the plane on 2026-09-10. Only the .tsx files go in
+  // here: the anti-vacuity check below asserts every entry carries
+  // `className=`, and a pure logic module beside a panel carries none.
+  // KnowledgeGraphPanel was mounted on /control on 2026-09-10 and was missing
+  // from this list, which is the same shape of gap the panels below would have
+  // had: the docstring says "every file mounted under /control" and the list
+  // is hand maintained, so it is only true if every mount is added.
+  "components/mind/KnowledgeGraphPanel.tsx",
+  "components/mind/MemoryPanel.tsx",
+  "components/projects/ProjectsPanel.tsx",
+  "components/roster/AgentRosterPanel.tsx",
+  "components/council/DecisionRecordPanel.tsx",
+  "components/control/WorkflowDoor.tsx",
 ];
 
 /** Class patterns that render below WCAG AA on this background. */
@@ -410,7 +423,7 @@ check("the legibility check is reading real files rather than an empty list", ()
   // A glob that silently matches nothing passes forever. This asserts the
   // files are on disk and carry the classes the check is written against, so a
   // rename cannot turn the guard above into a no-op.
-  assert.ok(CONTROL_TREE.length >= 12, "the control tree lost files");
+  assert.ok(CONTROL_TREE.length >= 18, "the control tree lost files");
   for (const relative of CONTROL_TREE) {
     const source = readFileSync(join(HERE, "..", relative), "utf8");
     assert.ok(source.length > 200, `${relative} is too small to be the real file`);
@@ -426,6 +439,10 @@ check("every text input on the surface carries a label", () => {
     "components/control/ProvenanceSlot.tsx",
     "components/mind/KnowledgePanel.tsx",
       "components/presence/PresenceStage.tsx",
+    "components/mind/KnowledgeGraphPanel.tsx",
+    "components/mind/MemoryPanel.tsx",
+    "components/projects/ProjectsPanel.tsx",
+    "components/control/WorkflowDoor.tsx",
   ];
   let inputs = 0;
   for (const relative of withInputs) {
@@ -441,7 +458,11 @@ check("every text input on the surface carries a label", () => {
       assert.ok(labelled, `${relative} has an input with no label: ${element.slice(0, 90)}`);
     }
   }
-  assert.equal(inputs, 4, "the input count moved; re-check that each one is labelled");
+  // 4 before 2026-09-10, then 11 with the graph panel and three door panels
+  // folded in: ProvenanceSlot 1, KnowledgePanel 1, PresenceStage 2,
+  // KnowledgeGraphPanel 1, MemoryPanel 1, ProjectsPanel 3, WorkflowDoor 2.
+  // Counted with this check's own regex rather than taken from a note.
+  assert.equal(inputs, 11, "the input count moved; re-check that each one is labelled");
 });
 
 /* the capture lane's only reachable surface */

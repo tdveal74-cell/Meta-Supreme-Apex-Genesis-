@@ -64,6 +64,7 @@ jobs:
             test_knowledge_graph.py \
             test_knowledge_graph_fixtures.py \
             test_devon_scheduler_honesty.py \
+            test_devon_scheduler_report_honesty.py \
             test_devon_console_voice_honesty.py
 
   dependency-audit:
