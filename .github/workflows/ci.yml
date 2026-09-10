@@ -59,7 +59,8 @@ jobs:
             test_devon_capture_enrichment.py \
             test_presence_cartesia.py \
             test_presence_service.py \
-            test_devon_owned_voice.py
+            test_devon_owned_voice.py \
+            test_devon_learning_context_honesty.py
 
   dependency-audit:
     name: Dependency audit (pip-audit + pnpm audit)

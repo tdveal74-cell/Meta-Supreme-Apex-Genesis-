@@ -40,9 +40,11 @@ export type ControlPlaneProps = {
   presence?: ReactNode;
   /** Tier 2: the knowledge corpus. */
   knowledge?: ReactNode;
+  /** Tier 2: the learning store DEVON plans from. */
+  learning?: ReactNode;
 };
 
-export function ControlPlane({ readiness, provenance, presence, knowledge }: ControlPlaneProps) {
+export function ControlPlane({ readiness, provenance, presence, knowledge, learning }: ControlPlaneProps) {
   return (
     <main className="min-h-screen bg-[#04070d] text-[#e8edf2]">
       <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col px-4 py-4 sm:px-6 lg:px-8">
@@ -195,6 +197,19 @@ export function ControlPlane({ readiness, provenance, presence, knowledge }: Con
               }
             >
               {knowledge}
+            </TierPanel>
+
+            <TierPanel
+              title="Learning"
+              purpose="The memories and skills every agent plan is handed, and the only place to write one."
+              sourcing={learning ? "live" : "unwired"}
+              sourceNote={
+                learning
+                  ? "Rows and counts come from the two learning routes. Until this panel existed nothing in the estate wrote to either table, so the store was empty by construction. A failed read is drawn as unreadable, never as empty."
+                  : "The learning panel is not mounted on this build."
+              }
+            >
+              {learning}
             </TierPanel>
           </Tier>
 

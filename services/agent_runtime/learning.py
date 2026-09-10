@@ -16,6 +16,7 @@ from threading import RLock
 from typing import Dict, List, Optional, Protocol, Sequence, Tuple
 
 from services.agent_runtime.contracts import utcnow
+from services.agent_runtime.learning_context import learning_payload
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
@@ -200,9 +201,17 @@ class InMemoryLearningStore:
             return sorted(self._skills.values(), key=lambda item: item.name)
 
     def context_for(self, goal: str, *, memory_limit: int = 5) -> Dict[str, object]:
+        """The planner's learning payload, with the counts that disambiguate it.
+
+        `search_memories` is token overlap only, so an empty match list used to
+        be indistinguishable from an empty store. The stored count rides along
+        so the planner can tell the two apart; learning_context.py holds the
+        ladder and the reasoning.
+        """
         memories = self.search_memories(goal, limit=memory_limit)
         skills = self.list_skills()
-        return {
-            "memories": [item.to_dict() for item in memories],
-            "skills": [item.to_dict() for item in skills],
-        }
+        return learning_payload(
+            memories=[item.to_dict() for item in memories],
+            skills=[item.to_dict() for item in skills],
+            memories_stored=len(self.list_memories()),
+        )
