@@ -5,13 +5,15 @@ states that matter most and are hardest to reach live (unreachable, a rotated
 key, a secondary pointed at the source by mistake) are the ones exercised
 hardest.
 
-Four of these are guards on structure rather than on behaviour, and each was
+Six of these are guards on structure rather than on behaviour, and each was
 written to be able to fail:
 
 * the router's live route table carries no verb but GET and HEAD
 * the running application answers 405 to POST, PUT, PATCH and DELETE
 * neither new module contains a mutating HTTP call or a mutating decorator
 * neither new module contains a URL literal or a live n8n host
+* neither new module can reach a socket except through `_httpx_get`
+* `_httpx_get` cannot branch, so one driven input speaks for every input
 
 The load bearing one is not any of those. It is
 `test_nothing_configured_never_reaches_the_network`: the fake fetcher raises if
@@ -29,7 +31,7 @@ import json
 import pathlib
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -217,6 +219,18 @@ _VERB_CARRYING_CALLABLES = {
 }
 
 
+#: The accessor pair, which must be treated the same way. `getattr` had a shape
+#: refusal and `setattr` had none, and that asymmetry alone was a working bypass
+#: on 2026-09-10.
+_ATTRIBUTE_ACCESSORS = {
+    "getattr",
+    "setattr",
+    "__getattr__",
+    "__setattr__",
+    "__getattribute__",
+}
+
+
 def _folded_strings(node: ast.AST) -> List[str]:
     """Every string this expression can evaluate to, with concatenation folded.
 
@@ -388,6 +402,41 @@ def _mutating_verb_offences(tree: ast.AST) -> List[str]:
         carried: List[str] = []
         for argument in list(node.args) + [keyword.value for keyword in node.keywords]:
             carried.extend(_folded_strings(argument))
+        # 6. THE SAME ASYMMETRY, ON THE OTHER SIDE OF THE PAIR. Added 2026-09-10
+        # after an adversary put a live POST in the fetcher and this suite
+        # reported 210 passed. Its bypass:
+        #
+        #     _req = client.build_request("GET", url, headers=headers)
+        #     setattr(_req, "method", "".join(chr(c) for c in (80, 79, 83, 84)))
+        #     response = await client.send(_req)
+        #
+        # Rule 5 refuses `request.method = x` by SHAPE whatever the value, and
+        # rule 4 refuses `getattr` handed a name it cannot read. `setattr` had
+        # neither: it was on the tracked list, so only its VALUES were folded,
+        # and a generator expression folds to nothing. `build_request("GET",
+        # ...)` folds to GET, `"method"` is not a verb, and `send(_req)` carries
+        # a Name. Three tracked call sites, nothing to see.
+        #
+        # So the pair is made symmetric. A tracked callable handed the string
+        # "method" is doing verb as object state work whatever the value is,
+        # exactly as rule 5(b) already held for the assignment spelling, and an
+        # accessor whose arguments this walk cannot read at all is refused the
+        # way `getattr` already was. Measured on both files first: neither hands
+        # "method" to anything.
+        if any(text.strip().lower() == "method" for text in carried):
+            offences.append(
+                f"{name}(...) at line {node.lineno} sets or reads the HTTP verb "
+                "field through an accessor. Refused by shape whatever the value, "
+                "because the value can be a call this walk cannot fold"
+            )
+            continue
+        if name in _ATTRIBUTE_ACCESSORS and not carried:
+            offences.append(
+                f"{name}(...) at line {node.lineno} names an attribute this walk "
+                "cannot read. The same refusal rule 4 gives getattr, because the "
+                "pair being asymmetric is what let a POST through"
+            )
+            continue
         for text in carried:
             if text.strip().lower() in _MUTATING_VERBS:
                 offences.append(f"{name}(...{text!r}...) at line {node.lineno}")
@@ -460,6 +509,20 @@ _BYPASSES = {
         "response = await client.send(request)"
     ),
     "the same dunder bound on the instance": 'request.__setattr__("method", "POST")',
+    # The adversary's 2026-09-10 tick five bypass, verbatim. It put a live POST
+    # into the production fetcher and this suite reported 210 passed. Wire
+    # capture logged POST on the URL the module's own `_executions_url` builds.
+    # `setattr` was tracked for its values and not for its shape, while
+    # `getattr` was refused by shape, and the verb was a generator expression
+    # that folds to nothing.
+    "the verb set through setattr with a value that folds to nothing": (
+        '_req = client.build_request("GET", url, headers=headers)\n'
+        'setattr(_req, "method", "".join(chr(c) for c in (80, 79, 83, 84)))\n'
+        "response = await client.send(_req)"
+    ),
+    "an accessor handed an attribute name this walk cannot read": (
+        "setattr(_req, _field, _verb)"
+    ),
     # Not a verb at all on the wire. The server is told to treat the GET as a
     # write, so the method stays honest and the effect does not.
     "a method override header carried in a dict": (
@@ -476,6 +539,443 @@ def test_the_mutating_verb_detector_catches_the_ways_around_it(label: str, sourc
         f"the detector did not see {label}. That is the shape that reached the production "
         f"fetcher and returned 41 passed: {source!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# THE SECOND DOOR
+#
+# Every rule above, and the transport check below, asks about A VERB. On
+# 2026-09-10 an adversary stopped arguing about verbs and appended a second
+# egress path to the service instead:
+#
+#     import urllib.request
+#     outbound = urllib.request.Request(endpoint, data=b"{}", headers={...})
+#     answer = urllib.request.urlopen(outbound, timeout=TIMEOUT_SECONDS)
+#
+# A capture server logged `POST /api/v1/executions/6679/retry` carrying the API
+# key. `_mutating_verb_offences` returned [] and the suite returned 191 passed.
+#
+# Both layers missed it for the same reason, and neither reason is a missing
+# location in a list:
+#
+# * the syntax walk assumes the verb exists as a token somewhere. `urllib`
+#   promotes GET to POST purely because `data=` is not None, so the verb is a
+#   runtime property of body presence and is spelled nowhere at all.
+# * the transport check drives `tel._httpx_get` and patches `httpx.AsyncClient`.
+#   `urllib.request.urlopen` never touches httpx, so the recorder saw nothing
+#   and its silence read as a pass.
+#
+# That is the honest limit of the check below: it audits ONE FUNCTION, not the
+# module's egress surface. Its coverage claim is only worth the separate claim
+# that no other code path in these two files can reach a socket, and nothing
+# was making that claim. This section makes it, structurally:
+#
+#   1. an IMPORT ALLOWLIST of exact dotted module names, measured off the two
+#      files on 2026-09-10 rather than imagined. `urllib.parse` is on it twice
+#      over (`urlparse` at line 130, `quote` at line 381) because it is pure
+#      string work; `urllib.request` is a different module and is not.
+#   2. a BANLIST that the allowlist cannot relax. A one word edit widening the
+#      allowlist to `urllib.request` still fails here, which is the difference
+#      between a rule and a speed bump.
+#   3. CONTAINMENT: `httpx` may be imported only inside `_httpx_get`. That is
+#      what turns "the audited function is read only" into "the module is read
+#      only", because it makes the audited function the only door.
+#   4. a refusal of DYNAMIC CODE by shape: `__import__`, `eval`, `exec`,
+#      `compile`, and the process spawning members of `os`. An import walk that
+#      can be defeated by `__import__("urllib.request")` is not a walk.
+#
+# The cost is real and stated: a new import in either file fails this test until
+# somebody adds it to the allowlist deliberately. Both files import eleven
+# modules between them and speak one verb, so that cost is a few seconds on the
+# rare occasion, against a door that stayed open through three hardening passes.
+# ---------------------------------------------------------------------------
+
+#: The exact dotted module names these two files import, measured with an AST
+#: walk on 2026-09-10 (service: math, os, dataclasses, datetime, typing,
+#: urllib.parse, httpx; route: typing, fastapi, app.security.deps,
+#: app.services). `httpx` is deliberately absent: it is governed by the
+#: containment rule below rather than by membership here.
+_ALLOWED_IMPORTS = {
+    "__future__",
+    "math",
+    "os",
+    "dataclasses",
+    "datetime",
+    "typing",
+    "urllib.parse",
+    "fastapi",
+    "app.security.deps",
+    "app.services",
+}
+
+#: Modules whose presence in either file is refused whatever the allowlist says.
+#: Every one of them can open a socket or run code that does, and none of them
+#: has a string only use the way `urllib.parse` does. Matched by dotted prefix,
+#: so `urllib.request.urlopen` is caught through `import urllib.request` and
+#: through `from urllib import request` alike.
+_NETWORK_CAPABLE_MODULES = (
+    "urllib.request",
+    "socket",
+    "ssl",
+    "http.client",
+    "http.server",
+    "requests",
+    "aiohttp",
+    "httplib2",
+    "urllib3",
+    "pycurl",
+    "ftplib",
+    "smtplib",
+    "imaplib",
+    "poplib",
+    "nntplib",
+    "telnetlib",
+    "xmlrpc",
+    "websocket",
+    "websockets",
+    "subprocess",
+    "ctypes",
+    "importlib",
+)
+
+#: Members that may be pulled out of the two LOCAL packages either file imports
+#: from. Measured 2026-09-10: the route imports `n8n_telemetry` and
+#: `CurrentUser` and nothing else.
+#:
+#: This exists because the allowlist above is keyed on the MODULE, so
+#: `from app.services import n8n_retry` satisfied it while
+#: `import app.services.n8n_retry` did not. Found by probing the rule rather
+#: than by an adversary, and then carried to a socket rather than argued: a
+#: sibling module holding the POST, imported by the route beside
+#: `n8n_telemetry`, logged
+#:
+#:     POST /api/v1/executions/6679/retry HTTP/1.1
+#:     X-N8N-Api-Key: <the configured key>
+#:
+#: on a local capture server while this suite reported 205 passed. Both guarded
+#: files stayed innocent: the route table still read GET, the verb walk still
+#: found nothing, and the transport check was never driven. With the members
+#: pinned, the same tree gives 1 failed, 206 passed.
+#:
+#: Only the local packages are pinned this way, and the distinction is the
+#: point. A member of `app.services` is a FILE somebody can add to this
+#: repository. A member of `typing` or `fastapi` is a symbol in an installed
+#: dependency and cannot be a new fetcher smuggled in beside these two files.
+_ALLOWED_PACKAGE_MEMBERS = {
+    "app.services": {"n8n_telemetry"},
+    "app.security.deps": {"CurrentUser"},
+}
+
+#: The only function permitted to import httpx, and the one the transport check
+#: below actually drives. The two must stay the same name or the coverage claim
+#: quietly stops meaning anything.
+_THE_ONE_FETCHER = "_httpx_get"
+
+#: Builtins that turn any import walk into a suggestion.
+_DYNAMIC_CODE_BUILTINS = {"__import__", "eval", "exec", "compile"}
+
+#: Members of `os` that hand the work to another process. `os` is on the
+#: allowlist for `os.environ`, which is the only thing either file uses it for.
+_OS_PROCESS_CALLS = {
+    "system",
+    "popen",
+    "fork",
+    "forkpty",
+    "execv",
+    "execve",
+    "execl",
+    "execle",
+    "execlp",
+    "execvp",
+    "execvpe",
+    "spawnv",
+    "spawnve",
+    "spawnl",
+    "spawnlp",
+    "posix_spawn",
+}
+
+
+def _banned_module(dotted: str) -> Optional[str]:
+    """The banlist entry this dotted module name falls under, if any."""
+    for banned in _NETWORK_CAPABLE_MODULES:
+        if dotted == banned or dotted.startswith(banned + "."):
+            return banned
+    return None
+
+
+def _egress_offences(tree: ast.AST) -> List[str]:
+    """Every way this syntax tree could reach a socket other than through
+    `_httpx_get`.
+
+    Deliberately not a verb check. The bypass this exists for spelled no verb
+    anywhere: `urllib.request.urlopen(Request(url, data=b"{}"))` is a POST
+    because the body is not None. So this asks the structural question instead,
+    which is the one the transport check cannot ask about itself: how many doors
+    does this module have?
+    """
+    offences: List[str] = []
+
+    def visit(node: ast.AST, scope: Tuple[str, ...]) -> None:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            scope = scope + (node.name,)
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                _judge_module(alias.name, node.lineno, scope, offences)
+        elif isinstance(node, ast.ImportFrom):
+            module = "." * node.level + (node.module or "")
+            # A relative import needs no branch of its own, and it had one for
+            # ten minutes until the control was run: neutering that branch left
+            # the probe green, because `module` keeps its leading dots and
+            # `.n8n_retry` is never on the allowlist. Measured rather than
+            # assumed, and the branch was deleted rather than left to be
+            # credited for a refusal the allowlist was already making.
+            if any(
+                f"{module}.{alias.name}" in _ALLOWED_PACKAGE_MEMBERS
+                for alias in node.names
+            ):
+                # `from app import services` hands out the PACKAGE, and
+                # `services.n8n_retry` then needs no import of its own here.
+                offences.append(
+                    f"from {module} import ... at line {node.lineno} binds a local "
+                    "package rather than a pinned member, so a sibling module is "
+                    "reachable through it without appearing in this file's imports"
+                )
+            elif module in _ALLOWED_PACKAGE_MEMBERS:
+                for alias in node.names:
+                    if alias.name not in _ALLOWED_PACKAGE_MEMBERS[module]:
+                        offences.append(
+                            f"from {module} import {alias.name} at line {node.lineno} "
+                            "pulls an unpinned member out of a local package. A sibling "
+                            "module can hold the mutating call while both guarded files "
+                            "stay innocent, so members of the local packages are pinned"
+                        )
+            elif module in _ALLOWED_IMPORTS or module == "httpx":
+                _judge_module(module, node.lineno, scope, offences)
+            else:
+                for alias in node.names:
+                    # A relative module keeps its dots, so joining with another
+                    # one would name `..n8n_retry` in the message and misreport
+                    # what the line actually imports.
+                    joined = (
+                        module + alias.name
+                        if module.endswith(".")
+                        else f"{module}.{alias.name}"
+                    )
+                    _judge_module(joined, node.lineno, scope, offences)
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            # A module name spelled as a STRING is the import walk's blind spot:
+            # `getattr(builtins, "__import__")("socket")` has a literal argument,
+            # so no dynamic refusal fires, and no Import node exists to judge.
+            # Matched on the WHOLE constant, so a docstring that mentions
+            # `client.request("DELETE", ...)` or the word socket stays legal.
+            # Measured on both files before it was added: zero constants collide.
+            spelled = node.value.strip()
+            if spelled in _NETWORK_CAPABLE_MODULES or spelled in _DYNAMIC_CODE_BUILTINS:
+                offences.append(
+                    f"the string {node.value!r} at line {node.lineno} names a module "
+                    "or builtin this walk refuses. A name reached as data is not an "
+                    "import node, so the shape is refused rather than the import"
+                )
+        elif isinstance(node, ast.Call):
+            name = _callee_name(node.func)
+            if name in _DYNAMIC_CODE_BUILTINS:
+                offences.append(
+                    f"{name}(...) at line {node.lineno} can name a module this walk "
+                    "never sees. Refused by shape: an import allowlist that "
+                    f"{name} can step around is not an allowlist"
+                )
+            elif (
+                name in _OS_PROCESS_CALLS
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "os"
+            ):
+                offences.append(
+                    f"os.{name}(...) at line {node.lineno} hands the work to another "
+                    "process, which can carry any verb to any host"
+                )
+        for child in ast.iter_child_nodes(node):
+            visit(child, scope)
+
+    visit(tree, ())
+    return offences
+
+
+def _judge_module(
+    dotted: str, lineno: int, scope: Tuple[str, ...], offences: List[str]
+) -> None:
+    banned = _banned_module(dotted)
+    if banned is not None:
+        offences.append(
+            f"import of {dotted} at line {lineno} opens a second egress path. "
+            f"{banned} is refused whatever the allowlist says, because the "
+            "transport check audits one function and cannot see this one"
+        )
+        return
+    if dotted == "httpx":
+        if _THE_ONE_FETCHER not in scope:
+            offences.append(
+                f"httpx imported at line {lineno} outside {_THE_ONE_FETCHER}. Every "
+                "client in this module has to be built inside the one function the "
+                "transport check drives, or that check stops covering the module"
+            )
+        return
+    if dotted not in _ALLOWED_IMPORTS:
+        offences.append(
+            f"import of {dotted} at line {lineno} is not on the measured allowlist. "
+            "If it is legitimate, add it deliberately and say why; the allowlist is "
+            "what makes the one audited fetcher the module's whole egress surface"
+        )
+
+
+@pytest.mark.parametrize("path", [SERVICE_FILE, ROUTE_FILE])
+def test_the_audited_fetcher_is_the_only_door(path: pathlib.Path) -> None:
+    """One egress path, proved off the source rather than assumed.
+
+    This is the claim the transport check below depends on and does not make.
+    It fails on a second network import, on an httpx client built anywhere but
+    `_httpx_get`, and on the dynamic code that would hide either.
+    """
+    offences = _egress_offences(_tree(path))
+    assert not offences, f"{path.name} opens an egress path outside the audited fetcher: {offences}"
+
+
+def test_the_audited_fetcher_exists_and_imports_httpx_itself() -> None:
+    """The containment rule above is vacuous if nothing imports httpx at all.
+
+    A guard nobody has watched fire is not a guarantee, and a guard that would
+    pass over a module with no fetcher in it is worse: it would be credited for
+    the silence.
+    """
+    tree = _tree(SERVICE_FILE)
+    inside: List[int] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if node.name != _THE_ONE_FETCHER:
+            continue
+        for inner in ast.walk(node):
+            if isinstance(inner, ast.Import) and any(a.name == "httpx" for a in inner.names):
+                inside.append(inner.lineno)
+    assert inside, (
+        f"{_THE_ONE_FETCHER} does not import httpx in its own body, so the "
+        "containment rule is guarding nothing and the transport check may be "
+        "driving a function that is no longer the fetcher"
+    )
+
+
+# Each of these reached a real socket from inside the guarded module while the
+# verb walk reported zero offences. They sit in their own corpus rather than in
+# `_BYPASSES` on purpose: none of them spells a verb, so `_mutating_verb_offences`
+# is right not to fire on them and a shared corpus would only teach the wrong
+# lesson about which layer owns which question.
+_EGRESS_BYPASSES = {
+    # The adversary's 2026-09-10 tick three bypass, verbatim, minus the body of
+    # the function it sat in. Wire capture logged POST /executions/6679/retry
+    # with the API key attached, on a suite reporting 191 passed.
+    "a second egress module whose verb is implied by a body": (
+        "import urllib.request\n"
+        'outbound = urllib.request.Request(endpoint, data=b"{}", headers=headers)\n'
+        "answer = urllib.request.urlopen(outbound, timeout=TIMEOUT_SECONDS)"
+    ),
+    "the same module reached through from": (
+        "from urllib import request\nrequest.urlopen(endpoint, data=b'{}')"
+    ),
+    "a raw socket": ("import socket\ns = socket.create_connection((host, 443))"),
+    "the stdlib http client": ("import http.client\nc = http.client.HTTPSConnection(host)"),
+    "a third party client": ("import requests\nrequests.request(verb, url)"),
+    "shelling out to curl": (
+        "import subprocess\nsubprocess.run(['curl', '-XPOST', url])"
+    ),
+    "shelling out through os": ('os.system("curl -XPOST " + url)'),
+    "a dynamic import the walk cannot read": (
+        '__import__("urllib.request").urlopen(endpoint, data=b"{}")'
+    ),
+    # Found by probing the rule rather than by an adversary, and confirmed
+    # against `_egress_offences` before it was closed: the allowlist was keyed on
+    # the module, so this satisfied it while `import app.services.n8n_retry` did
+    # not. A sibling module holding the POST leaves both guarded files innocent.
+    "a sibling module pulled out of the local package": (
+        "from app.services import n8n_retry\nawait n8n_retry.fire(execution_id)"
+    ),
+    "an unpinned member of the local security package": (
+        "from app.security.deps import RetryClient"
+    ),
+    "a sibling file reached by a relative import": (
+        "from . import n8n_retry\nn8n_retry.fire(execution_id)"
+    ),
+    "the local package bound as a name rather than a pinned member": (
+        "from app import services\nservices.n8n_retry.fire(execution_id)"
+    ),
+    "a banned module named as a string, so no import node exists": (
+        'getattr(__builtins__, "__import__")("socket")'
+    ),
+    "an httpx client built outside the audited fetcher": (
+        "async def refresh(url):\n"
+        "    import httpx\n"
+        "    async with httpx.AsyncClient() as client:\n"
+        "        return await client.get(url)"
+    ),
+}
+
+
+@pytest.mark.parametrize("label, source", sorted(_EGRESS_BYPASSES.items()))
+def test_the_egress_detector_catches_the_second_doors(label: str, source: str) -> None:
+    offences = _egress_offences(ast.parse(source))
+    assert offences, (
+        f"the detector did not see {label}. A path like this reached a real socket "
+        f"from inside the module while the suite reported 191 passed: {source!r}"
+    )
+
+
+def test_the_egress_detector_does_not_fire_on_the_real_shape() -> None:
+    """The other half of the control, and the one that stops this rule becoming
+    unmaintainable: the module's actual imports, plus the fetcher's own httpx
+    import in its own scope, must all stay legal.
+    """
+    legitimate = "\n".join(
+        [
+            "import math",
+            "import os",
+            "from dataclasses import dataclass",
+            "from datetime import datetime, timezone",
+            "from typing import Any, Dict",
+            "from urllib.parse import urlparse",
+            "async def _httpx_get(url, headers):",
+            "    import httpx",
+            "    from urllib.parse import quote",
+            "    async with httpx.AsyncClient() as client:",
+            "        return await client.get(url, headers=headers)",
+            "source = os.environ",
+            "from fastapi import APIRouter, Query",
+            "from app.security.deps import CurrentUser",
+            "from app.services import n8n_telemetry",
+        ]
+    )
+    assert _egress_offences(ast.parse(legitimate)) == []
+
+
+def test_the_banlist_survives_a_widened_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The banlist's only job, and the only check that watches it do it.
+
+    Measured on 2026-09-10: with `_NETWORK_CAPABLE_MODULES` emptied, all nine
+    probes above still passed, because the allowlist catches every one of them
+    on its own. So the banlist was decorative under test while being described
+    as the rule the allowlist cannot relax. This is that description, executed:
+    widen the allowlist by one word, the way a future contributor would, and the
+    second door must still be refused.
+    """
+    import sys
+
+    module = sys.modules[__name__]
+    monkeypatch.setattr(module, "_ALLOWED_IMPORTS", _ALLOWED_IMPORTS | {"urllib.request"})
+    offences = _egress_offences(ast.parse("import urllib.request"))
+    assert offences, (
+        "widening the allowlist by one entry reopened the second egress door. The "
+        "banlist exists so that a one word edit cannot do that"
+    )
+    assert "refused whatever the allowlist says" in offences[0]
 
 
 # ---------------------------------------------------------------------------
@@ -505,8 +1005,13 @@ def test_the_mutating_verb_detector_catches_the_ways_around_it(label: str, sourc
 # catch the next one without anybody having imagined it first.
 #
 # The syntax walk is kept because it is cheap, it names the offence precisely,
-# and it fails at collection rather than at runtime. It is the first line. This
-# is the guarantee.
+# and it fails at collection rather than at runtime. It is the first line.
+#
+# This is the guarantee FOR THE ONE FUNCTION IT DRIVES, and that qualifier was
+# missing here until a fourth adversary walked around the side of it with
+# `urllib.request.urlopen`, which never touches httpx. What makes this cover the
+# module is the egress rule above: one door, and this is the check standing in
+# it. Neither half is the guarantee alone.
 # ---------------------------------------------------------------------------
 
 #: Headers that make a server treat a GET as a write. The verb on the wire is
@@ -518,6 +1023,190 @@ _METHOD_OVERRIDE_HEADERS = (
 )
 
 
+def _fetcher_shape_offences(tree: ast.AST) -> List[str]:
+    """Anything in `_httpx_get` that could make it behave differently under test.
+
+    THIS IS WHAT MAKES ONE DRIVEN INPUT REPRESENTATIVE, and it was missing until
+    an adversary used its absence on 2026-09-10. Its bypass branched inside the
+    fetcher:
+
+        if "includeData" in url:
+            <the POST path>
+        else:
+            response = await client.get(url, headers=headers)
+
+    Every production read is built by `_executions_url`, which always appends
+    `&includeData=false`, and the transport check drove one hand written URL that
+    had no such token. So the recorder saw the GET branch and the wire saw POST.
+    Measured with a capture server on the URL the module itself builds:
+
+        POST /api/v1/executions?limit=5&includeData=false HTTP/1.1
+        GET  /api/v1/executions?limit=1 HTTP/1.1
+
+    The first is what production sends. The second is what the test asked for.
+
+    Driving the real URL builder, which the check below now does, closes THAT
+    divergence and not the class of it: the adversary named
+    `type(client).__name__ == "AsyncClient"` as the same trick with no URL in it,
+    and that one is right. So the shape is refused instead. `_httpx_get` may
+    contain no branch at all. Measured on the shipped fetcher before choosing
+    it: zero `If`, `IfExp`, `Match` and `While` nodes, no conditional
+    comprehension, and no `BoolOp` or `Compare` either, so a question about the
+    inputs cannot be asked without one of these. The cost today is zero, and a
+    fetcher that ever needs a branch has to be a fetcher somebody looked at
+    again.
+
+    This is still an ENUMERATION, which is the thing that keeps losing in this
+    file. A mapping lookup diverges on its input with none of those nodes.
+    `test_the_driven_urls_are_the_production_ones` holds that seam open on
+    purpose and shows what actually closes it: driving the URLs the module
+    itself builds.
+    """
+    offences: List[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if node.name != _THE_ONE_FETCHER:
+            continue
+        for inner in ast.walk(node):
+            if isinstance(
+                inner,
+                (ast.If, ast.IfExp, ast.Match, ast.While, ast.BoolOp, ast.Compare),
+            ):
+                offences.append(
+                    f"{type(inner).__name__} at line {inner.lineno} inside "
+                    f"{_THE_ONE_FETCHER}. A branch in the one audited fetcher is how a "
+                    "GET under the recorder becomes a POST on the wire, so it is "
+                    "refused by shape"
+                )
+            elif isinstance(inner, ast.comprehension) and inner.ifs:
+                offences.append(
+                    f"a conditional comprehension inside {_THE_ONE_FETCHER} at line "
+                    f"{getattr(inner.iter, 'lineno', 0)} can select behaviour the same way"
+                )
+    return offences
+
+
+def test_the_audited_fetcher_cannot_tell_it_is_being_watched() -> None:
+    """The claim that one driven input speaks for every input.
+
+    The transport check below can only assert about calls it makes. This is why
+    the calls it makes are representative.
+    """
+    offences = _fetcher_shape_offences(_tree(SERVICE_FILE))
+    assert not offences, f"{_THE_ONE_FETCHER} can branch, so the wire check proves less than it claims: {offences}"
+
+
+def test_the_fetcher_shape_rule_fires_and_only_where_it_should() -> None:
+    """Both directions, because a rule nobody has watched fire is credited.
+
+    It fired for real on the tick five bypass, and the two synthetic trees keep
+    that repeatable: the branching fetcher is refused, the shipped shape is not,
+    and a branch in a DIFFERENT function is none of this rule's business.
+    """
+    branching = "\n".join(
+        [
+            "async def _httpx_get(url, headers):",
+            "    import httpx",
+            "    async with httpx.AsyncClient() as client:",
+            '        if "includeData" in url:',
+            '            return await client.request("GET", url)',
+            "        return await client.get(url, headers=headers)",
+        ]
+    )
+    assert _fetcher_shape_offences(ast.parse(branching))
+
+    branchless = "\n".join(
+        [
+            "async def _httpx_get(url, headers):",
+            "    import httpx",
+            "    try:",
+            "        async with httpx.AsyncClient() as client:",
+            "            response = await client.get(url, headers=headers)",
+            "    except Exception as exc:",
+            "        raise Unreachable(str(exc)) from exc",
+            "    return Fetched(response.status_code, None, str(response.url))",
+            "def _executions_url(base, limit, cursor):",
+            "    query = '?limit=1'",
+            "    if cursor:",
+            "        query += '&cursor=' + cursor",
+            "    return base + query",
+        ]
+    )
+    assert _fetcher_shape_offences(ast.parse(branchless)) == []
+
+
+#: URLs to drive the real fetcher with. The first two are built by the module's
+#: OWN builder, so a token that only production URLs carry cannot separate the
+#: test input from the real one again: `_executions_url` always appends
+#: `includeData=false`, and that is exactly what the tick five bypass keyed on.
+#: The hand written ones stay because they are cheap and because a fetcher that
+#: treats a cursor URL differently is worth catching too.
+def _urls_worth_driving() -> List[str]:
+    base = f"https://{PRIMARY_HOST}"
+    return [
+        tel._executions_url(base, 5, None),
+        tel._executions_url(base, 250, "cursor-token-not-a-real-one"),
+        f"{base}/api/v1/executions?limit=1",
+        f"{base}/api/v1/executions",
+    ]
+
+
+async def test_the_driven_urls_are_the_production_ones() -> None:
+    """Why the driven set is built by the module's OWN url builder.
+
+    The shape rule above refuses the node types a branch is normally spelled
+    with, and that is an enumeration like every other one here. A mapping lookup
+    diverges on its input with no `If`, no `Compare` and no `BoolOp`, so it walks
+    straight through. What catches it instead is driving the input production
+    actually produces, which is the half of tick five the shape rule does not
+    answer.
+
+    Executed on a stand in fetcher rather than argued, because the real one is
+    clean and a claim about coverage has to be watched working.
+    """
+    import httpx
+
+    shaped_like_the_bypass = "\n".join(
+        [
+            "async def _httpx_get(url, headers):",
+            "    import httpx",
+            '    table = {0: "GET", 1: "POST"}',
+            "    async with httpx.AsyncClient() as client:",
+            '        return await client.request(table[url.count("includeData")], url)',
+        ]
+    )
+    assert _fetcher_shape_offences(ast.parse(shaped_like_the_bypass)) == [], (
+        "this control is worthless if the shape rule already refuses the stand in. It "
+        "exists because a mapping lookup is not one of the refused nodes"
+    )
+
+    seen: List[Any] = []
+
+    def handler(request: Any) -> Any:
+        seen.append(request)
+        return httpx.Response(200, json={"data": []})
+
+    async def diverging(url: str) -> None:
+        table = {0: "GET", 1: "POST"}
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            await client.request(table[url.count("includeData")], url)
+
+    await diverging(f"https://{PRIMARY_HOST}/api/v1/executions?limit=1")
+    assert [request.method for request in seen] == ["GET"], (
+        "the hand written URL was supposed to miss this divergence, and this control "
+        "only means something while it does"
+    )
+
+    seen.clear()
+    for url in _urls_worth_driving():
+        await diverging(url)
+    assert any(request.method == "POST" for request in seen), (
+        "no URL in the driven set carries the token every production URL carries, so "
+        "the executed check would have missed tick five's fetcher exactly as it did"
+    )
+
+
 async def _requests_the_real_fetcher_sends(monkeypatch: pytest.MonkeyPatch) -> List[Any]:
     """Drive `_httpx_get` itself and return every request that reached transport.
 
@@ -525,6 +1214,13 @@ async def _requests_the_real_fetcher_sends(monkeypatch: pytest.MonkeyPatch) -> L
     on the module object is enough; there is no cached reference to dodge. The
     client is subclassed rather than replaced so that every argument the real
     fetcher passes still applies and only the transport is ours.
+
+    The subclass carries httpx's own name and module deliberately. A fetcher
+    could otherwise read `type(client).__name__` and behave itself only while
+    being watched, which is the tick five bypass with the URL taken out of it.
+    That is a cheap sniff closed cheaply and is NOT a proof of
+    indistinguishability; `_fetcher_shape_offences` above is the actual answer,
+    because it refuses the branch such a sniff would need.
     """
     import httpx
 
@@ -541,11 +1237,13 @@ async def _requests_the_real_fetcher_sends(monkeypatch: pytest.MonkeyPatch) -> L
             kwargs["transport"] = httpx.MockTransport(handler)
             super().__init__(*args, **kwargs)
 
+    Recording.__name__ = real_client.__name__
+    Recording.__qualname__ = real_client.__qualname__
+    Recording.__module__ = real_client.__module__
+
     monkeypatch.setattr(httpx, "AsyncClient", Recording)
-    await tel._httpx_get(
-        f"https://{PRIMARY_HOST}/api/v1/executions?limit=1",
-        {"X-N8N-API-KEY": "not-a-real-key"},
-    )
+    for url in _urls_worth_driving():
+        await tel._httpx_get(url, {"X-N8N-API-KEY": "not-a-real-key"})
     return seen
 
 
@@ -558,11 +1256,16 @@ async def test_the_request_that_reaches_the_wire_carries_get(
     was handed, which is the only question the module docstring's promise is
     actually about.
     """
+    driven = _urls_worth_driving()
     sent = await _requests_the_real_fetcher_sends(monkeypatch)
     assert sent, (
         "the production fetcher never reached the transport, so this test proved "
         "nothing. A guard that cannot fire is worse than no guard, because it is "
         "credited"
+    )
+    assert len(sent) == len(driven), (
+        f"drove {len(driven)} URLs and the transport saw {len(sent)} requests. A "
+        "fetcher that swallows one input is a fetcher this check is not covering"
     )
     for request in sent:
         assert request.method == "GET", (

@@ -23,13 +23,51 @@ assembled by `"".join(("PO", "ST"))`, so NO verb string existed anywhere in this
 file, the walk reported zero offences, and a capture server logged POST on the
 wire.
 
-The guarantee is therefore an EXECUTED one.
+The guarantee is therefore an EXECUTED one, and it has a scope.
 `test_the_request_that_reaches_the_wire_carries_get` installs a recording
 transport under this very function and asserts on the request object the
-transport is handed, so it does not care how the verb got there and needed
-nobody to imagine the shape first. The syntax walk is kept beside it because it
-is cheap and names the offence precisely, and both are proved against synthetic
-bypasses in `test_the_mutating_verb_detector_catches_the_ways_around_it`.
+transport is handed, so it does not care how the verb got there. What it cannot
+see is a request that never passes through here, and that paragraph used to read
+as though it could. A fourth adversary walked around the side of it on
+2026-09-10 by appending a second fetcher built on `urllib.request.urlopen`,
+where the verb is not a token at all: `urllib` promotes GET to POST purely
+because `data=` is not None. The walk found no verb to fold, the recorder was
+never called, and a capture server logged POST against a retry endpoint with the
+API key attached.
+
+So the guarantee is three claims and it needs all three.
+
+`test_the_audited_fetcher_is_the_only_door` is the first. These files may import
+only a measured allowlist of modules; `urllib.request`, `socket`, `subprocess`
+and their kind are refused whatever that allowlist later says; `httpx` may be
+imported only inside `_httpx_get`; members of the two local packages are pinned;
+and the dynamic code that would hide any of that is refused by shape rather than
+by value. One door.
+
+`test_the_audited_fetcher_cannot_tell_it_is_being_watched` is the second, and it
+is here because a fifth adversary walked through its absence on 2026-09-10 while
+the suite reported 210 passed. Its fetcher branched:
+
+    if "includeData" in url:
+        <a POST, assembled so that no verb string exists>
+    else:
+        response = await client.get(url, headers=headers)
+
+Every production read is built by `_executions_url`, which always appends
+`&includeData=false`. The executed check drove one hand written URL that carried
+no such token, so the recorder was handed the GET branch while a capture server
+logged POST on the URL this module itself builds. `_httpx_get` may therefore
+contain no branch: no `If`, no `IfExp`, no `Match`, no `While`, no `BoolOp` and
+no `Compare`. It has none today. And because that is another enumeration, the
+executed check is now driven with the URLs `_executions_url` produces rather
+than with hand written ones, so the two halves fail in different directions.
+
+The syntax walk is the third and is kept because it is cheap and names the
+offence precisely. All of them are proved against synthetic bypasses that each
+reached a real socket once, in
+`test_the_mutating_verb_detector_catches_the_ways_around_it`,
+`test_the_egress_detector_catches_the_second_doors` and
+`test_the_driven_urls_are_the_production_ones`.
 
 THE API SHAPE WAS MEASURED ON 2026-09-10
 
