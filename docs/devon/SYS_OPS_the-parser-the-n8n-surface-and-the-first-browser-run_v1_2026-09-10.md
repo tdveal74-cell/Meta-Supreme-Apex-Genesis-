@@ -322,7 +322,63 @@ parser's hot path, and a partial list invites the next session to add a few more
 words, which is the fitted list trap this file already warns about. The
 behaviour stays, the measurement is filed, and the dig is closed.
 
+## Tee heard DEVON, 2026-09-10
+
+The caveat every arc in this estate has carried is closed. Tee pressed START
+AUDIO and Send on
+`https://meta-supreme-apex-genesis-web.vercel.app/presence` and reported back in
+two words: audio works.
+
+That is the only gate on this lane that was never measurable from a session.
+`/health` says `speech cartesia`, which proves the adapter; it publishes the
+adapter and never the voice id, so nothing short of a human listening could
+settle which voice is loaded and whether it sounds right. A person listened.
+
+The order matters and is worth keeping, because the failure mode is silent.
+`say()` posts to the socket the moment Send is pressed and does not need audio
+unlocked, so a turn can run in full while the browser's audio context is still
+locked and the page looks identical to a working one. START AUDIO first, then
+Send. The panel already says so in its own copy: "Scheduled is what left for the
+speakers, not what was heard: a muted device looks identical from here."
+
+## The four TQO sub-workflows, archived on Tee's ruling
+
+Ruled 2026-09-10. Tee first stated V5 calls them, then corrected himself and
+authorised retiring them. Measured either way before acting: both copies of
+`TQO FINAL V5` carry exactly two `executeWorkflow` nodes and both call
+`Zbq6gS77PRauqb1I`, which is `TSWS 01, Post-Production Master`. The four
+sub-workflow ids and names occur ZERO times across 340,431 characters of VPS
+payload and 346,103 of Cloud, none of the four has any production trigger, and
+none of them exists on Cloud at all.
+
+Archived, not deleted, under the estate's never hard delete doctrine, and read
+in full first because this repository already recorded that archiving makes a
+workflow unreadable:
+
+| workflow | id | nodes |
+|---|---|---|
+| TQO - Script Generation Sub-workflow | `9vnHZ6NoOa8kRLXp` | 7 |
+| TQO - Promote Sub-workflow | `MCHKC1ql65tF8mFp` | 3 |
+| TQO - Packaging Sub-workflow | `Df5Q5K63imK3r8S2` | 7 |
+| TQO - Rendering Sub-workflow (Detailed) | `N3aTJOrJEVIE0wqR` | 14 |
+
+Independent corroboration that they were the old architecture: all four are
+Airtable era, and `TQO FINAL V5` carries 29 DataTable nodes and no Airtable node
+at all. `TQO - Error Handler Sub-workflow` was NOT in the four and was left
+alone.
+
+**A credential finding came out of that read, and its value is deliberately not
+written here.** The Rendering sub-workflow's `ElevenLabs TTS` node carried an
+API key as a LITERAL in `headerParameters` under `x-api-key` rather than as a
+credential reference, pointed at a plain `http://` host, so the key also
+travelled in cleartext whenever that node ran. Graded: the workflow was inactive
+with no triggers so it was not firing, but a plaintext key in a node parameter
+is readable by anyone with n8n access, and archiving the workflow does not
+remove it from the n8n database. Rotation at the provider is the only thing that
+closes it, and it was raised to Tee the moment it was found.
+
 ## Open
+
 
 - Seven trigger sweep routes still reach a gate on prose. They are pre existing
   at `5ff4348`, the obvious fix was measured and refused because it breaks a
@@ -365,17 +421,17 @@ by property symbol. A getattr walk could not read a verb it reached for and said
 nothing. A stated used_fraction was trusted without being cross checked against
 the figures it claims to summarise. And the smoke run's own first red blamed a
 panel for a CORS refusal the harness had caused.
-OPEN: Nobody has heard DEVON end to end yet. /health was read by Tee on
-2026-09-10 and reports speech cartesia, so the owned voice lane is live, but it
-publishes the adapter and never the voice id, and the breaker has served no
-speech at all, so which voice is loaded and whether it sounds right are both
-unverified and only Tee's ears settle them. The prose leak dig is CLOSED with a
+OPEN: Rotate the API key found as a literal in the Rendering sub-workflow's
+ElevenLabs TTS node; archiving does not remove it from the n8n database and only
+the provider can close it. The prose leak dig is CLOSED with a
 negative result rather than a rule, and the recommendation is to leave the
 behaviour; a ruling from Tee to ship the measured 40 percent anyway would
 reopen it. Seven pre existing trigger sweep routes still gate on prose and
 need a ruling, not a guess. control-check's BELOW_AA still cannot see a non text
 indicator and the fix belongs in the panels. No contrast measured on a screen.
 dependency-audit not reproduced here; its inputs are unchanged.
-STATUS: pushed to claude/dreamy-wright-pv1f3l, draft PR opened, awaiting the head
-run; eight jobs expected on this diff
+STATUS: merged as d2b13f6 with all eight jobs green on 4bab181; four surfaces
+read back and all on d2b13f6; Tee heard DEVON end to end on 2026-09-10, which
+closes the last gate on the voice lane; four TQO sub-workflows archived on his
+ruling and one credential finding raised for rotation
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
