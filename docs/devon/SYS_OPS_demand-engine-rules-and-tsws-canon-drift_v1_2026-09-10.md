@@ -120,10 +120,20 @@ The 08-06 copy does sit alongside `mark_capture.html` and the current PNG
 exports, which reads like the live bundle, but that is inference and not a
 ruling.
 
-**Finding 3: `engine.realm` is one byte.** Drive id
-`1DhPC1CRwU49P-IwdlYPXq7nW9PX7ld17`, folder `1xZx8qdUI3bYhSce8jlRQr7BLntJnMc-H`,
-modified 2026-08-11. A one byte file with that name is a truncated or failed
-write. Unknown whether the render job reads it.
+**Finding 3: WITHDRAWN, same day.** It was raised as `engine.realm` being one
+byte and therefore a truncated or failed write. Checked rather than assumed:
+the file decodes to a single newline, and its folder
+(`1xZx8qdUI3bYhSce8jlRQr7BLntJnMc-H`) holds `flutter_tools.snapshot`,
+`flutter.version.json`, a `dart-sdk` directory, and stamps for
+`gradle_wrapper`, `material_fonts`, `ios-deploy`, `libimobiledevice` and
+`openssl`. That is a Flutter SDK `bin/cache` directory synced into Drive.
+`engine.realm` is Flutter's own artifact tracking file and has nothing to do
+with TSWS or the render pipeline. One newline is normal for it.
+
+Recorded rather than deleted, because the error is the useful part: a byte
+count was raised as a finding before its blast radius was worked out, which is
+the over-calling this estate's first law names explicitly. The check that
+settled it cost one download and one folder listing.
 
 ## What already exists, so nobody goes shopping again
 
@@ -184,8 +194,8 @@ TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_demand-engine-rules-and-tsws-canon-drift_v1_2026-09-10
 DATE: 2026-09-10
 DECISIONS: Tee ruled the neta.art assessment out of this capture and the rest of it in, then ruled to apply the 2026-08-04 delta and stated the environment engine is built on n8n; no ruling yet taken on which of the five logo files is the source of exports
-FINDINGS: the installed shadow-we-share-brand skill is five weeks behind a 2026-08-04 canon delta and caused two wrong answers in this session, calling the p5 living mark Three.js and describing environmental themes as a parameter layer on the mark when canon says the mark never wears season palettes; five copies of TheShadowWeShare_logo_3D.html exist across four Drive folders with the newest two bytes larger and not carrying the source of exports title; engine.realm is one byte and is a truncated or failed write; the KDP demand engine video rates 6.5 of 10 as strategy and 3 of 10 as evidence, with every revenue figure self reported or Book Beam estimated and the attribution claim asserted rather than measured; two standing rules were extracted that the estate did not previously hold in writing
-OPEN: rule on which of the five logo files is the source of exports, the 2026-08-06 copy being the only one that differs and the only one sitting with the current bundle while the source of exports title sits on the 2026-08-01 copy elsewhere; retire the stale synced copy of shadow-we-share-brand at its source so it cannot load beside the committed one; establish whether engine.realm is load bearing; read the TSWS render worker to confirm the environment engine is implemented there rather than only documented; video title, channel, publish date and view count remain unverified because vidIQ metadata needed an approval not held and youtube.com is egress blocked
-STATUS: capture filed; delta applied and committed as Canon v2 at .claude/skills/shadow-we-share-brand/SKILL.md; n8n render pipeline confirmed as six live workflows fronted by TSWS 00; four open items remain, one of them a ruling only Tee can make
+FINDINGS: the installed shadow-we-share-brand skill is five weeks behind a 2026-08-04 canon delta and caused two wrong answers in this session, calling the p5 living mark Three.js and describing environmental themes as a parameter layer on the mark when canon says the mark never wears season palettes; five copies of TheShadowWeShare_logo_3D.html exist across four Drive folders with the newest two bytes larger and not carrying the source of exports title; a third finding about engine.realm being a truncated write was raised and then WITHDRAWN the same day, the file being Flutter's own cache artifact and not TSWS at all; the KDP demand engine video rates 6.5 of 10 as strategy and 3 of 10 as evidence, with every revenue figure self reported or Book Beam estimated and the attribution claim asserted rather than measured; two standing rules were extracted that the estate did not previously hold in writing
+OPEN: rule on which of the five logo files is the source of exports, the 2026-08-06 copy being the only one that differs and the only one sitting with the current bundle while the source of exports title sits on the 2026-08-01 copy elsewhere; retire the stale synced copy of shadow-we-share-brand at its source, the container copy having been deleted 2026-09-10 after confirming it carried none of the delta, but it resyncs from the account and will return; read the TSWS render worker to confirm the environment engine is implemented there rather than only documented; video title, channel, publish date and view count remain unverified because vidIQ metadata needed an approval not held and youtube.com is egress blocked
+STATUS: capture filed; delta applied and committed as Canon v2 at .claude/skills/shadow-we-share-brand/SKILL.md; n8n render pipeline confirmed as six live workflows fronted by TSWS 00; one finding withdrawn on inspection; the mark was verified by rendering it headlessly from the 2026-08-06 file at 2000px on the canonical angle and published as a live viewer; two open items remain, one of them a ruling only Tee can make
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
