@@ -694,7 +694,43 @@ class DurableAgentTaskService:
             "expansion": {
                 "subagents": True,
                 "durable_subagent_links": True,
-                "scheduler": True,
+                # Recording a goal for later and running one at that time are
+                # two capabilities, and this key claimed both. It read a bare
+                # True until 2026-09-10, and
+                # apps/web/components/command-center/CapabilityDock.tsx lit a
+                # green Scheduler light from it directly above the rows that
+                # will never fire.
+                #
+                # Nothing runs a due agent schedule. materialize_due_schedules
+                # (line 361 of this file) has exactly one caller, the manual
+                # route at app/api/v1/agent_expansion.py:87, and the cron the
+                # API image ships (infrastructure/docker/Dockerfile.api:30,
+                # dispatch.py) drives app/services/dispatcher.py:111, which
+                # reads Workflow rows and never touches agent_schedules.
+                #
+                # False is the honest answer and it also fails safe: a consumer
+                # still reading this key as a plain flag goes grey rather than
+                # lighting green off a truthy object.
+                # test_devon_scheduler_honesty.py couples both keys below to
+                # the call graph, so restoring a runner without correcting them
+                # goes red, and so does correcting them without a runner.
+                "scheduler": False,
+                "scheduler_status": {
+                    "records_goals": True,
+                    "runs_goals": False,
+                    "runner": None,
+                    "materialize_route": (
+                        "POST /api/v1/agent-expansion/schedules/materialize"
+                    ),
+                    "detail": (
+                        "Scheduled goals are recorded durably and are not "
+                        "executed. No cron entry and no background loop calls "
+                        "materialize_due_schedules, so a due goal stays inert "
+                        "until somebody posts the materialize route, and the "
+                        "task that call creates is still human gated before it "
+                        "runs."
+                    ),
+                },
                 "skill_proposals": True,
                 "skill_promotion_requires_human": True,
                 "materialize_due_schedules": True,

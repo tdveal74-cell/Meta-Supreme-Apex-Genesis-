@@ -463,8 +463,13 @@ input,select{font:inherit}
           <label for="voiceSel">VOICE</label>
           <select id="voiceSel" aria-label="DEVON speaking voice"></select>
           <label for="rate">RATE</label>
-          <input id="rate" type="range" min="0.7" max="1.15" step="0.02" value="0.94" style="width:88px">
-          <button class="tgl" id="muteBtn" type="button">MUTE</button>
+          <!-- Voice out refuses on this host (see the Voice stub in the script
+               below), so both of these ship inert. The rate slider wrote a
+               property the stub does not have, and the button read MUTE and
+               flipped to an on label over a speak() that never speaks. The
+               script fills in the reason and the tooltips. -->
+          <input id="rate" type="range" min="0.7" max="1.15" step="0.02" value="0.94" style="width:88px" disabled>
+          <button class="tgl off" id="muteBtn" type="button" disabled>SPEECH OFF</button>
           <button class="tgl off" id="clearBtn" type="button">CLEAR</button>
         </div>
       </div>
@@ -2066,28 +2071,48 @@ if(!micOk){
 }
 
 Voice.init();
-function onVoicesReady(){
-  const sel=$('voiceSel'); sel.innerHTML='';
-  Voice.voices.forEach((v,i)=>{
-    const o=el('option','',esc(v.name.replace(/\s*\(.*?\)\s*/g,'').slice(0,28))+' · '+v.lang);
-    o.value=i; sel.appendChild(o);
-  });
-  sel.value='0';
-  sel.onchange=()=>{ Voice.chosen=Voice.voices[+sel.value]; devonSays('This is the voice I will use.'); };
-}
+/* THE THREE VOICE CONTROLS, AND WHY NONE OF THEM DOES ANYTHING.
+
+   Three controls here outlived the voice they drove. Until 2026-09-10:
+
+     - MUTE flipped the stub's muted flag and relabelled itself to say speech
+       was on. The stub's speak() returns without speaking whatever that flag
+       says, so the button announced a mode the page cannot enter. That is the
+       console claiming something ran when it did not, which is the one line
+       DEVON does not cross.
+     - the RATE slider wrote a rate property the stub does not declare and
+       nothing reads.
+     - onVoicesReady built the voice picker from a voices list and assigned a
+       chosen voice, two more properties the stub does not have. It was already
+       dead: nothing called it, because the speechSynthesis onvoiceschanged
+       handler that used to went out with the rented voice.
+
+   So the controls stay visible, because Tee needs to see that voice out exists
+   and is off, and they are inert and say why. If the owned voice on the
+   presence service is ever wired up here, this block is where the handlers come
+   back, alongside a Voice object that actually declares what they touch.
+   test_devon_console_voice_honesty.py holds the line: every Voice property the
+   page touches has to be one the object declares, and nothing outside the
+   object may assign to it. */
 if(!Voice.supported){
-  $('voiceSel').innerHTML='<option>not available</option>';
-  $('voiceSel').disabled=true;
+  const sel=$('voiceSel');
+  sel.innerHTML='<option>none, voice out is off</option>';
+  sel.disabled=true;
+  sel.title=Voice.reason;
+  const rate=$('rate');
+  rate.disabled=true;
+  rate.title=Voice.reason;
+  const mute=$('muteBtn');
+  mute.disabled=true;
+  mute.title=Voice.reason;
+  $('micNotice').insertAdjacentHTML('beforeend',`<div class="notice">${esc(Voice.reason)}</div>`);
 }
-$('rate').addEventListener('input',e=>{Voice.rate=parseFloat(e.target.value);});
-$('muteBtn').addEventListener('click',()=>{
-  Voice.muted=!Voice.muted;
-  const b=$('muteBtn');
-  b.textContent=Voice.muted?'SPEECH OFF':'SPEECH ON';
-  b.setAttribute('aria-pressed',String(!Voice.muted));
-  b.classList.toggle('off',Voice.muted);
-  if(Voice.muted) Voice.stop();
-});
+
+NOTE ON HUNK 2: the `·` above is the literal MIDDLE DOT character in the
+source line being deleted. The block is a pure deletion plus the new comment
+and `if(!Voice.supported)` body; the line `Voice.init();` immediately above and
+the line `$('clearBtn').addEventListener(...)` immediately below are unchanged,
+with one blank line inserted after `Voice.init();`.
 $('clearBtn').addEventListener('click',()=>{
   $('transcript').innerHTML='';
   $('plan').innerHTML='<span class="dim">Cleared. Speak or type when you are ready.</span>';
@@ -2153,10 +2178,10 @@ setTimeout(()=>{
   $('sayText').textContent=greeting;
   log('devon',greeting);
   $('voiceState').textContent=Ears.supported?'READY':'TYPED ONLY';
-  // Browsers refuse speech before a user gesture, so the greeting is written
-  // now and spoken on the first interaction rather than failing silently.
-  const speakOnce=()=>{ Voice.speak(greeting); document.removeEventListener('pointerdown',speakOnce); };
-  document.addEventListener('pointerdown',speakOnce,{once:true});
+  // This used to arm a pointerdown listener to speak the greeting once, because
+  // browsers refuse speech before a user gesture. Voice.speak is a no-op now,
+  // so the listener existed only to call nothing on the visitor's first click.
+  // The greeting is written above and stays written.
 },700);
 
 </script>

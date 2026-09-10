@@ -3,12 +3,37 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_BASE } from "@/lib/api-base";
 
+/**
+ * Whether a recorded goal can actually run, straight from
+ * `expansion.scheduler_status` in GET /agent-tasks/tools
+ * (app/services/agent_tasks.py, tool_catalog).
+ *
+ * `records_goals` and `runs_goals` are deliberately separate. This dock lit a
+ * green Scheduler light off a hardcoded `expansion.scheduler: true` until
+ * 2026-09-10, sitting directly above a panel listing the goals that will never
+ * fire, because nothing in the estate turns a due agent schedule into a task
+ * on a timer.
+ */
+type SchedulerStatus = {
+  records_goals?: boolean;
+  runs_goals?: boolean;
+  runner?: string | null;
+  materialize_route?: string;
+  detail?: string;
+};
+
 type ToolCatalog = {
   operator?: { enabled?: boolean; configured?: boolean };
   github?: { configured?: boolean; allowed_repositories?: string[] };
   browser?: { enabled?: boolean; live_fetch?: boolean; navigate_requires_approval?: boolean };
   council?: { enabled?: boolean; agents?: string[]; observation_reaches_approval_cards?: boolean };
-  expansion?: { scheduler?: boolean; subagents?: boolean; skill_proposals?: boolean; materialize_due_schedules?: boolean };
+  expansion?: {
+    scheduler?: boolean;
+    scheduler_status?: SchedulerStatus;
+    subagents?: boolean;
+    skill_proposals?: boolean;
+    materialize_due_schedules?: boolean;
+  };
   execution?: { effect_receipts?: boolean; shared_task_leases?: boolean; idempotency_ledger?: boolean };
 };
 
@@ -157,6 +182,12 @@ export function CapabilityDock() {
     };
   }, [refresh]);
 
+  // The mesh count is a count of capabilities that are running, so the
+  // scheduler entry reads runs_goals and not the recorder. A schedule store
+  // nothing executes is not an active capability, and counting it kept the
+  // headline number one higher than the estate deserved.
+  const schedulerRuns = Boolean(catalog?.expansion?.scheduler_status?.runs_goals);
+
   const activeCount = useMemo(() => {
     if (!catalog) return 0;
     return [
@@ -164,18 +195,37 @@ export function CapabilityDock() {
       Boolean(catalog.github?.configured),
       Boolean(catalog.browser?.enabled),
       Boolean(catalog.council?.enabled),
-      Boolean(catalog.expansion?.scheduler),
+      schedulerRuns,
       Boolean(catalog.execution?.effect_receipts),
       Boolean(soul?.enabled),
     ].filter(Boolean).length;
-  }, [catalog, soul]);
+  }, [catalog, schedulerRuns, soul]);
 
+  // Rows with a run_at and no task_id are the recorded goals nothing has
+  // materialised. They are not queued for execution by anything, so the panel
+  // below names them recorded and carries the runner's own reason.
   const nextSchedule = useMemo(() => {
     const pending = schedules
       .filter((item) => item.run_at && !item.task_id)
       .sort((a, b) => new Date(a.run_at || 0).getTime() - new Date(b.run_at || 0).getTime());
     return pending[0] || null;
   }, [schedules]);
+
+  // The matrix is the only thing that knows whether a runner exists, so a
+  // failed read says the state is unread rather than guessing either way.
+  const schedulerNote = useMemo(() => {
+    const status = catalog?.expansion?.scheduler_status;
+    if (!status) {
+      return "Runner state unread. The capability matrix did not answer, so whether these goals execute is unknown here.";
+    }
+    if (status.runs_goals) {
+      return status.detail || "A runner executes due goals. The matrix gave no further detail.";
+    }
+    return (
+      status.detail ||
+      "Recorded goals are not executed here. The matrix reports no runner and gave no further detail."
+    );
+  }, [catalog]);
 
   const shellLabel =
     state === "locked"
@@ -214,7 +264,13 @@ export function CapabilityDock() {
                   ["GitHub", Boolean(catalog?.github?.configured), `${catalog?.github?.allowed_repositories?.length || 0} repo scope`],
                   ["Browser", Boolean(catalog?.browser?.enabled), catalog?.browser?.live_fetch ? "live fetch" : "guarded/offline"],
                   ["Council", Boolean(catalog?.council?.enabled), `${catalog?.council?.agents?.length || 0} agents`],
-                  ["Scheduler", Boolean(catalog?.expansion?.scheduler), `${schedules.length} scheduled`],
+                  [
+                    "Scheduler",
+                    schedulerRuns,
+                    schedulerRuns
+                      ? `${schedules.length} scheduled`
+                      : `${schedules.length} recorded, none run`,
+                  ],
                   ["Receipts", Boolean(catalog?.execution?.effect_receipts), "effect ledger"],
                   ["Soul", Boolean(soul?.enabled), soul?.enabled ? "recall on" : "recall off"],
                   ["Leases", Boolean(catalog?.execution?.shared_task_leases), "fenced runs"],
@@ -231,10 +287,13 @@ export function CapabilityDock() {
 
               <div className="mt-3 border border-[#22384a] bg-black/15 px-3 py-2.5">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#6f8494]">Next scheduled goal</span>
+                  <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#6f8494]">
+                    {schedulerRuns ? "Next scheduled goal" : "Next recorded goal, not queued to run"}
+                  </span>
                   <span className="font-mono text-[9px] text-[#d4a017]">{nextSchedule?.run_at ? new Date(nextSchedule.run_at).toLocaleString() : "NONE"}</span>
                 </div>
                 <p className="mt-1 truncate text-[10px] text-[#93a6b5]">{nextSchedule?.goal || "No unmaterialized scheduled goal is currently visible."}</p>
+                <p className="mt-1.5 text-[9px] leading-4 text-[#c77b4a]">{schedulerNote}</p>
               </div>
 
               <div className="mt-3 border border-[#3e617c] bg-[#071016] px-3 py-3">
