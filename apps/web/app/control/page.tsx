@@ -4,6 +4,11 @@ import { PresenceStageLoader } from "@/components/presence/PresenceStageLoader";
 import { KnowledgePanel } from "@/components/mind/KnowledgePanel";
 import { KnowledgeGraphPanel } from "@/components/mind/KnowledgeGraphPanel";
 import { LearningPanel } from "@/components/mind/LearningPanel";
+import { MemoryPanel } from "@/components/mind/MemoryPanel";
+import { ProjectsPanel } from "@/components/projects/ProjectsPanel";
+import { AgentRosterPanel } from "@/components/roster/AgentRosterPanel";
+import { DecisionRecordPanel } from "@/components/council/DecisionRecordPanel";
+import { WorkflowDoor } from "@/components/control/WorkflowDoor";
 import { AgentReadinessMatrix } from "@/components/readiness";
 
 /**
@@ -26,6 +31,11 @@ export default function ControlPage() {
         </>
       }
       learning={<LearningPanel />}
+      roster={<AgentRosterPanel />}
+      decisions={<DecisionRecordPanel />}
+      projects={<ProjectsPanel />}
+      memory={<MemoryPanel />}
+      workflows={<WorkflowDoor />}
     />
   );
 }

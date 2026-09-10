@@ -263,6 +263,30 @@ class Settings(BaseSettings):
     # those failed. The timeout must exceed the longest plausible run — a
     # full council deliberation against a live provider — or the sweep will
     # fail runs that are genuinely still working.
+    # Whether THIS deployment actually schedules the cron entrypoint that
+    # materializes due agent_schedules rows. Default False, and the default is
+    # the load bearing part.
+    #
+    # dispatch.py lane 2 exists in the image on every deployment. Whether
+    # anything runs it per minute is a property of the platform, not of this
+    # process, and nothing inside the container can see a Railway cron
+    # definition or a crontab on the host. On 2026-09-10 an adversary proved why
+    # that distinction matters: the capability matrix was about to report
+    # runs_goals True because a first party call site existed in the repository,
+    # while the live Railway project held exactly three services (api, presence,
+    # Postgres), no cron service, a long running uvicorn container, and zero
+    # log lines mentioning dispatch over two hours against a documented per
+    # minute schedule. The dock would have lit a green Scheduler tile over goals
+    # that still could not fire.
+    #
+    # So this is an OPERATOR STATEMENT about one deployment, it is set per
+    # service rather than in code, and it defaults to the answer that claims
+    # nothing. Set it only after a scheduled tick has actually been read back
+    # from the platform, per the deploy-readback skill. Leaving it unset on a
+    # deployment that does schedule the tick understates the estate, which is
+    # the direction this repository errs in on purpose.
+    SCHEDULER_TICK_INSTALLED: bool = False
+
     WORKFLOW_SWEEP_ON_STARTUP: bool = True
     WORKFLOW_ORPHAN_TIMEOUT_MINUTES: int = 30
 

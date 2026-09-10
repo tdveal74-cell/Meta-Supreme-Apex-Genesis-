@@ -42,9 +42,30 @@ export type ControlPlaneProps = {
   knowledge?: ReactNode;
   /** Tier 2: the learning store DEVON plans from. */
   learning?: ReactNode;
+  /** Tier 1: the agent roster as the registry declares it. */
+  roster?: ReactNode;
+  /** Tier 1: the decision record, and the human final call on each open one. */
+  decisions?: ReactNode;
+  /** Tier 2: the projects every other read can be scoped by. */
+  projects?: ReactNode;
+  /** Tier 2: long term memory, read plus write plus edit plus hard delete. */
+  memory?: ReactNode;
+  /** Tier 3: the workflow engine, its runs and its approval gates. */
+  workflows?: ReactNode;
 };
 
-export function ControlPlane({ readiness, provenance, presence, knowledge, learning }: ControlPlaneProps) {
+export function ControlPlane({
+  readiness,
+  provenance,
+  presence,
+  knowledge,
+  learning,
+  roster,
+  decisions,
+  projects,
+  memory,
+  workflows,
+}: ControlPlaneProps) {
   return (
     <main className="min-h-screen bg-[#04070d] text-[#e8edf2]">
       <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col px-4 py-4 sm:px-6 lg:px-8">
@@ -132,6 +153,19 @@ export function ControlPlane({ readiness, provenance, presence, knowledge, learn
             </TierPanel>
 
             <TierPanel
+              title="Agent roster"
+              purpose="What each Council agent declares it is for, what it says it cannot do, the shape it promises to answer in, and how it asks to be judged."
+              sourcing={roster ? "live" : "unwired"}
+              sourceNote={
+                roster
+                  ? "Read from GET /agents and, per row on demand, GET /agents/{slug}. Both were complete and had no caller under apps/web until this panel. Capability counts read 'not read' rather than 0 until the detail route answers, because the list route sends no arrays; and is_active is only called a measurement on the detail route, because the list route filters on that very field."
+                  : "The roster panel is not mounted on this build."
+              }
+            >
+              {roster}
+            </TierPanel>
+
+            <TierPanel
               title="Ledger provenance"
               purpose="Whether an intent's history is hash chained end to end and whether a signed receipt certifies exactly that chain."
               sourcing={provenance ? "live" : "unwired"}
@@ -151,6 +185,19 @@ export function ControlPlane({ readiness, provenance, presence, knowledge, learn
               sourceNote="Read from the skill proposal routes on the agent expansion surface. Every field shown comes back from that read. Approving a draft and activating a skill are two separate rulings and the panel sends them as two separate values, because the API defaults promotion to on when the key is left out."
             >
               <SkillProposalGate />
+            </TierPanel>
+
+            <TierPanel
+              title="Decision record"
+              purpose="Every question the Council was asked, and the human final call on it."
+              sourcing={decisions ? "live" : "unwired"}
+              sourceNote={
+                decisions
+                  ? "Read from the decision routes. Until this panel existed nothing under apps/web called any of them, so a ruling made on the deliberate page lived in one browser tab and a reload discarded it. A failed read is drawn as unreadable, never as an empty record, and an exchange whose tracked state could not be read says so rather than reading as not recorded. Recording a call writes to the decision record only: no tool runs from here."
+                  : "The decision record panel is not mounted on this build."
+              }
+            >
+              {decisions}
             </TierPanel>
 
             <TierPanel
@@ -187,6 +234,19 @@ export function ControlPlane({ readiness, provenance, presence, knowledge, learn
             </TierPanel>
 
             <TierPanel
+              title="Projects"
+              purpose="The scope every other read can be narrowed by, and the only place to create or rename one."
+              sourcing={projects ? "live" : "unwired"}
+              sourceNote={
+                projects
+                  ? "Rows, counts and every field shown come from GET /projects, and creating and renaming go to POST /projects and PATCH /projects/{id}. Until this panel existed nothing under apps/web called any of them, so the project_id the knowledge routes and the graph route filter on could only ever be null. A failed read is drawn as unreadable, never as an empty list, and a 200 carrying rows with no usable id is drawn as neither. Archiving is accepted by the patch route and is deliberately not offered here."
+                  : "The projects panel is not mounted on this build."
+              }
+            >
+              {projects}
+            </TierPanel>
+
+            <TierPanel
               title="Knowledge"
               purpose="The corpus DEVON recalls from, a search that runs against it, and the measured distances between its items drawn as a graph."
               sourcing={knowledge ? "partial" : "unwired"}
@@ -211,6 +271,19 @@ export function ControlPlane({ readiness, provenance, presence, knowledge, learn
             >
               {learning}
             </TierPanel>
+
+            <TierPanel
+              title="Long term memory"
+              purpose="Everything stored about you that the Council can recall, and the only place to write, edit, pause or destroy one."
+              sourcing={memory ? "live" : "unwired"}
+              sourceNote={
+                memory
+                  ? "Rows and every field shown come back from GET /memory. The four routes were finished and tested before this panel and nothing under apps/web called them, so the Council's own memories about the owner accumulated where the owner could not read them. DELETE on that route is a hard delete, so deleting here is a two step ruling and the panel names what would be lost. A failed read is drawn as unreadable, never as empty."
+                  : "The memory panel is not mounted on this build."
+              }
+            >
+              {memory}
+            </TierPanel>
           </Tier>
 
           <Tier
@@ -219,6 +292,19 @@ export function ControlPlane({ readiness, provenance, presence, knowledge, learn
             title="Execution and Pipeline"
             summary="What the estate is spending, and what is running outside this repository."
           >
+            <TierPanel
+              title="Workflows"
+              purpose="The automation engine, the runs it has made, and the human ruling on every step that would write something."
+              sourcing={workflows ? "live" : "unwired"}
+              sourceNote={
+                workflows
+                  ? "Read from the six workflow paths. Until this panel existed nothing under apps/web called one of the engine's ten operations, so a workflow could not be composed and the approval gate the engine is built around had nobody standing at it. The payload a gate would write is rendered in full and its sha256 seal is sent back with the approval, so the server refuses a ruling given over a payload the run has since moved past. A gate the API reports as diverged carries no approve control at all."
+                  : "The workflow door is not mounted on this build."
+              }
+            >
+              {workflows}
+            </TierPanel>
+
             <TierPanel
               title="Token budget and cost"
               purpose="Today's spend against the hard cap that refuses at 429."
