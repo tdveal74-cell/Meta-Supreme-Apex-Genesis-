@@ -119,7 +119,7 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_devon_hermes_surface.py test_devon_receipts.py \
   test_devon_capture_enrichment.py test_presence_cartesia.py \
   test_presence_service.py test_devon_owned_voice.py \
-  test_devon_learning_context_honesty.py
+  test_devon_learning_context_honesty.py test_knowledge_graph.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .
