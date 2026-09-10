@@ -192,6 +192,29 @@ Railway cron definition or a crontab on the host, so the flag is an operator
 statement about one deployment. Set it on the service AFTER you have read back a
 scheduled tick from the platform, per the `deploy-readback` skill, not before.
 
+### How this estate actually runs it, as of 2026-09-10
+
+Not a host crontab. Railway service `scheduler-cron` in project `devon-api`,
+built from `main` at root `.`, start command `python dispatch.py`, restart policy
+NEVER, and every variable a cross service reference to `api` so no secret value
+is duplicated.
+
+**The schedule is `*/5 * * * *`, not `* * * * *`,** because five minutes is
+Railway's minimum cron interval. Railway also evaluates schedules in UTC and
+skips a run whose predecessor is still active rather than terminating it, which
+sits on top of the advisory lock rather than replacing it. The one minute crontab
+line above is still the right answer on a host you control; it is not available
+on this platform.
+
+The 15 minute failure backoff in `app/services/agent_scheduler.py` is therefore
+three ticks rather than fifteen. That is the intended shape either way: the
+number is chosen so a transient failure recovers inside a quarter hour and a
+permanently broken schedule costs one plan per window instead of one per tick.
+
+`SCHEDULER_TICK_INSTALLED` lives on the **api** service, not on the cron service,
+because the api is what serves the capability catalog the dock reads. Setting it
+on `scheduler-cron` would change nothing a person can see.
+
 **Cadences are UTC.** `daily:07:00` fires at 07:00 UTC year-round — it does not
 follow your local clock through daylight saving. Three forms:
 
