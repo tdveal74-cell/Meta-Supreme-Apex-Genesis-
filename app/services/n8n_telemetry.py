@@ -23,13 +23,28 @@ assembled by `"".join(("PO", "ST"))`, so NO verb string existed anywhere in this
 file, the walk reported zero offences, and a capture server logged POST on the
 wire.
 
-The guarantee is therefore an EXECUTED one.
+The guarantee is therefore an EXECUTED one, and it has a scope.
 `test_the_request_that_reaches_the_wire_carries_get` installs a recording
 transport under this very function and asserts on the request object the
-transport is handed, so it does not care how the verb got there and needed
-nobody to imagine the shape first. The syntax walk is kept beside it because it
-is cheap and names the offence precisely, and both are proved against synthetic
-bypasses in `test_the_mutating_verb_detector_catches_the_ways_around_it`.
+transport is handed, so it does not care how the verb got there. What it cannot
+see is a request that never passes through here, and that paragraph used to read
+as though it could. A fourth adversary walked around the side of it on
+2026-09-10 by appending a second fetcher built on `urllib.request.urlopen`,
+where the verb is not a token at all: `urllib` promotes GET to POST purely
+because `data=` is not None. The walk found no verb to fold, the recorder was
+never called, and a capture server logged POST against a retry endpoint with the
+API key attached.
+
+So the guarantee is two claims and it needs both.
+`test_the_audited_fetcher_is_the_only_door` is the structural half. These files
+may import only a measured allowlist of modules; `urllib.request`, `socket`,
+`subprocess` and their kind are refused whatever that allowlist later says;
+`httpx` may be imported only inside `_httpx_get`; and the dynamic code that
+would hide any of that is refused by shape rather than by value. One door, with
+the executed check standing in it. The syntax walk is kept beside both because
+it is cheap and names the offence precisely, and all three are proved against
+synthetic bypasses in `test_the_mutating_verb_detector_catches_the_ways_around_it`
+and `test_the_egress_detector_catches_the_second_doors`.
 
 THE API SHAPE WAS MEASURED ON 2026-09-10
 

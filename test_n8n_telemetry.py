@@ -5,13 +5,14 @@ states that matter most and are hardest to reach live (unreachable, a rotated
 key, a secondary pointed at the source by mistake) are the ones exercised
 hardest.
 
-Four of these are guards on structure rather than on behaviour, and each was
+Five of these are guards on structure rather than on behaviour, and each was
 written to be able to fail:
 
 * the router's live route table carries no verb but GET and HEAD
 * the running application answers 405 to POST, PUT, PATCH and DELETE
 * neither new module contains a mutating HTTP call or a mutating decorator
 * neither new module contains a URL literal or a live n8n host
+* neither new module can reach a socket except through `_httpx_get`
 
 The load bearing one is not any of those. It is
 `test_nothing_configured_never_reaches_the_network`: the fake fetcher raises if
@@ -29,7 +30,7 @@ import json
 import pathlib
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -479,6 +480,349 @@ def test_the_mutating_verb_detector_catches_the_ways_around_it(label: str, sourc
 
 
 # ---------------------------------------------------------------------------
+# THE SECOND DOOR
+#
+# Every rule above, and the transport check below, asks about A VERB. On
+# 2026-09-10 an adversary stopped arguing about verbs and appended a second
+# egress path to the service instead:
+#
+#     import urllib.request
+#     outbound = urllib.request.Request(endpoint, data=b"{}", headers={...})
+#     answer = urllib.request.urlopen(outbound, timeout=TIMEOUT_SECONDS)
+#
+# A capture server logged `POST /api/v1/executions/6679/retry` carrying the API
+# key. `_mutating_verb_offences` returned [] and the suite returned 191 passed.
+#
+# Both layers missed it for the same reason, and neither reason is a missing
+# location in a list:
+#
+# * the syntax walk assumes the verb exists as a token somewhere. `urllib`
+#   promotes GET to POST purely because `data=` is not None, so the verb is a
+#   runtime property of body presence and is spelled nowhere at all.
+# * the transport check drives `tel._httpx_get` and patches `httpx.AsyncClient`.
+#   `urllib.request.urlopen` never touches httpx, so the recorder saw nothing
+#   and its silence read as a pass.
+#
+# That is the honest limit of the check below: it audits ONE FUNCTION, not the
+# module's egress surface. Its coverage claim is only worth the separate claim
+# that no other code path in these two files can reach a socket, and nothing
+# was making that claim. This section makes it, structurally:
+#
+#   1. an IMPORT ALLOWLIST of exact dotted module names, measured off the two
+#      files on 2026-09-10 rather than imagined. `urllib.parse` is on it twice
+#      over (`urlparse` at line 130, `quote` at line 381) because it is pure
+#      string work; `urllib.request` is a different module and is not.
+#   2. a BANLIST that the allowlist cannot relax. A one word edit widening the
+#      allowlist to `urllib.request` still fails here, which is the difference
+#      between a rule and a speed bump.
+#   3. CONTAINMENT: `httpx` may be imported only inside `_httpx_get`. That is
+#      what turns "the audited function is read only" into "the module is read
+#      only", because it makes the audited function the only door.
+#   4. a refusal of DYNAMIC CODE by shape: `__import__`, `eval`, `exec`,
+#      `compile`, and the process spawning members of `os`. An import walk that
+#      can be defeated by `__import__("urllib.request")` is not a walk.
+#
+# The cost is real and stated: a new import in either file fails this test until
+# somebody adds it to the allowlist deliberately. Both files import eleven
+# modules between them and speak one verb, so that cost is a few seconds on the
+# rare occasion, against a door that stayed open through three hardening passes.
+# ---------------------------------------------------------------------------
+
+#: The exact dotted module names these two files import, measured with an AST
+#: walk on 2026-09-10 (service: math, os, dataclasses, datetime, typing,
+#: urllib.parse, httpx; route: typing, fastapi, app.security.deps,
+#: app.services). `httpx` is deliberately absent: it is governed by the
+#: containment rule below rather than by membership here.
+_ALLOWED_IMPORTS = {
+    "__future__",
+    "math",
+    "os",
+    "dataclasses",
+    "datetime",
+    "typing",
+    "urllib.parse",
+    "fastapi",
+    "app.security.deps",
+    "app.services",
+}
+
+#: Modules whose presence in either file is refused whatever the allowlist says.
+#: Every one of them can open a socket or run code that does, and none of them
+#: has a string only use the way `urllib.parse` does. Matched by dotted prefix,
+#: so `urllib.request.urlopen` is caught through `import urllib.request` and
+#: through `from urllib import request` alike.
+_NETWORK_CAPABLE_MODULES = (
+    "urllib.request",
+    "socket",
+    "ssl",
+    "http.client",
+    "http.server",
+    "requests",
+    "aiohttp",
+    "httplib2",
+    "urllib3",
+    "pycurl",
+    "ftplib",
+    "smtplib",
+    "imaplib",
+    "poplib",
+    "nntplib",
+    "telnetlib",
+    "xmlrpc",
+    "websocket",
+    "websockets",
+    "subprocess",
+    "ctypes",
+    "importlib",
+)
+
+#: The only function permitted to import httpx, and the one the transport check
+#: below actually drives. The two must stay the same name or the coverage claim
+#: quietly stops meaning anything.
+_THE_ONE_FETCHER = "_httpx_get"
+
+#: Builtins that turn any import walk into a suggestion.
+_DYNAMIC_CODE_BUILTINS = {"__import__", "eval", "exec", "compile"}
+
+#: Members of `os` that hand the work to another process. `os` is on the
+#: allowlist for `os.environ`, which is the only thing either file uses it for.
+_OS_PROCESS_CALLS = {
+    "system",
+    "popen",
+    "fork",
+    "forkpty",
+    "execv",
+    "execve",
+    "execl",
+    "execle",
+    "execlp",
+    "execvp",
+    "execvpe",
+    "spawnv",
+    "spawnve",
+    "spawnl",
+    "spawnlp",
+    "posix_spawn",
+}
+
+
+def _banned_module(dotted: str) -> Optional[str]:
+    """The banlist entry this dotted module name falls under, if any."""
+    for banned in _NETWORK_CAPABLE_MODULES:
+        if dotted == banned or dotted.startswith(banned + "."):
+            return banned
+    return None
+
+
+def _egress_offences(tree: ast.AST) -> List[str]:
+    """Every way this syntax tree could reach a socket other than through
+    `_httpx_get`.
+
+    Deliberately not a verb check. The bypass this exists for spelled no verb
+    anywhere: `urllib.request.urlopen(Request(url, data=b"{}"))` is a POST
+    because the body is not None. So this asks the structural question instead,
+    which is the one the transport check cannot ask about itself: how many doors
+    does this module have?
+    """
+    offences: List[str] = []
+
+    def visit(node: ast.AST, scope: Tuple[str, ...]) -> None:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            scope = scope + (node.name,)
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                _judge_module(alias.name, node.lineno, scope, offences)
+        elif isinstance(node, ast.ImportFrom):
+            module = "." * node.level + (node.module or "")
+            if node.level:
+                # A relative import cannot name a stdlib network module and is
+                # inside this repository, which the rest of the suite covers.
+                pass
+            elif module in _ALLOWED_IMPORTS or module == "httpx":
+                _judge_module(module, node.lineno, scope, offences)
+            else:
+                for alias in node.names:
+                    _judge_module(f"{module}.{alias.name}", node.lineno, scope, offences)
+        elif isinstance(node, ast.Call):
+            name = _callee_name(node.func)
+            if name in _DYNAMIC_CODE_BUILTINS:
+                offences.append(
+                    f"{name}(...) at line {node.lineno} can name a module this walk "
+                    "never sees. Refused by shape: an import allowlist that "
+                    f"{name} can step around is not an allowlist"
+                )
+            elif (
+                name in _OS_PROCESS_CALLS
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "os"
+            ):
+                offences.append(
+                    f"os.{name}(...) at line {node.lineno} hands the work to another "
+                    "process, which can carry any verb to any host"
+                )
+        for child in ast.iter_child_nodes(node):
+            visit(child, scope)
+
+    visit(tree, ())
+    return offences
+
+
+def _judge_module(
+    dotted: str, lineno: int, scope: Tuple[str, ...], offences: List[str]
+) -> None:
+    banned = _banned_module(dotted)
+    if banned is not None:
+        offences.append(
+            f"import of {dotted} at line {lineno} opens a second egress path. "
+            f"{banned} is refused whatever the allowlist says, because the "
+            "transport check audits one function and cannot see this one"
+        )
+        return
+    if dotted == "httpx":
+        if _THE_ONE_FETCHER not in scope:
+            offences.append(
+                f"httpx imported at line {lineno} outside {_THE_ONE_FETCHER}. Every "
+                "client in this module has to be built inside the one function the "
+                "transport check drives, or that check stops covering the module"
+            )
+        return
+    if dotted not in _ALLOWED_IMPORTS:
+        offences.append(
+            f"import of {dotted} at line {lineno} is not on the measured allowlist. "
+            "If it is legitimate, add it deliberately and say why; the allowlist is "
+            "what makes the one audited fetcher the module's whole egress surface"
+        )
+
+
+@pytest.mark.parametrize("path", [SERVICE_FILE, ROUTE_FILE])
+def test_the_audited_fetcher_is_the_only_door(path: pathlib.Path) -> None:
+    """One egress path, proved off the source rather than assumed.
+
+    This is the claim the transport check below depends on and does not make.
+    It fails on a second network import, on an httpx client built anywhere but
+    `_httpx_get`, and on the dynamic code that would hide either.
+    """
+    offences = _egress_offences(_tree(path))
+    assert not offences, f"{path.name} opens an egress path outside the audited fetcher: {offences}"
+
+
+def test_the_audited_fetcher_exists_and_imports_httpx_itself() -> None:
+    """The containment rule above is vacuous if nothing imports httpx at all.
+
+    A guard nobody has watched fire is not a guarantee, and a guard that would
+    pass over a module with no fetcher in it is worse: it would be credited for
+    the silence.
+    """
+    tree = _tree(SERVICE_FILE)
+    inside: List[int] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if node.name != _THE_ONE_FETCHER:
+            continue
+        for inner in ast.walk(node):
+            if isinstance(inner, ast.Import) and any(a.name == "httpx" for a in inner.names):
+                inside.append(inner.lineno)
+    assert inside, (
+        f"{_THE_ONE_FETCHER} does not import httpx in its own body, so the "
+        "containment rule is guarding nothing and the transport check may be "
+        "driving a function that is no longer the fetcher"
+    )
+
+
+# Each of these reached a real socket from inside the guarded module while the
+# verb walk reported zero offences. They sit in their own corpus rather than in
+# `_BYPASSES` on purpose: none of them spells a verb, so `_mutating_verb_offences`
+# is right not to fire on them and a shared corpus would only teach the wrong
+# lesson about which layer owns which question.
+_EGRESS_BYPASSES = {
+    # The adversary's 2026-09-10 tick three bypass, verbatim, minus the body of
+    # the function it sat in. Wire capture logged POST /executions/6679/retry
+    # with the API key attached, on a suite reporting 191 passed.
+    "a second egress module whose verb is implied by a body": (
+        "import urllib.request\n"
+        'outbound = urllib.request.Request(endpoint, data=b"{}", headers=headers)\n'
+        "answer = urllib.request.urlopen(outbound, timeout=TIMEOUT_SECONDS)"
+    ),
+    "the same module reached through from": (
+        "from urllib import request\nrequest.urlopen(endpoint, data=b'{}')"
+    ),
+    "a raw socket": ("import socket\ns = socket.create_connection((host, 443))"),
+    "the stdlib http client": ("import http.client\nc = http.client.HTTPSConnection(host)"),
+    "a third party client": ("import requests\nrequests.request(verb, url)"),
+    "shelling out to curl": (
+        "import subprocess\nsubprocess.run(['curl', '-XPOST', url])"
+    ),
+    "shelling out through os": ('os.system("curl -XPOST " + url)'),
+    "a dynamic import the walk cannot read": (
+        '__import__("urllib.request").urlopen(endpoint, data=b"{}")'
+    ),
+    "an httpx client built outside the audited fetcher": (
+        "async def refresh(url):\n"
+        "    import httpx\n"
+        "    async with httpx.AsyncClient() as client:\n"
+        "        return await client.get(url)"
+    ),
+}
+
+
+@pytest.mark.parametrize("label, source", sorted(_EGRESS_BYPASSES.items()))
+def test_the_egress_detector_catches_the_second_doors(label: str, source: str) -> None:
+    offences = _egress_offences(ast.parse(source))
+    assert offences, (
+        f"the detector did not see {label}. A path like this reached a real socket "
+        f"from inside the module while the suite reported 191 passed: {source!r}"
+    )
+
+
+def test_the_egress_detector_does_not_fire_on_the_real_shape() -> None:
+    """The other half of the control, and the one that stops this rule becoming
+    unmaintainable: the module's actual imports, plus the fetcher's own httpx
+    import in its own scope, must all stay legal.
+    """
+    legitimate = "\n".join(
+        [
+            "import math",
+            "import os",
+            "from dataclasses import dataclass",
+            "from datetime import datetime, timezone",
+            "from typing import Any, Dict",
+            "from urllib.parse import urlparse",
+            "async def _httpx_get(url, headers):",
+            "    import httpx",
+            "    from urllib.parse import quote",
+            "    async with httpx.AsyncClient() as client:",
+            "        return await client.get(url, headers=headers)",
+            "source = os.environ",
+        ]
+    )
+    assert _egress_offences(ast.parse(legitimate)) == []
+
+
+def test_the_banlist_survives_a_widened_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The banlist's only job, and the only check that watches it do it.
+
+    Measured on 2026-09-10: with `_NETWORK_CAPABLE_MODULES` emptied, all nine
+    probes above still passed, because the allowlist catches every one of them
+    on its own. So the banlist was decorative under test while being described
+    as the rule the allowlist cannot relax. This is that description, executed:
+    widen the allowlist by one word, the way a future contributor would, and the
+    second door must still be refused.
+    """
+    import sys
+
+    module = sys.modules[__name__]
+    monkeypatch.setattr(module, "_ALLOWED_IMPORTS", _ALLOWED_IMPORTS | {"urllib.request"})
+    offences = _egress_offences(ast.parse("import urllib.request"))
+    assert offences, (
+        "widening the allowlist by one entry reopened the second egress door. The "
+        "banlist exists so that a one word edit cannot do that"
+    )
+    assert "refused whatever the allowlist says" in offences[0]
+
+
+# ---------------------------------------------------------------------------
 # THE GUARANTEE, EXECUTED
 #
 # Everything above is a SYNTAX walk, and on 2026-09-10 an adversary showed in
@@ -505,8 +849,13 @@ def test_the_mutating_verb_detector_catches_the_ways_around_it(label: str, sourc
 # catch the next one without anybody having imagined it first.
 #
 # The syntax walk is kept because it is cheap, it names the offence precisely,
-# and it fails at collection rather than at runtime. It is the first line. This
-# is the guarantee.
+# and it fails at collection rather than at runtime. It is the first line.
+#
+# This is the guarantee FOR THE ONE FUNCTION IT DRIVES, and that qualifier was
+# missing here until a fourth adversary walked around the side of it with
+# `urllib.request.urlopen`, which never touches httpx. What makes this cover the
+# module is the egress rule above: one door, and this is the check standing in
+# it. Neither half is the guarantee alone.
 # ---------------------------------------------------------------------------
 
 #: Headers that make a server treat a GET as a write. The verb on the wire is
