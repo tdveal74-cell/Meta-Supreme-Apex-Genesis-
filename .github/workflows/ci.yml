@@ -61,7 +61,8 @@ jobs:
             test_presence_service.py \
             test_devon_owned_voice.py \
             test_devon_learning_context_honesty.py \
-            test_knowledge_graph.py
+            test_knowledge_graph.py \
+            test_knowledge_graph_fixtures.py
 
   dependency-audit:
     name: Dependency audit (pip-audit + pnpm audit)

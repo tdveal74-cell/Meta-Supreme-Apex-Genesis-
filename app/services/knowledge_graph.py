@@ -84,6 +84,13 @@ class GraphNode:
     title: str
     source: str
     source_type: str
+    # Already in this query's GROUP BY and ORDER BY, and it was NOT in the
+    # SELECT list until 2026-09-10, so every node reached the panel without it.
+    # The panel parsed `created_at`, sorted by it, and told every screen reader
+    # "created date not reported" on every successful read. Same shape as the
+    # `degree` field it also never sent. An ISO string, or None when the row
+    # carried no date.
+    created_at: Optional[str]
     chunk_count: int
     embedded_chunk_count: int
     simulated_embeddings: bool
@@ -96,6 +103,7 @@ class GraphNode:
             "title": self.title,
             "source": self.source,
             "source_type": self.source_type,
+            "created_at": self.created_at,
             "chunk_count": self.chunk_count,
             "embedded_chunk_count": self.embedded_chunk_count,
             "simulated_embeddings": self.simulated_embeddings,
@@ -369,6 +377,7 @@ _NODES_SQL = text(
         ki.title AS title,
         ki.source AS source,
         ki.source_type AS source_type,
+        ki.created_at AS created_at,
         COUNT(e.id) AS chunk_count,
         COUNT(e.embedding) AS embedded_chunk_count,
         (ki.metadata ->> 'simulated_embeddings' = 'true') AS simulated_embeddings
@@ -428,6 +437,25 @@ _EDGES_SQL = text(
 # ---------------------------------------------------------------------------
 
 
+def _iso_or_none(value: Any) -> Optional[str]:
+    """An ISO 8601 string, or None. Never a guessed date.
+
+    The row hands back whatever the driver made of `timestamptz`, which is a
+    datetime under asyncpg and can be a plain string under a stub session, so
+    both are accepted and anything else becomes None rather than str() of a
+    repr. A panel showing "datetime.datetime(2026, 9, 10..." would be this
+    function's fault, not the panel's.
+    """
+    if value is None:
+        return None
+    isoformat = getattr(value, "isoformat", None)
+    if callable(isoformat):
+        return str(isoformat())
+    if isinstance(value, str):
+        return value
+    return None
+
+
 def assemble_graph(
     *,
     counts: Mapping[str, Any],
@@ -472,6 +500,7 @@ def assemble_graph(
                 # app/models/knowledge.py:35-36 documents.
                 source=(row.get("source") or row.get("source_type") or "manual"),
                 source_type=(row.get("source_type") or "manual"),
+                created_at=_iso_or_none(row.get("created_at")),
                 chunk_count=int(row.get("chunk_count") or 0),
                 embedded_chunk_count=embedded,
                 simulated_embeddings=bool(row.get("simulated_embeddings")),

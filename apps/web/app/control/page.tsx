@@ -2,6 +2,7 @@ import { ControlPlane } from "@/components/control/ControlPlane";
 import { ProvenanceSlot } from "@/components/control/ProvenanceSlot";
 import { PresenceStageLoader } from "@/components/presence/PresenceStageLoader";
 import { KnowledgePanel } from "@/components/mind/KnowledgePanel";
+import { KnowledgeGraphPanel } from "@/components/mind/KnowledgeGraphPanel";
 import { LearningPanel } from "@/components/mind/LearningPanel";
 import { AgentReadinessMatrix } from "@/components/readiness";
 
@@ -18,7 +19,12 @@ export default function ControlPage() {
       readiness={<AgentReadinessMatrix />}
       provenance={<ProvenanceSlot />}
       presence={<PresenceStageLoader />}
-      knowledge={<KnowledgePanel />}
+      knowledge={
+        <>
+          <KnowledgePanel />
+          <KnowledgeGraphPanel />
+        </>
+      }
       learning={<LearningPanel />}
     />
   );

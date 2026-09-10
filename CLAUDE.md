@@ -94,11 +94,25 @@ test failure. It shows up as a hundred or more collection ERRORs.
 
 ## Reproducing CI
 
-CI is six jobs. Five are in `.github/workflows/ci.yml`
-(`standalone` then `container` and `engine` then `api`, plus `dependency-audit`
-on every push). The sixth is `.github/workflows/web-ci.yml`, path filtered to
-the web workspace, so a run of Python-only PRs makes CI look like five.
+CI is SEVEN jobs, and on most pull requests you will see five. Five are in
+`.github/workflows/ci.yml` (`standalone` then `container` and `engine` then
+`api`, plus `dependency-audit` on every push). The sixth is
+`.github/workflows/web-ci.yml`, path filtered to the web workspace, so a run of
+Python-only PRs makes CI look like five. The seventh arrived on 2026-09-10:
+`.github/workflows/audio-ci.yml`, filtered to the FIVE files that can change
+what the speaker produces, so it appears only on a change to the playback path.
 `ruff check .` runs at the end of the api job, not as a job of its own.
+
+The audio job exists because `check:audio` ran in no workflow at all and four
+separate review passes found that. Its script's docstring said so deliberately:
+it needs Playwright and a Chromium binary, neither pinned by this repository, so
+it costs a browser download on every run that triggers it. Tee ruled on
+2026-09-10 to wire it path filtered rather than into `web-ci.yml`. It installs
+Playwright globally in the job instead of adding a devDependency, because a
+lockfile change would put the cost inside web-ci's own path filter and make
+every web pull request pay it. Both `loadPlaywright` and `findChromium` THROW
+when missing, so a runner without Chromium turns the job red rather than green,
+which is the direction that matters.
 
 The standalone job runs with no database. This paragraph said it also runs
 with **no** `PYTHONPATH` until 2026-09-09, when a worktree agent read the file
@@ -119,7 +133,8 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_devon_hermes_surface.py test_devon_receipts.py \
   test_devon_capture_enrichment.py test_presence_cartesia.py \
   test_presence_service.py test_devon_owned_voice.py \
-  test_devon_learning_context_honesty.py test_knowledge_graph.py
+  test_devon_learning_context_honesty.py test_knowledge_graph.py \
+  test_knowledge_graph_fixtures.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .

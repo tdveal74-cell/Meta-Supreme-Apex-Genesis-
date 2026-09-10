@@ -37,6 +37,17 @@ import {
   riskRank,
   summarizeTaskRisk,
 } from "../components/readiness/risk-resolution.ts";
+import {
+  classifyProvider,
+  compareNodes,
+  describeGaps,
+  edgeCloseness,
+  layoutNodes,
+  parseGraphPayload,
+  radiusEncodesDegree,
+  readGraphVerdict,
+  sourceOrder,
+} from "../components/mind/knowledge-graph.ts";
 import type {
   AgentTaskView,
   ToolCatalogEntry,
@@ -1563,9 +1574,426 @@ check("no rendered copy points at a named panel the tree does not have", () => {
     "KnowledgeGraph",
     `the matcher resolved "${proven}" out of the sentence that was live, and it has to resolve KnowledgeGraph for the lookup to mean anything`,
   );
+  // The lookup must be able to FAIL, or the assertion in the loop above is
+  // satisfied by a resolver that says yes to everything. Proving that needs a
+  // name the tree genuinely lacks, and the original proof used KnowledgeGraph,
+  // which the tree now has: the graph panel shipped on 2026-09-10, this
+  // assertion went red, and its message said to give the proof an absent name.
+  // That is the check catching its own staleness rather than a person noticing.
+  const absent = "the phlogiston panel below, read from GET /nowhere.";
+  const absentHit = [...absent.matchAll(NAMED_PANEL_NEARBY)];
+  assert.equal(absentHit.length, 1, "the matcher no longer fires on a plain named positional reference");
+  const absentName = absentHit[0][1]
+    .trim()
+    .split(/\s+/)
+    .filter((w) => !GRAMMAR.has(w.toLowerCase()))
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join("");
+  assert.equal(absentName, "Phlogiston", `expected Phlogiston, resolved ${absentName}`);
+  for (const candidate of [`${absentName}Panel`, absentName, `${absentName}Card`]) {
+    assert.ok(
+      !declared.has(candidate),
+      `apps/web declares ${candidate}, so this proof case can no longer fail and the check above proves nothing. Pick a name the tree does not have`,
+    );
+  }
+
+  // And the real case now resolves to something that DOES exist, which is the
+  // other half: a guard that can only ever fail is as useless as one that can
+  // only ever pass.
   assert.ok(
-    !declared.has("KnowledgeGraphPanel") && !declared.has("KnowledgeGraph"),
-    "apps/web now declares a KnowledgeGraph panel again. That is welcome, and it means this check's own proof case can no longer fail, so give the proof a name the tree does not have",
+    declared.has("KnowledgeGraphPanel"),
+    "KnowledgeGraphPanel is not declared, so the knowledge panel's cross reference to it points at nothing again",
+  );
+});
+
+/* ------------------------------------------------------------------ */
+/* The knowledge graph, against fixtures the ROUTE generated            */
+/* ------------------------------------------------------------------ */
+
+/*
+ * WHY THESE FIXTURES ARE NOT WRITTEN HERE
+ *
+ * The graph panel was pulled on 2026-09-10 with both suites green. The route
+ * sends ONE FLAT payload; the panel read `raw.counts` as a nested member, so
+ * every real response produced `counts: null`. test_knowledge_graph.py was green
+ * because it pinned the flat shape the route sends. The graph checks in THIS file
+ * were green because their fixtures were written BY HAND in the nested shape. Two
+ * suites, each internally consistent, agreeing with each other about nothing, and
+ * the panel shipped a headline about a comparison that never ran.
+ *
+ * So the fixtures are now GENERATED, by scripts/gen_knowledge_graph_fixtures.py
+ * calling the real `assemble_graph`, and read from disk here.
+ * test_knowledge_graph_fixtures.py regenerates and compares on every Python run,
+ * so the committed file cannot drift back into being hand written.
+ *
+ * A fixture is committed rather than generated at check time because web-ci.yml
+ * runs this script in a Node only job: there is no Python interpreter there.
+ */
+
+type Fixtures = {
+  scenarios: Record<string, { why: string; payload: unknown }>;
+};
+
+const GRAPH_FIXTURES: Fixtures = JSON.parse(
+  readFileSync(join(HERE, "..", "components", "mind", "knowledge-graph-fixtures.json"), "utf8"),
+) as Fixtures;
+
+function scenario(name: string): unknown {
+  const entry = GRAPH_FIXTURES.scenarios[name];
+  assert.ok(
+    entry,
+    `the generated fixture has no scenario named ${name}. Regenerate with python3 scripts/gen_knowledge_graph_fixtures.py, and if it is genuinely gone, delete the check that reads it rather than inventing a payload here`,
+  );
+  return entry.payload;
+}
+
+check("the graph fixtures are the route's own output, not a hand written shape", () => {
+  const names = Object.keys(GRAPH_FIXTURES.scenarios);
+  assert.ok(
+    names.length >= 8,
+    `the fixture carries ${names.length} scenarios and the generator defines at least eight, so this file is stale`,
+  );
+  for (const name of names) {
+    const payload = scenario(name) as Record<string, unknown>;
+    // The defect itself, pinned from this side too. A nested counts object is
+    // the shape the pulled panel read and the route has never sent.
+    assert.ok(
+      !("counts" in payload),
+      `${name} carries a nested counts object. The route sends a flat payload; reading a nested one is what got the panel pulled`,
+    );
+    assert.ok(
+      "items_total" in payload,
+      `${name} has no top level items_total, so it is not the route's payload`,
+    );
+    // And every scenario must survive the parser, or a check below is asserting
+    // over a null it never noticed.
+    const parsed = parseGraphPayload(payload);
+    assert.notEqual(parsed, null, `${name} did not parse at all`);
+    assert.notEqual(
+      parsed!.counts,
+      null,
+      `${name} parsed with counts null. That is the original defect: the reader looking in the wrong place and the panel reporting "the route did not say" over counts that were right there`,
+    );
+    assert.deepEqual(
+      parsed!.missingFields,
+      [],
+      `${name} parsed with missing fields ${JSON.stringify(parsed!.missingFields)}, so the reader and the route disagree about the payload's own keys`,
+    );
+  }
+});
+
+check("a failed embedding provider is never read as a real one", () => {
+  // THE FIX OF 2026-09-10. classifyProvider took only the provider NAME and
+  // returned "real" for anything it did not recognise as fake. The route reports
+  // `embedding_provider: "unavailable"` with the simulated flag RAISED when it
+  // cannot build a provider at all, "unavailable" matched no fake substring, and
+  // a hard provider failure rendered as verified semantic distance. It is not an
+  // exotic path: start-devon.sh writes DEFAULT_AI_PROVIDER=cerebras, and only
+  // mock and openai embed, so a default launch produces exactly this payload.
+  const unavailable = parseGraphPayload(scenario("provider_unavailable"))!;
+  assert.equal(unavailable.provider, "unavailable", "the fixture is not the unavailable case");
+  assert.equal(
+    unavailable.counts!.embedding_provider_simulated,
+    true,
+    "the unavailable payload must arrive with the simulated flag raised",
+  );
+  assert.equal(
+    classifyProvider(unavailable.provider, unavailable.counts!.embedding_provider_simulated),
+    "simulated",
+    "a provider the route could not build must never read as real",
+  );
+  // Reading the name alone is the bug, so prove the name alone is not enough.
+  assert.notEqual(
+    classifyProvider(unavailable.provider, undefined),
+    "real",
+    "with the flag withheld, an unrecognised provider name must read unknown, never real",
+  );
+
+  const real = parseGraphPayload(scenario("provider_real"))!;
+  assert.equal(
+    classifyProvider(real.provider, real.counts!.embedding_provider_simulated),
+    "real",
+    "openai with the flag lowered is the one shape allowed to read real",
+  );
+
+  const mock = parseGraphPayload(scenario("embedded_no_edges"))!;
+  assert.equal(
+    classifyProvider(mock.provider, mock.counts!.embedding_provider_simulated),
+    "simulated",
+    "the mock provider's distances are a real measurement of a fake quantity",
+  );
+
+  // The flag outranks the name in BOTH directions, and an unknown name fails
+  // closed rather than open.
+  assert.equal(classifyProvider("openai", true), "simulated", "the raised flag wins over a real name");
+  assert.equal(classifyProvider("fixture-embedder", false), "unknown", "an unrecognised name must not read real");
+  assert.equal(classifyProvider("openai", null), "unknown", "a withheld flag cannot certify distances");
+  assert.equal(classifyProvider("simulated-v2", false), "simulated", "a name that says fake wins over a lowered flag");
+  assert.equal(classifyProvider(null, undefined), "unknown");
+});
+
+check("the three cap notices are reachable, not merely parsed", () => {
+  // nodes_capped, chunks_truncated and the per edge distance_is_upper_bound were
+  // all PARSED into the types and read by nothing, while the type comments
+  // claimed they were authoritative. A field with a reader and no renderer is a
+  // sentence nobody ever sees.
+  const capped = parseGraphPayload(scenario("capped_and_truncated"))!;
+  assert.equal(capped.counts!.nodes_capped, true, "the fixture must have node_cap actually biting");
+  assert.equal(capped.counts!.chunks_truncated, true, "the fixture must have chunk_cap actually biting");
+  assert.ok(
+    capped.edges.some((edge) => edge.distanceIsUpperBound === true),
+    "no drawn edge carries distanceIsUpperBound, so the per edge ceiling notice cannot fire",
+  );
+
+  const notes = describeGaps(capped, sourceOrder(capped.nodes));
+  const joined = notes.join(" ");
+  for (const required of [
+    "capped the node list",
+    "capped the edge list",
+    "ceilings",
+    "upper bound",
+  ]) {
+    assert.ok(
+      joined.includes(required),
+      `describeGaps said nothing about ${JSON.stringify(required)} over a payload where it is true. Notes were: ${JSON.stringify(notes)}`,
+    );
+  }
+});
+
+check("the layout claim and the layout move together", () => {
+  // The screen reader description said "most connected items pulled inward"
+  // unconditionally. The layout DOES do that, through radius = outer * (1 - 0.3 *
+  // share), but share is degree over max degree, so it collapses whenever every
+  // degree is equal. The commonest such payload is a new corpus with no edges at
+  // all, where every mark lands on one ring. For anyone using a screen reader the
+  // description IS the picture, so it described a shape that was not there.
+  const varying = parseGraphPayload(scenario("drawable_varying_degree"))!;
+  assert.ok(varying.edges.length >= 2, "the varying fixture needs at least two edges");
+  assert.equal(
+    radiusEncodesDegree(varying.nodes),
+    true,
+    "degrees differ in this payload, so the radius does encode degree and the claim is allowed",
+  );
+
+  const flat = parseGraphPayload(scenario("drawable_flat_degree"))!;
+  assert.equal(
+    radiusEncodesDegree(flat.nodes),
+    false,
+    "every node has the same degree, so the radius encodes nothing and the claim must be withheld",
+  );
+
+  const unembedded = parseGraphPayload(scenario("items_none_embedded"))!;
+  assert.equal(
+    radiusEncodesDegree(unembedded.nodes),
+    false,
+    "with no edges every degree is 0, which is the payload the false claim was measured over",
+  );
+  assert.equal(radiusEncodesDegree([]), false, "nothing is encoded when nothing is placed");
+
+  // And the measurement the WHY note recorded: over a no edge payload the marks
+  // really do land on one radius, so the claim would have been false.
+  const placed = layoutNodes(unembedded.nodes);
+  const radii = new Set(
+    placed.map((entry) => Math.round(Math.hypot(entry.x - 160, entry.y - 160) * 100) / 100),
+  );
+  assert.ok(
+    radii.size <= 2,
+    `a no edge payload should place every mark on one ring plus the parity stagger, so at most two radii; got ${radii.size}`,
+  );
+
+  // AND THE PANEL HAS TO ACTUALLY BRANCH ON IT. Everything above proves the
+  // helper is right, which is not the same as the description using it: a correct
+  // helper beside an unconditional sentence is the exact shape of the defect this
+  // whole arc keeps finding. So read the rendering. Both the screen reader <desc>
+  // and the visible paragraph must reference radialDegree, or the claim is fixed
+  // in place again.
+  const panel = parse("components/mind/KnowledgeGraphPanel.tsx");
+  const descs = collect(
+    panel,
+    (n) =>
+      ts.isJsxElement(n) &&
+      ts.isIdentifier(n.openingElement.tagName) &&
+      n.openingElement.tagName.text === "desc",
+  );
+  assert.equal(descs.length, 1, `the panel has ${descs.length} <desc> elements; expected exactly one`);
+  assert.ok(
+    descs[0].getText(panel).includes("radialDegree"),
+    "the SVG <desc> does not branch on radialDegree, so it states one layout claim whatever the payload does. For a screen reader that description IS the picture",
+  );
+
+  const claims = collect(
+    panel,
+    (n) => ts.isIdentifier(n) && n.text === "radialDegree",
+  );
+  assert.ok(
+    claims.length >= 3,
+    `radialDegree is referenced ${claims.length} times in the panel. It must be computed once and read by BOTH the <desc> and the visible layout paragraph, so a reader and a listener are told the same thing`,
+  );
+});
+
+check("four kinds of nothing still produce four different messages", () => {
+  const seen = new Map<string, string>();
+  for (const name of ["empty_corpus", "items_none_embedded", "embedded_no_edges", "drawable_varying_degree"]) {
+    const parsed = parseGraphPayload(scenario(name))!;
+    const verdict = readGraphVerdict(parsed);
+    seen.set(name, verdict.kind);
+  }
+  assert.equal(seen.get("empty_corpus"), "no-items");
+  assert.equal(
+    seen.get("items_none_embedded"),
+    "no-embeddings",
+    "items exist and none carry a vector, so the panel must say nothing is embedded rather than that no pair was close enough. Claiming a comparison over an edge query the route SKIPPED is exactly what got this panel pulled",
+  );
+  assert.equal(seen.get("embedded_no_edges"), "no-edges");
+  assert.equal(seen.get("drawable_varying_degree"), "drawable");
+  assert.equal(new Set(seen.values()).size, 4, "two of the four states collapsed onto one verdict");
+
+  // And the headline over the pulled payload must not mention a threshold, since
+  // no pair was ever compared against one.
+  const unembedded = readGraphVerdict(parseGraphPayload(scenario("items_none_embedded"))!);
+  const words = `${(unembedded as { headline?: string }).headline ?? ""} ${(unembedded as { detail?: string }).detail ?? ""}`;
+  assert.ok(
+    !/threshold|further apart|close enough/i.test(words),
+    `the no-embeddings message claims a distance comparison that never ran: ${JSON.stringify(words)}`,
+  );
+});
+
+check("edge thickness still refuses a scale the route did not supply", () => {
+  assert.equal(edgeCloseness(0.3, null), null, "no threshold means no scale");
+  assert.equal(edgeCloseness(0.3, 0), null);
+  assert.equal(edgeCloseness(0.3, -1), null);
+  assert.equal(edgeCloseness(Number.NaN, 0.65), null);
+  assert.equal(edgeCloseness(0, 0.65), 1, "touching is 1");
+  assert.equal(edgeCloseness(0.65, 0.65), 0, "on the threshold is 0");
+  assert.ok((edgeCloseness(1.3, 0.65) ?? -1) === 0, "beyond the threshold clamps rather than going negative");
+});
+
+check("the graph layout does not move between two readings of one payload", () => {
+  const payload = scenario("drawable_varying_degree");
+  const first = layoutNodes(parseGraphPayload(payload)!.nodes);
+  const second = layoutNodes(parseGraphPayload(payload)!.nodes);
+  assert.deepEqual(first, second, "the same payload drew two different pictures, so two readings cannot be compared");
+
+  // Order independence: the same nodes sent in another order must place the same.
+  const parsed = parseGraphPayload(payload)!;
+  const reversed = layoutNodes([...parsed.nodes].reverse());
+  const byId = new Map(first.map((entry) => [entry.node.id, entry]));
+  for (const entry of reversed) {
+    const original = byId.get(entry.node.id)!;
+    assert.equal(entry.x, original.x, `node ${entry.node.id} moved when the send order changed`);
+    assert.equal(entry.y, original.y, `node ${entry.node.id} moved when the send order changed`);
+  }
+  assert.ok(compareNodes(parsed.nodes[0], parsed.nodes[0]) === 0, "compareNodes is not reflexive");
+});
+
+check("only the filtered edge list can draw a line", () => {
+  // The adversary's finding of 2026-09-10: it drew a <line> between every pair of
+  // placed nodes and NO check noticed, because nothing inspected the SVG at all.
+  // An edge with no entry in edges[] is a relationship nobody measured, rendered
+  // as though it were one.
+  //
+  // This runs no browser, so it guards the structure rather than the pixels: every
+  // <line> in the panel must be produced by mapping over `shownEdges`, and
+  // `shownEdges` must be a FILTER of the parsed edge list. An all pairs mutation
+  // has to either add a line outside that map or change how shownEdges is built,
+  // and both go red here.
+  const panel = parse("components/mind/KnowledgeGraphPanel.tsx");
+
+  const lines = collect(
+    panel,
+    (n) =>
+      (ts.isJsxSelfClosingElement(n) || ts.isJsxOpeningElement(n)) &&
+      ts.isIdentifier((n as ts.JsxSelfClosingElement | ts.JsxOpeningElement).tagName) &&
+      ((n as ts.JsxSelfClosingElement | ts.JsxOpeningElement).tagName as ts.Identifier).text === "line",
+  );
+  assert.ok(lines.length > 0, "the panel draws no <line> at all, so it is not drawing edges");
+
+  for (const line of lines) {
+    // Walk out to the nearest enclosing .map() call and check what it maps over.
+    let at: ts.Node | undefined = line.parent;
+    let mapped: string | null = null;
+    while (at) {
+      if (
+        ts.isCallExpression(at) &&
+        ts.isPropertyAccessExpression(at.expression) &&
+        at.expression.name.text === "map"
+      ) {
+        mapped = at.expression.expression.getText(panel);
+        break;
+      }
+      at = at.parent;
+    }
+    const where = panel.getLineAndCharacterOfPosition(line.getStart(panel)).line + 1;
+    assert.equal(
+      mapped,
+      "shownEdges",
+      `the <line> at KnowledgeGraphPanel.tsx:${where} is drawn from ${mapped ?? "no map at all"} rather than from shownEdges. A line that does not come from the route's edge list is a relationship nobody measured`,
+    );
+  }
+
+  // And shownEdges must narrow the edge list, never generate pairs.
+  const decls = declarationsNamed(panel, "shownEdges");
+  assert.equal(decls.length, 1, `shownEdges is declared ${decls.length} times`);
+  const body = decls[0].getText(panel);
+  assert.ok(
+    body.includes("view.edges"),
+    "shownEdges is not derived from view.edges, so what it draws is not what the route returned",
+  );
+  for (const forbidden of ["flatMap", "for (", "while (", "concat", "push("]) {
+    assert.ok(
+      !body.includes(forbidden),
+      `shownEdges uses ${forbidden}, which can produce pairs the route never sent. It must only narrow view.edges`,
+    );
+  }
+});
+
+check("the knowledge graph panel still reads the graph route", () => {
+  const panel = parse("components/mind/KnowledgeGraphPanel.tsx");
+  const fetches = callsTo(panel, "fetch");
+  assert.ok(fetches.length >= 1, "the graph panel makes no fetch at all, so it draws nothing real");
+
+  const targets = fetches.map((call) => (call.arguments[0] ? call.arguments[0].getText(panel) : ""));
+  assert.ok(
+    targets.some((text) => text.includes("/knowledge/graph")),
+    `the graph panel does not fetch /knowledge/graph. It requests ${JSON.stringify(targets)}, so whatever it draws did not come from the route that measures the edges`,
+  );
+
+  // And the read must not be behind a condition this check cannot evaluate: a
+  // panel that fetches only when some flag is set draws nothing by default, which
+  // is the stranded-surface failure this whole arc closed.
+  const graphFetch = fetches.find((call) =>
+    call.arguments[0] ? call.arguments[0].getText(panel).includes("/knowledge/graph") : false,
+  )!;
+  const owner = enclosingDeclarationName(graphFetch);
+  assert.ok(owner !== null, "the graph fetch sits in no named declaration, so nothing can be said about who calls it");
+});
+
+check("the knowledge graph panel is mounted where a person can reach it", () => {
+  // Same shape as the skill gate's mount check, and for the same reason: an
+  // imported but unrendered panel is a route nobody can open, and a panel behind
+  // an environment flag is worse, because the flag reads as a feature.
+  const page = parse("app/control/page.tsx");
+  const COMPONENT = "KnowledgeGraphPanel";
+
+  const imported = collect(page, (n) => ts.isImportSpecifier(n) && n.name.text === COMPONENT);
+  assert.equal(imported.length, 1, `control/page.tsx must import ${COMPONENT} exactly once; found ${imported.length}`);
+
+  const rendered = collect(page, (n) => {
+    if (!ts.isJsxSelfClosingElement(n) && !ts.isJsxOpeningElement(n)) return false;
+    const tag = (n as ts.JsxSelfClosingElement | ts.JsxOpeningElement).tagName;
+    return ts.isIdentifier(tag) && tag.text === COMPONENT;
+  });
+  assert.equal(
+    rendered.length,
+    1,
+    `control/page.tsx must render <${COMPONENT} /> exactly once; found ${rendered.length}. An imported but unrendered panel is a measurement nobody can see`,
+  );
+
+  const gates = conditionalAncestors(rendered[0], page);
+  assert.equal(
+    gates.length,
+    0,
+    `<${COMPONENT} /> is mounted inside ${gates.length} condition(s), so whether the graph is drawn at all depends on a test this check cannot evaluate. The mount has to be unconditional`,
   );
 });
 
