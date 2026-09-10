@@ -246,8 +246,8 @@ def _callee_name(func: ast.AST) -> Optional[str]:
 def _mutating_verb_offences(tree: ast.AST) -> List[str]:
     """Every reach for a mutating HTTP verb in this syntax tree.
 
-    Three forms, because the name based version of this walk was beaten by the
-    second and third while reporting green:
+    Four forms, because the name based version of this walk was beaten by the
+    second and third while reporting green, and the fourth beat all of those:
 
     1. an attribute or call NAMED for the verb: `client.post(...)`,
        `@router.delete(...)`, or the bare attribute `client.patch`.
@@ -266,6 +266,62 @@ def _mutating_verb_offences(tree: ast.AST) -> List[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute) and node.attr.lower() in _MUTATING_VERBS:
             offences.append(f"attribute {node.attr} at line {node.lineno}")
+        # 5. THE VERB AS OBJECT STATE. Added 2026-09-10 after an adversary put a
+        # live POST into the module's only fetcher and this suite reported 183
+        # passed. Its bypass was three lines:
+        #
+        #     request = httpx.Request("GET", url, headers=headers)
+        #     request.method = "POST"
+        #     response = await client.send(request)
+        #
+        # Every rule above reasons about a CALL: the callee's own name, or a
+        # string folded out of its arguments. This one puts the verb nowhere
+        # near a call site. `httpx.Request.__init__` stores `self.method` as a
+        # plain str and the transport reads it at send time, so the wire really
+        # carries POST; the adversary proved that against a capture server
+        # rather than by reading the library. Of the three tracked sites,
+        # `Request("GET", ...)` folds to GET, `.method` is not a verb name, and
+        # `send(request)` carries a Name that folds to nothing.
+        #
+        # Closed two ways on purpose. Closing only the literal would leave
+        # `request.method = _v` open and the next tick would find it in
+        # seconds, so (b) refuses the SHAPE, which is the same answer rule 4
+        # gave for the same reason.
+        #
+        #   (a) BY VALUE: an assignment whose value folds to EXACTLY a verb.
+        #       Exactly, not by substring, because the read shape control
+        #       assigns "this route cannot trigger, retry, delete or resume an
+        #       execution" and that sentence must stay legal.
+        #   (b) BY SHAPE: an assignment targeting `.method`, or a subscript
+        #       whose key folds to "method", whatever the value. Measured
+        #       before it was chosen: neither guarded file assigns `.method`
+        #       anywhere, while plain subscript assignment appears 38 times in
+        #       the service alone, which is why the key is read rather than the
+        #       shape of the target alone.
+        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+            written = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in written:
+                if isinstance(target, ast.Attribute) and target.attr.lower() == "method":
+                    offences.append(
+                        f"assignment to .method at line {node.lineno} sets an HTTP "
+                        "verb as object state. Refused by shape whatever the value, "
+                        "because a verb reached this way sits at no call site"
+                    )
+                elif isinstance(target, ast.Subscript):
+                    for key in _folded_strings(target.slice):
+                        if key.strip().lower() == "method":
+                            offences.append(
+                                f'assignment to ["method"] at line {node.lineno} '
+                                "sets an HTTP verb as object state"
+                            )
+            if node.value is not None:
+                for text in _folded_strings(node.value):
+                    if text.strip().lower() in _MUTATING_VERBS:
+                        offences.append(
+                            f"assignment of {text!r} at line {node.lineno} puts a "
+                            "mutating verb into a name, and no later call site has "
+                            "to spell it"
+                        )
         if not isinstance(node, ast.Call):
             continue
         name = _callee_name(node.func)
@@ -348,6 +404,21 @@ _BYPASSES = {
     ),
     "a verb read off a mapping and handed to getattr": (
         'response = await getattr(client, VERBS["write"])(url)'
+    ),
+    # The adversary's second 2026-09-10 bypass, verbatim. It put a live POST
+    # into the production fetcher and this suite reported 183 passed. Proved on
+    # the wire against a local capture server, which logged POST, rather than by
+    # reading httpx's source.
+    "the verb set as object state on a request that is then sent": (
+        'request = httpx.Request("GET", url, headers=headers)\n'
+        'request.method = "POST"\n'
+        "response = await client.send(request)"
+    ),
+    # The same shape with the verb in a name, which a value analysis cannot see.
+    # This is what rule 5(b) exists for.
+    "the verb set as object state from a name": (
+        '_v = VERBS["write"]\nrequest.method = _v\n'
+        "response = await client.send(request)"
     ),
 }
 
