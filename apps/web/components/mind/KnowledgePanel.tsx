@@ -8,10 +8,25 @@ import { readDevonToken } from "@/components/presence/usePresenceSocket";
  * Tier 2, the memory behind the face.
  *
  * The brief calls this the second brain knowledge graph across Drive, Notion
- * and Pinecone namespaces. No graph is drawn here, and that is deliberate: no
- * route exposes vector activations or edges between the indexes, so any graph
- * would be a picture of something nobody measured. What the routes do give is
- * the corpus itself and a real search over it, which is what this shows.
+ * and Pinecone namespaces. This panel is the corpus itself and a real search
+ * over it. No graph is drawn here, and the reason has changed twice.
+ *
+ * It used to be that no route exposed vector activations or edges, so any graph
+ * would have been a picture of something nobody measured. That stopped being
+ * true when GET /knowledge/graph landed: it measures the distance between items
+ * as pgvector cosine distance, the minimum over their chunk pairs.
+ *
+ * A panel over that route was built and then PULLED before shipping, on
+ * 2026-09-10. It read the payload as a nested object while the route sends a
+ * flat one, so its counts were null on every real response, and over a corpus
+ * with nothing embedded and an edge query the route had skipped it rendered
+ * "Embedded nodes, no pair close enough to connect". Nothing was embedded and
+ * no pair had been compared. Neither test suite caught it because each was green
+ * about a different payload shape.
+ *
+ * So the honest state today: the edges are measured and nothing draws them. This
+ * panel is the corpus and a real search over it, and it claims nothing about the
+ * distance between items.
  *
  * Distance from the search route is a distance, not a score. Smaller is nearer,
  * so it is labelled as distance rather than dressed up as a percentage
@@ -255,9 +270,9 @@ export function KnowledgePanel() {
       ) : null}
 
       <p className="text-xs leading-relaxed text-white/50">
-        No route exposes vector activations or edges between the Drive, Notion and Pinecone
-        namespaces, so no graph is drawn. Distance is the raw distance the search route
-        returns, where smaller is nearer, not a confidence score.
+        The edges between these items are drawn in the knowledge graph panel below, read from
+        GET /knowledge/graph. Distance here is the raw distance the search route returns,
+        where smaller is nearer, not a confidence score.
       </p>
     </div>
   );

@@ -6,6 +6,7 @@ import { ExecutionHubPanel } from "@/components/control/ExecutionHubPanel";
 import { CostPanel } from "@/components/control/CostPanel";
 import { SecurityPanel } from "@/components/control/SecurityPanel";
 import { SessionDoor } from "@/components/control/SessionDoor";
+import { SkillProposalGate } from "@/components/control/SkillProposalGate";
 import { TierPanel } from "@/components/control/TierPanel";
 
 /**
@@ -39,9 +40,11 @@ export type ControlPlaneProps = {
   presence?: ReactNode;
   /** Tier 2: the knowledge corpus. */
   knowledge?: ReactNode;
+  /** Tier 2: the learning store DEVON plans from. */
+  learning?: ReactNode;
 };
 
-export function ControlPlane({ readiness, provenance, presence, knowledge }: ControlPlaneProps) {
+export function ControlPlane({ readiness, provenance, presence, knowledge, learning }: ControlPlaneProps) {
   return (
     <main className="min-h-screen bg-[#04070d] text-[#e8edf2]">
       <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col px-4 py-4 sm:px-6 lg:px-8">
@@ -142,6 +145,15 @@ export function ControlPlane({ readiness, provenance, presence, knowledge }: Con
             </TierPanel>
 
             <TierPanel
+              title="Skill proposal gate"
+              purpose="The drafts DEVON wrote for itself from finished work, and the human ruling on each one."
+              sourcing="live"
+              sourceNote="Read from the skill proposal routes on the agent expansion surface. Every field shown comes back from that read. Approving a draft and activating a skill are two separate rulings and the panel sends them as two separate values, because the API defaults promotion to on when the key is left out."
+            >
+              <SkillProposalGate />
+            </TierPanel>
+
+            <TierPanel
               title="Security shell and secrets"
               purpose="The two doors that can execute, and where secrets do and do not live."
               sourcing="partial"
@@ -176,15 +188,28 @@ export function ControlPlane({ readiness, provenance, presence, knowledge }: Con
 
             <TierPanel
               title="Knowledge"
-              purpose="The corpus DEVON recalls from, and a search that runs against it."
+              purpose="The corpus DEVON recalls from, and a search that runs against it. The distances between its items are measured by a route and not yet drawn."
               sourcing={knowledge ? "partial" : "unwired"}
               sourceNote={
                 knowledge
-                  ? "Items, the source breakdown and search all come from the knowledge routes. No route exposes vector activations or edges between the indexes, so no graph is drawn and none is implied."
+                  ? "Items, the source breakdown and search come from the knowledge routes. GET /knowledge/graph now measures the distances between items as pgvector cosine distance, and NO panel draws them yet: the first attempt read a payload shape the route does not send and stated a measurement over a query that had not run, so it was pulled rather than shipped. Until a panel lands, this tier shows the corpus and the search and claims nothing about the edges."
                   : "The knowledge panel is not mounted on this build."
               }
             >
               {knowledge}
+            </TierPanel>
+
+            <TierPanel
+              title="Learning"
+              purpose="The memories and skills every agent plan is handed, and the only place to write one."
+              sourcing={learning ? "live" : "unwired"}
+              sourceNote={
+                learning
+                  ? "Rows and counts come from the two learning routes. Until this panel existed nothing in the estate wrote to either table, so the store was empty by construction. A failed read is drawn as unreadable, never as empty."
+                  : "The learning panel is not mounted on this build."
+              }
+            >
+              {learning}
             </TierPanel>
           </Tier>
 

@@ -42,5 +42,7 @@ jobs:
         run: pnpm --filter @meta-supreme/web check:presence
       - name: Control plane honesty checks
         run: pnpm --filter @meta-supreme/web check:control
+      - name: Learning store honesty checks
+        run: pnpm --filter @meta-supreme/web check:learning
       - name: Production build
         run: pnpm --filter @meta-supreme/web build
