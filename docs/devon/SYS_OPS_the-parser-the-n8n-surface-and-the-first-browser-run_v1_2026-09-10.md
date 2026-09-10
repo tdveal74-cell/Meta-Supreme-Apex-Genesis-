@@ -210,13 +210,45 @@ So the phone lane already carries the 299 trigger table, the per intent payload
 bound and the suggestion path. Every `target` was checked rather than inferred
 from `state`, which is the trap this estate has fallen into once.
 
-**One surface stays UNVERIFIED and it is the one that can read itself back.**
-`GET /health` on the presence host is the honest answer to what that service is
-wired to, and this container's egress proxy refused the CONNECT with a 403, so
-it was not read. The deployment record above says the container shipped; it says
-nothing about `speech`, `livekit_configured`, `cors_origins` or `breaker`. Tee
-can settle it by opening
-`https://presence-production-d272.up.railway.app/health` on his phone.
+**The one surface that reads itself back, read by Tee 2026-09-10.** This
+container's egress proxy refused the CONNECT with a 403, so `GET /health` on the
+presence host could not be read from here. Tee opened it on his phone and the
+nine pinned keys came back:
+
+```
+status ok · service devon-presence · inference cerebras · fallback mock
+speech cartesia · livekit_configured false · audio_over_websocket true
+cors_origins [5] · breaker primary closed, 0 opens, 0 closes, 0 total_breaches
+```
+
+Three readings, and only the first is news.
+
+**`speech` is `cartesia`, not `mock`.** The owned voice lane is live in
+production. That is the compliance critical one, and it is now read off the
+service rather than inferred from a deployment record.
+
+**What it does NOT prove, stated so nobody reads it as more than it is.**
+`/health` publishes the ADAPTER, never the voice id, which is deliberate. So
+this says the Cartesia lane is wired; it does not say which voice is loaded, and
+Tee's own rule is that nothing ships without a human listening end to end. The
+listen is still owed. `last_ttft_ms` is null and `opens`, `closes` and
+`total_breaches` are all zero, which says this deployment has served no speech
+at all yet, so the breaker being closed is an untested closed rather than a
+proven one.
+
+**`livekit_configured` false is BY DESIGN and is not a finding.** Graded before
+being raised: `apps/presence/main.py:87` returns `not livekit_configured` for
+`audio_over_websocket`, so the socket carries PCM precisely when LiveKit is
+absent, and `SYS_OPS_audible-presence_v1_2026-09-09.md` already records that the
+browser path is the whole path and the LiveKit publisher is unbuilt and
+unnecessary for it. `audio_over_websocket true` beside it is the two halves
+agreeing.
+
+**`cors_origins` carries the production web domain.** The five are the three
+Vercel hosts including `meta-supreme-apex-genesis-web.vercel.app` plus the two
+loopbacks, which is the same five the api service logged on its own startup. A
+wrong list here is the failure that makes the chat's `POST /tts` fail silently
+with a discarded 200, so it is worth having read rather than assumed.
 
 ## The prose leak dig, 2026-09-10, and why it stops here
 
@@ -333,9 +365,11 @@ by property symbol. A getattr walk could not read a verb it reached for and said
 nothing. A stated used_fraction was trusted without being cross checked against
 the figures it claims to summarise. And the smoke run's own first red blamed a
 panel for a CORS refusal the harness had caused.
-OPEN: The presence service's own /health is unread, this container's egress
-proxy refusing it with a 403, so what that service is wired to is unverified
-and Tee can settle it from a browser. The prose leak dig is CLOSED with a
+OPEN: Nobody has heard DEVON end to end yet. /health was read by Tee on
+2026-09-10 and reports speech cartesia, so the owned voice lane is live, but it
+publishes the adapter and never the voice id, and the breaker has served no
+speech at all, so which voice is loaded and whether it sounds right are both
+unverified and only Tee's ears settle them. The prose leak dig is CLOSED with a
 negative result rather than a rule, and the recommendation is to leave the
 behaviour; a ruling from Tee to ship the measured 40 percent anyway would
 reopen it. Seven pre existing trigger sweep routes still gate on prose and
