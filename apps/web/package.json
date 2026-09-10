@@ -17,6 +17,8 @@
     "check:memory": "node --experimental-strip-types scripts/memory-check.ts",
     "check:projects": "node --experimental-strip-types scripts/projects-check.ts",
     "check:roster": "node --experimental-strip-types scripts/roster-check.ts",
+    "check:n8n": "node --experimental-strip-types scripts/n8n-telemetry-check.ts",
+    "check:panels": "node --experimental-strip-types scripts/panel-smoke.mjs",
     "check:audio": "node --experimental-strip-types scripts/audio-check.mjs"
   },
   "dependencies": {

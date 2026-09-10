@@ -198,3 +198,124 @@ def test_an_injected_queue_is_used(devon):
     assistant = Devon(approvals=queue)
     assistant.ask("Devon, shut down the computer", on_date=TODAY)
     assert len(queue.pending()) == 1
+
+
+# -- the decline that carries a near miss, added 2026-09-10 ------------------
+#
+# Before this, a declined utterance threw away everything the parse knew and
+# told the person to start again. `reason` was sitting right beside it holding
+# the near miss. What the reply may say is governed by the same rule as the
+# parse: an EFFECT intent is never offered, so a person who says "fire up
+# chrome" is never handed "reboot the computer" to confirm.
+
+
+@pytest.mark.parametrize(
+    "utterance,expected,canonical",
+    [
+        ("give me a project status update", "status_report", "status report"),
+        ("log the conversation we just had", "log_thread", "log this thread"),
+        ("what is my plate looking like", "whats_on_my_plate", "what's on my plate"),
+        ("what captures need triage", "triage", "show me untriaged captures"),
+    ],
+)
+def test_a_near_miss_decline_names_what_devon_almost_understood(
+    devon, utterance, expected, canonical
+):
+    """The near miss was already in `reason` at 5ff4348 and was thrown away.
+
+    Each of these is the intent the person plainly meant, sitting just under its
+    floor. DEVON still will not act on it, and now he says which one it was and
+    what to say instead, quoting canon rather than whichever alias matched.
+    """
+    response = devon.ask(utterance, on_date=TODAY)
+    assert not response.understood, f"{utterance!r} routed; pick another near miss"
+    assert response.suggestion == expected
+    assert response.suggestion_phrase == canonical
+    assert canonical in response.reply
+    assert 0.0 < response.suggestion_score < 1.0
+
+
+def test_a_decline_with_no_honest_near_miss_says_so_and_offers_nothing(devon):
+    response = devon.ask("wubba lubba dub dub", on_date=TODAY)
+    assert not response.understood
+    assert response.suggestion is None
+    assert response.suggestion_phrase is None
+    assert "take it from the top" in response.reply
+
+
+def test_a_suggested_decline_still_does_nothing_at_all(devon):
+    """A suggestion is a question. It is not a plan, a card, or an execution."""
+    for text in ("log this to the thred log", "an idee for an episode", "give me a stat"):
+        response = devon.ask(text, on_date=TODAY)
+        if response.understood:
+            continue
+        assert response.executed is False
+        assert response.plan is None
+        assert response.approval is None
+        assert response.approval_token is None
+        assert response.intent == "unknown"
+
+
+def test_no_decline_ever_offers_an_effect_to_confirm(devon):
+    """INVARIANT 2 at the surface a person actually reads.
+
+    Drives every trigger of every effect intent below its floor and checks both
+    halves of what comes back: the structured suggestion, and the reply text,
+    which must not name the intent or quote any phrase that routes to it.
+    """
+    from services.devon import commands as commands_mod
+
+    effect_triggers = [
+        commands_mod.normalize(trigger)
+        for intent in commands_mod.effect_intents()
+        for trigger in intent.triggers
+    ]
+    effect_names = {intent.name.replace("_", " ") for intent in commands_mod.effect_intents()}
+
+    declined = 0
+    for intent in commands_mod.effect_intents():
+        for trigger in intent.triggers:
+            for text in (
+                trigger[: max(1, len(trigger) - 3)],
+                "the " + trigger + " thing",
+                trigger.replace("a", "e"),
+                trigger + " maybe",
+            ):
+                response = devon.ask(text, on_date=TODAY)
+                if response.understood:
+                    continue
+                declined += 1
+                assert response.suggestion not in {
+                    i.name for i in commands_mod.effect_intents()
+                }, f"{text!r} suggested the effect {response.suggestion}"
+
+                spoken = commands_mod.normalize(response.reply)
+                padded = " " + spoken + " "
+                for banned in effect_triggers:
+                    assert f" {banned} " not in padded, (
+                        f"{text!r} produced a reply quoting the effect trigger {banned!r}"
+                    )
+                for banned in effect_names:
+                    assert f" {banned} " not in padded, (
+                        f"{text!r} produced a reply naming the effect intent {banned!r}"
+                    )
+    assert declined > 30, f"only {declined} declines were exercised; this proves little"
+
+
+def test_the_specific_case_this_arc_was_opened_for(devon):
+    """"fire up chrome" must never produce a prompt containing "reboot the computer"."""
+    for text in ("fire up chrom", "fire up", "fyre up chrom"):
+        response = devon.ask(text, on_date=TODAY)
+        assert "reboot" not in response.reply.lower()
+        assert "restart" not in response.reply.lower()
+        assert "shut down" not in response.reply.lower()
+
+
+def test_the_suggestion_survives_the_json_a_surface_would_render(devon):
+    response = devon.ask("wubba lubba dub dub", on_date=TODAY)
+    payload = response.to_dict()
+    assert payload["understood"] is False
+    assert payload["executed"] is False
+    assert payload["suggestion"] is None
+    assert "suggestion_phrase" in payload
+    assert "suggestion_score" in payload

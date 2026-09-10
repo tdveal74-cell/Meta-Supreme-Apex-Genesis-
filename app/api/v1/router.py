@@ -20,6 +20,7 @@ from app.api.v1 import (
     knowledge_graph,
     ledger,
     memory,
+    n8n_executions,
     operator,
     operator_shell,
     projects,
@@ -57,3 +58,4 @@ api_router.include_router(agent_tasks.router)
 api_router.include_router(agent_expansion.router)
 api_router.include_router(soul.router)
 api_router.include_router(ledger.router)
+api_router.include_router(n8n_executions.router)

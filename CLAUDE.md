@@ -94,7 +94,7 @@ test failure. It shows up as a hundred or more collection ERRORs.
 
 ## Reproducing CI
 
-CI is SEVEN jobs, and on most pull requests you will see five. Five are in
+CI is EIGHT jobs, and on most pull requests you will see five. Five are in
 `.github/workflows/ci.yml` (`standalone` then `container` and `engine` then
 `api`, plus `dependency-audit` on every push). The sixth is
 `.github/workflows/web-ci.yml`, path filtered to the web workspace, so a run of
@@ -113,6 +113,19 @@ lockfile change would put the cost inside web-ci's own path filter and make
 every web pull request pay it. Both `loadPlaywright` and `findChromium` THROW
 when missing, so a runner without Chromium turns the job red rather than green,
 which is the direction that matters.
+
+The eighth arrived on 2026-09-10: `.github/workflows/panel-smoke-ci.yml`,
+filtered to the five control plane panels, the six routes they are served on
+and the six API modules they read. It stands PostgreSQL, the FastAPI app and a
+built Next server up inside the job, registers a throwaway account through the
+real registration path, seeds one row per panel carrying a nonce, and drives all
+six routes in real Chromium. It exists because `next build` prerenders those
+routes and `tsc` compiles them while no `fetch` in any panel had ever executed,
+and every honesty check under `apps/web/scripts` reads source text or an AST.
+Same posture as the audio job: Playwright global rather than a devDependency,
+and both resolvers THROW so a runner without Chromium turns it red. Do not point
+`SMOKE_API_BASE` at a deployed surface: the run registers an account and writes
+a project, a memory, a decision and a workflow.
 
 The standalone job runs with no database. This paragraph said it also runs
 with **no** `PYTHONPATH` until 2026-09-09, when a worktree agent read the file
@@ -135,7 +148,8 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_presence_service.py test_devon_owned_voice.py \
   test_devon_learning_context_honesty.py test_knowledge_graph.py \
   test_knowledge_graph_fixtures.py test_devon_scheduler_honesty.py \
-  test_devon_scheduler_report_honesty.py test_devon_console_voice_honesty.py
+  test_devon_scheduler_report_honesty.py test_devon_console_voice_honesty.py \
+  test_n8n_telemetry.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .
