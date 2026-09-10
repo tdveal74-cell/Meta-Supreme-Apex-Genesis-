@@ -6,6 +6,7 @@ import { ExecutionHubPanel } from "@/components/control/ExecutionHubPanel";
 import { CostPanel } from "@/components/control/CostPanel";
 import { SecurityPanel } from "@/components/control/SecurityPanel";
 import { SessionDoor } from "@/components/control/SessionDoor";
+import { SkillProposalGate } from "@/components/control/SkillProposalGate";
 import { TierPanel } from "@/components/control/TierPanel";
 
 /**
@@ -139,6 +140,15 @@ export function ControlPlane({ readiness, provenance, presence, knowledge }: Con
               }
             >
               {provenance}
+            </TierPanel>
+
+            <TierPanel
+              title="Skill proposal gate"
+              purpose="The drafts DEVON wrote for itself from finished work, and the human ruling on each one."
+              sourcing="live"
+              sourceNote="Read from the skill proposal routes on the agent expansion surface. Every field shown comes back from that read. Approving a draft and activating a skill are two separate rulings and the panel sends them as two separate values, because the API defaults promotion to on when the key is left out."
+            >
+              <SkillProposalGate />
             </TierPanel>
 
             <TierPanel

@@ -961,4 +961,275 @@ check("DEVON chat speaks through the presence service's clone", () => {
   );
 });
 
+/*
+ * WHAT THIS GUARDS. Every agent task that reaches COMPLETED drafts a skill
+ * proposal and saves it, and DEVON_AUTO_SKILL_PROPOSE defaults ON
+ * (app/services/agent_tasks.py:174, saved at :513). CLAUDE.md's invariant reads
+ * "Skill promotion is human gated". Until 2026-09-09 it was gated with no door:
+ * GET /agent-expansion/skill-proposals (app/api/v1/agent_expansion.py:161) and
+ * POST /agent-expansion/skill-proposals/{id}/decide (:173) had no caller
+ * anywhere in apps/web, so proposals piled up where no person could read them.
+ * Nothing failed. No test went red. The same shape as the capture endpoint
+ * above: a capability that existed and nobody could trigger.
+ *
+ * So the panel existing is not the thing worth guarding. Three things are, and
+ * each of them can break silently:
+ *
+ *   1. the panel still calls both routes, as real code
+ *   2. the panel is still mounted on a page a person opens
+ *   3. approve and promote stay two separate rulings in the request body
+ *
+ * Point 3 is the sharp one. SkillDecideBody declares `promote: bool = True`
+ * (app/api/v1/agent_expansion.py:35-37), so a decide body that omits the key
+ * promotes. A refactor that drops promote from the payload turns every approval
+ * into an activation and the UI would look identical.
+ *
+ * WHY THIS PARSES INSTEAD OF GREPPING. Same reason as the capture check: three
+ * text based guards were beaten in this repository in one evening. A route path
+ * pasted into a comment or a JSX sentence is a comment or a StringLiteral, not a
+ * CallExpression with a TemplateExpression argument, and no quoting changes that.
+ *
+ * WHAT THIS DELIBERATELY DOES NOT ASSERT. The capture check forbids any return
+ * before its fetch. That would be wrong here: the decide handler legitimately
+ * returns early when the session token has gone, and a guard demanding it press
+ * on regardless would be demanding an unauthenticated request that 401s.
+ */
+
+/**
+ * The literal halves of a template expression with every interpolation
+ * collapsed to "{}", so `${API_BASE}/a/${id}/b` reads as "{}/a/{}/b".
+ * Returns null for anything that is not a template expression, which is how a
+ * path sitting inside a plain string fails to match rather than passing.
+ */
+function templatePath(node: ts.Node): string | null {
+  if (!ts.isTemplateExpression(node)) return null;
+  let out = node.head.text;
+  for (const span of node.templateSpans) out += `{}${span.literal.text}`;
+  return out;
+}
+
+/** The property assignment named `key` on an object literal, or undefined. */
+function propNamed(
+  object: ts.ObjectLiteralExpression,
+  key: string,
+): ts.PropertyAssignment | undefined {
+  return object.properties.find(
+    (pr) => ts.isPropertyAssignment(pr) && pr.name.getText() === key,
+  ) as ts.PropertyAssignment | undefined;
+}
+
+function isBooleanLiteral(node: ts.Node): boolean {
+  return node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword;
+}
+
+const GATE = "components/control/SkillProposalGate.tsx";
+const GATE_COMPONENT = "SkillProposalGate";
+
+check("the skill proposal gate still reads the queue and rules on it", () => {
+  const panel = parse(GATE);
+  const fetches = callsTo(panel, "fetch");
+
+  // 1. The read. Without it there is no queue on the page, and a door onto
+  //    nothing is the state this whole check exists to end.
+  const listCalls = fetches.filter(
+    (c) =>
+      c.arguments.length > 0 &&
+      templatePath(c.arguments[0]) === "{}/agent-expansion/skill-proposals",
+  );
+  assert.equal(
+    listCalls.length,
+    1,
+    `${GATE} must fetch \`\${API_BASE}/agent-expansion/skill-proposals\` exactly once as real code; found ${listCalls.length}`,
+  );
+
+  // 2. The decide call, as a POST. A GET here would read as success and rule
+  //    on nothing.
+  const decideCalls = fetches.filter(
+    (c) =>
+      c.arguments.length > 0 &&
+      templatePath(c.arguments[0]) === "{}/agent-expansion/skill-proposals/{}/decide",
+  );
+  assert.equal(
+    decideCalls.length,
+    1,
+    `${GATE} must fetch the decide route exactly once as real code; found ${decideCalls.length}. Without it the panel shows proposals nobody can rule on`,
+  );
+  // And the ruling call must sit on its handler's unconditional path. This is
+  // the one assertion the panel's own author could not write: the reachability
+  // helpers arrived in the same commit that closed the capture guard's three
+  // bypasses, and a gate whose decide fetch hides behind a never-satisfied
+  // condition is that defect wearing this arc's name. A try/catch is not a gate.
+  const decideOwner = collect(
+    panel,
+    (n) =>
+      ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === "decide",
+  );
+  assert.equal(
+    decideOwner.length,
+    1,
+    `${GATE} must declare the decide handler exactly once; found ${decideOwner.length}`,
+  );
+  const decideGates = conditionalAncestors(decideCalls[0], decideOwner[0]);
+  assert.equal(
+    decideGates.length,
+    0,
+    `the decide fetch sits inside ${decideGates.length} condition(s), so whether a ruling ever reaches the API depends on a test this check cannot evaluate. It has to be on the handler's unconditional path`,
+  );
+
+  // WHERE THIS CLAUSE STOPS, MEASURED RATHER THAN ASSUMED.
+  //
+  // The capture guard one screenful up also walks for a `return` before its
+  // call, and copying that here was tried and reverted. This handler legitimately
+  // returns early when a ruling has already been sent for the same proposal, so
+  // the blanket walk went red on correct code at once.
+  //
+  // The bypass it would have closed is `if (proposal.proposal_id === "") return;`
+  // above the fetch, dead for every real proposal. That is structurally IDENTICAL
+  // to the already-sent guard the panel needs: both are a conditional return
+  // before the call, and telling them apart means evaluating the condition, which
+  // a source check cannot do. So it stays open, deliberately, and graded low:
+  // exploiting it means writing a guard clause whose test is never true, which is
+  // a deliberate act rather than a regression or a copy paste.
+  //
+  // The reason that is the right call and not laziness: a guard that fails on
+  // correct code costs every future contributor an hour and teaches them to
+  // distrust the file, and this one would have failed on the panel as shipped.
+  // The condition walk above still closes the wrapping form, which is the shape
+  // a refactor actually produces.
+
+  const init = decideCalls[0].arguments[1];
+  assert.ok(
+    init && ts.isObjectLiteralExpression(init),
+    "the decide fetch options are not an object literal this check can read",
+  );
+  const options = init as ts.ObjectLiteralExpression;
+  const method = propNamed(options, "method");
+  assert.ok(
+    method && ts.isStringLiteral(method.initializer) && method.initializer.text === "POST",
+    "the decide fetch no longer POSTs, so no ruling is ever recorded",
+  );
+
+  // 3. Both halves of the ruling in the body, and neither one hardcoded.
+  //    A literal promote:true here promotes every approval; a literal
+  //    approve:true makes the reject button approve.
+  const body = propNamed(options, "body");
+  assert.ok(body, "the decide fetch sends no body, so approve and promote never reach the API");
+  const payloads = (
+    collect(body as ts.Node, (n) => ts.isObjectLiteralExpression(n)) as ts.ObjectLiteralExpression[]
+  ).filter((o) => propNamed(o, "approve") && propNamed(o, "promote"));
+  assert.equal(
+    payloads.length,
+    1,
+    `the decide body must carry exactly one object with both approve and promote; found ${payloads.length}. SkillDecideBody defaults promote to true, so a body missing the key promotes every approval`,
+  );
+  for (const key of ["approve", "promote"] as const) {
+    const assigned = propNamed(payloads[0], key) as ts.PropertyAssignment;
+    assert.ok(
+      !isBooleanLiteral(assigned.initializer),
+      `the decide body hardcodes ${key}, so the button the human pressed no longer decides it`,
+    );
+  }
+
+  // 4. All three rulings have to be reachable from the rendered buttons, and
+  //    every call site has to name promote. Read off the call sites of the
+  //    panel's own handler, so a button wired to nothing fails here.
+  const handler = collect(
+    panel,
+    (n) => ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === "decide",
+  );
+  assert.equal(
+    handler.length,
+    1,
+    `${GATE} declares the decide handler ${handler.length} times; a second declaration means this check may be reading the wrong one`,
+  );
+  const rulings = new Set<string>();
+  const sites = callsTo(panel, "decide");
+  assert.ok(sites.length > 0, "nothing calls the decide handler, so every button is inert");
+  for (const site of sites) {
+    const arg = site.arguments[1];
+    assert.ok(
+      arg && ts.isObjectLiteralExpression(arg),
+      "a decide call site does not pass a literal ruling this check can read",
+    );
+    const ruling = arg as ts.ObjectLiteralExpression;
+    const approve = propNamed(ruling, "approve");
+    const promote = propNamed(ruling, "promote");
+    assert.ok(
+      approve && isBooleanLiteral(approve.initializer),
+      "a decide call site does not state approve as a literal, so what it rules cannot be read here",
+    );
+    assert.ok(
+      promote && isBooleanLiteral(promote.initializer),
+      "a decide call site omits promote. The API defaults it to true, so that button would activate a skill the human only approved",
+    );
+    rulings.add(
+      `${approve.initializer.kind === ts.SyntaxKind.TrueKeyword}/${promote.initializer.kind === ts.SyntaxKind.TrueKeyword}`,
+    );
+  }
+  assert.ok(
+    rulings.has("false/false"),
+    "no button rejects a proposal. A gate where refusing is unavailable is not a gate",
+  );
+  assert.ok(
+    rulings.has("true/false"),
+    "no button approves without activating, so approving a draft and activating a skill have collapsed into one ruling",
+  );
+  assert.ok(
+    rulings.has("true/true"),
+    "no button activates an approved proposal, so nothing can ever be promoted from this surface",
+  );
+
+  // 5. The instructions are the artifact being approved, so the JSX has to
+  //    render the whole property and nothing derived from it. Asserting only
+  //    that the property is READ somewhere was measured green against
+  //    `{proposal.instructions.slice(0, 80)}` on 2026-09-09, which is a ruling
+  //    made on the first eighty characters. Requiring the interpolation to be
+  //    the bare property access turns a truncation into a CallExpression and
+  //    fails it. This still cannot catch a CSS line clamp, which is a style and
+  //    not a node: that boundary is real and is not claimed to be closed here.
+  const isField = (n: ts.Node, field: string) =>
+    ts.isPropertyAccessExpression(n) &&
+    n.name.text === field &&
+    ts.isIdentifier(n.expression) &&
+    n.expression.text === "proposal";
+  assert.ok(
+    collect(
+      panel,
+      (n) => ts.isJsxExpression(n) && n.expression !== undefined && isField(n.expression, "instructions"),
+    ).length > 0,
+    `${GATE} does not render proposal.instructions whole, so a ruling would be made on a title or an excerpt`,
+  );
+  // source_task_id is only a trace, so a fallback around it is legitimate and
+  // only the read is required here.
+  assert.ok(
+    collect(panel, (n) => isField(n, "source_task_id")).length > 0,
+    `${GATE} never reads proposal.source_task_id, so what produced the draft cannot be traced`,
+  );
+});
+
+check("the skill proposal gate is mounted on the control plane", () => {
+  const shell = parse("components/control/ControlPlane.tsx");
+
+  const imported = collect(shell, (n) => {
+    if (!ts.isImportSpecifier(n)) return false;
+    return n.name.text === GATE_COMPONENT;
+  });
+  assert.equal(
+    imported.length,
+    1,
+    `ControlPlane.tsx must import ${GATE_COMPONENT} exactly once; found ${imported.length}`,
+  );
+
+  const rendered = collect(shell, (n) => {
+    if (!ts.isJsxSelfClosingElement(n) && !ts.isJsxOpeningElement(n)) return false;
+    const tag = (n as ts.JsxSelfClosingElement | ts.JsxOpeningElement).tagName;
+    return ts.isIdentifier(tag) && tag.text === GATE_COMPONENT;
+  });
+  assert.equal(
+    rendered.length,
+    1,
+    `ControlPlane.tsx must render <${GATE_COMPONENT} /> exactly once; found ${rendered.length}. An imported but unrendered panel is the unreachable route this arc closed`,
+  );
+});
+
 console.log(`control-check: ${checks} checks passed`);
