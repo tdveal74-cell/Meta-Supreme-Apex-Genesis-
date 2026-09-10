@@ -270,9 +270,10 @@ export function KnowledgePanel() {
       ) : null}
 
       <p className="text-xs leading-relaxed text-white/50">
-        The edges between these items are drawn in the knowledge graph panel below, read from
-        GET /knowledge/graph. Distance here is the raw distance the search route returns,
-        where smaller is nearer, not a confidence score.
+        Distance here is the raw distance the search route returns, where smaller is nearer,
+        not a confidence score. GET /knowledge/graph measures the distance between items as
+        well, and nothing on this page draws those edges, so this panel says nothing about
+        how close any two items are.
       </p>
     </div>
   );
