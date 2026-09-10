@@ -201,6 +201,19 @@ _VERB_CARRYING_CALLABLES = {
     # the ways an attribute name can be assembled at runtime
     "getattr",
     "setattr",
+    # The dunders behind them. `setattr` was listed and `__setattr__` was not,
+    # so `object.__setattr__(request, "method", "POST")` put a live POST on the
+    # wire on 2026-09-10 with this suite at 185 passed. An allowlist is only as
+    # good as the author's imagination, which is why the runtime guard below
+    # exists; these are here so the cheap walk catches the cheap spelling.
+    "__setattr__",
+    "__getattr__",
+    "__getattribute__",
+    "update",
+    "__setstate__",
+    "partial",
+    "methodcaller",
+    "attrgetter",
 }
 
 
@@ -210,7 +223,13 @@ def _folded_strings(node: ast.AST) -> List[str]:
     `"po" + "st"` beats a name based walk and beats a grep. Folding it here is
     what makes the check about the verb rather than about how it was spelled.
     Lists and tuples are walked because `methods=["POST"]` is where a route
-    registration keeps its verb.
+    registration keeps its verb. DICTS are walked because an adversary on
+    2026-09-10 wrote `client.request(**{"method": "DELETE", "url": url})` and
+    this function returned nothing: the verb was spelled in full, at a callee
+    this walk explicitly tracks, and was invisible because the container was a
+    dict. That is the whole lesson of enumerating containers, so keys are
+    folded as well as values, and a `**` splat arrives as a keyword whose value
+    is the dict.
     """
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return [node.value]
@@ -224,6 +243,13 @@ def _folded_strings(node: ast.AST) -> List[str]:
         found: List[str] = []
         for element in node.elts:
             found.extend(_folded_strings(element))
+        return found
+    if isinstance(node, ast.Dict):
+        found = []
+        for key, value in zip(node.keys, node.values, strict=False):
+            if key is not None:
+                found.extend(_folded_strings(key))
+            found.extend(_folded_strings(value))
         return found
     if isinstance(node, ast.JoinedStr):
         literal = "".join(
@@ -420,6 +446,26 @@ _BYPASSES = {
         '_v = VERBS["write"]\nrequest.method = _v\n'
         "response = await client.send(request)"
     ),
+    # The 2026-09-10 tick two bypasses, verbatim. Both were carried to a real
+    # socket, not argued: a raw capture server logged the request line. The
+    # first is the worst of the set, because the verb is spelled in full at a
+    # callee this walk explicitly tracks and was still invisible; the container
+    # was a dict and `_folded_strings` had no dict branch.
+    "the verb splatted into a tracked dispatcher from a dict": (
+        'await client.request(**{"method": "DELETE", "url": url, "headers": headers})'
+    ),
+    "the verb set through the dunder rather than the builtin": (
+        'request = client.build_request("GET", url, headers=headers)\n'
+        'object.__setattr__(request, "method", "POST")\n'
+        "response = await client.send(request)"
+    ),
+    "the same dunder bound on the instance": 'request.__setattr__("method", "POST")',
+    # Not a verb at all on the wire. The server is told to treat the GET as a
+    # write, so the method stays honest and the effect does not.
+    "a method override header carried in a dict": (
+        '_h = {"X-HTTP-Method-Override": "DELETE"}\n'
+        "response = await client.get(url, headers=_h)"
+    ),
 }
 
 
@@ -429,6 +475,127 @@ def test_the_mutating_verb_detector_catches_the_ways_around_it(label: str, sourc
     assert offences, (
         f"the detector did not see {label}. That is the shape that reached the production "
         f"fetcher and returned 41 passed: {source!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THE GUARANTEE, EXECUTED
+#
+# Everything above is a SYNTAX walk, and on 2026-09-10 an adversary showed in
+# one run that a syntax walk can never be the guarantee. Six of eight shapes it
+# tried reported zero offences, and two of them it carried to a real socket:
+#
+#     await client.request(**{"method": "DELETE", "url": url})
+#     object.__setattr__(request, "method", "POST")
+#
+# The first spells DELETE in full, at a callee the walk explicitly tracks. It
+# was invisible because the container was a dict. The second works because
+# `setattr` was on the allowlist and `__setattr__` was not.
+#
+# Both holes are now closed above, and closing them changes nothing about the
+# real problem, which the adversary stated better than the previous four rules
+# did: the enumeration of places a verb can sit is FINITE, and the ways to set
+# one string field on one object are not. Every rule so far was another
+# location added after somebody found a location outside it.
+#
+# So this is the check that does not care how the verb got there. It installs a
+# recording transport under the REAL production fetcher and asserts on the
+# request object that actually reaches the wire. It would have caught all eight
+# of that run's shapes, including the six the walk cannot see, and it will
+# catch the next one without anybody having imagined it first.
+#
+# The syntax walk is kept because it is cheap, it names the offence precisely,
+# and it fails at collection rather than at runtime. It is the first line. This
+# is the guarantee.
+# ---------------------------------------------------------------------------
+
+#: Headers that make a server treat a GET as a write. The verb on the wire is
+#: honest and the effect is not, so asserting the method alone is not enough.
+_METHOD_OVERRIDE_HEADERS = (
+    "x-http-method-override",
+    "x-method-override",
+    "x-http-method",
+)
+
+
+async def _requests_the_real_fetcher_sends(monkeypatch: pytest.MonkeyPatch) -> List[Any]:
+    """Drive `_httpx_get` itself and return every request that reached transport.
+
+    `_httpx_get` does `import httpx` in its own body, so patching the attribute
+    on the module object is enough; there is no cached reference to dodge. The
+    client is subclassed rather than replaced so that every argument the real
+    fetcher passes still applies and only the transport is ours.
+    """
+    import httpx
+
+    seen: List[Any] = []
+
+    def handler(request: Any) -> Any:
+        seen.append(request)
+        return httpx.Response(200, json={"data": []})
+
+    real_client = httpx.AsyncClient
+
+    class Recording(real_client):  # type: ignore[misc, valid-type]
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            kwargs["transport"] = httpx.MockTransport(handler)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", Recording)
+    await tel._httpx_get(
+        f"https://{PRIMARY_HOST}/api/v1/executions?limit=1",
+        {"X-N8N-API-KEY": "not-a-real-key"},
+    )
+    return seen
+
+
+async def test_the_request_that_reaches_the_wire_carries_get(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The one check that does not enumerate anything.
+
+    A syntax walk asks where the verb is written. This asks what the transport
+    was handed, which is the only question the module docstring's promise is
+    actually about.
+    """
+    sent = await _requests_the_real_fetcher_sends(monkeypatch)
+    assert sent, (
+        "the production fetcher never reached the transport, so this test proved "
+        "nothing. A guard that cannot fire is worse than no guard, because it is "
+        "credited"
+    )
+    for request in sent:
+        assert request.method == "GET", (
+            f"the production fetcher put {request.method} on the wire. This module "
+            "is read only by construction and the transport says otherwise"
+        )
+        for header in _METHOD_OVERRIDE_HEADERS:
+            assert header not in request.headers, (
+                f"the fetcher sent {header}, which makes a server treat this GET as "
+                "a write. The verb on the wire is honest and the effect is not"
+            )
+
+
+async def test_the_wire_check_fails_when_the_fetcher_mutates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The control on the control. A recording transport that records nothing
+    would let the test above pass over a silent fetcher, so this proves the
+    recorder actually sees a non GET when one is sent.
+    """
+    import httpx
+
+    seen: List[Any] = []
+
+    def handler(request: Any) -> Any:
+        seen.append(request)
+        return httpx.Response(200, json={"data": []})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await client.request(**{"method": "DELETE", "url": f"https://{PRIMARY_HOST}/x"})
+    assert [r.method for r in seen] == ["DELETE"], (
+        "the recording transport did not see a DELETE it was handed, so the test "
+        "above cannot be trusted to see one either"
     )
 
 
