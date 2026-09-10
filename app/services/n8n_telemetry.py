@@ -35,7 +35,7 @@ because `data=` is not None. The walk found no verb to fold, the recorder was
 never called, and a capture server logged POST against a retry endpoint with the
 API key attached.
 
-So the guarantee is three claims and it needs all three.
+So the guarantee is four claims and it needs all four.
 
 `test_the_audited_fetcher_is_the_only_door` is the first. These files may import
 only a measured allowlist of modules; `urllib.request`, `socket`, `subprocess`
@@ -62,7 +62,24 @@ no `Compare`. It has none today. And because that is another enumeration, the
 executed check is now driven with the URLs `_executions_url` produces rather
 than with hand written ones, so the two halves fail in different directions.
 
-The syntax walk is the third and is kept because it is cheap and names the
+`test_the_production_read_path_sends_only_gets` is the third, and it is here
+because a sixth adversary found that the check above hands `_httpx_get` a
+headers dict of its own making while the real headers are assembled one frame up
+in `_read_pages`. So the three method override header names this module forbids
+were unenforced on the only path production uses, and a capture server logged
+
+    GET /api/v1/executions?limit=100&includeData=false
+    X-HTTP-Method-Override: DELETE
+
+with the suite at 215 passed. Graded before it was written up: the verb on the
+wire is GET, so nothing mutates unless an intermediary honours the override, and
+n8n on Express does not by default. The defect was a guard credited for a check
+it never performed on the path that matters. `read_all` is now driven with no
+fake at all, across two pages so the cursor URL is built too, and what left is
+read by one shared definition of a bad request: a verb other than GET, any
+override header, or any path but `/api/v1/executions`.
+
+The syntax walk is the fourth and is kept because it is cheap and names the
 offence precisely. All of them are proved against synthetic bypasses that each
 reached a real socket once, in
 `test_the_mutating_verb_detector_catches_the_ways_around_it`,

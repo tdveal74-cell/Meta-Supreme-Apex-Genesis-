@@ -1267,16 +1267,145 @@ async def test_the_request_that_reaches_the_wire_carries_get(
         f"drove {len(driven)} URLs and the transport saw {len(sent)} requests. A "
         "fetcher that swallows one input is a fetcher this check is not covering"
     )
-    for request in sent:
-        assert request.method == "GET", (
-            f"the production fetcher put {request.method} on the wire. This module "
-            "is read only by construction and the transport says otherwise"
-        )
+    # One definition of what is wrong with a request, shared with the production
+    # path check below. Two copies drifted apart once already: this one forbade
+    # the override headers while the path production uses was never inspected.
+    offences = _offences_on_the_wire(sent)
+    assert offences == [], (
+        f"the production fetcher put something on the wire that this module cannot "
+        f"speak: {offences}"
+    )
+
+
+#: The only path either instance may be asked for. The read surface is one
+#: endpoint, so a request to anything else is a request this module has no
+#: business making, whatever verb it carries.
+_ALLOWED_WIRE_PATHS = {"/api/v1/executions"}
+
+
+def _offences_on_the_wire(requests: List[Any]) -> List[str]:
+    """Everything wrong with the requests that actually left, whatever built them.
+
+    Factored out of the fetcher check because on 2026-09-10 a sixth adversary
+    showed the two are not the same question. The check above hands `_httpx_get`
+    a headers dict of its own making, and the production headers are assembled
+    one frame up in `_read_pages`. So the three override header names this file
+    forbids were unenforced on the ONLY path production uses: the adversary put
+    `X-HTTP-Method-Override: DELETE` into that dict and every layer stayed
+    silent, with the suite at 215 passed and a capture server logging
+
+        GET /api/v1/executions?limit=100&includeData=false HTTP/1.1
+        X-HTTP-Method-Override: DELETE
+
+    Graded before it was raised, because over calling a finding is its own
+    error: the verb on the wire is GET, so nothing mutates unless an
+    intermediary honours the override, and n8n on Express does not by default.
+    The defect is not a live write. It is that a guard was being credited for a
+    check it never performed on the path that matters, which is the failure this
+    whole file exists to refuse.
+    """
+    offences: List[str] = []
+    for request in requests:
+        if request.method != "GET":
+            offences.append(f"{request.method} reached the wire at {request.url}")
         for header in _METHOD_OVERRIDE_HEADERS:
-            assert header not in request.headers, (
-                f"the fetcher sent {header}, which makes a server treat this GET as "
-                "a write. The verb on the wire is honest and the effect is not"
+            if header in request.headers:
+                offences.append(
+                    f"the header {header} reached the wire carrying "
+                    f"{request.headers[header]!r}. The verb stays honest and the effect "
+                    "does not"
+                )
+        path = urlparse(str(request.url)).path
+        if path not in _ALLOWED_WIRE_PATHS:
+            offences.append(
+                f"a request reached {path}, which is not the read surface. n8n mutates "
+                "executions on paths this module must never build"
             )
+    return offences
+
+
+async def _requests_the_production_read_sends(monkeypatch: pytest.MonkeyPatch) -> List[Any]:
+    """Drive `read_all` with NO injected fetcher, so the real assembly runs.
+
+    Every other test in this file hands `read_all` a fake, which is the right
+    trade for the states that are hard to reach live and is exactly why the real
+    header assembly had never been driven. This one leaves `fetch` unset so
+    `_read_pages` builds the URL and the headers the way production does, and
+    answers the first page with a cursor so the second URL is built too.
+    """
+    import httpx
+
+    seen: List[Any] = []
+    answered = {"pages": 0}
+
+    def handler(request: Any) -> Any:
+        seen.append(request)
+        answered["pages"] += 1
+        if answered["pages"] == 1:
+            return httpx.Response(
+                200,
+                json={
+                    "data": [_row(6412, "success", "2026-09-10T12:00:00.000Z")],
+                    "nextCursor": "cursor-token-not-a-real-one",
+                },
+            )
+        return httpx.Response(200, json={"data": []})
+
+    real_client = httpx.AsyncClient
+
+    class Recording(real_client):  # type: ignore[misc, valid-type]
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            kwargs["transport"] = httpx.MockTransport(handler)
+            super().__init__(*args, **kwargs)
+
+    Recording.__name__ = real_client.__name__
+    Recording.__qualname__ = real_client.__qualname__
+    Recording.__module__ = real_client.__module__
+
+    monkeypatch.setattr(httpx, "AsyncClient", Recording)
+    await tel.read_all(environ=_env())
+    return seen
+
+
+async def test_the_production_read_path_sends_only_gets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The headers and URLs production actually assembles, not the ones a test
+    hands the fetcher.
+
+    This is the gap tick six found. It drives `read_all` with no fake at all, so
+    `_read_pages` builds both, and it asserts on what left.
+    """
+    sent = await _requests_the_production_read_sends(monkeypatch)
+    assert len(sent) >= 2, (
+        f"the production read reached the transport {len(sent)} times. It has to walk at "
+        "least two pages here, or the cursor URL this check exists to cover was never built"
+    )
+    assert _offences_on_the_wire(sent) == []
+
+
+def test_the_wire_offence_reader_names_what_it_should() -> None:
+    """The control on that check, and the reason it can be trusted.
+
+    A reader that returns an empty list for everything would let the test above
+    pass over a POST carrying a forbidden header to a retry endpoint.
+    """
+    import httpx
+
+    clean = httpx.Request(
+        "GET",
+        f"https://{PRIMARY_HOST}/api/v1/executions?limit=100&includeData=false",
+        headers={"X-N8N-API-KEY": "not-a-real-key"},
+    )
+    assert _offences_on_the_wire([clean]) == []
+
+    dirty = httpx.Request(
+        "POST",
+        f"https://{PRIMARY_HOST}/api/v1/executions/6679/retry",
+        headers={"X-HTTP-Method-Override": "DELETE"},
+    )
+    named = _offences_on_the_wire([dirty])
+    assert len(named) == 3, f"the reader saw {named}, and there are three things wrong here"
 
 
 async def test_the_wire_check_fails_when_the_fetcher_mutates(
