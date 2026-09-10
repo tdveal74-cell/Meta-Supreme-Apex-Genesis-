@@ -91,6 +91,13 @@ class DevonResponse:
     executed: bool = False
     unverified: List[str] = field(default_factory=list)
     reason: str = ""
+    # What DEVON almost understood, when he declined. A question for the person
+    # who spoke, never a route: `understood` is False and `executed` is False
+    # alongside it, and an EFFECT intent never reaches these fields at all, so a
+    # surface that renders them as a button cannot manufacture consent for one.
+    suggestion: Optional[str] = None
+    suggestion_phrase: Optional[str] = None
+    suggestion_score: float = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -115,6 +122,9 @@ class DevonResponse:
             "executed": self.executed,
             "unverified": self.unverified,
             "reason": self.reason,
+            "suggestion": self.suggestion,
+            "suggestion_phrase": self.suggestion_phrase,
+            "suggestion_score": self.suggestion_score,
         }
 
 
@@ -166,15 +176,7 @@ class Devon:
         """
         command = parse(text)
         if not command.understood:
-            return DevonResponse(
-                reply=(
-                    "I did not catch that one clearly enough to act on. Say it again "
-                    "and I will take it from the top."
-                ),
-                understood=False,
-                score=command.score,
-                reason=command.reason,
-            )
+            return self._decline(command)
 
         if command.requires_approval:
             return self._gate(command, owner_id)
@@ -200,6 +202,54 @@ class Devon:
         if command.intent is not None and command.intent.kind is Kind.CAPTURE:
             return handler(command, on_date or date_cls.today(), suggested_area=suggested_area)
         return handler(command, on_date or date_cls.today())
+
+    def _decline(self, command: ParsedCommand) -> DevonResponse:
+        """Answer an utterance DEVON would not act on, without wasting the parse.
+
+        Before 2026-09-10 this threw away everything the router had worked out
+        and asked the person to start again, which is the least useful thing it
+        could say to somebody whose sentence missed by 0.03. It now names the
+        near miss when there is an honest one to name.
+
+        What it will not do is offer an effect. `parse` refuses to put one in
+        `suggestion` at any score, so there is nothing here to filter, and the
+        no suggestion reply is a fixed string that names no candidate at all.
+        That is deliberate: the top candidate for "fire up chrome" at 5ff4348
+        was "reboot the computer", and a prompt built on the top candidate would
+        have asked a person to confirm rebooting their machine because they
+        asked to open a browser. A suggestion is also never a route. This
+        response carries understood False and executed False, no plan and no
+        approval card, so the only thing that can act on it is a person.
+        """
+        if command.suggestion is None:
+            return DevonResponse(
+                reply=(
+                    "I did not catch that one clearly enough to act on. Say it again "
+                    "and I will take it from the top."
+                ),
+                understood=False,
+                score=command.score,
+                reason=command.reason,
+            )
+
+        intent = command.suggestion
+        in_words = intent.name.replace("_", " ")
+        return DevonResponse(
+            reply=(
+                "I did not catch that one clearly enough to act on, so nothing was "
+                f"done. The nearest thing I know is {in_words}, and I read you at "
+                f"{command.suggestion_score:.2f} against a floor of {intent.min_score}, "
+                "which is not enough to act on a guess. If that is what you meant, say "
+                f'"{command.suggestion_phrase}" and I will run it. Otherwise say it '
+                "again and I will take it from the top."
+            ),
+            understood=False,
+            score=command.score,
+            reason=command.reason,
+            suggestion=intent.name,
+            suggestion_phrase=command.suggestion_phrase,
+            suggestion_score=command.suggestion_score,
+        )
 
     def area_suggestion_text(self, text: str) -> Optional[str]:
         """The text a model should be asked to tag, or None when asking is waste.

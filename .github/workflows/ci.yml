@@ -65,7 +65,8 @@ jobs:
             test_knowledge_graph_fixtures.py \
             test_devon_scheduler_honesty.py \
             test_devon_scheduler_report_honesty.py \
-            test_devon_console_voice_honesty.py
+            test_devon_console_voice_honesty.py \
+            test_n8n_telemetry.py
 
   dependency-audit:
     name: Dependency audit (pip-audit + pnpm audit)
@@ -134,7 +135,7 @@ jobs:
       - name: Council and security (no database)
         run: |
           if [ ! -f services/agents/executor.py ]; then
-            echo "::error::services/agents/executor.py is absent — it blocks test_council.py and test_phase4_council.py. See RESTORE.md."
+            echo "::error::services/agents/executor.py is absent, and it blocks test_council.py and test_phase4_council.py. See RESTORE.md."
             exit 1
           fi
           python -m pytest test_council.py test_phase4_council.py test_security.py \

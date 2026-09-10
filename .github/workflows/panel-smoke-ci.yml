@@ -1,0 +1,230 @@
+name: Panel smoke CI
+
+# WHY THIS IS ITS OWN WORKFLOW, PATH FILTERED
+#
+# Six control plane panels shipped on 2026-09-10 in PR #194. `next build`
+# prerenders all six routes and `tsc` compiles them, so each renders its INITIAL
+# state without throwing. No `fetch` in any of them had ever executed. Every
+# honesty check under apps/web/scripts reads source text or an AST:
+# control-check, roster-check, memory-check, projects-check, decisions-check and
+# workflow-check each prove the pure ladders and the shape of the JSX around
+# them, and not one of them sends a request. So a wrong path, a malformed
+# Authorization header, a body parsed against the wrong key or a CORS refusal
+# would pass every gate this estate has.
+#
+# This job closes a caveat every arc in this repository has carried: no panel has
+# ever been driven from a browser.
+#
+# WHY THE WHOLE STACK STANDS UP INSIDE THE JOB
+#
+# Five of the six panels are account scoped, so an unauthenticated run only ever
+# reaches the locked state and proves nothing about whether a read works. Tee
+# ruled on 2026-09-10 that the stack comes up here rather than pointing at
+# production: no production credential is used anywhere in this file, and no test
+# row is ever written to his real database. The registration key is generated
+# fresh per run with `openssl rand`, so there is no secret to store and no secret
+# to leak; the account it opens lives and dies with the job's Postgres container.
+#
+# WHY IT IS PATH FILTERED RATHER THAN A STEP IN web-ci.yml
+#
+# Same reason audio-ci.yml is: it needs Playwright and a Chromium binary, and
+# neither is pinned by this repository, so it costs a browser download on every
+# run that triggers it. It also stands up Postgres and a Python API, which no
+# other web job needs. Playwright is installed GLOBALLY in the job rather than
+# added as a devDependency, because a lockfile change would put that cost inside
+# web-ci.yml's own path filter and make every web pull request pay it.
+#
+# WHAT THE FILTER COVERS, and what it does not
+#
+# Read off the panels rather than guessed: the five panel components and their
+# pure modules, the shell that mounts them, the six routes they are served on,
+# the module that resolves the API origin, the module that holds the token slot
+# they read, the six API modules they call, the router that mounts those, and the
+# check itself.
+#
+# NAMED RESIDUAL: a panel read can also be broken from further inside the API,
+# in a service, a model or a migration, and this filter does not reach there. The
+# api job in ci.yml runs the Python suite on every push, so a change there is not
+# unguarded; it is simply not guarded BY THIS JOB. Widening the filter to the
+# whole of app/ and services/ would put a browser download on most pull requests
+# in the estate, which is how a smoke run gets disabled. Run it by hand with
+# workflow_dispatch when a change under app/ or services/ touches one of these
+# reads.
+#
+# IT FAILS LOUDLY WHEN THE BROWSER IS MISSING. `loadPlaywright` and
+# `findChromium` in scripts/panel-smoke.mjs both THROW rather than skip, so a
+# runner without Chromium turns this job RED rather than green. That is the same
+# posture audio-ci.yml takes, and for the same reason: a green job that checked
+# nothing is worse than no job, because it is credited.
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      # The panels and the pure modules they rank their reads with.
+      - "apps/web/components/control/WorkflowDoor.tsx"
+      - "apps/web/components/control/workflow-honesty.ts"
+      - "apps/web/components/control/ControlPlane.tsx"
+      - "apps/web/components/council/DecisionRecordPanel.tsx"
+      - "apps/web/components/council/decision-record.ts"
+      - "apps/web/components/mind/MemoryPanel.tsx"
+      - "apps/web/components/mind/memory-honesty.ts"
+      - "apps/web/components/projects/ProjectsPanel.tsx"
+      - "apps/web/components/projects/projects-honesty.ts"
+      - "apps/web/components/roster/AgentRosterPanel.tsx"
+      - "apps/web/components/roster/agent-roster-honesty.ts"
+      # The six routes the panels are served on.
+      - "apps/web/app/control/**"
+      # Where the requests are aimed, and the slot the bearer token is read from.
+      - "apps/web/lib/api-base.ts"
+      - "apps/web/components/presence/usePresenceSocket.ts"
+      # The routes those requests land on.
+      - "app/api/v1/agents.py"
+      - "app/api/v1/auth.py"
+      - "app/api/v1/decisions.py"
+      - "app/api/v1/memory.py"
+      - "app/api/v1/projects.py"
+      - "app/api/v1/workflows.py"
+      - "app/api/v1/router.py"
+      # The check, and this file.
+      - "apps/web/scripts/panel-smoke.mjs"
+      - ".github/workflows/panel-smoke-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  panels:
+    name: Six panels driven in real Chromium
+    runs-on: ubuntu-latest
+
+    # The same image ci.yml's api job uses, so the database this runs against is
+    # the one the Python suite runs against.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: meta_supreme
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+
+    env:
+      DEFAULT_AI_PROVIDER: mock
+      EMBEDDING_PROVIDER: mock
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/meta_supreme
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/api
+      SMOKE_API_BASE: http://127.0.0.1:8000/api/v1
+      SMOKE_WEB_ORIGIN: http://127.0.0.1:3000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install the pinned Python closure
+        run: |
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet -r requirements.txt
+
+      - name: Install the locked workspace
+        run: pnpm install --frozen-lockfile
+
+      # No production credential exists in this job. The registration key is
+      # minted here, used once, and dies with the runner; SECRET_KEY likewise, so
+      # the JWTs this job issues verify against nothing outside it.
+      - name: Mint this run's throwaway secrets
+        run: |
+          echo "DEVON_REGISTRATION_KEY=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+          echo "SECRET_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+
+      # The deploy path, not a second way of building the database. This is the
+      # same command ci.yml's api job runs in its "Fresh Alembic deploy" step and
+      # the same one Railway runs, and 001_baseline executes
+      # database/schemas/001_initial_schema.sql, which creates the vector
+      # extension the 004 index needs. No head revision is asserted here on
+      # purpose: adding a migration already touches four places in ci.yml and two
+      # lists in conftest.py, and this file will not become a fifth.
+      - name: Build the database the way the deploy does
+        run: alembic upgrade head
+
+      - name: Start the API
+        run: |
+          nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 \
+            --log-level warning > api.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -sf "$SMOKE_API_BASE/health" > /dev/null; then
+              echo "api up after ${attempt}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::the API never became healthy"; tail -60 api.log; exit 1
+
+      # NEXT_PUBLIC_API_URL wins over every fallback in apps/web/lib/api-base.ts,
+      # so the built bundle talks to the API in this job and to nothing else. The
+      # presence URL is pinned at a loopback address for the same reason: nothing
+      # in this job may dial a deployed service.
+      - name: Build the web workspace against this job's API
+        env:
+          NEXT_PUBLIC_API_URL: http://127.0.0.1:8000/api/v1
+          NEXT_PUBLIC_PRESENCE_URL: http://127.0.0.1:8010
+        run: pnpm --filter @meta-supreme/web build
+
+      - name: Start the built Next server
+        working-directory: apps/web
+        run: |
+          nohup npx next start --hostname 127.0.0.1 --port 3000 > ../../web.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -sf "$SMOKE_WEB_ORIGIN/control" > /dev/null; then
+              echo "web up after ${attempt}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::the web server never served /control"
+          tail -60 ../../web.log; exit 1
+
+      # Installed for this job only, never added to the workspace lockfile.
+      # Pinned to the version the development container carries (1.56.1,
+      # chromium build 1194) so a pass here means what a pass there means.
+      - name: Install Playwright and Chromium
+        run: |
+          npm install -g playwright@1.56.1
+          npx --yes playwright@1.56.1 install --with-deps chromium
+
+      # panel-smoke.mjs resolves both from the environment. Ask Playwright where
+      # it put the browser rather than hardcoding a cache path, because the build
+      # number moves with the version.
+      - name: Locate the browser Playwright installed
+        run: |
+          GLOBAL_ROOT="$(npm root -g)"
+          echo "PLAYWRIGHT_MODULE=${GLOBAL_ROOT}/playwright/index.mjs" >> "$GITHUB_ENV"
+          CHROME="$(node -e "process.stdout.write(require('${GLOBAL_ROOT}/playwright').chromium.executablePath())")"
+          test -x "$CHROME" || { echo "playwright reported a chromium path that is not executable: $CHROME"; exit 1; }
+          echo "CHROMIUM_BINARY=${CHROME}" >> "$GITHUB_ENV"
+          echo "using $CHROME"
+
+      - name: Drive the six panels in real Chromium
+        working-directory: apps/web
+        run: node --experimental-strip-types scripts/panel-smoke.mjs
+
+      - name: What the servers said, when it went red
+        if: failure()
+        run: |
+          for f in api.log web.log; do
+            [ -f "$f" ] || continue
+            echo "=== $f (last 80) ==="
+            tail -80 "$f"
+          done

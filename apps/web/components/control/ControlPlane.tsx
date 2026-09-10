@@ -317,8 +317,8 @@ export function ControlPlane({
             <TierPanel
               title="n8n operations"
               purpose="Execution telemetry, retries, queue depth and version sync against GitHub."
-              sourcing="unwired"
-              sourceNote="No route in this repository reads the n8n instance. The tier shows the API's own health instead of inventing execution data."
+              sourcing="partial"
+              sourceNote="GET /n8n/executions reads the configured instances, so recent executions and failure counts are sourced. Retries, queue depth and version sync are not built and are not drawn. Any plan cap is stated by configuration and the spend against it is estimated from the execution id gap, never measured, and is refused entirely when the ids of a window contradict its clock. No date is projected: every date on this tier is observed from an execution row or stated by configuration. Workflow names are NOT in the executions response, so a row is labelled by its workflow id and says so."
             >
               <ExecutionHubPanel />
             </TierPanel>
