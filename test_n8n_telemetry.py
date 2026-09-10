@@ -201,6 +201,19 @@ _VERB_CARRYING_CALLABLES = {
     # the ways an attribute name can be assembled at runtime
     "getattr",
     "setattr",
+    # The dunders behind them. `setattr` was listed and `__setattr__` was not,
+    # so `object.__setattr__(request, "method", "POST")` put a live POST on the
+    # wire on 2026-09-10 with this suite at 185 passed. An allowlist is only as
+    # good as the author's imagination, which is why the runtime guard below
+    # exists; these are here so the cheap walk catches the cheap spelling.
+    "__setattr__",
+    "__getattr__",
+    "__getattribute__",
+    "update",
+    "__setstate__",
+    "partial",
+    "methodcaller",
+    "attrgetter",
 }
 
 
@@ -210,7 +223,13 @@ def _folded_strings(node: ast.AST) -> List[str]:
     `"po" + "st"` beats a name based walk and beats a grep. Folding it here is
     what makes the check about the verb rather than about how it was spelled.
     Lists and tuples are walked because `methods=["POST"]` is where a route
-    registration keeps its verb.
+    registration keeps its verb. DICTS are walked because an adversary on
+    2026-09-10 wrote `client.request(**{"method": "DELETE", "url": url})` and
+    this function returned nothing: the verb was spelled in full, at a callee
+    this walk explicitly tracks, and was invisible because the container was a
+    dict. That is the whole lesson of enumerating containers, so keys are
+    folded as well as values, and a `**` splat arrives as a keyword whose value
+    is the dict.
     """
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return [node.value]
@@ -224,6 +243,13 @@ def _folded_strings(node: ast.AST) -> List[str]:
         found: List[str] = []
         for element in node.elts:
             found.extend(_folded_strings(element))
+        return found
+    if isinstance(node, ast.Dict):
+        found = []
+        for key, value in zip(node.keys, node.values, strict=False):
+            if key is not None:
+                found.extend(_folded_strings(key))
+            found.extend(_folded_strings(value))
         return found
     if isinstance(node, ast.JoinedStr):
         literal = "".join(
@@ -246,8 +272,8 @@ def _callee_name(func: ast.AST) -> Optional[str]:
 def _mutating_verb_offences(tree: ast.AST) -> List[str]:
     """Every reach for a mutating HTTP verb in this syntax tree.
 
-    Three forms, because the name based version of this walk was beaten by the
-    second and third while reporting green:
+    Four forms, because the name based version of this walk was beaten by the
+    second and third while reporting green, and the fourth beat all of those:
 
     1. an attribute or call NAMED for the verb: `client.post(...)`,
        `@router.delete(...)`, or the bare attribute `client.patch`.
@@ -266,6 +292,62 @@ def _mutating_verb_offences(tree: ast.AST) -> List[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute) and node.attr.lower() in _MUTATING_VERBS:
             offences.append(f"attribute {node.attr} at line {node.lineno}")
+        # 5. THE VERB AS OBJECT STATE. Added 2026-09-10 after an adversary put a
+        # live POST into the module's only fetcher and this suite reported 183
+        # passed. Its bypass was three lines:
+        #
+        #     request = httpx.Request("GET", url, headers=headers)
+        #     request.method = "POST"
+        #     response = await client.send(request)
+        #
+        # Every rule above reasons about a CALL: the callee's own name, or a
+        # string folded out of its arguments. This one puts the verb nowhere
+        # near a call site. `httpx.Request.__init__` stores `self.method` as a
+        # plain str and the transport reads it at send time, so the wire really
+        # carries POST; the adversary proved that against a capture server
+        # rather than by reading the library. Of the three tracked sites,
+        # `Request("GET", ...)` folds to GET, `.method` is not a verb name, and
+        # `send(request)` carries a Name that folds to nothing.
+        #
+        # Closed two ways on purpose. Closing only the literal would leave
+        # `request.method = _v` open and the next tick would find it in
+        # seconds, so (b) refuses the SHAPE, which is the same answer rule 4
+        # gave for the same reason.
+        #
+        #   (a) BY VALUE: an assignment whose value folds to EXACTLY a verb.
+        #       Exactly, not by substring, because the read shape control
+        #       assigns "this route cannot trigger, retry, delete or resume an
+        #       execution" and that sentence must stay legal.
+        #   (b) BY SHAPE: an assignment targeting `.method`, or a subscript
+        #       whose key folds to "method", whatever the value. Measured
+        #       before it was chosen: neither guarded file assigns `.method`
+        #       anywhere, while plain subscript assignment appears 38 times in
+        #       the service alone, which is why the key is read rather than the
+        #       shape of the target alone.
+        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+            written = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in written:
+                if isinstance(target, ast.Attribute) and target.attr.lower() == "method":
+                    offences.append(
+                        f"assignment to .method at line {node.lineno} sets an HTTP "
+                        "verb as object state. Refused by shape whatever the value, "
+                        "because a verb reached this way sits at no call site"
+                    )
+                elif isinstance(target, ast.Subscript):
+                    for key in _folded_strings(target.slice):
+                        if key.strip().lower() == "method":
+                            offences.append(
+                                f'assignment to ["method"] at line {node.lineno} '
+                                "sets an HTTP verb as object state"
+                            )
+            if node.value is not None:
+                for text in _folded_strings(node.value):
+                    if text.strip().lower() in _MUTATING_VERBS:
+                        offences.append(
+                            f"assignment of {text!r} at line {node.lineno} puts a "
+                            "mutating verb into a name, and no later call site has "
+                            "to spell it"
+                        )
         if not isinstance(node, ast.Call):
             continue
         name = _callee_name(node.func)
@@ -349,6 +431,41 @@ _BYPASSES = {
     "a verb read off a mapping and handed to getattr": (
         'response = await getattr(client, VERBS["write"])(url)'
     ),
+    # The adversary's second 2026-09-10 bypass, verbatim. It put a live POST
+    # into the production fetcher and this suite reported 183 passed. Proved on
+    # the wire against a local capture server, which logged POST, rather than by
+    # reading httpx's source.
+    "the verb set as object state on a request that is then sent": (
+        'request = httpx.Request("GET", url, headers=headers)\n'
+        'request.method = "POST"\n'
+        "response = await client.send(request)"
+    ),
+    # The same shape with the verb in a name, which a value analysis cannot see.
+    # This is what rule 5(b) exists for.
+    "the verb set as object state from a name": (
+        '_v = VERBS["write"]\nrequest.method = _v\n'
+        "response = await client.send(request)"
+    ),
+    # The 2026-09-10 tick two bypasses, verbatim. Both were carried to a real
+    # socket, not argued: a raw capture server logged the request line. The
+    # first is the worst of the set, because the verb is spelled in full at a
+    # callee this walk explicitly tracks and was still invisible; the container
+    # was a dict and `_folded_strings` had no dict branch.
+    "the verb splatted into a tracked dispatcher from a dict": (
+        'await client.request(**{"method": "DELETE", "url": url, "headers": headers})'
+    ),
+    "the verb set through the dunder rather than the builtin": (
+        'request = client.build_request("GET", url, headers=headers)\n'
+        'object.__setattr__(request, "method", "POST")\n'
+        "response = await client.send(request)"
+    ),
+    "the same dunder bound on the instance": 'request.__setattr__("method", "POST")',
+    # Not a verb at all on the wire. The server is told to treat the GET as a
+    # write, so the method stays honest and the effect does not.
+    "a method override header carried in a dict": (
+        '_h = {"X-HTTP-Method-Override": "DELETE"}\n'
+        "response = await client.get(url, headers=_h)"
+    ),
 }
 
 
@@ -358,6 +475,127 @@ def test_the_mutating_verb_detector_catches_the_ways_around_it(label: str, sourc
     assert offences, (
         f"the detector did not see {label}. That is the shape that reached the production "
         f"fetcher and returned 41 passed: {source!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THE GUARANTEE, EXECUTED
+#
+# Everything above is a SYNTAX walk, and on 2026-09-10 an adversary showed in
+# one run that a syntax walk can never be the guarantee. Six of eight shapes it
+# tried reported zero offences, and two of them it carried to a real socket:
+#
+#     await client.request(**{"method": "DELETE", "url": url})
+#     object.__setattr__(request, "method", "POST")
+#
+# The first spells DELETE in full, at a callee the walk explicitly tracks. It
+# was invisible because the container was a dict. The second works because
+# `setattr` was on the allowlist and `__setattr__` was not.
+#
+# Both holes are now closed above, and closing them changes nothing about the
+# real problem, which the adversary stated better than the previous four rules
+# did: the enumeration of places a verb can sit is FINITE, and the ways to set
+# one string field on one object are not. Every rule so far was another
+# location added after somebody found a location outside it.
+#
+# So this is the check that does not care how the verb got there. It installs a
+# recording transport under the REAL production fetcher and asserts on the
+# request object that actually reaches the wire. It would have caught all eight
+# of that run's shapes, including the six the walk cannot see, and it will
+# catch the next one without anybody having imagined it first.
+#
+# The syntax walk is kept because it is cheap, it names the offence precisely,
+# and it fails at collection rather than at runtime. It is the first line. This
+# is the guarantee.
+# ---------------------------------------------------------------------------
+
+#: Headers that make a server treat a GET as a write. The verb on the wire is
+#: honest and the effect is not, so asserting the method alone is not enough.
+_METHOD_OVERRIDE_HEADERS = (
+    "x-http-method-override",
+    "x-method-override",
+    "x-http-method",
+)
+
+
+async def _requests_the_real_fetcher_sends(monkeypatch: pytest.MonkeyPatch) -> List[Any]:
+    """Drive `_httpx_get` itself and return every request that reached transport.
+
+    `_httpx_get` does `import httpx` in its own body, so patching the attribute
+    on the module object is enough; there is no cached reference to dodge. The
+    client is subclassed rather than replaced so that every argument the real
+    fetcher passes still applies and only the transport is ours.
+    """
+    import httpx
+
+    seen: List[Any] = []
+
+    def handler(request: Any) -> Any:
+        seen.append(request)
+        return httpx.Response(200, json={"data": []})
+
+    real_client = httpx.AsyncClient
+
+    class Recording(real_client):  # type: ignore[misc, valid-type]
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            kwargs["transport"] = httpx.MockTransport(handler)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", Recording)
+    await tel._httpx_get(
+        f"https://{PRIMARY_HOST}/api/v1/executions?limit=1",
+        {"X-N8N-API-KEY": "not-a-real-key"},
+    )
+    return seen
+
+
+async def test_the_request_that_reaches_the_wire_carries_get(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The one check that does not enumerate anything.
+
+    A syntax walk asks where the verb is written. This asks what the transport
+    was handed, which is the only question the module docstring's promise is
+    actually about.
+    """
+    sent = await _requests_the_real_fetcher_sends(monkeypatch)
+    assert sent, (
+        "the production fetcher never reached the transport, so this test proved "
+        "nothing. A guard that cannot fire is worse than no guard, because it is "
+        "credited"
+    )
+    for request in sent:
+        assert request.method == "GET", (
+            f"the production fetcher put {request.method} on the wire. This module "
+            "is read only by construction and the transport says otherwise"
+        )
+        for header in _METHOD_OVERRIDE_HEADERS:
+            assert header not in request.headers, (
+                f"the fetcher sent {header}, which makes a server treat this GET as "
+                "a write. The verb on the wire is honest and the effect is not"
+            )
+
+
+async def test_the_wire_check_fails_when_the_fetcher_mutates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The control on the control. A recording transport that records nothing
+    would let the test above pass over a silent fetcher, so this proves the
+    recorder actually sees a non GET when one is sent.
+    """
+    import httpx
+
+    seen: List[Any] = []
+
+    def handler(request: Any) -> Any:
+        seen.append(request)
+        return httpx.Response(200, json={"data": []})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await client.request(**{"method": "DELETE", "url": f"https://{PRIMARY_HOST}/x"})
+    assert [r.method for r in seen] == ["DELETE"], (
+        "the recording transport did not see a DELETE it was handed, so the test "
+        "above cannot be trusted to see one either"
     )
 
 

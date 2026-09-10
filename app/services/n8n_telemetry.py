@@ -16,9 +16,20 @@ reachable from this module: the only transport verb it can speak is GET.
 mutating HTTP verb appears in it, whether as an attribute (`client.po` + `st`),
 as a verb string handed to a generic dispatcher (`client.request("DELETE", ...)`,
 `httpx.Request("POST", ...)`), or as a `methods=` list on a route registration.
-A comment saying "read only" is not a guarantee; an absent verb is, and the
-guard that proves the absence is itself proved against synthetic bypasses in
-`test_the_mutating_verb_detector_catches_the_ways_around_it`.
+That walk is a first line, and this paragraph used to call it the guarantee.
+That was wrong, and it was proved wrong on 2026-09-10: an adversary put
+`object.__setattr__(request, "method", _v)` in the fetcher with the verb
+assembled by `"".join(("PO", "ST"))`, so NO verb string existed anywhere in this
+file, the walk reported zero offences, and a capture server logged POST on the
+wire.
+
+The guarantee is therefore an EXECUTED one.
+`test_the_request_that_reaches_the_wire_carries_get` installs a recording
+transport under this very function and asserts on the request object the
+transport is handed, so it does not care how the verb got there and needed
+nobody to imagine the shape first. The syntax walk is kept beside it because it
+is cheap and names the offence precisely, and both are proved against synthetic
+bypasses in `test_the_mutating_verb_detector_catches_the_ways_around_it`.
 
 THE API SHAPE WAS MEASURED ON 2026-09-10
 
