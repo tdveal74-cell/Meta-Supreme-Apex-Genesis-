@@ -576,6 +576,34 @@ _NETWORK_CAPABLE_MODULES = (
     "importlib",
 )
 
+#: Members that may be pulled out of the two LOCAL packages either file imports
+#: from. Measured 2026-09-10: the route imports `n8n_telemetry` and
+#: `CurrentUser` and nothing else.
+#:
+#: This exists because the allowlist above is keyed on the MODULE, so
+#: `from app.services import n8n_retry` satisfied it while
+#: `import app.services.n8n_retry` did not. Found by probing the rule rather
+#: than by an adversary, and then carried to a socket rather than argued: a
+#: sibling module holding the POST, imported by the route beside
+#: `n8n_telemetry`, logged
+#:
+#:     POST /api/v1/executions/6679/retry HTTP/1.1
+#:     X-N8N-Api-Key: <the configured key>
+#:
+#: on a local capture server while this suite reported 205 passed. Both guarded
+#: files stayed innocent: the route table still read GET, the verb walk still
+#: found nothing, and the transport check was never driven. With the members
+#: pinned, the same tree gives 1 failed, 206 passed.
+#:
+#: Only the local packages are pinned this way, and the distinction is the
+#: point. A member of `app.services` is a FILE somebody can add to this
+#: repository. A member of `typing` or `fastapi` is a symbol in an installed
+#: dependency and cannot be a new fetcher smuggled in beside these two files.
+_ALLOWED_PACKAGE_MEMBERS = {
+    "app.services": {"n8n_telemetry"},
+    "app.security.deps": {"CurrentUser"},
+}
+
 #: The only function permitted to import httpx, and the one the transport check
 #: below actually drives. The two must stay the same name or the coverage claim
 #: quietly stops meaning anything.
@@ -634,15 +662,59 @@ def _egress_offences(tree: ast.AST) -> List[str]:
                 _judge_module(alias.name, node.lineno, scope, offences)
         elif isinstance(node, ast.ImportFrom):
             module = "." * node.level + (node.module or "")
-            if node.level:
-                # A relative import cannot name a stdlib network module and is
-                # inside this repository, which the rest of the suite covers.
-                pass
+            # A relative import needs no branch of its own, and it had one for
+            # ten minutes until the control was run: neutering that branch left
+            # the probe green, because `module` keeps its leading dots and
+            # `.n8n_retry` is never on the allowlist. Measured rather than
+            # assumed, and the branch was deleted rather than left to be
+            # credited for a refusal the allowlist was already making.
+            if any(
+                f"{module}.{alias.name}" in _ALLOWED_PACKAGE_MEMBERS
+                for alias in node.names
+            ):
+                # `from app import services` hands out the PACKAGE, and
+                # `services.n8n_retry` then needs no import of its own here.
+                offences.append(
+                    f"from {module} import ... at line {node.lineno} binds a local "
+                    "package rather than a pinned member, so a sibling module is "
+                    "reachable through it without appearing in this file's imports"
+                )
+            elif module in _ALLOWED_PACKAGE_MEMBERS:
+                for alias in node.names:
+                    if alias.name not in _ALLOWED_PACKAGE_MEMBERS[module]:
+                        offences.append(
+                            f"from {module} import {alias.name} at line {node.lineno} "
+                            "pulls an unpinned member out of a local package. A sibling "
+                            "module can hold the mutating call while both guarded files "
+                            "stay innocent, so members of the local packages are pinned"
+                        )
             elif module in _ALLOWED_IMPORTS or module == "httpx":
                 _judge_module(module, node.lineno, scope, offences)
             else:
                 for alias in node.names:
-                    _judge_module(f"{module}.{alias.name}", node.lineno, scope, offences)
+                    # A relative module keeps its dots, so joining with another
+                    # one would name `..n8n_retry` in the message and misreport
+                    # what the line actually imports.
+                    joined = (
+                        module + alias.name
+                        if module.endswith(".")
+                        else f"{module}.{alias.name}"
+                    )
+                    _judge_module(joined, node.lineno, scope, offences)
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            # A module name spelled as a STRING is the import walk's blind spot:
+            # `getattr(builtins, "__import__")("socket")` has a literal argument,
+            # so no dynamic refusal fires, and no Import node exists to judge.
+            # Matched on the WHOLE constant, so a docstring that mentions
+            # `client.request("DELETE", ...)` or the word socket stays legal.
+            # Measured on both files before it was added: zero constants collide.
+            spelled = node.value.strip()
+            if spelled in _NETWORK_CAPABLE_MODULES or spelled in _DYNAMIC_CODE_BUILTINS:
+                offences.append(
+                    f"the string {node.value!r} at line {node.lineno} names a module "
+                    "or builtin this walk refuses. A name reached as data is not an "
+                    "import node, so the shape is refused rather than the import"
+                )
         elif isinstance(node, ast.Call):
             name = _callee_name(node.func)
             if name in _DYNAMIC_CODE_BUILTINS:
@@ -758,6 +830,25 @@ _EGRESS_BYPASSES = {
     "a dynamic import the walk cannot read": (
         '__import__("urllib.request").urlopen(endpoint, data=b"{}")'
     ),
+    # Found by probing the rule rather than by an adversary, and confirmed
+    # against `_egress_offences` before it was closed: the allowlist was keyed on
+    # the module, so this satisfied it while `import app.services.n8n_retry` did
+    # not. A sibling module holding the POST leaves both guarded files innocent.
+    "a sibling module pulled out of the local package": (
+        "from app.services import n8n_retry\nawait n8n_retry.fire(execution_id)"
+    ),
+    "an unpinned member of the local security package": (
+        "from app.security.deps import RetryClient"
+    ),
+    "a sibling file reached by a relative import": (
+        "from . import n8n_retry\nn8n_retry.fire(execution_id)"
+    ),
+    "the local package bound as a name rather than a pinned member": (
+        "from app import services\nservices.n8n_retry.fire(execution_id)"
+    ),
+    "a banned module named as a string, so no import node exists": (
+        'getattr(__builtins__, "__import__")("socket")'
+    ),
     "an httpx client built outside the audited fetcher": (
         "async def refresh(url):\n"
         "    import httpx\n"
@@ -795,6 +886,9 @@ def test_the_egress_detector_does_not_fire_on_the_real_shape() -> None:
             "    async with httpx.AsyncClient() as client:",
             "        return await client.get(url, headers=headers)",
             "source = os.environ",
+            "from fastapi import APIRouter, Query",
+            "from app.security.deps import CurrentUser",
+            "from app.services import n8n_telemetry",
         ]
     )
     assert _egress_offences(ast.parse(legitimate)) == []
