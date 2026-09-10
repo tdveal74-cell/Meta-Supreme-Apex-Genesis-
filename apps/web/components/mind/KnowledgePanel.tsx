@@ -8,10 +8,17 @@ import { readDevonToken } from "@/components/presence/usePresenceSocket";
  * Tier 2, the memory behind the face.
  *
  * The brief calls this the second brain knowledge graph across Drive, Notion
- * and Pinecone namespaces. No graph is drawn here, and that is deliberate: no
- * route exposes vector activations or edges between the indexes, so any graph
- * would be a picture of something nobody measured. What the routes do give is
- * the corpus itself and a real search over it, which is what this shows.
+ * and Pinecone namespaces. This panel is the corpus itself and a real search
+ * over it. No graph is drawn HERE, and that is now a division of labour rather
+ * than a refusal: GET /knowledge/graph measures the edges, and
+ * components/mind/KnowledgeGraphPanel.tsx draws them under this panel with its
+ * own account of what the picture leaves out.
+ *
+ * This comment used to say that no route exposed vector activations or edges,
+ * so any graph would be a picture of something nobody measured. The first half
+ * stopped being true when that route landed; the second half is why the graph
+ * panel carries a provider warning, an unembedded count and a truncation
+ * notice instead of just a diagram.
  *
  * Distance from the search route is a distance, not a score. Smaller is nearer,
  * so it is labelled as distance rather than dressed up as a percentage
@@ -255,9 +262,9 @@ export function KnowledgePanel() {
       ) : null}
 
       <p className="text-xs leading-relaxed text-white/50">
-        No route exposes vector activations or edges between the Drive, Notion and Pinecone
-        namespaces, so no graph is drawn. Distance is the raw distance the search route
-        returns, where smaller is nearer, not a confidence score.
+        The edges between these items are drawn in the knowledge graph panel below, read from
+        GET /knowledge/graph. Distance here is the raw distance the search route returns,
+        where smaller is nearer, not a confidence score.
       </p>
     </div>
   );

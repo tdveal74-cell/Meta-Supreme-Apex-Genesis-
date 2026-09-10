@@ -554,11 +554,20 @@ def test_caps_default_and_clamp_to_their_hard_range():
     }
 
 
-def test_node_id_array_literal_refuses_anything_that_is_not_a_uuid():
-    literal = kg._uuid_array_literal([ITEM_A, ITEM_B])
-    assert literal == "{" + ITEM_A + "," + ITEM_B + "}"
+def test_the_node_id_array_param_is_a_list_and_refuses_a_non_uuid():
+    """A LIST, because asyncpg binds arrays natively and rejects a literal str.
+
+    This test asserted the "{a,b}" literal form until 2026-09-10, and it passed
+    while the edge query could not execute against a real database at all: the
+    driver raised DataError before Postgres saw the statement. That is why
+    test_knowledge_graph_pgvector.py exists. Asserting the type here is what
+    keeps a well meaning simplification back to a literal from shipping green.
+    """
+    param = kg._uuid_array_param([ITEM_A, ITEM_B])
+    assert isinstance(param, list), "asyncpg needs a sized iterable, never a str"
+    assert param == [ITEM_A, ITEM_B]
     with pytest.raises(ValueError):
-        kg._uuid_array_literal([ITEM_A, "'); drop table embeddings; --"])
+        kg._uuid_array_param([ITEM_A, "'); drop table embeddings; --"])
 
 
 # ---------------------------------------------------------------------------
@@ -726,7 +735,12 @@ async def test_the_edge_query_receives_only_the_kept_vector_bearing_nodes():
     )
     await kg.build_knowledge_graph(session, owner_id=OWNER, node_cap=3, chunk_cap=7)
     edge_params = session.params[2]
-    assert edge_params["node_ids"] == "{" + ITEM_A + "," + ITEM_B + "}"
+    # A list, not a literal string: asyncpg binds array parameters natively and
+    # rejects a str outright, which is how the edge query shipped unable to run
+    # against any real database while this file was green. Asserting the type is
+    # what keeps a simplification back to a literal from passing here again.
+    assert edge_params["node_ids"] == [ITEM_A, ITEM_B]
+    assert isinstance(edge_params["node_ids"], list)
     assert ITEM_C not in edge_params["node_ids"]
     assert edge_params["chunk_cap"] == 7
     assert edge_params["max_distance"] == kg.DEFAULT_MAX_DISTANCE

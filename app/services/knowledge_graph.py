@@ -268,18 +268,39 @@ def clamp_caps(
     }
 
 
-def _uuid_array_literal(ids: Sequence[str]) -> str:
-    """Render ids as a Postgres uuid[] literal, refusing anything that is not one.
+def _uuid_array_param(ids: Sequence[str]) -> List[str]:
+    """Validate ids and return them as a LIST for the array parameter.
 
-    The ids come straight back out of the node query, so this is belt and
-    braces rather than a live injection path, and the literal is interpolated
-    into no SQL at all: it is bound as a single parameter and CAST to uuid[].
-    Validating each element here means a malformed id fails loudly next to the
-    code that built it instead of as a Postgres cast error at the driver.
+    A LIST, not a "{a,b}" literal string, and that distinction is the whole
+    reason this docstring is long.
+
+    The first version of this returned the Postgres literal. Every offline test
+    passed, including one asserting the literal's exact shape and one proving it
+    refuses an injection attempt, and the edge query could not execute against a
+    real database at all. asyncpg binds array parameters natively rather than
+    parsing a literal, so a str arrives where it wants a sized iterable and the
+    driver raises before Postgres ever sees the statement:
+
+        asyncpg.exceptions.DataError: invalid input for query argument $1:
+        '{5d5dee42-...}' (a sized iterable container expected (got type 'str'))
+
+    So GET /knowledge/graph raised for every owner with two or more items
+    carrying vectors, which is the only case the route exists to serve, while
+    forty two tests reported green. Measured on the live cluster, all three
+    forms: the literal with CAST fails, a list with CAST works, and a list
+    without the CAST fails as AmbiguousFunctionError because unnest cannot pick
+    an overload for text[] against a uuid column. So it is a list AND the CAST.
+
+    The per element uuid.UUID() call stays. The ids come straight out of the node
+    query so this is belt and braces rather than a live injection path, and it
+    makes a malformed id fail next to the code that built it rather than as a
+    driver error three frames down.
     """
+    validated: List[str] = []
     for candidate in ids:
         uuid.UUID(str(candidate))
-    return "{" + ",".join(str(i) for i in ids) + "}"
+        validated.append(str(candidate))
+    return validated
 
 
 # ---------------------------------------------------------------------------
@@ -564,7 +585,7 @@ async def build_knowledge_graph(
         edges_result = await db.execute(
             _EDGES_SQL,
             {
-                "node_ids": _uuid_array_literal(vector_bearing),
+                "node_ids": _uuid_array_param(vector_bearing),
                 "chunk_cap": caps["chunk_cap"],
                 "max_distance": caps["max_distance"],
                 "edge_probe": caps["edge_cap"] + 1,
