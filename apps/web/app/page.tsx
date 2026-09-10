@@ -1,5 +1,31 @@
 import Link from "next/link";
 
+/**
+ * WHAT THIS PAGE IS ALLOWED TO SAY
+ *
+ * Every claim here has to name something a visitor can reach from this site.
+ * Two did not, until 2026-09-10:
+ *
+ *   - "Workflows with gates". The workflow engine is real and substantial:
+ *     ten routes in app/api/v1/workflows.py, about 2470 lines across that
+ *     file, app/services/workflows.py, services/workflows/ and
+ *     app/services/dispatcher.py, a workflows table in 001_baseline plus
+ *     migrations 002_workflow_runs and 003_schedule_dispatch, and a cron
+ *     entrypoint the API image ships
+ *     (infrastructure/docker/Dockerfile.api:30). Nothing can create a
+ *     workflow. There is no page for it under apps/web/app, no component in
+ *     apps/web calls /workflows, and no agent tool registers one, so the
+ *     engine only ever runs definitions nobody has a way to author.
+ *   - "long-term memory you can edit or delete", and "Upload documents".
+ *     apps/web/components/mind/KnowledgePanel.tsx reads GET /knowledge and
+ *     posts /knowledge/search. It has no ingest control, no editor and no
+ *     delete, and no component here calls /memory at all.
+ *
+ * apps/web/scripts/honesty-check.ts holds the prose to that rule: a capability
+ * word here has to have a matching path some component actually calls. The
+ * engine and its tests stay where they are; a landing page is the wrong place
+ * to advertise them.
+ */
 const pillars = [
   {
     title: "AI Council",
@@ -7,19 +33,19 @@ const pillars = [
       "Nine specialized agents collaborate: Oracle, Analyst, Strategist, Architect, Engineer, Guardian, Creator, Librarian, and Skeptic.",
   },
   {
-    title: "Knowledge + Memory",
+    title: "Knowledge retrieval",
     description:
-      "Upload documents, retrieve with semantic precision, and keep transparent long-term memory you can edit or delete.",
+      "Read the ingested corpus and search it by meaning from the control plane. Ingestion and long-term memory are API side and have no page here yet.",
   },
   {
     title: "Decision Intelligence",
     description:
-      "Structure questions, surface tradeoffs, and record the human final call so future decisions stay accountable.",
+      "Structure questions and surface tradeoffs on a Council run this site labels as simulated. Recording the final call is an API route with no page here yet, so nothing on this site persists a decision.",
   },
   {
-    title: "Workflows with gates",
+    title: "Approval gate on effects",
     description:
-      "Reads run unattended. Writes wait for your approval, every time. Automation never acts in your name alone.",
+      "Reads run unattended. Writes wait for your approval, every time, on a card you rule on in the DEVON chat or the operator terminal. Automation never acts in your name alone.",
   },
 ];
 
@@ -81,9 +107,9 @@ export default function HomePage() {
                 <span className="block text-navy/80">Keep the final call human.</span>
               </h1>
               <p className="mx-auto mt-6 max-w-2xl text-balance text-base leading-relaxed text-navy/65 sm:text-lg">
-                Multi-agent council, knowledge, memory, and gated workflows,
-                built for clear thinking rather than chat noise. Simulated
-                intelligence is always labeled.
+                Multi-agent council, knowledge retrieval, and an approval gate
+                on every effect, built for clear thinking rather than chat
+                noise. Simulated intelligence is always labeled.
               </p>
               <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
                 <Link

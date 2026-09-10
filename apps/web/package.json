@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "check:presence": "node --experimental-strip-types scripts/presence-check.ts",
     "check:control": "node --experimental-strip-types scripts/control-check.ts",
+    "check:honesty": "node --experimental-strip-types scripts/honesty-check.ts",
     "check:learning": "node --experimental-strip-types scripts/learning-check.ts",
     "check:audio": "node --experimental-strip-types scripts/audio-check.mjs"
   },

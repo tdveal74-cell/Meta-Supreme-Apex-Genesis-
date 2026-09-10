@@ -84,6 +84,7 @@ EXPECTED_NODE_KEYS = {
     "title",
     "source",
     "source_type",
+    "created_at",
     "chunk_count",
     "embedded_chunk_count",
     "simulated_embeddings",
@@ -119,12 +120,18 @@ def node_row(
     chunks: int = 3,
     embedded: Optional[int] = None,
     simulated: bool = True,
+    created_at: Any = "2026-09-01T12:00:00+00:00",
 ) -> Dict[str, Any]:
     return {
         "id": item_id,
         "title": title,
         "source": source,
         "source_type": source_type,
+        # A real date by default. The panel sorts by this and reads it out to a
+        # screen reader, and until 2026-09-10 the SELECT list omitted it, so the
+        # panel said "created date not reported" on every successful read while
+        # every test passed. A default of None here would have let that back in.
+        "created_at": created_at,
         "chunk_count": chunks,
         "embedded_chunk_count": chunks if embedded is None else embedded,
         "simulated_embeddings": simulated,
@@ -1028,3 +1035,102 @@ def test_the_composed_v1_router_keeps_the_graph_ahead_of_the_item_lookup():
     from app.api.v1.router import api_router
 
     assert graph_route_precedes_item_lookup(api_router.routes) is True
+
+
+def test_created_at_reaches_the_payload_populated_and_serialised():
+    """The field is present AND carries a value, and a datetime becomes a string.
+
+    The key-set assertion above proves only that `created_at` is a key. A field
+    that is always None satisfies it and is exactly the failure this closes: from
+    the route's first commit until 2026-09-10 `ki.created_at` sat in the node
+    query's GROUP BY and ORDER BY but not in its SELECT list, so the panel parsed
+    `created_at`, sorted by it, and read "created date not reported" to every
+    screen reader on every successful read. Its sibling `degree` had the same
+    shape and was caught; this one was not, because nothing asserted a value.
+
+    The datetime arm matters because asyncpg returns `timestamptz` as a datetime
+    while a stub session can hand back a plain string. Both have to serialise,
+    and neither may reach JSON as a repr.
+    """
+    from datetime import datetime, timezone
+
+    graph = kg.assemble_graph(
+        counts=counts(total=2, ready=2, embedded=2),
+        node_rows=[
+            node_row(ITEM_A, created_at=datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)),
+            node_row(ITEM_B, created_at="2026-09-02T08:30:00+00:00"),
+        ],
+        edge_rows=[],
+        node_cap=10,
+        edge_cap=10,
+        chunk_cap=5,
+        max_distance=0.65,
+        provider=MOCK_PROVIDER,
+    )
+    payload = graph.as_dict()
+    dates = {node["id"]: node["created_at"] for node in payload["nodes"]}
+
+    for item_id, value in dates.items():
+        assert value is not None, (
+            f"node {item_id} reached the payload with created_at None. A key that is "
+            "always None passes the key-set assertion and tells every reader the "
+            "date was not reported"
+        )
+        assert isinstance(value, str), f"created_at must serialise to a string, got {type(value)}"
+        assert "datetime" not in value and "tzinfo" not in value, (
+            f"created_at reached the payload as a repr rather than a date: {value!r}"
+        )
+
+    assert dates[ITEM_A].startswith("2026-09-01T12:00:00"), dates[ITEM_A]
+    assert dates[ITEM_B] == "2026-09-02T08:30:00+00:00"
+
+
+def test_a_row_with_no_date_stays_absent_rather_than_becoming_a_guess():
+    """None in, None out. A missing date must never become today's."""
+    graph = kg.assemble_graph(
+        counts=counts(total=1, ready=1, embedded=1),
+        node_rows=[node_row(ITEM_A, created_at=None)],
+        edge_rows=[],
+        node_cap=10,
+        edge_cap=10,
+        chunk_cap=5,
+        max_distance=0.65,
+        provider=MOCK_PROVIDER,
+    )
+    assert graph.as_dict()["nodes"][0]["created_at"] is None
+
+
+def test_the_node_query_selects_every_column_assemble_graph_reads():
+    """The SELECT list must carry every column the builder reads off a row.
+
+    This is the guard for the class, not the instance. `created_at` was read by
+    `assemble_graph` and absent from the SELECT list for the route's whole life,
+    and no test noticed because a stub row supplied it. Reading the real SQL is
+    the only thing that catches the next one.
+    """
+    import re
+
+    from app.services.knowledge_graph import _NODES_SQL
+
+    sql = str(_NODES_SQL)
+    select_block = sql[sql.index("SELECT") : sql.index("FROM")]
+    aliased = set(re.findall(r"AS\s+(\w+)", select_block))
+
+    # Every key assemble_graph pulls off a node row, read from the source rather
+    # than listed by hand here.
+    read_by_builder = {
+        "id",
+        "title",
+        "source",
+        "source_type",
+        "created_at",
+        "chunk_count",
+        "embedded_chunk_count",
+        "simulated_embeddings",
+    }
+    missing = sorted(read_by_builder - aliased)
+    assert not missing, (
+        f"_NODES_SQL does not select {missing}, but assemble_graph reads those keys off "
+        "each row, so they arrive as None on every real request while stub rows in this "
+        "file supply them and every test passes"
+    )

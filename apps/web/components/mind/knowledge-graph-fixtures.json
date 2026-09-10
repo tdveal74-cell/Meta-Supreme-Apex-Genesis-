@@ -1,0 +1,461 @@
+{
+  "generated_by": "scripts/gen_knowledge_graph_fixtures.py",
+  "how_to_regenerate": "python3 scripts/gen_knowledge_graph_fixtures.py",
+  "scenarios": {
+    "capped_and_truncated": {
+      "payload": {
+        "chunk_cap": 4,
+        "chunks_considered": 7,
+        "chunks_truncated": true,
+        "edge_cap": 1,
+        "edges": [
+          {
+            "distance": 0.12,
+            "distance_is_upper_bound": true,
+            "source": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "target": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+          }
+        ],
+        "edges_capped": true,
+        "edges_returned": 1,
+        "embedding_model": "mock-embed-v1",
+        "embedding_provider": "mock",
+        "embedding_provider_error": null,
+        "embedding_provider_simulated": true,
+        "items_embedded": 9,
+        "items_ready": 9,
+        "items_simulated_embeddings": 9,
+        "items_total": 9,
+        "items_unembedded": 0,
+        "max_distance": 0.65,
+        "node_cap": 2,
+        "nodes": [
+          {
+            "chunk_count": 9,
+            "chunks_considered": 4,
+            "chunks_truncated": true,
+            "created_at": "2026-09-01T12:00:00+00:00",
+            "embedded_chunk_count": 9,
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "simulated_embeddings": true,
+            "source": "drive",
+            "source_type": "markdown",
+            "title": "Long document"
+          },
+          {
+            "chunk_count": 3,
+            "chunks_considered": 3,
+            "chunks_truncated": false,
+            "created_at": "2026-09-01T12:00:00+00:00",
+            "embedded_chunk_count": 3,
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "simulated_embeddings": true,
+            "source": "drive",
+            "source_type": "markdown",
+            "title": "Second"
+          }
+        ],
+        "nodes_capped": true,
+        "nodes_returned": 2
+      },
+      "why": "node_cap and edge_cap both bite, and one item has more chunks than chunk_cap so its edges carry distance_is_upper_bound. All three notices were parsed and never rendered before 2026-09-10."
+    },
+    "drawable_flat_degree": {
+      "payload": {
+        "chunk_cap": 40,
+        "chunks_considered": 6,
+        "chunks_truncated": false,
+        "edge_cap": 240,
+        "edges": [
+          {
+            "distance": 0.3,
+            "distance_is_upper_bound": false,
+            "source": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "target": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+          }
+        ],
+        "edges_capped": false,
+        "edges_returned": 1,
+        "embedding_model": "mock-embed-v1",
+        "embedding_provider": "mock",
+        "embedding_provider_error": null,
+        "embedding_provider_simulated": true,
+        "items_embedded": 2,
+        "items_ready": 2,
+        "items_simulated_embeddings": 2,
+        "items_total": 2,
+        "items_unembedded": 0,
+        "max_distance": 0.65,
+        "node_cap": 60,
+        "nodes": [
+          {
+            "chunk_count": 3,
+            "chunks_considered": 3,
+            "chunks_truncated": false,
+            "created_at": "2026-09-01T12:00:00+00:00",
+            "embedded_chunk_count": 3,
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "simulated_embeddings": true,
+            "source": "drive",
+            "source_type": "markdown",
+            "title": "A document"
+          },
+          {
+            "chunk_count": 3,
+            "chunks_considered": 3,
+            "chunks_truncated": false,
+            "created_at": "2026-09-01T12:00:00+00:00",
+            "embedded_chunk_count": 3,
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "simulated_embeddings": true,
+            "source": "drive",
+            "source_type": "markdown",
+            "title": "A document"
+          }
+        ],
+        "nodes_capped": false,
+        "nodes_returned": 2
+      },
+      "why": "Every node has exactly one edge, so the radius encodes nothing and the description must NOT claim the connected are pulled inward."
+    },
+    "drawable_varying_degree": {
+      "payload": {
+        "chunk_cap": 40,
+        "chunks_considered": 12,
+        "chunks_truncated": false,
+        "edge_cap": 240,
+        "edges": [
+          {
+            "distance": 0.11,
+            "distance_is_upper_bound": false,
+            "source": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "target": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+          },
+          {
+            "distance": 0.22,
+            "distance_is_upper_bound": false,
+            "source": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "target": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+          },
+          {
+            "distance": 0.44,
+            "distance_is_upper_bound": false,
+            "source": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "target": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+          }
+        ],
+        "edges_capped": false,
+        "edges_returned": 3,
+        "embedding_model": "mock-embed-v1",
+        "embedding_provider": "mock",
+        "embedding_provider_error": null,
+        "embedding_provider_simulated": true,
+        "items_embedded": 4,
+        "items_ready": 4,
+        "items_simulated_embeddings": 4,
+        "items_total": 4,
+        "items_unembedded": 0,
+        "max_distance": 0.65,
+        "node_cap": 60,
+        "nodes": [
+          {
+            "chunk_count": 3,
+            "chunks_considered": 3,
+            "chunks_truncated": false,
+            "created_at": "2026-09-01T12:00:00+00:00",
+            "embedded_chunk_count": 3,
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "simulated_embeddings": true,
+            "source": "drive",
+            "source_type": "markdown",
+            "title": "Hub"
+          },
+          {
+            "chunk_count": 3,
+            "chunks_considered": 3,
+            "chunks_truncated": false,
+            "created_at": "2026-09-01T12:00:00+00:00",
+            "embedded_chunk_count": 3,
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "simulated_embeddings": true,
+            "source": "notion",
+            "source_type": "markdown",
+            "title": "Spoke one"
+          },
+          {
+            "chunk_count": 3,
+            "chunks_considered": 3,
+            "chunks_truncated": false,
+            "created_at": "2026-09-01T12:00:00+00:00",
+            "embedded_chunk_count": 3,
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "simulated_embeddings": true,
+            "source": "notion",
+            "source_type": "markdown",
+            "title": "Spoke two"
+          },
+          {
+            "chunk_count": 3,
+            "chunks_considered": 3,
+            "chunks_truncated": false,
+            "created_at": "2026-09-01T12:00:00+00:00",
+            "embedded_chunk_count": 3,
+            "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+            "simulated_embeddings": true,
+            "source": "url",
+            "source_type": "markdown",
+            "title": "Lonely"
+          }
+        ],
+        "nodes_capped": false,
+        "nodes_returned": 4
+      },
+      "why": "Degrees differ, so the ring's radius genuinely encodes degree and the screen reader description may say the connected are pulled inward."
+    },
+    "embedded_no_edges": {
+      "payload": {
+        "chunk_cap": 40,
+        "chunks_considered": 6,
+        "chunks_truncated": false,
+        "edge_cap": 240,
+        "edges": [],
+        "edges_capped": false,
+        "edges_returned": 0,
+        "embedding_model": "mock-embed-v1",
+        "embedding_provider": "mock",
+        "embedding_provider_error": null,
+        "embedding_provider_simulated": true,
+        "items_embedded": 2,
+        "items_ready": 2,
+        "items_simulated_embeddings": 2,
+        "items_total": 2,
+        "items_unembedded": 0,
+        "max_distance": 0.65,
+        "node_cap": 60,
+        "nodes": [
+          {
+            "chunk_count": 3,
+            "chunks_considered": 3,
+            "chunks_truncated": false,
+            "created_at": "2026-09-01T12:00:00+00:00",
+            "embedded_chunk_count": 3,
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "simulated_embeddings": true,
+            "source": "drive",
+            "source_type": "markdown",
+            "title": "A document"
+          },
+          {
+            "chunk_count": 3,
+            "chunks_considered": 3,
+            "chunks_truncated": false,
+            "created_at": "2026-09-01T12:00:00+00:00",
+            "embedded_chunk_count": 3,
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "simulated_embeddings": true,
+            "source": "notion",
+            "source_type": "markdown",
+            "title": "A document"
+          }
+        ],
+        "nodes_capped": false,
+        "nodes_returned": 2
+      },
+      "why": "Vectors exist on two or more items and no pair is inside the threshold. Genuinely edgeless."
+    },
+    "empty_corpus": {
+      "payload": {
+        "chunk_cap": 40,
+        "chunks_considered": 0,
+        "chunks_truncated": false,
+        "edge_cap": 240,
+        "edges": [],
+        "edges_capped": false,
+        "edges_returned": 0,
+        "embedding_model": "mock-embed-v1",
+        "embedding_provider": "mock",
+        "embedding_provider_error": null,
+        "embedding_provider_simulated": true,
+        "items_embedded": 0,
+        "items_ready": 0,
+        "items_simulated_embeddings": 0,
+        "items_total": 0,
+        "items_unembedded": 0,
+        "max_distance": 0.65,
+        "node_cap": 60,
+        "nodes": [],
+        "nodes_capped": false,
+        "nodes_returned": 0
+      },
+      "why": "No items at all. The panel must say the corpus is empty, not that nothing is embedded."
+    },
+    "items_none_embedded": {
+      "payload": {
+        "chunk_cap": 40,
+        "chunks_considered": 0,
+        "chunks_truncated": false,
+        "edge_cap": 240,
+        "edges": [],
+        "edges_capped": false,
+        "edges_returned": 0,
+        "embedding_model": "mock-embed-v1",
+        "embedding_provider": "mock",
+        "embedding_provider_error": null,
+        "embedding_provider_simulated": true,
+        "items_embedded": 0,
+        "items_ready": 4,
+        "items_simulated_embeddings": 0,
+        "items_total": 4,
+        "items_unembedded": 4,
+        "max_distance": 0.65,
+        "node_cap": 60,
+        "nodes": [
+          {
+            "chunk_count": 3,
+            "chunks_considered": 0,
+            "chunks_truncated": false,
+            "created_at": "2026-09-01T12:00:00+00:00",
+            "embedded_chunk_count": 0,
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "simulated_embeddings": true,
+            "source": "drive",
+            "source_type": "markdown",
+            "title": "First"
+          },
+          {
+            "chunk_count": 3,
+            "chunks_considered": 0,
+            "chunks_truncated": false,
+            "created_at": "2026-09-01T12:00:00+00:00",
+            "embedded_chunk_count": 0,
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "simulated_embeddings": true,
+            "source": "notion",
+            "source_type": "markdown",
+            "title": "Second"
+          }
+        ],
+        "nodes_capped": false,
+        "nodes_returned": 2
+      },
+      "why": "Items exist and NONE carry a vector, so the route skips the edge query entirely. This is the payload the pulled panel rendered as 'no pair close enough to connect', a comparison that never ran."
+    },
+    "provider_real": {
+      "payload": {
+        "chunk_cap": 40,
+        "chunks_considered": 6,
+        "chunks_truncated": false,
+        "edge_cap": 240,
+        "edges": [
+          {
+            "distance": 0.18,
+            "distance_is_upper_bound": false,
+            "source": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "target": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+          }
+        ],
+        "edges_capped": false,
+        "edges_returned": 1,
+        "embedding_model": "text-embedding-3-small",
+        "embedding_provider": "openai",
+        "embedding_provider_error": null,
+        "embedding_provider_simulated": false,
+        "items_embedded": 2,
+        "items_ready": 2,
+        "items_simulated_embeddings": 0,
+        "items_total": 2,
+        "items_unembedded": 0,
+        "max_distance": 0.65,
+        "node_cap": 60,
+        "nodes": [
+          {
+            "chunk_count": 3,
+            "chunks_considered": 3,
+            "chunks_truncated": false,
+            "created_at": "2026-09-01T12:00:00+00:00",
+            "embedded_chunk_count": 3,
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "simulated_embeddings": false,
+            "source": "drive",
+            "source_type": "markdown",
+            "title": "A document"
+          },
+          {
+            "chunk_count": 3,
+            "chunks_considered": 3,
+            "chunks_truncated": false,
+            "created_at": "2026-09-01T12:00:00+00:00",
+            "embedded_chunk_count": 3,
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "simulated_embeddings": false,
+            "source": "drive",
+            "source_type": "markdown",
+            "title": "A document"
+          }
+        ],
+        "nodes_capped": false,
+        "nodes_returned": 2
+      },
+      "why": "A genuine embedding provider. The only shape allowed to read as real."
+    },
+    "provider_unavailable": {
+      "payload": {
+        "chunk_cap": 40,
+        "chunks_considered": 6,
+        "chunks_truncated": false,
+        "edge_cap": 240,
+        "edges": [
+          {
+            "distance": 0.4,
+            "distance_is_upper_bound": false,
+            "source": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "target": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+          }
+        ],
+        "edges_capped": false,
+        "edges_returned": 1,
+        "embedding_model": "unavailable",
+        "embedding_provider": "unavailable",
+        "embedding_provider_error": "ProviderConfigError: cerebras does not embed",
+        "embedding_provider_simulated": true,
+        "items_embedded": 2,
+        "items_ready": 2,
+        "items_simulated_embeddings": 0,
+        "items_total": 2,
+        "items_unembedded": 0,
+        "max_distance": 0.65,
+        "node_cap": 60,
+        "nodes": [
+          {
+            "chunk_count": 3,
+            "chunks_considered": 3,
+            "chunks_truncated": false,
+            "created_at": "2026-09-01T12:00:00+00:00",
+            "embedded_chunk_count": 3,
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "simulated_embeddings": false,
+            "source": "drive",
+            "source_type": "markdown",
+            "title": "A document"
+          },
+          {
+            "chunk_count": 3,
+            "chunks_considered": 3,
+            "chunks_truncated": false,
+            "created_at": "2026-09-01T12:00:00+00:00",
+            "embedded_chunk_count": 3,
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "simulated_embeddings": false,
+            "source": "drive",
+            "source_type": "markdown",
+            "title": "A document"
+          }
+        ],
+        "nodes_capped": false,
+        "nodes_returned": 2
+      },
+      "why": "The provider could not be built at all. The route reports the name 'unavailable' with embedding_provider_simulated True. Reading the NAME made this read as REAL, which is the defect this fixture pins."
+    }
+  },
+  "why": "Generated from app.services.knowledge_graph.assemble_graph so the TypeScript checks cannot be green about a payload shape the route does not produce. Do not edit by hand."
+}

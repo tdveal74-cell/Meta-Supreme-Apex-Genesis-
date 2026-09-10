@@ -21,8 +21,13 @@ export default function DeliberatePage() {
 
   function handleDecision(decision: HumanDecision) {
     setLastDecision(decision);
-    // In a later slice this will persist the official decision record.
-    console.info("Human decision recorded:", decision);
+    // NOT recorded. app/api/v1/decisions.py exists and is registered at
+    // app/api/v1/router.py:50, and nothing in apps/web calls it, so this
+    // function persists nothing at all. The log line said "recorded", which was
+    // the same claim the landing page made and neither was true. Building the
+    // real write is separate work; until it exists this stays a local note and
+    // says so, and the badge below says so to the reader too.
+    console.info("Human decision held in page state only, not persisted:", decision);
   }
 
   function reset() {
@@ -95,7 +100,13 @@ export default function DeliberatePage() {
               </button>
               {lastDecision && (
                 <span className="text-xs text-navy/50">
-                  Decision locked · {lastDecision.choice}
+                  {/*
+                    NOT "locked". handleDecision below is a console.info and
+                    nothing in apps/web calls the /decisions route, so this is
+                    React state that a reload discards. "Locked" told a reader
+                    their ruling had been recorded somewhere it had not.
+                  */}
+                  Your call, held in this tab only: {lastDecision.choice}
                 </span>
               )}
             </div>

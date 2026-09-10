@@ -16,17 +16,24 @@ import { readDevonToken } from "@/components/presence/usePresenceSocket";
  * true when GET /knowledge/graph landed: it measures the distance between items
  * as pgvector cosine distance, the minimum over their chunk pairs.
  *
- * A panel over that route was built and then PULLED before shipping, on
- * 2026-09-10. It read the payload as a nested object while the route sends a
- * flat one, so its counts were null on every real response, and over a corpus
- * with nothing embedded and an edge query the route had skipped it rendered
- * "Embedded nodes, no pair close enough to connect". Nothing was embedded and
- * no pair had been compared. Neither test suite caught it because each was green
- * about a different payload shape.
+ * A panel over that route was built, PULLED before shipping on 2026-09-10, and
+ * then shipped later the same day. It was pulled because it read the payload as a
+ * nested object while the route sends a flat one, so its counts were null on
+ * every real response, and over a corpus with nothing embedded and an edge query
+ * the route had skipped it rendered "Embedded nodes, no pair close enough to
+ * connect". Nothing was embedded and no pair had been compared. Neither test
+ * suite caught it because each was green about a different payload shape: the
+ * Python side pinned the flat payload, the TypeScript side's fixtures were
+ * hand written in the nested one.
  *
- * So the honest state today: the edges are measured and nothing draws them. This
- * panel is the corpus and a real search over it, and it claims nothing about the
- * distance between items.
+ * What changed before it shipped: the fixtures on both sides are now GENERATED
+ * from the route's own assemble_graph, so they cannot describe different shapes
+ * again, and a Python test fails if the committed fixture drifts from what the
+ * route produces.
+ *
+ * So the honest state today: the edges are measured, and KnowledgeGraphPanel
+ * below draws them. This panel is the corpus and a real search over it, and it
+ * still claims nothing itself about the distance between items.
  *
  * Distance from the search route is a distance, not a score. Smaller is nearer,
  * so it is labelled as distance rather than dressed up as a percentage
@@ -271,9 +278,9 @@ export function KnowledgePanel() {
 
       <p className="text-xs leading-relaxed text-white/50">
         Distance here is the raw distance the search route returns, where smaller is nearer,
-        not a confidence score. GET /knowledge/graph measures the distance between items as
-        well, and nothing on this page draws those edges, so this panel says nothing about
-        how close any two items are.
+        not a confidence score. The distances between the items themselves are drawn in the
+        knowledge graph panel below, read from GET /knowledge/graph, and this panel says
+        nothing of its own about how close any two items are.
       </p>
     </div>
   );
