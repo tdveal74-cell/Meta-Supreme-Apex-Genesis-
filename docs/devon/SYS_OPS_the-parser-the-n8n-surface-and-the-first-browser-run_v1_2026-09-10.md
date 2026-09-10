@@ -191,11 +191,139 @@ its last green run. The only change to `apps/web/package.json` is two script
 entries. Reproducing the lane needs `pip-audit`, which the pinned closure does
 not carry and which can perturb it.
 
+## The read back, added 2026-09-10 after the merge
+
+This section replaces an OWED claim that was already false when it was written.
+The claim was that `devon-soul` was owed a build because `deploy/soul` changed.
+It was not owed: the merge to `main` built it automatically, like the other
+three. Read back from the platforms rather than reasoned, all four surfaces on
+`d2b13f6`:
+
+| surface | evidence |
+|---|---|
+| Railway `api` | deployment `90710b80` SUCCESS 09:54:17Z on `d2b13f6`; log carries alembic at head, `agent registry seeded`, `CORS allows 5 origin(s)` and `Application startup complete` |
+| Railway `presence` | deployment `38f0feb0` SUCCESS 09:47:56Z on `d2b13f6` |
+| Vercel `meta-supreme-apex-genesis-web` | `dpl_8eoYJeFcLF4PPhsWfjXqkizJkkm6` READY, target `production`, on `d2b13f6` |
+| Vercel `devon-soul` | `dpl_4M3hHuxdamxX3EEKb4SR9sj9KWR8` READY, target `production`, on `d2b13f6` |
+
+So the phone lane already carries the 299 trigger table, the per intent payload
+bound and the suggestion path. Every `target` was checked rather than inferred
+from `state`, which is the trap this estate has fallen into once.
+
+**The one surface that reads itself back, read by Tee 2026-09-10.** This
+container's egress proxy refused the CONNECT with a 403, so `GET /health` on the
+presence host could not be read from here. Tee opened it on his phone and the
+nine pinned keys came back:
+
+```
+status ok · service devon-presence · inference cerebras · fallback mock
+speech cartesia · livekit_configured false · audio_over_websocket true
+cors_origins [5] · breaker primary closed, 0 opens, 0 closes, 0 total_breaches
+```
+
+Three readings, and only the first is news.
+
+**`speech` is `cartesia`, not `mock`.** The owned voice lane is live in
+production. That is the compliance critical one, and it is now read off the
+service rather than inferred from a deployment record.
+
+**What it does NOT prove, stated so nobody reads it as more than it is.**
+`/health` publishes the ADAPTER, never the voice id, which is deliberate. So
+this says the Cartesia lane is wired; it does not say which voice is loaded, and
+Tee's own rule is that nothing ships without a human listening end to end. The
+listen is still owed. `last_ttft_ms` is null and `opens`, `closes` and
+`total_breaches` are all zero, which says this deployment has served no speech
+at all yet, so the breaker being closed is an untested closed rather than a
+proven one.
+
+**`livekit_configured` false is BY DESIGN and is not a finding.** Graded before
+being raised: `apps/presence/main.py:87` returns `not livekit_configured` for
+`audio_over_websocket`, so the socket carries PCM precisely when LiveKit is
+absent, and `SYS_OPS_audible-presence_v1_2026-09-09.md` already records that the
+browser path is the whole path and the LiveKit publisher is unbuilt and
+unnecessary for it. `audio_over_websocket true` beside it is the two halves
+agreeing.
+
+**`cors_origins` carries the production web domain.** The five are the three
+Vercel hosts including `meta-supreme-apex-genesis-web.vercel.app` plus the two
+loopbacks, which is the same five the api service logged on its own startup. A
+wrong list here is the failure that makes the chat's `POST /tts` fail silently
+with a discarded 200, so it is worth having read rather than assumed.
+
+## The prose leak dig, 2026-09-10, and why it stops here
+
+Tee ruled keep digging for a clean rule. This is the dig, and it closes with a
+negative result rather than a rule. Recorded so nobody re-derives it.
+
+**The harness.** 299 triggers by 20 neutral tails is 5980 utterances, plus the
+19 real commands from `test_devon_commands.py`. Twenty tails rather than four so
+a candidate cannot be fitted to a handful. Current parser, measured:
+
+| | count |
+|---|---|
+| reach an approval gated EFFECT | 140 |
+| reach an ungated EFFECT | 420 |
+| reach a READ | 4340 |
+| real commands broken | 0 of 19 |
+
+**Correction to what the arc reported.** The leak was written up as seven
+routes. Seven is the count of GATED routes, and it is one intent rather than
+seven: all seven triggers belong to `send_message`. Counting every EFFECT the
+leak is 28 triggers across three intents, `send_message` (7, gated),
+`search_web` (11, ungated) and `play_youtube` (10, ungated). The three that leak
+are exactly the three payload taking effects that declare no
+`max_payload_words`, which is the bound this arc added. `open_app` declares 2
+and does not leak.
+
+**The blast radius, graded before being raised, and the safety reading
+withdrawn.** `services/devon` is effect free, which is a CLAUDE.md invariant and
+holds here. `_do_search_web` and `_do_play_youtube` both return
+`executed=False` with the reason "browser effects are proposed, never opened
+unattended", and `send_message` stops at an approval card. So all 560 EFFECT
+leaks produce a wrong sentence and zero actions. This is a conversational
+quality defect, not a safety one, and a rule was being hunted for it as though
+it were the latter.
+
+**The whole score based class of fixes is dead, and now for every margin rather
+than one.** The arc already recorded that making an anchored effect clear its
+own floor breaks `search for the grid spec`. Sweeping the margin from 0.00 to
+0.70 in eleven steps shows the curves cross and never separate:
+
+| margin | gated leaks | effect leaks | real commands broken |
+|---|---|---|---|
+| 0.00 | 0 | 0 | 10 |
+| 0.25 | 0 | 26 | 5 |
+| 0.30 | 7 | 53 | 4 |
+| 0.50 | 137 | 350 | 0 |
+| 0.70 | 140 | 420 | 0 |
+
+There is no value where both columns are zero. The score is not the
+discriminator.
+
+**A closed class opener rule gets 40 percent and is then defeated by the trigger
+table itself.** Refusing a remainder that OPENS with a member of a genuinely
+closed English class, the finite forms of be, have and do plus the modals, takes
+the gated leaks from 140 to 84 and the effect leaks from 420 to 260, breaking 0
+of 19 real commands. The class was chosen as a class rather than assembled from
+the tails, precisely so the misses would be honest evidence.
+
+The misses are two kinds, and the second is the one that settles it. First, open
+class verbs and adverbs no list can enumerate without being fitted: sounds,
+seems, means, matters, never, always, already, still, again. Second, and
+structural: `'look that up'` and `'look that up for me'` are BOTH triggers of
+`search_web`, so "look that up for me is on the list for tomorrow" anchors on
+the shorter one and the remainder opens with "for" instead of "is". Any rule
+about the remainder's first word is defeated wherever one trigger is a prefix of
+another, which is a property of the trigger table rather than of English.
+
+**The recommendation, and it is not to ship the 40 percent.** Forty percent of a
+politeness problem is not worth another rule and another word list in the
+parser's hot path, and a partial list invites the next session to add a few more
+words, which is the fitted list trap this file already warns about. The
+behaviour stays, the measurement is filed, and the dig is closed.
+
 ## Open
 
-- The deploy/soul Vercel surface is OWED a build: `deploy/soul/services/devon/*`
-  changed. No claim is made here about what that surface is currently serving.
-  Load the `deploy-readback` skill before making one.
 - Seven trigger sweep routes still reach a gate on prose. They are pre existing
   at `5ff4348`, the obvious fix was measured and refused because it breaks a
   real command, and they need a ruling rather than another guess.
@@ -237,8 +365,14 @@ by property symbol. A getattr walk could not read a verb it reached for and said
 nothing. A stated used_fraction was trusted without being cross checked against
 the figures it claims to summarise. And the smoke run's own first red blamed a
 panel for a CORS refusal the harness had caused.
-OPEN: The deploy/soul Vercel surface is owed a build and no claim is made about
-what it serves. Seven pre existing trigger sweep routes still gate on prose and
+OPEN: Nobody has heard DEVON end to end yet. /health was read by Tee on
+2026-09-10 and reports speech cartesia, so the owned voice lane is live, but it
+publishes the adapter and never the voice id, and the breaker has served no
+speech at all, so which voice is loaded and whether it sounds right are both
+unverified and only Tee's ears settle them. The prose leak dig is CLOSED with a
+negative result rather than a rule, and the recommendation is to leave the
+behaviour; a ruling from Tee to ship the measured 40 percent anyway would
+reopen it. Seven pre existing trigger sweep routes still gate on prose and
 need a ruling, not a guess. control-check's BELOW_AA still cannot see a non text
 indicator and the fix belongs in the panels. No contrast measured on a screen.
 dependency-audit not reproduced here; its inputs are unchanged.
