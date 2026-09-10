@@ -191,11 +191,35 @@ its last green run. The only change to `apps/web/package.json` is two script
 entries. Reproducing the lane needs `pip-audit`, which the pinned closure does
 not carry and which can perturb it.
 
+## The read back, added 2026-09-10 after the merge
+
+This section replaces an OWED claim that was already false when it was written.
+The claim was that `devon-soul` was owed a build because `deploy/soul` changed.
+It was not owed: the merge to `main` built it automatically, like the other
+three. Read back from the platforms rather than reasoned, all four surfaces on
+`d2b13f6`:
+
+| surface | evidence |
+|---|---|
+| Railway `api` | deployment `90710b80` SUCCESS 09:54:17Z on `d2b13f6`; log carries alembic at head, `agent registry seeded`, `CORS allows 5 origin(s)` and `Application startup complete` |
+| Railway `presence` | deployment `38f0feb0` SUCCESS 09:47:56Z on `d2b13f6` |
+| Vercel `meta-supreme-apex-genesis-web` | `dpl_8eoYJeFcLF4PPhsWfjXqkizJkkm6` READY, target `production`, on `d2b13f6` |
+| Vercel `devon-soul` | `dpl_4M3hHuxdamxX3EEKb4SR9sj9KWR8` READY, target `production`, on `d2b13f6` |
+
+So the phone lane already carries the 299 trigger table, the per intent payload
+bound and the suggestion path. Every `target` was checked rather than inferred
+from `state`, which is the trap this estate has fallen into once.
+
+**One surface stays UNVERIFIED and it is the one that can read itself back.**
+`GET /health` on the presence host is the honest answer to what that service is
+wired to, and this container's egress proxy refused the CONNECT with a 403, so
+it was not read. The deployment record above says the container shipped; it says
+nothing about `speech`, `livekit_configured`, `cors_origins` or `breaker`. Tee
+can settle it by opening
+`https://presence-production-d272.up.railway.app/health` on his phone.
+
 ## Open
 
-- The deploy/soul Vercel surface is OWED a build: `deploy/soul/services/devon/*`
-  changed. No claim is made here about what that surface is currently serving.
-  Load the `deploy-readback` skill before making one.
 - Seven trigger sweep routes still reach a gate on prose. They are pre existing
   at `5ff4348`, the obvious fix was measured and refused because it breaks a
   real command, and they need a ruling rather than another guess.
@@ -237,8 +261,9 @@ by property symbol. A getattr walk could not read a verb it reached for and said
 nothing. A stated used_fraction was trusted without being cross checked against
 the figures it claims to summarise. And the smoke run's own first red blamed a
 panel for a CORS refusal the harness had caused.
-OPEN: The deploy/soul Vercel surface is owed a build and no claim is made about
-what it serves. Seven pre existing trigger sweep routes still gate on prose and
+OPEN: The presence service's own /health is unread, this container's egress
+proxy refusing it with a 403, so what that service is wired to is unverified
+and Tee can settle it from a browser. Seven pre existing trigger sweep routes still gate on prose and
 need a ruling, not a guess. control-check's BELOW_AA still cannot see a non text
 indicator and the fix belongs in the panels. No contrast measured on a screen.
 dependency-audit not reproduced here; its inputs are unchanged.
