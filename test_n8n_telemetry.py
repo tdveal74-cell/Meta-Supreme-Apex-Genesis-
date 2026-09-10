@@ -5,7 +5,7 @@ states that matter most and are hardest to reach live (unreachable, a rotated
 key, a secondary pointed at the source by mistake) are the ones exercised
 hardest.
 
-Five of these are guards on structure rather than on behaviour, and each was
+Six of these are guards on structure rather than on behaviour, and each was
 written to be able to fail:
 
 * the router's live route table carries no verb but GET and HEAD
@@ -13,6 +13,7 @@ written to be able to fail:
 * neither new module contains a mutating HTTP call or a mutating decorator
 * neither new module contains a URL literal or a live n8n host
 * neither new module can reach a socket except through `_httpx_get`
+* `_httpx_get` cannot branch, so one driven input speaks for every input
 
 The load bearing one is not any of those. It is
 `test_nothing_configured_never_reaches_the_network`: the fake fetcher raises if
@@ -218,6 +219,18 @@ _VERB_CARRYING_CALLABLES = {
 }
 
 
+#: The accessor pair, which must be treated the same way. `getattr` had a shape
+#: refusal and `setattr` had none, and that asymmetry alone was a working bypass
+#: on 2026-09-10.
+_ATTRIBUTE_ACCESSORS = {
+    "getattr",
+    "setattr",
+    "__getattr__",
+    "__setattr__",
+    "__getattribute__",
+}
+
+
 def _folded_strings(node: ast.AST) -> List[str]:
     """Every string this expression can evaluate to, with concatenation folded.
 
@@ -389,6 +402,41 @@ def _mutating_verb_offences(tree: ast.AST) -> List[str]:
         carried: List[str] = []
         for argument in list(node.args) + [keyword.value for keyword in node.keywords]:
             carried.extend(_folded_strings(argument))
+        # 6. THE SAME ASYMMETRY, ON THE OTHER SIDE OF THE PAIR. Added 2026-09-10
+        # after an adversary put a live POST in the fetcher and this suite
+        # reported 210 passed. Its bypass:
+        #
+        #     _req = client.build_request("GET", url, headers=headers)
+        #     setattr(_req, "method", "".join(chr(c) for c in (80, 79, 83, 84)))
+        #     response = await client.send(_req)
+        #
+        # Rule 5 refuses `request.method = x` by SHAPE whatever the value, and
+        # rule 4 refuses `getattr` handed a name it cannot read. `setattr` had
+        # neither: it was on the tracked list, so only its VALUES were folded,
+        # and a generator expression folds to nothing. `build_request("GET",
+        # ...)` folds to GET, `"method"` is not a verb, and `send(_req)` carries
+        # a Name. Three tracked call sites, nothing to see.
+        #
+        # So the pair is made symmetric. A tracked callable handed the string
+        # "method" is doing verb as object state work whatever the value is,
+        # exactly as rule 5(b) already held for the assignment spelling, and an
+        # accessor whose arguments this walk cannot read at all is refused the
+        # way `getattr` already was. Measured on both files first: neither hands
+        # "method" to anything.
+        if any(text.strip().lower() == "method" for text in carried):
+            offences.append(
+                f"{name}(...) at line {node.lineno} sets or reads the HTTP verb "
+                "field through an accessor. Refused by shape whatever the value, "
+                "because the value can be a call this walk cannot fold"
+            )
+            continue
+        if name in _ATTRIBUTE_ACCESSORS and not carried:
+            offences.append(
+                f"{name}(...) at line {node.lineno} names an attribute this walk "
+                "cannot read. The same refusal rule 4 gives getattr, because the "
+                "pair being asymmetric is what let a POST through"
+            )
+            continue
         for text in carried:
             if text.strip().lower() in _MUTATING_VERBS:
                 offences.append(f"{name}(...{text!r}...) at line {node.lineno}")
@@ -461,6 +509,20 @@ _BYPASSES = {
         "response = await client.send(request)"
     ),
     "the same dunder bound on the instance": 'request.__setattr__("method", "POST")',
+    # The adversary's 2026-09-10 tick five bypass, verbatim. It put a live POST
+    # into the production fetcher and this suite reported 210 passed. Wire
+    # capture logged POST on the URL the module's own `_executions_url` builds.
+    # `setattr` was tracked for its values and not for its shape, while
+    # `getattr` was refused by shape, and the verb was a generator expression
+    # that folds to nothing.
+    "the verb set through setattr with a value that folds to nothing": (
+        '_req = client.build_request("GET", url, headers=headers)\n'
+        'setattr(_req, "method", "".join(chr(c) for c in (80, 79, 83, 84)))\n'
+        "response = await client.send(_req)"
+    ),
+    "an accessor handed an attribute name this walk cannot read": (
+        "setattr(_req, _field, _verb)"
+    ),
     # Not a verb at all on the wire. The server is told to treat the GET as a
     # write, so the method stays honest and the effect does not.
     "a method override header carried in a dict": (
@@ -961,6 +1023,190 @@ _METHOD_OVERRIDE_HEADERS = (
 )
 
 
+def _fetcher_shape_offences(tree: ast.AST) -> List[str]:
+    """Anything in `_httpx_get` that could make it behave differently under test.
+
+    THIS IS WHAT MAKES ONE DRIVEN INPUT REPRESENTATIVE, and it was missing until
+    an adversary used its absence on 2026-09-10. Its bypass branched inside the
+    fetcher:
+
+        if "includeData" in url:
+            <the POST path>
+        else:
+            response = await client.get(url, headers=headers)
+
+    Every production read is built by `_executions_url`, which always appends
+    `&includeData=false`, and the transport check drove one hand written URL that
+    had no such token. So the recorder saw the GET branch and the wire saw POST.
+    Measured with a capture server on the URL the module itself builds:
+
+        POST /api/v1/executions?limit=5&includeData=false HTTP/1.1
+        GET  /api/v1/executions?limit=1 HTTP/1.1
+
+    The first is what production sends. The second is what the test asked for.
+
+    Driving the real URL builder, which the check below now does, closes THAT
+    divergence and not the class of it: the adversary named
+    `type(client).__name__ == "AsyncClient"` as the same trick with no URL in it,
+    and that one is right. So the shape is refused instead. `_httpx_get` may
+    contain no branch at all. Measured on the shipped fetcher before choosing
+    it: zero `If`, `IfExp`, `Match` and `While` nodes, no conditional
+    comprehension, and no `BoolOp` or `Compare` either, so a question about the
+    inputs cannot be asked without one of these. The cost today is zero, and a
+    fetcher that ever needs a branch has to be a fetcher somebody looked at
+    again.
+
+    This is still an ENUMERATION, which is the thing that keeps losing in this
+    file. A mapping lookup diverges on its input with none of those nodes.
+    `test_the_driven_urls_are_the_production_ones` holds that seam open on
+    purpose and shows what actually closes it: driving the URLs the module
+    itself builds.
+    """
+    offences: List[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if node.name != _THE_ONE_FETCHER:
+            continue
+        for inner in ast.walk(node):
+            if isinstance(
+                inner,
+                (ast.If, ast.IfExp, ast.Match, ast.While, ast.BoolOp, ast.Compare),
+            ):
+                offences.append(
+                    f"{type(inner).__name__} at line {inner.lineno} inside "
+                    f"{_THE_ONE_FETCHER}. A branch in the one audited fetcher is how a "
+                    "GET under the recorder becomes a POST on the wire, so it is "
+                    "refused by shape"
+                )
+            elif isinstance(inner, ast.comprehension) and inner.ifs:
+                offences.append(
+                    f"a conditional comprehension inside {_THE_ONE_FETCHER} at line "
+                    f"{getattr(inner.iter, 'lineno', 0)} can select behaviour the same way"
+                )
+    return offences
+
+
+def test_the_audited_fetcher_cannot_tell_it_is_being_watched() -> None:
+    """The claim that one driven input speaks for every input.
+
+    The transport check below can only assert about calls it makes. This is why
+    the calls it makes are representative.
+    """
+    offences = _fetcher_shape_offences(_tree(SERVICE_FILE))
+    assert not offences, f"{_THE_ONE_FETCHER} can branch, so the wire check proves less than it claims: {offences}"
+
+
+def test_the_fetcher_shape_rule_fires_and_only_where_it_should() -> None:
+    """Both directions, because a rule nobody has watched fire is credited.
+
+    It fired for real on the tick five bypass, and the two synthetic trees keep
+    that repeatable: the branching fetcher is refused, the shipped shape is not,
+    and a branch in a DIFFERENT function is none of this rule's business.
+    """
+    branching = "\n".join(
+        [
+            "async def _httpx_get(url, headers):",
+            "    import httpx",
+            "    async with httpx.AsyncClient() as client:",
+            '        if "includeData" in url:',
+            '            return await client.request("GET", url)',
+            "        return await client.get(url, headers=headers)",
+        ]
+    )
+    assert _fetcher_shape_offences(ast.parse(branching))
+
+    branchless = "\n".join(
+        [
+            "async def _httpx_get(url, headers):",
+            "    import httpx",
+            "    try:",
+            "        async with httpx.AsyncClient() as client:",
+            "            response = await client.get(url, headers=headers)",
+            "    except Exception as exc:",
+            "        raise Unreachable(str(exc)) from exc",
+            "    return Fetched(response.status_code, None, str(response.url))",
+            "def _executions_url(base, limit, cursor):",
+            "    query = '?limit=1'",
+            "    if cursor:",
+            "        query += '&cursor=' + cursor",
+            "    return base + query",
+        ]
+    )
+    assert _fetcher_shape_offences(ast.parse(branchless)) == []
+
+
+#: URLs to drive the real fetcher with. The first two are built by the module's
+#: OWN builder, so a token that only production URLs carry cannot separate the
+#: test input from the real one again: `_executions_url` always appends
+#: `includeData=false`, and that is exactly what the tick five bypass keyed on.
+#: The hand written ones stay because they are cheap and because a fetcher that
+#: treats a cursor URL differently is worth catching too.
+def _urls_worth_driving() -> List[str]:
+    base = f"https://{PRIMARY_HOST}"
+    return [
+        tel._executions_url(base, 5, None),
+        tel._executions_url(base, 250, "cursor-token-not-a-real-one"),
+        f"{base}/api/v1/executions?limit=1",
+        f"{base}/api/v1/executions",
+    ]
+
+
+async def test_the_driven_urls_are_the_production_ones() -> None:
+    """Why the driven set is built by the module's OWN url builder.
+
+    The shape rule above refuses the node types a branch is normally spelled
+    with, and that is an enumeration like every other one here. A mapping lookup
+    diverges on its input with no `If`, no `Compare` and no `BoolOp`, so it walks
+    straight through. What catches it instead is driving the input production
+    actually produces, which is the half of tick five the shape rule does not
+    answer.
+
+    Executed on a stand in fetcher rather than argued, because the real one is
+    clean and a claim about coverage has to be watched working.
+    """
+    import httpx
+
+    shaped_like_the_bypass = "\n".join(
+        [
+            "async def _httpx_get(url, headers):",
+            "    import httpx",
+            '    table = {0: "GET", 1: "POST"}',
+            "    async with httpx.AsyncClient() as client:",
+            '        return await client.request(table[url.count("includeData")], url)',
+        ]
+    )
+    assert _fetcher_shape_offences(ast.parse(shaped_like_the_bypass)) == [], (
+        "this control is worthless if the shape rule already refuses the stand in. It "
+        "exists because a mapping lookup is not one of the refused nodes"
+    )
+
+    seen: List[Any] = []
+
+    def handler(request: Any) -> Any:
+        seen.append(request)
+        return httpx.Response(200, json={"data": []})
+
+    async def diverging(url: str) -> None:
+        table = {0: "GET", 1: "POST"}
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            await client.request(table[url.count("includeData")], url)
+
+    await diverging(f"https://{PRIMARY_HOST}/api/v1/executions?limit=1")
+    assert [request.method for request in seen] == ["GET"], (
+        "the hand written URL was supposed to miss this divergence, and this control "
+        "only means something while it does"
+    )
+
+    seen.clear()
+    for url in _urls_worth_driving():
+        await diverging(url)
+    assert any(request.method == "POST" for request in seen), (
+        "no URL in the driven set carries the token every production URL carries, so "
+        "the executed check would have missed tick five's fetcher exactly as it did"
+    )
+
+
 async def _requests_the_real_fetcher_sends(monkeypatch: pytest.MonkeyPatch) -> List[Any]:
     """Drive `_httpx_get` itself and return every request that reached transport.
 
@@ -968,6 +1214,13 @@ async def _requests_the_real_fetcher_sends(monkeypatch: pytest.MonkeyPatch) -> L
     on the module object is enough; there is no cached reference to dodge. The
     client is subclassed rather than replaced so that every argument the real
     fetcher passes still applies and only the transport is ours.
+
+    The subclass carries httpx's own name and module deliberately. A fetcher
+    could otherwise read `type(client).__name__` and behave itself only while
+    being watched, which is the tick five bypass with the URL taken out of it.
+    That is a cheap sniff closed cheaply and is NOT a proof of
+    indistinguishability; `_fetcher_shape_offences` above is the actual answer,
+    because it refuses the branch such a sniff would need.
     """
     import httpx
 
@@ -984,11 +1237,13 @@ async def _requests_the_real_fetcher_sends(monkeypatch: pytest.MonkeyPatch) -> L
             kwargs["transport"] = httpx.MockTransport(handler)
             super().__init__(*args, **kwargs)
 
+    Recording.__name__ = real_client.__name__
+    Recording.__qualname__ = real_client.__qualname__
+    Recording.__module__ = real_client.__module__
+
     monkeypatch.setattr(httpx, "AsyncClient", Recording)
-    await tel._httpx_get(
-        f"https://{PRIMARY_HOST}/api/v1/executions?limit=1",
-        {"X-N8N-API-KEY": "not-a-real-key"},
-    )
+    for url in _urls_worth_driving():
+        await tel._httpx_get(url, {"X-N8N-API-KEY": "not-a-real-key"})
     return seen
 
 
@@ -1001,11 +1256,16 @@ async def test_the_request_that_reaches_the_wire_carries_get(
     was handed, which is the only question the module docstring's promise is
     actually about.
     """
+    driven = _urls_worth_driving()
     sent = await _requests_the_real_fetcher_sends(monkeypatch)
     assert sent, (
         "the production fetcher never reached the transport, so this test proved "
         "nothing. A guard that cannot fire is worse than no guard, because it is "
         "credited"
+    )
+    assert len(sent) == len(driven), (
+        f"drove {len(driven)} URLs and the transport saw {len(sent)} requests. A "
+        "fetcher that swallows one input is a fetcher this check is not covering"
     )
     for request in sent:
         assert request.method == "GET", (
