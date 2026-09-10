@@ -5,8 +5,14 @@
  *
  * The learning store has two list routes and, before this panel, no surface at
  * all: `GET /agent-tasks/learning/memories` and `GET /agent-tasks/learning/skills`
- * had no caller anywhere in the repository, so every plan DEVON made was handed
- * two empty lists and nobody could see it.
+ * had no caller under apps/web, so nothing a person could open read the store or
+ * wrote to it, and nobody could see what DEVON was being handed.
+ *
+ * CORRECTED 2026-09-10. This said "no caller anywhere in the repository", which is
+ * false: both routes are registered and both are exercised by
+ * test_devon_agent_tasks_api.py. The gap was a WEB surface, not a caller. An
+ * adversary found the overstatement with one grep, and the narrower claim is both
+ * true and sufficient.
  *
  * A panel over those routes has exactly one way to lie, and it is the same one
  * the control plane critic exploited on 2026-09-09 (see the header of

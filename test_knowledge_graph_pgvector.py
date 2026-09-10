@@ -32,6 +32,25 @@ put all the weight in the first two so the expected answers are exact:
 An orthogonal pair and an identical pair bracket the operator's whole range, so a
 query returning L2 distance, inner product, or similarity instead of cosine
 distance cannot satisfy both at once.
+
+AND THE FIRST VERSION OF THIS FILE DID NOT ACTUALLY CHECK THAT.
+
+A critic found it on 2026-09-10, in the file written to demonstrate that green is
+not correct. The orthogonal pair sits at distance 1.0, `DEFAULT_MAX_DISTANCE` is
+0.65, and the edge query ends `HAVING MIN(...) <= :max_distance`. So the route
+filtered the orthogonal pair out before the test ever saw it, `orthogonal` was an
+empty list, `for distance in orthogonal:` never executed once, and the only
+distance this file asserted was 0.0 for the identical pair. Zero is the identity
+for cosine and for L2 alike, so substituting the L2 operator `<->` for `<=>`
+passed all five tests. Measured, both halves: a probe printing
+`len(orthogonal)` printed 0 on unmutated source, and the L2 substitution
+returned `5 passed`.
+
+Two changes stop it coming back. Every graph read that wants the orthogonal pair
+now passes `max_distance=1.5`, above 1.0 and inside `MAX_MAX_DISTANCE` of 2.0.
+And the count is asserted BEFORE the loop, so an empty list fails loudly instead
+of passing silently. A loop over a possibly-empty collection is not an assertion,
+and this file is the reason to say that out loud.
 """
 
 from __future__ import annotations
@@ -105,7 +124,9 @@ async def test_the_edge_query_returns_real_cosine_distance(db_session):
     c = await _item(db_session, owner, "C", [_vector(0.0, 1.0)])
     await db_session.flush()
 
-    graph = await build_knowledge_graph(db_session, owner_id=owner)
+    # max_distance above 1.0, or HAVING drops the orthogonal pair and the
+    # assertions below become vacuous. That is exactly what happened.
+    graph = await build_knowledge_graph(db_session, owner_id=owner, max_distance=1.5)
     payload = graph.as_dict()
 
     ids = {node["id"] for node in payload["nodes"]}
@@ -126,6 +147,10 @@ async def test_the_edge_query_returns_real_cosine_distance(db_session):
     orthogonal = [
         edges[key] for key in (frozenset((a, c)), frozenset((b, c))) if key in edges
     ]
+    assert len(orthogonal) == 2, (
+        f"expected both orthogonal pairs as edges, got {len(orthogonal)}. A loop over "
+        "an empty list asserts nothing, and this file passed for a day because of it"
+    )
     for distance in orthogonal:
         assert distance == pytest.approx(1.0, abs=1e-6)
 
@@ -195,6 +220,56 @@ async def test_an_item_with_no_vector_is_a_node_and_carries_no_edge(db_session):
     assert frozenset((a, b)) in {
         frozenset((e["source"], e["target"])) for e in payload["edges"]
     }
+
+
+@pytest.mark.asyncio
+async def test_the_self_join_predicate_is_what_drops_self_and_mirrored_pairs(db_session):
+    """The predicate's job, tested where the Python backstop cannot hide it.
+
+    `a.item_id < b.item_id` is documented as doing three jobs: drop self pairs,
+    emit each unordered pair once, and halve the scan. An adversary changed it to
+    `<=` and to `!=` on 2026-09-10 and all forty seven tests passed, because
+    `assemble_graph` drops self and mirrored rows in Python afterwards and logs a
+    warning nobody asserts on.
+
+    That backstop stops WRONG edges. It cannot stop MISSING ones. Self pairs are
+    distance 0 and mirrored pairs duplicate real distances, so under
+    `ORDER BY distance ASC ... LIMIT :edge_probe` they sort to the front and spend
+    the caller's budget before the real pairs are reached. The adversary measured
+    the loss at 29 percent with a generous cap and 100 percent with a tight one,
+    and the payload reported `edges_capped: true`, which a panel reads as "there
+    are more edges past the cap" rather than "a third of your graph was discarded".
+
+    So this pins the exact edge count with the cap set AT the true pair count.
+    Three items make three unordered pairs; with `<=` the three self pairs arrive
+    first and the real ones fall off the end.
+    """
+    owner = await _owner(db_session)
+    a = await _item(db_session, owner, "A", [_vector(1.0, 0.0)])
+    b = await _item(db_session, owner, "B", [_vector(0.99, 0.01)])
+    c = await _item(db_session, owner, "C", [_vector(0.98, 0.02)])
+    await db_session.flush()
+
+    payload = (
+        await build_knowledge_graph(
+            db_session, owner_id=owner, edge_cap=3, max_distance=1.5
+        )
+    ).as_dict()
+
+    pairs = {frozenset((e["source"], e["target"])) for e in payload["edges"]}
+    assert pairs == {
+        frozenset((a, b)),
+        frozenset((a, c)),
+        frozenset((b, c)),
+    }, (
+        f"expected all three unordered pairs at edge_cap=3, got {len(pairs)}. A "
+        "predicate that also emits self or mirrored rows spends the cap on them "
+        "and drops real edges, and the Python guard downstream cannot put them back"
+    )
+    assert payload["edges_capped"] is False, (
+        "the cap is reported as having bitten at exactly the true pair count, which "
+        "means rows this graph does not need were counted against it"
+    )
 
 
 @pytest.mark.asyncio

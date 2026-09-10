@@ -7,8 +7,25 @@ Every agent task's planning context carries `devon_learning`
 into the prompt (services/agent_runtime/planner.py:176). The payload used to be
 two bare lists, so `memories: []` meant "nothing stored", "nothing matched this
 goal" or "the read did not happen", and the model was handed no way to tell
-which. The write paths have no production caller either, so in practice the
-lists were always empty and always silent about why.
+which.
+
+CORRECTION, 2026-09-10, and it is the reason to read this paragraph carefully.
+This said "the write paths have no production caller either, so in practice the
+lists were always empty". That is FALSE and an adversary caught it with one grep.
+`POST /api/v1/agent-tasks/learning/memories` calls `remember()`
+(app/api/v1/agent_tasks.py:267) and `PUT .../learning/skills/{name}` calls
+`upsert_skill()`; both are registered through
+`api_router.include_router(agent_tasks.router)` (app/api/v1/router.py:56) and
+both are exercised by test_devon_agent_tasks_api.py. They were live, registered,
+tested HTTP routes. An operator with a token could fill the store and the planner
+would have received real rows.
+
+The true claim is the narrower one, and it is the one worth making: there was no
+WEB surface on either route, so nothing a person could open wrote to the store or
+read it back. That is what this panel changed. The overstatement did not change a
+line of code, and it is corrected here rather than quietly deleted, because
+stating a stronger claim than the check supports is the failure the first law in
+CLAUDE.md is about.
 
 These are pure functions and an in-process store: no PostgreSQL, no session, no
 network. That is deliberate, so the guard can run in the standalone CI lane

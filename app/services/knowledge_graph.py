@@ -286,10 +286,32 @@ def _uuid_array_param(ids: Sequence[str]) -> List[str]:
 
     So GET /knowledge/graph raised for every owner with two or more items
     carrying vectors, which is the only case the route exists to serve, while
-    forty two tests reported green. Measured on the live cluster, all three
-    forms: the literal with CAST fails, a list with CAST works, and a list
-    without the CAST fails as AmbiguousFunctionError because unnest cannot pick
-    an overload for text[] against a uuid column. So it is a list AND the CAST.
+    forty two tests reported green.
+
+    WHAT IS ACTUALLY MEASURED, corrected 2026-09-10.
+
+    Two forms, on the shipped statement, against the live cluster:
+
+        the "{a,b}" literal with the CAST  ->  DataError, as quoted above
+        a Python list with the CAST        ->  works
+
+    The list is load bearing and is proved by seven tests: reverting it reds all
+    five pgvector tests plus two offline ones.
+
+    The CAST is NOT load bearing, and an earlier version of this docstring said
+    it was. It claimed a third measurement, that a list without the CAST fails as
+    AmbiguousFunctionError because unnest cannot pick an overload. An adversary
+    could not reproduce it, and neither could I on a second attempt: removing the
+    CAST from this statement passes all forty seven tests, and a direct probe of
+    `= ANY(:node_ids)` returns rows normally, because Postgres infers uuid[] from
+    the column being compared.
+
+    The AmbiguousFunctionError was real, and it came from a DIFFERENT statement:
+    a throwaway probe of `SELECT unnest(:p)`, which has no column to infer from.
+    Measuring one statement and writing the result up as a property of another is
+    the first law's failure mode exactly, so it is corrected here rather than
+    quietly dropped. The CAST stays because it states the intended type at the
+    call site, not because anything breaks without it.
 
     The per element uuid.UUID() call stays. The ids come straight out of the node
     query so this is belt and braces rather than a live injection path, and it

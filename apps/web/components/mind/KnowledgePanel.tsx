@@ -9,16 +9,24 @@ import { readDevonToken } from "@/components/presence/usePresenceSocket";
  *
  * The brief calls this the second brain knowledge graph across Drive, Notion
  * and Pinecone namespaces. This panel is the corpus itself and a real search
- * over it. No graph is drawn HERE, and that is now a division of labour rather
- * than a refusal: GET /knowledge/graph measures the edges, and
- * components/mind/KnowledgeGraphPanel.tsx draws them under this panel with its
- * own account of what the picture leaves out.
+ * over it. No graph is drawn here, and the reason has changed twice.
  *
- * This comment used to say that no route exposed vector activations or edges,
- * so any graph would be a picture of something nobody measured. The first half
- * stopped being true when that route landed; the second half is why the graph
- * panel carries a provider warning, an unembedded count and a truncation
- * notice instead of just a diagram.
+ * It used to be that no route exposed vector activations or edges, so any graph
+ * would have been a picture of something nobody measured. That stopped being
+ * true when GET /knowledge/graph landed: it measures the distance between items
+ * as pgvector cosine distance, the minimum over their chunk pairs.
+ *
+ * A panel over that route was built and then PULLED before shipping, on
+ * 2026-09-10. It read the payload as a nested object while the route sends a
+ * flat one, so its counts were null on every real response, and over a corpus
+ * with nothing embedded and an edge query the route had skipped it rendered
+ * "Embedded nodes, no pair close enough to connect". Nothing was embedded and
+ * no pair had been compared. Neither test suite caught it because each was green
+ * about a different payload shape.
+ *
+ * So the honest state today: the edges are measured and nothing draws them. This
+ * panel is the corpus and a real search over it, and it claims nothing about the
+ * distance between items.
  *
  * Distance from the search route is a distance, not a score. Smaller is nearer,
  * so it is labelled as distance rather than dressed up as a percentage

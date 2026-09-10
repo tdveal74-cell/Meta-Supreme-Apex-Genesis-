@@ -27,6 +27,7 @@ authenticated, bounded, and shadowed by nothing.
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
@@ -564,8 +565,18 @@ def test_the_node_id_array_param_is_a_list_and_refuses_a_non_uuid():
     keeps a well meaning simplification back to a literal from shipping green.
     """
     param = kg._uuid_array_param([ITEM_A, ITEM_B])
-    assert isinstance(param, list), "asyncpg needs a sized iterable, never a str"
-    assert param == [ITEM_A, ITEM_B]
+    # A SIZED ITERABLE, which is what the driver needs and what the message says.
+    # The first version asserted `isinstance(param, list)` while its message spoke
+    # of a sized iterable, so it would have failed a correct refactor to a tuple.
+    # An adversary measured that tuples and sets both work against real pgvector.
+    # What must never pass is a str, which is also sized and iterable, so it is
+    # excluded by name rather than by asserting one concrete type.
+    assert not isinstance(param, (str, bytes)), (
+        "asyncpg binds arrays natively, so a str is the one sized iterable it "
+        "rejects. This is the bug that shipped: a Postgres array literal"
+    )
+    assert hasattr(param, "__len__"), "asyncpg needs a sized iterable"
+    assert list(param) == [ITEM_A, ITEM_B]
     with pytest.raises(ValueError):
         kg._uuid_array_param([ITEM_A, "'); drop table embeddings; --"])
 
@@ -933,10 +944,20 @@ def graph_route_precedes_item_lookup(routes) -> bool:
     paths = flatten_route_paths(routes)
     graph_index = None
     item_index = None
+    # ANY single-segment parameter under /knowledge, not the literal {item_id}.
+    #
+    # This matched `endswith("/knowledge/{item_id}")` until 2026-09-10, when an
+    # adversary added a plausible future route `@router.get("/{fkr_id}")` to
+    # knowledge_fkr.py and registered it above the graph. The literal check found
+    # graph at index 31 and {item_id} at 35, reported True, and all 42 tests
+    # passed while a real TestClient request to /api/v1/knowledge/graph was served
+    # by the fkr lookup. So the guard covered today's two lines, spelled against
+    # one parameter name, rather than the rule.
+    parameterised = re.compile(r"/knowledge/\{[^}/]+\}$")
     for index, path in enumerate(paths):
         if path.endswith("/knowledge/graph") and graph_index is None:
             graph_index = index
-        elif path.endswith("/knowledge/{item_id}") and item_index is None:
+        elif parameterised.search(path) and item_index is None:
             item_index = index
     if graph_index is None or item_index is None:
         return True
@@ -974,10 +995,36 @@ def test_the_item_lookup_shadows_the_graph_when_registered_first():
     assert graph_route_precedes_item_lookup(correct.app.routes) is True
 
 
+def test_the_composed_v1_router_registers_the_graph_route_at_all():
+    """Absence, not order. The likelier regression, and it used to be invisible.
+
+    `graph_route_precedes_item_lookup` returns True when the graph route is
+    ABSENT, deliberately, because the piece was handed over unregistered and the
+    ordering helper had nothing to compare. That made the ordering test pass in
+    two very different worlds: correct registration, and no registration.
+
+    A critic removed the `include_router` line AND its now unused import on
+    2026-09-10 and measured the result: 42 offline passed, 5 pgvector passed,
+    ruff clean. With only the include line gone, ruff catches the unused import
+    as F401, which is what a careless deletion looks like; a tidy one removes
+    both and nothing notices. Since an unregistered route is exactly the stranded
+    capability this whole arc was convened to end, absence gets its own assertion
+    ahead of the ordering one.
+    """
+    from app.api.v1.router import api_router
+
+    paths = flatten_route_paths(api_router.routes)
+    assert any(path.endswith("/knowledge/graph") for path in paths), (
+        "GET /knowledge/graph is not registered on the composed v1 router, so the "
+        "route does not answer and the panel reading it draws nothing. Add "
+        "api_router.include_router(knowledge_graph.router) BEFORE knowledge.router"
+    )
+
+
 def test_the_composed_v1_router_keeps_the_graph_ahead_of_the_item_lookup():
     # Goes red the moment the graph router is registered in app/api/v1/
-    # router.py behind the knowledge router. Passes while it is not registered
-    # at all, which is the state this piece hands over in.
+    # router.py behind the knowledge router. Absence is covered by the test
+    # above, which is why this one may still treat it as a pass.
     from app.api.v1.router import api_router
 
     assert graph_route_precedes_item_lookup(api_router.routes) is True

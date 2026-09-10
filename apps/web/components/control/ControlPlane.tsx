@@ -188,11 +188,11 @@ export function ControlPlane({ readiness, provenance, presence, knowledge, learn
 
             <TierPanel
               title="Knowledge"
-              purpose="The corpus DEVON recalls from, a search that runs against it, and the measured distances between its items."
+              purpose="The corpus DEVON recalls from, and a search that runs against it. The distances between its items are measured by a route and not yet drawn."
               sourcing={knowledge ? "partial" : "unwired"}
               sourceNote={
                 knowledge
-                  ? "Items, the source breakdown and search come from the knowledge routes, and the graph under them from GET /knowledge/graph. That graph names its embedding provider and refuses to present a mock one's distances as real, counts the items with no embedding that are therefore absent from the picture, and says so when the route caps the edge list."
+                  ? "Items, the source breakdown and search come from the knowledge routes. GET /knowledge/graph now measures the distances between items as pgvector cosine distance, and NO panel draws them yet: the first attempt read a payload shape the route does not send and stated a measurement over a query that had not run, so it was pulled rather than shipped. Until a panel lands, this tier shows the corpus and the search and claims nothing about the edges."
                   : "The knowledge panel is not mounted on this build."
               }
             >

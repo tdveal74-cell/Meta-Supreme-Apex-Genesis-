@@ -47,15 +47,29 @@ STATUS_POPULATED = "populated"
 STATUS_UNAVAILABLE = "unavailable"
 
 _NOTE_EMPTY = (
-    "The learning store was read and holds nothing for this owner. Plan without "
+    "The learning store was read and holds nothing for this owner in this scope. "
+    "Plan without "
     "learning. This is a real empty store, not a failed read and not a goal that "
     "matched nothing."
 )
 
+# The search does NOT scan every stored memory. search_memories reads through
+# list_memories(limit=500) and scores that window, while the stored count is
+# unbounded, so above 500 in scope for one owner the two describe different sets.
+# The first version of this note said "none of them share a word with this goal",
+# which is false in exactly that case: an adversary measured 510 stored, a pool of
+# 500, and an exact-token match sitting outside the window while the note claimed
+# none existed. The wording now says what was actually examined. Blast radius is
+# low, since the write path is operator driven and no owner is near 500, but a
+# sentence that goes into every planning prompt is the wrong place to be nearly
+# right.
+_MEMORY_SEARCH_WINDOW = 500
+
 _NOTE_NO_MATCH = (
     "The learning store was read and is not empty: {stored} memories are stored "
-    "and none of them share a word with this goal. Absence of matches here is "
-    "not absence of memory."
+    "and the search matched none of the {window} most recently updated. Absence "
+    "of matches here is not absence of memory, and with more than {window} stored "
+    "a match can sit outside the window the search reads."
 )
 
 _NOTE_POPULATED = (
@@ -122,7 +136,9 @@ def learning_payload(
         note = _NOTE_EMPTY
     elif memory_view["status"] == STATUS_NO_MATCH and skill_view["stored"] == 0:
         status = STATUS_NO_MATCH
-        note = _NOTE_NO_MATCH.format(stored=memory_view["stored"])
+        note = _NOTE_NO_MATCH.format(
+            stored=memory_view["stored"], window=_MEMORY_SEARCH_WINDOW
+        )
     else:
         status = STATUS_POPULATED
         note = _NOTE_POPULATED.format(

@@ -366,7 +366,6 @@ const CONTROL_TREE = [
   "components/control/SessionDoor.tsx",
   "components/control/ProvenanceSlot.tsx",
   "components/mind/KnowledgePanel.tsx",
-  "components/mind/KnowledgeGraphPanel.tsx",
   "components/readiness/AgentReadinessMatrix.tsx",
   "components/ledger/ProvenanceCard.tsx",
   "components/presence/PresenceStage.tsx",
@@ -415,8 +414,7 @@ check("every text input on the surface carries a label", () => {
   const withInputs = [
     "components/control/ProvenanceSlot.tsx",
     "components/mind/KnowledgePanel.tsx",
-    "components/mind/KnowledgeGraphPanel.tsx",
-    "components/presence/PresenceStage.tsx",
+      "components/presence/PresenceStage.tsx",
   ];
   let inputs = 0;
   for (const relative of withInputs) {
@@ -432,7 +430,7 @@ check("every text input on the surface carries a label", () => {
       assert.ok(labelled, `${relative} has an input with no label: ${element.slice(0, 90)}`);
     }
   }
-  assert.equal(inputs, 5, "the input count moved; re-check that each one is labelled");
+  assert.equal(inputs, 4, "the input count moved; re-check that each one is labelled");
 });
 
 /* the capture lane's only reachable surface */
@@ -562,7 +560,12 @@ function declarationsNamed(root: ts.Node, name: string): ts.Node[] {
 function conditionalAncestors(node: ts.Node, stop: ts.Node): ts.Node[] {
   const gates: ts.Node[] = [];
   let at: ts.Node | undefined = node.parent;
-  while (at && at !== stop) {
+  let reached = false;
+  while (at) {
+    if (at === stop) {
+      reached = true;
+      break;
+    }
     if (
       ts.isIfStatement(at) ||
       ts.isConditionalExpression(at) ||
@@ -573,6 +576,28 @@ function conditionalAncestors(node: ts.Node, stop: ts.Node): ts.Node[] {
     }
     at = at.parent;
   }
+  // THE VACUITY GUARD, and it is here because it was exploited.
+  //
+  // The original loop condition was `while (at && at !== stop)`, so a `node` that
+  // is NOT inside `stop` walked all the way to the source file root, collected no
+  // conditionals from an unrelated subtree, and returned []. Every caller then
+  // read that empty array as "no gates, all good".
+  //
+  // A critic used exactly that on 2026-09-10: it moved the skill gate's decide
+  // fetch into a module level `async function neverCalledSend()` that nothing
+  // calls, replaced the real one with `new Response("{}")`, and control-check
+  // reported 36 checks passed with tsc and next build both clean. Tee would have
+  // pressed Approve, seen the panel confirm the ruling, and the row would never
+  // have changed. That is worse than the no-door state this arc set out to fix,
+  // because the no-door state was at least visibly absent.
+  //
+  // So an unreachable `stop` is now a hard error rather than a pass. A caller
+  // that hands two unrelated nodes has a bug in the check, and a check with a bug
+  // must fail loudly instead of approving.
+  assert.ok(
+    reached,
+    "conditionalAncestors was given a node that is not inside `stop`, so it can prove nothing about whether that node is gated. The caller is resolving the two out of different subtrees",
+  );
   return gates;
 }
 
@@ -1030,6 +1055,11 @@ const GATE_COMPONENT = "SkillProposalGate";
 check("the skill proposal gate still reads the queue and rules on it", () => {
   const panel = parse(GATE);
   const fetches = callsTo(panel, "fetch");
+  // NOTE for whoever edits below: `fetches` is file wide on purpose, for the
+  // COUNTING assertions ("exactly once in this file"). Every assertion about
+  // where a call sits must re-resolve it from inside the handler's own subtree,
+  // as the decide block does. Resolving the call and the handler independently is
+  // what let a critic orphan the ruling fetch and still report 36 passed.
 
   // 1. The read. Without it there is no queue on the page, and a door onto
   //    nothing is the state this whole check exists to end.
@@ -1061,16 +1091,48 @@ check("the skill proposal gate still reads the queue and rules on it", () => {
   // helpers arrived in the same commit that closed the capture guard's three
   // bypasses, and a gate whose decide fetch hides behind a never-satisfied
   // condition is that defect wearing this arc's name. A try/catch is not a gate.
-  const decideOwner = collect(
-    panel,
-    (n) =>
-      ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === "decide",
-  );
+  // declarationsNamed, not a const only predicate. The first version of this line
+  // matched `ts.isVariableDeclaration` alone, so rewriting the handler as
+  // `async function decide()` went red on correct code with the message "declared 0
+  // times". That is the exact misfire the comment above declarationsNamed was
+  // written about, reintroduced one screenful below it by someone who did not read
+  // his own helper. An adversary caught it on 2026-09-10.
+  const decideOwner = declarationsNamed(panel, "decide");
   assert.equal(
     decideOwner.length,
     1,
-    `${GATE} must declare the decide handler exactly once; found ${decideOwner.length}`,
+    decideOwner.length === 0
+      ? `${GATE} has no \`const decide =\` or \`function decide\` declaration, so this check cannot find the ruling handler`
+      : `${GATE} declares decide ${decideOwner.length} times, and a second declaration is a decoy this check could read while the real handler never sends`,
   );
+  // THE RULING FETCH MUST BE INSIDE THE HANDLER, not merely somewhere in the file.
+  //
+  // `decideCalls` above is filtered out of a FILE WIDE search, which is right for
+  // asserting "exactly once in this file" and useless for asserting where it sits.
+  // A critic moved the ruling fetch into a module level function nothing calls and
+  // left `new Response("{}")` in its place: the count still said one, the gate walk
+  // walked an unrelated subtree and found nothing, and this check reported 36
+  // passed while every button reported success and no ruling reached the API.
+  //
+  // Re-resolved from the handler's own subtree, the same direction the DevonChat
+  // capture guard resolves in. `conditionalAncestors` now also refuses a node that
+  // is not inside its stop node, so the two halves cover each other.
+  const inHandler = callsTo(decideOwner[0], "fetch").filter(
+    (c) =>
+      c.arguments.length > 0 &&
+      templatePath(c.arguments[0]) ===
+        "{}/agent-expansion/skill-proposals/{}/decide",
+  );
+  assert.equal(
+    inHandler.length,
+    1,
+    `the decide route is fetched ${inHandler.length} times INSIDE the decide handler. It has to be exactly one: a call that lives elsewhere in the file is a ruling no button can send, however real it looks`,
+  );
+  assert.ok(
+    inHandler[0] === decideCalls[0],
+    "the decide fetch this check counted is not the one inside the handler, so one of them is a decoy",
+  );
+
   const decideGates = conditionalAncestors(decideCalls[0], decideOwner[0]);
   assert.equal(
     decideGates.length,
@@ -1080,24 +1142,26 @@ check("the skill proposal gate still reads the queue and rules on it", () => {
 
   // WHERE THIS CLAUSE STOPS, MEASURED RATHER THAN ASSUMED.
   //
-  // The capture guard one screenful up also walks for a `return` before its
-  // call, and copying that here was tried and reverted. This handler legitimately
-  // returns early when a ruling has already been sent for the same proposal, so
-  // the blanket walk went red on correct code at once.
+  // The capture guard one screenful up also walks for a `return` before its call,
+  // and copying that here was tried and reverted, because the handler does return
+  // early: on a missing session token, which is a real condition and not a decoy.
+  //
+  // CORRECTION, 2026-09-10. This comment previously said the early return was an
+  // already-sent guard. That was false, and an adversary measured it: the only
+  // `return` before the fetch tests `!token`, and re-entry is prevented by
+  // `disabled={sending}` on all three buttons, which is an attribute rather than a
+  // return. The block comment above this check always gave the right reason; this
+  // one invented a second one. Two reasons for the same decision, one of them
+  // fabricated, is exactly what the first law is written about, so it is corrected
+  // here rather than quietly deleted.
   //
   // The bypass it would have closed is `if (proposal.proposal_id === "") return;`
-  // above the fetch, dead for every real proposal. That is structurally IDENTICAL
-  // to the already-sent guard the panel needs: both are a conditional return
-  // before the call, and telling them apart means evaluating the condition, which
-  // a source check cannot do. So it stays open, deliberately, and graded low:
-  // exploiting it means writing a guard clause whose test is never true, which is
+  // above the fetch, dead for every real proposal. It stays open and graded low,
+  // and the same adversary gave the better reason why: the containment assertion
+  // above reaches the identical outcome with no contrived condition at all, so
+  // fortifying this window while that door stood open bought nothing. The door is
+  // now shut. What is left needs a guard clause whose test is never true, which is
   // a deliberate act rather than a regression or a copy paste.
-  //
-  // The reason that is the right call and not laziness: a guard that fails on
-  // correct code costs every future contributor an hour and teaches them to
-  // distrust the file, and this one would have failed on the panel as shipped.
-  // The condition walk above still closes the wrapping form, which is the shape
-  // a refactor actually produces.
 
   const init = decideCalls[0].arguments[1];
   assert.ok(
@@ -1130,23 +1194,76 @@ check("the skill proposal gate still reads the queue and rules on it", () => {
       !isBooleanLiteral(assigned.initializer),
       `the decide body hardcodes ${key}, so the button the human pressed no longer decides it`,
     );
+
+    // Each key must read the handler's OWN ruling parameter, and must read the
+    // key of the same name. Three shapes got past the literal check alone, all
+    // found by an adversary on 2026-09-10, all with the panel unchanged to a
+    // reader and "Approve only" silently activating a skill:
+    //
+    //   promote: true as boolean      an AsExpression, not a TrueKeyword
+    //   promote: decision.approve     the exact inference the docs promise never
+    //                                 happens, which is the invariant itself
+    //   promote: decision.promote,    a SpreadAssignment is invisible to
+    //   ...RULING_DEFAULTS            propNamed, and the spread wins
+    //
+    // The second is the one that matters most: CLAUDE.md's rule is that skill
+    // promotion is human gated, and inferring promote from approve is precisely
+    // ungating it. The third is the most plausible accident, because a defaults
+    // object looks like tidying.
+    assert.ok(
+      ts.isPropertyAccessExpression(assigned.initializer) &&
+        ts.isIdentifier(assigned.initializer.name) &&
+        assigned.initializer.name.text === key,
+      `the decide body's ${key} is not a plain read of the ruling's own ${key}. It has to be exactly \`${key}: <ruling>.${key}\`: a cast, a widened type, or a read of the OTHER key is how approve silently starts promoting`,
+    );
+  }
+
+  // And nothing may be spread into that payload. A spread is invisible to the
+  // per key assertions above and overrides whatever they approved.
+  for (const payload of payloads) {
+    const spreads = payload.properties.filter((pr) => ts.isSpreadAssignment(pr));
+    assert.equal(
+      spreads.length,
+      0,
+      `the decide body spreads ${spreads.length} object(s) into the ruling. A spread can set approve or promote to anything after this check has read them, so the payload must be written out key by key`,
+    );
   }
 
   // 4. All three rulings have to be reachable from the rendered buttons, and
   //    every call site has to name promote. Read off the call sites of the
   //    panel's own handler, so a button wired to nothing fails here.
-  const handler = collect(
-    panel,
-    (n) => ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === "decide",
+  // decideOwner is already resolved and already asserted unique above. The first
+  // version of this block re-ran the identical predicate and asserted the identical
+  // thing, which can never fail once the first has passed: it read as extra
+  // coverage and was none. Removed rather than left as decoration.
+  const rulings = new Set<string>();
+
+  // EVERY RULING MUST COME OFF A RENDERED BUTTON, not merely exist in the file.
+  //
+  // This read `callsTo(panel, "decide")` file wide. An adversary put all three call
+  // sites in an unreferenced useCallback and rewrote every button to
+  // `onClick={() => undefined}` on 2026-09-10: three rulings still resolved, the
+  // set still held false/false, true/false and true/true, and this check reported
+  // ok while no button on the page did anything at all.
+  //
+  // So the sites are now collected from inside JSX onClick attributes. A call in
+  // dead code is not a button, and this check is about what a person can press.
+  const onClickHandlers = collect(panel, (n) => {
+    if (!ts.isJsxAttribute(n)) return false;
+    return ts.isIdentifier(n.name) && n.name.text === "onClick";
+  }) as ts.JsxAttribute[];
+  const sites = onClickHandlers.flatMap((attr) =>
+    attr.initializer ? callsTo(attr.initializer, "decide") : [],
+  );
+  assert.ok(
+    sites.length > 0,
+    "no rendered button's onClick calls decide, so every ruling in this file is dead code and the gate is a picture of a gate",
   );
   assert.equal(
-    handler.length,
-    1,
-    `${GATE} declares the decide handler ${handler.length} times; a second declaration means this check may be reading the wrong one`,
+    sites.length,
+    callsTo(panel, "decide").length,
+    `${callsTo(panel, "decide").length} call(s) to decide exist in the file but only ${sites.length} are wired to a button's onClick. A ruling nothing can press is dead code that makes this check read as coverage`,
   );
-  const rulings = new Set<string>();
-  const sites = callsTo(panel, "decide");
-  assert.ok(sites.length > 0, "nothing calls the decide handler, so every button is inert");
   for (const site of sites) {
     const arg = site.arguments[1];
     assert.ok(
@@ -1156,6 +1273,11 @@ check("the skill proposal gate still reads the queue and rules on it", () => {
     const ruling = arg as ts.ObjectLiteralExpression;
     const approve = propNamed(ruling, "approve");
     const promote = propNamed(ruling, "promote");
+    assert.equal(
+      ruling.properties.filter((pr) => ts.isSpreadAssignment(pr)).length,
+      0,
+      "a decide call site spreads an object into its ruling, which can overwrite approve or promote after this check has read them",
+    );
     assert.ok(
       approve && isBooleanLiteral(approve.initializer),
       "a decide call site does not state approve as a literal, so what it rules cannot be read here",
@@ -1232,502 +1354,22 @@ check("the skill proposal gate is mounted on the control plane", () => {
     1,
     `ControlPlane.tsx must render <${GATE_COMPONENT} /> exactly once; found ${rendered.length}. An imported but unrendered panel is the unreachable route this arc closed`,
   );
-});
 
-/* the knowledge graph draws measured edges, or names which nothing it is */
-
-/*
- * WHAT THIS GUARDS
- *
- * components/mind/KnowledgePanel.tsx refused to draw a graph until 2026-09-09
- * because no route measured the edges, and its reason was the right one: a graph
- * would have been "a picture of something nobody measured". GET /knowledge/graph
- * measures them now, so the picture is allowed. The obligation is not lifted,
- * and a graph is the worst surface in this estate to lose it on, because a wrong
- * graph still looks like a diagram of something real. A reader cannot tell a
- * cluster of meaning from a cluster of shared vocabulary by looking.
- *
- * So this holds the panel to four things it must keep doing:
- *
- *   1. Read the route. A panel that renders a layout of nothing is the failure
- *      that started this, one step further along.
- *   2. Refuse mock distances. app/core/config.py:239 defaults EMBEDDING_PROVIDER
- *      to mock, and services/intelligence/providers/embeddings.py:11 documents
- *      that provider as hashed bag-of-words, which clusters on shared words and
- *      nothing else. That is the default in every dev and test environment, so
- *      the failure mode is not exotic: it is what the panel shows unless someone
- *      set a key.
- *   3. Count what is absent. An item with no embedding has no vector and cannot
- *      be placed, and a capped edge list is a truncated picture. Both must reach
- *      the reader as a number.
- *   4. Tell four kinds of nothing apart. No items, items with no embeddings,
- *      embeddings with no pair inside the threshold, and a failed request are
- *      four different facts. One blank box for all four is the lie.
- *
- * WHY THE HONEST PARTS ARE PURE FUNCTIONS
- *
- * The same reason readVerdict is one. A critic can mutate a pure function and
- * re-measure it in a second; JSX needs a browser and a payload. So every refusal
- * above lives in components/mind/knowledge-graph.ts and is called here directly,
- * and the last assertion in the route check is the link that matters: the panel
- * must actually CALL each of them, or these tests are guarding dead code while
- * the rendered surface does whatever it likes. That is the shape of the four
- * beaten guards catalogued above this block, and it is the one thing the AST is
- * needed for.
- *
- * WHAT THE AST CANNOT DO HERE
- *
- * The DevonChat guard asserts zero returns before its fetch. This panel needs a
- * signed out early return, so the same assertion would be wrong. This one asserts
- * no return at the TOP LEVEL of the loader body before the fetch, which catches
- * the no-op guard that was used to beat the earlier version while leaving a
- * branch return alone. An attacker willing to write `if (true) return;` beats it,
- * and no static check of an unexecuted file closes that. Stated plainly here
- * rather than implied by silence.
- */
-
-import {
-  GRAPH_BOX,
-  classifyProvider,
-  describeGaps,
-  edgeCloseness,
-  layoutNodes,
-  parseGraphPayload,
-  readGraphVerdict,
-  sourceOrder,
-  type GraphCounts,
-  type GraphNode,
-  type ParsedGraph,
-} from "../components/mind/knowledge-graph.ts";
-
-/** The literal text of a string or a template, or null for anything else. */
-function pathText(node: ts.Node): string | null {
-  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
-  if (!ts.isTemplateExpression(node)) return null;
-  return node.head.text + node.templateSpans.map((span) => span.literal.text).join("");
-}
-
-/**
- * The OUTERMOST `const <name> = ...` a node sits in. Outermost, because the
- * nearest one to a fetch call is the `const response = await fetch(...)` holding
- * its own result, and checking that would tell us nothing about the handler.
- */
-function outermostDeclaration(node: ts.Node): ts.VariableDeclaration | null {
-  let found: ts.VariableDeclaration | null = null;
-  let cursor: ts.Node | undefined = node;
-  while (cursor) {
-    if (ts.isVariableDeclaration(cursor)) found = cursor;
-    cursor = cursor.parent;
-  }
-  return found;
-}
-
-function jsxElementsNamed(root: ts.Node, name: string): ts.Node[] {
-  return collect(
-    root,
-    (n) =>
-      (ts.isJsxOpeningElement(n) || ts.isJsxSelfClosingElement(n)) &&
-      ts.isIdentifier(n.tagName) &&
-      n.tagName.text === name,
-  );
-}
-
-const NO_COUNTS: GraphCounts = {
-  items_total: null,
-  items_ready: null,
-  items_embedded: null,
-  items_unembedded: null,
-  edges_returned: null,
-  edges_capped: null,
-};
-
-function countsOf(over: Partial<GraphCounts>): GraphCounts {
-  return { ...NO_COUNTS, ...over };
-}
-
-function graphOf(over: Partial<ParsedGraph>): ParsedGraph {
-  return {
-    nodes: [],
-    edges: [],
-    counts: null,
-    maxDistance: 0.6,
-    provider: "openai",
-    malformedNodes: 0,
-    malformedEdges: 0,
-    unresolvedEdges: 0,
-    selfEdges: 0,
-    nodesWithoutDegree: 0,
-    missingFields: [],
-    ...over,
-  };
-}
-
-function nodeOf(id: string, over: Partial<GraphNode> = {}): GraphNode {
-  return {
-    id,
-    title: `item ${id}`,
-    source: "drive",
-    created_at: "2026-09-01T00:00:00+00:00",
-    degree: 1,
-    ...over,
-  };
-}
-
-check("the graph panel refuses to present a mock embedding's distances as real", () => {
-  // The default in every environment that has not set a key, so this is the
-  // common case rather than the edge case.
-  for (const name of ["mock", "MOCK", "  mock  ", "mock-v2", "fake", "stub", "simulated", "dummy"]) {
-    assert.equal(
-      classifyProvider(name),
-      "simulated",
-      `${name} must be read as simulated, or the panel presents hashed bag-of-words clusters as measured meaning`,
-    );
-  }
-  assert.equal(classifyProvider("openai"), "real");
-  // A provider the route did not name is not a provider this panel may vouch for.
-  assert.equal(classifyProvider("unknown"), "unknown");
-  assert.equal(classifyProvider(""), "unknown");
-  assert.equal(classifyProvider(null), "unknown");
-  assert.equal(classifyProvider(undefined), "unknown");
-});
-
-check("four kinds of nothing produce four different messages", () => {
-  const noItems = readGraphVerdict(
-    graphOf({ counts: countsOf({ items_total: 0, items_embedded: 0, items_unembedded: 0 }) }),
-  );
-  const noEmbeddings = readGraphVerdict(
-    graphOf({ counts: countsOf({ items_total: 12, items_embedded: 0, items_unembedded: 12 }) }),
-  );
-  const noEdges = readGraphVerdict(
-    graphOf({
-      nodes: [nodeOf("a"), nodeOf("b")],
-      counts: countsOf({ items_total: 2, items_embedded: 2, items_unembedded: 0 }),
-    }),
-  );
-  const drawable = readGraphVerdict(
-    graphOf({
-      nodes: [nodeOf("a"), nodeOf("b")],
-      edges: [{ source: "a", target: "b", distance: 0.2 }],
-      counts: countsOf({ items_total: 2, items_embedded: 2, items_unembedded: 0 }),
-    }),
-  );
-
-  assert.equal(noItems.kind, "no-items");
-  assert.equal(noEmbeddings.kind, "no-embeddings");
-  assert.equal(noEdges.kind, "no-edges");
-  assert.equal(drawable.kind, "drawable");
-
-  const spoken = [noItems, noEmbeddings, noEdges].map((verdict) =>
-    "headline" in verdict ? `${verdict.headline} ${verdict.detail}` : "",
-  );
+  // AND NOT BEHIND A CONDITION. Counting the JSX node proved the element exists in
+  // the file, which is not the same as it reaching the page. An adversary wrote
+  // `{process.env.NEXT_PUBLIC_SKILL_GATE === "on" ? <SkillProposalGate /> : null}`
+  // on 2026-09-10: exactly one import, exactly one element, this check reported ok,
+  // and the panel never rendered. Measured effect on the build: /control fell from
+  // 27.7 kB to 26.2 kB and the route string vanished from every static chunk.
+  //
+  // The message above claimed to catch exactly that, which made it worse than
+  // silent. conditionalAncestors was already in this file, one screenful up, being
+  // used for the ruling fetch. It is now used here too.
+  const mountGates = conditionalAncestors(rendered[0], shell);
   assert.equal(
-    new Set(spoken).size,
-    3,
-    "two of the empty states print the same words, so a reader cannot tell an empty corpus from an unembedded one",
-  );
-  for (const message of spoken) {
-    assert.ok(
-      message.length > 60,
-      `an empty state explained in ${message.length} characters is the blank box this check exists to prevent`,
-    );
-  }
-  // Headlines on their own too. A reader scans those and stops, so two states
-  // sharing a headline are indistinguishable in practice even when the small
-  // print differs. Measured on 2026-09-10: duplicating one headline beat the
-  // combined comparison above.
-  const headlines = [noItems, noEmbeddings, noEdges].map((verdict) =>
-    "headline" in verdict ? verdict.headline : "",
-  );
-  assert.equal(
-    new Set(headlines).size,
-    3,
-    "two of the empty states share a headline, which is the line a reader actually reads",
-  );
-  // The fourth is the component's, because only it knows the request failed.
-  const panel = parse("components/mind/KnowledgeGraphPanel.tsx");
-  const failure = collect(
-    panel,
-    (n) => ts.isFunctionDeclaration(n) && n.name?.text === "failureDetail",
-  );
-  assert.equal(failure.length, 1, "the panel has no failureDetail, so a failed read has no message of its own");
-  assert.ok(
-    callsTo(panel, "failureDetail").length > 0,
-    "failureDetail is declared and never called, so a failed read falls through to whatever the empty states say",
-  );
-});
-
-check("a degraded graph payload is never filled in with invented numbers", () => {
-  assert.equal(parseGraphPayload(null), null);
-  assert.equal(parseGraphPayload("nodes"), null);
-  assert.equal(parseGraphPayload([]), null);
-
-  const bare = parseGraphPayload({});
-  assert.ok(bare !== null);
-  assert.equal(
-    bare.counts,
-    null,
-    "an absent counts object became a counts object, which puts numbers on screen the route never sent",
-  );
-  assert.equal(bare.maxDistance, null);
-  assert.equal(bare.provider, null);
-  assert.deepEqual(bare.missingFields, [
-    "nodes",
-    "edges",
-    "counts",
-    "max_distance",
-    "embedding_provider",
-  ]);
-
-  const partial = parseGraphPayload({ counts: { items_total: 4 } });
-  assert.equal(partial?.counts?.items_total, 4);
-  assert.equal(
-    partial?.counts?.items_embedded,
-    null,
-    "a missing count read as zero would tell the reader nothing is embedded when the route never said so",
-  );
-
-  const dirty = parseGraphPayload({
-    nodes: [{ id: "a" }, { id: "a" }, { title: "no id at all" }, { id: "b", degree: 2 }],
-    edges: [
-      { source: "a", target: "b", distance: 0.1 },
-      { source: "a", target: "ghost", distance: 0.2 },
-      { source: "a", target: "a", distance: 0 },
-      { source: "a", target: "b" },
-    ],
-  });
-  assert.equal(dirty?.nodes.length, 2, "a duplicate or id-less node row was placed anyway");
-  assert.equal(dirty?.malformedNodes, 2);
-  assert.equal(dirty?.edges.length, 1);
-  assert.equal(dirty?.unresolvedEdges, 1, "an edge to a node the route did not send was drawn to somewhere");
-  assert.equal(dirty?.selfEdges, 1);
-  assert.equal(dirty?.malformedEdges, 1, "an edge with no distance was drawn at a guessed thickness");
-  assert.equal(dirty?.nodesWithoutDegree, 1);
-});
-
-check("edge thickness refuses a scale the route did not supply", () => {
-  assert.equal(
-    edgeCloseness(0.2, null),
-    null,
-    "with no threshold there is nothing to normalise against, and a made up scale makes thickness carry a comparison nobody supplied",
-  );
-  assert.equal(edgeCloseness(0.2, 0), null);
-  assert.equal(edgeCloseness(Number.NaN, 0.5), null);
-  assert.equal(edgeCloseness(0, 0.5), 1);
-  assert.equal(edgeCloseness(0.5, 0.5), 0);
-  assert.equal(edgeCloseness(0.25, 0.5), 0.5);
-  assert.equal(edgeCloseness(9, 0.5), 0, "a distance past the threshold must clamp, not go negative");
-});
-
-check("the graph layout does not move between two readings of one payload", () => {
-  const nodes = [
-    nodeOf("c", { degree: 5 }),
-    nodeOf("a", { degree: 1, source: "notion" }),
-    nodeOf("b", { degree: 3 }),
-    nodeOf("d", { degree: null, source: null }),
-    nodeOf("e", { degree: 3, created_at: null }),
-    // b and f tie on source, degree and created_at, so only the id tiebreak
-    // separates them. Without a pair like this the comparator can lose that
-    // tiebreak and this check stays green: measured on 2026-09-10, the earlier
-    // input had no tie and the mutation survived.
-    nodeOf("f", { degree: 3 }),
-  ];
-  const first = layoutNodes(nodes, GRAPH_BOX);
-  const shuffled = layoutNodes([...nodes].reverse(), GRAPH_BOX);
-  assert.deepEqual(
-    shuffled,
-    first,
-    "the same nodes in another order drew a different picture, so two readings of one corpus cannot be compared and a screenshot proves nothing",
-  );
-  assert.deepEqual(layoutNodes(nodes, GRAPH_BOX), first, "two calls on one input disagree");
-  assert.equal(first.length, nodes.length, "the layout dropped or duplicated a node");
-  for (const placed of first) {
-    assert.ok(
-      placed.x >= 0 && placed.x <= GRAPH_BOX.width,
-      `${placed.node.id} is placed outside the viewBox at x ${placed.x}`,
-    );
-    assert.ok(
-      placed.y >= 0 && placed.y <= GRAPH_BOX.height,
-      `${placed.node.id} is placed outside the viewBox at y ${placed.y}`,
-    );
-    assert.ok(placed.radius > 0 && Number.isFinite(placed.radius), `${placed.node.id} has no drawable radius`);
-  }
-  // A node whose source the route did not name must not be folded into one that
-  // was named, or the legend would count it under a source it never claimed.
-  const unsourced = first.find((placed) => placed.node.id === "d");
-  assert.ok(unsourced && unsourced.sourceKey !== "drive" && unsourced.sourceKey !== "notion");
-});
-
-check("an unembedded item and a capped edge list always reach the reader", () => {
-  const partial = graphOf({
-    nodes: [nodeOf("a"), nodeOf("b")],
-    edges: [{ source: "a", target: "b", distance: 0.1 }],
-    counts: countsOf({
-      items_total: 10,
-      items_embedded: 2,
-      items_unembedded: 8,
-      edges_returned: 1,
-      edges_capped: true,
-    }),
-  });
-  const notes = describeGaps(partial, sourceOrder(partial.nodes));
-  assert.ok(
-    notes.some((note) => note.includes("8")),
-    "eight items with no embedding are absent from the picture and no sentence says so",
-  );
-  assert.ok(
-    notes.some((note) => /truncated/i.test(note)),
-    "the route capped the edge list and nothing tells the reader the graph is truncated",
-  );
-
-  // The other half of the same guard: a complete payload must not manufacture a
-  // warning, or every warning stops being read.
-  const clean = graphOf({
-    nodes: [nodeOf("a"), nodeOf("b")],
-    edges: [{ source: "a", target: "b", distance: 0.1 }],
-    counts: countsOf({
-      items_total: 2,
-      items_ready: 2,
-      items_embedded: 2,
-      items_unembedded: 0,
-      edges_returned: 1,
-      edges_capped: false,
-    }),
-  });
-  assert.deepEqual(
-    describeGaps(clean, sourceOrder(clean.nodes)),
-    [],
-    "a complete payload produced a warning, which teaches the reader to ignore the real ones",
-  );
-
-  // A route that says nothing must be reported as saying nothing, never as zero.
-  const silent = describeGaps(graphOf({ nodes: [nodeOf("a")] }), ["drive"]);
-  assert.ok(
-    silent.some((note) => /no counts/i.test(note)),
-    "a payload with no counts did not say that how much is missing is unknown",
-  );
-});
-
-check("the knowledge graph panel still reads the graph route", () => {
-  const file = parse("components/mind/KnowledgeGraphPanel.tsx");
-
-  const graphFetches = callsTo(file, "fetch").filter((call) => {
-    const first = call.arguments[0];
-    const text = first ? pathText(first) : null;
-    return text !== null && text.endsWith("/knowledge/graph");
-  });
-  assert.equal(
-    graphFetches.length,
-    1,
-    "the panel must call fetch on a path ending /knowledge/graph exactly once as real code. This check parses the file, so the path inside a comment or a string cannot satisfy it, and an extracted path constant fails here even though the code would work",
-  );
-  const call = graphFetches[0];
-
-  const declaration = outermostDeclaration(call);
-  assert.ok(
-    declaration && ts.isIdentifier(declaration.name),
-    "the graph fetch is not inside a named declaration this check can resolve",
-  );
-  const loaderName = (declaration!.name as ts.Identifier).text;
-  assert.equal(
-    declarationsNamed(file, loaderName).length,
-    1,
-    `${loaderName} is declared more than once, so a decoy could be read while another one runs`,
-  );
-
-  // No unconditional return above the fetch. A signed out branch return is
-  // correct and is left alone; a no-op guard at the top of the body is not.
-  const arrows = collect(declaration!, (n) => ts.isArrowFunction(n)) as ts.ArrowFunction[];
-  const holder = arrows.find((fn) => fn.getStart() <= call.getStart() && fn.getEnd() >= call.getEnd());
-  assert.ok(holder && ts.isBlock(holder.body), "the graph fetch is not inside a block bodied function");
-  const body = holder!.body as ts.Block;
-  const unconditional = collect(body, (n) => ts.isReturnStatement(n)).filter(
-    (n) => n.parent === body && n.getStart() < call.getStart(),
-  );
-  assert.equal(
-    unconditional.length,
+    mountGates.length,
     0,
-    `${loaderName} returns unconditionally before it reaches the graph route, so the panel renders without ever asking for data while every other assertion here still passes`,
-  );
-
-  // And something has to run it.
-  const wired = callsTo(file, "useEffect").filter((effect) => {
-    const first = effect.arguments[0];
-    if (!first) return false;
-    return collect(first, (n) => ts.isIdentifier(n) && n.text === loaderName).length > 0;
-  });
-  assert.ok(
-    wired.length >= 1,
-    `no useEffect references ${loaderName}, so the panel never asks the route for anything and draws whatever its initial state holds`,
-  );
-
-  // The link that makes every assertion above matter. A tested refusal the panel
-  // does not call is a tested refusal that never runs.
-  for (const refusal of [
-    "parseGraphPayload",
-    "classifyProvider",
-    "readGraphVerdict",
-    "describeGaps",
-    "layoutNodes",
-    "edgeCloseness",
-  ]) {
-    assert.ok(
-      callsTo(file, refusal).length > 0,
-      `${refusal} is proved above and the panel never calls it, so those assertions guard dead code while the surface does as it likes`,
-    );
-  }
-});
-
-check("the knowledge graph panel is mounted where a person can reach it", () => {
-  const page = parse("app/control/page.tsx");
-
-  const shells = jsxElementsNamed(page, "ControlPlane") as Array<
-    ts.JsxOpeningElement | ts.JsxSelfClosingElement
-  >;
-  assert.equal(shells.length, 1, "the control page no longer renders exactly one ControlPlane");
-
-  const carrying = shells[0].attributes.properties
-    .filter(ts.isJsxAttribute)
-    .filter((attribute) => jsxElementsNamed(attribute, "KnowledgeGraphPanel").length > 0);
-  assert.equal(
-    carrying.length,
-    1,
-    "the control page does not hand KnowledgeGraphPanel to ControlPlane in exactly one slot, so the graph renders nowhere a person can see it",
-  );
-  assert.equal(
-    jsxElementsNamed(page, "KnowledgeGraphPanel").length,
-    1,
-    "there is more than one KnowledgeGraphPanel on the page, so this check cannot tell which one is mounted",
-  );
-  const slot = carrying[0].name.getText();
-
-  const shell = parse("components/control/ControlPlane.tsx");
-  const rendered = collect(
-    shell,
-    (n) =>
-      ts.isJsxExpression(n) &&
-      n.expression !== undefined &&
-      ts.isIdentifier(n.expression) &&
-      n.expression.text === slot,
-  );
-  assert.ok(
-    rendered.length >= 1,
-    `ControlPlane takes the ${slot} slot and never renders it, so the graph is mounted into a hole`,
-  );
-
-  // The sentence next to it has to stop contradicting it. ControlPlane told the
-  // reader that no route exposes vector activations or edges between the
-  // indexes, which was true until GET /knowledge/graph landed. A surface with a
-  // graph on it and that sentence under it is worse than either alone.
-  const stale = collect(
-    shell,
-    (n) =>
-      (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isJsxText(n)) &&
-      /no route exposes vector activations/i.test(n.getText()),
-  );
-  assert.equal(
-    stale.length,
-    0,
-    "ControlPlane still tells the reader no route exposes vector activations or edges while a graph of them is mounted beside that sentence",
+    `<${GATE_COMPONENT} /> is mounted inside ${mountGates.length} condition(s), so whether a person can see the gate at all depends on a test this check cannot evaluate. The mount has to be unconditional`,
   );
 });
 
