@@ -2,10 +2,12 @@
 
 2026-09-10. Tee asked whether the migration from n8n Cloud to the VPS at
 `n8n.editforge.online` actually carried everything across. It did, as of the
-dates it was taken. The migration is not the problem. What the diff surfaced
-instead is that the VPS copy of the TQO pipeline predates a security hardening
-that Cloud already has, and that fact would have been invisible to anyone who
-only counted workflows.
+dates it was taken, and the webhook hardening came across with it.
+
+This document was first written around a security finding that turned out to be
+false. It is withdrawn below, along with the method that produced it, because
+the method is the part worth keeping: a summary field was read for something it
+does not report, and its silence was taken as evidence.
 
 ## The two instances
 
@@ -14,7 +16,7 @@ only counted workflows.
 | host | `thequietoperator.app.n8n.cloud` | `n8n.editforge.online` |
 | project | `rM0TNTE2fNXErglU` | `qbrcjkbIoorbwot6` |
 | workflows | 49 | 58 |
-| active | 42 | 0 |
+| active | 42 | 0 at 06:30, 1 by 11:25 (see below) |
 | data tables | 11 | 9 |
 | credentials | not counted | 28 |
 
@@ -52,45 +54,86 @@ each on `tqo_content` and `nco_content`. Rows came too, not just schema:
 `devon_state_ledger` carries 8 rows on the VPS, all bulk written at
 2026-09-03T09:01:37.
 
-## The finding: the VPS TQO pipeline predates Cloud's webhook hardening
+## WITHDRAWN: the claim that the VPS TQO pipeline predates Cloud's hardening
 
-`TQO FINAL V5` exists on both instances and carries 7 webhook triggers on each.
-They are not the same 7.
+This section originally carried the headline finding of this document: that
+`TQO FINAL V5` on the VPS had lost the webhook hardening Cloud received between
+2026-08-31 and 2026-09-08, leaving seven endpoints unauthenticated on bare
+paths. **It is false.** Withdrawn 2026-09-10, recorded rather than deleted,
+because the way it was reached is the useful part.
 
-On **Cloud** (active, 222 nodes, last updated 2026-09-08):
+Read from V5's actual node graph on the VPS, the configuration is identical to
+Cloud's:
 
-| method | path | guard |
-|---|---|---|
-| POST | `/webhook/run-tqo-pipeline` | header `x-devon-key` |
-| GET | `/webhook/system-pause` | header `x-devon-key` |
-| GET | `/webhook/system-resume` | header `x-devon-key` |
-| POST | `/webhook/run-nco-pipeline` | header `x-devon-key` |
-| POST | `/webhook/gumroad-sale-<16 hex>` | unguessable path only |
-| GET | `/webhook/run-tqo-<16 hex>` | unguessable path only |
-| GET | `/webhook/run-nco-<16 hex>` | unguessable path only |
+| node | method | path | authentication |
+|---|---|---|---|
+| Run All (Webhook) | POST | `run-tqo-pipeline` | `headerAuth`, Devon Capture Key |
+| SYSTEM PAUSE | GET | `system-pause` | `headerAuth`, Devon Capture Key |
+| SYSTEM RESUME | GET | `system-resume` | `headerAuth`, Devon Capture Key |
+| Run All (Webhook NCO) | POST | `run-nco-pipeline` | `headerAuth`, Devon Capture Key |
+| Gumroad Ping (Sale) | POST | `gumroad-sale-<16 hex>` | none, suffix is the guard |
+| Run TQO (Link) | GET | `run-tqo-<16 hex>` | none, suffix is the guard |
+| Run NCO (Link) | GET | `run-nco-<16 hex>` | none, suffix is the guard |
 
-On the **VPS** (inactive, 220 nodes, last updated 2026-09-03), the same seven
-nodes report **no credentials required**, and the three that Cloud protects
-with a random suffix sit on bare paths: `/webhook/gumroad-sale`,
-`/webhook/run-tqo`, `/webhook/run-nco`.
+Four header authenticated, three on unguessable paths, the same suffixes as
+Cloud. The hex values are deliberately not written into this document. They are
+the guard on those three endpoints, and a git repository is not where a guard
+belongs.
 
-The hex suffixes are deliberately not written into this document. They are the
-guard on those three endpoints, and a document in a git repository is not where
-a guard belongs.
+### How the false finding was reached
 
-So the hardening landed on Cloud between the 08-31 export and 09-08, and the
-VPS never received it. Four of the seven VPS endpoints are GET requests with
-side effects, two of them `system-pause` and `system-resume`. A GET with a side
-effect fires from anything that merely fetches a URL: a link unfurler, a
-crawler, browser prefetch, a preview card in a chat client.
+The measurement came from the `triggerInfo` summary returned by
+`get_workflow_details`, which reported "No credentials required for this
+webhook" for all seven, and reported the three suffixed paths as bare
+`/webhook/gumroad-sale`, `/webhook/run-tqo` and `/webhook/run-nco`.
 
-**Current exposure is zero.** Nothing on the VPS is active, so none of those
-paths are registered. The finding is a loaded gun, not a fired one. It becomes
-real the moment anyone activates `TQO FINAL V5` on that box, and the obvious
-move for someone finishing this migration is exactly that.
+On this VPS, `triggerInfo` does not report a webhook's authentication or its
+full path for a workflow with no published version. Every VPS workflow carries
+`activeVersionId: null`; every Cloud workflow carries a populated one. The
+summary was read as authoritative on both.
 
-The fix is not to invent hardening. Cloud already solved it. Bring Cloud's V5
-across rather than activating the VPS copy.
+A positive control was claimed and it was not a control. Cloud printed
+`Credentials: - This webhook requires a header with name "x-devon-key"`, and
+that was taken as proof the field reports reliably. Cloud is published and the
+VPS is not, so the two were never comparable. The `activeVersionId` difference
+was observed earlier the same day and not connected to it.
+
+The instrument was proved wrong by accident. Header auth was written onto a VPS
+webhook node to "fix" it, the write reported two operations applied, and
+`triggerInfo` still said no credentials were required. Reading the node graph
+then showed the parameter had been set correctly, and had already been set
+before the write. The version history confirmed it: the write created no new
+version, because it changed nothing.
+
+The lesson is narrower than "verify", which was done. An instrument was used
+without first establishing that it could report a positive on the same class of
+object being measured. A negative from an instrument that cannot report a
+positive is not evidence of absence.
+
+Two claims made downstream of this one are withdrawn with it:
+
+- That the eight rebuilt DEVON workflows dropped `x-devon-key` on their four
+  webhooks. They did not. `authentication: headerAuth` and the Devon Capture
+  Key are present on all four, set at build time.
+- That the agent which built them reported a security control as verified when
+  it was absent. It did not. Its claim was accurate, and the accusation is
+  withdrawn in full. The further inference, that its other verification claims
+  should be treated as unreliable, collapses with its premise and is withdrawn
+  too.
+
+### One thing this pass did establish
+
+`OS - Error Handler (all pipelines)` (`GbeNilHQzjmoWDz3`) is **active and
+published on the VPS**. It read `active: false` at 06:30 and `active: true` at
+11:25, with `updatedAt` unmoved from 2026-08-31, so activation does not bump
+that field. It was activated during the 08:22 to 08:53 build window and not
+reported. The statement elsewhere in this document that the VPS runs zero
+active workflows was true when written and is no longer true.
+
+`DEVON - Error Alarm` (`bqcnIS0Qv4RkTCU1`) has no published version, so n8n
+refuses to accept it as an error workflow until it is published. That is why
+the six Build 14 to 17 workflows still point at OS Error Handler rather than
+the DEVON Error Alarm their Cloud originals use.
 
 ## Rulings taken 2026-09-10
 
@@ -177,8 +220,11 @@ imported workflow arrives carrying the Cloud ID.
 - Archived `TQO - ORCHESTRATOR` (`IBRMsfd5kGqRvfis`).
 - Archived `TQO FINAL V8` (`DrK37dBm6n1idio8`).
 
-Nothing was activated. The VPS remains at 0 active workflows, which is the safe
-state while Cloud runs all 42.
+Nothing was activated by this pass. The VPS was at 0 active workflows when this
+was written at 06:30. By 11:25 `OS - Error Handler (all pipelines)` read active,
+having been activated during the 08:22 to 08:53 build window by the agent that
+rebuilt the eight DEVON workflows, and not reported. Everything else on the box
+remains inactive and unpublished.
 
 ## DEVON RECEIPT
 
@@ -188,7 +234,7 @@ TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_n8n-cloud-to-vps-migration-verified_v1_2026-09-10
 DATE: 2026-09-10
 DECISIONS: Tee ruled that TQO FINAL V8 was created in error by an agent and that TQO FINAL V5 is the real TQO pipeline, reversing a same day recommendation that had favoured V8 on credential wiring; Tee ruled TQO ORCHESTRATOR could be deleted, and it was archived rather than hard deleted under the estate's existing never hard delete doctrine; Tee confirmed the 2026-09-10 06:14 bulk edit was him enabling availableInMCP and not development work; no ruling yet taken on which instance owns the schedules, on the four orphaned sub-workflows, or on rebinding V5's credentials
-FINDINGS: the VPS copy of TQO FINAL V5 predates a webhook hardening that Cloud received between 2026-08-31 and 2026-09-08, so where Cloud requires an x-devon-key header on four endpoints and hides three more behind unguessable path suffixes, all seven VPS endpoints report no credentials and sit on bare paths, four of them GET requests with side effects including system pause and system resume; current exposure is zero because nothing on the VPS is active, and the finding becomes real only on activation; the migration itself is complete as of its snapshot dates, 41 of 49 workflows and 9 of 11 data tables with 0 column mismatches across 206 columns and rows intact, every absentee having been created on Cloud after the snapshot that produced the export; the import carried Cloud workflow IDs into errorWorkflow settings on at least two workflows and those IDs resolve to nothing on the VPS, so error routing is silently broken; two errors were made and corrected inside the session, reading a bulk availableInMCP flip as live development and archiving TQO FINAL V8 before checking that archiving makes a workflow unreadable
+FINDINGS: the headline finding of the first version of this document, that the VPS copy of TQO FINAL V5 had lost Cloud's webhook hardening, is FALSE and is withdrawn in place rather than deleted; read from the node graph the VPS carries the identical configuration, four webhooks on headerAuth with the Devon Capture Key and three on the same unguessable path suffixes, and two downstream claims are withdrawn with it, that the eight rebuilt DEVON workflows dropped x-devon-key and that the agent which built them falsely reported a security control as verified, neither of which is true; the cause was reading the triggerInfo summary, which on this VPS reports neither a webhook's authentication nor its full path for a workflow with no published version, and treating a published Cloud workflow as a positive control for an unpublished VPS one; OS Error Handler was activated on the VPS during the 08:22 to 08:53 build window without being reported, so the zero active claim in this document was true at 06:30 and false by 11:25; DEVON Error Alarm has no published version, so n8n refuses it as an error workflow, which is why six workflows still point at OS Error Handler rather than the handler their Cloud originals use; the migration itself is complete as of its snapshot dates, 41 of 49 workflows and 9 of 11 data tables with 0 column mismatches across 206 columns and rows intact, every absentee having been created on Cloud after the snapshot that produced the export; the import carried Cloud workflow IDs into errorWorkflow settings on at least two workflows and those IDs resolve to nothing on the VPS, so error routing is silently broken; two errors were made and corrected inside the session, reading a bulk availableInMCP flip as live development and archiving TQO FINAL V8 before checking that archiving makes a workflow unreadable
 OPEN: copy rows into the two newly created data tables and import the 8 workflows Cloud has that the VPS does not, both of which need a Cloud read; rebind TQO FINAL V5's credentials on the VPS using the recovered map, which means rewriting a 220 node workflow; decide which instance owns the schedules before anything on the VPS is activated; decide whether the four orphaned sub-workflows are retired, which first needs checking whether V5 calls them; bring Cloud's webhook hardening across before TQO FINAL V5 is ever activated on the VPS
 STATUS: migration verified and found complete as of its snapshot dates; two missing data tables created and schema verified, both empty; two workflows archived on Tee's rulings; one security finding raised with both instances measured and its blast radius graded as zero while inactive; two same session errors recorded rather than quietly fixed; five items remain open, three of them rulings only Tee can make
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
