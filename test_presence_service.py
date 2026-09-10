@@ -24,7 +24,7 @@ from apps.presence.inference import MockTokenStreamer
 from apps.presence.livekit_token import decode_livekit_token
 from apps.presence.main import TTS_TEXT_LIMIT, SpeakRequest, create_app
 from apps.presence.protocol import AUDIO_CODEC, AUDIO_RATE, PRIORITY_OF, validate_frame
-from apps.presence.session import VirtualPacer
+from apps.presence.session import FABRICATION_REFUSAL, VirtualPacer
 from apps.presence.settings import PresenceConfigError, PresenceSettings
 from apps.presence.speech import MockSpeech
 
@@ -346,6 +346,81 @@ def test_interrupt_for_another_turn_acks_without_cancelling():
         ack = collect_until(ws, lambda m: m["t"] == "interrupt_ack")[-1]
         assert ack["turn_id"] == "turn-3"
         assert collect_until(ws, lambda m: m["t"] == "metrics")[-1]["turn_id"] == "turn-3"
+
+
+def cloned_voice() -> MockSpeech:
+    """A synthesiser answering to a real voice's name.
+
+    `MockSpeech.name` is a class attribute, so assigning here shadows it on this
+    instance alone and leaves every other test's synthesiser untouched. The
+    frames and audio are still the deterministic mock ones; only the NAME is
+    real, which is the only thing the rule under test reads.
+    """
+    speech = MockSpeech()
+    speech.name = "cartesia"
+    return speech
+
+
+def test_a_mock_reply_never_leaves_in_a_real_voice():
+    """The rule Tee ruled on 2026-09-10, executed.
+
+    A `/control` turn read PROVIDER mock (fell back) beside SPEECH cartesia and
+    put "Simulated response for: hello" through a cloned voice. Invented words
+    in a voice that belongs to a person is an authorship failure, so the turn
+    now says what happened instead.
+    """
+    client = fast_app(primary=MockTokenStreamer(REPLY, name="mock"), speech=cloned_voice())
+    with open_ready(client) as ws:
+        messages = run_turn(ws, "turn-fab-1", "hello DEVON")
+
+    spoken = "".join(m["text"] for m in messages if m["t"] == "token")
+    assert spoken == FABRICATION_REFUSAL, (
+        "the mock's words reached a real voice. That is the exact shape this "
+        f"refuses: {spoken!r}"
+    )
+    assert REPLY not in spoken
+    metric = [m for m in messages if m["t"] == "metrics"][-1]
+    assert metric["provider"] == "mock", (
+        "the metrics frame still has to name the mock, or the panel loses the "
+        "only place this turn is accounted for"
+    )
+
+
+def test_a_mock_reply_in_a_mock_voice_is_left_alone():
+    """The control that keeps the rule narrow.
+
+    Mock words through a mock voice lend nobody's identity to anything, and it
+    is what this whole suite runs on. A rule that fired here would be a rule
+    that changed every test in this file for no gain.
+    """
+    client = fast_app()
+    with open_ready(client) as ws:
+        messages = run_turn(ws, "turn-fab-2", "hello DEVON")
+
+    spoken = "".join(m["text"] for m in messages if m["t"] == "token")
+    assert spoken == REPLY
+    assert FABRICATION_REFUSAL not in spoken
+
+
+def test_a_real_fallback_keeps_its_voice():
+    """Falling back is not the offence. Fabricating is.
+
+    `PRESENCE_FALLBACK_INFERENCE` accepts any name in `INFERENCE_CHOICES`, so a
+    fallback to a real provider is honest intelligence and has every right to be
+    spoken. Keying the rule on `fell_back` rather than on the mock would have
+    silenced this turn, which is why it is not keyed that way.
+    """
+    slow = MockTokenStreamer(REPLY, first_token_delay_ms=200, name="cerebras")
+    real = MockTokenStreamer("A real second opinion.", name="anthropic")
+    client = fast_app(primary=slow, fallback=real, speech=cloned_voice())
+
+    with open_ready(client) as ws:
+        messages = run_turn(ws, "turn-fab-3", "still there")
+
+    spoken = "".join(m["text"] for m in messages if m["t"] == "token")
+    assert spoken == "A real second opinion."
+    metric = [m for m in messages if m["t"] == "metrics"][-1]
+    assert metric["fell_back"] is True and metric["provider"] == "anthropic"
 
 
 def test_router_falls_back_on_the_same_connection_without_disconnecting():
