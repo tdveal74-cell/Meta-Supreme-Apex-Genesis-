@@ -146,6 +146,36 @@ deterministically rather than failing, and season palettes worn at whisper
 level on the world only. Whether that engine is built or only documented is
 UNVERIFIED. The engine code was not read in this session.
 
+## Same day update: the delta is applied and the engine is located
+
+Tee ruled the same session: apply the delta, and the engine is built on n8n.
+
+The delta is applied. `shadow-we-share-brand` was not committed to this
+repository, it loaded from an ephemeral synced directory in the container, so
+editing it there would have died with the session. It is now committed at
+`.claude/skills/shadow-we-share-brand/SKILL.md`, stamped Canon v2, applied
+2026-09-10, reviewed 2026-09-10, with all six delta sections merged in and the
+pre-existing canon text preserved verbatim rather than rewritten.
+
+The n8n lead is confirmed and the estate is larger than the delta implies.
+Six live workflows, all last updated 2026-08-12: TSWS 00 Render Job, a sub
+workflow bridging n8n Cloud to the TSWS render worker that accepts type and
+params, submits and polls; TSWS 01 Post-Production Master, which watches the
+drop folder and runs an episode end to end including rendering the mark and
+compositing; and 02 Narration and Sound Bed, 03 Visual Assembly, 04 Detail
+Recovery, 05 Conform and Grain. TSWS 00 is the render job the delta keeps
+referring to.
+
+No n8n workflow is named for the environment engine, so the realm painting
+most likely sits inside the render worker rather than in n8n. That remains
+UNVERIFIED. The worker was not read.
+
+One operational risk this creates: the container still carries a synced copy
+of the skill at the stale pre-delta version. Two copies of one skill name can
+load together and the wrong one can win, which is the failure this repository
+already documents for pinned plugins. The synced copy needs retiring at its
+source.
+
 ## DEVON RECEIPT
 
 ```
@@ -153,9 +183,9 @@ AREA: TQO, Podcast
 TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_demand-engine-rules-and-tsws-canon-drift_v1_2026-09-10
 DATE: 2026-09-10
-DECISIONS: Tee ruled the neta.art assessment out of this capture and the rest of it in; no ruling yet taken on which logo file is the source of exports, nor on applying the 2026-08-04 delta to the installed skill
+DECISIONS: Tee ruled the neta.art assessment out of this capture and the rest of it in, then ruled to apply the 2026-08-04 delta and stated the environment engine is built on n8n; no ruling yet taken on which of the five logo files is the source of exports
 FINDINGS: the installed shadow-we-share-brand skill is five weeks behind a 2026-08-04 canon delta and caused two wrong answers in this session, calling the p5 living mark Three.js and describing environmental themes as a parameter layer on the mark when canon says the mark never wears season palettes; five copies of TheShadowWeShare_logo_3D.html exist across four Drive folders with the newest two bytes larger and not carrying the source of exports title; engine.realm is one byte and is a truncated or failed write; the KDP demand engine video rates 6.5 of 10 as strategy and 3 of 10 as evidence, with every revenue figure self reported or Book Beam estimated and the attribution claim asserted rather than measured; two standing rules were extracted that the estate did not previously hold in writing
-OPEN: apply the 2026-08-04 delta to the installed skill with the version bump and reviewed date it demands; rule on which of the five logo files is the source of exports; establish whether engine.realm is load bearing; read the render job and studio bundle to establish whether the environment engine is implemented or only documented; video title, channel, publish date and view count remain unverified because vidIQ metadata needed an approval not held and youtube.com is egress blocked
-STATUS: capture filed, no estate change made, all four open items awaiting Tee
+OPEN: rule on which of the five logo files is the source of exports, the 2026-08-06 copy being the only one that differs and the only one sitting with the current bundle while the source of exports title sits on the 2026-08-01 copy elsewhere; retire the stale synced copy of shadow-we-share-brand at its source so it cannot load beside the committed one; establish whether engine.realm is load bearing; read the TSWS render worker to confirm the environment engine is implemented there rather than only documented; video title, channel, publish date and view count remain unverified because vidIQ metadata needed an approval not held and youtube.com is egress blocked
+STATUS: capture filed; delta applied and committed as Canon v2 at .claude/skills/shadow-we-share-brand/SKILL.md; n8n render pipeline confirmed as six live workflows fronted by TSWS 00; four open items remain, one of them a ruling only Tee can make
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
