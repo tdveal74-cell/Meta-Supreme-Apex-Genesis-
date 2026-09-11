@@ -24,6 +24,8 @@ const touch = (rel) => {
   return rel;
 };
 
+const mk = () => ({ narration: touch('a/nar.wav'), bed: touch('a/bed.wav'), output: 'a/mix.wav' });
+
 let pass = 0, fail = 0;
 const QUEUE = [];
 /**
@@ -168,7 +170,6 @@ t('N disjoint guards stay inside [0,1]', () => {
 });
 
 section('\n-- A1/A2: what duck_mix actually emits --');
-const mk = () => ({ narration: touch('a/nar.wav'), bed: touch('a/bed.wav'), output: 'a/mix.flac' });
 t('no afade anywhere in the duck_mix filter', () => {
   const b = J.JOBS.duck_mix.build({ ...mk(), guards: [{ start: 544, end: 548 }] });
   const fc = b.argv[b.argv.indexOf('-filter_complex') + 1];
@@ -216,6 +217,126 @@ t('depth 1 and depth 2 both found; .done skipped; root and depth reported', asyn
     assert.strictEqual(r.root, 'drop');
     assert.strictEqual(r.scanned_depth, 3);
   });
+});
+
+section('\n-- xfade offsets, which nothing pinned before --');
+t('offsets tile the timeline and never run past their own input', () => {
+  const shots = [
+    { path: touch('x/a.jpg'), in: 0, out: 6 },
+    { path: touch('x/b.jpg'), in: 0, out: 5 },
+    { path: touch('x/c.jpg'), in: 0, out: 7 },
+  ];
+  const xf = 1.0;
+  const b = J.JOBS.assemble_cut.build({ shots, output: 'x/cut.mp4', crossfade: xf, fps: 24 });
+  const fc = b.argv[b.argv.indexOf('-filter_complex') + 1];
+  const offsets = [...fc.matchAll(/xfade=transition=fade:duration=[\d.]+:offset=([\d.]+)/g)]
+    .map(m => Number(m[1]));
+  // Join k must start one crossfade before the running end of everything
+  // already joined, or the transition reaches past the end of its first input.
+  assert.deepStrictEqual(offsets, [5, 9], 'offsets were ' + JSON.stringify(offsets));
+  assert.strictEqual(b.parse().expected_duration, 6 + 5 + 7 - 2 * xf);
+});
+
+t('REGRESSION: dropping the crossfade from the offset is caught', () => {
+  // The mutation that previously passed 16/16: offset += dur instead of dur - xf.
+  // Pinning the exact offsets is what makes that mutation fail.
+  const shots = [{ path: touch('x/a.jpg'), in: 0, out: 6 },
+                 { path: touch('x/b.jpg'), in: 0, out: 6 }];
+  const b = J.JOBS.assemble_cut.build({ shots, output: 'x/c2.mp4', crossfade: 1.5, fps: 24 });
+  const fc = b.argv[b.argv.indexOf('-filter_complex') + 1];
+  assert.ok(fc.includes('offset=4.500'), 'offset should be 6 - 1.5 = 4.5, got: ' +
+    (fc.match(/offset=[\d.]+/) || ['none'])[0]);
+});
+
+t('a still contributes its QUANTISED length to the offsets, not the requested one', () => {
+  // 5.01s at 24fps is 120.24 frames, emitted as 120 = 5.0s. If the offset used
+  // the requested 5.01 it would drift from the picture by 10ms per join.
+  const shots = [{ path: touch('x/q1.jpg'), in: 0, out: 5.01 },
+                 { path: touch('x/q2.jpg'), in: 0, out: 5.01 }];
+  const b = J.JOBS.assemble_cut.build({ shots, output: 'x/q.mp4', crossfade: 1.0, fps: 24 });
+  const fc = b.argv[b.argv.indexOf('-filter_complex') + 1];
+  assert.ok(fc.includes('loop=loop=119:'), 'expected 120 frames: ' + fc.slice(0, 120));
+  assert.ok(fc.includes('offset=4.000'), 'offset should be 5.0 - 1.0, not 5.01 - 1.0');
+  const r = b.parse();
+  assert.strictEqual(r.expected_duration, 9);
+  assert.strictEqual(r.exact, true, 'an all-still assembly is frame exact');
+  assert.strictEqual(r.expected_duration * r.fps, 216, 'must be a whole frame count');
+});
+
+section('\n-- conform_grain: the protected silence provision --');
+const cg = (extra) => J.JOBS.conform_grain.build(Object.assign({
+  input: touch('cg/in.mp4'), output: 'cg/out.mp4', has_audio: true,
+}, extra));
+
+t('a cut landing INSIDE a protected silence is refused', () => {
+  // This is a performance hold that pipeline 02 deliberately preserved. The
+  // guard was deleted in a mutation test and every test still passed.
+  assert.throws(() => cg({
+    keep_segments: [{ start: 0, end: 545 }, { start: 560, end: 600 }],
+    protected_windows: [{ start: 544, end: 548 }],
+  }), /protected silence/, 'a boundary at 545 inside 544..548 must be refused');
+});
+
+t('a cut passing cleanly THROUGH a whole window is allowed', () => {
+  const b = cg({
+    keep_segments: [{ start: 0, end: 600 }],
+    protected_windows: [{ start: 544, end: 548 }],
+  });
+  assert.ok(Array.isArray(b.argv), 'a clean pass-through must build');
+});
+
+t('M1 REGRESSION: apad is never emitted without an ending to pad to', () => {
+  // apad with pad_dur=0 and no -t pads forever. The same defect this file
+  // already fixed in duck_mix was still live two jobs over.
+  const b = cg({ keep_segments: [{ start: 0, end: 25 }] });
+  const fc = b.argv[b.argv.indexOf('-filter_complex') + 1];
+  const hasT = b.argv.includes('-t') || b.argv.includes('-shortest');
+  assert.ok(!fc.includes('apad') || hasT,
+    'apad emitted with no -t and no -shortest: ' + fc);
+});
+
+section('\n-- M6: duck_mix must be able to match its container --');
+t('the codec is selectable, so pcm does not get forced into a flac container', () => {
+  const b = J.JOBS.duck_mix.build({ ...mk(), guards: [], codec: 'flac', output: 'a/m.flac' });
+  assert.strictEqual(b.argv[b.argv.indexOf('-c:a') + 1], 'flac');
+  const d = J.JOBS.duck_mix.build({ ...mk(), guards: [] });
+  assert.strictEqual(d.argv[d.argv.indexOf('-c:a') + 1], 'pcm_s24le', 'default unchanged');
+  assert.throws(() => J.JOBS.duck_mix.build({ ...mk(), guards: [], codec: 'mp3' }), /codec/);
+});
+
+section('\n-- M2: safePath must resolve symlinks, not just strings --');
+t('a symlink inside the work root cannot reach outside it', () => {
+  const link = path.join(ROOT, 'escape');
+  try { fs.unlinkSync(link); } catch { /* first run */ }
+  fs.symlinkSync(os.tmpdir(), link);
+  assert.throws(() => J.JOBS.read_text.build({ path: 'escape/anything' }),
+    /escapes the work root|no such file/,
+    'a symlinked path resolved outside the root was accepted');
+  assert.throws(() => J.JOBS.exists.build({ path: 'escape/passwd' }),
+    /escapes the work root/);
+  fs.unlinkSync(link);
+});
+
+section('\n-- M3: https is a scheme check, not a destination check --');
+t('private, loopback and link-local destinations are refused', () => {
+  for (const u of ['https://127.0.0.1/x', 'https://localhost/x', 'https://10.0.0.5/x',
+                   'https://169.254.169.254/latest/meta-data/', 'https://192.168.1.1/x',
+                   'https://172.16.0.1/x', 'https://[::1]/x', 'https://100.64.0.1/x']) {
+    assert.throws(() => J.JOBS.http_download.build({ url: u, output: 'd/x.bin' }),
+      /private or loopback/, u + ' was accepted');
+  }
+});
+t('an ordinary public https URL still works', () => {
+  const b = J.JOBS.http_download.build({ url: 'https://example.com/a.mp4', output: 'd/a.mp4' });
+  assert.ok(b.native, 'a public URL must still build');
+});
+
+section('\n-- H1: read_text must not block the event loop on a device --');
+t('a non-regular file is refused rather than opened', async () => {
+  const fifo = path.join(ROOT, 'r', 'dir_not_file');
+  fs.mkdirSync(fifo, { recursive: true });
+  const b = J.JOBS.read_text.build({ path: 'r/dir_not_file' });
+  await assert.rejects(() => b.native(), /not a regular file/);
 });
 
 section('\n-- A3: -nostdin reaches ffmpeg and never ffprobe --');

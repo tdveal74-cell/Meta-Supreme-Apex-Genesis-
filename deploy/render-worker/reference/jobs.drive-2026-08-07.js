@@ -42,37 +42,11 @@ function safePath(p, label) {
   if (typeof p !== 'string' || !p.length) throw new BadJob(`${label}: missing`);
   if (p.includes('\0')) throw new BadJob(`${label}: NUL byte`);
   const abs = path.resolve(WORK_ROOT, p);
-  // path.resolve does NOT follow symlinks, so a lexical prefix check alone lets
-  // a single symlink inside the work root read and write anywhere on the box.
-  // Measured: a `media -> /etc` link inside WORK_ROOT served /etc/passwd through
-  // `exists` and /etc/hostname through `read_text`. Resolve the real path of the
-  // deepest existing ancestor before comparing; an output file that does not
-  // exist yet is judged by the directory it will be created in.
-  const real = realDeepest(abs);
-  const rootReal = realDeepest(WORK_ROOT);
-  const root = rootReal.endsWith(path.sep) ? rootReal : rootReal + path.sep;
-  if (real !== rootReal && !real.startsWith(root)) {
+  const root = WORK_ROOT.endsWith(path.sep) ? WORK_ROOT : WORK_ROOT + path.sep;
+  if (abs !== WORK_ROOT && !abs.startsWith(root)) {
     throw new BadJob(`${label}: path escapes the work root`);
   }
   return abs;
-}
-
-/**
- * realpath of the deepest ancestor of `abs` that exists, with the unresolved
- * remainder appended. Never throws: a path whose ancestors are all missing
- * resolves to itself, which the caller's prefix check then judges lexically.
- */
-function realDeepest(abs) {
-  let head = abs;
-  const tail = [];
-  for (;;) {
-    try { return tail.length ? path.join(fs.realpathSync(head), ...tail) : fs.realpathSync(head); }
-    catch { /* fall through and climb */ }
-    const parent = path.dirname(head);
-    if (parent === head) return abs;
-    tail.unshift(path.basename(head));
-    head = parent;
-  }
 }
 
 function existingPath(p, label) {
@@ -102,60 +76,6 @@ function ensureDir(p) { fs.mkdirSync(path.dirname(p), { recursive: true }); retu
 // per minute of footage for no visible gain, and someone will eventually try it.
 const PRESETS = ['ultrafast','superfast','veryfast','faster','fast','medium','slow','slower','veryslow'];
 
-// --- picture normalisation and still handling ------------------------------
-
-/**
- * Scale and pad to exactly WxH, then pin SAR and pixel format.
- *
- * decrease + pad, never increase + crop. A black bar is a bug report; a crop is
- * a lie that silently discards a deliberately framed edge.
- *
- * Without this ahead of every shot, xfade on mixed-size inputs fails to
- * configure the output pad and ffmpeg writes a 0-byte file. QC measured
- * *minimum* width 3840 on the EP01 plates, not uniform 3840, so the plates
- * looked compliant and were not.
- */
-function normalizeChain(W, H) {
-  return `scale=${W}:${H}:force_original_aspect_ratio=decrease:flags=lanczos,` +
-         `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p`;
-}
-
-const STILL_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tif', '.tiff']);
-
-/** Inference of last resort. A declared shots[i].still always wins over this. */
-function isStill(f) { return STILL_EXT.has(path.extname(f).toLowerCase()); }
-
-/**
- * A gap in a signal is a gain envelope, not a pair of fades.
- *
- * The old chain was `afade=t=out` followed by `afade=t=in`. afade=t=out ramps
- * to zero and then HOLDS zero for the remainder of the stream; the following
- * afade=t=in multiplies everything before its own start by zero. Chained, they
- * do not reopen the gate, they close it for good. On EP01 that killed the bed
- * at 544.000s of an 880.907s episode and left the final 53 seconds as digital
- * silence under picture. It passed every gate that existed, because the only
- * gate measured length, and a silent file is exactly as long as a loud one.
- *
- * Each guard contributes an attenuation that is 0 outside its window, ramps to
- * 1 over `ramp` seconds, holds 1 across the gap, and ramps back down. The
- * overlap check rejects overlapping [s, e] windows but NOT windows whose ramps
- * overlap, so two guards closer than 2*ramp can both be non-zero at the same t
- * and the raw sum can exceed 1. The outer max(0, ...) is what makes that safe,
- * so it is load bearing and not belt and braces.
- *
- * Everywhere outside the ramps and the gap this evaluates to exactly 1, which
- * is what makes it a numerical no-op on the untouched remainder of the bed.
- */
-function gainEnvelope(windows, ramp) {
-  if (!windows.length) return null;
-  const terms = windows.map(({ s, e }) => {
-    const d0 = Math.max(0, s - ramp).toFixed(6);   // start of the down ramp
-    const u1 = (e + ramp).toFixed(6);              // end of the up ramp
-    return `max(0,min(1,min((t-${d0})/${ramp},(${u1}-t)/${ramp})))`;
-  });
-  return `max(0,1-(${terms.join('+')}))`;
-}
-
 // --- network helpers (for the Topaz transfers) -----------------------------
 
 const https = require('https');
@@ -169,38 +89,7 @@ function httpsUrl(u, label) {
   let parsed;
   try { parsed = new URL(u); } catch { throw new BadJob(`${label}: not a URL`); }
   if (parsed.protocol !== 'https:') throw new BadJob(`${label}: must be https`);
-  if (isPrivateHost(parsed.hostname)) {
-    throw new BadJob(`${label}: refuses a private or loopback address (${parsed.hostname})`);
-  }
   return u;
-}
-
-/**
- * A scheme check says nothing about the destination. Without this, a caller
- * holding the token turns http_download into a reader of the render box's own
- * private network, and read_text hands the result straight back. Measured
- * against a local service on 127.0.0.1: 53 bytes of a fake credential came back
- * through read_text before this guard existed.
- *
- * Name-based SSRF through DNS is NOT closed by this and cannot be closed here;
- * it needs resolution-time pinning in the agent. Stated rather than implied.
- */
-function isPrivateHost(h) {
-  const host = String(h || '').toLowerCase().replace(/^\[|\]$/g, '');
-  if (!host) return true;
-  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.internal')) return true;
-  if (host === '::1' || host === '::' || host.startsWith('fe80:') ||
-      host.startsWith('fc') || host.startsWith('fd')) return true;
-  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
-  if (!m) return false;                       // a name; see the caveat above
-  const [a, b] = [Number(m[1]), Number(m[2])];
-  if ([a, b, Number(m[3]), Number(m[4])].some(n => n > 255)) return true;
-  return a === 0 || a === 10 || a === 127 ||
-         (a === 169 && b === 254) ||          // link local, incl. cloud metadata
-         (a === 172 && b >= 16 && b <= 31) ||
-         (a === 192 && b === 168) ||
-         (a === 100 && b >= 64 && b <= 127) || // carrier grade NAT
-         a >= 224;                             // multicast and reserved
 }
 
 function downloadTo(url, dest, maxBytes, redirects = 0) {
@@ -254,8 +143,8 @@ function putRange(url, file, start, end) {
 
 const FF = 'ffmpeg';
 const FP = 'ffprobe';
-const QUIET = ['-nostdin', '-hide_banner', '-loglevel', 'error'];
-const MEASURE = ['-nostdin', '-hide_banner', '-nostats'];
+const QUIET = ['-hide_banner', '-loglevel', 'error'];
+const MEASURE = ['-hide_banner', '-nostats'];
 
 // --- jobs ------------------------------------------------------------------
 // Each: { build(params) -> {bin, argv, capture?, parse?} }
@@ -350,10 +239,9 @@ const JOBS = {
   /**
    * Duck the bed under the narration and mix.
    *
-   * The guard envelope matters more than the sidechain does. Sidechain RELEASE
-   * makes the bed swell back up exactly where nothing should be, inside the
-   * protected silence. The envelope holds it down through those windows and,
-   * unlike the afade pair it replaced, lets it back up afterwards.
+   * The afade guards matter more than the sidechain does. Sidechain RELEASE
+   * makes the bed swell back up exactly where nothing should be — in the
+   * protected silence. The explicit fades hold it down through those windows.
    */
   duck_mix: {
     build(p) {
@@ -365,61 +253,27 @@ const JOBS = {
 
       const guards = Array.isArray(p.guards) ? p.guards : [];
       if (guards.length > 64) throw new BadJob('guards: too many (max 64)');
-      const windows = guards.map((g, idx) => {
+      const fades = [];
+      for (const [idx, g] of guards.entries()) {
         const s = num(g.start, `guards[${idx}].start`, { min: 0, max: 86400 });
         const e = num(g.end,   `guards[${idx}].end`,   { min: 0, max: 86400 });
         if (e <= s) throw new BadJob(`guards[${idx}]: end must exceed start`);
-        return { s, e };
-      }).sort((a, b) => a.s - b.s);
-      // Disjoint windows are what keeps the summed envelope inside [0, 1].
-      for (let i = 1; i < windows.length; i++) {
-        if (windows[i].s < windows[i - 1].e) {
-          throw new BadJob(`guards: windows overlap (${windows[i - 1].e} > ${windows[i].s})`);
-        }
+        fades.push(`afade=t=out:st=${Math.max(0, s - ramp).toFixed(3)}:d=${ramp}`);
+        fades.push(`afade=t=in:st=${e.toFixed(3)}:d=${ramp}`);
       }
-      const env = gainEnvelope(windows, ramp);
-      const bedChain = env
-        ? `[1:a]volume=eval=frame:volume='${env}'[bedg]`
-        : `[1:a]anull[bedg]`;
+      const bedChain = ['[1:a]', fades.length ? fades.join(',') + ',' : '', 'anull[bedg]'].join('');
 
-      // amix=duration=first does NOT produce the first input's length. Measured
-      // on EP01: a dialogue stem of 880.906757s came out at 880.849000s, 58 ms
-      // short, leaving the last frame and a half with no audio. duration=longest
-      // returned the identical value, so it is not a duration= problem. The mix
-      // has to be pinned: apad to run past the end, then -t to cut it exactly.
-      // apad without -t never terminates, so the pin is all-or-nothing and the
-      // caller must supply the planned length to get it.
-      const pinned  = p.duration !== undefined;
-      const planned = pinned ? num(p.duration, 'duration', { min: 0.001, max: 86400 }) : null;
-
-      const mixTail = pinned ? '[mixraw];[mixraw]apad[mix]' : '[mix]';
       const filter =
         `[0:a]asplit=2[nar][key];` +
         bedChain + `;` +
         `[bedg][key]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400:makeup=1[duck];` +
-        `[nar][duck]amix=inputs=2:duration=first:dropout_transition=0:weights=1 ${gain}` + mixTail;
-
-      const argv = ['-y', ...QUIET, '-i', nar, '-i', bed, '-filter_complex', filter,
-                    '-map', '[mix]', '-ar', '48000',
-                    // loudnorm_apply two jobs up already takes a codec; this one
-                    // did not, so pcm_s24le was forced into whatever container
-                    // the output name implied. PCM does not mux into FLAC.
-                    '-c:a', oneOf(p.codec ?? 'pcm_s24le', 'codec',
-                                  ['pcm_s16le','pcm_s24le','pcm_f32le','aac','flac'])];
-      if (pinned) argv.push('-t', planned.toFixed(6));
-      argv.push(out);
+        `[nar][duck]amix=inputs=2:duration=first:dropout_transition=0:weights=1 ${gain}[mix]`;
 
       return {
         bin: FF,
-        argv,
-        parse: () => ({
-          output: path.relative(WORK_ROOT, out),
-          guards: windows.length,
-          // pinned:false means the 58 ms short-mix defect is still live on this
-          // call. Visible in the result rather than silent.
-          pinned,
-          planned_duration: planned,
-        }),
+        argv: ['-y', ...QUIET, '-i', nar, '-i', bed, '-filter_complex', filter,
+               '-map', '[mix]', '-ar', '48000', '-c:a', 'pcm_s24le', out],
+        parse: () => ({ output: path.relative(WORK_ROOT, out), guards: guards.length }),
       };
     },
   },
@@ -467,26 +321,9 @@ const JOBS = {
       const out = ensureDir(safePath(p.output, 'output'));
       const xf  = num(p.crossfade ?? 1.0, 'crossfade', { min: 0, max: 10 });
 
-      // Normalisation target. Every shot is scaled and padded to exactly this
-      // geometry, SAR and rate before it reaches xfade.
-      const W   = num(p.width  ?? 3840, 'width',  { min: 16, max: 8192, int: true });
-      const H   = num(p.height ?? 2160, 'height', { min: 16, max: 8192, int: true });
-      const fps = num(p.fps    ?? 24,   'fps',    { min: 1,  max: 240 });
-
       const inputs = [];
       const trims = [];
-      // The duration each shot ACTUALLY emits, which for a still is quantised to
-      // whole frames. The offsets and expected_duration are both accumulated
-      // from these rather than from the requested durations: a still emits
-      // round(d*fps)/fps, so on a 37 still manifest with durations that are not
-      // frame aligned the requested and emitted timelines drift apart, measured
-      // at up to 0.130s, which is 3.1 frames at 24fps. An xfade offset that
-      // drifts past the end of its first input is a broken join, not a rounding
-      // nit.
-      const emitted = [];
       let offset = 0;
-      let stills = 0;
-      let clips  = 0;
       shots.forEach((s, i) => {
         const f  = existingPath(s.path, `shots[${i}].path`);
         const IN = num(s.in ?? 0, `shots[${i}].in`, { min: 0, max: 86400 });
@@ -495,44 +332,15 @@ const JOBS = {
         if (i < shots.length - 1 && (OUT - IN) <= xf) {
           throw new BadJob(`shots[${i}]: shorter than the crossfade (${(OUT-IN).toFixed(2)}s <= ${xf}s)`);
         }
-        const d = OUT - IN;
         inputs.push('-i', f);
-
-        // Declaration beats inference: an explicit shots[i].still always wins,
-        // and the extension is consulted only when nothing was declared.
-        const still = s.still === undefined ? isStill(f) : !!s.still;
-        if (still) {
-          // The image demuxer emits exactly ONE frame, so the old
-          // trim=start=0:end=6 kept exactly that one frame. 37 of 37 EP01 shots
-          // are stills, which is how a 14-minute episode rendered as a
-          // 1.5-second slideshow and the fault looked like ffmpeg's.
-          //
-          // Decode once, normalise that single frame, then hold it with the
-          // loop filter. `-loop 1` also works and is what v1 did, but it
-          // re-reads and re-decodes the file for EVERY output frame: a 63s shot
-          // decodes a 4K JPEG 1,512 times. Measured on 2 cores, the picture
-          // stage went 62.04s -> 6.26s for a bit-identical result (PSNR inf).
-          const F = Math.round(d * fps);
-          if (F < 1) throw new BadJob(`shots[${i}]: still is shorter than one frame at ${fps}fps`);
-          stills++;
-          emitted.push(F / fps);
-          trims.push(`[${i}:v]${normalizeChain(W, H)},` +
-                     `loop=loop=${F - 1}:size=1:start=0,setpts=N/${fps}/TB,fps=${fps}[v${i}]`);
-        } else {
-          clips++;
-          // A trimmed clip is exact in source time. What fps= then emits depends
-          // on the source rate and cannot be known without probing, so this is
-          // the requested duration and is reported as such.
-          emitted.push(d);
-          trims.push(`[${i}:v]trim=start=${IN.toFixed(6)}:end=${OUT.toFixed(6)},setpts=PTS-STARTPTS,` +
-                     `${normalizeChain(W, H)},fps=${fps}[v${i}]`);
-        }
+        trims.push(`[${i}:v]trim=start=${IN}:end=${OUT},setpts=PTS-STARTPTS[v${i}]`);
       });
 
       const parts = [...trims];
       let last = 'v0';
       for (let k = 1; k < shots.length; k++) {
-        offset += emitted[k - 1] - xf;
+        const dur = num(shots[k-1].out, '', {}) - num(shots[k-1].in ?? 0, '', {});
+        offset += dur - xf;
         const outLbl = (k === shots.length - 1) ? 'vout' : `x${k}`;
         parts.push(`[${last}][v${k}]xfade=transition=fade:duration=${xf}:offset=${offset.toFixed(3)}[${outLbl}]`);
         last = outLbl;
@@ -546,24 +354,7 @@ const JOBS = {
                '-c:v', 'libx264', '-crf', String(num(p.crf ?? 16, 'crf', { min: 0, max: 51, int: true })),
                '-preset', oneOf(p.preset ?? 'medium', 'preset', PRESETS),
                '-pix_fmt', 'yuv420p', out],
-        // Returned so the assembly can be CHECKED against the manifest rather
-        // than trusted. expected_duration x fps should equal the frame count
-        // ffprobe reports on the output.
-        parse: () => ({
-          output: path.relative(WORK_ROOT, out),
-          shots: shots.length,
-          stills,
-          clips,
-          fps,
-          normalized_to: `${W}x${H}`,
-          // Exact when every shot is a still, which is the EP01 case (37 of 37).
-          // With clips in the mix it is the requested length; only ffprobe on the
-          // output settles that, which is why the runbook asks for a frame count
-          // rather than trusting this number.
-          expected_duration: Number((emitted.reduce((a, b) => a + b, 0)
-                                     - xf * (shots.length - 1)).toFixed(6)),
-          exact: clips === 0,
-        }),
+        parse: () => ({ output: path.relative(WORK_ROOT, out), shots: shots.length }),
       };
     },
   },
@@ -633,24 +424,15 @@ const JOBS = {
           await browser.close();
         }
 
-        // Phase 2: ffmpeg assembly, same as render_mark but inline.
-        // execFileSync here blocked the event loop for the whole ProRes encode,
-        // so the server answered nothing, including the polls the caller uses to
-        // watch this very job. Async, so only this job waits.
-        const { execFile } = require('child_process');
+        // Phase 2: ffmpeg assembly — same as render_mark but inline.
+        const { execFileSync } = require('child_process');
         fs.mkdirSync(path.dirname(out), { recursive: true });
-        await new Promise((resolve, reject) => {
-          execFile(FF, [
-            '-y', ...QUIET, '-framerate', String(fps),
-            '-i', path.join(framesDir, 'f_%06d.png'),
-            '-c:v', 'prores_ks', '-profile:v', '4444',
-            '-pix_fmt', 'yuva444p10le', out,
-          ], { cwd: WORK_ROOT, env: { PATH: process.env.PATH, LANG: 'C' },
-               maxBuffer: 32 * 1024 * 1024 },
-          (err, _o, errOut) => err
-            ? reject(new Error(String(errOut || err.message).trim().split('\n').slice(-8).join('\n')))
-            : resolve());
-        });
+        execFileSync(FF, [
+          '-y', ...QUIET, '-framerate', String(fps),
+          '-i', path.join(framesDir, 'f_%06d.png'),
+          '-c:v', 'prores_ks', '-profile:v', '4444',
+          '-pix_fmt', 'yuva444p10le', out,
+        ], { cwd: WORK_ROOT, env: { PATH: process.env.PATH, LANG: 'C' } });
 
         // Cleanup
         fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -866,27 +648,18 @@ const JOBS = {
                           // reads as cheap long before anyone can name why.
         keep.forEach((s, i) => {
           const d = s.end - s.start;
-          parts.push(`[0:v]trim=start=${s.start.toFixed(6)}:end=${s.end.toFixed(6)},setpts=PTS-STARTPTS[v${i}]`);
+          parts.push(`[0:v]trim=start=${s.start}:end=${s.end},setpts=PTS-STARTPTS[v${i}]`);
           pairs.push(`[v${i}]`);
           if (!hasAudio) return;
           parts.push(
-            `[0:a]atrim=start=${s.start.toFixed(6)}:end=${s.end.toFixed(6)},asetpts=PTS-STARTPTS,` +
+            `[0:a]atrim=start=${s.start}:end=${s.end},asetpts=PTS-STARTPTS,` +
             `afade=t=in:st=0:d=${FA},afade=t=out:st=${Math.max(0, d - FA).toFixed(6)}:d=${FA}[a${i}]`);
           pairs[pairs.length - 1] = `[v${i}][a${i}]`;
         });
         parts.push(`${pairs.join('')}concat=n=${keep.length}:v=1:a=${hasAudio ? 1 : 0}` +
                    (hasAudio ? '[vcut][acut]' : '[vcut]'));
         parts.push(`[vcut]${baseChain}[vout]`);
-        // apad is emitted ONLY when there is an ending to pad to. With no
-        // ending padDur is 0, and ffmpeg documents pad_dur as "used only if set
-        // to a non-zero value", so apad falls back to padding indefinitely. With
-        // no -t and no -shortest on this argv that is a render that never ends,
-        // which is the same defect this file already fixed in duck_mix.
-        if (hasAudio) {
-          parts.push(hasEnding
-            ? `[acut]apad=pad_dur=${padDur.toFixed(6)}[aout]`
-            : `[acut]anull[aout]`);
-        }
+        if (hasAudio) parts.push(`[acut]apad=pad_dur=${padDur.toFixed(6)}[aout]`);
         argv.push('-filter_complex', parts.join(';'), '-map', '[vout]');
         if (hasAudio) argv.push('-map', '[aout]');
       } else if (hasEnding) {
@@ -952,39 +725,22 @@ const JOBS = {
     build(p) {
       const dir = existingPath(p.drop_dir, 'drop_dir');
       const marker = oneOf(p.marker ?? 'manifest.json', 'marker', ['manifest.json']);
-      // The old walk hard-coded exactly two levels: readdir(drop)/readdir(a).
-      // A manifest at drop/EP01/manifest.json sits one level down and was never
-      // seen, so the job returned count:0 -- which reads as "nothing to do"
-      // rather than as "I looked in the wrong place". Walk to MAX_DEPTH instead,
-      // and report the depth and the root so a zero is diagnosable.
-      const MAX_DEPTH = num(p.max_depth ?? 3, 'max_depth', { min: 1, max: 6, int: true });
       return { native: async () => {
         const found = [];
-        let skippedDone = 0;
-        const walk = (d, depth) => {
-          if (depth > MAX_DEPTH) return;
-          if (fs.existsSync(path.join(d, marker))) {
-            // Skip anything already finished, same as the old `.done` check.
-            if (fs.existsSync(path.join(d, '.done'))) { skippedDone++; return; }
-            found.push(path.relative(WORK_ROOT, d));
-            return;  // an episode directory does not contain further episodes
+        for (const a of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (!a.isDirectory()) continue;
+          for (const b of fs.readdirSync(path.join(dir, a.name), { withFileTypes: true })) {
+            if (!b.isDirectory()) continue;
+            const epDir = path.join(dir, a.name, b.name);
+            if (fs.existsSync(path.join(epDir, marker))) {
+              // Skip anything already finished, same as the old `.done` check.
+              if (fs.existsSync(path.join(epDir, '.done'))) continue;
+              found.push(path.relative(WORK_ROOT, epDir));
+            }
           }
-          let entries;
-          try { entries = fs.readdirSync(d, { withFileTypes: true }); }
-          catch { return; }
-          for (const ent of entries) {
-            if (ent.isDirectory()) walk(path.join(d, ent.name), depth + 1);
-          }
-        };
-        walk(dir, 0);
+        }
         found.sort();
-        return {
-          root: path.relative(WORK_ROOT, dir),
-          scanned_depth: MAX_DEPTH,
-          skipped_done: skippedDone,
-          count: found.length,
-          episodes: found,
-        };
+        return { count: found.length, episodes: found };
       }};
     },
   },
@@ -995,16 +751,9 @@ const JOBS = {
       const f = existingPath(p.path, 'path');
       const max = num(p.max_bytes ?? 1024 * 1024, 'max_bytes', { min: 1, max: 16 * 1024 * 1024 });
       return { native: async () => {
-        // readFileSync on a FIFO blocks in open() forever, and because this runs
-        // on the event loop it took the ENTIRE server with it, /health included,
-        // without exiting, so systemd's Restart=on-failure never fired. One
-        // authenticated request was a permanent wedge. Refuse anything that is
-        // not a regular file, and read asynchronously so a slow device stalls
-        // one job rather than the process.
-        const st = await fs.promises.stat(f);
-        if (!st.isFile()) throw new Error(`not a regular file (${p.path})`);
+        const st = fs.statSync(f);
         if (st.size > max) throw new Error(`file is ${st.size} bytes, over max_bytes ${max}`);
-        const text = await fs.promises.readFile(f, 'utf8');
+        const text = fs.readFileSync(f, 'utf8');
         let parsed = null;
         if (p.parse_json) {
           try { parsed = JSON.parse(text); }
@@ -1226,5 +975,4 @@ const JOBS = {
   },
 };
 
-module.exports = { JOBS, BadJob, safePath, existingPath, num, oneOf, setRoot, getRoot, PRESETS,
-                   normalizeChain, isStill, gainEnvelope };
+module.exports = { JOBS, BadJob, safePath, existingPath, num, oneOf, setRoot, getRoot, PRESETS };

@@ -18,11 +18,17 @@ The engine was recovered from Drive on 2026-09-11.
 | sha256 | `6ed3109ab220cb986e7c33040e90fda4c103cf8afa5ee48137c7185ca55ecdae` |
 | last modified on Drive | 2026-08-07T18:53:12Z |
 
+That exact file is committed at `reference/jobs.drive-2026-08-07.js`, byte for
+byte, and `negative-control.js` verifies its sha256 before using it. It is there
+so the claim "these tests detect the defects" can be RUN by anyone with the
+repository rather than taken on trust.
+
 `jobs.js` here is that file with the fixes below applied. Its inherited comments
-are left byte faithful, em dashes included, so the diff against the Drive copy
-stays auditable line by line. Every line added by the fixes is dash free. If you
-would rather the whole file follow the house rule, say so and it gets one
-mechanical pass; it was not done unasked because it would bury the real diff.
+are left byte faithful, em and en dashes included (27 em, 1 en at line 692), so
+the diff against the Drive copy stays auditable line by line. Every line added by
+the fixes is dash free, checked mechanically against the diff. If you would
+rather the whole file follow the house rule, say so and it gets one mechanical
+pass; it was not done unasked because it would bury the real diff.
 
 `server.js` has no Drive ancestor. It did not exist.
 
@@ -78,10 +84,20 @@ silent file passes exactly as well as a loud one.
   a valid ffprobe flag and the one ffprobe job builds its own argv; there is a
   test pinning that.
 
-`assemble_cut` also now returns `stills`, `clips`, `fps`, `normalized_to` and
-`expected_duration`, so the assembly can be checked against the manifest rather
-than trusted. `expected_duration * fps` should equal the frame count ffprobe
-reports on the output.
+`assemble_cut` also now returns `stills`, `clips`, `fps`, `normalized_to`,
+`expected_duration` and `exact`, so the assembly can be checked against the
+manifest rather than trusted.
+
+**`expected_duration * fps` equals the reported frame count only when `exact` is
+true**, which means every shot was a still. That is the EP01 case, 37 of 37. A
+still emits `round(d * fps)` frames, so its real length is quantised; the xfade
+offsets are accumulated from those quantised lengths rather than from the
+requested ones, because a manifest whose durations are not frame aligned
+otherwise drifts, measured at up to 0.130s, which is 3.1 frames at 24fps, and an
+offset that runs past the end of its own input is a broken join. A clip's emitted
+length depends on its source rate and cannot be known without probing, so with
+`exact: false` treat `expected_duration` as the requested length and let ffprobe
+settle the rest.
 
 ### One thing deliberately NOT changed
 
@@ -97,22 +113,33 @@ against a real manifest before the first full episode.
 
 Proved, by execution, in this repository:
 
-- `node jobs.test.js` pins what the builders emit: 16 tests, all passing.
-  Includes a numeric comparison of the new gain envelope against the EP01
-  reference expression over 540s to 552s at 0.5 ms steps, worst divergence
-  `5.7e-14`.
+`npm test` runs all three. 46 tests, all passing.
+
+- `node jobs.test.js` pins what the builders emit: **27 tests**. Includes a
+  numeric comparison of the new gain envelope against the EP01 reference
+  expression over 540s to 552s at 0.5 ms steps, worst divergence `5.7e-14`; the
+  exact xfade offsets; and the protected-silence provision.
 - `node server.test.js` makes real HTTP requests against a real listening
-  server: 16 tests, all passing. It runs
-  `{"type":"exists","params":{"path":"."}}`, the exact smoke test the sticky note
-  on TSWS 00 prescribes and records as having "never once succeeded", and gets
-  `ok:true`.
-- Negative control: the same `jobs.test.js` run against the unfixed Drive copy
-  fails 15 of 16. The one that passes is the ffprobe guard, correctly true in
-  both. The tests detect the defects rather than merely agreeing with the fix.
+  server: **19 tests**. It runs `{"type":"exists","params":{"path":"."}}`, the
+  exact smoke test the sticky note on TSWS 00 prescribes and records as having
+  "never once succeeded", and gets `ok:true`.
+- `node negative-control.js` runs the same `jobs.test.js` against
+  `reference/jobs.drive-2026-08-07.js`, the engine byte for byte as recovered,
+  and **requires that it fail**. It currently fails 22 of 27. It verifies the
+  fixture's sha256 and its absence of the audit markers first, so it cannot
+  quietly drift into testing the fixed file.
+
+Every guard added here was mutation tested: the fix was reverted one at a time
+and the suite was required to go red. Six for six. That matters because two of
+them were only added after a critic reverted them and the suite stayed green,
+and because one test in the first round was asserting nothing at all.
 
 **Not proved, and it matters:** no ffmpeg exists in the container these fixes
 were written in. Every test above pins the argv and the filter graph. **None of
-them ran ffmpeg, so none of them prove a pixel or a sample.** The frame counts,
+them ran ffmpeg, so none of them prove a pixel or a sample.** Two filter-level
+claims in particular rest on ffmpeg's documented semantics and not on a run: that
+`loop=loop=F-1:size=1:start=0` holds a single decoded frame for F frames, and
+that `apad` with a zero `pad_dur` and no `-t` pads indefinitely. The frame counts,
 the levels and the silences have to be measured on the box. That is the
 acceptance suite below, and until it passes, this worker is unproven regardless
 of how green the unit tests are.
@@ -171,6 +198,11 @@ issue.
 curl -s https://render.editforge.online/health | python3 -m json.tool
 ```
 
+`/health` is the only unauthenticated route and it returns the job names and
+nothing else. Operational detail (`work_root`, queue depth, concurrency) is on
+`/status`, behind the token, because the first version put a filesystem path and
+a load signal in front of anyone who could reach the TLS terminator.
+
 `job_count` must read **18**. Fewer means an older `jobs.js` is loaded, and the
 sticky note's warning applies: a still plate renders as one frame, not a held one.
 
@@ -217,7 +249,8 @@ episode. Take a bed of at least 900 seconds, a narration, and one guard.
 
 ```bash
 sub '{"type":"duck_mix","params":{"narration":"t/nar.wav","bed":"t/bed.wav",
-  "output":"t/mix.flac","guards":[{"start":544,"end":548}],"duration":880.907}}'
+  "output":"t/mix.flac","codec":"flac",
+  "guards":[{"start":544,"end":548}],"duration":880.907}}'
 ```
 
 Then three measurements, not one:
@@ -240,6 +273,12 @@ sub '{"type":"silence_detect","params":{"input":"t/mix.flac","min_duration":3}}'
 # expect count 1: the 4 second guard, and nothing else.
 ```
 
+`codec` matters and was missing until 2026-09-11. `duck_mix` defaults to
+`pcm_s24le`, and PCM does not mux into a FLAC container, so an earlier version of
+this runbook sent the operator into a muxer error on the one check that decides
+the show. Pass `"codec":"flac"` with a `.flac` output, or write `.wav` and leave
+the default.
+
 **4. A2, the length pin.**
 
 ```bash
@@ -249,6 +288,13 @@ ffprobe -v error -show_entries format=duration -of csv=p=0 /data/tsws/t/mix.flac
 Expect `880.907000`, not `880.849`. Confirm the poll result also says
 `"pinned": true`; if it says false, the caller did not send `duration` and the
 58 ms defect is still live on that call.
+
+**What these four do NOT cover, so you know what is still untested on the box:**
+F2 is only exercised incidentally (step 2 suggests two stills of different pixel
+sizes but asserts nothing about it); `scan_drop` (F4) is not exercised at all,
+and one `{"type":"scan_drop","params":{"drop_dir":"drop"}}` against a real drop
+tree closes it; `-nostdin` (A3) is not exercised and only matters if you run a
+render from an interactive shell. Add those two if the lane will lean on them.
 
 Only after all four pass is it worth wiring the real lane.
 
@@ -278,6 +324,40 @@ settings.errorWorkflow          rqYmaQh91iCce8DJ  ->  GbeNilHQzjmoWDz3
 **Give the worker its own key.** `Header Auth account 10` is shared, and the
 autonomy driver already calls for splitting it. A worker token and a pipeline
 token that are the same string means rotating either one takes down both.
+
+## Security posture, after the 2026-09-11 critic pass
+
+Six things an adversarial pass changed. Named because "hardened" is not a
+standard and the specific holes are the useful record:
+
+- **A single authenticated request used to wedge the whole process.** The native
+  job path had no timeout and its jobs used synchronous fs, so `read_text`
+  against a FIFO blocked the event loop forever. `/health` went dark, the process
+  never exited, and `Restart=on-failure` therefore never fired. `read_text` now
+  refuses anything that is not a regular file and reads asynchronously,
+  `render_mark_full` no longer encodes synchronously, and the native path has a
+  timeout backstop.
+- **`safePath` was lexical.** `path.resolve` does not follow symlinks, so one
+  symlink inside the work root was a full read and write escape; a `media ->
+  /etc` link served `/etc/passwd`. It now resolves the real path of the deepest
+  existing ancestor before the prefix check.
+- **`http_download` checked the scheme and not the destination.** It would fetch
+  from `127.0.0.1`, `169.254.169.254` and any RFC1918 address, and `read_text`
+  handed the result straight back. Private, loopback, link local, CGNAT and
+  multicast destinations are now refused, on redirects too. **Name based SSRF
+  through DNS is not closed by this** and cannot be closed at this layer.
+- **`conform_grain` emitted `apad` with no ending to pad to**, which with no `-t`
+  and no `-shortest` is a render that never ends. Same defect this file had
+  already fixed in `duck_mix`, two jobs over.
+- **The queue was unbounded.** It now refuses at 64 with a `503` and a
+  `Retry-After`.
+- **There was no SIGTERM handler**, so the unit file's `TimeoutStopSec` comment
+  was describing a drain that did not exist. It drains now.
+
+Still open by design: the token is a single shared secret with no rotation
+mechanism, there are no per-job resource ceilings (`MemoryMax`, `CPUQuota`,
+`TasksMax` are not set in the unit), and there is no disk quota on the work root,
+so `render_mark_full` will accept a request for a great many 4K frames.
 
 ## Open
 

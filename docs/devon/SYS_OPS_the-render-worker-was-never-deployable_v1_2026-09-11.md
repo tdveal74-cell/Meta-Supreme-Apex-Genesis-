@@ -111,7 +111,8 @@ cannot reach it there.
 ### What was built
 
 `deploy/render-worker/` now carries the engine, the missing server, a deploy
-runbook and 32 tests. The engine leaves Drive for the first time and lives in
+runbook, a hardened systemd unit, the byte-for-byte Drive original as a fixture,
+a CI lane and 46 tests. The engine leaves Drive for the first time and lives in
 version control.
 
 `server.js` is written to a contract that was already fixed and is not
@@ -133,18 +134,25 @@ This repository's own rule refuses a transformation that could change a number.
 
 Proved by execution:
 
-* `jobs.test.js`, 16 tests, all passing. It pins what the builders emit, and it
+* `jobs.test.js`, 27 tests, all passing. It pins what the builders emit, and it
   compares the new gain envelope numerically against the EP01 reference
-  expression from 540s to 552s at 0.5 ms steps. Worst divergence `5.7e-14`.
-* `server.test.js`, 16 tests, all passing, against a real listening server over
+  expression from 540s to 552s at 0.5 ms steps. Worst divergence `5.7e-14`. It
+  also pins the exact xfade offsets and the protected-silence provision, both
+  added after the critic proved nothing pinned them.
+* `server.test.js`, 19 tests, all passing, against a real listening server over
   real HTTP. It runs `{"type":"exists","params":{"path":"."}}`, which is the
   exact smoke test the sticky note on TSWS 00 prescribes and records as having
   never once succeeded, and gets `ok:true`.
-* The negative control: the same `jobs.test.js` against the unfixed Drive copy
-  fails 15 of 16. The one that passes is the ffprobe guard, correctly true in
-  both. The tests detect the defects rather than agreeing with the fix.
+* `negative-control.js` runs the same suite against
+  `reference/jobs.drive-2026-08-07.js`, the engine byte for byte as recovered,
+  and requires that it fail. It fails 22 of 27. It checks the fixture's sha256
+  and the absence of the audit markers first, so it cannot drift into testing the
+  fixed file.
+* Every guard added in the critic round was mutation tested: the fix reverted one
+  at a time, the suite required to go red. Six for six.
 
-The negative control also caught a defect in the test harness itself. `scan_drop`
+The negative control has now caught two defects in the verification itself. The
+first was in the harness. `scan_drop`
 passed against the known defective original, which is impossible. The harness
 called the test function without awaiting it, so a failing async assertion became
 an unhandled rejection and was counted as a pass. That test was asserting
@@ -172,6 +180,80 @@ quantises to exactly 0 in the output. It is true silence in the file. The first
 assertion demanded exact float zero and failed; the assertion was wrong, not the
 code, and the threshold it now uses is the 24 bit floor with the arithmetic
 shown.
+
+## 2b. The critic pass, and what it cost to skip
+
+A fresh critic was spawned against the pushed commit with worktree isolation,
+pinned to `b47986d` and made to echo the SHA back. It returned
+PASS-WITH-CONDITIONS: safe as a repository artifact, not safe on the public
+internet. It was right on every count that mattered, and two of its findings are
+the interesting ones because they are about the verification rather than the
+code.
+
+**One authenticated request wedged the whole process.** The native job path had
+no timeout at all, and its jobs used synchronous filesystem calls on the event
+loop. `read_text` against a FIFO blocks in `open()` forever, so `/health` went
+dark, the queue stopped, and because the process never exited systemd's
+`Restart=on-failure` never fired. The critic demonstrated it against a real
+listening server: health 200 before, `curl_exit=28` after. The runbook tells an
+operator to poll exactly the endpoint that goes dark.
+
+**`safePath` was lexical.** `path.resolve` does not follow symlinks, so a single
+symlink inside the work root was a full read and write escape. The critic served
+`/etc/passwd` through `exists` and `/etc/hostname` through `read_text`. On a
+render box, symlinked media mounts under the work root are the normal wiring,
+which is exactly where the unreleased media lives.
+
+Also found and fixed: `http_download` validated the scheme and not the
+destination, so it would fetch `169.254.169.254` and hand the result back through
+`read_text`; `conform_grain` emitted `apad` with no ending to pad to, which with
+no `-t` is a render that never ends, and it is the same defect this file had
+already fixed in `duck_mix` two jobs over; the queue was unbounded; there was no
+SIGTERM handler, so the unit file's stop comment described a drain that did not
+exist; and `duck_mix` hardcoded `pcm_s24le` while the runbook told the operator
+to write `.flac`, which does not mux, sending them into a muxer error on the one
+acceptance check that decides the show.
+
+### The two findings that were about the verification
+
+**The tests did not pin the two most consequential pieces of logic.** The critic
+mutated `offset += dur - xf` to `offset += dur`, which moves every cut in the
+episode, and the suite returned 16 passed, 0 failed. It then deleted the entire
+protected-silence provision, the guard that refuses a cut boundary inside a hold
+pipeline 02 deliberately preserved, and the suite returned 16 passed, 0 failed
+again. Six of eighteen job types were exercised; `conform_grain`, about 190 lines
+carrying the cut, the grade, the ending and that provision, had none.
+
+Both are now pinned, and every guard added in this round was mutation tested:
+the fix reverted one at a time, the suite required to go red. Six for six. One of
+those mutations crashed the dispatcher rather than failing an assertion, which
+surfaced a further defect nobody had asked about: an exception inside `runNext`
+killed the process and left the concurrency counter incremented, so the slot
+would have leaked even without a restart. The right failure for a bad job is a
+failed job, never a dead server.
+
+**The strongest claim in the document was unreproducible.** "The negative control
+fails 15 of 16 against the unfixed original" was the evidence for "the tests
+detect the defects rather than merely agreeing with the fix", and nobody reading
+this repository could run it, because the unfixed engine lived only on Drive. It
+is now committed at `reference/jobs.drive-2026-08-07.js`, byte for byte, and
+`negative-control.js` verifies its sha256 and the absence of the audit markers
+before running the suite against it and requiring failure. It fails 22 of 27.
+Testimony became evidence.
+
+**No CI lane ran any of it.** Forty six tests, zero workflows, which is precisely
+the shape CLAUDE.md already records for `check:audio`: it ran in no workflow at
+all and four separate review passes found it. The precedent existed and was not
+followed. `.github/workflows/render-worker-ci.yml` now runs the builders, the
+HTTP contract and the negative control, path filtered to the worker directory,
+with a step that fails if the worker ever gains an npm dependency.
+
+The critic's one contradicted claim is worth recording too, because it was
+checked rather than accepted: it reported that DEPLOY.md's "every line added by
+the fixes is dash free" was contradicted by an en dash at `jobs.js:692`. The
+diff shows that line is inherited from the Drive original, not added, so the
+claim stood. The doc now states the inherited count exactly rather than saying
+"em dashes included" and leaving the en dash unmentioned.
 
 ## 3. Schedule ownership. No action, and now measured.
 
@@ -208,8 +290,8 @@ TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_the-render-worker-was-never-deployable_v1_2026-09-11
 DATE: 2026-09-11
 DECISIONS: Tee authorised all five recommended items in one instruction. The second was recommended as a deployment job and is recorded here as a construction job instead, because the worker had no server and the only reachable engine was the pre-audit copy. The engine moves from Drive into version control under deploy/render-worker rather than being deployed from Drive. The timeline versus source trim divergence between render_ep01_v3.sh and assemble_cut is recorded and deliberately left unfixed, because changing it on a guess could move every cut in the episode and this repository refuses a transformation that could change a number. The inherited comments in jobs.js keep their em dashes so the diff against the Drive original stays auditable line by line, with every added line dash free; Tee can call for a mechanical pass instead. The worker gets its own token rather than continuing to share Header Auth account 10.
-FINDINGS: The TSWS render worker has never run on any host, and the reason is not the missing URL every document names: jobs.js is a library that exports job definitions, nothing in Drive listens on a port, and there is no server.js anywhere in Drive, so the documented worker had no half that could be started. The jobs.js on Drive is the pre-audit copy and carries all three defects the 7 August audit reports as found and fixed with measurements, confirmed by grep against the downloaded bytes: normalizeChain, stills, clips, normalized_to, force_original_aspect_ratio, setsar, scanned_depth and skipped_done all appear zero times, assemble_cut returns only output and shots, and scan_drop still contains the hard coded two level walk verbatim. It also carries both defects the 8 August record names, so five in total. The one that decides the show is the afade pair in duck_mix, where afade=t=out holds zero forever and the following afade=t=in multiplies everything before its own start by zero, which on EP01 killed the bed at 544.000s of an 880.907s episode and left the final 53 seconds as digital silence under picture, passing every gate because the only gate measured length. Two Cloud credential and error workflow ids on VPS TSWS 00 resolved to nothing on that instance and would have failed a smoke test on auth rather than on DNS. The negative control caught a defect in the new test harness itself, where an async test was never awaited so a failing assertion became an unhandled rejection counted as a pass, which is a green that means nothing and surfaced only because the control was run. Of 60 VPS workflows exactly two are active and both are error handlers with triggerCount 0, so nothing on the VPS can fire on a clock.
-OPEN: run the four step acceptance suite in deploy/render-worker/DEPLOY.md on a real box, because no ffmpeg exists in the container these fixes were written in and nothing here proves a pixel or a sample; choose and provision the host, srv1936199 or its own, whose public address is not recorded in this repository; settle whether the TSWS manifest speaks timeline positions or source trims before the first full episode assembles; split Header Auth account 10 so the worker holds its own token; replace the account level shadow-we-share-brand skill body with the committed v2, which only Tee can do from the skill settings page; run the psnr job and record a number for the three encode generations rather than carrying the worry; install playwright and chromium on the box if the render_mark_full mark layer is wanted, neither being pinned by this repository
-STATUS: shipped to this repository, not to any host. VPS TSWS 00 repointed and re-read, versionId 1278ff9d to daabc50c with 13 nodes before and after. deploy/render-worker carries jobs.js with five fixes, the new server.js, a deploy runbook, a systemd unit and 32 passing tests, 16 pinning the builders and 16 exercising real HTTP. Negative control fails 15 of 16 against the unfixed original. The worker has still never been started on a host and no acceptance check has measured a sample. Branch restarted from origin/main after PR 193 merged.
+FINDINGS: A fresh critic on the pushed commit returned PASS-WITH-CONDITIONS and was right on every count that mattered, and the two findings worth keeping are about the verification rather than the code: mutating the xfade offset arithmetic so that every cut in the episode moves left the suite at 16 passed 0 failed, and deleting the entire protected-silence provision left it at 16 passed 0 failed again, so the two most consequential pieces of logic in the file were pinned by nothing; and the sentence carrying the whole verification argument, that the negative control fails against the unfixed original, was unreproducible by anyone reading the repository because the unfixed engine lived only on Drive. On the code: one authenticated request wedged the entire process, because the native job path had no timeout and its jobs blocked the event loop, so a FIFO through read_text took /health down without exiting and systemd's Restart=on-failure therefore never fired; safePath was lexical, so one symlink inside the work root served /etc/passwd through exists; http_download checked the scheme and not the destination, so it would fetch cloud metadata and hand it back through read_text; conform_grain emitted apad with no ending to pad to, the same defect already fixed in duck_mix two jobs over; the queue was unbounded; there was no SIGTERM handler, so the unit file's stop comment described a drain that did not exist; and duck_mix hardcoded pcm_s24le while the runbook told the operator to write .flac, which does not mux, which would have sent Tee into a muxer error on the one acceptance check that decides the show. Forty six tests ran in no CI workflow at all, the same shape CLAUDE.md already records for check:audio. The TSWS render worker has never run on any host, and the reason is not the missing URL every document names: jobs.js is a library that exports job definitions, nothing in Drive listens on a port, and there is no server.js anywhere in Drive, so the documented worker had no half that could be started. The jobs.js on Drive is the pre-audit copy and carries all three defects the 7 August audit reports as found and fixed with measurements, confirmed by grep against the downloaded bytes: normalizeChain, stills, clips, normalized_to, force_original_aspect_ratio, setsar, scanned_depth and skipped_done all appear zero times, assemble_cut returns only output and shots, and scan_drop still contains the hard coded two level walk verbatim. It also carries both defects the 8 August record names, so five in total. The one that decides the show is the afade pair in duck_mix, where afade=t=out holds zero forever and the following afade=t=in multiplies everything before its own start by zero, which on EP01 killed the bed at 544.000s of an 880.907s episode and left the final 53 seconds as digital silence under picture, passing every gate because the only gate measured length. Two Cloud credential and error workflow ids on VPS TSWS 00 resolved to nothing on that instance and would have failed a smoke test on auth rather than on DNS. The negative control caught a defect in the new test harness itself, where an async test was never awaited so a failing assertion became an unhandled rejection counted as a pass, which is a green that means nothing and surfaced only because the control was run. Of 60 VPS workflows exactly two are active and both are error handlers with triggerCount 0, so nothing on the VPS can fire on a clock.
+OPEN: run the four step acceptance suite in deploy/render-worker/DEPLOY.md on a real box, because no ffmpeg exists in the container these fixes were written in and nothing here proves a pixel or a sample, and two filter-level claims in particular rest on ffmpeg's documented semantics rather than on a run, that loop holds a single decoded frame for F frames and that apad with a zero pad_dur and no -t pads indefinitely; the acceptance suite covers F1, A1 and A2 but exercises F2 only incidentally, scan_drop not at all and -nostdin not at all, so add those two if the lane will lean on them; name-based SSRF through DNS is not closed by the private-address guard and cannot be closed at that layer; there is still no disk quota on the work root, so render_mark_full will accept a request for a great many 4K frames; the worker token is a single shared secret with no rotation mechanism; choose and provision the host, srv1936199 or its own, whose public address is not recorded in this repository; settle whether the TSWS manifest speaks timeline positions or source trims before the first full episode assembles; split Header Auth account 10 so the worker holds its own token; replace the account level shadow-we-share-brand skill body with the committed v2, which only Tee can do from the skill settings page; run the psnr job and record a number for the three encode generations rather than carrying the worry; install playwright and chromium on the box if the render_mark_full mark layer is wanted, neither being pinned by this repository
+STATUS: shipped to this repository, not to any host. VPS TSWS 00 repointed and re-read, versionId 1278ff9d to daabc50c with 13 nodes before and after. deploy/render-worker carries jobs.js with the five engine fixes plus six more from the critic round, the new server.js, a deploy runbook, a hardened systemd unit, the byte-for-byte Drive original as a committed fixture, and 46 passing tests: 27 pinning the builders, 19 exercising real HTTP against a real listening server. negative-control.js verifies the fixture's sha256 and requires the suite to FAIL against it, currently 22 of 27. Every guard added in the critic round was mutation tested, six for six. A path-filtered render-worker-ci.yml now runs all three. The worker has still never been started on a host and no acceptance check has measured a pixel or a sample. Branch restarted from origin/main after PR 193 merged.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```

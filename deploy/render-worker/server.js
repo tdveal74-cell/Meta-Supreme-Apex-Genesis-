@@ -49,6 +49,10 @@ const MAX_BODY    = Number(process.env.MAX_BODY_BYTES || 1024 * 1024);
 // Results are held so a caller that loses its poll can still collect. 24h is
 // well past the longest render plus the longest plausible retry.
 const RESULT_TTL  = Number(process.env.RESULT_TTL_MS || 24 * 3600 * 1000);
+// An unbounded queue is a memory exhaustion primitive for anyone holding the
+// token. Measured before this cap: 100 submissions sat with nothing draining
+// and nothing reclaiming them, because the sweep only collects FINISHED jobs.
+const MAX_QUEUE   = Number(process.env.MAX_QUEUE || 64);
 
 if (!TOKEN) {
   console.error('WORKER_TOKEN is not set. Refusing to start.');
@@ -122,45 +126,69 @@ function runNext() {
   // http_download, multipart_upload, render_mark_full) do their work in Node
   // rather than by spawning ffmpeg.
   if (j.spec.native) {
+    // execFile gets JOB_TIMEOUT; the native path had none at all, so a job that
+    // never settled held the single concurrency slot for the life of the
+    // process. This bounds the wait. It cannot interrupt a synchronous call
+    // that has already blocked the event loop, which is why the fix for that
+    // belongs in the jobs themselves (read_text and render_mark_full are now
+    // async) and this is the backstop rather than the guard.
+    let settled = false;
+    const done = (patch) => { if (!settled) { settled = true; clearTimeout(timer); finish(patch); } };
+    const timer = setTimeout(() => done({
+      status: 'error',
+      error: `job exceeded JOB_TIMEOUT of ${JOB_TIMEOUT} ms and was abandoned`,
+      killed: true,
+    }), JOB_TIMEOUT);
+    timer.unref();
     Promise.resolve()
       .then(() => j.spec.native())
-      .then(result => finish({ status: 'done', result }))
-      .catch(err => finish({ status: 'error', error: String(err && err.message || err) }));
+      .then(result => done({ status: 'done', result }))
+      .catch(err => done({ status: 'error', error: String(err && err.message || err) }));
     return;
   }
 
   // execFile, not exec. No shell is involved at any point.
-  execFile(j.spec.bin, j.spec.argv, {
-    timeout: JOB_TIMEOUT,
-    maxBuffer: 32 * 1024 * 1024,
-    cwd: WORK_ROOT,
-    windowsHide: true,
-  }, (err, stdout, stderr) => {
-    if (err) {
-      // Surface the tail of stderr verbatim. Return Failure in TSWS 00 prints
-      // whatever lands here, and rewriting an ffmpeg error into something
-      // friendlier just means the real one never reaches the log.
-      const tail = String(stderr || err.message || '').trim().split('\n').slice(-12).join('\n');
-      return finish({
-        status: 'error',
-        error: tail || String(err.message || 'no error text'),
-        exitCode: typeof err.code === 'number' ? err.code : null,
-        killed: !!err.killed,
-      });
-    }
-    let result = {};
-    if (typeof j.spec.parse === 'function') {
-      try {
-        result = j.spec.parse(stdout, stderr);
-      } catch (e) {
-        return finish({
-          status: 'error',
-          error: `the job ran but its output could not be parsed: ${e.message}`,
-        });
-      }
-    }
-    finish({ status: 'done', result });
-  });
+  //
+  // Wrapped because a synchronous throw here (a malformed spec, a bad argv
+  // type) escaped as an uncaught exception, killed the process, and left
+  // `running` incremented, so even a restart-free recovery would have leaked
+  // the single concurrency slot. Found by mutation testing the queue cap: the
+  // right failure for a bad job is a failed job, never a dead server.
+  try {
+    execFile(j.spec.bin, j.spec.argv, {
+      timeout: JOB_TIMEOUT,
+      maxBuffer: 32 * 1024 * 1024,
+      cwd: WORK_ROOT,
+      windowsHide: true,
+    }, (err, stdout, stderr) => {
+        if (err) {
+          // Surface the tail of stderr verbatim. Return Failure in TSWS 00 prints
+          // whatever lands here, and rewriting an ffmpeg error into something
+          // friendlier just means the real one never reaches the log.
+          const tail = String(stderr || err.message || '').trim().split('\n').slice(-12).join('\n');
+          return finish({
+            status: 'error',
+            error: tail || String(err.message || 'no error text'),
+            exitCode: typeof err.code === 'number' ? err.code : null,
+            killed: !!err.killed,
+          });
+        }
+        let result = {};
+        if (typeof j.spec.parse === 'function') {
+          try {
+            result = j.spec.parse(stdout, stderr);
+          } catch (e) {
+            return finish({
+              status: 'error',
+              error: `the job ran but its output could not be parsed: ${e.message}`,
+            });
+          }
+        }
+      finish({ status: 'done', result });
+    });
+  } catch (e) {
+    finish({ status: 'error', error: `could not start the job: ${String(e && e.message || e)}` });
+  }
 }
 
 // --- http ------------------------------------------------------------------
@@ -195,19 +223,17 @@ const server = http.createServer(async (req, res) => {
   catch { return send(res, 400, { error: 'bad request line' }); }
   const p = url.pathname.replace(/\/+$/, '') || '/';
 
-  // /health is the one unauthenticated route, and it deliberately reveals only
-  // the job type names. The sticky note in TSWS 00 tells an operator to compare
-  // that list against 18 to tell a stale jobs.js from a current one, so it has
-  // to be reachable before the token is known good.
+  // /health is the one unauthenticated route. It reveals the job type names and
+  // nothing else: the sticky note in TSWS 00 tells an operator to compare that
+  // list against 18 to tell a stale jobs.js from a current one, so it has to be
+  // reachable before the token is known good. WORK_ROOT and the queue depth used
+  // to be here too, which is a filesystem path and a load signal handed to
+  // anyone who can reach the TLS terminator. They moved behind the token.
   if (req.method === 'GET' && p === '/health') {
     return send(res, 200, {
       ok: true,
       jobs: Object.keys(J.JOBS).sort(),
       job_count: Object.keys(J.JOBS).length,
-      work_root: WORK_ROOT,
-      running,
-      queued: queue.length,
-      concurrency: CONCURRENCY,
     });
   }
 
@@ -239,6 +265,13 @@ const server = http.createServer(async (req, res) => {
       const code = e && e.statusCode === 400 ? 400 : 500;
       return send(res, code, { error: String(e && e.message || e) });
     }
+    if (queue.length >= MAX_QUEUE) {
+      // 503 and not 400: the parameters were fine, the box is full. TSWS 00's
+      // Accepted? treats any non-202 as a rejection and stops, which is the
+      // correct behaviour here too.
+      res.setHeader('retry-after', '60');
+      return send(res, 503, { error: `queue is full (${queue.length}/${MAX_QUEUE})` });
+    }
     const id = crypto.randomUUID();
     const j = {
       id, type, spec,
@@ -269,6 +302,13 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+  if (req.method === 'GET' && p === '/status') {
+    return send(res, 200, {
+      ok: true, work_root: WORK_ROOT, running,
+      queued: queue.length, concurrency: CONCURRENCY, tracked: jobs.size,
+    });
+  }
+
   if (req.method === 'GET' && p === '/jobs') {
     return send(res, 200, {
       count: jobs.size,
@@ -282,7 +322,32 @@ const server = http.createServer(async (req, res) => {
 server.headersTimeout = 65 * 1000;
 server.requestTimeout = 0;   // a submit is small; a poll is smaller
 
+/**
+ * SIGTERM arrives on `systemctl stop` and on every deploy. Without a handler,
+ * node's default action kills the process and the render at once and every job
+ * id the caller is still polling vanishes with the in-memory table, so the unit
+ * file's TimeoutStopSec was protecting nothing. Stop accepting, let the running
+ * job finish inside the unit's stop timeout, then go.
+ */
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`${signal} received. Not accepting new work; ${running} job(s) running.`);
+  server.close();
+  const deadline = Date.now() + Number(process.env.DRAIN_MS || 25000);
+  const tick = setInterval(() => {
+    if (running === 0 || Date.now() > deadline) {
+      clearInterval(tick);
+      console.log(running === 0 ? 'drained cleanly' : `stop deadline reached with ${running} running`);
+      process.exit(0);
+    }
+  }, 250);
+}
+
 if (require.main === module) {
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
   server.listen(PORT, HOST, () => {
     console.log(`tsws render worker listening on ${HOST}:${PORT}`);
     console.log(`  work root   ${WORK_ROOT}`);

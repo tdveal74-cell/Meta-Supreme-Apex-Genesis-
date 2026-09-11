@@ -6,7 +6,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node jobs.test.js && node server.test.js"
+    "test": "node jobs.test.js && node server.test.js && node negative-control.js",
+    "negative-control": "node negative-control.js"
   },
   "engines": {
     "node": ">=18"

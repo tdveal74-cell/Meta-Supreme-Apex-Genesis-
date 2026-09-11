@@ -161,9 +161,56 @@ t('a body that is not JSON is 400', async () => {
   const r = await req('POST', '/jobs', { raw: 'not json at all' });
   assert.strictEqual(r.status, 400);
 });
-t('an oversized body is refused rather than buffered', async () => {
-  const r = await req('POST', '/jobs', { raw: 'x'.repeat(2 * 1024 * 1024) }).catch(e => ({ status: 'reset', e }));
-  assert.ok(r.status === 400 || r.status === 'reset', 'got ' + r.status);
+t('an oversized body is refused by the size guard, not by the JSON parser', async () => {
+  // An earlier version sent 2 MiB of 'x', which is refused as invalid JSON
+  // whether or not MAX_BODY is enforced: raising MAX_BODY to 1 GiB still passed
+  // it. Send WELL FORMED JSON that is only oversized, so the size guard is the
+  // only thing that can reject it.
+  const big = JSON.stringify({ type: 'exists', params: { path: '.', pad: 'x'.repeat(2 * 1024 * 1024) } });
+  assert.ok(big.length > 2 * 1024 * 1024);
+  const r = await req('POST', '/jobs', { raw: big }).catch(() => ({ status: 'reset' }));
+  assert.ok(r.status === 400 || r.status === 'reset', 'got ' + r.status + ', size guard not enforced');
+});
+
+section('\n-- /health must not leak, and /status must be behind the token --');
+t('health carries the job list and nothing operational', async () => {
+  const r = await req('GET', '/health', { token: null });
+  for (const leak of ['work_root', 'queued', 'running', 'concurrency']) {
+    assert.ok(!(leak in r.body), `/health leaks ${leak} to anyone who can reach it`);
+  }
+});
+t('status carries the operational detail and requires the token', async () => {
+  assert.strictEqual((await req('GET', '/status', { token: null })).status, 401);
+  const r = await req('GET', '/status');
+  assert.strictEqual(r.status, 200);
+  assert.ok('work_root' in r.body && 'queued' in r.body);
+});
+
+section('\n-- the queue is bounded --');
+t('a full queue is refused with 503, not grown without limit', async () => {
+  // White box on purpose. `exists` finishes in under a millisecond, so firing
+  // requests at it never fills the queue: an earlier version of this test
+  // reported "80 accepted, 0 refused" and passed while proving nothing. Fill
+  // the real queue the server reads, then submit for real over HTTP.
+  const { queue } = require('./server.js');
+  const before = queue.length;
+  // A valid-shaped spec: with the cap removed these drain harmlessly instead of
+  // crashing the dispatcher, so a regression shows up as a failed assertion.
+  for (let i = 0; i < 64; i++) {
+    queue.push({ id: 'filler' + i, type: 'exists', status: 'queued',
+                 spec: { native: async () => ({ filler: true }) },
+                 started: null, ended: null });
+  }
+  try {
+    const r = await req('POST', '/jobs', { body: { type: 'exists', params: { path: '.' } } });
+    assert.strictEqual(r.status, 503, 'a full queue returned ' + r.status + ', not 503');
+    assert.ok(/queue is full/.test(r.body.error), r.body.error);
+  } finally {
+    queue.length = before;
+  }
+  // and it accepts again once there is room
+  const ok = await req('POST', '/jobs', { body: { type: 'exists', params: { path: '.' } } });
+  assert.strictEqual(ok.status, 202, 'a drained queue must accept again, got ' + ok.status);
 });
 
 section('\n-- lifecycle --');
