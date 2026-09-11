@@ -1,0 +1,17 @@
+{
+  "name": "tsws-render-worker",
+  "version": "3.0.0",
+  "private": true,
+  "description": "TSWS render worker: argv-only ffmpeg job runner behind a bearer token",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node jobs.test.js && node server.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {},
+  "optionalDependencies": {},
+  "//": "No dependencies, deliberately. Only render_mark_full needs anything beyond the Node standard library (playwright plus a chromium binary), and it throws a named error when they are absent rather than failing obscurely. Installing playwright is a separate, optional step documented in DEPLOY.md. This directory sits outside the pnpm workspace globs (apps/* and packages/*), so it does not enter the root lockfile."
+}

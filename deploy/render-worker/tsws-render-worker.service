@@ -1,0 +1,52 @@
+# TSWS render worker.
+#
+#   sudo cp tsws-render-worker.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now tsws-render-worker
+#
+# The token lives in /etc/tsws-render-worker.env, mode 0600, root owned. It is
+# deliberately not in this file: unit files are world readable.
+
+[Unit]
+Description=TSWS render worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tsws
+Group=tsws
+WorkingDirectory=/opt/tsws-render-worker
+ExecStart=/usr/bin/node /opt/tsws-render-worker/server.js
+EnvironmentFile=/etc/tsws-render-worker.env
+
+# Bind to loopback only. The TLS terminator in front of it is what faces the
+# internet, and it is the thing holding a certificate. A worker listening on
+# 0.0.0.0 is reachable on the bare IP over plain HTTP, which is how a bearer
+# token ends up on the wire in the clear.
+Environment=HOST=127.0.0.1
+Environment=PORT=8080
+
+Restart=on-failure
+RestartSec=5s
+
+# A render is long. Do not let systemd kill one mid encode.
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+# Hardening. The worker needs to read and write exactly one tree.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/data/tsws
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+
+[Install]
+WantedBy=multi-user.target
