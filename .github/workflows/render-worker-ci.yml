@@ -1,0 +1,88 @@
+name: Render worker CI
+
+# WHY THIS IS ITS OWN WORKFLOW, PATH FILTERED
+#
+# `deploy/render-worker/` is the TSWS render worker: the service every ffmpeg,
+# ffprobe and filesystem operation in the five TSWS pipelines goes through,
+# because n8n has no executeCommand on the plan in use. Its engine carried five
+# measured defects for five weeks, one of which would have shipped eleven
+# episodes with a dead sound bed.
+#
+# Its 46 tests ran in NO workflow when the directory first landed, and a critic
+# pass found that. This estate has paid for exactly that shape before: the
+# audio-ci.yml comment beside this file records `check:audio` running in no
+# workflow at all until four separate review passes found it. Wiring it the same
+# way rather than re-deriving the lesson a third time.
+#
+# It is a SEPARATE workflow with a narrow path filter, not a step inside ci.yml,
+# because deploy/render-worker sits outside the pnpm workspace globs (apps/* and
+# packages/*) on purpose: it has zero npm dependencies and must not enter the
+# root lockfile. A lockfile entry would drag every web pull request into paying
+# for it.
+#
+# NOTHING HERE RUNS FFMPEG, AND THAT IS STATED RATHER THAN IMPLIED. These tests
+# pin the argv and the filter graph the builders emit, and exercise the HTTP
+# contract against a real listening server. They prove no pixel and no sample.
+# The ffmpeg-level acceptance suite is in deploy/render-worker/DEPLOY.md and has
+# to be run on a real box by a human. A green run here is necessary and is not
+# sufficient.
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "deploy/render-worker/**"
+      - ".github/workflows/render-worker-ci.yml"
+  push:
+    branches: ["main"]
+    paths:
+      - "deploy/render-worker/**"
+      - ".github/workflows/render-worker-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  render-worker:
+    name: Render worker (argv, HTTP contract, negative control)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/render-worker
+    steps:
+      - uses: actions/checkout@v4
+
+      # No pnpm, no install step, no lockfile. The worker has zero
+      # dependencies, which is the property that lets it live outside the
+      # workspace, and a dependency appearing here should break this job.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Refuse any dependency creeping in
+        run: |
+          node -e '
+            const p = require("./package.json");
+            const d = Object.keys(p.dependencies || {});
+            const o = Object.keys(p.optionalDependencies || {});
+            if (d.length || o.length) {
+              console.error("the worker gained dependencies:", [...d, ...o].join(", "));
+              console.error("that would put it in the root lockfile and make every web PR pay for it");
+              process.exit(1);
+            }
+            console.log("zero dependencies, as designed");
+          '
+          test ! -e node_modules || { echo "node_modules committed"; exit 1; }
+
+      - name: Job builders (argv and filter graph)
+        run: node jobs.test.js
+
+      - name: HTTP contract against a real listening server
+        run: node server.test.js
+
+      # The load bearing check. Runs the SAME suite against the engine exactly as
+      # recovered from Drive on 2026-09-11, and requires that it FAILS. A suite
+      # that passes against known-defective code proves nothing, and this repo
+      # has already shipped one test that did precisely that: the first scan_drop
+      # test passed against the unfixed engine because the harness never awaited
+      # it, so it was asserting nothing at all.
+      - name: Negative control against the unfixed engine
+        run: node negative-control.js
