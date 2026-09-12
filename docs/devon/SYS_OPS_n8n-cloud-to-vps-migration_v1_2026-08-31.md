@@ -2,7 +2,7 @@
 
     status: pre-flight, nothing migrated
     source: thequietoperator.app.n8n.cloud (n8n Cloud)
-    target: the Hostinger VPS srv1936193 (2.25.140.44), n8n.editforge.online,
+    target: the Hostinger VPS N8N-HOST (N8N-HOST-IP), n8n.editforge.online,
             currently empty of workflows
     tool: scripts/n8n_migrate.py
     read from the live Cloud estate on 2026-08-31
@@ -284,7 +284,7 @@ redirect URI covers all three. Three different clients means three separate
 Google Cloud entries, possibly in three different projects.
 
 Second, the host itself. The URL above is derived from DNS (n8n.editforge.online
-resolves to 2.25.140.44, which is srv1936193) and from the Traefik container
+resolves to N8N-HOST-IP, which is N8N-HOST) and from the Traefik container
 publishing 443. It has not been fetched, because this sandbox has no egress to
 that host. The authoritative value is printed by n8n itself: open any OAuth2
 credential on the VPS and copy the OAuth Redirect URL it displays. If that

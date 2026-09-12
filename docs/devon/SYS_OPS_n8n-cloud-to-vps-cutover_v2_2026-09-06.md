@@ -2,7 +2,7 @@
 
     status: runbook, cutover not started; Cloud estate census read live 2026-09-06
     source: thequietoperator.app.n8n.cloud, 64 workflows, 39 active, 11 data tables
-    target: n8n.editforge.online on Hostinger VPS srv1936193 (2.25.140.44).
+    target: n8n.editforge.online on Hostinger VPS N8N-HOST (N8N-HOST-IP).
             Tee stated 2026-09-06 that nine data tables are there. This sandbox
             has no egress to the VPS, so nothing about the VPS is verified here.
     cap: 2,500 executions a month, stated by Tee 2026-09-06; 1,212 spent by

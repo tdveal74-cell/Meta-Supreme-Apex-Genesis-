@@ -126,7 +126,7 @@ outcome.
 
 Every prior record spoke of one VPS. There are two. VERIFIED by direct read.
 
-**srv1936193, public IP 2.25.140.44.** The n8n box. Six containers, all restart
+**N8N-HOST, public IP N8N-HOST-IP.** The n8n box. Six containers, all restart
 policy `always`:
 
 | Container | Published |
@@ -141,15 +141,15 @@ policy `always`:
 n8n on loopback behind traefik is exactly what the migration doc specified.
 Postgres is not internet reachable. Tee SSHes here as user `tee`, not root.
 
-**srv1936199.** The EditForge box. editforge web, provider, edge and worker plus
+**EDITFORGE-HOST.** The EditForge box. editforge web, provider, edge and worker plus
 two 1backend containers, all `unless-stopped`.
 
 Both boxes are fully patched as of 2026-09-05 06:09 and 06:47 UTC. Both were
 running a kernel that had since been superseded and auto removed, so both
 needed a reboot. **Both were rebooted on 2026-09-05 and BOTH were verified by
-direct read**, srv1936193 at 14:13:49 UTC and srv1936199 at 14:22:49 UTC. Both
+direct read**, N8N-HOST at 14:13:49 UTC and EDITFORGE-HOST at 14:22:49 UTC. Both
 proved reboot safe in practice, not just in theory. cloud-init is held back on
-purpose on srv1936193; that is the "1 update could not be installed
+purpose on N8N-HOST; that is the "1 update could not be installed
 automatically" in the MOTD, and it is not a failure.
 
 **Google Cloud project 828264336169 holds three OAuth clients, not one:** Gmail
@@ -249,12 +249,12 @@ the drift check on Mon and Thu, are also the ones that succeed.
 1. CLOSED 2026-09-05. Both VPSs were rebooted and BOTH were VERIFIED by direct
    read, so this item is measured rather than reported.
 
-   srv1936193 at 14:13:49 UTC: uptime 25 minutes, all six containers back on
+   N8N-HOST at 14:13:49 UTC: uptime 25 minutes, all six containers back on
    their own restart policy. traefik, n8n, postgres, searxng and sandbox-api
    at 25 minutes; sandbox-runner at 22, which is dependency order behind
    sandbox-api, not a fault.
 
-   srv1936199 at 14:22:49 UTC: uptime 34 minutes, load 0.01 0.05 0.02, all six
+   EDITFORGE-HOST at 14:22:49 UTC: uptime 34 minutes, load 0.01 0.05 0.02, all six
    containers back. editforge edge, web, worker and provider plus the two
    1backend containers. That also re-confirms the container inventory in
    section 5, which had been recorded from a single read on 2026-09-05 and had
@@ -264,8 +264,8 @@ the drift check on Mon and Thu, are also the ones that succeed.
    is the first time that has been demonstrated rather than assumed.
 
    NEW, found while reading the output: **health is only declared on half the
-   estate.** srv1936193 reports a health status on postgres and sandbox-api
-   only; srv1936199 on web, worker and provider only. The other six containers,
+   estate.** N8N-HOST reports a health status on postgres and sandbox-api
+   only; EDITFORGE-HOST on web, worker and provider only. The other six containers,
    traefik and n8n itself among them, declare no healthcheck at all, so "Up" is
    the entire signal. A container that is running and not serving is
    indistinguishable from a healthy one, which is the same shape as the failure
@@ -299,8 +299,8 @@ Recorded because the pattern matters more than the individual errors.
   labelled untested, and running it is what found out.
 - Calling the OAuth consent screen question a "landmine" ranked an unverified
   hypothesis above a measured, known broken alert lane.
-- "Updates are already done" was true of srv1936199 and said while the pending
-  updates were on srv1936193.
+- "Updates are already done" was true of EDITFORGE-HOST and said while the pending
+  updates were on N8N-HOST.
 - The first SSH hardening script checked `$HOME`, which resolves to `/root`
   under sudo, and would have missed `/home/tee/.ssh/authorized_keys`.
 - "vault.py and the conventions doc both disagree with the estate" was carried

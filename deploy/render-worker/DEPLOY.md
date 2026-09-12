@@ -11,11 +11,17 @@ on the live box, and what is still unproved.
 
 ## Deployed
 
+Host identifiers in this file are placeholders. `N8N-HOST`, `N8N-HOST-IP`,
+`EDITFORGE-HOST`, `EDITFORGE-HOST-IP` and `BRIDGE-GATEWAY` stand in for real
+values that are deliberately not recorded here, because this repository is
+public. The real values live in the private DEVON log. Substitute them before
+running anything below.
+
 | | |
 |---|---|
-| host | `srv1936193`, `2.25.140.44`, Ubuntu 24.04.4 LTS |
+| host | `N8N-HOST`, `N8N-HOST-IP`, Ubuntu 24.04.4 LTS |
 | resources | 2 cores, 7.8 GiB RAM, 96 GB disk |
-| bound to | `172.16.2.1:8080`, the `n8n_backend` docker bridge gateway |
+| bound to | `BRIDGE-GATEWAY:8080`, the `n8n_backend` docker bridge gateway |
 | node | 18.19.1, the Ubuntu 24.04 distro package |
 
 Proved on that box, by execution:
@@ -37,14 +43,23 @@ Proved on that box, by execution:
   empty list would not distinguish "worked and found nothing" from "did not
   work".
 
-Still unproved on the live box: n8n's own wiring inside `TSWS 00`, and every one
-of the five defect fixes at the sample and pixel level. The acceptance suite
-below is what settles the second, and nobody has run it.
+* `TSWS 00` returned `ok:true` end to end from n8n itself on 2026-09-12 at
+  03:29Z. Execution 11, 15.1 seconds, job id
+  `0b93daa1-e758-4498-b445-5d8be73c4d63`, result
+  `{"hit":false,"reason":"not a file"}`. Two defects had to be cleared before it
+  would run and both are recorded in
+  `docs/devon/SYS_OPS_the-wire-the-tab-and-the-wrapped-token_v1_2026-09-12.md`:
+  a `Submit Job` wire looping back into its own input, and a bearer token
+  carrying a space where a terminal had wrapped the line during a copy.
+
+Still unproved on the live box: every one of the five defect fixes at the sample
+and pixel level. The acceptance suite below is what settles that, and nobody has
+run it.
 
 ### Two deviations from the committed defaults, both required on this box
 
 ```
-Environment=HOST=127.0.0.1  ->  172.16.2.1
+Environment=HOST=127.0.0.1  ->  BRIDGE-GATEWAY
 MemoryMax=8G                ->  5G
 ```
 
@@ -211,8 +226,8 @@ docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}  gateway={
 
 If n8n uses `network_mode: host` it shares the host stack and loopback is fine.
 Otherwise bind the worker to the gateway of the network n8n's **application**
-container sits on, and set the same address in TSWS 00. On srv1936193 that was
-`172.16.2.1` (`n8n_backend`).
+container sits on, and set the same address in TSWS 00. On N8N-HOST that was
+`BRIDGE-GATEWAY` (`n8n_backend`).
 
 Do not bind to a task runner or sandbox network's gateway even though it would
 work. Binding only to the application network means sandboxed code routes to a
@@ -228,8 +243,8 @@ satisfies this worker, so no third party repository is required. Skip the `npm`
 package; the worker has zero dependencies and the three suites run directly with
 `node jobs.test.js`, `node server.test.js`, `node negative-control.js`.
 
-The autonomy driver recorded the intended home as srv1936199, the EditForge box,
-or its own host. It went to srv1936193 instead, the n8n box, so that the call
+The autonomy driver recorded the intended home as EDITFORGE-HOST, the EditForge box,
+or its own host. It went to N8N-HOST instead, the n8n box, so that the call
 never leaves the machine.
 
 ```bash
