@@ -44,12 +44,12 @@ last SUCCESSFULLY EMAILED pulse did not carry, or when ~22h have passed since
 the last emailed beat. A persisting problem therefore alerts once and then
 rides the daily note. The `emailed` column is a receipt, not a claim: the
 beat row inserts with `no` and a Mark Emailed node flips it to `yes` only
-after the Gmail send succeeds (with retry), so a failed send leaves its
+after the SMTP send succeeds (with retry), so a failed send leaves its
 alerts NEW and they re-fire on the very next beat - the failure direction is
 a duplicate email, never silence. Known tradeoff: a NEW instance under an
 already-alerted key (a second stuck job while one is already stuck) does not
 re-alert until the daily note. Known limit: the pulse email and the crash
-alarm share one Gmail credential, so a Gmail-wide outage silences both; the
+alarm share one SMTP credential, so a mail outage silences both; the
 heartbeat log stays the witness. Sender name: DEVON Heartbeat. Quiet beats
 still log; the heartbeat log, not the inbox, is the proof of life.
 

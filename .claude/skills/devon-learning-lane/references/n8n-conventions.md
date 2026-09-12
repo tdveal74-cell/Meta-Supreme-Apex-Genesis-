@@ -53,6 +53,7 @@ senderName naming the organ; activity emails only — silence means idle.
 Every new webhook/workflow is registered in `services/devon/vault.py` in the
 same change (one path, one job). Credentials are n8n credentials by id
 (Devon Capture Key `FYRvkRTOcROEYZ9P` for x-devon-key, Pinecone account
-`3XjKfxbS7zFWEa48`, Gmail account `vsTKuAilHmpYCc5L`) — never literal tokens
+`3XjKfxbS7zFWEa48`, SMTP account `mu7nJRSpkAfkzLdF` for every organ that
+mails) — never literal tokens
 in parameters, notes, or code nodes. Sticky notes on the canvas document what
 the workflow does and why its guards exist; keep them truthful when editing.
