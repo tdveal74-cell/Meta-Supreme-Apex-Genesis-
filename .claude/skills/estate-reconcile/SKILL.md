@@ -19,6 +19,22 @@ place, or the estate gets fixed through its gates. The one forbidden outcome
 is leaving them disagreeing silently. A reconcile run that found drift and
 ended without a write-back has not finished.
 
+### The list of places is a claim too
+
+Rule zero governs a record's values. It does not govern the record's own
+inventory of what there is to check, and that inventory rots the same way.
+
+Re-measuring every row a record has does not test whether the record has every
+row. A block can be re-read end to end, be right about all of it, and still be
+wrong, because a place existed that it never listed. Count the places from the
+estate on every pass, not from the last version of the record.
+
+Measured 2026-09-12, on the DEVON Area vocabulary. The canonical record listed
+four places the vocabulary had to stay in sync across. The estate held five:
+Airtable carried it in two fields, not one, and no version of the record had
+ever named the second. The 2026-09-06 pass had re-measured all four rows
+correctly six days earlier.
+
 ## The tool
 
     python3 scripts/estate_reconcile.py snapshot --out obs.json
@@ -104,6 +120,20 @@ from.
 
 ## The write-back doctrine
 
+A write-back never attributes a decision to Tee that Tee did not make. A
+reading derived from a record's own rules is labelled as derived, with the line
+to overturn named, so the next reader can tell a ruling from an inference. This
+costs one clause and it is not optional: a fabricated attribution is
+unfalsifiable once it is in the canon, because every later reader treats it as
+settled and stops checking.
+
+Measured 2026-09-12: a rewrite of the canonical Area vocabulary file recorded
+an ordering call as "Ruled 12 Sep 2026." Tee had ruled that day, on pinning a
+base ID. He had not ruled on ordering; the agent had, and dressed it as his.
+The file was withdrawn inside the hour and kept as a defective copy rather than
+deleted.
+
+
 When a vault claim drifts, correct `services/devon/vault.py` and keep
 `deploy/soul/services/devon/vault.py` byte identical, `cp` then `diff`.
 The correction records what was wrong and for how long, in the entry or its
@@ -144,6 +174,51 @@ Five stale records in nine days, for calibration:
 | Ecosystem spec, deployment section | autodeploy disabled, deploy by hand | pushes to main self-deploying | days, unwitnessed |
 | `vault WORKFLOWS Heartbeat` | active, 6 hour pulse | inactive, pulse dead | found 2026-09-01 |
 | `vault WORKFLOWS Error Alarm` | active | inactive | found 2026-09-01 |
+
+## Three ways a read comes back partial
+
+Every one of these was reported as a confident finding before it was caught,
+in a single session on 2026-09-12, against a record that four earlier passes
+had already touched. They are listed separately because each one looks like a
+completed read from the inside.
+
+**A truncated tool result is a silent partial read.** When a response exceeds
+the harness limit it is diverted to a file and the tool returns a pointer, not
+the data. The session that reads two of three items, hits the limit on the
+third and stops has surveyed nothing, and nothing in its own transcript says
+so. Query the saved file before drawing any conclusion about coverage. Measured
+on an Airtable schema call that returned 104,092 characters: the base that was
+skipped held the two fields the session then reported as never built.
+
+**A grep is not a read.** Keyword matching finds the section that matches and
+tells you nothing about the file. In the same session the base ID reported as
+missing from the estate was sitting in `devon-thread-log` itself, roughly forty
+lines below the section that had been searched. Before saying where something
+lives, or that it does not, read the file.
+
+**A synced skill is a copy, and you do not control when it refreshes.** An
+account-level Claude skill is mirrored into the session container at
+`~/.claude/skills/synced/<id>/<name>/SKILL.md`. The sync service refreshes it on
+its own schedule, which is neither session start nor read time: measured
+2026-09-12, one copy carried an 8 Sep stamp through several hours of a session
+and then refreshed mid-session, four days newer, with no read having asked for
+it. Invoking the skill through the Skill tool resolves to that same file, so it
+is not a second opinion, and there is no write path to the live skill at all.
+
+An agent therefore knows what its copy says and when that copy was stamped. It
+cannot force a refresh and cannot tell whether a newer version already exists.
+So report both halves or neither: `stat` the file and give the contents with the
+mtime, never a bare verdict about the live skill. "The skill says eight" and
+"my copy, stamped four days ago, says eight" are different sentences, and
+collapsing them puts a false status into a record under today's date. A record
+row covering an account-level skill carries Tee's attestation with the date he
+gave it, or it carries nothing.
+
+Measured 2026-09-12, twice in one session. First a copy stamped 8 Sep was read
+on 12 Sep, reported as a 12 Sep measurement, and written into the canonical
+file; Tee corrected it. Then the same paragraph was written claiming the copy is
+"never refreshed", and the copy refreshed forty minutes later. Both errors came
+from describing the live artifact when only the copy was in hand.
 
 ## Traps
 
