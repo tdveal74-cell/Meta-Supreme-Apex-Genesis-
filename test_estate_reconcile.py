@@ -1068,3 +1068,205 @@ def test_an_account_level_skill_row_is_attested_not_measured():
     # copy refreshed forty minutes later. The mtime clause is the correction.
     assert "give the contents with the mtime" in body
     assert "cannot force a refresh" in body
+
+
+# ---------------------------------------------------------------------------
+# The connector estate: vocabularies that live in Drive, Notion and Airtable,
+# where nothing repo side can see them
+# ---------------------------------------------------------------------------
+
+_AREA_TERMS = [
+    "TQO", "Podcast", "NCO", "Health", "Money", "Family", "Learning", "Systems", "ACX",
+]
+_NOTION = "notion:a5bcfbf5-ce1d-493b-9992-a11bc2a03dc4/Area"
+_RECEIPTS = "airtable:app28z7XnKzjfTXwc/tblEhgEZoNr2ztbB3/fldcBN1kec0xgSnr5"
+_CAPTURES = "airtable:app28z7XnKzjfTXwc/tbl4ziFRbl5mnUcKc/fldpbMPz2xBcEo0Ia"
+_SKILL_SURFACE = "account_skill:devon-thread-log"
+_ACX_FOLDER = "drive:1a_baNvgH9CBb4biuBCbdNb_4P9fvkO1a"
+_AREAS_FOLDER = "drive:1efaZ37s3PBjeEFD1HUQnN3QwH3pV0Rbc"
+
+
+def _connector_observations():
+    """The estate as read on 2026-09-12, every value from a live read."""
+    return {
+        "connectors": {
+            "surfaces": {
+                _NOTION: {"options": list(_AREA_TERMS)},
+                _RECEIPTS: {"options": list(_AREA_TERMS)},
+                _CAPTURES: {"options": list(_AREA_TERMS)},
+            },
+            "present": {_ACX_FOLDER: True},
+            "counts": {_AREAS_FOLDER: 9},
+            "attestations": {
+                _SKILL_SURFACE: {
+                    "by": "Tee",
+                    "at": "2026-09-12",
+                    "terms": list(_AREA_TERMS),
+                }
+            },
+            "discovered": [
+                _NOTION, _RECEIPTS, _CAPTURES, _SKILL_SURFACE, _ACX_FOLDER, _AREAS_FOLDER,
+            ],
+        }
+    }
+
+
+def _vocabulary_finding(observations, subject_fragment):
+    """The one finding for a surface. `_finding` above matches on claim.record;
+    these claims are addressed by their surface id, which is the subject."""
+    findings = reconcile.check(reconcile.vocabulary_claims(), observations)
+    matches = [f for f in findings if subject_fragment in f.claim.subject]
+    assert matches, f"no vocabulary finding for {subject_fragment!r}"
+    assert len(matches) == 1, f"ambiguous subject fragment {subject_fragment!r}"
+    return matches[0]
+
+
+def test_the_area_vocabulary_reads_clean_against_the_estate_of_2026_09_12():
+    """The whole lane, green, against values every one of which was read live
+    that day. A lane that has never been run against a real estate is a lane
+    that has never been tested."""
+    findings = reconcile.check(reconcile.vocabulary_claims(), _connector_observations())
+    assert [f.status for f in findings] == [reconcile.OK] * len(findings)
+    assert reconcile.exit_code(findings, strict=True) == 0
+
+
+def test_a_snapshot_that_never_read_the_connectors_is_unverified_not_ok():
+    """An observations file written before this lane existed must not be read
+    as agreement. Silence is UNVERIFIED, which fails a strict run for the same
+    reason a missing key does."""
+    findings = reconcile.check(reconcile.vocabulary_claims(), {})
+    assert {f.status for f in findings} == {reconcile.UNVERIFIED}
+    assert reconcile.exit_code(findings) == 0
+    assert reconcile.exit_code(findings, strict=True) == 1
+
+
+def test_a_term_missing_from_one_surface_is_drift():
+    observations = _connector_observations()
+    observations["connectors"]["surfaces"][_NOTION]["options"].remove("ACX")
+    finding = _vocabulary_finding(observations, _NOTION)
+    assert finding.status == reconcile.DRIFT
+    assert "ACX" in finding.detail
+
+
+def test_a_term_no_surface_should_carry_is_drift():
+    observations = _connector_observations()
+    observations["connectors"]["surfaces"][_RECEIPTS]["options"].append("Invented")
+    finding = _vocabulary_finding(observations, _RECEIPTS)
+    assert finding.status == reconcile.DRIFT
+    assert "Invented" in finding.detail
+
+
+def test_option_order_is_not_drift():
+    """Notion and Airtable both sort ACX ninth while the canon sorts it fourth.
+    Picker order is UI, not vocabulary, and a checker that called that drift
+    would push the canon to agree with a dropdown. Set comparison on purpose."""
+    observations = _connector_observations()
+    reordered = ["ACX"] + [t for t in _AREA_TERMS if t != "ACX"]
+    observations["connectors"]["surfaces"][_NOTION]["options"] = reordered
+    finding = _vocabulary_finding(observations, _NOTION)
+    assert finding.status == reconcile.OK
+
+
+def test_a_surface_the_estate_carries_and_no_record_pins_is_drift():
+    """The 2026-09-12 miss exactly: Inbox Captures carried the vocabulary and
+    no version of the record had ever named it. Re-measuring the pinned
+    surfaces could never have found that, which is why completeness is its own
+    claim and is counted from the estate."""
+    observations = _connector_observations()
+    observations["connectors"]["discovered"].append("airtable:appNEW/tblNEW/fldNEW")
+    finding = _vocabulary_finding(observations, "every surface carrying it is pinned")
+    assert finding.status == reconcile.DRIFT
+    assert "appNEW" in finding.detail
+
+
+def test_completeness_without_a_discovered_list_is_unverified():
+    """Re-measuring a list does not test whether the list is complete, and a
+    snapshot that never went looking must say so rather than pass."""
+    observations = _connector_observations()
+    del observations["connectors"]["discovered"]
+    finding = _vocabulary_finding(observations, "every surface carrying it is pinned")
+    assert finding.status == reconcile.UNVERIFIED
+    assert "does not test the pin list" in finding.detail
+
+
+def test_an_account_level_skill_is_never_measured_only_attested():
+    """A session reads a container copy on the sync service's schedule, so it
+    can know the copy's age and nothing else. With no attestation the row is
+    UNVERIFIED, never OK and never DRIFT: the tool cannot have an opinion."""
+    observations = _connector_observations()
+    del observations["connectors"]["attestations"][_SKILL_SURFACE]
+    finding = _vocabulary_finding(observations, _SKILL_SURFACE)
+    assert finding.status == reconcile.UNVERIFIED
+    assert "unreadable from a session" in finding.detail
+
+
+def test_an_attestation_with_no_attester_or_date_does_not_count():
+    """A fabricated attribution is unfalsifiable once it reaches the canon. An
+    attestation that names nobody is the same shape and is refused here."""
+    for dropped in ("by", "at"):
+        observations = _connector_observations()
+        observations["connectors"]["attestations"][_SKILL_SURFACE].pop(dropped)
+        finding = _vocabulary_finding(observations, _SKILL_SURFACE)
+        assert finding.status == reconcile.UNVERIFIED, f"dropping {dropped!r} still passed"
+        assert "attester" in finding.detail or "date" in finding.detail
+
+
+def test_an_attestation_that_disagrees_with_the_canon_is_drift():
+    observations = _connector_observations()
+    observations["connectors"]["attestations"][_SKILL_SURFACE]["terms"] = _AREA_TERMS[:8]
+    finding = _vocabulary_finding(observations, _SKILL_SURFACE)
+    assert finding.status == reconcile.DRIFT
+    assert "Tee" in finding.detail and "2026-09-12" in finding.detail
+
+
+def test_the_drive_folder_set_is_counted_not_named():
+    """Drive titles its folders with display names ("TQO - The Quiet Operator",
+    "Learning & Skills") rather than the vocabulary's terms, so a set
+    comparison would report drift that is not there. Counting catches the
+    failure that matters, an Area added with no folder, without inventing a
+    name mapping nobody ruled on."""
+    observations = _connector_observations()
+    finding = _vocabulary_finding(observations, _AREAS_FOLDER)
+    assert finding.status == reconcile.OK
+
+    observations["connectors"]["counts"][_AREAS_FOLDER] = 8
+    finding = _vocabulary_finding(observations, _AREAS_FOLDER)
+    assert finding.status == reconcile.DRIFT
+    assert "8 members for 9 terms" in finding.detail
+
+
+def test_a_trashed_pinned_folder_is_drift():
+    observations = _connector_observations()
+    observations["connectors"]["present"][_ACX_FOLDER] = False
+    finding = _vocabulary_finding(observations, _ACX_FOLDER)
+    assert finding.status == reconcile.DRIFT
+
+
+def test_every_vocabulary_surface_is_pinned_by_a_full_id_path():
+    """A name is not a pin. The 2026-09-12 record named a table and its field
+    with no base, so a session searched Airtable base names for DEVON, found
+    none, and reported the whole Airtable half as never built. An airtable
+    surface needs base/table/field, a notion surface needs a data source id."""
+    for vocabulary in reconcile.VOCABULARIES:
+        for surface in vocabulary["surfaces"]:
+            scheme, _, rest = surface["id"].partition(":")
+            assert rest, f"{surface['id']} carries no id after its scheme"
+            if scheme == "airtable":
+                assert rest.count("/") == 2, (
+                    f"{surface['id']} is not a full base/table/field path"
+                )
+                assert rest.startswith("app"), f"{surface['id']} does not start at a base"
+            if scheme == "notion":
+                assert "/" in rest, f"{surface['id']} names no property"
+
+
+def test_every_vocabulary_surface_has_a_registered_checker():
+    """A surface whose verifier is not in CHECKERS raises a KeyError deep in a
+    run rather than reporting anything, which is the one failure shape this
+    tool must never have."""
+    for vocabulary in reconcile.VOCABULARIES:
+        for surface in vocabulary["surfaces"]:
+            assert surface["verifier"] in reconcile.CHECKERS, (
+                f"{surface['label']} names an unregistered verifier "
+                f"{surface['verifier']!r}"
+            )

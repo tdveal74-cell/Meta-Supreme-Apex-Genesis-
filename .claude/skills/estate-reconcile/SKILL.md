@@ -108,6 +108,77 @@ UNVERIFIED, which is the honest reading of an older file, and fails a
 five most recent deployments of the API service with the commit each built
 from.
 
+## The connector estate
+
+Everything above is repo side: `vault.py`, pinned doc sentences, Alembic,
+Railway, n8n. `VOCABULARIES` in the reconciler covers what lives in Drive,
+Notion and Airtable, where nothing in this repository can see it. That is where
+the DEVON Area vocabulary sat out of sync across five surfaces until
+2026-09-12, found only because a session tripped over it.
+
+A vocabulary is a closed set of terms that must read identically everywhere it
+is written. Every surface is pinned by its FULL id path, base included, because
+a name is not a pin: the record that miscarried named a table and its field but
+no base, a session searched Airtable base names for "DEVON", found none, and
+reported the whole Airtable half as never built.
+
+These surfaces are read through a session's MCP connectors, so the snapshot is
+assembled by hand the same way the keyless n8n snapshot is. Add a `connectors`
+block:
+
+    "connectors": {
+      "surfaces": {
+        "notion:<data source id>/<property>": {"options": ["...", "..."]},
+        "airtable:<baseId>/<tableId>/<fieldId>": {"options": ["...", "..."]}
+      },
+      "present": {"drive:<file or folder id>": true},
+      "counts":  {"drive:<folder id>": 9},
+      "attestations": {
+        "account_skill:<name>": {"by": "Tee", "at": "<YYYY-MM-DD>",
+                                 "terms": ["...", "..."]}
+      },
+      "discovered": ["<every surface id you found>", "..."]
+    }
+
+Four things decide whether that block is worth anything.
+
+**`discovered` is the point, and it is a search, not a copy of the pin list.**
+It is what you actually went and found. Anything in it that is not pinned is a
+surface no record knows about, which is the exact shape of the 2026-09-12 miss.
+Enumerate: every Airtable base (`list_bases`, then every table schema, not a
+search for a base named after the lane), the Notion data sources, the Drive
+folder, the account level skills. Omit the key and completeness reports
+UNVERIFIED, which is honest and fails `--strict`. Filling it from
+`VOCABULARIES` makes the check pass and proves nothing, which is worse than
+leaving it out.
+
+The 2026-09-12 pass did not reach n8n data tables, so a vocabulary written into
+one would still be invisible. Say so in the run rather than letting an OK on
+completeness imply a sweep that did not happen.
+
+**Option ORDER is not vocabulary.** Comparison is on the set. Notion and
+Airtable both sort `ACX` ninth while the canon sorts it fourth; calling that
+drift would push the canon to agree with a dropdown.
+
+**An account level skill is attested, never measured.** A session does not read
+the live skill. It reads a copy mirrored into the container, refreshed on the
+sync service's schedule rather than at session start or read time, and invoking
+the skill through the Skill tool resolves to the same file. So a run knows the
+copy's contents and its `stat` mtime, and nothing else. Put Tee's attestation in
+the snapshot with who and when, or leave it out and take the UNVERIFIED. Never
+write the row from the container copy: on 2026-09-12 a four day old copy was
+reported as a same day measurement and reached the canonical record.
+
+**Where members carry display names, count rather than name.** The Drive
+`2. Areas` folders are titled `TQO - The Quiet Operator`, `NCO Forge`,
+`Learning & Skills`, not by the terms. `vocabulary_count` catches an Area added
+with no folder without inventing a name mapping nobody ruled on. Whether those
+titles should be the slugs is Tee's ruling.
+
+Adding a vocabulary means adding it to `VOCABULARIES` with every surface pinned
+by full id, and `test_estate_reconcile.py` enforces the id shape and that every
+verifier named is registered in `CHECKERS`.
+
 ## Reading a run
 
 - `DRIFT` is work, today. See the write-back doctrine below.
