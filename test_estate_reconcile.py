@@ -30,6 +30,8 @@ import pytest
 from scripts import estate_reconcile as reconcile
 
 ROOT = pathlib.Path(__file__).parent
+SKILLS = ROOT / ".claude" / "skills"
+SKILL = SKILLS / "estate-reconcile" / "SKILL.md"
 
 
 def _n8n_observation(workflows, webhooks):
@@ -444,7 +446,11 @@ def test_the_new_files_carry_no_banned_marks():
     """scripts/ and root tests sit outside test_devon_integrity's sweep, so
     the reconciler polices its own files by the same rule."""
     banned = (chr(0x2014), chr(0x2013))  # em dash, en dash, built not written
-    for path in (ROOT / "scripts" / "estate_reconcile.py", pathlib.Path(__file__)):
+    for path in (
+        ROOT / "scripts" / "estate_reconcile.py",
+        pathlib.Path(__file__),
+        SKILL,
+    ):
         text = path.read_text(encoding="utf-8")
         offenders = [line for line in text.splitlines() if any(m in line for m in banned)]
         assert not offenders, f"banned dash in {path.name}: {offenders[:3]}"
@@ -948,3 +954,117 @@ def test_the_score_is_reported_and_recorded_on_a_failing_run(tmp_path, capsys):
     assert code == 1, "a snapshot with no live estate must still fail on drift"
     assert "Verified score:" in capsys.readouterr().out
     assert len(reconcile.read_history(history)) == 1
+
+
+# ---------------------------------------------------------------------------
+# The 2026-09-12 amendments: counting the estate, and reads that come back
+# partial without saying so
+# ---------------------------------------------------------------------------
+
+_NUMBER_WORDS = {
+    "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+}
+
+
+def _skill_dirs():
+    """Every directory under .claude/skills that actually carries a skill."""
+    return sorted(d.name for d in SKILLS.iterdir() if (d / "SKILL.md").is_file())
+
+
+def _count(word, where):
+    """CLAUDE.md writes these as words, and capitalises one of them because it
+    opens a sentence. A KeyError here would read as a broken test rather than
+    as the prose having moved."""
+    number = _NUMBER_WORDS.get(word.lower())
+    assert number is not None, f"{where} now says {word!r}, which is not a number word"
+    return number
+
+
+def _prose(path):
+    """Prose pins match on the words, not on where the paragraph happens to
+    wrap. Rewrapping a sentence is not drift; losing it is."""
+    return re.sub(r"\s+", " ", path.read_text(encoding="utf-8"))
+
+
+def test_the_skill_inventory_is_counted_from_the_directory():
+    """CLAUDE.md's skill count was written once and then went stale: it said
+    six, five of them ours, while shadow-we-share-brand had been committed and
+    named nowhere. Counting a lane from its own prose is the failure the
+    2026-09-12 amendments are about, so the prose is now pinned to the
+    directory it describes."""
+    claude_md = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+    skills = _skill_dirs()
+    vendored = sorted(d.name for d in SKILLS.iterdir() if (d / "UPSTREAM.md").is_file())
+    ours = [name for name in skills if name not in vendored]
+
+    total = re.search(r"`\.claude/skills/` carries (\w+)\.", claude_md)
+    assert total, "CLAUDE.md no longer states a skill total; the pin cannot check it"
+    assert _count(total.group(1), "CLAUDE.md") == len(skills), (
+        f"CLAUDE.md says {total.group(1)} skills, the directory holds "
+        f"{len(skills)}: {skills}"
+    )
+
+    mine = re.search(r"(\w+) are ours:", claude_md)
+    assert mine, "CLAUDE.md no longer states how many skills are ours"
+    assert _count(mine.group(1), "CLAUDE.md") == len(ours), (
+        f"CLAUDE.md says {mine.group(1)} are ours, the directory holds "
+        f"{len(ours)}: {ours}"
+    )
+
+    unnamed = [name for name in skills if f"`{name}`" not in claude_md]
+    assert not unnamed, (
+        f"these skills exist and CLAUDE.md names none of them: {unnamed}. "
+        "A reader counting from that paragraph would miss them."
+    )
+
+
+def test_only_scroll_craft_is_vendored():
+    """The ours/vendored split in CLAUDE.md is load bearing: vendored skills
+    are never edited in place. UPSTREAM.md is what marks one, so a second
+    vendored skill arriving must move the prose, not sit silently."""
+    vendored = sorted(d.name for d in SKILLS.iterdir() if (d / "UPSTREAM.md").is_file())
+    assert vendored == ["scroll-craft"], (
+        f"vendored skills are now {vendored}; CLAUDE.md and the "
+        "ours/vendored counts above both assume scroll-craft is the only one"
+    )
+
+
+def test_the_skill_carries_the_inventory_rule():
+    """Rule zero governs a record's values. The 2026-09-12 addition governs the
+    record's list of what there is to check, which rotted independently."""
+    body = _prose(SKILL)
+    assert "### The list of places is a claim too" in body
+    assert "Count the places from the estate on every pass" in body
+
+
+def test_the_skill_carries_the_three_partial_reads():
+    """Each was reported as a confident finding before it was caught. Dropping
+    any one of them re-opens a failure mode that has already cost a false
+    record entry."""
+    body = _prose(SKILL)
+    for rule in (
+        "A truncated tool result is a silent partial read.",
+        "A grep is not a read.",
+        "A synced skill is a copy, and you do not control when it refreshes.",
+    ):
+        assert rule in body, f"the skill no longer carries: {rule}"
+
+
+def test_the_skill_forbids_attributing_an_unmade_ruling():
+    """A fabricated attribution is unfalsifiable once it reaches the canon:
+    every later reader treats it as settled and stops checking."""
+    body = _prose(SKILL)
+    assert "never attributes a decision to Tee that Tee did not make" in body
+    assert "labelled as derived" in body
+
+
+def test_an_account_level_skill_row_is_attested_not_measured():
+    """The rule that cost the most to learn: a session reads a container
+    snapshot, so it can measure the copy's age and nothing else."""
+    body = _prose(SKILL)
+    assert "carries Tee's attestation with the date he gave it, or it carries nothing" in body
+    assert "not a second opinion" in body
+    # The first draft of this rule claimed the copy is never refreshed, and the
+    # copy refreshed forty minutes later. The mtime clause is the correction.
+    assert "give the contents with the mtime" in body
+    assert "cannot force a refresh" in body
