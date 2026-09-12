@@ -1,0 +1,77 @@
+# TSWS render worker.
+#
+#   sudo cp tsws-render-worker.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now tsws-render-worker
+#
+# The token lives in /etc/tsws-render-worker.env, mode 0600, root owned. It is
+# deliberately not in this file: unit files are world readable.
+
+[Unit]
+Description=TSWS render worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tsws
+Group=tsws
+WorkingDirectory=/opt/tsws-render-worker
+ExecStart=/usr/bin/node /opt/tsws-render-worker/server.js
+EnvironmentFile=/etc/tsws-render-worker.env
+
+# Bind to loopback only. The TLS terminator in front of it is what faces the
+# internet, and it is the thing holding a certificate. A worker listening on
+# 0.0.0.0 is reachable on the bare IP over plain HTTP, which is how a bearer
+# token ends up on the wire in the clear.
+Environment=HOST=127.0.0.1
+Environment=PORT=8080
+
+Restart=on-failure
+RestartSec=5s
+# Without a burst limit, a missing or too-short token gives an infinite
+# five-second exit-2 loop instead of a service that stops and says why.
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+# A render is long. Do not let systemd kill one mid encode.
+#
+# This is only true because server.js now handles SIGTERM: it stops accepting,
+# waits for the running job, then exits. Until 2026-09-11 there was no handler,
+# so the default action killed node and the render together and every job id the
+# caller was polling vanished with the in-memory table. The comment described a
+# drain that did not exist. DRAIN_MS must stay below TimeoutStopSec.
+TimeoutStopSec=45
+Environment=DRAIN_MS=35000
+KillSignal=SIGTERM
+
+# Hardening. The worker needs to read and write exactly one tree.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/data/tsws
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+PrivateDevices=true
+RestrictNamespaces=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Ceilings. The worker refuses at 64 queued jobs, but nothing inside it bounds
+# what ONE job costs: render_mark_full will happily accept a request for 14,400
+# 4K frames. Tune CPUQuota to the box; these are a floor, not a recommendation.
+# There is still no disk quota on the work root, which needs a filesystem level
+# quota rather than a unit setting.
+MemoryMax=8G
+TasksMax=512
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

@@ -178,6 +178,7 @@ async def test_github_merge_requires_approval_and_exact_head_sha(
     step = waiting.json()["task"]["plan"]["steps"][0]
     decision = await client.post(
         "/api/v1/devon/approvals/decide",
+        headers=auth_headers,
         json={
             "request_id": step["approval_request_id"],
             "token": waiting.json()["approval_token"],

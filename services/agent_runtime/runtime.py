@@ -25,6 +25,7 @@ from services.agent_runtime.governance import (
     approval_marker,
 )
 from services.agent_runtime.learning import InMemoryLearningStore, LearningStore
+from services.agent_runtime.learning_context import unavailable_learning
 from services.agent_runtime.planner import Planner
 from services.agent_runtime.store import AgentTaskStore, InMemoryAgentTaskStore
 from services.agent_runtime.tools import ToolRegistry
@@ -125,6 +126,15 @@ class AgentRuntime:
         context_for = getattr(self.learning, "context_for", None)
         if callable(context_for):
             merged_context["devon_learning"] = context_for(clean_goal)
+        else:
+            # An injected store without `context_for` used to drop the key
+            # entirely, so the planner prompt simply had no learning section and
+            # nothing said why. A named absence is the same fact stated out
+            # loud, and it keeps this branch distinguishable from a store that
+            # was read and found empty.
+            merged_context["devon_learning"] = unavailable_learning(
+                "the injected learning store exposes no context_for"
+            )
         if self.soul is not None:
             merged_context["soul_recall"] = await soul_recall_payload(
                 self.soul, clean_goal
@@ -213,6 +223,7 @@ class AgentRuntime:
                     area=str(task.context.get("area") or "Systems"),
                     reversible=spec.reversible,
                     blast_radius=spec.blast_radius,
+                    owner_id=str(task.context.get("owner_id") or ""),
                 )
                 step.approval_request_id = record.request_id
                 step.state = StepState.WAITING_APPROVAL

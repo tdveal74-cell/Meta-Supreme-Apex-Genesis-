@@ -14,13 +14,21 @@ is available for offline/local work only. Backend failures fail closed rather
 than silently downgrading to a process-local queue.
 """
 
+import logging
 import os
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.session import get_db
+from app.security.deps import CurrentUser
+from app.services.capture_enrichment import status as enrichment_status
+from app.services.capture_enrichment import suggest_area
 from app.services.devon_approval_store import build_approval_queue
+from app.services.knowledge_loop import REQUESTED_BY as KNOWLEDGE_LOOP_REQUESTER
+from app.services.live_state_ledger import ledger
 from services.devon import areas as areas_mod
 from services.devon import (
     filing,
@@ -31,9 +39,17 @@ from services.devon import (
     receipts,
     vault,
 )
+from services.devon.approval import (
+    NO_MATCH,
+    ApprovalState,
+    DecisionResult,
+    RefusalReason,
+)
 from services.devon.assistant import Devon
 from services.devon.commands import ALL_INTENTS, approval_gated_intents
 from services.devon.precedence import Candidate, resolve
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/devon", tags=["DEVON"])
 
@@ -82,6 +98,10 @@ async def devon_identity() -> Dict[str, Any]:
         "intents": len(ALL_INTENTS),
         "approval_gated_intents": [i.name for i in approval_gated_intents()],
         "approval_storage": _approval_storage_status(),
+        # Whether captures are being tagged, and whether the provider behind
+        # that setting has ever actually been built. A lane that can stop
+        # running silently is what DCD-07 was.
+        "capture_enrichment": enrichment_status(),
         "guarantees": [
             "No route writes to Drive, Notion, Airtable or n8n.",
             "Captures return a filing plan. The caller executes it.",
@@ -280,25 +300,89 @@ async def list_areas() -> Dict[str, Any]:
 
 
 class CommandBody(BaseModel):
-    text: str = Field(..., min_length=1, description="What was said to DEVON")
+    text: str = Field(
+        ..., min_length=1, max_length=4_000, description="What was said to DEVON"
+    )
 
 
 @router.post("/command")
-async def command(body: CommandBody) -> Dict[str, Any]:
-    """Route one utterance. Returns what DEVON understood and what he did not do."""
-    return _devon.ask(body.text).to_dict()
+async def command(body: CommandBody, current_user: CurrentUser) -> Dict[str, Any]:
+    """Route one utterance. Returns what DEVON understood and what he did not do.
+
+    Signed in only. An effect utterance raises a durable approval card, and a
+    card raised by nobody in particular is exactly what an anonymous caller
+    would use to fill the approval rail, so the speaker must be an account and
+    the card is stamped with it.
+
+    A capture is offered an Area by the enrichment provider first. That costs a
+    call only when the utterance is a capture that would consult resolve_area
+    and ENRICHMENT_PROVIDER names a real provider; every other utterance,
+    including every query on the offline lane, spends nothing. The suggestion is
+    still validated against the nine inside DEVON, so the reply's
+    area_provenance says which rung of the ladder answered.
+    """
+    suggestion = await suggest_area(body.text)
+    return _devon.ask(
+        body.text,
+        owner_id=current_user.id,
+        suggested_area=suggestion.area_label if suggestion else None,
+    ).to_dict()
 
 
 class DecideBody(BaseModel):
     request_id: Optional[str] = None
     token: Optional[str] = None
     decision: Optional[str] = Field(default=None, description="approve or refuse")
-    decided_by: str = "Tee"
+
+
+async def _settle_ledger_refusal(
+    db: AsyncSession, result: DecisionResult, decided_by: str, owner_id: str
+) -> None:
+    """Tell the Live State Ledger that a card it opened was refused.
+
+    Only the knowledge loop opens ledger approval rows, so for every other
+    card this settles nothing and returns. The lookup is scoped by owner as
+    well as by request id: the queue's own visibility check has already run,
+    and this second scope keeps the settlement correct on its own terms
+    rather than on an invariant enforced somewhere else. The refusal itself has already
+    happened in the queue and is authoritative: a ledger that cannot be
+    written is logged and does not turn a completed refusal into a 500.
+    """
+    if result.ok is not True or result.state is not ApprovalState.REFUSED:
+        return
+    try:
+        await ledger.settle_approval(
+            db,
+            request_id=result.request_id,
+            state="refused",
+            decided_by=decided_by,
+            owner_id=owner_id,
+        )
+        await db.commit()
+    except Exception:  # noqa: BLE001 - the refusal stands either way
+        logger.exception(
+            "approval %s was refused but the ledger row could not be settled",
+            result.request_id,
+        )
+        await db.rollback()
+
+
+def _visible_to(record_owner: str, user_id: str) -> bool:
+    """A card is visible to its owner. A card with no owner (raised by a lane
+    that has no user in hand, such as the operator bridge) is visible to any
+    signed-in account."""
+    return not record_owner or record_owner == user_id
+
+
+def _principal_label(current_user: CurrentUser) -> str:
+    """Who ruled, taken from the login rather than from the request body."""
+    name = (current_user.full_name or "").strip()
+    return f"{name} <{current_user.email}>" if name else str(current_user.email)
 
 
 @router.get("/approvals")
-async def list_approvals() -> Dict[str, Any]:
-    """Everything awaiting a ruling."""
+async def list_approvals(current_user: CurrentUser) -> Dict[str, Any]:
+    """Everything awaiting a ruling from the signed-in account."""
     return {
         "pending": [
             {
@@ -310,6 +394,7 @@ async def list_approvals() -> Dict[str, Any]:
                 "expires_at": r.expires_at.isoformat(),
             }
             for r in _queue.pending()
+            if _visible_to(r.owner_id, current_user.id)
         ],
         "storage": _approval_storage_status(),
         "note": (
@@ -322,9 +407,53 @@ async def list_approvals() -> Dict[str, Any]:
 
 
 @router.post("/approvals/decide")
-async def decide(body: DecideBody) -> Dict[str, Any]:
-    """Rule on a pending request. Single use, expiring, fails closed."""
-    result = _queue.decide(body.request_id, body.token, body.decision, body.decided_by)
+async def decide(
+    body: DecideBody,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """Rule on a pending request. Single use, expiring, fails closed.
+
+    The ruling is signed by the login, never by text in the body. A card that
+    belongs to another account gets the queue's own unknown-id refusal, byte
+    for byte, so the route confirms nothing about other accounts' queues. A
+    card with no owner (raised by the operator bridge, or by a task persisted
+    before owners existed) is rulable by any signed-in account. A knowledge-
+    loop card can be refused here but not approved: approval needs
+    DEVON_RULING_KEY, which this route never sees.
+    """
+    record = _queue.get(body.request_id) if body.request_id else None
+    if record is not None and not _visible_to(record.owner_id, current_user.id):
+        result = DecisionResult(
+            False,
+            NO_MATCH,
+            reason=RefusalReason.UNKNOWN_ID,
+            message=f"No request {body.request_id}.",
+        )
+    elif (
+        record is not None
+        and record.requested_by == KNOWLEDGE_LOOP_REQUESTER
+        and (body.decision or "").strip().lower() != "refuse"
+    ):
+        # The proposing login holds this card's token, so an approval here
+        # would be the one credential approving its own capture. The knowledge
+        # loop approves through a second credential the API never returns. A
+        # refusal fails closed and needs no second credential, so it stays.
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "This card is a knowledge-loop capture. It is ruled through "
+                "POST /api/v1/soul/approve with its single-use token and "
+                "DEVON_RULING_KEY, never here."
+            ),
+        )
+    else:
+        result = _queue.decide(
+            body.request_id, body.token, body.decision, _principal_label(current_user)
+        )
+        await _settle_ledger_refusal(
+            db, result, _principal_label(current_user), str(current_user.id)
+        )
     return {
         "ok": result.ok,
         "approved": result.approved,

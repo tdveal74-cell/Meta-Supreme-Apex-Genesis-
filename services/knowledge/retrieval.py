@@ -41,7 +41,9 @@ def _acl_sql() -> str:
     return """
       e.owner_id = :owner_id
       AND (e.acl_tokens = '{}' OR e.acl_tokens && CAST(:user_tokens AS text[]))
-      AND (:project_id IS NULL OR e.project_id = :project_id OR ki.project_id = :project_id)
+      AND (CAST(:project_id AS uuid) IS NULL
+           OR e.project_id = CAST(:project_id AS uuid)
+           OR ki.project_id = CAST(:project_id AS uuid))
       AND ki.status = 'ready'
     """
 

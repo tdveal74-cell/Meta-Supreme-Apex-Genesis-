@@ -25,6 +25,7 @@ export default function DevonTerminalPage() {
             >
               Real shell
             </Link>
+            <Link href="/presence" className="rounded-lg border border-sky-400/30 bg-sky-400/10 px-3 py-2 font-semibold text-sky-200 transition hover:bg-sky-400/20">Presence</Link>
             <Link
               href="/command-center"
               className="rounded-lg border border-white/10 px-3 py-2 font-medium text-white/70 transition hover:border-white/20 hover:text-white"

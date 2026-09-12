@@ -1,0 +1,28 @@
+{
+  "enabledPlugins": {
+    "agentic-guardrails@meta-supreme-pinned": true,
+    "backend-security-skills@meta-supreme-pinned": true,
+    "test-generator@meta-supreme-pinned": true
+  },
+  "extraKnownMarketplaces": {
+    "meta-supreme-pinned": {
+      "source": {
+        "source": "directory",
+        "path": "."
+      }
+    }
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
+  }
+}

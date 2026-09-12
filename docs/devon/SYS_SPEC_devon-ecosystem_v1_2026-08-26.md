@@ -91,6 +91,7 @@ Laws, all enforced by one function so the checker and the writer cannot drift:
 1. Every intent opens with `INTENT_RECEIVED`, and is received exactly once.
 2. Each event names what must already stand on the intent before it.
 3. `ACTION_STARTED` on an effect intent requires `APPROVAL_GRANTED` first.
+4. Two events are reserved to services over HTTP, dated 2026-09-02: `APPROVAL_GRANTED`, and a `PLAN_CREATED` whose payload names an `approval_request_id`. `POST /api/v1/ledger/intents/{id}/events` refuses both with 403; the knowledge loop writes them at approve and propose. The intent read may still list `APPROVAL_GRANTED` as legal next; that is the ledger law, not the HTTP contract.
 4. No action starts while the emergency stop holds.
 5. Only the thirteen. The database carries the same list as a check constraint,
    so a caller that never touches the writer still cannot invent an event.
@@ -168,12 +169,56 @@ the map can never become a second registry that drifts.
 ## Deployment, read back
 
 Merging is not deploying, so this section records the read back rather than the
-merge. All three surfaces were verified current on 2026-08-26.
+merge.
+
+**Standing read back, 2026-09-05 at 20:50Z, against main at `077d7b5`.** All
+three surfaces verified current, after the third account block cleared.
+
+| Surface | Deployment | Commit |
+|---|---|---|
+| Railway `api` | `38d5d387` SUCCESS, created 19:56:13Z and finished 20:02:21Z; the deploy log carries the alembic context lines from the pre deploy hook | `077d7b5` |
+| Vercel `devon-soul` | `dpl_E9Whg4NdDRbntcBxp1sik356MEg3`, READY, `target: "production"` | `077d7b5` |
+| Vercel `meta-supreme-apex-genesis-web` | `dpl_7pK6tCvCMGB7wVhub9Y36bbxF79v`, CANCELED, `target: "production"`, which is the `ignoreCommand` skipping | `077d7b5` |
+
+The web skip was verified by hand rather than trusted: `cb01b7a..origin/main`
+over `apps/web`, `packages/ui`, `pnpm-lock.yaml` and `pnpm-workspace.yaml` is
+empty, and `cb01b7a` is the last commit that actually built that project. So
+nothing is owed to the web surface and it is current on its own terms. The
+block that stood earlier in the evening is settled by these records existing at
+all, which is the only signature a block leaves.
+
+**Superseded read back, 2026-09-04, against main at `edaf03e`.** All three
+surfaces verified current.
+
+| Surface | Deployment | Commit |
+|---|---|---|
+| Railway `api` | `406809cc` SUCCESS at 19:31:41 UTC, container started, application startup complete at 19:31:34, `alembic upgrade head` ran in pre deploy with nothing pending | `edaf03e` |
+| Vercel `meta-supreme-apex-genesis-web` | `dpl_XeMEfHQZju83jE28yW2aovwk9Voq`, READY, `target: "production"` | `f476195` |
+| Vercel `devon-soul` | `dpl_9Uf6twCzfiTFXUogMJntNv4xHorG`, READY, `target: "production"` | `94c49af` |
+
+Both Vercel surfaces sit behind main on purpose and both are current on their
+own terms. Every production deployment since is `CANCELED`, which is the
+`ignoreCommand` skipping. The skips were not taken on trust: each project's
+real rule was read out of its own `vercel.json` and the same comparison run by
+hand, `f476195..edaf03e` over `apps/web`, `packages/ui`, `pnpm-lock.yaml` and
+`pnpm-workspace.yaml`, and `94c49af..edaf03e` over `deploy/soul`. Both empty,
+so nothing is owed to either surface.
+
+That day also carried the second account block. Vercel answered "Account is
+blocked" on the PR #132 head at 19:01Z, Tee cleared it, and the merge created
+deployment records on both projects at 19:24:57Z, which is what settles a block
+rather than any status turning green. `list_teams` on the same day reports the
+account on the Pro plan, so the free plan cap below is history and no longer
+the limit. When it moved is not recorded anywhere this repository can read, so
+do not date the move from this line; the reading is what is verified.
+
+**Superseded read back, 2026-08-26.** Kept because the promotion and the cap it
+describes are what the rules were built from.
 
 | Surface | Deployment | Commit |
 |---|---|---|
 | Railway `api` | `a6c1908c` SUCCESS at 13:01:58 UTC, healthcheck passed, `alembic upgrade head` ran with nothing pending | `c0fa80c` |
-| Vercel `meta-supreme-web` | `dpl_Bf5QS6rzDyJoWBqf5msoX2vUitep`, READY, `target: "production"` | `5f409cf` |
+| Vercel `meta-supreme-apex-genesis-web` (recorded as `meta-supreme-web` until 2026-09-02; that project no longer exists) | `dpl_Bf5QS6rzDyJoWBqf5msoX2vUitep`, READY, `target: "production"` | `5f409cf` |
 | Vercel `devon-soul` | `dpl_6e6XWExoD7xSYb5uDKjT1t6C4mp1`, READY, `target: "production"` | `5f409cf` |
 
 The two Vercel surfaces reached production by promotion at 11:10 UTC after the
@@ -181,18 +226,23 @@ free plan cap of 100 deployments a day blocked the automatic production builds
 earlier in the day. `5f409cf` and repo main `44568cd` differ only by the merge
 commit; their trees are byte identical, so production carries main's content.
 
-Railway was four merges behind on 2026-08-26 and nothing noticed, because
-**autodeploy is disabled**: the Railway GitHub App is not installed on this
-repository, so no push to `main` triggers a build. The staleness was legitimate
-through `#70`-`#72` (docs, skills, `vercel.json` - none of which the API builds
-from) and became real at `#73`, which changed
-`services/agent_runtime/planner.py`. Deployment `a6c1908c` was created by hand
-from the current head at 13:00 UTC to close it.
+Railway was four merges behind on 2026-08-26 and nothing noticed. From that
+day until 2026-09-01 this section recorded autodeploy as disabled, on the
+observation that the Railway GitHub App was not installed, with a standing
+instruction to deploy every merge that touches container code by hand. The
+staleness it described was real: legitimate through `#70`-`#72` (docs, skills,
+`vercel.json`, none of which the API builds from), real at `#73`, closed by
+the hand made deployment `a6c1908c` at 13:00 UTC.
 
-Until the GitHub App is installed and autodeploy re-enabled, **every merge that
-touches container code needs a manual deployment**, and no alarm anywhere in the
-estate reports a stale surface. Do not read a merged PR as a shipped one on this
-project.
+The record then went stale the way this document warns everything does. By
+2026-08-31 autodeploy was working: deployment `5a86779f` built itself from the
+`#107` merge commit `abdc03b` with trigger `push`, and a read back on
+2026-09-01 confirmed recent merges to `main` deployed without hands. Nothing
+recorded when the GitHub App was installed or by whom. The manual deployment
+instruction is withdrawn; the read back rule is not. A merged PR is still not
+a shipped one until the deployment id, state and commit are read back, and
+`scripts/estate_reconcile.py` now pins this section's sentences so the next
+silent reversal fails a run instead of waiting for a session to trip over it.
 
 A `target` of `null` on a Vercel deployment means preview, not production. That
 distinction is written down here because reading a green preview as a shipped

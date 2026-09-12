@@ -1,0 +1,88 @@
+name: Audio CI
+
+# WHY THIS IS ITS OWN WORKFLOW, PATH FILTERED
+#
+# `apps/web/scripts/audio-check.mjs` drives the SHIPPED playback scheduler through
+# real Chromium and measures the rendered samples. It is the only check in this
+# estate that can catch a buffer declared at the wrong sample rate, a chunk
+# started at the wrong offset, or a byte order mistake in the PCM read: all of
+# those produce correct arithmetic and wrong sound, so `check:presence` passes on
+# every one of them.
+#
+# It ran in NO workflow until 2026-09-10, and four separate review passes found
+# that. The script's own docstring said so deliberately, with a real reason: it
+# needs Playwright and a Chromium binary, and neither is pinned by this
+# repository. Wiring it therefore costs a browser download on every run that
+# triggers it, which is why it is a separate job with a NARROW path filter rather
+# than a step inside web-ci.yml. Ruled by Tee on 2026-09-10 after the cost was
+# put to him.
+#
+# The filter is the set of files that can change what the speaker produces, read
+# off the import graph rather than guessed:
+#   lib/presence/pcm-player.ts   the scheduler the check actually drives
+#   components/presence/useAudioPlayback.ts  the hook that calls it
+#   components/presence/PresenceStage.tsx    and its other caller
+#   components/devon/DevonChat.tsx           the third caller
+#   scripts/audio-check.mjs                  the check itself
+# A change anywhere else in apps/web cannot alter the rendered samples, so it does
+# not pay for a browser.
+#
+# IT FAILS LOUDLY WHEN THE BROWSER IS MISSING. `loadPlaywright` and `findChromium`
+# both THROW rather than skip, so a runner without Chromium turns this job red
+# instead of green. That is deliberate: a green job that checked nothing is worse
+# than no job, and it is the failure mode this estate keeps paying for.
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "apps/web/lib/presence/pcm-player.ts"
+      - "apps/web/components/presence/useAudioPlayback.ts"
+      - "apps/web/components/presence/PresenceStage.tsx"
+      - "apps/web/components/devon/DevonChat.tsx"
+      - "apps/web/scripts/audio-check.mjs"
+      - ".github/workflows/audio-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  audio:
+    name: Playback in real Chromium
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install locked workspace
+        run: pnpm install --frozen-lockfile
+
+      # Playwright is installed for this job only, never added to the workspace
+      # lockfile. Adding it as a devDependency would put it in web-ci.yml's path
+      # filter through pnpm-lock.yaml and make every web pull request pay for it.
+      # The version is pinned to the one the development container carries
+      # (1.56.1, chromium build 1194) so a pass here means the same thing a pass
+      # there does.
+      - name: Install Playwright and Chromium
+        run: |
+          npm install -g playwright@1.56.1
+          npx --yes playwright@1.56.1 install --with-deps chromium
+
+      # audio-check.mjs resolves both from the environment. Ask Playwright itself
+      # where it put the browser rather than hardcoding a cache path, because the
+      # build number moves with the version.
+      - name: Locate the browser Playwright installed
+        run: |
+          GLOBAL_ROOT="$(npm root -g)"
+          echo "PLAYWRIGHT_MODULE=${GLOBAL_ROOT}/playwright/index.mjs" >> "$GITHUB_ENV"
+          CHROME="$(node -e "process.stdout.write(require('${GLOBAL_ROOT}/playwright').chromium.executablePath())")"
+          test -x "$CHROME" || { echo "playwright reported a chromium path that is not executable: $CHROME"; exit 1; }
+          echo "CHROMIUM_BINARY=${CHROME}" >> "$GITHUB_ENV"
+          echo "using $CHROME"
+
+      - name: Playback checks in real Chromium
+        run: pnpm --filter @meta-supreme/web check:audio

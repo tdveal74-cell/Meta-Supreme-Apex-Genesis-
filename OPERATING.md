@@ -30,6 +30,9 @@ workflow.** Check for them daily.
 
 ---
 
+Running DEVON and EditForge together on one machine, with nothing hosted
+involved, is its own runbook: `docs/OPERATING_LOCALLY.md`.
+
 ## 1. Starting and stopping
 
 ```bash
@@ -156,16 +159,61 @@ it worse.
 
 ---
 
-## 6. Scheduled workflows
+## 6. Scheduled workflows and recorded agent goals
 
 They only fire if cron is running the dispatcher. Install this once:
 
 ```cron
-* * * * * cd /srv/app && python -m app.cli.dispatch >> /var/log/dispatch.log 2>&1
+* * * * * cd /app && python dispatch.py >> /var/log/dispatch.log 2>&1
 ```
 
 Without it, `schedule` triggers are stored, valid, and inert. The workflow will
 look active and never run.
+
+**One cron line, two lanes.** Since 2026-09-10 `dispatch.py` also materializes
+due `agent_schedules` rows into durable agent tasks, one owner at a time, through
+`app/services/agent_scheduler.py`. It creates tasks and runs none: execution
+stays behind `POST /api/v1/agent-tasks/{task_id}/run`, so a materialized goal is
+a planned task waiting on a person.
+
+The two lanes report failure differently, on purpose. A single workflow that
+fails to dispatch does not fail lane 1, which exits 0 and counts it. A single
+owner left unread DOES fail lane 2, which exits 1, because goals nobody read
+would otherwise be silent. A failed owner's due rows are also pushed 15 minutes
+forward, so one broken schedule costs a planner call per window rather than one
+per minute, and the log names any owner whose deferral did not land.
+
+**The capability matrix will not claim goals run until you say this deployment
+schedules the tick.** `SCHEDULER_TICK_INSTALLED` defaults to false, and while it
+is unset `expansion.scheduler` and `scheduler_status.runs_goals` are both false
+and the Command Center's Scheduler tile stays grey with a sentence saying nothing
+schedules the runner. That is deliberate: nothing inside the container can see a
+Railway cron definition or a crontab on the host, so the flag is an operator
+statement about one deployment. Set it on the service AFTER you have read back a
+scheduled tick from the platform, per the `deploy-readback` skill, not before.
+
+### How this estate actually runs it, as of 2026-09-10
+
+Not a host crontab. Railway service `scheduler-cron` in project `devon-api`,
+built from `main` at root `.`, start command `python dispatch.py`, restart policy
+NEVER, and every variable a cross service reference to `api` so no secret value
+is duplicated.
+
+**The schedule is `*/5 * * * *`, not `* * * * *`,** because five minutes is
+Railway's minimum cron interval. Railway also evaluates schedules in UTC and
+skips a run whose predecessor is still active rather than terminating it, which
+sits on top of the advisory lock rather than replacing it. The one minute crontab
+line above is still the right answer on a host you control; it is not available
+on this platform.
+
+The 15 minute failure backoff in `app/services/agent_scheduler.py` is therefore
+three ticks rather than fifteen. That is the intended shape either way: the
+number is chosen so a transient failure recovers inside a quarter hour and a
+permanently broken schedule costs one plan per window instead of one per tick.
+
+`SCHEDULER_TICK_INSTALLED` lives on the **api** service, not on the cron service,
+because the api is what serves the capability catalog the dock reads. Setting it
+on `scheduler-cron` would change nothing a person can see.
 
 **Cadences are UTC.** `daily:07:00` fires at 07:00 UTC year-round — it does not
 follow your local clock through daylight saving. Three forms:

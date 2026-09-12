@@ -15,6 +15,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import setup_logging
+from app.core.tenant_context import TenantContextMiddleware
 
 
 @asynccontextmanager
@@ -92,6 +93,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Which account a request's provider calls are spent against. The auth
+# dependency binds it; this clears it when the request ends, so a test
+# client that serves requests in one task cannot carry a login across them.
+app.add_middleware(TenantContextMiddleware)
+
 # Mount versioned API
 app.include_router(api_router, prefix="/api/v1")
 
@@ -108,9 +114,11 @@ async def root():
     }
 
 
-# The DEVON console, served same-origin so its soul-recall calls need no CORS
-# story at all. The newest console version in the assets folder wins, which is
-# the precedence rule the vault already lives by.
+# I serve the Loop HUD same-origin at GET /console so remember / file a ruling /
+# find hit /api/v1/soul on this host with the CurrentUser JWT. CORS is not
+# this path. The newest SYS_OPS console in the assets folder wins, and that
+# file is kept byte-identical to deploy/soul/console.html. The unwired v8
+# asset is superseded. devon-soul.vercel.app still cannot persist.
 _CONSOLE_DIR = Path(__file__).resolve().parent.parent / "docs" / "devon" / "assets"
 
 
@@ -133,4 +141,12 @@ async def console():
     page = _newest_console()
     if page is None:
         raise HTTPException(status_code=404, detail="No console asset found")
-    return FileResponse(page, media_type="text/html")
+    # The HUD asset is byte-identical on both hosts, so the serving backend
+    # says which mode to render via a cookie rather than the page guessing
+    # from the hostname: localhost and preview deployments of the soul
+    # service used to render platform mode with the token field hidden.
+    response = FileResponse(page, media_type="text/html")
+    response.set_cookie(
+        "devon_host", "platform", path="/", samesite="strict", max_age=43200
+    )
+    return response

@@ -38,6 +38,16 @@ def new_intent_id() -> str:
     return f"INT-{secrets.token_hex(8).upper()}"
 
 
+class EffectFenceRefused(RuntimeError):
+    """The task lease token or execution generation no longer matches.
+
+    Raised by the intent and receipt writes when the worker lost its lease
+    between claiming and writing. It is a RuntimeError so existing callers
+    that catch that still do, and typed so the HTTP lane can answer 409
+    instead of 500 (audit ELC-02).
+    """
+
+
 class EffectReceiptRepository:
     """Owner-scoped, lease-fenced intent and receipt storage."""
 
@@ -66,7 +76,7 @@ class EffectReceiptRepository:
             )
         )
         if task_result.scalar_one_or_none() is None:
-            raise RuntimeError(
+            raise EffectFenceRefused(
                 "effect intent refused: task lease token or generation no longer matches"
             )
 
@@ -121,7 +131,7 @@ class EffectReceiptRepository:
             )
         )
         if task_result.scalar_one_or_none() is None:
-            raise RuntimeError(
+            raise EffectFenceRefused(
                 "effect receipt refused: task lease token or generation no longer matches"
             )
 

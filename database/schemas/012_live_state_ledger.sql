@@ -113,6 +113,8 @@ CREATE TABLE IF NOT EXISTS artifacts (
     path TEXT NOT NULL,
     sha256 VARCHAR(64) NOT NULL DEFAULT '',
     media_type VARCHAR(200) NOT NULL DEFAULT 'application/octet-stream',
+    body TEXT NOT NULL DEFAULT '',
+    kind VARCHAR(32) NOT NULL DEFAULT 'lesson',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

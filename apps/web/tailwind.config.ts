@@ -6,7 +6,7 @@ import { colors, radii, shadows, motion } from "@meta-supreme/ui";
  *
  * This file previously carried its own copy of every hex, which meant the
  * tokens package and the thing that actually renders could disagree without
- * anything failing — the worst kind of drift, because it looks fine in review.
+ * anything failing, the worst kind of drift, because it looks fine in review.
  * There is one source now; changing a token changes the product.
  */
 const config: Config = {

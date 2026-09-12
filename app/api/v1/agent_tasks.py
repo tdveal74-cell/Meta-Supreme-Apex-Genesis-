@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.models.project import Project
 from app.security.deps import CurrentUser
+from app.services.agent_effect_receipts import EffectFenceRefused
 from app.services.agent_runtime_persistence import (
     AmbiguousEffectRefusal,
     TaskExecutionBusy,
@@ -173,6 +174,7 @@ async def run_task(
     except (
         AgentRuntimeError,
         AmbiguousEffectRefusal,
+        EffectFenceRefused,
         TaskExecutionBusy,
         TaskExecutionLeaseLost,
         TaskRunConflict,

@@ -1,7 +1,7 @@
 import type { DecisionPackage } from "./council-types";
 
 /**
- * Offline mock generator — always labeled simulated.
+ * Offline mock generator, always labeled simulated.
  * Produces a realistic Decision Package for UI development and zero-key demos.
  */
 export function generateMockPackage(question: string): DecisionPackage {
@@ -34,7 +34,7 @@ export function generateMockPackage(question: string): DecisionPackage {
           "Introducing any live path too early increases the chance of unlabeled or partially labeled intelligence reaching the operator.",
       },
     ],
-    confidence_range: "62–74",
+    confidence_range: "62 to 74",
     unresolved_unknowns: [
       "How often the debate gate will actually fire on real questions",
       "Whether the current dissent presentation is dense enough for rapid scanning",

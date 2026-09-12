@@ -54,9 +54,11 @@ out = {
     "non_ascii_auth_recall": client.get(
         "/api/v1/soul/recall?q=hi", headers={b"Authorization": b"Bearer caf\xc3\xa9"}
     ).status_code,
-    # The console is not a public page.
+    # The console is not a public page. Query param t is never auth.
     "console_anonymous": client.get("/console").status_code,
-    "console_wrong_token": client.get("/console?t=nope").status_code,
+    "console_wrong_token": client.get(
+        "/console", headers={"Authorization": "Bearer nope"}
+    ).status_code,
     "console_query_token": client.get("/console?t=probe-token").status_code,
     "console_header_token": client.get("/console", headers=AUTH).status_code,
     # Whatever the anonymous console page is, it must not be the real one.
@@ -118,9 +120,18 @@ out = {
     "console_closed_has_paste_field": 'id="t"' in client.get("/console").text,
     "console_no_token_says_so": "No token yet" in client.get("/console").text,
     "console_bad_token_says_refused": "was refused"
-    in client.get("/console?t=nope").text,
+    in client.get("/console", headers={"Authorization": "Bearer nope"}).text,
     "console_bad_token_not_confused_with_no_token": "No token yet"
-    not in client.get("/console?t=nope").text,
+    not in client.get("/console", headers={"Authorization": "Bearer nope"}).text,
+    # Leftover ?t= alone must not open the gate or any API.
+    "console_query_token_is_door": "No token yet"
+    in client.get("/console?t=probe-token").text,
+    "status_query_token_alone": client.get(
+        "/api/v1/soul/status?t=probe-token"
+    ).status_code,
+    "recall_query_token_alone": client.get(
+        "/api/v1/soul/recall?q=hi&t=probe-token"
+    ).status_code,
     # Signing in once has to mean once: a top level navigation carries no
     # header, so without the cookie every home screen launch would land on
     # the door again.
@@ -143,6 +154,15 @@ out = {
         cookies={"devon_console": "stale-and-wrong"},
     ).status_code,
 }
+
+# Unknown paths used to leak FastAPI JSON {"detail":"Not Found"}.
+# /health is not /api/v1/health and must not invent a healthy process.
+for _path, _key in (("/health", "health"), ("/docs", "docs"), ("/agents", "agents")):
+    _res = client.get(_path)
+    out[f"unknown_{_key}_status"] = _res.status_code
+    out[f"unknown_{_key}_content_type"] = _res.headers.get("content-type", "")
+    out[f"unknown_{_key}_body"] = _res.text
+    out[f"unknown_{_key}_is_fastapi_json"] = _res.text.strip() == '{"detail":"Not Found"}'
 
 # With no CONSOLE_TOKEN at all the service closes rather than opening.
 os.environ.pop("CONSOLE_TOKEN", None)

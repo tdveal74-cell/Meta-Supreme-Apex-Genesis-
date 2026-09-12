@@ -192,6 +192,7 @@ class PresenceExecutor:
         turn_id: str,
         approvals: Optional[ApprovalQueue] = None,
         actor: str = "",
+        owner_id: str = "",
     ) -> None:
         self.tools = tools
         self.turn_id = (turn_id or "").strip()
@@ -199,6 +200,11 @@ class PresenceExecutor:
             raise ValueError("turn id is required: confirmations are bound to it")
         self.approvals = approvals
         self.actor = (actor or "").strip()
+        # The account the card belongs to. Durable adapters take the owner of
+        # every row they write from the card, never from model arguments, so a
+        # turn that raises cards without an owner can only run the in-memory
+        # fallbacks.
+        self.owner_id = (owner_id or "").strip()
 
     async def run_step(
         self,
@@ -389,6 +395,7 @@ class PresenceExecutor:
                 area="Conversation",
                 reversible=spec.reversible,
                 blast_radius=spec.blast_radius,
+                owner_id=self.owner_id,
             )
             ruling = self.approvals.decide(
                 record.request_id,

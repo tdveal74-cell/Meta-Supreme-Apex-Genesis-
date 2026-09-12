@@ -34,7 +34,10 @@ from services.intelligence.providers.embeddings import (
     OpenAIEmbeddingProvider,
     create_embedding_provider,
 )
-from services.intelligence.providers.factory import create_provider
+from services.intelligence.providers.factory import (
+    create_completion_provider,
+    create_provider,
+)
 from services.intelligence.providers.mock_provider import REQUIRED_KEYS_MARKER, MockProvider
 from services.intelligence.providers.openai_provider import OpenAIProvider
 
@@ -49,6 +52,7 @@ __all__ = [
     "MockEmbeddingProvider",
     "OpenAIEmbeddingProvider",
     "create_embedding_provider",
+    "create_completion_provider",
     "CompletionRequest",
     "CompletionResponse",
     "MockProvider",

@@ -159,19 +159,35 @@ def _parse_fields(body: str, keys: Tuple[str, ...]) -> Dict[str, str]:
     Written as an explicit scanner rather than a regex per field so that a
     multi line SUMMARY does not swallow the next key, which is the failure mode
     that makes naive receipt parsers drop DECIDED.
+
+    That held for keys the format knows and failed for every other one. A line
+    like ``TYPE: SYS_OPS`` is not in ``STANDING_KEYS``, so it used to fall to
+    the continuation branch and be appended to whatever field came before it.
+    Measured on 2026-09-09 across the eighteen receipts in ``docs/devon``:
+    seventeen of them had AREA holding the whole rest of the block, which
+    ``_split_areas`` then split on commas into areas like ``ruff clean`` and
+    ``api 1196 passed``. So an unknown key in SHOUTING CASE, which is what every
+    receipt field in this estate is written in, now ends the current field and
+    is skipped. A genuine continuation line is unaffected, because prose does
+    not arrive in all caps.
     """
     normalized = {k.lower(): k for k in keys}
     found: Dict[str, List[str]] = {}
     current: Optional[str] = None
     for line in body.splitlines():
         match = re.match(r"^\s*([A-Za-z_ ]{2,20})\s*:\s*(.*)$", line)
-        key = match.group(1).strip().lower().replace(" ", "_") if match else None
+        raw_key = match.group(1).strip() if match else None
+        key = raw_key.lower().replace(" ", "_") if raw_key else None
         if key and key in normalized:
             current = normalized[key]
             found.setdefault(current, [])
             remainder = match.group(2).strip()
             if remainder:
                 found[current].append(remainder)
+        elif raw_key and raw_key == raw_key.upper() and any(c.isalpha() for c in raw_key):
+            # A field header this format does not carry. It belongs to no key,
+            # so it ends the one in progress instead of being absorbed by it.
+            current = None
         elif current is not None:
             stripped = line.strip()
             if stripped:

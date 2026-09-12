@@ -4,11 +4,13 @@ WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
-COPY package.json pnpm-workspace.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY apps/web/package.json ./apps/web/
 COPY packages/ ./packages/
 
-RUN pnpm install --filter @meta-supreme/web...
+# The lockfile pins the overridden transitives (postcss, nanoid, sharp);
+# without it a fresh build re-resolves them at build time.
+RUN pnpm install --frozen-lockfile --filter @meta-supreme/web...
 
 COPY apps/web/ ./apps/web/
 

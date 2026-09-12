@@ -7,12 +7,15 @@ POST /knowledge or POST /knowledge/search (pure-semantic remains).
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
+from app.models.project import Project
 from app.security.deps import CurrentUser
 from services.intelligence.providers import ProviderConfigError
 from services.knowledge.pipeline import ingest_and_distill, query_knowledge
@@ -27,7 +30,10 @@ class FederatedIngestRequest(BaseModel):
     source: Optional[str] = Field(None, max_length=64)
     external_id: Optional[str] = Field(None, max_length=512)
     source_uri: Optional[str] = Field(None, max_length=2000)
-    project_id: Optional[str] = None
+    # A uuid or nothing, and it has to be the caller's own project: the
+    # column is a foreign key, so a non-uuid or an unknown id failed as 500
+    # inside the insert, and another account's id was accepted.
+    project_id: Optional[UUID] = None
     acl_tokens: List[str] = Field(default_factory=list)
 
 
@@ -44,8 +50,24 @@ class FederatedIngestResponse(BaseModel):
 class FederatedQueryRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000)
     limit: int = Field(6, ge=1, le=20)
-    project_id: Optional[str] = None
+    # A uuid or nothing: the ACL predicate casts it, and a string that is
+    # not a uuid must be refused here as 422, not inside the SQL as 500.
+    project_id: Optional[UUID] = None
     user_tokens: List[str] = Field(default_factory=list)
+
+
+async def _owned_project(db: AsyncSession, *, project_id: str, owner_id: str) -> None:
+    """The same answer POST /knowledge gives: a project the caller does not
+    own is indistinguishable from one that does not exist."""
+    owned = await db.execute(
+        select(Project).where(
+            Project.id == project_id,
+            Project.owner_id == owner_id,
+            Project.status != "deleted",
+        )
+    )
+    if owned.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
 
 @router.post(
@@ -58,6 +80,9 @@ async def federated_ingest(
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
+    project_id = str(payload.project_id) if payload.project_id else None
+    if project_id:
+        await _owned_project(db, project_id=project_id, owner_id=current_user.id)
     try:
         item = await ingest_and_distill(
             db,
@@ -68,7 +93,7 @@ async def federated_ingest(
             source=payload.source,
             external_id=payload.external_id,
             source_uri=payload.source_uri,
-            project_id=payload.project_id,
+            project_id=project_id,
             acl_tokens=payload.acl_tokens,
         )
     except ProviderConfigError as exc:
@@ -101,7 +126,7 @@ async def federated_query(
             owner_id=current_user.id,
             query=payload.query,
             limit=payload.limit,
-            project_id=payload.project_id,
+            project_id=str(payload.project_id) if payload.project_id else None,
             user_tokens=payload.user_tokens,
         )
     except ProviderConfigError as exc:

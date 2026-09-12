@@ -123,6 +123,10 @@ class ApprovalRequest:
     area: Optional[str] = None
     reversible: bool = False
     blast_radius: str = "unstated"
+    # The account the card belongs to. Empty means raised by a lane that has no
+    # user in hand (the operator bridge, a presence turn). The API scopes list
+    # and decide by this value; the gate itself does not read it.
+    owner_id: str = ""
     created_at: datetime = field(default_factory=_now)
     expires_at: datetime = field(default_factory=lambda: _now() + timedelta(hours=EXPIRY_HOURS))
     state: ApprovalState = ApprovalState.PENDING
@@ -252,6 +256,7 @@ class ApprovalQueue:
         area: Optional[str] = None,
         reversible: bool = False,
         blast_radius: str = "unstated",
+        owner_id: str = "",
     ) -> tuple[ApprovalRequest, str]:
         """Raise a request. Refuses at the door if the consequence is unstated."""
         if not title or not title.strip():
@@ -271,6 +276,7 @@ class ApprovalQueue:
             area=area,
             reversible=reversible,
             blast_radius=blast_radius,
+            owner_id=(owner_id or "").strip(),
             _token_hash=_hash_token(token),
         )
         self._store.put(record)

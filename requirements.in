@@ -1,0 +1,45 @@
+# Direct dependencies, pinned on 2026-09-02 to the versions the full suite
+# passed against (audit section 9 item 15). This file is the source
+# pip-compile reads; it is not installed directly and it never ships.
+# requirements.txt is the generated artifact: the full dependency closure,
+# direct and transitive, pinned to exact versions with hashes (audit
+# section 9 item 17), so a Railway build either reproduces this exact set
+# or fails outright.
+#
+# Bump a version here, in its own PR, with the suite and pip-audit green
+# on the new set, then regenerate requirements.txt with:
+#   pip-compile --generate-hashes --output-file=requirements.txt requirements.in
+# Core
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+pydantic==2.13.5
+pydantic-settings==2.15.0
+email-validator==2.3.0
+
+# Database
+sqlalchemy[asyncio]==2.0.52
+asyncpg==0.31.0
+psycopg[binary]==3.3.5
+alembic==1.19.1
+pgvector==0.5.0
+
+# Auth & Security
+PyJWT==2.13.0
+bcrypt==5.0.0
+python-multipart==0.0.32
+webauthn==3.0.0
+
+# HTTP & Utils
+httpx==0.28.1
+python-dotenv==1.2.3
+
+# Logging & Observability
+structlog==26.1.0
+
+# Testing
+pytest==9.1.1
+pytest-asyncio==1.4.0
+
+# Development
+ruff==0.16.5
+mypy==2.3.1

@@ -1,7 +1,9 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { API_BASE } from "@/lib/api-base";
+import { API_BASE, PRESENCE_BASE } from "@/lib/api-base";
+import { useAudioPlayback } from "@/components/presence/useAudioPlayback";
+import type { AudioMessage } from "@/lib/presence/protocol";
 
 type Role = "you" | "devon" | "system";
 
@@ -109,6 +111,9 @@ export function DevonChat() {
   // session credential, so it lives only as long as the keystroke that spends it.
   const [recovering, setRecovering] = useState(false);
   const [recoveryKey, setRecoveryKey] = useState("");
+  // The invite. Registration is closed unless the deployment holds
+  // DEVON_REGISTRATION_KEY and the first sign-in presents it.
+  const [inviteKey, setInviteKey] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState("");
   const [status, setStatus] = useState<IntelligenceStatus | null>(null);
@@ -116,7 +121,7 @@ export function DevonChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [mode, setMode] = useState<"auto" | "ask" | "do">("auto");
+  const [mode, setMode] = useState<"auto" | "ask" | "do" | "keep">("auto");
   const [pending, setPending] = useState<PendingApproval | null>(null);
   const [confirming, setConfirming] = useState<PendingConfirm | null>(null);
   const [turnId, setTurnId] = useState("");
@@ -129,8 +134,17 @@ export function DevonChat() {
   const sequence = useRef(10);
   const endRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<any>(null);
+  // DEVON's voice on this surface is the same clone /presence uses, streamed
+  // from the presence service and decoded by the same tested player. It is not
+  // the browser's speech synthesis: see primeVoice and speak below.
+  const playback = useAudioPlayback();
+  const unlockVoice = playback.unlock;
+  const playChunk = playback.play;
+
   const voiceOutRef = useRef(voiceOut);
   voiceOutRef.current = voiceOut;
+  const tokenRef = useRef(token);
+  tokenRef.current = token;
 
   const authed = Boolean(token);
 
@@ -151,40 +165,76 @@ export function DevonChat() {
   // the tenth tap costs nothing.
   const voicePrimed = useRef(false);
   const primeVoice = useCallback(() => {
-    if (voicePrimed.current) return;
-    try {
-      const synth = window.speechSynthesis;
-      if (!synth) return;
-      const silent = new SpeechSynthesisUtterance(" ");
-      silent.volume = 0;
-      synth.speak(silent);
-      voicePrimed.current = true;
-    } catch {
-      // A browser that refuses to be primed is one that was never going to
-      // speak; the real calls degrade to silence exactly as before.
-    }
-  }, []);
+    // A browser will not start audio outside a real gesture, so every tap that
+    // could lead to speech unlocks the context while the gesture is still live.
+    // Moving this below an await puts it outside the gesture and iOS ignores it.
+    void unlockVoice();
+  }, [unlockVoice]);
 
-  const speak = useCallback((text: string) => {
-    if (!voiceOutRef.current) return;
-    try {
-      const synth = window.speechSynthesis;
-      if (!synth) return;
-      synth.cancel();
-      const utterance = new SpeechSynthesisUtterance(
-        text.replace(/[*_#`>]/g, "").slice(0, 600),
-      );
-      const voices = synth.getVoices();
-      const preferred =
-        voices.find((v) => /en[-_]GB/i.test(v.lang) && /male|daniel|arthur/i.test(v.name)) ||
-        voices.find((v) => /en[-_]/i.test(v.lang));
-      if (preferred) utterance.voice = preferred;
-      utterance.rate = 1.02;
-      synth.speak(utterance);
-    } catch {
-      // Voice output is a convenience; silence is an acceptable failure.
-    }
-  }, []);
+  /**
+   * Say something in DEVON's own voice.
+   *
+   * THE BREACH THIS ENDS. Until 2026-09-09 this called
+   * `window.speechSynthesis`, preferred an en-GB voice named daniel or arthur,
+   * and otherwise took ANY installed English voice. Tee opened /devon and DEVON
+   * answered in a stock female browser voice. Three things were wrong and the
+   * gender was the smallest: the voice was rented rather than owned, which the
+   * estate's standing rule refuses with no exception path; the preferred branch
+   * reached for a British male when DEVON is Southeastern US with a Southern
+   * drawl; and the fallback had no floor, so who DEVON sounded like depended on
+   * which machine was open.
+   *
+   * It now streams from the presence service, which holds CARTESIA_VOICE_ID and
+   * the key. Same voice as /presence, decoded by the same player rather than a
+   * second copy that can drift. Silence stays an acceptable failure: a chat that
+   * cannot speak is worse than one that speaks in a stranger's voice only in the
+   * sense that nobody has ever been embarrassed by silence.
+   */
+  const speak = useCallback(
+    (text: string) => {
+      if (!voiceOutRef.current) return;
+      const clean = text.replace(/[*_#`>]/g, "").trim().slice(0, 1200);
+      if (!clean || !tokenRef.current) return;
+      void (async () => {
+        try {
+          const response = await fetch(`${PRESENCE_BASE}/tts`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${tokenRef.current}`,
+            },
+            body: JSON.stringify({ text: clean }),
+          });
+          if (!response.ok || !response.body) return;
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let cut = buffer.indexOf("\n");
+            while (cut >= 0) {
+              const line = buffer.slice(0, cut).trim();
+              buffer = buffer.slice(cut + 1);
+              // One bad line must not silence the rest of the sentence.
+              if (line) {
+                try {
+                  playChunk(JSON.parse(line) as AudioMessage);
+                } catch {
+                  // A chunk that will not parse is dropped, not fatal.
+                }
+              }
+              cut = buffer.indexOf("\n");
+            }
+          }
+        } catch {
+          // Voice output is a convenience; silence is an acceptable failure.
+        }
+      })();
+    },
+    [playChunk],
+  );
 
   // Restore a session and greet once.
   useEffect(() => {
@@ -205,7 +255,7 @@ export function DevonChat() {
     );
     append(
       "devon",
-      "DEVON online. Ask me anything, or tell me what needs doing — reads run on my say-so, writes wait on yours.",
+      "DEVON online. Ask me anything, or tell me what needs doing. Reads run on my say-so, writes wait on yours.",
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -227,7 +277,7 @@ export function DevonChat() {
     [token],
   );
 
-  // Once signed in, learn whether the mind is live or simulated — and say so.
+  // Once signed in, learn whether the mind is live or simulated, and say so.
   useEffect(() => {
     if (!token) return;
     let active = true;
@@ -256,12 +306,25 @@ export function DevonChat() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
+      if (response.status === 401 && !inviteKey) {
+        // A refused password on an existing account, or no account and no
+        // invite. Either way, registering would only answer with the
+        // deployment's registration policy, which is not what was asked.
+        throw new Error(
+          `${await readApiError(response)} New on this deployment? Enter the invite key to create the account.`,
+        );
+      }
       if (response.status === 401) {
-        // No account yet — create one, then sign in with the same credentials.
+        // No account yet and an invite in hand: create one, then sign in.
         const registered = await fetch(`${API_BASE}/auth/register`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password, full_name: "Tee" }),
+          body: JSON.stringify({
+            email,
+            password,
+            full_name: "Tee",
+            registration_key: inviteKey || undefined,
+          }),
         });
         if (!registered.ok && registered.status !== 409) {
           throw new Error(await readApiError(registered));
@@ -376,7 +439,7 @@ export function DevonChat() {
         const reason = String(task.failure_reason || state);
         const line =
           state === "cancelled"
-            ? `Understood — standing down. ${reason}`
+            ? `Understood. Standing down. ${reason}`
             : `That one didn't land: ${reason}`;
         append("devon", line);
         speak(line);
@@ -458,7 +521,7 @@ export function DevonChat() {
             break;
 
           case "turn_resumed":
-            append("system", `Resuming — running ${String(event.tool || "")}.`);
+            append("system", `Resuming, running ${String(event.tool || "")}.`);
             break;
 
           case "tool_started":
@@ -466,7 +529,7 @@ export function DevonChat() {
             // waiting on a summary of it.
             append(
               "system",
-              `${String(event.tool || "")}${event.why ? ` — ${String(event.why)}` : ""}`,
+              `${String(event.tool || "")}${event.why ? `: ${String(event.why)}` : ""}`,
             );
             break;
 
@@ -572,6 +635,47 @@ export function DevonChat() {
     [append, authedFetch, speak],
   );
 
+  /**
+   * File a capture through the knowledge loop.
+   *
+   * THE GAP THIS CLOSES. `POST /api/v1/soul/propose` is the only caller of
+   * `knowledge_loop.propose` in the estate, and until 2026-09-09 the only human
+   * surface that reached it was the platform console, which needs a CurrentUser
+   * JWT pasted into a field by hand. So the Cerebras enrichment lane wired in
+   * PR #186 had never run once in production: not because nobody captures, but
+   * because the surface Tee actually uses could not reach the endpoint. This
+   * chat already holds a valid token, so capture belongs here.
+   *
+   * It proposes and stops. Approving needs DEVON_RULING_KEY, which no endpoint
+   * ever returns, so the ruling stays where it was: with Tee, in the console.
+   * Nothing here consumes the approval and nothing here writes soul.
+   */
+  const remember = useCallback(
+    async (utterance: string) => {
+      const response = await authedFetch("/soul/propose", {
+        method: "POST",
+        body: JSON.stringify({ text: utterance, kind: "lesson", area: null, layer: 5 }),
+      });
+      if (!response.ok) throw new Error(await readApiError(response));
+      const body = await response.json();
+      const approval = (body?.approval ?? {}) as Record<string, unknown>;
+      const requestId = String(approval.request_id || "");
+      const what = String(approval.what_happens || "");
+
+      // what_happens carries the model's labelled gloss when enrichment ran, so
+      // this is where Tee sees what Cerebras made of his words. Rendering the
+      // raw field rather than a rewrite of it keeps that label attached.
+      const lines = [
+        `Held as ${requestId || "an unnumbered request"}. The ledger has the intent row; nothing is committed.`,
+        what,
+        "Approve it in the console. That needs the ruling key, which this chat never has.",
+      ].filter(Boolean);
+      append("devon", lines.join("\n\n"));
+      speak("I have it held, waiting on your ruling. Nothing is committed.");
+    },
+    [append, authedFetch, speak],
+  );
+
   const send = useCallback(
     async (raw?: string) => {
       const text = (raw ?? input).trim();
@@ -583,13 +687,14 @@ export function DevonChat() {
       append("you", text);
       setBusy(true);
       try {
-        // Three genuinely different instruments, not three phrasings of one.
+        // Four genuinely different instruments, not four phrasings of one.
         //
         //   ask   the council: nine agents deliberating, no hands
         //   do    a durable agent task, which outlives this conversation and
         //         waits on an emailed card if Tee walks away
         //   auto  the live loop: he answers and acts in one breath, on Tee's
         //         word alone, and can reach the council itself as a tool
+        //   keep  a capture through the knowledge loop, held for Tee's ruling
         //
         // auto is the default because it is the one that behaves like a
         // colleague rather than a form.
@@ -597,6 +702,8 @@ export function DevonChat() {
           await ask(text);
         } else if (mode === "do") {
           await execute(text);
+        } else if (mode === "keep") {
+          await remember(text);
         } else {
           await converse(text);
         }
@@ -608,7 +715,7 @@ export function DevonChat() {
         setBusy(false);
       }
     },
-    [append, ask, busy, converse, execute, input, mode, primeVoice, speak, token],
+    [append, ask, busy, converse, execute, input, mode, primeVoice, remember, speak, token],
   );
 
   const sendRef = useRef(send);
@@ -621,12 +728,11 @@ export function DevonChat() {
     try {
       const response = await fetch(`${API_BASE}/devon/approvals/decide`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           request_id: current.requestId,
           token: current.token,
           decision,
-          decided_by: "Tee",
         }),
       });
       if (!response.ok) throw new Error(await readApiError(response));
@@ -726,7 +832,7 @@ export function DevonChat() {
   const mindLabel = useMemo(() => {
     if (!status) return "";
     return status.simulated
-      ? "Simulated mind (mock provider) — add a live key in Railway for the real one"
+      ? "Simulated mind (mock provider). Add a live key in Railway for the real one"
       : `Live mind: ${status.provider} · ${status.model}`;
   }, [status]);
 
@@ -926,6 +1032,18 @@ export function DevonChat() {
             </button>
           </div>
 
+          {!recovering && (
+            <input
+              value={inviteKey}
+              onChange={(event) => setInviteKey(event.target.value)}
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="Invite key, only for the first sign-in on a deployment (DEVON_REGISTRATION_KEY)"
+              className="mt-3 min-h-11 w-full rounded-lg border border-amber-300/25 bg-black/30 px-3 font-mono text-sm text-white outline-none transition placeholder:text-white/25 focus:border-amber-300/40"
+            />
+          )}
+
           {recovering && (
             <input
               value={recoveryKey}
@@ -961,7 +1079,7 @@ export function DevonChat() {
           className="border-t border-white/10 bg-black/25 p-4 sm:p-5"
         >
           <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]">
-            {(["auto", "ask", "do"] as const).map((option) => (
+            {(["auto", "ask", "do", "keep"] as const).map((option) => (
               <button
                 key={option}
                 type="button"
@@ -972,7 +1090,7 @@ export function DevonChat() {
                     : "border-white/10 bg-black/30 text-white/40"
                 }`}
               >
-                {option === "auto" ? "Auto" : option === "ask" ? "Answer" : "Execute"}
+                {option === "auto" ? "Auto" : option === "ask" ? "Answer" : option === "do" ? "Execute" : "Keep"}
               </button>
             ))}
             <span className="text-white/30">

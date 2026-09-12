@@ -21,6 +21,11 @@ os.environ["DEFAULT_AI_PROVIDER"] = "mock"
 os.environ["ENVIRONMENT"] = "test"
 os.environ["DEBUG"] = "false"
 os.environ["DEVON_APPROVAL_STORE"] = "postgres"
+# Registration is closed by default behind DEVON_REGISTRATION_KEY. The suite
+# opens it with a known key, and the `client` fixture sends that key on every
+# request so the seven tests that register directly keep working unchanged.
+TEST_REGISTRATION_KEY = "test-registration-key-not-for-production-0123456789"
+os.environ["DEVON_REGISTRATION_KEY"] = TEST_REGISTRATION_KEY
 
 import pytest  # noqa: E402
 
@@ -67,6 +72,11 @@ _INCREMENTAL_SCHEMAS = (
     "011_passkeys.sql",
     "012_live_state_ledger.sql",
     "013_approval_consumption.sql",
+    "014_artifact_body.sql",
+    "015_devon_approval_owner.sql",
+    "017_provider_usage.sql",
+    "018_schema_convergence.sql",
+    "019_event_hash_chain.sql",
 )
 
 _DSN = TEST_DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
@@ -76,6 +86,7 @@ _TEST_DB_NAME = _DSN.rsplit("/", 1)[1]
 # Tables wiped between tests (order respects FKs; agents and executors stay
 # seeded, the latter by 012_live_state_ledger.sql).
 _DATA_TABLES = (
+    "provider_usage",
     "universal_receipts",
     "learning_candidates",
     "verifications",
@@ -117,8 +128,23 @@ _DATA_TABLES = (
 )
 
 
+#: Set when the test database was built by something other than these scripts,
+#: which today means the CI step that builds it with `alembic upgrade head` and
+#: then runs the ledger and knowledge suites against it. Re-applying the SQL
+#: mirrors there would paper over exactly the divergence that step exists to
+#: catch, so with this set the schema is taken as it stands.
+_SCHEMA_PREBUILT = os.getenv("TEST_SCHEMA_PREBUILT", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+}
+
+
 async def _ensure_test_database() -> None:
     import asyncpg
+
+    if _SCHEMA_PREBUILT:
+        return
 
     admin = await asyncpg.connect(dsn=_ADMIN_DSN)
     try:
@@ -178,7 +204,11 @@ async def client(_clean_tables):
     from app.main import app
 
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as c:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+        headers={"X-Devon-Registration-Key": TEST_REGISTRATION_KEY},
+    ) as c:
         yield c
 
 

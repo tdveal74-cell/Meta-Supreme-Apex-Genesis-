@@ -17,9 +17,15 @@ from app.db.session import AsyncSessionLocal
 from app.services.agent_effect_receipts import EffectReceiptRepository
 from app.services.agent_runtime_persistence import (
     AgentLearningRepository,
+    AgentTaskExecutionClaim,
     AgentTaskRepository,
     AmbiguousEffectRefusal,
     TaskExecutionLeaseLost,
+)
+from app.services.editforge_client import (
+    EditForgeClient,
+    EditForgeConfig,
+    read_editforge_status,
 )
 from app.services.hermes_expansion_persistence import HermesExpansionRepository
 from app.services.intelligence import get_provider
@@ -29,16 +35,13 @@ from app.services.subagent_links import SubagentLinkRepository
 from services.agent_runtime.contracts import (
     COUNCIL_TOOL_NAME,
     AgentTask,
+    AmbiguousOutcome,
     PlanStep,
     TaskState,
     ToolCall,
 )
 from services.agent_runtime.effect_recorder import EffectRecorder
-from services.agent_runtime.expansion import (
-    InMemoryScheduleStore,
-    SkillProposalStore,
-    new_subagent_spec,
-)
+from services.agent_runtime.expansion import new_subagent_spec
 from services.agent_runtime.expansion_tools import ExpansionToolAdapter
 from services.agent_runtime.learning_loop import draft_skill_proposal_from_task
 from services.agent_runtime.planner import LLMPlanner, StaticPlanner
@@ -48,23 +51,114 @@ from services.agent_runtime.tools import ToolRegistry
 from services.agents.registry import list_agent_slugs
 from services.browser.agent_adapter import BrowserCapabilityAdapter
 from services.browser.http_fetcher import maybe_live_fetcher
+from services.editforge.agent_adapter import EditForgeCapabilityAdapter
 from services.github.agent_adapter import GitHubCapabilityAdapter
 from services.github.client import GitHubRESTClient
 from services.intelligence.council_adapter import CouncilCapabilityAdapter
 from services.operator.agent_adapter import OperatorCapabilityAdapter
 
 github_client = GitHubRESTClient()
-schedule_store = InMemoryScheduleStore()
-skill_proposal_store = SkillProposalStore()
-expansion_adapter = ExpansionToolAdapter(
-    schedules=schedule_store,
-    skill_proposals=skill_proposal_store,
-)
 expansion_repo = HermesExpansionRepository()
 subagent_links = SubagentLinkRepository()
+
+
+async def _write_schedule(*, owner_id, goal, run_at, context):
+    """The runtime scheduler writes the table the HTTP routes read."""
+    async with AsyncSessionLocal() as session:
+        item = await expansion_repo.create_schedule(
+            session, owner_id=owner_id, goal=goal, run_at=run_at, context=context
+        )
+        await session.commit()
+        return item
+
+
+async def _write_skill_proposal(*, owner_id, proposal):
+    """Same table and same goal-slug dedupe as the auto-propose path."""
+    async with AsyncSessionLocal() as session:
+        if await expansion_repo.has_skill_proposal_named(
+            session, owner_id=owner_id, name=proposal.name
+        ):
+            raise ValueError(
+                f"a skill proposal named {proposal.name!r} already exists for this "
+                "owner; decide it before drafting another"
+            )
+        saved = await expansion_repo.save_skill_proposal(
+            session, owner_id=owner_id, proposal=proposal
+        )
+        await session.commit()
+        return saved
+
+
+async def _write_subagent(*, owner_id, parent_task_id, goal, max_steps, inherit_context_keys):
+    """Same durable child task and parent-child link as POST /agent-expansion/subagents."""
+    async with AsyncSessionLocal() as session:
+        child = await agent_tasks_service.spawn_subagent_task(
+            session,
+            owner_id=owner_id,
+            parent_task_id=parent_task_id,
+            goal=goal,
+            max_steps=max_steps,
+            inherit_context_keys=inherit_context_keys,
+        )
+        await session.commit()
+        return child.to_dict()
+
+
+# Each handler spends its runtime approval binding, then writes through the
+# repositories above in its own committed transaction, the way
+# LeasedEffectRecorder commits an intent: a worker crash after the write
+# leaves the row behind instead of losing an approved effect.
+expansion_adapter = ExpansionToolAdapter(
+    approvals=approvals,
+    schedule_writer=_write_schedule,
+    proposal_writer=_write_skill_proposal,
+    subagent_writer=_write_subagent,
+)
 # The provider resolves at call time, so the mock provider serves CI and the
 # live provider serves production through the same adapter instance.
 council_adapter = CouncilCapabilityAdapter(get_provider)
+
+
+def _editforge_client() -> EditForgeClient:
+    """Resolve current private EditForge configuration at call time."""
+    from app.core.config import settings
+
+    return EditForgeClient(
+        EditForgeConfig(
+            base_url=settings.EDITFORGE_URL,
+            token=settings.EDITFORGE_TOKEN or "",
+            timeout_seconds=settings.EDITFORGE_TIMEOUT_SECONDS,
+        )
+    )
+
+
+async def _read_live_editforge_status() -> Dict[str, Any]:
+    """Bind the runtime tool to the same private config as the HTTP control API."""
+    return await read_editforge_status(_editforge_client().config)
+
+
+async def _execute_editforge(command: Dict[str, Any]) -> Dict[str, Any]:
+    return await _editforge_client().execute(command)
+
+
+async def _read_editforge_execution(
+    command_id: str,
+    poll: bool,
+) -> Dict[str, Any]:
+    return await _editforge_client().execution(command_id, poll=poll)
+
+
+async def _control_editforge(command_id: str, action: str) -> Dict[str, Any]:
+    return await _editforge_client().action(command_id, action)
+
+
+editforge_adapter = EditForgeCapabilityAdapter(
+    _read_live_editforge_status,
+    command_writer=_execute_editforge,
+    execution_reader=_read_editforge_execution,
+    action_writer=_control_editforge,
+    approvals=approvals,
+)
 
 
 def _browser_live_fetch_enabled() -> bool:
@@ -85,6 +179,50 @@ def _auto_skill_propose_enabled() -> bool:
     }
 
 
+#: What the dock renders verbatim under the queued goals, one string per state.
+#:
+#: Both name the runner, because the runner is a fact of the image either way.
+#: They differ on the only thing that decides whether a recorded goal fires, and
+#: the unscheduled one says plainly that nothing does.
+_SCHEDULER_DETAIL_UNSCHEDULED = (
+    "Scheduled goals are recorded durably. A runner for them exists in this "
+    "image: dispatch.py lane 2 calls "
+    "app/services/agent_scheduler.materialize_due_agent_schedules, which turns "
+    "a due goal into a planned agent task and executes nothing. NOTHING IN THIS "
+    "DEPLOYMENT SCHEDULES THAT ENTRYPOINT, so a due goal stays inert until "
+    "somebody posts the materialize route above. Whether a cron runs in the "
+    "platform is not something this process can see, so it is read from "
+    "SCHEDULER_TICK_INSTALLED, which is unset here and defaults to claiming "
+    "nothing."
+)
+
+_SCHEDULER_DETAIL_SCHEDULED = (
+    "Due goals are materialized by the cron entrypoint dispatch.py, one owner "
+    "at a time, on that owner's own session and tenant binding, into durable "
+    "agent tasks. The runner never executes them: the task it creates is "
+    "planned and human gated, and running it is a separate authenticated call "
+    "to POST /api/v1/agent-tasks/{task_id}/run. The manual route above does the "
+    "same thing on demand for one owner. That the entrypoint is scheduled is "
+    "read from SCHEDULER_TICK_INSTALLED, which is an operator statement about "
+    "this one deployment rather than something this process can measure; it is "
+    "set only after a scheduled tick has been read back from the platform."
+)
+
+
+def _scheduler_tick_installed() -> bool:
+    """Whether this deployment schedules dispatch.py.
+
+    Read through `settings` rather than `os.getenv` so the value is the same one
+    the rest of the app validated, and read on every call rather than captured at
+    import so a test can set it without reloading the module. The import is local
+    for the same reason the EDITFORGE one at line 124 is: this module is imported
+    by tooling that does not always have a settings environment.
+    """
+    from app.core.config import settings
+
+    return bool(getattr(settings, "SCHEDULER_TICK_INSTALLED", False))
+
+
 def build_tool_registry() -> ToolRegistry:
     registry = ToolRegistry()
     OperatorCapabilityAdapter(operator_bridge, approvals).register(registry)
@@ -93,6 +231,7 @@ def build_tool_registry() -> ToolRegistry:
         approvals,
         fetcher=maybe_live_fetcher(_browser_live_fetch_enabled()),
     ).register(registry)
+    editforge_adapter.register(registry)
     expansion_adapter.register(registry)
     council_adapter.register(registry)
     return registry
@@ -143,6 +282,9 @@ class DurableAgentTaskService:
 
         tools = build_tool_registry()
         merged_context = dict(context or {})
+        # The owner rides in the task context so the runtime can stamp it on
+        # every approval card it raises; the API scopes list and decide by it.
+        merged_context["owner_id"] = owner_id
         if project_id:
             merged_context["project_id"] = project_id
         merged_context["devon_learning"] = await self.learning.context_for(
@@ -331,27 +473,6 @@ class DurableAgentTaskService:
     ) -> TaskRunOutcome:
         key = self._normalize_idempotency_key(idempotency_key)
 
-        orphans = await self.effects.find_orphan_intents(
-            db, owner_id=owner_id, task_id=task_id
-        )
-        if orphans:
-            task = await self.tasks.get_owned(db, owner_id=owner_id, task_id=task_id)
-            if task is not None and not task.done:
-                task.state = TaskState.FAILED
-                task.failure_reason = orphans[0].reason
-                task.touch()
-                await self.tasks.save(
-                    db,
-                    owner_id=owner_id,
-                    task=task,
-                    project_id=self._project_id(task),
-                )
-                await db.commit()
-            raise AmbiguousEffectRefusal(
-                f"ambiguous_external_effect: {orphans[0].detail} "
-                f"(intent_id={orphans[0].intent.intent_id})"
-            )
-
         lease_seconds = _lease_seconds()
         claim = await self.tasks.acquire_execution(
             db,
@@ -387,6 +508,26 @@ class DurableAgentTaskService:
             )
         )
         try:
+            # The orphan check runs only now, with the lease in hand and
+            # inside the failure path that releases it. Every intent and
+            # receipt write is fenced by the live lease token and generation,
+            # so while this worker holds the lease no other worker can be
+            # between an intent and its receipt: a receipt-less intent
+            # belongs to a generation that lost its lease, and the refusal
+            # is real. Checked before the lease, a healthy in-flight effect
+            # on another worker read as an orphan, the task row was
+            # clobbered by an unfenced write, and the caller saw
+            # ambiguous_external_effect where TaskExecutionBusy was the
+            # truth (audit H7). An error in the check itself now lands in
+            # the except below, which closes the run row and releases the
+            # lease instead of leaving the task busy until expiry.
+            orphans = await self.effects.find_orphan_intents(
+                db, owner_id=owner_id, task_id=task_id
+            )
+            if orphans:
+                await self._park_orphaned_task(
+                    db, owner_id=owner_id, claim=claim, orphan=orphans[0]
+                )
             recorder = LeasedEffectRecorder(
                 db=db,
                 owner_id=owner_id,
@@ -471,6 +612,45 @@ class DurableAgentTaskService:
             except Exception:
                 await db.rollback()
             raise
+
+    async def _park_orphaned_task(
+        self,
+        db: AsyncSession,
+        *,
+        owner_id: str,
+        claim: AgentTaskExecutionClaim,
+        orphan: AmbiguousOutcome,
+    ) -> None:
+        """Mark the task failed under the lease this worker holds, then refuse.
+
+        The task write is fenced on the lease token, so a lease that expired
+        between the claim and this write changes nothing and the refusal is
+        reported as a lost lease instead. The caller's failure path closes
+        the run row with the refusal and releases the lease, so the same
+        idempotency key replays the refusal instead of re-running.
+        """
+        task = claim.task
+        detail = (
+            f"ambiguous_external_effect: {orphan.detail} "
+            f"(intent_id={orphan.intent.intent_id})"
+        )
+        if task is not None and not task.done and claim.lease_token is not None:
+            task.state = TaskState.FAILED
+            task.failure_reason = orphan.reason
+            task.touch()
+            parked = await self.tasks.park_if_leased(
+                db,
+                owner_id=owner_id,
+                task=task,
+                lease_token=claim.lease_token,
+                project_id=self._project_id(task),
+            )
+            if not parked:
+                raise TaskExecutionLeaseLost(
+                    "agent task lease was lost before the orphan refusal was recorded"
+                )
+            await db.commit()
+        raise AmbiguousEffectRefusal(detail)
 
     async def cancel(
         self,
@@ -558,10 +738,81 @@ class DurableAgentTaskService:
             "expansion": {
                 "subagents": True,
                 "durable_subagent_links": True,
-                "scheduler": True,
+                # Recording a goal for later, being able to run one, and
+                # actually having something run one are THREE facts, and this
+                # key has now claimed each of the wrong ones in turn.
+                #
+                # It read a bare True until 2026-09-10 and
+                # apps/web/components/command-center/CapabilityDock.tsx lit a
+                # green Scheduler light from it directly above the rows that
+                # would never fire. It was corrected to False that same day,
+                # which was honest and left the capability missing.
+                #
+                # A RUNNER LANDED later on 2026-09-10. dispatch.py, the cron
+                # entrypoint the API image already ships
+                # (infrastructure/docker/Dockerfile.api:30), now runs two lanes.
+                # Lane 1 is app/services/dispatcher.dispatch_due over Workflow
+                # rows, unchanged. Lane 2 is
+                # app/services/agent_scheduler.materialize_due_agent_schedules,
+                # which enumerates the owners holding a due agent_schedules row
+                # and calls materialize_due_schedules (line 361 of this file)
+                # once per owner, on that owner's own session and under that
+                # owner's tenant binding. It creates tasks and runs none:
+                # create_task plans and saves, and run_until_blocked is a
+                # different method reachable only from
+                # POST /api/v1/agent-tasks/{task_id}/run, so a materialized goal
+                # is still human gated before anything executes.
+                #
+                # AND THAT IS STILL NOT THE CLAIM THE DOCK LIGHTS. The first
+                # version of these keys flipped straight back to True on the
+                # strength of the runner existing, and an adversary caught it
+                # before it merged: the live Railway project held exactly three
+                # services (api, presence, Postgres), no cron or job service, a
+                # long running uvicorn container up since 03:14:30Z, and zero
+                # log lines mentioning dispatch over two hours against a
+                # documented per minute schedule. A runner in the image that
+                # nothing schedules fires nothing, and the tile would have gone
+                # green over goals that still could not run.
+                #
+                # So the two facts are reported apart. `runner` names the module
+                # and is coupled by test_devon_scheduler_honesty.py to the real
+                # call graph, read with ast. `runs_goals` and the plain
+                # `scheduler` flag follow SCHEDULER_TICK_INSTALLED, which is an
+                # operator statement about ONE deployment, defaults False, and is
+                # set only after a scheduled tick has been read back from the
+                # platform. Understating is the safe direction and it is the one
+                # this code takes.
+                "scheduler": _scheduler_tick_installed(),
+                "scheduler_status": {
+                    "records_goals": True,
+                    "runs_goals": _scheduler_tick_installed(),
+                    # Measured from the repository rather than from the
+                    # deployment: the module is on disk and dispatch.py calls
+                    # it. test_devon_agent_scheduler_runner.py asserts all three
+                    # of those, and test_devon_scheduler_honesty.py couples this
+                    # key to the ast call graph in both directions.
+                    "runner": (
+                        "dispatch.py lane 2, "
+                        "app/services/agent_scheduler."
+                        "materialize_due_agent_schedules"
+                    ),
+                    "runner_in_image": True,
+                    "tick_scheduled_in_this_deployment": (
+                        _scheduler_tick_installed()
+                    ),
+                    "materialize_route": (
+                        "POST /api/v1/agent-expansion/schedules/materialize"
+                    ),
+                    "detail": (
+                        _SCHEDULER_DETAIL_SCHEDULED
+                        if _scheduler_tick_installed()
+                        else _SCHEDULER_DETAIL_UNSCHEDULED
+                    ),
+                },
                 "skill_proposals": True,
                 "skill_promotion_requires_human": True,
                 "materialize_due_schedules": True,
+                "runtime_tools_durable": expansion_adapter.durable,
                 "auto_skill_propose_on_success": _auto_skill_propose_enabled(),
             },
             "execution": {

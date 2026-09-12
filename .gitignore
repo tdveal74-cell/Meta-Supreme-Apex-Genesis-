@@ -19,14 +19,35 @@ venv/
 # Environment — never commit real secrets
 .env
 .env.local
+.env.prod
 
 # OS / editor
 .DS_Store
 *.log
 
-# unlazy skill runtime state (see .agents/skills/unlazy)
-.unlazy/
-.unlazy-hook-state.json
 .claude/settings.local.json
-.claude/settings.local.json.unlazy.bak
-.claude/settings.json.unlazy.bak
+
+# Workflow and agent worktrees are never repository content
+.claude/worktrees/
+
+# scroll-craft build output. The skill resolves its workspace from
+# SCROLLCRAFT_HOME, then the nearest .scrollcraft.json, then
+# <project root>/scrollcraft, so ignoring the default location alone leaves the
+# other two paths exposed. Upstream reports a single build with ten video legs
+# at 300MB+ and a working lab directory at 12GB, and committing one puts it in
+# history permanently, so the video extensions are ignored by content as well as
+# by location. The repository tracks no .mp4, .mov or .webm today.
+scrollcraft/
+.scrollcraft.json
+*.mp4
+*.mov
+*.webm
+
+# n8n estate exports and the id maps a cutover writes beside them. The export
+# is every workflow body including every webhook path in full; it belongs
+# outside the checkout, and this is the seatbelt.
+n8n-export/
+inspect.txt
+creds-map.json
+tables-map.json
+_id_map.json

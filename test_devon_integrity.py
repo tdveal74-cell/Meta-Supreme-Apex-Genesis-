@@ -19,9 +19,24 @@ import re
 
 import pytest
 
-PACKAGE = pathlib.Path(__file__).parent / "services" / "devon"
+ROOT = pathlib.Path(__file__).parent
+PACKAGE = ROOT / "services" / "devon"
 SOURCE_FILES = sorted(PACKAGE.glob("*.py"))
-DOC_FILES = sorted((pathlib.Path(__file__).parent / "docs" / "devon").glob("*.md"))
+DOC_FILES = sorted((ROOT / "docs" / "devon").glob("*.md"))
+
+# The web surface, added 2026-09-09. Tee's first hard rule is studio wide and
+# says "no exceptions", but this file only ever read services/devon and
+# docs/devon, so twenty two banned marks had accumulated in the product surface
+# a reader actually sees, including the homepage headline. Restructured rather
+# than repunctuated, and now checked so it cannot come back. Build output is
+# excluded: .next is generated and not authored.
+WEB = ROOT / "apps" / "web"
+WEB_FILES = sorted(
+    path
+    for pattern in ("**/*.ts", "**/*.tsx")
+    for path in WEB.glob(pattern)
+    if ".next" not in path.parts and "node_modules" not in path.parts
+)
 
 
 def test_the_package_has_the_expected_modules():
@@ -71,6 +86,18 @@ def test_no_em_dashes_in_the_source(path):
 def test_no_em_dashes_in_the_docs(path):
     offenders = _offending_lines(path.read_text(encoding="utf-8"))
     assert not offenders, f"banned dash in {path.name}: {offenders[:3]}"
+
+
+@pytest.mark.parametrize("path", WEB_FILES, ids=lambda p: p.name)
+def test_no_em_dashes_in_the_web_surface(path):
+    """Hard rule 1 reaches the surface a reader sees, not only the doctrine."""
+    offenders = _offending_lines(path.read_text(encoding="utf-8"))
+    assert not offenders, f"banned dash in {path.name}: {offenders[:3]}"
+
+
+def test_the_web_surface_is_actually_being_read():
+    """A glob that silently matched nothing would pass this file forever."""
+    assert len(WEB_FILES) > 40, f"only {len(WEB_FILES)} web files found; the glob is wrong"
 
 
 def test_exemptions_are_rare_and_explicit():
@@ -263,3 +290,134 @@ def test_unrecognised_capture_types_are_parked_not_guessed():
     destination, recognised = vault.route_capture("pdf")
     assert recognised
     assert "Documents" in destination
+
+
+def test_draft_folders_match_the_executor_folder_map() -> None:
+    """The Drive Draft Writer carries its own copy of DRAFT_FOLDERS.
+
+    n8n cannot import the vault, so Build 16's Validate and Plan node holds the
+    same Area to folder map inline. The repo copy of that node lives under
+    ``n8n/devon/drive-draft-writer/``. If the two drift, DEVON writes a draft
+    into a folder the vault does not permit for the Area and nothing else
+    notices. This pins them together.
+    """
+    from services.devon import vault
+
+    Path = pathlib.Path
+    source = Path(__file__).parent / "n8n" / "devon" / "drive-draft-writer" / "validate_and_plan.js"
+    assert source.exists(), f"{source} is missing; the executor source must live in the repo"
+    body = source.read_text(encoding="utf-8")
+
+    block = re.search(r"const FOLDERS = \{(.*?)\n\};", body, re.S)
+    assert block, "FOLDERS map not found in the executor source"
+    pairs = dict(re.findall(r"'([A-Za-z]+)':\s*\{\s*id:\s*'([^']+)'", block.group(1)))
+
+    inbox = re.search(r"const INBOX = \{\s*id:\s*'([^']+)'", body)
+    assert inbox, "INBOX fallback not found in the executor source"
+    pairs["_unknown"] = inbox.group(1)
+
+    assert pairs == vault.DRAFT_FOLDERS, (
+        "the executor's folder map and vault.DRAFT_FOLDERS disagree; "
+        "change both or neither"
+    )
+
+    # The approval card names the folder in words, from a third copy of the map
+    # inside the driver's Decide node. That sentence is the one thing Tee reads
+    # about where the document lands, so it is pinned to the folder NAMES the
+    # executor actually writes to, not just to the ids.
+    names = dict(re.findall(r"'([A-Za-z]+)':\s*\{[^}]*?name:\s*'([^']+)'", block.group(1)))
+    decide = Path(__file__).parent / "n8n" / "devon" / "job-driver" / "decide.js"
+    assert decide.exists(), f"{decide} is missing; the driver source must live in the repo"
+    labels = dict(
+        re.findall(
+            r"(\w+):\s*'the [^']*?\(([^)]+)\)'",
+            re.search(r"const AREA_FOLDER_LABEL = \{(.*?)\};", decide.read_text(encoding="utf-8"), re.S).group(1),
+        )
+    )
+    assert labels, "AREA_FOLDER_LABEL not found in the driver source"
+    for area, folder in labels.items():
+        assert names.get(area) == folder, (
+            f"the approval card tells Tee a {area} draft lands in {folder}, "
+            f"but the executor writes it to {names.get(area)}"
+        )
+
+
+def test_airtable_row_tables_match_the_executor_table_map() -> None:
+    """The Airtable Row Writer carries its own copy of AIRTABLE_ROW_TABLES.
+
+    n8n cannot import the vault, so Build 17's Validate and Plan node holds the
+    same table allowlist inline: the table id, the two stamp fields and the
+    writable fields. The repo copy of that node lives under
+    ``n8n/devon/airtable-row-writer/``. If the two drift, DEVON writes a row
+    into a table or a field the vault does not permit and nothing else
+    notices. This pins them together, and pins the base id to AIRTABLE.
+    """
+    from services.devon import vault
+
+    source = pathlib.Path(__file__).parent / "n8n" / "devon" / "airtable-row-writer" / "validate_and_plan.js"
+    assert source.exists(), f"{source} is missing; the executor source must live in the repo"
+    body = source.read_text(encoding="utf-8")
+
+    base = re.search(r"const BASE = '([^']+)';", body)
+    assert base, "BASE not found in the executor source"
+    assert base.group(1) == vault.AIRTABLE["live_base"], "the executor writes to a base the vault does not name as live"
+
+    block = re.search(r"const TABLES = \{(.*?)\n\};", body, re.S)
+    assert block, "TABLES map not found in the executor source"
+    tables = {}
+    for name, entry in re.findall(r"'([^']+)': \{\s*\n(.*?)\n  \}", block.group(1), re.S):
+        table_id = re.search(r"id: '([^']+)'", entry)
+        key_field = re.search(r"key_field: '([^']+)'", entry)
+        job_field = re.search(r"job_field: '([^']+)'", entry)
+        rules = re.search(r"rules: \{(.*?)\n    \}", entry, re.S)
+        assert table_id and key_field and job_field and rules, f"table {name} is missing id, stamp fields or rules"
+        writable = tuple(re.findall(r"'([^']+)': \{ kind:", rules.group(1)))
+        tables[name] = {
+            "id": table_id.group(1),
+            "key_field": key_field.group(1),
+            "job_field": job_field.group(1),
+            "writable": writable,
+        }
+    assert tables, "no tables parsed from the executor source"
+    assert tables == vault.AIRTABLE_ROW_TABLES, (
+        "the executor's table allowlist and vault.AIRTABLE_ROW_TABLES disagree; change both or neither"
+    )
+    for name, entry in tables.items():
+        assert vault.AIRTABLE["tables"].get(name) == entry["id"], (
+            f"table {name} is on the row writer's allowlist with id {entry['id']} but AIRTABLE.tables records it differently"
+        )
+        assert entry["key_field"] not in entry["writable"] and entry["job_field"] not in entry["writable"], (
+            f"table {name} lets the job set a stamp field; the executor must own both stamps"
+        )
+
+
+def test_action_router_allowlist_matches_the_vault_state() -> None:
+    """Every allowlisted action names a workflow the vault records.
+
+    The router dispatches only to the names in TARGETS. A name that reaches
+    production without a vault entry is a capability nobody wrote down.
+    """
+    from services.devon import vault
+
+    source = pathlib.Path(__file__).parent / "n8n" / "devon" / "action-router" / "authorise_and_resolve_target.js"
+    assert source.exists(), f"{source} is missing; the router source must live in the repo"
+    body = source.read_text(encoding="utf-8")
+
+    targets = dict(re.findall(r"'([a-z.]+)':\s*\{[^}]*?workflow_id:\s*'([^']+)'", body, re.S))
+    assert targets, "no TARGETS entries found in the router source"
+
+    known = {entry["id"] for entry in vault.WORKFLOWS.values()}
+    for action, workflow_id in targets.items():
+        assert workflow_id in known, f"action {action} dispatches to unregistered workflow {workflow_id}"
+
+    ceilings = dict(
+        re.findall(r"'([a-z.]+)':\s*\{[^}]*?max_blast_radius:\s*'([^']+)'", body, re.S)
+    )
+    router_state = vault.WORKFLOWS["Action Router"]["state"]
+    for action in targets:
+        assert action in router_state, f"action {action} is live but the vault state does not name it"
+        ceiling = ceilings.get(action)
+        assert ceiling, f"action {action} has no ceiling in the router source"
+        assert ceiling in router_state, (
+            f"action {action} dispatches at ceiling {ceiling}, which the vault state does not record"
+        )

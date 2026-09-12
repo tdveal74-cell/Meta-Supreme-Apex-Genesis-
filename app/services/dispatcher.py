@@ -1,7 +1,7 @@
 """
 Schedule dispatcher — the thing that fires scheduled workflows.
 
-Invoked by cron (or a Kubernetes CronJob) via `app.cli.dispatch`, never as a
+Invoked by cron (or a Kubernetes CronJob) via `python dispatch.py` at the repository root, never as a
 thread inside the API. Three reasons, in order of how much they would hurt:
 
 1. An in-process scheduler fires N times when you run N API replicas.
@@ -34,6 +34,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.tenant_context import bind_tenant, reset_tenant
 from app.models.workflow import Workflow, WorkflowRun
 from app.services.workflows import parse_definition, start_run
 from services.workflows import RunStatus, TriggerType
@@ -198,13 +199,21 @@ async def dispatch_due(
 
             try:
                 # `start_run` reads the trigger from the definition, which is
-                # already `schedule` for everything this loop selects.
-                run = await start_run(
-                    db,
-                    workflow=workflow,
-                    user_id=workflow.owner_id,
-                    trigger_input="",
-                )
+                # already `schedule` for everything this loop selects. The run
+                # executes inside this call, so its provider spend is bound
+                # to the workflow's owner for the duration: a scheduled run
+                # is the owner's spend, not the system's, and a tenant cannot
+                # launder provider calls through the scheduler.
+                tenant = bind_tenant(workflow.owner_id)
+                try:
+                    run = await start_run(
+                        db,
+                        workflow=workflow,
+                        user_id=workflow.owner_id,
+                        trigger_input="",
+                    )
+                finally:
+                    reset_tenant(tenant)
                 run.meta = {**(run.meta or {}), "idempotency_key": key}
                 await db.flush()
                 report.started.append(run.id)

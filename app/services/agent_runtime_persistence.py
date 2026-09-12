@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Sequence
 from uuid import uuid4
 
-from sqlalchemy import delete, or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +28,7 @@ from app.models.agent_runtime import (
 )
 from services.agent_runtime.contracts import AgentTask
 from services.agent_runtime.learning import MemoryRecord, SkillRecord
+from services.agent_runtime.learning_context import learning_payload
 from services.agent_runtime.serialization import task_from_dict
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -385,6 +386,42 @@ class AgentTaskRepository:
         )
         return run_result.rowcount == 1
 
+    async def park_if_leased(
+        self,
+        db: AsyncSession,
+        *,
+        owner_id: str,
+        task: AgentTask,
+        lease_token: str,
+        project_id: Optional[str] = None,
+    ) -> bool:
+        """Write the task's state and payload only while this worker owns the lease.
+
+        The lease itself is left in place; the caller's failure path releases
+        it. Returns False, and writes nothing, when the lease is no longer ours.
+        """
+        result = await db.execute(
+            update(AgentTaskRecord)
+            .where(
+                AgentTaskRecord.id == task.task_id,
+                AgentTaskRecord.owner_id == owner_id,
+                AgentTaskRecord.lease_token == lease_token,
+            )
+            .values(
+                project_id=project_id,
+                goal=task.goal,
+                state=task.state.value,
+                current_step=task.current_step,
+                payload=task.to_dict(),
+                updated_at=task.updated_at,
+            )
+        )
+        if result.rowcount != 1:
+            return False
+        await self._save_checkpoints(db, owner_id=owner_id, task=task)
+        await db.flush()
+        return True
+
     async def complete_execution(
         self,
         db: AsyncSession,
@@ -584,6 +621,32 @@ class AgentLearningRepository:
         )
         return [self._memory_record(row) for row in result.scalars().all()]
 
+    async def count_memories(
+        self,
+        db: AsyncSession,
+        *,
+        owner_id: str,
+        project_id: Optional[str] = None,
+    ) -> int:
+        """How many memories this owner has in scope, matched or not.
+
+        The scoping clause is copied from `list_memories` above and must stay
+        identical to it. A count taken over a wider or narrower scope than the
+        search would make `store.memories.stored` a number that describes a
+        different set than `store.memories.returned`, which is worse than no
+        number at all.
+        """
+        query = select(func.count()).select_from(AgentRuntimeMemory).where(
+            AgentRuntimeMemory.owner_id == owner_id
+        )
+        if project_id:
+            query = query.where(
+                (AgentRuntimeMemory.project_id == project_id)
+                | (AgentRuntimeMemory.project_id.is_(None))
+            )
+        result = await db.execute(query)
+        return int(result.scalar() or 0)
+
     async def search_memories(
         self,
         db: AsyncSession,
@@ -700,6 +763,14 @@ class AgentLearningRepository:
         project_id: Optional[str] = None,
         memory_limit: int = 5,
     ) -> Dict[str, object]:
+        """The planner's learning payload, with the counts that disambiguate it.
+
+        This dict is injected into every agent task's planning context by
+        app/services/agent_tasks.py:246 and serialised whole into the planner
+        prompt. Until the `store` block existed, `memories: []` meant any of
+        three things at once and the model was told none of them: see
+        services/agent_runtime/learning_context.py for the ladder.
+        """
         memories = await self.search_memories(
             db,
             owner_id=owner_id,
@@ -708,10 +779,14 @@ class AgentLearningRepository:
             limit=memory_limit,
         )
         skills = await self.list_skills(db, owner_id=owner_id)
-        return {
-            "memories": [item.to_dict() for item in memories],
-            "skills": [item.to_dict() for item in skills],
-        }
+        stored = await self.count_memories(
+            db, owner_id=owner_id, project_id=project_id
+        )
+        return learning_payload(
+            memories=[item.to_dict() for item in memories],
+            skills=[item.to_dict() for item in skills],
+            memories_stored=stored,
+        )
 
     @staticmethod
     def _memory_record(row: AgentRuntimeMemory) -> MemoryRecord:

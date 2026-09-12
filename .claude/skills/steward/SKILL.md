@@ -17,17 +17,20 @@ eight merges landed on a red main because nobody looked.
 
 ## Local verification parity with CI
 
-CI is FOUR jobs in `.github/workflows/ci.yml`, chained
-`standalone -> {container, engine} -> api`: offline standalone, the Railway
-container contract, engine (council/security), and the PostgreSQL API suite.
+CI is FIVE jobs in `.github/workflows/ci.yml`: four chained
+`standalone -> {container, engine} -> api` (offline standalone, the Railway
+container contract, engine (council/security), and the PostgreSQL API suite)
+plus `dependency-audit`, which runs on every push with no dependency on the
+others (pip-audit on the pinned root requirements and the soul host's
+requirements on Python 3.12, and pnpm audit on the locked workspace).
 The api job also ends with `ruff check .`, so lint failures surface there rather
 than as a job of their own.
-Reproduce all four locally before any push; one validated push beats three
+Reproduce all of them locally before any push; one validated push beats three
 speculative ones. The full suite alone is not parity: the standalone job runs
 with NO `PYTHONPATH` and no database, so an import that only resolves under the
 test path passes locally and fails there.
 
-**A FIFTH job exists and is easy to miss, because it usually does not run.**
+**A SIXTH job, in its own workflow file, is easy to miss because it usually does not run.**
 `.github/workflows/web-ci.yml` runs `Next.js typecheck + build` and is path
 filtered to `apps/web/**`, `packages/ui/**`, the root `package.json`, the
 lockfile, the workspace file, and itself. Touch none of those and it never
@@ -53,7 +56,7 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python -m pytest -q \
   test_billing.py test_definition.py test_providers.py test_schedule.py \
   test_workflow_engine.py test_devon_hermes_expansion.py \
   test_devon_hermes_durable_followon.py test_devon_learning_loop.py \
-  test_devon_operating_layer.py
+  test_devon_operating_layer.py test_devon_editforge_execution.py
 
 # 2. container contract (the import check, without building the image)
 env -u PYTHONPATH DEFAULT_AI_PROVIDER=mock python -c "from app.main import app; \
@@ -68,6 +71,11 @@ python -m pytest test_council.py test_phase4_council.py test_security.py -q \
 # 4. api suite + migrations (needs Postgres 16 + pgvector)
 python -m pytest -q --tb=short
 ruff check .
+
+# 5. dependency audit (network to PyPI and the npm registry through the proxy)
+python -m pip_audit -r requirements.txt --progress-spinner off
+python -m pip_audit -r deploy/soul/requirements.txt --progress-spinner off
+pnpm audit --audit-level=moderate
 alembic upgrade head && alembic downgrade 004_federated_knowledge_waist && alembic upgrade head
 ```
 
@@ -171,14 +179,18 @@ Check these before inventing new theories:
 
 ## Environment facts
 
-Env flags: `DEVON_AUTO_SKILL_PROPOSE` (default on),
+Env flags: `DEVON_REGISTRATION_KEY` (unset closes registration, at least 16
+characters opens it, sent as `registration_key` in the body or the
+`X-Devon-Registration-Key` header, conftest sets one and the `client` fixture
+sends it), `DEVON_AUTO_SKILL_PROPOSE` (default on),
 `DEVON_BROWSER_LIVE_FETCH` (default off), `DEVON_AGENT_TASK_LEASE_SECONDS`
 (default 120), `DEFAULT_AI_PROVIDER`/`ENRICHMENT_PROVIDER` (cerebras live,
-mock in CI). Alembic head as of 2026-08-27: `013_approval_consumption` (the
-skill said `010_agent_subagent_links`, then `012_live_state_ledger`; verify with
+mock in CI). Alembic head as of 2026-09-02: `017_provider_usage` (the skill said
+`010_agent_subagent_links`, `012_live_state_ledger`, then
+`015_devon_approval_owner`; verify with
 `alembic heads` rather than trusting this line).
 
-**A new migration touches ci.yml in THREE places, not two.** The two `for f in
+**A new migration touches ci.yml in FOUR places, not three.** The two `for f in
 001... ; do test -s` loops check that the schema and migration files exist, and
 they are the obvious ones. The third is an assertion inside the Python heredoc
 of the "Fresh Alembic deploy" step: `assert revision == "<head>"`. On
@@ -186,6 +198,10 @@ of the "Fresh Alembic deploy" step: `assert revision == "<head>"`. On
 job went red on `AssertionError: 013_approval_consumption` after 1043 tests had
 passed and the upgrade/downgrade/upgrade round trip had worked. The failure
 names the new head, which reads like the migration broke rather than like a
-pinned expectation went stale.
+pinned expectation went stale. The fourth is the `for f in 002_workflow_runs
+...` loop in the "same database" step, which applies every SQL script beside
+the Alembic build and diffs the two shapes; it arrived with 018 and this
+paragraph said three until 019 counted from the file on 2026-09-08. Count with
+`grep -n "<previous head>" .github/workflows/ci.yml` before editing.
 Live-environment verification (deployed DB, Cerebras key) cannot run from CI
 or agent containers; it is always a manual item for Tee.

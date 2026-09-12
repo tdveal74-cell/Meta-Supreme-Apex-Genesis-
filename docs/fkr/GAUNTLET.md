@@ -31,12 +31,12 @@ Five-stage Cerebras-style knowledge system inside Meta Supreme:
 | Design spec (locked) | ~94 | Section-reviewed, decisions recorded |
 | Implementation plan | ~92 | Phased, human checkpoints |
 | Task checklist | ~90 | Clear acceptance criteria |
-| Code / migrations | **0** | None written |
-| Hybrid retrieve | **0** | Not built |
-| Ingest path | **0** | Not built |
+| Code / migrations | schema present | I will not keep saying code 0 / none written. `004_federated_knowledge_waist.sql` exists. Ledger schemas `012_live_state_ledger.sql` and `014_artifact_body.sql` also exist. Those are the in-estate ledger, not FKR hybrid retrieve. FKR product is not live. |
+| Hybrid retrieve | **0** | Not built as an operator product |
+| Ingest path | **0** | Not built as an operator product |
 | Synthesis / citations | **0** | Not built |
-| Live connector writes | **0** | Explicitly blocked until authorized |
-| **Overall (product)** | **~28** | Design-complete, implementation not started |
+| Live connector writes | **0** | Explicitly blocked until authorized. Notion/Drive/n8n missing. |
+| **Overall (product)** | **~28** | Design-complete. Schema exists. Implementation is not an operator FKR product. |
 
 ## Path to 99
 

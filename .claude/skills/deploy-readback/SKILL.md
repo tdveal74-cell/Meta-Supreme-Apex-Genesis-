@@ -1,6 +1,6 @@
 ---
 name: deploy-readback
-description: Verify what this estate's three production surfaces are actually serving, and diagnose Vercel deploy-quota exhaustion. Load before claiming anything is deployed or live, when asked whether production is current, when a Vercel deploy is blocked or skipped, when promoting a deployment to production, or when a status doc claims a deployment state. Compiled from the 2026-08-26 session where green previews were reported as production while all three surfaces sat stale.
+description: Verify what this estate's four production surfaces are actually serving (Railway api, Railway presence, and two Vercel projects), and diagnose Vercel deploy-quota exhaustion. Load before claiming anything is deployed or live, when asked whether production is current, when a Vercel deploy is blocked or skipped, when promoting a deployment to production, or when a status doc claims a deployment state. Compiled from the 2026-08-26 session where green previews were reported as production while all three surfaces sat stale.
 ---
 
 # Deployment read-back
@@ -17,17 +17,39 @@ deployment id, its state, and its commit. "The workflow passed" and "the PR
 merged" are not deployment evidence. If the evidence cannot be produced, the
 honest answer is "unverified", not an optimistic one.
 
-## The three surfaces
+## The four surfaces
+
+This section said **three** until 2026-09-09, when a critic counted from the
+estate and found a fourth. The presence service has been on its own Railway host
+since PR #188, `apps/web/lib/api-base.ts:26-29` hardcodes its production URL as
+the fallback, and DEVON's voice reaches Tee through it and through nothing else.
+It was simply never written down here, which is the count-from-the-lane miss
+CLAUDE.md's first law describes, in the file whose whole job is knowing what
+production serves.
 
 | Surface | What it serves | How to read it |
 |---|---|---|
 | Railway `api` | The FastAPI app, the ledger, migrations | `list-deployments`, then `get-logs` on the deployment id |
-| Vercel `meta-supreme-web` | The web app and Command Center, root `apps/web` | `list_deployments` for the project |
+| Railway `presence` | DEVON's voice and live inference, root `apps/presence`: `POST /tts`, the WebSocket lane, LiveKit tokens | `list-deployments`, then `GET /health` on the public host |
+| Vercel `meta-supreme-apex-genesis-web` | The web app and Command Center, root `apps/web` (recorded as `meta-supreme-web` until 2026-09-02; that project no longer exists) | `list_deployments` for the project |
 | Vercel `devon-soul` | The phone lane, root `deploy/soul` | `list_deployments` for the project |
+
+**The presence service reads itself back, which the other three cannot.**
+`GET /health` is unauthenticated and returns the nine keys pinned by
+`test_presence_service.py::test_health_says_only_these_things_and_no_more`:
+`inference` and `fallback` name the live providers, `speech` says whether the
+Cartesia clone or the mock is wired, `livekit_configured` is the deployed
+variable set rather than the repo default, `cors_origins` is the list whose being
+wrong makes the chat's `POST /tts` fail silently with a discarded 200, and
+`breaker` carries the live circuit state. So for this one surface the honest
+answer to "what is production serving" comes from the service itself rather than
+from a deployment record, and a claim about its wiring that was not read off
+`/health` is unverified. The key set is pinned deliberately: a field added there
+is published to anybody, so it is a decision and not a debugging leftover.
 
 **Count the Vercel projects before trusting any of this.** On 2026-08-27 a
 diagnosis assumed two and there were four, all deploying from this one
-repository: `meta-supreme-web` and `devon-soul` above, plus
+repository: `meta-supreme-web` (since retired) and `devon-soul` above, plus
 `meta-supreme-apex-genesis` and `meta-supreme-apex-genesis-web`, both imported
 on 2026-08-26. The third had no `ignoreCommand` and rebuilt on every push to
 every branch, which is what actually exhausted the cap; it was paused on Tee's
@@ -84,13 +106,24 @@ deployment from the current head.
 
 ## Vercel quota
 
-The free plan allows 100 deployments a day, counted across the account.
+**The account is on the Pro plan as of 2026-09-04**, read from `list_teams`,
+which reports `"plan": "pro"` for `tdveal74-5020s-projects`. Everything below
+about the free plan's 100 deployments a day is kept as history, because it is
+what shaped these rules and it explains the `ignoreCommand` that is still in
+both project roots. It no longer describes this account's limit. Read the plan
+from `list_teams` rather than assuming either one, and read the actual number
+from the dashboard Usage page, because there is still no quota endpoint in the
+tooling.
 
-**How it gets exhausted:** before 2026-08-26 both projects rebuilt on every
-commit to every branch regardless of whether the change could affect them. One
-docs-only commit produced four builds that could not have differed from their
-predecessors. The cap was then reached while shipping almost nothing, and it
-blocked the production deploys that mattered.
+The rules below survive the plan change on their own merit. A wrong skip ships
+stale code silently whatever the plan is, and that is the failure worth
+preventing, not the cost of a build.
+
+**How the free plan cap got exhausted:** before 2026-08-26 both projects
+rebuilt on every commit to every branch regardless of whether the change could
+affect them. One docs-only commit produced four builds that could not have
+differed from their predecessors. The cap was then reached while shipping
+almost nothing, and it blocked the production deploys that mattered.
 
 **The mitigation, already shipped:** each project root carries a `vercel.json`
 with an `ignoreCommand`. Vercel runs it before building; **exit 0 skips, any
@@ -124,7 +157,7 @@ direction.** No previous SHA, or one this checkout does not contain, means
 build. A needless build costs one deployment. A wrong skip ships stale code and
 says nothing, and the silence is what makes that expensive.
 
-`meta-supreme-web` deliberately watches beyond its own root: it imports
+`meta-supreme-apex-genesis-web` deliberately watches beyond its own root: it imports
 `@meta-supreme/ui` from `packages/ui` in `tailwind.config.ts` and
 `app/layout.tsx`, so a theme change touching no file under `apps/web` still has
 to rebuild. Narrowing that rule would ship a stale brand and the skip would be
@@ -151,6 +184,106 @@ the working assumption and not a settled fact. The safe posture either way:
 cheap in build time. Whether it makes them free against the daily count is
 unproven, and the optimistic reading is the one that burned this estate.
 
+### A preview builds when the BRANCH has no previous deployment
+
+The fail-open guard is not only a safety net for damaged history: it fires
+whenever a branch ref has no deployment behind it. `VERCEL_GIT_PREVIOUS_SHA` is
+then empty, the guard exits 1, and the build runs no matter what the commit
+touched.
+
+**The condition is the branch ref's deployment history, not the branch's
+novelty, and in this repository those come apart.** The convention here is to
+recycle the designated branch name after every merge, restarting it from
+`origin/main` and force pushing. Vercel keeps that ref's deployment history
+across the force push, so the second and later lives of a recycled branch have a
+previous SHA from the outset and the guard never fires. PR #93 proved it: its
+very first push recorded Ignored on all three active projects, on a branch name
+that had already carried PR #92. Saying "a new branch always builds" would have
+predicted a build there and been wrong.
+
+**So do not predict either outcome on a pull request from path reasoning.** On
+2026-08-27 a docs-only commit was pushed to a genuinely fresh branch with a PR
+body claiming both Vercel projects would correctly skip. All three active
+projects built previews. Nothing was broken; the prediction applied
+production-branch reasoning to a first preview. The build log settles it in one
+line, and is the only honest way to tell a fail-open build from a rule failure:
+
+```
+Running "if [ -z "$VERCEL_GIT_PREVIOUS_SHA" ] || ! git cat-file -e ..."
+Running "vercel build"
+```
+
+The rule ran and chose to build. Contrast a genuine skip, where the
+`ignoreCommand` line is followed by the build being ignored rather than by
+`vercel build`.
+
+**From the second push onward the comparison base is the branch's own last
+deployment, not production.** The same PR proved it: push two touched only the
+skill file, and all three active projects recorded Ignored, because
+`VERCEL_GIT_PREVIOUS_SHA` then pointed at push one on that branch. So a preview
+skip means "nothing changed since I last built this branch", which is a
+different question from the one a skip on `main` answers. Do not read a preview
+skip as evidence about what production serves.
+
+Practical consequences. A preview building on a docs-only PR is expected and is
+not evidence the rule is broken. A branch's first ever push costs one build per
+active project regardless of its paths, which is worth knowing when the daily
+cap is near; a recycled branch does not, which is a quiet argument for the
+recycling convention. And the skips worth auditing are the ones on **main**,
+where the comparison base is production and a wrong skip ships stale code.
+
+**Two projects can answer differently on the same push, and that is still the
+guard rather than a broken rule.** On 2026-09-04, PR #133 pushed `d032283` to
+`claude/github-repo-install-5wtko6`, a records-only commit touching neither
+project's paths. `devon-soul` recorded Ignored. `meta-supreme-apex-genesis-web`
+built a preview to READY.
+
+What is proven, from the build log and from git:
+
+- The web rule ran and chose to build. Its log reads `Running "if [ -z
+  "$VERCEL_GIT_PREVIOUS_SHA" ...` and then `Running "vercel build"`, which is
+  the fail-open signature, not a skip.
+- It cannot have been a path match. `f476195..d032283` and `edaf03e..d032283`
+  are both empty over `apps/web`, `packages/ui`, `pnpm-lock.yaml` and
+  `pnpm-workspace.yaml`, so no plausible comparison base would have built.
+- So the guard fired: either the previous SHA was empty or `git cat-file -e`
+  could not find it in the checkout.
+- The difference between the two projects lines up with how far back each one's
+  last successful deployment sits. The web build restored cache from
+  `XeMEfHQZju83jE28yW2aovwk9Voq`, the production deployment on `f476195`, many
+  commits back, while `devon-soul` last built successfully at `edaf03e`, which
+  is `d032283`'s immediate parent.
+
+What is **not** proven: that the shallow clone is why `git cat-file -e` failed.
+That is the obvious explanation and it fits every observation here, but the log
+does not echo `VERCEL_GIT_PREVIOUS_SHA` and nothing in the tooling reports the
+clone depth, so it stays a hypothesis. Settling it would mean changing the
+`ignoreCommand` to echo the variable, which costs a build and has not been
+done.
+
+**The next push settled that it is not stable, and did not settle why.** Three
+minutes later `ec8ccd1` went to the same branch, another records-only commit,
+and **both** projects recorded Ignored, the web one included. So the same
+branch produced a build and then a skip on consecutive pushes with nothing
+relevant changing in the diff. The one thing that did change is that the web
+project now had a successful deployment of its own on this ref, at `d032283`,
+the immediate parent.
+
+That is consistent with the empty-variable reading and with the unreachable-SHA
+reading alike, so it is one more observation rather than a proof. It does kill
+the inference a reader would otherwise draw from the paragraph above, that this
+project simply builds and the other simply skips. Neither is a property of the
+project.
+
+The practical reading, which does not depend on the hypothesis: a project whose
+last successful deployment is several commits back will tend to fail open and
+build, and a project that built recently will skip, so the same branch can
+answer differently from one push to the next. That is the guard working in the
+safe direction. It costs a build; a wrong skip costs a silent stale production.
+Do not read such a build as a broken rule, do not read two projects disagreeing
+as one of them being wrong, and do not read one push's outcome as a prediction
+of the next.
+
 ### Reading a skipped build correctly
 
 An ignored build is recorded as **`CANCELED`**, and the Vercel bot comments
@@ -172,7 +305,56 @@ Distinguish them by evidence, never by assumption:
 |---|---|
 | `CANCELED` plus an "Ignored" bot comment | The `ignoreCommand` skipped it. Correct. |
 | A bot comment naming `api-deployments-free-per-day` | The cap. Nothing will deploy until the window rolls. |
+| A commit status reading **"Account is blocked"** | An account-level block. See below. Not the cap, and not a build failure. |
 | A build that ran and reached `READY` | There was headroom **at that moment**. See below. |
+
+### An account block is a third thing, and it looks like neither
+
+Seen three times: 2026-09-02 into 2026-09-03, again on 2026-09-04, and again
+on 2026-09-05 from some point between 18:55Z (the last record created on both
+projects, commit 21caa65) and 19:23Z (the push of 88a002d, which created
+none). The Vercel commit statuses on the head read `failure` with the
+description **"Account is blocked"**, pointing at
+`https://vercel.com/knowledge/why-is-my-account-deployment-blocked`.
+
+It is not the daily cap. The cap names itself (`api-deployments-free-per-day`)
+and it is a refusal of one deployment; a block is account wide and the tooling
+never names a reason. It is not a build failure either, so re-running, pushing
+an empty commit, or changing code does nothing. **Only a human on the Vercel
+account can clear it.**
+
+**Its signature is the absence of records.** While blocked, no deployment
+record of any kind is created on any project, so `list_deployments` simply has
+a gap. On 2026-09-02 that gap ran from 22:39Z to 13:16Z the next day on both
+projects. That absence is the tell, because a blocked account and a quiet
+account look identical in every status field.
+
+**So that is also how you verify it cleared**, and it is stronger evidence than
+any status turning green: push, then check that a deployment record was created
+at all. `CANCELED` is enough. On 2026-09-04 the merge of PR #132 created
+records on both projects at 19:24:57Z, which settled the block without needing
+a successful build.
+
+**Merging past a block is correct; shipping past one is not.** The `ci.yml`
+workflow is the merge gate, and these statuses are third-party. But while a
+block stands, nothing in the estate can deploy, so anything owed to a surface
+stays owed and silent. Say so, and check what is owed rather than assuming.
+
+### Verify a skip yourself rather than trusting it
+
+`CANCELED` means the rule chose to skip. It does not prove the rule was right,
+and a wrong skip is the expensive failure. Read each project's real
+`ignoreCommand` out of its own `vercel.json` (not out of this file, which can
+go stale) and run the same comparison by hand, from the commit of the last
+deployment that actually built to `main`:
+
+```
+git diff --stat <last built commit> <main> -- <that project's paths>
+```
+
+Empty means nothing is owed and the skip was correct. Anything listed is owed
+to production and nothing will tell you. Done on 2026-09-04 for both projects
+against `edaf03e`: both empty, both surfaces correct at a commit behind main.
 
 **A build succeeding does not mean the cap has reset.** The window is rolling,
 so a slot ageing out lets one or two builds through while the account is still
@@ -213,7 +395,8 @@ optimistic sentence.
 
 ```
 Railway api      LIVE   deployment <id> SUCCESS <time> on <commit>, migration <rev> applied
-meta-supreme-web LIVE   <dpl_id> READY target "production" on <commit>
+Railway presence LIVE   deployment <id> SUCCESS <time>; /health speech=cartesia livekit_configured=false breaker=closed
+meta-supreme-apex-genesis-web LIVE   <dpl_id> READY target "production" on <commit>
 devon-soul       STALE  production still on <commit>; current main is <commit>
 ```
 

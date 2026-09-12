@@ -3,13 +3,70 @@ Application configuration.
 Secrets are loaded from environment variables. Never hard-code them.
 """
 
+import os
 from functools import lru_cache
-from typing import List
+from typing import List, Mapping, Optional
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from services.devon.persona import BOUNDARY as DEVON_PERSONA_BOUNDARY
 from services.devon.persona import REGISTER as DEVON_PERSONA_REGISTER
+
+DEFAULT_SECRET_KEY = "change-me-in-production-use-openssl-rand-hex-32"
+
+#: Environments a developer runs on their own machine. Anything else is a
+#: deployment, staging included: it is reachable and it signs the same JWTs.
+LOCAL_ENVIRONMENTS = frozenset({"development", "dev", "test", "local", ""})
+
+#: Variables a hosting platform injects into every deployment it runs. Their
+#: presence means "deployed" whatever ENVIRONMENT says, so a service whose
+#: ENVIRONMENT was never set cannot boot on the public key by accident.
+PLATFORM_MARKERS = ("RAILWAY_ENVIRONMENT_NAME", "RAILWAY_PROJECT_ID", "VERCEL_ENV")
+
+
+def deployment_reason(
+    environment: str, environ: Optional[Mapping[str, str]] = None
+) -> str:
+    """Why this process counts as deployed, or an empty string when it is local."""
+    env = (environment or "").strip().lower()
+    if env not in LOCAL_ENVIRONMENTS:
+        return f"ENVIRONMENT is {env}"
+    variables = os.environ if environ is None else environ
+    for marker in PLATFORM_MARKERS:
+        if (variables.get(marker) or "").strip():
+            return f"{marker} is set, so this process runs on a hosting platform"
+    return ""
+
+
+def secret_key_refusal(
+    environment: str, secret_key: str, environ: Optional[Mapping[str, str]] = None
+) -> str:
+    """Why this process must not start, or an empty string when it may.
+
+    A deployed process (ENVIRONMENT outside the local set, or a hosting
+    platform's own marker present) is refused the public default and an
+    empty key. Development and test keep the default so the standalone and
+    offline paths run with no environment at all, which is the same reason
+    the default exists.
+    """
+    deployed = deployment_reason(environment, environ)
+    if not deployed:
+        return ""
+    key = (secret_key or "").strip()
+    if not key:
+        return (
+            f"SECRET_KEY is empty and {deployed}. Refusing to start: every JWT "
+            "would verify against nothing. Set SECRET_KEY to the output of "
+            "`openssl rand -hex 32`."
+        )
+    if key == DEFAULT_SECRET_KEY:
+        return (
+            f"SECRET_KEY is the public default and {deployed}. Refusing to start: "
+            "anyone holding the repository could mint a token for any user. Set "
+            "SECRET_KEY to the output of `openssl rand -hex 32`."
+        )
+    return ""
 
 
 class Settings(BaseSettings):
@@ -26,17 +83,27 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     API_V1_PREFIX: str = "/api/v1"
 
-    # Security
-    SECRET_KEY: str = "change-me-in-production-use-openssl-rand-hex-32"
+    # Security. The default exists so a fresh checkout can run offline. It is
+    # public, so a production process that still carries it would let anyone
+    # mint a JWT for any user id; the validator below refuses to start there.
+    SECRET_KEY: str = DEFAULT_SECRET_KEY
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     ALGORITHM: str = "HS256"
 
     # DEVON Command Center passkeys. These defaults bind credentials to the
     # canonical production Vercel host. Railway can override them for a custom
     # domain without changing code. WebAuthn private keys never reach DEVON.
-    PASSKEY_RP_ID: str = "meta-supreme-web.vercel.app"
+    #
+    # The two must always name the SAME host, the origin with a scheme and the
+    # rp id without one, or registration and login disagree about who is asking.
+    # They previously defaulted to meta-supreme-web.vercel.app, a project that
+    # served the same code and was retired on 2026-08-27 once production was
+    # confirmed to override both. A default naming a host that no longer exists
+    # is the worst kind: it applies only when the override is missing, and the
+    # failure surfaces as a rejected passkey rather than as absent config.
+    PASSKEY_RP_ID: str = "meta-supreme-apex-genesis-web.vercel.app"
     PASSKEY_RP_NAME: str = "DEVON Command Center"
-    PASSKEY_ORIGIN: str = "https://meta-supreme-web.vercel.app"
+    PASSKEY_ORIGIN: str = "https://meta-supreme-apex-genesis-web.vercel.app"
     PASSKEY_CHALLENGE_TTL_SECONDS: int = 300
 
     # Operator shell: a second, shell-only key distinct from the operator
@@ -49,7 +116,10 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/meta_supreme"
 
-    # CORS
+    # CORS. Default is loopback. The operator console is served same-origin
+    # from app.main GET /console, so the knowledge loop does not need CORS.
+    # devon-soul.vercel.app is not on this list: that host has no Postgres
+    # and must fail-close persist. I am not teaching a second origin.
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
@@ -94,6 +164,13 @@ class Settings(BaseSettings):
     AI_TEMPERATURE: float = 0.2
     AI_MAX_TOKENS_PER_AGENT: int = 1200
     AI_MAX_TOKENS_SYNTHESIS: int = 2000
+    # Live AgentTurn is an iterative loop, so these limits apply on every tool
+    # step rather than once per Council request. Keep the newest context and a
+    # compact completion budget; deployments can raise them with measurements.
+    AI_MAX_TOKENS_AGENT_TURN: int = 600
+    AI_TURN_HISTORY_MAX_MESSAGES: int = 12
+    AI_TURN_HISTORY_MAX_CHARS: int = 12_000
+    AI_TURN_OBSERVATIONS_MAX_CHARS: int = 6_000
 
     # DEVON remains the approval and orchestration authority. EditForge is the
     # authenticated media execution boundary. The token is never returned by
@@ -107,6 +184,36 @@ class Settings(BaseSettings):
     COUNCIL_MAX_CONCURRENCY: int = 3  # provider calls in flight (rate-limit friendly)
     COUNCIL_DELIBERATION_ROUNDS: int = 1  # 2 → always deliberate; per-request opt-in also supported
     COUNCIL_HISTORY_LIMIT: int = 10  # recent messages passed to agents
+
+    # Provider spend per account per UTC day, input plus output tokens, across
+    # every lane that reaches a provider: councils, agent turns, workflows,
+    # enrichment and embeddings all pass through the metered wrapper that
+    # app.services.intelligence installs on the provider, so no route enforces
+    # this on its own. The wrapper reads the account's provider_usage row
+    # before each call and refuses with 429 once the row has reached the cap;
+    # after each call it records what the provider reported. 0 disables the
+    # refusal; the ledger still records. Work no account asked for (startup
+    # jobs, service-layer calls outside a request) is counted and capped under
+    # the "system" bucket, so an attribution gap fills up and becomes visible
+    # instead of draining the key unbounded.
+    #
+    # Why 500,000: a full council run costs about 20,000 tokens at the limits
+    # above (nine agents plus synthesis), so the default allows about 25 of
+    # them, or several hundred agent turns, per account per day: more than a
+    # person uses and still a few dollars of provider credit if a login leaks,
+    # rather than the key's monthly limit. The mock provider counts a quarter
+    # token per character and the suite truncates the ledger between tests,
+    # so no test approaches it.
+    PROVIDER_DAILY_TOKEN_CAP: int = 500_000
+
+    # Universal Receipt signing (migration 019). Empty derives a key from
+    # SECRET_KEY, so receipts are never signed under the JWT key itself; a
+    # dedicated value is the setting to prefer in production, because it is
+    # the one the presence service never receives and so cannot leak. The
+    # previous list is the rotation ring: receipts signed under an earlier key
+    # still verify and report which key signed them. Comma separated.
+    RECEIPT_SIGNING_KEY: str = ""
+    RECEIPT_SIGNING_KEYS_PREVIOUS: str = ""
 
     # Model tiers (None → provider default). Fast for intent classification,
     # synthesis for the final combination step.
@@ -156,11 +263,42 @@ class Settings(BaseSettings):
     # those failed. The timeout must exceed the longest plausible run — a
     # full council deliberation against a live provider — or the sweep will
     # fail runs that are genuinely still working.
+    # Whether THIS deployment actually schedules the cron entrypoint that
+    # materializes due agent_schedules rows. Default False, and the default is
+    # the load bearing part.
+    #
+    # dispatch.py lane 2 exists in the image on every deployment. Whether
+    # anything runs it per minute is a property of the platform, not of this
+    # process, and nothing inside the container can see a Railway cron
+    # definition or a crontab on the host. On 2026-09-10 an adversary proved why
+    # that distinction matters: the capability matrix was about to report
+    # runs_goals True because a first party call site existed in the repository,
+    # while the live Railway project held exactly three services (api, presence,
+    # Postgres), no cron service, a long running uvicorn container, and zero
+    # log lines mentioning dispatch over two hours against a documented per
+    # minute schedule. The dock would have lit a green Scheduler tile over goals
+    # that still could not fire.
+    #
+    # So this is an OPERATOR STATEMENT about one deployment, it is set per
+    # service rather than in code, and it defaults to the answer that claims
+    # nothing. Set it only after a scheduled tick has actually been read back
+    # from the platform, per the deploy-readback skill. Leaving it unset on a
+    # deployment that does schedule the tick understates the estate, which is
+    # the direction this repository errs in on purpose.
+    SCHEDULER_TICK_INSTALLED: bool = False
+
     WORKFLOW_SWEEP_ON_STARTUP: bool = True
     WORKFLOW_ORPHAN_TIMEOUT_MINUTES: int = 30
 
     # Observability
     LOG_LEVEL: str = "INFO"
+
+    @model_validator(mode="after")
+    def _refuse_the_default_secret_in_production(self) -> "Settings":
+        refusal = secret_key_refusal(self.ENVIRONMENT, self.SECRET_KEY)
+        if refusal:
+            raise ValueError(refusal)
+        return self
 
 
 @lru_cache

@@ -38,9 +38,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import Cookie, FastAPI, Header, HTTPException, Query, status
+from fastapi import Cookie, FastAPI, Header, HTTPException, Query, Request, status
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 # The service is the whole of deploy/soul. Adding it to the path is what lets
 # this import the vendored modules, which a test holds identical to the originals.
@@ -68,6 +70,14 @@ app = FastAPI(
     docs_url=None,      # nothing to browse; the console is the surface
     redoc_url=None,
 )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def branded_http_exception(request: Request, exc: StarletteHTTPException):
+    """Unknown paths get a flagship HTML page, not unstyled FastAPI JSON."""
+    if exc.status_code == 404:
+        return HTMLResponse(not_found_page(), status_code=404)
+    return await http_exception_handler(request, exc)
 
 
 @app.middleware("http")
@@ -102,28 +112,26 @@ TOKEN_COOKIE = "devon_console"
 
 
 def _presented(
-    authorization: str | None, t: str | None, cookie: str | None = None
+    authorization: str | None, cookie: str | None = None
 ) -> str:
     """
-    The token the caller offered: a header, the first-load URL, or a cookie.
+    The token the caller offered: a Bearer header or the SameSite cookie.
 
-    A browser performing a top level navigation cannot set a header, which is
-    why ?t= exists at all. But it cannot set one on the second visit either,
-    so without the cookie every launch from a home screen would land on the
-    door and ask for the token again. The cookie is what makes signing in
-    once mean once.
+    A browser performing a top level navigation cannot set a header. The door
+    therefore stores the token in sessionStorage and a SameSite cookie, then
+    opens /console with no token in the URL. Query param t is never accepted
+    as auth: it would land the credential in history, bookmarks, and referrer
+    logs. The cookie is what makes signing in once mean once.
 
     Header first so an API caller is never overridden by a stale cookie.
     """
     if authorization and authorization.lower().startswith("bearer "):
         return authorization[7:].strip()
-    if t and t.strip():
-        return t.strip()
     return (cookie or "").strip()
 
 
 def _require(
-    authorization: str | None, t: str | None = None, cookie: str | None = None
+    authorization: str | None, cookie: str | None = None
 ) -> None:
     """
     Let the caller in, or say plainly why not.
@@ -150,7 +158,7 @@ def _require(
                 "environment settings and redeploy."
             ),
         )
-    presented = _presented(authorization, t, cookie)
+    presented = _presented(authorization, cookie)
     if not presented or not hmac.compare_digest(
         presented.encode("utf-8"), expected.encode("utf-8")
     ):
@@ -366,53 +374,86 @@ def door_page(reason: str = "") -> str:
     return DOOR_HTML.replace("{{NOTE}}", note)
 
 
-DOOR_HTML = """<!doctype html><meta charset=\"utf-8\">
-<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">
+def not_found_page() -> str:
+    return NOT_FOUND_HTML
+
+
+NOT_FOUND_HTML = """<!doctype html><meta charset=\"utf-8\">
+<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">
 <meta name=\"referrer\" content=\"no-referrer\">
 <title>DEVON</title>
 <style>
- :root{color-scheme:dark}
+ :root{color-scheme:dark;--navy:#0A1628;--amber:#D4A017;--surface:#F8F5F0}
  *{box-sizing:border-box}
- body{margin:0;min-height:100vh;display:grid;place-items:center;
-      background:#050A0E;color:#EDE7DC;
-      font:15px/1.6 ui-sans-serif,system-ui,-apple-system,sans-serif;padding:24px}
+ html,body{margin:0;overflow-x:hidden}
+ body{min-height:100dvh;min-height:100vh;display:flex;align-items:flex-start;
+      justify-content:flex-start;background:var(--navy);color:var(--surface);
+      font:15px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif;
+      padding:max(16px,env(safe-area-inset-top,0px)) 16px 24px}
  main{width:100%;max-width:26rem}
- h1{font-size:13px;letter-spacing:.24em;color:#C77B4A;margin:0 0 6px;font-weight:600}
- p{margin:0 0 18px;color:#93A6B5;font-size:14px}
- p.why{color:#D4A017;border-left:2px solid #D4A017;padding-left:10px;font-size:13px}
- label{display:block;font-size:11px;letter-spacing:.18em;color:#5E7484;margin:0 0 6px}
- input{width:100%;padding:13px 12px;background:#0B141B;color:#EDE7DC;
-       border:1px solid #22384A;border-radius:6px;font:14px ui-monospace,monospace}
- input:focus{outline:none;border-color:#C77B4A}
- button{width:100%;margin-top:10px;padding:13px;border:1px solid #C77B4A;
-        border-radius:6px;background:transparent;color:#C77B4A;
-        font:600 12px/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.20em;
+ h1{font-size:12px;letter-spacing:.24em;color:var(--amber);margin:0 0 8px;font-weight:700}
+ p{margin:0 0 14px;color:#93A6B5;font-size:14px}
+ a{color:var(--amber)}
+ .note{margin-top:14px;font-size:12px;color:#8A9BAE}
+</style>
+<main>
+ <h1>DEVON</h1>
+ <p>No page at this path. This surface is the console door, not a public API browser.</p>
+ <p><a href=\"/\">Return to the door</a></p>
+ <p class=\"note\">Soul recall is reads only. Nothing here writes to either soul index. Propose is not live on this host; devon-soul.vercel.app has no Postgres. Remember is refused on this host outright; it lives in the platform console on app.main. /terminal is a separate Operator sandbox and can write inside that isolated workspace.</p>
+</main>"""
+
+
+DOOR_HTML = """<!doctype html><meta charset=\"utf-8\">
+<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">
+<meta name=\"referrer\" content=\"no-referrer\">
+<title>DEVON</title>
+<style>
+ :root{color-scheme:dark;--navy:#0A1628;--amber:#D4A017;--surface:#F8F5F0}
+ *{box-sizing:border-box}
+ html,body{margin:0;overflow-x:hidden}
+ body{min-height:100dvh;min-height:100vh;display:flex;align-items:flex-start;
+      justify-content:flex-start;background:var(--navy);color:var(--surface);
+      font:15px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif;
+      padding:max(16px,env(safe-area-inset-top,0px)) 16px 24px}
+ main{width:100%;max-width:26rem}
+ h1{font-size:12px;letter-spacing:.24em;color:var(--amber);margin:0 0 8px;font-weight:700}
+ p{margin:0 0 14px;color:#93A6B5;font-size:14px}
+ p.why{color:var(--amber);border-left:2px solid var(--amber);padding-left:10px;font-size:13px}
+ label{display:block;font-size:11px;letter-spacing:.18em;color:#8A9BAE;margin:0 0 6px}
+ input{width:100%;min-height:44px;padding:12px;background:#0C1A2E;color:var(--surface);
+       border:1px solid #1E3348;border-radius:6px;font:14px ui-monospace,monospace}
+ input:focus{outline:none;border-color:var(--amber)}
+ button{width:100%;min-height:44px;margin-top:10px;padding:12px;border:1px solid var(--amber);
+        border-radius:6px;background:transparent;color:var(--amber);
+        font:700 12px/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.18em;
         cursor:pointer}
- button:active{background:#1A1008}
- .note{margin-top:16px;font-size:12px;color:#5E7484}
+ button:active{background:#0C1A2E}
+ .note{margin-top:14px;font-size:12px;color:#8A9BAE}
 </style>
 <main>
  <h1>DEVON</h1>
  {{NOTE}}
- <p>Paste your console token. It is kept in this browser and nowhere else.</p>
+ <p>Paste your console token. It stays in this browser session (sessionStorage and a 12-hour SameSite cookie) and is not sent to another site.</p>
  <form id=\"f\" autocomplete=\"off\">
   <label for=\"t\">CONSOLE TOKEN</label>
   <input id=\"t\" type=\"password\" inputmode=\"text\" autocapitalize=\"off\"
          autocorrect=\"off\" spellcheck=\"false\" placeholder=\"CONSOLE_TOKEN from the host\">
   <button type=\"submit\">OPEN THE CONSOLE</button>
  </form>
- <p class=\"note\">Reads only. Nothing here writes to either soul.</p>
+ <p class=\"note\">Soul recall is reads only. Nothing here writes to either soul index. Propose is not live on this host; devon-soul.vercel.app has no Postgres. Remember is refused on this host outright; it lives in the platform console on app.main. /terminal is a separate Operator sandbox and can write inside that isolated workspace.</p>
 </main>
 <script>
 document.getElementById('f').addEventListener('submit', function (e) {
   e.preventDefault();
   var v = (document.getElementById('t').value || '').trim();
   if (!v) return;
-  try { localStorage.setItem('devon.soul.token', v); } catch (err) {}
+  try { sessionStorage.setItem('devon.soul.token', v); } catch (err) {}
+  try { localStorage.removeItem('devon.soul.token'); } catch (err) {}
   var secure = location.protocol === 'https:' ? '; Secure' : '';
   document.cookie = 'devon_console=' + encodeURIComponent(v) +
-                    '; path=/; max-age=31536000; SameSite=Strict' + secure;
-  location.href = '/console?t=' + encodeURIComponent(v);
+                    '; path=/; max-age=43200; SameSite=Strict' + secure;
+  location.href = '/console';
 });
 </script>"""
 
@@ -430,7 +471,8 @@ async def root(accept: str | None = Header(default=None)):
                     "/api/v1/soul/recall?q=",
                     "/api/v1/soul/conflict-search",
                 ],
-                "writes": "none by design",
+                "soul_writes": "none by design",
+                "operator_terminal": "/terminal is a separate Operator sandbox when the wrapper is mounted; not a soul write",
             }
         )
     return HTMLResponse(door_page())
@@ -448,10 +490,9 @@ async def health():
 @app.get("/api/v1/soul/status")
 async def soul_status(
     authorization: str | None = Header(default=None),
-    t: str | None = Query(default=None),
     devon_console: str | None = Cookie(default=None),
 ):
-    _require(authorization, t, devon_console)
+    _require(authorization, devon_console)
     enabled = bool(_pinecone_key())
     return {
         "enabled": enabled,
@@ -477,13 +518,12 @@ def _bounded(name: str, value: int, low: int, high: int) -> int:
 @app.get("/api/v1/soul/recall")
 async def soul_recall(
     authorization: str | None = Header(default=None),
-    t: str | None = Query(default=None),
     devon_console: str | None = Cookie(default=None),
     q: str | None = Query(default=None),
     top_k_tee: int = Query(default=4),
     top_k_devon: int = Query(default=3),
 ):
-    _require(authorization, t, devon_console)
+    _require(authorization, devon_console)
     if not q or not q.strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -547,7 +587,6 @@ class ConflictSearchBody(BaseModel):
 async def conflict_search(
     body: ConflictSearchBody,
     authorization: str | None = Header(default=None),
-    t: str | None = Query(default=None),
     devon_console: str | None = Cookie(default=None),
 ):
     """
@@ -572,7 +611,7 @@ async def conflict_search(
     window that came back full with no weak-scored floor, because such a
     window can hide an active non-weak match below the cutoff.
     """
-    _require(authorization, t, devon_console)
+    _require(authorization, devon_console)
 
     claim = body.claim.strip()
     if len(claim) < 8:
@@ -698,13 +737,12 @@ async def conflict_search(
 @app.get("/console", include_in_schema=False)
 async def console(
     authorization: str | None = Header(default=None),
-    t: str | None = Query(default=None),
     devon_console: str | None = Cookie(default=None),
 ):
     if not CONSOLE.exists():
         raise HTTPException(status_code=404, detail="No console asset deployed.")
     try:
-        _require(authorization, t, devon_console)
+        _require(authorization, devon_console)
     except HTTPException as exc:
         if exc.status_code == status.HTTP_503_SERVICE_UNAVAILABLE:
             why = (
@@ -712,7 +750,7 @@ async def console(
                 "refusing everything. Set one there and redeploy. A token "
                 "pasted here cannot help until that is done."
             )
-        elif _presented(authorization, t, devon_console):
+        elif _presented(authorization, devon_console):
             why = (
                 "That token was refused. Check it for a stray space, a "
                 "changed character, or a capital the keyboard added."
@@ -720,4 +758,12 @@ async def console(
         else:
             why = "No token yet."
         return HTMLResponse(door_page(why), status_code=exc.status_code)
-    return FileResponse(CONSOLE, media_type="text/html")
+    # The HUD asset is byte-identical on both hosts; the serving backend
+    # marks which mode to render, so localhost and Vercel preview
+    # deployments of this service stop rendering platform mode with the
+    # CONSOLE_TOKEN field hidden. Not HttpOnly on purpose: the page reads it.
+    response = FileResponse(CONSOLE, media_type="text/html")
+    response.set_cookie(
+        "devon_host", "soul", path="/", samesite="strict", max_age=43200
+    )
+    return response

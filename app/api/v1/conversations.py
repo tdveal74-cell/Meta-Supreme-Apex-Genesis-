@@ -24,6 +24,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.devon import _queue as approval_queue
+from app.core.config import settings
+from app.core.exceptions import AppError
 from app.db.session import AsyncSessionLocal, get_db
 from app.models.agent import Agent, AgentRun
 from app.models.conversation import Conversation, Message
@@ -451,6 +453,12 @@ async def send_message_stream(
             await queue.put({"type": "error", "status": 503, "message": str(exc)})
         except (CouncilExecutionError, ProviderError) as exc:
             await queue.put({"type": "error", "status": 502, "message": str(exc)})
+        except AppError as exc:
+            # A typed refusal (the provider spend cap answers 429) keeps its
+            # status on the stream, where the exception handlers cannot reach.
+            await queue.put(
+                {"type": "error", "status": exc.status_code, "message": exc.message}
+            )
         except Exception:  # noqa: BLE001 — stream must always terminate cleanly
             logger.exception("streaming council run failed")
             await queue.put(
@@ -674,7 +682,7 @@ async def act_stream(
                 select(Message)
                 .where(Message.conversation_id == conversation.id)
                 .order_by(Message.created_at.desc())
-                .limit(HISTORY_TURNS)
+                .limit(settings.AI_TURN_HISTORY_MAX_MESSAGES)
             )
         )
         .scalars()
@@ -732,7 +740,12 @@ async def act_stream(
             turn_id=turn_id,
             approvals=approval_queue,
             actor=str(current_user.id),
+            owner_id=str(current_user.id),
         ),
+        max_completion_tokens=settings.AI_MAX_TOKENS_AGENT_TURN,
+        history_max_messages=settings.AI_TURN_HISTORY_MAX_MESSAGES,
+        history_max_chars=settings.AI_TURN_HISTORY_MAX_CHARS,
+        observations_max_chars=settings.AI_TURN_OBSERVATIONS_MAX_CHARS,
     )
 
     async def event_stream():

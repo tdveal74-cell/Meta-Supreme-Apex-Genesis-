@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.agent import Agent, AgentRun
 from app.models.conversation import Conversation, Message
+from app.services.provider_usage import MeteredProvider
 from services.agents.registry import AGENT_REGISTRY
 from services.intelligence import (
     ContextPacket,
@@ -42,7 +43,14 @@ logger = logging.getLogger(__name__)
 
 @lru_cache
 def get_provider() -> AIProvider:
-    """Build the configured AI provider once per process."""
+    """Build the configured AI provider once per process.
+
+    Every lane that reaches a provider (councils, agent turns, workflows,
+    the planner) takes its provider from here, so the per-tenant spend cap
+    is installed here and nowhere else: the provider returned is the
+    configured one wrapped in `MeteredProvider`, which refuses an account at
+    its daily cap before the call and records the usage after it.
+    """
     name = settings.DEFAULT_AI_PROVIDER
     model = settings.AI_MODEL or (
         settings.ANTHROPIC_MODEL if name == "anthropic"
@@ -62,7 +70,7 @@ def get_provider() -> AIProvider:
     logger.info(
         "AI provider initialized: %s (model=%s)", provider.name, provider.default_model
     )
-    return provider
+    return MeteredProvider(provider)
 
 
 @lru_cache
@@ -99,7 +107,7 @@ def get_enrichment_provider() -> AIProvider:
         provider.name,
         provider.default_model,
     )
-    return provider
+    return MeteredProvider(provider)
 
 
 def build_controller(provider: Optional[AIProvider] = None) -> ExecutiveController:

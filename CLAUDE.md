@@ -1,0 +1,365 @@
+# CLAUDE.md
+
+Project memory for Meta Supreme Apex Genesis. Read this first, then load the
+`steward` skill before touching CI or a PR.
+
+## The first law: check before you claim
+
+Ruled by Tee 2026-09-06, after a single night produced five assertions that a
+cheap check would have caught. This governs everything below it.
+
+**Do not state anything as fact when a check is available and you have not run
+it.** Not "probably", not "should be", not a number you remember. Either verify
+it or label it unverified. "Unverified" is always an acceptable answer here;
+a confident wrong one never is.
+
+The failure mode is not guessing in the abstract. It is asserting when the
+check was cheap and sitting right there:
+
+| what was claimed | what it cost to check | what was true |
+|---|---|---|
+| "the system prompt is not in this repository at all", written three times | opening one file | it is in `validate_and_plan.js` and already carried the rule |
+| digits either side of a dash mean a range, so rewrite it | one test case | "120 [dash] 30% above my last one" became "120-30%", a fabricated number |
+| the quadratic regex is fixed | re-running the timing | it was not; the per-line rewrite only moved the backtracking |
+| thirteen webhook paths take the key | reading the webhook nodes | fifteen, and the miss was an ACTIVE door |
+| the capture tokens are a security finding | working out the blast radius | they are a deliberate design, and the flag was withdrawn |
+
+Rules that follow from it:
+
+- **Read the file before saying where something lives.** A path is not a memory.
+- **Count from the estate, not from the lane.** That count has now been wrong
+  twice in the same direction, eleven then thirteen, because it was taken from
+  a dependency list instead of from the workflows themselves.
+- **A fix is not fixed until it is re-measured.** Reproduce the failure, apply
+  the change, show the same measurement clean. Three of the entries above
+  passed every gate the estate had and were still wrong.
+- **Never widen a rule on speculation about intent.** If a transformation could
+  change a number, a name, a path or a line of dialogue, refuse instead. A
+  refusal costs a retry; a wrong guess lands unread in Tee's Drive.
+- **Grade your own findings before raising them.** Work out the actual blast
+  radius. Over-calling a finding spends Tee's attention and is its own error.
+- **Green is not correct.** CI passed on every one of those. Tests do not read
+  the artifact; a human or an executed adversarial case does.
+
+When a check genuinely cannot be run here, say so with the reason and name who
+can run it. The 2026-09-06 rotation negative test is the model: the network
+policy blocked it, that was stated plainly rather than papered over, and Tee
+ran it himself and got the 401.
+
+## What this is
+
+An intelligence operating system, not a chatbot. A FastAPI service under
+`app/` and `services/`, a Next.js workspace under `apps/web` and
+`packages/ui`, PostgreSQL 16 with pgvector, Alembic migrations under
+`database/`. Agents recommend, humans decide: every WRITE or HIGH_IMPACT tool
+call is human gated.
+
+Orientation docs, in the order worth reading them: `README.md`,
+`ARCHITECTURE.md`, `RUNBOOK.md`, `OPERATING.md`, `docs/devon/DEVON.md`.
+The `docs/devon/SYS_OPS_*` files are the dated status record; the newest one
+on a topic supersedes the older ones.
+
+## Environment
+
+The SessionStart hook (`.claude/hooks/session-start.sh`) runs on Claude Code
+on the web and prepares everything below, so in a web session it is already
+done. On a local machine the hook exits immediately and you do it yourself.
+
+```bash
+python3 -m pip install -r requirements.txt   # add --ignore-installed if the
+                                             # Debian PyYAML shim blocks it
+pnpm install --frozen-lockfile
+export DEFAULT_AI_PROVIDER=mock EMBEDDING_PROVIDER=mock ENVIRONMENT=test
+export PYTHONPATH=$PWD:$PWD/apps/api
+export DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/meta_supreme
+export TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/meta_supreme_test
+```
+
+PostgreSQL 16 binaries are in the image but there is no initialised cluster and
+no pgvector, so a cold container needs
+`apt-get install -y postgresql-16-pgvector` and an `initdb` before anything
+touches the database.
+
+The cluster lives at `/var/lib/pgtest`, not at the empty Debian skeleton in
+`/var/lib/postgresql/16/main`. Pointing `pg_ctl` at the skeleton fails with
+`could not access the server configuration file`, which reads like a broken
+install and is not one. The cluster does not survive a container restart:
+
+```bash
+su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/pgtest -l /tmp/pg.log start"
+```
+
+`ConnectionRefused` in the middle of a run is the cluster going away, not a
+test failure. It shows up as a hundred or more collection ERRORs.
+
+## Reproducing CI
+
+CI is EIGHT jobs, and on most pull requests you will see five. Five are in
+`.github/workflows/ci.yml` (`standalone` then `container` and `engine` then
+`api`, plus `dependency-audit` on every push). The sixth is
+`.github/workflows/web-ci.yml`, path filtered to the web workspace, so a run of
+Python-only PRs makes CI look like five. The seventh arrived on 2026-09-10:
+`.github/workflows/audio-ci.yml`, filtered to the FIVE files that can change
+what the speaker produces, so it appears only on a change to the playback path.
+`ruff check .` runs at the end of the api job, not as a job of its own.
+
+The audio job exists because `check:audio` ran in no workflow at all and four
+separate review passes found that. Its script's docstring said so deliberately:
+it needs Playwright and a Chromium binary, neither pinned by this repository, so
+it costs a browser download on every run that triggers it. Tee ruled on
+2026-09-10 to wire it path filtered rather than into `web-ci.yml`. It installs
+Playwright globally in the job instead of adding a devDependency, because a
+lockfile change would put the cost inside web-ci's own path filter and make
+every web pull request pay it. Both `loadPlaywright` and `findChromium` THROW
+when missing, so a runner without Chromium turns the job red rather than green,
+which is the direction that matters.
+
+The eighth arrived on 2026-09-10: `.github/workflows/panel-smoke-ci.yml`,
+filtered to the five control plane panels, the six routes they are served on
+and the six API modules they read. It stands PostgreSQL, the FastAPI app and a
+built Next server up inside the job, registers a throwaway account through the
+real registration path, seeds one row per panel carrying a nonce, and drives all
+six routes in real Chromium. It exists because `next build` prerenders those
+routes and `tsc` compiles them while no `fetch` in any panel had ever executed,
+and every honesty check under `apps/web/scripts` reads source text or an AST.
+Same posture as the audio job: Playwright global rather than a devDependency,
+and both resolvers THROW so a runner without Chromium turns it red. Do not point
+`SMOKE_API_BASE` at a deployed surface: the run registers an account and writes
+a project, a memory, a decision and a workflow.
+
+The standalone job runs with no database. This paragraph said it also runs
+with **no** `PYTHONPATH` until 2026-09-09, when a worktree agent read the file
+and found otherwise: `ci.yml` sets `PYTHONPATH` in its top level `env:` block
+(line 14), which applies to every job, and `standalone` declares no override.
+Reproducing it with the variable unset is therefore **stricter than CI, not
+equal to it**, which is why the commands below are still the ones to run: they
+catch an import CI would let through. Keep the list of files in step with the
+job, which is the real thing the local run mirrors.
+
+```bash
+env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -c "import standalone_api"
+env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
+  test_billing.py test_definition.py test_providers.py test_schedule.py \
+  test_workflow_engine.py test_devon_hermes_expansion.py \
+  test_devon_hermes_durable_followon.py test_devon_learning_loop.py \
+  test_devon_operating_layer.py test_devon_editforge_execution.py \
+  test_devon_hermes_surface.py test_devon_receipts.py \
+  test_devon_capture_enrichment.py test_presence_cartesia.py \
+  test_presence_service.py test_devon_owned_voice.py \
+  test_devon_learning_context_honesty.py test_knowledge_graph.py \
+  test_knowledge_graph_fixtures.py test_devon_scheduler_honesty.py \
+  test_devon_scheduler_report_honesty.py test_devon_console_voice_honesty.py \
+  test_n8n_telemetry.py
+
+python3 -m pytest -q --tb=short          # full api suite, needs the database
+python3 -m ruff check .
+pnpm --filter @meta-supreme/web typecheck && pnpm --filter @meta-supreme/web build
+```
+
+The dependency audit lane needs a tool the pinned closure does not carry, and
+installing it can perturb that closure, so the hook leaves it out. Reproduce it
+on demand, in a throwaway environment when you can:
+
+```bash
+python3 -m pip install pip-audit
+python3 -m pip_audit -r requirements.txt --progress-spinner off
+python3 -m pip_audit -r deploy/soul/requirements.txt --progress-spinner off
+pnpm audit --audit-level=moderate
+```
+
+`pytest ... | tail` and `tsc ... | tail` report tail's exit code. A run with
+154 errors exits 0 through a pipe. Redirect to a file and check `$?`.
+
+ESLint is not configured here. `next lint` drops into its interactive setup and
+exits non-zero, which looks like a lint failure and is not one.
+
+The full failure catalogue with root causes lives in the `steward` skill.
+Check it before inventing a new theory.
+
+## Invariants that never get relaxed to make CI green
+
+- `services/devon` stays effect free
+- WRITE and HIGH_IMPACT tools require human approval
+- Orphan effect intents refuse automatic retry; the intent commits durably
+  before the adapter runs
+- Receipts commit atomically with the lease fenced result
+- Skill promotion is human gated; proposals dedupe by goal slug
+- Materialize and spawn never auto run effects
+- `deploy/soul/main.py` has no mutating routes. The one permitted non-GET is
+  `POST /api/v1/soul/conflict-search`, which is a read only recall query, and
+  it is allowlisted explicitly in `test_deploy_soul.py`
+- No em or en dashes in `services/devon/*.py` or `docs/devon/*.md`.
+  `test_devon_integrity.py` enforces it. Restructure the sentence, do not swap
+  the punctuation
+
+## Adding a migration
+
+A new migration touches four places in `ci.yml`, not three: the two `for f in
+001... ; do test -s` existence loops, the `assert revision == "<head>"`
+inside the Python heredoc of the "Fresh Alembic deploy" step, and the `for f
+in 002_workflow_runs ...` loop in the "same database" step that applies the
+SQL scripts beside the Alembic build. The fourth arrived with 018 and this
+paragraph said three until 019 counted from the file (2026-09-08), which is
+the same miss the first law describes. It also touches two lists in
+`conftest.py`: `_INCREMENTAL_SCHEMAS` and `_DATA_TABLES`, where FK order
+matters. Miss either list and every test touching the new tables fails with
+`relation "agent_..." does not exist`. Count the places with
+`grep -n "<previous head>" .github/workflows/ci.yml` before editing, never
+from this paragraph.
+
+Confirm the current head with `alembic heads`, never from a doc.
+
+## Ship discipline
+
+Small PRs on the designated branch, draft first, full local validation before
+every push. Merge only with Tee's explicit authorization. After a designated
+branch's PR merges, restart the branch from `origin/main` under the same name.
+Close an arc with a dated `docs/devon/SYS_OPS_*` status doc and a DEVON thread
+log receipt.
+
+A handover's "CI green" is a claim, not a fact. Check the Actions history for
+the claimed head SHA before building on it. A green Vercel preview is not
+production; load the `deploy-readback` skill before saying any surface is live.
+
+**Tee's word in the session is the review of record.** Ruled 2026-09-09, after
+a close-out doc recorded the GitHub timeline carrying no `reviewed` event on
+PR #176 and six seconds between leaving draft and merging. GitHub review is not
+the gate here and a missing `reviewed` event is not a finding; do not wait on
+one, and do not write it up as a gap. His explicit authorization is still
+required to merge, and it arrives in chat.
+
+## The receipt on a status doc
+
+Ruled 2026-09-09. Every `docs/devon/SYS_OPS_*.md` carries a `## DEVON RECEIPT`
+block with nine keys, `AREA`, `TYPE`, `ARTIFACT`, `DATE`, `DECISIONS`,
+`FINDINGS`, `OPEN`, `STATUS` and `TOKEN`, the capture token line verbatim, and
+a `DATE` matching the date in the filename. Extra keys are welcome; those nine
+are the floor. `test_devon_receipt_shape.py` enforces it, so do not describe
+the rule in prose and hope.
+
+Enforcement is an exemption list of exact filenames, not a date cutoff, because
+a new doc can carry an old date in its name and a filename cannot be forged
+that way. The list is the migration backlog and it may only shrink: one test
+fails if it names a doc that no longer exists, another fails if a listed doc
+already satisfies the canon and is still listed. Forty five docs were exempt
+when the rule landed, most of them August handovers that may not be status docs
+at all, which is a call for Tee rather than forty guesses.
+
+`services/devon/receipts.py` is a different format for a different job, the
+thread log capture path. It reads a `=== DEVON RECEIPT v1 ===` block and
+`detect_format` returns None for every status doc. Do not try to make one
+satisfy the other.
+
+## Running a critic
+
+Every arc here closes with a fresh critic, and a critic earns its verdict by
+mutating the real source: registering a tool that should not exist, deleting a
+guard, feeding an input nothing else feeds it, then reverting. That is the
+method working rather than a critic misbehaving.
+
+**Spawn it with `isolation: "worktree"`.** A critic, or any subagent told to
+mutate the source, gets its own checkout. The session's own tree is not scratch
+space, and a critic that shares it costs three ways. All three happened in one
+session, 2026-09-09, PR #177:
+
+- The stop hook reported uncommitted changes that were the critic's.
+  `app/api/v1/router.py`, a new `app/api/v1/agent_skills.py` and
+  `app/api/v1/agent_tasks.py` each appeared and reverted inside three commands.
+  Committing them would have pushed a throwaway probe as if it were the work.
+- Any check the parent runs while a critic holds a mutation is measuring the
+  critic's source, not the branch's. A green run in that window proves nothing
+  and has to be thrown away and repeated.
+- A critic that stops mid mutation leaves dirt with no owner, and the next
+  session cannot tell it from real work.
+
+If foreign changes do turn up in the tree, do not commit them and do not
+revert them blind. Ask whether the path is in your own diff first, with
+`git diff --name-only <base>..HEAD`, and leave alone anything that is not.
+A path you did not touch belongs to something still running.
+
+**The worktree does not start on your HEAD.** Measured on 2026-09-09: the
+parent sat on `b8fd28b` and the new worktree came up on `2b09dbd`, which is
+`origin/main`, so `test_devon_hermes_surface.py` did not exist in the critic's
+checkout at all. A critic handed the wrong commit reviews code the branch does
+not have and reports green, which is the most expensive answer it can give.
+Check the commit out yourself as the first instruction in the prompt, and make
+the agent echo `git rev-parse --short HEAD` back in its report so a wrong base
+shows up in the receipt rather than in the verdict:
+
+```
+git fetch origin <branch> && git checkout -B verify <sha>
+git rev-parse --short HEAD    # must match the sha you meant
+```
+
+Two things that are already handled, so nobody re-derives them:
+`.claude/worktrees/` is in `.gitignore`, and the worktree is removed on its own
+when the agent leaves it unchanged.
+
+**The isolation is of the filesystem only, and the database bites.** Every
+worktree shares this container's one PostgreSQL cluster, so two agents running
+the full suite are writing the same `meta_supreme_test`, and `conftest.py`
+truncates one global `_DATA_TABLES` list after every test. Measured on
+2026-09-09, when this was written as a caution and then promptly happened: a
+worktree agent's suite returned `8 failed, 1493 passed, 56 errors`, the errors
+reading `duplicate key value violates unique constraint "users_email_key"`,
+with a second session running the identical suite from another worktree. The
+retry collided with a third session, both blocked in `pg_stat_activity` on
+`Lock / relation` with one `TRUNCATE` waiting on the other. On a private
+database the same commit returned `1557 passed`. So a suite that fails only
+while a critic is out is the cluster, not the branch. Give a concurrent run
+its own database rather than re-running into the same collision, and know that
+`test_live_state_ledger_provenance.py` hardcodes `meta_supreme_test` for the
+TEMP privilege check, so that one test alone must run against the real name.
+
+**Check `PYTHONPATH` before running anything in a worktree.** The inherited
+value points at the main checkout, so pytest imports the parent's code while
+the run appears to be testing the worktree. Same shape as the wrong base
+commit above: a green that means nothing. Set it to absolute worktree paths.
+
+## Skills in this repository
+
+`.claude/skills/` carries seven. Six are ours: `steward` (CI and PR
+conventions, load it for anything touching either), `deploy-readback` (what the
+production surfaces are actually serving), `estate-reconcile` (checking records
+against the live estate), `devon-learning-lane` (the Build 12 learning lane and
+the n8n house conventions), `devon-grill` (interviewing Tee for the context no
+file holds, filed as `docs/devon/CAPTURE_*`), `shadow-we-share-brand` (the
+podcast's brand system, its flagship standard, palette, mark and voice).
+
+This paragraph said six and five until 2026-09-12, when a session counted the
+directory instead of the sentence. `shadow-we-share-brand` had been committed
+since `962f104` and was named nowhere. Do not edit these two numbers by hand:
+`test_estate_reconcile.py::test_the_skill_inventory_is_counted_from_the_directory`
+reads the directory and fails when they drift, which is the only reason this
+line can now be trusted.
+
+The seventh, `scroll-craft`, is vendored third-party work: Nate Herk's
+scroll-driven landing page skill, MIT, copied from `nateherkai/scroll-craft`.
+Never edit it in place, fixes go upstream, and `test_vendored_skills.py`
+enforces that against `MANIFEST.sha256` rather than trusting the prose. Read
+`.claude/skills/scroll-craft/UPSTREAM.md` before syncing it, which also means
+regenerating that manifest, and before adding `nateherk-design` to the pinned
+marketplace, which would double load the same skill name. Its scripts want
+Node 18+, a full ffmpeg, and `playwright-core` plus Chrome;
+`node .claude/skills/scroll-craft/scripts/doctor.mjs` says which are present.
+None of them are pinned or installed by this repository.
+
+A pinned plugin is not a substitute here. `.claude/settings.json` enabling a
+plugin does not install it, and in a Claude Code on the web session
+`~/.claude/plugins/installed_plugins.json` reads empty while all three pinned
+plugins show as enabled. `~/.claude/skills/` is no better: `$HOME` is in the
+ephemeral container. Anything that has to load in a web session is committed
+under `.claude/skills/`.
+
+`.claude/settings.json` also pins three community plugins through the
+`meta-supreme-pinned` marketplace in `.claude-plugin/marketplace.json`. Each
+machine installs them once:
+
+```bash
+claude plugin install agentic-guardrails@meta-supreme-pinned
+claude plugin install backend-security-skills@meta-supreme-pinned
+claude plugin install test-generator@meta-supreme-pinned
+```
+
+Remove any `@claude-community` copy of the same name, which would otherwise
+load beside the pinned one and win.

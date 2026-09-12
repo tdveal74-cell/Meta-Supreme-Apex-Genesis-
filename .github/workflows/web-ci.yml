@@ -10,6 +10,15 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - ".github/workflows/web-ci.yml"
+      # check:control's owned-voice ban reads the served consoles under these two
+      # roots, and until 2026-09-09 neither triggered this workflow. A pull
+      # request restoring the rented voice in deploy/soul/console.html alone kept
+      # both copies byte identical, passed all 97 console tests, never ran this
+      # job, and would have landed green. The narrow fix is here; the load
+      # bearing one is test_devon_owned_voice.py in ci.yml, which has no path
+      # filter at all.
+      - "deploy/soul/**"
+      - "docs/devon/assets/**"
   workflow_dispatch:
 
 jobs:
@@ -29,5 +38,25 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Typecheck
         run: pnpm --filter @meta-supreme/web typecheck
+      - name: Presence protocol checks
+        run: pnpm --filter @meta-supreme/web check:presence
+      - name: Control plane honesty checks
+        run: pnpm --filter @meta-supreme/web check:control
+      - name: Surface claim honesty checks
+        run: pnpm --filter @meta-supreme/web check:honesty
+      - name: Learning store honesty checks
+        run: pnpm --filter @meta-supreme/web check:learning
+      - name: Workflow door honesty checks
+        run: pnpm --filter @meta-supreme/web check:workflow
+      - name: Decision record honesty checks
+        run: pnpm --filter @meta-supreme/web check:decisions
+      - name: Long term memory honesty checks
+        run: pnpm --filter @meta-supreme/web check:memory
+      - name: Projects door honesty checks
+        run: pnpm --filter @meta-supreme/web check:projects
+      - name: Agent roster honesty checks
+        run: pnpm --filter @meta-supreme/web check:roster
+      - name: n8n telemetry honesty checks
+        run: pnpm --filter @meta-supreme/web check:n8n
       - name: Production build
         run: pnpm --filter @meta-supreme/web build

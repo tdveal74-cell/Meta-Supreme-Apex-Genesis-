@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from jose import JWTError, jwt
+import jwt
 
 from app.core.config import settings
 
@@ -41,5 +41,5 @@ def decode_access_token(token: str) -> Optional[dict[str, Any]]:
         if payload.get("type") != "access":
             return None
         return payload
-    except JWTError:
+    except jwt.PyJWTError:
         return None

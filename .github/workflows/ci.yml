@@ -28,6 +28,19 @@ jobs:
           python -m pip install --quiet -r requirements.txt
       - name: The documented offline entry point still imports
         run: python -c "import standalone_api; print(standalone_api.app.title)"
+      # n8n Cloud runs these Code node bodies; this repo is where they are read
+      # and diffed. Nothing executed them until 2026-09-06, when a gauntlet
+      # found a regex in parse_draft.js that silently merged lines in every
+      # draft DEVON writes, on a commit where all six jobs were green. A parse
+      # check is not a behaviour test, but a syntax error or an unclosed class
+      # can no longer reach the estate with CI reporting success.
+      - name: The n8n Code node sources parse
+        run: |
+          shopt -s globstar nullglob
+          files=(n8n/**/*.js)
+          if [ ${#files[@]} -eq 0 ]; then echo "no n8n sources found, refusing to pass silently"; exit 1; fi
+          for f in "${files[@]}"; do echo "checking $f"; node --check "$f"; done
+          echo "${#files[@]} file(s) parsed"
       - name: Offline suite (no database, no keys)
         run: |
           python -m pytest -q --tb=short \
@@ -40,7 +53,56 @@ jobs:
             test_devon_hermes_durable_followon.py \
             test_devon_learning_loop.py \
             test_devon_operating_layer.py \
-            test_devon_editforge_execution.py
+            test_devon_editforge_execution.py \
+            test_devon_hermes_surface.py \
+            test_devon_receipts.py \
+            test_devon_capture_enrichment.py \
+            test_presence_cartesia.py \
+            test_presence_service.py \
+            test_devon_owned_voice.py \
+            test_devon_learning_context_honesty.py \
+            test_knowledge_graph.py \
+            test_knowledge_graph_fixtures.py \
+            test_devon_scheduler_honesty.py \
+            test_devon_scheduler_report_honesty.py \
+            test_devon_console_voice_honesty.py \
+            test_n8n_telemetry.py
+
+  dependency-audit:
+    name: Dependency audit (pip-audit + pnpm audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # The interpreter Dockerfile.api ships, so the audit resolves the
+          # same set Railway builds.
+          python-version: "3.12"
+      - name: pip-audit the pinned requirements and the soul host's
+        # PYSEC-2026-1325 was ecdsa, pulled in by python-jose, which the
+        # ecdsa maintainers said they would not fix. Audit item 16 replaced
+        # python-jose with PyJWT in app/security/jwt.py, which removed
+        # ecdsa from the resolved set along with it, so the ignore is gone
+        # too: a fresh advisory here should fail the build, not sit hidden
+        # behind a stale id. Two resolutions on purpose: audited together,
+        # the root pins would override the soul host's floating versions
+        # and hide a newer vulnerable release the soul host would actually
+        # install.
+        run: |
+          python -m pip install --quiet --upgrade pip pip-audit
+          python -m pip_audit -r requirements.txt --progress-spinner off
+          python -m pip_audit -r deploy/soul/requirements.txt --progress-spinner off
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      # No `cache: pnpm` here: the audit reads the lockfile and installs
+      # nothing, so setup-node's post-step has no store to save and fails
+      # the job with "Path Validation Error" when the option is set.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: pnpm audit the locked workspace
+        run: pnpm audit --audit-level=moderate
 
   container:
     name: Railway container contract
@@ -73,7 +135,7 @@ jobs:
       - name: Council and security (no database)
         run: |
           if [ ! -f services/agents/executor.py ]; then
-            echo "::error::services/agents/executor.py is absent — it blocks test_council.py and test_phase4_council.py. See RESTORE.md."
+            echo "::error::services/agents/executor.py is absent, and it blocks test_council.py and test_phase4_council.py. See RESTORE.md."
             exit 1
           fi
           python -m pytest test_council.py test_phase4_council.py test_security.py \
@@ -112,10 +174,10 @@ jobs:
 
       - name: The test fixture's schema and deploy migrations are present
         run: |
-          for f in 001_initial_schema 002_workflow_runs 003_schedule_dispatch 004_federated_knowledge_waist 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion 010_agent_subagent_links 011_passkeys 012_live_state_ledger 013_approval_consumption; do
+          for f in 001_initial_schema 002_workflow_runs 003_schedule_dispatch 004_federated_knowledge_waist 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion 010_agent_subagent_links 011_passkeys 012_live_state_ledger 013_approval_consumption 014_artifact_body 015_devon_approval_owner 017_provider_usage 018_schema_convergence 019_event_hash_chain; do
             test -s "database/schemas/$f.sql" || { echo "::error::database/schemas/$f.sql is missing or empty"; exit 1; }
           done
-          for f in 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion 010_agent_subagent_links 011_passkeys 012_live_state_ledger 013_approval_consumption; do
+          for f in 005_agent_runtime_persistence 006_devon_approval_store 007_agent_task_execution_leases 008_agent_effect_receipts 009_agent_hermes_expansion 010_agent_subagent_links 011_passkeys 012_live_state_ledger 013_approval_consumption 014_artifact_body 015_devon_approval_owner 017_provider_usage 018_schema_convergence 019_event_hash_chain; do
             test -s "database/migrations/versions/$f.py" || { echo "::error::database/migrations/versions/$f.py is missing or empty"; exit 1; }
           done
 
@@ -164,6 +226,7 @@ jobs:
                       "verifications",
                       "learning_candidates",
                       "universal_receipts",
+                      "provider_usage",
                   }
                   rows = await conn.fetch(
                       "SELECT table_name FROM information_schema.tables "
@@ -174,12 +237,62 @@ jobs:
                   missing = expected - present
                   assert not missing, f"missing migrated tables: {sorted(missing)}"
                   revision = await conn.fetchval("SELECT version_num FROM alembic_version")
-                  assert revision == "013_approval_consumption", revision
+                  assert revision == "019_event_hash_chain", revision
               finally:
                   await conn.close()
 
           asyncio.run(main())
           PY
+
+      - name: The Alembic build and the SQL build are the same database
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -c "CREATE DATABASE schema_alembic"
+          psql -h localhost -U postgres -c "CREATE DATABASE schema_sql"
+          psql -h localhost -U postgres -d schema_alembic -c "CREATE EXTENSION IF NOT EXISTS vector"
+          psql -h localhost -U postgres -d schema_sql -c "CREATE EXTENSION IF NOT EXISTS vector"
+
+          DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/schema_alembic \
+            alembic upgrade head
+
+          psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d schema_sql \
+            -f database/schemas/001_initial_schema.sql > /dev/null
+          for f in 002_workflow_runs 003_schedule_dispatch 004_federated_knowledge_waist \
+                   005_agent_runtime_persistence 006_devon_approval_store \
+                   007_agent_task_execution_leases 008_agent_effect_receipts \
+                   009_agent_hermes_expansion 010_agent_subagent_links 011_passkeys \
+                   012_live_state_ledger 013_approval_consumption 014_artifact_body \
+                   015_devon_approval_owner 017_provider_usage 018_schema_convergence 019_event_hash_chain; do
+            psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d schema_sql \
+              -f "database/schemas/$f.sql" > /dev/null
+          done
+
+          python scripts/schema_shape.py \
+            "postgresql://postgres:postgres@localhost:5432/schema_alembic" > shape_alembic.txt
+          python scripts/schema_shape.py \
+            "postgresql://postgres:postgres@localhost:5432/schema_sql" > shape_sql.txt
+          if ! diff -u shape_alembic.txt shape_sql.txt; then
+            echo "::error::The Alembic build and the SQL build disagree. Railway deploys the Alembic build; the tests run against the SQL build. Add the missing migration before merging."
+            exit 1
+          fi
+          echo "Both builds agree: $(wc -l < shape_alembic.txt) shape lines."
+
+      - name: Ledger and knowledge suites run against the Alembic build
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/meta_supreme
+          TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/schema_alembic
+          TEST_SCHEMA_PREBUILT: "1"
+          DEFAULT_AI_PROVIDER: mock
+          EMBEDDING_PROVIDER: mock
+          ENVIRONMENT: test
+        run: |
+          python -m pytest -q --tb=short \
+            test_live_state_ledger.py \
+            test_devon_knowledge_loop_durability.py \
+            test_devon_ledger_row_states.py \
+            test_knowledge.py \
+            test_devon_fkr_query_route.py
 
       - name: Failure summary
         if: failure()

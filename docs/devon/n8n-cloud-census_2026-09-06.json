@@ -1,0 +1,3664 @@
+{
+ "_": "Node level census of every workflow on the n8n Cloud instance, read live on 2026-09-06 for the VPS cutover runbook (docs/devon/SYS_OPS_n8n-cloud-to-vps-cutover_v2_2026-09-06.md, section 4). Each workflow was read by two independent agents whose counts had to agree, with disagreements re-read singly; notes are the readers' prose and are verified only where the runbook says so. Workflow names are normalised to drop the estate's em dash separator per the house rule; ids are the join key. Secret looking literals were redacted by the readers and the file was scanned before commit.",
+ "source": "thequietoperator.app.n8n.cloud",
+ "read_at": "2026-09-06",
+ "total_workflows": 64,
+ "readable": 58,
+ "active": 39,
+ "entries": [
+  {
+   "id": "ecLqrxALuLDdF2BN",
+   "name": "DEVON Action Router, n8n lane (Build 05, half)",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "93f95447-3067-4121-aca5-77796a752663",
+   "node_count": 11,
+   "execution_order": "v1",
+   "error_workflow": "XDQXwgFkUhYxoEjG",
+   "save_success_executions": "none",
+   "trigger_summary": "Webhook: POST /webhook/devon-action with header auth (x-devon-key), responds via Respond to Webhook nodes",
+   "webhooks": [
+    {
+     "node": "Action In (POST)",
+     "path": "devon-action",
+     "method": "POST",
+     "auth": "headerAuth",
+     "credential_id": "FYRvkRTOcROEYZ9P"
+    }
+   ],
+   "host_refs": [
+    {
+     "node": "Authorise and Resolve Target",
+     "node_type": "n8n-nodes-base.code",
+     "field": "parameters.jsCode",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "url: 'https://thequietoperator.app.n8n.cloud/webhook/devon-spine-n8n',"
+    },
+    {
+     "node": "Authorise and Resolve Target",
+     "node_type": "n8n-nodes-base.code",
+     "field": "parameters.jsCode",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "url: 'https://thequietoperator.app.n8n.cloud/webhook/devon-drive-draft',"
+    },
+    {
+     "node": "Authorise and Resolve Target",
+     "node_type": "n8n-nodes-base.code",
+     "field": "parameters.jsCode",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "url: 'https://thequietoperator.app.n8n.cloud/webhook/devon-airtable-row',"
+    },
+    {
+     "node": "Report Entry to Bus",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-event"
+    },
+    {
+     "node": "Report Exit to Bus",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-event"
+    }
+   ],
+   "credentials": [
+    {
+     "node": "Action In (POST)",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Dispatch to Executor",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Report Entry to Bus",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Report Exit to Bus",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [],
+   "notes": "Dispatch to Executor has no literal url; it posts to $json.target_url, resolved by the TARGETS allowlist inside the Authorise and Resolve Target Code node, which hardcodes three Cloud urls and three workflow ids: spine.echo -> /webhook/devon-spine-n8n (workflow Oi7o1sTEqhxhOaJL, ceiling read), drive.draft -> /webhook/devon-drive-draft (J7Ly7riwXEd95D9a, ceiling reversible_write), airtable.row -> /webhook/devon-airtable-row (ps2S6dWcTIpq5bvr, ceiling reversible_write). Those are HTTP dispatches, not Execute Workflow nodes, which is why execute_workflow_targets is empty. The workflow_id values are reported to the bus as target_workflow, so if the executors land on the target under new ids both the urls and the ids in TARGETS need changing. Both bus reports (ACTION_STARTED on entry, ACTION_COMPLETED or ACTION_FAILED on exit) go to the Cloud /webhook/devon-event url with timeout 15000 ms; Dispatch timeout is 75000 ms. Error workflow XDQXwgFkUhYxoEjG; saveDataErrorExecution is also none. The description states the Zapier lane is not built."
+  },
+  {
+   "id": "ps2S6dWcTIpq5bvr",
+   "name": "DEVON Airtable Row Writer (Build 17)",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "486c243d-c8ee-4db0-b634-6ed76efc0729",
+   "node_count": 17,
+   "execution_order": "v1",
+   "error_workflow": "XDQXwgFkUhYxoEjG",
+   "save_success_executions": "none",
+   "trigger_summary": "Webhook: POST /webhook/devon-airtable-row with header auth (x-devon-key), responds via Respond to Webhook nodes",
+   "webhooks": [
+    {
+     "node": "Row In (POST)",
+     "path": "devon-airtable-row",
+     "method": "POST",
+     "auth": "headerAuth",
+     "credential_id": "FYRvkRTOcROEYZ9P"
+    }
+   ],
+   "host_refs": [
+    {
+     "node": "Report Entry to Bus",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-event"
+    },
+    {
+     "node": "Report Exit to Bus",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-event"
+    }
+   ],
+   "credentials": [
+    {
+     "node": "Row In (POST)",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Report Entry to Bus",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Find Existing Row",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Report Exit to Bus",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Write Row",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "api.airtable.com",
+    "airtable.com"
+   ],
+   "notes": "The Cloud host appears only in the two Event Bus HTTP Request urls (Report Entry to Bus, Report Exit to Bus), both POST /webhook/devon-event, timeout 15000 ms. Airtable urls are built inside the Validate and Plan Code node from constants BASE app28z7XnKzjfTXwc and table id tbl4ziFRbl5mnUcKc (Inbox Captures): 'https://api.airtable.com/v0/' + BASE + '/' + t.id, and the record url from 'https://airtable.com/'; that allowlist mirrors AIRTABLE_ROW_TABLES in services/devon/vault.py. Find Existing Row and Write Row take their url by expression from Validate and Plan (api_url). Validate and Plan and Advance Envelope use $workflow.id for the single flight lock (execution.state running under this workflow's id) and stamp it into execution.workflow_id, so a changed workflow id on the target alters the lock check; the Action Router (ecLqrxALuLDdF2BN) allowlist names this workflow by id ps2S6dWcTIpq5bvr and by its Cloud url. Error workflow XDQXwgFkUhYxoEjG (the shared Error Alarm) must exist on the target. executionTimeout 120 s. Credential FYRvkRTOcROEYZ9P is used both as the inbound webhook header auth and as the outbound header auth to the bus. Sticky note says the webhook is registered in vault.py WEBHOOKS (devon-airtable-row) and WORKFLOWS. No n8n Data Table nodes; the Airtable table is external and needs no recreation."
+  },
+  {
+   "id": "syRVj0G47mA1b0Xn",
+   "name": "DEVON Approval Queue",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "b598e4a3-63bd-438a-8851-bc8039b8aa47",
+   "node_count": 13,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "none",
+   "trigger_summary": "Two webhooks: POST /webhook/devon-approve-request (header auth x-devon-key) queues a request and emails Tee; GET /webhook/devon-approve-decide (no auth, id, token and d in the query string) records a decision on the second confirmed tap",
+   "webhooks": [
+    {
+     "node": "Request In (POST)",
+     "path": "devon-approve-request",
+     "method": "POST",
+     "auth": "headerAuth",
+     "credential_id": "FYRvkRTOcROEYZ9P"
+    },
+    {
+     "node": "Decision In (GET)",
+     "path": "devon-approve-decide",
+     "method": "GET",
+     "auth": "none",
+     "credential_id": ""
+    }
+   ],
+   "host_refs": [
+    {
+     "node": "Build Request",
+     "node_type": "n8n-nodes-base.code",
+     "field": "parameters.jsCode",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "const HOST = \"https://thequietoperator.app.n8n.cloud\";"
+    },
+    {
+     "node": "Check Decision",
+     "node_type": "n8n-nodes-base.code",
+     "field": "parameters.jsCode",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "const HOST = \"https://thequietoperator.app.n8n.cloud\";"
+    }
+   ],
+   "credentials": [
+    {
+     "node": "Request In (POST)",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Email Tee",
+     "cred_type": "smtp",
+     "id": "mu7nJRSpkAfkzLdF",
+     "name": "SMTP account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [
+    {
+     "node": "Store Pending",
+     "table_id": "u6wzeN5y9LNxROsN",
+     "operation": "insert"
+    },
+    {
+     "node": "Find Request",
+     "table_id": "u6wzeN5y9LNxROsN",
+     "operation": "get"
+    },
+    {
+     "node": "Record Decision",
+     "table_id": "u6wzeN5y9LNxROsN",
+     "operation": "update"
+    }
+   ],
+   "external_hosts": [],
+   "notes": "The Cloud host is a HOST constant at the top of two Code nodes, Build Request and Check Decision; every approve, reject and confirm link in the email and on the first tap page is built from it (HOST + '/webhook/devon-approve-decide?id=...&token=...&d=...'), so after migration both constants must change or every emailed decision link keeps pointing at Cloud. Decision In (GET) has no authentication by design; the query token is the auth and single use comes from the pending status check. All three data table nodes point at approval_queue u6wzeN5y9LNxROsN (Store Pending insert; Find Request reads the latest 200 rows unfiltered ordered by createdAt DESC and the id match happens in Check Decision; Record Decision updates matched on request_id). Data table ids are instance local, so the table must be recreated on the target and the three nodes re-pointed, and pending rows carried over if in-flight approvals must survive the move. Email Tee sends through SMTP credential mu7nJRSpkAfkzLdF from and to tdveal74@gmail.com (moved off Gmail OAuth 2026-09-05 per the sticky note); the SMTP host lives in the credential, not the workflow. No error workflow configured. Sticky note states the node order Check Decision, Record Decision, Respond Decided is load bearing."
+  },
+  {
+   "id": "6hQD8YhiYzR1FFda",
+   "name": "DEVON Build 12 Ledger Feeder",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "7bef0e3b-1707-4270-a41d-d2b7818520f0",
+   "node_count": 15,
+   "execution_order": "v1",
+   "error_workflow": "XDQXwgFkUhYxoEjG",
+   "save_success_executions": "default",
+   "trigger_summary": "Schedule trigger 'Daily 02:00': every 1 day at 02:00 instance time (rule days interval 1, triggerAtHour 2, triggerAtMinute 0; no workflow timezone set)",
+   "webhooks": [],
+   "host_refs": [
+    {
+     "node": "Feed Learning Webhook",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-build12-upstream"
+    },
+    {
+     "node": "Report Learning to Bus",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-event"
+    }
+   ],
+   "credentials": [
+    {
+     "node": "Feed Learning Webhook",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Notify",
+     "cred_type": "smtp",
+     "id": "mu7nJRSpkAfkzLdF",
+     "name": "SMTP account"
+    },
+    {
+     "node": "Report Learning to Bus",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Notify Marks",
+     "cred_type": "smtp",
+     "id": "mu7nJRSpkAfkzLdF",
+     "name": "SMTP account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [
+    {
+     "node": "Fetch Completed Jobs",
+     "table_id": "VYyno7pDWmY6uxBz",
+     "operation": "get"
+    },
+    {
+     "node": "Fetch Feed Log",
+     "table_id": "QeoV4V4dYXXN8dBR",
+     "operation": "get"
+    },
+    {
+     "node": "Record Feed Log",
+     "table_id": "QeoV4V4dYXXN8dBR",
+     "operation": "upsert"
+    }
+   ],
+   "external_hosts": [],
+   "notes": "The schedule fires at 02:00 in instance time (no timezone in the workflow settings), so the target instance's default timezone decides the hour. Two instance local data tables: VYyno7pDWmY6uxBz (the Build 02 state ledger, read for state eq COMPLETED) and QeoV4V4dYXXN8dBR (devon_build12_feed_log, this workflow's own idempotency table and the only dedupe key, read in full and upserted on intent_id). Migrating without carrying the feed log rows would re-feed every COMPLETED job once. Feed Learning Webhook posts each payload to the Cloud url of the Build 12 Upstream Test (VznESplSFCs8ldph), timeout 30000 ms; Report Learning to Bus posts LEARNING_CAPTURED to the Cloud /webhook/devon-event with batching 1 per 750 ms. Both email nodes use SMTP credential mu7nJRSpkAfkzLdF from and to tdveal74@gmail.com. Select Unmarked Jobs depends on execution order v1 canvas ordering (the feed branch sits above the mark branch) and reads Log Or Alert inside a try so a quiet day does not fault. Fetch Feed Log has executeOnce and alwaysOutputData. Error workflow XDQXwgFkUhYxoEjG. saveDataSuccessExecution is not set, so the instance default applies."
+  },
+  {
+   "id": "VznESplSFCs8ldph",
+   "name": "DEVON Build 12 Upstream Test",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "67541a64-745c-437d-b349-5fabe559d71b",
+   "node_count": 10,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "none",
+   "trigger_summary": "Webhook: POST /webhook/devon-build12-upstream with header auth (x-devon-key), responds with the first entry JSON of the last node",
+   "webhooks": [
+    {
+     "node": "Webhook",
+     "path": "devon-build12-upstream",
+     "method": "POST",
+     "auth": "headerAuth",
+     "credential_id": "FYRvkRTOcROEYZ9P"
+    }
+   ],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Webhook",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Conflict-Search Issuer",
+     "cred_type": "httpHeaderAuth",
+     "id": "SFou54MzuKGj3MwV",
+     "name": "Devon Soul Service Token"
+    },
+    {
+     "node": "Pinecone Upsert",
+     "cred_type": "httpTemplatedCustomAuth",
+     "id": "FcxUsEaxn5OfXeiO",
+     "name": "Pinecone Api-Key"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "devon-soul.vercel.app",
+    "devon-subconscious-jw37oa2.svc.aped-4627-b74a.pinecone.io"
+   ],
+   "notes": "Neither host appears anywhere in the workflow JSON; the only coupling to Cloud is inbound, the Ledger Feeder (6hQD8YhiYzR1FFda) posts to this webhook at its Cloud url. The Webhook node's webhookId is the literal string 'devon-build12-upstream' rather than a UUID. Conflict-Search Issuer posts to https://devon-soul.vercel.app/api/v1/soul/conflict-search with credential SFou54MzuKGj3MwV. Pinecone Upsert is a live write (POST /records/namespaces/experience/upsert on the Pinecone index host) that runs when the Learning Gate rules PROMOTE, with custom auth credential FcxUsEaxn5OfXeiO plus a literal X-Pinecone-Api-Version 2025-01 header; the dry_run label set by Assemble Result is overwritten by Write Result, so despite the name this workflow writes to the subconscious. Candidate Former falls back to a hardcoded test claim and two synthetic intent ids when the body is empty. Settings carry callerPolicy workflowsFromSameOwner, binaryMode separate and timeSavedMode fixed. No error workflow configured."
+  },
+  {
+   "id": "YHueoBK7TSLdTlfF",
+   "name": "DEVON Capture Nudge",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "a8be324d-8666-4202-80c0-e110651ba4f7",
+   "node_count": 5,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Schedule: daily at 08:00 (Schedule Trigger 1.3, interval entry triggerAtHour 8 with no field, node named 'Daily 08:00'); no workflow timezone set, so the hour resolves in the instance default timezone.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Read Thread Log",
+     "cred_type": "notionApi",
+     "id": "69GcWnTi2TDh1FAN",
+     "name": "Notion account"
+    },
+    {
+     "node": "Send Capture Nudge",
+     "cred_type": "smtp",
+     "id": "mu7nJRSpkAfkzLdF",
+     "name": "SMTP account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "api.notion.com"
+   ],
+   "notes": "Scanned every node parameter (Code jsCode, Notion node, emailSend fields), the sticky note, description and settings: zero occurrences of thequietoperator.app.n8n.cloud or n8n.editforge.online. Read-only against Notion: Notion node typeVersion 3 reads dataSourceId a5bcfbf5-ce1d-493b-9992-a11bc2a03dc4 (databasePage getAll, limit 1, sorted created_time desc, onError continueRegularOutput), so the target build must carry Notion node v3 with data source support. api.notion.com is implied by the Notion node type, not a literal in the JSON. The SMTP host lives inside credential mu7nJRSpkAfkzLdF and is not visible in the workflow. Sticky note records that Gmail OAuth credential vsTKuAilHmpYCc5L went invalid around 1 Sept and was replaced by SMTP on 2026-09-05; no node binds vsTKuAilHmpYCc5L. The emailSend node carries a webhookId attribute (n8n internal), not a webhook trigger; executeOnce true. Settings also carry availableInMCP true and binaryMode separate. Mail from/to tdveal74@gmail.com. No secret-looking literals found."
+  },
+  {
+   "id": "pPIt2cELH2RVZktS",
+   "name": "DEVON Capture Webhook",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "d39a585c-a765-4617-99dc-63ab03f0c9db",
+   "node_count": 6,
+   "execution_order": "v1",
+   "error_workflow": "rqYmaQh91iCce8DJ",
+   "save_success_executions": "none",
+   "trigger_summary": "Webhook: POST /webhook/devon-capture with header auth (x-devon-key), plus a per-poster capture token checked in the body by the Check Token Code node; responds via Respond to Webhook node",
+   "webhooks": [
+    {
+     "node": "Receipt In (POST)",
+     "path": "devon-capture",
+     "method": "POST",
+     "auth": "headerAuth",
+     "credential_id": "FYRvkRTOcROEYZ9P"
+    }
+   ],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Receipt In (POST)",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "File to Thread Receipts",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [],
+   "notes": "Neither host appears in the workflow JSON. Check Token holds four per-poster capture tokens as plaintext literals in its jsCode (dcp_ prefixed, one each for ChatGPT, Grok, Gemini and Claude; values deliberately not reproduced here); they travel inside the workflow JSON on export, and the four posting connectors must keep matching values after migration. LEGACY_GRACE is false, so an untokened or wrong-token post throws a refusal rather than filing. File to Thread Receipts is an Airtable node (typeVersion 2.1) creating records in base app28z7XnKzjfTXwc table tblEhgEZoNr2ztbB3 with typecast true; the Airtable API host is implied by the node type and is not a literal in the JSON, which is why external_hosts is empty and data_tables (n8n Data Tables) is empty. Error workflow is rqYmaQh91iCce8DJ, a different workflow from the shared Error Alarm XDQXwgFkUhYxoEjG used by the other DEVON organs; it must exist on the target. Settings timezone America/New_York. The description records header auth enforced 2026-08-23 with credential FYRvkRTOcROEYZ9P."
+  },
+  {
+   "id": "5Nc9yh6WSqBJ41ok",
+   "name": "DEVON Conscious and Subconscious Runtime (Build 03)",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "4fbe6056-b592-4bba-ad3a-3667cbeaecfc",
+   "node_count": 8,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "none",
+   "trigger_summary": "Webhook: POST /webhook/devon-runtime with header auth (x-devon-key), responds via Respond to Webhook node",
+   "webhooks": [
+    {
+     "node": "Runtime In (POST)",
+     "path": "devon-runtime",
+     "method": "POST",
+     "auth": "headerAuth",
+     "credential_id": "FYRvkRTOcROEYZ9P"
+    }
+   ],
+   "host_refs": [
+    {
+     "node": "Report Exit to Bus",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-event"
+    },
+    {
+     "node": "Report Entry to Bus",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-event"
+    }
+   ],
+   "credentials": [
+    {
+     "node": "Runtime In (POST)",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Report Exit to Bus",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Report Entry to Bus",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [
+    {
+     "node": "Subconscious Recall",
+     "table_id": "VYyno7pDWmY6uxBz",
+     "operation": "get"
+    }
+   ],
+   "external_hosts": [],
+   "notes": "The Cloud host appears only in the two Event Bus HTTP Request urls (INTENT_RECEIVED on entry, PLAN_CREATED on exit), timeout 20000 ms. Subconscious Recall reads the instance local data table VYyno7pDWmY6uxBz (the Build 02 state ledger) filtered by area equal to the envelope's area, ordered by ledger_written_at DESC, limit 25, alwaysOutputData; the table must exist on the target with those columns. Conscious Pass accepts state UNDERSTANDING only and throws on refusal (a thrown error, not a data refusal). No error workflow configured. The Conscious Pass comment names /devon-spine-n8n as a path only, with no host."
+  },
+  {
+   "id": "J7Ly7riwXEd95D9a",
+   "name": "DEVON Drive Draft Writer (Build 16)",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "fac97950-0f49-4f23-a169-58a33d9d887d",
+   "node_count": 21,
+   "execution_order": "v1",
+   "error_workflow": "XDQXwgFkUhYxoEjG",
+   "save_success_executions": "none",
+   "trigger_summary": "Webhook: POST /webhook/devon-drive-draft with header auth (x-devon-key), responds via Respond to Webhook nodes",
+   "webhooks": [
+    {
+     "node": "Draft In (POST)",
+     "path": "devon-drive-draft",
+     "method": "POST",
+     "auth": "headerAuth",
+     "credential_id": "FYRvkRTOcROEYZ9P"
+    }
+   ],
+   "host_refs": [
+    {
+     "node": "Report Entry to Bus",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-event"
+    },
+    {
+     "node": "Report Exit to Bus",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-event"
+    }
+   ],
+   "credentials": [
+    {
+     "node": "Draft In (POST)",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Report Entry to Bus",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Find Existing Draft",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Cerebras Write",
+     "cred_type": "httpHeaderAuth",
+     "id": "YTVk8Dq2gYPAmUim",
+     "name": "Cerebras Cloud"
+    },
+    {
+     "node": "Create Doc",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Report Exit to Bus",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Confirm Properties",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "api.cerebras.ai",
+    "docs.google.com"
+   ],
+   "notes": "The Cloud host appears only in the two Event Bus HTTP Request urls (INTENT_RECEIVED on entry, ACTION_COMPLETED on exit), timeout 15000 ms. Validate and Plan hardcodes nine Area to Google Drive folder id mappings plus a capture inbox folder id (mirrors DRAFT_FOLDERS in services/devon/vault.py; the ids are not reproduced here) and builds the Cerebras request (model gpt-oss-120b). It uses $workflow.id for the single flight lock and Advance Envelope stamps it into execution.workflow_id, so a changed workflow id on the target alters the lock check; the Action Router (ecLqrxALuLDdF2BN) names this workflow by id J7Ly7riwXEd95D9a and by its Cloud url. Three Google Drive nodes (Find Existing Draft, Create Doc, Confirm Properties) use OAuth credential WMz320icjnur7rDL; Create Doc targets driveId 'My Drive' in list mode with folderId by expression and converts to a Google Document with three appProperties (devon_idempotency_key, devon_intent_id, devon_action); the Drive API host is implied by the node type and is not a literal in the JSON. Cerebras Write posts to https://api.cerebras.ai/v1/chat/completions with credential YTVk8Dq2gYPAmUim, timeout 25000 ms. The artifact uri is built from https://docs.google.com/document/d/ in Advance Envelope. Error workflow XDQXwgFkUhYxoEjG; executionTimeout 120 s. Sticky note says the webhook is registered in vault.py WEBHOOKS and WORKFLOWS."
+  },
+  {
+   "id": "mbIKJk4UuB7V27rP",
+   "name": "DEVON Driver Poll (Build 14)",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "1c9b2407-2d73-402a-9aad-80e8b6c00b29",
+   "node_count": 7,
+   "execution_order": "v1",
+   "error_workflow": "XDQXwgFkUhYxoEjG",
+   "save_success_executions": "default",
+   "trigger_summary": "Schedule trigger node 'Every Hour': rule interval field hours, hoursInterval 1 (every hour).",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Send Digest",
+     "cred_type": "smtp",
+     "id": "mu7nJRSpkAfkzLdF",
+     "name": "SMTP account"
+    }
+   ],
+   "execute_workflow_targets": [
+    {
+     "node": "Drive Each Job",
+     "workflow_id": "TT4TfFXyH9O7lfdc",
+     "how": "workflowId parameter"
+    }
+   ],
+   "data_tables": [
+    {
+     "node": "Read Ledger",
+     "table_id": "VYyno7pDWmY6uxBz",
+     "operation": "get"
+    }
+   ],
+   "external_hosts": [],
+   "notes": "Neither host literal appears anywhere in this workflow. Drive Each Job is n8n-nodes-base.executeWorkflow v1.3, mode 'each', source 'database', waitForSubWorkflow true, onError continueRegularOutput, targeting TT4TfFXyH9O7lfdc (the Job Driver, not in this batch); the new instance's id for the Job Driver must be written into that parameter. settings.errorWorkflow points at XDQXwgFkUhYxoEjG (Error Alarm) and must be rewritten to the migrated Error Alarm id. executionTimeout 300. Send Digest is n8n-nodes-base.emailSend from 'DEVON Driver <tdveal74@gmail.com>' to tdveal74@gmail.com over the SMTP credential; the SMTP host lives in the credential, not the workflow. Sticky note says the hourly interval exists only because Cloud counts executions and should be tightened on the VPS, and that the workflow is registered in services/devon/vault.py WORKFLOWS."
+  },
+  {
+   "id": "X7OGXWHBx57CIG42",
+   "name": "DEVON Duplicate Sweep",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "684a0d9e-aee2-47d0-8618-3dcdc779fea0",
+   "node_count": 8,
+   "execution_order": "v1",
+   "error_workflow": "rqYmaQh91iCce8DJ",
+   "save_success_executions": "default",
+   "trigger_summary": "Schedule: daily at 03:00 America/New_York (Schedule Trigger 1.3, field days, triggerAtHour 3, node 'Daily 3am'; workflow timezone America/New_York), plus a Manual Trigger 'Run Now' wired to the same first node.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Read Captures",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Move to _To Delete",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Mark Superseded",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Log Conflict",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "api.airtable.com",
+    "www.googleapis.com"
+   ],
+   "notes": "The live name carries an em dash ('DEVON Duplicate Sweep'). Scanned every node, the long Find Duplicates Code node, all expressions and settings: zero occurrences of either n8n host. Last updated 2026-08-08, the oldest of the eight; it did not get the 2026-09-05 mail change because it has no emailSend node, and it is the only one of the eight not bound to SMTP mu7nJRSpkAfkzLdF. Settings errorWorkflow rqYmaQh91iCce8DJ must exist under the same id on the target or be re-pointed. Timezone America/New_York set on the workflow. This workflow WRITES: Move to _To Delete is Google Drive v3 file move to folderId 1_woUEQcLmlW6VM6pjZrauStMRXP75Ui- with driveId resource locator mode 'list', value 'My Drive', cachedResultName 'My Drive', onError continueRegularOutput; Mark Superseded is Airtable 2.1 record update on base app28z7XnKzjfTXwc table tbl4ziFRbl5mnUcKc matching on id with Notes and Triaged=true, typecast, onError continueRegularOutput; Log Conflict is Airtable 2.1 record create in table tblbenoy1QF9KAftn (Conflicts) with Status Open. Read Captures is Airtable 2.1 search on tbl4ziFRbl5mnUcKc, returnAll. Mark Superseded references $('Find Duplicates').item by node name, so node names must survive import. api.airtable.com and www.googleapis.com are implied by node types, not literals. Google OAuth2 credential WMz320icjnur7rDL needs re-authorising on the new host. Settings carry availableInMCP true. No sticky notes. No secret-looking literals found."
+  },
+  {
+   "id": "OFIhA7zdFv9UoyCv",
+   "name": "DEVON EditForge Handoff (Build 07)",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "918079e9-57e3-4872-a0f5-6af13c7ec5f2",
+   "node_count": 9,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "none",
+   "trigger_summary": "Webhook trigger node 'EditForge In (POST)': POST /webhook/devon-editforge, headerAuth, responseMode responseNode.",
+   "webhooks": [
+    {
+     "node": "EditForge In (POST)",
+     "path": "devon-editforge",
+     "method": "POST",
+     "auth": "headerAuth",
+     "credential_id": "FYRvkRTOcROEYZ9P"
+    }
+   ],
+   "host_refs": [
+    {
+     "node": "Report Entry to Bus",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-event"
+    },
+    {
+     "node": "Report Exit to Bus",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-event"
+    }
+   ],
+   "credentials": [
+    {
+     "node": "EditForge In (POST)",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Report Entry to Bus",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Submit to EditForge",
+     "cred_type": "httpHeaderAuth",
+     "id": "THqWeT7Fd0kiiGSv",
+     "name": "EditForge MCP Token"
+    },
+    {
+     "node": "Report Exit to Bus",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "editforge.vercel.app"
+   ],
+   "notes": "Two hard-coded absolute callbacks into its own instance's Event Bus (devon-event) in HTTP Request url fields; both must be rewritten to the new host or the organ will keep reporting to Cloud. The same credential FYRvkRTOcROEYZ9P guards the inbound door and is presented outbound to the bus, so it must exist on the new instance with the same header name and value. Submit to EditForge posts to https://editforge.vercel.app/api/jobs with credential THqWeT7Fd0kiiGSv; Map Job Status code also builds the artifact uri from the literal 'https://editforge.vercel.app/api/jobs/' + jobId. No errorWorkflow set. saveDataSuccessExecution none. Sticky notes: none in this workflow."
+  },
+  {
+   "id": "XDQXwgFkUhYxoEjG",
+   "name": "DEVON Error Alarm",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "8d4a8f7b-1b66-4486-83b6-f7396819f499",
+   "node_count": 3,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Error Trigger node 'On Workflow Failure' (n8n-nodes-base.errorTrigger): runs only when another workflow that names this id in settings.errorWorkflow crashes. No schedule, webhook, chat, manual or Execute Workflow trigger; the read reports triggerCount 0.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Alert Tee",
+     "cred_type": "smtp",
+     "id": "mu7nJRSpkAfkzLdF",
+     "name": "SMTP account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [],
+   "notes": "Neither host literal appears. This is the errorWorkflow target for four of the eight in this batch (mbIKJk4UuB7V27rP, LsmfRFMmI5feINs0, dRgTNLod2s8BAcPg, AEFgXee7IDJarNV7); after import, the new id of this workflow must be written into each of those settings. Alert Tee is n8n-nodes-base.emailSend from 'DEVON Error Alarm <tdveal74@gmail.com>' to tdveal74@gmail.com; its body uses the expression $json.execution?.url, which n8n fills from the instance's own base URL, so it is expected (not verified here) to point at the new host once that instance's editor base URL is configured. Sticky note states the SMTP credential mu7nJRSpkAfkzLdF is shared with the Heartbeat on purpose and is the single point of failure for mail."
+  },
+  {
+   "id": "Bvy0grTSIyEmPwFA",
+   "name": "DEVON Event Bus and Universal Receipts (Build 06)",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "b32e3c72-01b9-4979-8445-a93e4f59f24a",
+   "node_count": 5,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "none",
+   "trigger_summary": "Webhook trigger node 'Event In (POST)': POST /webhook/devon-event, headerAuth, responseMode responseNode.",
+   "webhooks": [
+    {
+     "node": "Event In (POST)",
+     "path": "devon-event",
+     "method": "POST",
+     "auth": "headerAuth",
+     "credential_id": "FYRvkRTOcROEYZ9P"
+    }
+   ],
+   "host_refs": [
+    {
+     "node": "Persist to Ledger",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-ledger"
+    }
+   ],
+   "credentials": [
+    {
+     "node": "Event In (POST)",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Persist to Ledger",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [],
+   "notes": "One hard-coded absolute call to the Build 02 ledger webhook (devon-ledger, a workflow not in this batch) on the Cloud host; must be rewritten. Persist to Ledger has onError continueRegularOutput, neverError true, text response. Issue Receipt classifies the ledger reply by inspecting the text body: a body starting with 'ledger ' means persisted, an empty 200 means refused_by_ledger, a transport error means ledger_unreachable; the migrated ledger must keep answering the same way or every receipt reads as unexpected_ledger_response. This bus is the target of both callbacks in OFIhA7zdFv9UoyCv. No errorWorkflow set. saveDataSuccessExecution none. No sticky notes."
+  },
+  {
+   "id": "LsmfRFMmI5feINs0",
+   "name": "DEVON Face (Build 15)",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "1c9e6662-e35c-4362-87b1-644781b4e5d1",
+   "node_count": 15,
+   "execution_order": "v1",
+   "error_workflow": "XDQXwgFkUhYxoEjG",
+   "save_success_executions": "default",
+   "trigger_summary": "Chat trigger node 'Chat In' (@n8n/n8n-nodes-langchain.chatTrigger v1.4): public true, mode hostedChat, authentication n8nUserAuth, responseMode lastNode, loadPreviousSession notSupported, webhookId 71510ab0-07eb-42d8-9734-c0741b398d49. The node has no path parameter and no httpMethod parameter; triggerCount 1.",
+   "webhooks": [
+    {
+     "node": "Chat In",
+     "path": "",
+     "method": "",
+     "auth": "n8nUserAuth",
+     "credential_id": ""
+    }
+   ],
+   "host_refs": [
+    {
+     "node": "Chat In",
+     "node_type": "@n8n/n8n-nodes-langchain.chatTrigger",
+     "field": "parameters.options.customCss",
+     "host": "www.w3.org",
+     "snippet": "xmlns=%22http://www.w3.org/2000/svg%22 (SVG namespace inside a data:image/svg+xml URI; a namespace string, not a network fetch)"
+    },
+    {
+     "node": "Cerebras Chat",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "api.cerebras.ai",
+     "snippet": "https://api.cerebras.ai/v1/chat/completions"
+    },
+    {
+     "node": "File Job",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-intake"
+    }
+   ],
+   "credentials": [
+    {
+     "node": "Cerebras Chat",
+     "cred_type": "httpHeaderAuth",
+     "id": "YTVk8Dq2gYPAmUim",
+     "name": "Cerebras Cloud"
+    },
+    {
+     "node": "File Job",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [
+    {
+     "node": "Read Memory",
+     "table_id": "nwnHN8o2dgHjtk7f",
+     "operation": "get"
+    },
+    {
+     "node": "Read Ledger",
+     "table_id": "VYyno7pDWmY6uxBz",
+     "operation": "get"
+    },
+    {
+     "node": "Read Driver Log",
+     "table_id": "9VbICTCa4x4yhWZm",
+     "operation": "get"
+    },
+    {
+     "node": "Read Heartbeat",
+     "table_id": "Adg1Gd9HML7Q4L3U",
+     "operation": "get"
+    },
+    {
+     "node": "Insert Memory",
+     "table_id": "nwnHN8o2dgHjtk7f",
+     "operation": "insert"
+    }
+   ],
+   "external_hosts": [
+    "api.cerebras.ai"
+   ],
+   "notes": "Disagreement settled: Chat In carries a webhookId but no path or httpMethod parameter, so the JSON holds zero webhook path literals; the counter's empty list is literally correct, while the reader was wrong to put prose into the path field, which made it read as one path. Neither pass stated a false fact, but the counter's empty list hides one active door: Chat In is a public (public: true) webhook-backed hosted chat trigger on an active workflow, its URL derived by n8n from webhookId 71510ab0-07eb-42d8-9734-c0741b398d49, gated by n8nUserAuth (Tee must be logged in to the instance) and taking no header key, so it is a door that does not take the capture key; path is reported as an empty string here because no literal exists. Three host literals in the JSON: api.cerebras.ai (Cerebras Chat url, 45000 ms timeout), thequietoperator.app.n8n.cloud (File Job url, absolute POST to /webhook/devon-intake with Devon Capture Key header auth and 240000 ms timeout; must be rewritten for the new host), and www.w3.org (SVG xmlns inside a data: URI in Chat In customCss; a namespace string, not a fetch; the reader mentioned it only in notes, it is a host_refs row here). The sticky note holds no host literal (counter sticky_cloud_count 0 is correct; it names devon-intake as a path word and nwnHN8o2dgHjtk7f and YTVk8Dq2gYPAmUim as ids). Counter's http_request_node_count 2, host_cloud_count 1, host_vps_count 0, credential ids and the four table ids all match this read. Five data table references across four tables (devon_chat_log nwnHN8o2dgHjtk7f read and insert). Compose Prompt sets model gpt-oss-120b; its text names executors drive.draft, airtable.row and spine.echo, which are dotted names and not hosts. Sticky note says HTTP Request is used instead of the AI Agent node because the Cerebras credential is header auth, and claims registration in services/devon/vault.py WORKFLOWS (that claim not verified in this read). settings: executionOrder v1, errorWorkflow XDQXwgFkUhYxoEjG (must be remapped), executionTimeout 300, availableInMCP true, saveDataSuccessExecution absent so instance default applies. activeVersionId equals versionId, activeVersion sameAsDraft true, updatedAt 2026-09-06T11:48:14.336Z. No executeWorkflow nodes. No secret-looking literals found in any Code node."
+  },
+  {
+   "id": "M3H2mVPZJpDyIzrl",
+   "name": "DEVON Health and Observability Console (Build 10)",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "aa0d358a-918b-4b32-8fd3-71d27ef5ca0a",
+   "node_count": 4,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Webhook trigger node 'Health In (GET)': GET /webhook/devon-health, headerAuth, responseMode responseNode.",
+   "webhooks": [
+    {
+     "node": "Health In (GET)",
+     "path": "devon-health",
+     "method": "GET",
+     "auth": "headerAuth",
+     "credential_id": "FYRvkRTOcROEYZ9P"
+    }
+   ],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Health In (GET)",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [
+    {
+     "node": "Read Ledger",
+     "table_id": "VYyno7pDWmY6uxBz",
+     "operation": "get"
+    }
+   ],
+   "external_hosts": [],
+   "notes": "Neither host literal appears. Read-only over the ledger table; the ledger table id must be remapped. Assess Health code mentions workflow id X3sKmPj6yHJu4xWu (Notion Buffer Drain) in its not_measured prose only, no call is made. No errorWorkflow set. Oldest of the batch, last updated 2026-08-23. No sticky notes."
+  },
+  {
+   "id": "dRgTNLod2s8BAcPg",
+   "name": "DEVON Heartbeat (Build 13)",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "44e07ab4-fd8d-41d1-95b1-dfd32b3633b1",
+   "node_count": 12,
+   "execution_order": "v1",
+   "error_workflow": "XDQXwgFkUhYxoEjG",
+   "save_success_executions": "default",
+   "trigger_summary": "Schedule trigger node 'Every 6 Hours': rule interval field hours, hoursInterval 6 (every 6 hours).",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Send Pulse",
+     "cred_type": "smtp",
+     "id": "mu7nJRSpkAfkzLdF",
+     "name": "SMTP account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [
+    {
+     "node": "Read Jobs",
+     "table_id": "VYyno7pDWmY6uxBz",
+     "operation": "get"
+    },
+    {
+     "node": "Read Feed",
+     "table_id": "QeoV4V4dYXXN8dBR",
+     "operation": "get"
+    },
+    {
+     "node": "Read Soul Log",
+     "table_id": "U9fnVy19Vc8kvQAw",
+     "operation": "get"
+    },
+    {
+     "node": "Read Beats",
+     "table_id": "Adg1Gd9HML7Q4L3U",
+     "operation": "get"
+    },
+    {
+     "node": "Record Beat",
+     "table_id": "Adg1Gd9HML7Q4L3U",
+     "operation": "insert"
+    },
+    {
+     "node": "Mark Emailed",
+     "table_id": "Adg1Gd9HML7Q4L3U",
+     "operation": "update"
+    }
+   ],
+   "external_hosts": [],
+   "notes": "Neither host literal appears. Six data table references across four tables (ledger VYyno7pDWmY6uxBz, learning feed QeoV4V4dYXXN8dBR, soul commit log U9fnVy19Vc8kvQAw, heartbeat log Adg1Gd9HML7Q4L3U read, insert and update) all need remapping. Compose Pulse derives missed-beat, daily-email and reflection findings from prior rows in the heartbeat log, so migrating without the table's history makes the first beat on the new host report 'first heartbeat' and resets the email clock. Sticky note c1813eb8 says the daily Reflection is a claude.ai Routine outside n8n that writes its own row into Adg1Gd9HML7Q4L3U through 'the read-only Table Reader'; that external writer must be repointed at the new instance or the pulse will flag reflection_missing. Sticky note b8269640 names retired Gmail OAuth credential vsTKuAilHmpYCc5L (no node binds it now) and records that every execution from 2026-08-29 to 2026-09-05 errored. Send Pulse: retryOnFail, maxTries 3, waitBetweenTries 5000, from 'DEVON Heartbeat <tdveal74@gmail.com>' to tdveal74@gmail.com. settings.errorWorkflow XDQXwgFkUhYxoEjG must be remapped. executionTimeout 300."
+  },
+  {
+   "id": "AEFgXee7IDJarNV7",
+   "name": "DEVON Intake Former (Build 14)",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "207ae1cc-ed8c-4957-83c4-33c993951778",
+   "node_count": 16,
+   "execution_order": "v1",
+   "error_workflow": "XDQXwgFkUhYxoEjG",
+   "save_success_executions": "none",
+   "trigger_summary": "Webhook trigger node 'Intake In (POST)': POST /webhook/devon-intake, headerAuth, responseMode responseNode.",
+   "webhooks": [
+    {
+     "node": "Intake In (POST)",
+     "path": "devon-intake",
+     "method": "POST",
+     "auth": "headerAuth",
+     "credential_id": "FYRvkRTOcROEYZ9P"
+    }
+   ],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Intake In (POST)",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Cerebras Tag",
+     "cred_type": "httpHeaderAuth",
+     "id": "YTVk8Dq2gYPAmUim",
+     "name": "Cerebras Cloud"
+    },
+    {
+     "node": "Cerebras Brief",
+     "cred_type": "httpHeaderAuth",
+     "id": "YTVk8Dq2gYPAmUim",
+     "name": "Cerebras Cloud"
+    }
+   ],
+   "execute_workflow_targets": [
+    {
+     "node": "Drive Job",
+     "workflow_id": "TT4TfFXyH9O7lfdc",
+     "how": "workflowId parameter"
+    }
+   ],
+   "data_tables": [
+    {
+     "node": "Read Same Key",
+     "table_id": "VYyno7pDWmY6uxBz",
+     "operation": "get"
+    }
+   ],
+   "external_hosts": [
+    "api.cerebras.ai"
+   ],
+   "notes": "Neither host literal appears; the sticky note documents the door as the relative path /webhook/devon-intake with header x-devon-key (header name only, no value in the JSON). Drive Job is n8n-nodes-base.executeWorkflow v1.3, mode 'once', source 'database', waitForSubWorkflow true, onError continueRegularOutput, targeting TT4TfFXyH9O7lfdc (Job Driver, not in this batch); the new id must be written in. Read Same Key dedupes on idempotency_key against the ledger table VYyno7pDWmY6uxBz and refuses to file when the table cannot be read, so the ledger table must exist and be mapped before this door is opened on the new host. Two Cerebras HTTP Request calls (Tag and Brief) to api.cerebras.ai, model gpt-oss-120b, both onError continueRegularOutput. Respond node sets responseCode by expression (400 on refusal, otherwise 200). This is the target of File Job in LsmfRFMmI5feINs0. settings.errorWorkflow XDQXwgFkUhYxoEjG must be remapped. executionTimeout 300. saveDataSuccessExecution none. Sticky note says registered in services/devon/vault.py WEBHOOKS as devon-intake."
+  },
+  {
+   "id": "xh3EkLmgTDJFhzGH",
+   "name": "DEVON Intelligence Router (Build 04)",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "b463604a-0a1f-495a-b98f-b97506797b3b",
+   "node_count": 9,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "none",
+   "trigger_summary": "Webhook: POST /webhook/devon-route (node Route In (POST)), header auth, responds via Respond to Webhook node",
+   "webhooks": [
+    {
+     "node": "Route In (POST)",
+     "path": "devon-route",
+     "method": "POST",
+     "auth": "headerAuth",
+     "credential_id": "FYRvkRTOcROEYZ9P"
+    }
+   ],
+   "host_refs": [
+    {
+     "node": "Report Entry to Bus",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-event"
+    },
+    {
+     "node": "Report Exit to Bus",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-event"
+    }
+   ],
+   "credentials": [
+    {
+     "node": "Route In (POST)",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Cerebras Classify",
+     "cred_type": "httpHeaderAuth",
+     "id": "YTVk8Dq2gYPAmUim",
+     "name": "Cerebras Cloud"
+    },
+    {
+     "node": "Report Entry to Bus",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Report Exit to Bus",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "api.cerebras.ai",
+    "devon-soul.vercel.app"
+   ],
+   "notes": "Both Cloud host occurrences are the two bus reports, each a plain literal in parameters.url pointing at /webhook/devon-event (the Event Bus workflow, which is not in this batch); both use neverError and responseFormat text, so a dead bus degrades rather than fails. Cerebras Classify has onError continueRegularOutput. devon-soul.vercel.app appears only as prose inside the Compose Routing jsCode (a comment and a reason string for level 3 interim routing); it is never a request target in this workflow. The webhook header-auth credential expects the header name x-devon-key (per triggerInfo); the value is in credential FYRvkRTOcROEYZ9P. No errorWorkflow is set on this workflow, unlike the Janitor, Job Driver, Soul Committer and Backup. Compose Routing depends on the exact JSON shape returned by the bus (envelope, persisted, outcome, ledger_said, retryable)."
+  },
+  {
+   "id": "TT4TfFXyH9O7lfdc",
+   "name": "DEVON Job Driver (Build 14)",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "f33c65ed-99a8-449a-84a6-ab43f6e97210",
+   "node_count": 17,
+   "execution_order": "v1",
+   "error_workflow": "XDQXwgFkUhYxoEjG",
+   "save_success_executions": "none",
+   "trigger_summary": "Execute Workflow Trigger (node When Called, inputSource passthrough); executed by another workflow only, never on its own (sticky note names the Intake Former and the hourly Driver Poll as callers)",
+   "webhooks": [],
+   "host_refs": [
+    {
+     "node": "Decide",
+     "node_type": "n8n-nodes-base.code",
+     "field": "parameters.jsCode",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "const HOST = 'https://thequietoperator.app.n8n.cloud/webhook/';"
+    }
+   ],
+   "credentials": [
+    {
+     "node": "Call Organ",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [
+    {
+     "node": "Read Card Rows",
+     "table_id": "u6wzeN5y9LNxROsN",
+     "operation": "get (filter evidence like {{ $json.marker }})"
+    },
+    {
+     "node": "Write Driver Log",
+     "table_id": "9VbICTCa4x4yhWZm",
+     "operation": "insert"
+    },
+    {
+     "node": "Read Last Pass",
+     "table_id": "9VbICTCa4x4yhWZm",
+     "operation": "get (filter intent_id eq)"
+    }
+   ],
+   "external_hosts": [],
+   "notes": "The Cloud host occurs exactly once, as a HOST constant at the top of the Decide Code node; every organ URL is built from it by string concatenation and there are no other literal URLs anywhere in the workflow. Decide derives eight call targets: HOST + 'devon-spine-n8n' (two sites), 'devon-runtime', 'devon-route', 'devon-action', 'devon-event', 'devon-approve-request' (two sites, approval card and verify card), 'devon-editforge'. The Call Organ HTTP Request node's url is the expression {{ $json.url }} and its body {{ JSON.stringify($json.body) }}, both from Decide, so changing the one HOST line rewires all organ calls. Call Organ is neverError plus fullResponse with a 120s timeout. settings also carry saveExecutionProgress false, saveManualExecutions false, saveDataErrorExecution none, executionTimeout 300 and callerPolicy workflowsFromSameOwner; execution saving is off deliberately because Read Card Rows reads approval_queue rows (u6wzeN5y9LNxROsN) that carry plaintext decision tokens. The three data table ids are Cloud-instance ids and will need remapping on the self-hosted instance. All three dataTable nodes have onError continueRegularOutput. Not executable through MCP because its only trigger is the Execute Workflow Trigger."
+  },
+  {
+   "id": "HKNEDVy7PUKPtsrN",
+   "name": "DEVON Ledger Janitor",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "2b23fc50-a9c2-4d83-a2d0-d005393ab215",
+   "node_count": 7,
+   "execution_order": "v1",
+   "error_workflow": "XDQXwgFkUhYxoEjG",
+   "save_success_executions": "default",
+   "trigger_summary": "Schedule: daily at 02:30 (node Daily Sweep, daysInterval 1, triggerAtHour 2, triggerAtMinute 30; the workflow sets no timezone, the description says UTC)",
+   "webhooks": [],
+   "host_refs": [
+    {
+     "node": "Cancel via Ledger",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-ledger"
+    }
+   ],
+   "credentials": [
+    {
+     "node": "Cancel via Ledger",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Send Janitor Digest",
+     "cred_type": "smtp",
+     "id": "mu7nJRSpkAfkzLdF",
+     "name": "SMTP account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [
+    {
+     "node": "Read Ledger",
+     "table_id": "VYyno7pDWmY6uxBz",
+     "operation": "get (returnAll)"
+    }
+   ],
+   "external_hosts": [],
+   "notes": "The single Cloud host occurrence is the POST to /webhook/devon-ledger, which is the Live State Ledger workflow z9j2I8h0RnbDKGBO in this same batch; on the new instance the Janitor and the Ledger must move together or the Janitor cancels against the wrong instance. Cancel via Ledger batches one request per 500ms with onError continueRegularOutput and text response. Read Ledger reads the same data table VYyno7pDWmY6uxBz the Ledger writes; that id is Cloud-scoped. The sticky note names the retired Gmail credential vsTKuAilHmpYCc5L and records that the SMTP conversion was never proven by a live send on this lane. Sender and recipient tdveal74@gmail.com are hardcoded in Send Janitor Digest; the SMTP host lives inside credential mu7nJRSpkAfkzLdF and is not visible in the workflow. Description says it is registered in vault.py WORKFLOWS."
+  },
+  {
+   "id": "z9j2I8h0RnbDKGBO",
+   "name": "DEVON Live State Ledger (Build 02)",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "991c0fc4-fad9-4d33-9152-cde3cb7ba104",
+   "node_count": 6,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "none",
+   "trigger_summary": "Webhook: POST /webhook/devon-ledger (node Ledger In (POST)), header auth, responds via Respond to Webhook node",
+   "webhooks": [
+    {
+     "node": "Ledger In (POST)",
+     "path": "devon-ledger",
+     "method": "POST",
+     "auth": "headerAuth",
+     "credential_id": "FYRvkRTOcROEYZ9P"
+    }
+   ],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Ledger In (POST)",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [
+    {
+     "node": "Read Prior State",
+     "table_id": "VYyno7pDWmY6uxBz",
+     "operation": "get (filter intent_id eq, limit 1, alwaysOutputData)"
+    },
+    {
+     "node": "Write Ledger Row",
+     "table_id": "VYyno7pDWmY6uxBz",
+     "operation": "upsert (matching column intent_id)"
+    }
+   ],
+   "external_hosts": [],
+   "notes": "No host literal anywhere; this workflow is a pure endpoint whose identity is the webhook path devon-ledger, called by the Janitor (this batch) and, per the other workflows' code, by the Event Bus. It is the store of record for data table VYyno7pDWmY6uxBz (devon_state_ledger), which the Janitor, the Backup and the Ledger all reference by Cloud id; migrating the table contents and remapping the id in all three is required. Guard Transition throws on illegal transitions and on a first entry not in RECEIVED, so replaying rows out of order on the new instance will be refused. No errorWorkflow set."
+  },
+  {
+   "id": "yro0wBRGghMjkZhj",
+   "name": "DEVON Monthly Credential Review",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "8c7422b4-5b46-4200-adb0-d8d61134107a",
+   "node_count": 5,
+   "execution_order": "v1",
+   "error_workflow": "rqYmaQh91iCce8DJ",
+   "save_success_executions": "default",
+   "trigger_summary": "Schedule: monthly on the 1st at 08:00 America/New_York (Schedule Trigger 1.3, field months, triggerAtDayOfMonth 1, triggerAtHour 8, node '1st of Month 8am'; workflow timezone America/New_York), plus a Manual Trigger 'Check Now' wired to the same first node.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Read Credentials",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Email the Review",
+     "cred_type": "smtp",
+     "id": "mu7nJRSpkAfkzLdF",
+     "name": "SMTP account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "api.airtable.com"
+   ],
+   "notes": "The live name carries an em dash ('DEVON Monthly Credential Review'). Scanned every node, the Assess Registry Code node, expressions and settings: zero occurrences of either n8n host. Settings errorWorkflow rqYmaQh91iCce8DJ must exist under the same id on the target or be re-pointed. Timezone America/New_York set on the workflow. Read-only against Airtable: Read Credentials is Airtable 2.1 search on base app28z7XnKzjfTXwc table tblkLdeuGzdtJMw7D (the Credentials registry; the code comment states it holds no secret values), returnAll. Assess Registry has alwaysOutputData true so the review always sends, including an explicit 'registry is empty' alert. api.airtable.com is implied by the node type, not a literal. SMTP host inside credential mu7nJRSpkAfkzLdF. emailSend webhookId is internal, not a trigger; onError continueRegularOutput. Settings carry availableInMCP true. No description field. No sticky notes. No secret-looking literals found."
+  },
+  {
+   "id": "X3sKmPj6yHJu4xWu",
+   "name": "DEVON Notion Buffer Drain",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "be6b15a6-b478-4c1b-aa80-720a54b55919",
+   "node_count": 9,
+   "execution_order": "v1",
+   "error_workflow": "rqYmaQh91iCce8DJ",
+   "save_success_executions": "default",
+   "trigger_summary": "Schedule: daily at 07:00 America/New_York (Schedule Trigger 1.3, field days, triggerAtHour 7, node 'Daily 7am'; workflow timezone America/New_York), plus a Manual Trigger 'Drain Now' wired to the same first node.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Read Thread Receipts",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Create Notion Page",
+     "cred_type": "httpHeaderAuth",
+     "id": "b9FYEfGUlMiYJCCU",
+     "name": "Header Auth account 10"
+    },
+    {
+     "node": "Log Sync Failure",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Tick Synced to Notion",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Find Existing Page",
+     "cred_type": "httpHeaderAuth",
+     "id": "b9FYEfGUlMiYJCCU",
+     "name": "Header Auth account 10"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "api.notion.com",
+    "api.airtable.com"
+   ],
+   "notes": "The live name carries an em dash ('DEVON Notion Buffer Drain'). Updated 2026-09-06T10:25:50Z, i.e. today; this census reflects that version. Scanned every node, the long Shape for Notion Code node, both HTTP Request nodes including header fields and jsonBody expressions, the Log Sync Failure Evidence expression, node notes and settings: zero occurrences of either n8n host. Settings errorWorkflow rqYmaQh91iCce8DJ must exist under the same id on the target or be re-pointed. Timezone America/New_York set on the workflow. This workflow WRITES: Create Notion Page is HTTP Request 4.2 POST https://api.notion.com/v1/pages and Find Existing Page is HTTP Request 4.2 POST https://api.notion.com/v1/databases/e91b0a7b-42c0-405e-bf5b-39975e0d4e38/query, both genericCredentialType httpHeaderAuth (credential b9FYEfGUlMiYJCCU carries the Notion token as a header; the value is not visible in the workflow), headers Notion-Version 2022-06-28 and Content-Type application/json, onError continueErrorOutput with the error branch wired to Log Sync Failure. Notion database id e91b0a7b-42c0-405e-bf5b-39975e0d4e38 is hardcoded twice: in the Find Existing Page URL and as the DB constant inside Shape for Notion (the code comment records that the data source id a5bcfbf5-... is the wrong object kind for the REST API). Airtable 2.1 nodes on base app28z7XnKzjfTXwc: Read Thread Receipts (search, returnAll) and Tick Synced to Notion (update, matching id, Synced to Notion=true) on tblEhgEZoNr2ztbB3 (Thread Receipts); Log Sync Failure creates in tblbenoy1QF9KAftn (Conflicts) with Type 'Sync failure'. Create Notion Page, Tick Synced to Notion and Log Sync Failure reference $('Shape for Notion').item by node name, so node names must survive import. The Log Sync Failure Evidence expression deliberately avoids JSON.stringify of the raw error because it would contain the Authorization header; do not widen it. api.notion.com is a literal; api.airtable.com is implied by the node type. No emailSend node. Settings carry availableInMCP true. No description field. No sticky notes. No secret-looking literals found in the workflow JSON."
+  },
+  {
+   "id": "wndFo6uJCqVuINaV",
+   "name": "DEVON Pipeline Watchdog",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "414dd215-d0eb-42b9-b979-b6ba893e5745",
+   "node_count": 9,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Schedule: every 4 hours (Schedule Trigger 1.3, field hours, hoursInterval 4, node named 'Every 4 Hours'); no workflow timezone set.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Scan TQO Content",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Scan TSWS Content",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Scan NCO Forge",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Send Watchdog Alert",
+     "cred_type": "smtp",
+     "id": "mu7nJRSpkAfkzLdF",
+     "name": "SMTP account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "api.airtable.com"
+   ],
+   "notes": "Scanned all nine nodes (three Airtable searches, Merge, Code, two sticky notes, emailSend, trigger), description and settings: zero occurrences of either n8n host. Read-only against Airtable base app28z7XnKzjfTXwc, tables tblx5CcNguOypBjLI (TQO Content), tblVhCXkBp0O0Y2tI (TSWS Content), tblhtxvB7xouDKpww (NCO Forge), each filterByFormula OR({Status}=\"Error\",{Status}=\"Rendering\"), limit 50, onError continueRegularOutput. Airtable nodes are typeVersion 2.2 and the Merge node is 3.2 (numberInputs 3), so the target build must carry those versions. Sticky note flags the Status and Title field names as UNVERIFIED against the live schema (Airtable was 429 rate limited when built). One nodeGroup 'Digest and Alert' (Build Digest, Send Watchdog Alert). Sticky references the retired Gmail credential vsTKuAilHmpYCc5L; no node binds it. api.airtable.com is implied by the node type, not a literal. SMTP host inside credential mu7nJRSpkAfkzLdF. emailSend webhookId is internal, not a trigger. Settings carry availableInMCP true and binaryMode separate. No secret-looking literals found."
+  },
+  {
+   "id": "W5rlpAt6hsJAExU6",
+   "name": "DEVON Precedence Guard",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "ff4c755e-749d-4729-b3ee-878d01432425",
+   "node_count": 5,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Schedule: daily at 07:00 (Schedule Trigger 1.3, interval entry triggerAtHour 7 with no field, node named 'Daily 07:00'); no workflow timezone set, so instance default timezone applies.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "List Devon Core",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Send Precedence Alert",
+     "cred_type": "smtp",
+     "id": "mu7nJRSpkAfkzLdF",
+     "name": "SMTP account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "www.googleapis.com"
+   ],
+   "notes": "Scanned every node, sticky note, description and settings: zero occurrences of either n8n host. List Devon Core is an HTTP Request (typeVersion 4.5) GET https://www.googleapis.com/drive/v3/files with authentication predefinedCredentialType / nodeCredentialType googleDriveOAuth2Api, query q=\"'17chQD2DTfzbnZy2oGwiJxEk7PHvnstBp' in parents and trashed=false\", fields files(id,name,md5Checksum,size,createdTime,modifiedTime,mimeType), pageSize 1000, onError continueRegularOutput. Read-only against Drive. The Google OAuth2 credential WMz320icjnur7rDL will need re-authorising on the new host because the OAuth callback URL is bound to the instance host. www.googleapis.com is a literal in the HTTP Request url. Sticky references the retired Gmail credential vsTKuAilHmpYCc5L; no node binds it. SMTP host inside credential mu7nJRSpkAfkzLdF. emailSend webhookId is internal, not a trigger. Settings carry availableInMCP true and binaryMode separate. No secret-looking literals found."
+  },
+  {
+   "id": "lANs6wopaK0PkNhN",
+   "name": "DEVON Soul Committer (Build 12)",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "49007534-50c5-4e6d-b8bb-5160f75fd198",
+   "node_count": 28,
+   "execution_order": "v1",
+   "error_workflow": "XDQXwgFkUhYxoEjG",
+   "save_success_executions": "none",
+   "trigger_summary": "Schedule: every hour (node Every Hour, hoursInterval 1; changed from every 15 minutes on 2026-09-06 per sticky note)",
+   "webhooks": [],
+   "host_refs": [
+    {
+     "node": "Raise Approval Request",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-approve-request"
+    }
+   ],
+   "credentials": [
+    {
+     "node": "Raise Approval Request",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Commit To devon-soul",
+     "cred_type": "pineconeApi",
+     "id": "3XjKfxbS7zFWEa48",
+     "name": "Pinecone account"
+    },
+    {
+     "node": "Notify Propose Failures",
+     "cred_type": "smtp",
+     "id": "mu7nJRSpkAfkzLdF",
+     "name": "SMTP account"
+    },
+    {
+     "node": "Notify Commits",
+     "cred_type": "smtp",
+     "id": "mu7nJRSpkAfkzLdF",
+     "name": "SMTP account"
+    },
+    {
+     "node": "Notify Closed",
+     "cred_type": "smtp",
+     "id": "mu7nJRSpkAfkzLdF",
+     "name": "SMTP account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [
+    {
+     "node": "Fetch Promoted Jobs",
+     "table_id": "QeoV4V4dYXXN8dBR",
+     "operation": "get (filter gate_decision eq PROMOTE)"
+    },
+    {
+     "node": "Fetch Commit Log",
+     "table_id": "U9fnVy19Vc8kvQAw",
+     "operation": "get (returnAll)"
+    },
+    {
+     "node": "Fetch Open Requests",
+     "table_id": "u6wzeN5y9LNxROsN",
+     "operation": "get (returnAll)"
+    },
+    {
+     "node": "Insert Commit Rows",
+     "table_id": "U9fnVy19Vc8kvQAw",
+     "operation": "upsert (matching column intent_id)"
+    },
+    {
+     "node": "Fetch Pending Commits",
+     "table_id": "U9fnVy19Vc8kvQAw",
+     "operation": "get (filter state eq PROPOSED)"
+    },
+    {
+     "node": "Fetch Decisions",
+     "table_id": "u6wzeN5y9LNxROsN",
+     "operation": "get (returnAll)"
+    },
+    {
+     "node": "Update Commit Log",
+     "table_id": "U9fnVy19Vc8kvQAw",
+     "operation": "update (filter intent_id eq)"
+    },
+    {
+     "node": "Update Closed Rows",
+     "table_id": "U9fnVy19Vc8kvQAw",
+     "operation": "update (filter intent_id eq)"
+    }
+   ],
+   "external_hosts": [
+    "devon-soul-jw37oa2.svc.aped-4627-b74a.pinecone.io"
+   ],
+   "notes": "The one Cloud host occurrence is the POST to /webhook/devon-approve-request, the DEVON Approval Queue workflow, which is not in this batch and must be migrated alongside or the committer raises cards on the old instance. The Pinecone index host is a literal in Commit To devon-soul's url with header X-Pinecone-API-Version 2025-04 and an NDJSON raw body; the credential is pineconeApi 3XjKfxbS7zFWEa48. Three Cloud data table ids are referenced (QeoV4V4dYXXN8dBR feed log, U9fnVy19Vc8kvQAw commit log, u6wzeN5y9LNxROsN approval_queue) and Fetch Open Requests and Fetch Decisions read approval_queue whole, which is why settings also carry saveExecutionProgress false, saveManualExecutions false, saveDataErrorExecution none and executionTimeout 300; the sticky note says do not turn saving back on. Both sticky notes reference the retired Gmail credential vsTKuAilHmpYCc5L. Sender and recipient tdveal74@gmail.com are hardcoded in all three emailSend nodes; SMTP host lives in the credential. Raise Approval Request and Commit To devon-soul are neverError, fullResponse, onError continueRegularOutput."
+  },
+  {
+   "id": "edIJx7Q3FXTawg9J",
+   "name": "DEVON Soul Layer Write-Back",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "a760bbc2-ccd3-4c00-a2e3-35ff56f37d36",
+   "node_count": 7,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Notion Trigger (n8n-nodes-base.notionTrigger 1.1) polling every 15 minutes on dataSourceId a5bcfbf5-ce1d-493b-9992-a11bc2a03dc4; the event parameter is absent so the node default applies. Not a schedule, webhook, chat or manual trigger; the read reports it cannot be fired directly through MCP.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "New Thread Log Entry",
+     "cred_type": "notionApi",
+     "id": "69GcWnTi2TDh1FAN",
+     "name": "Notion account"
+    },
+    {
+     "node": "Upsert To Soul Layer",
+     "cred_type": "pineconeApi",
+     "id": "3XjKfxbS7zFWEa48",
+     "name": "Pinecone account"
+    },
+    {
+     "node": "Notify",
+     "cred_type": "smtp",
+     "id": "mu7nJRSpkAfkzLdF",
+     "name": "SMTP account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "tee-soul-layer-jw37oa2.svc.aped-4627-b74a.pinecone.io",
+    "api.notion.com"
+   ],
+   "notes": "Scanned every node (trigger, three Code nodes, HTTP Request, sticky note, emailSend), description and settings: zero occurrences of either n8n host. This workflow WRITES: Upsert To Soul Layer is HTTP Request 4.5 POST https://tee-soul-layer-jw37oa2.svc.aped-4627-b74a.pinecone.io/records/namespaces/rulings/upsert with predefinedCredentialType pineconeApi, raw application/x-ndjson body from $json.ndjson, headers Content-Type application/x-ndjson and X-Pinecone-API-Version 2025-04, options fullResponse + neverError, onError continueRegularOutput; the Pinecone index host is hardcoded in the URL. Confirm Or Alert reads $(\"Build NDJSON Batch\").first() by node name, so node names must survive import. Polling trigger state lives in workflow static data, which an export/import does not necessarily carry; verify the first poll on the new host at cutover so entries are neither re-shipped nor skipped. api.notion.com is implied by the Notion Trigger node type, not a literal. Sticky references the retired Gmail credential vsTKuAilHmpYCc5L; no node binds it. SMTP host inside credential mu7nJRSpkAfkzLdF. emailSend webhookId is internal, not a trigger. Settings carry availableInMCP true and binaryMode separate. No secret-looking literals found."
+  },
+  {
+   "id": "Oi7o1sTEqhxhOaJL",
+   "name": "DEVON Spine Conformance Executor (n8n)",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "9d0d1c21-cd47-4a27-b13d-be54b0ddda00",
+   "node_count": 7,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "none",
+   "trigger_summary": "Webhook: POST /webhook/devon-spine-n8n (node Envelope In (POST)), header auth, responds via Respond to Webhook node",
+   "webhooks": [
+    {
+     "node": "Envelope In (POST)",
+     "path": "devon-spine-n8n",
+     "method": "POST",
+     "auth": "headerAuth",
+     "credential_id": "FYRvkRTOcROEYZ9P"
+    }
+   ],
+   "host_refs": [
+    {
+     "node": "Report Entry to Bus",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-event"
+    },
+    {
+     "node": "Report Exit to Bus",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-event"
+    }
+   ],
+   "credentials": [
+    {
+     "node": "Envelope In (POST)",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Report Entry to Bus",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "Report Exit to Bus",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [],
+   "notes": "Both Cloud host occurrences are the mandatory double report to /webhook/devon-event (Event Bus, not in this batch), each neverError with text response. Advance Envelope writes $workflow.id into execution.workflow_id and into the trace note ('on workflow ' + $workflow.id), so if the import assigns a new workflow id on the self-hosted instance, ledger rows and traces produced after cutover will carry the new id; anything comparing against Oi7o1sTEqhxhOaJL must be updated. Return Envelope responds with an array of one envelope, a shape the Build 05 action router's Report Dispatch parses (per the Reconcile Exit Envelope comment). No errorWorkflow set. This is the organ the Job Driver reaches via HOST + 'devon-spine-n8n'."
+  },
+  {
+   "id": "qCfGZ1CwmpK9vOta",
+   "name": "DEVON Weekly Table Backup",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "16e6d18f-fad3-4da8-bde5-9684480ec135",
+   "node_count": 13,
+   "execution_order": "v1",
+   "error_workflow": "XDQXwgFkUhYxoEjG",
+   "save_success_executions": "default",
+   "trigger_summary": "Schedule: weekly on Sunday at 03:10 (node Weekly Backup, weeksInterval 1, triggerAtDay [0], triggerAtHour 3, triggerAtMinute 10; the workflow sets no timezone, the description says UTC)",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Send Backup Email",
+     "cred_type": "smtp",
+     "id": "mu7nJRSpkAfkzLdF",
+     "name": "SMTP account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [
+    {
+     "node": "Read Ledger",
+     "table_id": "VYyno7pDWmY6uxBz",
+     "operation": "get (returnAll)"
+    },
+    {
+     "node": "Read Feed Log",
+     "table_id": "QeoV4V4dYXXN8dBR",
+     "operation": "get (returnAll)"
+    },
+    {
+     "node": "Read Commit Log",
+     "table_id": "U9fnVy19Vc8kvQAw",
+     "operation": "get (returnAll)"
+    },
+    {
+     "node": "Read Heartbeat Log",
+     "table_id": "Adg1Gd9HML7Q4L3U",
+     "operation": "get (returnAll)"
+    }
+   ],
+   "external_hosts": [],
+   "notes": "No host literal anywhere. Its only instance coupling is the four Cloud data table ids (devon_state_ledger VYyno7pDWmY6uxBz, devon_build12_feed_log QeoV4V4dYXXN8dBR, devon_soul_commit_log U9fnVy19Vc8kvQAw, devon_heartbeat_log Adg1Gd9HML7Q4L3U), all of which need remapping on the new instance; Adg1Gd9HML7Q4L3U (heartbeat log) is referenced by no other workflow in this batch. approval_queue is excluded on purpose because its rows carry plaintext decision tokens; do not add it. The workflow description still says 'one Gmail with four attachments' but the send node is n8n-nodes-base.emailSend on SMTP credential mu7nJRSpkAfkzLdF; the sticky note names the retired Gmail credential vsTKuAilHmpYCc5L. Attachments ride in options.fileAttachments as an expression naming the binary properties (ledger, feed, commit, heartbeat). Sender and recipient tdveal74@gmail.com hardcoded; SMTP host is inside the credential. Description says it is registered in vault.py WORKFLOWS."
+  },
+  {
+   "id": "0soYvqnSKYlFn3gr",
+   "name": "DEVON _To Delete Auto-Purge (30d)",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "ca2b9b1c-0214-4f7b-9d04-d5b09a06a26b",
+   "node_count": 7,
+   "execution_order": "v1",
+   "error_workflow": "rqYmaQh91iCce8DJ",
+   "save_success_executions": "default",
+   "trigger_summary": "Schedule: weekly on Sunday at 10:00 America/New_York (Schedule Trigger 1.3, field weeks, triggerAtDay [0], triggerAtHour 10, node 'Sunday 10am'; workflow timezone setting America/New_York), plus a Manual Trigger 'Run Now' wired to the same first node.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Read _To Delete",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Move to Drive Trash",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Email the Summary",
+     "cred_type": "smtp",
+     "id": "mu7nJRSpkAfkzLdF",
+     "name": "SMTP account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "www.googleapis.com"
+   ],
+   "notes": "The live name carries an em dash ('DEVON _To Delete Auto-Purge (30d)'); the task listing omitted it, so any name-based match must use the dashed form. Scanned every node, settings and expressions: zero occurrences of either n8n host. Settings errorWorkflow rqYmaQh91iCce8DJ is not in this batch; it must exist under the same id on the target or the setting must be re-pointed, otherwise the error handler silently does nothing. Timezone America/New_York is set on the workflow itself so the fire time survives a different instance default. This workflow WRITES: Move to Drive Trash is Google Drive v3 file deleteFile with deletePermanently false (trash only), fileId from $json.id, onError continueRegularOutput. Read _To Delete is Google Drive v3 fileFolder search, queryString \"'1_woUEQcLmlW6VM6pjZrauStMRXP75Ui-' in parents and trashed = false\", returnAll, fields *. Age Filter Code node: 30 day hold, protect markers keep/evidence/locked/original/do-not-delete. Summary or Purge? If node routes kind=summary to email, else to trash. www.googleapis.com is implied by the Google Drive node type, not a literal. Google OAuth2 credential WMz320icjnur7rDL needs re-authorising on the new host (OAuth callback URL is host-bound). SMTP host inside credential mu7nJRSpkAfkzLdF. emailSend webhookId is internal, not a trigger. Settings carry availableInMCP true. No description field. No sticky notes. No secret-looking literals found."
+  },
+  {
+   "id": "5s6CwWWelffqszQe",
+   "name": "DEVON iPhone Inbox Capture",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "4a03e504-fdfc-4b4f-b09a-4f5804698843",
+   "node_count": 11,
+   "execution_order": "v1",
+   "error_workflow": "rqYmaQh91iCce8DJ",
+   "save_success_executions": "none",
+   "trigger_summary": "Webhook: POST /webhook/devon-inbox (node Capture In (POST), n8n-nodes-base.webhook v2.1), authentication headerAuth via credential FYRvkRTOcROEYZ9P (header name x-devon-key, value redacted), responseMode responseNode answered by the Confirm node (respondToWebhook, text)",
+   "webhooks": [
+    {
+     "node": "Capture In (POST)",
+     "path": "devon-inbox",
+     "method": "POST",
+     "auth": "headerAuth",
+     "credential_id": "FYRvkRTOcROEYZ9P"
+    }
+   ],
+   "host_refs": [
+    {
+     "node": "Enrich Area",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "api.cerebras.ai",
+     "snippet": "https://api.cerebras.ai/v1/chat/completions"
+    },
+    {
+     "node": "Index Capture",
+     "node_type": "n8n-nodes-base.airtable",
+     "field": "parameters.columns.value[\"Drive Link\"]",
+     "host": "drive.google.com",
+     "snippet": "={{ $json.webViewLink || ($json.id ? 'https://drive.google.com/file/d/' + $json.id + '/view' : '') }}"
+    }
+   ],
+   "credentials": [
+    {
+     "node": "Capture In (POST)",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "File into Drive",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Index Capture",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Write Note to Drive",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Enrich Area",
+     "cred_type": "httpHeaderAuth",
+     "id": "YTVk8Dq2gYPAmUim",
+     "name": "Cerebras Cloud"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "api.cerebras.ai",
+    "drive.google.com"
+   ],
+   "notes": "The counter was right and the reader was wrong on data_tables: no node of type n8n-nodes-base.dataTable exists in this workflow, and tbl4ziFRbl5mnUcKc is the Airtable table id inside Index Capture (n8n-nodes-base.airtable v2.1, resource record, operation create, base app28z7XnKzjfTXwc, parameter key table in id mode), which the reader filed under data_tables despite its own caveat that it is not an n8n Data Table. The reader also left host_refs empty while the JSON holds two literal host occurrences (api.cerebras.ai in the Enrich Area url and drive.google.com in the Index Capture Drive Link expression), so those are listed here; api.airtable.com and www.googleapis.com are implied by the Airtable and Google Drive node types but appear nowhere as strings, so external_hosts is trimmed to the two literals. Everything else in pass A checks out against the JSON: 11 nodes, no sticky notes, no executeWorkflow nodes, one HTTP Request node, errorWorkflow rqYmaQh91iCce8DJ, timezone America/New_York, saveDataSuccessExecution none, five credential bindings across four ids (Google Drive account bound twice). Neither thequietoperator.app.n8n.cloud nor n8n.editforge.online appears in any node or setting; the Cloud host shows only in the tool's derived triggerInfo, so the only instance binding is the webhook path devon-inbox and the iPhone Shortcuts calling it must be repointed by hand. Seven Google Drive folder ids are hardcoded in Route Capture; Index Capture has onError continueRegularOutput; Enrich Area uses fullResponse and neverError with a 20s timeout, and Apply Area falls back to keyword tagging on a non-200."
+  },
+  {
+   "id": "rqYmaQh91iCce8DJ",
+   "name": "OS Error Handler (all pipelines)",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "57bc44cf-d3aa-4718-9b8e-d26e7f0ccf0b",
+   "node_count": 5,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Error Trigger only (node 'Error Trigger', n8n-nodes-base.errorTrigger): fires when a workflow whose settings.errorWorkflow names this id fails. No schedule, webhook, chat, manual or execute-workflow trigger.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Send Email Alert",
+     "cred_type": "smtp",
+     "id": "mu7nJRSpkAfkzLdF",
+     "name": "SMTP account"
+    },
+    {
+     "node": "Log to Maintenance",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "api.airtable.com"
+   ],
+   "notes": "Read from the settings of the other six workflows in this census: ALL six (o4ctniOsIq2VSfgm, Zbq6gS77PRauqb1I, v6E12rr1fg1azVHi, TL6ssgJjJLdvxrUp, wl6XAUp84fiq50sj, QaXpPiVFubsOkDD1) set errorWorkflow to this id, which contradicts this workflow's own description ('TSWS is deliberately NOT pointed here'). Every errorWorkflow reference must resolve to this workflow's id on the new instance: preserve ids on import or repoint all six. Log to Maintenance is an HTTP Request node (not an Airtable node) POSTing to api.airtable.com base app28z7XnKzjfTXwc table tbloLNpzdGWgqacuI using the predefined airtableTokenApi credential type; the Code comment records an earlier homoglyph typo in that table id. Send Email Alert has fromEmail and toEmail hardcoded as literals to the owner's Gmail address. Classify Failure keeps the one-email-per-signature-per-hour throttle in $getWorkflowStaticData('global').seen; static data is not part of a workflow export, so throttle state resets on migration. The executionUrl in the email body is read from the Error Trigger payload at runtime, not a literal, so it will point at whichever host runs the failing workflow. Classify Failure's refusal list references '/webhook/system-resume' as a path only (no host) and names a 'Check Token' node and LEGACY_GRACE flag that live in another workflow outside this census. Settings: callerPolicy workflowsFromSameOwner, binaryMode separate, availableInMCP true; activeVersion sameAsDraft true."
+  },
+  {
+   "id": "o4ctniOsIq2VSfgm",
+   "name": "TSWS 00 Render Job (sub-workflow)",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "5fbcdbf9-3d30-427f-a758-a1e79e59f531",
+   "node_count": 13,
+   "execution_order": "v1",
+   "error_workflow": "rqYmaQh91iCce8DJ",
+   "save_success_executions": "default",
+   "trigger_summary": "Executed by another workflow only: Execute Workflow Trigger 'When Called' (n8n-nodes-base.executeWorkflowTrigger v1, no declared inputs, accepts {type, params, poll_seconds?, max_polls?}). Called by TSWS 01, 02, 03, 04 and 05. No schedule, webhook, chat or manual trigger.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Submit Job",
+     "cred_type": "httpHeaderAuth",
+     "id": "b9FYEfGUlMiYJCCU",
+     "name": "Header Auth account 10"
+    },
+    {
+     "node": "Poll Job",
+     "cred_type": "httpHeaderAuth",
+     "id": "b9FYEfGUlMiYJCCU",
+     "name": "Header Auth account 10"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "RENDER-WORKER-URL-HERE",
+    "render.example.com"
+   ],
+   "notes": "Both HTTP Request nodes still carry the literal placeholder host in parameters.url: Submit Job POSTs to 'https://RENDER-WORKER-URL-HERE/jobs' and Poll Job GETs '=https://RENDER-WORKER-URL-HERE/jobs/{{ $('Submit Job').first().json.body.id }}'. The placeholder has never been replaced; the sticky note 'Sticky Note - Contract' (rev 3, 7 Aug 2026) says the smoke test 'has never once succeeded'. The sticky explains the hardcode: $vars is a paid-tier feature on this Cloud plan and $env is denied inside nodes, so on the self-hosted instance the worker URL can move to an environment variable or n8n variable instead of two hand-edited literals. external_hosts lists the placeholder string because it is literally what the two nodes would try to resolve; render.example.com appears only as an example inside the sticky note. Both HTTP nodes bind the same httpHeaderAuth credential (id b9FYEfGUlMiYJCCU); the sticky says its value must be a header named Authorization carrying 'Bearer <token>'; credential values are not in the export and must be recreated on the new instance. Wait To Poll (n8n-nodes-base.wait 1.1) resumes on a timer with an expression amount ($('Prep Request').first().json.poll_seconds) and carries webhookId 9d508f6c-e4d9-4033-b3bf-49871e2948e4, so the new instance needs a correct WEBHOOK_URL for resume. Poll budget defaults to 6h (max_polls = ceil(21600 / poll_seconds)) and is counted with $runIndex in Count Poll. This id is the target of 27 Execute Workflow nodes in this census (01: 6, 02: 9, 03: 3, 04: 5, 05: 4), so it must be preserved on import or all 27 callers repointed. Settings have no callerPolicy; binaryMode separate; activeVersion sameAsDraft true."
+  },
+  {
+   "id": "Zbq6gS77PRauqb1I",
+   "name": "TSWS 01 Post-Production Master",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "23878ae0-37ef-4168-8203-58eb5c52690f",
+   "node_count": 47,
+   "execution_order": "v1",
+   "error_workflow": "rqYmaQh91iCce8DJ",
+   "save_success_executions": "default",
+   "trigger_summary": "Three trigger nodes: Schedule Trigger 'Scan Every 5 Minutes' (rule: every 5 minutes) which is disabled=true in both the draft and the published version; Manual Trigger 'Run Manually'; and Execute Workflow Trigger 'Pause Signal (from TQO pipeline)' (typeVersion 1.1, declared inputs op, reason, by) invoked by the shared TQO pipeline's pause/resume path. With the schedule disabled nothing starts episode work automatically on Cloud.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [],
+   "execute_workflow_targets": [
+    {
+     "node": "Scan Drop Folder",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Read Manifest",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Detail Recovery",
+     "workflow_id": "wl6XAUp84fiq50sj",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Visual Assembly",
+     "workflow_id": "TL6ssgJjJLdvxrUp",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Narration & Sound Bed",
+     "workflow_id": "v6E12rr1fg1azVHi",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Render Mark Layer",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Composite + Mux Master",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Conform & Grain",
+     "workflow_id": "QaXpPiVFubsOkDD1",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Write Done Marker + Log",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Render Thumbnail",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    }
+   ],
+   "data_tables": [],
+   "external_hosts": [],
+   "notes": "Draft and published version differ: versionId 23878ae0-37ef-4168-8203-58eb5c52690f (draft, returned as workflow.nodes) vs activeVersionId 6099cce0-ed8e-4cbc-a110-0ea47d8f50e0 (published), sameAsDraft false. Diffed node by node: connections identical, 46 of 47 nodes identical, the only change is Build Packaging's jsCode where the draft adds a sixth OS 28 gate 'qc' (manifest qc_verdict 'SHIP' or 'WAIVED' passes, otherwise needs_human) that the published version lacks. Decide which version migrates. The Schedule Trigger has disabled: true in both versions; do not assume re-enabling it on the new host is intended. All ten Execute Workflow nodes reference their target by workflowId in resource-locator mode 'list' with a cachedResultName; the four pipeline calls pass the whole item through with no workflowInputs mapping (Detail Recovery in mode 'each', one sub-execution per generated clip; Visual Assembly, Narration & Sound Bed, Conform & Grain in mode 'once'), while the six calls to 00 map type/params explicitly. All five target ids must be preserved on import or remapped. The Pause Signal trigger is invoked by the shared TQO pipeline (not in this census) whose /webhook/system-pause and /webhook/system-resume paths are named in Build Scan Command comments (paths only, no host); that caller must be repointed to this workflow's new id. Pause state lives in $getWorkflowStaticData('global') (systemPause, pausedAt, pauseReason, pausedBy) and does not export. Sticky note 9077ea1f says 'create the Render Worker Header Auth credential and set RENDER_WORKER_URL', which is stale against 00's sticky (no $vars on Cloud; the URL is a hardcoded placeholder in 00). Every file path is absolute on the render box under workdir, default /data/tsws. No credentials, webhooks, data tables, host literals or external hosts anywhere in the 47 nodes. Settings callerPolicy workflowsFromSameOwner, saveManualExecutions true."
+  },
+  {
+   "id": "v6E12rr1fg1azVHi",
+   "name": "TSWS 02 Narration & Sound Bed",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "4d130133-0a53-4295-b2ca-f285c001b9f7",
+   "node_count": 42,
+   "execution_order": "v1",
+   "error_workflow": "rqYmaQh91iCce8DJ",
+   "save_success_executions": "default",
+   "trigger_summary": "Executed by another workflow only: Execute Workflow Trigger 'Receive Audio Job' (v1, no declared inputs), called by TSWS 01 node 'Narration & Sound Bed' in mode once. No schedule, webhook, chat or manual trigger.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [],
+   "execute_workflow_targets": [
+    {
+     "node": "Measure Narration (pass 1)",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Normalise Narration (pass 2)",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Detect Protected Silence",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Duck Bed + Mix",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Measure Mix (pass 1)",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Master to Target LUFS (pass 2)",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Verify Loudness",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Verify Protected Silence",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Append To Audio Log",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    }
+   ],
+   "data_tables": [],
+   "external_hosts": [],
+   "notes": "All nine Execute Workflow nodes target 00 (o4ctniOsIq2VSfgm) by workflowId in list mode with type/params mapped via workflowInputs, so the 00 id must be preserved or nine nodes repointed. No credentials, webhooks, data tables, host literals or external hosts; every media operation leaves as {type, params} for the render worker and all paths are absolute under workdir (default /data/tsws). Sticky note ba90e4ea says house_style.json on the render box must agree with the -14 LUFS target. Settings callerPolicy workflowsFromSameOwner, saveManualExecutions true; activeVersion sameAsDraft true."
+  },
+  {
+   "id": "TL6ssgJjJLdvxrUp",
+   "name": "TSWS 03 Visual Assembly",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "787d10cd-43ae-4a48-b191-eb87b99b23d6",
+   "node_count": 19,
+   "execution_order": "v1",
+   "error_workflow": "rqYmaQh91iCce8DJ",
+   "save_success_executions": "default",
+   "trigger_summary": "Executed by another workflow only: Execute Workflow Trigger 'Receive Assembly Job' (v1, no declared inputs), called by TSWS 01 node 'Visual Assembly' in mode once. No schedule, webhook, chat or manual trigger.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [],
+   "execute_workflow_targets": [
+    {
+     "node": "Assemble Cut",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Probe Duration",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Append To Assembly Log",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    }
+   ],
+   "data_tables": [],
+   "external_hosts": [],
+   "notes": "All three Execute Workflow nodes target 00 (o4ctniOsIq2VSfgm) by workflowId in list mode with type/params mapped. No credentials, webhooks, data tables, host literals or external hosts. Shim: Probe Duration routes both its success and error outputs to Evaluate Duration Gate. Paths absolute under workdir (default /data/tsws). Settings callerPolicy workflowsFromSameOwner, saveManualExecutions true; activeVersion sameAsDraft true."
+  },
+  {
+   "id": "wl6XAUp84fiq50sj",
+   "name": "TSWS 04 Detail Recovery (EditForge)",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "664ced38-bc4e-4fc7-a1aa-f25b627cf669",
+   "node_count": 27,
+   "execution_order": "v1",
+   "error_workflow": "rqYmaQh91iCce8DJ",
+   "save_success_executions": "default",
+   "trigger_summary": "Executed by another workflow only: Execute Workflow Trigger 'Receive Recovery Job' (v1, no declared inputs), called by TSWS 01 node 'Detail Recovery' in mode each (one execution per generated clip). No schedule, webhook, chat or manual trigger.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [],
+   "execute_workflow_targets": [
+    {
+     "node": "Probe Artifact Cache",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Probe Source Layer",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Restore Layer",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "QC Restored Layer",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Append To Recovery Log",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    }
+   ],
+   "data_tables": [],
+   "external_hosts": [],
+   "notes": "All five Execute Workflow nodes target 00 (o4ctniOsIq2VSfgm) by workflowId in list mode with type/params mapped. No credentials, webhooks, data tables, host literals or external hosts; sticky 'Note contract' states no API key, credits or third party, everything runs on the render worker. Build Params mirrors the finish block of editforge31/config/house_style.json, which lives on the render box, not in n8n. Paths absolute under workdir (default /data/tsws). Settings callerPolicy workflowsFromSameOwner, saveManualExecutions true; activeVersion sameAsDraft true."
+  },
+  {
+   "id": "QaXpPiVFubsOkDD1",
+   "name": "TSWS 05 Conform & Grain",
+   "active": true,
+   "readable": true,
+   "read_error": "",
+   "version_id": "9f0c48e6-a0df-4430-92e3-339c19bf4bf5",
+   "node_count": 25,
+   "execution_order": "v1",
+   "error_workflow": "rqYmaQh91iCce8DJ",
+   "save_success_executions": "default",
+   "trigger_summary": "Executed by another workflow only: Execute Workflow Trigger 'Receive Conform Job' (v1, no declared inputs), called by TSWS 01 node 'Conform & Grain' in mode once. No schedule, webhook, chat or manual trigger.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [],
+   "execute_workflow_targets": [
+    {
+     "node": "Probe Artifact Cache",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Conform + Grain (single encode pass)",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Measure PSNR vs Native Ref",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Append To Conform Log",
+     "workflow_id": "o4ctniOsIq2VSfgm",
+     "how": "workflowId parameter"
+    }
+   ],
+   "data_tables": [],
+   "external_hosts": [],
+   "notes": "All four Execute Workflow nodes target 00 (o4ctniOsIq2VSfgm) by workflowId in list mode with type/params mapped; their cachedResultName reads 'TSWS 00 - Render Job (sub-workflow)' with a hyphen rather than the em dash in 00's actual name, cosmetic only since the id is what resolves. No credentials, webhooks, data tables, host literals or external hosts. Optionally ingests an EditForge plan object on the input item (plan.execute_with.job must be conform_grain, editforge_version must start with '3.') and refuses cuts that carry no measured protected_windows. Paths absolute under workdir (default /data/tsws). Settings have no callerPolicy; binaryMode separate; activeVersion sameAsDraft true."
+  },
+  {
+   "id": "BSMAEOeWciqKbaFs",
+   "name": "Cerebras Smoke Test",
+   "active": false,
+   "readable": true,
+   "read_error": "",
+   "version_id": "a321db23-9fca-44b0-b413-14495b01d54b",
+   "node_count": 5,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Manual trigger only (node 'Run Smoke Test'); no schedule, webhook or chat trigger.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Cerebras Chat",
+     "cred_type": "httpHeaderAuth",
+     "id": "YTVk8Dq2gYPAmUim",
+     "name": "Cerebras Cloud"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "api.cerebras.ai"
+   ],
+   "notes": "Throwaway per its sticky note and description: proves the Cerebras Cloud header credential end to end (POST https://api.cerebras.ai/v1/chat/completions, model gpt-oss-120b) and is meant to be deleted once enrichment is wired into DEVON iPhone Inbox Capture. Cerebras Chat sends only a Content-Type header in headerParameters; the API key lives in the credential, not in the JSON. Node has onError continueRegularOutput and neverError/fullResponse so the Verify Response Code node reads the status itself. Neither Cloud nor self-hosted host appears anywhere in the workflow. Sticky note 'Sticky Note beb63e2a' references api.cerebras.ai only."
+  },
+  {
+   "id": "pm5hoO4eFpGhlAb4",
+   "name": "DEVON Build 08 Credential Probe (throwaway)",
+   "active": false,
+   "readable": true,
+   "read_error": "",
+   "version_id": "4e5ef03b-6be0-4db8-aa52-eb64a88acdae",
+   "node_count": 4,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Manual trigger only (node 'Start'); no schedule, webhook or chat trigger.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Probe Identity",
+     "cred_type": "httpHeaderAuth",
+     "id": "WCF2WR8TnuJ9F6QF",
+     "name": "GitHub"
+    },
+    {
+     "node": "Probe Repositories",
+     "cred_type": "httpHeaderAuth",
+     "id": "WCF2WR8TnuJ9F6QF",
+     "name": "GitHub"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "api.github.com"
+   ],
+   "notes": "Throwaway probe, description says 'Not an organ, not monitoring'; candidate for not migrating. Two HTTP Request nodes GET https://api.github.com/user and https://api.github.com/user/repos?per_page=100&sort=full_name&affiliation=owner,collaborator,organization_member with headers Accept, User-Agent devon-build08-probe and X-GitHub-Api-Version 2022-11-28; the Authorization header comes from the GitHub httpHeaderAuth credential, not the JSON. Both nodes have onError continueRegularOutput, neverError and fullResponse. 'Probe Report' Code node carries a hardcoded FROM_SCREENSHOT list of six tdveal74-cell repository full names (including tdveal74-cell/EditForge, which is a repo name, not the n8n.editforge.online host). The workflow description as stored is truncated mid-sentence ('...Not an')."
+  },
+  {
+   "id": "Cbd24ptTPWch3aZO",
+   "name": "DEVON Capture Hook",
+   "active": false,
+   "readable": true,
+   "read_error": "",
+   "version_id": "ea4b1d52-17c1-441c-8d60-c47cf91e337c",
+   "node_count": 4,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Webhook: POST /webhook/devon-capture-file with n8n header auth (header x-devon-key per the sticky note, credential Devon Capture Key); called by an iOS Shortcut.",
+   "webhooks": [
+    {
+     "node": "Capture Hook",
+     "path": "devon-capture-file",
+     "method": "POST",
+     "auth": "headerAuth",
+     "credential_id": "FYRvkRTOcROEYZ9P"
+    }
+   ],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Capture Hook",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "File To DEVON Vault",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "www.googleapis.com"
+   ],
+   "notes": "The Cloud host is not stored in the workflow JSON; the tool's computed production URL is https://thequietoperator.app.n8n.cloud/webhook/devon-capture-file, so the caller (the iOS Shortcut) holds the host and must be repointed. Webhook node webhookId is 37b341e8-8701-456f-a173-3ecb4c7b8c15; path is explicit so the URL is path-based. Webhook options: binaryPropertyName data, binaryData true, ignoreBots true, responseMode lastNode / firstEntryJson. Workflow settings carry binaryMode 'separate', which must be preserved on import. Uploads to Google Drive folder id 1ZusR2B7GWMf2MsCipgb5srZ8mS5z4F0B (00_Capture Inbox) with filenames prefixed CAPTURE_. Sticky note warns the path 'devon-capture' belongs to cross-platform receipts and must not be reused here. www.googleapis.com is implicit via the Google Drive node type, not a literal in the JSON."
+  },
+  {
+   "id": "ktZ0fnrgxvCNY9xH",
+   "name": "DEVON End to End Watch Harness",
+   "active": false,
+   "readable": true,
+   "read_error": "",
+   "version_id": "f8245fec-d55b-4104-8041-5c8b2a25ad2c",
+   "node_count": 11,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Manual trigger only (node 'Start'); Tee taps Execute; no schedule, webhook or chat trigger.",
+   "webhooks": [],
+   "host_refs": [
+    {
+     "node": "A1 Spine",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-spine-n8n"
+    },
+    {
+     "node": "A2 Runtime",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-runtime"
+    },
+    {
+     "node": "A3 Route",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-route"
+    },
+    {
+     "node": "A4 Action",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-action"
+    },
+    {
+     "node": "B1 Spine",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-spine-n8n"
+    },
+    {
+     "node": "B2 Runtime",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-runtime"
+    },
+    {
+     "node": "B3 Route",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-route"
+    },
+    {
+     "node": "A5 EditForge",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "thequietoperator.app.n8n.cloud",
+     "snippet": "https://thequietoperator.app.n8n.cloud/webhook/devon-editforge"
+    }
+   ],
+   "credentials": [
+    {
+     "node": "A1 Spine",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "A2 Runtime",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "A3 Route",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "A4 Action",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "B1 Spine",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "B2 Runtime",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "B3 Route",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    },
+    {
+     "node": "A5 EditForge",
+     "cred_type": "httpHeaderAuth",
+     "id": "FYRvkRTOcROEYZ9P",
+     "name": "Devon Capture Key"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [],
+   "notes": "All eight HTTP Request nodes hardcode the Cloud host as a plain string in parameters.url (not built from a constant, not an expression); the paths are the production webhooks of five organ workflows: devon-spine-n8n (A1, B1), devon-runtime (A2, B2), devon-route (A3, B3), devon-action (A4), devon-editforge (A5). After migration every url must be rewritten to the self-hosted host and those five organ workflows must be active there first. All eight calls authenticate with the Devon Capture Key header credential; all have onError continueRegularOutput, neverError and a 30s timeout. Running this harness is not read-only: it mints fresh ULID envelopes each run and drives them through the organs, which write to the state ledger and submit a mock EditForge job (provider mock, kind voice). A5 EditForge carries a node-level notes field (not parameters) explaining it bypasses Build 05 because Build 05 dispatches in AUTHORIZED and Build 07 accepts EXECUTING only. The two Code nodes (Mint Envelopes, Watch Report) contain no host literal. No sticky notes in this workflow."
+  },
+  {
+   "id": "we45pHkQHRmSRnZx",
+   "name": "DEVON Learning Lane Table Reader",
+   "active": false,
+   "readable": true,
+   "read_error": "",
+   "version_id": "9026d3ac-f40b-4e24-a1df-b502deebe3a4",
+   "node_count": 6,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Manual trigger only (node 'Run Check'), fanning out to four Data Table reads; no schedule, webhook or chat trigger.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [],
+   "execute_workflow_targets": [],
+   "data_tables": [
+    {
+     "node": "Read Commit Log",
+     "table_id": "U9fnVy19Vc8kvQAw",
+     "operation": "row get (returnAll true)"
+    },
+    {
+     "node": "Read Feed Log",
+     "table_id": "QeoV4V4dYXXN8dBR",
+     "operation": "row get (returnAll true)"
+    },
+    {
+     "node": "Read State Ledger",
+     "table_id": "VYyno7pDWmY6uxBz",
+     "operation": "row get (returnAll true)"
+    },
+    {
+     "node": "Read Heartbeat Log",
+     "table_id": "Adg1Gd9HML7Q4L3U",
+     "operation": "row get (returnAll true)"
+    }
+   ],
+   "external_hosts": [],
+   "notes": "All four nodes are n8n-nodes-base.dataTable v1.1 with dataTableId in __rl id mode and executeOnce true; they bind no credential. Data table ids are instance-local, so the four tables must exist on the self-hosted instance and each node re-bound to the new ids. The sticky note names the tables as devon_soul_commit_log, devon_build12_feed_log, devon_state_ledger and devon_heartbeat_log; the id-to-name mapping is inferred from node names and sticky order only, not verified against the table catalogue. Sticky note (n8n-nodes-base.stickyNote) states this workflow deliberately never reads the approval_queue table because its rows carry plaintext decision tokens and this workflow persists execution data; do not add a queue read. Also used by the daily Reflection session (Build 13)."
+  },
+  {
+   "id": "ocU2Zep8WyRmbsIk",
+   "name": "DEVON Master Index",
+   "active": false,
+   "readable": true,
+   "read_error": "",
+   "version_id": "f012fc3b-7199-486e-b8cb-c26c69277602",
+   "node_count": 7,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Manual trigger only (node 'Build Index'); no schedule, webhook or chat trigger.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "All Folders",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "All Files",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Write MASTER_INDEX.md",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "www.googleapis.com"
+   ],
+   "notes": "Writes Google Drive: 'Write MASTER_INDEX.md' is a file update in place against fixed fileId 1UzIic07dwGKpfkgqxem0j21cGCsP8sXZ in folder 1IRamTK0jDCgT0W8LMgsUntAsxR4oTERO (changeFileContent true, inputDataFieldName data, plus a content expression); the description rules it must never be changed back to a create operation because that minted duplicate index files. 'Compose Index' Code node hardcodes Drive folder ids ROOT 1qR2TpfRQG5-ACbNNG77srYyiRTbJwlDn (TSWS MASTER - canonical) and PEN 1_woUEQcLmlW6VM6pjZrauStMRXP75Ui-. Two Drive searches (All Folders, All Files) return all items with fields * and are appended by a Merge node. Flow is Compose Index -> To File (convertToFile toText, MASTER_INDEX.md, text/markdown) -> Write MASTER_INDEX.md. www.googleapis.com is implicit via the Google Drive node type."
+  },
+  {
+   "id": "Epcmuep1JnBaSrrr",
+   "name": "DEVON Purge List (manual)",
+   "active": false,
+   "readable": true,
+   "read_error": "",
+   "version_id": "3a23929b-19c8-4e20-8e50-da71f5d5ba37",
+   "node_count": 3,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Manual trigger only (node 'Run Purge'); no schedule, webhook or chat trigger.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Move to _To Delete",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "www.googleapis.com"
+   ],
+   "notes": "'Purge List' Code node carries a hardcoded FILE_IDS array of eight Google Drive file ids left over from the 5 Aug 2026 run; executing it after migration would re-move those same ids. 'Move to _To Delete' moves each fileId (expression from $json.fileId) into Drive folder 1_woUEQcLmlW6VM6pjZrauStMRXP75Ui- with onError continueRegularOutput; it never hard-deletes. www.googleapis.com is implicit via the Google Drive node type."
+  },
+  {
+   "id": "vYr35jqNNaAztGhQ",
+   "name": "DEVON Soul Index Setup (one-shot)",
+   "active": false,
+   "readable": true,
+   "read_error": "",
+   "version_id": "252416d7-004b-4150-8646-ac7fec859a7b",
+   "node_count": 7,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Webhook: POST /webhook/devon-soul-setup-<16 character suffix, elided> with no n8n authentication; the request body must carry a setup_token that the 'Gate' Code node compares to a hardcoded literal.",
+   "webhooks": [
+    {
+     "node": "Setup In (POST)",
+     "path": "devon-soul-setup-<16 character suffix, elided>",
+     "method": "POST",
+     "auth": "none",
+     "credential_id": ""
+    }
+   ],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Create Index",
+     "cred_type": "pineconeApi",
+     "id": "3XjKfxbS7zFWEa48",
+     "name": "Pinecone account"
+    },
+    {
+     "node": "Describe Index",
+     "cred_type": "pineconeApi",
+     "id": "3XjKfxbS7zFWEa48",
+     "name": "Pinecone account"
+    },
+    {
+     "node": "Email Host",
+     "cred_type": "gmailOAuth2",
+     "id": "vsTKuAilHmpYCc5L",
+     "name": "Gmail account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "api.pinecone.io",
+    "www.googleapis.com"
+   ],
+   "notes": "One-shot setup, description says it was unpublished after its single run; it is a candidate for not migrating at all. The 'Gate' Code node holds a plaintext 40-character setup token literal (redacted here) and throws REFUSED on mismatch; the webhook path also carries a 16-hex-character obscurity suffix. Webhook node webhookId c8a04765-0f4f-47ae-a423-5644ff124910, responseMode responseNode (answered by 'Confirm' respondToWebhook). Create Index POSTs https://api.pinecone.io/indexes/create-for-model with a JSON body naming index devon-soul (aws, us-east-1, llama-text-embed-v2, cosine) and header X-Pinecone-API-Version 2025-04; Describe Index GETs https://api.pinecone.io/indexes/devon-soul; both use the predefined pineconeApi credential. 'Email Host' sends the resulting host to Tee's Gmail address (sendTo parameter) with senderName DEVON Soul Setup. The Cloud host is not in the JSON; the tool-computed production URL is on thequietoperator.app.n8n.cloud. www.googleapis.com is implicit via the Gmail node type."
+  },
+  {
+   "id": "mhI1YAoqrITtuB1M",
+   "name": "DEVON Vault Comparison",
+   "active": false,
+   "readable": true,
+   "read_error": "",
+   "version_id": "0ca4042a-956a-407d-99ca-873c3cf75878",
+   "node_count": 6,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Manual trigger only (node 'Compare Vault'); no schedule, webhook or chat trigger.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Scan All Files",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Write Report",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Log Vault Conflict",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "www.googleapis.com",
+    "api.airtable.com"
+   ],
+   "notes": "Scans every non-folder file in Drive (fields *, returnAll), applies the precedence doctrine in the 'Apply Precedence' Code node, then an If node ('Report or Conflict?', $json.kind equals report) splits: true branch 'Write Report' creates a text file SYS_LOG_vault-comparison_v2_<date>.md in Drive folder 17chQD2DTfzbnZy2oGwiJxEk7PHvnstBp; false branch 'Log Vault Conflict' creates Airtable records in base app28z7XnKzjfTXwc table tblbenoy1QF9KAftn (parameter key is 'table', an external Airtable table, so not listed under data_tables) with typecast true and onError continueRegularOutput. Moves nothing. The Code node embeds Tee's 5 Aug and 6 Aug 2026 precedence rulings as comments. www.googleapis.com and api.airtable.com are implicit via the Google Drive and Airtable node types, not literals in the JSON."
+  },
+  {
+   "id": "svqHaaMzZPeGee8e",
+   "name": "DT Bootstrap Tables (TQO Migration S1a)",
+   "active": false,
+   "readable": true,
+   "read_error": "",
+   "version_id": "749f0dcd-0418-424f-b771-da0f5b25993a",
+   "node_count": 10,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Manual trigger only (node 'Start', n8n-nodes-base.manualTrigger, typeVersion 1). triggerCount 0, activeVersionId null; nothing fires on its own.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [],
+   "execute_workflow_targets": [],
+   "data_tables": [
+    {
+     "node": "Drop tqo_content",
+     "table_id": "tqo_content",
+     "operation": "table delete (dataTableId __rl mode=name)"
+    },
+    {
+     "node": "Drop nco_content",
+     "table_id": "nco_content",
+     "operation": "table delete (dataTableId __rl mode=name)"
+    },
+    {
+     "node": "Create tqo_content",
+     "table_id": "tqo_content",
+     "operation": "table create (tableName parameter, 53 columns: 46 string + 7 number, createIfNotExists=true)"
+    },
+    {
+     "node": "Create nco_content",
+     "table_id": "nco_content",
+     "operation": "table create (tableName parameter, 53 columns identical to tqo_content, createIfNotExists=true, executeOnce=true)"
+    },
+    {
+     "node": "Seed Test Idea",
+     "table_id": "tqo_content",
+     "operation": "row insert (dataTableId mode=name; brand TQO, content_id SMOKE-001, status Idea)"
+    },
+    {
+     "node": "Read Idea Rows",
+     "table_id": "tqo_content",
+     "operation": "row get (dataTableId mode=name; status eq Idea, returnAll)"
+    },
+    {
+     "node": "Mark Smoke Done",
+     "table_id": "tqo_content",
+     "operation": "row update (dataTableId mode=name; match id = {{ $json.id }}; sets status SmokeDone, last_feedback)"
+    },
+    {
+     "node": "Verify Update",
+     "table_id": "tqo_content",
+     "operation": "row get (dataTableId mode=name; status eq SmokeDone, returnAll)"
+    },
+    {
+     "node": "Probe Undefined Clobber",
+     "table_id": "tqo_content",
+     "operation": "row update (dataTableId mode=name; match id = {{ $json.id }}; writes notes from {{ $json.__does_not_exist }} to probe clobbering, status ProbeDone)"
+    }
+   ],
+   "external_hosts": [],
+   "notes": "Pass A (reader) was wrong on the id set: it appended the descriptive tag \"(dataTableId mode name)\" into the table_id string for the seven dataTableId nodes, which turned two real identifiers into four distinct strings; the JSON holds exactly two table identifiers, tqo_content and nco_content, every reference is by name (never numeric), and pass B (counter) had that right. The reader's per-node facts were otherwise correct, except its column type split: both create nodes define 53 columns each (script-counted, lists identical, no duplicate names) but the split is 46 string and 7 number, not 44 and 9; the workflow description's \"31 columns each\" is also stale. Wired path from Start: Drop tqo_content -> Drop nco_content -> Create tqo_content -> Create nco_content -> Seed Test Idea -> Read Idea Rows -> Mark Smoke Done -> Verify Update -> Probe Undefined Clobber, so running it deletes both tables before recreating them and any existing rows are lost. No credentials, no HTTP Request or Code nodes, no webhooks, no sticky notes, no host literals, no secret-looking values. settings.availableInMCP=true, no errorWorkflow set, saveDataSuccessExecution unset (default), meta.aiBuilderAssisted=true."
+  },
+  {
+   "id": "1Udz2KOjV4omNjax",
+   "name": "Directory v6 Correction",
+   "active": false,
+   "readable": true,
+   "read_error": "",
+   "version_id": "c726f55d-d14a-44fb-95ac-5df68f72cc3e",
+   "node_count": 7,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Manual trigger only (node 'Run', n8n-nodes-base.manualTrigger); no schedule, webhook, chat or execute-workflow entry.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Get v6",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Get Core",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Get Open",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Write Back",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "www.googleapis.com"
+   ],
+   "notes": "Manual one-shot Drive editor, already run 22 Aug 2026 per its description. Three HTTP GETs read Drive files by hard-coded file id (www.googleapis.com/drive/v3/files/<id>?alt=media): 1sSnB7tdXhf7ECAknNgE_tINrmJ1maUg_ (directory v6), 1cCTPUiCYA3CVNg1FN5GrGsOVkRYFzggl (core section), 1VC4nunY06fbL2hUtbGdtKyNAHJ5Orb9d (open section). Code node 'Correct v6' splices, then 'Write Back' HTTP PATCHes www.googleapis.com/upload/drive/v3/files/1sSnB7tdXhf7ECAknNgE_tINrmJ1maUg_?uploadType=media, so a run WRITES to Google Drive in place. Code guards throw before the write on re-run (for example it refuses if the v1 filing-laws reference is absent or the doc is not v6). All four HTTP nodes use predefinedCredentialType googleDriveOAuth2Api with onError=continueRegularOutput and neverError, so HTTP failures surface only in the 'Report' Code node output. The Drive OAuth2 credential needs re-consent on the new host because the OAuth callback URL changes. settings.availableInMCP=true. No sticky notes, no expressions referencing either n8n host."
+  },
+  {
+   "id": "tx0QTS8DlFJ3EH3Q",
+   "name": "Filing Laws v2",
+   "active": false,
+   "readable": true,
+   "read_error": "",
+   "version_id": "1190bcc0-98ac-4688-9268-9629f9f14dea",
+   "node_count": 5,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Manual trigger only (node 'Run', n8n-nodes-base.manualTrigger).",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Get Laws",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Write Back",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "www.googleapis.com"
+   ],
+   "notes": "Manual one-shot, run 22 Aug 2026. 'Get Laws' HTTP GETs Drive file 1YxrdXHqlT5kkdzWey5qO_21KbVDQd9ID, Code node 'Add Law 8' inserts Law 8 and rewrites Part 2, 'Write Back' HTTP PATCHes the same file id via the Drive upload endpoint (writes to Google Drive in place, bumps 'version: 1.0' to 'version: 2'). Guard throws 'Law 8 already present' so a re-run refuses before writing. Superseded in practice by 'Filing Laws v3 Merge' (USU9PjlT7M6ocgkD), which wrote v3 onto this same file id. HTTP nodes: predefinedCredentialType googleDriveOAuth2Api, onError=continueRegularOutput, neverError. Drive OAuth2 credential needs re-consent on the new host. settings.availableInMCP=true. No sticky notes."
+  },
+  {
+   "id": "USU9PjlT7M6ocgkD",
+   "name": "Filing Laws v3 Merge",
+   "active": false,
+   "readable": true,
+   "read_error": "",
+   "version_id": "87089bad-7f4f-4fcf-b581-7a5971a5bab5",
+   "node_count": 5,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Manual trigger only (node 'Run', n8n-nodes-base.manualTrigger).",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Get Theirs",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Write To Canon Id",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "www.googleapis.com"
+   ],
+   "notes": "Manual one-shot, run 22 Aug 2026. 'Get Theirs' HTTP GETs Drive file 12ihUn_OoUwa4heFwfKhiX1NMD0hYSAFK (the competing v2), Code node 'Combine to v3' delegates Part 2 and appends the fork record, 'Write To Canon Id' HTTP PATCHes a DIFFERENT file, 1YxrdXHqlT5kkdzWey5qO_21KbVDQd9ID (the canon id), via the Drive upload endpoint (writes to Google Drive). No 'already merged' guard: the Part 2 and fork-note edits are conditional, but a re-run still PATCHes the canon file with whatever it read from the source id. HTTP nodes: predefinedCredentialType googleDriveOAuth2Api, onError=continueRegularOutput, neverError. Drive OAuth2 credential needs re-consent on the new host. settings.availableInMCP=true. No sticky notes."
+  },
+  {
+   "id": "mMaWH5T2sXovJpNC",
+   "name": "Naming v4 Capability Clause",
+   "active": false,
+   "readable": true,
+   "read_error": "",
+   "version_id": "0384737d-e384-4326-b3ad-8764b136d247",
+   "node_count": 5,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Manual trigger only (node 'Run', n8n-nodes-base.manualTrigger).",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Get Doc",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Write Back",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "www.googleapis.com"
+   ],
+   "notes": "Manual one-shot, run 22 Aug 2026. 'Get Doc' HTTP GETs Drive file 1r5-7JCqMDEHcYWj97AxZuWuzb7wdSYCL (naming convention v4), Code node 'Add Capability Clause' inserts one clause after a fixed anchor sentence, 'Write Back' HTTP PATCHes the same file id via the Drive upload endpoint (writes to Google Drive in place; deliberately no version bump). Guard throws 'Clause already present' so a re-run refuses before writing. HTTP nodes: predefinedCredentialType googleDriveOAuth2Api, onError=continueRegularOutput, neverError. Drive OAuth2 credential needs re-consent on the new host. settings.availableInMCP=true. No sticky notes."
+  },
+  {
+   "id": "EuPHrxmyQ69Mha6r",
+   "name": "Naming v4 In Place",
+   "active": false,
+   "readable": true,
+   "read_error": "",
+   "version_id": "94764a06-5ee4-4b06-bbc3-9926c5a828a5",
+   "node_count": 7,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Manual trigger only (node 'Run', n8n-nodes-base.manualTrigger).",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Get Doc",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Get VerSec",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Get ConSec",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Write Back",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "www.googleapis.com"
+   ],
+   "notes": "Manual one-shot, run 22 Aug 2026. Three HTTP GETs read Drive files by hard-coded id: 1r5-7JCqMDEHcYWj97AxZuWuzb7wdSYCL (naming convention, then v3), 1edwuy8x8-aFMD1EcdriHCqYAMOU-ET4Q (replacement VERSION NUMBERS section), 1wtj3eVyV70UcHemSW_QKKi2FRRKHJTFk (replacement constraint paragraph). Code node 'Build v4' splices and rewrites the header from v3 to v4; 'Write Back' HTTP PATCHes 1r5-7JCqMDEHcYWj97AxZuWuzb7wdSYCL via the Drive upload endpoint (writes to Google Drive in place). Guard requires the phrase 'DEVON NAMING CONVENTION v3' in the source, so against the v4 document now at that id it throws before writing. HTTP nodes: predefinedCredentialType googleDriveOAuth2Api, onError=continueRegularOutput, neverError. Drive OAuth2 credential needs re-consent on the new host. settings.availableInMCP=true. No sticky notes."
+  },
+  {
+   "id": "7WyIarNoJa2irx2r",
+   "name": "OS 29 Platform Policy Sensor",
+   "active": false,
+   "readable": true,
+   "read_error": "",
+   "version_id": "bfadcf37-17ed-437d-9424-fd4ed713288d",
+   "node_count": 14,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Schedule trigger 'Daily 06:00 Scan' with cron expression '0 6 * * *' (daily 06:00 in the instance default timezone; no workflow-level timezone set), plus a second entry point, manual trigger 'Run Now', both wired into 'Get Watched Sources'.",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Get Watched Sources",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Record Change",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Record Checked",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Notify",
+     "cred_type": "smtp",
+     "id": "mu7nJRSpkAfkzLdF",
+     "name": "SMTP account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "api.airtable.com",
+    "api.anthropic.com"
+   ],
+   "notes": "Name as returned by the read contains an em dash ('OS 29 Platform Policy Sensor'); the parent's list wrote it without one. Reads Airtable base app28z7XnKzjfTXwc table tbljgUxMRSI2aWuht (filterByFormula {Watch} = 1) and UPDATES the same table in 'Record Change' and 'Record Checked' (Airtable writes on every sweep). 'Fetch Policy Page' url is the expression {{ $json.URL || $json.fields.URL }}, so the policy hosts it actually contacts live in the Airtable rows, not in the workflow JSON; they cannot be enumerated from this read. 'Assess Materiality (Claude)' POSTs to https://api.anthropic.com/v1/messages with authentication=genericCredentialType/httpHeaderAuth but the node carries NO credentials block in this export, so no Anthropic credential is bound; it will fail auth on the new host until one is attached (its onError=continueRegularOutput means the failure is filed as 'assessment failed' rather than stopping the run). Model id 'claude-sonnet-4-6' is set in Code node 'Build Assessment Prompt'. 'Notify' (emailSend) uses SMTP credential mu7nJRSpkAfkzLdF; fromEmail and toEmail are both the operator's personal Gmail address hard-coded in the node; the SMTP host is inside the credential, not the workflow. Code node 'Fingerprint & Compare' calls require('crypto'): unverified here whether the self-hosted instance permits that built-in in Code nodes (NODE_FUNCTION_ALLOW_BUILTIN); confirm before first run or the node throws. The 'Notify' node has a webhookId property but is an emailSend node, not a webhook trigger. 'Sweep Complete' is a noOp. Loop is splitInBatches batchSize 1. settings.availableInMCP=true. No sticky notes."
+  },
+  {
+   "id": "Rr4Agd7UtdUbH9Nf",
+   "name": "Pill v16 Splice",
+   "active": false,
+   "readable": true,
+   "read_error": "",
+   "version_id": "061819c1-b79f-48e5-beca-2cc0a2cc39c0",
+   "node_count": 6,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Manual trigger only (node 'Run', n8n-nodes-base.manualTrigger).",
+   "webhooks": [],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Get Pill",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Get PartBC",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Write Back",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [],
+   "external_hosts": [
+    "www.googleapis.com"
+   ],
+   "notes": "Manual one-shot, run 22 Aug 2026. 'Get Pill' HTTP GETs Drive file 1bySPMORLCMlBkNv9YuK2uvuWTiJL6_qS (context pill, response under outputPropertyName 'pill') and 'Get PartBC' GETs 1EUDMXeoq58gQ7KZPl-DfObMTqT12eOrc (Parts B and C, outputPropertyName 'part'); Code node 'Splice' keeps Part A byte for byte, rewrites header lines from v15 to v16 and appends the new Part B/C; 'Write Back' HTTP PATCHes 1bySPMORLCMlBkNv9YuK2uvuWTiJL6_qS via the Drive upload endpoint (writes to Google Drive in place). No 'already v16' guard: a re-run re-PATCHes the file. HTTP nodes: predefinedCredentialType googleDriveOAuth2Api, onError=continueRegularOutput, neverError. Drive OAuth2 credential needs re-consent on the new host. settings.availableInMCP=true. No sticky notes."
+  },
+  {
+   "id": "be5rCRZ1ktLnmwI4",
+   "name": "S5 Seed: TQO Idea Row",
+   "active": false,
+   "readable": true,
+   "read_error": "",
+   "version_id": "49f32483-e3c7-4d86-9616-f1f485e31056",
+   "node_count": 8,
+   "execution_order": "v1",
+   "error_workflow": "",
+   "save_success_executions": "default",
+   "trigger_summary": "Manual trigger only (node 'Manual Trigger', n8n-nodes-base.manualTrigger, triggerCount 0, triggerInfo empty). It fans out to three HTTP probes: 'Render Server: Probe', 'Pexels: Smoke', 'EL: Voice Probe (read only)'. The other four nodes ('Seed Idea Row', 'Speechify: Smoke', 'Retire Smoke Row', and 'Read Back' which is fed only by 'Retire Smoke Row') are not reachable from the trigger.",
+   "webhooks": [],
+   "host_refs": [
+    {
+     "node": "Speechify: Smoke",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "api.speechify.ai",
+     "snippet": "https://api.speechify.ai/v1/audio/stream"
+    },
+    {
+     "node": "Render Server: Probe",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "129.80.78.29",
+     "snippet": "http://129.80.78.29:8080/v2/movies"
+    },
+    {
+     "node": "Pexels: Smoke",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "api.pexels.com",
+     "snippet": "https://api.pexels.com/v1/search"
+    },
+    {
+     "node": "EL: Voice Probe (read only)",
+     "node_type": "n8n-nodes-base.httpRequest",
+     "field": "parameters.url",
+     "host": "api.elevenlabs.io",
+     "snippet": "https://api.elevenlabs.io/v1/voices/<redacted>"
+    }
+   ],
+   "credentials": [
+    {
+     "node": "Speechify: Smoke",
+     "cred_type": "httpHeaderAuth",
+     "id": "o1Y2okfhRPngvhOl",
+     "name": "Speechify API"
+    },
+    {
+     "node": "Pexels: Smoke",
+     "cred_type": "httpHeaderAuth",
+     "id": "nRIc1n1L6nvZ2jYB",
+     "name": "Pexel Header Auth"
+    },
+    {
+     "node": "EL: Voice Probe (read only)",
+     "cred_type": "httpHeaderAuth",
+     "id": "4bVgNOG53Ibog4eK",
+     "name": "Eleven Labs"
+    }
+   ],
+   "execute_workflow_targets": [],
+   "data_tables": [
+    {
+     "node": "Seed Idea Row",
+     "table_id": "tqo_content",
+     "operation": "row insert (dataTableId mode name)"
+    },
+    {
+     "node": "Read Back",
+     "table_id": "tqo_content",
+     "operation": "row get, returnAll, filter status eq Idea (dataTableId mode name)"
+    },
+    {
+     "node": "Retire Smoke Row",
+     "table_id": "tqo_content",
+     "operation": "row update, filter status eq Idea and topic eq 'SMOKE: quiet leverage audit' (dataTableId mode name)"
+    }
+   ],
+   "external_hosts": [
+    "api.speechify.ai",
+    "129.80.78.29",
+    "api.pexels.com",
+    "api.elevenlabs.io"
+   ],
+   "notes": "The data table disagreement is a formatting artifact, not a factual one: all three dataTable nodes carry dataTableId {__rl: true, mode: \"name\", value: \"tqo_content\"}, so the counter's bare \"tqo_content\" is the literal and the reader (pass A) was wrong to pack the \"(dataTableId mode name)\" annotation into the id field, which is what made the two strings compare unequal; the mode now lives in the operation column. Pass A was also wrong to report host_refs as empty: the JSON holds four url literals, one per httpRequest node, listed above. Everything else in pass A checks out against the JSON: 8 nodes, versionId 49f32483-e3c7-4d86-9616-f1f485e31056, executionOrder v1, no errorWorkflow or saveDataSuccessExecution key in settings, availableInMCP true, three httpHeaderAuth credentials by id only, no webhook, executeWorkflow, sticky note or Code nodes, and the connection map is exactly Manual Trigger to the three probes plus Retire Smoke Row to Read Back. 'Render Server: Probe' is plain http to a bare IP on port 8080 with no credential and neverError. The ElevenLabs voice id path segment is redacted above as a precaution; it is a voice identifier in the url, not a credential, and no plaintext secret-looking literal exists in the workflow JSON."
+  },
+  {
+   "id": "gsGJQan7a6ZufhYt",
+   "name": "TQO FINAL V5",
+   "active": false,
+   "readable": true,
+   "read_error": "",
+   "version_id": "a7ea4928-3ba5-4dd9-a28b-77ac290dfe4b",
+   "node_count": 220,
+   "execution_order": "v1",
+   "error_workflow": "rqYmaQh91iCce8DJ",
+   "save_success_executions": "all",
+   "trigger_summary": "15 trigger nodes counted from the node list (the instance metadata says triggerCount 19; the payload does not explain the difference): 6 Schedule Triggers, all cron in the workflow timezone America/New_York: 'Daily 6am - Script Writer' 0 6 * * * (daily 06:00), 'Mon/Wed/Fri 7am - Promote' 0 7 * * 1,3,5, 'Sunday 9am - Quiet Brief' 0 9 * * 0, 'NCO: Tuesday 7:30am - Promote' 30 7 * * 2, 'Analytics: Daily 5am' 0 5 * * *, 'Every 3h - Pipeline Pass' 0 */3 * * * (every 3 hours on the hour); 2 Manual Triggers ('Run All (Manual)', 'Run All (NCO Forge)'); 7 Webhook triggers (run-tqo-pipeline POST, run-nco-pipeline POST, gumroad-sale POST, run-tqo GET, run-nco GET, system-pause GET, system-resume GET), none authenticated. No chat trigger and no Execute Workflow Trigger. Inactive on Cloud (active false, activeVersionId null), so none of these doors are live there.",
+   "webhooks": [
+    {
+     "node": "▶ Run All (Webhook)",
+     "path": "run-tqo-pipeline",
+     "method": "POST",
+     "auth": "none",
+     "credential_id": ""
+    },
+    {
+     "node": "⏸ SYSTEM PAUSE",
+     "path": "system-pause",
+     "method": "GET",
+     "auth": "none",
+     "credential_id": ""
+    },
+    {
+     "node": "▶ SYSTEM RESUME",
+     "path": "system-resume",
+     "method": "GET",
+     "auth": "none",
+     "credential_id": ""
+    },
+    {
+     "node": "Gumroad Ping (Sale)",
+     "path": "gumroad-sale",
+     "method": "POST",
+     "auth": "none",
+     "credential_id": ""
+    },
+    {
+     "node": "▶ Run All (Webhook NCO)",
+     "path": "run-nco-pipeline",
+     "method": "POST",
+     "auth": "none",
+     "credential_id": ""
+    },
+    {
+     "node": "▶ Run TQO (Link)",
+     "path": "run-tqo",
+     "method": "GET",
+     "auth": "none",
+     "credential_id": ""
+    },
+    {
+     "node": "▶ Run NCO (Link)",
+     "path": "run-nco",
+     "method": "GET",
+     "auth": "none",
+     "credential_id": ""
+    }
+   ],
+   "host_refs": [],
+   "credentials": [
+    {
+     "node": "Write Script (Claude)",
+     "cred_type": "httpHeaderAuth",
+     "id": "TEJIJDPoEhid0aOE",
+     "name": "Header Auth account 3"
+    },
+    {
+     "node": "Upload MP3",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Make Audio Public",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Start Render",
+     "cred_type": "httpHeaderAuth",
+     "id": "BT9qHSPFUV4L5hW6",
+     "name": "Header Auth account 8"
+    },
+    {
+     "node": "Check Render Status",
+     "cred_type": "httpHeaderAuth",
+     "id": "BT9qHSPFUV4L5hW6",
+     "name": "Header Auth account 8"
+    },
+    {
+     "node": "Upload Video (Ready to Publish)",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Write Packaging (Claude)",
+     "cred_type": "httpHeaderAuth",
+     "id": "TEJIJDPoEhid0aOE",
+     "name": "Header Auth account 3"
+    },
+    {
+     "node": "Write Brief (Claude)",
+     "cred_type": "httpHeaderAuth",
+     "id": "TEJIJDPoEhid0aOE",
+     "name": "Header Auth account 3"
+    },
+    {
+     "node": "Create Draft Campaign (MailerLite)",
+     "cred_type": "httpHeaderAuth",
+     "id": "eYTecIAkpa16GAQ6",
+     "name": "Header Auth account 7"
+    },
+    {
+     "node": "Send Now (OPTIONAL - not connected)",
+     "cred_type": "httpHeaderAuth",
+     "id": "eYTecIAkpa16GAQ6",
+     "name": "Header Auth account 7"
+    },
+    {
+     "node": "Pexels Search",
+     "cred_type": "httpHeaderAuth",
+     "id": "nRIc1n1L6nvZ2jYB",
+     "name": "Pexel Header Auth"
+    },
+    {
+     "node": "Upload Thumbnail",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Share Thumbnail",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Share Video Public",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Upload to YouTube",
+     "cred_type": "youTubeOAuth2Api",
+     "id": "GA3sbYnmJAAo0AVC",
+     "name": "YouTube account 2"
+    },
+    {
+     "node": "Upload to YouTube (NCO Forge)",
+     "cred_type": "youTubeOAuth2Api",
+     "id": "GA3sbYnmJAAo0AVC",
+     "name": "YouTube account 2"
+    },
+    {
+     "node": "ElevenLabs TTS (Tee Clone)",
+     "cred_type": "httpHeaderAuth",
+     "id": "4bVgNOG53Ibog4eK",
+     "name": "Eleven Labs"
+    },
+    {
+     "node": "Write Manifest (Claude)",
+     "cred_type": "httpHeaderAuth",
+     "id": "TEJIJDPoEhid0aOE",
+     "name": "Header Auth account 3"
+    },
+    {
+     "node": "Run QC (Claude)",
+     "cred_type": "httpHeaderAuth",
+     "id": "TEJIJDPoEhid0aOE",
+     "name": "Header Auth account 3"
+    },
+    {
+     "node": "Offer Engine: Fetch Live Offers",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Brief: Fetch Offers",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Gumroad: Fetch Offers",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Gumroad: Check Duplicate",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Gumroad: Create Customer",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Gumroad: MailerLite Buyer Sync",
+     "cred_type": "httpHeaderAuth",
+     "id": "TEJIJDPoEhid0aOE",
+     "name": "Header Auth account 3"
+    },
+    {
+     "node": "Gumroad: Attribute Revenue",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Run Script Doctor (Claude)",
+     "cred_type": "httpHeaderAuth",
+     "id": "TEJIJDPoEhid0aOE",
+     "name": "Header Auth account 3"
+    },
+    {
+     "node": "Thumb: Find Still",
+     "cred_type": "httpHeaderAuth",
+     "id": "nRIc1n1L6nvZ2jYB",
+     "name": "Pexel Header Auth"
+    },
+    {
+     "node": "Primitives: Write",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Assets: Write",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Rules: Fetch Library",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Rules: Write",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Publishing: Write",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "EditForge: Write Queue",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Analytics: YouTube Stats",
+     "cred_type": "youTubeOAuth2Api",
+     "id": "GA3sbYnmJAAo0AVC",
+     "name": "YouTube account 2"
+    },
+    {
+     "node": "Analytics: Write Performance",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Comments: Fetch Threads",
+     "cred_type": "youTubeOAuth2Api",
+     "id": "GA3sbYnmJAAo0AVC",
+     "name": "YouTube account 2"
+    },
+    {
+     "node": "Signals: Fetch Recent",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Signals: Write",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Repurpose: Due Slots",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Repurpose: Find Render",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Repurpose: Mark Handed Off",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Repurpose: Fetch Asset",
+     "cred_type": "airtableTokenApi",
+     "id": "OyuQtrelq7zP2mTy",
+     "name": "Airtable Personal Access Token account"
+    },
+    {
+     "node": "Repurpose: Drop Caption File",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "Repurpose: Drop Video",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "YT Thumb: Download",
+     "cred_type": "googleDriveOAuth2Api",
+     "id": "WMz320icjnur7rDL",
+     "name": "Google Drive account"
+    },
+    {
+     "node": "YT Thumb: Set",
+     "cred_type": "youTubeOAuth2Api",
+     "id": "GA3sbYnmJAAo0AVC",
+     "name": "YouTube account 2"
+    },
+    {
+     "node": "Speechify TTS (Fallback)",
+     "cred_type": "httpHeaderAuth",
+     "id": "o1Y2okfhRPngvhOl",
+     "name": "Speechify API"
+    }
+   ],
+   "execute_workflow_targets": [
+    {
+     "node": "Propagate Pause → TSWS 01",
+     "workflow_id": "Zbq6gS77PRauqb1I",
+     "how": "workflowId parameter"
+    },
+    {
+     "node": "Propagate Resume → TSWS 01",
+     "workflow_id": "Zbq6gS77PRauqb1I",
+     "how": "workflowId parameter"
+    }
+   ],
+   "data_tables": [
+    {
+     "node": "Get Idea Rows",
+     "table_id": "={{ $('Show Context: Script').first().json.tableId }}",
+     "operation": "get"
+    },
+    {
+     "node": "Get Queued Videos",
+     "table_id": "={{ $('Show Context: Render').first().json.tableId }}",
+     "operation": "get"
+    },
+    {
+     "node": "Get 3 Oldest Scripted",
+     "table_id": "={{ $('Show Context: Promote').first().json.tableId }}",
+     "operation": "get"
+    },
+    {
+     "node": "Get Ready to Publish",
+     "table_id": "={{ $('Show Context: Publish').first().json.tableId }}",
+     "operation": "get"
+    },
+    {
+     "node": "Get Latest Content",
+     "table_id": "={{ $('Show Context: Brief').first().json.tableId }}",
+     "operation": "get"
+    },
+    {
+     "node": "Anything Still Rendering?",
+     "table_id": "={{ $('Show Context: Render').first().json.tableId }}",
+     "operation": "get"
+    },
+    {
+     "node": "Reaper: Find Stale Claims",
+     "table_id": "={{ $('Show Context: Render').first().json.tableId }}",
+     "operation": "get"
+    },
+    {
+     "node": "Render Lock: Other Brand",
+     "table_id": "={{ $('Show Context: Render').first().json.show === 'NCO' ? 'tqo_content' : 'nco_content' }}",
+     "operation": "get"
+    },
+    {
+     "node": "Fetch Prior Episodes",
+     "table_id": "={{ $('Show Context: Script').first().json.tableId }}",
+     "operation": "get"
+    },
+    {
+     "node": "Analytics: Fetch TQO Published",
+     "table_id": "tqo_content",
+     "operation": "get"
+    },
+    {
+     "node": "Analytics: Fetch NCO Published",
+     "table_id": "nco_content",
+     "operation": "get"
+    },
+    {
+     "node": "Claim Rows (Mark Rendering)",
+     "table_id": "={{ $('Show Context: Render').first().json.tableId }}",
+     "operation": "update"
+    },
+    {
+     "node": "Claim: Mark Publishing",
+     "table_id": "={{ $('Show Context: Publish').first().json.tableId }}",
+     "operation": "update"
+    },
+    {
+     "node": "Mark Published",
+     "table_id": "={{ $('Show Context: Publish').first().json.tableId }}",
+     "operation": "update"
+    },
+    {
+     "node": "Mark Ready + Save URL",
+     "table_id": "={{ $('Show Context: Render').first().json.tableId }}",
+     "operation": "update"
+    },
+    {
+     "node": "OS 28: Record Verdict",
+     "table_id": "={{ $('Show Context: Publish').first().json.tableId }}",
+     "operation": "update"
+    },
+    {
+     "node": "Promote to Queued",
+     "table_id": "={{ $('Show Context: Promote').first().json.tableId }}",
+     "operation": "update"
+    },
+    {
+     "node": "Save Packaging",
+     "table_id": "={{ $('Show Context: Publish').first().json.tableId }}",
+     "operation": "update"
+    },
+    {
+     "node": "Save Script to Airtable",
+     "table_id": "={{ $('Show Context: Script').first().json.tableId }}",
+     "operation": "update"
+    },
+    {
+     "node": "Save Thumb Link",
+     "table_id": "={{ $('Show Context: Publish').first().json.tableId }}",
+     "operation": "update"
+    },
+    {
+     "node": "Reaper: Release Rows",
+     "table_id": "={{ $json.__table }}",
+     "operation": "update"
+    },
+    {
+     "node": "Render: Write Release",
+     "table_id": "={{ $json.__table }}",
+     "operation": "update"
+    },
+    {
+     "node": "Script: Write Run Fields",
+     "table_id": "={{ $json.__table }}",
+     "operation": "update"
+    },
+    {
+     "node": "Ideas: Upsert",
+     "table_id": "={{ $json.__table }}",
+     "operation": "upsert"
+    },
+    {
+     "node": "Short Engine: Create Rows",
+     "table_id": "={{ $json.__table }}",
+     "operation": "insert"
+    },
+    {
+     "node": "Save QC to Airtable",
+     "table_id": "={{ $('Show Context: Publish').first().json.tableId }}",
+     "operation": "update"
+    },
+    {
+     "node": "Save Doctor Verdict",
+     "table_id": "={{ $('Show Context: Script').first().json.tableId }}",
+     "operation": "update"
+    },
+    {
+     "node": "Preflight: Record Skip",
+     "table_id": "={{ $('Show Context: Publish').first().json.tableId }}",
+     "operation": "update"
+    },
+    {
+     "node": "Family: Stamp Episode",
+     "table_id": "={{ $('Family: Assign IDs').first().json.tableId }}",
+     "operation": "update"
+    }
+   ],
+   "external_hosts": [
+    "api.airtable.com",
+    "api.anthropic.com",
+    "api.elevenlabs.io",
+    "api.pexels.com",
+    "api.speechify.ai",
+    "connect.mailerlite.com",
+    "drive.usercontent.google.com",
+    "jobsecurityaudit.netlify.app",
+    "thequietoperator.gumroad.com",
+    "thequietoperator.netlify.app",
+    "www.googleapis.com",
+    "youtu.be",
+    "129.80.78.29",
+    "150.136.200.85",
+    "json2video.com"
+   ],
+   "notes": "HOST STRINGS: neither 'thequietoperator.app.n8n.cloud' nor 'n8n.editforge.online' appears anywhere in the workflow body (all 220 node parameter trees, node-level notes, the 11 sticky notes, and settings were walked; the raw payload was also grepped). All 14 occurrences of the Cloud host in the read sit inside the MCP server's synthesized triggerInfo block, which derives production and test URLs from the instance base URL. So no node edit is needed to rehost the URLs, but every external caller must be repointed: the dashboard's 'Run Full Pipeline' and NCO Run buttons (sticky 'Sticky Note - Run Button' and the node notes on 'Run All (Webhook NCO)', 'Run TQO (Link)', 'Run NCO (Link)' say the production URL is pasted into the dashboard), the Gumroad Settings > Advanced Ping endpoint (node note on 'Gumroad Ping (Sale)'), and any bookmarks for /webhook/run-tqo, /webhook/run-nco, /webhook/system-pause, /webhook/system-resume. The five '⏸ Gate:' Code nodes mention the relative path /webhook/system-resume in a thrown error message only; no Code node builds an absolute self-URL and there is no $env, $vars or WEBHOOK_URL reference. WEBHOOKS: all 7 webhook nodes have no authentication parameter and bind no credential, so once activated on the new host they are open doors; the three GET link webhooks and pause/resume respond in lastNode mode. SCHEDULES: cron expressions are evaluated in settings.timezone America/New_York, not UTC. SETTINGS: callerPolicy workflowsFromSameOwner; errorWorkflow rqYmaQh91iCce8DJ and the Execute Workflow target Zbq6gS77PRauqb1I ('TSWS 01', both Propagate Pause/Resume nodes, mode id, waitForSubWorkflow true) are referenced by workflow id only, so those ids must be preserved on import or both places remapped. saveExecutionProgress and saveManualExecutions true, saveDataErrorExecution all. DATA TABLES: all 29 Data Table nodes reference the table by NAME (mode 'name'), never by id, resolving to 'tqo_content' or 'nco_content': the five 'Show Context:' Code nodes carry tableId constants per show, 'Render Lock: Other Brand' uses a ternary, 'Winner: Build Re-expansion' and 'Signals: Recurrence Check' hold TQO/NCO constants, and the '$json.__table' nodes get the name from 'DT Unpack:' Code nodes or 'Reaper: Build Release'. The target instance needs Data Tables named exactly tqo_content and nco_content with the columns the filters and updates use (status, video_url, published_url, script, system_status, createdAt, os_28_status, platform_packaging, tags, rubric_average, correction_attempts, render_attempts, last_feedback, score_history, qc_*, manifest, attached_offer, content_id, canonical_rule_id, atomized_at, idea fields). RENDER WORKER BY RAW IP OVER PLAIN HTTP: 'Start Render' POSTs to http://129.80.78.29:8080/v2/movies and 'Check Render Status' GETs the same base, both with httpHeaderAuth 'Header Auth account 8' (BT9qHSPFUV4L5hW6); the 'Sticky Note json2video' describes json2video.com and is stale relative to those node URLs. 'Build Movie' (Code) embeds five music URLs http://150.136.200.85/music/track1.mp3 to track5.mp3 inside the render payload, so the worker fetches them, not n8n. Both IPs must be reachable from n8n.editforge.online egress or remapped. json2video.com appears only in sticky-note prose. AIRTABLE: reached through 19 HTTP Request nodes with predefinedCredentialType airtableTokenApi against base app28z7XnKzjfTXwc (tables tblZZV9hBXBv85aGC offers, tbl6hyri0Qtp3eae5 customers, tblk3Pb6i9GFkItHE primitives, tblBW5EyViCCBwhCi assets, tbl0Q2MX9BqvjpoBa rules, tblQgQ3JdpoKOANXh publishing, tblsWef63twib7dIr EditForge queue, tbla2jC3Rbnylnq4G performance, tblRvhGTXegjSkLsK signals); these are Airtable ids in URLs, not n8n data tables. SECRETS: no dcp_ or devon_ literal and no key typed into a node; the only literal header values in HTTP Request nodes are anthropic-version, content-type and accept; every API key is credential-bound. 'Note thumbnail path' records that a former 'Make Thumbnail' node carried the ops-box x-api-key in plaintext, that the node is gone (confirmed: no such node), and that the key still needs rotating; the note also says thumbnails now go through '00 Render Job', but no node in this workflow calls any such workflow; the actual thumbnail chain is Thumb: Find Still (Pexels) -> Thumb: Download Still -> Thumb: Compose (editImage, runs inside n8n and needs GraphicsMagick on the self-hosted image) -> Upload Thumbnail (Drive). OAUTH: 'Google Drive account' (WMz320icjnur7rDL, 9 nodes) and 'YouTube account 2' (GA3sbYnmJAAo0AVC, 5 nodes) are OAuth2 and will need re-authorising on n8n.editforge.online because the redirect URL changes; 'Header Auth account 3' (TEJIJDPoEhid0aOE) is bound to the six Anthropic calls AND to 'Gumroad: MailerLite Buyer Sync', which the note says should use the MailerLite credential, a binding worth checking before cutover. Drive folderId literals are Drive-side and unaffected. TRIGGER COUNT: instance metadata triggerCount is 19 while the node list holds 15 trigger nodes; the payload does not explain the gap. Node breakdown: 92 code, 41 httpRequest, 29 dataTable, 11 stickyNote, 9 googleDrive, 9 if, 7 webhook, 6 scheduleTrigger, 3 splitInBatches, 3 noOp, 2 manualTrigger, 2 executeWorkflow, 2 youTube, 1 set, 1 wait (60 s timer, no resume webhook), 1 editImage, 1 stopAndError. No node is disabled and no non-sticky node is orphaned; tags empty; meta says aiBuilderAssisted with builderVariant mcp."
+  }
+ ],
+ "disagreements": [
+  {
+   "id": "LsmfRFMmI5feINs0",
+   "name": "DEVON Face (Build 15)",
+   "reasons": [
+    "webhook paths: reader [webhookId 71510ab0-07eb-42d8-9734-c0741b398d49 (chat trigger carries no path parameter)], counter []"
+   ],
+   "resolution": "Disagreement settled: Chat In carries a webhookId but no path or httpMethod parameter, so the JSON holds zero webhook path literals; the counter's empty list is literally correct, while the reader was wrong to put prose into the path field, which made it read as one path. Neither pass stated a false fact, but the counter's empty list hides one active door: Chat In is a public (public: true) webhook-backed hosted chat trigger on an active workflow, its URL derived by n8n from webhookId 71510ab0-07eb-42d8-9734-c0741b398d49, gated by n8nUserAuth (Tee must be logged in to the instance) and taking no header key, so it is a door that does not take the capture key; path is reported as an empty string here because no literal exists. Three host literals in the JSON: api.cerebras.ai (Cerebras Chat url, 45000 ms timeout), thequietoperator.app.n8n.cloud (File Job url, absolute POST to /webhook/devon-intake with Devon Capture Key header auth and 240000 ms timeout; must be rewritten for the new host), and www.w3.org (SVG xmlns inside a data: URI in Chat In customCss; a namespace string, not a fetch; the reader mentioned it only in notes, it is a host_refs row here). The sticky note holds no host literal (counter sticky_cloud_count 0 is correct; it names devon-intake as a path word and nwnHN8o2dgHjtk7f and YTVk8Dq2gYPAmUim as ids). Counter's http_request_node_count 2, host_cloud_count 1, host_vps_count 0, credential ids and the four table ids all match this read. Five data table references across four tables (devon_chat_log nwnHN8o2dgHjtk7f read and insert). Compose Prompt sets model gpt-oss-120b; its text names executors drive.draft, airtable.row and spine.echo, which are dotted names and not hosts. Sticky note says HTTP Request is used instead of the AI Agent node because the Cerebras credential is header auth, and claims registration in services/devon/vault.py WORKFLOWS (that claim not verified in this read). settings: executionOrder v1, errorWorkflow XDQXwgFkUhYxoEjG (must be remapped), executionTimeout 300, availableInMCP true, saveDataSuccessExecution absent so instance default applies. activeVersionId equals versionId, activeVersion sameAsDraft true, updatedAt 2026-09-06T11:48:14.336Z. No executeWorkflow nodes. No secret-looking literals found in any Code node."
+  },
+  {
+   "id": "5s6CwWWelffqszQe",
+   "name": "DEVON iPhone Inbox Capture",
+   "reasons": [
+    "data table ids: reader [tbl4ziFRbl5mnUcKc], counter []"
+   ],
+   "resolution": "The counter was right and the reader was wrong on data_tables: no node of type n8n-nodes-base.dataTable exists in this workflow, and tbl4ziFRbl5mnUcKc is the Airtable table id inside Index Capture (n8n-nodes-base.airtable v2.1, resource record, operation create, base app28z7XnKzjfTXwc, parameter key table in id mode), which the reader filed under data_tables despite its own caveat that it is not an n8n Data Table. The reader also left host_refs empty while the JSON holds two literal host occurrences (api.cerebras.ai in the Enrich Area url and drive.google.com in the Index Capture Drive Link expression), so those are listed here; api.airtable.com and www.googleapis.com are implied by the Airtable and Google Drive node types but appear nowhere as strings, so external_hosts is trimmed to the two literals. Everything else in pass A checks out against the JSON: 11 nodes, no sticky notes, no executeWorkflow nodes, one HTTP Request node, errorWorkflow rqYmaQh91iCce8DJ, timezone America/New_York, saveDataSuccessExecution none, five credential bindings across four ids (Google Drive account bound twice). Neither thequietoperator.app.n8n.cloud nor n8n.editforge.online appears in any node or setting; the Cloud host shows only in the tool's derived triggerInfo, so the only instance binding is the webhook path devon-inbox and the iPhone Shortcuts calling it must be repointed by hand. Seven Google Drive folder ids are hardcoded in Route Capture; Index Capture has onError continueRegularOutput; Enrich Area uses fullResponse and neverError with a 20s timeout, and Apply Area falls back to keyword tagging on a non-200."
+  },
+  {
+   "id": "svqHaaMzZPeGee8e",
+   "name": "DT Bootstrap Tables (TQO Migration S1a)",
+   "reasons": [
+    "data table ids: reader [nco_content,nco_content (dataTableId mode name),tqo_content,tqo_content (dataTableId mode name)], counter [nco_content,tqo_content]"
+   ],
+   "resolution": "Pass A (reader) was wrong on the id set: it appended the descriptive tag \"(dataTableId mode name)\" into the table_id string for the seven dataTableId nodes, which turned two real identifiers into four distinct strings; the JSON holds exactly two table identifiers, tqo_content and nco_content, every reference is by name (never numeric), and pass B (counter) had that right. The reader's per-node facts were otherwise correct, except its column type split: both create nodes define 53 columns each (script-counted, lists identical, no duplicate names) but the split is 46 string and 7 number, not 44 and 9; the workflow description's \"31 columns each\" is also stale. Wired path from Start: Drop tqo_content -> Drop nco_content -> Create tqo_content -> Create nco_content -> Seed Test Idea -> Read Idea Rows -> Mark Smoke Done -> Verify Update -> Probe Undefined Clobber, so running it deletes both tables before recreating them and any existing rows are lost. No credentials, no HTTP Request or Code nodes, no webhooks, no sticky notes, no host literals, no secret-looking values. settings.availableInMCP=true, no errorWorkflow set, saveDataSuccessExecution unset (default), meta.aiBuilderAssisted=true."
+  },
+  {
+   "id": "be5rCRZ1ktLnmwI4",
+   "name": "S5 Seed: TQO Idea Row",
+   "reasons": [
+    "data table ids: reader [tqo_content (dataTableId mode name)], counter [tqo_content]"
+   ],
+   "resolution": "The data table disagreement is a formatting artifact, not a factual one: all three dataTable nodes carry dataTableId {__rl: true, mode: \"name\", value: \"tqo_content\"}, so the counter's bare \"tqo_content\" is the literal and the reader (pass A) was wrong to pack the \"(dataTableId mode name)\" annotation into the id field, which is what made the two strings compare unequal; the mode now lives in the operation column. Pass A was also wrong to report host_refs as empty: the JSON holds four url literals, one per httpRequest node, listed above. Everything else in pass A checks out against the JSON: 8 nodes, versionId 49f32483-e3c7-4d86-9616-f1f485e31056, executionOrder v1, no errorWorkflow or saveDataSuccessExecution key in settings, availableInMCP true, three httpHeaderAuth credentials by id only, no webhook, executeWorkflow, sticky note or Code nodes, and the connection map is exactly Manual Trigger to the three probes plus Retire Smoke Row to Read Back. 'Render Server: Probe' is plain http to a bare IP on port 8080 with no credential and neverError. The ElevenLabs voice id path segment is redacted above as a precaution; it is a voice identifier in the url, not a credential, and no plaintext secret-looking literal exists in the workflow JSON."
+  }
+ ],
+ "unreadable": [
+  {
+   "id": "ljrWDpRVgK8gxQwH",
+   "name": "TQO - ORCHESTRATOR",
+   "why": "Workflow is not available in MCP. Enable MCP access from the workflow card in the workflows list, or from the workflow settings."
+  },
+  {
+   "id": "80Um0VPtbVQIO47n",
+   "name": "TQO FINAL V1 (80Um)",
+   "why": "Workflow is not available in MCP. Enable MCP access from the workflow card in the workflows list, or from the workflow settings."
+  },
+  {
+   "id": "o09uEM6O2JedxpF5",
+   "name": "TQO FINAL V1 (o09u)",
+   "why": "Workflow is not available in MCP. Enable MCP access from the workflow card in the workflows list, or from the workflow settings."
+  },
+  {
+   "id": "hnVhgvRJOLVPfXHI",
+   "name": "TQO FINAL V1 FIXED 2",
+   "why": "Workflow is not available in MCP. Enable MCP access from the workflow card in the workflows list, or from the workflow settings."
+  },
+  {
+   "id": "k5B5dcewspDpNSHO",
+   "name": "TQO FINAL V2",
+   "why": "Workflow is not available in MCP. Enable MCP access from the workflow card in the workflows list, or from the workflow settings."
+  },
+  {
+   "id": "WDFEnVIziUmGA3Pj",
+   "name": "TQO FINAL V4",
+   "why": "Workflow is not available in MCP. Enable MCP access from the workflow card in the workflows list, or from the workflow settings."
+  }
+ ]
+}

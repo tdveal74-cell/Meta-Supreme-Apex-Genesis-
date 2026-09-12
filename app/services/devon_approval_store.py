@@ -59,7 +59,8 @@ expires_at,
 state,
 decided_at,
 decided_by,
-token_hash
+token_hash,
+owner_id
 """
 
 
@@ -79,12 +80,12 @@ class PostgresApprovalStore:
             INSERT INTO devon_approvals (
                 request_id, title, what_happens, requested_by, area,
                 reversible, blast_radius, created_at, expires_at, state,
-                decided_at, decided_by, token_hash, updated_at
+                decided_at, decided_by, token_hash, owner_id, updated_at
             ) VALUES (
                 %(request_id)s, %(title)s, %(what_happens)s, %(requested_by)s,
                 %(area)s, %(reversible)s, %(blast_radius)s, %(created_at)s,
                 %(expires_at)s, %(state)s, %(decided_at)s, %(decided_by)s,
-                %(token_hash)s, NOW()
+                %(token_hash)s, %(owner_id)s, NOW()
             )
         """
         try:
@@ -166,6 +167,7 @@ class PostgresApprovalStore:
                    updated_at = NOW()
              WHERE state = 'pending'
                AND expires_at <= NOW()
+         RETURNING request_id
         """
         select_sql = f"""
             SELECT {_COLUMNS}
@@ -176,13 +178,40 @@ class PostgresApprovalStore:
         """
         try:
             with self._connect() as conn:
-                conn.execute(expire_sql)
+                expired = conn.execute(expire_sql).fetchall()
+                self._settle_expired_on_ledger(conn, [row["request_id"] for row in expired])
                 rows = conn.execute(select_sql).fetchall()
         except psycopg.Error:
             raise ApprovalStoreUnavailable(
                 "DEVON approval database is unavailable; pending state is unknown"
             ) from None
         return [self._record(row) for row in rows]
+
+    @staticmethod
+    def _settle_expired_on_ledger(conn, request_ids: list[str]) -> None:
+        """Carry an expiry through to the Live State Ledger's own row.
+
+        The ledger's approvals table holds a row only for cards the knowledge
+        loop opened, and it lives in whichever database this store points at,
+        which is not always the one the ledger uses. Both facts make this a
+        best-effort settle in the same transaction as the queue's expiry: no
+        table, or no matching row, means nothing to settle.
+        """
+        if not request_ids:
+            return
+        present = conn.execute("SELECT to_regclass('public.approvals') AS t").fetchone()
+        if not present or not present["t"]:
+            return
+        conn.execute(
+            """
+            UPDATE approvals
+               SET state = 'expired',
+                   decided_at = NOW()
+             WHERE state = 'pending'
+               AND approval_request_id = ANY(%(ids)s)
+            """,
+            {"ids": request_ids},
+        )
 
     def _connect(self):
         return psycopg.connect(
@@ -207,6 +236,7 @@ class PostgresApprovalStore:
             "decided_at": request.decided_at,
             "decided_by": request.decided_by,
             "token_hash": request._token_hash,
+            "owner_id": request.owner_id,
         }
 
     @staticmethod
@@ -224,6 +254,7 @@ class PostgresApprovalStore:
             state=ApprovalState(str(row["state"])),
             decided_at=row["decided_at"],
             decided_by=str(row["decided_by"]) if row["decided_by"] is not None else None,
+            owner_id=str(row.get("owner_id") or ""),
             _token_hash=str(row["token_hash"]),
         )
 

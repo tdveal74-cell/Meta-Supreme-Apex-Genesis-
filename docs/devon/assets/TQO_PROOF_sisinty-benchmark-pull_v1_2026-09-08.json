@@ -1,0 +1,1393 @@
+{
+ "pulled": "2026-09-08",
+ "source": "vidIQ MCP on 2026-09-08: get_videos_by_ids(6OmqsFrRv4I), channel_stats, channel_videos(long, popular), channel_videos(short, popular), video_transcript x14 (language en), balance x2",
+ "channel": {
+  "channelId": "UClXAalunTPaX1YV185DWUeg",
+  "title": "Vaibhav Sisinty",
+  "country": "IN",
+  "publishedAt": "2009-07-27",
+  "subscribers": 835000,
+  "views": 65737476,
+  "videos": 728,
+  "growth_30d": {
+   "subscribersGained": 41000,
+   "viewsGained": 3814279,
+   "videosPublished": 27,
+   "from": "2026-08-09",
+   "to": "2026-09-08"
+  }
+ },
+ "long_popular": [
+  {
+   "id": "btLZQzynfoA",
+   "title": "If I Had to Start Over in 2026, I'd Learn Only This (5-Level AI Roadmap)",
+   "publishedAt": "2026-02-17",
+   "views": 250428,
+   "likes": 8616,
+   "comments": 315,
+   "duration": "PT16M28S",
+   "vph": 8.94,
+   "breakout": 1.88
+  },
+  {
+   "id": "uVVri3khsco",
+   "title": "Ankur@warikoo Untold Podcast: From Employee to Founder to Creator",
+   "publishedAt": "2023-10-07",
+   "views": 881604,
+   "likes": 9228,
+   "comments": 66,
+   "duration": "PT1H26M59S",
+   "vph": 1.47,
+   "breakout": null
+  },
+  {
+   "id": "hqquu7H7X0w",
+   "title": "How To Use NotebookLM For Infographics and Slide Decks: Full Tutorial, No Design Skills",
+   "publishedAt": "2026-02-27",
+   "views": 212459,
+   "likes": 7666,
+   "comments": 237,
+   "duration": "PT14M1S",
+   "vph": 0.33,
+   "breakout": 1.6
+  },
+  {
+   "id": "CnMlXwyA288",
+   "title": "This Viral AI Bot Can do your Work For FREE | Here's How to Set It Up",
+   "publishedAt": "2026-01-29",
+   "views": 287423,
+   "likes": 6442,
+   "comments": 278,
+   "duration": "PT12M32S",
+   "vph": 8.12,
+   "breakout": 4.99
+  },
+  {
+   "id": "NGMzAJSMseU",
+   "title": "Elon's New AI Employees Are Here: I Tested Them To See If They Can Do My Job (+14 AI Updates)",
+   "publishedAt": "2026-08-17",
+   "views": 138506,
+   "likes": 2546,
+   "comments": 131,
+   "duration": "PT17M17S",
+   "vph": 6.57,
+   "breakout": 1.0
+  },
+  {
+   "id": "QucgvbO5gsM",
+   "title": "Free AI Tools So Good They're Making Paid Versions Obsolete",
+   "publishedAt": "2026-07-22",
+   "views": 440555,
+   "likes": 16802,
+   "comments": 574,
+   "duration": "PT18M34S",
+   "vph": 102.58,
+   "breakout": 3.75
+  },
+  {
+   "id": "KjNsnE_vsyc",
+   "title": "Forget Prompt Engineering - This Is What Actually Matters in AI",
+   "publishedAt": "2026-05-02",
+   "views": 551246,
+   "likes": 14414,
+   "comments": 416,
+   "duration": "PT16M32S",
+   "vph": 24.52,
+   "breakout": 3.62
+  },
+  {
+   "id": "XtwTjwUZSTs",
+   "title": "10 Ways to Get Monthly Income (let AI work for you)",
+   "publishedAt": "2026-08-15",
+   "views": 221118,
+   "likes": 5829,
+   "comments": 237,
+   "duration": "PT14M55S",
+   "vph": 135.9,
+   "breakout": 1.59
+  },
+  {
+   "id": "durdbSdX8o8",
+   "title": "China Just Dropped a Free AI Kimi K3 That Beats Claude Fable 5 (+16 AI Updates)",
+   "publishedAt": "2026-07-20",
+   "views": 137500,
+   "likes": 2859,
+   "comments": 389,
+   "duration": "PT20M2S",
+   "vph": 12.19,
+   "breakout": 1.18
+  },
+  {
+   "id": "AHGG7LHi07E",
+   "title": "I Tested 1000+ Claude Skills: These 10 Are The Only Ones That Matter",
+   "publishedAt": "2026-05-13",
+   "views": 150077,
+   "likes": 4379,
+   "comments": 257,
+   "duration": "PT14M6S",
+   "vph": 10.82,
+   "breakout": 0.99
+  },
+  {
+   "id": "wj8sGbKhNtU",
+   "title": "Google Flow Free Tutorial: How To Make Cinematic AI Videos With No Editing Skills",
+   "publishedAt": "2026-05-26",
+   "views": 337338,
+   "likes": 9346,
+   "comments": 332,
+   "duration": "PT27M",
+   "vph": 128.18,
+   "breakout": 1.77
+  },
+  {
+   "id": "8xMYpZZsimw",
+   "title": "Claude Design Tutorial: Build a Full Brand Identity and Launch Video Step By Step",
+   "publishedAt": "2026-04-22",
+   "views": 219268,
+   "likes": 4581,
+   "comments": 178,
+   "duration": "PT12M56S",
+   "vph": 66.05,
+   "breakout": 1.89
+  },
+  {
+   "id": "Q8DoGJ0VuEI",
+   "title": "Anthropic Just Made Claude Cowork Work With Any AI For FREE (+12 AI Updates)",
+   "publishedAt": "2026-04-27",
+   "views": 285956,
+   "likes": 7514,
+   "comments": 405,
+   "duration": "PT20M36S",
+   "vph": 0.77,
+   "breakout": 2.09
+  },
+  {
+   "id": "-dwLbaCB-_I",
+   "title": "Google Antigravity 2.0 Tutorial: Full Masterclass Plus Antigravity vs Claude Code vs Codex",
+   "publishedAt": "2026-05-22",
+   "views": 391930,
+   "likes": 8292,
+   "comments": 339,
+   "duration": "PT16M6S",
+   "vph": 60.0,
+   "breakout": 2.37
+  },
+  {
+   "id": "8_vlWx1vUVk",
+   "title": "I Tested Every AI Tool Google Launched In 24 Hours Here's What's Worth Your Time (20+ Free Updates)",
+   "publishedAt": "2026-05-21",
+   "views": 254512,
+   "likes": 6717,
+   "comments": 356,
+   "duration": "PT20M57S",
+   "vph": 2.58,
+   "breakout": null
+  },
+  {
+   "id": "YYAMwM-F30o",
+   "title": "China Just Dropped A Free AI That Beats Claude Fable 5 (Here's How To Use It +21 AI Updates)",
+   "publishedAt": "2026-08-30",
+   "views": 692849,
+   "likes": 5635,
+   "comments": 237,
+   "duration": "PT22M53S",
+   "vph": 473.16,
+   "breakout": 5.81
+  },
+  {
+   "id": "65RvB3Xta0E",
+   "title": "Claude's New Update Is Scarier Than You Think (+18 AI Updates)",
+   "publishedAt": "2026-06-28",
+   "views": 187881,
+   "likes": 2921,
+   "comments": 158,
+   "duration": "PT30M59S",
+   "vph": 109.11,
+   "breakout": 1.49
+  },
+  {
+   "id": "cLSWcxKHl8g",
+   "title": "Google AI Just Made ChatGPT and Claude Obsolete  (+ 13 Top AI Updates)",
+   "publishedAt": "2026-04-06",
+   "views": 254525,
+   "likes": 7184,
+   "comments": 238,
+   "duration": "PT16M4S",
+   "vph": 0.66,
+   "breakout": 2.56
+  },
+  {
+   "id": "0Vq55ktZ6_8",
+   "title": "Higgsfield Just DESTROYED Hollywood's 3 Crore Camera (AI Cinematography masterclass)",
+   "publishedAt": "2026-01-26",
+   "views": 165967,
+   "likes": 4270,
+   "comments": 126,
+   "duration": "PT8M50S",
+   "vph": 30.81,
+   "breakout": 2.88
+  },
+  {
+   "id": "nExo3f75EAs",
+   "title": "Claude Just Killed Prompt Engineering. This Is The New Way. (+17 AI Updates)",
+   "publishedAt": "2026-07-27",
+   "views": 141725,
+   "likes": 2431,
+   "comments": 117,
+   "duration": "PT24M36S",
+   "vph": 17.7,
+   "breakout": 1.19
+  },
+  {
+   "id": "L110osBj5Kk",
+   "title": "Google's FREE AI Just Replaced LinkedIn, Naukri, and Indeed (Complete Job Hunt Stack)",
+   "publishedAt": "2026-05-07",
+   "views": 337717,
+   "likes": 11575,
+   "comments": 279,
+   "duration": "PT14M3S",
+   "vph": 80.66,
+   "breakout": 1.69
+  },
+  {
+   "id": "tx8b5P5T2io",
+   "title": "Podcast with @Sahil_Bloom on Content Creation, Side Hustles & Fitness | GSTH 04",
+   "publishedAt": "2024-04-20",
+   "views": 219723,
+   "likes": 3390,
+   "comments": 20,
+   "duration": "PT1H31M58S",
+   "vph": 0.1,
+   "breakout": null
+  },
+  {
+   "id": "ACjwmGeDHFc",
+   "title": "Why Anthropic's Claude Fable 5 & Mythos 5 Are Now Illegal (+15 AI Updates)",
+   "publishedAt": "2026-06-14",
+   "views": 210711,
+   "likes": 3805,
+   "comments": 181,
+   "duration": "PT25M51S",
+   "vph": 0.6,
+   "breakout": 1.25
+  },
+  {
+   "id": "Qy5gvSoF2qs",
+   "title": "ChatGPT Agent Builder Tutorial: I Built My First AI Agent in 18 Minutes (No Coding Needed)",
+   "publishedAt": "2025-10-08",
+   "views": 183697,
+   "likes": 4736,
+   "comments": 322,
+   "duration": "PT17M38S",
+   "vph": 14.03,
+   "breakout": 4.16
+  },
+  {
+   "id": "RIPxwxqZhVI",
+   "title": "Google's SECRET 8 AI Tools Just REPLACED Every Paid AI Tool (100% FREE Stack)",
+   "publishedAt": "2026-06-19",
+   "views": 222335,
+   "likes": 7478,
+   "comments": 184,
+   "duration": "PT1H42M29S",
+   "vph": 28.68,
+   "breakout": null
+  },
+  {
+   "id": "WJtnH0G8G1g",
+   "title": "How To Use NotebookLM Free: Complete Beginner Guide With 6 Live Use Case Demos",
+   "publishedAt": "2025-12-23",
+   "views": 309480,
+   "likes": 8528,
+   "comments": 416,
+   "duration": "PT16M26S",
+   "vph": 0.98,
+   "breakout": 7.36
+  },
+  {
+   "id": "iH5vjVacPG8",
+   "title": "Claude Fable 5 Is Mythos. The Most Powerful AI Ever Made Is Now Public",
+   "publishedAt": "2026-06-12",
+   "views": 146674,
+   "likes": 2570,
+   "comments": 161,
+   "duration": "PT19M52S",
+   "vph": 0.49,
+   "breakout": 0.87
+  },
+  {
+   "id": "vBeYXouVTuM",
+   "title": "Claude's FREE Visual Builder Just DESTROYED Every Paid Design Tool (+ 9 AI Updates)",
+   "publishedAt": "2026-03-17",
+   "views": 152255,
+   "likes": 3351,
+   "comments": 95,
+   "duration": "PT12M30S",
+   "vph": 36.38,
+   "breakout": 1.25
+  },
+  {
+   "id": "A-2WKQxhI_8",
+   "title": "Why You Should Switch to DeepSeek V4 Flash Right Now (+14 AI Updates)",
+   "publishedAt": "2026-08-09",
+   "views": 328454,
+   "likes": 7245,
+   "comments": 339,
+   "duration": "PT21M47S",
+   "vph": 45.94,
+   "breakout": 2.35
+  },
+  {
+   "id": "yI_GwsdnqX0",
+   "title": "This Is the Craziest Free Google AI Update Right Now (NotebookLM)",
+   "publishedAt": "2026-07-04",
+   "views": 157153,
+   "likes": 4336,
+   "comments": 131,
+   "duration": "PT15M24S",
+   "vph": 8.92,
+   "breakout": 1.25
+  },
+  {
+   "id": "_0xa6RVqTC8",
+   "title": "How to Use Claude Code in 2026: Full Course From Install to First Build (Step by Step)",
+   "publishedAt": "2026-01-18",
+   "views": 381284,
+   "likes": 6104,
+   "comments": 209,
+   "duration": "PT14M23S",
+   "vph": 1.53,
+   "breakout": 6.62
+  },
+  {
+   "id": "2fb_N_uk_9w",
+   "title": "I Cancelled My 6 Lakh Claude Subscription. Here's What I Use Now...",
+   "publishedAt": "2026-05-15",
+   "views": 230390,
+   "likes": 4729,
+   "comments": 456,
+   "duration": "PT18M51S",
+   "vph": 8.08,
+   "breakout": 1.38
+  },
+  {
+   "id": "xH5ROS-t3uQ",
+   "title": "Sam Altman's New AI Device Is Here (+ 18 Massive AI Updates)",
+   "publishedAt": "2026-05-04",
+   "views": 272250,
+   "likes": 4277,
+   "comments": 175,
+   "duration": "PT18M54S",
+   "vph": 0.06,
+   "breakout": 1.63
+  },
+  {
+   "id": "cSOpT-vCXck",
+   "title": "Claude Code for Beginners: Complete Build Tutorial From Setup to Finished App (Free)",
+   "publishedAt": "2026-06-04",
+   "views": 208167,
+   "likes": 5878,
+   "comments": 229,
+   "duration": "PT1H18M1S",
+   "vph": 42.58,
+   "breakout": 1.09
+  },
+  {
+   "id": "hqiStqp6FL4",
+   "title": "Claude Skills Tutorial: How To Automate Repetitive Work With No Coding (Full Guide)",
+   "publishedAt": "2026-02-06",
+   "views": 152979,
+   "likes": 3142,
+   "comments": 202,
+   "duration": "PT10M30S",
+   "vph": 29.88,
+   "breakout": 1.38
+  },
+  {
+   "id": "CpDM2ZXapBs",
+   "title": "The Top 5 Claude Co-work Features You Need to Know",
+   "publishedAt": "2026-03-05",
+   "views": 409655,
+   "likes": 6742,
+   "comments": 246,
+   "duration": "PT12M46S",
+   "vph": 0.0,
+   "breakout": 3.08
+  },
+  {
+   "id": "3JkcN6rldpc",
+   "title": "Hermes Agent Full Setup: How to Build Your Own Self-Improving Al Agent in 10 mins",
+   "publishedAt": "2026-05-03",
+   "views": 180531,
+   "likes": 4880,
+   "comments": 169,
+   "duration": "PT10M11S",
+   "vph": 17.41,
+   "breakout": 1.17
+  },
+  {
+   "id": "NCXYlZ-oAY0",
+   "title": "ChatGPT Finally Built The AI Coworker Claude Couldn't",
+   "publishedAt": "2026-04-25",
+   "views": 142354,
+   "likes": 3489,
+   "comments": 196,
+   "duration": "PT17M52S",
+   "vph": 4.22,
+   "breakout": null
+  },
+  {
+   "id": "_Vccl1Iulws",
+   "title": "Nvidia CEO Just Said This About OpenClaw And He's Not Wrong (+ 12 AI Updates)",
+   "publishedAt": "2026-03-22",
+   "views": 168183,
+   "likes": 3745,
+   "comments": 110,
+   "duration": "PT19M16S",
+   "vph": 41.44,
+   "breakout": 1.05
+  },
+  {
+   "id": "HJN3husu1oM",
+   "title": "This New AI Agent Turns You Into a One-Person Company",
+   "publishedAt": "2026-05-24",
+   "views": 497640,
+   "likes": 7336,
+   "comments": 168,
+   "duration": "PT16M3S",
+   "vph": 4.69,
+   "breakout": 2.62
+  },
+  {
+   "id": "fUCfm6Nc2dM",
+   "title": "Zuckerberg Finally Built An AI That Beats Claude And GPT (+12 AI Updates)",
+   "publishedAt": "2026-04-15",
+   "views": 155703,
+   "likes": 3543,
+   "comments": 154,
+   "duration": "PT18M39S",
+   "vph": 1.33,
+   "breakout": 1.51
+  },
+  {
+   "id": "4LwtuscILlc",
+   "title": "How To Build Your First AI Agent In 13 Minutes (No Coding, Full Tutorial)",
+   "publishedAt": "2026-08-02",
+   "views": 157750,
+   "likes": 3865,
+   "comments": 138,
+   "duration": "PT13M31S",
+   "vph": 114.46,
+   "breakout": 1.22
+  },
+  {
+   "id": "NuNDpeZYQ28",
+   "title": "Stop Paying For Claude: I Found A Way To Run It For FREE",
+   "publishedAt": "2026-08-04",
+   "views": 196346,
+   "likes": 4179,
+   "comments": 294,
+   "duration": "PT17M1S",
+   "vph": 100.34,
+   "breakout": 1.45
+  },
+  {
+   "id": "lpVkxuVmaLk",
+   "title": "Claude AI Just Got A Massive Update Nobody Saw Coming",
+   "publishedAt": "2026-06-02",
+   "views": 173098,
+   "likes": 3474,
+   "comments": 121,
+   "duration": "PT21M49S",
+   "vph": 6.75,
+   "breakout": 1.03
+  },
+  {
+   "id": "ROmtgqTefAw",
+   "title": "Google Just Changed AI Forever - 7 FREE Tools No One Knows About Yet",
+   "publishedAt": "2025-11-12",
+   "views": 478544,
+   "likes": 18113,
+   "comments": 795,
+   "duration": "PT13M12S",
+   "vph": 6.46,
+   "breakout": 8.25
+  },
+  {
+   "id": "WeFJzppMOyI",
+   "title": "Pomelli: Google's New FREE SECRET Weapon For Every Business Owner",
+   "publishedAt": "2026-05-28",
+   "views": 163296,
+   "likes": 5774,
+   "comments": 198,
+   "duration": "PT20M38S",
+   "vph": 16.72,
+   "breakout": 0.83
+  },
+  {
+   "id": "baoTpwmIBbU",
+   "title": "I Spent 200 Hours on Codex. Here's What I Found",
+   "publishedAt": "2026-04-30",
+   "views": 153044,
+   "likes": 4376,
+   "comments": 176,
+   "duration": "PT12M28S",
+   "vph": 12.8,
+   "breakout": 1.12
+  },
+  {
+   "id": "gNA2fQ2KAIs",
+   "title": "The Man Behind Every Google AI Tool Showed Me What's Coming Next",
+   "publishedAt": "2026-03-12",
+   "views": 293412,
+   "likes": 8059,
+   "comments": 214,
+   "duration": "PT31M35S",
+   "vph": 0.49,
+   "breakout": 2.4
+  },
+  {
+   "id": "dcz8i5aDrcA",
+   "title": "Sam Altman Just Beat Claude With OpenAI's Biggest Model Yet",
+   "publishedAt": "2026-04-24",
+   "views": 151033,
+   "likes": 3535,
+   "comments": 214,
+   "duration": "PT16M31S",
+   "vph": 0.26,
+   "breakout": 1.25
+  },
+  {
+   "id": "O2HgyToWu9Q",
+   "title": "China Just Dropped A Free AI GLM 5.2 That Beats Claude (+16 AI Updates)",
+   "publishedAt": "2026-06-21",
+   "views": 374515,
+   "likes": 8865,
+   "comments": 530,
+   "duration": "PT22M52S",
+   "vph": 198.24,
+   "breakout": 2.42
+  }
+ ],
+ "short_popular": [
+  {
+   "id": "zF5DzNSKBI0",
+   "title": "You can Buy this HOUSE for just 85 Rupees",
+   "publishedAt": "2025-01-13",
+   "views": 3092392,
+   "likes": 191985,
+   "comments": 943,
+   "duration": "PT1M26S",
+   "vph": 1.47,
+   "breakout": null
+  },
+  {
+   "id": "FZml4h4uXJU",
+   "title": "Free tools you don't know yet",
+   "publishedAt": "2025-10-02",
+   "views": 2391754,
+   "likes": 75207,
+   "comments": 152,
+   "duration": "PT1M9S",
+   "vph": 30.06,
+   "breakout": null
+  },
+  {
+   "id": "KxAGWENTUpw",
+   "title": "Use any AI Model for FREE",
+   "publishedAt": "2025-09-20",
+   "views": 1365790,
+   "likes": 49681,
+   "comments": 230,
+   "duration": "PT44S",
+   "vph": 101.98,
+   "breakout": null
+  },
+  {
+   "id": "tYnuf6-kXT8",
+   "title": "AI runs on GPUs. And whoever controls GPUs... controls the future.",
+   "publishedAt": "2025-08-22",
+   "views": 1001843,
+   "likes": 18002,
+   "comments": 211,
+   "duration": "PT52S",
+   "vph": 2.09,
+   "breakout": null
+  },
+  {
+   "id": "4uLBG43dL-g",
+   "title": "Google just launched Gemini 2.5 Flash Image and it's completely FREE",
+   "publishedAt": "2025-08-28",
+   "views": 823297,
+   "likes": 24314,
+   "comments": 131,
+   "duration": "PT2M14S",
+   "vph": 0.75,
+   "breakout": null
+  },
+  {
+   "id": "6sOPSbhnVZw",
+   "title": "Guess the Company",
+   "publishedAt": "2025-01-07",
+   "views": 783888,
+   "likes": 37539,
+   "comments": 186,
+   "duration": "PT1M20S",
+   "vph": 0.62,
+   "breakout": null
+  },
+  {
+   "id": "k3G0K5UxbP8",
+   "title": "Samay Raina is Marketing GENIUS",
+   "publishedAt": "2025-01-05",
+   "views": 756237,
+   "likes": 38120,
+   "comments": 305,
+   "duration": "PT1M27S",
+   "vph": 0.68,
+   "breakout": null
+  },
+  {
+   "id": "01hUKhzYL5Q",
+   "title": "Secret AI Perks You Already Own (But Aren't Using)",
+   "publishedAt": "2026-01-07",
+   "views": 594488,
+   "likes": 15832,
+   "comments": 138,
+   "duration": "PT41S",
+   "vph": 0.81,
+   "breakout": 15.65
+  },
+  {
+   "id": "TZ5VL1u7Exs",
+   "title": "Puma's Genius PR Stunt",
+   "publishedAt": "2025-01-25",
+   "views": 554283,
+   "likes": 25297,
+   "comments": 65,
+   "duration": "PT1M13S",
+   "vph": 0.24,
+   "breakout": null
+  },
+  {
+   "id": "nq8qpjroHm8",
+   "title": "Elon Musk vs. India: The Scary Truth About GPUs",
+   "publishedAt": "2025-12-19",
+   "views": 526927,
+   "likes": 8161,
+   "comments": 160,
+   "duration": "PT36S",
+   "vph": null,
+   "breakout": 16.96
+  },
+  {
+   "id": "nvdhEORdnWA",
+   "title": "Ambani Bought 1 LAKH CRORE Worth Land for Just 2200 Crore",
+   "publishedAt": "2025-01-10",
+   "views": 480737,
+   "likes": 17506,
+   "comments": 197,
+   "duration": "PT1M8S",
+   "vph": null,
+   "breakout": null
+  },
+  {
+   "id": "FK9_03Mg9Gs",
+   "title": "Microsoft Just Built the Eternal Hard Drive",
+   "publishedAt": "2026-04-30",
+   "views": 475575,
+   "likes": 16148,
+   "comments": 196,
+   "duration": "PT1M24S",
+   "vph": 0.88,
+   "breakout": 3.45
+  },
+  {
+   "id": "7A4s1UtOYv0",
+   "title": "Stop paying for AI NVIDIA made every top AI FREE",
+   "publishedAt": "2026-04-29",
+   "views": 427507,
+   "likes": 20129,
+   "comments": 110,
+   "duration": "PT1M18S",
+   "vph": 9.25,
+   "breakout": 2.14
+  },
+  {
+   "id": "6UR-EXqeNW4",
+   "title": "Stop Paying For Claude Code! Run It FREE Now",
+   "publishedAt": "2026-06-27",
+   "views": 447742,
+   "likes": 19807,
+   "comments": 5806,
+   "duration": "PT44S",
+   "vph": 110.62,
+   "breakout": 4.24
+  },
+  {
+   "id": "Sn3D6RwguJg",
+   "title": "ComfyUI: The control panel for your AI creativity",
+   "publishedAt": "2025-08-26",
+   "views": 383186,
+   "likes": 10326,
+   "comments": 24,
+   "duration": "PT41S",
+   "vph": 4.74,
+   "breakout": null
+  },
+  {
+   "id": "-dXsBzU1-DU",
+   "title": "Why AI Companies Are Shredding Millions of Physical Books!",
+   "publishedAt": "2026-08-01",
+   "views": 371356,
+   "likes": 7827,
+   "comments": 83,
+   "duration": "PT1M35S",
+   "vph": 1.21,
+   "breakout": 7.36
+  },
+  {
+   "id": "OMXXHx9hZcc",
+   "title": "The Secret Way This Indian Man Found 25 Hidden Land Plots!",
+   "publishedAt": "2026-06-07",
+   "views": 367481,
+   "likes": 11233,
+   "comments": 77,
+   "duration": "PT1M16S",
+   "vph": null,
+   "breakout": 5.77
+  },
+  {
+   "id": "ZQSUDtIx_ZM",
+   "title": "Why 2.5 Million People Just Deleted ChatGPT (Claude's New Update)",
+   "publishedAt": "2026-03-24",
+   "views": 367371,
+   "likes": 10429,
+   "comments": 128,
+   "duration": "PT1M30S",
+   "vph": 0.35,
+   "breakout": 4.88
+  },
+  {
+   "id": "MYOdDsEAMns",
+   "title": "OpenAI Just Killed Claude Code: 6 Insane Updates That Change Everything",
+   "publishedAt": "2026-04-17",
+   "views": 366767,
+   "likes": 13854,
+   "comments": 234,
+   "duration": "PT1M21S",
+   "vph": 8.8,
+   "breakout": 7.37
+  },
+  {
+   "id": "yjJCGNpeQR4",
+   "title": "OpenAI's Most SECRET Device is better than iPhone",
+   "publishedAt": "2026-05-01",
+   "views": 345305,
+   "likes": 8423,
+   "comments": 67,
+   "duration": "PT1M30S",
+   "vph": 3.29,
+   "breakout": 2.51
+  },
+  {
+   "id": "qRNuIJU7OS0",
+   "title": "Anthropic's CEO prediction about future of coding is wild",
+   "publishedAt": "2025-09-04",
+   "views": 318907,
+   "likes": 6388,
+   "comments": 137,
+   "duration": "PT39S",
+   "vph": null,
+   "breakout": null
+  },
+  {
+   "id": "Yg6iLTai2no",
+   "title": "This Juice Shop Makes 2 Crore by working 4 hrs a day",
+   "publishedAt": "2025-02-09",
+   "views": 313380,
+   "likes": 15472,
+   "comments": 71,
+   "duration": "PT1M7S",
+   "vph": 6.56,
+   "breakout": null
+  },
+  {
+   "id": "fVc95xxfg80",
+   "title": "Why Jensen Huang is Worried About Microsoft's New AI",
+   "publishedAt": "2026-06-05",
+   "views": 284606,
+   "likes": 7800,
+   "comments": 69,
+   "duration": "PT2M12S",
+   "vph": 0.79,
+   "breakout": 4.59
+  },
+  {
+   "id": "bpao3BG_O0M",
+   "title": "Guess the City ? #shorts",
+   "publishedAt": "2025-02-24",
+   "views": 272316,
+   "likes": 6645,
+   "comments": 386,
+   "duration": "PT1M11S",
+   "vph": null,
+   "breakout": null
+  },
+  {
+   "id": "RdzJ9Ndj-Kw",
+   "title": "Google Just Ended the iPhone (Gemini Intelligence is Here)",
+   "publishedAt": "2026-05-14",
+   "views": 264283,
+   "likes": 5841,
+   "comments": 66,
+   "duration": "PT1M18S",
+   "vph": 6.41,
+   "breakout": 4.99
+  },
+  {
+   "id": "xkolq8is6Os",
+   "title": "Stop Using ChatGPT. Kimi K2.6 Just Replaced Your Whole Team",
+   "publishedAt": "2026-04-27",
+   "views": 263899,
+   "likes": 9830,
+   "comments": 95,
+   "duration": "PT1M30S",
+   "vph": 8.39,
+   "breakout": 2.75
+  },
+  {
+   "id": "kOnott2mg5g",
+   "title": "Stop Using ChatGPT. Google Just Changed Everything",
+   "publishedAt": "2026-05-24",
+   "views": 255768,
+   "likes": 8267,
+   "comments": 67,
+   "duration": "PT1M23S",
+   "vph": 1.13,
+   "breakout": 3.12
+  },
+  {
+   "id": "2vKU3J29FJw",
+   "title": "One guy automated his entire job search with Claude Code #ai #automation",
+   "publishedAt": "2026-04-26",
+   "views": 256501,
+   "likes": 9837,
+   "comments": 2379,
+   "duration": "PT1M45S",
+   "vph": 17.1,
+   "breakout": 3.77
+  },
+  {
+   "id": "fVIfAOJF9xc",
+   "title": "3 Free AI tools that feel illegal to use",
+   "publishedAt": "2026-05-05",
+   "views": 269597,
+   "likes": 15314,
+   "comments": 2105,
+   "duration": "PT45S",
+   "vph": 40.33,
+   "breakout": 2.77
+  },
+  {
+   "id": "dpNKposa9JU",
+   "title": "2X Cheaper, 21X Faster: The New Way to Train LLMs (Lighthouse Attention)",
+   "publishedAt": "2026-05-22",
+   "views": 247333,
+   "likes": 8019,
+   "comments": 101,
+   "duration": "PT1M37S",
+   "vph": 13.63,
+   "breakout": 3.0
+  },
+  {
+   "id": "lsmtWX8LMgg",
+   "title": "AI is powerful, but not perfect. For facts, always pair it with real-time search. #AItips",
+   "publishedAt": "2025-08-24",
+   "views": 247089,
+   "likes": 5328,
+   "comments": 22,
+   "duration": "PT1M",
+   "vph": null,
+   "breakout": null
+  },
+  {
+   "id": "CRX-rxP1F6o",
+   "title": "GPT-5 Free: Mind-blowing Features",
+   "publishedAt": "2025-08-08",
+   "views": 242151,
+   "likes": 7289,
+   "comments": 78,
+   "duration": "PT2M16S",
+   "vph": 18.78,
+   "breakout": null
+  },
+  {
+   "id": "8XWvy00tjWk",
+   "title": "The Ruthless Move Elon Musk Just Made to Destroy OpenAI & Google",
+   "publishedAt": "2026-03-26",
+   "views": 238008,
+   "likes": 4723,
+   "comments": 88,
+   "duration": "PT1M20S",
+   "vph": null,
+   "breakout": 2.48
+  },
+  {
+   "id": "fCEpoioDzQA",
+   "title": "How to Run a Hollywood-Level AI Art Generator on Your Own Device",
+   "publishedAt": "2026-06-08",
+   "views": 238158,
+   "likes": 11011,
+   "comments": 1580,
+   "duration": "PT1M2S",
+   "vph": 8.82,
+   "breakout": 3.5
+  },
+  {
+   "id": "NbLNHmFpgz0",
+   "title": "This Floating Magnets can Generate unlimited Electricity for almost FREE",
+   "publishedAt": "2026-05-01",
+   "views": 231036,
+   "likes": 6075,
+   "comments": 63,
+   "duration": "PT1M8S",
+   "vph": 0.67,
+   "breakout": 2.59
+  },
+  {
+   "id": "_n89H_tI720",
+   "title": "This AI Tool is truly a game changer",
+   "publishedAt": "2025-08-27",
+   "views": 230554,
+   "likes": 10849,
+   "comments": 16,
+   "duration": "PT1M3S",
+   "vph": 3.7,
+   "breakout": null
+  },
+  {
+   "id": "WmeEd3A64AU",
+   "title": "This 1 Free Tool Replaced My Entire Video Production Team!",
+   "publishedAt": "2026-06-28",
+   "views": 243773,
+   "likes": 13398,
+   "comments": 3426,
+   "duration": "PT1M6S",
+   "vph": 77.21,
+   "breakout": 2.22
+  },
+  {
+   "id": "MEIPmCh8cYo",
+   "title": "China's Cheap AI is Terrifying the US",
+   "publishedAt": "2026-03-23",
+   "views": 211440,
+   "likes": 3201,
+   "comments": 36,
+   "duration": "PT36S",
+   "vph": null,
+   "breakout": 2.86
+  },
+  {
+   "id": "CVUGTFTZiuw",
+   "title": "How to Get FREE Electricity with NVIDIA's New AI Box",
+   "publishedAt": "2026-05-17",
+   "views": 210584,
+   "likes": 5700,
+   "comments": 78,
+   "duration": "PT1M27S",
+   "vph": null,
+   "breakout": 4.37
+  },
+  {
+   "id": "g-8Ja8jZlg8",
+   "title": "Indian Founder Ghosts OpenAI's $3B Deal #sundarpichai #ytshorts",
+   "publishedAt": "2025-07-14",
+   "views": 199286,
+   "likes": 3710,
+   "comments": 38,
+   "duration": "PT1M4S",
+   "vph": 19.69,
+   "breakout": null
+  },
+  {
+   "id": "V6vvB7qtndc",
+   "title": "The Death of Aging? Inside the New Cellular Rejuvenation Science",
+   "publishedAt": "2026-03-22",
+   "views": 196298,
+   "likes": 4556,
+   "comments": 59,
+   "duration": "PT1M24S",
+   "vph": 43.24,
+   "breakout": 3.04
+  },
+  {
+   "id": "Oi_uqlSsHFs",
+   "title": "How RCB Is Quietly Using AI To Find Unknown Superstars",
+   "publishedAt": "2026-06-03",
+   "views": 192106,
+   "likes": 4130,
+   "comments": 30,
+   "duration": "PT1M17S",
+   "vph": 0.66,
+   "breakout": 3.67
+  },
+  {
+   "id": "60JytbI2Yb0",
+   "title": "Even the richest people know layoffs will crash the economy",
+   "publishedAt": "2026-04-20",
+   "views": 186017,
+   "likes": 3586,
+   "comments": 56,
+   "duration": "PT1M20S",
+   "vph": 0.33,
+   "breakout": 3.94
+  },
+  {
+   "id": "ovRGtPcwRGY",
+   "title": "The Brutal Reason Jack Dorsey Just Fired 4,000 Employees",
+   "publishedAt": "2026-06-02",
+   "views": 181861,
+   "likes": 2386,
+   "comments": 10,
+   "duration": "PT51S",
+   "vph": null,
+   "breakout": 4.03
+  },
+  {
+   "id": "oSQIADJQHQ0",
+   "title": "Why AI Subscriptions are the New Economy ?",
+   "publishedAt": "2026-01-27",
+   "views": 174761,
+   "likes": 2670,
+   "comments": 23,
+   "duration": "PT37S",
+   "vph": 1.69,
+   "breakout": 4.08
+  },
+  {
+   "id": "iPSevsRZOfk",
+   "title": "Mark Zuckerberg's Next Big Device Just Leaked!",
+   "publishedAt": "2026-06-06",
+   "views": 173164,
+   "likes": 3187,
+   "comments": 43,
+   "duration": "PT1M8S",
+   "vph": null,
+   "breakout": 2.81
+  },
+  {
+   "id": "tBLb3Zy4b_k",
+   "title": "Mark Zuckerberg's SECRET move with Meta will change how AI is powered",
+   "publishedAt": "2026-05-05",
+   "views": 171486,
+   "likes": 4649,
+   "comments": 41,
+   "duration": "PT1M18S",
+   "vph": null,
+   "breakout": 1.56
+  },
+  {
+   "id": "jIPIy5XbYb0",
+   "title": "Stop Paying For Claude! Try Nvidia Nemotron 3 Ultra",
+   "publishedAt": "2026-06-10",
+   "views": 168797,
+   "likes": 8296,
+   "comments": 1225,
+   "duration": "PT1M7S",
+   "vph": 6.06,
+   "breakout": 2.26
+  },
+  {
+   "id": "d0ARx_PRUEE",
+   "title": "The Silicon Valley Secret: AI is Already Writing 100% of the Code",
+   "publishedAt": "2026-01-25",
+   "views": 166285,
+   "likes": 2708,
+   "comments": 84,
+   "duration": "PT33S",
+   "vph": null,
+   "breakout": 3.59
+  },
+  {
+   "id": "_y4uzZnklTo",
+   "title": "Claude Opus 4.7 vs GPT-Rosalind: The AI War is Over",
+   "publishedAt": "2026-04-28",
+   "views": 165920,
+   "likes": 5932,
+   "comments": 42,
+   "duration": "PT2M33S",
+   "vph": 6.98,
+   "breakout": 1.19
+  }
+ ],
+ "transcripts": {
+  "YYAMwM-F30o": {
+   "format": "weekly roundup",
+   "gate": null,
+   "quoted_lines_verbatim": [
+    "A few days ago, a mysterious free AI model called Ox Alpha appeared online and it was already beating Claude's most powerful and expensive model, Claude Fable 5. And nobody knew who made it.",
+    "But Google did something even bigger this week because they are giving away 12 months of Gemini AI's paid version completely free.",
+    "And those are just two of the 21 things that happened this week",
+    "Now, at the end of the video, we try Ox Alpha ourselves.",
+    "if any section gets too technical, just jump to the next update you care about.",
+    "So OpenAI isn't just building AI models anymore. It's now building the chips that run them too.",
+    "Can India soon be able to compete with the US? Let us know in the comments.",
+    "Subscribe if you haven't yet so YouTube will bring it to your feed when it drops.",
+    "Zcode creates a complete 22 slide deck",
+    "And all of this used only around 6% of its 1 million token context window.",
+    "Zcode is currently offering around 3 million free tokens",
+    "It costs around 7 cents per million input tokens and 25 cents per million output tokens.",
+    "The design and gameplay still needs some improvement.",
+    "70% of the people watching this are not subscribed yet. So, YouTube will not show you the next AI updates video we drop."
+   ]
+  },
+  "KjNsnE_vsyc": {
+   "format": "framework",
+   "gate": null,
+   "quoted_lines_verbatim": [
+    "There's a five-letter word that's going to decide your paycheck for the next decade. It's not agents. It's not coding. It's adapt.",
+    "couldn't understand half the words his own team was using",
+    "A 22-year-old intern on your team is finishing in 2 hours what used to take you two full days of work.",
+    "I'm going to show you the one stage where 94 out of every 100 people quit forever.",
+    "their co-workers are making 56% more money doing the exact same job at the exact same desk",
+    "Hi, I'm Vibbhav. I run three AI companies and train people across 150 plus countries.",
+    "MIT published a study. 11.7% of every job today can already be automated.",
+    "think of it as a USB port for AI",
+    "The result was that out of 1,000 plus calls handled per day, 70% fully resolved by the agent.",
+    "The agent would pick up the phone in 0.8 seconds",
+    "Quick thing for the founders watching. Me and my team actually run corporate AI trainings.",
+    "AI will code. Humans will program.",
+    "if you are not subscribed yet, 70% of the people watching this are not."
+   ]
+  },
+  "HJN3husu1oM": {
+   "format": "sponsored tool demo",
+   "gate": null,
+   "quoted_lines_verbatim": [
+    "Most people think running a business means hiring a big team.",
+    "But what if one AI could quietly handle half that org chart?",
+    "Give me the next 15 minutes of your time",
+    "I run three companies using AI and I've tested basically every agent there is.",
+    "We're running two real experiments.",
+    "If it can do that, it can literally change how someone starts a company.",
+    "with a real company, you can tell immediately when advice is generic",
+    "It's like 3 minutes of setup, so just stay with me.",
+    "This video was sponsored by them",
+    "About 70% of you watching aren't subscribed yet, which means YouTube isn't going to show you the next one I make."
+   ]
+  },
+  "ROmtgqTefAw": {
+   "format": "free tools list",
+   "gate": null,
+   "quoted_lines_verbatim": [
+    "Stop paying for AI. I mean it.",
+    "This is the guide Google doesn't want you to see. Let's go.",
+    "All right, so it's 10 p.m. Your exam is tomorrow.",
+    "Think about what just happened. You just hacked your exam for free.",
+    "I'm going to show you the pro tip 99% of people miss.",
+    "Although this comes with a price tag",
+    "Now, it's not going to replace a $50,000 design agency",
+    "I've put links to all six of these tools down in the description. Go get them and go build something. Thanks for watching. See you in the next one."
+   ]
+  },
+  "_0xa6RVqTC8": {
+   "format": "tutorial",
+   "gate": null,
+   "quoted_lines_verbatim": [
+    "People are building 3D models in Blender just by typing. Filing taxes automatically. Scraping Instagram for restaurant recommendations all with one tool.",
+    "I'm not technical at all. I avoided this for months thinking it wasn't for me.",
+    "By the end of this video, you'll have one, a personal AI assistant that remembers everything about your projects. Two, your first AI agent built and deployed. Three, a full content army working on autopilot. All with just three commands.",
+    "Now, most of you might be thinking, \"Oh, Vehav, Claude in the browser works just fine for me. Why should I even switch to Claude code?\"",
+    "You can get started with Claude Pro that cost $20 per month.",
+    "it's only available on Mac and you need a $100 Claude Max subscription to run it",
+    "I've put together a complete command cheat sheet. I'm sharing it in my WhatsApp community.",
+    "If you want a video on that, drop it in the comments and I'll make it happen. All right, go build your AI army."
+   ]
+  },
+  "L110osBj5Kk": {
+   "format": "career workflow",
+   "gate": null,
+   "quoted_lines_verbatim": [
+    "Here's something nobody tells you about job hunting. You're not losing because you're underqualified. You're losing because the system was never designed to find the best person. It was designed to filter out the most people as fast as possible.",
+    "I run three companies myself and we hire hundreds of candidates a year.",
+    "So today, we're going to break this down into four stages.",
+    "And I want you to copy this type of prompt because the specificity is what makes it work.",
+    "Whenever you use AI, know that it's 80% the final output.",
+    "send this to them. It might actually change their week.",
+    "70% of the people watching this are not subscribed yet.",
+    "we had promised you that we would make a few videos when we reached 500,000."
+   ]
+  },
+  "btLZQzynfoA": {
+   "format": "career roadmap",
+   "gate": null,
+   "quoted_lines_verbatim": [
+    "A post just went viral. 50 million views from the CEO of an AI company and it's scaring everyone.",
+    "I've worked at Uber, built three startups, raised 5 million from Sequoia. I use AI 8 to 10 hours a day.",
+    "Level five is the one nobody sees coming.",
+    "Quick check. Where are you right now? Drop a comment. Are you a cook, chef, or orchestrator?",
+    "Think of it as USBC for AI.",
+    "68% of you watching right now aren't subscribed yet.",
+    "Replace 700 customer support people with AI agents.",
+    "So what did Clara do? They hired humans back",
+    "I'm going to reveal all of it. But only when we hit 500,000 subscribers on this channel.",
+    "Which of these income paths would you start with? Comment on your pick."
+   ]
+  },
+  "6OmqsFrRv4I": {
+   "format": "weekly roundup (the linked video)",
+   "gate": null,
+   "quoted_lines_verbatim": [
+    "OpenAI just dropped GPT6 and it raises a question. Are we really moving towards AGI?",
+    "Those are just five of the 12 biggest AI updates this week.",
+    "At the end, I'll show you what I asked for and what was on my screen about an hour later.",
+    "Timestamps are in the description. Just jump to the next one.",
+    "comment below with what I should build next",
+    "But is it really worth the hype? Let us know in the comments.",
+    "If you're finding these updates useful, then subscribe.",
+    "around 70% of the people watching are still not subscribed. So, if you want YouTube actually to show you the next AI updates video when it drops, hit that subscribe button now."
+   ]
+  },
+  "KxAGWENTUpw": {
+   "format": "interview clip",
+   "gate": null,
+   "text_verbatim": "For somebody who is want to get started in this world of AI, how much money do I need to spend per month to get started? Zero. >> No. But to at least get the good subscriptions of these AI models, I have to spend 2K. You >> can do that for free as well. >> How? Chad GP plus is 2,000 a month. >> No. Install a software called as Olama. If you have a basic computer which has basic GPU, you have 50,000 laptop or Windows or Mac doesn't matter. You can almost run any decent open-source AI model directly on your computer for free without internet access unlimited. If you're a student, you can generate an ID card using AI and upload that and Gemini is free for you for one year. If you are a subscriber, >> yeah, >> perplexity is free for you. And a lot of people don't understand the power of perplexity. You know what? You can do everything that you're doing with chat GPT with perplexity by going to settings and playing with all the bloody models that are out"
+  },
+  "01hUKhzYL5Q": {
+   "format": "interview clip: the same clip as KxAGWENTUpw re-posted 109 days later, three seconds shorter; the spoken words match after the opening clause and the auto-captions differ only in punctuation, casing, one repeated word and 'one year' against '1 year' (see repost_check)",
+   "gate": null,
+   "text_verbatim": "In this world of AI, how much money do I need to spend per month to get started? Zero. >> No, but to at least get the good subscriptions of these AI models, I have to spend spend 2K. You >> can do that for free as well. >> How? Chad GP plus is 2,000 a month. >> No. Install a software called as Olama. If you have a basic computer which has basic GPU if you have 50,000 laptop or Windows or Mac doesn't matter. You can almost run any decent open-source AI model directly on your computer for free without internet access unlimited. If you're a student, you can generate an ID card using AI and upload that and Gemini is free for you for 1 year. If you are a subscriber, >> yeah, >> perplexity is free for you. And a lot of people don't understand the power of perplexity. You know what? You can do everything that you're doing with Chad GPT with Perplexity by going to settings and playing with all the bloody models that are out"
+  },
+  "2vKU3J29FJw": {
+   "format": "story short",
+   "gate": "job",
+   "quoted_lines_verbatim": [
+    "This guy just landed ahead of AI role by vibe coding and AI system that evaluated 700 jobs for him and automated his job hunt.",
+    "Here's what happened.",
+    "By the way, this is crazy AI update of the day, and today is day 16.",
+    "740 plus. That's how many jobs this system evaluated. Over a 100 custom RS generated",
+    "It scans 45 plus companies on its own.",
+    "7,000 people have already grabbed it in 2 days.",
+    "If you know someone who's looking for a job right now, send them this reel. Comment job and I will send you the link to my WhatsApp community"
+   ]
+  },
+  "fVIfAOJF9xc": {
+   "format": "list short",
+   "gate": "link",
+   "quoted_lines_verbatim": [
+    "This is how you can use Claude, GPT and Gemini for free in one place.",
+    "Comment link and I'll send you all three links directly. I drop new AI tools every day in my free WhatsApp community to join link in bio."
+   ]
+  },
+  "WmeEd3A64AU": {
+   "format": "tool short",
+   "gate": "printer",
+   "quoted_lines_verbatim": [
+    "One Chinese developer replaced an entire video production team with one free tool.",
+    "And you can run it on a basic CPU with 4 GB of RAM",
+    "So, I tested it by giving it just one word, \"health\", and within minutes it dropped me a 60-second video with voice over and matching footage",
+    "And the setup literally takes 10 seconds.",
+    "Comment \"printer\" and I'll share the complete setup guide with you. Follow for more content like this."
+   ]
+  },
+  "nq8qpjroHm8": {
+   "format": "interview clip",
+   "gate": null,
+   "quoted_lines_verbatim": [
+    "It is scary when I read it.",
+    "Elon Musk has access to a million GPUs and he says it will go to a 10 million GPUs.",
+    "How many GPUs do you think India has? >> 10,000 15,000",
+    "It's funny that you can't buy them directly right now because Nvidia is a US company."
+   ]
+  }
+ },
+ "title_normalisation": "IDs, dates, counts and durations are exactly as vidIQ returned them. Titles had emoji, rupee signs, curly quotes, a word joiner and em dashes stripped for the repo's ASCII and dash conventions (em dashes became 'and', '.' or '...'); wording is otherwise as returned. The raw vidIQ responses were not saved.",
+ "linked_video": {
+  "id": "6OmqsFrRv4I",
+  "title": "GPT-6 Astra Just Did What Claude Fable 5.1 Couldn't (+14 AI Updates)",
+  "channelId": "UClXAalunTPaX1YV185DWUeg",
+  "publishedAt": "2026-09-08T13:33:52Z",
+  "duration": "PT11M57S",
+  "viewCount": 2648,
+  "likeCount": 199,
+  "commentCount": 15,
+  "pulled_about": "2026-09-08T15:05Z",
+  "description_disclaimer_verbatim": "This video was created with the assistance of AI tools. The script, voiceover, visuals and some editing elements were generated or enhanced using AI, with human oversight applied to fact-check and structure the content.",
+  "description_timestamps": [
+   "01:15 GPT-6 Astra",
+   "02:20 Claude Fable 5.1 + Lovable",
+   "03:16 Gemini 3.8 Flash + Flash Cyber",
+   "04:06 NVIDIA Acquires Hugging Face",
+   "04:39 Uber Robotaxis in London",
+   "05:15 Google Pics",
+   "06:14 Gemini Agentic Video Understanding",
+   "07:04 Grok Bot Templates",
+   "07:26 Meta Muse Voice Transcribe",
+   "08:11 OpenClaw 2.0",
+   "08:50 Hermes Agent: Pantheon Release",
+   "10:02 Perplexity Hybrid Compute + Coinbase Integration"
+  ]
+ },
+ "balance_reads": [
+  {
+   "when": "before the first transcript call",
+   "totalCredits": 172,
+   "renewableCredits": 70,
+   "addOnCredits": 102
+  },
+  {
+   "when": "after the last transcript call",
+   "totalCredits": 102,
+   "renewableCredits": 0,
+   "addOnCredits": 102
+  },
+  {
+   "charged": 70,
+   "calls": 14,
+   "per_call_listed": 5,
+   "note": "70 equals 14 times 5 exactly"
+  }
+ ],
+ "repost_check": {
+  "method": "lowercase, strip punctuation and speaker markers, collapse an immediately repeated word, then difflib.SequenceMatcher over the word lists (autojunk off)",
+  "word_count_KxAGWENTUpw": 185,
+  "word_count_01hUKhzYL5Q": 178,
+  "similarity_ratio": 0.9642,
+  "differences": [
+   {
+    "op": "delete",
+    "KxAGWENTUpw": "for somebody who is want to get started",
+    "01hUKhzYL5Q": ""
+   },
+   {
+    "op": "insert",
+    "KxAGWENTUpw": "",
+    "01hUKhzYL5Q": "if"
+   },
+   {
+    "op": "replace",
+    "KxAGWENTUpw": "one",
+    "01hUKhzYL5Q": "1"
+   },
+   {
+    "op": "replace",
+    "KxAGWENTUpw": "chat",
+    "01hUKhzYL5Q": "chad"
+   }
+  ],
+  "reading": "The 2026 upload drops the opening clause 'for somebody who is want to get started' and its captions carry an extra 'if', '1 year' for 'one year' and 'chad' for 'chat'; every other word matches in order. Same clip, re-cut three seconds shorter, published 109 days later.",
+  "durations": {
+   "KxAGWENTUpw": "PT44S",
+   "01hUKhzYL5Q": "PT41S"
+  },
+  "published": {
+   "KxAGWENTUpw": "2025-09-20",
+   "01hUKhzYL5Q": "2026-01-07"
+  },
+  "gap_days": 109,
+  "sha256_KxAGWENTUpw": "fbe2628f6ebcf44598c1964280590867fd43ad1740546649153fa7096cdd30cd",
+  "sha256_01hUKhzYL5Q": "72d72ae46bb96df84054268182033a30b0f8819cd39c0d6848105568a36c586d"
+ },
+ "transcripts_note": "Fourteen transcripts were pulled (vidIQ video_transcript, language en). Full texts are held out of the repository as third-party captions, except the two short interview clips kept in full for the re-post check; every line quoted in the benchmark doc is stored here verbatim under quoted_lines_verbatim, auto-caption mishearings included. A re-pull costs 5 vidIQ credits per video."
+}

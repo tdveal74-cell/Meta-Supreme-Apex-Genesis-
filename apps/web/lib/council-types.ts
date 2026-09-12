@@ -1,5 +1,5 @@
 /**
- * Decision Package contract — locked in Phase 2
+ * Decision Package contract, locked in Phase 2
  * Do not loosen these shapes without updating the UI contract.
  */
 

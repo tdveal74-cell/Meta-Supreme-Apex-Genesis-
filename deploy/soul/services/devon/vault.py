@@ -125,6 +125,25 @@ SHOW_TREES: Dict[str, Dict[str, str]] = {
     },
 }
 
+# Where DEVON's drive.draft executor (Build 16) may write a draft, by Area: the
+# show's scripts folder for the two shows with a tree, the Area folder for the
+# rest, the capture inbox for an Area it does not know. Mirrored in the
+# executor's Code node because n8n cannot import this file: a change here is a
+# change there too. Ruled 2026-09-05 on Tee's "do it"; reversible, the draft
+# is one document that can be trashed.
+DRAFT_FOLDERS: Dict[str, str] = {
+    "TQO": SHOW_TREES["TQO"]["01_SCRIPTS"],
+    "Podcast": SHOW_TREES["TSWS"]["01_SCRIPTS"],
+    "NCO": AREA_FOLDERS["NCO"],
+    "ACX": AREA_FOLDERS["ACX"],
+    "Systems": AREA_FOLDERS["Systems"],
+    "Learning": AREA_FOLDERS["Learning"],
+    "Family": AREA_FOLDERS["Family"],
+    "Money": AREA_FOLDERS["Money"],
+    "Health": AREA_FOLDERS["Health"],
+    "_unknown": CAPTURE_INBOX["id"],
+}
+
 # Restricted, untouched by every sweep. Never read, list, or move without a ruling.
 RESTRICTED: Dict[str, str] = {
     "TSWS MEMOIR VAULT": "1j88Euvldadd3wouVK2cxHZadaRQZ3p32",
@@ -256,6 +275,25 @@ AIRTABLE = {
     ),
 }
 
+# Where DEVON's airtable.row executor (Build 17) may write a row, by table. The
+# executor (n8n/devon/airtable-row-writer/validate_and_plan.js) carries the same
+# map inline because n8n cannot import this file; test_devon_integrity pins the
+# two together. Every table here carries the two stamp fields the executor writes
+# on every row and reads back before writing again: DEVON key holds the job's
+# idempotency key, DEVON job holds the intent id. Both were created on Inbox
+# Captures on 2026-09-06 (fldvp5UiTnGhRunAs, fldM2r96swSZsxH8x). The base is
+# AIRTABLE["live_base"]. Adding a table or a field is a deliberate act: create the
+# two stamp fields on the table first, then change this map and the executor in
+# the same change.
+AIRTABLE_ROW_TABLES = {
+    "Inbox Captures": {
+        "id": "tbl4ziFRbl5mnUcKc",
+        "key_field": "DEVON key",
+        "job_field": "DEVON job",
+        "writable": ("Title", "Captured", "Kind", "Source", "Area", "Body", "Notes"),
+    },
+}
+
 
 # ---------------------------------------------------------------------------
 # n8n
@@ -268,17 +306,75 @@ WEBHOOKS = {
         "job": "cross platform receipts",
         "destination": "Airtable Thread Receipts tblEhgEZoNr2ztbB3",
         "workflow": "pPIt2cELH2RVZktS",
-        "auth": None,
+        # Stays the single checkable phrase. node_auth_for() in the reconciler
+        # matches by PREFIX, so any second clause added here is silently
+        # discarded. The second layer has its own field and its own checker.
+        "auth": "header x-devon-key",
+        # The body token gate, checked by the estate reconciler since 2026-09-06
+        # (verifier body_gate). It pins a fingerprint of the Check Token node's
+        # code rather than the node's presence, because presence is not the
+        # gate: the switch is `const LEGACY_GRACE = false;` inside the code, and
+        # flipping it reopens the door with the node still there and enabled.
+        # Any edit, the grace switch flipped or a single rotated poster token
+        # alike, changes the fingerprint and reports DRIFT until a human
+        # re-reads the node and re-pins it dated. A rewiring bypass changes no
+        # byte of the node, so since the second pass of 2026-09-06 the snapshot
+        # also records whether the door feeds Check Token and nothing else, and
+        # a trigger wired past it reports DRIFT the same way. The snapshot
+        # records only the hash and the wiring, never the code, so obs.json is
+        # not a fifth copy of the four tokens.
+        # Fingerprint provenance: sha256 over the jsCode with line endings and
+        # trailing whitespace normalised (code_fingerprint in the reconciler),
+        # taken 2026-09-06 from two independent transcriptions of the MCP read
+        # that agreed. The first keyed `snapshot` run is the authoritative
+        # confirmation; if it reports DRIFT with the node unchanged, re-pin
+        # from that read and note it here.
+        "body_gate": {
+            "node": "Check Token",
+            "type": "n8n-nodes-base.code",
+            "sha256": "74fdf22a12cee9c8fede22e02061b82d8348b6cf48ae4ba115d7ae6cae7a38e9",
+            "pinned": "2026-09-06",
+        },
         "open_ruling": (
-            "Still unauthenticated. Deliberately unchanged, because the posters are "
-            "ChatGPT and Grok and most chat platforms cannot attach a custom header. "
-            "Lower blast radius since it only creates rows. Needs a ruling."
+            "Header auth enforced live 2026-08-23, credential Devon Capture Key "
+            "FYRvkRTOcROEYZ9P. This entry carried auth None until 2026-08-31, so "
+            "anything reasoned from it before that date treated the lane as open. "
+            "Posters that cannot attach a custom header now need a shim. "
+            "THE SECOND LAYER IS DELIBERATE, AND AN AUDIT HAS ALREADY MIS-FLAGGED "
+            "IT ONCE. The Check Token node holds four per poster tokens as "
+            "plaintext literals in its JavaScript, one each for ChatGPT, Grok, "
+            "Gemini and Claude. Ruled by Tee 2026-09-06: they exist so each of "
+            "those platforms can file the work done on it as a receipt, so the "
+            "value HAS to be known outside n8n, pasted into that platform's own "
+            "custom instruction or project. Moving them into a credential would "
+            "not remove the secret from the world; it would only remove one copy "
+            "from the workflow JSON. Four separate tokens rather than one shared "
+            "value is the point: a single platform can be cut off without "
+            "breaking the other three. "
+            "Blast radius, worked out rather than assumed: a body token alone "
+            "gets nothing, because it sits behind the header key. Someone holding "
+            "both could file a false receipt into the Thread Log. That is receipt "
+            "pollution, not an approval bypass, and it is a long way from what "
+            "the header key can do at the write gates. A 2026-09-06 audit raised "
+            "these as a security finding alongside the header key, which was an "
+            "over-call, and it was withdrawn. Do not raise it again. The copy "
+            "worth worrying about is the one stored on each external platform, "
+            "under that platform's retention, not the one in the node."
         ),
     },
     "devon-inbox": {
         "job": "iOS and agent captures, text and binary",
         "destination": "Drive, routed by type",
         "workflow": "5s6CwWWelffqszQe",
+        "auth": "header x-devon-key",
+        "open_ruling": None,
+    },
+    # Registered 2026-09-06 with its workflow. The one GET door in the estate;
+    # it reads the ledger and writes nothing.
+    "devon-health": {
+        "job": "organism health from the ledger: open against terminal, stuck jobs, failure concentration",
+        "destination": "the caller, as JSON; nothing is written",
+        "workflow": "M3H2mVPZJpDyIzrl",
         "auth": "header x-devon-key",
         "open_ruling": None,
     },
@@ -289,10 +385,12 @@ WEBHOOKS = {
         "auth": "header x-devon-key",
         "open_ruling": (
             "POST half first proven live 2026-08-25 by the Soul Committer smoke. "
-            "Known defect, fix pending a ruling: Build Request's rand() uses signed "
-            "shifts, so ids and tokens can embed the literal text 'undefined' "
-            "(seen live: REQ-20260825-Jundef), collapsing suffix entropy. Fix is "
-            ">>> in place of >> for the three shifted indexes."
+            "The signed-shift entropy defect recorded here (ids and tokens "
+            "embedding the literal text 'undefined', seen live as "
+            "REQ-20260825-Jundef) was FIXED in the live workflow on 2026-08-25. "
+            "Build Request now uses >>> for all three shifted indexes, and the "
+            "workflow's own sticky note warns against changing them back. This "
+            "entry still called the fix pending until 2026-08-31."
         ),
     },
     "devon-approve-decide": {
@@ -300,7 +398,106 @@ WEBHOOKS = {
         "destination": "n8n data table approval_queue u6wzeN5y9LNxROsN",
         "workflow": "syRVj0G47mA1b0Xn",
         "auth": "single use token in the link, 72 hour expiry",
-        "open_ruling": None,
+        "open_ruling": (
+            "Found blank on 2026-09-05 when Tee tapped APPROVE from the phone: the "
+            "first tap and every refusal carry a sentinel request id, the Record "
+            "Decision update matched no row and emitted nothing, so the Respond "
+            "node never ran and the browser got an empty reply (execution 5800). "
+            "Every card since the two tap confirm was added on 2026-08-25 was "
+            "undecidable from the email. Fixed the same day, version b598e4a3: a "
+            "Decided? gate sends valid decisions through Record Decision then the "
+            "response, and everything else straight to the response. Write before "
+            "answer still holds on the recorded path. Proven with a fake id "
+            "(execution 5801, NOT RECORDED page returned). Tee's real confirm "
+            "landed at 18:33Z the same day (executions 5802 and 5803, both "
+            "success) and the next poll read the card approved and moved job "
+            "01M1SAK59GF0511GR7B78Y06A9 to AUTHORIZED (execution 5807). The "
+            "door is proven from the phone end to end."
+        ),
+    },
+    "devon-action": {
+        "job": "dispatch one AUTHORIZED envelope to an allowlisted executor",
+        "destination": "the executor named by the allowlist, spine.echo today",
+        "workflow": "ecLqrxALuLDdF2BN",
+        "auth": "header x-devon-key",
+        "open_ruling": (
+            "Repaired 2026-09-05, version c95d7449 and the critic pass after it: a "
+            "gate refusal used to be a thrown error, so the webhook answered with "
+            "an empty body and the driver logged http 200 null (execution 5810). "
+            "A refusal is now data with the reason, intent id, state, action and "
+            "the known actions, HTTP 200, and the dispatch branch requires "
+            "refused false plus a target url. The allowlist carries spine.echo "
+            "with a read ceiling, so an approved reversible_write job parks at "
+            "AUTHORIZED with that reason in devon_driver_log until its grant "
+            "decays. drive.draft (Drive Draft Writer J7Ly7riwXEd95D9a) joined the "
+            "allowlist the same evening at ceiling reversible_write on Tee's ruling, "
+            "was quarantined off it hours later by the fourth critic cycle, and was "
+            "restored at 20:45Z once the card named the executor and the executor "
+            "required a granted grant on every envelope (router version b2a3bf4b). "
+            "A refusal the router itself raised never reaches the bus, so the driver "
+            "posts the mark: ACTION_FAILED at the same state with state_reason "
+            "Parked at AUTHORIZED, once per distinct reason (Tee's ruling, ruling 1)."
+        ),
+    },
+    "devon-drive-draft": {
+        "job": "write one Google Doc draft for an AUTHORIZED job and advance it to EXECUTING",
+        "destination": "Google Drive, the folder DRAFT_FOLDERS names for the job's Area",
+        "workflow": "J7Ly7riwXEd95D9a",
+        "auth": "header x-devon-key",
+        "open_ruling": (
+            "Build 16, created 2026-09-05 on Tee's ruling (do it, then create it). "
+            "The first real executor: called only by the Action Router as action "
+            "drive.draft at ceiling reversible_write. Checks the grant again, reports "
+            "to the bus twice, finds an existing draft by idempotency key before "
+            "writing, and refuses as data. Reversible by trashing the document. "
+            "Proven live 2026-09-05 19:34Z on job 01M1SAK59GF0511GR7B78Y06A9: "
+            "execution 5881 wrote one Google Doc into TQO/01_SCRIPTS and the job "
+            "reached verification card REQ-20260905-0Mq1q1. Hardened at 20:35Z "
+            "(version 7ff4d7d4) after the fourth critic cycle: a granted, unexpired "
+            "approval is required on every envelope whatever the blast radius label "
+            "says, a single flight lock refuses a second pass inside ten minutes, "
+            "nothing is written unless the ledger took the entry report, and the "
+            "created file is read back under its key so the artifact records whether "
+            "the idempotency properties persisted."
+        ),
+    },
+    "devon-airtable-row": {
+        "job": "write one row into an allowlisted Airtable table for an AUTHORIZED job and advance it to EXECUTING",
+        "destination": "Airtable base AIRTABLE live_base, the tables AIRTABLE_ROW_TABLES names (Inbox Captures today)",
+        "workflow": "ps2S6dWcTIpq5bvr",
+        "auth": "header x-devon-key",
+        "open_ruling": (
+            "Build 17, created 2026-09-06 on Tee's ruling (the third executor, first "
+            "of the three builds in the recommended order). The second real executor: "
+            "called only by the Action Router as action airtable.row at ceiling "
+            "reversible_write, and bound by the Job Driver only when the job carries a "
+            "structural intent.payload.airtable (table and fields), never from words "
+            "in the summary. Same gates as the Drive Draft Writer: a granted, unexpired "
+            "approval on every envelope, the single flight lock in the entry report, "
+            "nothing written unless the ledger took that report, an existing row found "
+            "by DEVON key and DEVON job before writing, the created record read back so "
+            "the artifact records key_verified, refusals as data. Never sends typecast, "
+            "so an option that does not exist on a select field is refused by Airtable "
+            "and the job parks with that reason. Reversible by deleting the row. The "
+            "Intake Former passes payload.airtable through since the same day; before "
+            "that edit the executor was unreachable from any poster. Live proof, "
+            "2026-09-06: Tee approved card REQ-20260906-8kt8Vj at 11:32:16Z; Driver "
+            "Poll run 6200, driver pass 6202, executor execution 6208 wrote "
+            "recKhlOqdAG0Zju30 into Inbox Captures under DEVON key "
+            "build17-proof-20260906-airtable-row for job 01M1V6M3XG0RQR191QFF7W74WJ, "
+            "artifact key_verified true, both stamps read back directly from Airtable; "
+            "verification card REQ-20260906-vED3ik approved by Tee at 12:04:12Z and "
+            "the job closed COMPLETED by driver pass 6238 (poll run 6236) at 12:08:11Z "
+            "with human_watched true: the lane has run end to end on a real job once. "
+            "Hardened the same hour on a fresh critic's findings (version "
+            "486c243d): a Write? guard so a Check Existing refusal answers as data "
+            "instead of throwing (pinned 6224, 6225, 6226), whitespace refused in the "
+            "key rather than collapsed, and a date must be a calendar date that "
+            "exists. The single flight mark is best effort and this entry said lock "
+            "until then: the mark lives in the ledger row and a router failure exit "
+            "rewrites it away; the Driver Poll's three minute skip and the search by "
+            "both stamp fields are what prevent a second row."
+        ),
     },
     "devon-ledger": {
         "job": "Build 02 state ledger writes, one row per intent",
@@ -320,6 +517,55 @@ WEBHOOKS = {
         "auth": "header x-devon-key",
         "open_ruling": None,
     },
+    # Build 14, the mouth of the autonomy lane. One POST forms one v1 job
+    # envelope at RECEIVED and hands it to the Job Driver in the same call, so
+    # the poster gets back where the job stopped. Free text is tagged by
+    # Cerebras and every tag is validated against the closed vocabularies:
+    # no Area means refused, never guessed; no blast radius defaults to
+    # reversible_write, which sends the job to Tee. dry_run returns the
+    # envelope without driving it.
+    "devon-intake": {
+        "job": "form one v1 job envelope from a capture and drive it through the organs",
+        "destination": "Job Driver TT4TfFXyH9O7lfdc, then the Build 02 ledger by way of the organs",
+        "workflow": "AEFgXee7IDJarNV7",
+        "auth": "header x-devon-key",
+        "open_ruling": None,
+    },
+    # Ruled by Tee 2026-09-08 after his phone timed out twice against
+    # api.gumroad.com while n8n reached it in half a second: the Gumroad sale
+    # check moved off the phone when he repointed the Shortcut to this door on
+    # 2026-09-08 (proved from the phone at 13:58 UTC). The
+    # token stays in n8n credential K1D8KUvTcWDcdrV0; the caller sends only
+    # x-devon-key and a sale_id, and Preflight refuses an implausible id before
+    # any request leaves. Proved on executions 6482 (a made-up id: Gumroad
+    # answered 200 with success false, the door answered 404) and 6483 (an
+    # implausible id: refused 400, no request made), both manual with the body
+    # pinned; 6489 and 6490 (pinned Gumroad replies) proved the empty-sale 502
+    # and the found-sale 200; probe execution 6494 (a throwaway workflow,
+    # archived after its one run) hit the production door twice, 404 with the
+    # key and 403 without, so the header check is proved from outside. It
+    # reads and writes nothing; it is one more key holder. Since about 14:55
+    # UTC the same door also answers {"job": "list"}: the last five sales from
+    # GET /v2/sales with no buyer fields, ruled the same day, proved on
+    # executions 6501 to 6507.
+    "devon-gumroad-sale-check": {
+        "job": "read one Gumroad sale back from GET /v2/sales/:id, or the last five sales from GET /v2/sales with no buyer fields, for Tee's phone",
+        "destination": "api.gumroad.com through credential K1D8KUvTcWDcdrV0, answered to the caller, nothing written",
+        "workflow": "7bDqKNdMHY8sxoXa",
+        "auth": "header x-devon-key",
+        "open_ruling": None,
+    },
+    # Build 15, the Face's door. A public hosted chat is a POST endpoint at
+    # /webhook/<id>/chat like any other webhook, so it is registered and
+    # audited like one. The auth is n8n login: only a signed-in n8n user can
+    # open it, and there is no key to leak.
+    "71510ab0-07eb-42d8-9734-c0741b398d49/chat": {
+        "job": "the Face: hosted chat where Tee talks to DEVON",
+        "destination": "Cerebras, then devon-intake for any job Tee files; memory in devon_chat_log nwnHN8o2dgHjtk7f",
+        "workflow": "LsmfRFMmI5feINs0",
+        "auth": "n8n user login",
+        "open_ruling": None,
+    },
 }
 
 WEBHOOK_RULE = (
@@ -328,33 +574,239 @@ WEBHOOK_RULE = (
     "routes to whichever workflow was published first."
 )
 
+# Ruled by Tee 2026-09-05 (ruling 2, rotate and stop saving). Every workflow whose
+# webhook takes the x-devon-key header receives that key inside the request headers,
+# and a saved successful execution keeps those headers where anyone who can read
+# executions can read the key. SIXTEEN webhook paths take the header as of
+# 2026-09-06, when Build 17 added devon-airtable-row (fifteen earlier that day,
+# and thirteen recorded here until the same morning). Fourteen belong to this
+# lane: devon-capture, devon-inbox, devon-approve-request, devon-action,
+# devon-drive-draft, devon-airtable-row, devon-ledger, devon-build12-upstream,
+# devon-intake, devon-spine-n8n, devon-runtime, devon-route, devon-event and
+# devon-editforge.
+# Two more sit outside it and were missed by a count taken from the lane's own
+# dependency list rather than from the estate: devon-health (Health and
+# Observability Console M3H2mVPZJpDyIzrl, ACTIVE, GET) and devon-capture-file
+# (Capture Hook Cbd24ptTPWch3aZO, INACTIVE, so it serves nothing today and would
+# the moment it is activated). This count has now been wrong twice, first as
+# eleven and then as thirteen, both times by counting the lane instead of the
+# estate. Read it from the workflows before trusting it again.
+# (devon-approve-decide is the exception that takes no header at all: its auth is
+# the single use token in the emailed link. Confirmed 2026-09-06 by reading the
+# node, which carries no credential. Rotating this key does not rotate anything
+# guarding an approval decision.) The fourteen lane paths live in fourteen
+# workflows, since the Approval Queue serves two paths, and all fourteen now run
+# with success execution data OFF, as does the Job Driver, which has no webhook
+# of its own. devon-health and devon-capture-file were NOT part of that setting
+# change and may still save successful executions carrying the header.
+# Error executions are still saved, on purpose: a failure with no body is not
+# debuggable, and a failed run is the one a human reads. That means the FIRST
+# failed run after a rotation writes the new key back into stored run data, so
+# this setting reduces the exposure and does not end it. The rotation itself is
+# Tee's hands in the n8n UI; KEY_ROTATION names what has to move with it and why
+# it is urgent.
+KEY_ROTATION = (
+    "The key is approval equivalent for a write. The three write gates, the Action "
+    "Router, the Drive Draft Writer and the Airtable Row Writer, read the envelope "
+    "in front of them and nothing about the caller, so whoever holds this header "
+    "value can POST an AUTHORIZED envelope and cause a Google Doc or an Airtable "
+    "row to be written with no approval card ever raised. Rotating it is a security act, not housekeeping. "
+    "Rotating the shared key (credential Devon Capture Key FYRvkRTOcROEYZ9P) is one "
+    "edit in n8n and then every holder outside n8n. Order matters: edit the "
+    "credential first, because every organ reads the same credential for both its "
+    "own webhook auth and its calls to the other organs, so all sixteen cut over "
+    "together and there is no partial state, then update the outside holders, "
+    "which are the only places that break. Known holders: the iPhone Shortcut that "
+    "posts to devon-capture and devon-inbox, any Apple Routine or automation that "
+    "posts to devon-intake, and any saved curl or HTTP client on a laptop. "
+    "Two things do NOT break, and a human mid rotation will go looking for them: "
+    "pending approval and verification cards keep working, because devon-approve-"
+    "decide authenticates a single use token in the emailed link and never reads "
+    "the header, and the Face keeps working because it sits behind an n8n user "
+    "login. The Soul service token, Cerebras and the Drive OAuth are separate "
+    "credentials and are untouched. "
+    "No value is stored in this repository, but two environment variable names "
+    "would hold it if either were ever set: app/services/knowledge_loop.py reads "
+    "N8N_WEBHOOK_KEY and falls back to DEVON_CAPTURE_KEY. Both were read directly "
+    "off Railway production on 2026-09-06 and neither is set, so Railway held no "
+    "copy at the 2026-09-06 rotation. Check them again before the next one rather "
+    "than trusting this line. "
+    "The twenty-one paths, so a rotator has a checklist rather than a count: "
+    "devon-capture, devon-inbox, devon-intake, devon-approve-request, devon-action, "
+    "devon-drive-draft, devon-airtable-row, devon-ledger, devon-event, "
+    "devon-spine-n8n, devon-runtime, devon-route, devon-editforge, "
+    "devon-build12-upstream, and the two outside this lane, devon-health and "
+    "devon-capture-file. Four more joined on 2026-09-07 when TQO FINAL V5 "
+    "(gsGJQan7a6ZufhYt) had auth put on its webhooks, which until then had none at "
+    "all: run-tqo-pipeline, run-nco-pipeline, system-pause and system-resume. A "
+    "twenty-first joined on 2026-09-08: devon-gumroad-sale-check (7bDqKNdMHY8sxoXa), "
+    "the sale check Tee's phone could not make directly, ruled the same day. "
+    "This number moved twice in one day and the second move is the instructive "
+    "one. It went sixteen to twenty-three when all seven V5 webhooks were put on "
+    "the header, then back to twenty when Tee ruled the three callers that cannot "
+    "physically send a header onto unguessable paths instead. Those three are NOT "
+    "key holders and a key rotation does not touch them; they have their own "
+    "rotation, which is changing the path, and they are listed under SECRET PATH "
+    "WEBHOOKS below. Counting doors and counting key holders are different "
+    "questions and this line answers only the second. That workflow was published "
+    "2026-09-08, so these four doors are live and a rotation proves them from the "
+    "outside like the rest. Eleven of the twenty-one carry an auth field in the WEBHOOKS map "
+    "below (eight until devon-health was registered on 2026-09-06, nine until "
+    "devon-airtable-row was added later that day, ten until devon-gumroad-sale-check "
+    "on 2026-09-08); the rest are recorded in "
+    "prose, so working the map alone covers eleven of twenty-one and feels finished. The first version of "
+    "this checklist, written 2026-09-06, itself said thirteen and omitted the last "
+    "two, which is the failure it was written to prevent: it was built from the "
+    "lane's dependency list. The 2026-09-07 jump from sixteen to twenty-three is "
+    "the same class of drift caught early: adding auth to a workflow adds holders "
+    "of the key, and the checklist has to move with it. Rebuild it by reading every "
+    "workflow's webhook node and its bound credential, not by counting organs. "
+    "SECRET PATH WEBHOOKS, which are doors but not key holders: TQO FINAL V5 "
+    "carries three whose whole protection is an unguessable path, because the "
+    "caller cannot send a header. Two run links tapped from Tee's phone and the "
+    "Gumroad sale ping. Their paths are run-tqo-<16 hex, elided>, "
+    "run-nco-<16 hex, elided> and gumroad-sale-<16 hex, elided>, elided here "
+    "because this repository is public, exactly as devon-soul-setup already is. "
+    "The live values are in the workflow itself and nowhere in git. Rotating one "
+    "means editing the path and repointing its caller, not touching any "
+    "credential. The Gumroad one is the door most worth attacking, because "
+    "Gumroad signs nothing, so a leaked URL is a forged sale. Since 2026-09-08 "
+    "the branch behind it no longer trusts the ping at all. Gumroad: Preflight "
+    "Ping refuses a ping whose sale_id is absent or not a plausible id, and "
+    "Gumroad: Verify Sale reads the sale back from GET /v2/sales/:id before "
+    "Gumroad: Normalise Sale records anything, taking every value from that "
+    "response rather than from the ping. The credential is the proof, since "
+    "that endpoint is scoped to the token own account. That adds a SECOND "
+    "secret to the estate, a Gumroad API token held as an n8n credential, and "
+    "it is NOT one of the twenty-one above: it rotates on its own monthly cadence, "
+    "ruled 2026-09-08 and filed in the Credentials registry, not with x-devon-key, "
+    "and the twenty-one count only x-devon-key holders. Do not "
+    "let it inflate that number, which has already been wrong twice. The first "
+    "design of this guard compared seller_id against $env.GUMROAD_SELLER_ID "
+    "and could never have worked, because this instance is n8n Cloud, which "
+    "has no environment to set and blocks $env inside Code nodes. Execution "
+    "6398 measured that rather than assuming it. "
+    "After rotating, prove it THREE ways, and the third is the one a rotation "
+    "cannot skip. One, post a capture from the phone with the new key: a 401 means "
+    "an outside holder was missed. Two, file one level 0 job with blast radius none "
+    "and auto_verify, which completes without a card and makes the organs it "
+    "touches perform real authenticated calls. Three, POST THE OLD KEY at any "
+    "webhook above and require a 401. One and two prove the new key works. Only "
+    "three proves the old one is dead, and until it is run, a credential edit that "
+    "silently failed to propagate leaves an approval equivalent secret live with "
+    "every positive test still passing. "
+    "Last rotated 2026-09-06; update this line on the next rotation. Job "
+    "01M1TB5RAJHF0FJEN91QMKYYK7 ran RECEIVED to COMPLETED in one pass of six steps "
+    "with the Action Router dispatching to the Spine on execution 6069 and no hop "
+    "reporting unclean, which exercised the Intake Former, Spine, Runtime, "
+    "Intelligence Router, Action Router and Event Bus. That is six of the sixteen "
+    "proven by execution. The rest are inferred, but the inference was grounded on "
+    "2026-09-06 by reading every webhook node and every organ to organ HTTP node "
+    "across twenty two workflows: all of them bind credential FYRvkRTOcROEYZ9P by "
+    "id, none binds any of the ten unrelated Header Auth account credentials in the "
+    "project, so an in place value edit reaches all of them at once. The Airtable "
+    "Row Writer, added after that read, binds the same credential by id on its "
+    "door and its two bus reports, read back on 2026-09-06 after creation. That is "
+    "structure, not behaviour. The behavioural negative test WAS run, by Tee, on "
+    "2026-09-06: he posted the old key and got a 401, then deleted the old value. "
+    "That is the proof the credential edit propagated and the old secret is dead, "
+    "and it is the one proof neither positive test could give. All three proofs of "
+    "this rotation are therefore in hand. Note what it cost to get: the runbook did "
+    "not ask for it until after the rotation, so for most of a day the estate had "
+    "two passing tests and no evidence the old key had stopped working. Ask for the "
+    "401 first next time. "
+    "Old successful executions saved before "
+    "2026-09-05 still carry the previous key in their headers, so rotate rather "
+    "than rely on the setting alone, and error executions still store whatever key "
+    "was current when a run failed."
+)
+
 WORKFLOWS = {
     "iPhone Inbox Capture": {"id": "5s6CwWWelffqszQe", "state": "active"},
     "Capture Webhook": {"id": "pPIt2cELH2RVZktS", "state": "active"},
-    "Pipeline Watchdog": {"id": "wndFo6uJCqVuINaV", "state": "active"},
-    "Precedence Guard": {"id": "W5rlpAt6hsJAExU6", "state": "active, daily 07:00"},
-    "Capture Nudge": {"id": "YHueoBK7TSLdTlfF", "state": "active, daily 08:00"},
+    "Pipeline Watchdog": {"id": "wndFo6uJCqVuINaV", "state": "active, every 4h, timezone pinned America/New_York 2026-09-07"},
+    "Precedence Guard": {"id": "W5rlpAt6hsJAExU6", "state": "active, daily 07:00 America/New_York, timezone pinned 2026-09-07"},
+    "Capture Nudge": {"id": "YHueoBK7TSLdTlfF", "state": "active, daily 08:00 America/New_York, timezone pinned 2026-09-07"},
     "Soul Layer Write-Back": {"id": "edIJx7Q3FXTawg9J", "state": "active, 15 minute poll"},
     "Approval Queue": {"id": "syRVj0G47mA1b0Xn", "state": "active"},
     "Duplicate Sweep": {"id": "X7OGXWHBx57CIG42", "state": "active"},
     "OS Error Handler": {"id": "rqYmaQh91iCce8DJ", "state": "active"},
+    # Switched on 2026-09-08 by Tee's ruling, after the prune found a policy
+    # sensor sitting inactive, which his own rules make an exception path for a
+    # compliance item. Its cron was implicit and was pinned the same day.
+    # Coverage was FOUR of eight for most of that night, was called eight of
+    # eight by the v1 doc, and one of those eight was hollow: Meta Content
+    # Monetization captured three policy sections as heading plus lead-in and
+    # nothing, fixed the same night with a Firecrawl custom body, see the v2
+    # doc. Nine watched since the X successor row was added. The history
+    # matters more than the number. The first sweep,
+    # execution 6401, reported success and recorded baselines for three sources
+    # that fetch 200 and normalise to 79, 75 and 14 characters of readable text,
+    # because Meta and TikTok serve JavaScript applications with no server
+    # rendered policy text. A fingerprint that short can never move, so all
+    # three would have read Stable forever while nothing was watched. The node
+    # now refuses anything under 1000 characters. A browser User-Agent and
+    # substitute URLs were both tried and reverted, executions 6403 and 6407.
+    # What fixed it was a Firecrawl fallback on Gateway credits, which renders
+    # JavaScript and also cleared X's 403; it runs ONLY on a source plain HTTP
+    # already failed, so roughly five scrapes a sweep and not nine. Assess
+    # Materiality runs on a MANAGED anthropicApi credential, so this workflow
+    # holds no key: it is not a key holder and never enters the twenty.
+    # Machine verdicts write to AI Verdict; the Assessment column is Tee's
+    # research and the workflow must never write it again.
+    "OS 29 Platform Policy Sensor": {"id": "7WyIarNoJa2irx2r", "state": "active since 2026-09-08, daily 06:00 America/New_York, timezone pinned the same day, nine sources watched once the X Original Content Rewards successor was added, activeVersionId 36b3170c since 2026-09-08 about 11:49 UTC, when a failed fetch began writing its reason into AI Verdict with no email on Tee's ruling, proved on execution 6481 against a sandbox row that was then deleted; the Firecrawl fallback on Gateway credits runs with a custom body (waitFor 15000, onlyMainContent false, rawHtml dropped, maxAge 0 added by the close-out session on 2026-09-08 as its own judgement, location US en-US which is UNPROVEN after three fresh samples, two en-US and one en-GB) because the node defaults captured hollow policy sections on Meta Content Monetization from the day the sensor was built and its documented two day default cache could serve a matching request a stale copy, both found 2026-09-08; comparison is a block level diff with a two flip volatile rule, a completeness rule refuses a hollow capture on both paths, AI Verdict is append only"},
     "Live State Ledger": {"id": "z9j2I8h0RnbDKGBO", "state": "active"},
+    # Builds 01, 03, 04, 06 and 07, the organs the driver walks a job through.
+    # Live since 2026-08-23 and 08-24 but never registered here until 2026-09-05,
+    # which the new allowlist test caught: the Action Router dispatches to the
+    # Spine and this map did not know the Spine existed. All five run with
+    # successful execution data off since Tee's ruling 2 the same day, because
+    # their webhooks take the x-devon-key header.
+    "Spine Conformance Executor": {"id": "Oi7o1sTEqhxhOaJL", "state": "active, webhook devon-spine-n8n, advances one legal state, successful executions not saved"},
+    "Conscious and Subconscious Runtime": {"id": "5Nc9yh6WSqBJ41ok", "state": "active, webhook devon-runtime, UNDERSTANDING to PLANNING, successful executions not saved"},
+    "Intelligence Router": {"id": "xh3EkLmgTDJFhzGH", "state": "active, webhook devon-route, PLANNING to AUTHORIZED or WAITING_APPROVAL or ESCALATED, successful executions not saved"},
+    "Event Bus": {"id": "Bvy0grTSIyEmPwFA", "state": "active, webhook devon-event, fourteen event types, persists to the ledger, successful executions not saved"},
+    "EditForge Handoff": {"id": "OFIhA7zdFv9UoyCv", "state": "active, webhook devon-editforge, EXECUTING only, completed maps to VERIFYING, successful executions not saved"},
     "Build 12 Upstream Test": {"id": "VznESplSFCs8ldph", "state": "active"},
-    "Build 12 Ledger Feeder": {"id": "6hQD8YhiYzR1FFda", "state": "active, 15 minute poll"},
+    # Recorded as a 15 minute poll until 2026-09-06; the live trigger had been
+    # daily (02:00 instance time) since 2026-09-05, found by reading the node
+    # for Build 18. Build 18 (2026-09-06, learning capture): the feeder now
+    # mirrors its feed log onto the job envelope as one LEARNING_CAPTURED event
+    # per fed job through the Event Bus, a same state COMPLETED update, so
+    # learning.state reads captured with the feed time and the gate decision.
+    "Build 12 Ledger Feeder": {"id": "6hQD8YhiYzR1FFda", "state": "active, daily 02:00 America/New_York (timezone pinned 2026-09-07), feeds COMPLETED jobs once each and marks the envelope captured, versions 7bef0e3b"},
     # Sole devon-soul writer, approval gated. First draft Wo7zPxpGH8kiBRy8 was
     # archived unpublished after adversarial review; lANs6wopaK0PkNhN is the
     # rebuild that shipped. Its execution data persistence is off on purpose
     # (approval tokens must not land in stored executions); truth lives in the
     # data tables and digest emails, read via the Table Reader.
-    "Soul Committer": {"id": "lANs6wopaK0PkNhN", "state": "active, 15 minute poll"},
-    "Error Alarm": {"id": "XDQXwgFkUhYxoEjG", "state": "active, shared error workflow"},
+    # Ruled by Tee 2026-09-06 ("hourly") once the burn was measured: the 15 minute
+    # poll cost 96 executions a day against a commit log holding one row since
+    # 2026-08-25. Hourly since version 49007534; one proposal and one commit per
+    # poll unchanged, failure alert damping retuned to every 4th attempt.
+    "Soul Committer": {"id": "lANs6wopaK0PkNhN", "state": "active, hourly poll (15 minute poll until 2026-09-06), one proposal and one commit per poll"},
+    # Found inactive on the live instance 2026-09-01 by the first estate
+    # reconcile; recorded active until then, deactivation unrecorded. An n8n
+    # error workflow fires when a caller names it whether or not it is
+    # active, so the lane likely kept working, but the record was wrong and
+    # nobody had said so. Reactivated later the same day on Tee's ruling
+    # ("Flip on"): the only version it has ever had (17239190, built
+    # 2026-08-25) republished unchanged, read back active.
+    "Error Alarm": {"id": "XDQXwgFkUhYxoEjG", "state": "active, shared error workflow, reactivated 2026-09-01"},
     "Learning Lane Table Reader": {"id": "we45pHkQHRmSRnZx", "state": "manual, read only"},
     # Build 13. The 6-hour pulse reads every organ (never approval_queue, whose
     # rows carry plaintext decision tokens), writes one beat row to
     # devon_heartbeat_log (Adg1Gd9HML7Q4L3U), and emails Tee on new findings or
     # roughly daily. Its partner is a claude.ai Routine (daily Reflection) that
     # writes reflection rows into the same table; the pulse flags its silence.
-    "Heartbeat": {"id": "dRgTNLod2s8BAcPg", "state": "active, 6 hour pulse"},
+    # Found inactive on the live instance 2026-09-01 by the first estate
+    # reconcile; recorded active until then, deactivation unrecorded, so the
+    # pulse was dead and nothing watched the organs. Reactivated the same day
+    # on Tee's ruling ("Reactivate"): the same version built 2026-08-26
+    # (ac7bdf78) was republished unchanged and the read back confirmed
+    # active. Who switched it off between 2026-08-31 and 2026-09-01 remains
+    # unrecorded.
+    "Heartbeat": {"id": "dRgTNLod2s8BAcPg", "state": "active, 6 hour pulse, reactivated 2026-09-01"},
     # Daily sweep: any ledger job still non-terminal past 96h is cancelled
     # THROUGH the guarded devon-ledger webhook, never by writing the table
     # directly, so legal-transition rules keep applying (VERIFYING two-steps
@@ -362,15 +814,117 @@ WORKFLOWS = {
     # trace note. Digest email only when it acted; unreadable envelopes are
     # skipped and named, and the Heartbeat keeps alerting on them
     # (stuck_jobs) until repaired by hand.
-    "Ledger Janitor": {"id": "HKNEDVy7PUKPtsrN", "state": "active, daily 02:30"},
+    "Ledger Janitor": {"id": "HKNEDVy7PUKPtsrN", "state": "active, daily 02:30 America/New_York, timezone pinned 2026-09-07, previously mis-documented as UTC"},
     # Weekly read-only export: the four learning-lane tables (state ledger,
     # feed log, soul commit log, heartbeat log) each to CSV, one Gmail with
     # four attachments. approval_queue is EXCLUDED on purpose: its rows carry
     # plaintext decision tokens, and mailing them would let anyone with inbox
     # access approve soul writes. Never add it to this or any export.
-    "Weekly Table Backup": {"id": "qCfGZ1CwmpK9vOta", "state": "active, weekly Sun 03:10"},
-    "TQO FINAL V5": {"id": "gsGJQan7a6ZufhYt", "state": "inactive by ruling"},
+    "Weekly Table Backup": {"id": "qCfGZ1CwmpK9vOta", "state": "active, weekly Sun 03:10 America/New_York, timezone pinned 2026-09-07, previously mis-documented as UTC"},
+    # Build 14, the autonomy lane, built and proven live 2026-09-05. Before it
+    # the organs existed but nothing formed jobs, walked them between organs,
+    # bridged approval cards back into the ledger, observed EditForge, or
+    # owned VERIFYING to COMPLETED; every job needed a hand on every hop.
+    # The Job Driver is a sub-workflow, never a trigger of its own: one pass
+    # advances one job through the organs as far as it legally can (spine,
+    # runtime, router, approval card, action, EditForge, verification card)
+    # and stops at every human gate. It reads approval_queue only by the
+    # evidence marker "intent <id>; card <kind>", copies only request_id,
+    # status and timestamps into memory, never the token column, and its
+    # execution data persistence is off for the same reason the Soul
+    # Committer's is. It writes one row per pass to devon_driver_log
+    # (9VbICTCa4x4yhWZm). Proof: a level 0 job with blast radius none ran
+    # RECEIVED to COMPLETED in one pass of 14 seconds with no human card
+    # (intent 01M1S81K3WDD0JSKY6KPAY43K1). A job with any wider blast radius
+    # stops at WAITING_APPROVAL with a card in Tee's inbox and, once executed,
+    # at VERIFYING with a second card; COMPLETED is written only after Tee
+    # approves that second card, so human_watched is never claimed by a
+    # machine. The Driver Poll resumes every open job hourly and emails only
+    # when a job moved or an organ refused.
+    # Build 05, n8n lane. Dispatches an AUTHORIZED envelope to an allowlisted
+    # executor and reports to the bus twice. Zapier lane never built. Refusals
+    # answer as data since 2026-09-05; see WEBHOOKS devon-action.
+    "Action Router": {"id": "ecLqrxALuLDdF2BN", "state": "active, webhook devon-action, allowlist spine.echo at ceiling read, drive.draft at ceiling reversible_write and airtable.row at ceiling reversible_write, successful executions not saved"},
+    # Build 16, the first real executor. One Google Doc draft per job, idempotent
+    # by key, folder by Area from DRAFT_FOLDERS. See WEBHOOKS devon-drive-draft.
+    "Drive Draft Writer": {"id": "J7Ly7riwXEd95D9a", "state": "active, webhook devon-drive-draft, executor drive.draft at ceiling reversible_write, successful executions not saved"},
+    # Build 17, the second real executor. One row per job into a table
+    # AIRTABLE_ROW_TABLES permits, idempotent by DEVON key and DEVON job. See
+    # WEBHOOKS devon-airtable-row.
+    "Airtable Row Writer": {"id": "ps2S6dWcTIpq5bvr", "state": "active, webhook devon-airtable-row, executor airtable.row at ceiling reversible_write, successful executions not saved"},
+    "Intake Former": {"id": "AEFgXee7IDJarNV7", "state": "active, webhook devon-intake"},
+    "Job Driver": {"id": "TT4TfFXyH9O7lfdc", "state": "active, sub-workflow called by the Intake Former and the Driver Poll"},
+    "Driver Poll": {"id": "mbIKJk4UuB7V27rP", "state": "active, hourly poll"},
+    # Build 15, the face. n8n hosted chat behind n8n user auth where Tee talks
+    # to DEVON from the phone. Cerebras answers with the live ledger, the last
+    # driver passes and the last heartbeat in front of it, plus this session's
+    # turns from devon_chat_log (nwnHN8o2dgHjtk7f). Status answers cite only
+    # measured context. A request to do something is filed through
+    # devon-intake, the same door every poster uses, so the same tags, brief,
+    # router, cards and ledger apply; an ambiguous ask becomes a dry run and
+    # waits for a plain yes. The face never decides a card and never reads
+    # approval_queue. The Cerebras credential is header auth, which the chat
+    # model subnodes cannot use, so the lane is an HTTP Request, not an Agent.
+    "Face": {"id": "LsmfRFMmI5feINs0", "state": "active, hosted chat, n8n user auth"},
+    "TQO FINAL V5": {"id": "gsGJQan7a6ZufhYt", "state": "active since 2026-09-08, published on Tee's ruling with all six schedule triggers disabled, each re-enabled as its own named act on his watch; activeVersionId bde7ddec; seven webhooks live: four on header x-devon-key (run-tqo-pipeline, run-nco-pipeline, system-pause, system-resume) and three on secret paths (run-tqo, run-nco, gumroad-sale); the Gumroad guard verifies each ping against GET /v2/sales/:id on credential K1D8KUvTcWDcdrV0, refuses a missing sale on Gumroad's 200 success false, and accepts the two trailing equals signs real ids carry since the same-day fix; view_sales on a real sale still unproven"},
+    "DEVON Gumroad Sale Check": {"id": "7bDqKNdMHY8sxoXa", "state": "active since 2026-09-08, activeVersionId 8e26df1d (8c50cbb8 at first publish; e187e828 the same day with an empty-sale guard and successful executions not saved; 8e26df1d at about 14:55 UTC with the list job, ruled, proved on 6501 to 6507); webhook devon-gumroad-sale-check on header x-devon-key, reads one sale from GET /v2/sales/:id or the last five sales from GET /v2/sales with no buyer fields, on credential K1D8KUvTcWDcdrV0, and writes nothing; proved on executions 6482 and 6483 (manual, body pinned) and 6489 and 6490 (pinned Gumroad replies: empty sale 502, found sale 200), and from outside on probe execution 6494 (two production POSTs at the door from inside n8n: 404 with the key, 403 without); Tee's Shortcut was repointed at it on 2026-09-08 and proved from the phone (400 at Preflight at 13:47 UTC, then the 404 end to end at 13:58 UTC), so the Gumroad token is off the phone"},
     "Capture Hook": {"id": "Cbd24ptTPWch3aZO", "state": "retired 2026-08-22"},
+    # Registered 2026-09-06, ruled by Tee after the operational report found
+    # ten DEVON named workflows on the instance and not in this map, four of
+    # them active and unwatched by the reconciler since they were built.
+    # Record side only: nothing was activated, deactivated or archived. Each
+    # state was read from the workflow's trigger that morning; the six
+    # inactive ones are one shots, probes and manual tools, and stay
+    # registered so a quiet reactivation reports DRIFT instead of passing.
+    "Health and Observability Console": {
+        "id": "M3H2mVPZJpDyIzrl",
+        "state": "active, webhook devon-health GET, reads the ledger, read only",
+    },
+    "Monthly Credential Review": {
+        "id": "yro0wBRGghMjkZhj",
+        "state": "active, monthly on the 1st 08:00 New York",
+    },
+    "Notion Buffer Drain": {
+        "id": "X3sKmPj6yHJu4xWu",
+        "state": "active, daily 07:00 New York, Airtable Thread Receipts to the Notion Thread Log",
+    },
+    "To Delete Auto-Purge": {"id": "0soYvqnSKYlFn3gr", "state": "active, weekly Sunday 10:00 New York"},
+    "Soul Index Setup": {"id": "vYr35jqNNaAztGhQ", "state": "inactive, one shot setup"},
+    "Build 08 Credential Probe": {"id": "pm5hoO4eFpGhlAb4", "state": "inactive, throwaway probe"},
+    "End to End Watch Harness": {"id": "ktZ0fnrgxvCNY9xH", "state": "inactive, watch harness"},
+    "Master Index": {"id": "ocU2Zep8WyRmbsIk", "state": "inactive"},
+    "Purge List": {"id": "Epcmuep1JnBaSrrr", "state": "manual, purge list"},
+    "Vault Comparison": {"id": "mhI1YAoqrITtuB1M", "state": "inactive"},
+    # The six active TSWS pipeline workflows, registered 2026-09-06 on Tee's
+    # ruling that the map watches every active workflow on the instance, not
+    # only the DEVON organs. The 16 inactive seeds, one shots and bootstraps
+    # that share the project stay unregistered on the same ruling. Each state
+    # was read from the instance that day: 00 and 02 to 05 are sub-workflows
+    # called by the master and carry an Execute Workflow trigger, so they have
+    # no schedule of their own; 01 describes itself as the drop folder watcher
+    # and its trigger node was not read. 01 also had a draft ahead of its
+    # active version that day, which the reconciler does not check.
+    "TSWS 00 Render Job": {"id": "o4ctniOsIq2VSfgm", "state": "active, sub-workflow called by TSWS 01"},
+    "TSWS 01 Post-Production Master": {
+        "id": "Zbq6gS77PRauqb1I",
+        "state": "active, drop folder watcher per its description, trigger node not read",
+    },
+    "TSWS 02 Narration and Sound Bed": {"id": "v6E12rr1fg1azVHi", "state": "active, sub-workflow called by TSWS 01"},
+    "TSWS 03 Visual Assembly": {"id": "TL6ssgJjJLdvxrUp", "state": "active, sub-workflow called by TSWS 01"},
+    "TSWS 04 Detail Recovery": {"id": "wl6XAUp84fiq50sj", "state": "active, sub-workflow called by TSWS 01"},
+    "TSWS 05 Conform and Grain": {"id": "QaXpPiVFubsOkDD1", "state": "active, sub-workflow called by TSWS 01"},
+    # Registered 2026-09-08. A manual only helper in Tee's personal project
+    # that reads, previews, publishes or clears the custom landing page on
+    # Gumroad product gxcyjr through credential K1D8KUvTcWDcdrV0, built
+    # because the container this repository is worked from cannot reach
+    # gumroad.com. Its Job node refuses to send a payload whose sha256 prefix
+    # and byte length differ from the constants it carries, so the bytes that
+    # reach Gumroad are the bytes that were reviewed. It has no trigger but
+    # the manual one and has never been published.
+    "Gumroad Landing Page Helper (gxcyjr)": {
+        "id": "vrcLMw802tgf3MpY",
+        "state": "manual, never published, reads previews publishes or clears the gxcyjr landing page on Tee's word",
+    },
 }
 
 

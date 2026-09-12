@@ -1,10 +1,10 @@
-# Portfolio gauntlet scorecard (2026-08-15)
+# Portfolio gauntlet scorecard (2026-08-31)
 
 Honest scores. Flagship is the floor. 99 requires verified runtime under operator use.
 
 | Repo | Overall | Notes |
 |------|---------|-------|
-| Meta-Supreme-Apex-Genesis- (incl FKR) | ~72 / FKR ~55 | FKR source Phases 1-5 landed; migration not applied |
+| Meta-Supreme-Apex-Genesis- (incl FKR) | 60 / FKR ~28 | Round-5 critic floor. Honesty 72. 2nd-brain 60. Not ~72. Not a closed 2nd-brain. |
 | EditForge | ~89 | Media elevation prior; live media wiring remains |
 | solid-octo-potato | ~85 | Content OS; flagship docs present |
 | psycle | ~82 | Presence product; no-metrics rule; Flutter primary |
