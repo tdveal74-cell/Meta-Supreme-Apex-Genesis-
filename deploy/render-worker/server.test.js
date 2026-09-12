@@ -24,8 +24,12 @@ const TOKEN = 'test-token-that-is-long-enough-0123456789';
 process.env.WORKER_TOKEN = TOKEN;
 process.env.WORK_ROOT = ROOT;
 process.env.PORT = '0';
+// Off by default so the existing suites read cleanly. The logging section below
+// turns it on around the assertions that need it, which also exercises the
+// switch in both directions.
+process.env.LOG_REQUESTS = '0';
 
-const { server } = require('./server.js');
+const { server, authFailureReason, logLine } = require('./server.js');
 
 let BASE;
 const req = (method, p, { token = TOKEN, body = null, raw = null } = {}) =>
@@ -221,6 +225,150 @@ t('polling an unknown id is 404', async () => {
 t('an unrouted path is 404', async () => {
   const r = await req('GET', '/admin');
   assert.strictEqual(r.status, 404);
+});
+
+
+section('\n-- why a 401 happened, which is the whole point of the log --');
+
+/** Minimal request stand-in. authFailureReason only ever reads headers. */
+const hreq = (headers) => ({ headers });
+
+t('a token one character too long says so, with both lengths', async () => {
+  // The 2026-09-12 regression, pinned. A 64 character token arrived as 65
+  // because a terminal wrapped the line during a copy and the wrap became a
+  // space. Four rounds of diagnosis and a packet capture went into finding
+  // that. This line finds it for free.
+  const r = authFailureReason(hreq({ authorization: `Bearer ${TOKEN}X` }));
+  assert.strictEqual(r, `token-is-${TOKEN.length + 1}-chars-expected-${TOKEN.length}`);
+});
+t('a token with an interior space is reported by length, not silently', async () => {
+  const wrapped = TOKEN.slice(0, 10) + ' ' + TOKEN.slice(10);
+  const r = authFailureReason(hreq({ authorization: `Bearer ${wrapped}` }));
+  assert.strictEqual(r, `token-is-${TOKEN.length + 1}-chars-expected-${TOKEN.length}`);
+});
+t('a missing header is distinguished from a wrong token', async () => {
+  assert.strictEqual(authFailureReason(hreq({})), 'no-authorization-header');
+});
+t('an auth-like header under the wrong name is named', async () => {
+  const r = authFailureReason(hreq({ 'x-api-key': TOKEN }));
+  assert.ok(r.includes('x-api-key'), r);
+  assert.ok(r.startsWith('no-authorization-header'), r);
+});
+t('a lowercase bearer scheme is distinguished from a wrong token', async () => {
+  const r = authFailureReason(hreq({ authorization: `bearer ${TOKEN}` }));
+  assert.strictEqual(r, 'scheme-is-not-capitalised-Bearer');
+});
+t('two spaces after Bearer is distinguished from a wrong token', async () => {
+  const r = authFailureReason(hreq({ authorization: `Bearer  ${TOKEN}` }));
+  assert.strictEqual(r, 'more-than-one-space-after-Bearer');
+});
+t('a known scheme is named', async () => {
+  const r = authFailureReason(hreq({ authorization: `Basic ${TOKEN}` }));
+  assert.strictEqual(r, 'scheme-is-Basic-not-Bearer');
+});
+t('an unknown scheme is NOT echoed, because it may be a pasted credential', async () => {
+  const r = authFailureReason(hreq({ authorization: `${TOKEN} ${TOKEN}` }));
+  assert.strictEqual(r, 'scheme-is-unrecognised-not-Bearer');
+});
+t('a bare value with no scheme says so and prints nothing of it', async () => {
+  const r = authFailureReason(hreq({ authorization: TOKEN }));
+  assert.strictEqual(r, 'authorization-header-has-no-scheme-just-a-value');
+});
+t('a right-length wrong token says exactly that', async () => {
+  const r = authFailureReason(hreq({ authorization: `Bearer ${'X'.repeat(TOKEN.length)}` }));
+  assert.strictEqual(r, 'token-is-the-right-length-but-does-not-match');
+});
+t('NO failure reason ever contains the real token or a slice of it', async () => {
+  // The security property. A reason string lands in journald and in whatever a
+  // half-asleep operator pastes into a chat window, which is exactly how a live
+  // token reached a transcript on 2026-09-12.
+  const cases = [
+    {}, { authorization: TOKEN }, { authorization: `Bearer ${TOKEN}X` },
+    { authorization: `bearer ${TOKEN}` }, { authorization: `Bearer  ${TOKEN}` },
+    { authorization: `Basic ${TOKEN}` }, { 'x-api-key': TOKEN },
+    { authorization: `Bearer ${'X'.repeat(TOKEN.length)}` },
+  ];
+  for (const h of cases) {
+    const r = authFailureReason(hreq(h));
+    assert.ok(!r.includes(TOKEN), `leaked the whole token: ${r}`);
+    for (let i = 0; i + 8 <= TOKEN.length; i++) {
+      assert.ok(!r.includes(TOKEN.slice(i, i + 8)), `leaked a token slice: ${r}`);
+    }
+  }
+});
+
+section('\n-- the access and job lines themselves --');
+
+/** Run fn with logging on, returning every line console.log emitted. */
+async function captureLog(fn) {
+  const lines = [];
+  const real = console.log;
+  const prev = process.env.LOG_REQUESTS;
+  process.env.LOG_REQUESTS = '1';
+  console.log = (...a) => lines.push(a.join(' '));
+  try { await fn(); }
+  finally {
+    console.log = real;
+    if (prev === undefined) delete process.env.LOG_REQUESTS; else process.env.LOG_REQUESTS = prev;
+  }
+  return lines;
+}
+
+t('a successful request writes one access line with method, path, status and ms', async () => {
+  const lines = await captureLog(() => req('GET', '/health', { token: null }));
+  const access = lines.filter(l => l.includes('path=/health'));
+  assert.strictEqual(access.length, 1, 'expected one line, got ' + JSON.stringify(lines));
+  assert.ok(/method=GET/.test(access[0]), access[0]);
+  assert.ok(/status=200/.test(access[0]), access[0]);
+  assert.ok(/ms=[0-9.]+/.test(access[0]), access[0]);
+});
+t('a 401 access line carries the reason', async () => {
+  const lines = await captureLog(() =>
+    req('POST', '/jobs', { token: 'short', body: { type: 'exists', params: { path: '.' } } }));
+  const l = lines.find(x => x.includes('status=401'));
+  assert.ok(l, 'no 401 line in ' + JSON.stringify(lines));
+  assert.ok(l.includes('auth=token-is-5-chars-expected-' + TOKEN.length), l);
+});
+t('no log line ever contains the token', async () => {
+  const lines = await captureLog(async () => {
+    await req('GET', '/health', { token: null });
+    const sub = await req('POST', '/jobs', { body: { type: 'exists', params: { path: '.' } } });
+    await pollUntilFinished(sub.body.id);
+    await req('POST', '/jobs', { token: TOKEN + 'X', body: { type: 'exists', params: { path: '.' } } });
+  });
+  assert.ok(lines.length > 0, 'nothing was logged at all');
+  for (const l of lines) assert.ok(!l.includes(TOKEN), 'a log line carried the token: ' + l);
+});
+t('a job writes a start line and an end line joinable by id', async () => {
+  let id;
+  const lines = await captureLog(async () => {
+    const sub = await req('POST', '/jobs', { body: { type: 'exists', params: { path: '.' } } });
+    id = sub.body.id;
+    await pollUntilFinished(id);
+  });
+  const start = lines.find(l => l.includes('job=start') && l.includes(`id=${id}`));
+  const end = lines.find(l => l.includes('job=end') && l.includes(`id=${id}`));
+  assert.ok(start, 'no start line: ' + JSON.stringify(lines));
+  assert.ok(end, 'no end line: ' + JSON.stringify(lines));
+  assert.ok(start.includes('type=exists'), start);
+  assert.ok(end.includes('status=done'), end);
+  assert.ok(/seconds=[0-9.]+/.test(end), end);
+  // The access line for the submit must carry the same id, or the two logs
+  // cannot be joined and the access log is decoration.
+  assert.ok(lines.some(l => l.includes('path=/jobs') && l.includes(`id=${id}`)),
+    'no access line carried the job id');
+});
+t('LOG_REQUESTS=0 silences every line', async () => {
+  const lines = [];
+  const real = console.log;
+  process.env.LOG_REQUESTS = '0';
+  console.log = (...a) => lines.push(a.join(' '));
+  try {
+    const sub = await req('POST', '/jobs', { body: { type: 'exists', params: { path: '.' } } });
+    await pollUntilFinished(sub.body.id);
+    await req('GET', '/health', { token: null });
+  } finally { console.log = real; }
+  assert.strictEqual(lines.length, 0, 'logged while off: ' + JSON.stringify(lines));
 });
 
 (async () => {

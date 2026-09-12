@@ -69,6 +69,40 @@ if (TOKEN.length < 24) {
 fs.mkdirSync(WORK_ROOT, { recursive: true });
 J.setRoot(WORK_ROOT);
 
+// --- logging ---------------------------------------------------------------
+
+// One line per request and per job, on stdout, which systemd hands to journald.
+//
+// None of this existed until 2026-09-12, and its absence cost four rounds of
+// diagnosis on a single 401. The worker answered `{"error":"unauthorized"}` and
+// nothing else, so a token carrying one stray space read exactly like a wrong
+// token, a wrong header name, a missing credential and a lowercase scheme. It
+// took a packet capture to tell them apart. The `auth=` field below tells them
+// apart for free.
+//
+// It never logs the Authorization header, the token, or any request body. It
+// does log the LENGTH of the presented token beside the expected length, which
+// is the field that makes a stray character visible at a glance. That is not a
+// disclosure: anyone who can read this process's journal can already read
+// WORKER_TOKEN out of the unit's EnvironmentFile.
+//
+// Set LOG_REQUESTS=0 to silence it. The default is on, because a worker nobody
+// can see into is the thing this was written to fix.
+// Read on every call rather than captured at load, so the switch can be
+// exercised by a test and flipped by an operator without a restart mattering.
+const logEnabled = () => process.env.LOG_REQUESTS !== '0';
+
+function logLine(fields) {
+  if (!logEnabled()) return;
+  const parts = [new Date().toISOString()];
+  for (const [k, v] of Object.entries(fields)) {
+    if (v === undefined || v === null) continue;
+    const needsQuote = typeof v === 'string' && /[\s"]/.test(v);
+    parts.push(`${k}=${needsQuote ? JSON.stringify(v) : v}`);
+  }
+  console.log(parts.join(' '));
+}
+
 // --- auth ------------------------------------------------------------------
 
 /**
@@ -77,6 +111,10 @@ J.setRoot(WORK_ROOT);
  * comparison is length-padded and timing safe: a plain === on a secret leaks
  * its prefix to anyone willing to measure.
  */
+const KNOWN_SCHEMES = new Set([
+  'Basic', 'Digest', 'Negotiate', 'NTLM', 'Token', 'ApiKey', 'Bearer',
+]);
+
 function authorized(req) {
   const h = req.headers['authorization'];
   if (typeof h !== 'string') return false;
@@ -89,6 +127,46 @@ function authorized(req) {
     return false;
   }
   return crypto.timingSafeEqual(given, want);
+}
+
+/**
+ * Why a request failed auth, in a form safe to write to a log.
+ *
+ * Never returns any part of either token. The length pair is deliberate: on
+ * 2026-09-12 a 64 character token arrived as 65 because a terminal had wrapped
+ * the line during a copy and the wrap became a space. This function would have
+ * printed `token-is-65-chars-expected-64` on the first attempt.
+ *
+ * Called only on the 401 path, so the extra comparison costs nothing on a
+ * request that was going to succeed.
+ */
+function authFailureReason(req) {
+  const h = req.headers['authorization'];
+  if (typeof h !== 'string') {
+    const near = ['bearer', 'x-auth', 'x-api-key', 'x-auth-token', 'token', 'auth']
+      .filter(k => typeof req.headers[k] === 'string');
+    return near.length
+      ? `no-authorization-header-but-saw-${near.join('-and-')}`
+      : 'no-authorization-header';
+  }
+  if (!h.startsWith('Bearer ')) {
+    if (/^bearer /i.test(h)) return 'scheme-is-not-capitalised-Bearer';
+    // The scheme is echoed ONLY from this allowlist. The first draft echoed
+    // `h.split(' ')[0]` and its own test caught it leaking 24 characters of the
+    // token, because a credential pasted with no scheme makes the whole value
+    // the first word. Anything not on the list is unrecognised and unprinted.
+    if (!h.includes(' ')) return 'authorization-header-has-no-scheme-just-a-value';
+    const first = h.slice(0, h.indexOf(' '));
+    return KNOWN_SCHEMES.has(first)
+      ? `scheme-is-${first}-not-Bearer`
+      : 'scheme-is-unrecognised-not-Bearer';
+  }
+  const given = h.slice(7);
+  if (given.startsWith(' ')) return 'more-than-one-space-after-Bearer';
+  if (given.length !== TOKEN.length) {
+    return `token-is-${given.length}-chars-expected-${TOKEN.length}`;
+  }
+  return 'token-is-the-right-length-but-does-not-match';
 }
 
 // --- job table -------------------------------------------------------------
@@ -113,12 +191,25 @@ function runNext() {
   running++;
   j.status = 'running';
   j.started = Date.now();
+  // A 4K conform measured about 43 minutes on 16 cores. Without a start line
+  // there is no way to tell a long render from a wedged one except by reading
+  // the process table, which is exactly the position this worker put an
+  // operator in on 2026-09-12.
+  logLine({ job: 'start', id: j.id, type: j.type, queued_ms: j.started - j.queued_at });
 
   const finish = (patch) => {
     Object.assign(j, patch);
     j.ended = Date.now();
     j.seconds = Number(((j.ended - j.started) / 1000).toFixed(3));
     running--;
+    // The error tail can be twelve lines of ffmpeg. Log the first line only:
+    // the full text is already on GET /jobs/<id> for whoever needs it.
+    const firstLine = j.error ? String(j.error).split('\n')[0].slice(0, 200) : null;
+    logLine({
+      job: 'end', id: j.id, type: j.type, status: j.status,
+      seconds: j.seconds, exit: j.exitCode, killed: j.killed || undefined,
+      error: firstLine,
+    });
     setImmediate(runNext);
   };
 
@@ -218,10 +309,30 @@ function readBody(req) {
 }
 
 const server = http.createServer(async (req, res) => {
+  const t0 = process.hrtime.bigint();
   let url;
   try { url = new URL(req.url, 'http://localhost'); }
-  catch { return send(res, 400, { error: 'bad request line' }); }
+  catch {
+    logLine({ method: req.method, path: '?', status: 400, note: 'bad-request-line' });
+    return send(res, 400, { error: 'bad request line' });
+  }
   const p = url.pathname.replace(/\/+$/, '') || '/';
+
+  // Filled in by the POST /jobs branch so the access line carries the job type
+  // and the id it handed back. Without the id, an access log and a job log
+  // cannot be joined, which is most of what makes an access log worth keeping.
+  const extra = {};
+  res.on('finish', () => {
+    logLine({
+      method: req.method,
+      path: p,
+      status: res.statusCode,
+      ms: (Number(process.hrtime.bigint() - t0) / 1e6).toFixed(1),
+      type: extra.type,
+      id: extra.id,
+      auth: res.statusCode === 401 ? authFailureReason(req) : undefined,
+    });
+  });
 
   // /health is the one unauthenticated route. It reveals the job type names and
   // nothing else: the sticky note in TSWS 00 tells an operator to compare that
@@ -283,6 +394,8 @@ const server = http.createServer(async (req, res) => {
     queue.push(j);
     setImmediate(runNext);
     // 202, not 200. Accepted? in TSWS 00 compares against 202 exactly.
+    extra.type = type;
+    extra.id = id;
     return send(res, 202, { id, type, status: 'queued' });
   }
 
@@ -356,4 +469,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server, jobs, queue, authorized };
+module.exports = { server, jobs, queue, authorized, authFailureReason, logLine, logEnabled };
