@@ -418,13 +418,13 @@ second one.
 Each of these needs a hand a session does not have: a host shell, a secret,
 or a claude.ai settings page. None is blocked on code.
 
-### A. EditForge voice and avatar renders (host env on srv1936199)
+### A. EditForge voice and avatar renders (host env on EDITFORGE-HOST)
 
 The EditForge compose file passes ELEVENLABS_VOICE_ID, HEYGEN_API_KEY,
 HEYGEN_AVATAR_ID and HEYGEN_VOICE_ID from the host `.env` into the web
-container. Until those four are set on srv1936199 (editforge.online), a
+container. Until those four are set on EDITFORGE-HOST (editforge.online), a
 voice or avatar job submitted by the driver runs on the mock provider or
-fails at the provider. Steps: ssh to srv1936199, add the four values to the
+fails at the provider. Steps: ssh to EDITFORGE-HOST, add the four values to the
 compose `.env` (the voice id must be Tee's own cloned voice, the avatar id
 Tee's own likeness, never a stock persona), `docker compose up -d` for the
 web service, then file one intake job with `payload.editforge` kind `voice`,
@@ -438,7 +438,7 @@ The render worker is a separate service whose source lives only on Drive
 v3 review doc 1kuBrc4Z2dXcMNZ-XUYxgWZo_t6Pco8kRqDY3F-cZtVM names two defects
 still in jobs.js: the `-loop 1` flag and the afade pair). It is not deployed
 anywhere this session could read. Steps: fix the two defects in jobs.js;
-deploy the worker beside EditForge on srv1936199 or its own host; split the
+deploy the worker beside EditForge on EDITFORGE-HOST or its own host; split the
 shared Header Auth credential (account 10, b9FYEfGUlMiYJCCU) so the worker
 gets its own key; then replace the placeholder RENDER-WORKER-URL-HERE in
 TSWS 00 Render Job (o4ctniOsIq2VSfgm), nodes Submit Job and Poll Job, and run
@@ -446,7 +446,7 @@ one episode through TSWS 01 with a human watching the output.
 
 ### C. VPS cutover (n8n Cloud execution ceiling, wall about 2026-09-21)
 
-The self-hosted n8n on srv1936193 (2.25.140.44, n8n.editforge.online) is
+The self-hosted n8n on N8N-HOST (N8N-HOST-IP, n8n.editforge.online) is
 installed and empty. Steps: create an n8n API key on the VPS instance; run
 `scripts/n8n_migrate.py export` against Cloud and `import` against the VPS
 from a machine with egress to both (the agent sandbox cannot reach either

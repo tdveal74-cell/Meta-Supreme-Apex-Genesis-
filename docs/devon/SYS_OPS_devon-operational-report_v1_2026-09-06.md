@@ -156,8 +156,8 @@ FastAPI app, the ledger schema and the Alembic migrations. Vercel project
 `devon-soul` `prj_RTiwmhndbWFWf1KH7go43rs2Acxn` serves the phone lane from
 `deploy/soul`. Vercel project `meta-supreme-apex-genesis-web`
 `prj_tlXnTP7pZ2qzdDBdU0hNID7ystaw` serves the Command Center from `apps/web`.
-Two VPSs are recorded, `srv1936193` (self hosted n8n, installed and empty) and
-`srv1936199` (EditForge); both were VERIFIED up on 2026-09-05 by direct read
+Two VPSs are recorded, `N8N-HOST` (self hosted n8n, installed and empty) and
+`EDITFORGE-HOST` (EditForge); both were VERIFIED up on 2026-09-05 by direct read
 and are UNVERIFIED today, the container has no egress to either.
 
 ## 3. What he can do today

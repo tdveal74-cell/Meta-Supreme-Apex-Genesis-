@@ -1,5 +1,5 @@
 {
-  "_": "Exact n8n data table schemas read from n8n Cloud on 2026-08-31 and re-read on 2026-09-06, for recreation on the VPS (srv1936193, n8n.editforge.online). Column order is the source instance's index order. Source ids are recorded so a workflow node still pointing at one can be found; the target instance mints its own ids and every dataTable node must be repointed after import. Two tables, devon_driver_log and devon_chat_log, were created on 2026-09-05 and did not exist at the 2026-08-31 read.",
+  "_": "Exact n8n data table schemas read from n8n Cloud on 2026-08-31 and re-read on 2026-09-06, for recreation on the VPS (N8N-HOST, n8n.editforge.online). Column order is the source instance's index order. Source ids are recorded so a workflow node still pointing at one can be found; the target instance mints its own ids and every dataTable node must be repointed after import. Two tables, devon_driver_log and devon_chat_log, were created on 2026-09-05 and did not exist at the 2026-08-31 read.",
   "source": "thequietoperator.app.n8n.cloud",
   "read_at": "2026-09-06",
   "tables": [
