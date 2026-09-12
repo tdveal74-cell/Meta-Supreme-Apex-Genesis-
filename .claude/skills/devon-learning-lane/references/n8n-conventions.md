@@ -62,9 +62,17 @@ truthful when editing.
 went invalid on its own and took the Heartbeat, the Error Alarm and every other
 lane that emails down with it, unnoticed for nine days. The Heartbeat and Error
 Alarm now use `n8n-nodes-base.emailSend` on the SMTP credential, proven by
-execution 5600 returning a real `250 2.0.0 OK` from gsmtp. Other workflows still
-carry the dead Gmail credential and each one is a silent failure until moved.
-An OAuth refresh token expires with no warning; an SMTP password does not.
+execution 5600 returning a real `250 2.0.0 OK` from gsmtp.
+
+**The conversion is complete, audited 2026-09-12.** All 49 workflows on the
+instance were read in full: `vsTKuAilHmpYCc5L` is referenced by ZERO nodes, and
+all thirteen mail nodes across the eleven workflows that email run on the SMTP
+credential. An earlier draft of this section warned that other workflows still
+carried the dead credential and were each a silent failure until moved; that is
+no longer true and the credential is now orphaned in the store. Proven from the
+destination, not from the wiring: the Pulse mailed on 8, 9, 10 and 11 September
+and an approval card landed 2026-09-12T20:52:00Z. An OAuth refresh token expires
+with no warning; an SMTP password does not.
 
 ## Say what you did, with counts, or the digest is a green light with nothing behind it
 

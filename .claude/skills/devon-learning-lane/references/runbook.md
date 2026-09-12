@@ -32,7 +32,7 @@ never land in stored executions), so its n8n execution history is empty by
 design. Inspect the feed log and commit log with the read-only Table Reader
 workflow instead; never add an approval_queue read to it.
 
-## Email vocabulary (all from Gmail, senderName tells you the organ)
+## Email vocabulary (all from the SMTP account, senderName tells you the organ)
 
 - "APPROVAL NEEDED: Soul commit: …" — the queue asking Tee to rule. Links
   expire after 72h; no decision is a rejection.
@@ -60,7 +60,7 @@ workflow instead; never add an approval_queue read to it.
 | Approval request POST fails or its response is lost | no commit-log row; next poll reconciles against approval_queue by evidence and ADOPTS the request if the queue stored it anyway — the card is never raised twice, and a decision Tee made on it is honored |
 | Soul upsert fails after approval | row stays PROPOSED with an attempt counter in the note; approval stands; retried under the SAME record id (no duplicate possible); alerts damp to first failure + roughly every 4h |
 | Workflow crashes between commit and log update | next poll re-upserts same id, then updates the log — self-healing |
-| Committer crashes anywhere (node error) | the Error Alarm workflow emails Tee out-of-band — in-band digests cannot fire from a dead run. ONLY the committer names the Error Alarm in its settings today; a crashed FEEDER or QUEUE alerts nobody, so when the lane stalls, check those two in the n8n executions list before trusting silence |
+| Committer crashes anywhere (node error) | the Error Alarm workflow emails Tee out-of-band — in-band digests cannot fire from a dead run. Coverage as of 2026-09-12: the whole lane is alarmed. Committer, feeder, janitor, backup, heartbeat, queue and the Build 14-17 organs name the DEVON Error Alarm (`XDQXwgFkUhYxoEjG`); the Build 01-07 organs, which refuse by THROWING a `REFUSED:` message, name the OS Error Handler (`rqYmaQh91iCce8DJ`) instead, because it classifies any `REFUSED:` prefix as a deliberate refusal and logs it without emailing. Never point a throw-to-refuse organ at the plain Error Alarm: it would page Tee on every legal refusal, which is how the alert that matters gets missed |
 | Feed-log row has webhook_status 200 but empty/garbled gate_decision | the gate answered 200 with a body the feeder could not parse a decision from; the intent is logged as fed (never re-fed) and invisible to the committer — terminal and near-silent (the feed digest line just lacks the ", gate ..." suffix). Repair: determine the gate's real decision (upstream execution history, or re-run the claim through the gate manually), then manually correct the feed-log row's gate_decision; a corrected PROMOTE enters committer intake on the next poll |
 | Proposal rejected, refused, or expired | terminal; never re-raised |
 | Queue row deleted / unknown status / bad expires_at | commit-log row closes EXPIRED 24h past the 72h TTL from proposed_at — nothing can stick silently forever |

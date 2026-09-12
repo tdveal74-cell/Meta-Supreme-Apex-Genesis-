@@ -32,7 +32,7 @@ Findings it computes, each with a stable key:
 | key | alerts? | meaning |
 |---|---|---|
 | stuck_jobs | yes | ledger jobs non-terminal beyond 24h |
-| feeder_silent | yes | COMPLETED jobs with no feed-log row after 40 min; dead-feeder detection (the feeder has no error workflow wired) |
+| feeder_silent | yes | COMPLETED jobs with no feed-log row after 40 min. No longer the only dead-feeder detection: the feeder has named the Error Alarm (`XDQXwgFkUhYxoEjG`) in its settings since 2026-09-07, so a crash pages on its own. The finding still earns its place by catching what a crash alarm structurally cannot see - a poll that never fired, or one that ran clean and fed nothing |
 | malformed_feed | yes | fed rows with HTTP 200 but empty gate_decision; terminal and invisible to the committer, repair per runbook |
 | soul_overdue | yes | PROPOSED soul rows open past 76h; the text names both readings - the committer may legitimately hold a row inside its 96h close-by-absence window (or be retrying a failing commit), or the resolve lane is stalled |
 | missed_beat | yes | previous pulse older than 7.5h; the heartbeat monitoring itself |
@@ -44,12 +44,12 @@ last SUCCESSFULLY EMAILED pulse did not carry, or when ~22h have passed since
 the last emailed beat. A persisting problem therefore alerts once and then
 rides the daily note. The `emailed` column is a receipt, not a claim: the
 beat row inserts with `no` and a Mark Emailed node flips it to `yes` only
-after the Gmail send succeeds (with retry), so a failed send leaves its
+after the SMTP send succeeds (with retry), so a failed send leaves its
 alerts NEW and they re-fire on the very next beat - the failure direction is
 a duplicate email, never silence. Known tradeoff: a NEW instance under an
 already-alerted key (a second stuck job while one is already stuck) does not
 re-alert until the daily note. Known limit: the pulse email and the crash
-alarm share one Gmail credential, so a Gmail-wide outage silences both; the
+alarm share one SMTP credential, so a mail outage silences both; the
 heartbeat log stays the witness. Sender name: DEVON Heartbeat. Quiet beats
 still log; the heartbeat log, not the inbox, is the proof of life.
 
