@@ -419,7 +419,7 @@ VOCABULARIES: Tuple[Dict[str, Any], ...] = (
         # Canonical list. Where any other document lists the areas inline,
         # this file wins, and its order is the canonical order. The option
         # order inside a live picker is UI, not vocabulary.
-        "canon": "Drive _Devon Core/AREAS.md (1SBVY1dqYRb0qxkgJqnFuZt7nrU7pgSjF)",
+        "canon": "Drive _Devon Core/AREAS.md (17xC0xGvo9SnPO12Bc6-6Y9qrbHIStAOC)",
         "terms": (
             "TQO",
             "Podcast",
@@ -459,24 +459,75 @@ VOCABULARIES: Tuple[Dict[str, Any], ...] = (
                 "label": "Skill, `devon-thread-log` Area vocabulary",
                 "verifier": "vocabulary_attested",
             },
+            # The Drive vault, one folder per term inside `2. Areas`
+            # (1efaZ37s3PBjeEFD1HUQnN3QwH3pV0Rbc). Each is pinned by its own
+            # id, read live 2026-09-12.
+            #
+            # Six of the nine are titled with display names rather than the
+            # term: "TQO - The Quiet Operator", "NCO Forge", "Learning &
+            # Skills", "Family & People", "Money & Finances", "Health &
+            # Fitness". Tee ruled on 2026-09-12 NOT to rename them. Drive is
+            # where a human navigates, and a readable title is worth more
+            # there than a tidier comparison here. Pinning each folder's id
+            # gets the stronger check anyway and mutates nothing: the id is
+            # measured, where a title-to-term mapping would be guessed. A name
+            # is not a pin, and that cuts both ways.
+            #
+            # This replaced a bare count of the parent folder, which could not
+            # tell an added folder from a swapped one.
             {
-                # A folder, not an option list: presence is the whole claim.
-                "id": "drive:1a_baNvgH9CBb4biuBCbdNb_4P9fvkO1a",
-                "label": "Drive, `2. Areas / ACX` folder",
+                "id": "drive:1DXDzO_qY17i1ChE-gOqL3oOwBVbaveLH",
+                "label": "Drive, `2. Areas` folder for TQO",
+                "term": "TQO",
                 "verifier": "vocabulary_present",
             },
             {
-                # The whole folder set, one per Area. Checked by COUNT, not by
-                # name: measured 2026-09-12, Drive titles its folders with
-                # display names ("TQO - The Quiet Operator", "NCO Forge",
-                # "Learning & Skills") rather than the vocabulary slugs, so a
-                # set comparison would report drift that is not there. Whether
-                # those titles should be the slugs is Tee's ruling, not a
-                # mapping for this file to invent. A count still catches the
-                # failure that matters: an Area added with no folder.
-                "id": "drive:1efaZ37s3PBjeEFD1HUQnN3QwH3pV0Rbc",
-                "label": "Drive, `2. Areas` folder set, one per Area",
-                "verifier": "vocabulary_count",
+                "id": "drive:1ZNnbg7bFfcEAM0bMZ96sUnZsr8NXXl6c",
+                "label": "Drive, `2. Areas` folder for Podcast",
+                "term": "Podcast",
+                "verifier": "vocabulary_present",
+            },
+            {
+                "id": "drive:1GhyNDBaBLrcJux9gEVtVpSTnbDK1eJzO",
+                "label": "Drive, `2. Areas` folder for NCO",
+                "term": "NCO",
+                "verifier": "vocabulary_present",
+            },
+            {
+                "id": "drive:1a_baNvgH9CBb4biuBCbdNb_4P9fvkO1a",
+                "label": "Drive, `2. Areas` folder for ACX",
+                "term": "ACX",
+                "verifier": "vocabulary_present",
+            },
+            {
+                "id": "drive:1BkZ0YfANbOS0fQf_2F-e-22LTSeV8xRg",
+                "label": "Drive, `2. Areas` folder for Health",
+                "term": "Health",
+                "verifier": "vocabulary_present",
+            },
+            {
+                "id": "drive:1PbsQU2VSLSt-e7scjWY83X5k-y27c8OO",
+                "label": "Drive, `2. Areas` folder for Money",
+                "term": "Money",
+                "verifier": "vocabulary_present",
+            },
+            {
+                "id": "drive:1LU5mD4reyWwN-D3O_41FCvP1BuUvqlhd",
+                "label": "Drive, `2. Areas` folder for Family",
+                "term": "Family",
+                "verifier": "vocabulary_present",
+            },
+            {
+                "id": "drive:1_WWVxVMfhCxMdxXLv6NjSiKPCzZmbQFu",
+                "label": "Drive, `2. Areas` folder for Learning",
+                "term": "Learning",
+                "verifier": "vocabulary_present",
+            },
+            {
+                "id": "drive:1La9LZ1zvpnU6-ep-EVStEy33M8cvyUGr",
+                "label": "Drive, `2. Areas` folder for Systems",
+                "term": "Systems",
+                "verifier": "vocabulary_present",
             },
         ),
     },
@@ -531,7 +582,11 @@ def vocabulary_claims(
                     record=f"{vocabulary['canon']} -> {surface['label']}",
                     subject=surface["id"],
                     verifier=surface["verifier"],
-                    expected={"terms": terms, "surface": surface["id"]},
+                    expected={
+                        "terms": terms,
+                        "surface": surface["id"],
+                        "term": surface.get("term"),
+                    },
                 )
             )
         claims.append(
@@ -898,16 +953,24 @@ def _check_vocabulary_options(claim: Claim, observations: Dict[str, Any]) -> Tup
 
 
 def _check_vocabulary_present(claim: Claim, observations: Dict[str, Any]) -> Tuple[str, str]:
-    """A folder or file has no option list, so existence is the whole claim."""
+    """A folder or file has no option list, so existence is the whole claim.
+
+    Pinned by id, never by title. The Drive folders this settles are titled
+    for a human ("Money & Finances", "Learning & Skills"), and matching those
+    to terms would mean inventing a mapping; their ids were measured. A folder
+    renamed in Drive still passes, a folder deleted or swapped does not.
+    """
     present, why = _connectors_or_none(observations, "present")
     if present is None:
         return UNVERIFIED, why
     surface_id = claim.expected["surface"]
+    term = claim.expected.get("term")
+    stands_for = f" for {term}" if term else ""
     if surface_id not in present:
         return UNVERIFIED, f"the snapshot did not read {surface_id}"
     if present[surface_id]:
-        return OK, "present"
-    return DRIFT, f"{surface_id} is gone or trashed"
+        return OK, f"present{stands_for}"
+    return DRIFT, f"{surface_id}{stands_for} is gone or trashed"
 
 
 def _check_vocabulary_attested(claim: Claim, observations: Dict[str, Any]) -> Tuple[str, str]:
@@ -953,27 +1016,6 @@ def _check_vocabulary_attested(claim: Claim, observations: Dict[str, Any]) -> Tu
     return DRIFT, f"attested by {who} on {when}: " + "; ".join(parts)
 
 
-def _check_vocabulary_count(claim: Claim, observations: Dict[str, Any]) -> Tuple[str, str]:
-    """One child per term, counted rather than named.
-
-    For a surface whose members carry display names instead of the vocabulary's
-    own terms. Weaker than a set comparison on purpose: it cannot tell an added
-    member from a swapped one, and claiming otherwise would mean inventing a
-    name mapping nobody ruled on.
-    """
-    counts, why = _connectors_or_none(observations, "counts")
-    if counts is None:
-        return UNVERIFIED, why
-    surface_id = claim.expected["surface"]
-    observed = counts.get(surface_id)
-    if observed is None:
-        return UNVERIFIED, f"the snapshot did not count {surface_id}"
-    expected = len(claim.expected["terms"])
-    if observed == expected:
-        return OK, f"{observed} members for {expected} terms"
-    return DRIFT, f"{observed} members for {expected} terms"
-
-
 def _check_vocabulary_surfaces_complete(
     claim: Claim, observations: Dict[str, Any]
 ) -> Tuple[str, str]:
@@ -1006,7 +1048,6 @@ def _check_vocabulary_surfaces_complete(
 CHECKERS = {
     "vocabulary_options": _check_vocabulary_options,
     "vocabulary_present": _check_vocabulary_present,
-    "vocabulary_count": _check_vocabulary_count,
     "vocabulary_attested": _check_vocabulary_attested,
     "vocabulary_surfaces_complete": _check_vocabulary_surfaces_complete,
     "n8n_host": _check_n8n_host,
