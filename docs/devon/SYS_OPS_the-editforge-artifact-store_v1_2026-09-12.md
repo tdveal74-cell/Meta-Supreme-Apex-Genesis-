@@ -216,6 +216,52 @@ source read and reported, not measured, and it is labelled that way on purpose.
 What is measured is `artifactStore: false`, which is the flag that decides the
 refusal, and that one came straight off the live surface.
 
+## One open item from the last arc died while this one was being written
+
+Carried forward into this document's OPEN list was the line that TSWS 00 still
+holds a literal placeholder worker URL. Checking it before filing it, which is
+the only reason it was caught, that is no longer true, and the thing it was
+standing in for has started working.
+
+Read off VPS TSWS 00 (`CX07qa6O1hTSXlpj`) today: both HTTP nodes are repointed
+at a private address on the VPS network on port 8080, `Header Auth account 10`
+is attached to each, and `versionId` equals `activeVersionId`, so there is no
+undrafted delta. The placeholder string survives only inside the setup sticky
+note, which now instructs the next reader to make an edit that has already been
+made.
+
+Then the part that matters. Execution 11 at 2026-09-12T03:29:09Z is the exact
+smoke test that sticky note prescribes, `exists` against `.`, and it succeeded:
+`Submit Job` took HTTP 202 with a real job id, `Poll Job` came back
+`status: "done"` with `ok: true`, and `Return Result` emitted
+`{ok: true, status: "done", seconds: 0.001, type: "exists"}`. The sticky note
+says of that call, "That call has never once succeeded." It has now.
+
+Two records are superseded on that one point, and both are named here rather
+than edited, because a dated record should be corrected by a later dated record
+and not quietly rewritten:
+
+- The sticky note on TSWS 00, on both the URL edit and the smoke test.
+- `SYS_OPS_the-render-worker-was-never-deployable_v1_2026-09-11.md`, whose
+  STATUS says the worker has still never been started on a host. It has. The
+  second half of that same sentence still stands: no acceptance check has
+  measured a pixel or a sample, and `exists` moves no media, so the worker being
+  reachable is not the worker being proven.
+
+Worth knowing how close this came to being filed wrong. Six of the eleven
+executions on that workflow report `success`, and five of those six finished in
+under a quarter of a second, which is far too fast to have reached the box.
+That is the design: the workflow returns `ok:false` rather than throwing, so
+every rejection is a `success` in the execution list. Only execution 11 ran long
+enough to have waited a poll, and only reading its node output proves the round
+trip. `success` in that list is not the answer to "did it work".
+
+Two things follow, neither of them taken here. The sticky note should be
+rewritten, and that is a write to a live workflow that has just started working
+for the first time, so it is a recommendation rather than an action. And the
+worker now being reachable makes the acceptance check on real media the next
+thing worth Tee's time on that lane.
+
 ## DEVON RECEIPT
 
 ```
@@ -224,8 +270,8 @@ TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_the-editforge-artifact-store_v1_2026-09-12
 DATE: 2026-09-12
 DECISIONS: none ruled. The recommendation put to Tee is to park the artifact store, option 4, and to pick later between running EditForge where a volume exists, option 1, and putting a blob store behind the existing four call site interface, option 2. The one decision taken inside this arc was mine and it was a refusal: not to set EDITFORGE_ARTIFACT_DIR on the Vercel project, because flipping that flag green would let a voice run spend real ElevenLabs characters and then serve 404 for the audio, which is worse than the honest refusal the flag was built to give. Recorded rather than done.
-FINDINGS: EditForge production on Vercel answers 503 degraded, with all four conjuncts of productionReady false, artifactStore false, executionReady false, workerConfigured and workerReachable false, accessGate false and sessionSecret false, while the durable store itself is healthy on Vercel KV with three variables present; the voice lane refuses because the artifact store is the filesystem at both ends, artifactDir reading EDITFORGE_ARTIFACT_DIR at lib/artifacts.ts:109, storeArtifact writing with fs.mkdir and fs.writeFile at :200 and :201, and the GET route serving with fs.stat and createReadStream at route.ts:41 and :69 including hand rolled byte ranges, so no directory on an ephemeral filesystem satisfies both halves; the refusal is deliberate and documented at lib/artifacts.ts:117-119 and .env.example:17-20, built so a voice submit that would refuse says so before a provider has been paid for audio the studio then throws away; there is no object store to fall back to, a case insensitive grep for blob, aws, s3, storage and minio in package.json at be3eb47 returning nothing; compose.hostinger.yaml already solves the same problem for a host with a disk, EDITFORGE_ARTIFACT_DIR set at lines 30 and 83 with the named volume mounted at 48 and 89; the artifact abstraction is not sealed, artifactDir() being called directly from outside its own module at modules/canvas/render.ts:112 and at app/api/artifacts/[name]/route.ts:26 while artifactStoreConfigured() is read in eight modules and storeArtifact is called from three, so the blob store option is wider than the four definitions it looks like, which was corrected inside this arc by counting the callers rather than estimating them; and the larger finding nobody was looking for, that there is no human sign-in path on that surface at all, passkeys status answering available false count zero and Google status answering available false, so a browser is redirected to /login and cannot get in, leaving editforge.vercel.app a token only API surface protected by EDITFORGE_MCP_TOKEN, which is the benign reading because proxy.ts fails closed but is still a live fact Tee did not know.
-OPEN: where EditForge runs is undecided, and the artifact store answer follows from it rather than the other way round; no human can open the EditForge UI on the production surface today and that needs a ruling, not a fix taken unasked; the voice provider's readyToRun detail is source read and reported rather than measured, because /api/providers is behind the bearer token; every open item from the previous arc stands, which are the ElevenLabs key rotation at the provider that Tee is checking, the 16 character floor on deploy/soul/main.py _require blocked until he confirms his console token length, the watchdog alarm negative control blocked until he sets one tqo_content row to Error, the 45 grandfathered SYS_OPS docs needing a ruling, TSWS 00 still carrying a literal placeholder worker URL, the presence total_breaches watch at 1500 ms, and the voice hold with its three line listen test before anything narrated by the clone ships.
+FINDINGS: EditForge production on Vercel answers 503 degraded, with all four conjuncts of productionReady false, artifactStore false, executionReady false, workerConfigured and workerReachable false, accessGate false and sessionSecret false, while the durable store itself is healthy on Vercel KV with three variables present; the voice lane refuses because the artifact store is the filesystem at both ends, artifactDir reading EDITFORGE_ARTIFACT_DIR at lib/artifacts.ts:109, storeArtifact writing with fs.mkdir and fs.writeFile at :200 and :201, and the GET route serving with fs.stat and createReadStream at route.ts:41 and :69 including hand rolled byte ranges, so no directory on an ephemeral filesystem satisfies both halves; the refusal is deliberate and documented at lib/artifacts.ts:117-119 and .env.example:17-20, built so a voice submit that would refuse says so before a provider has been paid for audio the studio then throws away; there is no object store to fall back to, a case insensitive grep for blob, aws, s3, storage and minio in package.json at be3eb47 returning nothing; the TSWS render worker is live and answering, execution 11 on VPS TSWS 00 at 2026-09-12T03:29:09Z returning HTTP 202 on submit and then ok true status done on the exists smoke test the sticky note prescribes and records as having never once succeeded, which supersedes that note and the claim in SYS_OPS_the-render-worker-was-never-deployable_v1_2026-09-11.md that the worker has never been started on a host, while that doc's second claim stands because exists moves no media; compose.hostinger.yaml already solves the same problem for a host with a disk, EDITFORGE_ARTIFACT_DIR set at lines 30 and 83 with the named volume mounted at 48 and 89; the artifact abstraction is not sealed, artifactDir() being called directly from outside its own module at modules/canvas/render.ts:112 and at app/api/artifacts/[name]/route.ts:26 while artifactStoreConfigured() is read in eight modules and storeArtifact is called from three, so the blob store option is wider than the four definitions it looks like, which was corrected inside this arc by counting the callers rather than estimating them; and the larger finding nobody was looking for, that there is no human sign-in path on that surface at all, passkeys status answering available false count zero and Google status answering available false, so a browser is redirected to /login and cannot get in, leaving editforge.vercel.app a token only API surface protected by EDITFORGE_MCP_TOKEN, which is the benign reading because proxy.ts fails closed but is still a live fact Tee did not know.
+OPEN: where EditForge runs is undecided, and the artifact store answer follows from it rather than the other way round; no human can open the EditForge UI on the production surface today and that needs a ruling, not a fix taken unasked; the voice provider's readyToRun detail is source read and reported rather than measured, because /api/providers is behind the bearer token; every open item from the previous arc stands, which are the ElevenLabs key rotation at the provider that Tee is checking, the 16 character floor on deploy/soul/main.py _require blocked until he confirms his console token length, the watchdog alarm negative control blocked until he sets one tqo_content row to Error, the 45 grandfathered SYS_OPS docs needing a ruling, the TSWS render worker having answered its first smoke test during this arc but still never having moved a pixel or a sample, and the sticky note on TSWS 00 now misinstructing the next reader on both counts, the presence total_breaches watch at 1500 ms, and the voice hold with its three line listen test before anything narrated by the clone ships.
 STATUS: filed, nothing shipped and nothing changed. No repository code was touched in this arc and no Vercel setting was changed by me; this document is the only artifact. Every claim in it was measured today against the live surface or read off a named file and line, and the two things that could not be measured are labelled in the text rather than rounded up. The one deployment this arc touched, dpl_9iZuKYXY8ZBqzVyGCJwLyrJ3z1RU, was Tee's Vercel agent setting ELEVENLABS_VOICE_ID in Production, and it is READY on target production on commit be3eb4702998ef2f20460f4e1fbb624e38485020 as a redeploy of dpl_4PDLTgbhsQUKRycMdyefVfskfoBf, verified here rather than taken from the agent's report.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
