@@ -174,14 +174,14 @@ against a real manifest before the first full episode.
 
 Proved, by execution, in this repository:
 
-`npm test` runs all three. 46 tests, all passing.
+`npm test` runs all three. 62 tests, all passing.
 
 - `node jobs.test.js` pins what the builders emit: **27 tests**. Includes a
   numeric comparison of the new gain envelope against the EP01 reference
   expression over 540s to 552s at 0.5 ms steps, worst divergence `5.7e-14`; the
   exact xfade offsets; and the protected-silence provision.
 - `node server.test.js` makes real HTTP requests against a real listening
-  server: **19 tests**. It runs `{"type":"exists","params":{"path":"."}}`, the
+  server: **35 tests**. It runs `{"type":"exists","params":{"path":"."}}`, the
   exact smoke test the sticky note on TSWS 00 prescribes and records as having
   "never once succeeded", and gets `ok:true`.
 - `node negative-control.js` runs the same `jobs.test.js` against
@@ -191,7 +191,8 @@ Proved, by execution, in this repository:
   quietly drift into testing the fixed file.
 
 Every guard added here was mutation tested: the fix was reverted one at a time
-and the suite was required to go red. Six for six. That matters because two of
+and the suite was required to go red. Six for six on the critic round, and six
+for six again on the logging added 2026-09-12. That matters because two of
 them were only added after a critic reverted them and the suite stayed green,
 and because one test in the first round was asserting nothing at all.
 
@@ -204,6 +205,50 @@ that `apad` with a zero `pad_dur` and no `-t` pads indefinitely. The frame count
 the levels and the silences have to be measured on the box. That is the
 acceptance suite below, and until it passes, this worker is unproven regardless
 of how green the unit tests are.
+
+## Reading the log
+
+The worker writes one line per request and two per job to stdout, which systemd
+hands to journald. It did not do this until 2026-09-12, and the absence is the
+direct reason a single 401 took four rounds and a packet capture to diagnose.
+
+```bash
+journalctl -u tsws-render-worker -f            # live
+journalctl -u tsws-render-worker --since -1h   # the last hour
+```
+
+An accepted job looks like this, and the `id` joins the three lines:
+
+```
+2026-09-12T03:29:09.677Z method=POST path=/jobs status=202 ms=2.1 type=exists id=0b93daa1
+2026-09-12T03:29:09.679Z job=start id=0b93daa1 type=exists queued_ms=2
+2026-09-12T03:29:09.681Z job=end id=0b93daa1 type=exists status=done seconds=0.001
+```
+
+**A 401 says why.** This is the field worth knowing about, because every one of
+these used to look identical from the outside:
+
+| `auth=` | what to fix |
+|---|---|
+| `no-authorization-header` | the credential is not attached to the node |
+| `no-authorization-header-but-saw-x-api-key` | the header Name field is wrong. It must be `Authorization` |
+| `authorization-header-has-no-scheme-just-a-value` | the Value field is missing the `Bearer ` prefix |
+| `scheme-is-not-capitalised-Bearer` | `bearer` for `Bearer` |
+| `more-than-one-space-after-Bearer` | two spaces where there should be one |
+| `token-is-65-chars-expected-64` | **a stray character in the token.** This is what a wrapped terminal copy looks like: the line break became a space |
+| `token-is-the-right-length-but-does-not-match` | genuinely the wrong token, or the service is running an older one than the env file holds |
+
+The reason string never contains the token or any slice of it, and neither does
+any other line. That is asserted by a test which also checks every eight
+character window of the real token against every reason the function can
+produce, and it caught the first draft echoing 24 characters of a bare
+credential back into the log.
+
+The token length pair is deliberate and is not a disclosure: anyone who can read
+this process's journal can already read `WORKER_TOKEN` out of the unit's
+`EnvironmentFile`.
+
+Set `LOG_REQUESTS=0` in the environment file to silence all of it.
 
 ## Deploying it
 
