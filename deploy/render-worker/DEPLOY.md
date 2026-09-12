@@ -4,8 +4,54 @@ The service that every ffmpeg, ffprobe and filesystem operation in the five TSWS
 pipelines goes through. n8n has no `executeCommand` on the plan in use, so this
 box is the only thing that can touch media.
 
-**It has never run.** Not once, on any host. What follows is what was wrong,
-what was fixed, what is proved, and what is still yours to prove.
+**It ran for the first time on 2026-09-12.** Until then it had never run on any
+host, because there was no server to run and the engine on Drive carried five
+measured defects. What follows is what was wrong, what was fixed, what is proved
+on the live box, and what is still unproved.
+
+## Deployed
+
+| | |
+|---|---|
+| host | `srv1936193`, `2.25.140.44`, Ubuntu 24.04.4 LTS |
+| resources | 2 cores, 7.8 GiB RAM, 96 GB disk |
+| bound to | `172.16.2.1:8080`, the `n8n_backend` docker bridge gateway |
+| node | 18.19.1, the Ubuntu 24.04 distro package |
+
+Proved on that box, by execution:
+
+* All three suites: 27, 19, and the negative control failing 22 of 27 against
+  the committed Drive original. Exit code 0 on each, checked individually
+  rather than inferred from a chain.
+* `/health` reports 18 job types.
+* Public IPv4 and IPv6 both refuse. The n8n container reaches the worker on the
+  bridge address. Between those two facts the bind is proved by behaviour: it
+  cannot be loopback, because the container reached it, and it cannot be
+  `0.0.0.0`, because the public address refused.
+* `exists` returned `ok:true`, which is the smoke test the sticky note on TSWS 00
+  records as having never once succeeded.
+* `probe` spawned a real **ffprobe**, captured stdout, parsed it, and returned a
+  duration of exactly 1.0 on a generated one second file.
+* `silence_detect` spawned a real **ffmpeg**, captured **stderr**, and its regex
+  returned `count: 1` spanning 0 to 1 second. A non-empty result on purpose: an
+  empty list would not distinguish "worked and found nothing" from "did not
+  work".
+
+Still unproved on the live box: n8n's own wiring inside `TSWS 00`, and every one
+of the five defect fixes at the sample and pixel level. The acceptance suite
+below is what settles the second, and nobody has run it.
+
+### Two deviations from the committed defaults, both required on this box
+
+```
+Environment=HOST=127.0.0.1  ->  172.16.2.1
+MemoryMax=8G                ->  5G
+```
+
+The first is the docker problem described under Deploying it. The second is a
+defect in the committed unit file: `8G` is above this machine's 7.8 GiB total, so
+the ceiling never binds and under pressure the kernel picks a victim, which could
+be n8n rather than the render. Set `MemoryMax` below total RAM on any host.
 
 ## Provenance
 
@@ -146,10 +192,45 @@ of how green the unit tests are.
 
 ## Deploying it
 
-Node 18 or newer, ffmpeg with libx264 and libx265, and a TLS terminator. The
-autonomy driver recorded the intended home as srv1936199, the EditForge box, or
-its own host. srv1936199's public address is not recorded in this repository and
-was not invented here; take it from Hostinger.
+Node 18 or newer, and ffmpeg with libx264 and libx265. A TLS terminator only if
+the worker faces the internet, which on the deployment above it does not.
+
+**IF n8n RUNS IN DOCKER, LOOPBACK WILL NOT WORK, AND THE FAILURE LOOKS LIKE A
+WIRING MISTAKE.** A container's `127.0.0.1` is the container, not the host. Point
+n8n at `http://127.0.0.1:8080` while the worker sits on the host's loopback and
+every call returns connection refused, which reads as a bad URL or a bad token
+rather than as a network namespace boundary. This cost nothing here only because
+it was caught before the install rather than after.
+
+Find the right address before installing:
+
+```bash
+docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}'
+docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}  gateway={{$v.Gateway}}{{"\n"}}{{end}}' $(docker ps --filter name=n8n -q)
+```
+
+If n8n uses `network_mode: host` it shares the host stack and loopback is fine.
+Otherwise bind the worker to the gateway of the network n8n's **application**
+container sits on, and set the same address in TSWS 00. On srv1936193 that was
+`172.16.2.1` (`n8n_backend`).
+
+Do not bind to a task runner or sandbox network's gateway even though it would
+work. Binding only to the application network means sandboxed code routes to a
+different gateway, finds nothing listening, and is refused. That isolation is
+free and worth keeping.
+
+A docker bridge address is RFC1918 and is not routable from the internet, so this
+keeps the property that matters: the token never crosses a network.
+
+**Node.** A host running n8n in docker will usually have no Node at all, because
+n8n never needed it there. Ubuntu 24.04's own `nodejs` package is 18.19.1, which
+satisfies this worker, so no third party repository is required. Skip the `npm`
+package; the worker has zero dependencies and the three suites run directly with
+`node jobs.test.js`, `node server.test.js`, `node negative-control.js`.
+
+The autonomy driver recorded the intended home as srv1936199, the EditForge box,
+or its own host. It went to srv1936193 instead, the n8n box, so that the call
+never leaves the machine.
 
 ```bash
 # 1. user, directories, code
