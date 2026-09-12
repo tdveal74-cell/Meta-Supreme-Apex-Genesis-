@@ -32,7 +32,7 @@ Findings it computes, each with a stable key:
 | key | alerts? | meaning |
 |---|---|---|
 | stuck_jobs | yes | ledger jobs non-terminal beyond 24h |
-| feeder_silent | yes | COMPLETED jobs with no feed-log row after 40 min; dead-feeder detection (the feeder has no error workflow wired) |
+| feeder_silent | yes | COMPLETED jobs with no feed-log row after 40 min. No longer the only dead-feeder detection: the feeder has named the Error Alarm (`XDQXwgFkUhYxoEjG`) in its settings since 2026-09-07, so a crash pages on its own. The finding still earns its place by catching what a crash alarm structurally cannot see - a poll that never fired, or one that ran clean and fed nothing |
 | malformed_feed | yes | fed rows with HTTP 200 but empty gate_decision; terminal and invisible to the committer, repair per runbook |
 | soul_overdue | yes | PROPOSED soul rows open past 76h; the text names both readings - the committer may legitimately hold a row inside its 96h close-by-absence window (or be retrying a failing commit), or the resolve lane is stalled |
 | missed_beat | yes | previous pulse older than 7.5h; the heartbeat monitoring itself |
