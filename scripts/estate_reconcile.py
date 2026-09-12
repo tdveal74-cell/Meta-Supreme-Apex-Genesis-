@@ -396,6 +396,93 @@ DOC_CLAIMS: Tuple[Dict[str, Any], ...] = (
 )
 
 
+# ---------------------------------------------------------------------------
+# The connector estate
+#
+# Everything above this block is repo side: vault.py, pinned doc sentences,
+# Alembic, Railway. The vocabularies below live in Drive, Notion and Airtable,
+# where nothing in this repository could see them, which is how the DEVON Area
+# vocabulary sat four days out of sync across five surfaces on 2026-09-12 and
+# was found only because a session tripped over it.
+#
+# A vocabulary is a closed set of terms that must read identically everywhere
+# it is written. Each surface is pinned by its FULL id path, base included: the
+# 2026-09-12 record named a table and its field but no base, a session searched
+# Airtable base names for "DEVON", found none, and reported the whole Airtable
+# half as never built. A name is not a pin.
+# ---------------------------------------------------------------------------
+
+
+VOCABULARIES: Tuple[Dict[str, Any], ...] = (
+    {
+        "name": "DEVON Area vocabulary",
+        # Canonical list. Where any other document lists the areas inline,
+        # this file wins, and its order is the canonical order. The option
+        # order inside a live picker is UI, not vocabulary.
+        "canon": "Drive _Devon Core/AREAS.md (1SBVY1dqYRb0qxkgJqnFuZt7nrU7pgSjF)",
+        "terms": (
+            "TQO",
+            "Podcast",
+            "NCO",
+            "ACX",
+            "Health",
+            "Money",
+            "Family",
+            "Learning",
+            "Systems",
+        ),
+        "surfaces": (
+            {
+                "id": "notion:a5bcfbf5-ce1d-493b-9992-a11bc2a03dc4/Area",
+                "label": "Notion, Thread Log `Area` property",
+                "verifier": "vocabulary_options",
+            },
+            {
+                "id": "airtable:app28z7XnKzjfTXwc/tblEhgEZoNr2ztbB3/fldcBN1kec0xgSnr5",
+                "label": "Airtable, `Thread Receipts` `Area` property",
+                "verifier": "vocabulary_options",
+            },
+            {
+                # Found on 2026-09-12. No version of the canonical record had
+                # ever named it; the record said four places and the estate
+                # held five.
+                "id": "airtable:app28z7XnKzjfTXwc/tbl4ziFRbl5mnUcKc/fldpbMPz2xBcEo0Ia",
+                "label": "Airtable, `Inbox Captures` `Area` property",
+                "verifier": "vocabulary_options",
+            },
+            {
+                # An account level Claude skill. A session reads a container
+                # copy whose refresh it does not control, so it can measure
+                # the copy's age and nothing else. Attested or UNVERIFIED,
+                # never measured. See the skill's row 4 doctrine.
+                "id": "account_skill:devon-thread-log",
+                "label": "Skill, `devon-thread-log` Area vocabulary",
+                "verifier": "vocabulary_attested",
+            },
+            {
+                # A folder, not an option list: presence is the whole claim.
+                "id": "drive:1a_baNvgH9CBb4biuBCbdNb_4P9fvkO1a",
+                "label": "Drive, `2. Areas / ACX` folder",
+                "verifier": "vocabulary_present",
+            },
+            {
+                # The whole folder set, one per Area. Checked by COUNT, not by
+                # name: measured 2026-09-12, Drive titles its folders with
+                # display names ("TQO - The Quiet Operator", "NCO Forge",
+                # "Learning & Skills") rather than the vocabulary slugs, so a
+                # set comparison would report drift that is not there. Whether
+                # those titles should be the slugs is Tee's ruling, not a
+                # mapping for this file to invent. A count still catches the
+                # failure that matters: an Area added with no folder.
+                "id": "drive:1efaZ37s3PBjeEFD1HUQnN3QwH3pV0Rbc",
+                "label": "Drive, `2. Areas` folder set, one per Area",
+                "verifier": "vocabulary_count",
+            },
+        ),
+    },
+)
+
+
 def doc_claims(doc_texts: Dict[str, str]) -> List[Claim]:
     """Claims pinned to document sentences. `doc_texts` maps repo path to content.
 
@@ -419,6 +506,43 @@ def doc_claims(doc_texts: Dict[str, str]) -> List[Claim]:
                 subject=pinned["quote"],
                 verifier=verifier,
                 expected=pinned["expected"],
+            )
+        )
+    return claims
+
+
+def vocabulary_claims(
+    vocabularies: Sequence[Dict[str, Any]] = VOCABULARIES,
+) -> List[Claim]:
+    """One claim per pinned surface, plus one that the pin list is complete.
+
+    The completeness claim is the one that matters. Re-measuring every surface
+    a record lists does not test whether the record lists every surface, and on
+    2026-09-12 a pass six days earlier had re-measured all four of its rows
+    correctly while a fifth existed that it had never known about.
+    """
+    claims: List[Claim] = []
+    for vocabulary in vocabularies:
+        name = vocabulary["name"]
+        terms = tuple(vocabulary["terms"])
+        for surface in vocabulary["surfaces"]:
+            claims.append(
+                Claim(
+                    record=f"{vocabulary['canon']} -> {surface['label']}",
+                    subject=surface["id"],
+                    verifier=surface["verifier"],
+                    expected={"terms": terms, "surface": surface["id"]},
+                )
+            )
+        claims.append(
+            Claim(
+                record=f"{vocabulary['canon']} (the surface list itself)",
+                subject=f"{name}: every surface carrying it is pinned",
+                verifier="vocabulary_surfaces_complete",
+                expected={
+                    "pinned": tuple(s["id"] for s in vocabulary["surfaces"]),
+                    "name": name,
+                },
             )
         )
     return claims
@@ -723,7 +847,168 @@ def _check_repo_file(claim: Claim, observations: Dict[str, Any]) -> Tuple[str, s
     )
 
 
+def _connectors_or_none(
+    observations: Dict[str, Any], needs: str
+) -> Tuple[Optional[Dict[str, Any]], str]:
+    """The connector block, or the reason it cannot settle this claim.
+
+    A snapshot without it is UNVERIFIED rather than OK: these surfaces are read
+    through a session's MCP connectors, so an older observations file simply
+    predates the lane and must not be read as agreement.
+    """
+    connectors = observations.get("connectors")
+    if not connectors:
+        return None, "no connector block in the observations; run a snapshot from a session"
+    section = connectors.get(needs)
+    if section is None:
+        return None, f"the connector block carries no {needs!r} section"
+    return section, ""
+
+
+def _check_vocabulary_options(claim: Claim, observations: Dict[str, Any]) -> Tuple[str, str]:
+    """The option set at a pinned id, against the canonical terms.
+
+    Set comparison, deliberately. Option ORDER inside a Notion or Airtable
+    multi-select is UI, not vocabulary: on 2026-09-12 both sorted ACX ninth
+    while the canon sorts it fourth, and treating that as drift would push the
+    canon to agree with a dropdown.
+    """
+    surfaces, why = _connectors_or_none(observations, "surfaces")
+    if surfaces is None:
+        return UNVERIFIED, why
+    surface_id = claim.expected["surface"]
+    observed = surfaces.get(surface_id)
+    if observed is None:
+        return UNVERIFIED, f"the snapshot did not read {surface_id}"
+    options = observed.get("options")
+    if options is None:
+        return UNVERIFIED, f"{surface_id} was read without its options"
+    expected = set(claim.expected["terms"])
+    seen = set(options)
+    if seen == expected:
+        return OK, f"all {len(expected)} terms present"
+    missing = sorted(expected - seen)
+    extra = sorted(seen - expected)
+    parts = []
+    if missing:
+        parts.append(f"missing {missing}")
+    if extra:
+        parts.append(f"carries {extra} which the canon does not")
+    return DRIFT, "; ".join(parts)
+
+
+def _check_vocabulary_present(claim: Claim, observations: Dict[str, Any]) -> Tuple[str, str]:
+    """A folder or file has no option list, so existence is the whole claim."""
+    present, why = _connectors_or_none(observations, "present")
+    if present is None:
+        return UNVERIFIED, why
+    surface_id = claim.expected["surface"]
+    if surface_id not in present:
+        return UNVERIFIED, f"the snapshot did not read {surface_id}"
+    if present[surface_id]:
+        return OK, "present"
+    return DRIFT, f"{surface_id} is gone or trashed"
+
+
+def _check_vocabulary_attested(claim: Claim, observations: Dict[str, Any]) -> Tuple[str, str]:
+    """An account level skill: attested by a human, or UNVERIFIED. Never measured.
+
+    A session does not read the live skill. It reads a copy mirrored into its
+    container, refreshed on the sync service's schedule rather than at session
+    start or read time, and invoking the skill resolves to that same file. So a
+    run can know the copy's contents and its mtime, and nothing else. On
+    2026-09-12 a four day old copy was reported as a same day measurement and
+    written into the canonical record; this checker makes that unrepresentable.
+    """
+    attestations, why = _connectors_or_none(observations, "attestations")
+    if attestations is None:
+        return UNVERIFIED, why
+    surface_id = claim.expected["surface"]
+    attested = attestations.get(surface_id)
+    if attested is None:
+        return UNVERIFIED, (
+            f"{surface_id} is an account level skill, unreadable from a session. "
+            "It needs a human attestation in the snapshot, not a measurement"
+        )
+    who, when = attested.get("by"), attested.get("at")
+    if not who or not when:
+        return UNVERIFIED, (
+            f"the attestation for {surface_id} names no attester or no date; "
+            "an unattributed attestation is not one"
+        )
+    terms = attested.get("terms")
+    if terms is None:
+        return UNVERIFIED, f"the attestation for {surface_id} records no terms"
+    expected = set(claim.expected["terms"])
+    seen = set(terms)
+    if seen == expected:
+        return OK, f"attested by {who} on {when}, all {len(expected)} terms"
+    missing = sorted(expected - seen)
+    extra = sorted(seen - expected)
+    parts = []
+    if missing:
+        parts.append(f"missing {missing}")
+    if extra:
+        parts.append(f"carries {extra} which the canon does not")
+    return DRIFT, f"attested by {who} on {when}: " + "; ".join(parts)
+
+
+def _check_vocabulary_count(claim: Claim, observations: Dict[str, Any]) -> Tuple[str, str]:
+    """One child per term, counted rather than named.
+
+    For a surface whose members carry display names instead of the vocabulary's
+    own terms. Weaker than a set comparison on purpose: it cannot tell an added
+    member from a swapped one, and claiming otherwise would mean inventing a
+    name mapping nobody ruled on.
+    """
+    counts, why = _connectors_or_none(observations, "counts")
+    if counts is None:
+        return UNVERIFIED, why
+    surface_id = claim.expected["surface"]
+    observed = counts.get(surface_id)
+    if observed is None:
+        return UNVERIFIED, f"the snapshot did not count {surface_id}"
+    expected = len(claim.expected["terms"])
+    if observed == expected:
+        return OK, f"{observed} members for {expected} terms"
+    return DRIFT, f"{observed} members for {expected} terms"
+
+
+def _check_vocabulary_surfaces_complete(
+    claim: Claim, observations: Dict[str, Any]
+) -> Tuple[str, str]:
+    """Every surface the estate carries this vocabulary on is pinned above.
+
+    Counted from the estate, never from the pin list. `discovered` is what the
+    snapshotting session actually found; anything in it that is not pinned is
+    a surface no record knows about, which is the exact shape of the 2026-09-12
+    miss. A snapshot with no `discovered` key cannot settle this and says so.
+    """
+    connectors = observations.get("connectors")
+    if not connectors:
+        return UNVERIFIED, "no connector block in the observations"
+    discovered = connectors.get("discovered")
+    if discovered is None:
+        return UNVERIFIED, (
+            "the snapshot carries no `discovered` list, so completeness is "
+            "untested; re-measuring the pinned surfaces does not test the pin list"
+        )
+    pinned = set(claim.expected["pinned"])
+    unpinned = sorted(set(discovered) - pinned)
+    if unpinned:
+        return DRIFT, (
+            f"the estate carries {claim.expected['name']} on surfaces no record "
+            f"pins: {unpinned}"
+        )
+    return OK, f"all {len(discovered)} discovered surfaces are pinned"
+
+
 CHECKERS = {
+    "vocabulary_options": _check_vocabulary_options,
+    "vocabulary_present": _check_vocabulary_present,
+    "vocabulary_count": _check_vocabulary_count,
+    "vocabulary_attested": _check_vocabulary_attested,
+    "vocabulary_surfaces_complete": _check_vocabulary_surfaces_complete,
     "n8n_host": _check_n8n_host,
     "webhook_auth": _check_webhook_auth,
     "body_gate": _check_body_gate,
@@ -1347,7 +1632,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         observations = json.loads(pathlib.Path(args.observations).read_text())
     else:
         observations = gather_observations()
-    claims = vault_claims() + doc_claims(_read_doc_texts())
+    claims = vault_claims() + doc_claims(_read_doc_texts()) + vocabulary_claims()
     findings = check(claims, observations)
     print(render(findings, open_rulings()))
 
