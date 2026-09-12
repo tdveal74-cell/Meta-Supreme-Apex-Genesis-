@@ -1083,7 +1083,21 @@ _RECEIPTS = "airtable:app28z7XnKzjfTXwc/tblEhgEZoNr2ztbB3/fldcBN1kec0xgSnr5"
 _CAPTURES = "airtable:app28z7XnKzjfTXwc/tbl4ziFRbl5mnUcKc/fldpbMPz2xBcEo0Ia"
 _SKILL_SURFACE = "account_skill:devon-thread-log"
 _ACX_FOLDER = "drive:1a_baNvgH9CBb4biuBCbdNb_4P9fvkO1a"
-_AREAS_FOLDER = "drive:1efaZ37s3PBjeEFD1HUQnN3QwH3pV0Rbc"
+
+#: One Drive folder per term inside `2. Areas`, every id read live 2026-09-12.
+#: Pinned by id because six of the nine are titled for a human rather than by
+#: the term, and Tee ruled on 2026-09-12 to leave those titles alone.
+_AREA_FOLDERS = {
+    "TQO": "drive:1DXDzO_qY17i1ChE-gOqL3oOwBVbaveLH",
+    "Podcast": "drive:1ZNnbg7bFfcEAM0bMZ96sUnZsr8NXXl6c",
+    "NCO": "drive:1GhyNDBaBLrcJux9gEVtVpSTnbDK1eJzO",
+    "ACX": _ACX_FOLDER,
+    "Health": "drive:1BkZ0YfANbOS0fQf_2F-e-22LTSeV8xRg",
+    "Money": "drive:1PbsQU2VSLSt-e7scjWY83X5k-y27c8OO",
+    "Family": "drive:1LU5mD4reyWwN-D3O_41FCvP1BuUvqlhd",
+    "Learning": "drive:1_WWVxVMfhCxMdxXLv6NjSiKPCzZmbQFu",
+    "Systems": "drive:1La9LZ1zvpnU6-ep-EVStEy33M8cvyUGr",
+}
 
 
 def _connector_observations():
@@ -1095,8 +1109,7 @@ def _connector_observations():
                 _RECEIPTS: {"options": list(_AREA_TERMS)},
                 _CAPTURES: {"options": list(_AREA_TERMS)},
             },
-            "present": {_ACX_FOLDER: True},
-            "counts": {_AREAS_FOLDER: 9},
+            "present": {folder: True for folder in _AREA_FOLDERS.values()},
             "attestations": {
                 _SKILL_SURFACE: {
                     "by": "Tee",
@@ -1105,7 +1118,8 @@ def _connector_observations():
                 }
             },
             "discovered": [
-                _NOTION, _RECEIPTS, _CAPTURES, _SKILL_SURFACE, _ACX_FOLDER, _AREAS_FOLDER,
+                _NOTION, _RECEIPTS, _CAPTURES, _SKILL_SURFACE,
+                *_AREA_FOLDERS.values(),
             ],
         }
     }
@@ -1219,20 +1233,57 @@ def test_an_attestation_that_disagrees_with_the_canon_is_drift():
     assert "Tee" in finding.detail and "2026-09-12" in finding.detail
 
 
-def test_the_drive_folder_set_is_counted_not_named():
-    """Drive titles its folders with display names ("TQO - The Quiet Operator",
-    "Learning & Skills") rather than the vocabulary's terms, so a set
-    comparison would report drift that is not there. Counting catches the
-    failure that matters, an Area added with no folder, without inventing a
-    name mapping nobody ruled on."""
-    observations = _connector_observations()
-    finding = _vocabulary_finding(observations, _AREAS_FOLDER)
-    assert finding.status == reconcile.OK
+def test_every_term_has_its_own_drive_folder_pinned_by_id():
+    """Six of the nine Drive folders are titled for a human rather than by the
+    term ("Money & Finances", "Learning & Skills"), and Tee ruled on 2026-09-12
+    to leave those titles alone. Pinning each folder's id gets a stronger check
+    than the bare parent count this replaced, without renaming anything and
+    without inventing a title-to-term mapping: the ids were measured.
+    """
+    surfaces = {
+        s.get("term"): s["id"]
+        for v in reconcile.VOCABULARIES
+        for s in v["surfaces"]
+        if s["id"].startswith("drive:")
+    }
+    assert surfaces == _AREA_FOLDERS, "the pinned Drive folders drifted from the measured ids"
 
-    observations["connectors"]["counts"][_AREAS_FOLDER] = 8
-    finding = _vocabulary_finding(observations, _AREAS_FOLDER)
+    terms = set(reconcile.VOCABULARIES[0]["terms"])
+    assert set(surfaces) == terms, "a term has no Drive folder, or a folder has no term"
+
+
+def test_a_folder_missing_for_one_term_is_drift_and_names_the_term():
+    """The failure a bare count could see. Unlike the count, this one says
+    which Area lost its folder."""
+    observations = _connector_observations()
+    observations["connectors"]["present"][_AREA_FOLDERS["Money"]] = False
+    finding = _vocabulary_finding(observations, _AREA_FOLDERS["Money"])
     assert finding.status == reconcile.DRIFT
-    assert "8 members for 9 terms" in finding.detail
+    assert "Money" in finding.detail
+
+
+def test_a_swapped_folder_is_drift_which_a_count_could_not_see():
+    """A count of the parent folder stays at nine when one folder is replaced
+    by another. Pinning each id catches it. This is the whole reason the count
+    was retired."""
+    observations = _connector_observations()
+    present = observations["connectors"]["present"]
+    del present[_AREA_FOLDERS["Learning"]]
+    present["drive:1SOMEOTHERFOLDERIDENTIRELY"] = True
+    assert len(present) == len(_AREA_FOLDERS), "the swap must keep the count identical"
+    finding = _vocabulary_finding(observations, _AREA_FOLDERS["Learning"])
+    assert finding.status == reconcile.UNVERIFIED
+    assert "did not read" in finding.detail
+
+
+def test_a_renamed_folder_is_not_drift():
+    """Drive titles are for humans and may change. The pin is the id, so a
+    rename moves nothing here. The inverse of the rule that a name is not a
+    pin: a title is not a claim either."""
+    observations = _connector_observations()
+    finding = _vocabulary_finding(observations, _AREA_FOLDERS["Money"])
+    assert finding.status == reconcile.OK
+    assert "Money" in finding.detail
 
 
 def test_a_trashed_pinned_folder_is_drift():
@@ -1270,3 +1321,18 @@ def test_every_vocabulary_surface_has_a_registered_checker():
                 f"{surface['label']} names an unregistered verifier "
                 f"{surface['verifier']!r}"
             )
+
+
+def test_the_canon_pointer_names_the_live_areas_file():
+    """The canon field is itself a pinned id and rots like any other. It
+    pointed at 1SBVY1... for about sixteen hours on 2026-09-12, until that file
+    was superseded by 17xC0x... and the pointer was left behind. Caught by
+    reading the run's own output rather than by a test, which is why there is
+    now a test."""
+    canon = reconcile.VOCABULARIES[0]["canon"]
+    assert "17xC0xGvo9SnPO12Bc6-6Y9qrbHIStAOC" in canon, (
+        f"the canon pointer is {canon!r}; superseding AREAS.md means updating it here"
+    )
+    for retired in ("1SBVY1dqYRb0qxkgJqnFuZt7nrU7pgSjF", "14OCcHBuvW9oVa1URawicKkZhxaFPKlHx",
+                    "1D2OxQa7oiEwHHZQTDf_Iepivt2fz3eP1", "1Icg36IpKEl9bZyUE_CegE_L3YfeoIeZM"):
+        assert retired not in canon, f"the canon pointer names a superseded file: {retired}"

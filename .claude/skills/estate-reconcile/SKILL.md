@@ -132,7 +132,6 @@ block:
         "airtable:<baseId>/<tableId>/<fieldId>": {"options": ["...", "..."]}
       },
       "present": {"drive:<file or folder id>": true},
-      "counts":  {"drive:<folder id>": 9},
       "attestations": {
         "account_skill:<name>": {"by": "Tee", "at": "<YYYY-MM-DD>",
                                  "terms": ["...", "..."]}
@@ -169,11 +168,27 @@ the snapshot with who and when, or leave it out and take the UNVERIFIED. Never
 write the row from the container copy: on 2026-09-12 a four day old copy was
 reported as a same day measurement and reached the canonical record.
 
-**Where members carry display names, count rather than name.** The Drive
-`2. Areas` folders are titled `TQO - The Quiet Operator`, `NCO Forge`,
-`Learning & Skills`, not by the terms. `vocabulary_count` catches an Area added
-with no folder without inventing a name mapping nobody ruled on. Whether those
-titles should be the slugs is Tee's ruling.
+**Where members carry display names, pin each one by id. Do not rename them,
+and do not compare titles.** The Drive `2. Areas` folders are titled
+`TQO - The Quiet Operator`, `NCO Forge`, `Learning & Skills`, `Family & People`,
+`Money & Finances`, `Health & Fitness`, not by the terms. Three routes were open
+and only one is right:
+
+- Compare titles to terms. Wrong: it needs a title-to-term mapping nobody ruled
+  on, which is guessing at intent, and six of nine would report drift that is
+  not there.
+- Rename the folders to the terms. Considered and refused by Tee on 2026-09-12.
+  Drive is where a human navigates; a readable title is worth more there than a
+  tidier comparison here, and the rename would mutate the vault to suit the
+  tool.
+- Pin each folder's own id, one per term. Taken. The ids are measured rather
+  than guessed, nothing in the vault moves, a rename in Drive is correctly not
+  drift, and a deleted or swapped folder is caught, which a count of the parent
+  never could.
+
+The rule generalises: when a surface's members are labelled for humans, the pin
+is the id of each member, never its label and never the parent's cardinality. A
+count is what you settle for when you have not got the ids; get the ids.
 
 Adding a vocabulary means adding it to `VOCABULARIES` with every surface pinned
 by full id, and `test_estate_reconcile.py` enforces the id shape and that every
@@ -293,6 +308,17 @@ from describing the live artifact when only the copy was in hand.
 
 ## Traps
 
+- **A rewrite inside one mtime tick leaves stale bytecode, and the test then
+  reads the old value.** Measured 2026-09-12 while proving a pin could fail:
+  the source was edited, reverted and re-run in quick succession, CPython kept
+  `scripts/__pycache__/estate_reconcile.*.pyc` because the mtime had not
+  visibly moved, and pytest imported the previous constant. The run was red
+  against a file that was already correct, and it would as easily have been
+  green against one that was not. Any negative control that edits and restores
+  a module in the same second is suspect: clear the cache
+  (`find . -name __pycache__ -path '*/scripts/*' -exec rm -rf {} +`) between
+  the mutation and the restore, and confirm the source with `git diff` rather
+  than the test result.
 - A container without `requirements.txt` installed does not fail a tidy
   handful of tests, it aborts collection outright, and even with the
   missing modules stubbed in the pre-existing failure count runs to
