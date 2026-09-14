@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import hmac
 import json
@@ -50,4 +49,4 @@ def test_http_url_is_blocked(monkeypatch):
 def test_missing_secret_fails_closed(monkeypatch):
     monkeypatch.delenv("DEVON_OPS_SECRET", raising=False)
     with pytest.raises(ops_gateway.DevonOpsGatewayError, match="not configured"):
-        asyncio.run(ops_gateway.gateway_read("status"))
+        ops_gateway._signed_request("status", "")
