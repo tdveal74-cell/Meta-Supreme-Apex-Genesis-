@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { DevonChat } from "@/components/devon/DevonChat";
 import { OperatorTerminal } from "@/components/terminal/OperatorTerminal";
 import { RealShell } from "@/components/terminal/RealShell";
+import { VpsActionGate } from "@/components/command-center/VpsActionGate";
 import { API_BASE } from "@/lib/api-base";
 
 type CheckState = "checking" | "online" | "offline" | "locked" | "scheduled" | "ready";
@@ -368,6 +369,8 @@ export function UnifiedCommandCenter() {
               <p className="mt-2 text-sm font-semibold text-white">DEVON can think, route, read, plan, and execute reads.</p>
               <p className="mt-2 text-xs leading-5 text-[#93a6b5]">Effectful writes remain bound to your approval path. The real shell is your separate human operator door, not a bypass for DEVON.</p>
             </section>
+
+            <VpsActionGate />
           </aside>
         </section>
 
