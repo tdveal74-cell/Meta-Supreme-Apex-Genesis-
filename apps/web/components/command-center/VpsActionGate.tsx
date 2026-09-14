@@ -75,7 +75,10 @@ export function VpsActionGate() {
     status === "approving" ||
     status === "rejecting";
 
-  const isPending = status === "pending" && Boolean(receipt?.request_id);
+  const hasRequest = Boolean(receipt?.request_id);
+  const showPendingControls =
+    hasRequest &&
+    (status === "pending" || status === "approving" || status === "rejecting");
 
   const requestAction = useCallback(
     async (event?: FormEvent) => {
@@ -207,7 +210,7 @@ export function VpsActionGate() {
           <select
             value={choice}
             onChange={(e) => setChoice(e.target.value as ActionChoice)}
-            disabled={isBusy || isPending}
+            disabled={isBusy || showPendingControls}
             className="w-full border border-[#22384a] bg-[#091017] px-3 py-2 font-mono text-xs text-[#ede7dc] outline-none focus:border-[#c77b4a]/50 disabled:opacity-40"
           >
             {ACTION_OPTIONS.map((opt) => (
@@ -225,7 +228,7 @@ export function VpsActionGate() {
           <textarea
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            disabled={isBusy || isPending}
+            disabled={isBusy || showPendingControls}
             rows={2}
             placeholder="Why this action is required"
             className="w-full resize-none border border-[#22384a] bg-[#091017] px-3 py-2 font-mono text-xs text-[#ede7dc] outline-none placeholder:text-[#6f8494]/50 focus:border-[#c77b4a]/50 disabled:opacity-40"
@@ -235,13 +238,13 @@ export function VpsActionGate() {
         <div className="flex flex-wrap gap-2">
           <button
             type="submit"
-            disabled={isBusy || isPending || reason.trim().length < 3}
+            disabled={isBusy || showPendingControls || reason.trim().length < 3}
             className="border border-[#c77b4a]/45 bg-[#c77b4a]/15 px-4 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#e89b66] transition hover:bg-[#c77b4a]/25 disabled:cursor-not-allowed disabled:opacity-30"
           >
             {status === "requesting" ? "Requesting…" : "Request"}
           </button>
 
-          {isPending && (
+          {showPendingControls && (
             <>
               <button
                 type="button"
