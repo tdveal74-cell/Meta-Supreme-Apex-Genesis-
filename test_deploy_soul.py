@@ -39,6 +39,7 @@ SECRET_SHAPES = [
 
 DELIBERATELY_DIFFERENT = {
     "main.py": "the read-only soul service itself",
+    "ops_gateway.py": "the signed, strict-allowlist client for VPS read-only operations",
     "app.py": (
         "the hosted Operator deployment wrapper; it imports the read-only soul "
         "app but executes commands only in Vercel Sandbox"
