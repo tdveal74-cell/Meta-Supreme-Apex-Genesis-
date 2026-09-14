@@ -28,6 +28,7 @@ from typing import Any
 from fastapi import Cookie, Header, HTTPException, Request, status
 from fastapi.responses import FileResponse, HTMLResponse
 from main import _presented, _require, app
+from ops_gateway import DevonOpsGatewayError, gateway_read
 from vercel import sandbox as vercel_sandbox
 from vercel.headers import set_headers
 from vercel.sandbox import GitSource
@@ -520,6 +521,35 @@ async def operator_terminal(
         return HTMLResponse(_terminal_door(why), status_code=exc.status_code)
 
     return FileResponse(TERMINAL, media_type="text/html")
+
+
+@app.get("/api/v1/ops/status")
+async def devon_ops_status(
+    authorization: str | None = Header(default=None),
+    devon_console: str | None = Cookie(default=None),
+):
+    """Return the restricted VPS service status through the signed gateway."""
+    _operator_require(authorization, devon_console)
+    try:
+        return await gateway_read("status")
+    except DevonOpsGatewayError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/v1/ops/health/{target}")
+async def devon_ops_health(
+    target: str,
+    authorization: str | None = Header(default=None),
+    devon_console: str | None = Cookie(default=None),
+):
+    """Return health for one explicitly allowlisted VPS service."""
+    _operator_require(authorization, devon_console)
+    if target not in {"n8n", "render-adapter"}:
+        raise HTTPException(status_code=404, detail="That VPS health target is not allowed.")
+    try:
+        return await gateway_read("health", target)
+    except DevonOpsGatewayError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.get("/api/v1/operator-terminal/status")
