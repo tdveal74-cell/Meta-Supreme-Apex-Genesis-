@@ -103,7 +103,16 @@ GRANDFATHERED = frozenset(
     }
 )
 
-FILENAME_DATE = re.compile(r"_(\d{4}-\d{2}-\d{2})\.md$")
+FILENAME_DATE = re.compile(r"_(\d{4}-\d{2}-\d{2})([a-z])?\.md$")
+
+#: Ruled by Tee 2026-09-15, on a card. Two status docs carrying the same date
+#: cannot be ordered by the filename, and the readiness audit of that day found
+#: six same day pairs that supersede each other in an order nothing records.
+#: From the day after the ruling every status doc carries a sequence letter
+#: after its date, `_2026-09-16a.md`, `b`, `c` within one day, unique across the
+#: day, so the filename sorts into the order the docs were written. Docs dated
+#: on or before the ruling keep their names.
+SEQUENCE_LETTER_FROM = "2026-09-16"
 
 
 def _status_docs() -> list[pathlib.Path]:
@@ -211,3 +220,30 @@ def test_a_migrated_legacy_doc_leaves_the_exemption_list(path):
         f"{path.name} now satisfies the canon: remove it from GRANDFATHERED "
         "so the backlog reflects the estate"
     )
+
+
+def test_a_status_doc_written_after_the_ruling_carries_a_sequence_letter():
+    """A day's docs sort into writing order by filename, or they cannot be
+    ordered at all. Anti vacuity: the regex must accept the lettered form and
+    reject a bare date after the ruling, on synthetic names, so the rule fails
+    loudly the day the first lettered doc arrives with a typo."""
+    accepted = FILENAME_DATE.search("SYS_OPS_x_v1_2026-09-16a.md")
+    assert accepted and accepted.group(1) == "2026-09-16" and accepted.group(2) == "a"
+    bare = FILENAME_DATE.search("SYS_OPS_x_v1_2026-09-16.md")
+    assert bare and bare.group(2) is None
+    seen: dict[str, set[str]] = {}
+    for path in _status_docs():
+        stamped = FILENAME_DATE.search(path.name)
+        assert stamped, f"{path.name} carries no date in its filename"
+        day, letter = stamped.group(1), stamped.group(2)
+        if day < SEQUENCE_LETTER_FROM:
+            continue
+        assert letter, (
+            f"{path.name} is dated after the 2026-09-15 ruling and carries no "
+            f"sequence letter; name it _{day}a.md, b, c in the order it was written"
+        )
+        assert letter not in seen.setdefault(day, set()), (
+            f"{path.name} reuses letter {letter} on {day}; letters are unique within a day"
+        )
+        seen[day].add(letter)
+

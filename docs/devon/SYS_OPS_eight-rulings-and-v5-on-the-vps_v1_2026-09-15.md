@@ -90,18 +90,49 @@ every scheduled organ on cadence, zero errors, ledger terminal). The DEVON
 lane on the VPS is the cutover, runbook steps 3 to 6 of the v2 record, and it
 is not started; the cutover audit lists the ten blockers in order.
 
-## The Heartbeat subject fix, for Tee to apply
+## Eight more rulings, later the same day
+
+Tee asked for the question bank on cards and ruled eight more. Done in the
+same sitting, each read back after the write:
+
+1. The five active VPS TSWS pipelines now name the VPS OS Error Handler
+   `GbeNilHQzjmoWDz3` as their error workflow (was the Cloud id), published
+   at `e50af1de`, `b77a7182`, `d3169ee6`, `df08db3b`, `69ce87e3`; the
+   handler itself binds SMTP `AgSGuaA2pnZsrZcJ` and Airtable
+   `Avhx7u29TskBaR67` instead of the two Cloud ids that failed in execution
+   24, published at `95e4eae3`.
+2. The Heartbeat subject fix was applied on Cloud, not left for Tee:
+   `reflection_missing` is filed with `alert` true, published at
+   `2a1c5ab4`; the section below is now history. The 10:00Z beat is the
+   re-measure, and a check-in is armed for it.
+3. The VPS Claude calls stay on `claude-sonnet-4-6` until the watched run
+   passes.
+4. `/health/ready` gets its real check now, PR #223.
+5. The 33 copies of 08-31 vintage are ported through the connectors the way
+   V5 was, one at a time, DEVON lane organs first, after the content lane.
+6. The DEVON cutover starts after the content lane's watched run passes.
+7. Tee reads the n8n Cloud usage page and sends the two numbers; the five
+   cap anchor variable lines come back to him to set on Railway.
+8. From 2026-09-16 every status doc carries a sequence letter after its
+   date; `test_devon_receipt_shape.py` enforces it and CLAUDE.md says so.
+
+And three on the content lane itself: after Tee reconnects the Google Drive
+credential on the VPS, one watched run of `run-tqo-pipeline`; the six
+schedules are enabled on the VPS only after that run passes; Cloud's copy of
+V5 is unpublished after that run passes.
+
+## The Heartbeat subject fix, as applied
 
 In workflow `dRgTNLod2s8BAcPg`, node `Compose Pulse`, the reflection finding
 is filed with `alert` false, so it lands under WATCHING and the subject stays
 "DEVON Pulse: all quiet" while the reflection has been silent for 40 hours.
-The one line to change, exactly:
+The one line that changed, exactly:
 
 ```
 finding('reflection_missing', false, 'No fresh reflection: ...
 ```
 
-becomes
+became
 
 ```
 finding('reflection_missing', true, 'No fresh reflection: ...
@@ -119,9 +150,9 @@ AREA: Systems
 TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_eight-rulings-and-v5-on-the-vps_v1_2026-09-15
 DATE: 2026-09-15
-DECISIONS: eight rulings by Tee on 2026-09-15: delete the proxy debug lines and rotate the secret; change the panel note to "Configured only:"; merge #219 on green; give /health/ready a real check; the VPS owns TQO FINAL V5 and the TSWS chain (objection logged once, overruled); close the two V5 link doors on the VPS with header auth; re-export the 08-31 vintage with the tool; a standalone reflection Routine plus the pulse subject fix. Then: the VPS has the fresher V5 copy.
-FINDINGS: PR #219 merged at baafe685 and PR #221 at 642326b6; the VPS V5 published at 89fef7ef with five Cloud changes ported and hash verified, the two link doors closed, and a mis-bound Buyer Sync credential corrected; the model bump to claude-sonnet-5 and the Gateway credit conversion were not ported because the VPS calls Anthropic with Tee's key; the Google Drive credential on the VPS is still disconnected and the six schedules are disabled on both instances, so no content run can complete yet.
-OPEN: Tee reconnects Google Drive on the VPS and checks the YouTube credential; Tee rotates DEVON_OPS_SECRET; Tee decides whether the six schedules go live on the VPS and whether Cloud's V5 goes inactive; the /health/ready PR; the 08-31 re-export sitting; the Heartbeat subject line; the standalone reflection Routine; the Sonnet 5 question on the VPS key; the DEVON cutover itself.
+DECISIONS: eight rulings by Tee on 2026-09-15: delete the proxy debug lines and rotate the secret; change the panel note to "Configured only:"; merge #219 on green; give /health/ready a real check; the VPS owns TQO FINAL V5 and the TSWS chain (objection logged once, overruled); close the two V5 link doors on the VPS with header auth; re-export the 08-31 vintage with the tool; a standalone reflection Routine plus the pulse subject fix. Then: the VPS has the fresher V5 copy. Eight more the same day: the TSWS error path repointed and the handler rebound on the VPS, the Heartbeat subject fix applied on Cloud, Sonnet 4-6 stays on the VPS until the watched run, /health/ready now, the 08-31 vintage ported through the connectors, the cutover after the content lane, Tee sends the usage page numbers, sequence letters on status doc filenames from 2026-09-16; and on the content lane a watched run after the Drive reconnect, schedules and the Cloud switch off after it passes.
+FINDINGS: PR #219 merged at baafe685 and PR #221 at 642326b6; the VPS V5 published at 89fef7ef with five Cloud changes ported and hash verified, the two link doors closed, and a mis-bound Buyer Sync credential corrected; the model bump to claude-sonnet-5 and the Gateway credit conversion were not ported because the VPS calls Anthropic with Tee's key; the Google Drive credential on the VPS is still disconnected and the six schedules are disabled on both instances, so no content run can complete yet; under the second eight rulings the TSWS 01 to 05 error path was repointed and the handler rebound on the VPS, and the Heartbeat pulse subject fix was applied on Cloud at 2a1c5ab4.
+OPEN: Tee reconnects Google Drive on the VPS and checks the YouTube credential; Tee rotates DEVON_OPS_SECRET; the six schedules go live on the VPS and Cloud's V5 goes inactive only after the watched run passes; PR #223 carries the /health/ready check and is merging; the 08-31 vintage port through the connectors; the Heartbeat fix is applied on Cloud at 2a1c5ab4 and its 10:15Z re-measure is still owed; the standalone reflection Routine; the Sonnet 5 question waits on the watched run; the usage page numbers; the DEVON cutover itself.
 STATUS: two PRs merged, one workflow published on the VPS under Tee's ruling, everything read back after the write. Content cannot flow until the Drive credential is reconnected, which is his hand on his OAuth.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
