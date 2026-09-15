@@ -247,6 +247,13 @@ a `DATE` matching the date in the filename. Extra keys are welcome; those nine
 are the floor. `test_devon_receipt_shape.py` enforces it, so do not describe
 the rule in prose and hope.
 
+Ruled 2026-09-15: from 2026-09-16 every status doc's filename carries a
+sequence letter after the date, `_v1_2026-09-16a.md`, then `b`, `c` within the
+same day and unique across that day, because the readiness audit found six
+same day pairs that supersede each other in an order the filenames could not
+express. The same test enforces it; docs dated on or before 2026-09-15 keep
+their names.
+
 Enforcement is an exemption list of exact filenames, not a date cutoff, because
 a new doc can carry an old date in its name and a filename cannot be forged
 that way. The list is the migration backlog and it may only shrink: one test
