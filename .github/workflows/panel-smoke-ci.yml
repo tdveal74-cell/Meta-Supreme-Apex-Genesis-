@@ -56,6 +56,15 @@ name: Panel smoke CI
 # runner without Chromium turns this job RED rather than green. That is the same
 # posture audio-ci.yml takes, and for the same reason: a green job that checked
 # nothing is worse than no job, because it is credited.
+#
+# THE CAPABILITY DOCK RIDES THE SAME STACK, since 2026-09-15. scripts/dock-smoke.mjs
+# opens /command-center twice, once with a real token and once with one the API
+# refuses, and asserts the Soul readout's rendered words: "recall off" with the
+# route's own detail and this job's API host in the first, "status unread" and
+# a 0/7 mesh in the second. It exists because the AST guard for that readout in
+# scripts/honesty-check.ts was beaten eleven times in one afternoon by a critic
+# editing around the expression it pinned; rendered text cannot be edited
+# around. Its files are in the filter below.
 
 on:
   pull_request:
@@ -86,8 +95,16 @@ on:
       - "app/api/v1/projects.py"
       - "app/api/v1/workflows.py"
       - "app/api/v1/router.py"
-      # The check, and this file.
+      # The capability dock, its route, and the four API modules it reads.
+      - "apps/web/components/command-center/CapabilityDock.tsx"
+      - "apps/web/app/command-center/**"
+      - "app/api/v1/soul.py"
+      - "app/api/v1/agent_tasks.py"
+      - "app/api/v1/agent_expansion.py"
+      - "app/api/v1/devon.py"
+      # The checks, and this file.
       - "apps/web/scripts/panel-smoke.mjs"
+      - "apps/web/scripts/dock-smoke.mjs"
       - ".github/workflows/panel-smoke-ci.yml"
   workflow_dispatch:
 
@@ -219,6 +236,10 @@ jobs:
       - name: Drive the six panels in real Chromium
         working-directory: apps/web
         run: node --experimental-strip-types scripts/panel-smoke.mjs
+
+      - name: Drive the capability dock in real Chromium
+        working-directory: apps/web
+        run: node --experimental-strip-types scripts/dock-smoke.mjs
 
       - name: What the servers said, when it went red
         if: failure()

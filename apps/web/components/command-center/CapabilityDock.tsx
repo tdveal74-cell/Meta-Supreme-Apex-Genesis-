@@ -52,6 +52,23 @@ type SoulStatus = {
   detail?: string;
 };
 
+/**
+ * The one three way read of the status route: on, off, or unread because the
+ * route did not answer. Everything the dock says about soul derives from this
+ * value, so there is one expression to get wrong and one for check:honesty to
+ * pin. A critic on 2026-09-15 got eleven lies past the first version of that
+ * check by editing around the single ternary it pinned; the light, the tile,
+ * the panel header and the note now share this value instead of each reading
+ * the status object for themselves.
+ */
+type SoulState = "on" | "off" | "unread";
+
+const SOUL_TILE_DETAIL: Record<SoulState, string> = {
+  on: "recall on",
+  off: "recall off",
+  unread: "status unread",
+};
+
 type Schedule = {
   schedule_id?: string;
   goal?: string;
@@ -196,6 +213,11 @@ export function CapabilityDock() {
   // headline number one higher than the estate deserved.
   const schedulerRuns = Boolean(catalog?.expansion?.scheduler_status?.runs_goals);
 
+  // The only place `enabled` is read. `soul` is null when the route did not
+  // answer (a 401 on a stale token, an unreachable API), and that is a state
+  // of its own, not "off".
+  const soulState: SoulState = !soul ? "unread" : soul.enabled ? "on" : "off";
+
   const activeCount = useMemo(() => {
     if (!catalog) return 0;
     return [
@@ -205,9 +227,9 @@ export function CapabilityDock() {
       Boolean(catalog.council?.enabled),
       schedulerRuns,
       Boolean(catalog.execution?.effect_receipts),
-      Boolean(soul?.enabled),
+      soulState === "on",
     ].filter(Boolean).length;
-  }, [catalog, schedulerRuns, soul]);
+  }, [catalog, schedulerRuns, soulState]);
 
   // Rows with a run_at and no task_id are the recorded goals nothing has
   // materialised. They are not queued for execution by anything, so the panel
@@ -254,15 +276,22 @@ export function CapabilityDock() {
   // status route's own detail, which names the variables that turn recall on,
   // followed by the host whose environment they belong to.
   const soulNote = useMemo(() => {
-    if (!soul) {
+    if (state === "loading" && soulState === "unread") {
+      return `Checking. GET /soul/status on ${apiHost} has not answered yet.`;
+    }
+    if (soulState === "unread") {
       return `Soul status unread. GET /soul/status on ${apiHost} did not answer, so whether recall is on is unknown here.`;
     }
-    const detail = soul.detail || (soul.enabled ? "Soul recall is on." : "Soul recall is off.");
-    if (soul.enabled) {
+    const detail =
+      soul?.detail ||
+      (soulState === "on"
+        ? "Soul recall is on."
+        : "Soul recall is off. SOUL_RECALL_ENABLED and PINECONE_API_KEY turn it on.");
+    if (soulState === "on") {
       return `${detail} Configured rather than probed: the status route never calls Pinecone, so only a recall proves the connection.`;
     }
-    return `${detail} Set them in the environment of ${apiHost}, which is the only host this readout asks.`;
-  }, [soul, apiHost]);
+    return `${detail} Those variables belong to the environment of ${apiHost}, the only host this readout asks.`;
+  }, [state, soul, soulState, apiHost]);
 
   const shellLabel =
     state === "locked"
@@ -309,7 +338,7 @@ export function CapabilityDock() {
                       : `${schedules.length} recorded, none run`,
                   ],
                   ["Receipts", Boolean(catalog?.execution?.effect_receipts), "effect ledger"],
-                  ["Soul", Boolean(soul?.enabled), soul ? (soul.enabled ? "recall on" : "recall off") : "status unread"],
+                  ["Soul", soulState === "on", SOUL_TILE_DETAIL[soulState]],
                   ["Leases", Boolean(catalog?.execution?.shared_task_leases), "fenced runs"],
                 ].map(([label, ok, detail]) => (
                   <div key={String(label)} className="bg-[#0b141b] px-3 py-2.5">
@@ -336,7 +365,7 @@ export function CapabilityDock() {
               <div className="mt-3 border border-[#22384a] bg-black/15 px-3 py-2.5">
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#6f8494]">Soul recall</span>
-                  <span className="font-mono text-[9px] text-[#d4a017]">{soul ? (soul.enabled ? "ON" : "OFF") : "UNREAD"}</span>
+                  <span className="font-mono text-[9px] text-[#d4a017]">{soulState.toUpperCase()}</span>
                 </div>
                 <p className="mt-1.5 text-[9px] leading-4 text-[#c77b4a]">{soulNote}</p>
               </div>
