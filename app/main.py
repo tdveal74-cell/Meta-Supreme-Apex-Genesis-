@@ -24,8 +24,9 @@ async def lifespan(app: FastAPI):
     setup_logging()
 
     # Seed the agents table from the canonical registry (idempotent).
-    # Failure is logged loudly but does not block startup — /health/ready
-    # reports database availability, and seeding retries on demand.
+    # Failure is logged loudly but does not block startup: /health/ready
+    # answers 503 until the database answers SELECT 1, and seeding retries
+    # on demand.
     import logging
 
     from app.db.session import AsyncSessionLocal
