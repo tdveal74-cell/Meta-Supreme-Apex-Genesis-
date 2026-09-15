@@ -70,9 +70,11 @@ export async function POST(
     return safeError("VPS gate not configured on this host", 503);
   }
 
+  let rawBody: string;
   let body: Record<string, unknown>;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    rawBody = await request.text();
+    body = JSON.parse(rawBody) as Record<string, unknown>;
   } catch {
     return safeError("Invalid JSON body");
   }
@@ -113,7 +115,10 @@ export async function POST(
     return safeError(`No path for action: ${action}`, 404);
   }
 
-  const exactBody = JSON.stringify(body);
+  // Preserve the caller's exact bytes unless this route deliberately adds
+  // server-controlled approval metadata before forwarding the request.
+  const exactBody =
+    action === "approve" || action === "reject" ? JSON.stringify(body) : rawBody;
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const signature = sign(timestamp, exactBody, secret);
 
