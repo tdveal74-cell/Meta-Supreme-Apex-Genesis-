@@ -74,6 +74,7 @@ sides, and a payload edited after the card parked with
 | the graph end to end, happy path | pinned execution 109 on the VPS | EXECUTING, artifact `zapier_call`, call log row 1, ledger_clean true |
 | the graph end to end, refusal | pinned execution 110 on the VPS | refused as data, HTTP 200, the reason names the allowlist |
 | the live call from the VPS | execution 112, real credential | REFUSED: HTTP 401, see below |
+| the live call again, after Tee rotated the token | execution 113, real credential | 200, session issued, EXECUTING with the artifact, ledger_clean true |
 | the same call from Cloud | execution 7171, same minute, same endpoint | 200, session issued, 17 tools listed |
 
 ## The 401, stated plainly
@@ -91,8 +92,14 @@ method works, the workflow works, and the value on the VPS is not the value
 Zapier expects. It is a token to re-copy, not a design to revisit.
 
 The executor's own refusal named it: "the Zapier MCP credential on n8n is the
-first thing to check." That is the honest path working as designed, and it is
-why the lane is not published yet.
+first thing to check." That is the honest path working as designed.
+
+Tee rotated the token at 21:15Z and execution 113 settled it. `initialize`
+answered 200 and issued session `96d7aabb-6745-40eb-93d7-06aebb488f70`,
+`tools/call` answered 200 with the configuration URL, the envelope advanced to
+EXECUTING carrying a `zapier_call` artifact and call log row 1, and
+`ledger_clean` came back true. Build 19 is published on the VPS,
+`activeVersionId 09d88637`: the first DEVON organ live there under the ruling.
 
 One more thing the Cloud probe found, which changes what the lane can become:
 the Zapier server now exposes seventeen tools, not the one it exposed this
@@ -122,12 +129,14 @@ table id in the repository from n8n Cloud to n8n.editforge.online:
 
 ## The cutover is prepared, not done
 
-The tooling exists and is proven on a fixture pair:
-`scripts`-adjacent generators under the session scratchpad turn a Cloud live
-workflow into VPS update operations with the host, credential ids, data table
-ids, workflow ids, node settings and error workflow mapped, and a verifier
-compares the rebuilt VPS copy against the Cloud source with the same maps
-applied and exits non-zero on any mismatch.
+The tooling exists, is proven on a fixture pair, and is committed:
+`scripts/vps_cutover_rebuild.py` turns a Cloud live workflow into VPS update
+operations with the host, credential ids, data table ids, workflow ids, node
+settings and error workflow mapped, and `scripts/vps_cutover_verify.py` compares
+the rebuilt VPS copy against the Cloud source with the same maps applied and
+exits non-zero on any mismatch. The maps and the organ list sit beside them under
+`docs/devon/`, and `SYS_OPS_the-vps-cutover-handover_v1_2026-09-15.md` is the
+plan of record for the session that runs it.
 
 The maps are complete and first hand:
 
@@ -138,9 +147,9 @@ The maps are complete and first hand:
   `Header Auth account 10` has no VPS twin, and the Zapier MCP credential is
   the 401 above.
 
-What is not done: the forty VPS copies have not been rebuilt from their Cloud
-sources, nothing has been published on the VPS, nothing has been unpublished on
-Cloud, and the ledger rows have not moved. Tee ruled that the open jobs move
+What is not done: the thirty nine VPS copies with a Cloud twin have not been
+rebuilt from their sources, nothing else has been published on the VPS, nothing
+has been unpublished on Cloud, and the ledger rows have not moved. Tee ruled that the open jobs move
 and the closed ones stay, and that the approval queue never moves because its
 token column is never read. That is the plan of record; it has not run.
 
@@ -157,8 +166,8 @@ TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_the-zapier-executor-and-the-vps-repoint_v1_2026-09-15.md
 DATE: 2026-09-15
 DECISIONS: Tee ruled the Zapier MCP server is DEVON's external executor, wired as the fourth Action Router action zapier.mcp at ceiling reversible_write, bound by a structural intent.payload.zapier and never from words in a summary. Tee ruled every DEVON organ runs on the VPS, live and published, so the repository's host, workflow ids and data table ids were repointed from n8n Cloud to n8n.editforge.online. Tee ruled the cutover moves the open ledger jobs and leaves the terminal ones, and that the approval queue never moves. Tee created the Zapier MCP credential on the VPS himself.
-FINDINGS: Build 19 is live on the VPS as MIELNCkP9IyHWVlr with 23 nodes, proven by pinned executions 109 (EXECUTING with a zapier_call artifact and ledger_clean true) and 110 (refusal as data naming the allowlist), and by 68 offline cases across four harnesses. The VPS Zapier MCP credential krUcZs3zx3V6zhUt answered HTTP 401 -31997 Invalid OAuth token on execution 112, while the Cloud credential answered 200 and issued a session against the same URL in the same minute on execution 7171, so the token value on the VPS is wrong and the lane is unpublished. The Zapier server now exposes seventeen tools where it exposed one this afternoon, including execute_zapier_read_action and execute_zapier_write_action. 28 of 30 Cloud credentials have a VPS twin of the same type by exact name; Header Auth account 10 has none. All 11 Cloud data tables have a VPS twin by name. 49 workflow id pairs were read from both instances; Soul Index Setup and Build 08 Credential Probe exist only on Cloud.
-OPEN: The VPS Zapier MCP credential value has to be re-copied from Zapier before the lane can call anything. The forty VPS organ copies have not been rebuilt from their Cloud sources, nothing is published on the VPS and nothing is unpublished on Cloud, so the cutover Tee ruled has not happened. The ledger rows have not moved. Whether the VPS Devon Capture Key holds the same secret as the Cloud one is unverified and decides whether Tee's phone Shortcut keeps working after the switch. Which Zapier tools join the allowlist beyond get_configuration_url is Tee's ruling, and execute_zapier_write_action cannot join under the current ceiling.
-STATUS: Build 19 built, proven offline and on pinned runs, live on the VPS and unpublished pending its credential. The repository names the VPS throughout. The cutover is prepared and not executed.
+FINDINGS: Build 19 is live on the VPS as MIELNCkP9IyHWVlr with 23 nodes, proven by pinned executions 109 (EXECUTING with a zapier_call artifact and ledger_clean true) and 110 (refusal as data naming the allowlist), and by 68 offline cases across four harnesses. The VPS Zapier MCP credential krUcZs3zx3V6zhUt answered HTTP 401 -31997 Invalid OAuth token on execution 112, while the Cloud credential answered 200 and issued a session against the same URL in the same minute on execution 7171, proving the token value and not the endpoint; Tee rotated it and execution 113 ran the lane end to end from the VPS with 200 on both calls, EXECUTING, a zapier_call artifact and ledger_clean true, so Build 19 was published (activeVersionId 09d88637). The Zapier server now exposes seventeen tools where it exposed one this afternoon, including execute_zapier_read_action and execute_zapier_write_action. 28 of 30 Cloud credentials have a VPS twin of the same type by exact name; Header Auth account 10 has none. All 11 Cloud data tables have a VPS twin by name. 49 workflow id pairs were read from both instances; Soul Index Setup and Build 08 Credential Probe exist only on Cloud.
+OPEN: The forty VPS organ copies have not been rebuilt from their Cloud sources, nothing is published on the VPS and nothing is unpublished on Cloud, so the cutover Tee ruled has not happened. The ledger rows have not moved. Whether the VPS Devon Capture Key holds the same secret as the Cloud one is unverified and decides whether Tee's phone Shortcut keeps working after the switch. Which Zapier tools join the allowlist beyond get_configuration_url is Tee's ruling, and execute_zapier_write_action cannot join under the current ceiling.
+STATUS: Build 19 built, proven offline, on pinned runs and on a live call, and published on the VPS after Tee rotated its token. The repository names the VPS throughout. The cutover is prepared and not executed.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```

@@ -15,8 +15,9 @@ stands. Execute it.
 Thirty nine DEVON organs exist on the VPS as unpublished, mostly stale copies.
 Rebuild each from its n8n Cloud live version with every identifier remapped,
 move the open ledger rows, then unpublish on Cloud and publish on the VPS in one
-pass. The transform and the check are written and tested; the identity maps are
-complete; nothing has been rebuilt or published yet.
+pass. The transform and the check are written and tested and the identity maps
+are complete. One organ is done: Build 19, which has no Cloud twin, is proven
+and published. The other thirty nine have not been touched.
 
 ## What is already done, and where it lives
 
@@ -37,10 +38,11 @@ The repository already names the VPS throughout. `vault.N8N_HOST` is
 the VPS copy's id, and no URL under `n8n/devon/` names Cloud any more. That work
 is finished and merged into the branch; the cutover is the live half.
 
-Build 19, the Zapier executor, was built tonight and is live on the VPS as
-`MIELNCkP9IyHWVlr`, unpublished. It is the only organ with no Cloud twin, so it
-is not in the rebuild list; it only needs its credential fixed and publishing
-with the rest.
+Build 19, the Zapier executor, was built tonight and is PUBLISHED on the VPS as
+`MIELNCkP9IyHWVlr`. It is the only organ with no Cloud twin, so it is not in the
+rebuild list, and it is the first DEVON organ live on the VPS under this ruling.
+Its door answers but nothing dispatches to it yet, because the Action Router's
+VPS copy is still unpublished.
 
 ## Proof the tooling works
 
@@ -66,14 +68,16 @@ partway through, which is why this handover exists at all.
 
 ### 1. Fix the two credentials first
 
-Nothing publishes until these are settled.
+Nothing publishes until these are settled. One of the two is now settled.
 
-**Zapier MCP.** The VPS credential `krUcZs3zx3V6zhUt` exists but its value
-answered `HTTP 401, -31997 Invalid OAuth token - please re-authenticate` on
-execution 112. The Cloud credential answered 200 against the same URL in the
-same minute on execution 7171, so the endpoint and the graph are fine and the
-token text on the VPS is wrong. Tee re-copies it from the Zapier connect dialog.
-Prove it with a manual run of `MIELNCkP9IyHWVlr` before publishing that organ.
+**Zapier MCP. SETTLED, 2026-09-15 21:15Z.** The VPS credential
+`krUcZs3zx3V6zhUt` first answered `HTTP 401, -31997 Invalid OAuth token` on
+execution 112. Tee rotated the token, and execution 113 on the VPS ran the lane
+end to end: `initialize` answered 200 and issued session
+`96d7aabb-6745-40eb-93d7-06aebb488f70`, `tools/call` answered 200 with the
+configuration URL, the envelope advanced to EXECUTING carrying a `zapier_call`
+artifact and call log row 1, and `ledger_clean` came back true. Build 19 is
+published on the VPS, `activeVersionId 09d88637`. Nothing here is left to do.
 
 **Devon Capture Key.** This one is not a known failure, it is an unanswered
 question, and it is the sharpest edge in the whole cutover. Cloud holds
@@ -156,7 +160,7 @@ ledger.
 
 1. Unpublish on Cloud, leaf organs first and the ledger and bus last.
 2. Publish on the VPS, the ledger and bus first and the leaf organs last.
-3. Publish Build 19 with them, if its credential now answers 200.
+3. Build 19 is already published and needs nothing at this step.
 
 The VPS Error Alarm (`bqcnIS0Qv4RkTCU1`) and OS Error Handler
 (`GbeNilHQzjmoWDz3`) are already active there, so failures are caught from the
@@ -209,7 +213,7 @@ points at the VPS by default, and close the arc with a dated
 - Eleven data table pairs mapped, every Cloud table matched by name. The VPS also
   holds `script_exemplars` and `devon_zapier_call_log`, both VPS native.
 - Twenty eight of thirty credentials mapped by exact name and type. The two
-  exceptions are named in step 1.
+  exceptions are named in step 1, and the Zapier one is now settled.
 - TQO FINAL V5 and the TSWS chain are already live on the VPS and are NOT part of
   this cutover. Do not rebuild them from their Cloud copies; the Cloud copies are
   the stale ones.
@@ -222,8 +226,8 @@ TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_the-vps-cutover-handover_v1_2026-09-15.md
 DATE: 2026-09-15
 DECISIONS: Tee ruled every DEVON organ runs on the VPS, live and published, and declined the offer to wait a week for the newly live content engine to prove itself first; the objection is logged once here and the ruling stands. Tee ruled the cutover moves the open ledger jobs, leaves the terminal ones, and never moves the approval queue because its token column is never read. Tee created the VPS Zapier MCP credential himself.
-FINDINGS: Thirty nine DEVON organs exist on the VPS, one active and the rest unpublished, in two vintages: eight rebuilt 2026-09-10 and thirty one exported 2026-08-31. Forty nine workflow id pairs, eleven data table pairs and twenty eight of thirty credentials were mapped by reading both live instances. The VPS Zapier MCP credential krUcZs3zx3V6zhUt answered HTTP 401 Invalid OAuth token while the Cloud one answered 200 against the same URL in the same minute. Whether the VPS Devon Capture Key holds the same secret as the Cloud one is unverified and decides whether Tee's phone Shortcut survives the switch. Header Auth account 10 has no VPS twin. The Approval Queue's VPS copy predates the 2026-09-05 repair in four ways including a Gmail node where Cloud uses SMTP and stored execution data that once kept a plaintext token. The rebuild transform and the verifier were proven by a round trip: the verifier reports nine mismatches and exit 1 against the stale copy and ok true with exit 0 against a copy built from the generated operations.
-OPEN: No organ has been rebuilt, nothing is published on the VPS and nothing is unpublished on Cloud, so the cutover has not happened. The ledger rows have not moved. The Zapier credential value and the Devon Capture Key question both have to be settled before anything publishes. Usage credits ran out on 2026-09-15 during a forty agent fan out, so the executing session works one organ at a time.
-STATUS: Prepared and handed over, not executed. The transform, the verifier, the identity maps and the organ list are committed to the branch; the live half is the next session's work.
+FINDINGS: Thirty nine DEVON organs exist on the VPS, one active and the rest unpublished, in two vintages: eight rebuilt 2026-09-10 and thirty one exported 2026-08-31. Forty nine workflow id pairs, eleven data table pairs and twenty eight of thirty credentials were mapped by reading both live instances. The VPS Zapier MCP credential krUcZs3zx3V6zhUt answered HTTP 401 Invalid OAuth token on execution 112 while the Cloud one answered 200 against the same URL in the same minute; Tee rotated the token and execution 113 then ran the lane end to end from the VPS, 200 on initialize and on tools/call, the envelope advanced to EXECUTING with a zapier_call artifact and ledger_clean true, so Build 19 was published (activeVersionId 09d88637) and is the first DEVON organ live on the VPS under this ruling. Whether the VPS Devon Capture Key holds the same secret as the Cloud one is unverified and decides whether Tee's phone Shortcut survives the switch. Header Auth account 10 has no VPS twin. The Approval Queue's VPS copy predates the 2026-09-05 repair in four ways including a Gmail node where Cloud uses SMTP and stored execution data that once kept a plaintext token. The rebuild transform and the verifier were proven by a round trip: the verifier reports nine mismatches and exit 1 against the stale copy and ok true with exit 0 against a copy built from the generated operations.
+OPEN: No Cloud organ has been rebuilt on the VPS and nothing is unpublished on Cloud, so the cutover has not happened; Build 19 is the one organ published there and it has no Cloud twin. The ledger rows have not moved. Whether the two Devon Capture Keys hold the same secret is still unverified and still gates the switch. Usage credits ran out on 2026-09-15 during a forty agent fan out, so the executing session works one organ at a time.
+STATUS: Prepared and handed over, one organ executed. The transform, the verifier, the identity maps and the organ list are committed to the branch, and Build 19 is live on the VPS; the other thirty nine organs are the next session's work.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
