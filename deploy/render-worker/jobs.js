@@ -768,6 +768,10 @@ const JOBS = {
       const headH  = stacked ? H - splitY : H;
       const plate  = String(p.plate_color ?? '#0A1628');
       if (!/^#[0-9A-Fa-f]{6}$/.test(plate)) throw new BadJob('plate_color: must be #RRGGBB');
+      // A field that is present and not an array is refused, never defaulted:
+      // an n8n expression that hands over a JSON string would otherwise render
+      // a cutaway-free episode that returns ok (critic finding, 2026-09-15).
+      if (p.emphasis !== undefined && !Array.isArray(p.emphasis)) throw new BadJob('emphasis: must be an array of {start, end}');
       const emph = Array.isArray(p.emphasis) ? p.emphasis : [];
       if (emph.length > 64) throw new BadJob('emphasis: too many (max 64)');
       if (emph.length && !stacked) throw new BadJob('emphasis: only meaningful with layout stacked');
@@ -782,6 +786,7 @@ const JOBS = {
         if (emphasis[i].s < emphasis[i - 1].e) throw new BadJob(`emphasis: windows overlap (${emphasis[i - 1].e} > ${emphasis[i].s})`);
       }
 
+      if (p.cutaways !== undefined && !Array.isArray(p.cutaways)) throw new BadJob('cutaways: must be an array of {path, start, end}');
       const cuts = Array.isArray(p.cutaways) ? p.cutaways : [];
       if (cuts.length > 64) throw new BadJob('cutaways: too many (max 64)');
       const windows = cuts.map((c, k) => {
@@ -799,6 +804,7 @@ const JOBS = {
         }
         // In the full layout every cutaway is full frame; in the stacked layout
         // it sits in the payload zone unless it asks for the whole canvas.
+        if (c.full !== undefined && typeof c.full !== 'boolean') throw new BadJob(`cutaways[${k}].full: must be true or false, not ${JSON.stringify(c.full)}`);
         const full = stacked ? c.full === true : true;
         return { f, s, e, IN, full };
       }).sort((a, b) => a.s - b.s);

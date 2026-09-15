@@ -144,8 +144,8 @@ The stacked acceptance render was re-run at that value and the frame at 1.0 s
 seam between the payload zone and the head zone, roughly y 1235 to 1305 of
 1920, above the presenter's face and inside the spec's band. The PR body's
 line saying the seam move was "not in this PR" was wrong and is corrected on
-the next push. CI on `252e4bb` is green on all seven checks and the PR is
-mergeable.
+the next push. CI on `252e4bb` is green on all six jobs (GitHub shows seven
+check runs; the seventh is the Vercel preview bot) and the PR is mergeable.
 
 ## MuseTalk: what was verified and what was not
 

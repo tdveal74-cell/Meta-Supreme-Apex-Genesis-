@@ -27,8 +27,12 @@ running anything below.
 Proved on that box, by execution:
 
 * All three suites: 27, 19, and the negative control failing 22 of 27 against
-  the committed Drive original (41, 44 and 36 of 41 after the 2026-09-15
-  presenter work, in the container, not yet on the box). Exit code 0 on each, checked individually
+  the committed Drive original. After the 2026-09-15 presenter work, in the
+  container and not yet on the box: jobs.test.js 51, server.test.js 46, both
+  exit 0, counted from the harness line on the day. The negative control was
+  last run at 36 of 41 before the stacked and the critic tests were added and
+  has not been re-run since; that denominator is stale until someone runs it
+  against the Drive original again. Exit code 0 on each, checked individually
   rather than inferred from a chain.
 * `/health` reports 18 job types (19 once the 2026-09-15 build is deployed).
 * Public IPv4 and IPv6 both refuse. The n8n container reaches the worker on the
@@ -485,6 +489,31 @@ Set `bed_gain` knowing the voice comes down by 20 log10(1 / (1 + bed_gain)).
 Not measured: the same render on the box's own ffmpeg, a real HeyGen file, a
 real Pexels clip, and libass with the fonts the box actually has. Run the
 synthetic case above on the box before the first episode.
+
+**The stacked layout** (`layout: stacked`, portrait canvas only) is the Anchor
+Desk Short from the flagship canon: the payload zone on top, the presenter
+chest up in the bottom zone, split at 1250 of 1920 and scaled with the canvas.
+Three states alternate, as the canon asks: split (the default), full-frame
+head for each `emphasis: [{start, end}]` window, and full-frame payload for a
+cutaway carrying `full: true`; a cutaway without it sits in the payload zone.
+`plate_color` paints the plate behind the zones (`#0A1628` by default). The
+caption sits on the seam between the zones at `MarginV=92` in libass script
+units, which Tee ruled on 2026-09-15 after the first cut at 45 put the line
+across the presenter's chest. Measured the same day, same synthetic media on a
+1080x1920 canvas, 12 s, a red clip in the zone over 2 to 5 s, an emphasis
+window 6 to 7.5 s, a blue full cutaway 8 to 11 s, one caption over 0.5 to 3 s:
+
+| check | result |
+|---|---|
+| frame at 1.0 s | plate above, presenter in the bottom zone from y 1250, caption on the seam at roughly y 1235 to 1305, above the face |
+| frame at 3.5 s | red clip inside the payload zone, presenter untouched below the split |
+| frame at 6.8 s | presenter full frame on the emphasis window |
+| frame at 9.5 s | blue clip full frame on `full: true` |
+| pinned duration | 12.000 s |
+
+Refused rather than defaulted: `cutaways` or `emphasis` present and not an
+array, `full` as anything but a boolean, `emphasis` on the full layout, and a
+window past the planned duration when one is given.
 
 ## Wiring TSWS 00
 

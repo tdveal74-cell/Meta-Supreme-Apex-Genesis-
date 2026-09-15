@@ -65,7 +65,8 @@ own script, and runs `inference.sh v1.5 normal` on two inputs you upload first:
 - `in/line.wav`, 30 seconds of the cloned narration (the S1E1 MP3 on Drive,
   converted with `ffmpeg -i s1e1.mp3 -t 30 -ar 16000 -ac 1 in/line.wav`)
 
-The output lands at `out/proof.mp4`. Download it, watch it on the phone at full
+The output lands under `out/`, named by MuseTalk itself; the script lists the
+directory when it finishes. Download the file, watch it on the phone at full
 brightness, then watch it again on the largest screen in the house. The
 questions that decide the ruling:
 

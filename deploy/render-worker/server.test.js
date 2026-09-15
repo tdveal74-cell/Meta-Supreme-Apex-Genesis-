@@ -127,6 +127,33 @@ t('a file inside the work root streams back with its bytes and type', async () =
   assert.strictEqual(r.headers['cache-control'], 'no-store');
   assert.ok(r.body.equals(payload), 'bytes differ');
 });
+t('a quote or a line break in the filename never reaches the content-disposition header', async () => {
+  fs.writeFileSync(path.join(ROOT, 'out', 'na"me.mp4'), Buffer.from([1, 2, 3]));
+  const r = await new Promise((resolve, reject) => {
+    http.get(BASE + '/files/out/na%22me.mp4', { headers: { authorization: `Bearer ${TOKEN}` } }, res => {
+      res.resume(); res.on('end', () => resolve({ status: res.statusCode, headers: res.headers }));
+    }).on('error', reject);
+  });
+  assert.strictEqual(r.status, 200, 'got ' + r.status);
+  assert.strictEqual(r.headers['content-disposition'], 'attachment; filename="na_me.mp4"');
+});
+t('an aborted download closes the file descriptor', async () => {
+  const big = path.join(ROOT, 'out', 'big.bin');
+  fs.writeFileSync(big, Buffer.alloc(8 * 1024 * 1024, 7));
+  const openFds = () => fs.readdirSync('/proc/self/fd').filter(fd => {
+    try { return fs.readlinkSync('/proc/self/fd/' + fd) === big; } catch { return false; }
+  }).length;
+  const before = openFds();
+  await new Promise((resolve, reject) => {
+    const q = http.get(BASE + '/files/out/big.bin', { headers: { authorization: `Bearer ${TOKEN}` } }, res => {
+      res.once('data', () => { q.destroy(); resolve(); });
+    });
+    q.on('error', () => resolve());
+    q.on('close', () => resolve());
+  });
+  await new Promise(r => setTimeout(r, 200));
+  assert.strictEqual(openFds(), before, 'the read stream was not destroyed after the client went away');
+});
 t('a percent-encoded path decodes before it is confined', async () => {
   fs.writeFileSync(path.join(ROOT, 'out', 'with space.srt'), '1\n00:00:00,000 --> 00:00:01,000\nhi\n');
   const r = await req('GET', '/files/out/with%20space.srt');

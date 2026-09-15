@@ -450,6 +450,10 @@ const server = http.createServer(async (req, res) => {
     });
     const stream = fs.createReadStream(abs);
     stream.on('error', () => { try { res.destroy(); } catch { /* already gone */ } });
+    // pipe() alone leaves the descriptor open when the client aborts mid file;
+    // measured 2026-09-15, three aborted GETs on a 200 MB file left three fds
+    // open. An n8n retry loop against a multi-GB master would pile them up.
+    res.on('close', () => { if (!stream.destroyed) stream.destroy(); });
     stream.pipe(res);
     return;
   }

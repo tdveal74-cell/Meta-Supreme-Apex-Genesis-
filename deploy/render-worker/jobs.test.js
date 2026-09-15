@@ -452,6 +452,25 @@ t('a captions path or style the filter string cannot take verbatim is refused, n
   const p2 = { ...pc(), caption_style: "FontSize=22'[vout];[0:v]null" };
   assert.throws(() => J.JOBS.presenter_composite.build(p2), /caption_style/);
 });
+t('a colon in the captions path is refused: it is the character that ends the filename option', () => {
+  const p1 = { ...pc(), captions: touch('p/cue:1.srt') };
+  assert.throws(() => J.JOBS.presenter_composite.build(p1), /rename it/);
+  const p2 = { ...pc(), caption_style: 'FontSize=22;Outline=2' };
+  assert.throws(() => J.JOBS.presenter_composite.build(p2), /caption_style/);
+});
+t('cutaways or emphasis that are present and not an array are refused, never defaulted to none', () => {
+  const asString = { ...pc(), cutaways: JSON.stringify(pc().cutaways) };
+  assert.throws(() => J.JOBS.presenter_composite.build(asString), /cutaways: must be an array/);
+  const asObject = { ...pc(), cutaways: { path: 'p/cut-a.mp4', start: 1, end: 3 } };
+  assert.throws(() => J.JOBS.presenter_composite.build(asObject), /cutaways: must be an array/);
+  const emph = { ...pc(), layout: 'stacked', width: 1080, height: 1920, emphasis: '[{"start":1,"end":2}]' };
+  assert.throws(() => J.JOBS.presenter_composite.build(emph), /emphasis: must be an array/);
+});
+t('a stacked cutaway with full as a string is refused instead of silently becoming a zone cutaway', () => {
+  const p = { ...pc(), layout: 'stacked', width: 1080, height: 1920 };
+  p.cutaways[0].full = 'true';
+  assert.throws(() => J.JOBS.presenter_composite.build(p), /full: must be true or false/);
+});
 t('the avatar and the output are confined to the work root', () => {
   assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), avatar: '../../etc/passwd' }), /no such file|escapes/);
   assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), output: '../out.mp4' }), /escapes the work root/);
