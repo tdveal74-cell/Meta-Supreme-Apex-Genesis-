@@ -2,7 +2,7 @@
 // as it stands and chooses the ONE organ call that legally advances it, or stops.
 // This node writes nothing. Every state change travels through an organ or the
 // Event Bus, and the Build 02 ledger's guard table stays the authority on legality.
-const HOST = 'https://thequietoperator.app.n8n.cloud/webhook/';
+const HOST = 'https://n8n.editforge.online/webhook/';
 const GRANT_HOURS = 24;
 const ABSENT_GRACE_H = 96;
 const MAX_STEPS = 8;
@@ -44,10 +44,32 @@ function airtablePayload() {
   if (!a.fields || typeof a.fields !== 'object' || Array.isArray(a.fields)) { return null; }
   return a;
 }
+// Executor selection, Build 19. A structural Zapier payload (intent.payload.zapier
+// carrying a tool name and an optional arguments object) binds zapier.mcp. The
+// executor holds the tool allowlist with each tool's blast radius, so a payload
+// naming a tool it does not permit parks the job with that reason rather than
+// calling anything. The intake refuses a job carrying both an airtable and a
+// zapier object, so the order of the two structural tests below never decides.
+function zapierPayload() {
+  const z = p.zapier;
+  if (!z || typeof z !== 'object' || Array.isArray(z)) { return null; }
+  if (typeof z.tool !== 'string' || !z.tool.trim()) { return null; }
+  if (z.arguments !== undefined && z.arguments !== null && (typeof z.arguments !== 'object' || Array.isArray(z.arguments))) { return null; }
+  return z;
+}
+// The object the Zapier executor fingerprints: the tool with its whitespace
+// collapsed and the arguments as declared, so the eight characters on the card
+// and the eight in the call log are the same computation over the same value.
+function zapierCanon() {
+  const z = zapierPayload();
+  if (!z) { return null; }
+  return { tool: String(z.tool).replace(/\s+/g, ' ').trim(), arguments: (z.arguments && typeof z.arguments === 'object') ? z.arguments : {} };
+}
 function selectAction() {
   const ef = (p.editforge && typeof p.editforge === 'object') ? p.editforge : null;
   const br = String(intent.blast_radius || 'none');
   if (!ef && br === 'reversible_write' && airtablePayload()) { return 'airtable.row'; }
+  if (!ef && br === 'reversible_write' && zapierPayload()) { return 'zapier.mcp'; }
   if (!ef && br === 'reversible_write' && DRAFT_WORDS.test(summary) && !NOT_DRAFT.test(summary)) { return 'drive.draft'; }
   return 'spine.echo';
 }
@@ -76,6 +98,12 @@ function executorLine(action) {
     const body = (typeof a.fields.Body === 'string') ? a.fields.Body.replace(/\s+/g, ' ').trim() : '';
     const excerpt = body.length > 160 ? body.slice(0, 160) + ' [' + body.length + ' characters in all]' : body;
     return 'Airtable Row Writer (airtable.row): one row will be written into the ' + String(a.table).trim() + ' table of the DEVON base (payload fingerprint ' + fingerprint(a) + ')' + (title ? ', titled ' + title : '') + ', carrying the fields ' + (names || 'none') + ' as the job declares them plus DEVON key and DEVON job' + (excerpt ? '. Body begins: ' + excerpt : '') + '. Reversible by deleting the row. Nothing is published or sent';
+  }
+  if (action === 'zapier.mcp') {
+    const zc = zapierCanon() || { tool: '', arguments: {} };
+    const keys = Object.keys(zc.arguments);
+    const shown = keys.slice(0, 10).map(function (k) { const v = zc.arguments[k]; const t = (typeof v === 'string') ? v : JSON.stringify(v); return k + ': ' + String(t === undefined ? 'null' : t).replace(/\s+/g, ' ').trim().slice(0, 80); }).join('; ');
+    return 'Zapier Executor (zapier.mcp): one tools/call of ' + zc.tool + ' on the Zapier MCP server (payload fingerprint ' + fingerprint(zc) + ') with ' + (keys.length ? ('the arguments ' + shown + (keys.length > 10 ? ' [' + keys.length + ' arguments in all]' : '')) : 'no arguments') + '. The executor calls only a tool on its allowlist, at the blast radius recorded there, and refuses any other; whatever that tool does in the connected Zapier app happens once, idempotent by this job\'s key';
   }
   if (action === 'drive.draft') {
     const area = String(env.area || '');
@@ -145,6 +173,15 @@ if (state === 'AUTHORIZED') {
     if (carded && carded[1] !== nowFp) {
       const e = copy(env);
       e.state_reason = ('Parked at ' + state + ': the Airtable payload no longer matches the one the approval card described (fingerprint ' + carded[1] + ' on the card, ' + nowFp + ' now). Tee approved one row; nothing runs until a human looks.').slice(0, 500);
+      return busPlan('ACTION_FAILED', e, e.state_reason, 'stop', 'bound_payload_mismatch');
+    }
+  }
+  if (action === 'zapier.mcp') {
+    const carded = String((env.approval && env.approval.card_executor) || '').match(/payload fingerprint ([0-9a-f]{8})/);
+    const nowFp = fingerprint(zapierCanon());
+    if (carded && carded[1] !== nowFp) {
+      const e = copy(env);
+      e.state_reason = ('Parked at ' + state + ': the Zapier payload no longer matches the one the approval card described (fingerprint ' + carded[1] + ' on the card, ' + nowFp + ' now). Tee approved one call; nothing runs until a human looks.').slice(0, 500);
       return busPlan('ACTION_FAILED', e, e.state_reason, 'stop', 'bound_payload_mismatch');
     }
   }

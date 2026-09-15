@@ -23,6 +23,14 @@ if (code === 200 && body.filed === true) {
     const f = at.fields; const body = (typeof f.Body === 'string') ? f.Body.replace(/\s+/g, ' ').trim() : '';
     lines.push('Row it would write into ' + String(at.table) + ': Title ' + String(f.Title || '(none)') + ' | fields ' + Object.keys(f).join(', ') + (body ? ' | Body begins: ' + (body.length > 160 ? body.slice(0, 160) + ' [' + body.length + ' characters in all]' : body) : '') + '.');
   }
+  // A Zapier job shows the tool and the argument names and values, for the same
+  // reason: the card will carry them and the executor will send exactly them.
+  const zp = (it.payload && it.payload.zapier && typeof it.payload.zapier === 'object') ? it.payload.zapier : null;
+  if (zp && typeof zp.tool === 'string') {
+    const za = (zp.arguments && typeof zp.arguments === 'object') ? zp.arguments : {};
+    const zk = Object.keys(za);
+    lines.push('Zapier tool it would call: ' + zp.tool + (zk.length ? ' | arguments ' + zk.slice(0, 10).map(function (k) { const v = za[k]; const t = (typeof v === 'string') ? v : JSON.stringify(v); return k + ': ' + String(t).replace(/\s+/g, ' ').trim().slice(0, 80); }).join('; ') + (zk.length > 10 ? ' [' + zk.length + ' in all]' : '') : ' | no arguments') + '.');
+  }
   if (b && Array.isArray(b.plan) && b.plan.length) { lines.push(planLine(b)); if (Array.isArray(b.done_when) && b.done_when.length) { lines.push('Done when: ' + b.done_when.map(s => String(s).trim().replace(/[.]+$/, '')).join('; ') + '.'); } lines.push('I recommend ' + String(b.recommendation) + why(b) + '.'); }
   lines.push('Say file it and I will.');
 } else if (code === 200 && body.duplicate === true) {

@@ -28,6 +28,7 @@ import subprocess
 import pytest
 
 from scripts import estate_reconcile as reconcile
+from services.devon import vault
 
 ROOT = pathlib.Path(__file__).parent
 SKILLS = ROOT / ".claude" / "skills"
@@ -357,11 +358,20 @@ def test_disabled_webhook_nodes_are_skipped():
 
 
 def test_a_self_referential_host_read_is_unverified():
-    """When the read defaulted to the vault's own host, agreement is an echo."""
+    """When the read defaulted to the vault's own host, agreement is an echo.
+
+    The echo and the independent read use the vault's own host value, whatever
+    it is; the drift case names the other instance. Until the 2026-09-15 cutover
+    the vault's host was n8n Cloud and the other instance was the VPS; that
+    night the ruling put every organ on the VPS and the two swapped.
+    """
     claims = reconcile.vault_claims(webhooks={}, workflows={})
+    own_host = vault.N8N_HOST
+    other_host = "https://thequietoperator.app.n8n.cloud"
+    assert own_host != other_host
     echo = {
         "n8n": {
-            "host": "https://thequietoperator.app.n8n.cloud",
+            "host": own_host,
             "host_source": "vault_default",
             "workflows": {},
             "webhooks": {},
@@ -373,7 +383,7 @@ def test_a_self_referential_host_read_is_unverified():
 
     independent = {
         "n8n": {
-            "host": "https://thequietoperator.app.n8n.cloud",
+            "host": own_host,
             "host_source": "env",
             "workflows": {},
             "webhooks": {},
@@ -383,7 +393,7 @@ def test_a_self_referential_host_read_is_unverified():
 
     elsewhere = {
         "n8n": {
-            "host": "https://n8n.editforge.online",
+            "host": other_host,
             "host_source": "env",
             "workflows": {},
             "webhooks": {},
