@@ -95,9 +95,14 @@ on:
       - "app/api/v1/projects.py"
       - "app/api/v1/workflows.py"
       - "app/api/v1/router.py"
-      # The capability dock, its route, and the four API modules it reads.
-      - "apps/web/components/command-center/CapabilityDock.tsx"
+      # The capability dock, everything else mounted on its route (the smoke
+      # reads the dock's own section, but a sibling can still throw a page
+      # error), the chat that writes the token slot the dock reads, the
+      # dependency that answers 401, and the four API modules the dock reads.
+      - "apps/web/components/command-center/**"
       - "apps/web/app/command-center/**"
+      - "apps/web/components/devon/DevonChat.tsx"
+      - "app/security/deps.py"
       - "app/api/v1/soul.py"
       - "app/api/v1/agent_tasks.py"
       - "app/api/v1/agent_expansion.py"
@@ -110,7 +115,7 @@ on:
 
 jobs:
   panels:
-    name: Six panels driven in real Chromium
+    name: Six panels and the capability dock driven in real Chromium
     runs-on: ubuntu-latest
 
     # The same image ci.yml's api job uses, so the database this runs against is
@@ -237,7 +242,11 @@ jobs:
         working-directory: apps/web
         run: node --experimental-strip-types scripts/panel-smoke.mjs
 
+      # Runs even when the panels step is red, so a dock regression riding
+      # with a panel regression is named in the same run rather than after
+      # the panel fix. It still fails fast if the stack never came up.
       - name: Drive the capability dock in real Chromium
+        if: ${{ !cancelled() }}
         working-directory: apps/web
         run: node --experimental-strip-types scripts/dock-smoke.mjs
 

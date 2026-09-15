@@ -294,15 +294,33 @@ function within(node: ts.Node, root: ts.Node): boolean {
   return node.pos >= root.pos && node.end <= root.end;
 }
 
-function onlyDeclaration(file: ts.SourceFile, name: string): ts.VariableDeclaration {
-  const decls = declarationsNamed(file, name);
-  assert.equal(
-    decls.length,
-    1,
-    `${name} is declared ${decls.length} time(s) in the dock. This check pins it by name on purpose, the way schedulerNote is pinned: renaming it means updating this check`,
+/** Every way a name can be bound: a const, a parameter, a destructuring, a function, a catch, an import. */
+function bindingsNamed(root: ts.Node, name: string): ts.Node[] {
+  return collect(
+    root,
+    (n) =>
+      ((ts.isVariableDeclaration(n) || ts.isParameter(n) || ts.isBindingElement(n) || ts.isFunctionDeclaration(n) || ts.isImportSpecifier(n)) &&
+        !!n.name &&
+        ts.isIdentifier(n.name) &&
+        n.name.text === name) ||
+      (ts.isCatchClause(n) && !!n.variableDeclaration && ts.isIdentifier(n.variableDeclaration.name) && n.variableDeclaration.name.text === name),
   );
-  assert.ok(decls[0].initializer, `${name} has no initialiser`);
-  return decls[0];
+}
+
+function onlyDeclaration(file: ts.SourceFile, name: string): ts.VariableDeclaration {
+  // Bound once in the whole file, in any form. The second critic shadowed
+  // soulState with an arrow parameter around the tile grid and the first
+  // version of this helper, which counted const declarations only, never saw it.
+  const bindings = bindingsNamed(file, name);
+  assert.equal(
+    bindings.length,
+    1,
+    `${name} is bound ${bindings.length} time(s) in the dock, counting parameters, destructurings, functions, catches and imports. It may be bound once, as a const, and this check pins it by name on purpose: renaming it means updating this check`,
+  );
+  const decl = bindings[0];
+  assert.ok(ts.isVariableDeclaration(decl), `${name} is bound as something other than a const declaration`);
+  assert.ok(decl.initializer, `${name} has no initialiser`);
+  return decl;
 }
 
 check("the status object is bound once and read in exactly two places: enabled for the state, detail for the note", () => {
@@ -310,13 +328,7 @@ check("the status object is bound once and read in exactly two places: enabled f
 
   // One binding, the useState pair, so nothing can shadow `soul` with a
   // literal and feed the state from it.
-  const bindings = collect(
-    file,
-    (n) =>
-      (ts.isBindingElement(n) || ts.isVariableDeclaration(n) || ts.isParameter(n)) &&
-      ts.isIdentifier(n.name) &&
-      n.name.text === "soul",
-  );
+  const bindings = bindingsNamed(file, "soul");
   assert.equal(bindings.length, 1, `the name soul is bound ${bindings.length} time(s); it may be bound once, by useState`);
   assert.ok(ts.isBindingElement(bindings[0]) && ts.isArrayBindingPattern(bindings[0].parent), "soul is not bound by an array destructuring of useState");
 
@@ -499,12 +511,26 @@ check("what feeds soulState: the status slot starts null and only ever holds the
     }
   }
   assert.ok(guard, "the answer is stored outside any if statement");
-  const condition = guard.expression;
+  // Exact shape: `soulResult.status === "fulfilled" && soulResult.value.ok`
+  // and no other operand. A count of parts was satisfied by `|| status === 401`.
+  const condition = unparen(guard.expression);
+  const okRead = (n: ts.Node) =>
+    ts.isPropertyAccessExpression(n) && n.name.text === "ok" && isPropOf(unparen(n.expression), "soulResult", "value");
+  const fulfilled = (n: ts.Node) => {
+    const b = unparen(n);
+    return (
+      ts.isBinaryExpression(b) &&
+      b.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken &&
+      isPropOf(unparen(b.left), "soulResult", "status") &&
+      isStr(unparen(b.right), "fulfilled")
+    );
+  };
   assert.ok(
-    collect(condition, (n) => isPropOf(n, "soulResult", "value")).length >= 1 &&
-      collect(condition, (n) => ts.isPropertyAccessExpression(n) && n.name.text === "ok").length === 1 &&
-      collect(condition, (n) => isStr(n, "fulfilled")).length === 1,
-    "the answer is stored under a condition that does not test soulResult.status === \"fulfilled\" and soulResult.value.ok",
+    ts.isBinaryExpression(condition) &&
+      condition.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken &&
+      fulfilled(condition.left) &&
+      okRead(unparen(condition.right)),
+    'the answer is stored under a condition other than exactly `soulResult.status === "fulfilled" && soulResult.value.ok`',
   );
   assert.ok(within(answers[0], guard.thenStatement), "the answer is stored in the else branch of the ok test");
   assert.ok(
@@ -568,15 +594,13 @@ check("soulNote reads the route's detail, names the host it read in the off bran
   const element = rendered[0].parent;
   assert.ok(ts.isJsxElement(element), "soulNote is not the child of a JSX element");
   const attrs = element.openingElement.attributes.properties;
-  assert.equal(attrs.length, 1, "the element rendering soulNote carries an attribute besides className");
-  const attr = attrs[0];
+  assert.equal(attrs.length, 2, "the element rendering soulNote carries attributes besides its marker and className");
+  const marker = attrs.find((a) => ts.isJsxAttribute(a) && a.name.getText() === "data-soul-note") as ts.JsxAttribute | undefined;
+  assert.ok(marker && !!marker.initializer && ts.isStringLiteral(marker.initializer) && marker.initializer.text === "text", 'the note element is not marked data-soul-note="text"');
+  const attr = attrs.find((a) => ts.isJsxAttribute(a) && a.name.getText() === "className") as ts.JsxAttribute | undefined;
   assert.ok(
-    ts.isJsxAttribute(attr) &&
-      ts.isIdentifier(attr.name) &&
-      attr.name.text === "className" &&
-      !!attr.initializer &&
-      ts.isStringLiteral(attr.initializer),
-    "the element rendering soulNote is not a plain className element",
+    !!attr && !!attr.initializer && ts.isStringLiteral(attr.initializer),
+    "the element rendering soulNote does not carry a literal className",
   );
   const classes = (attr.initializer as ts.StringLiteral).text.split(/\s+/);
   for (const hidden of ["hidden", "sr-only", "invisible", "opacity-0", "h-0", "w-0", "text-[0", "collapse"]) {
@@ -624,6 +648,187 @@ check("apiHost is the host of API_BASE and nothing else", () => {
     collect(init, (n) => ts.isIfStatement(n) || ts.isConditionalExpression(n)).length === 0,
     "apiHost branches on something; the only branch it may have is the catch",
   );
+});
+
+check("the soul request is GET API_BASE/soul/status with the bearer header, and nothing else feeds soulResult", () => {
+  const file = parse(DOCK);
+  const settled = collect(
+    file,
+    (n) =>
+      ts.isVariableDeclaration(n) &&
+      ts.isArrayBindingPattern(n.name) &&
+      n.name.elements.some((e) => ts.isBindingElement(e) && isIdent(e.name, "soulResult")),
+  ) as ts.VariableDeclaration[];
+  assert.equal(settled.length, 1, "soulResult is not bound exactly once by the allSettled destructuring");
+  const pattern = settled[0].name as ts.ArrayBindingPattern;
+  const position = pattern.elements.findIndex((e) => ts.isBindingElement(e) && isIdent(e.name, "soulResult"));
+  let init = unparen(settled[0].initializer as ts.Node);
+  if (ts.isAwaitExpression(init)) init = unparen(init.expression);
+  assert.ok(
+    ts.isCallExpression(init) && isPropOf(init.expression, "Promise", "allSettled") && init.arguments.length === 1,
+    "soulResult does not come from Promise.allSettled([...])",
+  );
+  const list = unparen(init.arguments[0]);
+  assert.ok(ts.isArrayLiteralExpression(list), "Promise.allSettled is not handed an array literal");
+  const call = unparen(list.elements[position]);
+  assert.ok(ts.isCallExpression(call) && isIdent(call.expression, "fetch") && call.arguments.length === 2, "the soul read is not a two argument fetch");
+  const url = unparen(call.arguments[0]);
+  assert.ok(
+    ts.isTemplateExpression(url) &&
+      url.head.text === "" &&
+      url.templateSpans.length === 1 &&
+      isIdent(unparen(url.templateSpans[0].expression), "API_BASE") &&
+      url.templateSpans[0].literal.text === "/soul/status",
+    "the soul read is not aimed at `${API_BASE}/soul/status`; the second critic aimed it at /agent-tasks/tools and every word on the panel stayed plausible",
+  );
+  const opts = unparen(call.arguments[1]);
+  assert.ok(ts.isObjectLiteralExpression(opts) && opts.properties.length === 2, "the soul read's options are not exactly { cache, headers }");
+  const cache = opts.properties.find((p) => ts.isPropertyAssignment(p) && ts.isIdentifier(p.name) && p.name.text === "cache") as ts.PropertyAssignment | undefined;
+  assert.ok(cache && isStr(unparen(cache.initializer), "no-store"), 'the soul read is not cache: "no-store"');
+  assert.ok(
+    opts.properties.some((p) => ts.isShorthandPropertyAssignment(p) && p.name.text === "headers"),
+    "the soul read does not pass the shared headers, so it is sent without the bearer token and every read is a 401",
+  );
+  const headers = declarationsNamed(file, "headers");
+  assert.equal(headers.length, 1, "headers is not declared exactly once");
+  const h = unparen(headers[0].initializer as ts.Node);
+  assert.ok(
+    ts.isObjectLiteralExpression(h) &&
+      h.properties.length === 1 &&
+      ts.isPropertyAssignment(h.properties[0]) &&
+      ts.isIdentifier(h.properties[0].name) &&
+      h.properties[0].name.text === "Authorization" &&
+      ts.isTemplateExpression(unparen(h.properties[0].initializer)) &&
+      (unparen(h.properties[0].initializer) as ts.TemplateExpression).head.text === "Bearer " &&
+      isIdent(unparen((unparen(h.properties[0].initializer) as ts.TemplateExpression).templateSpans[0].expression), "token"),
+    "headers is not exactly { Authorization: `Bearer ${token}` }",
+  );
+});
+
+check("the render path from soulState to the pixels is pinned: the light's body, the tile callback, the header row, the section", () => {
+  const file = parse(DOCK);
+
+  // Indicator: one span, data-indicator="light", a className whose only
+  // expression is a conditional on `ok` between the two pinned class strings.
+  const indicator = collect(file, (n) => ts.isFunctionDeclaration(n) && !!n.name && n.name.text === "Indicator") as ts.FunctionDeclaration[];
+  assert.equal(indicator.length, 1, "Indicator is not declared exactly once");
+  const returns = collect(indicator[0], (n) => ts.isReturnStatement(n)) as ts.ReturnStatement[];
+  assert.equal(returns.length, 1, "Indicator does not return exactly once");
+  const span = unparen(returns[0].expression as ts.Node);
+  assert.ok(ts.isJsxSelfClosingElement(span) && span.tagName.getText() === "span", "Indicator does not return one self closing span");
+  const attrs = span.attributes.properties;
+  assert.equal(attrs.length, 2, "Indicator's span carries attributes besides data-indicator and className");
+  const marker = attrs.find((a) => ts.isJsxAttribute(a) && a.name.getText() === "data-indicator") as ts.JsxAttribute | undefined;
+  assert.ok(marker && marker.initializer && ts.isStringLiteral(marker.initializer) && marker.initializer.text === "light", 'Indicator\'s span is not marked data-indicator="light"');
+  const cls = attrs.find((a) => ts.isJsxAttribute(a) && a.name.getText() === "className") as ts.JsxAttribute | undefined;
+  assert.ok(cls && cls.initializer && ts.isJsxExpression(cls.initializer) && cls.initializer.expression, "Indicator's className is not an expression");
+  const tpl = unparen(cls.initializer.expression as ts.Node);
+  assert.ok(ts.isTemplateExpression(tpl) && tpl.head.text === "h-1.5 w-1.5 rounded-full " && tpl.templateSpans.length === 1 && tpl.templateSpans[0].literal.text === "", "Indicator's class template is not `h-1.5 w-1.5 rounded-full ${...}`");
+  const cond = unparen(tpl.templateSpans[0].expression);
+  assert.ok(
+    ts.isConditionalExpression(cond) &&
+      isIdent(unparen(cond.condition), "ok") &&
+      isStr(unparen(cond.whenTrue), "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,.7)]") &&
+      isStr(unparen(cond.whenFalse), "bg-[#526979]"),
+    "Indicator does not choose exactly the emerald class on ok and the grey class otherwise",
+  );
+
+  // The tile callback: [label, ok, detail] => a div with two rows and nothing else.
+  const indicators = collect(file, (n) => (ts.isJsxSelfClosingElement(n) || ts.isJsxOpeningElement(n)) && n.tagName.getText() === "Indicator");
+  assert.equal(indicators.length, 1, "expected exactly one <Indicator> in the dock");
+  let node: ts.Node = indicators[0];
+  let arrow: ts.ArrowFunction | null = null;
+  while (node.parent) {
+    node = node.parent;
+    if (ts.isArrowFunction(node)) {
+      arrow = node;
+      break;
+    }
+  }
+  assert.ok(arrow, "the <Indicator> is not rendered inside an arrow function");
+  assert.ok(
+    arrow.parameters.length === 1 && ts.isArrayBindingPattern(arrow.parameters[0].name) && arrow.parameters[0].name.elements.map((e) => (ts.isBindingElement(e) && ts.isIdentifier(e.name) ? e.name.text : "?")).join(",") === "label,ok,detail",
+    "the tile callback does not destructure [label, ok, detail]",
+  );
+  const tile = unparen(arrow.body);
+  assert.ok(ts.isJsxElement(tile) && tile.openingElement.tagName.getText() === "div", "the tile callback does not return a div");
+  const tileChildren = tile.children.filter((c) => !(ts.isJsxText(c) && c.text.trim() === ""));
+  assert.equal(tileChildren.length, 2, "the tile div does not have exactly two children (the row and the paragraph); the second critic painted a second light inside it");
+  const [row, para] = tileChildren;
+  assert.ok(ts.isJsxElement(row) && row.openingElement.tagName.getText() === "div", "the tile's first child is not the row div");
+  const rowChildren = row.children.filter((c) => !(ts.isJsxText(c) && c.text.trim() === ""));
+  assert.equal(rowChildren.length, 2, "the tile row does not have exactly two children (the light and the label)");
+  const light = rowChildren[0];
+  assert.ok(ts.isJsxSelfClosingElement(light) && light.tagName.getText() === "Indicator", "the row's first child is not <Indicator>");
+  const okAttr = light.attributes.properties.find((a) => ts.isJsxAttribute(a) && a.name.getText() === "ok") as ts.JsxAttribute | undefined;
+  assert.ok(okAttr && okAttr.initializer && ts.isJsxExpression(okAttr.initializer) && okAttr.initializer.expression, "Indicator has no ok expression");
+  const okExpr = unparen(okAttr.initializer.expression as ts.Node);
+  assert.ok(
+    ts.isCallExpression(okExpr) && isIdent(okExpr.expression, "Boolean") && okExpr.arguments.length === 1 && isIdent(unparen(okExpr.arguments[0]), "ok"),
+    "the light is not lit by exactly Boolean(ok); the second critic lit it with `|| label === \"Soul\"`",
+  );
+  assert.equal(light.attributes.properties.length, 1, "the <Indicator> carries attributes besides ok");
+  assert.ok(ts.isJsxElement(para) && para.openingElement.tagName.getText() === "p", "the tile's second child is not the paragraph");
+  const paraExprs = collect(para, (n) => ts.isJsxExpression(n) && !!n.expression) as ts.JsxExpression[];
+  assert.equal(paraExprs.length, 1, "the tile paragraph does not carry exactly one expression");
+  const pe = unparen(paraExprs[0].expression as ts.Node);
+  assert.ok(ts.isCallExpression(pe) && isIdent(pe.expression, "String") && pe.arguments.length === 1 && isIdent(unparen(pe.arguments[0]), "detail"), "the tile paragraph is not exactly String(detail); the second critic rewrote unread as off here");
+  const tileAttrs = tile.openingElement.attributes.properties.map((a) => (ts.isJsxAttribute(a) ? a.name.getText() : "?"));
+  assert.deepEqual(tileAttrs, ["key", "data-tile", "className"], "the tile div's attributes are not exactly key, data-tile, className");
+
+  // The Soul recall header row: exactly two spans, the value span pinned.
+  const rows = collect(file, (n) => ts.isJsxOpeningElement(n) && n.attributes.properties.some((a) => ts.isJsxAttribute(a) && a.name.getText() === "data-soul-header" && !!a.initializer && ts.isStringLiteral(a.initializer) && a.initializer.text === "row"));
+  assert.equal(rows.length, 1, 'no element is marked data-soul-header="row"');
+  const rowEl = rows[0].parent as ts.JsxElement;
+  const headerChildren = rowEl.children.filter((c) => !(ts.isJsxText(c) && c.text.trim() === ""));
+  assert.equal(headerChildren.length, 2, "the Soul recall header row does not have exactly two children; the second critic added a static ON beside a hidden OFF");
+  const [labelSpan, valueSpan] = headerChildren;
+  assert.ok(ts.isJsxElement(labelSpan) && labelSpan.children.length === 1 && ts.isJsxText(labelSpan.children[0]) && labelSpan.children[0].text.trim() === "Soul recall", 'the header label is not the text "Soul recall"');
+  assert.ok(ts.isJsxElement(valueSpan), "the header value is not an element");
+  const valueAttrs = (valueSpan as ts.JsxElement).openingElement.attributes.properties;
+  const valueMarker = valueAttrs.find((a) => ts.isJsxAttribute(a) && a.name.getText() === "data-soul-header") as ts.JsxAttribute | undefined;
+  assert.ok(valueMarker && valueMarker.initializer && ts.isStringLiteral(valueMarker.initializer) && valueMarker.initializer.text === "value", 'the header value span is not marked data-soul-header="value"');
+  const valueCls = valueAttrs.find((a) => ts.isJsxAttribute(a) && a.name.getText() === "className") as ts.JsxAttribute | undefined;
+  assert.ok(valueCls && valueCls.initializer && ts.isStringLiteral(valueCls.initializer) && valueCls.initializer.text === "font-mono text-[9px] text-[#d4a017]", "the header value span's className is not the pinned amber literal; the second critic painted it in the background colour");
+  assert.equal(valueAttrs.length, 2, "the header value span carries attributes besides its marker and className");
+  const valueKids = (valueSpan as ts.JsxElement).children.filter((c) => !(ts.isJsxText(c) && c.text.trim() === ""));
+  assert.ok(valueKids.length === 1 && ts.isJsxExpression(valueKids[0]) && !!valueKids[0].expression, "the header value span does not carry exactly one expression");
+  const call = unparen(valueKids[0].expression as ts.Node);
+  assert.ok(ts.isCallExpression(call) && isPropOf(call.expression, "soulState", "toUpperCase") && call.arguments.length === 0, "the header value is not soulState.toUpperCase()");
+
+  // The note paragraph is marked, and the section carries the derived state.
+  const noteEls = collect(file, (n) => ts.isJsxOpeningElement(n) && n.attributes.properties.some((a) => ts.isJsxAttribute(a) && a.name.getText() === "data-soul-note"));
+  assert.equal(noteEls.length, 1, "the note paragraph is not marked data-soul-note exactly once");
+  const noteKids = (noteEls[0].parent as ts.JsxElement).children.filter((c) => !(ts.isJsxText(c) && c.text.trim() === ""));
+  assert.ok(noteKids.length === 1 && ts.isJsxExpression(noteKids[0]) && !!noteKids[0].expression && isIdent(noteKids[0].expression, "soulNote"), "the marked note paragraph does not render exactly {soulNote}");
+  const sections = collect(file, (n) => ts.isJsxOpeningElement(n) && n.tagName.getText() === "section") as ts.JsxOpeningElement[];
+  assert.equal(sections.length, 1, "the dock does not render exactly one section");
+  const dockAttr = sections[0].attributes.properties.find((a) => ts.isJsxAttribute(a) && a.name.getText() === "data-dock") as ts.JsxAttribute | undefined;
+  assert.ok(dockAttr && dockAttr.initializer && ts.isStringLiteral(dockAttr.initializer) && dockAttr.initializer.text === "capability-mesh", 'the section is not marked data-dock="capability-mesh"');
+  const stateAttr = sections[0].attributes.properties.find((a) => ts.isJsxAttribute(a) && a.name.getText() === "data-soul-state") as ts.JsxAttribute | undefined;
+  assert.ok(stateAttr && stateAttr.initializer && ts.isJsxExpression(stateAttr.initializer) && !!stateAttr.initializer.expression && isIdent(stateAttr.initializer.expression, "soulState"), "the section does not carry data-soul-state={soulState}");
+});
+
+check("the three note sentences are the pinned ones, and the fallbacks name themselves", () => {
+  const file = parse(DOCK);
+  const note = onlyDeclaration(file, "soulNote");
+  const body = note.initializer as ts.Node;
+  const templates = collect(body, (n) => ts.isTemplateExpression(n)) as ts.TemplateExpression[];
+  const texts = templates.map((t) => t.head.text + t.templateSpans.map((sp) => "${" + unparen(sp.expression).getText() + "}" + sp.literal.text).join(""));
+  assert.deepEqual(
+    texts,
+    [
+      "Checking. GET /soul/status on ${apiHost} has not answered yet.",
+      "Soul status unread. GET /soul/status on ${apiHost} did not answer, so whether recall is on is unknown here.",
+      "${detail} Configured rather than probed: the status route never calls Pinecone, so only a recall proves the connection.",
+      "${detail} Those variables belong to the environment of ${apiHost}, the only host this readout asks.",
+    ],
+    "soulNote's four sentences are not the pinned ones, in order. The second critic made the on branch claim Pinecone had been probed; change these words as a decision, here and in dock-smoke.mjs together",
+  );
+  const literals = collect(body, (n) => ts.isStringLiteral(n)).map((n) => (n as ts.StringLiteral).text);
+  for (const fallback of literals.filter((t) => /Soul recall is/.test(t))) {
+    assert.ok(/gave no detail/.test(fallback), `the fallback ${JSON.stringify(fallback)} could pass for the route's own detail; a fallback names itself as one`);
+  }
 });
 
 /* ------------------------------------------------------------------ */

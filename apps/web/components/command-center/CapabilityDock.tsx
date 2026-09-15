@@ -101,9 +101,15 @@ function tokenFromDevice() {
   }
 }
 
+// The light. One span, two class strings, and nothing else in the body: the
+// second critic of 2026-09-15 lit this green over "recall off" from inside the
+// map callback, and nothing at either level read it. check:honesty pins this
+// body and the callback; dock-smoke.mjs reads the dot's computed colour and
+// asks the browser which element sits at its centre.
 function Indicator({ ok }: { ok: boolean }) {
   return (
     <span
+      data-indicator="light"
       className={`h-1.5 w-1.5 rounded-full ${
         ok
           ? "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,.7)]"
@@ -282,11 +288,14 @@ export function CapabilityDock() {
     if (soulState === "unread") {
       return `Soul status unread. GET /soul/status on ${apiHost} did not answer, so whether recall is on is unknown here.`;
     }
+    // The fallbacks name themselves as fallbacks. The route's detail is a
+    // sentence the smoke pins by its exact text, and a fallback equal to it
+    // let a dock that never asked the route pass as one that had.
     const detail =
       soul?.detail ||
       (soulState === "on"
-        ? "Soul recall is on."
-        : "Soul recall is off. SOUL_RECALL_ENABLED and PINECONE_API_KEY turn it on.");
+        ? "Soul recall is on and the status route gave no detail."
+        : "Soul recall is off and the status route gave no detail. SOUL_RECALL_ENABLED and PINECONE_API_KEY turn it on.");
     if (soulState === "on") {
       return `${detail} Configured rather than probed: the status route never calls Pinecone, so only a recall proves the connection.`;
     }
@@ -303,7 +312,11 @@ export function CapabilityDock() {
   return (
     <div className="fixed bottom-[4.75rem] right-3 z-[60] sm:bottom-[5.25rem] sm:right-5">
       {open && (
-        <section className="mb-2 w-[min(92vw,380px)] border border-[#3e617c] bg-[#071016]/95 shadow-2xl shadow-black/50 backdrop-blur-xl">
+        <section
+          data-dock="capability-mesh"
+          data-soul-state={soulState}
+          className="mb-2 w-[min(92vw,380px)] border border-[#3e617c] bg-[#071016]/95 shadow-2xl shadow-black/50 backdrop-blur-xl"
+        >
           <header className="flex items-center justify-between border-b border-[#22384a] px-4 py-3">
             <div>
               <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#c77b4a]">DEVON capability mesh</p>
@@ -341,7 +354,7 @@ export function CapabilityDock() {
                   ["Soul", soulState === "on", SOUL_TILE_DETAIL[soulState]],
                   ["Leases", Boolean(catalog?.execution?.shared_task_leases), "fenced runs"],
                 ].map(([label, ok, detail]) => (
-                  <div key={String(label)} className="bg-[#0b141b] px-3 py-2.5">
+                  <div key={String(label)} data-tile={String(label)} className="bg-[#0b141b] px-3 py-2.5">
                     <div className="flex items-center gap-2">
                       <Indicator ok={Boolean(ok)} />
                       <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#93a6b5]">{String(label)}</span>
@@ -363,11 +376,11 @@ export function CapabilityDock() {
               </div>
 
               <div className="mt-3 border border-[#22384a] bg-black/15 px-3 py-2.5">
-                <div className="flex items-center justify-between gap-3">
+                <div data-soul-header="row" className="flex items-center justify-between gap-3">
                   <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#6f8494]">Soul recall</span>
-                  <span className="font-mono text-[9px] text-[#d4a017]">{soulState.toUpperCase()}</span>
+                  <span data-soul-header="value" className="font-mono text-[9px] text-[#d4a017]">{soulState.toUpperCase()}</span>
                 </div>
-                <p className="mt-1.5 text-[9px] leading-4 text-[#c77b4a]">{soulNote}</p>
+                <p data-soul-note="text" className="mt-1.5 text-[9px] leading-4 text-[#c77b4a]">{soulNote}</p>
               </div>
 
               <div className="mt-3 border border-[#3e617c] bg-[#071016] px-3 py-3">
