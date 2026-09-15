@@ -391,6 +391,42 @@ def test_airtable_row_tables_match_the_executor_table_map() -> None:
         )
 
 
+def test_zapier_tools_match_the_executor_tool_map() -> None:
+    """The Zapier executor calls only the tools ZAPIER_MCP_TOOLS names, at their radius.
+
+    The executor (n8n/devon/zapier-executor/validate_and_plan.js) carries the
+    same map inline because n8n cannot import the vault. A tool callable on the
+    Zapier MCP server that the vault does not record is an external effect nobody
+    wrote down, and a radius that disagrees is a card that lies.
+    """
+    from services.devon import vault
+
+    source = pathlib.Path(__file__).parent / "n8n" / "devon" / "zapier-executor" / "validate_and_plan.js"
+    assert source.exists(), f"{source} is missing; the executor source must live in the repo"
+    body = source.read_text(encoding="utf-8")
+    block = re.search(r"const TOOLS = \{(.*?)\n\};", body, re.S)
+    assert block, "no TOOLS map found in the executor source"
+    tools = dict(re.findall(r"'([a-z0-9_]+)':\s*\{[^}]*?blast_radius:\s*'([a-z_]+)'", block.group(1), re.S))
+    assert tools, "the executor TOOLS map is empty"
+
+    assert set(tools) == set(vault.ZAPIER_MCP_TOOLS), (
+        f"executor tools {sorted(tools)} differ from vault.ZAPIER_MCP_TOOLS {sorted(vault.ZAPIER_MCP_TOOLS)}"
+    )
+    for name, radius in tools.items():
+        assert radius == vault.ZAPIER_MCP_TOOLS[name]["blast_radius"], (
+            f"tool {name} is {radius} in the executor and {vault.ZAPIER_MCP_TOOLS[name]['blast_radius']} in the vault"
+        )
+    ceiling = re.search(r"const CEILING = '([a-z_]+)';", body)
+    assert ceiling and ceiling.group(1) == "reversible_write", "the executor ceiling must stay reversible_write"
+    order = ["none", "read", "reversible_write", "irreversible_write", "destructive"]
+    for name, radius in tools.items():
+        assert order.index(radius) <= order.index("reversible_write"), f"tool {name} is wider than the ceiling"
+
+    router_state = vault.WORKFLOWS["Action Router"]["state"]
+    assert "zapier.mcp" in router_state and "Zapier Executor" in vault.WORKFLOWS
+    assert vault.WEBHOOKS["devon-zapier-mcp"]["workflow"] == vault.WORKFLOWS["Zapier Executor"]["id"]
+
+
 def test_action_router_allowlist_matches_the_vault_state() -> None:
     """Every allowlisted action names a workflow the vault records.
 

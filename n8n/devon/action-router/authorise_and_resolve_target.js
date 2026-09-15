@@ -1,7 +1,10 @@
 // DEVON Action Router, Build 05, n8n lane.
 // Contract: SYS_DATA_job-envelope-schema_v1_2026-08-23.json, Drive 1mH0T1B5MK-qFT1W71ZoezPcrfgg7GPoj
-// The Zapier lane is NOT built. It needs a Zap with a webhook trigger and a code step,
-// which is Tee's hands in the Zapier UI. Build 05 is half shipped and says so.
+// The Zapier lane was NOT built until 2026-09-15: it was going to need a Zap with a
+// webhook trigger and a code step. It is built now as zapier.mcp (Build 19), which
+// reaches Zapier through the Zapier MCP server instead of a Zap; see the entry.
+// Ruled by Tee 2026-09-15: every DEVON organ runs on the VPS (n8n.editforge.online),
+// live and published, so every URL and workflow id below is a VPS one.
 //
 // REPAIRED 2026-09-05. Every gate refusal used to be a thrown error, which n8n turned
 // into an empty 200 body and an ERROR execution. The caller (the Job Driver) read
@@ -47,24 +50,38 @@ const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 // today), stamped with the idempotency key and the intent id, and advances the
 // envelope to EXECUTING with the artifact. The driver binds it only when the job
 // carries a structural intent.payload.airtable, never from words in the summary.
+//
+// RULED 2026-09-15 by Tee (wire the Zapier MCP as the executor; then everything on
+// the VPS): zapier.mcp is the third real executor. Build 19 accepts AUTHORIZED,
+// calls one tool on the Zapier MCP server from the allowlist inside the executor
+// (each tool with the blast radius it really has, under a reversible_write
+// ceiling), idempotent by the call log the executor owns, and advances the
+// envelope to EXECUTING with the artifact. The driver binds it only when the job
+// carries a structural intent.payload.zapier, never from words in the summary.
 const TARGETS = {
   'spine.echo': {
-    url: 'https://thequietoperator.app.n8n.cloud/webhook/devon-spine-n8n',
-    workflow_id: 'Oi7o1sTEqhxhOaJL',
+    url: 'https://n8n.editforge.online/webhook/devon-spine-n8n',
+    workflow_id: 'VUXIyCaur9lejAhL',
     max_blast_radius: 'read',
     description: 'Spine conformance executor. Advances one legal state and returns.'
   },
   'drive.draft': {
-    url: 'https://thequietoperator.app.n8n.cloud/webhook/devon-drive-draft',
-    workflow_id: 'J7Ly7riwXEd95D9a',
+    url: 'https://n8n.editforge.online/webhook/devon-drive-draft',
+    workflow_id: 'FdQgiX2Thgk38CSa',
     max_blast_radius: 'reversible_write',
     description: 'Drive Draft Writer, Build 16. Writes one Google Doc draft and advances AUTHORIZED to EXECUTING.'
   },
   'airtable.row': {
-    url: 'https://thequietoperator.app.n8n.cloud/webhook/devon-airtable-row',
-    workflow_id: 'ps2S6dWcTIpq5bvr',
+    url: 'https://n8n.editforge.online/webhook/devon-airtable-row',
+    workflow_id: 'glEO2xa4IZmHDbkg',
     max_blast_radius: 'reversible_write',
     description: 'Airtable Row Writer, Build 17. Writes one row into an allowlisted table of the DEVON base and advances AUTHORIZED to EXECUTING.'
+  },
+  'zapier.mcp': {
+    url: 'https://n8n.editforge.online/webhook/devon-zapier-mcp',
+    workflow_id: 'MIELNCkP9IyHWVlr',
+    max_blast_radius: 'reversible_write',
+    description: 'Zapier Executor, Build 19. Calls one allowlisted tool on the Zapier MCP server, idempotent by its own call log, and advances AUTHORIZED to EXECUTING.'
   }
 };
 

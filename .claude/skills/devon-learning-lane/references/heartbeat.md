@@ -9,7 +9,7 @@ stays honest about the difference.
 
 Two halves, deliberately unequal:
 
-## The Pulse (n8n workflow `dRgTNLod2s8BAcPg`, every 6 hours)
+## The Pulse (n8n workflow `EEDrp2jLlw2Ssd5b`, every 6 hours)
 
 Deterministic. Reads devon_state_ledger, devon_build12_feed_log,
 devon_soul_commit_log, and devon_heartbeat_log; computes vitals; writes ONE
@@ -18,7 +18,7 @@ Keeps beating on empty tables (first beat introduces itself). It reads no
 secrets: the approval_queue table is never touched, which is why its
 execution-data saving can stay on. Its only writes are its own beat row and
 the receipt flip of that row's `emailed` column after a successful send.
-Crash alerting via the shared Error Alarm (`XDQXwgFkUhYxoEjG`); execution
+Crash alerting via the shared Error Alarm (`bqcnIS0Qv4RkTCU1`); execution
 timeout 300s. Anchor rows (previous pulse, last emailed, last reflection)
 are picked only from rows whose `beat_at` parses and sits at most 1h in the
 future, compared numerically - one malformed or forged row (the free-form
@@ -32,7 +32,7 @@ Findings it computes, each with a stable key:
 | key | alerts? | meaning |
 |---|---|---|
 | stuck_jobs | yes | ledger jobs non-terminal beyond 24h |
-| feeder_silent | yes | COMPLETED jobs with no feed-log row after 40 min. No longer the only dead-feeder detection: the feeder has named the Error Alarm (`XDQXwgFkUhYxoEjG`) in its settings since 2026-09-07, so a crash pages on its own. The finding still earns its place by catching what a crash alarm structurally cannot see - a poll that never fired, or one that ran clean and fed nothing |
+| feeder_silent | yes | COMPLETED jobs with no feed-log row after 40 min. No longer the only dead-feeder detection: the feeder has named the Error Alarm (`bqcnIS0Qv4RkTCU1`) in its settings since 2026-09-07, so a crash pages on its own. The finding still earns its place by catching what a crash alarm structurally cannot see - a poll that never fired, or one that ran clean and fed nothing |
 | malformed_feed | yes | fed rows with HTTP 200 but empty gate_decision; terminal and invisible to the committer, repair per runbook |
 | soul_overdue | yes | PROPOSED soul rows open past 76h; the text names both readings - the committer may legitimately hold a row inside its 96h close-by-absence window (or be retrying a failing commit), or the resolve lane is stalled |
 | missed_beat | yes | previous pulse older than 7.5h; the heartbeat monitoring itself |
@@ -56,7 +56,7 @@ still log; the heartbeat log, not the inbox, is the proof of life.
 ## The Reflection (claude.ai Routine `trig_01XCKFGEbojhkPRnNbMd8yCP`, daily 11:30 UTC)
 
 A mind, allowed to fail. A scheduled Claude session wakes, reads the whole
-estate through the read-only Table Reader (`we45pHkQHRmSRnZx`), and writes ONE
+estate through the read-only Table Reader (`VGwrZPdZ5se2pr03`), and writes ONE
 first-person reflection row (kind `reflection`) into devon_heartbeat_log: what
 changed, what is stuck, at most two recommendations for Tee to decide, one
 honest uncertainty, 900 characters max. The next pulse email carries the
@@ -73,7 +73,7 @@ Routines UI with the n8n connector attached, using the prompt archived in
 that session; per-Routine connector grants are not available from inside
 sessions in this org.
 
-## The table: devon_heartbeat_log (`Adg1Gd9HML7Q4L3U`)
+## The table: devon_heartbeat_log (`RuPMZKXkqcbuHRKa`)
 
 Columns: beat_at, kind (`pulse` | `reflection`), vitals (JSON string),
 findings (newline-separated `key | text` lines), reflection, emailed

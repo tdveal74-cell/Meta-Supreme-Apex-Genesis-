@@ -92,6 +92,63 @@ if (payloadIn.airtable && typeof payloadIn.airtable === 'object' && !Array.isArr
   if (!n) { return refuse('payload.airtable.fields is empty. Nothing was filed.'); }
   payload.airtable = { table: table, fields: fields };
 }
+// Build 19: a structural Zapier call rides through exactly as the poster declared
+// it. The Zapier Executor holds the tool allowlist and refuses anything outside
+// it; this node checks shape only: a tool name, an optional flat arguments object
+// (at most 24 keys of plain names; values strings, numbers, booleans, null, lists
+// of those up to 50 items, or one flat object of those), 20000 characters per
+// string, 2000 per list item. Anything over a bound is REFUSED with the bound
+// named, never cut to fit. A job carries one structural act: airtable or zapier,
+// never both, because the card names one executor and the driver binds one.
+if (payloadIn.zapier && typeof payloadIn.zapier === 'object' && !Array.isArray(payloadIn.zapier)) {
+  if (payload.airtable) { return refuse('payload carries both an airtable object and a zapier object. One job is one act with one executor; file two jobs. Nothing was filed.'); }
+  const zp = payloadIn.zapier;
+  const tool = s(zp.tool);
+  if (!tool) { return refuse('payload.zapier.tool is required. Nothing was filed.'); }
+  if (tool.length > 80 || !/^[A-Za-z0-9_.-]+$/.test(tool)) { return refuse('payload.zapier.tool must be a tool name of up to 80 letters, digits, underscores, dots or dashes. Nothing was filed.'); }
+  const KEYRE = /^[a-zA-Z][a-zA-Z0-9_]{0,60}$/;
+  function isScalar(v) { return typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' || v === null; }
+  function boundScalar(path, v) {
+    if (typeof v === 'string' && v.length > 20000) { return path + ' is ' + v.length + ' characters, over the 20000 limit. Nothing was filed.'; }
+    if (typeof v === 'number' && !Number.isFinite(v)) { return path + ' is not a finite number. Nothing was filed.'; }
+    return '';
+  }
+  function boundList(path, v) {
+    if (v.length > 50) { return path + ' lists ' + v.length + ' items, over the 50 limit. Nothing was filed.'; }
+    for (let i = 0; i < v.length; i++) {
+      if (!isScalar(v[i])) { return path + '[' + i + '] must be a string, a number, a boolean or null. Nothing was filed.'; }
+      if (typeof v[i] === 'string' && v[i].length > 2000) { return path + '[' + i + '] is ' + v[i].length + ' characters, over the 2000 limit. Nothing was filed.'; }
+    }
+    return '';
+  }
+  const argsIn = (zp.arguments === undefined || zp.arguments === null) ? {} : zp.arguments;
+  if (typeof argsIn !== 'object' || Array.isArray(argsIn)) { return refuse('payload.zapier.arguments must be an object of argument name to value. Nothing was filed.'); }
+  const argKeys = Object.keys(argsIn);
+  if (argKeys.length > 24) { return refuse('payload.zapier.arguments has ' + argKeys.length + ' keys, over the 24 limit. Nothing was filed.'); }
+  const args = {};
+  for (const k of argKeys) {
+    if (!KEYRE.test(k)) { return refuse('payload.zapier.arguments has a key that is not a plain name: ' + s(k).slice(0, 40) + '. Nothing was filed.'); }
+    const v = argsIn[k];
+    let why = '';
+    if (isScalar(v)) { why = boundScalar('payload.zapier.arguments.' + k, v); if (why) { return refuse(why); } args[k] = v; }
+    else if (Array.isArray(v)) { why = boundList('payload.zapier.arguments.' + k, v); if (why) { return refuse(why); } args[k] = v.slice(); }
+    else if (typeof v === 'object') {
+      const inner = Object.keys(v);
+      if (inner.length > 24) { return refuse('payload.zapier.arguments.' + k + ' has ' + inner.length + ' keys, over the 24 limit. Nothing was filed.'); }
+      const o = {};
+      for (const ik of inner) {
+        if (!KEYRE.test(ik)) { return refuse('payload.zapier.arguments.' + k + ' has a key that is not a plain name: ' + s(ik).slice(0, 40) + '. Nothing was filed.'); }
+        const iv = v[ik];
+        if (isScalar(iv)) { why = boundScalar('payload.zapier.arguments.' + k + '.' + ik, iv); if (why) { return refuse(why); } o[ik] = iv; }
+        else if (Array.isArray(iv)) { why = boundList('payload.zapier.arguments.' + k + '.' + ik, iv); if (why) { return refuse(why); } o[ik] = iv.slice(); }
+        else { return refuse('payload.zapier.arguments.' + k + '.' + ik + ' nests an object inside an object; one level is the limit. Nothing was filed.'); }
+      }
+      args[k] = o;
+    }
+    else { return refuse('payload.zapier.arguments.' + k + ' must be a string, a number, a boolean, null, a list of those or a flat object of those. Nothing was filed.'); }
+  }
+  payload.zapier = { tool: tool, arguments: args };
+}
 
 const area = pickArea(b.area);
 const blast = pickBlast(b.blast_radius);

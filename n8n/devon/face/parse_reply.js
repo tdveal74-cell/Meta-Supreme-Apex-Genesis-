@@ -31,6 +31,14 @@ if (code !== 200) {
       if (at && typeof at === 'object' && !Array.isArray(at) && typeof at.table === 'string' && at.fields && typeof at.fields === 'object' && !Array.isArray(at.fields)) {
         job.payload = Object.assign({}, job.payload || {}, { airtable: { table: at.table, fields: at.fields } });
       }
+      // Build 19: a Zapier call rides through as the model declared it, tool and
+      // arguments only. The intake bounds the shape and the Zapier Executor holds
+      // the tool allowlist, so nothing here decides what is callable.
+      const zp = parsed.job.zapier;
+      if (zp && typeof zp === 'object' && !Array.isArray(zp) && typeof zp.tool === 'string' && zp.tool.trim()) {
+        const za = (zp.arguments && typeof zp.arguments === 'object' && !Array.isArray(zp.arguments)) ? zp.arguments : {};
+        job.payload = Object.assign({}, job.payload || {}, { zapier: { tool: zp.tool.trim(), arguments: za } });
+      }
       // Accepting a proposal files the proposal Tee saw, not a re-derivation of it.
       const prop = c.last_proposal;
       const norm = v => String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();

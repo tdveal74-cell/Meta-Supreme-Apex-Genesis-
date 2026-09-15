@@ -80,6 +80,20 @@ if (d.payload && d.payload.airtable && typeof d.payload.airtable === 'object') {
     return [{ json: { refused: true, reason: 'An Airtable row job is a reversible write and this one is labelled ' + d.blast_radius + '. The row writer runs at reversible_write only, so the job would be carded as something else and never write. Post it as reversible_write or drop the airtable payload. Nothing was filed. Notes: ' + notes.join(' ') } }];
   }
 }
+// A Zapier call is never a note either (Build 19), and it is exactly a reversible
+// write at the door for the same reason a row is: the driver binds zapier.mcp only
+// at that radius, and the executor's own allowlist carries each tool's real
+// radius under a reversible_write ceiling. A tool that reaches further cannot be
+// added there without a ruling, so a job labelled wider is refused here.
+if (d.payload && d.payload.zapier && typeof d.payload.zapier === 'object') {
+  if (BLAST.indexOf(d.blast_radius) < BLAST.indexOf('reversible_write')) {
+    notes.push('blast radius raised from ' + d.blast_radius + ' to reversible_write because the job calls a Zapier tool');
+    d.blast_radius = 'reversible_write';
+  }
+  if (BLAST.indexOf(d.blast_radius) > BLAST.indexOf('reversible_write')) {
+    return [{ json: { refused: true, reason: 'A Zapier call job is a reversible write and this one is labelled ' + d.blast_radius + '. The Zapier executor runs at reversible_write only, so the job would be carded as something else and never run. Post it as reversible_write or drop the zapier payload. Nothing was filed. Notes: ' + notes.join(' ') } }];
+  }
+}
 const gated = d.blast_radius === 'irreversible_write' || d.blast_radius === 'destructive';
 const envelope = {
   schema_version: '1.0.0',

@@ -1,0 +1,282 @@
+[
+ {
+  "name": "DEVON Airtable Row Writer (Build 17)",
+  "cloud_id": "ps2S6dWcTIpq5bvr",
+  "vps_id": "glEO2xa4IZmHDbkg",
+  "short": "airtable-row",
+  "overlay": "airtable-row-writer"
+ },
+ {
+  "name": "DEVON Approval Queue",
+  "cloud_id": "syRVj0G47mA1b0Xn",
+  "vps_id": "Ia28EHrxtiI8cjeA",
+  "short": "approval-queue",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Build 12 Upstream Test",
+  "cloud_id": "VznESplSFCs8ldph",
+  "vps_id": "VzJsSlDswkIJ9wok",
+  "short": "b12-upstream",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Capture Hook",
+  "cloud_id": "Cbd24ptTPWch3aZO",
+  "vps_id": "bCZa6KVgjHgRup1Y",
+  "short": "capture-hook",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Capture Nudge",
+  "cloud_id": "YHueoBK7TSLdTlfF",
+  "vps_id": "3B8pGfSklJMte3ut",
+  "short": "capture-nudge",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Gumroad Sale Check",
+  "cloud_id": "7bDqKNdMHY8sxoXa",
+  "vps_id": "e5H3pk7YNF9jQi1r",
+  "short": "gumroad",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Pipeline Watchdog",
+  "cloud_id": "wndFo6uJCqVuINaV",
+  "vps_id": "IZBVlXQ8Y5dsGTRS",
+  "short": "watchdog",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Precedence Guard",
+  "cloud_id": "W5rlpAt6hsJAExU6",
+  "vps_id": "4BXO9CX8MdYYyGMq",
+  "short": "precedence",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Soul Layer Write-Back",
+  "cloud_id": "edIJx7Q3FXTawg9J",
+  "vps_id": "rZdhFXcsOyBcEkgR",
+  "short": "soul-writeback",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON To Delete Auto-Purge (30d)",
+  "cloud_id": "0soYvqnSKYlFn3gr",
+  "vps_id": "2M8CIPebpl1nSLVx",
+  "short": "auto-purge",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Action Router (Build 05)",
+  "cloud_id": "ecLqrxALuLDdF2BN",
+  "vps_id": "NYcEp03Oqlvq86Mb",
+  "short": "action-router",
+  "overlay": "action-router"
+ },
+ {
+  "name": "DEVON Build 12 Ledger Feeder",
+  "cloud_id": "6hQD8YhiYzR1FFda",
+  "vps_id": "GEbNoDMBdGqDfZJ2",
+  "short": "ledger-feeder",
+  "overlay": "ledger-feeder"
+ },
+ {
+  "name": "DEVON Capture Webhook",
+  "cloud_id": "pPIt2cELH2RVZktS",
+  "vps_id": "Me7DDHBDX28ppvHA",
+  "short": "capture-webhook",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Conscious and Subconscious Runtime (Build 03)",
+  "cloud_id": "5Nc9yh6WSqBJ41ok",
+  "vps_id": "ePvPCXVUjygZzvQT",
+  "short": "runtime",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Drive Draft Writer (Build 16)",
+  "cloud_id": "J7Ly7riwXEd95D9a",
+  "vps_id": "FdQgiX2Thgk38CSa",
+  "short": "drive-draft",
+  "overlay": "drive-draft-writer"
+ },
+ {
+  "name": "DEVON Driver Poll (Build 14)",
+  "cloud_id": "mbIKJk4UuB7V27rP",
+  "vps_id": "6b4dJasBKcOPQ6oX",
+  "short": "driver-poll",
+  "overlay": "driver-poll"
+ },
+ {
+  "name": "DEVON Duplicate Sweep",
+  "cloud_id": "X7OGXWHBx57CIG42",
+  "vps_id": "3tY1sJF3brpvdkgi",
+  "short": "dup-sweep",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON EditForge Handoff (Build 07)",
+  "cloud_id": "OFIhA7zdFv9UoyCv",
+  "vps_id": "LnbtB81ItUYptbWg",
+  "short": "editforge",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON End to End Watch Harness",
+  "cloud_id": "ktZ0fnrgxvCNY9xH",
+  "vps_id": "VwSnFY0Qyw03FxKk",
+  "short": "e2e-harness",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Error Alarm",
+  "cloud_id": "XDQXwgFkUhYxoEjG",
+  "vps_id": "bqcnIS0Qv4RkTCU1",
+  "short": "error-alarm",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Event Bus (Build 06)",
+  "cloud_id": "Bvy0grTSIyEmPwFA",
+  "vps_id": "11weboiKowmLq3d0",
+  "short": "event-bus",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Face (Build 15)",
+  "cloud_id": "LsmfRFMmI5feINs0",
+  "vps_id": "sPv6Cq7elbjoi5Nw",
+  "short": "face",
+  "overlay": "face"
+ },
+ {
+  "name": "DEVON Health and Observability Console (Build 10)",
+  "cloud_id": "M3H2mVPZJpDyIzrl",
+  "vps_id": "bsxKtdx1ebMu5hGs",
+  "short": "health-console",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Heartbeat (Build 13)",
+  "cloud_id": "dRgTNLod2s8BAcPg",
+  "vps_id": "EEDrp2jLlw2Ssd5b",
+  "short": "heartbeat",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Intake Former (Build 14)",
+  "cloud_id": "AEFgXee7IDJarNV7",
+  "vps_id": "TciVQhWJA0y92x9P",
+  "short": "intake-former",
+  "overlay": "intake-former"
+ },
+ {
+  "name": "DEVON Intelligence Router (Build 04)",
+  "cloud_id": "xh3EkLmgTDJFhzGH",
+  "vps_id": "8QiP1xQiB21Ic42Z",
+  "short": "intel-router",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON iPhone Inbox Capture",
+  "cloud_id": "5s6CwWWelffqszQe",
+  "vps_id": "CEy7WAl4QAzHfG46",
+  "short": "iphone-inbox",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Job Driver (Build 14)",
+  "cloud_id": "TT4TfFXyH9O7lfdc",
+  "vps_id": "MfJCYeJqVjBLFrCu",
+  "short": "job-driver",
+  "overlay": "job-driver"
+ },
+ {
+  "name": "DEVON Learning Lane Table Reader",
+  "cloud_id": "we45pHkQHRmSRnZx",
+  "vps_id": "VGwrZPdZ5se2pr03",
+  "short": "table-reader",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Ledger Janitor",
+  "cloud_id": "HKNEDVy7PUKPtsrN",
+  "vps_id": "V0i8zTw1keMMJmhF",
+  "short": "janitor",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Live State Ledger (Build 02)",
+  "cloud_id": "z9j2I8h0RnbDKGBO",
+  "vps_id": "hDmTRI5VAZ3a8sTn",
+  "short": "ledger",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Master Index",
+  "cloud_id": "ocU2Zep8WyRmbsIk",
+  "vps_id": "aDMJX0I83b1LS5gz",
+  "short": "master-index",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Monthly Credential Review",
+  "cloud_id": "yro0wBRGghMjkZhj",
+  "vps_id": "ZKyaYzv7DAGhJSLi",
+  "short": "cred-review",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Notion Buffer Drain",
+  "cloud_id": "X3sKmPj6yHJu4xWu",
+  "vps_id": "ptAmD28msYTvobgq",
+  "short": "notion-drain",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Purge List (manual)",
+  "cloud_id": "Epcmuep1JnBaSrrr",
+  "vps_id": "DxEB0OrDLlkDBrsF",
+  "short": "purge-list",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Soul Committer (Build 12)",
+  "cloud_id": "lANs6wopaK0PkNhN",
+  "vps_id": "drP96ernQvbrvzIZ",
+  "short": "soul-committer",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Spine Conformance Executor",
+  "cloud_id": "Oi7o1sTEqhxhOaJL",
+  "vps_id": "VUXIyCaur9lejAhL",
+  "short": "spine",
+  "overlay": "spine"
+ },
+ {
+  "name": "DEVON Vault Comparison",
+  "cloud_id": "mhI1YAoqrITtuB1M",
+  "vps_id": "DjrDKJ5hTYULzGcm",
+  "short": "vault-compare",
+  "overlay": ""
+ },
+ {
+  "name": "DEVON Weekly Table Backup",
+  "cloud_id": "qCfGZ1CwmpK9vOta",
+  "vps_id": "rVXA5wH5AXW4tCjp",
+  "short": "weekly-backup",
+  "overlay": ""
+ },
+ {
+  "name": "OS Error Handler (all pipelines)",
+  "cloud_id": "rqYmaQh91iCce8DJ",
+  "vps_id": "GbeNilHQzjmoWDz3",
+  "short": "os-error-handler",
+  "overlay": ""
+ }
+]
