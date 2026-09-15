@@ -12,17 +12,19 @@ published, executed or edited by this audit.
 ## Verdict in one paragraph
 
 Not ready, and the one group that already runs on the VPS runs there in a
-broken state. Every DEVON lane copy on the VPS but the Error Alarm is inactive and
-unpublished, `activeVersionId` null on 40 of the 41, while Cloud keeps filing
-and finishing jobs. The VPS state ledger is the 2026-09-03 snapshot, eight
+broken state. Of the 41 DEVON lane entries the vault registers, 39 exist on
+the VPS and 38 of them are inactive with `activeVersionId` null, the Error
+Alarm being the one published, while 33 of the 41 are active on Cloud and
+Cloud keeps filing and finishing jobs. The VPS state ledger is the 2026-09-03 snapshot, eight
 CANCELLED rows from August plus one decided approval card whose token field
 reads the literal text `undefined`, against 21 rows on Cloud, so runbook
 steps 3 (wipe) and 6.2 (copy) are both unstarted. The Google Drive OAuth
 credential on the VPS is disconnected, proven by execution 23 dying at Upload
 MP3 on 2026-09-13, which blocks TQO FINAL V5 and the Drive Draft Writer
 there. The active OS Error Handler on the VPS binds two Cloud credential ids
-that do not exist on the VPS, proven by execution 24, and eleven VPS copies
-name a Cloud id as their error workflow, five of them active, so the first
+that do not exist on the VPS, proven by execution 24, and sixteen VPS copies
+name a Cloud id as their error workflow, eleven the Cloud OS Error Handler
+and five the Cloud Error Alarm, five of the sixteen active, so the first
 real failure on the VPS is silent. The VPS holds two vintages: eight DEVON
 copies rebuilt on 2026-09-10 read clean, and 33 copies exported on
 2026-08-31 predate Cloud fixes that landed since. TQO FINAL V5 and the TSWS
@@ -40,7 +42,12 @@ Two instances through their MCP connectors, read only. Cloud project
 `qbrcjkbIoorbwot6`: the same calls plus `list_credentials`, and full node
 graph reads of TQO FINAL V5 (222 nodes parsed for type, disabled,
 authentication, credential ids, settings and host literals), TSWS 00 to 05,
-both error handlers, and the nine DEVON lane copies rebuilt on 2026-09-10.
+both error handlers, and nine DEVON lane copies (Job Driver, Action Router,
+Approval Queue, Drive Draft Writer, Airtable Row Writer, Face, Event Bus,
+Intake Former, Driver Poll), six of which are among the eight copies created
+on 2026-09-10; the other two of the eight are the Gumroad Sale Check and the
+Gumroad Landing Page Helper, and the three others read (Action Router,
+Approval Queue, Event Bus) are 08-31 vintage saved 2026-09-03.
 `scripts/estate_reconcile.py check` ran against a Cloud observation file
 built from those reads; its output is quoted where it applies. The
 `approval_queue` table on Cloud was read by count only, with `limit 1` and
@@ -53,14 +60,14 @@ already orders wiped.
 | | Cloud | VPS |
 |---|---|---|
 | workflows | 49 (41 active) | 61 (9 active) |
-| DEVON lane copies active | 35 of the 41 the vault registers | the Error Alarm only; the other 40 read `activeVersionId` null |
+| DEVON lane entries in the vault, 41 | 33 active, 6 inactive, 2 archived | 39 exist; the Error Alarm active, the other 38 `activeVersionId` null |
 | active on the VPS | | DEVON Error Alarm `bqcnIS0Qv4RkTCU1`, OS Error Handler `GbeNilHQzjmoWDz3`, TQO FINAL V5 `qEkGOUsNyVaRAmm6`, TSWS 00 to 05 |
-| executions since 2026-09-15T00:00Z | 13, all timers, all success | 0 |
+| executions since 2026-09-15T00:00Z | 13, all success: 12 timers and one manual run of the Learning Lane Table Reader at 05:54Z (7121), actor not read | 0 |
 | executions since 2026-09-08 | production timers hourly and daily; 5 manual V5 errors on 09-08 and 09-10 | 24, all manual or test: 19 on TSWS 00 (ids 1 and 3 to 20), 4 on the V5 ADAPTER TEST copy (2 error), 1 on the OS Error Handler in error mode |
 | data tables | 11 | 11, same names |
 | state ledger rows | 21, every one read, all terminal (12 CANCELLED, 9 COMPLETED), newest 2026-09-13T06:00:39Z | 8, all from the 2026-09-03 snapshot, all CANCELLED, created 2026-08-24 |
 | approval_queue rows | 13 by count (2 pending past expiry, 10 approved, 1 rejected) | 1, decided 2026-08-25, expired 2026-08-28, token field carries the literal `undefined` nine times |
-| devon_driver_log, devon_chat_log | populated | 0 rows each |
+| devon_driver_log, devon_chat_log | not read today; the v2 record counted 92 driver log rows on 2026-09-06 | 0 rows each |
 | credentials | 29; Google Drive `WMz320icjnur7rDL`, Gmail `vsTKuAilHmpYCc5L`, Devon Capture Key `FYRvkRTOcROEYZ9P` | 31, all owned by Tee's personal project, no id in common with Cloud, so every rebinding is by id |
 
 ## The runbook, step by step
@@ -81,14 +88,14 @@ not what a record says.
 | 1 export from Cloud and compare `inspect.txt` | partial | 41 copies carry `createdAt` 2026-08-31T13:23Z, an export that predates the tool; 8 carry 2026-09-10, rebuilt by hand per their sticky notes; no `inspect.txt` comparison is recorded anywhere |
 | 2 create credentials on the VPS, write `creds-map.json` | partial | 31 credentials on the VPS; the verified record's five map targets exist, three of them renamed since (`EdFztvzdUL9PSycJ` is now `anthropic`, `KtgOCINafn32E0h4` `json2video`, `XbLg8FnNraeTbEfJ` `mailerlite`), so a name keyed map would miss them; `creds-map.json` unverified |
 | 3 wipe the 09-03 rows | not done | ledger 8 rows and queue 1 row, all stamped 2026-09-03T09:01:37Z |
-| 4 `import --rewrite-host` then `repoint` | partial | the tool never ran against these copies; by hand the nine 09-10 rebuilds carry the VPS host in Job Driver HOST, Action Router URLs, Approval Queue HOST, the two writers' bus URLs, the Face intake URL and the Event Bus ledger URL; the 33 copies dated 08-31 were not opened node by node and are unverified for host literals; repoint is not done for error workflows or for the OS Error Handler's credentials |
-| 5 hand edits the map lacks | not done | the Action Router VPS copy's allowlist still names `Oi7o1sTEqhxhOaJL`, the Cloud Spine id, and lists `spine.echo` only; 11 VPS workflows name a Cloud error workflow; the VPS Face chat trigger carries `webhookId bf371d93`, a different door from Cloud's `71510ab0` |
+| 4 `import --rewrite-host` then `repoint` | partial | the tool never ran against these copies; by hand the nine lane copies read node by node carry the VPS host in Job Driver HOST, Action Router URLs, Approval Queue HOST, the two writers' bus URLs, the Face intake URL and the Event Bus ledger URL, and four more 08-31 copies read by the verifier do too; the remaining 26 copies dated 08-31 were not opened and are unverified for host literals; repoint is not done for error workflows or for the OS Error Handler's credentials |
+| 5 hand edits the map lacks | not done | the Action Router VPS copy's allowlist still names `Oi7o1sTEqhxhOaJL`, the Cloud Spine id, and lists `spine.echo` only; 16 VPS workflows name a Cloud error workflow; the VPS Face chat trigger carries `webhookId bf371d93`, a different door from Cloud's `71510ab0` |
 | 6.1 drain Cloud | not done | Cloud filed and completed jobs on 2026-09-12; all 21 ledger rows are terminal today, newest created 2026-09-12T21:22:36Z, so there is nothing to drain at this minute and the next job will land on Cloud |
 | 6.2 copy terminal rows | not done | VPS ledger 8 rows against Cloud 21; the two new tables hold 0 |
 | 6.3 switch one group per sitting, never both | not done, and reversed for one group | every DEVON copy inactive on the VPS while active on Cloud; group (e), the TSWS chain and the OS Error Handler, is active on both, and so is TQO FINAL V5 |
-| 6.4 repoint `vault.py`, the soul copy, the skills, the n8n bodies, then `check --strict` | not done | `services/devon/vault.py` `N8N_HOST` is the Cloud host and all 51 `WORKFLOWS` and 13 `WEBHOOKS` ids are Cloud ids, counted from the file; `deploy/soul/services/devon/vault.py` is byte identical to it; the n8n bodies in the repository still carry the Cloud host at `n8n/devon/job-driver/decide.js:5` and `n8n/devon/action-router/authorise_and_resolve_target.js:52`, `:58`, `:64`; the skills reference is `.claude/skills/devon-learning-lane/references/ids-and-contracts.md:7`; `test_estate_reconcile.py` carries three hits; and the presence service watches `services/**`, so the vault edit deploys presence |
-| 6.5 keep Cloud reachable and inactive 72 hours | not done | Cloud ran 13 timer executions between 00:00Z and 06:30Z today |
-| section 6 proofs 1 to 7 | none run | no VPS execution since 2026-09-08 touched a DEVON lane workflow; proof 4, the Cloud negative test, would return 200 today because every Cloud twin is live |
+| 6.4 repoint `vault.py`, the soul copy, the skills, the n8n bodies, then `check --strict` | not done | `services/devon/vault.py` `N8N_HOST` is the Cloud host and all 51 `WORKFLOWS` and 13 `WEBHOOKS` ids are Cloud ids, counted from the file; `deploy/soul/services/devon/vault.py` is byte identical to it; the n8n bodies in the repository still carry the Cloud host at `n8n/devon/job-driver/decide.js:5` and `n8n/devon/action-router/authorise_and_resolve_target.js:52`, `:58`, `:64`; the skills reference is `.claude/skills/devon-learning-lane/references/ids-and-contracts.md:7`; `test_estate_reconcile.py` carries three hits; and the presence service watches `services/**`, so the vault edit deploys presence; whether the api service also redeploys on that edit is unverified, its watch patterns unread |
+| 6.5 keep Cloud reachable and inactive 72 hours | not done | Cloud ran 12 timer executions and one manual run between 00:00Z and 06:30Z today |
+| section 6 proofs 1 to 7 | none run | no VPS execution since 2026-09-08 touched a DEVON lane workflow; proof 4, the Cloud negative test, would return 200 today because the Cloud intake door is live |
 
 ## The nine hazards of the v2 record, re-read
 
@@ -96,11 +103,11 @@ not what a record says.
    A VPS Driver Poll or Janitor activated over it would act on jobs Cloud
    finished in August.
 2. The two missing tables: created on 2026-09-10, both still empty.
-3. The Cloud host inside nodes: closed on the nine 09-10 rebuilds and on
-   four of the 08-31 copies opened by the second reader (Capture Webhook,
+3. The Cloud host inside nodes: closed on the nine lane copies read and on
+   four more 08-31 copies opened by the second reader (Capture Webhook,
    Soul Committer, Ledger Feeder, Heartbeat), every URL and table id a VPS
-   one, all four saved 2026-09-03T10:22Z in one batch rewrite; unverified
-   on the remaining 29 copies dated 08-31. The repository's own copies of
+   one, those four saved 2026-09-03T10:22Z in one batch rewrite; unverified
+   on the remaining 26 copies dated 08-31. The repository's own copies of
    the bodies are a different matter: `n8n/devon/job-driver/decide.js:5`
    and `n8n/devon/action-router/authorise_and_resolve_target.js` lines 52,
    58 and 64 still carry the Cloud host, so the source is a three executor
@@ -109,8 +116,9 @@ not what a record says.
 4. Workflow ids inside Code nodes: open. The Action Router VPS copy is the
    08-31 shape, `spine.echo` only with the Cloud workflow id beside a VPS
    URL, so `drive.draft` and `airtable.row` would be refused on the VPS.
-5. Error workflow settings: open on 11 VPS copies, five of them active (the
-   list is below).
+5. Error workflow settings: open on 16 VPS copies, eleven naming the Cloud
+   OS Error Handler and five the Cloud Error Alarm, five of the sixteen
+   active (the list is below).
 6. Credentials by id: open. The active OS Error Handler binds `smtp
    mu7nJRSpkAfkzLdF` and `airtableTokenApi OyuQtrelq7zP2mTy`, neither on the
    VPS, so it fires and then fails at both its outputs (execution 24, mode
@@ -198,14 +206,18 @@ and `search_workflows` omits archived), so the vault's inactive should read
 archived or the entries should retire; and TSWS 00 Render Job is recorded
 active but inactive on Cloud. The strict run's output is byte identical and
 fails on the same four lines. The 21 unverified lines are the connector
-claims the snapshot could not carry (Drive, Airtable, Notion, the skill
-vocabulary), two `dispatch.py` file checks, the deployed Alembic head
-(the newest head deployment is SKIPPED and the reconciler reads a SUCCESS
-build only) and the vault host echo.
+claims the snapshot could not carry (fourteen lines: Drive, Airtable,
+Notion, the skill vocabulary), four `dispatch.py` file checks against
+`OPERATING.md` and `RUNBOOK.md`, the deployed Alembic head (the newest head
+deployment is SKIPPED and the reconciler reads a SUCCESS build only), the
+"deployed without hands" line of the ecosystem spec for the same reason, and
+the vault host echo.
 
 Against the VPS, 51 vault entries map to 49 VPS copies; the two absent are
-the two archived Cloud workflows. Of the 49, nine are active on the VPS and
-40 are inactive with no published version.
+the two archived Cloud workflows. Of the 49, nine are active on the VPS (the
+two error handlers, V5 and TSWS 00 to 05) and 40 are inactive with no
+published version; counting the DEVON lane alone, 39 of its 41 entries exist
+on the VPS, one active and 38 unpublished.
 
 ## Cloud burn, an estimate
 
@@ -217,8 +229,8 @@ executions a day, all timers: Driver Poll 24, Watchdog 6, Heartbeat 4, and
 the dailies. At 64 a day a 30 day cycle is about 1,900 to 2,200 against the
 2,500 cap Tee stated on 2026-09-06. The n8n Cloud usage page is the only real
 number for both the count and the cycle reset date, and neither is readable
-through the connector. The pressure is real and it sits entirely in groups
-(a) to (d), which is exactly the group furthest from ready.
+through the connector. Whatever the true figure, every execution in the
+estimate is a group (a) to (d) timer, which is the group furthest from ready.
 
 ## What is ready, conditionally
 
@@ -229,8 +241,10 @@ credential `WpZNTg9qduOFC5NM` present, both HTTP nodes on
 `ok:true` on an exists check). It is also the only render lane that is
 wired at all: Cloud's TSWS 00 `o4ctniOsIq2VSfgm` is inactive with both URLs
 still the `RENDER-WORKER-URL-HERE` placeholder, and its sticky note of
-2026-09-13 says Cloud TSWS 05 calls it from four nodes, so the five active
-Cloud TSWS pipelines cannot render a byte. It becomes ready when the five
+2026-09-13 says Cloud TSWS 05 calls it from four nodes and names TSWS 01 to
+04 as likely callers, so Cloud TSWS 05 cannot render a byte and, if the note
+is right about the other four, neither can they; their targets were not
+read. It becomes ready when the five
 `errorWorkflow` settings on TSWS 01 to 05 are repointed to `GbeNilHQzjmoWDz3`
 and that handler's two credentials are rebound to `AgSGuaA2pnZsrZcJ` (smtp)
 and `Avhx7u29TskBaR67` (Airtable). Even then it fires only by hand or by a
@@ -244,16 +258,17 @@ nothing either.
    are empty on the VPS. Runbook steps 3 and 6.2.
 2. Reconnect the Google Drive account `NW3vR6nNcMoUkJyJ` on the VPS. Runbook
    step 0.5, and the first Drive upload fails until it is done.
-3. Rebind the active OS Error Handler's two credentials, then repoint the 11
+3. Rebind the active OS Error Handler's two credentials, then repoint the 16
    `errorWorkflow` settings: `rqYmaQh91iCce8DJ` to `GbeNilHQzjmoWDz3` on
    TSWS 01 to 05 and six inactive DEVON copies, `XDQXwgFkUhYxoEjG` to
    `bqcnIS0Qv4RkTCU1` on the five learning lane copies.
 4. Re-export or rebuild the 08-31 vintage where Cloud has moved on: Action
    Router (three executor allowlist, VPS Spine id), Soul Committer (hourly),
-   OS 29 (Firecrawl body), and host-check the rest of the 33.
+   OS 29 (Firecrawl body), and host-check the 26 not yet opened.
 5. Close the three unauthenticated V5 doors on the VPS (Gumroad Ping, Run
-   TQO Link, Run NCO Link) or deactivate V5 there. Cloud closed two of the
-   three on 2026-09-11 and the VPS copy did not follow.
+   TQO Link, Run NCO Link) or deactivate V5 there. Cloud has two of the
+   three on header auth and the VPS copy does not; when Cloud closed them is
+   unmeasured.
 6. Decide which instance owns TQO FINAL V5 and the TSWS chain. Both are
    active on both today.
 7. Publish each DEVON copy only in the 6.3 order, Cloud off first per group.
@@ -272,7 +287,7 @@ nothing either.
 The VPS n8n version and `GENERIC_TIMEZONE`; whether a VPS snapshot exists;
 whether `tables-map.json` and `creds-map.json` exist on Tee's machine; which
 host and scopes the Railway secondary n8n key names; Cloud host literals
-inside the 29 VPS copies dated 08-31 that nobody opened; the fate of the four TQO rendering
+inside the 26 VPS copies dated 08-31 that nobody opened; the fate of the four TQO rendering
 sub-workflows absent from the VPS census; which of Cloud's 29 credentials remain
 unmatched on the VPS beyond the ids named above; where each external
 poster points; the 18 older Cloud ledger rows; the real Cloud execution count
@@ -287,8 +302,8 @@ TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_n8n-cloud-to-vps-cutover-readiness_v1_2026-09-15
 DATE: 2026-09-15
 DECISIONS: none ruled; nothing on either instance was activated, published, executed or edited. Three calls are Tee's and are put to him here: which instance owns TQO FINAL V5 and the TSWS chain, since both are active on both; whether the three unauthenticated V5 doors on the VPS are closed or V5 is deactivated there; and whether the 08-31 vintage is re-exported from Cloud or rebuilt by hand.
-FINDINGS: every DEVON lane copy on the VPS but the Error Alarm is inactive and unpublished, activeVersionId null on 40 of 41; the VPS ledger is the 2026-09-03 snapshot, 8 CANCELLED rows and one decided approval card carrying the literal undefined in its token field, against 21 rows on Cloud; the Google Drive credential on the VPS is disconnected, execution 23; the active OS Error Handler on the VPS binds two Cloud credential ids and fails at both outputs, execution 24; 11 VPS copies name a Cloud error workflow id, five of them the active TSWS pipelines; the VPS holds two vintages, 8 rebuilt 2026-09-10 and 33 exported 2026-08-31, and the older vintage predates the hourly Soul Committer and the third executor, both measured, and by date the OS 29 rebuild; TQO FINAL V5 and the TSWS chain are active on both instances, V5's copies have diverged so that three doors on the VPS accept unauthenticated requests, and Cloud's five active TSWS pipelines call a TSWS 00 that still carries the placeholder worker URL, so only the VPS lane can render; the repository's own n8n bodies and the skills reference still carry the Cloud host; vault.py is Cloud throughout and mis-states TSWS 00 as active; the reconciler scores the vault 71 of 100 against Cloud with 4 drift lines, two of them archived workflows the vault calls inactive; Cloud burn is an ESTIMATE of 60 to 75 executions a day, all timers.
-OPEN: the ten blockers above in order, the first two being the wipe and copy of the tables and the Drive reconnect; the seven section 6 proofs, none run; the usage page read and the cap anchor variables; the 29 unopened 08-31 copies; whether Cloud narration is falling back to Speechify since the 11 September credential split.
+FINDINGS: of the 41 DEVON lane entries in the vault, 39 exist on the VPS and 38 are unpublished with activeVersionId null, the Error Alarm being the one active, while 33 are active on Cloud; the VPS ledger is the 2026-09-03 snapshot, 8 CANCELLED rows and one decided approval card carrying the literal undefined in its token field, against 21 rows on Cloud; the Google Drive credential on the VPS is disconnected, execution 23; the active OS Error Handler on the VPS binds two Cloud credential ids and fails at both outputs, execution 24; 16 VPS copies name a Cloud error workflow id, eleven the Cloud OS Error Handler and five the Cloud Error Alarm, five of them the active TSWS pipelines; the VPS holds two vintages, 8 rebuilt 2026-09-10 and 33 exported 2026-08-31, and the older vintage predates the hourly Soul Committer and the third executor, both measured, and by date the OS 29 rebuild; TQO FINAL V5 and the TSWS chain are active on both instances, V5's copies have diverged so that three doors on the VPS accept unauthenticated requests, and Cloud's TSWS 05 calls a TSWS 00 that still carries the placeholder worker URL, with TSWS 01 to 04 named as likely callers by the same note, so only the VPS lane is known to be wired to a worker; the repository's own n8n bodies and the skills reference still carry the Cloud host; vault.py is Cloud throughout and mis-states TSWS 00 as active; the reconciler scores the vault 71 of 100 against Cloud with 4 drift lines, two of them archived workflows the vault calls inactive; Cloud burn is an ESTIMATE of 60 to 75 executions a day, all timers.
+OPEN: the ten blockers above in order, the first two being the wipe and copy of the tables and the Drive reconnect; the seven section 6 proofs, none run; the usage page read and the cap anchor variables; the 26 unopened 08-31 copies; whether Cloud narration is falling back to Speechify since the 11 September credential split.
 STATUS: not ready for cutover. The TSWS render chain is the one group that could be called ready, after its five error workflow settings and its handler's two credentials are repointed. Everything above was read today through the two connectors or counted from a named file; what could not be read is listed as unverified, with no rounding up.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
