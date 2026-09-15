@@ -74,13 +74,6 @@ export async function POST(
   let body: Record<string, unknown>;
   try {
     rawBody = await request.text();
-
-    // 🟢 INSERT THE DEBUG LOGS EXACTLY HERE:
-    console.log("=== DEVON GATEWAY DEBUG ===");
-    console.log("TIMESTAMP:", Math.floor(Date.now() / 1000).toString());
-    console.log("RAW BODY:", rawBody);
-    console.log("SECRET (first 3):", process.env.DEVON_OPS_SECRET?.substring(0, 3));
-
     body = JSON.parse(rawBody) as Record<string, unknown>;
   } catch {
     return safeError("Invalid JSON body");
