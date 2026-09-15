@@ -30,6 +30,16 @@
  *     value's computed colour and opacity, and document.elementFromPoint at
  *     the centre of the light, the header value, the tile word and the note,
  *     which must resolve to those elements and nothing painted over them;
+ *     and, on every element inside the section, opacity, visibility, filter,
+ *     background-image, transform, clip-path, box-shadow, font size, text
+ *     fill colour and ::before and ::after content, because a third critic
+ *     painted an emerald gradient over the grey light, zeroed the tile word
+ *     and wrote "recall on" into ::after, and hid the header value and the
+ *     note behind filter:opacity(0) beside ::after text, all invisible to
+ *     innerText and to the reads above;
+ *   - the grid: the tile labels are exactly the eight pinned ones in order,
+ *     because a second Soul tile lit beside the first would be read by
+ *     nobody, both readers taking the first match;
  *   - the words: exact innerText of the tile word, the header row and the
  *     note, scoped to the dock's own section, against sentences pinned HERE;
  *   - the on state: a third context answers /soul/status through a Playwright
@@ -43,6 +53,11 @@
  * Change the words in the dock and this goes red, which is a decision and not
  * a drift. Same posture as panel-smoke.mjs: Playwright and Chromium resolved
  * from the environment, both resolvers THROW when missing.
+ *
+ * Running it on a web port other than 3000: the API's CORS_ORIGINS defaults
+ * to ports 3000 only (app/core/config.py:123), so the browser's read dies in
+ * preflight and this file times out at waitForResponse with no assertion
+ * named. Set CORS_ORIGINS='["http://127.0.0.1:<port>"]' on the API first.
  */
 
 import assert from "node:assert/strict";
@@ -264,10 +279,15 @@ const EXPECTED_OFF = [
   Boolean(catalog.expansion?.scheduler_status?.runs_goals),
   Boolean(catalog.execution?.effect_receipts),
 ].filter(Boolean).length;
-check("GET /agent-tasks/tools answers the real token, and the count it implies is in range", () => {
+check("GET /agent-tasks/tools answers the real token with the sections the dock's count reads", () => {
   expectStatus(toolsRead, 200, "GET /agent-tasks/tools");
-  assert.ok(EXPECTED_OFF >= 0 && EXPECTED_OFF <= 6, `derived count ${EXPECTED_OFF} is out of range`);
+  for (const key of ["operator", "github", "browser", "council", "expansion", "execution"]) {
+    assert.ok(catalog[key] && typeof catalog[key] === "object", `the tools catalogue has no ${key} section, so the derived count reads nothing there`);
+  }
 });
+
+/** The tile labels the grid must carry, in order; the same list is pinned in the AST by honesty-check.ts. */
+const TILE_LABELS = ["Operator", "GitHub", "Browser", "Council", "Scheduler", "Receipts", "Soul", "Leases"];
 
 /* ------------------------------------------------------------------ */
 /* The browser                                                         */
@@ -378,10 +398,41 @@ async function readDock(token, label, { mockOn = false } = {}) {
     const note = sec.querySelector('[data-soul-note="text"]');
     const shell = sec.parentElement ? sec.parentElement.querySelector('button[aria-expanded="true"]') : null;
     const emerald = "rgb(52, 211, 153)";
+    // Every element inside the section, read for the ways a lie can be
+    // painted without changing a word: dimmed, filtered, shadowed, given a
+    // gradient, moved, clipped, shrunk to nothing, text filled in another
+    // colour, or given ::before or ::after content that innerText never sees.
+    const all = [sec, ...sec.querySelectorAll("*")];
+    const ownText = (el) => [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim() !== "");
+    const violations = [];
+    for (const el of all) {
+      const c = cs(el);
+      const where = describe(el);
+      if (c.opacity !== "1") violations.push(`${where} opacity ${c.opacity}`);
+      if (c.visibility !== "visible") violations.push(`${where} visibility ${c.visibility}`);
+      if (c.display === "none") violations.push(`${where} display none`);
+      if (c.filter !== "none") violations.push(`${where} filter ${c.filter}`);
+      if (c.backgroundImage !== "none") violations.push(`${where} background-image ${c.backgroundImage}`);
+      if (c.transform !== "none") violations.push(`${where} transform ${c.transform}`);
+      if (c.clipPath !== "none") violations.push(`${where} clip-path ${c.clipPath}`);
+      const litLight = el.getAttribute("data-indicator") === "light" && c.backgroundColor === emerald;
+      if (el !== sec && c.boxShadow !== "none" && !litLight) violations.push(`${where} box-shadow ${c.boxShadow}`);
+      for (const pseudo of ["::before", "::after"]) {
+        const content = getComputedStyle(el, pseudo).content;
+        if (content !== "none" && content !== "normal") violations.push(`${where}${pseudo} content ${content}`);
+      }
+      if (ownText(el)) {
+        if (!(parseFloat(c.fontSize) >= 8)) violations.push(`${where} font-size ${c.fontSize}`);
+        if (c.webkitTextFillColor !== c.color) violations.push(`${where} text-fill ${c.webkitTextFillColor} over color ${c.color}`);
+        if (c.textIndent !== "0px") violations.push(`${where} text-indent ${c.textIndent}`);
+      }
+    }
     return {
       state: sec.getAttribute("data-soul-state"),
       text: sec.innerText,
       shell: shell ? shell.innerText : null,
+      hygiene: { elements: all.length, violations },
+      tiles: [...sec.querySelectorAll("[data-tile]")].map((e) => e.getAttribute("data-tile")),
       tile: tile
         ? {
             children: tile.children.length,
@@ -473,11 +524,19 @@ function assertShape(ctx, label) {
     assert.ok(!/vercel/i.test(ctx.seen.text), excerpt(ctx.seen.text));
     assert.ok(ctx.seen.text.includes(`Reads ${HOST}.`), excerpt(ctx.seen.text));
   });
+  check(`${label}: nothing inside the section is dimmed, filtered, shadowed, painted by a gradient, moved, shrunk or given pseudo element text`, () => {
+    const h = ctx.seen.hygiene;
+    assert.ok(h && h.elements >= 40, `only ${h ? h.elements : 0} elements inside the section; the walk is broken`);
+    assert.deepEqual(h.violations, [], h.violations.join(" | "));
+  });
+  check(`${label}: the tile grid is exactly the eight pinned labels in order`, () => {
+    assert.deepEqual(ctx.seen.tiles, TILE_LABELS, `the tiles are ${JSON.stringify(ctx.seen.tiles)}`);
+  });
 }
 
 function assertWords(ctx, label, { state, word, header, note, mesh, footerFailed, absent }) {
   check(`${label}: the browser sent GET /soul/status${state === "unread" ? " and was refused" : " with the bearer token"}`, () => {
-    assert.ok(ctx.request.url.endsWith("/soul/status"), `the soul read went to ${ctx.request.url}`);
+    assert.equal(ctx.request.url, `${API_BASE}/soul/status`, `the soul read went to ${ctx.request.url}, not to this job's API`);
     if (state === "unread") {
       assert.equal(ctx.request.status, 401, `the refused token got ${ctx.request.status}`);
     } else {
@@ -544,7 +603,7 @@ assertWords(on, "mocked on", {
 /* An exact count, so a deleted check is a red run                     */
 /* ------------------------------------------------------------------ */
 
-const EXPECTED_CHECKS = 4 + 3 * (6 + 4) + 1;
+const EXPECTED_CHECKS = 4 + 3 * (8 + 4) + 1;
 assert.equal(checks, EXPECTED_CHECKS, `${checks} checks ran; this file makes exactly ${EXPECTED_CHECKS}. A check went missing rather than failing`);
 
 const seconds = ((Date.now() - STARTED_AT) / 1000).toFixed(1);

@@ -252,12 +252,19 @@ check("the recorded goal panel carries the runner reason from the matrix", () =>
  * the checks below pin that value's expression exactly, pin that the status
  * object is read in exactly two places, pin what is allowed to feed it, and
  * pin the words as data rather than as a ternary anyone can reorder. The DOM
- * level check is scripts/dock-smoke.mjs, which reads the rendered words off a
- * real page with a real token and with a refused one, and cannot be edited
- * around; these are the fast checks that name the edit.
+ * level check is scripts/dock-smoke.mjs, which captures the browser's request,
+ * reads computed pixels and asserts the rendered words on a real page in three
+ * states. A third critic still painted four lies past both, through Tailwind
+ * arbitrary variants on unpinned ancestors and pseudo element text that
+ * innerText cannot see, plus a second Soul tile and a reworded fallback, which
+ * is why the class allowlist, the tile label pin, the exact fallback pin and
+ * the global rebinding check below exist. These are the fast checks that name
+ * the edit; the smoke reads what a person sees.
  */
 
 const DOCK = "components/command-center/CapabilityDock.tsx";
+const ON_FALLBACK = "Soul recall is on and the status route gave no detail.";
+const OFF_FALLBACK = "Soul recall is off and the status route gave no detail. SOUL_RECALL_ENABLED and PINECONE_API_KEY turn it on.";
 
 function unparen(node: ts.Node): ts.Node {
   while (ts.isParenthesizedExpression(node)) node = node.expression;
@@ -825,10 +832,96 @@ check("the three note sentences are the pinned ones, and the fallbacks name them
     ],
     "soulNote's four sentences are not the pinned ones, in order. The second critic made the on branch claim Pinecone had been probed; change these words as a decision, here and in dock-smoke.mjs together",
   );
-  const literals = collect(body, (n) => ts.isStringLiteral(n)).map((n) => (n as ts.StringLiteral).text);
-  for (const fallback of literals.filter((t) => /Soul recall is/.test(t))) {
-    assert.ok(/gave no detail/.test(fallback), `the fallback ${JSON.stringify(fallback)} could pass for the route's own detail; a fallback names itself as one`);
+  // The two fallbacks, pinned by exact text on the one `detail` binding inside
+  // soulNote. The first version filtered string literals by /Soul recall is/
+  // and asserted /gave no detail/ on the matches, so the third critic reworded
+  // a fallback to "Recall is on and Pinecone answered the probe." and the
+  // filter never looked at it.
+  const details = collect(body, (n) => ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === "detail") as ts.VariableDeclaration[];
+  assert.equal(details.length, 1, "soulNote does not bind `detail` exactly once");
+  const init = unparen(details[0].initializer as ts.Node);
+  assert.ok(
+    ts.isBinaryExpression(init) && init.operatorToken.kind === ts.SyntaxKind.BarBarToken && ts.isPropertyAccessExpression(unparen(init.left)) && isIdent((unparen(init.left) as ts.PropertyAccessExpression).expression, "soul") && (unparen(init.left) as ts.PropertyAccessExpression).name.text === "detail",
+    "detail is not `soul?.detail || (...)`",
+  );
+  const fb = unparen(init.right);
+  assert.ok(
+    ts.isConditionalExpression(fb) && isEqualsString(fb.condition, "soulState", "on") && isStr(unparen(fb.whenTrue), ON_FALLBACK) && isStr(unparen(fb.whenFalse), OFF_FALLBACK),
+    `the two fallbacks are not exactly the pinned sentences (on: ${JSON.stringify(ON_FALLBACK)}; off: ${JSON.stringify(OFF_FALLBACK)}); a fallback names itself as one, and changing it is a decision made here and in dock-smoke.mjs together`,
+  );
+});
+
+/** The tile grid, as data. A ninth tile or a second Soul is a lie the DOM reader would never see, because it takes the first match. */
+const TILE_LABELS = ["Operator", "GitHub", "Browser", "Council", "Scheduler", "Receipts", "Soul", "Leases"];
+
+check("the tile grid is exactly the eight pinned labels in order, Soul once", () => {
+  const file = parse(DOCK);
+  const labels = dockTiles(file).map((t) => {
+    const first = unparen(t.elements[0]);
+    assert.ok(ts.isStringLiteral(first), `a tile's label is not a string literal: ${t.getText().slice(0, 60)}`);
+    return first.text;
+  });
+  assert.deepEqual(labels, TILE_LABELS, "the tile grid is not exactly the eight pinned labels in order; the third critic added a second Soul tile, lit whenever the route answered, and both readers took the first match");
+  assert.equal(new Set(labels.map((l) => l.toLowerCase())).size, labels.length, "two tiles share a label once upper cased");
+});
+
+/**
+ * Every class token inside the section, allowlisted. A refusal list is the
+ * shape the third critic beat: it painted an emerald gradient over the grey
+ * light, zeroed the tile word's font size and wrote "recall on" into ::after,
+ * hid the header value behind filter:opacity(0) beside an ::after "ON", and
+ * hid the note the same way under an ::after sentence naming a Vercel
+ * project, all through Tailwind arbitrary variants on ancestors whose
+ * className nothing pinned. So nothing inside the section may carry a token
+ * outside this list, and adding one is a decision made in this file.
+ */
+const SECTION_CLASS = "mb-2 w-[min(92vw,380px)] border border-[#3e617c] bg-[#071016]/95 shadow-2xl shadow-black/50 backdrop-blur-xl";
+const ALLOWED_CLASS =
+  /^(flex|grid|grid-cols-2|items-center|justify-between|flex-wrap|overflow-hidden|truncate|rounded-full|border|border-b|font-mono|font-semibold|uppercase|text-xs|text-white|gap-(px|[0-9.]+)|(p|px|py|pl|mt|leading)-[0-9.]+|(w|h)-[0-9.]+|border-(\[#[0-9a-f]{6}\]|sky-400\/25)|bg-(\[#[0-9a-f]{6}\]|black\/15|sky-400\/\[0\.06\]|emerald-400)|text-(\[(8|9|10)px\]|\[#[0-9a-f]{6}\]|sky-[0-9]{3}(\/[0-9]{2})?)|tracking-\[0\.[0-9]+em\]|hover:(border-\[#[0-9a-f]{6}\]\/[0-9]{2}|text-white)|shadow-\[0_0_10px_rgba\(52,211,153,\.7\)\])$/;
+
+check("every class inside the section is a literal from the allowlist, and nothing carries a style attribute or raw HTML", () => {
+  const file = parse(DOCK);
+  const sections = collect(file, (n) => ts.isJsxOpeningElement(n) && n.tagName.getText() === "section") as ts.JsxOpeningElement[];
+  assert.equal(sections.length, 1, "the dock does not render exactly one section");
+  const section = sections[0].parent as ts.JsxElement;
+  const sectionCls = sections[0].attributes.properties.find((a) => ts.isJsxAttribute(a) && a.name.getText() === "className") as ts.JsxAttribute | undefined;
+  assert.ok(sectionCls && sectionCls.initializer && ts.isStringLiteral(sectionCls.initializer) && sectionCls.initializer.text === SECTION_CLASS, "the section's className is not the pinned literal");
+  const everyAttr = collect(file, (n) => ts.isJsxAttribute(n)) as ts.JsxAttribute[];
+  for (const attr of everyAttr) {
+    const name = attr.name.getText();
+    assert.ok(name !== "style" && name !== "dangerouslySetInnerHTML", `${name} attribute in the dock; inline styles and raw HTML are a painted lie the AST cannot read`);
   }
+  const attrs = collect(section, (n) => ts.isJsxAttribute(n)) as ts.JsxAttribute[];
+  assert.ok(attrs.length > 30, `only ${attrs.length} attributes inside the section; the walk is broken`);
+  const offending: string[] = [];
+  let tokens = 0;
+  for (const attr of attrs) {
+    if (attr.name.getText() !== "className" || attr === sectionCls) continue;
+    assert.ok(attr.initializer && ts.isStringLiteral(attr.initializer), `a className inside the section is not a string literal: ${attr.getText().slice(0, 80)}`);
+    for (const token of attr.initializer.text.split(/\s+/).filter(Boolean)) {
+      tokens += 1;
+      if (!ALLOWED_CLASS.test(token)) offending.push(token);
+    }
+  }
+  assert.ok(tokens > 80, `only ${tokens} class tokens inside the section; the walk is broken`);
+  assert.deepEqual([...new Set(offending)], [], `class tokens inside the section outside the allowlist: ${[...new Set(offending)].join(" ")}. Adding one is a decision made in ALLOWED_CLASS, with the reason`);
+});
+
+check("no global the dock relies on is rebound, nothing writes to window, and API_BASE is one plain import", () => {
+  const file = parse(DOCK);
+  for (const name of ["fetch", "Promise", "Boolean", "String", "URL", "Response", "JSON", "Object", "localStorage", "document", "window", "globalThis", "self"]) {
+    assert.equal(bindingsNamed(file, name).length, 0, `${name} is bound inside the dock; the third critic shadowed fetch at module scope so a 401 came back as an off answer`);
+  }
+  const writes = collect(file, (n) => ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isPropertyAccessExpression(unparen(n.left)) && ["globalThis", "window", "self"].some((g) => isIdent((unparen(n.left) as ts.PropertyAccessExpression).expression, g)));
+  assert.equal(writes.length, 0, "the dock assigns a property on the global object");
+  const defines = collect(file, (n) => ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === "defineProperty");
+  assert.equal(defines.length, 0, "the dock calls defineProperty");
+  const apiBase = bindingsNamed(file, "API_BASE");
+  assert.equal(apiBase.length, 1, `API_BASE is bound ${apiBase.length} time(s) in the dock; the third critic rebound it to another host beside the import`);
+  const spec = apiBase[0];
+  assert.ok(ts.isImportSpecifier(spec) && !spec.propertyName, "API_BASE is not a plain import specifier");
+  const decl = spec.parent.parent.parent;
+  assert.ok(ts.isImportDeclaration(decl) && ts.isStringLiteral(decl.moduleSpecifier) && decl.moduleSpecifier.text === "@/lib/api-base", "API_BASE is not imported from @/lib/api-base");
 });
 
 /* ------------------------------------------------------------------ */
@@ -1000,5 +1093,10 @@ check("the landing page names no capability a visitor cannot reach", () => {
     );
   }
 });
+
+// A floor, so a deleted check is a red run and not a quieter green one. The
+// dock smoke has carried one since its first version; this file did not.
+const EXPECTED_CHECKS = 16;
+assert.equal(checks, EXPECTED_CHECKS, `${checks} checks ran; this file makes exactly ${EXPECTED_CHECKS}. A check went missing rather than failing`);
 
 console.log(`\n${checks} honesty checks passed`);

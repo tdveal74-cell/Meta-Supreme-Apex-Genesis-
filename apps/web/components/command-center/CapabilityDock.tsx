@@ -41,9 +41,11 @@ type ToolCatalog = {
  * GET /soul/status on API_BASE (app/api/v1/soul.py). `enabled` means
  * SOUL_RECALL_ENABLED and PINECONE_API_KEY are both set in THAT service's
  * environment, read without touching Pinecone. The phone lane at
- * devon-soul.vercel.app carries its own key and its own status route, and
- * this dock never asks it. A diagnostic on 2026-09-15 spent itself on that
- * project because nothing on this readout said which host answers.
+ * devon-soul.vercel.app carries its own key and its own status route
+ * (deploy/soul/main.py:490, keyed on PINECONE_API_KEY alone; its
+ * /api/v1/health read soul_key_set true on 2026-09-15), and this dock never
+ * asks it. A diagnostic on 2026-09-15 spent itself on that project because
+ * nothing on this readout said which host answers.
  */
 type SoulStatus = {
   enabled?: boolean;
