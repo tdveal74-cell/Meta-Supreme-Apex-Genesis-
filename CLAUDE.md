@@ -94,7 +94,7 @@ test failure. It shows up as a hundred or more collection ERRORs.
 
 ## Reproducing CI
 
-CI is EIGHT jobs, and on most pull requests you will see five. Five are in
+CI is NINE jobs, and on most pull requests you will see five. Five are in
 `.github/workflows/ci.yml` (`standalone` then `container` and `engine` then
 `api`, plus `dependency-audit` on every push). The sixth is
 `.github/workflows/web-ci.yml`, path filtered to the web workspace, so a run of
@@ -126,6 +126,16 @@ Same posture as the audio job: Playwright global rather than a devDependency,
 and both resolvers THROW so a runner without Chromium turns it red. Do not point
 `SMOKE_API_BASE` at a deployed surface: the run registers an account and writes
 a project, a memory, a decision and a workflow.
+
+The ninth arrived on 2026-09-11 in `df52510`, and this paragraph said eight
+until 2026-09-15, when a readiness audit counted the `jobs:` keys of the five
+files in `.github/workflows` instead of trusting the sentence: `render-worker-ci.yml`,
+filtered to `deploy/render-worker/**`, runs on pull requests and on pushes to
+`main`. Its own comment says what it proves, the argv and filter graphs the
+builders emit and the HTTP contract against a listening server, and what it
+does not, no pixel and no sample. The steward skill still says five jobs plus
+a sixth; that count is older still. Before editing this number again, count it
+from the files.
 
 The standalone job runs with no database. This paragraph said it also runs
 with **no** `PYTHONPATH` until 2026-09-09, when a worktree agent read the file
