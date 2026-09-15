@@ -55,7 +55,7 @@ the dock never asks that service. If it is set anyway it has to carry `https://`
 builds the search URL by string concatenation, and a scheme-less host reaches
 httpx as an unsupported protocol, which `_request` reports as
 `ProviderServerError("Network error calling Pinecone: ...")` inside the
-recall's `errors` list rather than as a crash.
+recall's `errors` list, with no crash.
 
 The restart is what lights the tile, not the variable write:
 `app/core/config.py:304-309` builds `settings` once per process and
@@ -65,7 +65,7 @@ repository cannot verify; confirm it from the deployment list after the fact.
 
 The key is Tee's secret and no file in the tree holds it. A session with the
 Railway connector could write the flag, and writing a production variable is
-his call rather than a session's, so neither is done here. The network policy
+his call and never a session's, so neither is done here. The network policy
 blocks `railway.app` from this container, so the read back below is his too.
 
 ## How to know it worked
@@ -139,17 +139,20 @@ because the local `meta_supreme` database had never been stamped and
 ran 18 upgrades and the second attempt passed. The job runs that step before
 starting the API, which is why it is there.
 
-Measured on the reworked tree: `check:honesty` 10 checks; typecheck and the
+Measured on `27abd48`, the first rework: `check:honesty` 10 checks; typecheck and the
 production build exit 0; the other nine `check:*` scripts exit 0;
 `test_devon_integrity.py` 262 passed; no dash and no banned word in any
 changed file.
 
 ## The dash that had main red
 
-Main's api job has been red since run #739, `1 failed, 2509 passed`, on one
-line: `VpsActionGate.tsx:272` carried an en dash between 3 and 500 in the
-Reason label, which `test_devon_integrity.py::test_no_em_dashes_in_the_web_surface`
-refuses. The file's own error string at line 121 already says "3 to 500
+Main's api job has been red since run #735, the PR #216 merge `400fded` at
+2026-09-14T22:33:08Z, `1 failed, 2509 passed` on every run through #744 and
+on one line: `VpsActionGate.tsx:272` carried an en dash between 3 and 500 in
+the Reason label, which `test_devon_integrity.py::test_no_em_dashes_in_the_web_surface`
+refuses. This paragraph said #739 until the readiness audit listed the runs
+from the Actions API; the last green run on `main` is #733 on `95fbdd5`, the
+commit the Railway api serves. The file's own error string at line 121 already says "3 to 500
 characters", so the label now says the same, in its own commit, separate from
 the Soul change. It is on this branch because the branch cannot go green
 without it and the rule it restores has no exception path.
@@ -202,9 +205,9 @@ AREA: Systems
 TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_the-soul-tile-reads-railway_v1_2026-09-15
 DATE: 2026-09-15
-DECISIONS: none ruled. The recommendation put to Tee is to set SOUL_RECALL_ENABLED=true and PINECONE_API_KEY on the Railway api service and nothing on devon-soul, and to leave SOUL_DEVON_HOST unset because the config default already carries the right host with its scheme. Two calls were mine: the dock change was made rather than proposed, because it is the same honesty fix the Scheduler tile got on 2026-09-10 and it is guarded the same way; and the en dash on main was fixed in its own commit rather than reported, because the branch cannot go green without it and the rule has no exception path. Both are one revert if Tee disagrees.
-FINDINGS: the DEVON capability mesh reads the Railway platform API at api-production-5644.up.railway.app for all four of its fetches, api-base.ts:7 and CapabilityDock.tsx:141-146, confirmed by the Railway http log on deployment 84ad6a1c showing an iPhone hitting /api/v1/soul/status in the same burst as the other three; the devon-soul Vercel project is never asked by the dock, never reads SOUL_RECALL_ENABLED, and already has its key, its /api/v1/health answering soul_key_set true; the Railway api service carries none of the four SOUL variables, so app/api/v1/soul.py:77 computes enabled false from the config defaults and the tile is grey on configuration alone; SOUL_DEVON_HOST defaults at config.py:159 to the exact host the handover names, with the scheme, so it needs no setting; the dock rendered a failed status read as "recall off", discarded the route's detail naming the variables, and named no host, which is why the handover went to the wrong surface; main's api job was red on exactly one test, the en dash at VpsActionGate.tsx:272, 1 failed 2509 passed on run #744; the first Soul guard was beaten eleven times in one session by a critic and was replaced by six shape checks plus a browser smoke, 21 checks in Chromium with 17 mutations red; DEPLOY.md said there was no vercel.json and that nothing read NEXT_PUBLIC_API_URL, both false against the tree, corrected in their own commit.
-OPEN: Tee sets the two variables on Railway api and runs the four read back steps; the recall probe in step 3 is the only proof of the Pinecone connection, because the status route never calls Pinecone by design; the dock's "recall on" therefore means configured, and a revoked key would still read green until a recall fails, which is a deliberate trade against polling Pinecone every 45 seconds and is stated on the panel; the handover's origin, a Gemini iOS webview also seen in the Railway log at 04:54:06Z, carried three wrong claims that a file read would have caught, and whatever produced it should be pointed at this doc before it is asked again; the dock smoke proves the off and unread states and the on state is pinned by the shape check alone, because the stack the job stands up carries no soul variables.
-STATUS: filed with four code commits and this doc on the designated branch, draft PR, nothing merged and nothing set on any live surface. The Soul tile stays grey until Tee sets the variables. Every claim above was measured today against the live estate or read off a named file and line, and the four things that could not be measured are listed rather than rounded up.
+DECISIONS: none ruled. The recommendation put to Tee is to set SOUL_RECALL_ENABLED=true and PINECONE_API_KEY on the Railway api service and nothing on devon-soul, and to leave SOUL_DEVON_HOST unset because the config default already carries the right host with its scheme. Two calls were mine: the dock change was made, with no proposal step, because it is the same honesty fix the Scheduler tile got on 2026-09-10 and it is guarded the same way; and the en dash on main was fixed in its own commit instead of being reported, because the branch cannot go green without it and the rule has no exception path. Both are one revert if Tee disagrees.
+FINDINGS: the DEVON capability mesh reads the Railway platform API at api-production-5644.up.railway.app for all four of its fetches, api-base.ts:7 and CapabilityDock.tsx:141-146, confirmed by the Railway http log on deployment 84ad6a1c showing an iPhone hitting /api/v1/soul/status in the same burst as the other three; the devon-soul Vercel project is never asked by the dock, never reads SOUL_RECALL_ENABLED, and already has its key, its /api/v1/health answering soul_key_set true; the Railway api service carries none of the four SOUL variables, so app/api/v1/soul.py:77 computes enabled false from the config defaults and the tile is grey on configuration alone; SOUL_DEVON_HOST defaults at config.py:159 to the exact host the handover names, with the scheme, so it needs no setting; the dock rendered a failed status read as "recall off", discarded the route's detail naming the variables, and named no host, which is why the handover went to the wrong surface; main's api job was red on exactly one test, the en dash at VpsActionGate.tsx:272, 1 failed 2509 passed on run #744; the first Soul guard was beaten eleven times by one critic and its rework nine times by a second, and what holds now is thirteen shape checks plus a browser smoke that captures the request, reads the pixels and drives the on state, 35 checks over three contexts with 29 mutations red; DEPLOY.md said there was no vercel.json and that nothing read NEXT_PUBLIC_API_URL, both false against the tree, corrected in their own commit.
+OPEN: Tee sets the two variables on Railway api and runs the four read back steps; the recall probe in step 3 is the only proof of the Pinecone connection, because the status route never calls Pinecone by design; the dock's "recall on" therefore means configured, and a revoked key would still read green until a recall fails, which is a deliberate trade against polling Pinecone every 45 seconds and is stated on the panel; the handover's origin, a Gemini iOS webview also seen in the Railway log at 04:54:06Z, carried three wrong claims that a file read would have caught, and whatever produced it should be pointed at this doc before it is asked again; the dock smoke drives the on state through a route mock because the stack the job stands up carries no soul variables, so a real on read against a configured API is still Tee's step 1.
+STATUS: filed with five code commits and this doc on the designated branch, draft PR, nothing merged and nothing set on any live surface. The Soul tile stays grey until Tee sets the variables. Every claim above was measured today against the live estate or read off a named file and line, and the four things that could not be measured are listed, with no rounding up.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
