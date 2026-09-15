@@ -45,8 +45,8 @@ def test_column_types_follow_the_airtable_field_type():
     assert am.column_type("number") == "number"
     assert am.column_type("rating") == "number"
     assert am.column_type("checkbox") == "boolean"
-    assert am.column_type("date") == "date"
-    assert am.column_type("dateTime") == "date"
+    assert am.column_type("date") == "string"
+    assert am.column_type("dateTime") == "string"
     assert am.column_type("singleSelect") == "string"
     assert am.column_type("multipleAttachments") == "string"
     assert am.column_type("formula") == "string"
@@ -99,3 +99,18 @@ def test_plan_base_skips_excluded_tables_and_keeps_order():
     plans = am.plan_base("tqo", schema, {"t1": [{"id": "r", "createdTime": "2026-01-01T00:00:00.000Z", "cellValuesByFieldId": {"a": "x"}}]})
     assert [p["table"] for p in plans] == ["at_tqo_leads", "at_tqo_offers"]
     assert plans[1]["rows"] == []
+
+
+def test_a_date_field_becomes_a_string_column_so_no_day_can_shift():
+    """An n8n ``date`` column stamps the instance timezone onto a bare date.
+
+    Measured on n8n.editforge.online 2026-09-15: "2026-08-06" inserted into a
+    ``date`` column read back "2026-08-06T04:00:00.000Z", which is the previous
+    day anywhere west of UTC-4. Every Airtable date type therefore lands in a
+    ``string`` column carrying the Airtable value unchanged. This test exists so
+    the rule cannot be relaxed back without someone re-running that probe.
+    """
+    for field_type in ("date", "dateTime", "createdTime", "lastModifiedTime"):
+        assert am.column_type(field_type) == "string", field_type
+    assert am.cell_value("string", "2026-08-06") == "2026-08-06"
+    assert am.cell_value("string", "2026-07-21T22:02:59.000Z") == "2026-07-21T22:02:59.000Z"
