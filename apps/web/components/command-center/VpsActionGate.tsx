@@ -310,40 +310,48 @@ export function VpsActionGate() {
       {receipt && (
         <div className="mt-3 border border-[#22384a] bg-[#091017] p-3 font-mono text-[11px] leading-5 text-[#93a6b5]">
           <p className="text-[10px] uppercase tracking-[0.16em] text-[#6f8494]">
-            Receipt
+            Receipt (all fields)
           </p>
-          {receipt.request_id && (
-            <p className="mt-1 break-all text-[#ede7dc]">
-              id · {receipt.request_id}
-            </p>
+          {Object.keys(receipt).length === 0 ? (
+            <p className="mt-1 text-[#6f8494]">Empty response</p>
+          ) : (
+            Object.entries(receipt).map(([key, value]) => {
+              // Skip internal/secret fields
+              if (["DEVON_OPS_SECRET", "secret"].includes(key)) return null;
+              
+              // Handle status field with color coding
+              if (key === "status" || key === "state") {
+                const statusValue = String(value);
+                return (
+                  <p key={key}>
+                    {key} ·{" "}
+                    <span
+                      className={
+                        statusValue === "pending"
+                          ? "text-amber-300"
+                          : statusValue === "approved"
+                            ? "text-emerald-300"
+                            : statusValue === "rejected"
+                              ? "text-red-300"
+                              : "text-[#ede7dc]"
+                      }
+                    >
+                      {statusValue}
+                    </span>
+                  </p>
+                );
+              }
+
+              // Handle other fields
+              if (value === null || value === undefined) return null;
+              
+              return (
+                <p key={key}>
+                  {key} · <span className="text-[#ede7dc]">{String(value)}</span>
+                </p>
+              );
+            })
           )}
-          {(receipt.status || receipt.state) && (
-            <p>
-              status ·{" "}
-              <span
-                className={
-                  (receipt.status || receipt.state) === "pending"
-                    ? "text-amber-300"
-                    : (receipt.status || receipt.state) === "approved"
-                      ? "text-emerald-300"
-                      : (receipt.status || receipt.state) === "rejected"
-                        ? "text-red-300"
-                        : "text-[#ede7dc]"
-                }
-              >
-                {receipt.status || receipt.state}
-              </span>
-            </p>
-          )}
-          {(receipt.operation || receipt.target) && (
-            <p>
-              action · {receipt.operation}/{receipt.target}
-            </p>
-          )}
-          {receipt.reason && <p>reason · {receipt.reason}</p>}
-          {receipt.approved_by && <p>approved_by · {receipt.approved_by}</p>}
-          {receipt.rejected_by && <p>rejected_by · {receipt.rejected_by}</p>}
-          {receipt.message && <p>msg · {receipt.message}</p>}
         </div>
       )}
 
