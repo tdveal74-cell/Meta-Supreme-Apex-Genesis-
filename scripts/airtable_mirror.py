@@ -119,7 +119,9 @@ def _scalar(v: Any) -> Any:
     if isinstance(v, dict):
         # A select choice, a collaborator, an attachment: the human readable
         # part wins, the id is not the value Tee reads.
-        for key in ("name", "url", "email", "id"):
+        # An aiText cell is {"state", "value"}; "value" comes first so the
+        # generated text wins over its state word.
+        for key in ("value", "name", "url", "email", "id"):
             if key in v and v[key] not in (None, ""):
                 return str(v[key])
         return json.dumps(v, ensure_ascii=False, sort_keys=True)

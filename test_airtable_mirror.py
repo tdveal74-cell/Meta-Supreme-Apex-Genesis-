@@ -57,6 +57,8 @@ def test_cells_keep_the_human_readable_part_and_never_fabricate_a_number():
     assert am.cell_value("string", [{"id": "selA", "name": "A"}, {"id": "selB", "name": "B"}]) == "A, B"
     assert am.cell_value("string", [{"id": "att1", "url": "https://x/y.png", "filename": "y.png"}]) == "https://x/y.png"
     assert am.cell_value("string", ["recA", "recB"]) == "recA, recB"
+    assert am.cell_value("string", {"state": "generated", "value": "Summary text"}) == "Summary text"
+    assert am.cell_value("string", {"id": "usr1", "email": "a@b.c", "name": "Tee"}) == "Tee"
     assert am.cell_value("number", "not a number") is None
     assert am.cell_value("number", "12.5") == 12.5
     assert am.cell_value("boolean", "yes") is True
