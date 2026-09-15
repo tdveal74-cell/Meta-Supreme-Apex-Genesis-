@@ -19,6 +19,14 @@ type GateStatus =
   | "done"
   | "error";
 
+type ApprovalData = {
+  id?: string;
+  request_id?: string;
+  status?: string;
+  state?: string;
+  [key: string]: unknown;
+};
+
 type Receipt = {
   request_id?: string;
   status?: string;
@@ -33,6 +41,8 @@ type Receipt = {
   message?: string;
   error?: string;
   ok?: boolean;
+  approval?: ApprovalData;
+  requires_human_approval?: boolean;
   [key: string]: unknown;
 };
 
@@ -63,6 +73,25 @@ async function callProxy(
   return data;
 }
 
+/**
+ * Extract the request_id from either top-level or nested in approval object
+ */
+function getRequestId(receipt: Receipt): string | undefined {
+  return receipt.request_id || (receipt.approval as ApprovalData)?.request_id || (receipt.approval as ApprovalData)?.id;
+}
+
+/**
+ * Extract the status from either top-level or nested in approval object
+ */
+function getStatus(receipt: Receipt): string | undefined {
+  return (
+    receipt.status ||
+    receipt.state ||
+    (receipt.approval as ApprovalData)?.status ||
+    (receipt.approval as ApprovalData)?.state
+  );
+}
+
 export function VpsActionGate() {
   const [choice, setChoice] = useState<ActionChoice>("system:pause");
   const [reason, setReason] = useState("");
@@ -77,7 +106,7 @@ export function VpsActionGate() {
     status === "approving" ||
     status === "rejecting";
 
-  const hasRequest = Boolean(receipt?.request_id);
+  const hasRequest = Boolean(getRequestId(receipt || {}));
   const showPendingControls =
     hasRequest &&
     (status === "pending" || status === "approving" || status === "rejecting");
@@ -106,12 +135,10 @@ export function VpsActionGate() {
 
         console.log("=== VPS RESPONSE (requestAction) ===");
         console.log("Full response:", data);
-        console.log("data.status:", data.status);
-        console.log("data.state:", data.state);
-        console.log("data.ok:", data.ok);
-        console.log("data.error:", data.error);
-        console.log("data.request_id:", data.request_id);
-        console.log("ALL keys:", Object.keys(data));
+        console.log("data.approval:", data.approval);
+        console.log("data.requires_human_approval:", data.requires_human_approval);
+        console.log("getRequestId():", getRequestId(data));
+        console.log("getStatus():", getStatus(data));
 
         if (data.error || data.ok === false) {
           setError(data.error || data.message || "Request failed");
@@ -121,11 +148,12 @@ export function VpsActionGate() {
         }
 
         setReceipt(data);
-        // Check both 'status' and 'state' fields (VPS may return either)
-        const currentStatus = data.status || data.state;
-        console.log("currentStatus resolved to:", currentStatus);
-        console.log("Setting status to:", currentStatus === "pending" ? "pending" : "done");
-        setStatus(currentStatus === "pending" ? "pending" : "done");
+        // If requires_human_approval is true, we're in pending state
+        const currentStatus = getStatus(data);
+        const isPending = data.requires_human_approval === true || currentStatus === "pending";
+        console.log("isPending:", isPending);
+        console.log("Setting status to:", isPending ? "pending" : "done");
+        setStatus(isPending ? "pending" : "done");
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
         setStatus("error");
@@ -136,7 +164,8 @@ export function VpsActionGate() {
 
   const decide = useCallback(
     async (decision: "approve" | "reject") => {
-      if (!receipt?.request_id || isBusy) return;
+      const requestId = getRequestId(receipt || {});
+      if (!requestId || isBusy) return;
 
       setError("");
       setStatus(decision === "approve" ? "approving" : "rejecting");
@@ -144,8 +173,8 @@ export function VpsActionGate() {
       try {
         const body =
           decision === "approve"
-            ? { request_id: receipt.request_id, approved_by: "Tee" }
-            : { request_id: receipt.request_id, rejected_by: "Tee" };
+            ? { request_id: requestId, approved_by: "Tee" }
+            : { request_id: requestId, rejected_by: "Tee" };
 
         const data = await callProxy(decision, body);
 
@@ -163,16 +192,17 @@ export function VpsActionGate() {
         setStatus("error");
       }
     },
-    [isBusy, receipt?.request_id],
+    [isBusy, receipt],
   );
 
   const refreshStatus = useCallback(async () => {
-    if (!receipt?.request_id || isBusy) return;
+    const requestId = getRequestId(receipt || {});
+    if (!requestId || isBusy) return;
 
     setError("");
     try {
       const data = await callProxy("approval-status", {
-        request_id: receipt.request_id,
+        request_id: requestId,
       });
 
       if (data.error) {
@@ -181,14 +211,14 @@ export function VpsActionGate() {
       }
 
       setReceipt((prev) => ({ ...prev, ...data }));
-      const currentStatus = data.status || data.state;
-      if (currentStatus && currentStatus !== "pending") {
+      const currentStatus = getStatus(data);
+      if (currentStatus && currentStatus !== "pending" && data.requires_human_approval !== true) {
         setStatus("done");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [isBusy, receipt?.request_id]);
+  }, [isBusy, receipt]);
 
   const reset = () => {
     setStatus("idle");
@@ -310,48 +340,75 @@ export function VpsActionGate() {
       {receipt && (
         <div className="mt-3 border border-[#22384a] bg-[#091017] p-3 font-mono text-[11px] leading-5 text-[#93a6b5]">
           <p className="text-[10px] uppercase tracking-[0.16em] text-[#6f8494]">
-            Receipt (all fields)
+            Receipt
           </p>
-          {Object.keys(receipt).length === 0 ? (
-            <p className="mt-1 text-[#6f8494]">Empty response</p>
-          ) : (
-            Object.entries(receipt).map(([key, value]) => {
-              // Skip internal/secret fields
-              if (["DEVON_OPS_SECRET", "secret"].includes(key)) return null;
-              
-              // Handle status field with color coding
-              if (key === "status" || key === "state") {
-                const statusValue = String(value);
-                return (
-                  <p key={key}>
-                    {key} ·{" "}
-                    <span
-                      className={
-                        statusValue === "pending"
-                          ? "text-amber-300"
-                          : statusValue === "approved"
-                            ? "text-emerald-300"
-                            : statusValue === "rejected"
-                              ? "text-red-300"
-                              : "text-[#ede7dc]"
-                      }
-                    >
-                      {statusValue}
-                    </span>
-                  </p>
-                );
-              }
-
-              // Handle other fields
-              if (value === null || value === undefined) return null;
-              
-              return (
-                <p key={key}>
-                  {key} · <span className="text-[#ede7dc]">{String(value)}</span>
-                </p>
-              );
-            })
+          
+          {/* Extracted top-level fields */}
+          {getRequestId(receipt) && (
+            <p className="mt-1 break-all text-[#ede7dc]">
+              request_id · {getRequestId(receipt)}
+            </p>
           )}
+          
+          {getStatus(receipt) && (
+            <p>
+              status ·{" "}
+              <span
+                className={
+                  getStatus(receipt) === "pending"
+                    ? "text-amber-300"
+                    : getStatus(receipt) === "approved"
+                      ? "text-emerald-300"
+                      : getStatus(receipt) === "rejected"
+                        ? "text-red-300"
+                        : "text-[#ede7dc]"
+                }
+              >
+                {getStatus(receipt)}
+              </span>
+            </p>
+          )}
+
+          {receipt.requires_human_approval !== undefined && (
+            <p>
+              requires_human_approval ·{" "}
+              <span className="text-[#ede7dc]">
+                {String(receipt.requires_human_approval)}
+              </span>
+            </p>
+          )}
+
+          {/* Approval object nested fields */}
+          {receipt.approval && typeof receipt.approval === "object" && (
+            <>
+              <p className="mt-2 text-[10px] uppercase tracking-[0.16em] text-[#6f8494]">
+                approval:
+              </p>
+              {Object.entries(receipt.approval as Record<string, unknown>).map(
+                ([key, value]) => {
+                  if (value === null || value === undefined) return null;
+                  return (
+                    <p key={key} className="ml-2">
+                      {key} · <span className="text-[#ede7dc]">{String(value)}</span>
+                    </p>
+                  );
+                }
+              )}
+            </>
+          )}
+
+          {/* Other top-level fields */}
+          {Object.entries(receipt).map(([key, value]) => {
+            // Skip fields we've already rendered
+            if (["request_id", "status", "state", "requires_human_approval", "approval", "DEVON_OPS_SECRET", "secret"].includes(key)) return null;
+            if (value === null || value === undefined || typeof value === "object") return null;
+            
+            return (
+              <p key={key}>
+                {key} · <span className="text-[#ede7dc]">{String(value)}</span>
+              </p>
+            );
+          })}
         </div>
       )}
 
