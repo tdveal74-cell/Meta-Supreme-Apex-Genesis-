@@ -1,0 +1,261 @@
+{
+ "_read_at": "2026-09-15T21:00Z",
+ "_what": "Cloud to VPS identity maps for the DEVON cutover Tee ruled on 2026-09-15. Every value was read from both live instances in that session, never copied from a doc. Ids are endpoints, not secrets; the token behind a credential id never appears here.",
+ "_ruling": "Every DEVON organ runs on the VPS, live and published. Open ledger jobs move, terminal ones stay, the approval queue never moves.",
+ "host_from": "https://thequietoperator.app.n8n.cloud",
+ "host_to": "https://n8n.editforge.online",
+ "workflow_ids": {
+  "5s6CwWWelffqszQe": "CEy7WAl4QAzHfG46",
+  "pPIt2cELH2RVZktS": "Me7DDHBDX28ppvHA",
+  "wndFo6uJCqVuINaV": "IZBVlXQ8Y5dsGTRS",
+  "W5rlpAt6hsJAExU6": "4BXO9CX8MdYYyGMq",
+  "YHueoBK7TSLdTlfF": "3B8pGfSklJMte3ut",
+  "edIJx7Q3FXTawg9J": "rZdhFXcsOyBcEkgR",
+  "syRVj0G47mA1b0Xn": "Ia28EHrxtiI8cjeA",
+  "X7OGXWHBx57CIG42": "3tY1sJF3brpvdkgi",
+  "rqYmaQh91iCce8DJ": "GbeNilHQzjmoWDz3",
+  "7WyIarNoJa2irx2r": "vpe8TglGmFwz4YRu",
+  "z9j2I8h0RnbDKGBO": "hDmTRI5VAZ3a8sTn",
+  "Oi7o1sTEqhxhOaJL": "VUXIyCaur9lejAhL",
+  "5Nc9yh6WSqBJ41ok": "ePvPCXVUjygZzvQT",
+  "xh3EkLmgTDJFhzGH": "8QiP1xQiB21Ic42Z",
+  "Bvy0grTSIyEmPwFA": "11weboiKowmLq3d0",
+  "OFIhA7zdFv9UoyCv": "LnbtB81ItUYptbWg",
+  "VznESplSFCs8ldph": "VzJsSlDswkIJ9wok",
+  "6hQD8YhiYzR1FFda": "GEbNoDMBdGqDfZJ2",
+  "lANs6wopaK0PkNhN": "drP96ernQvbrvzIZ",
+  "XDQXwgFkUhYxoEjG": "bqcnIS0Qv4RkTCU1",
+  "we45pHkQHRmSRnZx": "VGwrZPdZ5se2pr03",
+  "dRgTNLod2s8BAcPg": "EEDrp2jLlw2Ssd5b",
+  "HKNEDVy7PUKPtsrN": "V0i8zTw1keMMJmhF",
+  "qCfGZ1CwmpK9vOta": "rVXA5wH5AXW4tCjp",
+  "ecLqrxALuLDdF2BN": "NYcEp03Oqlvq86Mb",
+  "J7Ly7riwXEd95D9a": "FdQgiX2Thgk38CSa",
+  "ps2S6dWcTIpq5bvr": "glEO2xa4IZmHDbkg",
+  "AEFgXee7IDJarNV7": "TciVQhWJA0y92x9P",
+  "TT4TfFXyH9O7lfdc": "MfJCYeJqVjBLFrCu",
+  "mbIKJk4UuB7V27rP": "6b4dJasBKcOPQ6oX",
+  "LsmfRFMmI5feINs0": "sPv6Cq7elbjoi5Nw",
+  "gsGJQan7a6ZufhYt": "qEkGOUsNyVaRAmm6",
+  "7bDqKNdMHY8sxoXa": "e5H3pk7YNF9jQi1r",
+  "Cbd24ptTPWch3aZO": "bCZa6KVgjHgRup1Y",
+  "M3H2mVPZJpDyIzrl": "bsxKtdx1ebMu5hGs",
+  "yro0wBRGghMjkZhj": "ZKyaYzv7DAGhJSLi",
+  "X3sKmPj6yHJu4xWu": "ptAmD28msYTvobgq",
+  "0soYvqnSKYlFn3gr": "2M8CIPebpl1nSLVx",
+  "ktZ0fnrgxvCNY9xH": "VwSnFY0Qyw03FxKk",
+  "ocU2Zep8WyRmbsIk": "aDMJX0I83b1LS5gz",
+  "Epcmuep1JnBaSrrr": "DxEB0OrDLlkDBrsF",
+  "mhI1YAoqrITtuB1M": "DjrDKJ5hTYULzGcm",
+  "o4ctniOsIq2VSfgm": "CX07qa6O1hTSXlpj",
+  "Zbq6gS77PRauqb1I": "UoJS8WDZfkVD9AVH",
+  "v6E12rr1fg1azVHi": "vqfgphaJUi1OWx5x",
+  "TL6ssgJjJLdvxrUp": "s3TE4io4Qzl4DI1Q",
+  "wl6XAUp84fiq50sj": "khY3wwZt79FQgjAW",
+  "QaXpPiVFubsOkDD1": "klTNudFrz5hXBVy2",
+  "vrcLMw802tgf3MpY": "mk6l25xXGoNHhNp7"
+ },
+ "workflow_names": {
+  "ps2S6dWcTIpq5bvr": "DEVON Airtable Row Writer (Build 17)",
+  "syRVj0G47mA1b0Xn": "DEVON Approval Queue",
+  "VznESplSFCs8ldph": "DEVON Build 12 Upstream Test",
+  "Cbd24ptTPWch3aZO": "DEVON Capture Hook",
+  "YHueoBK7TSLdTlfF": "DEVON Capture Nudge",
+  "7bDqKNdMHY8sxoXa": "DEVON Gumroad Sale Check",
+  "wndFo6uJCqVuINaV": "DEVON Pipeline Watchdog",
+  "W5rlpAt6hsJAExU6": "DEVON Precedence Guard",
+  "edIJx7Q3FXTawg9J": "DEVON Soul Layer Write-Back",
+  "0soYvqnSKYlFn3gr": "DEVON To Delete Auto-Purge (30d)",
+  "ecLqrxALuLDdF2BN": "DEVON Action Router (Build 05)",
+  "6hQD8YhiYzR1FFda": "DEVON Build 12 Ledger Feeder",
+  "pPIt2cELH2RVZktS": "DEVON Capture Webhook",
+  "5Nc9yh6WSqBJ41ok": "DEVON Conscious and Subconscious Runtime (Build 03)",
+  "J7Ly7riwXEd95D9a": "DEVON Drive Draft Writer (Build 16)",
+  "mbIKJk4UuB7V27rP": "DEVON Driver Poll (Build 14)",
+  "X7OGXWHBx57CIG42": "DEVON Duplicate Sweep",
+  "OFIhA7zdFv9UoyCv": "DEVON EditForge Handoff (Build 07)",
+  "ktZ0fnrgxvCNY9xH": "DEVON End to End Watch Harness",
+  "XDQXwgFkUhYxoEjG": "DEVON Error Alarm",
+  "Bvy0grTSIyEmPwFA": "DEVON Event Bus (Build 06)",
+  "LsmfRFMmI5feINs0": "DEVON Face (Build 15)",
+  "M3H2mVPZJpDyIzrl": "DEVON Health and Observability Console (Build 10)",
+  "dRgTNLod2s8BAcPg": "DEVON Heartbeat (Build 13)",
+  "AEFgXee7IDJarNV7": "DEVON Intake Former (Build 14)",
+  "xh3EkLmgTDJFhzGH": "DEVON Intelligence Router (Build 04)",
+  "5s6CwWWelffqszQe": "DEVON iPhone Inbox Capture",
+  "TT4TfFXyH9O7lfdc": "DEVON Job Driver (Build 14)",
+  "we45pHkQHRmSRnZx": "DEVON Learning Lane Table Reader",
+  "HKNEDVy7PUKPtsrN": "DEVON Ledger Janitor",
+  "z9j2I8h0RnbDKGBO": "DEVON Live State Ledger (Build 02)",
+  "ocU2Zep8WyRmbsIk": "DEVON Master Index",
+  "yro0wBRGghMjkZhj": "DEVON Monthly Credential Review",
+  "X3sKmPj6yHJu4xWu": "DEVON Notion Buffer Drain",
+  "Epcmuep1JnBaSrrr": "DEVON Purge List (manual)",
+  "lANs6wopaK0PkNhN": "DEVON Soul Committer (Build 12)",
+  "Oi7o1sTEqhxhOaJL": "DEVON Spine Conformance Executor",
+  "mhI1YAoqrITtuB1M": "DEVON Vault Comparison",
+  "qCfGZ1CwmpK9vOta": "DEVON Weekly Table Backup",
+  "rqYmaQh91iCce8DJ": "OS Error Handler (all pipelines)"
+ },
+ "workflows_with_no_vps_copy": {
+  "vYr35jqNNaAztGhQ": "Soul Index Setup, one shot setup, inactive",
+  "pm5hoO4eFpGhlAb4": "Build 08 Credential Probe, throwaway, inactive"
+ },
+ "error_workflows": {
+  "XDQXwgFkUhYxoEjG": "bqcnIS0Qv4RkTCU1",
+  "rqYmaQh91iCce8DJ": "GbeNilHQzjmoWDz3"
+ },
+ "data_tables": {
+  "Adg1Gd9HML7Q4L3U": "RuPMZKXkqcbuHRKa",
+  "VYyno7pDWmY6uxBz": "QZvdxllOjWevb3Vo",
+  "QeoV4V4dYXXN8dBR": "U0PqQWiq4nadKFlm",
+  "9VbICTCa4x4yhWZm": "EHrmGJfmOKNJJcc4",
+  "u6wzeN5y9LNxROsN": "AomDw2Oa9XCUluRX",
+  "tc2lBzham6J65EP7": "2GtmrFcTNqVMbddh",
+  "nwnHN8o2dgHjtk7f": "DKCusDJfIF8CPxyb",
+  "U9fnVy19Vc8kvQAw": "x8U4QqvXTVgINg3h",
+  "7OT3H8GzyqP5RgmJ": "H4cd4PrAJVmGozWe",
+  "VBW2nTLQcaZ8l74a": "Rbb2x4idectRvpIA",
+  "NTUtlcfrvNmS2oau": "DSH1tn4TZjzAEKxp"
+ },
+ "data_table_names": {
+  "Adg1Gd9HML7Q4L3U": "devon_heartbeat_log",
+  "VYyno7pDWmY6uxBz": "devon_state_ledger",
+  "QeoV4V4dYXXN8dBR": "devon_build12_feed_log",
+  "9VbICTCa4x4yhWZm": "devon_driver_log",
+  "u6wzeN5y9LNxROsN": "approval_queue",
+  "tc2lBzham6J65EP7": "tqo_content",
+  "nwnHN8o2dgHjtk7f": "devon_chat_log",
+  "U9fnVy19Vc8kvQAw": "devon_soul_commit_log",
+  "7OT3H8GzyqP5RgmJ": "devon_github_checkpoints",
+  "VBW2nTLQcaZ8l74a": "devon_soul_setup",
+  "NTUtlcfrvNmS2oau": "nco_content"
+ },
+ "vps_only_data_tables": {
+  "k3A66wV0vUoeaElo": "script_exemplars",
+  "k8q48ohh5dnwJS4a": "devon_zapier_call_log"
+ },
+ "credentials": {
+  "3XjKfxbS7zFWEa48": {
+   "id": "5vCUF12UaOsgSqMF",
+   "name": "Pinecone account"
+  },
+  "4bVgNOG53Ibog4eK": {
+   "id": "IRr81VQl9EiLIf03",
+   "name": "Eleven Labs"
+  },
+  "69GcWnTi2TDh1FAN": {
+   "id": "q31Ht7Ie3YLT4zKa",
+   "name": "Notion account"
+  },
+  "AWBt7xeE5Ecw8rfr": {
+   "id": "Wan5EWMeQiyrFOuY",
+   "name": "OpenRouter account"
+  },
+  "BT9qHSPFUV4L5hW6": {
+   "id": "KtgOCINafn32E0h4",
+   "name": "JSON2VIDEO"
+  },
+  "FYRvkRTOcROEYZ9P": {
+   "id": "MTZXcoob6BtzbJyH",
+   "name": "Devon Capture Key"
+  },
+  "FcxUsEaxn5OfXeiO": {
+   "id": "YL4Q4rZ4yFssfQVy",
+   "name": "Pinecone Api-Key"
+  },
+  "GA3sbYnmJAAo0AVC": {
+   "id": "2oUKSwU4rB6UKPPV",
+   "name": "YouTube account 2"
+  },
+  "I6xTXEaSvHNRuTdH": {
+   "id": "h8bm9vdi91sWx5jn",
+   "name": "Header Auth account 9"
+  },
+  "K1D8KUvTcWDcdrV0": {
+   "id": "dgAdreNTI6q2JjrE",
+   "name": "Gumroad OAuth - DEVON OS 29"
+  },
+  "M5Pk9MgrGBFy3pkC": {
+   "id": "d53LbUapTU7xwChi",
+   "name": "Header Auth account 5"
+  },
+  "OyuQtrelq7zP2mTy": {
+   "id": "Avhx7u29TskBaR67",
+   "name": "Airtable Personal Access Token account"
+  },
+  "Rekx2gmjxgixRzkl": {
+   "id": "f8470H9MIgTGJUO8",
+   "name": "Header Auth account 2"
+  },
+  "THqWeT7Fd0kiiGSv": {
+   "id": "dtlz8HF694CwAIzz",
+   "name": "EditForge MCP Token"
+  },
+  "VrShnCJJgezZxPsA": {
+   "id": "KF7XRYYB0ddFtfFv",
+   "name": "Header Auth account"
+  },
+  "WCF2WR8TnuJ9F6QF": {
+   "id": "V1rttZK8hEAYRsT7",
+   "name": "GitHub"
+  },
+  "WMz320icjnur7rDL": {
+   "id": "NW3vR6nNcMoUkJyJ",
+   "name": "Google Drive account"
+  },
+  "YTVk8Dq2gYPAmUim": {
+   "id": "ENoUSqySnkK0NVsl",
+   "name": "Cerebras Cloud"
+  },
+  "eYTecIAkpa16GAQ6": {
+   "id": "XbLg8FnNraeTbEfJ",
+   "name": "MailerLite"
+  },
+  "mu7nJRSpkAfkzLdF": {
+   "id": "AgSGuaA2pnZsrZcJ",
+   "name": "SMTP account"
+  },
+  "nRIc1n1L6nvZ2jYB": {
+   "id": "Uv3TsnWEEWLKeybu",
+   "name": "Pexel Header Auth"
+  },
+  "o1Y2okfhRPngvhOl": {
+   "id": "e3kYgqCGCUCBYTMj",
+   "name": "Speechify API"
+  },
+  "qpnq3sFXU5J3Nepr": {
+   "id": "dIaw4iV1Yuj7NEBO",
+   "name": "Header Auth account 4"
+  },
+  "qzwDSqPygS9k14vO": {
+   "id": "pHgm5T6L7Nh2OCed",
+   "name": "Header Auth account 6"
+  },
+  "uY9QooBk8JVzvDWP": {
+   "id": "tNkyw36B0WNgsyW3",
+   "name": "Bearer Auth account"
+  },
+  "vsTKuAilHmpYCc5L": {
+   "id": "9OGS2U62Gn8OTWm3",
+   "name": "Gmail account"
+  },
+  "TEJIJDPoEhid0aOE": {
+   "id": "EdFztvzdUL9PSycJ",
+   "name": "anthropic"
+  },
+  "SFou54MzuKGj3MwV": {
+   "id": "JSBvIdHJ9UUQRXwH",
+   "name": "Devon Console Token"
+  }
+ },
+ "credentials_with_no_vps_twin": {
+  "b9FYEfGUlMiYJCCU": "Header Auth account 10, httpHeaderAuth, no VPS credential of that name and type"
+ },
+ "credential_notes": {
+  "TEJIJDPoEhid0aOE": "Cloud spells it Antrhropic, the VPS spells it anthropic. Same service, same type.",
+  "SFou54MzuKGj3MwV": "Cloud Devon Soul Service Token maps to the VPS Devon Console Token. Ruled 2026-09-15: the soul token answered 401 where the console token answered 200, and Tee deleted the stale VPS copy.",
+  "YFD1LlWr6OhTKQ7k": "Zapier MCP. The VPS twin krUcZs3zx3V6zhUt exists but its value answered HTTP 401 Invalid OAuth token on 2026-09-15. Re-copy before the Zapier lane can call anything.",
+  "FYRvkRTOcROEYZ9P": "Devon Capture Key. Name and type match on both hosts, but whether the two hold the SAME secret is UNVERIFIED. It decides whether Tee's phone Shortcut still works after the switch."
+ }
+}
