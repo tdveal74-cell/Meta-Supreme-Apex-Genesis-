@@ -29,15 +29,24 @@ default and it is what lets the build reach `packages/ui`. `apps/web` depends on
 `@meta-supreme/ui` as `workspace:*`, so an install scoped to `apps/web` alone
 resolves nothing and the build fails at the first `import` of a token.
 
-There is deliberately no `vercel.json`. Every field above except Root Directory
-is what Vercel already picks; a config file restating them would be one more
-thing to drift out of sync with the dashboard.
+`apps/web/vercel.json` exists and carries exactly one field, an `ignoreCommand`,
+so the project skips a build when nothing under its paths changed since the
+last deployment that built. It restates none of the fields above. This
+paragraph said "there is deliberately no `vercel.json`" from before the
+ignore rule shipped on 2026-08-26 until 2026-09-15, when a critic read the
+file; the `deploy-readback` skill under `.claude/skills` is the record of why
+the rule exists and how to read a skipped build.
 
 ### Environment variables
 
-None. `apps/web` reads no secrets and calls no API at build time — it is four
-statically prerendered routes. `NEXT_PUBLIC_API_URL` appears in the local
-compose file but nothing in `apps/web` reads it today.
+None are required. `apps/web` reads no secrets and calls no API at build time.
+Two optional overrides are read at build time by `apps/web/lib/api-base.ts`:
+`NEXT_PUBLIC_API_URL`, which replaces the Railway API fallback that a
+production build otherwise compiles in, and `NEXT_PUBLIC_PRESENCE_URL`, which
+does the same for the presence service. Leave both unset on the Vercel project
+and the built page talks to the two Railway hosts named in that file. This
+paragraph said nothing in `apps/web` read `NEXT_PUBLIC_API_URL` until
+2026-09-15; `api-base.ts:5` has read it since the file existed.
 
 ### Verifying before you push
 
