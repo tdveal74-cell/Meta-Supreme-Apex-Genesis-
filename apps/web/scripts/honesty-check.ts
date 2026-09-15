@@ -25,6 +25,13 @@
  *      apps/web/app, no component calling /workflows, no agent tool. It also
  *      offered document upload and memory you can edit or delete, over a
  *      knowledge panel that only reads and searches.
+ *   3. Added 2026-09-15. The Soul tile rendered a failed read of
+ *      GET /soul/status as "recall off", the same words the route uses when
+ *      it answers enabled: false, and threw away the route's own detail,
+ *      which names the two variables that turn recall on. Nothing on the
+ *      panel said which host it reads. A diagnostic went to the devon-soul
+ *      Vercel project on that basis while the dock reads API_BASE on
+ *      Railway, whose environment carried none of the variables.
  *
  * WHY THIS PARSES RATHER THAN GREPS
  *
@@ -222,6 +229,94 @@ check("the recorded goal panel carries the runner reason from the matrix", () =>
   assert.ok(
     rendered.length >= 1,
     "schedulerNote is computed and never rendered, so the panel states the goals are queued and says nothing about whether anything runs them",
+  );
+});
+
+/** Whether an identifier of this exact name is read anywhere under a node. */
+function readsIdentifier(root: ts.Node, name: string): boolean {
+  return collect(root, (n) => ts.isIdentifier(n) && n.text === name).length >= 1;
+}
+
+check("the Soul tile tells an unread status from recall off", () => {
+  const file = parse("components/command-center/CapabilityDock.tsx");
+  const soul = dockTiles(file).find((tile) => {
+    const label = tile.elements[0];
+    return ts.isStringLiteral(label) && label.text === "Soul";
+  });
+  assert.ok(soul, 'no tile is labelled "Soul"; this check has nothing to inspect');
+
+  // The light reads `enabled` off the status route. The detail under it is a
+  // three way read: on, off, or the route did not answer. A two way detail
+  // shows a state the dock never read as if it had, which is the Scheduler
+  // lie in a new tile.
+  assert.ok(
+    propertyNames(soul.elements[1]).has("enabled"),
+    "the Soul light does not read the status route's enabled field",
+  );
+
+  // Shape, not words. A detail reading `soul?.enabled ? "recall on" : "recall
+  // off, maybe unread"` carries every word a text guard would look for and is
+  // still a two way read. So the detail has to be a conditional on the status
+  // object itself, with the unread arm on the null side and the on/off
+  // decision nested under the read side.
+  const detail = soul.elements[2];
+  assert.ok(
+    ts.isConditionalExpression(detail),
+    "the Soul tile detail is not a conditional, so it cannot be a three way read",
+  );
+  assert.ok(
+    ts.isIdentifier(detail.condition) && detail.condition.text === "soul",
+    "the Soul tile detail does not branch on whether the status object was read at all, so a 401 or an unreachable API renders as recall off, the same words the route uses when it answers enabled: false",
+  );
+  assert.ok(
+    ts.isStringLiteral(detail.whenFalse) && /unread/i.test(detail.whenFalse.text),
+    "the Soul tile's unread arm does not say unread",
+  );
+  let read: ts.Node = detail.whenTrue;
+  while (ts.isParenthesizedExpression(read)) read = read.expression;
+  assert.ok(
+    ts.isConditionalExpression(read) && propertyNames(read.condition).has("enabled"),
+    "the Soul tile's read arm does not branch on the route's enabled field",
+  );
+  const arms = [read.whenTrue, read.whenFalse].map((arm) => (ts.isStringLiteral(arm) ? arm.text : ""));
+  assert.ok(
+    arms.some((arm) => /recall on/i.test(arm)) && arms.some((arm) => /recall off/i.test(arm)),
+    "the Soul tile no longer distinguishes recall on from recall off",
+  );
+});
+
+check("the soul note carries the status route's own detail and names the host it read", () => {
+  const file = parse("components/command-center/CapabilityDock.tsx");
+
+  const decls = declarationsNamed(file, "soulNote");
+  assert.equal(decls.length, 1, "soulNote is not declared exactly once");
+  assert.ok(decls[0].initializer, "soulNote has no initialiser");
+  assert.ok(
+    propertyNames(decls[0].initializer).has("detail"),
+    "soulNote does not read the status route's detail, so the sentence under the tiles is the dock's own guess rather than the API naming what turns recall on",
+  );
+  assert.ok(
+    readsIdentifier(decls[0].initializer, "apiHost"),
+    "soulNote does not name the host it read, so a reader cannot tell which service's environment the variables belong to",
+  );
+
+  // The host has to be the one the dock actually reads, derived from
+  // API_BASE, not a second literal that can drift from it.
+  const hosts = declarationsNamed(file, "apiHost");
+  assert.equal(hosts.length, 1, "apiHost is not declared exactly once");
+  assert.ok(hosts[0].initializer, "apiHost has no initialiser");
+  assert.ok(
+    readsIdentifier(hosts[0].initializer, "API_BASE"),
+    "apiHost is not derived from API_BASE, so the host the note names may not be the host the dock reads",
+  );
+
+  const rendered = collect(
+    file,
+    (n) => ts.isJsxExpression(n) && !!n.expression && ts.isIdentifier(n.expression) && n.expression.text === "soulNote",
+  );
+  assert.ok(
+    rendered.length >= 1,
+    "soulNote is computed and never rendered, so the panel shows a grey Soul light and says nothing about why",
   );
 });
 

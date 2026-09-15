@@ -37,6 +37,14 @@ type ToolCatalog = {
   execution?: { effect_receipts?: boolean; shared_task_leases?: boolean; idempotency_ledger?: boolean };
 };
 
+/**
+ * GET /soul/status on API_BASE (app/api/v1/soul.py). `enabled` means
+ * SOUL_RECALL_ENABLED and PINECONE_API_KEY are both set in THAT service's
+ * environment, read without touching Pinecone. The phone lane at
+ * devon-soul.vercel.app carries its own key and its own status route, and
+ * this dock never asks it. A diagnostic on 2026-09-15 spent itself on that
+ * project because nothing on this readout said which host answers.
+ */
 type SoulStatus = {
   enabled?: boolean;
   tee_host_configured?: boolean;
@@ -227,6 +235,35 @@ export function CapabilityDock() {
     );
   }, [catalog]);
 
+  // The host this readout reads. Every tile above comes from API_BASE, so a
+  // variable one of them says is missing belongs to this host's environment
+  // and nowhere else. Named here because the 2026-09-15 diagnostic could not
+  // tell from the panel.
+  const apiHost = useMemo(() => {
+    try {
+      return new URL(API_BASE).host;
+    } catch {
+      return API_BASE;
+    }
+  }, []);
+
+  // Same shape as schedulerNote. A failed read says the state is unread
+  // rather than rendering as "recall off", which until 2026-09-15 was what a
+  // 401 or an unreachable API looked like: the Scheduler lie in a new tile, a
+  // state the dock never read shown as if it had. The sentence itself is the
+  // status route's own detail, which names the variables that turn recall on,
+  // followed by the host whose environment they belong to.
+  const soulNote = useMemo(() => {
+    if (!soul) {
+      return `Soul status unread. GET /soul/status on ${apiHost} did not answer, so whether recall is on is unknown here.`;
+    }
+    const detail = soul.detail || (soul.enabled ? "Soul recall is on." : "Soul recall is off.");
+    if (soul.enabled) {
+      return `${detail} Configured rather than probed: the status route never calls Pinecone, so only a recall proves the connection.`;
+    }
+    return `${detail} Set them in the environment of ${apiHost}, which is the only host this readout asks.`;
+  }, [soul, apiHost]);
+
   const shellLabel =
     state === "locked"
       ? "MESH LOCKED"
@@ -272,7 +309,7 @@ export function CapabilityDock() {
                       : `${schedules.length} recorded, none run`,
                   ],
                   ["Receipts", Boolean(catalog?.execution?.effect_receipts), "effect ledger"],
-                  ["Soul", Boolean(soul?.enabled), soul?.enabled ? "recall on" : "recall off"],
+                  ["Soul", Boolean(soul?.enabled), soul ? (soul.enabled ? "recall on" : "recall off") : "status unread"],
                   ["Leases", Boolean(catalog?.execution?.shared_task_leases), "fenced runs"],
                 ].map(([label, ok, detail]) => (
                   <div key={String(label)} className="bg-[#0b141b] px-3 py-2.5">
@@ -294,6 +331,14 @@ export function CapabilityDock() {
                 </div>
                 <p className="mt-1 truncate text-[10px] text-[#93a6b5]">{nextSchedule?.goal || "No unmaterialized scheduled goal is currently visible."}</p>
                 <p className="mt-1.5 text-[9px] leading-4 text-[#c77b4a]">{schedulerNote}</p>
+              </div>
+
+              <div className="mt-3 border border-[#22384a] bg-black/15 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#6f8494]">Soul recall</span>
+                  <span className="font-mono text-[9px] text-[#d4a017]">{soul ? (soul.enabled ? "ON" : "OFF") : "UNREAD"}</span>
+                </div>
+                <p className="mt-1.5 text-[9px] leading-4 text-[#c77b4a]">{soulNote}</p>
               </div>
 
               <div className="mt-3 border border-[#3e617c] bg-[#071016] px-3 py-3">
@@ -325,7 +370,7 @@ export function CapabilityDock() {
 
               <p className="mt-3 text-[9px] leading-4 text-[#526979]">
                 {state === "degraded" ? "One or more telemetry reads failed. " : ""}
-                {checkedAt ? `Checked ${checkedAt.toLocaleTimeString()}.` : ""} Heartbeat remains a separate deterministic n8n pulse.
+                {checkedAt ? `Checked ${checkedAt.toLocaleTimeString()}.` : ""} Reads {apiHost}. Heartbeat remains a separate deterministic n8n pulse.
               </p>
             </div>
           )}
