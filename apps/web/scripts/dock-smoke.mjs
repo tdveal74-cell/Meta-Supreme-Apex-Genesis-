@@ -90,7 +90,7 @@ const ON_DETAIL = "Soul recall is on.";
 const HOST = new URL(API_BASE).host;
 const NOTE_UNREAD = `Soul status unread. GET /soul/status on ${HOST} did not answer, so whether recall is on is unknown here.`;
 const NOTE_OFF = `${OFF_DETAIL} Those variables belong to the environment of ${HOST}, the only host this readout asks.`;
-const NOTE_ON = `${ON_DETAIL} Configured rather than probed: the status route never calls Pinecone, so only a recall proves the connection.`;
+const NOTE_ON = `${ON_DETAIL} Configured only: the status route never calls Pinecone, so only a recall proves the connection.`;
 const FAILED_FOOTER = "One or more telemetry reads failed.";
 
 // Tailwind's emerald-400 and the dock's own greys and ambers, as Chromium
@@ -596,7 +596,7 @@ assertWords(on, "mocked on", {
   note: NOTE_ON,
   mesh: EXPECTED_OFF + 1,
   footerFailed: false,
-  absent: ["recall off", "status unread", "gave no detail", "Probed:"],
+  absent: ["recall off", "status unread", "gave no detail", "probed", "Probed"],
 });
 
 /* ------------------------------------------------------------------ */

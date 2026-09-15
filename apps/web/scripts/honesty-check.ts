@@ -827,7 +827,7 @@ check("the three note sentences are the pinned ones, and the fallbacks name them
     [
       "Checking. GET /soul/status on ${apiHost} has not answered yet.",
       "Soul status unread. GET /soul/status on ${apiHost} did not answer, so whether recall is on is unknown here.",
-      "${detail} Configured rather than probed: the status route never calls Pinecone, so only a recall proves the connection.",
+      "${detail} Configured only: the status route never calls Pinecone, so only a recall proves the connection.",
       "${detail} Those variables belong to the environment of ${apiHost}, the only host this readout asks.",
     ],
     "soulNote's four sentences are not the pinned ones, in order. The second critic made the on branch claim Pinecone had been probed; change these words as a decision, here and in dock-smoke.mjs together",
