@@ -54,3 +54,33 @@ async def test_ready_answers_503_when_the_database_does_not(client, monkeypatch)
     data = response.json()
     assert data["status"] == "not_ready"
     assert data["checks"]["database"] == "error: ConnectionRefusedError"
+
+
+def test_the_apps_api_twin_carries_the_same_readiness_route():
+    """apps/api/app/api/v1/health.py is a hand kept copy that no import in
+    the suite resolves to (PYTHONPATH puts the root copy first), so a critic
+    on 2026-09-15 reverted the twin to the old unconditional ready and every
+    test stayed green. This reads both files and compares the readiness
+    function body itself, docstring aside, so the copy cannot drift silently."""
+    import ast
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent
+
+    def readiness_body(path):
+        tree = ast.parse((root / path).read_text(encoding="utf-8"))
+        fn = next(
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.AsyncFunctionDef) and node.name == "readiness_check"
+        )
+        fn.body = [
+            node
+            for node in fn.body
+            if not (isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant))
+        ]
+        return ast.dump(fn)
+
+    root_body = readiness_body("app/api/v1/health.py")
+    assert "SELECT 1" in root_body, "the root route no longer runs SELECT 1"
+    assert readiness_body("apps/api/app/api/v1/health.py") == root_body

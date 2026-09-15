@@ -32,9 +32,11 @@ async def readiness_check():
 
     Until 2026-09-15 this route returned "ready" unconditionally with two
     checks marked "pending", so a process with a dead database answered ready
-    and every database backed route failed after it. Railway probes
-    /api/v1/health, the liveness route, so no platform probe keyed on the
-    lie; a reader of the JSON did.
+    and every database backed route failed after it. The Railway service
+    config, read through the connector on 2026-09-15, probes
+    /api/v1/health, the liveness route, and docker-compose.prod.yml probes
+    the same path, so no platform probe keyed on the lie; a reader of the
+    JSON did.
     """
     checks = {"database": "unchecked", "ai_providers": "unchecked"}
     try:
