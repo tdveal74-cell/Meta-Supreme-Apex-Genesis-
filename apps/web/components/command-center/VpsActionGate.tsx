@@ -269,7 +269,7 @@ export function VpsActionGate() {
 
         <label className="block">
           <span className="mb-1.5 block font-mono text-[10px] uppercase tracking-[0.16em] text-[#6f8494]">
-            Reason (3–500 chars)
+            Reason (3 to 500 chars)
           </span>
           <textarea
             value={reason}

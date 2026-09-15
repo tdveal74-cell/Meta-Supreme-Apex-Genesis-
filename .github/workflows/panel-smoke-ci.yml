@@ -56,6 +56,20 @@ name: Panel smoke CI
 # runner without Chromium turns this job RED rather than green. That is the same
 # posture audio-ci.yml takes, and for the same reason: a green job that checked
 # nothing is worse than no job, because it is credited.
+#
+# THE CAPABILITY DOCK RIDES THE SAME STACK, since 2026-09-15. scripts/dock-smoke.mjs
+# opens /command-center three times, with a real token, with one the API
+# refuses, and with /soul/status answered through a route mock, and asserts
+# what a person sees of the Soul readout: the request the browser sent, the
+# computed colours, the words, and that nothing inside the section is dimmed,
+# filtered, shadowed, painted by a gradient, moved or given pseudo element
+# text. It exists because the AST guard in scripts/honesty-check.ts was beaten
+# eleven times by one critic and nine by a second, and a third then painted
+# four lies through Tailwind arbitrary variants on unpinned ancestors and
+# ::after content that innerText never sees, plus one through a rule in
+# app/globals.css, a file this filter did not cover. The filter below now
+# covers the stylesheet, the theme, the layout and the build config, because
+# what the dock looks like is decided there as much as in its TSX.
 
 on:
   pull_request:
@@ -86,14 +100,38 @@ on:
       - "app/api/v1/projects.py"
       - "app/api/v1/workflows.py"
       - "app/api/v1/router.py"
-      # The check, and this file.
+      # The capability dock, everything else mounted on its route (the smoke
+      # reads the dock's own section, but a sibling can still throw a page
+      # error), the chat that writes the token slot the dock reads, the
+      # dependency that answers 401, and the four API modules the dock reads.
+      - "apps/web/components/command-center/**"
+      - "apps/web/app/command-center/**"
+      - "apps/web/components/devon/DevonChat.tsx"
+      - "app/security/deps.py"
+      - "app/api/v1/soul.py"
+      - "app/api/v1/agent_tasks.py"
+      - "app/api/v1/agent_expansion.py"
+      - "app/api/v1/devon.py"
+      # What decides how the dock's TSX is painted: the global stylesheet, the
+      # root layout that loads it, the Tailwind theme and the build config. A
+      # rule appended to globals.css lit the Soul light emerald over "recall
+      # off" while every check in web-ci.yml stayed green, because this job
+      # never ran for it.
+      - "apps/web/app/globals.css"
+      - "apps/web/app/layout.tsx"
+      - "apps/web/tailwind.config.ts"
+      - "apps/web/postcss.config.mjs"
+      - "apps/web/next.config.mjs"
+      - "packages/ui/**"
+      # The checks, and this file.
       - "apps/web/scripts/panel-smoke.mjs"
+      - "apps/web/scripts/dock-smoke.mjs"
       - ".github/workflows/panel-smoke-ci.yml"
   workflow_dispatch:
 
 jobs:
   panels:
-    name: Six panels driven in real Chromium
+    name: Six panels and the capability dock driven in real Chromium
     runs-on: ubuntu-latest
 
     # The same image ci.yml's api job uses, so the database this runs against is
@@ -219,6 +257,14 @@ jobs:
       - name: Drive the six panels in real Chromium
         working-directory: apps/web
         run: node --experimental-strip-types scripts/panel-smoke.mjs
+
+      # Runs even when the panels step is red, so a dock regression riding
+      # with a panel regression is named in the same run rather than after
+      # the panel fix. It still fails fast if the stack never came up.
+      - name: Drive the capability dock in real Chromium
+        if: ${{ !cancelled() }}
+        working-directory: apps/web
+        run: node --experimental-strip-types scripts/dock-smoke.mjs
 
       - name: What the servers said, when it went red
         if: failure()
