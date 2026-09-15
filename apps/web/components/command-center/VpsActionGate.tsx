@@ -22,6 +22,7 @@ type GateStatus =
 type Receipt = {
   request_id?: string;
   status?: string;
+  state?: string;
   operation?: string;
   target?: string;
   reason?: string;
@@ -110,7 +111,9 @@ export function VpsActionGate() {
         }
 
         setReceipt(data);
-        setStatus(data.status === "pending" ? "pending" : "done");
+        // Check both 'status' and 'state' fields (VPS may return either)
+        const currentStatus = data.status || data.state;
+        setStatus(currentStatus === "pending" ? "pending" : "done");
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
         setStatus("error");
@@ -166,7 +169,8 @@ export function VpsActionGate() {
       }
 
       setReceipt((prev) => ({ ...prev, ...data }));
-      if (data.status && data.status !== "pending") {
+      const currentStatus = data.status || data.state;
+      if (currentStatus && currentStatus !== "pending") {
         setStatus("done");
       }
     } catch (err) {
@@ -239,7 +243,7 @@ export function VpsActionGate() {
           <button
             type="submit"
             disabled={isBusy || showPendingControls || reason.trim().length < 3}
-            className="border border-[#c77b4a]/45 bg-[#c77b4a]/15 px-4 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#e89b66] transition hover:bg-[#c77b4a]/25 disabled:cursor-not-allowed disabled:opacity-30"
+            className="border border-[#c77b4a]/45 bg-[#c77b4a]/15 px-4 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#e89b66] transition hover:bg-[#c77b4a]/25 disabled:opacity-30"
           >
             {status === "requesting" ? "Requesting…" : "Request"}
           </button>
@@ -301,21 +305,21 @@ export function VpsActionGate() {
               id · {receipt.request_id}
             </p>
           )}
-          {receipt.status && (
+          {(receipt.status || receipt.state) && (
             <p>
               status ·{" "}
               <span
                 className={
-                  receipt.status === "pending"
+                  (receipt.status || receipt.state) === "pending"
                     ? "text-amber-300"
-                    : receipt.status === "approved"
+                    : (receipt.status || receipt.state) === "approved"
                       ? "text-emerald-300"
-                      : receipt.status === "rejected"
+                      : (receipt.status || receipt.state) === "rejected"
                         ? "text-red-300"
                         : "text-[#ede7dc]"
                 }
               >
-                {receipt.status}
+                {receipt.status || receipt.state}
               </span>
             </p>
           )}
