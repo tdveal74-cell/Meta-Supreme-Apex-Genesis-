@@ -185,6 +185,13 @@ Draft Writer (J7Ly7riwXEd95D9a), active, so the Cloud estate then held
 63 workflows with 38 active. Amended again on 2026-09-06: Build 17 added
 the Airtable Row Writer (ps2S6dWcTIpq5bvr), active, so the Cloud estate now
 holds the 64 workflows the reconciler expects and the live active count is 39.
+Amended on 2026-09-15, the night of the cutover: that 64 counted n8n Cloud,
+which the reconciler no longer reads. `vault.N8N_HOST` is the VPS, and the VPS
+holds 100 workflows because it carries the DEVON organs, the TQO and TSWS
+chains and the Airtable mirror side by side. The DEVON cutover moved 34 organs
+off Cloud that night, leaving 6 workflows active on Cloud, none of them DEVON:
+the OS 29 Platform Policy Sensor and TSWS 01 through 05. The number to count
+from is the instance, never this sentence.
 Every 58 and every 33 below this line was true on 2026-08-31 and is the
 record of that day, not the live number. A
 reconcile on 2026-09-01 found 31 active, with both the Heartbeat and the
