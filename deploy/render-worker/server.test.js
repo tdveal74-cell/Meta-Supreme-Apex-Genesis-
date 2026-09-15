@@ -74,11 +74,13 @@ t('health needs no token and lists the job types', async () => {
   const r = await req('GET', '/health', { token: null });
   assert.strictEqual(r.status, 200);
   assert.strictEqual(r.body.ok, true);
-  // The sticky note tells an operator to compare this against 18 to tell a
-  // stale jobs.js from a current one.
-  assert.strictEqual(r.body.job_count, 18, 'job_count was ' + r.body.job_count);
+  // The sticky note tells an operator to compare this against the count here
+  // to tell a stale jobs.js from a current one. 18 until 2026-09-15, when
+  // presenter_composite made it 19.
+  assert.strictEqual(r.body.job_count, 19, 'job_count was ' + r.body.job_count);
   assert.ok(r.body.jobs.includes('assemble_cut'));
   assert.ok(r.body.jobs.includes('duck_mix'));
+  assert.ok(r.body.jobs.includes('presenter_composite'));
 });
 
 section('\n-- auth --');
@@ -104,6 +106,107 @@ t('a token without the Bearer prefix is 401', async () => {
     q.on('error', reject); q.write(b); q.end();
   });
   assert.strictEqual(r.status, 401);
+});
+
+section('\n-- GET /files, the return path --');
+t('a file inside the work root streams back with its bytes and type', async () => {
+  fs.mkdirSync(path.join(ROOT, 'out'), { recursive: true });
+  const payload = Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0xff, 0xfe, 0x0a, 0x0d]);
+  fs.writeFileSync(path.join(ROOT, 'out', 'master.mp4'), payload);
+  const r = await new Promise((resolve, reject) => {
+    http.get(BASE + '/files/out/master.mp4', { headers: { authorization: `Bearer ${TOKEN}` } }, res => {
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }));
+    }).on('error', reject);
+  });
+  assert.strictEqual(r.status, 200, 'got ' + r.status);
+  assert.strictEqual(r.headers['content-type'], 'video/mp4');
+  assert.strictEqual(Number(r.headers['content-length']), payload.length);
+  assert.ok(/attachment; filename="master.mp4"/.test(r.headers['content-disposition']), r.headers['content-disposition']);
+  assert.strictEqual(r.headers['cache-control'], 'no-store');
+  assert.ok(r.body.equals(payload), 'bytes differ');
+});
+t('a quote or a line break in the filename never reaches the content-disposition header', async () => {
+  fs.writeFileSync(path.join(ROOT, 'out', 'na"me.mp4'), Buffer.from([1, 2, 3]));
+  const r = await new Promise((resolve, reject) => {
+    http.get(BASE + '/files/out/na%22me.mp4', { headers: { authorization: `Bearer ${TOKEN}` } }, res => {
+      res.resume(); res.on('end', () => resolve({ status: res.statusCode, headers: res.headers }));
+    }).on('error', reject);
+  });
+  assert.strictEqual(r.status, 200, 'got ' + r.status);
+  assert.strictEqual(r.headers['content-disposition'], 'attachment; filename="na_me.mp4"');
+});
+t('an aborted download closes the file descriptor', async () => {
+  const big = path.join(ROOT, 'out', 'big.bin');
+  fs.writeFileSync(big, Buffer.alloc(8 * 1024 * 1024, 7));
+  const openFds = () => fs.readdirSync('/proc/self/fd').filter(fd => {
+    try { return fs.readlinkSync('/proc/self/fd/' + fd) === big; } catch { return false; }
+  }).length;
+  const before = openFds();
+  await new Promise((resolve, reject) => {
+    const q = http.get(BASE + '/files/out/big.bin', { headers: { authorization: `Bearer ${TOKEN}` } }, res => {
+      res.once('data', () => { q.destroy(); resolve(); });
+    });
+    q.on('error', () => resolve());
+    q.on('close', () => resolve());
+  });
+  await new Promise(r => setTimeout(r, 200));
+  assert.strictEqual(openFds(), before, 'the read stream was not destroyed after the client went away');
+});
+t('a percent-encoded path decodes before it is confined', async () => {
+  fs.writeFileSync(path.join(ROOT, 'out', 'with space.srt'), '1\n00:00:00,000 --> 00:00:01,000\nhi\n');
+  const r = await req('GET', '/files/out/with%20space.srt');
+  assert.strictEqual(r.status, 200, 'got ' + r.status + ' ' + r.text);
+  assert.ok(r.text.includes('00:00:01,000'));
+});
+t('/files needs the token', async () => {
+  const r = await req('GET', '/files/out/master.mp4', { token: null });
+  assert.strictEqual(r.status, 401);
+});
+t('a path escaping the work root is 400, not a read', async () => {
+  const r = await req('GET', '/files/..%2F..%2F..%2Fetc%2Fpasswd');
+  assert.strictEqual(r.status, 400, 'got ' + r.status + ' ' + r.text);
+  assert.ok(/escapes the work root/.test(r.body.error), r.body.error);
+  assert.ok(!/root:/.test(r.text), 'served /etc/passwd');
+});
+t('a symlink out of the work root is 400', async () => {
+  try { fs.symlinkSync('/etc', path.join(ROOT, 'out', 'etc')); } catch (e) { if (e.code !== 'EEXIST') throw e; }
+  const r = await req('GET', '/files/out/etc/hostname');
+  assert.strictEqual(r.status, 400, 'got ' + r.status + ' ' + r.text);
+});
+t('a missing file is 404', async () => {
+  const r = await req('GET', '/files/out/nope.mp4');
+  assert.strictEqual(r.status, 404);
+});
+t('a directory is 404, never a listing', async () => {
+  const r = await req('GET', '/files/out');
+  assert.strictEqual(r.status, 404);
+  assert.ok(!/master\.mp4/.test(r.text), 'listed the directory');
+});
+t('an unknown extension is octet-stream', async () => {
+  fs.writeFileSync(path.join(ROOT, 'out', 'blob.bin'), 'x');
+  const r = await new Promise((resolve, reject) => {
+    http.get(BASE + '/files/out/blob.bin', { headers: { authorization: `Bearer ${TOKEN}` } }, res => {
+      res.resume(); res.on('end', () => resolve({ status: res.statusCode, headers: res.headers }));
+    }).on('error', reject);
+  });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.headers['content-type'], 'application/octet-stream');
+});
+t('the access line for a file read carries type=file', async () => {
+  const lines = [];
+  const real = console.log;
+  process.env.LOG_REQUESTS = '1';
+  console.log = (...a) => lines.push(a.join(' '));
+  try {
+    await req('GET', '/files/out/master.mp4');
+    // The access line is written on the response's finish event, which lands
+    // a tick after the client sees end. Wait for it rather than race it.
+    await new Promise(r => setTimeout(r, 50));
+  } finally { console.log = real; }
+  assert.ok(lines.some(l => l.includes('path=/files/out/master.mp4') && l.includes('type=file')),
+    'no access line for the file read: ' + JSON.stringify(lines));
 });
 
 section('\n-- THE SMOKE TEST FROM THE STICKY NOTE --');
