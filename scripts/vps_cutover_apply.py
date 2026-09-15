@@ -137,6 +137,9 @@ def apply_operations(workflow: Dict[str, Any],
         elif kind == "setNodePosition":
             _node(result, operation["nodeName"])["position"] = list(operation["position"])
 
+        elif kind == "setNodeTypeVersion":
+            _node(result, operation["nodeName"])["typeVersion"] = operation["typeVersion"]
+
         elif kind == "setNodeDisabled":
             node = _node(result, operation["nodeName"])
             if operation["disabled"]:
@@ -205,16 +208,54 @@ def apply_operations(workflow: Dict[str, Any],
 # --------------------------------------------------------------------------
 
 
+#: Node types whose ``webhookId`` is a live inbound URL that a caller holds. On
+#: any other node it is vestigial: n8n stamps one on several action nodes and
+#: nothing routes to it.
+#:
+#: Measured 2026-09-15 across all forty organs, because guarding every
+#: ``webhookId`` failed thirteen of them: fifteen nodes change type from
+#: ``gmail`` to ``emailSend``, the un-migrated half of the 2026-09-05 move to
+#: SMTP, and every one carries a VPS ``webhookId`` that a rebuild drops when it
+#: recreates the node under the new type. NO trigger node changes type anywhere
+#: in the estate, so no inbound URL was ever at risk. Losing an ``emailSend``
+#: node's webhookId costs nothing: the node sends mail outbound and no caller
+#: can reach it.
+URL_BEARING_TYPES = frozenset({
+    "n8n-nodes-base.webhook",
+    "n8n-nodes-base.formTrigger",
+    "n8n-nodes-base.chatTrigger",
+    "@n8n/n8n-nodes-langchain.chatTrigger",
+    "n8n-nodes-base.wait",
+})
+
+
+def _url_bearing(node: Dict[str, Any]) -> bool:
+    node_type = node.get("type", "")
+    return bool(node.get("webhookId")) and (
+        node_type in URL_BEARING_TYPES or node_type.endswith("Trigger")
+    )
+
+
 def webhook_ids(workflow: Dict[str, Any]) -> Dict[str, str]:
+    """The webhookIds that are actually reachable from outside."""
     return {
         node["name"]: node["webhookId"]
         for node in workflow.get("nodes", [])
-        if node.get("webhookId")
+        if _url_bearing(node)
+    }
+
+
+def vestigial_webhook_ids(workflow: Dict[str, Any]) -> Dict[str, str]:
+    """webhookIds on action nodes, reported rather than guarded."""
+    return {
+        node["name"]: node["webhookId"]
+        for node in workflow.get("nodes", [])
+        if node.get("webhookId") and not _url_bearing(node)
     }
 
 
 def check_webhook_ids(before: Dict[str, Any], after: Dict[str, Any]) -> List[str]:
-    """Return one complaint per webhookId that moved or vanished."""
+    """Return one complaint per caller-facing webhookId that moved or vanished."""
     was, now = webhook_ids(before), webhook_ids(after)
     complaints = []
     for name, value in was.items():
@@ -223,6 +264,12 @@ def check_webhook_ids(before: Dict[str, Any], after: Dict[str, Any]) -> List[str
         elif now[name] != value:
             complaints.append(f"{name}: webhookId changed {value} -> {now[name]}")
     return complaints
+
+
+def dropped_vestigial(before: Dict[str, Any], after: Dict[str, Any]) -> List[str]:
+    """Names whose vestigial webhookId did not survive, for the record only."""
+    was, now = vestigial_webhook_ids(before), vestigial_webhook_ids(after)
+    return sorted(name for name in was if now.get(name) != was[name])
 
 
 # --------------------------------------------------------------------------
@@ -296,6 +343,12 @@ def run_organ(organ: Dict[str, Any], maps: Dict[str, Any], out: pathlib.Path,
     if complaints:
         outcome["error"] = "webhook guard: " + "; ".join(complaints)
         return outcome
+
+    vestigial = dropped_vestigial(vps_wf, rebuilt)
+    if vestigial:
+        outcome["vestigial_webhook_ids_dropped"] = vestigial
+        report["vestigial_webhook_ids_dropped"] = vestigial
+        folder.joinpath("report.json").write_text(json.dumps(report, indent=1))
 
     if dry_run:
         after = rebuilt
