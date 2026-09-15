@@ -33,6 +33,7 @@ type Receipt = {
   message?: string;
   error?: string;
   ok?: boolean;
+  [key: string]: unknown;
 };
 
 const ACTION_OPTIONS: { value: ActionChoice; label: string }[] = [
@@ -103,6 +104,15 @@ export function VpsActionGate() {
           reason: trimmed,
         });
 
+        console.log("=== VPS RESPONSE (requestAction) ===");
+        console.log("Full response:", data);
+        console.log("data.status:", data.status);
+        console.log("data.state:", data.state);
+        console.log("data.ok:", data.ok);
+        console.log("data.error:", data.error);
+        console.log("data.request_id:", data.request_id);
+        console.log("ALL keys:", Object.keys(data));
+
         if (data.error || data.ok === false) {
           setError(data.error || data.message || "Request failed");
           setStatus("error");
@@ -113,6 +123,8 @@ export function VpsActionGate() {
         setReceipt(data);
         // Check both 'status' and 'state' fields (VPS may return either)
         const currentStatus = data.status || data.state;
+        console.log("currentStatus resolved to:", currentStatus);
+        console.log("Setting status to:", currentStatus === "pending" ? "pending" : "done");
         setStatus(currentStatus === "pending" ? "pending" : "done");
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
