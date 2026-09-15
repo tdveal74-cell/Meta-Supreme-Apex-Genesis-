@@ -85,6 +85,51 @@ this in. If not, the next candidate is LatentSync 1.6 (Apache 2.0 code,
 18 GB of VRAM by its README, weights license still to be read), and the
 recording is reused as is.
 
+## Step two, the free route, ruled 2026-09-15: Hugging Face Spaces
+
+Tee ruled the same day, on an inline card, that until the 25th the proof runs
+on Hugging Face's free shared GPU instead of a rented pod. Two public Spaces
+already run the models this arc chose, and a free Hugging Face account gets a
+daily allowance of ZeroGPU time. Checked on 2026-09-15 by reading each Space's
+own files, not by running them: how much daily quota a free account has, and
+whether a Space is awake when you open it, are unverified from this container.
+
+The primary door is the MuseTalk 1.5 Space at
+`huggingface.co/spaces/henrybit/musetalk-1-5`, MIT, pinned to MuseTalk commit
+`0a89dec`, running the v1.5 UNet on ZeroGPU. Its app takes a driving audio
+file and a reference image or video, exposes `bbox_shift`, `extra_margin`
+(default 10), a `parsing_mode` of `jaw`, and left and right cheek widths
+(default 90), and has a Test Inpainting button that runs the first frame only.
+Its GPU reservation for a generate is 45 seconds plus 18 seconds per second
+of media, capped at 600 seconds, so a 30 second clip sits at the cap: use 15
+to 20 seconds of take A for the first proof and grow from there.
+
+From the phone:
+
+1. Sign up at huggingface.co (free), confirm the email, sign in.
+2. Make the two inputs: 15 to 20 seconds of take A landscape as a small MP4
+   (the phone's own trim in Photos is fine), and the same length of cloned
+   narration as MP3 or WAV. Keep both under about 20 MB so the upload holds.
+3. Open the Space. If it says Sleeping or Building, tap to wake it and wait;
+   the first start downloads the weights and can take several minutes.
+4. Upload the video as the reference and the narration as the driving audio.
+5. Tap Test Inpainting. It draws the mouth box on the first frame. If the box
+   misses the mouth, move `bbox_shift` by a few units and test again.
+6. Tap Generate, wait, download the MP4, and watch it against the four
+   questions in the pod steps above. Same verdict rule, same next step.
+
+If the Space is asleep for good or the quota refuses the reservation, the
+second free door is Meituan's own LongCat-Video-Avatar 1.5 demo at
+`huggingface.co/spaces/meituan-longcat/LongCat-Video-Avatar-1.5-Demo`, MIT
+weights, on ZeroGPU: one photo of you plus the narration plus a one line text
+prompt returns a 5 second lip synced clip. It is a different model from the
+one ruled, so a pass there is a signal, not the proof; it says whether a
+still of you can carry a Short's head zone while MuseTalk is sorted out.
+
+Not free routes, recorded so nobody reaches for them first: HeyGen's free
+plan, D-ID's trial and Hedra's free credits all watermark or expire, and all
+of them are a rented persona of Tee's face, which the identity ruling forbids.
+
 ## Step three, after the proof passes: the job shape
 
 The render worker on the VPS has no GPU, so the lip sync runs as a remote job
