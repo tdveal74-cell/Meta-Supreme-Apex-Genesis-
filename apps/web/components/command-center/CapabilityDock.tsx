@@ -299,7 +299,7 @@ export function CapabilityDock() {
         ? "Soul recall is on and the status route gave no detail."
         : "Soul recall is off and the status route gave no detail. SOUL_RECALL_ENABLED and PINECONE_API_KEY turn it on.");
     if (soulState === "on") {
-      return `${detail} Configured rather than probed: the status route never calls Pinecone, so only a recall proves the connection.`;
+      return `${detail} Configured only: the status route never calls Pinecone, so only a recall proves the connection.`;
     }
     return `${detail} Those variables belong to the environment of ${apiHost}, the only host this readout asks.`;
   }, [state, soul, soulState, apiHost]);
