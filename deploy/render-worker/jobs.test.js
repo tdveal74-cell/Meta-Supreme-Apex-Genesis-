@@ -339,6 +339,180 @@ t('a non-regular file is refused rather than opened', async () => {
   await assert.rejects(() => b.native(), /not a regular file/);
 });
 
+section('\n-- P1: presenter_composite, the TQO presenter build --');
+const pc = () => ({
+  avatar: touch('p/avatar.mp4'), output: 'p/master.mp4',
+  cutaways: [
+    { path: touch('p/cut-a.mp4'), start: 4, end: 10 },
+    { path: touch('p/cut-b.mp4'), start: 20, end: 26.5, in: 3 },
+  ],
+  captions: touch('p/captions.srt'), bed: touch('p/bed.mp3'), duration: 60,
+});
+t('inputs are avatar, cutaways in window order, then the looped bed', () => {
+  const b = J.JOBS.presenter_composite.build(pc());
+  assert.strictEqual(b.bin, 'ffmpeg');
+  const a = b.argv;
+  const ins = [];
+  for (let i = 0; i < a.length; i++) if (a[i] === '-i') ins.push(a[i + 1]);
+  assert.strictEqual(ins.length, 4, JSON.stringify(ins));
+  assert.ok(ins[0].endsWith('p/avatar.mp4'));
+  assert.ok(ins[1].endsWith('p/cut-a.mp4'));
+  assert.ok(ins[2].endsWith('p/cut-b.mp4'));
+  assert.ok(ins[3].endsWith('p/bed.mp3'));
+  const bedI = a.indexOf(ins[3]);
+  assert.deepStrictEqual(a.slice(bedI - 3, bedI), ['-stream_loop', '-1', '-i'], 'the bed is not looped');
+  assert.ok(a.includes('-nostdin'));
+});
+t('each cutaway is delayed to its window and gated by enable=between', () => {
+  const b = J.JOBS.presenter_composite.build(pc());
+  const g = b.argv[b.argv.indexOf('-filter_complex') + 1];
+  assert.ok(g.includes('setpts=PTS+4.000000/TB[c0]'), g);
+  assert.ok(g.includes('setpts=PTS+20.000000/TB[c1]'), g);
+  assert.ok(g.includes("[base][c0]overlay=0:0:eof_action=pass:enable='between(t,4.000000,10.000000)'[v1]"), g);
+  assert.ok(g.includes("[v1][c1]overlay=0:0:eof_action=pass:enable='between(t,20.000000,26.500000)'[v2]"), g);
+  // the second clip is trimmed from its own `in`, for the window length
+  assert.ok(g.includes('[2:v]trim=start=3.000000:end=9.500000,'), g);
+  // a short clip holds its last frame for the window rather than leaving a hole
+  assert.ok(g.includes('tpad=stop_mode=clone:stop_duration=6.500000,trim=end=6.500000'), g);
+  // and fades on alpha at both ends
+  assert.ok(g.includes('fade=t=in:st=0:d=0.3:alpha=1,fade=t=out:st=6.200000:d=0.3:alpha=1'), g);
+});
+t('captions burn in after the last overlay; no captions means null, never a missing label', () => {
+  const b = J.JOBS.presenter_composite.build(pc());
+  const g = b.argv[b.argv.indexOf('-filter_complex') + 1];
+  assert.ok(/\[v2\]subtitles=filename=[^:]+p\/captions\.srt:force_style='FontSize=22,Outline=2,Shadow=0,MarginV=60'\[vout\]/.test(g), g);
+  const nb = J.JOBS.presenter_composite.build({ ...pc(), captions: undefined });
+  const g2 = nb.argv[nb.argv.indexOf('-filter_complex') + 1];
+  assert.ok(g2.includes('[v2]null[vout]'), g2);
+  assert.ok(!g2.includes('subtitles='), g2);
+});
+t('the bed is ducked under the avatar audio with the duck_mix chain and pinned to duration', () => {
+  const b = J.JOBS.presenter_composite.build(pc());
+  const g = b.argv[b.argv.indexOf('-filter_complex') + 1];
+  assert.ok(g.includes('[0:a]aresample=48000,asplit=2[nar][key]'), g);
+  assert.ok(g.includes('[3:a]aresample=48000[bedg]'), g);
+  assert.ok(g.includes('[bedg][key]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400:makeup=1[duck]'), g);
+  assert.ok(g.includes('[nar][duck]amix=inputs=2:duration=first:dropout_transition=0:weights=1 0.35[mixraw];[mixraw]apad[mix]'), g);
+  assert.ok(!/afade/.test(g), 'afade crept in');
+  const tI = b.argv.indexOf('-t');
+  assert.ok(tI > 0 && b.argv[tI + 1] === '60.000000', 'not pinned');
+  assert.ok(tI < b.argv.length - 2, '-t must precede the output');
+  assert.deepStrictEqual(b.argv.slice(b.argv.indexOf('-map'), b.argv.indexOf('-map') + 4), ['-map', '[vout]', '-map', '[mix]']);
+});
+t('a separate narration file replaces the avatar audio as voice and key', () => {
+  const b = J.JOBS.presenter_composite.build({ ...pc(), narration: touch('p/voice.mp3') });
+  const g = b.argv[b.argv.indexOf('-filter_complex') + 1];
+  assert.ok(g.includes('[4:a]aresample=48000,asplit=2[nar][key]'), g);
+  assert.ok(!g.includes('[0:a]'), g);
+  assert.strictEqual(b.parse().narration, 'separate file');
+});
+t('no bed and no pin: the avatar audio passes straight through', () => {
+  const b = J.JOBS.presenter_composite.build({ ...pc(), bed: undefined, duration: undefined });
+  const g = b.argv[b.argv.indexOf('-filter_complex') + 1];
+  assert.ok(g.endsWith('[0:a]aresample=48000[mix]'), g);
+  assert.ok(!g.includes('sidechaincompress'), g);
+  assert.ok(!b.argv.includes('-stream_loop'));
+  assert.ok(!b.argv.includes('-t'));
+  assert.strictEqual(b.parse().pinned, false);
+});
+t('fade=0 emits no fade filter at all (d=0 would mean 25 frames, not none)', () => {
+  const b = J.JOBS.presenter_composite.build({ ...pc(), fade: 0 });
+  const g = b.argv[b.argv.indexOf('-filter_complex') + 1];
+  assert.ok(!/fade=t=/.test(g), g);
+});
+t('parse reports what was composited', () => {
+  const r = J.JOBS.presenter_composite.build(pc()).parse();
+  assert.deepStrictEqual(r, { output: 'p/master.mp4', cutaways: 2, captions: true, bed: true,
+    narration: 'avatar audio', pinned: true, planned_duration: 60, fps: 25, normalized_to: '1920x1080',
+    layout: 'full', emphasis: 0, full_cutaways: 2 });
+});
+t('overlapping windows are refused at submit', () => {
+  const p = pc(); p.cutaways[1].start = 9;
+  assert.throws(() => J.JOBS.presenter_composite.build(p), /windows overlap/);
+});
+t('a window past the planned duration is refused', () => {
+  const p = pc(); p.cutaways[1].end = 61;
+  assert.throws(() => J.JOBS.presenter_composite.build(p), /past the planned/);
+});
+t('a window shorter than two fades is refused', () => {
+  const p = pc(); p.cutaways[0].end = 4.5;
+  assert.throws(() => J.JOBS.presenter_composite.build(p), /shorter than two fades/);
+});
+t('end <= start, a missing clip, and a 65th cutaway are refused', () => {
+  const p1 = pc(); p1.cutaways[0].end = 4;
+  assert.throws(() => J.JOBS.presenter_composite.build(p1), /end must exceed start/);
+  const p2 = pc(); p2.cutaways[0].path = 'p/absent.mp4';
+  assert.throws(() => J.JOBS.presenter_composite.build(p2), /no such file/);
+  const p3 = { ...pc(), cutaways: Array.from({ length: 65 }, (_, i) => ({ path: 'p/cut-a.mp4', start: i * 10, end: i * 10 + 5 })), duration: undefined };
+  assert.throws(() => J.JOBS.presenter_composite.build(p3), /too many/);
+});
+t('a captions path or style the filter string cannot take verbatim is refused, not escaped', () => {
+  const p1 = { ...pc(), captions: touch("p/it's.srt") };
+  assert.throws(() => J.JOBS.presenter_composite.build(p1), /rename it/);
+  const p2 = { ...pc(), caption_style: "FontSize=22'[vout];[0:v]null" };
+  assert.throws(() => J.JOBS.presenter_composite.build(p2), /caption_style/);
+});
+t('the avatar and the output are confined to the work root', () => {
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), avatar: '../../etc/passwd' }), /no such file|escapes/);
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), output: '../out.mp4' }), /escapes the work root/);
+});
+
+section('\n-- P2: presenter_composite stacked, the Anchor Desk Short --');
+const st = () => ({
+  avatar: touch('q/avatar.mp4'), output: 'q/short.mp4', layout: 'stacked', width: 1080, height: 1920,
+  cutaways: [
+    { path: touch('q/cut-a.mp4'), start: 2, end: 6 },
+    { path: touch('q/cut-b.mp4'), start: 8, end: 11, full: true },
+  ],
+  emphasis: [{ start: 6.5, end: 7.5 }],
+  captions: touch('q/captions.srt'), duration: 12,
+});
+const graph = (b) => b.argv[b.argv.indexOf('-filter_complex') + 1];
+t('the presenter is cropped chest up into the bottom 35 percent over a plate the size of the canvas', () => {
+  const g = graph(J.JOBS.presenter_composite.build(st()));
+  assert.ok(g.includes('[0:v]split=2[a_desk][a_full]'), g);
+  assert.ok(g.includes('[a_desk]scale=1080:670:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:670,'), g);
+  assert.ok(g.includes('color=c=#0A1628:s=1080x1920:r=25[plate]'), g);
+  assert.ok(g.includes('[plate][head]overlay=0:1250:shortest=1[base]'), g);
+});
+t('a zone cutaway is letterboxed into the top 1250 px; a full cutaway fills and crops the whole canvas', () => {
+  const g = graph(J.JOBS.presenter_composite.build(st()));
+  assert.ok(g.includes('[1:v]trim=start=0.000000:end=4.000000,setpts=PTS-STARTPTS,scale=1080:1250:force_original_aspect_ratio=decrease:flags=lanczos,pad=1080:1250:'), g);
+  assert.ok(g.includes('[2:v]trim=start=0.000000:end=3.000000,setpts=PTS-STARTPTS,scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,'), g);
+});
+t('emphasis windows put the full-frame head on top of everything, gated by between()', () => {
+  const g = graph(J.JOBS.presenter_composite.build(st()));
+  assert.ok(g.includes('[a_full]scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,'), g);
+  assert.ok(g.includes("[v2][headfull]overlay=0:0:eof_action=pass:enable='between(t,6.500000,7.500000)'[vemph]"), g);
+  assert.ok(g.includes('[vemph]subtitles='), 'captions must burn in after the emphasis layer');
+  const none = graph(J.JOBS.presenter_composite.build({ ...st(), emphasis: [] }));
+  assert.ok(none.includes('[a_full]nullsink'), 'the unused split branch must be sunk, or ffmpeg refuses the graph');
+  assert.ok(!none.includes('headfull'), none);
+});
+t('stacked captions default to the band between the zones in libass script units', () => {
+  const g = graph(J.JOBS.presenter_composite.build(st()));
+  assert.ok(g.includes("force_style='FontSize=12,Bold=1,Outline=2,Shadow=0,MarginV=92'"), g);
+});
+t('parse reports the layout, the emphasis count and the full cutaways', () => {
+  const r = J.JOBS.presenter_composite.build(st()).parse();
+  assert.strictEqual(r.layout, 'stacked'); assert.strictEqual(r.emphasis, 1); assert.strictEqual(r.full_cutaways, 1);
+  assert.strictEqual(r.normalized_to, '1080x1920');
+});
+t('stacked refuses a landscape canvas, a bad plate colour, overlapping or late emphasis, and emphasis in the full layout', () => {
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...st(), width: 1920, height: 1080 }), /portrait canvas/);
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...st(), plate_color: 'navy' }), /plate_color/);
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...st(), emphasis: [{ start: 1, end: 3 }, { start: 2, end: 4 }] }), /emphasis: windows overlap/);
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...st(), emphasis: [{ start: 11, end: 13 }] }), /past the planned/);
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...st(), layout: 'full', width: 1920, height: 1080 }), /only meaningful with layout stacked/);
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...st(), layout: 'sideways' }), /layout: must be one of/);
+});
+t('the full layout ignores the full flag and never splits the avatar', () => {
+  const g = graph(J.JOBS.presenter_composite.build({ ...st(), layout: 'full', width: 1920, height: 1080, emphasis: [] }));
+  assert.ok(!g.includes('split=2'), g);
+  assert.ok(!g.includes('color=c='), g);
+  assert.ok(g.includes('[2:v]trim=start=0.000000:end=3.000000,setpts=PTS-STARTPTS,scale=1920:1080:force_original_aspect_ratio=decrease'), g);
+});
+
 section('\n-- A3: -nostdin reaches ffmpeg and never ffprobe --');
 t('ffmpeg jobs carry -nostdin', () => {
   const b = J.JOBS.silence_detect.build({ input: touch('s/in.wav') });

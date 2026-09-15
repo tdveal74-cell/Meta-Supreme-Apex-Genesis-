@@ -703,6 +703,251 @@ const JOBS = {
   },
 
   /**
+   * The presenter build for TQO and NCO Forge (added 2026-09-15).
+   *
+   * A HeyGen avatar render is the BASE TRACK: full frame, the whole episode,
+   * carrying the ElevenLabs narration HeyGen was handed. Pexels cutaways are
+   * laid over it full frame inside planned windows, captions are burned in
+   * from an SRT, and the music bed is ducked under the narration with the same
+   * sidechain chain duck_mix uses. One ffmpeg pass, one encode generation.
+   *
+   * Timing model: every cutaway window is on the EPISODE timeline, never the
+   * clip's. cutaways[k] = { path, start, end, in? }. The clip is trimmed from
+   * `in` for (end - start) seconds. A clip shorter than its window holds its
+   * last frame (tpad clone) rather than leaving a hole, and the overlay is
+   * delayed to `start` with setpts. Before the cutaway's first frame the
+   * overlay filter has no second frame and passes the base through, and
+   * eof_action=pass does the same after its last one. That is measured, not
+   * assumed: the acceptance step in DEPLOY.md samples a pixel before, inside
+   * and after a window.
+   *
+   * Windows must be disjoint. Two cutaways over the same second is a planning
+   * error, not a creative choice, and refusing it at submit is cheaper than a
+   * render that silently shows only the later one.
+   *
+   * The narration used as the sidechain KEY and as the voice in the mix is the
+   * avatar's own audio stream unless `narration` names a separate file. HeyGen
+   * re-encodes what it is given, so a caller who wants the untouched
+   * ElevenLabs file in the mix passes it here.
+   *
+   * No guards (duck_mix's protected-silence envelope) in this first cut. A
+   * teaching episode has no protected silence the way a TSWS episode does.
+   *
+   * params: { avatar, output, cutaways?: [{path, start, end, in?, full?}],
+   *           captions?, caption_style?, bed?, bed_gain?, narration?, duration?,
+   *           width?, height?, fps?, fade?, crf?, preset?,
+   *           layout?: 'full' | 'stacked', plate_color?, emphasis?: [{start, end}] }
+   */
+  presenter_composite: {
+    build(p) {
+      const avatar = existingPath(p.avatar, 'avatar');
+      const out = ensureDir(safePath(p.output, 'output'));
+      const W   = num(p.width  ?? 1920, 'width',  { min: 16, max: 8192, int: true });
+      const H   = num(p.height ?? 1080, 'height', { min: 16, max: 8192, int: true });
+      // 25, not 24: HeyGen renders every avatar at 25 fps and a base track
+      // resampled to another rate judders on every held frame.
+      const fps = num(p.fps ?? 25, 'fps', { min: 1, max: 120 });
+      const xf  = num(p.fade ?? 0.3, 'fade', { min: 0, max: 5 });
+      const gain = num(p.bed_gain ?? 0.35, 'bed_gain', { min: 0, max: 2 });
+      const pinned  = p.duration !== undefined;
+      const planned = pinned ? num(p.duration, 'duration', { min: 0.001, max: 86400 }) : null;
+
+      // layout 'full' is the long-form presenter: the avatar fills the frame and
+      // a cutaway replaces it inside its window. layout 'stacked' is the Anchor
+      // Desk Short from the AAA flagship canon (stacked-short-format.md): a
+      // 9:16 canvas, the payload zone in the top 65 percent, the presenter chest
+      // up in the bottom 35 percent, captions in the band between them, and the
+      // three states the canon insists on alternating: split (the default),
+      // full-frame head (`emphasis` windows) and full-frame payload (a cutaway
+      // with `full: true`). Zone edges follow the spec's 1250 px split on a
+      // 1080 x 1920 canvas and scale with the canvas when a caller changes it.
+      const layout = oneOf(p.layout ?? 'full', 'layout', ['full', 'stacked']);
+      const stacked = layout === 'stacked';
+      if (stacked && !(H > W)) throw new BadJob(`layout stacked needs a portrait canvas (got ${W}x${H})`);
+      const splitY = stacked ? Math.round(H * 1250 / 1920) : 0;   // top of the presenter zone
+      const headH  = stacked ? H - splitY : H;
+      const plate  = String(p.plate_color ?? '#0A1628');
+      if (!/^#[0-9A-Fa-f]{6}$/.test(plate)) throw new BadJob('plate_color: must be #RRGGBB');
+      const emph = Array.isArray(p.emphasis) ? p.emphasis : [];
+      if (emph.length > 64) throw new BadJob('emphasis: too many (max 64)');
+      if (emph.length && !stacked) throw new BadJob('emphasis: only meaningful with layout stacked');
+      const emphasis = emph.map((g, k) => {
+        const s = num(g && g.start, `emphasis[${k}].start`, { min: 0, max: 86400 });
+        const e = num(g && g.end,   `emphasis[${k}].end`,   { min: 0, max: 86400 });
+        if (e <= s) throw new BadJob(`emphasis[${k}]: end must exceed start`);
+        if (pinned && e > planned) throw new BadJob(`emphasis[${k}]: ends at ${e}s, past the planned ${planned}s`);
+        return { s, e };
+      }).sort((a, b) => a.s - b.s);
+      for (let i = 1; i < emphasis.length; i++) {
+        if (emphasis[i].s < emphasis[i - 1].e) throw new BadJob(`emphasis: windows overlap (${emphasis[i - 1].e} > ${emphasis[i].s})`);
+      }
+
+      const cuts = Array.isArray(p.cutaways) ? p.cutaways : [];
+      if (cuts.length > 64) throw new BadJob('cutaways: too many (max 64)');
+      const windows = cuts.map((c, k) => {
+        if (!c || typeof c !== 'object') throw new BadJob(`cutaways[${k}]: not an object`);
+        const f  = existingPath(c.path, `cutaways[${k}].path`);
+        const s  = num(c.start, `cutaways[${k}].start`, { min: 0, max: 86400 });
+        const e  = num(c.end,   `cutaways[${k}].end`,   { min: 0, max: 86400 });
+        const IN = num(c.in ?? 0, `cutaways[${k}].in`,  { min: 0, max: 86400 });
+        if (e <= s) throw new BadJob(`cutaways[${k}]: end must exceed start`);
+        if (xf > 0 && (e - s) < 2 * xf) {
+          throw new BadJob(`cutaways[${k}]: shorter than two fades (${(e - s).toFixed(2)}s < ${(2 * xf).toFixed(2)}s)`);
+        }
+        if (pinned && e > planned) {
+          throw new BadJob(`cutaways[${k}]: ends at ${e}s, past the planned ${planned}s`);
+        }
+        // In the full layout every cutaway is full frame; in the stacked layout
+        // it sits in the payload zone unless it asks for the whole canvas.
+        const full = stacked ? c.full === true : true;
+        return { f, s, e, IN, full };
+      }).sort((a, b) => a.s - b.s);
+      for (let i = 1; i < windows.length; i++) {
+        if (windows[i].s < windows[i - 1].e) {
+          throw new BadJob(`cutaways: windows overlap (${windows[i - 1].e} > ${windows[i].s})`);
+        }
+      }
+
+      // Inputs: 0 is the avatar, then one per cutaway in window order, then
+      // the bed (looped, so a 90 second track covers a 12 minute episode), then
+      // the narration override. The indices below follow that order exactly.
+      const inputs = ['-i', avatar];
+      const parts = [];
+      // Fill a zone edge to edge: scale so the shorter side matches, then crop
+      // the centre. The chest-up presenter and a full-frame payload both want
+      // this; letterboxing (normalizeChain) is for the payload zone, where a
+      // 16:9 clip is shown whole.
+      const fillChain = (w, h) => `scale=${w}:${h}:force_original_aspect_ratio=increase:flags=lanczos,crop=${w}:${h},setsar=1,format=yuv420p`;
+      if (stacked) {
+        // The presenter, chest up, in the bottom zone over a plate the height of
+        // the canvas. shortest=1 ends the plate with the presenter, so a pinned
+        // render still pads on -t and an unpinned one ends where the avatar does.
+        parts.push(`[0:v]split=2[a_desk][a_full]`);
+        parts.push(`[a_desk]${fillChain(W, headH)},fps=${fps},setpts=PTS-STARTPTS[head]`);
+        parts.push(`color=c=${plate}:s=${W}x${H}:r=${fps}[plate]`);
+        parts.push(`[plate][head]overlay=0:${splitY}:shortest=1[base]`);
+      } else {
+        parts.push(`[0:v]${normalizeChain(W, H)},fps=${fps},setpts=PTS-STARTPTS[base]`);
+      }
+      windows.forEach((w, i) => {
+        inputs.push('-i', w.f);
+        const len = w.e - w.s;
+        const fades = xf > 0
+          ? `,fade=t=in:st=0:d=${xf}:alpha=1,fade=t=out:st=${(len - xf).toFixed(6)}:d=${xf}:alpha=1`
+          : '';
+        // full frame fills the canvas; the payload zone shows the clip whole.
+        const geometry = w.full ? (stacked ? fillChain(W, H) : normalizeChain(W, H)) : normalizeChain(W, splitY);
+        parts.push(
+          `[${i + 1}:v]trim=start=${w.IN.toFixed(6)}:end=${(w.IN + len).toFixed(6)},setpts=PTS-STARTPTS,` +
+          `${geometry},fps=${fps},` +
+          `tpad=stop_mode=clone:stop_duration=${len.toFixed(6)},trim=end=${len.toFixed(6)},` +
+          `format=yuva420p${fades},setpts=PTS+${w.s.toFixed(6)}/TB[c${i}]`);
+      });
+      let last = 'base';
+      windows.forEach((w, i) => {
+        const lbl = `v${i + 1}`;
+        parts.push(`[${last}][c${i}]overlay=0:0:eof_action=pass:enable='between(t,${w.s.toFixed(6)},${w.e.toFixed(6)})'[${lbl}]`);
+        last = lbl;
+      });
+      if (stacked && emphasis.length) {
+        // The emphasis line: the presenter takes the whole canvas. Laid last so
+        // it wins over any cutaway that shares the second.
+        const en = emphasis.map(g => `between(t,${g.s.toFixed(6)},${g.e.toFixed(6)})`).join('+');
+        parts.push(`[a_full]${fillChain(W, H)},fps=${fps},setpts=PTS-STARTPTS[headfull]`);
+        parts.push(`[${last}][headfull]overlay=0:0:eof_action=pass:enable='${en}'[vemph]`);
+        last = 'vemph';
+      } else if (stacked) {
+        parts.push(`[a_full]nullsink`);
+      }
+
+      let captions = null;
+      if (p.captions !== undefined && p.captions !== null && p.captions !== '') {
+        captions = existingPath(p.captions, 'captions');
+        // The SRT path lives INSIDE the filter string, the one place argv
+        // cannot protect. A colon, a quote, a backslash or a comma there
+        // changes the graph. Refuse rather than escape: the caller renames.
+        if (!/^[A-Za-z0-9_./-]+$/.test(captions)) {
+          throw new BadJob('captions: the resolved path carries a character the subtitles filter cannot take verbatim; rename it');
+        }
+        // libass sizes an SRT against a 384 x 288 script and scales to the
+        // canvas, so FontSize and MarginV here are in those units, not pixels
+        // (one unit is 6.67 px on a 1920 high canvas). Stacked: the caption
+        // sits on the seam between the zones, inside the spec's band (y 1150 to
+        // 1630 of 1920) and above the presenter's face, not across it. MarginV
+        // 92 puts the baseline near y 1300. The first cut used 45 and the
+        // 2026-09-15 acceptance frame showed the line across the presenter's
+        // chest, which is why this is measured rather than derived.
+        const style = String(p.caption_style ?? (stacked
+          ? 'FontSize=12,Bold=1,Outline=2,Shadow=0,MarginV=92'
+          : 'FontSize=22,Outline=2,Shadow=0,MarginV=60'));
+        if (!/^[A-Za-z0-9=,._&# -]+$/.test(style)) {
+          throw new BadJob('caption_style: only letters, digits, space and = , . _ & # - are accepted');
+        }
+        parts.push(`[${last}]subtitles=filename=${captions}:force_style='${style}'[vout]`);
+      } else {
+        parts.push(`[${last}]null[vout]`);
+      }
+
+      let bed = null;
+      let narration = null;
+      let idx = windows.length + 1;
+      let bedIdx = null;
+      let narIdx = null;
+      if (p.bed !== undefined && p.bed !== null && p.bed !== '') {
+        bed = existingPath(p.bed, 'bed');
+        bedIdx = idx++;
+        inputs.push('-stream_loop', '-1', '-i', bed);
+      }
+      if (p.narration !== undefined && p.narration !== null && p.narration !== '') {
+        narration = existingPath(p.narration, 'narration');
+        narIdx = idx++;
+        inputs.push('-i', narration);
+      }
+      const narSrc = narIdx === null ? '[0:a]' : `[${narIdx}:a]`;
+      // Same pin as duck_mix: amix=duration=first came out 58 ms short on EP01,
+      // so the mix is padded and cut to the planned length when one is given.
+      const mixTail = pinned ? '[mixraw];[mixraw]apad[mix]' : '[mix]';
+      if (bed) {
+        parts.push(
+          `${narSrc}aresample=48000,asplit=2[nar][key];` +
+          `[${bedIdx}:a]aresample=48000[bedg];` +
+          `[bedg][key]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400:makeup=1[duck];` +
+          `[nar][duck]amix=inputs=2:duration=first:dropout_transition=0:weights=1 ${gain}` + mixTail);
+      } else {
+        parts.push(`${narSrc}aresample=48000` + (pinned ? ',apad[mix]' : '[mix]'));
+      }
+
+      const argv = ['-y', ...QUIET, ...inputs, '-filter_complex', parts.join(';'),
+                    '-map', '[vout]', '-map', '[mix]', '-r', String(fps),
+                    '-c:v', 'libx264', '-crf', String(num(p.crf ?? 18, 'crf', { min: 0, max: 51, int: true })),
+                    '-preset', oneOf(p.preset ?? 'medium', 'preset', PRESETS),
+                    '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k',
+                    '-movflags', '+faststart'];
+      if (pinned) argv.push('-t', planned.toFixed(6));
+      argv.push(out);
+
+      return {
+        bin: FF,
+        argv,
+        parse: () => ({
+          output: path.relative(WORK_ROOT, out),
+          cutaways: windows.length,
+          captions: captions !== null,
+          bed: bed !== null,
+          narration: narration === null ? 'avatar audio' : 'separate file',
+          pinned,
+          planned_duration: planned,
+          fps,
+          normalized_to: `${W}x${H}`,
+          layout,
+          emphasis: emphasis.length,
+          full_cutaways: windows.filter(w => w.full).length,
+        }),
+      };
+    },
+  },
+
+  /**
    * Conform + grain in ONE ffmpeg pass. Splitting scale/grain/encode costs a
    * full generation of re-encode for nothing.
    *

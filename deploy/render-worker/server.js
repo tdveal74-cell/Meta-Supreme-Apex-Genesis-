@@ -308,6 +308,15 @@ function readBody(req) {
   });
 }
 
+// What GET /files hands back, by extension. Anything else is octet-stream,
+// which n8n still stores as a binary; the type only matters to a browser.
+const MIME = {
+  '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm',
+  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.flac': 'audio/flac', '.m4a': 'audio/mp4',
+  '.srt': 'text/plain; charset=utf-8', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp',
+};
+
 const server = http.createServer(async (req, res) => {
   const t0 = process.hrtime.bigint();
   let url;
@@ -413,6 +422,36 @@ const server = http.createServer(async (req, res) => {
       exitCode: j.exitCode,
       seconds: j.seconds,
     });
+  }
+
+  // GET /files/<path>: the return path (added 2026-09-15). Every job writes
+  // inside WORK_ROOT and until this route nothing could read a result back out
+  // except read_text, which is text only. The TQO presenter build needs the
+  // finished MP4 back in n8n so the existing Upload Video node can put it on
+  // Drive for Human Review, and the box has no other way to hand a binary to
+  // anything. Token gated like every route but /health, confined by the same
+  // safePath the jobs use (symlinks included), regular files only, no
+  // directory listing, no Range. The path is percent-decoded first so a
+  // filename with a space survives the trip through n8n's URL field.
+  const fm = /^\/files\/(.+)$/.exec(p);
+  if (req.method === 'GET' && fm) {
+    let abs;
+    try { abs = J.safePath(decodeURIComponent(fm[1]), 'path'); }
+    catch (e) { return send(res, 400, { error: String(e && e.message || e) }); }
+    let st;
+    try { st = fs.statSync(abs); } catch { return send(res, 404, { error: 'no such file' }); }
+    if (!st.isFile()) return send(res, 404, { error: 'not a regular file' });
+    extra.type = 'file';
+    res.writeHead(200, {
+      'content-type': MIME[path.extname(abs).toLowerCase()] || 'application/octet-stream',
+      'content-length': st.size,
+      'content-disposition': `attachment; filename="${path.basename(abs).replace(/["\\\r\n]/g, '_')}"`,
+      'cache-control': 'no-store',
+    });
+    const stream = fs.createReadStream(abs);
+    stream.on('error', () => { try { res.destroy(); } catch { /* already gone */ } });
+    stream.pipe(res);
+    return;
   }
 
   if (req.method === 'GET' && p === '/status') {
