@@ -7,6 +7,9 @@ being true.
 
 from __future__ import annotations
 
+import ast
+import pathlib
+
 import pytest
 
 from services.devon import areas, ecosystem
@@ -369,6 +372,58 @@ def test_mechanical_work_goes_to_cerebras_and_judgement_to_the_council():
 
 def test_an_unrecorded_thinking_duty_is_declined_rather_than_guessed():
     assert ecosystem.route_thinking("read my mind")[0] == "DECLINED"
+
+
+def test_the_studios_script_writing_duty_routes_to_the_council():
+    """Ruled 2026-09-16.
+
+    The estate runs a 06:00 Script Writer lane in TQO FINAL V5, so script
+    writing is a duty this registry has to answer for. Until the ruling it came
+    back DECLINED, which is the correct answer for a duty nobody recorded and
+    the wrong one for the work the studio does every day.
+    """
+    lane, reason = ecosystem.route_thinking("script writing")
+    assert lane == "council"
+    assert "judgement" in reason
+
+
+def test_script_writing_did_not_go_to_the_cheap_lane():
+    """Anti vacuity: the ruling is as much about where it did not go.
+
+    Cerebras was offered as the free lane on 2026-09-15 and held, because the
+    script is the product. If a later edit moves script writing onto the fast
+    lane to save money, that is a decision for Tee and this test is what makes
+    him make it on purpose rather than in passing.
+    """
+    assert "script writing" not in ecosystem.CEREBRAS_DUTIES
+    assert ecosystem.route_thinking("script writing")[0] != "cerebras"
+
+
+def test_the_soul_copy_routes_thinking_the_same_way():
+    """`ecosystem.py` exists twice and nothing regenerates one from the other.
+
+    A duty added here and not under `deploy/soul` would route differently
+    depending on which host answered, and nothing would say so. Measured by
+    parsing both files rather than importing the second, because the soul copy
+    is a deployment artifact and not on the path.
+    """
+    def duties(path: str) -> dict[str, tuple[str, ...]]:
+        tree = ast.parse(pathlib.Path(path).read_text(encoding="utf-8"))
+        found: dict[str, tuple[str, ...]] = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                if node.target.id in ("CEREBRAS_DUTIES", "COUNCIL_DUTIES"):
+                    found[node.target.id] = tuple(
+                        element.value for element in node.value.elts
+                    )
+        return found
+
+    here = duties("services/devon/ecosystem.py")
+    soul = duties("deploy/soul/services/devon/ecosystem.py")
+    assert set(here) == {"CEREBRAS_DUTIES", "COUNCIL_DUTIES"}, here
+    assert here == soul, "the soul copy's thinking duties have drifted"
+    assert here["COUNCIL_DUTIES"] == ecosystem.COUNCIL_DUTIES
+    assert here["CEREBRAS_DUTIES"] == ecosystem.CEREBRAS_DUTIES
 
 
 def test_the_operating_surfaces_come_from_the_one_registry():

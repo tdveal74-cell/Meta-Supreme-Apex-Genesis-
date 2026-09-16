@@ -782,12 +782,23 @@ CEREBRAS_DUTIES: Tuple[str, ...] = (
     "preprocessing",
 )
 
+#: Ruled by Tee 2026-09-16. Script writing is the studio's core craft duty and
+#: the only thinking duty that already runs on a schedule, the 06:00 Script
+#: Writer lane in TQO FINAL V5, yet `route_thinking` answered DECLINED for it
+#: because no list named it. DECLINED is the right answer for a duty nobody has
+#: recorded and the wrong one for the work the estate does every day, so the
+#: registry was failing on the one question it most needed to answer.
+#: It goes to the Council because it is judgement carrying Tee's voice, not
+#: because the Council is cheap. Cerebras was offered as the free lane on
+#: 2026-09-15 and held: the fast lane takes mechanical work, and the script is
+#: the product.
 COUNCIL_DUTIES: Tuple[str, ...] = (
     "deep deliberation",
     "complex reasoning",
     "risk analysis",
     "multi perspective",
     "sovereign advice",
+    "script writing",
 )
 
 
