@@ -138,11 +138,16 @@ class Settings(BaseSettings):
     # Vision is its own backend, separate from DEFAULT_AI_PROVIDER, because
     # the text lane may sit on Cerebras (which serves no vision model) while
     # a frame still needs reading. "mock" describes nothing and calls nobody.
-    VISION_PROVIDER: str = "mock"  # mock | anthropic | openai | local
+    VISION_PROVIDER: str = "mock"  # mock | anthropic | openai | openrouter | local
     VISION_MODEL: str | None = None
     # Points LocalVisionProvider at an OpenAI compatible server on the host.
     # Set this and VISION_PROVIDER=local and no frame leaves the box.
     VISION_API_URL: str | None = None
+    # OpenRouter is its own key, deliberately. OPENAI_API_KEY is read by the
+    # text provider, the embedding provider and the knowledge pipeline, so an
+    # OpenRouter key parked there would authenticate all three against the
+    # wrong vendor the day any of them is switched to "openai".
+    OPENROUTER_API_KEY: str | None = None
     # A ceiling, not a vendor limit. The 017 usage ledger has no column for an
     # image, so a frame is charged at the text rate; bounding the bytes bounds
     # how far that under charge can run.
@@ -150,7 +155,18 @@ class Settings(BaseSettings):
     # The ONLY directory vision.describe may read from. Unset means the tool
     # refuses every call, which is the shipped default: what writes into this
     # directory on a Railway container is a deployment decision, not a default.
+    # Ruled 2026-09-16: it is a dedicated inbox holding nothing but frames meant
+    # for describing, so a bug that slips the root, traversal and extension
+    # guards still has nowhere to go. `var/vision-inbox/` is that directory in
+    # a checkout; a deployment points this at its own copy.
     VISION_IMAGE_ROOT: str | None = None
+    # Vision input tokens are recorded against the daily cap at this multiple.
+    # 1.0 records exactly what the vendor reported and is correct only while
+    # that vendor prices an image token like a text one. Set it to the vendor's
+    # real ratio and the cap sees the true spend instead of a flattering one.
+    # Below 1.0 is refused: that is deliberate under charging, and the recorder
+    # floors at the vendor's own number regardless.
+    VISION_INPUT_TOKEN_WEIGHT: float = 1.0
     AI_MODEL: str | None = None  # override the provider's default model
     ANTHROPIC_MODEL: str = "claude-sonnet-5"
     OPENAI_MODEL: str = "gpt-5.2"
@@ -309,6 +325,17 @@ class Settings(BaseSettings):
 
     # Observability
     LOG_LEVEL: str = "INFO"
+
+    @model_validator(mode="after")
+    def _refuse_a_vision_weight_that_under_charges(self) -> "Settings":
+        if self.VISION_INPUT_TOKEN_WEIGHT < 1.0:
+            raise ValueError(
+                "VISION_INPUT_TOKEN_WEIGHT is "
+                f"{self.VISION_INPUT_TOKEN_WEIGHT}, which charges an image for "
+                "less than the vendor reported. 1.0 is parity; a vendor that "
+                "prices image input above text takes a number above 1.0."
+            )
+        return self
 
     @model_validator(mode="after")
     def _refuse_the_default_secret_in_production(self) -> "Settings":

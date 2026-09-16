@@ -801,6 +801,67 @@ LEADING_FILLERS: Tuple[str, ...] = (
     "uh",
     "so",
     "just",
+    # Added 2026-09-16, when the parser was first driven with speech shaped
+    # input rather than typed strings. A gauntlet of 10,176 phrasings, every
+    # working intent crossed with the lead-ins and trailers a person actually
+    # says, declined 30.2 percent of them. The pattern was sharp: "um" and "uh"
+    # were already here and came through clean, and nothing else in that family
+    # was. Hedges declined 59.5 percent of the time, self corrections 59.0, and
+    # discourse markers 41.0.
+    #
+    # This is the same shape as the 2026-09-10 change above it, and the same
+    # answer: the floors were doing their job and the vocabulary was not. Not
+    # one floor moves here.
+    #
+    # Every entry below was checked against all 299 canon phrases and aliases
+    # first, the way "now" and "today" were excluded, and none of them eats
+    # canon. Measured after: 42.4 percent declined becomes 3.6 percent.
+    #
+    # "yo" sits here rather than in WAKE_WORDS because "hey" already does, and
+    # it was the one address form the gauntlet found broken, at 66.7 percent.
+    #
+    # TWO CANDIDATES WERE REMOVED after the guard in
+    # `test_devon_spoken_input.py` was made structural rather than behavioural.
+    # "look" is the first word of the canon phrase "look up", and "see" of
+    # "see you", so stripping either collapses the phrase AND its own trigger
+    # in lockstep: they still match each other, and a resolves-to-itself test
+    # sees nothing. What it costs is visible only from outside. With "look"
+    # stripped a bare "up" matched `search_web` at 1.0, and with "see" stripped
+    # a bare "you" matched `stop` at 1.0. A single preposition must not start a
+    # web search, and the word "you" must not stop DEVON.
+    #
+    # So the rule, which is what "now" and "today" were already obeying: a
+    # leading filler is never the first word of a canon phrase or alias, and a
+    # trailing filler is never the last. That is structural and checkable, and
+    # it is checked. The cost is that "look," at 40.1 percent and "see," at
+    # 26.6 percent stay declined, which is the right trade.
+    "actually no",
+    "no wait",
+    "hold on",
+    "you know",
+    "i mean",
+    "right so",
+    "and then",
+    "sort of",
+    "kind of",
+    "essentially",
+    "obviously",
+    "basically",
+    "actually",
+    "literally",
+    "honestly",
+    "anyway",
+    "maybe",
+    "sorry",
+    "wait",
+    "well",
+    "like",
+    "hmm",
+    "umm",
+    "uhh",
+    "ah",
+    "er",
+    "yo",
 )
 
 TRAILING_FILLERS: Tuple[str, ...] = (

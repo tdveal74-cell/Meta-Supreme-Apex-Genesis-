@@ -43,6 +43,15 @@ from services.vision.base import (
 ANTHROPIC_VISION_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
 OPENAI_VISION_URL = "https://api.openai.com/v1/chat/completions"
+OPENROUTER_VISION_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+#: Measured on 2026-09-16 through the n8n `devon-vision` lane: it answered
+#: 200 at cost 0 under this account's Zero Data Retention enforcement.
+#: Zero Data Retention eligibility is PER ENDPOINT, not per price tier, so
+#: this being free says nothing about the next free model: `gemma-4-31b-it:free`
+#: returned `zdr-violation-by-account` on the same account the same day.
+#: Changing this default means re-measuring, not reasoning by analogy.
+OPENROUTER_DEFAULT_VISION_MODEL = "inclusionai/ling-3.0-flash-vl:free"
 
 
 def _raise_for_status(response: httpx.Response, *, provider: str, vendor: str) -> None:
@@ -292,6 +301,37 @@ class OpenAIVisionProvider(_HttpVisionProvider):
         )
 
 
+class OpenRouterVisionProvider(OpenAIVisionProvider):
+    """OpenRouter, which speaks the OpenAI Chat Completions dialect.
+
+    A subclass rather than `VISION_PROVIDER=openai` with `VISION_API_URL`
+    pointed elsewhere, for two reasons that are not style:
+
+    `OPENAI_API_KEY` is read by the text provider, the embedding provider and
+    the knowledge pipeline. An OpenRouter key parked there authenticates every
+    one of them against the wrong vendor the day any of them is switched to
+    "openai". This reads `OPENROUTER_API_KEY` and nothing else does.
+
+    And a receipt has to name who was actually paid. Borrowing the openai slot
+    would record `provider: "openai"` for a call that never reached OpenAI, in
+    the same metadata the approval gate writes down.
+
+    A refusal here is worth reading rather than retrying: this account enforces
+    Zero Data Retention, and an endpoint that is not ZDR eligible answers
+    `zdr-violation-by-account` whatever it costs.
+    """
+
+    name = "openrouter"
+    vendor = "OpenRouter"
+    api_url = OPENROUTER_VISION_URL
+    requires_key = True
+
+    def __init__(
+        self, *, default_model: str = OPENROUTER_DEFAULT_VISION_MODEL, **kwargs: object
+    ) -> None:
+        super().__init__(default_model=default_model, **kwargs)  # type: ignore[arg-type]
+
+
 class LocalVisionProvider(OpenAIVisionProvider):
     """An OpenAI compatible server on the host. No key, no frame leaving the box.
 
@@ -323,7 +363,7 @@ def create_vision_provider(
         raise VisionUnsupportedError(
             "Cerebras serves text models and SUPPORTS_IMAGES is "
             f"{SUPPORTS_IMAGES}; it cannot read a frame. Choose anthropic, "
-            "openai, local or mock.",
+            "openai, openrouter, local or mock.",
             provider="cerebras",
         )
 
@@ -342,6 +382,10 @@ def create_vision_provider(
         return OpenAIVisionProvider(
             api_key=api_key, **({"default_model": default_model} if default_model else {}), **shared
         )
+    if key == "openrouter":
+        return OpenRouterVisionProvider(
+            api_key=api_key, **({"default_model": default_model} if default_model else {}), **shared
+        )
     if key == "local":
         return LocalVisionProvider(
             **({"default_model": default_model} if default_model else {"default_model": "local-vision"}),
@@ -349,6 +393,6 @@ def create_vision_provider(
         )
 
     raise VisionUnsupportedError(
-        f"unknown vision provider '{name}'. Choose anthropic, openai, local or mock.",
+        f"unknown vision provider '{name}'. Choose anthropic, openai, openrouter, local or mock.",
         provider=key or "unknown",
     )

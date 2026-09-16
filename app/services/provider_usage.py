@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
@@ -302,6 +303,22 @@ class MeteredEmbeddingProvider(EmbeddingProvider):
         return await self.inner._embed_once(texts)
 
 
+def weighted_vision_input(input_tokens: int) -> int:
+    """Image input charged against the daily cap at the configured multiple.
+
+    Read at call time, like the cap itself, so a deployment can correct the
+    ratio without a restart. Rounded UP, so rounding never moves in the
+    account's favour, and floored at the vendor's own number so a weight below
+    parity cannot charge less than what was actually spent. The config
+    validator refuses such a weight outright; this floor is the second guard,
+    for a value set after start up or patched in a test.
+    """
+    weight = float(getattr(settings, "VISION_INPUT_TOKEN_WEIGHT", 1.0) or 1.0)
+    if weight <= 1.0:
+        return input_tokens
+    return math.ceil(input_tokens * weight)
+
+
 class MeteredVisionProvider(VisionProvider):
     """The configured vision backend, metered and capped per account.
 
@@ -309,13 +326,15 @@ class MeteredVisionProvider(VisionProvider):
     which is an unmetered door into a paid call; `VisionProvider` has a single
     abstract method so this wrapper has no equivalent.
 
-    A known and bounded under count: the 017 ledger has no column for an image,
-    so a frame is recorded at whatever token counts the vendor reports and at
-    the text rate. If a vendor prices image input above that, this account is
-    under charged against its daily cap by that factor.
-    `services.vision.base.DEFAULT_MAX_IMAGE_BYTES` bounds how wrong it can get,
-    and `test_devon_vision_spend.py` pins the behaviour so the day someone adds
-    a cost column the test says what changed.
+    The 017 ledger has no column for cost, model, provider or modality, so an
+    image and a paragraph of the same token count would spend the same against
+    the cap. That was a silent assumption that a vendor prices an image token
+    like a text one. It is now a named, configurable one:
+    `VISION_INPUT_TOKEN_WEIGHT` multiplies the input recorded against the cap,
+    defaulting to 1.0 so a deployment that has not set it records exactly what
+    shipped. The response still reports the vendor's own numbers; only the
+    ledger is weighted, because the weight is an accounting ratio and not a
+    claim about what the vendor said.
     """
 
     def __init__(self, inner: VisionProvider) -> None:
@@ -334,7 +353,7 @@ class MeteredVisionProvider(VisionProvider):
         await asyncio.shield(
             _record_or_log(
                 tenant_id,
-                input_tokens=response.usage.input_tokens,
+                input_tokens=weighted_vision_input(response.usage.input_tokens),
                 output_tokens=response.usage.output_tokens,
             )
         )
