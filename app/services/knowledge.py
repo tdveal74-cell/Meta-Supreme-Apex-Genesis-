@@ -18,7 +18,7 @@ services.*; the services layer never imports app.*.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,9 +55,19 @@ async def search_knowledge(
     query: str,
     limit: int = 6,
     project_id: Optional[str] = None,
+    source_types: Optional[Sequence[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Semantic search over the owner's knowledge base.
+
+    ``source_types`` narrows the search to those kinds of item. It exists
+    because "have I written about this" and "have I SAID this, on air" are
+    different questions with different consequences, and an unfiltered search
+    answers the first while appearing to answer the second. A draft outline
+    and a published episode sit in the same table; matching the outline and
+    reporting it as covered is a false positive that would send Tee looking
+    for an episode that does not exist. None means every source type, which
+    is what every caller before this got and still gets.
 
     Returns a list of hit dicts:
       {
@@ -97,10 +107,18 @@ async def search_knowledge(
           AND ki.status = 'ready'
           AND (CAST(:project_id AS uuid) IS NULL
                OR ki.project_id = CAST(:project_id AS uuid))
+          AND (CAST(:source_types AS text[]) IS NULL
+               OR ki.source_type = ANY(CAST(:source_types AS text[])))
         ORDER BY e.embedding <=> CAST(:query_vec AS vector)
         LIMIT :limit
         """
     )
+
+    # An EMPTY sequence means "no source type can match", not "every one".
+    # Collapsing it to None would turn a caller that filtered down to nothing
+    # into a caller that searched everything, which is the direction that
+    # invents an answer rather than declining.
+    wanted = None if source_types is None else list(source_types)
 
     result = await db.execute(
         sql,
@@ -108,6 +126,7 @@ async def search_knowledge(
             "query_vec": str(query_vec),
             "owner_id": owner_id,
             "project_id": project_id,
+            "source_types": wanted,
             "limit": limit,
         },
     )
