@@ -63,7 +63,7 @@ on its own, because the test reads this block and checks it against the code,
 so a surface change has to move this document too:
 
 ```hermes-surface-counts
-tools 20
+tools 21
 routes 24
 columns 126
 states 9

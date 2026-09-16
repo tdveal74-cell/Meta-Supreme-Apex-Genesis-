@@ -1747,7 +1747,7 @@ const INTENTS=[
  {n:'get_date',k:'READ',floor:.72,lead:["what's the date",'what is the date','the date'],dest:'answers locally'},
  {n:'get_weather',k:'READ',floor:.74,lead:['weather in','weather for',"what's the weather"],dest:'a weather provider'},
  {n:'open_app',k:'EFFECT',floor:.86,gated:1,lead:['open','launch'],dest:'launches a program'},
- {n:'take_screenshot',k:'EFFECT',floor:.84,gated:1,lead:['take a screenshot','screenshot'],dest:'writes an image of the screen to disk'},
+ {n:'take_screenshot',k:'EFFECT',floor:.84,gated:1,lead:['take a screenshot','screenshot'],dest:'captures the screen of the machine DEVON runs on; nothing executes this today'},
  {n:'send_message',k:'EFFECT',floor:.88,gated:1,lead:['send a message to','send message to'],dest:'sends on your behalf'},
  {n:'shutdown',k:'EFFECT',floor:.92,gated:1,lead:['shut down the computer','shutdown the computer','power off the computer'],dest:'powers the machine off'},
  {n:'restart',k:'EFFECT',floor:.92,gated:1,lead:['restart the computer','reboot the computer'],dest:'reboots the machine'},

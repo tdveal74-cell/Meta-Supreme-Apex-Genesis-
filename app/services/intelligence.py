@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.agent import Agent, AgentRun
 from app.models.conversation import Conversation, Message
-from app.services.provider_usage import MeteredProvider
+from app.services.provider_usage import MeteredProvider, MeteredVisionProvider
 from services.agents.registry import AGENT_REGISTRY
 from services.intelligence import (
     ContextPacket,
@@ -33,6 +33,8 @@ from services.intelligence import (
     SynthesisResult,
 )
 from services.intelligence.providers import AIProvider, create_provider
+from services.vision.base import VisionProvider
+from services.vision.providers import create_vision_provider
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +73,38 @@ def get_provider() -> AIProvider:
         "AI provider initialized: %s (model=%s)", provider.name, provider.default_model
     )
     return MeteredProvider(provider)
+
+
+def get_vision_provider() -> VisionProvider:
+    """Build the configured vision backend, metered like every other call.
+
+    Separate from `get_provider` on purpose. The text lane can sit on Cerebras,
+    which serves no vision model, while a frame still needs reading, so one
+    setting cannot answer both questions.
+
+    The wrapper is not optional. `apps/presence/inference.py` already proved
+    that a factory which forgets to wrap quietly loses the cap, so
+    `test_devon_vision_spend.py` asserts the returned object IS a
+    MeteredVisionProvider rather than trusting this line.
+    """
+    name = settings.VISION_PROVIDER
+    provider = create_vision_provider(
+        name,
+        api_key=(
+            settings.ANTHROPIC_API_KEY if name == "anthropic"
+            else settings.OPENAI_API_KEY if name == "openai"
+            else ""
+        )
+        or "",
+        default_model=settings.VISION_MODEL or "",
+        timeout_seconds=settings.AI_TIMEOUT_SECONDS,
+        api_url=settings.VISION_API_URL,
+    )
+    logger.info(
+        "vision provider initialized: %s (model=%s)",
+        provider.name, provider.default_model,
+    )
+    return MeteredVisionProvider(provider)
 
 
 @lru_cache

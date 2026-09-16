@@ -677,7 +677,7 @@ DEVICE_INTENTS: Tuple[Intent, ...] = (
         phrases=("take a screenshot", "capture screen", "screen capture"),
         requires_approval=True,
         min_score=0.84,
-        description="Writes an image of the screen to disk. Approval gated: screens hold secrets.",
+        description="Captures the screen of the machine DEVON runs on. Nothing executes this today and the deployed API has no screen, so approving it captures nothing. Gated because screens hold secrets.",
         aliases=(
             "grab a screenshot",
             "snap a screenshot",
