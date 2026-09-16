@@ -53,10 +53,21 @@ senderName naming the organ; activity emails only — silence means idle.
 Every new webhook/workflow is registered in `services/devon/vault.py` in the
 same change (one path, one job). Credentials are n8n credentials by id, never
 literal tokens in parameters, notes, or code nodes: Devon Capture Key
-`FYRvkRTOcROEYZ9P` for x-devon-key, Pinecone account `3XjKfxbS7zFWEa48`, and
-for outbound mail the SMTP account `mu7nJRSpkAfkzLdF`. Sticky notes on the
-canvas document what the workflow does and why its guards exist; keep them
-truthful when editing.
+`MTZXcoob6BtzbJyH` for x-devon-key, Pinecone account `5vCUF12UaOsgSqMF`, and
+for outbound mail the SMTP account `AgSGuaA2pnZsrZcJ`.
+
+Those three ids were `FYRvkRTOcROEYZ9P`, `3XjKfxbS7zFWEa48` and
+`mu7nJRSpkAfkzLdF` until 2026-09-16, which were the Cloud instance's. Tee ruled
+on 2026-09-15 that every organ runs on the VPS, `vault.py` records that every id
+was rebuilt that night, and this paragraph was not rebuilt with them. Counted
+from the estate rather than from the sentence: `list_credentials` on
+n8n.editforge.online returns all three under those same names at the ids above,
+and none of the old three appear at all. A session copying the old values into a
+node gets a credential that does not exist. Read them from the instance before
+trusting this line again.
+
+Sticky notes on the canvas document what the workflow does and why its guards
+exist; keep them truthful when editing.
 
 **Mail moved off Gmail OAuth on 2026-09-05.** Gmail account `vsTKuAilHmpYCc5L`
 went invalid on its own and took the Heartbeat, the Error Alarm and every other

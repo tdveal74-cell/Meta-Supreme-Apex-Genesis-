@@ -239,6 +239,17 @@ the gate here and a missing `reviewed` event is not a finding; do not wait on
 one, and do not write it up as a gap. His explicit authorization is still
 required to merge, and it arrives in chat.
 
+**Rulings go on an inline card, not in prose.** Ruled by Tee 2026-09-16, after
+a session put a live outage, a merge question and four handed back items into
+one paragraph and asked him to find the decisions in it. A card puts the
+options beside each other with their costs and takes one tap; a paragraph asks
+him to do the sorting. So every decision that is his to make is asked with
+`AskUserQuestion`, the recommended option first, and each option's cost written
+into its own description rather than into the text around the card. This
+loosens nothing above it. His authorization to merge is still explicit and
+still arrives from him; the card is how it is asked for, never a substitute for
+having it.
+
 ## The receipt on a status doc
 
 Ruled 2026-09-09. Every `docs/devon/SYS_OPS_*.md` carries a `## DEVON RECEIPT`

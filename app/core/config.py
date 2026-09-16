@@ -90,6 +90,22 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     ALGORITHM: str = "HS256"
 
+    # The key a machine presents on x-devon-key to reach a read only service
+    # door, such as the hearing lane's parse. An account token cannot do that
+    # job: this value expires in 24 hours, so a workflow holding one breaks by
+    # the next morning.
+    #
+    # The default is EMPTY and empty means CLOSED, enforced in
+    # app/security/service_key.py rather than here. That module refuses before
+    # it compares, because the shape of the bug this guards against is a caller
+    # sending no header, a server holding no key, and a comparison of nothing
+    # against nothing returning a match. A deployment that forgot to set this
+    # serves nobody rather than everybody. A key that is set but shorter than
+    # MINIMUM_KEY_LENGTH is refused the same way and for the same reason: a
+    # one character key would otherwise authenticate while the deployment read
+    # as configured. Generate one with secrets.token_urlsafe(32), 43 chars.
+    DEVON_SERVICE_KEY: str = ""
+
     # DEVON Command Center passkeys. These defaults bind credentials to the
     # canonical production Vercel host. Railway can override them for a custom
     # domain without changing code. WebAuthn private keys never reach DEVON.

@@ -675,6 +675,71 @@ WEBHOOKS = {
             "different URL, so that is one edit beside the model id."
         ),
     },
+    "devon-hears": {
+        "job": "one voice note in, what DEVON understood back; does none of it",
+        "destination": "the caller, as JSON, plus one row per turn in n8n data table devon_hearing_log Tht7qGrqF66E48EA",
+        "workflow": "6KGsMrVCVJe2nYnE",
+        "auth": "header x-devon-key",
+        "open_ruling": (
+            "BUILT 2026-09-16 and deliberately INACTIVE. Item 1 of the ears "
+            "build, ruled by Tee on an inline card that same day: a purpose "
+            "built door rather than an extension of devon-inbox, and a read "
+            "only service parse rather than a lane that logs in as him each "
+            "run. "
+            "BOTH HALVES OF THE KEY ARE NOW IN PLACE, checked rather than "
+            "taken on report. DEVON_SERVICE_KEY appears in the Railway api "
+            "service's variable names, and the credential lQOq0PEHosCWqkV1, "
+            "httpHeaderAuth, named DEVON_SERVICE_KEY, is attached to Ask What "
+            "DEVON Heard. That second step was NOT automatic: n8n skips "
+            "credential assignment for HTTP Request nodes, and a credential "
+            "existing in the store does not attach it to a node. A read back "
+            "after Tee created it showed the node carrying no credentials key "
+            "at all, so the lane would have called the door bare and taken a "
+            "401. Creating and attaching are two separate actions; check the "
+            "node, never the credential list. "
+            "The key must be at least 24 characters or the door refuses it the "
+            "same way it refuses an unset one; secrets.token_urlsafe(32) gives "
+            "43. The node briefly asked for httpTemplatedCustomAuth, which was "
+            "wrong and is corrected. The SDK validator refuses to CREATE a new "
+            "httpHeaderAuth credential from workflow code and steers to the "
+            "templated type, but that is a builder constraint, not a runtime "
+            "one. A credential made by hand in the UI has no such limit, and "
+            "the validator's own warning says plain generic types are for "
+            "reusing an existing credential, which is exactly this path. "
+            "WHAT IS STILL MISSING is the endpoint. POST /api/v1/devon/hear "
+            "ships in the same change as this entry and does not exist on the "
+            "Railway api service until it merges and deploys. The credential "
+            "value itself is unreadable from here, so that the two sides carry "
+            "the SAME string is unproven until a real execution says so. "
+            "WHAT THE DOOR CANNOT DO IS STRUCTURAL, NOT A FLAG. It calls "
+            "parse, a pure function in the effect free services/devon package, "
+            "and never Devon.ask, which is the thing that gates an intent and "
+            "raises an approval card. So a spoken EFFECT comes back refused "
+            "with its payload blanked rather than queued, and a machine cannot "
+            "fill the approval rail with cards nobody spoke for. "
+            "test_devon_hear_door.py proves it twice, once by replacing the "
+            "gate with a landmine and once by reading the route's own AST, and "
+            "both halves were shown failing on a mutation that reintroduced "
+            "the call. "
+            "NOT PROVEN: no voice note has been through this lane. No "
+            "execution exists, ElevenLabs has never been called from it, and "
+            "the transcription model is left unset on purpose because that "
+            "node's model picker lists synthesis models only, measured against "
+            "the live credential on 2026-09-16. "
+            "THE LOG RESOLVES BY ID. devon_hearing_log is Tht7qGrqF66E48EA and "
+            "Log The Turn addresses it in id mode, never by name, because a "
+            "name is capturable by any other table name that contains it. The "
+            "collision check was run before the table was created and reported "
+            "53 names with no containment collisions. The row is written "
+            "BEFORE the caller is answered, so the record exists before the "
+            "claim does, and a confidence the transcriber did not report is "
+            "stored as null rather than as a zero that would read as "
+            "certainty. Answer The Phone reads Read The Status Back explicitly "
+            "rather than $json, because a write node outputs its own API "
+            "response and chaining the insert in front of the responder would "
+            "have answered the caller with a row id instead of the result."
+        ),
+    },
 }
 
 WEBHOOK_RULE = (
@@ -839,6 +904,10 @@ KEY_ROTATION = (
 
 WORKFLOWS = {
     "iPhone Inbox Capture": {"id": "CEy7WAl4QAzHfG46", "state": "active"},
+    # Built 2026-09-16, inactive on purpose: the endpoint it calls is not
+    # deployed and its service credential is empty. See the devon-hears entry
+    # in WEBHOOKS for both, and for what the door structurally cannot do.
+    "DEVON Hears": {"id": "6KGsMrVCVJe2nYnE", "state": "inactive, never executed"},
     "Capture Webhook": {"id": "Me7DDHBDX28ppvHA", "state": "active"},
     "Pipeline Watchdog": {"id": "IZBVlXQ8Y5dsGTRS", "state": "active, every 4h, timezone pinned America/New_York 2026-09-07"},
     "Precedence Guard": {"id": "4BXO9CX8MdYYyGMq", "state": "active, daily 07:00 America/New_York, timezone pinned 2026-09-07"},
