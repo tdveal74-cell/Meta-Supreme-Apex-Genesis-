@@ -125,3 +125,149 @@ def test_the_forty_minute_rule_is_gone_from_the_code_but_not_from_the_history() 
     assert not re.search(r"finding\(\s*'feeder_silent'", source)
     assert not re.search(r"^\s*const UNFED_MIN", source, re.MULTILINE)
     assert "feeder_silent" in source, "the retirement history is the useful part; keep it"
+
+
+# ---------------------------------------------------------------------------
+# Counting the exposure from the estate, which Tee ruled the arc must carry
+# ---------------------------------------------------------------------------
+#
+# The collision check asks whether a colliding NAME exists today. This asks how
+# many locators one could reach at all, which is the number that shrinks
+# permanently. It exists because that count drifted twice, eleven then thirteen
+# then fifteen, every time it was taken from a dependency list rather than from
+# the workflows themselves.
+
+
+def _dt(name: str, mode: str | None, value: str = "tqo_content") -> dict:
+    locator = None if mode is None else {"__rl": True, "mode": mode, "value": value}
+    return {
+        "name": name,
+        "type": "n8n-nodes-base.dataTable",
+        "parameters": {"dataTableId": locator} if locator else {},
+    }
+
+
+def _wf(name: str, active: bool, nodes: list[dict], wf_id: str | None = None) -> dict:
+    return {"id": wf_id or name, "name": name, "active": active, "nodes": nodes}
+
+
+def test_only_name_mode_counts_as_exposure():
+    """list mode stores an id and resolves like one; no mode names no table."""
+    from services.devon.data_tables import name_mode_locators
+
+    found = name_mode_locators(
+        [
+            _wf(
+                "Mixed",
+                True,
+                [
+                    _dt("by name", "name"),
+                    _dt("by id", "id", "2GtmrFcTNqVMbddh"),
+                    _dt("by list", "list", "2GtmrFcTNqVMbddh"),
+                    _dt("creates a table", None),
+                    {"name": "not a data table", "type": "n8n-nodes-base.code", "parameters": {}},
+                ],
+            )
+        ]
+    )
+    assert [record["node"] for record in found] == ["by name"]
+
+
+def test_active_exposure_sorts_ahead_of_inactive():
+    """An active workflow on name mode can bite today. An inactive one cannot."""
+    from services.devon.data_tables import describe_name_mode, name_mode_locators
+
+    found = name_mode_locators(
+        [
+            _wf("Sleeping", False, [_dt("z node", "name")]),
+            _wf("Running", True, [_dt("a node", "name")]),
+        ]
+    )
+    assert found[0]["workflow"] == "Running"
+    assert found[0]["active"] is True
+
+    report = describe_name_mode(found)
+    assert "1 locator(s) resolve by NAME in ACTIVE workflows" in report
+    assert "Running :: a node" in report
+    assert "1 more sit in inactive workflows" in report
+
+
+def test_the_clean_report_says_so_rather_than_saying_nothing():
+    from services.devon.data_tables import describe_name_mode, name_mode_locators
+
+    report = describe_name_mode(name_mode_locators([_wf("Clean", True, [_dt("ok", "id")])]))
+    assert report == "No ACTIVE workflow resolves a Data Table by name."
+
+
+def _run_check(*args: str):
+    import pathlib
+    import subprocess
+    import sys
+
+    return subprocess.run(
+        [sys.executable, "scripts/n8n_name_mode_check.py", *args],
+        capture_output=True,
+        text=True,
+        cwd=pathlib.Path(__file__).parent,
+    )
+
+
+def test_the_check_bites_on_an_active_name_mode_locator(tmp_path):
+    import json
+
+    estate = tmp_path / "estate"
+    estate.mkdir()
+    (estate / "live.json").write_text(json.dumps(_wf("Live One", True, [_dt("Scan", "name")])))
+    done = _run_check(str(estate))
+    assert done.returncode == 1, done.stdout
+    assert "Live One :: Scan" in done.stdout
+    assert "1 ACTIVE name mode locator" in done.stderr
+
+
+def test_the_check_passes_an_estate_whose_active_workflows_are_all_on_id(tmp_path):
+    """Inactive exposure is reported and does NOT fail the check.
+
+    It is a loaded gun rather than a fired one. Failing on it would make the
+    check permanently red and therefore permanently ignored, which is how a
+    guard stops being a guard.
+    """
+    import json
+
+    estate = tmp_path / "estate"
+    estate.mkdir()
+    (estate / "live.json").write_text(json.dumps(_wf("Live", True, [_dt("Scan", "id", "abc")])))
+    (estate / "idle.json").write_text(json.dumps(_wf("Idle", False, [_dt("Old", "name")])))
+    done = _run_check(str(estate))
+    assert done.returncode == 0, done.stderr
+    assert "No ACTIVE workflow resolves a Data Table by name." in done.stdout
+    assert "1 more sit in inactive workflows" in done.stdout
+
+
+def test_the_export_index_does_not_double_the_count(tmp_path):
+    """The export writes a per-workflow file AND an index carrying them all."""
+    import json
+
+    estate = tmp_path / "estate"
+    estate.mkdir()
+    one = _wf("Only", True, [_dt("Scan", "id", "abc")], wf_id="w1")
+    (estate / "w1.json").write_text(json.dumps(one))
+    (estate / "_index.json").write_text(json.dumps({"data": [one]}))
+    done = _run_check(str(estate))
+    assert done.returncode == 0, done.stderr
+    assert "1 workflow(s) read" in done.stdout
+
+
+def test_an_unreadable_estate_is_exit_2_and_never_exit_0(tmp_path):
+    """The third answer. A check that cannot see the estate must not clear it."""
+    missing = _run_check(str(tmp_path / "nope"))
+    assert missing.returncode == 2
+    assert "NOT reporting the estate clean" in missing.stderr
+
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert _run_check(str(empty)).returncode == 2
+
+    broken = tmp_path / "broken"
+    broken.mkdir()
+    (broken / "bad.json").write_text("{not json")
+    assert _run_check(str(broken)).returncode == 2

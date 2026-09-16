@@ -139,8 +139,13 @@ def convert(workflow: dict[str, Any]) -> list[str]:
         code = _code(node)
         if "tableRef: ctx.tableRef" in code:
             continue
-        new = code.replace(
-            "tableId: ctx.tableId,", "tableId: ctx.tableId,\n  tableRef: ctx.tableRef,"
+        # Match the indentation of the line being followed. These are live
+        # production bodies and a two space line inside a four space object
+        # is the kind of thing a reader trips over for no reason.
+        new = re.sub(
+            r"([ \t]*)tableId: ctx\.tableId,",
+            lambda m: f"{m.group(1)}tableId: ctx.tableId,\n{m.group(1)}tableRef: ctx.tableRef,",
+            code,
         )
         if new != code:
             _set_code(node, new)
