@@ -7,6 +7,63 @@ footage with the mouth driven to the cloned narration by MuseTalk, run on a
 rented GPU per episode. Nothing here is rented as a persona: the face is Tee's,
 the voice is Tee's clone, and the software is MIT licensed.
 
+## Amended 2026-09-16: both routes are live, on purpose
+
+Tee ruled on 2026-09-16, on an inline card, that HeyGen and MuseTalk both run
+rather than one replacing the other. HeyGen avatar `1b799c8689a54ebcb6a55de37f92488c`
+is the base track that unblocks episodes now; MuseTalk over his own recorded
+footage stays the owned route and the recording session below stays on the plan.
+
+This is not the 2026-09-15 ruling being forgotten. It is a deliberate second
+route, and it is written here because the sentence above it says HeyGen is out
+and a reader who stopped there would act on a fact that is one day stale.
+
+`presenter_composite` in `deploy/render-worker/jobs.js` takes an `avatar` file
+and does not care how it was made, so the base track is swappable and neither
+route is thrown away by choosing the other today.
+
+The credentials exist, and the first pass said they did not. Corrected the
+same day: the n8n instance carries TWO HeyGen credentials, `Xz4mxIvFgUjLBowu`
+named "HeyGen" and `9i1bFLtfKwtf72z8` named "HEYGEN_API_KEY", both
+`httpHeaderAuth`. Which of the two holds a working key is unverified, and a
+duplicate is its own hazard: n8n lets a credential exist without being attached
+to any node, which this estate has already been caught by once.
+
+**`list_credentials`'s `query` is a case-sensitive substring match.** Searching
+`heygen` returns zero while `HeyGen` returns one, and neither finds
+`HEYGEN_API_KEY`. A filtered search coming back empty is not evidence that a
+credential is absent; only an unfiltered listing is. That mistake was made here
+and written into this file as fact before it was caught.
+
+### Measured 2026-09-16, execution 297 of throwaway `y7PCEQcNaSQb6c7i`
+
+Read only probe, two endpoints, each called once with each credential, then
+archived. Nothing generated, nothing billed.
+
+| what | result |
+|---|---|
+| `Xz4mxIvFgUjLBowu` "HeyGen" | WORKS. Returned the full catalogue, 1266 avatars and 8172 talking photos |
+| `9i1bFLtfKwtf72z8` "HEYGEN_API_KEY" | DEAD. 401 Unauthorized on both endpoints |
+| `remaining_quota` | **0**, with `plan_credit` 99 and `studio_free_watermarked_preview` 3 |
+| `1b799c8689a54ebcb6a55de37f92488c` | a `talking_photo_id` named "Tee", NOT an `avatar_id` |
+
+**The id is a talking photo, not an avatar, and that changes the payload.**
+HeyGen's generate call takes either `character: {type: "avatar", avatar_id}` or
+`character: {type: "talking_photo", talking_photo_id}`. Wiring the id Tee
+supplied into the avatar shape would have failed at the first render. The
+account also holds a real avatar, `aada36d0b20f454b98f03748ec0e6ff0` named
+"TERRANCE ", plus six talking photos under that name, so which face drives the
+base track is a live choice rather than a given.
+
+**The 402 has not gone away.** `remaining_quota` reads 0, which is the API
+facing number. `plan_credit` 99 is reported separately and this probe did not
+establish what it is spendable on, so it is recorded and not interpreted.
+Nothing renders through the API until that quota is non zero.
+
+**The v2 endpoints used here are Legacy** and HeyGen's own response says they
+are removed on 2026-10-31, with `GET /v3/users/me` named as the replacement.
+Six weeks. Build the render call against v3 rather than v2.
+
 Nothing in this directory has been run yet. This container has no GPU, checked
 on 2026-09-15 with `nvidia-smi` and `/dev/nvidia*`, both absent. The proof
 below is the first thing that runs, on a rented pod, and Tee watches the

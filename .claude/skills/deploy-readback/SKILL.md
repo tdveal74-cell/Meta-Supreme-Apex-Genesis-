@@ -134,6 +134,26 @@ deployed build carries `apps/presence/livekit_publisher.py`. Check which
 commit the service is actually running before concluding anything, because the
 variables and the code that honours them move independently.
 
+**Closed on 2026-09-16 at 13:27:51Z.** The publisher merged in PR #250, Railway
+deployed it on `f459ba0`, Tee set the three variables and heard DEVON speak from
+the presence stage. That is the first audio this estate has put into a real
+LiveKit room. It also flips the reading above: on a build carrying
+`apps/presence/livekit_publisher.py`, `true, false` is the WORKING state rather
+than the silent one, so the pair alone no longer tells you which it is and the
+serving commit is the thing to check. The log for that turn carries the socket
+accept and `POST /livekit/token` at 200.
+
+Two traps from that same hour, both cheap and both paid for. A `/health` read
+taken inside a deployment cutover is answered by the OUTGOING container: a read
+at 13:18:47Z said `livekit_configured: false` while the incoming container,
+started at 13:18:46Z, did not finish booting until 13:18:49Z and had the values
+all along. That reading was reported as a clean boot of the new build and was
+not one. Wait for the deployment to report SUCCESS, then read, and check the
+container start time in the logs against the timestamp of your own request. And
+`list-variables` returns names only for an OAuth credential, so a variable
+NAME on a service says nothing about whether it holds a value; read the
+behaviour instead.
+
 One more shape worth knowing: the variables were first set on the **api**
 service rather than presence, where they are completely inert. Nothing under
 `app/`, `services/` or `deploy/` reads `LIVEKIT_*`; only `apps/presence/` does.
