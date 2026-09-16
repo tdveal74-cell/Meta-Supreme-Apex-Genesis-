@@ -139,6 +139,13 @@ def test_health_says_only_these_things_and_no_more():
         "inference",
         "fallback",
         "speech",
+        # Added with protocol v2. Both are provider and contract names of the
+        # same class as "speech", which this test already admits: an operator
+        # needs to read whether the ear is mock or the vendor, and which
+        # protocol versions a client may ask for, without a login. Neither
+        # carries a key, an origin or a hostname.
+        "ears",
+        "protocols",
         "cors_origins",
         "livekit_configured",
         "audio_over_websocket",
@@ -221,7 +228,10 @@ def test_malformed_hello_closes_4400():
         assert info.value.code == 4400
 
     with client.websocket_connect("/ws/presence") as ws:
-        ws.send_json({"t": "hello", "token": mint(), "client": "web", "protocol": 2})
+        # 2 used to be the wrong-version example here and is now a real one.
+        # 3 is the first version this server does not speak, so the assertion
+        # keeps its meaning instead of the example keeping its number.
+        ws.send_json({"t": "hello", "token": mint(), "client": "web", "protocol": 3})
         error = ws.receive_json()
         assert error["code"] == 4400 and "protocol" in error["message"]
         with pytest.raises(WebSocketDisconnect) as info:
