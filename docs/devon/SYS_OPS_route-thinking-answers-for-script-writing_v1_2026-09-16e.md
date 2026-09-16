@@ -1,95 +1,108 @@
-# route_thinking answers for script writing, and the cheap lane stays shut
+# route_thinking answers for script writing, and it nearly answered wrong
 
-Date: 2026-09-16. Supersedes nothing. Follows
-`SYS_OPS_duix-llama-and-coverr-evaluated_v1_2026-09-15.md`, which raised the
-finding this document closes.
+Date: 2026-09-16. Supersedes nothing. Closes the one finding from
+`SYS_OPS_duix-llama-and-coverr-evaluated_v1_2026-09-15.md` that was genuinely
+unfiled.
 
-The registry that decides where thinking goes could not route the one duty this
-studio performs every day. `route_thinking("script writing")` returned
-DECLINED. It now returns `council`. Cerebras was offered as the free lane and
-Tee held it, so the fast lane is unchanged and the hold is now enforced by a
-test rather than by anyone remembering it.
+`route_thinking("script writing")` returned DECLINED. It now returns
+`cerebras`, which is where the work has actually run since Tee ruled it on
+2026-09-15. The first attempt at this fix routed it to the Council, was wrong,
+and was caught by reading the Context Pill before merging rather than after.
 
 ## What was wrong
 
-`services/devon/ecosystem.py` carries two tuples and a function over them.
+`services/devon/ecosystem.py` holds two tuples and a function over them.
 `CEREBRAS_DUTIES` names classification, summarization, extraction, bulk
-analysis, routing assistance and preprocessing. `COUNCIL_DUTIES` named deep
+analysis, routing assistance and preprocessing. `COUNCIL_DUTIES` names deep
 deliberation, complex reasoning, risk analysis, multi perspective and sovereign
-advice. Anything in neither list came back DECLINED, with the function's own
-comment explaining that a confident wrong route is worse than no route, which
-is correct and is why the shape was left alone.
+advice. Anything in neither came back DECLINED, with the function's own comment
+explaining that a confident wrong route is worse than no route. That shape is
+correct and was left alone.
 
-Script writing was in neither list. That is not an exotic duty here. TQO FINAL
-V5 carries a `Daily 6am - Script Writer` schedule trigger, one of the six
-disabled triggers, and the script lane is the largest of the six Claude calls
-by token budget at 24,000. So the registry was silent on the single question it
-most needed to answer, and the silence looked like a considered refusal.
+Script writing was in neither. That is not an exotic duty here. TQO FINAL V5
+carries a `Daily 6am - Script Writer` schedule trigger and a script lane whose
+nodes are named `Write Script (Cerebras)` and `Expand Script (Cerebras)`. So
+the registry that says where thinking goes was silent on the duty the studio
+performs daily, and the silence read as a considered refusal.
 
-The finding was raised on 2026-09-15 while pricing a free script writer. It was
-raised as unfiled, which was half right: a second finding offered in the same
-breath, that Gateway credits are Cloud only and therefore unavailable to the
-VPS script lane, turned out to be already filed twice, in
-`SYS_OPS_the-anthropic-funding-lane_v1_2026-09-11.md` at line 118 and in its
-receipt, with the consequence recorded at
-`SYS_OPS_the-first-vps-watched-run_v1_2026-09-15.md` line 104. Only the
-`route_thinking` boundary was genuinely absent from every document. Checking
-before asserting would have caught that, and did not.
+## The near miss, which is the part worth keeping
+
+The first fix added `script writing` to `COUNCIL_DUTIES`, reasoning that script
+writing is judgement, that judgement goes to the Council by the module's own
+doctrine, and that Tee had said "cerebras held" earlier in the session. Tests
+were written, four suites and the full 2626 test run went green, a pull request
+was opened, and CI began.
+
+All of that was green and all of it was wrong.
+
+"Cerebras held" meant the throwaway quality probe offered on 2026-09-15 stays
+held. It did not mean Cerebras is barred from script writing, because Tee had
+already ruled the opposite on 2026-09-15, on an inline card, recorded in
+`SYS_OPS_the-two-pass-writer-and-the-owned-presenter_v1_2026-09-15.md`: the
+Cerebras writer came in under the 1200 word floor five times running, at 894,
+798, 1055, 1059 and 848 words, and the answer to that card was two pass
+expansion on Cerebras. The Context Pill carried the same ruling in one line,
+"The writer is TWO PASS on Cerebras, second expansion pass capped at two", and
+noted that V5's nine model calls already use that lane.
+
+The error was not the routing opinion. It was reaching a routing opinion
+without first reading the standing rulings, then treating a short instruction
+as license for it. Green CI on a wrong premise is exactly what "green is not
+correct" is about, and this is the second entry in that ledger from the same
+session: the previous document asserted two findings were unfiled when one had
+been filed twice, for the same reason.
+
+The pill was read only because updating it was the next task in the list. Had
+the order been merge then update, the wrong route would have landed.
 
 ## What changed
 
-`script writing` was added to `COUNCIL_DUTIES` in both copies of
-`ecosystem.py`, with the ruling recorded in a comment above the tuple.
+`RULED_ONTO_CEREBRAS` was added, a map of duties whose lane was ruled rather
+than derived, carrying one entry. `route_thinking` consults it before the two
+tuples, so where the work actually runs beats where the doctrine would have put
+it.
 
-It goes to the Council because it is judgement carrying Tee's voice, not
-because the Council is cheap. The Council lane is in fact the unfunded one
-today. Routing is a pure function that returns a decision and spends nothing,
-so recording the correct route costs nothing and leaves the funding question
-exactly where it was.
+It is held separately rather than appended to `CEREBRAS_DUTIES` because the
+reason differs and the reason is what a reader comes for. Everything in that
+tuple is there because it is mechanical, and the function says so in its return
+value. Script writing is the product. It is on the fast lane because that lane
+is the funded one, the Anthropic account behind the Claude nodes being empty,
+and because two pass expansion was measured to clear the floor. Collapsing it
+into the tuple would make the registry call the studio's product mechanical in
+the one place someone looks to find out why, so a test now fails if that
+happens.
 
-## What did not change, on purpose
-
-Cerebras remains the mechanical lane and `script writing` is not on it. Tee was
-offered a measured probe on 2026-09-15, a throwaway VPS workflow writing one
-real TQO script on `gpt-oss-120b` through the existing credential
-`ENoUSqySnkK0NVsl`, and answered "Hold for now". Nothing was run, no workflow
-was created on either n8n instance, and no token was spent. On 2026-09-16 he
-ruled the Oracle box out, which closes the Duix question raised in the previous
-document without the architecture check ever being run.
+`describe_ecosystem` gained a `ruled_onto_cerebras` key so the map shows the
+third category rather than hiding it inside the function.
 
 ## The measurement
 
-Reproduced before and after rather than asserted. The pre-fix module was loaded
-straight from `git show HEAD:services/devon/ecosystem.py` into a temporary
-path, so the working tree was never reverted to test it:
+Reproduced rather than asserted. The pre-fix module was loaded straight from
+`git show HEAD:services/devon/ecosystem.py` into a temporary path, so the
+working tree was never reverted to test it: DECLINED before, `cerebras` after,
+with `classification` still `cerebras`, `risk analysis` still `council`, and an
+unrecorded duty still DECLINED.
 
-```
-BEFORE (HEAD)      : DECLINED
-AFTER  (worktree)  : council | 'script writing' is judgement...
-on cheap lane?     : False
-unknown duty still declines: DECLINED
-```
-
-Suites, all local, all exit 0: `test_devon_ecosystem.py` 61 passed;
+Suites, all local, all exit 0: `test_devon_ecosystem.py` 62 passed, the four new
+tests confirmed by name rather than inferred from the count;
 `test_deploy_soul.py` with `test_devon_integrity.py` 358 passed; the CI
 standalone job's file list reproduced with `PYTHONPATH`, `DATABASE_URL` and
 `TEST_DATABASE_URL` unset, 694 passed; the full suite against PostgreSQL 16,
-2626 passed in 193 seconds; `ruff check .` clean.
+2626 passed; `ruff check .` clean.
 
-## The drift this nearly caused
+## The drift this nearly caused as well
 
 `ecosystem.py` exists twice, at `services/devon/ecosystem.py` and at
 `deploy/soul/services/devon/ecosystem.py`, and nothing regenerates the second
 from the first. There is no sync script under `scripts/` and no test compared
 them. A duty added to one and not the other would route differently depending
-on which host answered, and nothing would have said so.
+on which host answered, silently.
 
-Both copies were edited and `test_the_soul_copy_routes_thinking_the_same_way`
-now parses both files and compares the two tuples, so the next person to edit
-one is told about the other. The guard is deliberately narrow: it covers the
-two duty tuples, not the whole file, because the two copies could legitimately
-diverge elsewhere and a byte equality test would fail on a difference nobody
-cares about.
+Both copies carry the change and `test_the_soul_copy_routes_thinking_the_same_way`
+now parses both files and compares all three collections. The guard is
+deliberately narrow, covering the duty collections rather than the whole file,
+because the copies could legitimately diverge elsewhere and a byte equality
+test would fail on a difference nobody cares about.
 
 ## DEVON RECEIPT
 
@@ -98,9 +111,9 @@ AREA: Systems, TQO
 TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_route-thinking-answers-for-script-writing_v1_2026-09-16e
 DATE: 2026-09-16
-DECISIONS: Tee ruled three things across 2026-09-15 and 2026-09-16. He held the Cerebras script writer probe with the words "Hold for now", so nothing was run and no workflow was created on either n8n instance. He ruled the Oracle box out, which closes the Duix hardware question from the previous document without the uname check ever being run and without either Duix licensing PDF being read. He then instructed that route_thinking be made green, merged, filed, threaded and carried into the Context Pill. The decision taken inside this arc was mine and it was where to put script writing: the Council rather than Cerebras, because it is judgement carrying Tee's voice and because the cheap lane was explicitly held, accepting that the Council lane is the unfunded one today and that routing correctly does not fund it. I also chose to keep the change to one duty rather than adding every craft duty I could imagine, because widening a rule on speculation about intent is what this repository's first law forbids.
-FINDINGS: route_thinking in services/devon/ecosystem.py returned DECLINED for "script writing" while TQO FINAL V5 carries a Daily 6am Script Writer trigger and the script lane holds the largest of the six Claude token budgets at 24,000, so the registry was silent on the duty the studio performs daily and the silence read as a considered refusal; the pre-fix behaviour was reproduced by loading HEAD's copy of the module into a temporary path rather than by reverting the worktree, returning DECLINED before and council after with the cheap lane unchanged and unknown duties still declining; ecosystem.py exists twice, at services/devon and at deploy/soul/services/devon, with no generator under scripts/ and no test comparing them, so a one sided edit would have routed differently per host silently, which is why both copies were edited and a narrow parsing guard over the two duty tuples was added rather than a byte equality test that would fail on differences nobody cares about; and one correction to the previous document's framing, that of the two findings it offered for filing only this one was genuinely unfiled, because the Gateway credits Cloud only constraint was already recorded in SYS_OPS_the-anthropic-funding-lane_v1_2026-09-11.md at line 118 and in its receipt with the consequence at SYS_OPS_the-first-vps-watched-run_v1_2026-09-15.md line 104, an error a check before the assertion would have caught.
-OPEN: the script lane is routed correctly and still unfunded, so the 401s on the VPS stand until the Anthropic key is funded or the six Claude nodes are repointed, and no new option was created by this change; the Cerebras probe stays held and is Tee's to release; the free MuseTalk lip sync route recorded on main at 5063493 on 2026-09-15 has not been read against the Duix finding, and it may reopen the avatar question that ruling Oracle out appeared to close; neither Duix licensing PDF was read and both would need reading before any GPU spend; the wider drift risk between the two ecosystem.py copies is now guarded only for the thinking duties, with the rest of the file unguarded; and no other craft duty was added to either tuple, so anything beyond script writing still returns DECLINED by design.
-STATUS: shipped to this repository. One code change across two copies of ecosystem.py, four tests added to test_devon_ecosystem.py, and this document. No dependency was added, no skill vendored, no n8n workflow touched on either instance, no credential read or written, and no provider called. Every number here is measured in this session rather than recalled, and the before and after routing values were reproduced rather than asserted.
+DECISIONS: Tee ruled three things in this exchange. Oracle is out, which closes the Duix hardware question from the previous document without the uname check ever being run and without either Duix licensing PDF being read. Cerebras stays held, which on reading the record means the throwaway quality probe stays held rather than that Cerebras is barred from script writing, because he had already ruled the writer onto Cerebras on 2026-09-15. And route_thinking was to be made green, merged, filed, threaded and carried into the Context Pill. The decision taken inside this arc was mine and it was to hold script writing in a separate RULED_ONTO_CEREBRAS map rather than append it to CEREBRAS_DUTIES, so that the returned reason states the real one, a funding fact and a measured floor, instead of calling the studio's product mechanical. I also reversed my own first answer: the change that routed script writing to the Council was written, tested, pushed and under CI before the standing ruling was read, and it was replaced rather than defended.
+FINDINGS: route_thinking returned DECLINED for "script writing" while TQO FINAL V5 carries a Daily 6am Script Writer trigger and a script lane whose nodes are named Write Script (Cerebras) and Expand Script (Cerebras), so the registry disagreed with the estate it describes; the first fix routed the duty to the Council on the reasoning that script writing is judgement, passed 2626 tests and reached CI before being found wrong, because Tee had ruled the writer onto Cerebras on 2026-09-15 on an inline card after five measured undershoots of the 1200 word floor at 894, 798, 1055, 1059 and 848 words, a ruling recorded in SYS_OPS_the-two-pass-writer-and-the-owned-presenter_v1_2026-09-15.md and carried in one line of the Context Pill; the phrase "cerebras held" referred to the throwaway quality probe offered on 2026-09-15 and not to the lane, and reading a short instruction as license for a routing opinion is what produced the wrong change; the error was caught only because updating the Context Pill was the next task in the list, so a merge-then-update order would have landed it; and ecosystem.py exists twice with no generator under scripts/ and no test comparing the copies, so a one sided edit would have routed differently per host silently, which is why both copies carry the change and a narrow parsing guard over the three duty collections was added.
+OPEN: the script lane is now routed to the lane it runs on, and nothing about funding changed, so the Anthropic account behind the remaining Claude nodes is still empty and any node still pointed at it fails the same way; the Cerebras quality probe stays held and is Tee's to release, though the writer already runs there so the probe would now measure the live lane rather than a candidate; the wider drift risk between the two ecosystem.py copies is guarded only for the thinking duties, with the rest of both files unguarded; no other craft duty was added to any collection, so anything beyond script writing still returns DECLINED by design; and the free MuseTalk lip sync route recorded on main at 5063493 has not been read against the Duix finding, which ruling Oracle out appeared to close but may not have.
+STATUS: shipped to this repository. One code change across two copies of ecosystem.py, four tests added to test_devon_ecosystem.py, and this document. No dependency was added, no skill vendored, no n8n workflow touched on either instance, no credential read or written, and no provider called. Every number here is measured in this session rather than recalled, the before and after routing values were reproduced rather than asserted, and the wrong first attempt is recorded above rather than quietly dropped.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
