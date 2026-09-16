@@ -272,13 +272,17 @@ DOC_CLAIMS: Tuple[Dict[str, Any], ...] = (
         "expected": {"total": 63},
     },
     {
-        # The standing census after Build 17 (Airtable Row Writer, the second
-        # real executor), 2026-09-06. Holds until the estate changes again, at
-        # which point the doc must be amended, dated, and a new pin added here.
+        # The standing census on the VPS, 2026-09-16. This pin read 64 and
+        # quoted "the 64 workflows" until then, which counted n8n Cloud, an
+        # instance the reconciler stopped reading when vault.N8N_HOST moved.
+        # It therefore reported drift against the wrong instance rather than
+        # against a wrong number. Holds until the estate changes again, at
+        # which point the doc must be amended, dated, and this pin moved with
+        # it. Count from the instance, never from the sentence.
         "doc": "docs/devon/SYS_OPS_n8n-cloud-to-vps-migration_v1_2026-08-31.md",
-        "quote": "the 64 workflows",
+        "quote": "holds 101 workflows",
         "verifier": "n8n_total",
-        "expected": {"total": 64},
+        "expected": {"total": 101},
     },
     # Records the DEVON and Hermes audit of 2026-09-02 (item 14) found stale
     # and corrected, dated. Each retired sentence stays pinned as a tripwire:

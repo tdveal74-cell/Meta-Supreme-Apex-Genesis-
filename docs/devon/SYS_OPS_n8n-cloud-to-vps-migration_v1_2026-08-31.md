@@ -187,11 +187,34 @@ the Airtable Row Writer (ps2S6dWcTIpq5bvr), active, so the Cloud estate now
 holds the 64 workflows the reconciler expects and the live active count is 39.
 Amended on 2026-09-15, the night of the cutover: that 64 counted n8n Cloud,
 which the reconciler no longer reads. `vault.N8N_HOST` is the VPS, and the VPS
-holds 100 workflows because it carries the DEVON organs, the TQO and TSWS
-chains and the Airtable mirror side by side. The DEVON cutover moved 34 organs
-off Cloud that night, leaving 6 workflows active on Cloud, none of them DEVON:
-the OS 29 Platform Policy Sensor and TSWS 01 through 05. The number to count
-from is the instance, never this sentence.
+holds 101 workflows because it carries the DEVON organs, the TQO and TSWS
+chains and the Airtable mirror side by side. That number read 100 until
+2026-09-16, which is the third time a count in this paragraph has been written
+down and then moved; the number to count from is the instance, never this
+sentence.
+
+Amended again on 2026-09-16, on Tee's ruling to unpublish everything on Cloud
+and publish everything on the VPS. The DEVON cutover had left 6 workflows
+active on Cloud, none of them DEVON: the OS 29 Platform Policy Sensor and TSWS
+01 through 05. TSWS 01 through 05 were unpublished on Cloud that night; their
+VPS twins were already active, so that lane went from running on two instances
+to running on one with no gap. Their only schedule trigger was disabled on
+both instances and their caller is an executeWorkflowTrigger, so nothing had
+been firing the Cloud copies.
+
+OS 29 is the exception and it is still active on Cloud. Its VPS copy was an
+older 14 node build, because OS 29 was never in the 40 organ cutover list at
+all: that list is 39 DEVON organs plus the shared OS Error Handler, and OS 29
+sits in the TQO lane outside it. The copy was rebuilt from Cloud on 2026-09-16
+through `scripts/vps_cutover_apply.py` and verifies clean at 22 nodes, node for
+node by name, with no Cloud host left in it and six credentials bound. It still
+cannot be published: n8n refuses it with `Unrecognized node type:
+@mendable/n8n-nodes-firecrawl.firecrawl`. That community node is installed on
+Cloud and not on the VPS, and exactly one workflow on the whole VPS uses it.
+Installing it is a server side action on the instance, so Cloud stays on for
+this one workflow until it is done. Unpublishing Cloud first would take the
+platform policy watcher dark with nothing behind it, which is a compliance
+lane and has no exception path.
 Every 58 and every 33 below this line was true on 2026-08-31 and is the
 record of that day, not the live number. A
 reconcile on 2026-09-01 found 31 active, with both the Heartbeat and the
