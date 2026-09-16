@@ -23,12 +23,15 @@ import httpx
 from services.intelligence.providers.anthropic_provider import _error_detail
 from services.intelligence.providers.base import (
     ProviderAuthError,
+    ProviderBillingError,
     ProviderConfigError,
     ProviderRateLimitError,
     ProviderResponseError,
     ProviderServerError,
     ProviderTimeoutError,
     TokenUsage,
+    billing_message,
+    billing_refusal,
 )
 from services.vision.base import (
     VisionProvider,
@@ -53,6 +56,15 @@ def _raise_for_status(response: httpx.Response, *, provider: str, vendor: str) -
     if response.status_code < 400:
         return
     detail = _error_detail(response)
+    # Funding first. An empty account picks its own status code and two of
+    # them collide with a real condition, so this cannot sit after the 401
+    # and 429 branches. See ProviderBillingError.
+    reason = billing_refusal(response.status_code, detail)
+    if reason:
+        raise ProviderBillingError(
+            billing_message(vendor, response.status_code, detail, reason),
+            provider=provider,
+        )
     if response.status_code == 401:
         raise ProviderAuthError(
             f"{vendor} authentication failed: {detail}", provider=provider

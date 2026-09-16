@@ -132,6 +132,86 @@ class ProviderResponseError(ProviderError):
     """The provider returned something unusable (bad request / malformed body)."""
 
 
+class ProviderBillingError(ProviderError):
+    """The account behind the key has no money. Never retryable.
+
+    Separated from every other 4xx on 2026-09-16, after an empty Anthropic
+    account cost a morning. OS 29 had been detecting policy changes and
+    assessing none of them since the VPS cutover, and n8n reported it as "Bad
+    request - please check your parameters", which is n8n's wording for any
+    vendor 400. The real body read "Your credit balance is too low to access
+    the Anthropic API". The key authenticated. The account was empty. A
+    different model id returned the identical error, which is what ruled out
+    the model string before anyone touched the credential.
+
+    Two things make this its own class rather than a better message.
+
+    It is NOT RETRYABLE, and one vendor currently says otherwise. OpenAI
+    returns 429 for `insufficient_quota`, which mapped here to
+    `ProviderRateLimitError` with `retryable=True`, so an unfunded OpenAI
+    account looked exactly like a busy one and the lane would retry it until
+    something else gave up. An empty balance does not refill on a retry.
+
+    And the remedy is a person, not a patch. Every other provider error is
+    something an engineer can act on; this one needs somebody to fund an
+    account, so the message says the account name and says what to do.
+    """
+
+    def __init__(self, message: str, *, provider: str = "unknown"):
+        super().__init__(message, provider=provider, retryable=False)
+
+
+#: Phrases that mean "the account is empty", as each vendor words it. Matched
+#: case insensitively against the response body.
+#:
+#: Deliberately narrow. A 429 saying "Rate limit reached for requests" is a
+#: real rate limit and MUST stay retryable; only a quota that money fixes
+#: belongs here. Anything added to this list should be a phrase copied from an
+#: observed response, not one imagined from a vendor's documentation.
+_BILLING_PHRASES = (
+    "credit balance is too low",          # Anthropic, observed req_011Cf6L2vyK6pRVWS2LtvRJC
+    "insufficient_quota",                 # OpenAI error type
+    "exceeded your current quota",        # OpenAI message body
+    "insufficient credits",               # OpenRouter
+    "billing hard limit",                 # OpenAI legacy
+    "payment required",
+    "please add credits",
+    "upgrade your plan",
+)
+
+
+def billing_refusal(status_code: int, detail: str) -> str | None:
+    """Why this response is a funding problem, or None when it is not one.
+
+    402 counts on its own, because Payment Required means exactly this and
+    nothing else. Every other status needs a phrase from `_BILLING_PHRASES`,
+    so a plain 400 or a genuine 429 is untouched.
+    """
+    if status_code == 402:
+        return "the vendor answered 402 Payment Required"
+    lowered = (detail or "").lower()
+    for phrase in _BILLING_PHRASES:
+        if phrase in lowered:
+            return f"the response body says {phrase!r}"
+    return None
+
+
+def billing_message(vendor: str, status_code: int, detail: str, reason: str) -> str:
+    """One wording for every backend, which names the remedy as a person.
+
+    The status code is kept in the text on purpose. The whole failure was that
+    a 400 read as a parameter bug, so the message has to carry both the number
+    that misled and the sentence that explains it.
+    """
+    return (
+        f"{vendor} refused the call because the account behind the key has no "
+        f"balance, not because the request was wrong ({status_code}; {reason}). "
+        f"The key authenticated. Retrying will not help and this is not a "
+        f"parameter bug. Fund the {vendor} account or point this lane at a "
+        f"funded provider. Vendor said: {detail}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Base provider
 # ---------------------------------------------------------------------------

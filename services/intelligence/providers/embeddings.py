@@ -29,12 +29,15 @@ import httpx
 
 from services.intelligence.providers.base import (
     ProviderAuthError,
+    ProviderBillingError,
     ProviderConfigError,
     ProviderError,
     ProviderRateLimitError,
     ProviderResponseError,
     ProviderServerError,
     ProviderTimeoutError,
+    billing_message,
+    billing_refusal,
 )
 
 logger = logging.getLogger(__name__)
@@ -200,6 +203,18 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 f"Network error calling OpenAI embeddings: {exc}", provider=self.name
             ) from exc
 
+        # Funding first, for the same reason as the completion path: OpenAI
+        # answers an empty account with 429, which used to be retried here.
+        if response.status_code >= 400:
+            detail = response.text[:400]
+            reason = billing_refusal(response.status_code, detail)
+            if reason:
+                raise ProviderBillingError(
+                    billing_message(
+                        "OpenAI embeddings", response.status_code, detail, reason
+                    ),
+                    provider=self.name,
+                )
         if response.status_code == 401:
             raise ProviderAuthError("OpenAI embeddings auth failed", provider=self.name)
         if response.status_code == 429:

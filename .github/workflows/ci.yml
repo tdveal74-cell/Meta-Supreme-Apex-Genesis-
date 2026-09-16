@@ -67,6 +67,7 @@ jobs:
             test_devon_editforge_execution.py \
             test_devon_data_tables.py \
             test_devon_table_id_conversion.py \
+            test_devon_provider_billing.py \
             test_devon_hermes_surface.py \
             test_devon_receipts.py \
             test_devon_capture_enrichment.py \
