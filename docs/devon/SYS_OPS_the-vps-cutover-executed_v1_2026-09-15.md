@@ -166,6 +166,43 @@ copies, so nothing here was changed.
 
 Both need wall clock rather than work, and neither is claimed.
 
+### Amended 2026-09-16, after both were watched
+
+The Driver Poll fired on its own at 00:00:41Z, execution 153, mode trigger. It
+read the ledger's 8 rows, found 0 open jobs and passed quietly, which is the
+correct answer for an empty queue and is the first scheduled organ to run on the
+VPS without a human starting it.
+
+A real job was then filed through the front door at 00:36:07Z. A throwaway
+workflow posted a well formed envelope to
+`https://n8n.editforge.online/webhook/devon-intake` carrying the Devon Capture
+Key, an `airtable.row` payload for the Inbox Captures table, and the idempotency
+key `vps-cutover-proof-20260916`. The throwaway is archived. What the estate did
+with it, read from the ledger row rather than from the response body:
+
+- intent `01M2KT8WM4RPZ90BCTZPVXH6HK`, ledger row 9, 12 trace events, written at
+  00:36:14Z
+- the spine advanced RECEIVED to UNDERSTANDING on `VUXIyCaur9lejAhL`
+- the runtime loaded the area, recalled 8 prior Systems jobs with 0 open, and
+  planned
+- the router raised the stated level 1 to level 2 on the blast radius floor and
+  sent it to WAITING_APPROVAL, because a reversible write still passes the queue
+- the brief came back from cerebras gpt-oss-120b recommending proceed
+- card `REQ-20260916-37xZi6` is pending in the queue, expiring 2026-09-19T00:36:11.577Z
+- the card names its executor, the table, the payload fingerprint 068eeb86 and
+  the first 182 characters of the body, so Tee can read what will be written
+  before he decides
+
+Nine organs ran on the VPS to produce that: intake, spine, runtime, the intel
+router, the approval queue, the ledger, the event bus and the two the router
+called through. The job stops there and is meant to. The executor does not run
+until Tee taps the card, which is the WRITE gate invariant doing its job rather
+than a fault, so the executor and the verification card stay unproven until he
+does.
+
+The Heartbeat still reads 0 executions at 00:38Z. Its cadence is six hours, so
+that is wall clock and nothing else. It is the last item on this list.
+
 ## DEVON RECEIPT
 
 ```
@@ -175,7 +212,7 @@ ARTIFACT: SYS_OPS_the-vps-cutover-executed_v1_2026-09-15.md
 DATE: 2026-09-15
 DECISIONS: Tee authorised the full switch in one pass after being shown that the Notion database read answered 200. He created the Notion Integration Token bQZHyw6TfiBHmFmE and connected the target database to the n8n vps integration. The switch mirrors Cloud's active state rather than publishing all forty, so the six organs deliberately dormant on Cloud stay dormant on the VPS; that was a judgement made during execution and is his to overturn. The TSWS chain was left untouched on both hosts because the handover forbids rebuilding it.
 FINDINGS: The switch moved 34 DEVON organs from Cloud to the VPS with zero failures and zero organs live on both, verified by reading both instances afterwards rather than trusting the script. All 40 organ pairs rebuilt and verified clean beforehand with all 19 caller facing webhook ids unchanged. The ledger moved nothing because all 21 Cloud rows are terminal. All 16 key protected doors refuse an unkeyed caller with 403 and not the 401 the handover predicts, the body reading Authorization data is wrong with a www-authenticate header, so it is n8n's own auth layer; all 16 accept the key. The door proof sent seven fault emails to Tee at 23:39:32Z because the probe body was garbage that threw rather than a well formed envelope that fails validation. The VPS copy of Create Notion Page had been bound to WpZNTg9qduOFC5NM, the TSWS Render Worker credential, under a display name cached from Cloud, so publishing it would have sent that token to api.notion.com; it never was published. The Notion integration was first connected to a single database row rather than to the database, which answers 404 object_not_found rather than 401. estate_reconcile reported 71 OK and 3 drifts; the Face's chat door id and the two Cloud only one shots were repaired here. The five TSWS workflows are active on both instances, but the only self firing trigger among them is disabled on both hosts, so it is a latent double arm and not active duplication.
-OPEN: No real job has been driven end to end since the switch, and neither the first Driver Poll nor the first Heartbeat has been watched firing on the VPS. OS 29 Platform Policy Sensor is recorded active while its VPS copy is inactive; it runs on Cloud, is outside the cutover list, and whether it moves is Tee's call. The five TSWS workflows remain armed on both hosts. The Vercel account is blocked, so nothing can deploy to either Vercel surface until a human clears it, though nothing is currently owed to either.
+OPEN: Amended 2026-09-16. The first Driver Poll fired on its own at 00:00:41Z, execution 153, and passed quietly on an empty queue. A real job was filed through the intake at 00:36:07Z and reached the approval card: intent 01M2KT8WM4RPZ90BCTZPVXH6HK, ledger row 9, 12 trace events, card REQ-20260916-37xZi6 pending. It stops at the card because the executor waits on Tee's tap, so the executor and the verification card are still unproven and are his to unblock. The Heartbeat has still not fired; it reads 0 executions at 00:38Z on a six hour cadence. OS 29 Platform Policy Sensor is recorded active while its VPS copy is inactive; it runs on Cloud, is outside the cutover list, and whether it moves is Tee's call. The five TSWS workflows remain armed on both hosts. The Vercel account is blocked, so nothing can deploy to either Vercel surface until a human clears it, though nothing is currently owed to either.
 STATUS: The cutover is executed. Every DEVON organ runs on the VPS and Cloud runs none of them. Proof of a live job and of the first scheduled organs firing is outstanding.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
