@@ -17,6 +17,11 @@ forgot to set `DEVON_SERVICE_KEY` would authenticate every caller rather than
 none: the door would read as configured while standing open. So this refuses
 first and compares second, and an unset key is a 503 naming the missing
 setting rather than a 200 to a stranger.
+
+A key that is set but too short is refused the same way, and for the same
+reason: both are a misconfigured service, not a bad caller. Without that floor
+a one character key is accepted and the deployment reads as configured, which
+is the unset bug wearing a different hat.
 """
 
 import secrets
@@ -35,6 +40,17 @@ SERVICE_KEY_HEADER = "x-devon-key"
 #: response body or a stored row by way of a route that meant well.
 SERVICE_PRINCIPAL = "machine"
 
+#: The shortest key this door will accept. 24 characters is roughly 128 bits
+#: once the value carries real randomness, and it exists because without it a
+#: one character key is accepted and reads as configured. The recommended way
+#: to produce one is `secrets.token_urlsafe(32)`, which is 43 characters.
+#:
+#: A short key is refused the same way an unset one is, with a 503 naming the
+#: setting, because both are a misconfigured service rather than a bad caller.
+#: Telling a stranger apart from a bad deployment is the operator's job and
+#: the log line is where that belongs, not the response body.
+MINIMUM_KEY_LENGTH = 24
+
 
 def require_service_key(
     x_devon_key: Annotated[Optional[str], Header(alias=SERVICE_KEY_HEADER)] = None,
@@ -50,6 +66,16 @@ def require_service_key(
             detail=(
                 "This door needs DEVON_SERVICE_KEY set on the service. It is "
                 "unset, so the door is closed rather than open to everyone."
+            ),
+        )
+    if len(configured) < MINIMUM_KEY_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                f"DEVON_SERVICE_KEY is shorter than {MINIMUM_KEY_LENGTH} "
+                "characters. The door stays closed rather than guarded by "
+                "something guessable. Generate one with "
+                "secrets.token_urlsafe(32)."
             ),
         )
 

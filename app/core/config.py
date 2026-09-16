@@ -100,7 +100,10 @@ class Settings(BaseSettings):
     # it compares, because the shape of the bug this guards against is a caller
     # sending no header, a server holding no key, and a comparison of nothing
     # against nothing returning a match. A deployment that forgot to set this
-    # serves nobody rather than everybody.
+    # serves nobody rather than everybody. A key that is set but shorter than
+    # MINIMUM_KEY_LENGTH is refused the same way and for the same reason: a
+    # one character key would otherwise authenticate while the deployment read
+    # as configured. Generate one with secrets.token_urlsafe(32), 43 chars.
     DEVON_SERVICE_KEY: str = ""
 
     # DEVON Command Center passkeys. These defaults bind credentials to the

@@ -29,7 +29,11 @@ import pytest
 
 from app.api.v1.devon import hear
 from app.core.config import settings
-from app.security.service_key import SERVICE_KEY_HEADER, SERVICE_PRINCIPAL
+from app.security.service_key import (
+    MINIMUM_KEY_LENGTH,
+    SERVICE_KEY_HEADER,
+    SERVICE_PRINCIPAL,
+)
 
 HEAR = "/api/v1/devon/hear"
 
@@ -84,6 +88,40 @@ async def test_an_unset_key_refuses_a_plausible_key(client, unset):
 async def test_an_unset_key_refuses_no_header_at_all(client, unset):
     answered = await client.post(HEAR, json={"text": "what time is it"})
     assert answered.status_code == 503, answered.text
+
+
+@pytest.mark.asyncio
+async def test_a_short_key_is_refused_even_when_the_caller_has_it(client, monkeypatch):
+    """A guessable key is a misconfigured service, not a guarded door.
+
+    The caller here presents the configured key exactly and still gets nothing.
+    Without this floor a one character key authenticates and the deployment
+    reads as configured, which is the unset bug wearing a different hat.
+    """
+    short = "x" * (MINIMUM_KEY_LENGTH - 1)
+    monkeypatch.setattr(settings, "DEVON_SERVICE_KEY", short, raising=False)
+    answered = await client.post(
+        HEAR, json={"text": "what time is it"}, headers={SERVICE_KEY_HEADER: short}
+    )
+    assert answered.status_code == 503, answered.text
+    assert str(MINIMUM_KEY_LENGTH) in answered.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_a_key_exactly_at_the_floor_is_accepted(client, monkeypatch):
+    """The boundary is inclusive, so the floor is a floor and not a fence."""
+    exact = "k" * MINIMUM_KEY_LENGTH
+    monkeypatch.setattr(settings, "DEVON_SERVICE_KEY", exact, raising=False)
+    answered = await client.post(
+        HEAR, json={"text": "what time is it"}, headers={SERVICE_KEY_HEADER: exact}
+    )
+    assert answered.status_code == 200, answered.text
+
+
+def test_the_floor_is_at_least_128_bits_of_a_random_key():
+    """24 URL safe characters is about 143 bits. Below this is thin for a key
+    that never rotates and sits in front of a parse door."""
+    assert MINIMUM_KEY_LENGTH >= 22
 
 
 # ---------------------------------------------------------------------------

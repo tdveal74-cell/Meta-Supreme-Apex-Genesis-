@@ -677,7 +677,7 @@ WEBHOOKS = {
     },
     "devon-hears": {
         "job": "one voice note in, what DEVON understood back; does none of it",
-        "destination": "the caller, as JSON; nothing is written anywhere",
+        "destination": "the caller, as JSON, plus one row per turn in n8n data table devon_hearing_log Tht7qGrqF66E48EA",
         "workflow": "6KGsMrVCVJe2nYnE",
         "auth": "header x-devon-key",
         "open_ruling": (
@@ -710,9 +710,19 @@ WEBHOOKS = {
             "execution exists, ElevenLabs has never been called from it, and "
             "the transcription model is left unset on purpose because that "
             "node's model picker lists synthesis models only, measured against "
-            "the live credential on 2026-09-16. It also writes no log row yet, "
-            "so there is no record of a turn beyond the response to the "
-            "caller; that is a named gap, not a silent one."
+            "the live credential on 2026-09-16. "
+            "THE LOG RESOLVES BY ID. devon_hearing_log is Tht7qGrqF66E48EA and "
+            "Log The Turn addresses it in id mode, never by name, because a "
+            "name is capturable by any other table name that contains it. The "
+            "collision check was run before the table was created and reported "
+            "53 names with no containment collisions. The row is written "
+            "BEFORE the caller is answered, so the record exists before the "
+            "claim does, and a confidence the transcriber did not report is "
+            "stored as null rather than as a zero that would read as "
+            "certainty. Answer The Phone reads Read The Status Back explicitly "
+            "rather than $json, because a write node outputs its own API "
+            "response and chaining the insert in front of the responder would "
+            "have answered the caller with a row id instead of the result."
         ),
     },
 }
