@@ -55,5 +55,11 @@ _id_map.json
 # Frames staged for vision.describe. The directory and its README are tracked
 # so VISION_IMAGE_ROOT has somewhere to point in a fresh checkout; the images
 # are not. A frame is whatever was on a screen, and this repository is public.
+#
+# ONE named exception, ruled 2026-09-16: devon-vision-test.png. It is generated
+# by scripts/make_vision_test_frame.py rather than captured, so it holds nothing
+# that was on anybody's screen, and it is the only way a deployed container gets
+# a frame to read while there is no upload route. Add nothing else here by hand.
 var/vision-inbox/*
 !var/vision-inbox/README.md
+!var/vision-inbox/devon-vision-test.png
