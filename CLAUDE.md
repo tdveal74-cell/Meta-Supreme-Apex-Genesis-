@@ -254,6 +254,22 @@ same day pairs that supersede each other in an order the filenames could not
 express. The same test enforces it; docs dated on or before 2026-09-15 keep
 their names.
 
+Ruled 2026-09-16, on the first full day that letter existed, because it
+collided that same day. Two sessions forty three minutes apart each wrote a
+2026-09-16 doc and each picked `a`. Neither was careless: an unmerged branch is
+invisible from another container, so both read an empty day and both took the
+first free letter, and PR #235 merging second turned `main` red. A picked
+suffix races whenever two sessions write on the same day.
+
+So from 2026-09-17 the suffix is the UTC hour and minute the doc was written,
+`_v1_2026-09-17-0342.md`. Get it from `date -u +%Y-%m-%d-%H%M` rather than by
+reading the directory; the point is that it is derived, not chosen, so two
+sessions reach different answers without seeing each other. A collision now
+takes two docs written in the same minute, and the same test still catches it.
+2026-09-16 itself stays letters only: its docs are already named, and digits
+sort before letters, so allowing both forms on one day would misorder the only
+thing the suffix exists to order.
+
 Enforcement is an exemption list of exact filenames, not a date cutoff, because
 a new doc can carry an old date in its name and a filename cannot be forged
 that way. The list is the migration backlog and it may only shrink: one test
