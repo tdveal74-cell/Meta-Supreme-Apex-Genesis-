@@ -64,6 +64,39 @@ Nothing renders through the API until that quota is non zero.
 are removed on 2026-10-31, with `GET /v3/users/me` named as the replacement.
 Six weeks. Build the render call against v3 rather than v2.
 
+### Ruled 2026-09-16: HeyGen is wired and NOT to be spent against
+
+`GET /v3/users/me` returned this, and it is the reason:
+
+```json
+{"billing_type":"wallet","wallet":{"currency":"usd","remaining_balance":0,
+ "auto_reload":{"enabled":true,"amount_usd":10,"threshold_usd":5}}}
+```
+
+**Auto reload is ON at $10 a top up with a $5 floor.** A generate call against
+this account does not fail with a 402. It charges a card, automatically, with
+no confirmation step. An 8 minute episode could trigger several top ups in a
+row. Any session that reaches for a HeyGen render is spending Tee's money
+without being asked, so do not, and do not reason that "the wallet is empty so
+it will just fail". It is configured to make sure it does not fail.
+
+The free watermarked previews are NOT a way around this. The docs say an API
+key bills to API plans while OAuth draws on subscription credits, and on v3
+this account has no plan: `billing_type` is `wallet`. The `plan_credit` 99 and
+`studio_free_watermarked_preview` 3 came from the deprecated v2 endpoint and do
+not map onto the wallet an API key bills. That option was offered before the
+contract had been read, and it was not real.
+
+So the presenter is MuseTalk over Tee's own footage, which is where the
+2026-09-15 ruling started. HeyGen keeps its working credential
+`Xz4mxIvFgUjLBowu` and the chosen avatar `aada36d0b20f454b98f03748ec0e6ff0`
+recorded here so the lane can be switched on the day Tee funds it deliberately,
+and not before.
+
+**The critical path is now the recording session in this file, plus the shot
+list in `SHOT_LIST.md`, plus a rented GPU.** Nothing else unblocks the
+presenter.
+
 Nothing in this directory has been run yet. This container has no GPU, checked
 on 2026-09-15 with `nvidia-smi` and `/dev/nvidia*`, both absent. The proof
 below is the first thing that runs, on a rented pod, and Tee watches the
