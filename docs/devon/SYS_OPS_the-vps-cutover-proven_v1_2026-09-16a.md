@@ -87,11 +87,23 @@ What was measured rather than assumed:
   so nothing was edited between the pass and the failure. Same version, same
   node, same inputs, opposite outcomes.
 
-So the failure is intermittent and sits in n8n's own Data Table schema
-resolution, not in a wrong column name. That is as far as measurement goes from
-here. It is a 240 node workflow carrying the TQO and NCO pipelines, its next
-pass is at 04:00Z, and whether it is chased now or left to reproduce is Tee's
-call rather than a thing to start editing at one in the morning.
+So the failure sits in n8n's own Data Table schema resolution, not in a wrong
+column name. That is as far as measurement went that night. It is a 240 node
+workflow carrying the TQO and NCO pipelines, its next pass is at 04:00Z, and
+whether it is chased now or left to reproduce is Tee's call rather than a thing
+to start editing at one in the morning.
+
+### CORRECTED 2026-09-16 04:00Z. It was never intermittent.
+
+The 04:00Z pass failed identically, which is the second in a row, and the root
+cause came out on the next look. `SYS_OPS_the-tqo-lane-was-resolving-the-wrong-table_v1_2026-09-16g.md`
+carries it. In short: at 23:38Z, between the 22:00Z pass that worked and the
+01:00Z pass that did not, a concurrent session created Airtable mirror tables in
+the same project, two of which carry `tqo_content` inside their own names. n8n's
+Data Table resource locator in name mode then stopped reaching `tqo_content`.
+Deterministic from that minute, not intermittent. The word above was written
+from one failure and one older success, which is not enough to call anything.
+Read the newer doc; this section is the wrong reading kept for the record.
 
 ## DEVON RECEIPT
 
@@ -100,8 +112,8 @@ AREA: Systems
 TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_the-vps-cutover-proven_v1_2026-09-16a.md
 DATE: 2026-09-16
-DECISIONS: Tee approved card REQ-20260916-37xZi6 at 00:57:40Z, which is what let the airtable.row executor run and closed the last open item from the cutover close-out. The throwaway filer workflow was archived rather than left in the estate. TQO FINAL V5 was left alone rather than edited, because it is outside the cutover and the failure is intermittent.
-FINDINGS: The DEVON lane runs end to end on the VPS. One real job went intake to spine to runtime to router to card to Driver Poll to the airtable.row executor to the spine again to a verification card, 22 trace events in the ledger, artifact recoe6wzzAdkKpEnj written into Inbox Captures with key_verified true and reused false. The Driver Poll fired unattended twice, a 35 millisecond quiet pass at 00:00:41Z and a 7.4 second working pass at 01:00:41Z. The approval card named its executor, table, payload fingerprint and body opening before Tee decided. TQO FINAL V5 (qEkGOUsNyVaRAmm6) failed at 01:00:00Z on a Data Table filter that names a column both candidate tables actually carry, after the same node on the same branch passed twice at 22:00:00Z with the workflow unedited since 19:13:34Z the previous evening, so it is intermittent rather than misconfigured.
+DECISIONS: Tee approved card REQ-20260916-37xZi6 at 00:57:40Z, which is what let the airtable.row executor run and closed the last open item from the cutover close-out. The throwaway filer workflow was archived rather than left in the estate. TQO FINAL V5 was left alone rather than edited, because it is outside the cutover and the failure looked intermittent at the time. CORRECTED 2026-09-16: it was deterministic and the cause is named in _2026-09-16g.md.
+FINDINGS: The DEVON lane runs end to end on the VPS. One real job went intake to spine to runtime to router to card to Driver Poll to the airtable.row executor to the spine again to a verification card, 22 trace events in the ledger, artifact recoe6wzzAdkKpEnj written into Inbox Captures with key_verified true and reused false. The Driver Poll fired unattended twice, a 35 millisecond quiet pass at 00:00:41Z and a 7.4 second working pass at 01:00:41Z. The approval card named its executor, table, payload fingerprint and body opening before Tee decided. TQO FINAL V5 (qEkGOUsNyVaRAmm6) failed at 01:00:00Z on a Data Table filter that names a column both candidate tables actually carry, after the same node on the same branch passed twice at 22:00:00Z with the workflow unedited since 19:13:34Z the previous evening. CORRECTED 2026-09-16 after a second identical failure at 04:00:00Z: it was deterministic from 23:38Z, when a concurrent session created mirror tables whose names contain tqo_content, and calling it intermittent from one failure and one older success was the error. See _2026-09-16g.md.
 OPEN: The verification card REQ-20260916-J1ApUy is pending and its method is human_watch, so the lane is proven only as far as a human ruling on the artifact. The Heartbeat EEDrp2jLlw2Ssd5b has still not fired, 0 executions at 01:06Z on a six hour cadence. TQO FINAL V5 is red on the VPS and unexplained; its next pass is 04:00Z. OS 29 Platform Policy Sensor is recorded active while its VPS copy is inactive, and the five TSWS workflows remain armed on both hosts; both were open before this arc and both are Tee's call.
 STATUS: The cutover is proven. Every DEVON organ runs on the VPS, and the lane has now carried one real job from the front door to a verification card with a human grant in the middle.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
