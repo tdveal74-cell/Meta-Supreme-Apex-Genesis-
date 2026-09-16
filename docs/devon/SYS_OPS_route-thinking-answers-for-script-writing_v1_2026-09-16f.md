@@ -90,6 +90,28 @@ standalone job's file list reproduced with `PYTHONPATH`, `DATABASE_URL` and
 `TEST_DATABASE_URL` unset, 694 passed; the full suite against PostgreSQL 16,
 2626 passed; `ruff check .` clean.
 
+## The suffix raced a fourth time
+
+This document was first named `_2026-09-16e.md`, chosen by listing
+`docs/devon/` and taking the first free letter after a, b, c and d. That is the
+same method, and the same mistake, that PR #239 exists to describe. Its own
+status doc, `SYS_OPS_a-picked-suffix-races_v1_2026-09-16e.md`, was sitting on an
+unmerged branch in another container holding `e`, where a directory listing
+cannot see it.
+
+So the rule that had already raced three times on the day it was written raced a
+fourth, on the day it was written, against the pull request documenting the
+races. This one was caught before merging for the same reason the one in #239
+was: something other than the directory got read, in this case the Notion thread
+log, which named #239's artifact. Renamed to `f`.
+
+That makes 2026-09-16 run a through f, one letter further than #239's own
+sentence calling `e` the last named that way. That sentence was true when it was
+written. It is worth reading as evidence for the change #239 makes rather than as
+an error in it: from 2026-09-17 the suffix is a derived UTC timestamp, taken from
+the clock rather than chosen from a listing, and this document is one more count
+against choosing.
+
 ## The drift this nearly caused as well
 
 `ecosystem.py` exists twice, at `services/devon/ecosystem.py` and at
@@ -109,7 +131,7 @@ test would fail on a difference nobody cares about.
 ```
 AREA: Systems, TQO
 TYPE: SYS_OPS
-ARTIFACT: SYS_OPS_route-thinking-answers-for-script-writing_v1_2026-09-16e
+ARTIFACT: SYS_OPS_route-thinking-answers-for-script-writing_v1_2026-09-16f
 DATE: 2026-09-16
 DECISIONS: Tee ruled three things in this exchange. Oracle is out, which closes the Duix hardware question from the previous document without the uname check ever being run and without either Duix licensing PDF being read. Cerebras stays held, which on reading the record means the throwaway quality probe stays held rather than that Cerebras is barred from script writing, because he had already ruled the writer onto Cerebras on 2026-09-15. And route_thinking was to be made green, merged, filed, threaded and carried into the Context Pill. The decision taken inside this arc was mine and it was to hold script writing in a separate RULED_ONTO_CEREBRAS map rather than append it to CEREBRAS_DUTIES, so that the returned reason states the real one, a funding fact and a measured floor, instead of calling the studio's product mechanical. I also reversed my own first answer: the change that routed script writing to the Council was written, tested, pushed and under CI before the standing ruling was read, and it was replaced rather than defended.
 FINDINGS: route_thinking returned DECLINED for "script writing" while TQO FINAL V5 carries a Daily 6am Script Writer trigger and a script lane whose nodes are named Write Script (Cerebras) and Expand Script (Cerebras), so the registry disagreed with the estate it describes; the first fix routed the duty to the Council on the reasoning that script writing is judgement, passed 2626 tests and reached CI before being found wrong, because Tee had ruled the writer onto Cerebras on 2026-09-15 on an inline card after five measured undershoots of the 1200 word floor at 894, 798, 1055, 1059 and 848 words, a ruling recorded in SYS_OPS_the-two-pass-writer-and-the-owned-presenter_v1_2026-09-15.md and carried in one line of the Context Pill; the phrase "cerebras held" referred to the throwaway quality probe offered on 2026-09-15 and not to the lane, and reading a short instruction as license for a routing opinion is what produced the wrong change; the error was caught only because updating the Context Pill was the next task in the list, so a merge-then-update order would have landed it; and ecosystem.py exists twice with no generator under scripts/ and no test comparing the copies, so a one sided edit would have routed differently per host silently, which is why both copies carry the change and a narrow parsing guard over the three duty collections was added.
