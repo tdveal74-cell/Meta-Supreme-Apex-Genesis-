@@ -70,6 +70,19 @@ name: Panel smoke CI
 # app/globals.css, a file this filter did not cover. The filter below now
 # covers the stylesheet, the theme, the layout and the build config, because
 # what the dock looks like is decided there as much as in its TSX.
+#
+# THE COMMAND CENTER'S OWN STATUS CARDS RIDE IT TOO, since 2026-09-16.
+# scripts/command-smoke.mjs opens /command-center signed out, with a real token
+# and with one the API refuses, and asserts the six cards at the top of
+# UnifiedCommandCenter.tsx: their words, the colour of each light, that nothing
+# is painted over them, that the browser actually sent each read with the bearer
+# only where the route needs one, and that the four live cards agree with what
+# THIS RUN's API answered rather than with a sentence pinned in the file. The
+# dock check above covered one of the five components this route mounts; the
+# first thing a person reads when they open the cockpit had no browser guard at
+# all until a 2026-09-16 audit went looking for one. The three contexts are the
+# load bearing part: a card hardwired to a green word passes a single signed in
+# pass and fails all three.
 
 on:
   pull_request:
@@ -112,6 +125,12 @@ on:
       - "app/api/v1/agent_tasks.py"
       - "app/api/v1/agent_expansion.py"
       - "app/api/v1/devon.py"
+      # The three routes the Command Center's own status cards read. Counted off
+      # UnifiedCommandCenter.tsx rather than assumed: /health, /operator/status,
+      # /devon/operating-layer/status (devon.py, above) and /intelligence/status.
+      - "app/api/v1/health.py"
+      - "app/api/v1/operator.py"
+      - "app/api/v1/intelligence.py"
       # What decides how the dock's TSX is painted: the global stylesheet, the
       # root layout that loads it, the Tailwind theme and the build config. A
       # rule appended to globals.css lit the Soul light emerald over "recall
@@ -126,12 +145,13 @@ on:
       # The checks, and this file.
       - "apps/web/scripts/panel-smoke.mjs"
       - "apps/web/scripts/dock-smoke.mjs"
+      - "apps/web/scripts/command-smoke.mjs"
       - ".github/workflows/panel-smoke-ci.yml"
   workflow_dispatch:
 
 jobs:
   panels:
-    name: Six panels and the capability dock driven in real Chromium
+    name: Six panels, the capability dock and the status cards in real Chromium
     runs-on: ubuntu-latest
 
     # The same image ci.yml's api job uses, so the database this runs against is
@@ -265,6 +285,14 @@ jobs:
         if: ${{ !cancelled() }}
         working-directory: apps/web
         run: node --experimental-strip-types scripts/dock-smoke.mjs
+
+      # Same reason the dock step runs on !cancelled(): a status card regression
+      # riding with a panel or dock regression is named in the same run rather
+      # than after the other fix.
+      - name: Drive the Command Center status cards in real Chromium
+        if: ${{ !cancelled() }}
+        working-directory: apps/web
+        run: node --experimental-strip-types scripts/command-smoke.mjs
 
       - name: What the servers said, when it went red
         if: failure()
