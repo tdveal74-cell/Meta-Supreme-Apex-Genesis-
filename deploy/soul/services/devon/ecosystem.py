@@ -791,9 +791,43 @@ COUNCIL_DUTIES: Tuple[str, ...] = (
 )
 
 
+#: Duties whose lane was RULED rather than derived from the two tuples above.
+#:
+#: Ruled by Tee on an inline card, 2026-09-15, after the Cerebras writer came in
+#: under the 1200 word floor five times running at 894, 798, 1055, 1059 and 848
+#: words: the writer takes a second expansion pass, capped at two, on Cerebras.
+#: This is not a preference waiting to be implemented. The live script lane in
+#: TQO FINAL V5 carries nodes named `Write Script (Cerebras)` and `Expand Script
+#: (Cerebras)`, so the fast lane is where the work already runs.
+#:
+#: It is held here rather than appended to CEREBRAS_DUTIES because the reason is
+#: different, and the reason is the part a reader comes for. Everything in that
+#: tuple is there because it is mechanical. Script writing is the product. It is
+#: on the fast lane because that lane is the funded one, the Anthropic account
+#: behind the Claude nodes being empty, and because two pass expansion was
+#: measured to clear the floor. Calling it "mechanical and latency sensitive"
+#: would put a lie in the one place someone looks to find out why.
+RULED_ONTO_CEREBRAS: Dict[str, str] = {
+    "script writing": (
+        "'script writing' runs on Cerebras by Tee's ruling of 2026-09-15, a two "
+        "pass expansion capped at two, and not because it is mechanical. It is "
+        "the product. The Council is where judgement belongs and is also the "
+        "unfunded lane today, so this route is a funding fact as much as a "
+        "doctrine one, and is worth re-reading when the funding changes."
+    ),
+}
+
+
 def route_thinking(duty: str) -> Tuple[str, str]:
-    """Send mechanical work to the fast lane and judgement to the Council."""
+    """Send mechanical work to the fast lane and judgement to the Council.
+
+    A ruled duty is answered before the doctrine, because where the work
+    actually runs beats where the doctrine would have put it.
+    """
     wanted = duty.strip().lower()
+    ruled = RULED_ONTO_CEREBRAS.get(wanted)
+    if ruled is not None:
+        return "cerebras", ruled
     if wanted in CEREBRAS_DUTIES:
         return "cerebras", (
             f"'{wanted}' is mechanical and latency sensitive. It belongs on the "
@@ -942,6 +976,7 @@ def summary() -> Dict[str, object]:
         "external_intelligence": {
             "cerebras": list(CEREBRAS_DUTIES),
             "council": list(COUNCIL_DUTIES),
+            "ruled_onto_cerebras": sorted(RULED_ONTO_CEREBRAS),
         },
         "operating_surfaces": list(OPERATING_SURFACES),
         "outputs": list(OUTPUTS),
