@@ -1,9 +1,12 @@
-# Four rulings: the vision root, the spend ratio, the lane door, and table ids
+# Rulings: the vision root, the spend ratio, the lane door, table ids, OpenRouter
 
 Tee ruled on four open items from the vision arc, on inline cards, on
-2026-09-16. Two were work and are done here. One was a decision to change
-nothing, which is recorded so nobody reopens it. One is scheduled rather than
-started.
+2026-09-16, then picked the vision backend in the same session. Three were
+work and are done here. One was a decision to change nothing, which is
+recorded so nobody reopens it. One is scheduled rather than started.
+
+The filename carries no count on purpose. This doc was named for four rulings
+and a fifth arrived twenty minutes later.
 
 ## Ruling 1: a dedicated inbox, not the working tree
 
@@ -82,6 +85,43 @@ Nothing is broken today: the mirrors are renamed and the hazard set across all
 51 tables is empty. The naming rule in the Context Pill is what holds until the
 arc runs.
 
+## Ruling 5: OpenRouter is the vision backend
+
+Asked what to put on Railway, Tee picked an OpenRouter model. That answered a
+question ruling 1 had left open: the repo side path had a directory to read
+from and no funded vendor to send a frame to. The `api` service carries no
+Anthropic or OpenAI key, and the Anthropic account behind this estate is the
+empty one that made OS 29 fail with a credit balance 400.
+
+It could have shipped with no code at all. `OpenAIVisionProvider` already takes
+an `api_url` override and already sends `Authorization: Bearer`, and OpenRouter
+speaks the OpenAI Chat Completions dialect, so `VISION_PROVIDER=openai` with
+`VISION_API_URL` pointed at OpenRouter works today. That shortcut was refused
+for two reasons that are not style.
+
+`OPENAI_API_KEY` is read in five places: the vision factory, the text provider,
+the embedding provider twice, and the knowledge pipeline. An OpenRouter key
+parked there authenticates all of them against the wrong vendor the day any one
+is switched to `openai`. `OPENROUTER_API_KEY` is its own setting and nothing
+else reads it.
+
+And a receipt has to name who was actually paid. `_read` returns
+`provider=self.name`, so borrowing the openai slot would have written
+`provider: "openai"` into the same metadata the approval gate records, for a
+call that never reached OpenAI.
+
+So `OpenRouterVisionProvider` subclasses the OpenAI one: same dialect, own
+name, own vendor string, own URL, own key. Three variables turn it on, and none
+of them is a funded vendor account.
+
+`OPENROUTER_DEFAULT_VISION_MODEL` is `inclusionai/ling-3.0-flash-vl:free`, the
+endpoint the n8n lane measured at 200 and cost 0 under this account's Zero Data
+Retention enforcement. A test pins it, and the docstring says why: ZDR
+eligibility is per endpoint and not per price tier, which this session got
+wrong once already. `gemma-4-31b-it:free` returned `zdr-violation-by-account`
+on the same account the same day at the same price. Changing that default means
+measuring the new endpoint, not reasoning that free implies free.
+
 ## What was measured
 
 Both mutations and the suite were run on this branch, not on a handover's word.
@@ -97,10 +137,10 @@ Both mutations and the suite were run on this branch, not on a handover's word.
 
 AREA: Systems
 TYPE: SYS_OPS
-ARTIFACT: docs/devon/SYS_OPS_four-rulings-on-vision-and-table-ids_v1_2026-09-16l.md
+ARTIFACT: docs/devon/SYS_OPS_rulings-on-vision-and-table-ids_v1_2026-09-16l.md
 DATE: 2026-09-16
-DECISIONS: VISION_IMAGE_ROOT points at a dedicated inbox, var/vision-inbox/, tracked through its README with frames gitignored; the code default stays None so an unconfigured deployment still refuses. VISION_INPUT_TOKEN_WEIGHT names the image to text pricing ratio, defaults to 1.0 for parity with what shipped, prices input only, rounds up, and is refused below parity by both a config validator and a floor in the recorder. The vision lane keeps its raw devon-vision webhook rather than gaining a DEVON command. Resolving Data Tables by id becomes its own scheduled arc rather than being bolted onto this one or cut down to active workflows only.
+DECISIONS: VISION_IMAGE_ROOT points at a dedicated inbox, var/vision-inbox/, tracked through its README with frames gitignored; the code default stays None so an unconfigured deployment still refuses. VISION_INPUT_TOKEN_WEIGHT names the image to text pricing ratio, defaults to 1.0 for parity with what shipped, prices input only, rounds up, and is refused below parity by both a config validator and a floor in the recorder. The vision lane keeps its raw devon-vision webhook rather than gaining a DEVON command. Resolving Data Tables by id becomes its own scheduled arc rather than being bolted onto this one or cut down to active workflows only. OpenRouter is the vision backend, as a first class provider with its own OPENROUTER_API_KEY rather than borrowing the openai slot, because OPENAI_API_KEY is read by four other lanes and because a receipt has to name who was actually paid.
 FINDINGS: The vision spend under count was not a missing ledger column but an unnamed assumption that a vendor prices an image token like a text one. Naming it as a configurable ratio removes the silence without inventing a vendor's price.
-OPEN: The real image to text price ratio for each configured vendor is unset, so the weight sits at parity until someone reads a price list. The table id arc is scheduled and unstarted, 73 name mode nodes across 106 workflows. No deployment has VISION_IMAGE_ROOT set yet, so vision.describe still refuses everywhere.
-STATUS: Rulings 1 and 2 shipped and measured. Ruling 3 is a decision to change nothing. Ruling 4 is scheduled.
+OPEN: Nothing writes a frame into var/vision-inbox and a Railway container's disk is wiped each deploy, so the repo side path has a backend but still no way for an image to arrive. The real image to text price ratio for each configured vendor is unset, so the weight sits at parity until someone reads a price list. The table id arc is scheduled and unstarted, 73 name mode nodes across 106 workflows. No deployment has VISION_IMAGE_ROOT set yet, so vision.describe still refuses everywhere.
+STATUS: Rulings 1, 2 and 5 shipped and measured. Ruling 3 is a decision to change nothing. Ruling 4 is scheduled.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f

@@ -138,11 +138,16 @@ class Settings(BaseSettings):
     # Vision is its own backend, separate from DEFAULT_AI_PROVIDER, because
     # the text lane may sit on Cerebras (which serves no vision model) while
     # a frame still needs reading. "mock" describes nothing and calls nobody.
-    VISION_PROVIDER: str = "mock"  # mock | anthropic | openai | local
+    VISION_PROVIDER: str = "mock"  # mock | anthropic | openai | openrouter | local
     VISION_MODEL: str | None = None
     # Points LocalVisionProvider at an OpenAI compatible server on the host.
     # Set this and VISION_PROVIDER=local and no frame leaves the box.
     VISION_API_URL: str | None = None
+    # OpenRouter is its own key, deliberately. OPENAI_API_KEY is read by the
+    # text provider, the embedding provider and the knowledge pipeline, so an
+    # OpenRouter key parked there would authenticate all three against the
+    # wrong vendor the day any of them is switched to "openai".
+    OPENROUTER_API_KEY: str | None = None
     # A ceiling, not a vendor limit. The 017 usage ledger has no column for an
     # image, so a frame is charged at the text rate; bounding the bytes bounds
     # how far that under charge can run.
