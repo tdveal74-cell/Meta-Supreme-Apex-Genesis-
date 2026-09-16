@@ -41,9 +41,40 @@ count-from-the-lane miss CLAUDE.md's first law describes.
 |---|---|---|
 | Railway `api` | The FastAPI app, the ledger, migrations | `list-deployments`, then `get-logs` on the deployment id |
 | Railway `presence` | DEVON's voice and live inference, root `apps/presence`: `POST /tts`, the WebSocket lane, LiveKit tokens | `list-deployments`, then `GET /health` on the public host, which an agent container cannot reach (see below) |
-| Railway `scheduler-cron` | The scheduled lane, deployed from the same commit as `api` | `list-deployments`; it carries no public host of its own to read back |
+| Railway `scheduler-cron` | The scheduled lane, `python dispatch.py` on a `*/5 * * * *` cron | `list-deployments`; it carries no public host of its own to read back |
 | Vercel `meta-supreme-apex-genesis-web` | The web app and Command Center, root `apps/web` (recorded as `meta-supreme-web` until 2026-09-02; that project no longer exists) | `list_deployments` for the project |
 | Vercel `devon-soul` | The phone lane, root `deploy/soul` | `list_deployments` for the project |
+
+**THE THREE RAILWAY SERVICES DO NOT DEPLOY ON THE SAME RULE, AND ONE OF THEM
+STOPS WHEN CI IS RED.** Read from `get-service-config` on 2026-09-16, because
+this file had said `scheduler-cron` deploys from the same commit as `api`, and
+that is only true while CI is green.
+
+| service | `source.checkSuites` | `build.watchPatterns` |
+|---|---|---|
+| `api` | **true** | none, so every commit to main |
+| `scheduler-cron` | false | none, so every commit to main |
+| `presence` | false | `apps/presence/**`, `services/**`, `requirements.txt` |
+
+`checkSuites: true` means Railway holds the `api` deploy until GitHub's check
+suites finish, and **SKIPS it outright when they fail**. Measured the same day,
+twice, on the same pair of commits. Main went red on `71f96e2` and `api`'s
+deploy sat WAITING from 08:30:08Z and then turned SKIPPED at 08:35:58Z, so that
+commit never reached the API at all. The fix merged as `2ca6ec1`, `api` sat
+WAITING from 08:39:07Z, CI run 827 passed at 08:45:08Z, and the deploy went
+SUCCESS at 08:46:03Z, one minute later.
+
+`scheduler-cron` has no such gate. On that same red commit it deployed anyway,
+SUCCESS at 08:35:07Z, so for ten minutes the cron lane was running `71f96e2`
+while the API was still serving `c0a2ea9`. **A red main splits the two apart
+rather than freezing both**, and nothing announces it. So when CI on a merge
+commit is red, do not report the estate as simply stale: say which service took
+the commit and which one refused it.
+
+`presence` is the only service with watch patterns, and `services/**` is in
+them, so a change anywhere under `services/` deploys the voice lane. That is
+wider than it looks: adding `services/devon/data_tables.py` triggered a
+presence rebuild on 2026-09-16.
 
 **The presence service reads itself back, which the other four cannot.**
 `GET /health` is unauthenticated and returns the nine keys pinned by
