@@ -40,7 +40,7 @@ count-from-the-lane miss CLAUDE.md's first law describes.
 | Surface | What it serves | How to read it |
 |---|---|---|
 | Railway `api` | The FastAPI app, the ledger, migrations | `list-deployments`, then `get-logs` on the deployment id |
-| Railway `presence` | DEVON's voice and live inference, root `apps/presence`: `POST /tts`, the WebSocket lane, LiveKit tokens | `list-deployments`, then `GET /health` on the public host, which an agent container cannot reach (see below) |
+| Railway `presence` | DEVON's voice and live inference, root `apps/presence`: `POST /tts`, the WebSocket lane, LiveKit tokens | `list-deployments`, then `GET /health` on the public host, which a container CAN reach since 2026-09-16 (see below) |
 | Railway `scheduler-cron` | The scheduled lane, `python dispatch.py` on a `*/5 * * * *` cron | `list-deployments`; it carries no public host of its own to read back |
 | Vercel `meta-supreme-apex-genesis-web` | The web app and Command Center, root `apps/web` (recorded as `meta-supreme-web` until 2026-09-02; that project no longer exists) | `list_deployments` for the project |
 | Vercel `devon-soul` | The phone lane, root `deploy/soul` | `list_deployments` for the project |
@@ -89,21 +89,32 @@ from a deployment record, and a claim about its wiring that was not read off
 `/health` is unverified. The key set is pinned deliberately: a field added there
 is published to anybody, so it is a decision and not a debugging leftover.
 
-**AND AN AGENT CONTAINER CANNOT READ IT.** Measured on 2026-09-16: the network
-policy blocks `*.up.railway.app`, so `curl` gets `CONNECT tunnel failed,
-response 403` from the agent proxy and the read returns nothing. That is a
-policy denial, not an outage, and retrying it is wasted. It means the one
-surface that can prove its own wiring is the one surface a session cannot prove,
-so `speech`, `livekit_configured`, `cors_origins` and `breaker` stay
-**unverified from a container, every time, until the policy changes**. Say
-unverified rather than inferring them from a deployment record.
+**AND A CONTAINER CAN NOW READ IT. Tee opened it on 2026-09-16.** For most of
+that day it could not: the network policy blocked `*.up.railway.app`, `curl`
+got `CONNECT tunnel failed, response 403` from the agent proxy, and the one
+surface that can prove its own wiring was the one surface no session could
+prove. Tee added `*.up.railway.app` under Custom allowed domains in the Claude
+Code environment settings, which is the same remedy the two n8n hosts needed
+and for the same reason: a key alone was never enough.
 
-The remedy is Tee's and it has a precedent: both n8n hosts were 403 blocked the
-same way until he added them under Custom allowed domains in the Claude Code
-environment settings, and a key alone was not enough. Adding
-`presence-production-d272.up.railway.app`, or `*.up.railway.app` for both
-Railway hosts, closes this the same way. Until then a session with egress, or
-Tee on his phone, is the only reader.
+Proven by the read itself, not by the setting being saved:
+
+```
+curl https://presence-production-d272.up.railway.app/health   200, nine keys
+curl https://api-production-5644.up.railway.app/api/v1/health 200, healthy
+```
+
+The wildcard covers both hosts and any Railway service added later. **So read
+`/health` rather than saying unverified.** The four fields nothing else could
+reach came back `speech: cartesia`, `livekit_configured: false`,
+`cors_origins` naming five origins, and `breaker` closed with zero breaches.
+`livekit_configured: false` is the expected state, pinned by
+`test_presence_service.py:106`, and `audio_over_websocket` is defined as `not
+livekit_configured`, so the pair reading `false, true` is the design rather
+than a gap.
+
+A denial is still a denial: if this ever answers 403 again, say so with the
+reason rather than retrying it, and check whether the environment changed.
 
 **Count the Vercel projects before trusting any of this.** On 2026-08-27 a
 diagnosis assumed two and there were four, all deploying from this one
