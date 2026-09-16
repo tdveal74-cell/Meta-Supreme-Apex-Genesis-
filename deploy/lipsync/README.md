@@ -7,6 +7,27 @@ footage with the mouth driven to the cloned narration by MuseTalk, run on a
 rented GPU per episode. Nothing here is rented as a persona: the face is Tee's,
 the voice is Tee's clone, and the software is MIT licensed.
 
+## Amended 2026-09-16: both routes are live, on purpose
+
+Tee ruled on 2026-09-16, on an inline card, that HeyGen and MuseTalk both run
+rather than one replacing the other. HeyGen avatar `1b799c8689a54ebcb6a55de37f92488c`
+is the base track that unblocks episodes now; MuseTalk over his own recorded
+footage stays the owned route and the recording session below stays on the plan.
+
+This is not the 2026-09-15 ruling being forgotten. It is a deliberate second
+route, and it is written here because the sentence above it says HeyGen is out
+and a reader who stopped there would act on a fact that is one day stale.
+
+`presenter_composite` in `deploy/render-worker/jobs.js` takes an `avatar` file
+and does not care how it was made, so the base track is swappable and neither
+route is thrown away by choosing the other today.
+
+Still unverified and blocking the HeyGen half: that account answered 402
+insufficient credit on 2026-09-15, and no HeyGen credential exists on the n8n
+instance (`list_credentials` returns zero for it) or on the Railway `api` or
+`presence` services. An avatar id is not access. Both the funding and the key
+have to be confirmed before anything renders.
+
 Nothing in this directory has been run yet. This container has no GPU, checked
 on 2026-09-15 with `nvidia-smi` and `/dev/nvidia*`, both absent. The proof
 below is the first thing that runs, on a rented pod, and Tee watches the
