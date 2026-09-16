@@ -675,6 +675,46 @@ WEBHOOKS = {
             "different URL, so that is one edit beside the model id."
         ),
     },
+    "devon-hears": {
+        "job": "one voice note in, what DEVON understood back; does none of it",
+        "destination": "the caller, as JSON; nothing is written anywhere",
+        "workflow": "6KGsMrVCVJe2nYnE",
+        "auth": "header x-devon-key",
+        "open_ruling": (
+            "BUILT 2026-09-16 and deliberately INACTIVE. Item 1 of the ears "
+            "build, ruled by Tee on an inline card that same day: a purpose "
+            "built door rather than an extension of devon-inbox, and a read "
+            "only service parse rather than a lane that logs in as him each "
+            "run. It cannot be activated yet and that is the honest state, not "
+            "an oversight. Two things are missing and both are named on the "
+            "canvas. The endpoint it calls, POST /api/v1/devon/hear on the "
+            "Railway api service, ships in the same change as this entry and "
+            "is not deployed until that merges. And the DEVON Service Key "
+            "credential on Ask What DEVON Heard is EMPTY: n8n skips credential "
+            "assignment for HTTP Request nodes, the create call said so, and "
+            "the read back confirmed the node carries no credentials key at "
+            "all. Tee sets DEVON_SERVICE_KEY on the api service and pastes the "
+            "same value into that credential as an httpTemplatedCustomAuth "
+            "template on x-devon-key. "
+            "WHAT THE DOOR CANNOT DO IS STRUCTURAL, NOT A FLAG. It calls "
+            "parse, a pure function in the effect free services/devon package, "
+            "and never Devon.ask, which is the thing that gates an intent and "
+            "raises an approval card. So a spoken EFFECT comes back refused "
+            "with its payload blanked rather than queued, and a machine cannot "
+            "fill the approval rail with cards nobody spoke for. "
+            "test_devon_hear_door.py proves it twice, once by replacing the "
+            "gate with a landmine and once by reading the route's own AST, and "
+            "both halves were shown failing on a mutation that reintroduced "
+            "the call. "
+            "NOT PROVEN: no voice note has been through this lane. No "
+            "execution exists, ElevenLabs has never been called from it, and "
+            "the transcription model is left unset on purpose because that "
+            "node's model picker lists synthesis models only, measured against "
+            "the live credential on 2026-09-16. It also writes no log row yet, "
+            "so there is no record of a turn beyond the response to the "
+            "caller; that is a named gap, not a silent one."
+        ),
+    },
 }
 
 WEBHOOK_RULE = (
@@ -839,6 +879,10 @@ KEY_ROTATION = (
 
 WORKFLOWS = {
     "iPhone Inbox Capture": {"id": "CEy7WAl4QAzHfG46", "state": "active"},
+    # Built 2026-09-16, inactive on purpose: the endpoint it calls is not
+    # deployed and its service credential is empty. See the devon-hears entry
+    # in WEBHOOKS for both, and for what the door structurally cannot do.
+    "DEVON Hears": {"id": "6KGsMrVCVJe2nYnE", "state": "inactive, never executed"},
     "Capture Webhook": {"id": "Me7DDHBDX28ppvHA", "state": "active"},
     "Pipeline Watchdog": {"id": "IZBVlXQ8Y5dsGTRS", "state": "active, every 4h, timezone pinned America/New_York 2026-09-07"},
     "Precedence Guard": {"id": "4BXO9CX8MdYYyGMq", "state": "active, daily 07:00 America/New_York, timezone pinned 2026-09-07"},

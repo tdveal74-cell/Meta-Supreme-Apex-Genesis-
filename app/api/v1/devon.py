@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.security.deps import CurrentUser
+from app.security.service_key import ServiceCaller
 from app.services.capture_enrichment import status as enrichment_status
 from app.services.capture_enrichment import suggest_area
 from app.services.devon_approval_store import build_approval_queue
@@ -46,7 +47,7 @@ from services.devon.approval import (
     RefusalReason,
 )
 from services.devon.assistant import Devon
-from services.devon.commands import ALL_INTENTS, approval_gated_intents
+from services.devon.commands import ALL_INTENTS, approval_gated_intents, parse
 from services.devon.precedence import Candidate, resolve
 
 logger = logging.getLogger(__name__)
@@ -327,6 +328,74 @@ async def command(body: CommandBody, current_user: CurrentUser) -> Dict[str, Any
         owner_id=current_user.id,
         suggested_area=suggestion.area_label if suggestion else None,
     ).to_dict()
+
+
+class HearBody(BaseModel):
+    text: str = Field(
+        ..., min_length=1, max_length=4_000, description="The transcript of what was said"
+    )
+    source: str = Field(
+        default="",
+        max_length=120,
+        description="Which lane heard it, for the reply's provenance only",
+    )
+    transcript_confidence: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="How sure the transcriber was, when it reports one",
+    )
+
+
+@router.post("/hear")
+async def hear(body: HearBody, caller: ServiceCaller) -> Dict[str, Any]:
+    """Report what DEVON understands in a transcript, and do none of it.
+
+    This is the door the hearing lane speaks through. It is machine
+    authenticated on `x-devon-key` because no account is behind a voice note
+    arriving from a workflow, and an account token would expire inside a day.
+
+    It cannot act, and that is structural rather than guarded. It calls
+    `parse`, a pure function in an effect free package, and never
+    `Devon.ask`, which is what gates an intent and raises an approval card.
+    There is no branch here that reaches the queue, so a mis-wired caller gets
+    a description back rather than an effect, and a machine cannot fill the
+    approval rail with cards nobody spoke for.
+
+    An EFFECT utterance is therefore refused rather than gated. The reply names
+    the intent it heard so the lane can tell Tee what he asked for and where to
+    go and do it himself. Ruled by Tee 2026-09-16 on the card that chose this
+    door over a lane that logs in as him each run.
+
+    `transcript_confidence` is carried through untouched. DEVON does not
+    currently lower his own threshold for a shaky transcript; reporting it back
+    lets the lane decide to ask instead of act, and keeps the number in the
+    reply for when that rule is written.
+    """
+    command = parse(body.text)
+    refused = command.is_effect
+    return {
+        "heard": body.text,
+        "source": body.source,
+        "transcript_confidence": body.transcript_confidence,
+        "principal": caller,
+        "understood": command.understood and not refused,
+        "intent": None if refused else (command.name if command.understood else None),
+        "kind": command.intent.kind.value if command.intent else None,
+        "payload": "" if refused else command.payload,
+        "score": command.score,
+        "method": command.method.value,
+        "reason": (
+            f"{command.name} is an effect. This door describes, it never acts, "
+            "so nothing was done and no approval card was raised."
+            if refused
+            else command.reason
+        ),
+        "refused": refused,
+        "suggestion": command.suggestion_name or None,
+        "suggestion_phrase": command.suggestion_phrase or None,
+        "suggestion_score": command.suggestion_score,
+    }
 
 
 class DecideBody(BaseModel):
