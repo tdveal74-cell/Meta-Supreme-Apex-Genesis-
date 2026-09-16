@@ -95,7 +95,7 @@ than the footage itself.
 ## DEVON RECEIPT
 
 ```
-AREA: Studio
+AREA: TQO, Systems
 TYPE: SHOT_LIST
 ARTIFACT: deploy/lipsync/SHOT_LIST.md
 DATE: 2026-09-16
