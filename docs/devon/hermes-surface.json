@@ -32,7 +32,8 @@
     "operator.read | risk=read | reversible=True | blast=read-only process on the configured operator host",
     "runtime.propose_skill | risk=write | reversible=True | blast=one SkillProposal row awaiting human decision",
     "runtime.schedule_goal | risk=write | reversible=True | blast=one delayed goal row in the schedule table",
-    "runtime.spawn_subagent | risk=write | reversible=True | blast=one child AgentTask row and one parent-child link"
+    "runtime.spawn_subagent | risk=write | reversible=True | blast=one child AgentTask row and one parent-child link",
+    "vision.describe | risk=write | reversible=False | blast=one image file transmitted to the configured vision backend; the disclosure is permanent"
   ],
   "routes": [
     "DELETE /agent-tasks/learning/memories/{memory_id}",

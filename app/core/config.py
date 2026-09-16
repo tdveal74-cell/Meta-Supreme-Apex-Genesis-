@@ -134,6 +134,23 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str | None = None
     CEREBRAS_API_KEY: str | None = None
     DEFAULT_AI_PROVIDER: str = "mock"  # mock | anthropic | openai | cerebras
+
+    # Vision is its own backend, separate from DEFAULT_AI_PROVIDER, because
+    # the text lane may sit on Cerebras (which serves no vision model) while
+    # a frame still needs reading. "mock" describes nothing and calls nobody.
+    VISION_PROVIDER: str = "mock"  # mock | anthropic | openai | local
+    VISION_MODEL: str | None = None
+    # Points LocalVisionProvider at an OpenAI compatible server on the host.
+    # Set this and VISION_PROVIDER=local and no frame leaves the box.
+    VISION_API_URL: str | None = None
+    # A ceiling, not a vendor limit. The 017 usage ledger has no column for an
+    # image, so a frame is charged at the text rate; bounding the bytes bounds
+    # how far that under charge can run.
+    VISION_MAX_IMAGE_BYTES: int = 5 * 1024 * 1024
+    # The ONLY directory vision.describe may read from. Unset means the tool
+    # refuses every call, which is the shipped default: what writes into this
+    # directory on a Railway container is a deployment decision, not a default.
+    VISION_IMAGE_ROOT: str | None = None
     AI_MODEL: str | None = None  # override the provider's default model
     ANTHROPIC_MODEL: str = "claude-sonnet-5"
     OPENAI_MODEL: str = "gpt-5.2"

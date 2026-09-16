@@ -53,6 +53,11 @@ from services.intelligence.providers.embeddings import (
     EmbeddingProvider,
     EmbeddingResponse,
 )
+from services.vision.base import (
+    VisionProvider,
+    VisionRequest,
+    VisionResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -295,3 +300,42 @@ class MeteredEmbeddingProvider(EmbeddingProvider):
 
     async def _embed_once(self, texts: List[str]) -> EmbeddingResponse:
         return await self.inner._embed_once(texts)
+
+
+class MeteredVisionProvider(VisionProvider):
+    """The configured vision backend, metered and capped per account.
+
+    One method, deliberately. `MeteredProvider` also exposes `_complete_once`,
+    which is an unmetered door into a paid call; `VisionProvider` has a single
+    abstract method so this wrapper has no equivalent.
+
+    A known and bounded under count: the 017 ledger has no column for an image,
+    so a frame is recorded at whatever token counts the vendor reports and at
+    the text rate. If a vendor prices image input above that, this account is
+    under charged against its daily cap by that factor.
+    `services.vision.base.DEFAULT_MAX_IMAGE_BYTES` bounds how wrong it can get,
+    and `test_devon_vision_spend.py` pins the behaviour so the day someone adds
+    a cost column the test says what changed.
+    """
+
+    def __init__(self, inner: VisionProvider) -> None:
+        super().__init__(
+            default_model=inner.default_model,
+            timeout_seconds=inner.timeout_seconds,
+        )
+        self.name = inner.name
+        self.supports_images = inner.supports_images
+        self.inner = inner
+
+    async def describe(self, request: VisionRequest) -> VisionResponse:
+        tenant_id = spend_bucket()
+        await refuse_if_capped(tenant_id)
+        response = await self.inner.describe(request)
+        await asyncio.shield(
+            _record_or_log(
+                tenant_id,
+                input_tokens=response.usage.input_tokens,
+                output_tokens=response.usage.output_tokens,
+            )
+        )
+        return response

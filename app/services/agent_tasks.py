@@ -28,7 +28,7 @@ from app.services.editforge_client import (
     read_editforge_status,
 )
 from app.services.hermes_expansion_persistence import HermesExpansionRepository
-from app.services.intelligence import get_provider
+from app.services.intelligence import get_provider, get_vision_provider
 from app.services.leased_effect_recorder import LeasedEffectRecorder
 from app.services.soul import get_soul_layer
 from app.services.subagent_links import SubagentLinkRepository
@@ -56,6 +56,7 @@ from services.github.agent_adapter import GitHubCapabilityAdapter
 from services.github.client import GitHubRESTClient
 from services.intelligence.council_adapter import CouncilCapabilityAdapter
 from services.operator.agent_adapter import OperatorCapabilityAdapter
+from services.vision.agent_adapter import VisionAdapter
 
 github_client = GitHubRESTClient()
 expansion_repo = HermesExpansionRepository()
@@ -234,6 +235,7 @@ def build_tool_registry() -> ToolRegistry:
     editforge_adapter.register(registry)
     expansion_adapter.register(registry)
     council_adapter.register(registry)
+    VisionAdapter(approvals, provider_factory=get_vision_provider).register(registry)
     return registry
 
 
