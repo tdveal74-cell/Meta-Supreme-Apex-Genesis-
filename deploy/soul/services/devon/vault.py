@@ -646,6 +646,14 @@ WEBHOOKS = {
             "execution 258, openai/gpt-5-nano, 402 'Insufficient credits. This "
             "account never purchased credits.' So the OpenRouter account is "
             "unfunded, which is the same trap the 2026-09-16c doc recorded for "
+            "the Anthropic account, and which does NOT block this lane because a "
+            "free endpoint carries it. Corrected the same day: this entry first "
+            "read the gemma refusal as ZDR excluding free endpoints as a CLASS. "
+            "That was one sample and it was wrong. Eligibility is per endpoint, "
+            "and inclusionai/ling-3.0-flash-vl:free clears the guardrail and "
+            "answers at cost 0 in about two and a half seconds, proven by "
+            "executions 262 and 263, the second sending only an image and taking "
+            "the default model and prompt. It is now the lane default. "
             "the Anthropic account. Credential Wan5EWMeQiyrFOuY is bound and "
             "authenticates; the routing metadata in those errors is the proof. "
             "The model id was chosen from the live catalogue, never invented: "
@@ -657,7 +665,12 @@ WEBHOOKS = {
             "logged here once. The VPS capacity is UNMEASURED: the Execute "
             "Command node is not available on this n8n instance, so no session "
             "here can read the box. Tee or anyone with shell can, with nproc, "
-            "free -m and df -h. Going local also moves the endpoint, since "
+            "free -m and df -h; Tee read it off the host on 2026-09-16 and it is "
+            "2 cores, 7940 MB memory and 96 GB disk with no GPU. Two cores is the "
+            "blocker rather than memory, so the ruling is UNEXECUTED: a local model "
+            "cannot answer inside the 60 second Describe Image timeout without "
+            "starving the 62 workflow estate that shares the host. Going local "
+            "would also move the endpoint, since "
             "Describe Image posts to openrouter.ai and a local server is a "
             "different URL, so that is one edit beside the model id."
         ),
@@ -976,7 +989,7 @@ WORKFLOWS = {
     "TQO FINAL V5": {"id": "qEkGOUsNyVaRAmm6", "state": "active since 2026-09-08, published on Tee's ruling with all six schedule triggers disabled, each re-enabled as its own named act on his watch; activeVersionId bde7ddec; seven webhooks live: four on header x-devon-key (run-tqo-pipeline, run-nco-pipeline, system-pause, system-resume) and three on secret paths (run-tqo, run-nco, gumroad-sale); the Gumroad guard verifies each ping against GET /v2/sales/:id on credential K1D8KUvTcWDcdrV0, refuses a missing sale on Gumroad's 200 success false, and accepts the two trailing equals signs real ids carry since the same-day fix; view_sales on a real sale still unproven"},
     "DEVON Gumroad Sale Check": {"id": "e5H3pk7YNF9jQi1r", "state": "active since 2026-09-08, activeVersionId 8e26df1d (8c50cbb8 at first publish; e187e828 the same day with an empty-sale guard and successful executions not saved; 8e26df1d at about 14:55 UTC with the list job, ruled, proved on 6501 to 6507); webhook devon-gumroad-sale-check on header x-devon-key, reads one sale from GET /v2/sales/:id or the last five sales from GET /v2/sales with no buyer fields, on credential K1D8KUvTcWDcdrV0, and writes nothing; proved on executions 6482 and 6483 (manual, body pinned) and 6489 and 6490 (pinned Gumroad replies: empty sale 502, found sale 200), and from outside on probe execution 6494 (two production POSTs at the door from inside n8n: 404 with the key, 403 without); Tee's Shortcut was repointed at it on 2026-09-08 and proved from the phone (400 at Preflight at 13:47 UTC, then the 404 end to end at 13:58 UTC), so the Gumroad token is off the phone"},
     "Capture Hook": {"id": "bCZa6KVgjHgRup1Y", "state": "retired 2026-08-22"},
-    "DEVON Vision Describe": {"id": "WjSNXSsGP8ZCxXMa", "state": "active since 2026-09-16, published activeVersionId f5222423; webhook devon-vision on header x-devon-key credential MTZXcoob6BtzbJyH; refuses before spending on type, size and a missing model id, and answers every refusal as data with a reason and a status; logs one row per attempt to devon_vision_log lapnGsgr33wcX0Ef, guard refusals included since the Log Refusal node was added; proven from outside by a 403 with no key and end to end by executions 254, 255, 257 and 258, which are rows 1 to 4 of that table; no successful description yet because every provider account behind it is unfunded or blocked by the account ZDR setting"},
+    "DEVON Vision Describe": {"id": "WjSNXSsGP8ZCxXMa", "state": "active since 2026-09-16, published activeVersionId f5222423; webhook devon-vision on header x-devon-key credential MTZXcoob6BtzbJyH; refuses before spending on type, size and a missing model id, and answers every refusal as data with a reason and a status; logs one row per attempt to devon_vision_log lapnGsgr33wcX0Ef, guard refusals included since the Log Refusal node was added; proven from outside by a 403 with no key and end to end by executions 254, 255, 257 and 258, which are rows 1 to 4 of that table; answering for real since 2026-09-16 on default model inclusionai/ling-3.0-flash-vl:free at cost 0, activeVersionId 4fc9069d, proven by execution 263 which sent only an image, took the default model and prompt, returned 200 and wrote row 6"},
     # Registered 2026-09-06, ruled by Tee after the operational report found
     # ten DEVON named workflows on the instance and not in this map, four of
     # them active and unwatched by the reconciler since they were built.
