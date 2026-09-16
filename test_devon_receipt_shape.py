@@ -103,7 +103,7 @@ GRANDFATHERED = frozenset(
     }
 )
 
-FILENAME_DATE = re.compile(r"_(\d{4}-\d{2}-\d{2})([a-z])?\.md$")
+FILENAME_DATE = re.compile(r"_(\d{4}-\d{2}-\d{2})(?:([a-z])|-(\d{4}))?\.md$")
 
 #: Ruled by Tee 2026-09-15, on a card. Two status docs carrying the same date
 #: cannot be ordered by the filename, and the readiness audit of that day found
@@ -113,6 +113,25 @@ FILENAME_DATE = re.compile(r"_(\d{4}-\d{2}-\d{2})([a-z])?\.md$")
 #: day, so the filename sorts into the order the docs were written. Docs dated
 #: on or before the ruling keep their names.
 SEQUENCE_LETTER_FROM = "2026-09-16"
+
+#: Ruled by Tee 2026-09-16, on the first full day the letter existed, because
+#: it collided that same day. Two sessions forty three minutes apart each wrote
+#: a 2026-09-16 status doc and each picked `a`: neither could see the other's
+#: file, because an unmerged branch is invisible from another container, so
+#: both read an empty day and both chose the first free letter. The letter is
+#: picked, and anything picked from a partial view races.
+#:
+#: From 2026-09-17 the suffix is the UTC hour and minute the doc was written,
+#: `_v1_2026-09-17-0342.md`, which `date -u +%Y-%m-%d-%H%M` prints. It is
+#: derived rather than chosen, so two sessions reach different answers without
+#: coordinating, and it still sorts a day into writing order. A genuine
+#: collision now needs two docs written in the same minute, and the uniqueness
+#: assertion below still catches that.
+#:
+#: 2026-09-16 itself stays letters only. Its three docs are already named, and
+#: digits sort before letters, so allowing both forms on one day would misorder
+#: the only thing the suffix exists to order.
+WRITING_TIME_FROM = "2026-09-17"
 
 
 def _status_docs() -> list[pathlib.Path]:
@@ -222,28 +241,51 @@ def test_a_migrated_legacy_doc_leaves_the_exemption_list(path):
     )
 
 
-def test_a_status_doc_written_after_the_ruling_carries_a_sequence_letter():
+def test_a_status_doc_written_after_the_ruling_carries_a_writing_order_suffix():
     """A day's docs sort into writing order by filename, or they cannot be
-    ordered at all. Anti vacuity: the regex must accept the lettered form and
-    reject a bare date after the ruling, on synthetic names, so the rule fails
-    loudly the day the first lettered doc arrives with a typo."""
-    accepted = FILENAME_DATE.search("SYS_OPS_x_v1_2026-09-16a.md")
-    assert accepted and accepted.group(1) == "2026-09-16" and accepted.group(2) == "a"
+    ordered at all.
+
+    Anti vacuity: the regex must accept both suffix forms and reject a bare
+    date after the ruling, on synthetic names, so the rule fails loudly the day
+    the first stamped doc arrives with a typo. The stamp is read as a real
+    clock time too, because 9999 is four digits and is not a time, and a typo
+    that parsed would sort silently into the wrong place, which is the one
+    failure this whole rule exists to prevent.
+    """
+    lettered = FILENAME_DATE.search("SYS_OPS_x_v1_2026-09-16a.md")
+    assert lettered and lettered.group(1) == "2026-09-16"
+    assert lettered.group(2) == "a" and lettered.group(3) is None
+    stamped = FILENAME_DATE.search("SYS_OPS_x_v1_2026-09-17-0342.md")
+    assert stamped and stamped.group(1) == "2026-09-17"
+    assert stamped.group(2) is None and stamped.group(3) == "0342"
     bare = FILENAME_DATE.search("SYS_OPS_x_v1_2026-09-16.md")
-    assert bare and bare.group(2) is None
+    assert bare and bare.group(2) is None and bare.group(3) is None
+
     seen: dict[str, set[str]] = {}
     for path in _status_docs():
-        stamped = FILENAME_DATE.search(path.name)
-        assert stamped, f"{path.name} carries no date in its filename"
-        day, letter = stamped.group(1), stamped.group(2)
+        found = FILENAME_DATE.search(path.name)
+        assert found, f"{path.name} carries no date in its filename"
+        day, letter, stamp = found.group(1), found.group(2), found.group(3)
         if day < SEQUENCE_LETTER_FROM:
             continue
-        assert letter, (
-            f"{path.name} is dated after the 2026-09-15 ruling and carries no "
-            f"sequence letter; name it _{day}a.md, b, c in the order it was written"
+        if day >= WRITING_TIME_FROM:
+            assert stamp, (
+                f"{path.name} is dated on or after {WRITING_TIME_FROM} and carries no "
+                "writing time; name it _<date>-HHMM.md with the UTC hour and minute it "
+                "was written, which `date -u +%Y-%m-%d-%H%M` prints"
+            )
+            assert int(stamp[:2]) < 24 and int(stamp[2:]) < 60, (
+                f"{path.name} carries {stamp}, which is four digits but not a time of day"
+            )
+            suffix = stamp
+        else:
+            assert letter, (
+                f"{path.name} is dated after the 2026-09-15 ruling and carries no "
+                f"sequence letter; name it _{day}a.md, b, c in the order it was written"
+            )
+            suffix = letter
+        assert suffix not in seen.setdefault(day, set()), (
+            f"{path.name} reuses suffix {suffix} on {day}; the suffix is what orders a "
+            "day's docs, so it has to be unique within that day"
         )
-        assert letter not in seen.setdefault(day, set()), (
-            f"{path.name} reuses letter {letter} on {day}; letters are unique within a day"
-        )
-        seen[day].add(letter)
-
+        seen[day].add(suffix)
