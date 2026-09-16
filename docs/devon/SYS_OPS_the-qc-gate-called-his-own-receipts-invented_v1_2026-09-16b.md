@@ -117,7 +117,7 @@ only.
 ```
 AREA: TQO
 TYPE: SYS_OPS
-ARTIFACT: SYS_OPS_the-qc-gate-called-his-own-receipts-invented_v1_2026-09-16a.md
+ARTIFACT: SYS_OPS_the-qc-gate-called-his-own-receipts-invented_v1_2026-09-16b.md
 DATE: 2026-09-16
 DECISIONS: Tee ruled to fix the QC gate rather than override it for one episode, on the reading that the same hold would return on every well sourced script. The evidence dimension now scores first person primary observation high and names what it is not judging. The hard blocker was narrowed to an external claim with no named source and split so a fabricated date or a self contradicting figure is named separately. Packaging grade instability is recorded and left for Tee, because the remedy is a ruling rather than an edit.
 FINDINGS: The 6pm pass held S1E1 at 75 of 100 with evidence 6 of 15 and a hard blocker reading "an invented or unverifiable statistic presented as fact", naming numbers that are all real and sourced from this repository's own first law table. The rubric could not distinguish a first person count from an unsourced external statistic. Measured on a throwaway VPS harness with no publish path: the old prompt reproduced the failure at HOLD 76 evidence 6 with the same blocker, and the new prompt returned SHIP 91 evidence 13 and SHIP 100 evidence 15 on identical input, so the prompt is the cause and not model drift. Packaging graded 7.3, 6.3 and 7.8 across those same three runs against a live record of 6.1, a 1.7 point spread on a gate whose floor is 7.0. TQO FINAL V5 was versioned nowhere before today.
