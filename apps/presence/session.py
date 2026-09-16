@@ -44,6 +44,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Protocol
 
 from apps.presence.breaker import InferenceRouter, InferenceUnavailable, TurnMetrics
 from apps.presence.buffer import SlidingWindowBuffer
+from apps.presence.livekit_publisher import AudioSink
 from apps.presence.protocol import (
     ERR_INFERENCE_UNAVAILABLE,
     ERR_SPEECH_NOT_CONFIGURED,
@@ -174,6 +175,7 @@ class PresenceSession:
         window_ms: float = 250.0,
         pacer: Optional[Pacer] = None,
         send_audio: bool = True,
+        audio_sink: Optional["AudioSink"] = None,
         drain_interval_ms: Optional[float] = None,
     ) -> None:
         self.session_id = session_id
@@ -184,6 +186,13 @@ class PresenceSession:
         self.window_ms = float(window_ms)
         self.pacer: Pacer = pacer if pacer is not None else RealTimePacer()
         self.send_audio = send_audio
+        #: Where audio goes when it does not go over the socket. `main.py`
+        #: passes a LiveKit publisher when the room is configured. None with
+        #: `send_audio` False is the state that used to DROP every frame
+        #: silently; `create_app` now refuses to build that combination, so a
+        #: session reaching here without either is a programming error and the
+        #: turn raises rather than going quiet.
+        self.audio_sink = audio_sink
         self.drain_interval_ms = (
             float(drain_interval_ms) if drain_interval_ms else self.window_ms / 2.0
         )
@@ -387,6 +396,19 @@ class PresenceSession:
                     if self.send_audio:
                         await self.emit(audio_message(turn_id, audio_seq, chunk.at_ms, chunk.pcm))
                         audio_seq += 1
+                    elif self.audio_sink is not None:
+                        # The LiveKit room. `capture_frame` waits on the SDK's
+                        # own queue, so this paces at real time; it runs in the
+                        # producer task, so it holds audio and never the face.
+                        await self.audio_sink.publish(chunk.pcm, chunk.at_ms)
+                        audio_seq += 1
+                    else:
+                        raise RuntimeError(
+                            "this session has neither a socket audio path nor an "
+                            "audio sink, so the turn's audio has nowhere to go. "
+                            "Until 2026-09-16 this case dropped every frame in "
+                            "silence; it is loud now on purpose."
+                        )
                 elif chunk.kind == CHUNK_STATE:
                     _check_timeline(chunk.at_ms)
                     timeline_end = max(timeline_end, chunk.at_ms)

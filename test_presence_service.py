@@ -21,6 +21,7 @@ from starlette.websockets import WebSocketDisconnect
 
 import apps.presence.main as presence_main
 from apps.presence.inference import MockTokenStreamer
+from apps.presence.livekit_publisher import RecordingSink
 from apps.presence.livekit_token import decode_livekit_token
 from apps.presence.main import TTS_TEXT_LIMIT, SpeakRequest, create_app
 from apps.presence.protocol import AUDIO_CODEC, AUDIO_RATE, PRIORITY_OF, validate_frame
@@ -529,7 +530,22 @@ def test_livekit_token_needs_auth_and_names_the_gate_when_unconfigured():
     assert "LIVEKIT_URL" in response.json()["detail"]
 
 
-def test_livekit_token_mints_when_configured_and_audio_leaves_the_socket():
+def test_livekit_token_mints_when_configured_and_audio_goes_to_the_room():
+    """With LiveKit configured, audio leaves the socket AND reaches the room.
+
+    The second half of that sentence is new. Until 2026-09-16 this test ended
+    at "no audio message on the socket", which was true and was also the whole
+    bug: the frames were produced and dropped, because the room publisher did
+    not exist. Asserting only the absence documented the silence as if it were
+    the design. Now the sink is checked as well, so a regression that stops
+    publishing fails here instead of going quiet in production.
+    """
+    sinks: dict[str, RecordingSink] = {}
+
+    def make_sink(session_id: str) -> RecordingSink:
+        sinks[session_id] = RecordingSink()
+        return sinks[session_id]
+
     settings = PresenceSettings(
         SECRET_KEY=TEST_SECRET,
         ENVIRONMENT="test",
@@ -538,7 +554,7 @@ def test_livekit_token_mints_when_configured_and_audio_leaves_the_socket():
         LIVEKIT_API_KEY="APIkey",
         LIVEKIT_API_SECRET="livekit-secret-0123456789abcdef0123456789abcdef",
     )
-    client = fast_app(settings=settings)
+    client = fast_app(settings=settings, make_audio_sink=make_sink)
 
     # A room the caller has no presence session for is refused: the token
     # would otherwise let one signed-in user join any room the estate's
@@ -589,6 +605,15 @@ def test_livekit_token_mints_when_configured_and_audio_leaves_the_socket():
 
         messages = run_turn(ws, "turn-12", "hi")
         assert not [m for m in messages if m["t"] == "audio"]
+
+        # And it went into the room instead of nowhere.
+        sink = sinks[room]
+        assert sink.started, "the publisher must connect before the client is told ready"
+        assert sink.chunks, "LiveKit is configured and not one audio frame was published"
+        assert sink.total_bytes > 0
+        # Same wire format the socket path would have carried: pcm_s16le, so a
+        # whole number of two byte samples.
+        assert all(len(pcm) % 2 == 0 for pcm, _ in sink.chunks)
         assert [m for m in messages if m["t"] == "frame"]
 
     # The session is forgotten when the socket closes, so the room dies with it.

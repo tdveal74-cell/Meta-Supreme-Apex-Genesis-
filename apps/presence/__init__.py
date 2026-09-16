@@ -42,10 +42,14 @@ What is a later gate
   was not verified in this build.
 - ``CartesiaSpeech`` is a stub that raises ``SpeechNotConfigured``. The
   vendor response shape was not verified here and is not invented.
-- LiveKit: this service mints join tokens (``livekit_token.py``) but does
-  not publish audio into a room. That publisher needs a LiveKit server
-  SDK that is not in ``requirements.txt``. Until it exists, audio reaches
-  the client over the WebSocket only, and only when LIVEKIT_* is unset.
+- LiveKit: CLOSED on 2026-09-16. This paragraph said the publisher did not
+  exist and that audio reached the client over the WebSocket only. That was
+  true and it was also a trap: with LIVEKIT_* set, frames were produced and
+  dropped, and ``/health`` still answered 200 while DEVON said nothing.
+  ``livekit_publisher.py`` now publishes into the room, ``livekit`` is pinned
+  in ``requirements.txt``, and ``create_app`` refuses to boot when LIVEKIT_* is
+  set without it. What is still unproven is a real room: no turn has been
+  spoken into a live LiveKit server from this build.
 - Sentence level pipelining (starting speech before the last token) is
   not done. A turn streams every token, then speaks the whole reply.
 """

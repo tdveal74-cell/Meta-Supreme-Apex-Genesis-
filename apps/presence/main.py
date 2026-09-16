@@ -32,7 +32,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Dict, Optional
+from typing import Any, AsyncIterator, Callable, Dict, Optional
 
 import jwt
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -43,11 +43,13 @@ from pydantic import BaseModel, Field
 from apps.presence import SERVICE_NAME
 from apps.presence.breaker import CircuitBreaker, InferenceRouter
 from apps.presence.inference import TokenStreamer, build_streamer
+from apps.presence.livekit_publisher import AudioSink, LiveKitPublisher, load_rtc
 from apps.presence.livekit_token import DEFAULT_TTL_SECONDS, mint_livekit_token
 from apps.presence.protocol import (
     CLOSE_MALFORMED,
     CLOSE_UNAUTHENTICATED,
     ERR_MALFORMED,
+    ERR_SPEECH_NOT_CONFIGURED,
     ERR_UNAUTHENTICATED,
     HELLO_TIMEOUT_SECONDS,
     ProtocolError,
@@ -78,13 +80,39 @@ class Runtime:
     #: for a room the estate's LiveKit project holds for someone else.
     sessions: Dict[str, str] = field(default_factory=dict)
 
+    #: Builds the per-session audio sink. Injectable so a test drives the whole
+    #: WebSocket lane against a recording sink without a LiveKit server.
+    make_audio_sink: Optional[Callable[[str], AudioSink]] = None
+
     @property
     def send_audio_over_websocket(self) -> bool:
         # Protocol v1: audio frames on the socket only when LiveKit is not
-        # configured. With LiveKit configured this build sends no audio at
-        # all, because the room publisher is a later gate (see the package
-        # docstring). That is stated in /health rather than hidden.
+        # configured. With LiveKit configured they go into the room instead,
+        # through `audio_sink_for`. This paragraph said the publisher was "a
+        # later gate" and that audio was dropped until 2026-09-16, when Tee
+        # ruled it built. /health still states the choice rather than hiding it.
         return not self.settings.livekit_configured
+
+    def audio_sink_for(self, session_id: str) -> Optional[AudioSink]:
+        """The room sink for this session, or None when audio uses the socket.
+
+        The room IS the session id, which is the same name `/livekit/token`
+        checks ownership against, so the browser and the publisher meet in a
+        room no other signed in user can mint their way into.
+        """
+        if self.send_audio_over_websocket:
+            return None
+        if self.make_audio_sink is not None:
+            return self.make_audio_sink(session_id)
+        return LiveKitPublisher(
+            url=self.settings.LIVEKIT_URL,
+            api_key=self.settings.LIVEKIT_API_KEY,
+            api_secret=self.settings.LIVEKIT_API_SECRET,
+            room=session_id,
+            # Never the user's identity: `/livekit/token` mints with `sub`,
+            # and a publisher sharing that identity collides with the human.
+            identity=f"devon-{session_id}",
+        )
 
 
 def decode_devon_token(token: str, settings: PresenceSettings) -> Optional[Dict[str, Any]]:
@@ -159,6 +187,7 @@ def create_app(
     speech: Optional[SpeechSynthesizer] = None,
     pacer: Optional[Pacer] = None,
     breaker: Optional[CircuitBreaker] = None,
+    make_audio_sink: Optional[Callable[[str], AudioSink]] = None,
 ) -> FastAPI:
     """Build the service. Injected pieces override what the settings would build."""
     settings = settings if settings is not None else PresenceSettings.from_env()
@@ -176,11 +205,18 @@ def create_app(
         breaker=breaker,
         ttft_threshold_ms=settings.PRESENCE_TTFT_THRESHOLD_MS,
     )
+    # Fail on boot, not on the first turn. A service that accepts LIVEKIT_*
+    # and cannot publish is how DEVON went silent before 2026-09-16, and a
+    # start up refusal is the one place that failure is cheap.
+    if settings.livekit_configured and make_audio_sink is None:
+        load_rtc()
+
     runtime = Runtime(
         settings=settings,
         router=router,
         speech=speech if speech is not None else build_speech(settings),
         pacer=pacer if pacer is not None else RealTimePacer(),
+        make_audio_sink=make_audio_sink,
     )
 
     app = FastAPI(title="DEVON Presence", version="0.1.0")
@@ -328,8 +364,24 @@ def create_app(
             await ws.close(code=CLOSE_UNAUTHENTICATED)
             return
 
+        session_id = uuid.uuid4().hex
+        audio_sink = runtime.audio_sink_for(session_id)
+        if audio_sink is not None:
+            # Connect and publish the track before telling the client we are
+            # ready, so a room that refuses the join fails the socket rather
+            # than opening one that will never carry a word.
+            try:
+                await audio_sink.start()
+            except Exception as exc:
+                logger.exception("livekit publisher failed to start")
+                await send_json(
+                    error_message(ERR_SPEECH_NOT_CONFIGURED, f"livekit room unavailable: {exc}")
+                )
+                await ws.close(code=CLOSE_MALFORMED)
+                return
+
         session = PresenceSession(
-            session_id=uuid.uuid4().hex,
+            session_id=session_id,
             user_id=str(payload["sub"]),
             router=runtime.router,
             speech=runtime.speech,
@@ -337,6 +389,7 @@ def create_app(
             window_ms=settings.PRESENCE_WINDOW_MS,
             pacer=runtime.pacer,
             send_audio=runtime.send_audio_over_websocket,
+            audio_sink=audio_sink,
         )
         await send_json(
             ready_message(
@@ -378,6 +431,11 @@ def create_app(
         finally:
             runtime.sessions.pop(session.session_id, None)
             await session.close()
+            if audio_sink is not None:
+                try:
+                    await audio_sink.aclose()
+                except Exception:
+                    logger.exception("livekit publisher failed to close cleanly")
             try:
                 await ws.close()
             except (RuntimeError, WebSocketDisconnect):
