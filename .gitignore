@@ -51,3 +51,9 @@ inspect.txt
 creds-map.json
 tables-map.json
 _id_map.json
+
+# Frames staged for vision.describe. The directory and its README are tracked
+# so VISION_IMAGE_ROOT has somewhere to point in a fresh checkout; the images
+# are not. A frame is whatever was on a screen, and this repository is public.
+var/vision-inbox/*
+!var/vision-inbox/README.md

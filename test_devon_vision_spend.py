@@ -4,12 +4,12 @@ The first test here exists because a factory that forgets its wrapper loses
 the cap silently, and this estate has already shipped that bug once in
 `apps/presence/inference.py`. So the wrapper is asserted, not assumed.
 
-The last test pins a KNOWN under count rather than papering over it. The 017
-ledger has no column for an image, so a frame is charged at whatever token
-counts the vendor reports and at the text rate. If a vendor prices image input
-above that, this account is under charged against its daily cap by that factor.
-`VISION_MAX_IMAGE_BYTES` bounds how wrong it can get. The day someone adds a
-cost column, this test is what says the behaviour changed.
+The tests after it cover what used to be a pinned under count and is now a
+named ratio. The 017 ledger has no column for cost or modality, so charging a
+frame at whatever the vendor reported silently assumed a vendor prices an image
+token like a text one. `VISION_INPUT_TOKEN_WEIGHT` makes that assumption
+explicit: 1.0 is parity and is what ships, a vendor that prices image input
+higher takes its real ratio, and below parity is refused twice over.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from app.services.provider_usage import (
     ProviderSpendCapExceeded,
     read_usage,
     record_usage,
+    weighted_vision_input,
 )
 from services.vision.base import ImageSource, VisionRequest, VisionResponse
 from services.vision.providers import MockVisionProvider
@@ -102,26 +103,118 @@ async def test_the_ledger_records_exactly_what_the_backend_reported(db_session):
         reset_tenant(token)
 
 
-async def test_the_image_is_charged_at_the_text_rate_and_that_is_bounded(db_session):
-    """A known, bounded under count, pinned so a fix is visible as a change.
+async def test_the_weight_defaults_to_parity_so_the_shipped_number_is_unchanged(db_session):
+    """1.0 records exactly what the vendor said, which is what shipped.
 
-    The ledger has six columns and none of them is cost, model, provider or
-    modality, so a frame and a paragraph of the same token count spend the same
-    against the cap. The byte ceiling is what bounds the error.
+    A deployment that never sets the weight must get the old behaviour to the
+    token, or this change would silently re-price every existing account.
     """
-    token = bind_tenant("vision-rate-tenant")
-    original = settings.PROVIDER_DAILY_TOKEN_CAP
+    token = bind_tenant("vision-parity-tenant")
+    original_cap = settings.PROVIDER_DAILY_TOKEN_CAP
+    original_weight = settings.VISION_INPUT_TOKEN_WEIGHT
     try:
         settings.PROVIDER_DAILY_TOKEN_CAP = 0
+        settings.VISION_INPUT_TOKEN_WEIGHT = 1.0
         before = await read_usage(current_tenant_id())
 
         inner = _Counting(input_tokens=500, output_tokens=10)
         await MeteredVisionProvider(inner).describe(_request())
 
         after = await read_usage(current_tenant_id())
-        # No multiplier is applied anywhere. This is the under count, stated.
         assert after.total_tokens - before.total_tokens == 510
-        assert settings.VISION_MAX_IMAGE_BYTES == 5 * 1024 * 1024
     finally:
-        settings.PROVIDER_DAILY_TOKEN_CAP = original
+        settings.PROVIDER_DAILY_TOKEN_CAP = original_cap
+        settings.VISION_INPUT_TOKEN_WEIGHT = original_weight
         reset_tenant(token)
+
+
+async def test_a_weight_above_parity_charges_the_input_and_leaves_the_output(db_session):
+    """The weight prices image INPUT. Output is text and is charged as text.
+
+    Weighting the output too would be a second, unearned multiplier on tokens
+    the vendor already prices at its text rate.
+    """
+    token = bind_tenant("vision-weighted-tenant")
+    original_cap = settings.PROVIDER_DAILY_TOKEN_CAP
+    original_weight = settings.VISION_INPUT_TOKEN_WEIGHT
+    try:
+        settings.PROVIDER_DAILY_TOKEN_CAP = 0
+        settings.VISION_INPUT_TOKEN_WEIGHT = 3.0
+        before = await read_usage(current_tenant_id())
+
+        inner = _Counting(input_tokens=500, output_tokens=10)
+        answer = await MeteredVisionProvider(inner).describe(_request())
+
+        after = await read_usage(current_tenant_id())
+        assert after.input_tokens - before.input_tokens == 1500
+        assert after.output_tokens - before.output_tokens == 10
+
+        # The RESPONSE still reports the vendor's own number. The weight is an
+        # accounting ratio, not a claim about what the vendor said, and a
+        # receipt that inflated it would be a lie about the call.
+        assert answer.usage.input_tokens == 500
+    finally:
+        settings.PROVIDER_DAILY_TOKEN_CAP = original_cap
+        settings.VISION_INPUT_TOKEN_WEIGHT = original_weight
+        reset_tenant(token)
+
+
+def test_a_fractional_weight_rounds_up_so_rounding_never_favours_the_account():
+    original = settings.VISION_INPUT_TOKEN_WEIGHT
+    try:
+        settings.VISION_INPUT_TOKEN_WEIGHT = 1.5
+        assert weighted_vision_input(101) == 152  # 151.5 rounded up, not down
+        settings.VISION_INPUT_TOKEN_WEIGHT = 1.01
+        assert weighted_vision_input(1) == 2  # 1.01 is still more than one token
+    finally:
+        settings.VISION_INPUT_TOKEN_WEIGHT = original
+
+
+def test_a_weight_below_parity_still_charges_the_full_vendor_number():
+    """The second guard. The config validator refuses such a weight at start up.
+
+    This one covers a value set after start up or patched in a test: the
+    recorder floors at what the vendor reported rather than trusting it.
+    """
+    original = settings.VISION_INPUT_TOKEN_WEIGHT
+    try:
+        settings.VISION_INPUT_TOKEN_WEIGHT = 0.25
+        assert weighted_vision_input(400) == 400
+        settings.VISION_INPUT_TOKEN_WEIGHT = 0
+        assert weighted_vision_input(400) == 400
+    finally:
+        settings.VISION_INPUT_TOKEN_WEIGHT = original
+
+
+def test_the_config_refuses_a_weight_that_under_charges():
+    """The first guard, at start up, so a bad deployment never boots quiet."""
+    from app.core.config import Settings
+
+    with pytest.raises(ValueError, match="VISION_INPUT_TOKEN_WEIGHT"):
+        Settings(VISION_INPUT_TOKEN_WEIGHT=0.5)
+
+    # Parity and above are accepted.
+    assert Settings(VISION_INPUT_TOKEN_WEIGHT=1.0).VISION_INPUT_TOKEN_WEIGHT == 1.0
+    assert Settings(VISION_INPUT_TOKEN_WEIGHT=2.5).VISION_INPUT_TOKEN_WEIGHT == 2.5
+
+
+def test_the_vision_inbox_is_in_the_checkout_for_the_root_to_point_at():
+    """Ruled 2026-09-16: a dedicated inbox, not the working tree.
+
+    The directory is tracked through its README so a fresh checkout has
+    somewhere for `VISION_IMAGE_ROOT` to point, and the frames inside it are
+    not, because a frame is whatever was on a screen and this repo is public.
+    """
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent
+    inbox = root / "var" / "vision-inbox"
+    assert inbox.is_dir(), "var/vision-inbox is missing; VISION_IMAGE_ROOT has no target"
+    assert (inbox / "README.md").is_file()
+
+    ignored = subprocess.run(
+        ["git", "check-ignore", "var/vision-inbox/anything.png"],
+        cwd=root, capture_output=True, text=True,
+    )
+    assert ignored.returncode == 0, "a frame dropped in the inbox would be committable"

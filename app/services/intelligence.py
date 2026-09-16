@@ -93,6 +93,7 @@ def get_vision_provider() -> VisionProvider:
         api_key=(
             settings.ANTHROPIC_API_KEY if name == "anthropic"
             else settings.OPENAI_API_KEY if name == "openai"
+            else settings.OPENROUTER_API_KEY if name == "openrouter"
             else ""
         )
         or "",

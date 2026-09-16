@@ -28,10 +28,13 @@ from services.vision.base import (
     VisionUnsupportedError,
 )
 from services.vision.providers import (
+    OPENROUTER_DEFAULT_VISION_MODEL,
+    OPENROUTER_VISION_URL,
     AnthropicVisionProvider,
     LocalVisionProvider,
     MockVisionProvider,
     OpenAIVisionProvider,
+    OpenRouterVisionProvider,
     _raise_for_status,
     create_vision_provider,
 )
@@ -613,3 +616,105 @@ def test_vision_is_not_listed_in_always_confirm_or_a_guarded_prefix():
 
     assert "vision.describe" not in set(presence.ALWAYS_CONFIRM_TOOLS)
     assert not "vision.describe".startswith(GUARDED_PREFIXES)
+
+
+# ---------------------------------------------------------------------------
+# OpenRouter: the dialect is OpenAI's, the identity and the key are not
+# ---------------------------------------------------------------------------
+
+async def test_openrouter_speaks_the_openai_dialect_but_reports_itself():
+    """The body may be OpenAI shaped. The receipt must still name who was paid.
+
+    Borrowing `VISION_PROVIDER=openai` with a redirected URL would have written
+    `provider: "openai"` into the same metadata the approval gate records, for
+    a call that never reached OpenAI.
+    """
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["auth"] = request.headers.get("authorization")
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": "a login screen"}}],
+                "model": "inclusionai/ling-3.0-flash-vl:free",
+                "usage": {"prompt_tokens": 11, "completion_tokens": 4},
+            },
+        )
+
+    provider = OpenRouterVisionProvider(
+        api_key="or-key", transport=httpx.MockTransport(handler)
+    )
+    answer = await provider.describe(_request())
+
+    assert seen["url"] == OPENROUTER_VISION_URL
+    assert seen["auth"] == "Bearer or-key"
+    # The OpenAI wire shape: a data URI, not a base64 source block.
+    content = seen["body"]["messages"][0]["content"]
+    assert content[1]["image_url"]["url"].startswith("data:image/png;base64,")
+
+    assert answer.provider == "openrouter"
+    assert answer.model == "inclusionai/ling-3.0-flash-vl:free"
+    assert answer.usage.input_tokens == 11
+
+
+def test_openrouter_reads_its_own_key_and_never_the_openai_one():
+    """OPENAI_API_KEY is read by the text, embedding and knowledge lanes too.
+
+    An OpenRouter key parked there would authenticate all three against the
+    wrong vendor the day any of them is switched to "openai".
+    """
+    from app.core.config import settings
+    from app.services.intelligence import get_vision_provider
+
+    original = (
+        settings.VISION_PROVIDER,
+        settings.OPENROUTER_API_KEY,
+        settings.OPENAI_API_KEY,
+    )
+    try:
+        settings.VISION_PROVIDER = "openrouter"
+        settings.OPENROUTER_API_KEY = "or-real"
+        settings.OPENAI_API_KEY = "openai-must-not-be-used"
+        inner = get_vision_provider().inner
+        assert isinstance(inner, OpenRouterVisionProvider)
+        assert inner._api_key == "or-real"
+
+        # And with no OpenRouter key it refuses rather than falling back.
+        settings.OPENROUTER_API_KEY = None
+        with pytest.raises(ProviderConfigError):
+            get_vision_provider()
+    finally:
+        (
+            settings.VISION_PROVIDER,
+            settings.OPENROUTER_API_KEY,
+            settings.OPENAI_API_KEY,
+        ) = original
+
+
+def test_the_openrouter_default_model_is_the_one_that_was_measured():
+    """Pinned because ZDR eligibility is per endpoint, not per price tier.
+
+    On 2026-09-16 this endpoint answered 200 at cost 0 under this account's
+    Zero Data Retention enforcement while `gemma-4-31b-it:free`, equally free,
+    returned `zdr-violation-by-account`. Changing the default means measuring
+    the new one, so the constant is asserted rather than assumed.
+    """
+    assert OPENROUTER_DEFAULT_VISION_MODEL == "inclusionai/ling-3.0-flash-vl:free"
+    assert OpenRouterVisionProvider(api_key="k").default_model == (
+        OPENROUTER_DEFAULT_VISION_MODEL
+    )
+    # VISION_MODEL still overrides it.
+    assert (
+        create_vision_provider("openrouter", api_key="k", default_model="other/model")
+        .default_model
+        == "other/model"
+    )
+
+
+def test_openrouter_needs_a_key_like_every_other_paid_backend():
+    with pytest.raises(ProviderConfigError) as exc:
+        create_vision_provider("openrouter")
+    assert "OpenRouter vision needs an API key" in str(exc.value)
