@@ -49,8 +49,27 @@ catches that one.
 
 2026-09-16 stays letters only. Its docs are already named, and digits sort
 before letters, so accepting both forms on one day would misorder the very
-thing the suffix exists to order. This doc is `d` under the old rule, which is
+thing the suffix exists to order. This doc is `e` under the old rule, which is
 the last one written that way.
+
+## It happened again while this was being written
+
+This doc was `d` for about twenty minutes. Another session merged PR #238 in
+that window carrying `SYS_OPS_the-devon-log-backfill_v1_2026-09-16d.md`, and
+`main` moved from `643d164` to `8293ed3` underneath this branch. Two sessions
+had again read the same empty slot and taken the same letter, on the pull
+request whose whole subject is that letter racing.
+
+It was caught before it merged, and not by being careful. The Context Pill
+named `d` as taken, `main` confirmed it, and the test failed on the merge the
+moment it was pulled in. That is three collisions in one day on a rule that is
+one day old, which is the argument for deriving the suffix rather than any
+amount of counting more carefully. Renamed to `e`.
+
+The narrower lesson is about where a collision hides. It does not exist in
+either pull request's head, only in the merge commit, so a green PR proves
+nothing about it. Pull `main` before naming a doc, and read CI on the merge
+commit afterwards.
 
 ## Proving it bites
 
@@ -111,11 +130,11 @@ live only.
 ```
 AREA: Systems
 TYPE: SYS_OPS
-ARTIFACT: SYS_OPS_a-picked-suffix-races_v1_2026-09-16d.md
+ARTIFACT: SYS_OPS_a-picked-suffix-races_v1_2026-09-16e.md
 DATE: 2026-09-16
 DECISIONS: Tee ruled to fix the sequence letter race rather than leave it to the test to catch each time, overruling the recommendation to leave it. From 2026-09-17 the suffix is the UTC hour and minute the doc was written, taken from date -u rather than by reading the directory, so it is derived and two sessions reach different answers without coordinating. 2026-09-16 stays letters only because its docs are named and digits sort before letters, so a mixed day would misorder the thing the suffix exists to order. OS 29 was left for Tee to run end to end rather than fired as a test, because a real pass writes to Airtable and sends mail.
-FINDINGS: The letter collided on the first full day it existed. Two sessions forty three minutes apart each read an empty 2026-09-16 and each took the first free letter; the other's file was on an unmerged branch in another container and invisible. PR #235 merging second turned main red and the next PR inherited it. The letter was not at fault, picking was: any suffix chosen by reading a directory races when two sessions write on the same day, which this estate does by design. The new rule was run against four real files rather than only synthetic strings: a bare date, a 9999 stamp, an old style letter after the cutover, and a duplicate stamp all failed with messages naming the fix, and a correct stamp passed. Tee's two reports were both checked rather than recorded: the Cerebras repoint is proven by executions 218 and 219, and the rotated Firecrawl key by probe execution 225 returning success true and 167 characters of markdown with onError stripped so a bad key would throw. Neither code review bot has reviewed a recent PR: CodeRabbit is off below ten stars and Codex is out of usage.
+FINDINGS: The letter collided three times in the one day it existed, the third time on this very pull request: while this doc sat at d, another session merged PR #238 carrying SYS_OPS_the-devon-log-backfill_v1_2026-09-16d.md, main moved from 643d164 to 8293ed3 underneath the branch, and the test failed on the merge. Caught by the Context Pill naming d as taken and by the guard, not by counting more carefully, which is the argument for deriving the suffix. A collision lives only in the merge commit and not in either PR head, so a green PR proves nothing about it. The first collision was on the first full day it existed. Two sessions forty three minutes apart each read an empty 2026-09-16 and each took the first free letter; the other's file was on an unmerged branch in another container and invisible. PR #235 merging second turned main red and the next PR inherited it. The letter was not at fault, picking was: any suffix chosen by reading a directory races when two sessions write on the same day, which this estate does by design. The new rule was run against four real files rather than only synthetic strings: a bare date, a 9999 stamp, an old style letter after the cutover, and a duplicate stamp all failed with messages naming the fix, and a correct stamp passed. Tee's two reports were both checked rather than recorded: the Cerebras repoint is proven by executions 218 and 219, and the rotated Firecrawl key by probe execution 225 returning success true and 167 characters of markdown with onError stripped so a bad key would throw. Neither code review bot has reviewed a recent PR: CodeRabbit is off below ten stars and Codex is out of usage.
 OPEN: The Anthropic account is unfunded, harmless while nothing on the VPS calls it and a trap for the next node that does. OS 29 has not been run end to end since both blockers cleared, and that is Tee's to trigger because a real pass writes rows and sends mail. Three of OS 29's twenty three nodes are mirrored; the rest are live only. The two review bots are silent by configuration, so a green tick on a recent PR is CI and the session's own checks, not bot review.
-STATUS: The sequence suffix is derived from the clock from 2026-09-17 and enforced by test_devon_receipt_shape.py, proven to fail on four real mutations and pass on the correct form. OS 29's two blockers are both cleared and both measured. CLAUDE.md carries the ruling.
+STATUS: Renamed d to e after the third collision of the day. The sequence suffix is derived from the clock from 2026-09-17 and enforced by test_devon_receipt_shape.py, proven to fail on four real mutations and pass on the correct form. OS 29's two blockers are both cleared and both measured. CLAUDE.md carries the ruling.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
