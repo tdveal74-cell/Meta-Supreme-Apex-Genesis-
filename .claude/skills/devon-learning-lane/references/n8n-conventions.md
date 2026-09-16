@@ -122,3 +122,38 @@ spent thirty nodes to learn what node 1 could have told it.
 
 Preflight what the run cannot proceed without, not everything. The test is
 whether the run is guaranteed to fail without it.
+
+## A Data Table name that contains another table's name captures it
+
+Ruled by measurement 2026-09-16, after it cost the TQO lane four and a half
+silent hours.
+
+A Data Table resolved in NAME mode is only as stable as every OTHER table name
+in the project. A new name that merely CONTAINS an existing one is enough to
+capture it. On 2026-09-15 at 23:38Z a session created `at_tqo_content` and
+`at_tqo_content_primitives`; both carry `tqo_content` inside them, and from that
+minute NAME mode stopped reaching the real `tqo_content`. Measured with a
+throwaway: name mode returned 0 rows where id mode returned 45.
+
+**The failure is almost entirely silent.** Counted from the estate: 73 Data
+Table nodes across 106 workflows resolve by name, 31 of them inside the active
+TQO FINAL V5. Exactly ONE threw, because it alone filtered on a column the wrong
+table lacked. The other 72 returned zero rows and carried on, so the lane was
+not failing, it was finding no work and saying nothing. Expect the loud failure
+to be hiding a silent one, and go looking for the silent one.
+
+So, before you create or rename a Data Table in `qbrcjkbIoorbwot6`:
+
+```
+python3 scripts/n8n_table_collision_check.py tables.json   # exit 1 names the pairs
+```
+
+Save the `search_data_tables` result to `tables.json` first; the checker also
+takes the payload on stdin, and a bare list of names. Exit 0 is a clean name
+set, exit 1 names every colliding pair, and exit 2 means it could not read the
+input, which is deliberately not a pass.
+
+Tee ruled the fix is to rename the LONGER table, not to edit the workflows: one
+rename each fixed all 73 nodes, while editing V5 alone would have meant 31
+changes inside 240 nodes. Resolving by id is the durable fix and is unstarted;
+it needs his word, because it reopens the 31 nodes he ruled against touching.

@@ -1,6 +1,6 @@
 ---
 name: deploy-readback
-description: Verify what this estate's four production surfaces are actually serving (Railway api, Railway presence, and two Vercel projects), and diagnose Vercel deploy-quota exhaustion. Load before claiming anything is deployed or live, when asked whether production is current, when a Vercel deploy is blocked or skipped, when promoting a deployment to production, or when a status doc claims a deployment state. Compiled from the 2026-08-26 session where green previews were reported as production while all three surfaces sat stale.
+description: Verify what this estate's five production surfaces are actually serving (Railway api, presence and scheduler-cron, and two Vercel projects), and diagnose Vercel deploy-quota exhaustion. Load before claiming anything is deployed or live, when asked whether production is current, when a Vercel deploy is blocked or skipped, when promoting a deployment to production, or when a status doc claims a deployment state. Compiled from the 2026-08-26 session where green previews were reported as production while all three surfaces sat stale.
 ---
 
 # Deployment read-back
@@ -17,24 +17,35 @@ deployment id, its state, and its commit. "The workflow passed" and "the PR
 merged" are not deployment evidence. If the evidence cannot be produced, the
 honest answer is "unverified", not an optimistic one.
 
-## The four surfaces
+## The five surfaces
 
-This section said **three** until 2026-09-09, when a critic counted from the
-estate and found a fourth. The presence service has been on its own Railway host
-since PR #188, `apps/web/lib/api-base.ts:26-29` hardcodes its production URL as
-the fallback, and DEVON's voice reaches Tee through it and through nothing else.
-It was simply never written down here, which is the count-from-the-lane miss
-CLAUDE.md's first law describes, in the file whose whole job is knowing what
-production serves.
+This section said **three** until 2026-09-09 and **four** until 2026-09-16, and
+each correction came the same way: somebody counted from the estate instead of
+reading this list. The presence service was the fourth, found by a critic on
+2026-09-09; it has been on its own Railway host since PR #188,
+`apps/web/lib/api-base.ts:26-29` hardcodes its production URL as the fallback,
+and DEVON's voice reaches Tee through it and through nothing else.
+
+`scheduler-cron` is the fifth, found on 2026-09-16 by a session that called
+`list-services` on the Railway project while reading production back. Railway
+answers with four services, `api`, `presence`, `scheduler-cron` and `Postgres`,
+and only two of them were named here. It deploys from the same commit as `api`
+and it had been deploying the whole time, unwatched by this file.
+
+**So count the surfaces from `list-services` and `list_projects`, never from
+this table.** Twice now the table has been the thing that was wrong, in the file
+whose whole job is knowing what production serves, which is exactly the
+count-from-the-lane miss CLAUDE.md's first law describes.
 
 | Surface | What it serves | How to read it |
 |---|---|---|
 | Railway `api` | The FastAPI app, the ledger, migrations | `list-deployments`, then `get-logs` on the deployment id |
-| Railway `presence` | DEVON's voice and live inference, root `apps/presence`: `POST /tts`, the WebSocket lane, LiveKit tokens | `list-deployments`, then `GET /health` on the public host |
+| Railway `presence` | DEVON's voice and live inference, root `apps/presence`: `POST /tts`, the WebSocket lane, LiveKit tokens | `list-deployments`, then `GET /health` on the public host, which an agent container cannot reach (see below) |
+| Railway `scheduler-cron` | The scheduled lane, deployed from the same commit as `api` | `list-deployments`; it carries no public host of its own to read back |
 | Vercel `meta-supreme-apex-genesis-web` | The web app and Command Center, root `apps/web` (recorded as `meta-supreme-web` until 2026-09-02; that project no longer exists) | `list_deployments` for the project |
 | Vercel `devon-soul` | The phone lane, root `deploy/soul` | `list_deployments` for the project |
 
-**The presence service reads itself back, which the other three cannot.**
+**The presence service reads itself back, which the other four cannot.**
 `GET /health` is unauthenticated and returns the nine keys pinned by
 `test_presence_service.py::test_health_says_only_these_things_and_no_more`:
 `inference` and `fallback` name the live providers, `speech` says whether the
@@ -46,6 +57,22 @@ answer to "what is production serving" comes from the service itself rather than
 from a deployment record, and a claim about its wiring that was not read off
 `/health` is unverified. The key set is pinned deliberately: a field added there
 is published to anybody, so it is a decision and not a debugging leftover.
+
+**AND AN AGENT CONTAINER CANNOT READ IT.** Measured on 2026-09-16: the network
+policy blocks `*.up.railway.app`, so `curl` gets `CONNECT tunnel failed,
+response 403` from the agent proxy and the read returns nothing. That is a
+policy denial, not an outage, and retrying it is wasted. It means the one
+surface that can prove its own wiring is the one surface a session cannot prove,
+so `speech`, `livekit_configured`, `cors_origins` and `breaker` stay
+**unverified from a container, every time, until the policy changes**. Say
+unverified rather than inferring them from a deployment record.
+
+The remedy is Tee's and it has a precedent: both n8n hosts were 403 blocked the
+same way until he added them under Custom allowed domains in the Claude Code
+environment settings, and a key alone was not enough. Adding
+`presence-production-d272.up.railway.app`, or `*.up.railway.app` for both
+Railway hosts, closes this the same way. Until then a session with egress, or
+Tee on his phone, is the only reader.
 
 **Count the Vercel projects before trusting any of this.** On 2026-08-27 a
 diagnosis assumed two and there were four, all deploying from this one
