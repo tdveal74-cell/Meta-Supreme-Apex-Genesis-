@@ -327,11 +327,29 @@ Why it keeps happening is unanswered here, and it is worth Tee asking Vercel
 rather than each session re-deriving the same diagnosis.
 
 The 2026-09-15 gap is the cleanest recorded instance of the signature, because
-three pushes landed inside it. Both projects created their last record at
-22:52:51Z on `cb8de0e`. `b2d6f4a` at 23:35:20Z, `5906af9` at 23:48:53Z and
-`70bbf04` at 23:55:51Z each created no deployment record on either project,
-while GitHub Actions ran and went green on the same commits. Actions green and
-Vercel silent, at the same time, on the same head, is what a block looks like.
+five pushes landed inside it. Both projects created their last record at
+22:52:51Z on `cb8de0e`. `b2d6f4a` at 23:35:20Z, `5906af9` at 23:48:53Z,
+`70bbf04` at 23:55:51Z, `bada32e` at 23:58:59Z and `122f0e3` at 00:06:55Z each
+created no deployment record on either project, while GitHub Actions ran and
+went green on the same commits. Actions green and Vercel silent, at the same
+time, on the same head, is what a block looks like.
+
+**It cleared, and the clearing was read the same way.** The merge of PR #231
+at 00:29:48Z created four records within a minute, two per project, on
+`e71f215`. That is the verification this section prescribes: a record
+appearing, not a status turning green. The block therefore ran roughly 97
+minutes, from some point after 22:52:51Z to before 00:29:53Z. It is the only
+one of the four whose duration this file can state, so treat it as one
+measurement rather than a typical length.
+
+Two things that window is worth remembering for. Nothing was stranded by it:
+checked from each project's own `ignoreCommand` paths, no commit in the whole
+40-record window touched `apps/web`, `packages/ui` or the lockfiles, so every
+ignored production build in it was a correct skip. And `devon-soul` production
+built to READY on the merge rather than skipping, because that merge carried
+`deploy/soul/services/devon/vault.py`, which is the shape worth watching: a
+block that had lasted into a `deploy/soul` change would have held a real
+production update, silently, with only an absence to show for it.
 
 It is not the daily cap. The cap names itself (`api-deployments-free-per-day`)
 and it is a refusal of one deployment; a block is account wide and the tooling
