@@ -608,7 +608,15 @@ WEBHOOKS = {
     # /webhook/<id>/chat like any other webhook, so it is registered and
     # audited like one. The auth is n8n login: only a signed-in n8n user can
     # open it, and there is no key to leak.
-    "71510ab0-07eb-42d8-9734-c0741b398d49/chat": {
+    # The id in this path is the chat trigger's own webhookId, so it is
+    # instance specific and did not survive the move. Cloud served
+    # 71510ab0-07eb-42d8-9734-c0741b398d49/chat; the VPS copy carries its own
+    # from the 2026-08-31 export and kept it through the rebuild, so the live
+    # door is the one below. Found by estate_reconcile after the 2026-09-15
+    # cutover, which is the only reason anyone noticed: the repointing pass
+    # rewrote workflow and webhook id FIELDS and could not see an id embedded
+    # in a path string.
+    "bf371d93-da93-4e81-b50b-4ffe988aeae5/chat": {
         "job": "the Face: hosted chat where Tee talks to DEVON",
         "destination": "Cerebras, then devon-intake for any job Tee files; memory in devon_chat_log nwnHN8o2dgHjtk7f",
         "workflow": "sPv6Cq7elbjoi5Nw",
@@ -943,8 +951,20 @@ WORKFLOWS = {
         "state": "active, daily 07:00 New York, Airtable Thread Receipts to the Notion Thread Log",
     },
     "To Delete Auto-Purge": {"id": "2M8CIPebpl1nSLVx", "state": "active, weekly Sunday 10:00 New York"},
-    "Soul Index Setup": {"id": "vYr35jqNNaAztGhQ", "state": "inactive, one shot setup"},
-    "Build 08 Credential Probe": {"id": "pm5hoO4eFpGhlAb4", "state": "inactive, throwaway probe"},
+    # Both were one shot throwaways that only ever existed on n8n Cloud, and
+    # both ran their single job there. After the 2026-09-15 cutover this
+    # registry reads the VPS, where neither was ever created, so the ids below
+    # resolve nowhere. Kept named rather than deleted because the executions
+    # they produced are cited in older status docs, and a reader meeting those
+    # names needs to know where they lived and that they are gone.
+    "Soul Index Setup": {
+        "id": "vYr35jqNNaAztGhQ",
+        "state": "retired, Cloud only, absent from the VPS",
+    },
+    "Build 08 Credential Probe": {
+        "id": "pm5hoO4eFpGhlAb4",
+        "state": "retired, Cloud only, absent from the VPS",
+    },
     "End to End Watch Harness": {"id": "VwSnFY0Qyw03FxKk", "state": "inactive, watch harness"},
     "Master Index": {"id": "aDMJX0I83b1LS5gz", "state": "inactive"},
     "Purge List": {"id": "DxEB0OrDLlkDBrsF", "state": "manual, purge list"},

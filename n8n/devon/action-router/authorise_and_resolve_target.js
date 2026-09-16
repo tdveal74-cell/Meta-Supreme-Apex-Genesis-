@@ -12,8 +12,8 @@
 // designed answer: this node emits { refused: true, reason } as data, the Accepted?
 // node routes accepted envelopes on and everything else to Return Refusal, and the
 // caller parks the job with the reason. Genuine faults still throw; the shared
-// Error Alarm (XDQXwgFkUhYxoEjG) is this workflow's error workflow as of the same
-// day, so a fault emails Tee.
+// Error Alarm (bqcnIS0Qv4RkTCU1 on the VPS) is this workflow's error workflow as
+// of the same day, so a fault emails Tee.
 
 const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 

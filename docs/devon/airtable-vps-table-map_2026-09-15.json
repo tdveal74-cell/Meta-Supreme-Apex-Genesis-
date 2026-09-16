@@ -1,0 +1,4721 @@
+{
+ "generated_at": "2026-09-15",
+ "n8n_host": "https://n8n.editforge.online",
+ "n8n_project_id": "qbrcjkbIoorbwot6",
+ "note": "Schema and identifiers only. No Airtable record values are recorded here, and none ever enter this repository: the Leads, Customers, Coaching Clients and Coaching Sessions rows live on Tee's VPS alone. The Airtable Credentials table (tblkLdeuGzdtJMw7D) is excluded from the mirror by airtable_mirror.EXCLUDED_TABLE_NAMES, because a data table is readable by every workflow on the instance and so cannot hold a secret.",
+ "date_typing": "Every Airtable date field is mirrored into a string column. An n8n date column stamps the instance timezone onto a date-only value: measured 2026-09-15, \"2026-08-06\" read back \"2026-08-06T04:00:00.000Z\" on this America/New_York instance, which is the previous day west of UTC-4.",
+ "source_bases": [
+  {
+   "base_id": "app28z7XnKzjfTXwc",
+   "tables_in_base": 37,
+   "tables_mirrored": 36,
+   "excluded": [
+    "Credentials"
+   ]
+  },
+  {
+   "base_id": "appa7WL221K1DhYnX",
+   "tables_in_base": 2,
+   "tables_mirrored": 2,
+   "excluded": []
+  }
+ ],
+ "totals": {
+  "data_tables": 38,
+  "rows": 507,
+  "cells_verified": 22941
+ },
+ "tables": [
+  {
+   "data_table": "at_tqo_acx_canon_heads",
+   "data_table_id": "v2JS6cvmOXO1zFLw",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblhbumDnO4M3LHBr",
+   "airtable_table_name": "ACX Canon Heads",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "cell_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "category",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "category_name",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "subject",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "head",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "head_version",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "source_tag",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "tier",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "last_moved",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "last_change_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "acx_continuity_lineage",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 14,
+   "row_count": 0
+  },
+  {
+   "data_table": "at_tqo_acx_content",
+   "data_table_id": "mdMWhen7YWZMXBY4",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblLapkVnp3PWk6UQ",
+   "airtable_table_name": "ACX Content",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "topic",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "video_title",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "script",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "description",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "tags",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "voice_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "template_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "channel",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "canon_version",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "audio_url",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "video_url",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "live_links",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "publish_date",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "rubric_average",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "correction_attempts",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "last_feedback",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "system_status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "vidiq_optimized_title",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "vidiq_tags",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "platform_packaging",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "broll_keywords",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "idea",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "content_pillar",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "audience_persona",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "stage_of_awareness",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "editorial_stage",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail_headline",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail_concept",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "visual_hook",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "primary_subject",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "scene_description",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail_prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "gpt_image_prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "higgsfield_prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "flux_prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "midjourney_prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "negative_prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "aspect_ratio",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "emotion",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ctr_trigger",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "visual_metaphor",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "lighting_style",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "composition",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "color_treatment",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "generated_thumbnail",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "selected_thumbnail",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail_version",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail_score",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "published_url",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ctr_result",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "watch_time_result",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "average_view_duration",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "subscriber_conversion",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "performance_notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "lessons_learned",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ep",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "human_review",
+     "type": "boolean",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ai_disclosure",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "os_28_status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "virality_score",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "qc_verdict",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "acx_continuity_lineage",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "strategic_decisions",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "maintenance_logs",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 67,
+   "row_count": 0
+  },
+  {
+   "data_table": "at_tqo_acx_continuity_lineage",
+   "data_table_id": "J4QHgnAd2XRUzzih",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblPjPUbyimJ8izn4",
+   "airtable_table_name": "ACX Continuity Lineage",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "change_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "timestamp",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "layer",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "verdict",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "tier",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "subject",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "check",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "proposed",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "evidence",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "objection",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "head_before",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "head_after",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ruled_by",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "cell",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "episode",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 17,
+   "row_count": 0
+  },
+  {
+   "data_table": "at_tqo_assets",
+   "data_table_id": "sQStJ0EDlH6ZFK7R",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblBW5EyViCCBwhCi",
+   "airtable_table_name": "Assets",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "asset_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "content_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "brand_old_safe_to_delete",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "kind",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "function",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "from_primitive",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "primitive_strength",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "hook_type",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "angle",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "body",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "episode_row",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "show",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "season",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "episode",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "est_seconds",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "created_at",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "brand",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 21,
+   "row_count": 0
+  },
+  {
+   "data_table": "at_tqo_audience_intelligence",
+   "data_table_id": "Q8bQ41V0Oz7xHrCt",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblRvhGTXegjSkLsK",
+   "airtable_table_name": "Audience Intelligence",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "signal_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "brand_old_safe_to_delete",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "source",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "content_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "raw_text",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "author",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "engagement",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "classification",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "routed_to",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "theme",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "priority",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "spawned_idea",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "captured_at",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "brand",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 17,
+   "row_count": 0
+  },
+  {
+   "data_table": "at_tqo_b_roll_library",
+   "data_table_id": "KngAKngKq1tVtfMN",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tbl2pr5GLeeUJK1rr",
+   "airtable_table_name": "B-Roll Library",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "clip_name",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "drive_file_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "tags",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "duration",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "size_mb",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "resolution",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "orientation",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "source",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "brand_old_safe_to_delete",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "verified",
+     "type": "boolean",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "wired",
+     "type": "boolean",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "times_used",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "last_used",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "brand",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 17,
+   "row_count": 21
+  },
+  {
+   "data_table": "at_tqo_brand_kits",
+   "data_table_id": "3T1CZqmbrS0ZQfsF",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblNMtpwp8y3WncqI",
+   "airtable_table_name": "Brand Kits",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "wordmark",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "palette",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "type_pairing",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "voice",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "taglines",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "source_idea",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "created",
+     "type": "string",
+     "airtable_type_was_date": true
+    }
+   ],
+   "column_count": 10,
+   "row_count": 3
+  },
+  {
+   "data_table": "at_tqo_campaigns",
+   "data_table_id": "VIbXBcstxzL99KgL",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tbljYRyjzjPht4ick",
+   "airtable_table_name": "Campaigns",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "channel",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "sent",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "open",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "reply",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "pipeline",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 9,
+   "row_count": 3
+  },
+  {
+   "data_table": "at_tqo_coaching_clients",
+   "data_table_id": "Xt0dZODPtBMX9ZXS",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblKN43hwFzIwAhel",
+   "airtable_table_name": "Coaching Clients",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "assignee",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "attachments",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "attachment_summary",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "email",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "source",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "package",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "start_date",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "client_status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "coaching_sessions",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 14,
+   "row_count": 3
+  },
+  {
+   "data_table": "at_tqo_coaching_sessions",
+   "data_table_id": "HLJyp2EvWxoyR5Cm",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblpGkNPhuUXyfg57",
+   "airtable_table_name": "Coaching Sessions",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "assignee",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "attachments",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "attachment_summary",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "client",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "session_date",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "session_number",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "key_themes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "action_items",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "next_session_focus",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 14,
+   "row_count": 3
+  },
+  {
+   "data_table": "at_tqo_conflicts",
+   "data_table_id": "dnnivkskhRa3mVkk",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblbenoy1QF9KAftn",
+   "airtable_table_name": "Conflicts",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "what",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "detected",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "type",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "candidate_a_newer",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "candidate_b_older",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "evidence",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "where",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ruling",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 11,
+   "row_count": 17
+  },
+  {
+   "data_table": "at_tqo_content",
+   "data_table_id": "74CJPALlabYNAaJW",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblx5CcNguOypBjLI",
+   "airtable_table_name": "Content",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "topic",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "video_title",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "script",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "description",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "tags",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "voice_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "template_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "channel",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "audio_url",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "video_url",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "live_links",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "publish_date",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "rubric_average",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "correction_attempts",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "last_feedback",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "system_status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "vidiq_optimized_title",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "vidiq_tags",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "strategic_decisions",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "maintenance_logs",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "platform_packaging",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "broll_keywords",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "idea",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "content_pillar",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "audience_persona",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "stage_of_awareness",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail_headline",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail_concept",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "visual_hook",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "primary_subject",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "scene_description",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail_prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "elias_visible",
+     "type": "boolean",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "elias_role",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "elias_pose",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "elias_environment",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "elias_interaction",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "elias_signature_object",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "gpt_image_prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "higgsfield_prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "flux_prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "midjourney_prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "negative_prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "aspect_ratio",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "emotion",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ctr_trigger",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "visual_metaphor",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "lighting_style",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "composition",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "color_treatment",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "editorial_stage",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "generated_thumbnail",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "selected_thumbnail",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail_version",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail_score",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "published_url",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ctr_result",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "watch_time_result",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "average_view_duration",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "subscriber_conversion",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "performance_notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "lessons_learned",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "hook_vo",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "close_vo",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "checklist",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "learning_objective",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "avatar_hook_url",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "avatar_close_url",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "avatar_hook_secs",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "avatar_close_secs",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "human_review",
+     "type": "boolean",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ai_disclosure",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "os_28_status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "virality_score",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "recheck_by",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "claim_validity",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "qc_verdict",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "show",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "season",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "episode",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "asset_type",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "operator_test",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "quiet_move",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "parent_record",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "shorts_ideas",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "qc_score",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "qc_findings",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "manifest",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "score_history",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "attached_offer",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "content_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "idea_score",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "idea_score_breakdown",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "routing",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "canonical_rule_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "atomized_at",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "render_attempts",
+     "type": "number",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 100,
+   "row_count": 66
+  },
+  {
+   "data_table": "at_tqo_content_primitives",
+   "data_table_id": "bHBuXDvD3O80VdJb",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblk3Pb6i9GFkItHE",
+   "airtable_table_name": "Content Primitives",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "primitive_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "content_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "brand_old_safe_to_delete",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "type",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "strength",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "source_text",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "note",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "episode_row",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "show",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "season",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "episode",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "assets_built",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "extracted_at",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "brand",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 16,
+   "row_count": 0
+  },
+  {
+   "data_table": "at_tqo_customers",
+   "data_table_id": "vATuL2onSm0hdtSJ",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tbl6hyri0Qtp3eae5",
+   "airtable_table_name": "Customers",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "email",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "brand_old_safe_to_delete",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "offer",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "rail",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "order_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "amount",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "purchased_at",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "sourced_by_episode",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "episode_title",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "lifecycle_stage",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "mailerlite_synced",
+     "type": "boolean",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "total_spend",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "order_count",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "brand",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 18,
+   "row_count": 0
+  },
+  {
+   "data_table": "at_tqo_editforge_generation_queue",
+   "data_table_id": "nQdokQVuN9rjZRYC",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblsWef63twib7dIr",
+   "airtable_table_name": "EditForge Generation Queue",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "frame_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "package",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "kind",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "rider",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "art_ref",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "dest_path",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "size",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "model_used",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "output_url",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "credits_used",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "qc_notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "generated_at",
+     "type": "string",
+     "airtable_type_was_date": true
+    }
+   ],
+   "column_count": 16,
+   "row_count": 45
+  },
+  {
+   "data_table": "at_tqo_experiments",
+   "data_table_id": "5Z7rKgqmhDAyB7AM",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblvZFDIaVo8GUjgt",
+   "airtable_table_name": "Experiments",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "experiment_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "content_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "brand_old_safe_to_delete",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "type",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "variant_a",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "variant_b",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "angle_a",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "angle_b",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "metric",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "result_a",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "result_b",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "winner",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "learning",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ran_at",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "brand",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 18,
+   "row_count": 0
+  },
+  {
+   "data_table": "at_tqo_forge_rules",
+   "data_table_id": "UdR5r2lysmtS07FA",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tbl0Q2MX9BqvjpoBa",
+   "airtable_table_name": "Forge Rules",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "rule_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "number",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "brand_old_safe_to_delete",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "rule",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "content_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "episode_row",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "show",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "from_primitive",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "theme",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "times_reused",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "created_at",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "brand",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 16,
+   "row_count": 0
+  },
+  {
+   "data_table": "at_tqo_guests",
+   "data_table_id": "LibwKhasUBvjZGfV",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblUsWNFYAOCXVOWT",
+   "airtable_table_name": "Guests",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "contact",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "topic",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "episode",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 8,
+   "row_count": 0
+  },
+  {
+   "data_table": "at_tqo_inbox_captures",
+   "data_table_id": "0tmm2baLwVWFdZAR",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tbl4ziFRbl5mnUcKc",
+   "airtable_table_name": "Inbox Captures",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "title",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "captured",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "kind",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "source",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "area",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "filename",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "destination",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "drive_link",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "body",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "triaged",
+     "type": "boolean",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "size",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "devon_key",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "devon_job",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 16,
+   "row_count": 11
+  },
+  {
+   "data_table": "at_tqo_leads",
+   "data_table_id": "jCg3RqT0LJZYAEEl",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblsyErI4YuWGc4QV",
+   "airtable_table_name": "Leads",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "assignee",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "attachments",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "attachment_summary",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "email_secondary",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "source",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "audit_score",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "audit_band",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "lead_status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "last_engaged_date",
+     "type": "string",
+     "airtable_type_was_date": true
+    }
+   ],
+   "column_count": 14,
+   "row_count": 6
+  },
+  {
+   "data_table": "at_tqo_ledger",
+   "data_table_id": "Vb9zzukEjDpNWDj3",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblu6xR1VQaw7LISP",
+   "airtable_table_name": "Ledger",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "subject",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "actor",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "loop",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "verdict",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "confidence",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "evidence",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "lesson",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "hash",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "timestamp",
+     "type": "string",
+     "airtable_type_was_date": true
+    }
+   ],
+   "column_count": 11,
+   "row_count": 5
+  },
+  {
+   "data_table": "at_tqo_maintenance_logs",
+   "data_table_id": "vt3HNNrbSDXrgQy3",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tbloLNpzdGWgqacuI",
+   "airtable_table_name": "Maintenance Logs",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "assignee",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "attachments",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "attachment_summary",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "date",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "category",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "issue_task",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "log_status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "resolution_notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "related_content",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "content_copy",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "nco_forge_content",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "severity",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "acx_content",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 18,
+   "row_count": 31
+  },
+  {
+   "data_table": "at_tqo_nco_forge_content",
+   "data_table_id": "I9iYxTA6TQwiKwME",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblhtxvB7xouDKpww",
+   "airtable_table_name": "NCO Forge Content",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "topic",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "video_title",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "script",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "description",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "tags",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "voice_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "template_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "channel",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "audio_url",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "video_url",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "live_links",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "publish_date",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "rubric_average",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "correction_attempts",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "last_feedback",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "system_status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "vidiq_optimized_title",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "vidiq_tags",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "platform_packaging",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "broll_keywords",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "idea",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "pillar_july_pkg_retired",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "audience_persona",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "stage_of_awareness",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail_headline",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail_concept",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "visual_hook",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "primary_subject",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "scene_description",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail_prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "negative_prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "aspect_ratio",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "emotion",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ctr_trigger",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "visual_metaphor",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "lighting_style",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "composition",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "color_treatment",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "editorial_stage",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "generated_thumbnail",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "selected_thumbnail",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail_version",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail_score",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "published_url",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ctr_result",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "watch_time_result",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "average_view_duration",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "subscriber_conversion",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "performance_notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "lessons_learned",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "checklist",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "learning_objective",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "shorts_ideas",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "tagline",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "brand_applied",
+     "type": "boolean",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "watermark_applied",
+     "type": "boolean",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "strategic_decisions",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "maintenance_logs",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "human_review",
+     "type": "boolean",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ai_disclosure",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "os_28_status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "virality_score",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "content_pillar",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "format",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "recheck_by",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "claim_validity",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "qc_verdict",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "show",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "season",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "episode",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "asset_type",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "forge_test",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "closing_standard",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "parent_record",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "qc_score",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "qc_findings",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "manifest",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "score_history",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "attached_offer",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "content_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "idea_score",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "idea_score_breakdown",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "routing",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "canonical_rule_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "atomized_at",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "render_attempts",
+     "type": "number",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 89,
+   "row_count": 30
+  },
+  {
+   "data_table": "at_tqo_offers",
+   "data_table_id": "LIDBoUOp7sQrysrz",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblZZV9hBXBv85aGC",
+   "airtable_table_name": "Offers",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "brand_old_safe_to_delete",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "tier",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "price",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "rail",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "checkout_url",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "promise",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "problem_solved",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "trigger_pillars",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "trigger_keywords",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "mailerlite_group_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "fulfilment_notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "units_sold",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "revenue",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "brand",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 18,
+   "row_count": 10
+  },
+  {
+   "data_table": "at_tqo_os_28_policy_watch",
+   "data_table_id": "KofEMzR049iMbOBv",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tbljgUxMRSI2aWuht",
+   "airtable_table_name": "OS 28 Policy Watch",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "source",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "platform",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "url",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "watch",
+     "type": "boolean",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "gate",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "last_fingerprint",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "last_checked",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "last_changed",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "assessment",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "consecutive_failures",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ai_verdict",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "block_index",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 15,
+   "row_count": 9
+  },
+  {
+   "data_table": "at_tqo_performance",
+   "data_table_id": "ukSBME375Q5NSUkY",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tbla2jC3Rbnylnq4G",
+   "airtable_table_name": "Performance",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "measurement_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "content_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "asset_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "brand_old_safe_to_delete",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "platform",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "platform_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "measured_at",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "days_since_post",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "impressions",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "views",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ctr",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "avg_view_duration",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "retention",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "likes",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "comments",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "shares",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "saves",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "subscribers_gained",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "outlier_score",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "winner",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "brand",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 24,
+   "row_count": 0
+  },
+  {
+   "data_table": "at_tqo_platform_packaging",
+   "data_table_id": "o4NLuKZbqy7zlURf",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblueqBeC7NxYtgyE",
+   "airtable_table_name": "Platform Packaging",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "assignee",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "attachments",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "attachment_summary",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "content",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "platform",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "hook_title",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "caption_description",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "hashtags",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "clip_guidance",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "posting_offset",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "packaging_status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "monetization_note",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 17,
+   "row_count": 3
+  },
+  {
+   "data_table": "at_tqo_products",
+   "data_table_id": "39tzPPmLqVHzcarb",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblmdqCxTkhWAxoEJ",
+   "airtable_table_name": "Products",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "type",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "price",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "margin",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "sku",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "break_even_roas",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "actual_roas",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "verdict",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "link",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 12,
+   "row_count": 4
+  },
+  {
+   "data_table": "at_tqo_publishing",
+   "data_table_id": "FrJojhuZu0kGNxni",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblQgQ3JdpoKOANXh",
+   "airtable_table_name": "Publishing",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "slot_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "asset_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "content_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "brand_old_safe_to_delete",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "platform",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "day_offset",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "scheduled_for",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "posted_at",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "post_url",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "caption",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "brand",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 15,
+   "row_count": 0
+  },
+  {
+   "data_table": "at_tqo_quality_issues",
+   "data_table_id": "XGRzxsAbk0hCyg5E",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblleaBx7vuR4VWqo",
+   "airtable_table_name": "Quality Issues",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "assignee",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "attachments",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "attachment_summary",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "date",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "source",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "severity",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "description",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "resolution",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "issue_status",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 14,
+   "row_count": 3
+  },
+  {
+   "data_table": "at_tqo_strategic_decisions",
+   "data_table_id": "XkLvtSVPT0WlQLRZ",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblBVwPprqdJ3m3of",
+   "airtable_table_name": "Strategic Decisions",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "assignee",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "attachments",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "attachment_summary",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "decision_date",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "category",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "request_question",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "agent_used",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "recommendation",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "decision_made",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "outcome_notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "decision_status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "related_content",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "content_copy",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "nco_forge_content",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "acx_content",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 20,
+   "row_count": 79
+  },
+  {
+   "data_table": "at_tqo_thread_receipts",
+   "data_table_id": "JCwPJ37BmyUW21r1",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblEhgEZoNr2ztbB3",
+   "airtable_table_name": "Thread Receipts",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "title",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "date",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "platform",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "area",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "summary",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "decided",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "built",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "open",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "next",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "canon",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "verify",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "raw",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "synced_to_notion",
+     "type": "boolean",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 15,
+   "row_count": 4
+  },
+  {
+   "data_table": "at_tqo_tsws_book_memory_register",
+   "data_table_id": "x0c6Ia01ojKMiBjQ",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblqv6kyLgKMME2nW",
+   "airtable_table_name": "TSWS Book Memory Register",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "source_name",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "captured",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "type",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "life_period",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "people_involved",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "confidence_class",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "consent_state",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "vault_link",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "feeds_movements",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 12,
+   "row_count": 0
+  },
+  {
+   "data_table": "at_tqo_tsws_canon_heads",
+   "data_table_id": "Y3rJdE3Kuqx3ufzJ",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tbl8NJdLhrndQF21V",
+   "airtable_table_name": "TSWS Canon Heads",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "cell_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "category",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "category_name",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "subject",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "head",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "head_version",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "source_tag",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "tier",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "last_moved",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "last_change_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "tsws_continuity_lineage",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 14,
+   "row_count": 25
+  },
+  {
+   "data_table": "at_tqo_tsws_content",
+   "data_table_id": "16SErrCkjhfuQzYA",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblVhCXkBp0O0Y2tI",
+   "airtable_table_name": "TSWS Content",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "topic",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "video_title",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "script",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "description",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "tags",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "voice_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "template_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "channel",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "audio_url",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "video_url",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "live_links",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "publish_date",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "rubric_average",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "correction_attempts",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "last_feedback",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "system_status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "vidiq_optimized_title",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "vidiq_tags",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "strategic_decisions",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "maintenance_logs",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "platform_packaging",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "broll_keywords",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "idea",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "content_pillar",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "audience_persona",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "stage_of_awareness",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail_headline",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail_concept",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "visual_hook",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "primary_subject",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "scene_description",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail_prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "auren_visible",
+     "type": "boolean",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "vespera_visible",
+     "type": "boolean",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "auren_role",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "vespera_role",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "auren_pose",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "vespera_pose",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "scene_environment",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "auren_interaction",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "vespera_interaction",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "auren_signature_object",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "vespera_signature_object",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "gpt_image_prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "higgsfield_prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "flux_prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "midjourney_prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "negative_prompt",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "aspect_ratio",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "emotion",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ctr_trigger",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "visual_metaphor",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "lighting_style",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "composition",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "color_treatment",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "editorial_stage",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "generated_thumbnail",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "selected_thumbnail",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail_version",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail_score",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "published_url",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ctr_result",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "watch_time_result",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "average_view_duration",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "subscriber_conversion",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "performance_notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "lessons_learned",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "guests",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ep",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "record_date",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "promo_posted",
+     "type": "boolean",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "human_review",
+     "type": "boolean",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ai_disclosure",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "os_28_status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "virality_score",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "qc_verdict",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "tsws_continuity_lineage",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 80,
+   "row_count": 108
+  },
+  {
+   "data_table": "at_tqo_tsws_continuity_lineage",
+   "data_table_id": "XVEOtk1pAH9yqdDX",
+   "airtable_base_id": "app28z7XnKzjfTXwc",
+   "airtable_base_key": "tqo",
+   "airtable_table_id": "tblpAwTA33gkjKAAQ",
+   "airtable_table_name": "TSWS Continuity Lineage",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "change_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "timestamp",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "layer",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "verdict",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "tier",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "cell",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "subject",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "check",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "proposed",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "evidence",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "objection",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "head_before",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "head_after",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "episode_ref_legacy_text",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ruled_by",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "episode",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 18,
+   "row_count": 15
+  },
+  {
+   "data_table": "at_tsws_episodes",
+   "data_table_id": "fh66OyjGBjOGwKdR",
+   "airtable_base_id": "appa7WL221K1DhYnX",
+   "airtable_base_key": "tsws",
+   "airtable_table_id": "tblogzA198SnkgjPV",
+   "airtable_table_name": "Episodes",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "title",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ep",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "guest",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "record_date",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "publish_date",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "promo_posted",
+     "type": "boolean",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "human_review",
+     "type": "boolean",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "ai_disclosure",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "os_28_status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "virality_score",
+     "type": "number",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "thumbnail",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 15,
+   "row_count": 2
+  },
+  {
+   "data_table": "at_tsws_guests",
+   "data_table_id": "GlFpQtO9SFkufocF",
+   "airtable_base_id": "appa7WL221K1DhYnX",
+   "airtable_base_key": "tsws",
+   "airtable_table_id": "tblPSsY5lKc609Iei",
+   "airtable_table_name": "Guests",
+   "columns": [
+    {
+     "name": "airtable_record_id",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "airtable_created_time",
+     "type": "string",
+     "airtable_type_was_date": true
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "contact",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "topic",
+     "type": "string",
+     "airtable_type_was_date": false
+    },
+    {
+     "name": "notes",
+     "type": "string",
+     "airtable_type_was_date": false
+    }
+   ],
+   "column_count": 7,
+   "row_count": 1
+  }
+ ]
+}

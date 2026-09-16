@@ -37,6 +37,11 @@ and rebuilt from the Cloud graph.
 Outputs ``<out>/ops-N.json`` (at most ``--chunk`` operations each, node operations
 first and connection operations last) and ``<out>/report.json``, which names what
 was mapped, what could not be, and which overlay files matched.
+
+One operation type, ``setNodeTypeVersion``, is read by ``vps_cutover_apply`` and
+may not be understood by the n8n MCP ``update_workflow`` tool. Applying these
+operations over REST with that driver is the supported path; an MCP caller that
+does not know the type will reject the batch loudly rather than skip it.
 """
 
 from __future__ import annotations
@@ -231,6 +236,20 @@ def build_operations(
                         "node": name,
                         "cloud": node.get("typeVersion"),
                         "vps": existing.get("typeVersion"),
+                    }
+                )
+                # Carry the version across, not just record it. The parameters
+                # written just above are Cloud's, and they belong to Cloud's
+                # typeVersion; leaving the VPS node on an older one applies new
+                # parameters to old semantics, which is the more dangerous half
+                # of the drift. Found 2026-09-15: six nodes in the Gumroad organ
+                # verified dirty for exactly this, and nothing else in the estate
+                # drifts, so the blast radius of the carry is one organ.
+                node_ops.append(
+                    {
+                        "type": "setNodeTypeVersion",
+                        "nodeName": name,
+                        "typeVersion": node.get("typeVersion"),
                     }
                 )
             for cred_type, ref in credentials.items():

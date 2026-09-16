@@ -84,7 +84,14 @@ def column_type(field_type: str) -> str:
     if field_type in _BOOLEAN_TYPES:
         return "boolean"
     if field_type in _DATE_TYPES:
-        return "date"
+        # Measured on the VPS 2026-09-15, not assumed: an n8n ``date`` column
+        # stamps the instance timezone onto a date-only value. A cell inserted
+        # as "2026-08-06" reads back "2026-08-06T04:00:00.000Z" on an
+        # America/New_York instance, so the day moves for anyone reading it
+        # further west. An archive that silently shifts a date is worse than no
+        # archive, so a date field becomes a ``string`` and the Airtable value
+        # lands byte for byte. ISO-8601 still sorts and compares correctly.
+        return "string"
     return "string"
 
 

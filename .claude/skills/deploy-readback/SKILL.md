@@ -310,12 +310,28 @@ Distinguish them by evidence, never by assumption:
 
 ### An account block is a third thing, and it looks like neither
 
-Seen three times: 2026-09-02 into 2026-09-03, again on 2026-09-04, and again
+Seen four times: 2026-09-02 into 2026-09-03, again on 2026-09-04, again
 on 2026-09-05 from some point between 18:55Z (the last record created on both
 projects, commit 21caa65) and 19:23Z (the push of 88a002d, which created
-none). The Vercel commit statuses on the head read `failure` with the
-description **"Account is blocked"**, pointing at
+none), and again on 2026-09-15 between 22:52:51Z and 23:35:20Z. The Vercel
+commit statuses on the head read `failure` with the description
+**"Account is blocked"**, pointing at
 `https://vercel.com/knowledge/why-is-my-account-deployment-blocked`.
+
+This paragraph said three until the fourth, and the fourth is the one that
+kills the comfortable reading. It is the first block recorded since the account
+moved to Pro on 2026-09-04, so a block is not the free plan and upgrading did
+not stop it. Four occurrences in a fortnight is a recurrence rather than an
+incident, and nothing in the tooling has ever named a reason for any of them.
+Why it keeps happening is unanswered here, and it is worth Tee asking Vercel
+rather than each session re-deriving the same diagnosis.
+
+The 2026-09-15 gap is the cleanest recorded instance of the signature, because
+three pushes landed inside it. Both projects created their last record at
+22:52:51Z on `cb8de0e`. `b2d6f4a` at 23:35:20Z, `5906af9` at 23:48:53Z and
+`70bbf04` at 23:55:51Z each created no deployment record on either project,
+while GitHub Actions ran and went green on the same commits. Actions green and
+Vercel silent, at the same time, on the same head, is what a block looks like.
 
 It is not the daily cap. The cap names itself (`api-deployments-free-per-day`)
 and it is a refusal of one deployment; a block is account wide and the tooling

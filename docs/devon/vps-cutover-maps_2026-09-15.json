@@ -188,6 +188,14 @@
    "id": "f8470H9MIgTGJUO8",
    "name": "Header Auth account 2"
   },
+  "SFou54MzuKGj3MwV": {
+   "id": "JSBvIdHJ9UUQRXwH",
+   "name": "Devon Console Token"
+  },
+  "TEJIJDPoEhid0aOE": {
+   "id": "EdFztvzdUL9PSycJ",
+   "name": "anthropic"
+  },
   "THqWeT7Fd0kiiGSv": {
    "id": "dtlz8HF694CwAIzz",
    "name": "EditForge MCP Token"
@@ -207,6 +215,10 @@
   "YTVk8Dq2gYPAmUim": {
    "id": "ENoUSqySnkK0NVsl",
    "name": "Cerebras Cloud"
+  },
+  "b9FYEfGUlMiYJCCU": {
+   "id": "bQZHyw6TfiBHmFmE",
+   "name": "Notion Integration Token"
   },
   "eYTecIAkpa16GAQ6": {
    "id": "XbLg8FnNraeTbEfJ",
@@ -239,23 +251,14 @@
   "vsTKuAilHmpYCc5L": {
    "id": "9OGS2U62Gn8OTWm3",
    "name": "Gmail account"
-  },
-  "TEJIJDPoEhid0aOE": {
-   "id": "EdFztvzdUL9PSycJ",
-   "name": "anthropic"
-  },
-  "SFou54MzuKGj3MwV": {
-   "id": "JSBvIdHJ9UUQRXwH",
-   "name": "Devon Console Token"
   }
  },
- "credentials_with_no_vps_twin": {
-  "b9FYEfGUlMiYJCCU": "Header Auth account 10, httpHeaderAuth, no VPS credential of that name and type"
- },
+ "credentials_with_no_vps_twin": {},
  "credential_notes": {
   "TEJIJDPoEhid0aOE": "Cloud spells it Antrhropic, the VPS spells it anthropic. Same service, same type.",
   "SFou54MzuKGj3MwV": "Cloud Devon Soul Service Token maps to the VPS Devon Console Token. Ruled 2026-09-15: the soul token answered 401 where the console token answered 200, and Tee deleted the stale VPS copy.",
   "YFD1LlWr6OhTKQ7k": "Zapier MCP. The VPS twin krUcZs3zx3V6zhUt exists but its value answered HTTP 401 Invalid OAuth token on 2026-09-15. Re-copy before the Zapier lane can call anything.",
-  "FYRvkRTOcROEYZ9P": "Devon Capture Key. Name and type match on both hosts, but whether the two hold the SAME secret is UNVERIFIED. It decides whether Tee's phone Shortcut still works after the switch."
+  "FYRvkRTOcROEYZ9P": "Devon Capture Key. Name and type match on both hosts, but whether the two hold the SAME secret is UNVERIFIED. It decides whether Tee's phone Shortcut still works after the switch.",
+  "b9FYEfGUlMiYJCCU": "Header Auth account 10 on Cloud, the Notion integration token. Had no VPS twin until Tee created Notion Integration Token bQZHyw6TfiBHmFmE on 2026-09-15. The two nodes that want it are Create Notion Page and Find Existing Page in the Notion Buffer Drain; before the mapping existed the VPS copy of Create Notion Page was bound to WpZNTg9qduOFC5NM, which is the TSWS Render Worker credential, so publishing it would have sent that token to api.notion.com. The nodes set Notion-Version and Content-Type themselves, so the credential carries only Authorization: Bearer <token>."
  }
 }
