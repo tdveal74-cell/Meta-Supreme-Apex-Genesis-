@@ -121,7 +121,7 @@ parameter guessing had not.
 ```
 AREA: Systems
 TYPE: SYS_OPS
-ARTIFACT: SYS_OPS_a-400-that-was-not-a-parameter-bug_v1_2026-09-16b.md
+ARTIFACT: SYS_OPS_a-400-that-was-not-a-parameter-bug_v1_2026-09-16c.md
 DATE: 2026-09-16
 DECISIONS: Tee ruled to point the OS 29 assessment call at Cerebras gpt-oss-120b rather than fund the Anthropic account for one node, on the reading that the V5 lane is already paid for and this workflow has exactly one model node. The swap follows the V5 pattern: the prompt builder keeps emitting the Anthropic shape, one shim converts it, one extraction line in the parser reads either shape. The unambiguous typographic hyphens are folded to ASCII deterministically; em and en dashes are left alone because folding a dash between digits invents a number.
 FINDINGS: The error n8n reported as "Bad request - please check your parameters" was an Anthropic 400 whose body read "Your credit balance is too low to access the Anthropic API", request req_011Cf6L2vyK6pRVWS2LtvRJC, visible only after onError continueRegularOutput was removed on a throwaway copy, execution 216. The credential authenticates; the account behind it is empty. A different model id returned the identical error on execution 215, which ruled out the model string before the credential was touched. The node worked on Cloud because it ran on n8n Gateway managed credits, a Cloud only feature that self hosted n8n does not have, so the 2026-09-15 cutover was what exposed it. Probe 217 also showed the model writing a U+2011 NON-BREAKING HYPHEN into a field that reaches Airtable and email.
