@@ -109,7 +109,7 @@ corrections came the same way: somebody counted from the estate instead of
 reading the list. It now says so, and says to count from `list-services` and
 `list_projects` rather than from its own table.
 
-## 4. The presence health read cannot be fixed from a session
+## 4. The presence health read was handed back, and Tee closed it the same day
 
 `GET /health` on the presence service is the only self read this estate has, and
 an agent container cannot make it. Measured again today: the network policy
@@ -124,9 +124,30 @@ them under Custom allowed domains in the Claude Code environment settings, and a
 key alone was not enough. Adding `presence-production-d272.up.railway.app`, or
 `*.up.railway.app` for both Railway hosts, closes it the same way.
 
-This is written into `deploy-readback` rather than left as a session's memory,
-so the next session says unverified instead of inferring it from a deployment
-record.
+This was written into `deploy-readback` rather than left as a session's memory,
+so the next session would say unverified instead of inferring it from a
+deployment record.
+
+**Tee added `*.up.railway.app` the same afternoon and the read works.** Proven
+by making it rather than by the setting being saved:
+
+```
+GET https://presence-production-d272.up.railway.app/health    200, nine keys
+GET https://api-production-5644.up.railway.app/api/v1/health  200, healthy
+```
+
+The four fields no session could reach came back `speech: cartesia`,
+`livekit_configured: false`, `cors_origins` naming five origins, and `breaker`
+closed with zero breaches, zero opens and zero consecutive breaches.
+`livekit_configured: false` is the expected state rather than a gap: it is
+pinned false by `test_presence_service.py:106`, and `audio_over_websocket` is
+defined as `not livekit_configured`, so the pair reading false and true is the
+design. The wildcard covers both hosts and anything Railway adds later.
+
+So this item is CLOSED rather than handed back, and `deploy-readback` now says
+to read `/health` instead of saying unverified. The handback was still the right
+call at the time: the fix was a permission only Tee holds, and the alternative
+was a session inventing a workaround for a policy denial.
 
 ## What the local validation caught
 
@@ -214,7 +235,7 @@ ARTIFACT: SYS_OPS_four-open-items-closed_v1_2026-09-16k.md
 DATE: 2026-09-16
 DECISIONS: Tee ruled "fix it all" on the four items the Command Center arc left open. The heartbeat's feeder rule was fixed at the root rather than retuned: the forty minute threshold is replaced by two findings that read the feed log's own newest fed_at, because widening a threshold to stop an alarm complaining is how an alarm stops being read. The heartbeat was deliberately NOT fired by hand to prove the fix, because a manual run writes into devon_heartbeat_log, which is where DEVON's continuity lives, and would likely email a duplicate pulse; the 10:00Z beat proves it free. The Data Table hazard got a guard rather than the id conversion, because Tee ruled on 2026-09-16 that renaming the table beats editing the workflows, and reopening V5's 31 nodes in the lane that recovered this morning is his call rather than a session's. The presence health read was handed back rather than worked around, because it is a network policy the session cannot change.
 FINDINGS: The heartbeat's feeder_silent rule was wrong in both directions and only the noisy half had been noticed. False positive: it called a COMPLETED job unfed after 40 minutes while the feeder that carries it runs once a day, so the 04:00:15Z beat reported a feeder that was armed and simply not due until 06:00Z. False negative, and worse: its own text said "feeder may be down" but the loop only looked when a COMPLETED job happened to be waiting, so a feeder that died on a quiet week was invisible. Both are now proven by a harness that drives the real node body over the real rows of that morning and reimplements the retired rule to show it firing where the new one is silent, six scenarios and eight checks. Live as version 738d6d58 of EEDrp2jLlw2Ssd5b, with the version diff confirming exactly one node and one field changed and the previous version 6cb17f49 recorded for revert. The Data Table collision hazard belongs to the name set rather than to any workflow, which is why one checker covers all 73 by-name nodes at once; it reports exit 0 on the live 52 table estate, exit 1 on the estate as it stood at 2026-09-15T23:38Z naming all three real pairs, and exit 2 rather than a false green when it cannot read the input. Railway carries five services and deploy-readback named four; scheduler-cron had been deploying from the same commit as api the whole time, unwatched, and that section had already been wrong once before in the same direction. The presence /health read fails with a 403 on CONNECT from the agent proxy, which is a policy denial and not an outage. The doc letter raced again: i looked free from a directory listing and was held by open PR #243, caught by listing open pull requests, so this doc is j. Local validation added three more. test_deploy_soul.py globs services/devon/*.py to build its vendored map, so data_tables.py had to ship into deploy/soul/services/devon/ byte identical, and that also pulls this branch into web-ci.yml, whose filter carries deploy/soul/**, so the ten honesty checks and the Next build were run here and are clean. The mirror's own parity was measured rather than asserted: the live jsCode of version 738d6d58 read back and diffed against compose_pulse.js is identical from the first const down, 12013 bytes each, with the header differing on purpose and saying so. And the collision checker exited 1 on a mistyped path, borrowing its own alarm code for an unreadable input; it catches OSError now and exits 2 with the rest. The letter raced a fourth time, and this doc was the one that lost. It was named j after listing open pull requests, which was the rule as written and still not enough: PR #244 carried its own j on a branch, merged first at 08:29Z, and the collision existed only in the merge commit that followed. main went red on 71f96e2 with test_devon_receipt_shape.py naming the duplicate, and this doc is now k. The derived suffix that replaces the letter starts 2026-09-17 and would have prevented it. Reading production back after the merge found a fifth thing, appended to this doc rather than filed as l. deploy-readback said scheduler-cron deploys from the same commit as api; get-service-config says the three Railway services deploy on three different rules. api carries source.checkSuites true, so Railway holds it until GitHub's check suites finish and skips it when they fail: on the red 71f96e2 it waited from 08:30:08Z and turned SKIPPED at 08:35:58Z, and on the green 2ca6ec1 it waited from 08:39:07Z until CI run 827 passed at 08:45:08Z then succeeded at 08:46:03Z. scheduler-cron has no gate and deployed the red commit anyway at 08:35:07Z, so for ten minutes the cron lane ran 71f96e2 while the API served c0a2ea9. A red main splits the estate rather than freezing it.
-OPEN: The 10:00Z beat is expected to carry neither feeder finding and that is unverified until it lands. Resolving Data Tables by id rather than by name is the durable fix, is unstarted, and needs Tee's word because it reopens the 31 V5 nodes he ruled against editing. The presence /health read stays unverified from any agent container until *.up.railway.app is added under Custom allowed domains, which only Tee can do.
+OPEN: The 10:00Z beat is expected to carry neither feeder finding and that is unverified until it lands. Resolving Data Tables by id rather than by name is the durable fix, is unstarted, and needs Tee's word because it reopens the 31 V5 nodes he ruled against editing. The presence /health read is CLOSED: Tee added *.up.railway.app under Custom allowed domains on 2026-09-16 and both Railway hosts answer 200 from a container, proven by making the read rather than by the setting being saved.
 STATUS: Two of four fixed and proven, one guarded at the class rather than the instance with the instance fix handed back, one handed back entirely. The heartbeat fix is live on the VPS and mirrored in the repo with a behaviour test wired into CI. The collision detector, its checker and its tests are in the repo. deploy-readback now counts five surfaces and records that the presence read cannot be made from a container.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
