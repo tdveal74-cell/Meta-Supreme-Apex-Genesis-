@@ -7,6 +7,9 @@ being true.
 
 from __future__ import annotations
 
+import ast
+import pathlib
+
 import pytest
 
 from services.devon import areas, ecosystem
@@ -369,6 +372,81 @@ def test_mechanical_work_goes_to_cerebras_and_judgement_to_the_council():
 
 def test_an_unrecorded_thinking_duty_is_declined_rather_than_guessed():
     assert ecosystem.route_thinking("read my mind")[0] == "DECLINED"
+
+
+def test_script_writing_routes_to_the_lane_it_actually_runs_on():
+    """Ruled by Tee on an inline card, 2026-09-15.
+
+    Until this landed, `route_thinking("script writing")` returned DECLINED,
+    which is the right answer for a duty nobody recorded and the wrong one for
+    the work the studio does every day. The live script lane in TQO FINAL V5
+    carries `Write Script (Cerebras)` and `Expand Script (Cerebras)`, so the
+    registry was disagreeing with the estate it describes.
+    """
+    lane, reason = ecosystem.route_thinking("script writing")
+    assert lane == "cerebras"
+    assert "2026-09-15" in reason
+
+
+def test_the_script_writing_reason_does_not_call_the_product_mechanical():
+    """The route is right for a reason the generic one would misstate.
+
+    Everything in CEREBRAS_DUTIES is there because it is mechanical. Script
+    writing is on the fast lane because that lane is funded and because two
+    pass expansion was measured to clear the 1200 word floor. If a later edit
+    collapses it into the tuple, the reason string silently starts calling the
+    studio's product mechanical, and this is what catches that.
+    """
+    reason = ecosystem.route_thinking("script writing")[1]
+    assert "mechanical" not in reason.replace("not because it is mechanical", "")
+    assert "script writing" not in ecosystem.CEREBRAS_DUTIES
+    assert "script writing" not in ecosystem.COUNCIL_DUTIES
+
+
+def test_a_ruled_duty_does_not_disturb_the_doctrine_around_it():
+    """Anti vacuity: the ruled branch answers first, so prove it answers only
+    for what it names."""
+    assert ecosystem.route_thinking("classification")[0] == "cerebras"
+    assert ecosystem.route_thinking("risk analysis")[0] == "council"
+    assert ecosystem.route_thinking("read my mind")[0] == "DECLINED"
+    assert set(ecosystem.RULED_ONTO_CEREBRAS) == {"script writing"}
+
+
+def test_the_soul_copy_routes_thinking_the_same_way():
+    """`ecosystem.py` exists twice and nothing regenerates one from the other.
+
+    A duty added here and not under `deploy/soul` would route differently
+    depending on which host answered, and nothing would say so. Measured by
+    parsing both files rather than importing the second, because the soul copy
+    is a deployment artifact and is not on the path.
+    """
+
+    def duty_names(path: str) -> dict[str, tuple[str, ...]]:
+        tree = ast.parse(pathlib.Path(path).read_text(encoding="utf-8"))
+        found: dict[str, tuple[str, ...]] = {}
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.AnnAssign):
+                continue
+            if not isinstance(node.target, ast.Name):
+                continue
+            name = node.target.id
+            if name in ("CEREBRAS_DUTIES", "COUNCIL_DUTIES"):
+                found[name] = tuple(e.value for e in node.value.elts)
+            elif name == "RULED_ONTO_CEREBRAS":
+                found[name] = tuple(k.value for k in node.value.keys)
+        return found
+
+    here = duty_names("services/devon/ecosystem.py")
+    soul = duty_names("deploy/soul/services/devon/ecosystem.py")
+    assert set(here) == {
+        "CEREBRAS_DUTIES",
+        "COUNCIL_DUTIES",
+        "RULED_ONTO_CEREBRAS",
+    }, here
+    assert here == soul, "the soul copy's thinking duties have drifted"
+    assert here["COUNCIL_DUTIES"] == ecosystem.COUNCIL_DUTIES
+    assert here["CEREBRAS_DUTIES"] == ecosystem.CEREBRAS_DUTIES
+    assert here["RULED_ONTO_CEREBRAS"] == tuple(ecosystem.RULED_ONTO_CEREBRAS)
 
 
 def test_the_operating_surfaces_come_from_the_one_registry():
