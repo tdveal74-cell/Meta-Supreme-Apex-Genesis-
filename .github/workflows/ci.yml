@@ -41,6 +41,17 @@ jobs:
           if [ ${#files[@]} -eq 0 ]; then echo "no n8n sources found, refusing to pass silently"; exit 1; fi
           for f in "${files[@]}"; do echo "checking $f"; node --check "$f"; done
           echo "${#files[@]} file(s) parsed"
+      # And here is one behaviour test, for the node whose rule was wrong rather
+      # than unparseable. The Pulse called a COMPLETED job "unfed" after forty
+      # minutes while the feeder that carries it runs once a day, so on
+      # 2026-09-16 the 04:00:15Z beat reported a feeder that was armed and
+      # simply not due; the same rule could not see a feeder that died on a
+      # quiet week. The harness drives the real node body over the real rows of
+      # that morning, and asserts the retired rule fired where the new one is
+      # silent, so this is measured against what it replaced rather than
+      # asserted.
+      - name: The Pulse's feeder findings behave
+        run: node n8n/devon/heartbeat/compose_pulse.test.mjs
       - name: Offline suite (no database, no keys)
         run: |
           python -m pytest -q --tb=short \
@@ -54,6 +65,7 @@ jobs:
             test_devon_learning_loop.py \
             test_devon_operating_layer.py \
             test_devon_editforge_execution.py \
+            test_devon_data_tables.py \
             test_devon_hermes_surface.py \
             test_devon_receipts.py \
             test_devon_capture_enrichment.py \
