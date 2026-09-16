@@ -108,10 +108,37 @@ The wildcard covers both hosts and any Railway service added later. **So read
 `/health` rather than saying unverified.** The four fields nothing else could
 reach came back `speech: cartesia`, `livekit_configured: false`,
 `cors_origins` naming five origins, and `breaker` closed with zero breaches.
-`livekit_configured: false` is the expected state, pinned by
-`test_presence_service.py:106`, and `audio_over_websocket` is defined as `not
-livekit_configured`, so the pair reading `false, true` is the design rather
-than a gap.
+**`livekit_configured: false` is not merely expected, it is the state in which
+DEVON can speak at all, and it is worth understanding before anybody touches
+those variables.** This paragraph said the value was "pinned by
+`test_presence_service.py:106`". That test builds the app from the TEST
+environment, where the `LIVEKIT_*` variables are unset, so it pins the local
+value and says nothing whatever about production. The real reason lives in
+`apps/presence/main.py`, where `audio_over_websocket` is `not
+livekit_configured`.
+
+**It fired on 2026-09-16 at 11:13:58Z, hours after being written up as a
+hazard.** The three `LIVEKIT_*` variables were set on the Railway `presence`
+service. Railway redeployed, `/health` went `livekit_configured: true` with
+`audio_over_websocket: false`, and the build then running produced every audio
+frame and dropped it. `/health` still answered 200, the socket still opened,
+the page still rendered, the breaker still read closed with zero breaches, and
+DEVON said nothing. Nothing logged an error, because from that build's point of
+view nothing had gone wrong. Tee removed the three variables and `/health` read
+`false, true` again by 11:42:16Z.
+
+So when reading this surface back: **a healthy looking `/health` is not proof
+that audio works.** The pair to read is `livekit_configured` and
+`audio_over_websocket` together, and `true, false` means silence unless the
+deployed build carries `apps/presence/livekit_publisher.py`. Check which
+commit the service is actually running before concluding anything, because the
+variables and the code that honours them move independently.
+
+One more shape worth knowing: the variables were first set on the **api**
+service rather than presence, where they are completely inert. Nothing under
+`app/`, `services/` or `deploy/` reads `LIVEKIT_*`; only `apps/presence/` does.
+An estate can therefore look configured for LiveKit while the service that
+needs it has nothing.
 
 A denial is still a denial: if this ever answers 403 again, say so with the
 reason rather than retrying it, and check whether the environment changed.
