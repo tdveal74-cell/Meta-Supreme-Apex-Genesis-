@@ -44,6 +44,11 @@ PLATFORM_MARKERS = ("RAILWAY_ENVIRONMENT_NAME", "RAILWAY_PROJECT_ID", "VERCEL_EN
 INFERENCE_CHOICES = ("mock", "cerebras", "anthropic", "openai")
 SPEECH_CHOICES = ("mock", "cartesia")
 
+#: What can transcribe the user. Added with protocol v2, which gave this
+#: socket an ear. The default stays "mock" because the elevenlabs request
+#: shape has not been executed from this repository; see apps/presence/hearing.py.
+EARS_CHOICES = ("mock", "elevenlabs")
+
 #: The voice is a compliance item in this estate rather than a default anyone
 #: may fill in. Tee's standing rule is that identity is owned and never rented:
 #: his own cloned voice, or a character he and his wife voice under recorded
@@ -151,6 +156,9 @@ class PresenceSettings:
     ANTHROPIC_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
     PRESENCE_SPEECH: str = "mock"
+    PRESENCE_EARS: str = "mock"
+    ELEVENLABS_API_KEY: str = ""
+    ELEVENLABS_STT_MODEL: str = "scribe_v1"
     CARTESIA_API_KEY: str = ""
     CARTESIA_VOICE_ID: str = ""
     CARTESIA_MODEL: str = "sonic-3"
@@ -210,6 +218,21 @@ class PresenceSettings:
                 )
             if not self.CARTESIA_VOICE_ID:
                 raise PresenceConfigError(CARTESIA_VOICE_RULE)
+        if self.PRESENCE_EARS not in EARS_CHOICES:
+            raise PresenceConfigError(
+                f"PRESENCE_EARS is {self.PRESENCE_EARS!r}; it must be one of "
+                f"{', '.join(EARS_CHOICES)}."
+            )
+        if self.PRESENCE_EARS == "elevenlabs" and not self.ELEVENLABS_API_KEY:
+            # Refused here as well as in build_hearing, for the same reason the
+            # Cartesia pair above is: this answers "is the configuration
+            # valid", build_hearing answers "can I hand back something that
+            # hears". A deployment that set PRESENCE_EARS and forgot the key
+            # would otherwise read as configured and fail one clip at a time.
+            raise PresenceConfigError(
+                "PRESENCE_EARS is elevenlabs but ELEVENLABS_API_KEY is empty. Set "
+                "the key or switch PRESENCE_EARS to mock."
+            )
         if self.PRESENCE_TTFT_THRESHOLD_MS <= 0:
             raise PresenceConfigError("PRESENCE_TTFT_THRESHOLD_MS must be greater than zero.")
         if self.PRESENCE_WINDOW_MS <= 0:
@@ -253,6 +276,10 @@ class PresenceSettings:
             CARTESIA_VOICE_ID=text("CARTESIA_VOICE_ID"),
             CARTESIA_MODEL=text("CARTESIA_MODEL", "sonic-3") or "sonic-3",
             CARTESIA_LANGUAGE=text("CARTESIA_LANGUAGE", "en") or "en",
+            PRESENCE_EARS=text("PRESENCE_EARS", "mock").lower() or "mock",
+            ELEVENLABS_API_KEY=text("ELEVENLABS_API_KEY"),
+            ELEVENLABS_STT_MODEL=text("ELEVENLABS_STT_MODEL", "scribe_v1")
+            or "scribe_v1",
             LIVEKIT_URL=text("LIVEKIT_URL"),
             LIVEKIT_API_KEY=text("LIVEKIT_API_KEY"),
             LIVEKIT_API_SECRET=text("LIVEKIT_API_SECRET"),

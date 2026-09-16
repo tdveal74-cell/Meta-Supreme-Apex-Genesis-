@@ -7,10 +7,18 @@ Routes:
 - ``POST /livekit/token``: a LiveKit join token for the caller, gated on a
   DEVON access JWT. 401 on a bad token, 503 naming the gate when
   LIVEKIT_* is unset.
-- ``WS /ws/presence``: protocol v1 from ``protocol.py``. The first frame
-  must be ``hello`` within 15 seconds and must carry a DEVON access JWT;
-  close 4400 for a malformed hello, 4401 for a bad token, the same codes
-  as ``app/api/v1/operator_shell.py``.
+- ``WS /ws/presence``: protocol v1 or v2 from ``protocol.py``, negotiated
+  at hello. The first frame must be ``hello`` within 15 seconds and must
+  carry a DEVON access JWT; close 4400 for a malformed hello, 4401 for a
+  bad token, the same codes as ``app/api/v1/operator_shell.py``.
+
+A v2 session can be spoken to. ``listen_start``, ``listen_chunk`` and
+``listen_end`` assemble one push to talk clip in memory, ``hearing.py``
+transcribes it, the text goes out as ``transcript`` and then into the same
+``begin_turn`` a typed ``say`` enters. A v1 session is refused those three
+by name rather than ignored, and the version a session runs at is the one
+the CLIENT asked for, so an older page keeps working across a deploy of
+this service alone.
 
 ``app`` is built from the environment at import. ``create_app`` takes an
 explicit ``PresenceSettings`` and lets a test inject the streamers, the
@@ -42,22 +50,38 @@ from pydantic import BaseModel, Field
 
 from apps.presence import SERVICE_NAME
 from apps.presence.breaker import CircuitBreaker, InferenceRouter
+from apps.presence.hearing import (
+    ClipInProgress,
+    ClipTooLarge,
+    HearingFailed,
+    HearingNotConfigured,
+    Transcriber,
+    build_hearing,
+)
 from apps.presence.inference import TokenStreamer, build_streamer
 from apps.presence.livekit_publisher import AudioSink, LiveKitPublisher, load_rtc
 from apps.presence.livekit_token import DEFAULT_TTL_SECONDS, mint_livekit_token
 from apps.presence.protocol import (
     CLOSE_MALFORMED,
     CLOSE_UNAUTHENTICATED,
+    ERR_CLIP_TOO_LARGE,
+    ERR_HEARING_FAILED,
     ERR_MALFORMED,
+    ERR_PROTOCOL_TOO_OLD,
     ERR_SPEECH_NOT_CONFIGURED,
     ERR_UNAUTHENTICATED,
     HELLO_TIMEOUT_SECONDS,
+    MAX_CLIP_BYTES,
+    MAX_CLIP_CHUNKS,
+    SUPPORTED_PROTOCOLS,
+    TYPE_MIN_PROTOCOL,
     ProtocolError,
     audio_message,
     error_message,
     parse_client_message,
     pong_message,
     ready_message,
+    transcript_message,
 )
 from apps.presence.session import Pacer, PresenceSession, RealTimePacer
 from apps.presence.settings import PresenceConfigError, PresenceSettings
@@ -73,6 +97,7 @@ class Runtime:
     settings: PresenceSettings
     router: InferenceRouter
     speech: SpeechSynthesizer
+    hearing: Transcriber
     pacer: Pacer
     #: Open presence sessions, session id to the DEVON user id that opened
     #: it. A LiveKit token is minted only for a room named here and only to
@@ -179,12 +204,90 @@ class LiveKitTokenRequest(BaseModel):
     room: str = Field(min_length=1, max_length=128)
 
 
+async def _handle_listen(
+    message: Dict[str, Any],
+    kind: str,
+    *,
+    clip: ClipInProgress,
+    session: PresenceSession,
+    hearing: Transcriber,
+) -> None:
+    """One step of a push to talk clip: start, a chunk, or the end of it.
+
+    ``listen_end`` transcribes inline, which holds the receive loop for the
+    length of the vendor call. That is deliberate for push to talk: the user
+    has already released the button, so there is no turn in flight to
+    interrupt, and doing it inline keeps one clip per socket without a
+    second piece of concurrency to reason about. It would need revisiting
+    for a continuous listening mode, where a turn can still be running.
+
+    Nothing here closes the socket. A clip that is too large, a transcriber
+    that refuses and a chunk with no start behind it are all one turn
+    failing, and the next turn is still worth having.
+    """
+    turn_id = str(message["turn_id"])
+
+    if kind == "listen_start":
+        clip.start(turn_id, str(message["codec"]), int(message.get("rate") or 0))
+        return
+
+    if not clip.owns(turn_id):
+        await session.emit(
+            error_message(
+                ERR_MALFORMED,
+                f"{kind} for turn {turn_id!r} with no open listen_start behind it",
+            )
+        )
+        return
+
+    if kind == "listen_chunk":
+        try:
+            clip.append(
+                message["audio"], max_bytes=MAX_CLIP_BYTES, max_chunks=MAX_CLIP_CHUNKS
+            )
+        except ClipTooLarge as exc:
+            clip.reset()
+            await session.emit(error_message(ERR_CLIP_TOO_LARGE, str(exc)))
+        return
+
+    # listen_end
+    audio = clip.finish()
+    codec, rate = clip.codec, clip.rate
+    # Cleared BEFORE the vendor call, so a clip cannot be appended to while it
+    # is being transcribed and a failure cannot leave a half clip behind.
+    clip.reset()
+    try:
+        heard = await hearing.transcribe(audio, codec=codec, rate=rate)
+    except (HearingFailed, HearingNotConfigured) as exc:
+        await session.emit(error_message(ERR_HEARING_FAILED, str(exc)))
+        return
+    except Exception as exc:  # noqa: BLE001 - one turn, never the socket
+        logger.exception("transcription failed")
+        await session.emit(
+            error_message(ERR_HEARING_FAILED, f"transcription failed: {exc}")
+        )
+        return
+
+    await session.emit(
+        transcript_message(
+            turn_id,
+            heard.text,
+            confidence=heard.confidence,
+            provider=heard.provider,
+        )
+    )
+    # The same entry point `say` uses. Speaking a turn and typing it converge
+    # here, which is why v2 adds no surface that can act.
+    await session.begin_turn(turn_id, heard.text)
+
+
 def create_app(
     settings: Optional[PresenceSettings] = None,
     *,
     primary: Optional[TokenStreamer] = None,
     fallback: Optional[TokenStreamer] = None,
     speech: Optional[SpeechSynthesizer] = None,
+    hearing: Optional[Transcriber] = None,
     pacer: Optional[Pacer] = None,
     breaker: Optional[CircuitBreaker] = None,
     make_audio_sink: Optional[Callable[[str], AudioSink]] = None,
@@ -215,6 +318,7 @@ def create_app(
         settings=settings,
         router=router,
         speech=speech if speech is not None else build_speech(settings),
+        hearing=hearing if hearing is not None else build_hearing(settings),
         pacer=pacer if pacer is not None else RealTimePacer(),
         make_audio_sink=make_audio_sink,
     )
@@ -237,6 +341,8 @@ def create_app(
             "inference": runtime.router.primary.name,
             "fallback": runtime.router.fallback_name,
             "speech": runtime.speech.name,
+            "ears": runtime.hearing.name,
+            "protocols": list(SUPPORTED_PROTOCOLS),
             # Readable because it is otherwise unknowable from outside, and it
             # fails silently: the chat's POST /tts is the first cross origin
             # request the web app makes to this service, so a localhost only
@@ -364,6 +470,13 @@ def create_app(
             await ws.close(code=CLOSE_UNAUTHENTICATED)
             return
 
+        # The version the CLIENT asked for, not this server's newest. The
+        # TypeScript client refuses a ready it does not recognise, so
+        # announcing 2 to a page built against 1 would lock it out of a
+        # service that is otherwise fine for it.
+        negotiated = int(hello.get("protocol") or 1)
+        clip = ClipInProgress()
+
         session_id = uuid.uuid4().hex
         audio_sink = runtime.audio_sink_for(session_id)
         if audio_sink is not None:
@@ -399,6 +512,7 @@ def create_app(
                 fallback=runtime.router.fallback_name,
                 livekit_configured=settings.livekit_configured,
                 livekit_url=settings.LIVEKIT_URL or None,
+                protocol=negotiated,
             )
         )
         runtime.sessions[session.session_id] = session.user_id
@@ -416,6 +530,21 @@ def create_app(
                 kind = message["t"]
                 if kind == "say":
                     await session.begin_turn(message["turn_id"], message["text"])
+                elif kind in TYPE_MIN_PROTOCOL:
+                    needs = TYPE_MIN_PROTOCOL[kind]
+                    if negotiated < needs:
+                        await session.emit(
+                            error_message(
+                                ERR_PROTOCOL_TOO_OLD,
+                                f"{kind} needs protocol {needs} and this session "
+                                f"negotiated {negotiated}. Reconnect with a hello "
+                                f"asking for {needs}.",
+                            )
+                        )
+                        continue
+                    await _handle_listen(
+                        message, kind, clip=clip, session=session, hearing=runtime.hearing
+                    )
                 elif kind == "interrupt":
                     await session.interrupt(message["turn_id"], float(message["at_ms"]))
                 elif kind == "render":

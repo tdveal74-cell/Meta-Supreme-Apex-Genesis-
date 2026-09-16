@@ -9,6 +9,16 @@ audio itself as PCM chunks over the same WebSocket. It sits beside the
 DEVON API and trusts the same access JWTs, so a signed in web session can
 open it with the token it already holds.
 
+Protocol v2 added the other direction. Until it this service had a mouth,
+a face and a brain and no ear at all: the client sent text it already had,
+the socket only ever read text, and the ``listening`` state was a label on
+a text box. A v2 client can push one recorded clip up, ``hearing.py``
+transcribes it, and the text enters the same turn a typed message enters.
+The version is negotiated at hello and the server answers with the one the
+CLIENT asked for, so this service and the web app can deploy in either
+order. NOTHING SENDS AUDIO YET: the capture side of the page is not built,
+so v2 is a door that works and has nobody walking through it.
+
 It carries two mechanisms the plain chat lane does not need:
 
 1. a sliding window buffer (``buffer.py``) that keeps the face in step
