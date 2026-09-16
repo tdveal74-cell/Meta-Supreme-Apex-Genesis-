@@ -14,10 +14,12 @@
  * reports "not configured"; the stage then runs the frame timeline on the
  * wall clock from the moment the speaking state arrived.
  *
- * UNVERIFIED: this LiveKit path has not been exercised against a live
- * LiveKit server in this build. It type checks against livekit-client
- * 2.22.3 and follows its Room / RoomEvent.TrackSubscribed / attach API, and
- * that is the extent of the evidence.
+ * VERIFIED on 2026-09-16 at 13:27:51Z. This path joined a real LiveKit room
+ * and played DEVON's audio to a human listener. Until then it had only type
+ * checked against livekit-client 2.22.3, and this note said so. The server
+ * side log for that turn carries POST /livekit/token at 200, which only
+ * answers that way when the presence service holds all three LIVEKIT_
+ * variables.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";

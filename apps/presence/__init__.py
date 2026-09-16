@@ -48,8 +48,11 @@ What is a later gate
   dropped, and ``/health`` still answered 200 while DEVON said nothing.
   ``livekit_publisher.py`` now publishes into the room, ``livekit`` is pinned
   in ``requirements.txt``, and ``create_app`` refuses to boot when LIVEKIT_* is
-  set without it. What is still unproven is a real room: no turn has been
-  spoken into a live LiveKit server from this build.
+  set without it. PROVEN against a real room on 2026-09-16 at 13:27:51Z: Tee
+  set the three variables, opened the presence stage and heard DEVON speak.
+  The service log for that turn carries the socket accept, then ``OPTIONS``
+  and ``POST`` on ``/livekit/token`` at 200, which only answer that way when
+  ``livekit_configured`` is true. No error was logged.
 - Sentence level pipelining (starting speech before the last token) is
   not done. A turn streams every token, then speaks the whole reply.
 """
