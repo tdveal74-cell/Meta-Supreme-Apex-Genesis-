@@ -43,3 +43,13 @@ pytest-asyncio==1.4.0
 # Development
 ruff==0.16.5
 mypy==2.3.1
+
+# Presence: publishing DEVON's audio into a LiveKit room
+# Ruled by Tee 2026-09-16. This is a platform tagged wheel carrying a compiled
+# rtc binary, roughly 12 MB, so it is a real cost on every job that installs
+# this file and on the presence image. It is here rather than behind an
+# optional import because a service that accepts LIVEKIT_* and cannot publish
+# is how DEVON went silent; the SDK being pinned is what makes the start up
+# refusal in apps/presence/main.py a configuration error rather than a normal
+# state. apps/presence/livekit_publisher.py is the only module that imports it.
+livekit==1.1.18

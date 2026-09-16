@@ -15,12 +15,15 @@ from services.intelligence.providers.base import (
     CompletionRequest,
     CompletionResponse,
     ProviderAuthError,
+    ProviderBillingError,
     ProviderConfigError,
     ProviderRateLimitError,
     ProviderResponseError,
     ProviderServerError,
     ProviderTimeoutError,
     TokenUsage,
+    billing_message,
+    billing_refusal,
 )
 
 _API_URL = "https://api.openai.com/v1/chat/completions"
@@ -128,6 +131,17 @@ class OpenAIProvider(AIProvider):
             return
 
         detail = _error_detail(response)
+        # Funding before everything else, because an empty account answers
+        # with whatever status the vendor happens to use and two of them
+        # collide with a real condition: Anthropic says 400, which reads as a
+        # parameter bug, and OpenAI says 429, which reads as a busy endpoint
+        # and used to be RETRIED. Neither is fixed by trying again.
+        reason = billing_refusal(response.status_code, detail)
+        if reason:
+            raise ProviderBillingError(
+                billing_message("OpenAI", response.status_code, detail, reason),
+                provider=self.name,
+            )
         if response.status_code == 401:
             raise ProviderAuthError(
                 f"OpenAI authentication failed: {detail}", provider=self.name

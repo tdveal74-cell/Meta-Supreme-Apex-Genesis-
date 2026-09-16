@@ -153,7 +153,47 @@ takes the payload on stdin, and a bare list of names. Exit 0 is a clean name
 set, exit 1 names every colliding pair, and exit 2 means it could not read the
 input, which is deliberately not a pass.
 
-Tee ruled the fix is to rename the LONGER table, not to edit the workflows: one
-rename each fixed all 73 nodes, while editing V5 alone would have meant 31
-changes inside 240 nodes. Resolving by id is the durable fix and is unstarted;
-it needs his word, because it reopens the 31 nodes he ruled against touching.
+Tee ruled the instance fix on 2026-09-16, rename the LONGER table rather than
+edit the workflows: one rename each fixed all 73 nodes, while editing V5 alone
+would have meant 31 changes inside 240 nodes.
+
+He ruled the DURABLE fix the same day, and it is now done on every ACTIVE
+workflow. An id cannot be captured, because it is unique and immutable.
+
+**No active workflow in this estate resolves a Data Table by name any more.**
+Counted from the export on 2026-09-16 after the conversion: 96 locators on id,
+44 still on name and every one of them in an INACTIVE workflow. Count it from
+the export rather than from this paragraph.
+
+What was converted, and how:
+
+| workflow | locators | how |
+|---|---|---|
+| TQO FINAL V5 `qEkGOUsNyVaRAmm6` | 31 | additive `tableRef`, active version `39874380`, revert `23735e68` |
+| DEVON Pipeline Watchdog `IZBVlXQ8Y5dsGTRS` | 2 | literal ids, active version `9b4d682f`, revert `9e937aaf` |
+
+V5 was not a find and replace. Only four of its thirty one locators carried a
+literal name; twenty seven computed one at run time from a field called
+`tableId` that holds a NAME. So `scripts/n8n_table_id_conversion.py` adds a
+`tableRef` carrying the id beside every `tableId`, and a `__tableRef` beside
+every `__table`, and moves only the locators. **`tableId` and `__table` keep
+their values and their meaning**, so a node the transform misses keeps working
+on the old path, and a locator pointed at a ref nobody set fails loudly rather
+than returning zero rows. Silence is what made the original incident expensive.
+
+Two things were measured before any of it, and are worth knowing when you next
+touch a locator:
+
+  * **id mode evaluates an expression.** Probe `2RQX9mrwJTvqGATQ` execution 268
+    read `tqo_content` three ways and all three returned the same 40 rows.
+  * **id mode does not fall back to name resolution.** n8n REFUSES at save time
+    to accept a locator with mode id and value `tqo_content`: "data table with
+    id 'tqo_content' not found". That refusal is what makes the fix real.
+    Execution 278 then proved the composition, the real Show Context body
+    feeding the real converted locator, returning rows 6 and 7.
+
+Still on name mode, all inactive, biggest first: `TQO FINAL V5 - ADAPTER TEST`
+29, `DT Bootstrap Tables (TQO Migration S1a)` 7, `S5 Seed: TQO Idea Row` 3, and
+three throwaways. The ADAPTER TEST is a copy of V5 and is the one that matters:
+activating it as it stands reintroduces the hazard in full. It is Tee's call
+rather than a session's, and the script converts it mechanically.

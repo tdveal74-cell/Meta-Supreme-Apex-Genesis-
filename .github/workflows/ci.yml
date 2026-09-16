@@ -66,12 +66,15 @@ jobs:
             test_devon_operating_layer.py \
             test_devon_editforge_execution.py \
             test_devon_data_tables.py \
+            test_devon_table_id_conversion.py \
+            test_devon_provider_billing.py \
             test_devon_spoken_input.py \
             test_devon_hermes_surface.py \
             test_devon_receipts.py \
             test_devon_capture_enrichment.py \
             test_presence_cartesia.py \
             test_presence_service.py \
+            test_presence_livekit_publisher.py \
             test_devon_owned_voice.py \
             test_devon_learning_context_honesty.py \
             test_knowledge_graph.py \
