@@ -22,11 +22,21 @@ and a reader who stopped there would act on a fact that is one day stale.
 and does not care how it was made, so the base track is swappable and neither
 route is thrown away by choosing the other today.
 
-Still unverified and blocking the HeyGen half: that account answered 402
-insufficient credit on 2026-09-15, and no HeyGen credential exists on the n8n
-instance (`list_credentials` returns zero for it) or on the Railway `api` or
-`presence` services. An avatar id is not access. Both the funding and the key
-have to be confirmed before anything renders.
+The credentials exist, and the first pass said they did not. Corrected the
+same day: the n8n instance carries TWO HeyGen credentials, `Xz4mxIvFgUjLBowu`
+named "HeyGen" and `9i1bFLtfKwtf72z8` named "HEYGEN_API_KEY", both
+`httpHeaderAuth`. Which of the two holds a working key is unverified, and a
+duplicate is its own hazard: n8n lets a credential exist without being attached
+to any node, which this estate has already been caught by once.
+
+**`list_credentials`'s `query` is a case-sensitive substring match.** Searching
+`heygen` returns zero while `HeyGen` returns one, and neither finds
+`HEYGEN_API_KEY`. A filtered search coming back empty is not evidence that a
+credential is absent; only an unfiltered listing is. That mistake was made here
+and written into this file as fact before it was caught.
+
+Still unverified: that account answered 402 insufficient credit on 2026-09-15,
+and whether it has credit now cannot be checked from this container.
 
 Nothing in this directory has been run yet. This container has no GPU, checked
 on 2026-09-15 with `nvidia-smi` and `/dev/nvidia*`, both absent. The proof
