@@ -3255,6 +3255,44 @@ NF3_FUTURE_ENV = {
 }
 
 
+#: The day count the withdrawn finding quoted, as a pattern rather than as the
+#: bare substring "0.38".
+#:
+#: Ruled by measurement 2026-09-16. The bare substring is four characters and it
+#: collides with any UTC timestamp whose seconds units digit is 0 and whose
+#: microseconds begin 38, because "50.389935" contains "0.38". That is about one
+#: timestamp in a thousand, and this payload carries several, so the assertion
+#: reddened a clean full suite run and then passed 25 consecutive re-runs of the
+#: same test. A flake that rare is worse than a loud one: it fires on an
+#: unrelated branch and costs a session working out that it was never theirs.
+#:
+#: The lookbehind is the whole fix. A fabricated day count reaches the payload
+#: as a JSON number or at the head of a phrase, so the 0 is preceded by a space,
+#: a colon, a quote or a bracket. Inside a timestamp it is always preceded by
+#: another digit. Nothing else about the check changes.
+FABRICATED_DAY_COUNT = re.compile(r"(?<!\d)0\.38")
+
+
+def test_the_day_count_sentinel_reads_a_number_and_not_a_timestamp() -> None:
+    """The guard above, tested rather than described.
+
+    Every timestamp here contains the literal characters "0.38" and every one
+    of them tripped the old bare substring check. The first is the exact string
+    that reddened the suite on 2026-09-16.
+    """
+    for real in ('{"days_left": 0.38}', '"in about 0.38 days"', '[0.38]', '{"d":0.38}'):
+        assert FABRICATED_DAY_COUNT.search(real), f"a real day count slipped past: {real}"
+
+    for stamp in (
+        "2026-09-16T12:12:50.389935Z",
+        "2026-09-16T12:12:00.380001Z",
+        "2026-09-16T12:12:20.389999Z",
+        "2027-09-10T10:10:30.384000Z",
+    ):
+        assert "0.38" in stamp, f"{stamp} is not a case the old check would have tripped on"
+        assert not FABRICATED_DAY_COUNT.search(stamp), f"{stamp} still trips the sentinel"
+
+
 async def test_the_exact_nf3_future_basis_produces_no_wall_to_be_wrong_about(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -3295,8 +3333,9 @@ async def test_the_exact_nf3_future_basis_produces_no_wall_to_be_wrong_about(
     # And there is no wall.
     assert "projection" not in cap
     serialised = json.dumps(body)
-    for gone in ("exhausts_at", "days_left", "2027-09-10T21:00", "Projected exhaustion", "0.38"):
+    for gone in ("exhausts_at", "days_left", "2027-09-10T21:00", "Projected exhaustion"):
         assert gone not in serialised, f"{gone} survived the cut"
+    assert not FABRICATED_DAY_COUNT.search(serialised), "the 0.38 day count survived the cut"
     # AND EVERY DATE ON THE PAYLOAD IS ONE THE ROUTE DID NOT COMPUTE. Every
     # timestamp in the serialised body must be either an observed startedAt from
     # one of the three rows or the moment of the read itself. A date that is
