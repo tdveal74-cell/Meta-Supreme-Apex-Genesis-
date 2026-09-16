@@ -634,17 +634,32 @@ WEBHOOKS = {
         "workflow": "WjSNXSsGP8ZCxXMa",
         "auth": "header x-devon-key",
         "open_ruling": (
-            "Two things are deliberately unfinished and both are Tee's. "
-            "DEFAULT_MODEL in the Guard and Fingerprint node is EMPTY: no "
-            "OpenRouter vision model id was invented, because openrouter.ai is "
-            "blocked by the session egress proxy and could not be read, so "
-            "every call refuses 424 and costs nothing until he sets one. And "
-            "n8n reported that the OpenRouter credential Wan5EWMeQiyrFOuY was "
-            "SKIPPED during credential auto assignment on the Describe Image "
-            "node, so it needs binding by hand in the UI; the webhook's own "
-            "x-devon-key did bind, confirmed from the trigger info. Filing "
-            "stays out of this lane on purpose: devon-capture-file is the "
-            "filing door and one path means one job."
+            "PUBLISHED and proven 2026-09-16, and the lane is correct while no "
+            "account behind it can pay. Guarded from outside: a POST with no "
+            "x-devon-key answered 403. Proven end to end by three live runs, "
+            "each a different provider failure answered as data with the "
+            "provider's own words and logged: execution 255, z-ai/glm-5.2:free, "
+            "404 'No endpoints found that support image input', so that model "
+            "reads no images; execution 257, google/gemma-4-31b-it:free, 404 "
+            "zdr-violation-by-account, because the OpenRouter account enforces "
+            "Zero Data Retention and the free endpoints cannot meet it; "
+            "execution 258, openai/gpt-5-nano, 402 'Insufficient credits. This "
+            "account never purchased credits.' So the OpenRouter account is "
+            "unfunded, which is the same trap the 2026-09-16c doc recorded for "
+            "the Anthropic account. Credential Wan5EWMeQiyrFOuY is bound and "
+            "authenticates; the routing metadata in those errors is the proof. "
+            "The model id was chosen from the live catalogue, never invented: "
+            "443 models, 272 accept image input, 10 of those free. "
+            "Tee ruled on 2026-09-16 to host a local model on the VPS instead "
+            "of funding a provider. HARDWARE.md section 5 refuses that shape in "
+            "general terms, no GPU and inference is a provider's problem, so "
+            "the ruling overrides a written standard and the objection is "
+            "logged here once. The VPS capacity is UNMEASURED: the Execute "
+            "Command node is not available on this n8n instance, so no session "
+            "here can read the box. Tee or anyone with shell can, with nproc, "
+            "free -m and df -h. Going local also moves the endpoint, since "
+            "Describe Image posts to openrouter.ai and a local server is a "
+            "different URL, so that is one edit beside the model id."
         ),
     },
 }
@@ -961,7 +976,7 @@ WORKFLOWS = {
     "TQO FINAL V5": {"id": "qEkGOUsNyVaRAmm6", "state": "active since 2026-09-08, published on Tee's ruling with all six schedule triggers disabled, each re-enabled as its own named act on his watch; activeVersionId bde7ddec; seven webhooks live: four on header x-devon-key (run-tqo-pipeline, run-nco-pipeline, system-pause, system-resume) and three on secret paths (run-tqo, run-nco, gumroad-sale); the Gumroad guard verifies each ping against GET /v2/sales/:id on credential K1D8KUvTcWDcdrV0, refuses a missing sale on Gumroad's 200 success false, and accepts the two trailing equals signs real ids carry since the same-day fix; view_sales on a real sale still unproven"},
     "DEVON Gumroad Sale Check": {"id": "e5H3pk7YNF9jQi1r", "state": "active since 2026-09-08, activeVersionId 8e26df1d (8c50cbb8 at first publish; e187e828 the same day with an empty-sale guard and successful executions not saved; 8e26df1d at about 14:55 UTC with the list job, ruled, proved on 6501 to 6507); webhook devon-gumroad-sale-check on header x-devon-key, reads one sale from GET /v2/sales/:id or the last five sales from GET /v2/sales with no buyer fields, on credential K1D8KUvTcWDcdrV0, and writes nothing; proved on executions 6482 and 6483 (manual, body pinned) and 6489 and 6490 (pinned Gumroad replies: empty sale 502, found sale 200), and from outside on probe execution 6494 (two production POSTs at the door from inside n8n: 404 with the key, 403 without); Tee's Shortcut was repointed at it on 2026-09-08 and proved from the phone (400 at Preflight at 13:47 UTC, then the 404 end to end at 13:58 UTC), so the Gumroad token is off the phone"},
     "Capture Hook": {"id": "bCZa6KVgjHgRup1Y", "state": "retired 2026-08-22"},
-    "DEVON Vision Describe": {"id": "WjSNXSsGP8ZCxXMa", "state": "inactive since creation 2026-09-16, unpublished; webhook devon-vision on header x-devon-key credential MTZXcoob6BtzbJyH; refuses before spending on type, size and a missing model id, and answers every refusal as data with a reason and a status; logs one row per attempt to devon_vision_log lapnGsgr33wcX0Ef; never executed, so nothing here is proven by a run"},
+    "DEVON Vision Describe": {"id": "WjSNXSsGP8ZCxXMa", "state": "active since 2026-09-16, published activeVersionId f5222423; webhook devon-vision on header x-devon-key credential MTZXcoob6BtzbJyH; refuses before spending on type, size and a missing model id, and answers every refusal as data with a reason and a status; logs one row per attempt to devon_vision_log lapnGsgr33wcX0Ef, guard refusals included since the Log Refusal node was added; proven from outside by a 403 with no key and end to end by executions 254, 255, 257 and 258, which are rows 1 to 4 of that table; no successful description yet because every provider account behind it is unfunded or blocked by the account ZDR setting"},
     # Registered 2026-09-06, ruled by Tee after the operational report found
     # ten DEVON named workflows on the instance and not in this map, four of
     # them active and unwatched by the reconciler since they were built.
