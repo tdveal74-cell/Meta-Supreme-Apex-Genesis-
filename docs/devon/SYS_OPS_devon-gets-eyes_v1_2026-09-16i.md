@@ -112,6 +112,15 @@ rows is visibly a lane that did nothing.
 an iOS Shortcut and files them to Drive, and it is inactive. It was left alone.
 Filing and describing are two jobs and the house rule is one path, one job.
 
+## The suffix raced again, and CI would have caught it second
+
+This doc was written as 2026-09-16h. PR #242 merged while the work was in
+flight and took h for the same day, so merging main produced two h files and
+the sequence letter rule would have failed. Caught by recounting the letters
+from the directory after the merge rather than trusting the number picked
+before it. It is now i; e stays free on main but is claimed by the unmerged
+branch behind PR #239, which is the open PR about this exact race.
+
 ## Two findings withdrawn before they were raised
 
 Both cost a grep and both were wrong. The Capture Hook's Cloud id
@@ -128,7 +137,7 @@ that the check itself was complete.
 ```
 AREA: Systems
 TYPE: SYS_OPS
-ARTIFACT: SYS_OPS_devon-gets-eyes_v1_2026-09-16h.md
+ARTIFACT: SYS_OPS_devon-gets-eyes_v1_2026-09-16i.md
 DATE: 2026-09-16
 DECISIONS: Tee ruled to build both tiers. Omarchy Vision assessed and not installed: wrong platform, wrong capability, wrong gate posture. The text completion contract was NOT widened; services/vision is a separate path, ruled after measurement showed a block list reaches both vendors byte identically today and that base.py is byte mirrored into deploy/soul. vision.describe carries risk WRITE with reversible False, not READ, because READ removes the card, the confirm and the effect receipt together. OpenRouter chosen for the tier one lane on Tee's answer, over funding the Anthropic account or adding an OpenAI credential. Vision is on demand only, and the local model seam was built on day one rather than retrofitted.
 FINDINGS: ChatMessage accepts a block list today with no validation and both HTTP providers put it on the wire untranslated, producing byte identical JSON for two vendors whose schemas differ, measured with httpx.MockTransport. MockProvider raises AttributeError on a list and AgentTurn stringifies it silently. There is no upload path anywhere in the FastAPI app, the services or the Next.js side, and artifacts.body is TEXT. take_screenshot described writing an image of the screen to disk on a service with no screen, no test asserted that string, and a second copy of the same false claim sat in console.html where a grep for the Python string misses it. The VPS has no OpenAI credential and the Anthropic account behind J2kxUFwXcqTltKaw is the unfunded one from the OS 29 finding, so a vision node pointed at it fails the same way. n8n reported the OpenRouter credential was SKIPPED during auto assignment on the Describe Image node. Two suspected record drifts were withdrawn: both ids were already recorded correctly, and the second was nearly raised because a verifying grep was truncated by head.
