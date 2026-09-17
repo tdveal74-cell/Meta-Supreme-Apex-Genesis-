@@ -78,6 +78,7 @@ _INCREMENTAL_SCHEMAS = (
     "018_schema_convergence.sql",
     "019_event_hash_chain.sql",
     "020_episode_transcripts.sql",
+    "021_fts_includes_title.sql",
 )
 
 _DSN = TEST_DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
