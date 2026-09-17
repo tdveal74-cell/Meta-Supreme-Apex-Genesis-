@@ -77,13 +77,17 @@ wider than it looks: adding `services/devon/data_tables.py` triggered a
 presence rebuild on 2026-09-16.
 
 **The presence service reads itself back, which the other four cannot.**
-`GET /health` is unauthenticated and returns the nine keys pinned by
+`GET /health` is unauthenticated and returns the eleven keys pinned by
 `test_presence_service.py::test_health_says_only_these_things_and_no_more`:
 `inference` and `fallback` name the live providers, `speech` says whether the
 Cartesia clone or the mock is wired, `livekit_configured` is the deployed
 variable set rather than the repo default, `cors_origins` is the list whose being
 wrong makes the chat's `POST /tts` fail silently with a discarded 200, and
-`breaker` carries the live circuit state. So for this one surface the honest
+`breaker` carries the live circuit state. This said nine until 2026-09-17, when
+a read-back counted the set in the test instead of trusting the sentence:
+protocol v2 added `ears` and `protocols`, and `protocols` is the one worth
+reading on a stale estate, because a client that cannot speak v2 and a service
+that does look identical from the service's side. **Count them from the test.** So for this one surface the honest
 answer to "what is production serving" comes from the service itself rather than
 from a deployment record, and a claim about its wiring that was not read off
 `/health` is unverified. The key set is pinned deliberately: a field added there
@@ -222,12 +226,14 @@ deployment from the current head.
 
 ## Vercel quota
 
-**The account is on the Pro plan as of 2026-09-04**, read from `list_teams`,
-which reports `"plan": "pro"` for `tdveal74-5020s-projects`. Everything below
-about the free plan's 100 deployments a day is kept as history, because it is
-what shaped these rules and it explains the `ignoreCommand` that is still in
-both project roots. It no longer describes this account's limit. Read the plan
-from `list_teams` rather than assuming either one, and read the actual number
+**The plan has moved and this file cannot tell you which one is current.** It
+read `"plan": "pro"` from `list_teams` on 2026-09-04 and `"plan": "hobby"` from
+the same field on 2026-09-17, so everything below about the free plan's 100
+deployments a day may be history or may be live guidance. **Read it from
+`list_teams` at the time you need it and say which you read**, because on Hobby
+the cap applies and on Pro it does not, and the `ignoreCommand` in both project
+roots is what it is either way. Read the plan from `list_teams` rather than
+assuming either one, and read the actual number
 from the dashboard Usage page, because there is still no quota endpoint in the
 tooling.
 
@@ -426,21 +432,28 @@ Distinguish them by evidence, never by assumption:
 
 ### An account block is a third thing, and it looks like neither
 
-Seen four times: 2026-09-02 into 2026-09-03, again on 2026-09-04, again
+Seen five times: 2026-09-02 into 2026-09-03, again on 2026-09-04, again
 on 2026-09-05 from some point between 18:55Z (the last record created on both
 projects, commit 21caa65) and 19:23Z (the push of 88a002d, which created
-none), and again on 2026-09-15 between 22:52:51Z and 23:35:20Z. The Vercel
+none), again on 2026-09-15 between 22:52:51Z and 23:35:20Z, and again from
+2026-09-16T22:58:52Z to 2026-09-17T19:07:13Z. The Vercel
 commit statuses on the head read `failure` with the description
 **"Account is blocked"**, pointing at
 `https://vercel.com/knowledge/why-is-my-account-deployment-blocked`.
 
-This paragraph said three until the fourth, and the fourth is the one that
-kills the comfortable reading. It is the first block recorded since the account
-moved to Pro on 2026-09-04, so a block is not the free plan and upgrading did
-not stop it. Four occurrences in a fortnight is a recurrence rather than an
-incident, and nothing in the tooling has ever named a reason for any of them.
-Why it keeps happening is unanswered here, and it is worth Tee asking Vercel
-rather than each session re-deriving the same diagnosis.
+This paragraph said three until the fourth and four until the fifth, and the
+fourth is the one that killed the comfortable reading. It is the first block
+recorded since the account moved to Pro on 2026-09-04, so a block is not the
+free plan and upgrading did not stop it. Five occurrences in three weeks is a
+recurrence rather than an incident, and nothing in the tooling has ever named a
+reason for any of them. Why it keeps happening is unanswered here, and it is
+worth Tee asking Vercel rather than each session re-deriving the same
+diagnosis.
+
+**Do not take 97 minutes as the shape of one.** The fifth ran 20 hours and 8
+minutes, about twelve times the only other duration this file can state, and
+nine commits landed on main inside it without producing a record on either
+project. Read the gap, never a remembered length.
 
 The 2026-09-15 gap is the cleanest recorded instance of the signature, because
 five pushes landed inside it. Both projects created their last record at
@@ -466,6 +479,25 @@ built to READY on the merge rather than skipping, because that merge carried
 `deploy/soul/services/devon/vault.py`, which is the shape worth watching: a
 block that had lasted into a `deploy/soul` change would have held a real
 production update, silently, with only an absence to show for it.
+
+**That is exactly what the fifth block did, on both projects at once.** The
+2026-09-17 read-back found `meta-supreme-apex-genesis-web` production on
+`f0f1e7e` from 2026-09-16T14:28:12Z owing ten files and 1312 insertions, all of
+them from `164fd7f`, PR #262's push to talk build, and `devon-soul` production
+on `94de84b` from 2026-09-16T12:25:30Z owing 57 insertions of
+`deploy/soul/services/devon/vault.py` from `82f6810` and `926098d`. All three
+of those commits landed inside the window. So the presence service served
+`protocols: [1, 2]` from 15:41:31Z while the page that would speak v2 sat
+undeployed, and nothing anywhere said so.
+
+**A cleared block does not ship what it held.** The comparison base is the last
+successful deployment, so the owed diff survives and the next push to main
+carries it, but until that push there is nothing in flight and no status
+anywhere is wrong. Check what is owed the moment a block lifts, and if main has
+not moved since, say the surfaces are still stale and name the commit that will
+ship them. Do not reach for Redeploy: it rebuilds the commit of the record it
+starts from, and during a block no record was created for the commits that
+matter, so the newest thing it can rebuild is the stale one already live.
 
 It is not the daily cap. The cap names itself (`api-deployments-free-per-day`)
 and it is a refusal of one deployment; a block is account wide and the tooling
