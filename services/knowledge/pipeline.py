@@ -13,9 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.knowledge import Embedding, KnowledgeItem
-from services.intelligence.providers.embeddings import create_embedding_provider
+from services.intelligence.providers.embeddings import (
+    create_embedding_provider,
+    resolve_embedding_provider_name,
+)
 from services.knowledge.chunking import chunk_text
 from services.knowledge.distillation import distill_content
+from services.knowledge.fts import FTS_FILL_NEW_CHUNKS_SQL
 from services.knowledge.retrieval import RetrievalCandidate, hybrid_retrieve
 from services.knowledge.synthesis import (
     SynthesizedAnswer,
@@ -32,11 +36,11 @@ def _embedding_provider():
     # not a new dependency direction.
     from app.services.provider_usage import MeteredEmbeddingProvider
 
-    name = getattr(settings, "DEFAULT_EMBEDDING_PROVIDER", None) or getattr(
-        settings, "DEFAULT_AI_PROVIDER", "mock"
-    )
+    # Reads EMBEDDING_PROVIDER through the shared resolver. This used to look
+    # for DEFAULT_EMBEDDING_PROVIDER, a field that does not exist, and fall
+    # through to the CHAT provider; see resolve_embedding_provider_name.
     provider = create_embedding_provider(
-        name,
+        resolve_embedding_provider_name(settings),
         openai_api_key=getattr(settings, "OPENAI_API_KEY", None),
         model=getattr(settings, "EMBEDDING_MODEL", None),
     )
@@ -162,16 +166,10 @@ async def ingest_and_distill(
         await db.flush()
         from sqlalchemy import text as sql_text
 
-        await db.execute(
-            sql_text(
-                """
-                UPDATE embeddings
-                SET fts = to_tsvector('english', COALESCE(content, ''))
-                WHERE knowledge_item_id = :kid AND fts IS NULL
-                """
-            ),
-            {"kid": item.id},
-        )
+        # Shared with app/services/knowledge.py and the 021 backfill, from
+        # services.knowledge.fts. Three hand written copies is how the title
+        # came to be missing from two of them.
+        await db.execute(sql_text(FTS_FILL_NEW_CHUNKS_SQL), {"kid": item.id})
 
         item.status = "ready"
         item.meta = {

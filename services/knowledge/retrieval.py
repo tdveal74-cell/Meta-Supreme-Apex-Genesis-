@@ -88,6 +88,32 @@ async def _dense_signal(
     return [dict(row) for row in result.mappings().all()]
 
 
+# plainto_tsquery ANDs every lexeme it produces, so `how do I fix my resume`
+# becomes 'fix' & 'resum' and only matches a chunk carrying BOTH words. A
+# natural language question almost never clears that bar, which is how the
+# lexical leg of this retriever came to return nothing on four of five
+# realistic queries while nobody noticed. Measured 2026-09-17 on a seeded
+# corpus: the shipped AND form reached the known relevant chunk 1 time in 5.
+#
+# The fix is the operator, not the parser. plainto_tsquery still does the
+# sanitising, so quotes, backslashes and tsquery operators in the user's text
+# are stripped before this ever sees them; the replace then only swaps the
+# conjunction. Measured against hostile input on the same day:
+#   resume & ! job | (x)    ->  'resum' | 'job' | 'x'
+#   resume \ job':;drop      ->  'resum' | 'job' | 'drop'
+# plainto_tsquery emits no operator other than ` & ` between top level
+# lexemes, including for hyphenated words, so the swap is total.
+#
+# OR does not cost precision here because ts_rank_cd still ranks by how much
+# of the query matched and how close the matches sit, so a chunk carrying
+# every term outranks one carrying a single term. RRF consumes the rank, not
+# the score. Do not "tighten" this back to AND without re-running the
+# measurement: AND is not stricter, it is silent.
+_OR_TSQUERY = (
+    "replace(plainto_tsquery('english', :query)::text, ' & ', ' | ')::tsquery"
+)
+
+
 async def _sparse_signal(
     db: AsyncSession,
     *,
@@ -106,12 +132,12 @@ async def _sparse_signal(
           e.content,
           e.chunk_index,
           e.source,
-          ts_rank_cd(e.fts, plainto_tsquery('english', :query)) AS rank
+          ts_rank_cd(e.fts, {_OR_TSQUERY}) AS rank
         FROM embeddings e
         JOIN knowledge_items ki ON ki.id = e.knowledge_item_id
         WHERE {_acl_sql()}
           AND e.fts IS NOT NULL
-          AND e.fts @@ plainto_tsquery('english', :query)
+          AND e.fts @@ {_OR_TSQUERY}
         ORDER BY rank DESC
         LIMIT :limit
         """
