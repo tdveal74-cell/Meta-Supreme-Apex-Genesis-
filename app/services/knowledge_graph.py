@@ -205,16 +205,25 @@ def embedding_provider_identity() -> Dict[str, Any]:
     """Name the provider that actually embeds in this process.
 
     Deliberately delegates to `app.services.knowledge._embedding_provider`,
-    private name and all, rather than re-reading the settings here. That
-    function is the single place where the provider for this lane is resolved
-    (app/services/knowledge.py:34-48), and it resolves through
-    `settings.DEFAULT_AI_PROVIDER`, not `settings.EMBEDDING_PROVIDER`, because
-    `DEFAULT_EMBEDDING_PROVIDER` is not a field on settings. Verified by
-    running it: with DEFAULT_AI_PROVIDER=mock it returns the mock provider,
-    and with DEFAULT_AI_PROVIDER=anthropic it raises ProviderConfigError,
-    since only mock and openai embed. Re-deriving that expression here would
-    let the two drift, and a drifted provider name is exactly the field a
-    panel trusts when it decides whether the distances are real.
+    private name and all, rather than re-reading the settings here.
+    Re-deriving that expression would let the two drift, and a drifted
+    provider name is exactly the field a panel trusts when it decides whether
+    the distances are real.
+
+    THIS PARAGRAPH DESCRIBED THE OLD, BROKEN RESOLUTION UNTIL 2026-09-17. It
+    said the provider resolves through `settings.DEFAULT_AI_PROVIDER` rather
+    than `settings.EMBEDDING_PROVIDER`, because `DEFAULT_EMBEDDING_PROVIDER`
+    is not a field. That was an accurate reading of the code and it was
+    reported here as a quirk to be aware of. It was a defect: it welded
+    embeddings to the CHAT provider, so an estate running chat on Cerebras,
+    which cannot embed, got ProviderConfigError from every embedding call
+    while `EMBEDDING_PROVIDER=openai` sat in production doing nothing.
+
+    Reading code correctly and still describing a bug as a design is its own
+    failure mode, and it is the one this file fell into. Both resolvers now
+    call `resolve_embedding_provider_name`, which reads `EMBEDDING_PROVIDER`
+    and does not fall back to the chat provider; that function carries the
+    measurement.
 
     Construction has no side effects: MeteredEmbeddingProvider.__init__ copies
     fields and does not touch the tenant ledger (app/services/
