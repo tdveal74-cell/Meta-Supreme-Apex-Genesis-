@@ -458,10 +458,31 @@ re-deriving the same diagnosis.
 The one the earlier entries warned about and none of them had seen. Both
 projects created their last record at **2026-09-16 22:58:52Z** on `ce70236`.
 The next commit to main, `550479a` at 2026-09-17 01:50:57Z, created none, and
-neither did anything after it. Read at 18:00Z on 2026-09-17 the gap was still
-open, roughly nineteen hours against the ninety seven minutes of the only other
-occurrence this file can time. Treat neither as typical; two measurements are
-not a distribution.
+neither did anything after it.
+
+**It cleared, and this is the first time the clearing was established by a
+deliberate test rather than noticed in passing.** Tee said the account was
+unblocked at about 18:00Z. The last hard evidence of the block was an
+"Account is blocked" status on `e97614d` at 16:52:55Z, and no push had happened
+since, so his word could not be confirmed from records that did not exist yet.
+A real commit was pushed at 19:07:12Z for that purpose, and both projects
+created records within three seconds, `dpl_4QPUZuxzsq5TgdeGDDszWfWsLbYi` and
+`dpl_6avX6GyU3mAXPAyCDsvk6DDouHxx`. The gap in records therefore ran 20 hours
+and 8 minutes, from 2026-09-16 22:58:52Z to 2026-09-17 19:07:13Z, and the block
+itself lifted at some unrecorded point between 16:52:55Z and 19:07:13Z. Against
+the ninety seven minutes of the only other occurrence this file can time, treat
+neither as typical; two measurements are not a distribution.
+
+**Use a real commit for that test, never an empty one.** There is always
+something honest to push when a read-back has just been done, because the
+read-back itself usually finds something this file or a status doc claims
+wrongly. This one found two.
+
+**And the clearing deploys nothing by itself.** A block lifting does not
+replay the commits it refused. Production stayed exactly as stale after 19:07Z
+as before it, on both surfaces, and the owed work below shipped only when a
+later commit reached main. So when a block clears, the next question is never
+"is it green now" but "what is still owed, and what will carry it".
 
 Unlike 2026-09-15, this one did not run through a quiet window. It stranded a
 real production change on BOTH surfaces, which is the shape the 2026-09-15
