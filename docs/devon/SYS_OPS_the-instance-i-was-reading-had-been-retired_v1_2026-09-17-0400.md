@@ -144,9 +144,14 @@ second time in a week this estate has produced that argument.
   `738d6d58-d4db-431e-8cdb-72210faa9c7f`, four successful executions on 09-16.
 - The live `Compose Pulse` node was read in full from version `738d6d58`. It
   emits `feeder_down` and `feeder_skipped` and no longer emits `feeder_silent`.
-  `MISSED_BEAT_H` is 7.5 in the live node and 7.5 in the repository mirror at
-  `n8n/devon/heartbeat/compose_pulse.js`; that specific constant was read on
-  both sides. A full byte comparison of the two was NOT done.
+  It was then compared against the repository mirror at
+  `n8n/devon/heartbeat/compose_pulse.js` on 21 distinctive markers: all ten
+  constants including `MISSED_BEAT_H` at 7.5, all seven finding keys, the
+  `feederDown` expression, the future-timestamp guard in `stampOf`, and the
+  absence of the retired `feeder_silent` finding from both. Every marker
+  matched. That is strong evidence the mirror is current and it is NOT a byte
+  for byte comparison, which was not done; a difference outside those 21
+  markers would not have been seen.
 - The n8n rows API shape used by the watchdog was not guessed. It is taken from
   `scripts/vps_backfill_devon_logs.py`, which measured it against this estate on
   2026-09-16: `limit` and nothing else, capped at 250, no ordering promised, no
