@@ -129,12 +129,12 @@ owing 57 insertions of `deploy/soul/services/devon/vault.py` from `82f6810` and
 under `deploy/soul`, and its production build went READY carrying both the new
 work and the owed vault change.
 
-For about 42 hours the presence service served `protocols: [1, 2]` while the
-page that speaks v2 sat in main undeployed, and no status anywhere said so.
-That is the shape the skill wrote up on 2026-09-15 as the thing to watch for
-and could not yet show: a block lasting into a real change holds a production
-update silently, with only an absence to show for it. It has now happened on
-both projects at once.
+The push to talk build was merged at 04:23Z and served from 22:48:27Z, 18 hours
+and 25 minutes later, with CI green on it the whole time and no status anywhere
+reporting a problem. That is the shape the skill wrote up on 2026-09-15 as the
+thing to watch for and could not yet show: a block lasting into a real change
+holds a production update silently, with only an absence to show for it. It has
+now happened on both projects at once.
 
 **A cleared block does not ship what it held, and the next push does.** The
 comparison base is the last successful deployment, so the owed diff survives
@@ -151,17 +151,29 @@ was recommended earlier in this session and withdrawn before Tee acted. And a
 push to a branch cannot do it either: a branch push makes a preview, and its
 comparison base is that branch's own last deployment rather than production.
 
-## Two things in the skill that no longer match the estate
+## What the skill needed, and what it already had
 
-Recorded rather than acted on, because both are Tee's call.
+Three corrections were found here and only one of them was new, which is worth
+recording on its own: another session ran the same read-back at about 18:00Z
+today and its work merged as PR #268 while this doc was being written. Two
+sessions measuring the same estate hours apart reached the same numbers
+independently, which is the strongest evidence in this doc that the numbers are
+right.
 
-`list_teams` now reports `"plan": "hobby"` for `tdveal74-5020s-projects`. The
-`deploy-readback` skill recorded `"pro"`, read from the same field on
-2026-09-04, and the whole free plan section is kept there as history on the
-strength of that. If the account is back on Hobby then the 100 deployments per
-day cap applies again and that history is live guidance rather than history.
-Whether the plan actually changed, or the field means something else now, is
-not established here. Worth Tee reading the Vercel billing page.
+Already carried by that session's work, and taken over this doc's version
+wholesale on merge: the fifth block gets its own section with the clearing test
+and the stranding table, and `list_teams` reporting `"plan": "hobby"` where the
+skill had recorded `"pro"` on 2026-09-04. Their entry goes further than mine
+did. It names the reading time, refuses to infer a reason, and adds that the
+account carries nine Vercel projects, seven unrelated to this repository, all
+spending the same per day allowance. Tee's call, and worth him reading the
+Vercel billing page.
+
+New here: the resolution. Both strands shipped unforced at 22:48:27Z and
+22:56Z, the web project's skip on `d8d7144` is correct rather than a wrong
+skip, and a read-back taken as a block ends has the shortest useful life of any
+claim in that file. Also the presence `/health` key count, which the skill said
+was nine and is eleven, because protocol v2 added `ears` and `protocols`.
 
 `get_project` returns `"live": false` for both projects. It was false for both
 earlier in this session as well, including while production was building. No
@@ -176,8 +188,8 @@ TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_the-block-swallowed-two-production-strands_v1_2026-09-17-2246.md
 DATE: 2026-09-17
 DECISIONS: Tee ruled on an inline card on 2026-09-17 to redeploy both Vercel projects from the dashboard once he had unblocked the account; that recommendation was withdrawn and corrected before he acted, because Redeploy rebuilds the commit of the record it starts from and no record exists for the commits a block swallowed. What replaced it needed no decision: the first push to main after a block carries the whole owed diff, which is what the 22:47:31Z and 22:56:29Z merges did.
-FINDINGS: The Vercel block ran from 2026-09-16T22:58:52Z to 2026-09-17T19:07:13Z, 20 hours and 8 minutes with no deployment record of any kind on either project while nine commits landed on main. It is the fifth block recorded here, about 12 times longer than the only other one whose duration is known, and the first to hold real production payload: ten files and 1312 insertions owed to meta-supreme-apex-genesis-web, all from PR #262's push to talk build, and 57 insertions of deploy/soul/services/devon/vault.py owed to devon-soul, every one of them landing inside the window. Production web therefore could not send a clip for about 42 hours while the presence service served protocols [1, 2]. Both strands are now live: 53b3f48 built the web surface to READY at 22:48:27Z and d8d7144 built devon-soul, and the web project's skip on d8d7144 is correct because 53b3f48..d8d7144 is empty over its watched paths. Railway was current at 22:35Z with api and scheduler-cron on 240a8f2 and presence one commit behind on 795b1d8, correctly, because its watch patterns found nothing to rebuild.
-OPEN: This doc's first draft was stale 61 seconds after it was written, because main moved twice while it was being committed; that is the second stale sentence of the day and the remedy is re-reading live state immediately before merging a claim about it, not a better draft. list_teams now reports plan hobby for this team where the deploy-readback skill records pro as of 2026-09-04, which if real puts the 100 deployments per day cap back in force; unresolved and worth Tee reading the billing page. Both projects report live false, observed three times including while production was building, and unexplained. The reason for the block itself is unestablished from here, because the Vercel commit statuses are not readable through this session's tooling. The two vercel.app hosts cannot be fetched from a container, so no Vercel surface can be read back directly the way presence can. Tee's password remains disclosed and unrotated from a 2026-09-17 screenshot. The ten year access token issued to this session is revoked only by rotating SECRET_KEY on the api and presence services together with RECEIPT_SIGNING_KEYS_PREVIOUS carrying the old value, unstarted. Approval card REQ-F3F9F01CB06F expires unruled on 2026-09-20.
+FINDINGS: The Vercel block ran from 2026-09-16T22:58:52Z to 2026-09-17T19:07:13Z, 20 hours and 8 minutes with no deployment record of any kind on either project while nine commits landed on main. It is the fifth block recorded here, about 12 times longer than the only other one whose duration is known, and the first to hold real production payload: ten files and 1312 insertions owed to meta-supreme-apex-genesis-web, all from PR #262's push to talk build, and 57 insertions of deploy/soul/services/devon/vault.py owed to devon-soul, every one of them landing inside the window. The push to talk build was merged at 04:23Z and served from 22:48:27Z, 18 hours and 25 minutes later, with CI green on it throughout. Both strands are now live: 53b3f48 built the web surface to READY at 22:48:27Z and d8d7144 built devon-soul, and the web project's skip on d8d7144 is correct because 53b3f48..d8d7144 is empty over its watched paths. Railway was current at 22:35Z with api and scheduler-cron on 240a8f2 and presence one commit behind on 795b1d8, correctly, because its watch patterns found nothing to rebuild.
+OPEN: This doc's first draft was stale 61 seconds after it was written, because main moved twice while it was being committed; that is the second stale sentence of the day and the remedy is re-reading live state immediately before merging a claim about it, not a better draft. list_teams reports plan hobby for this team where the skill had recorded pro as of 2026-09-04, measured independently here and by the session whose work merged as PR #268; if real it puts the 100 deployments per day cap back in force across all nine of the account's projects, and it is unresolved and worth Tee reading the billing page. Both projects report live false, observed three times including while production was building, and unexplained. The reason for the block itself is unestablished from here, because the Vercel commit statuses are not readable through this session's tooling. The two vercel.app hosts cannot be fetched from a container, so no Vercel surface can be read back directly the way presence can. Tee's password remains disclosed and unrotated from a 2026-09-17 screenshot. The ten year access token issued to this session is revoked only by rotating SECRET_KEY on the api and presence services together with RECEIPT_SIGNING_KEYS_PREVIOUS carrying the old value, unstarted. Approval card REQ-F3F9F01CB06F expires unruled on 2026-09-20.
 STATUS: Railway read at 22:35Z: api 93102939 SUCCESS on 240a8f2 since 15:57:59Z, presence d34c2e1e SUCCESS on 795b1d8 since 15:41:31Z, scheduler-cron 9bf6c0d8 SUCCESS on 240a8f2. Vercel read at 23:05Z: meta-supreme-apex-genesis-web production dpl_F89tEYKtgLgFSMkG7j8BV8CssYua READY on 53b3f48 at 22:48:27Z, devon-soul production dpl_EqbcffbHERX1URRkjY4o4suApUrZ READY on d8d7144. Both api and presence answered a live health read; neither Vercel host could be fetched from this container, so that half rests on deployment records and build logs.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```

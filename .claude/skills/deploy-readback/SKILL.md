@@ -83,14 +83,17 @@ presence rebuild on 2026-09-16.
 Cartesia clone or the mock is wired, `livekit_configured` is the deployed
 variable set rather than the repo default, `cors_origins` is the list whose being
 wrong makes the chat's `POST /tts` fail silently with a discarded 200, and
-`breaker` carries the live circuit state. This said nine until 2026-09-17, when
-a read-back counted the set in the test instead of trusting the sentence:
-protocol v2 added `ears` and `protocols`, and `protocols` is the one worth
-reading on a stale estate, because a client that cannot speak v2 and a service
-that does look identical from the service's side. **Count them from the test.** So for this one surface the honest
+`breaker` carries the live circuit state. So for this one surface the honest
 answer to "what is production serving" comes from the service itself rather than
 from a deployment record, and a claim about its wiring that was not read off
-`/health` is unverified. The key set is pinned deliberately: a field added there
+`/health` is unverified.
+
+That count said nine until 2026-09-17, when a read-back counted the set in the
+test instead of trusting the sentence. Protocol v2 added `ears` and
+`protocols`, and `protocols` is the one worth reading on a stale estate: a
+client that cannot speak v2 and a service that can look identical from the
+service's side, which is how the push to talk lane was live on presence and
+unserved by the web surface for 18 hours. **Count them from the test.** The key set is pinned deliberately: a field added there
 is published to anybody, so it is a decision and not a debugging leftover.
 
 **AND A CONTAINER CAN NOW READ IT. Tee opened it on 2026-09-16.** For most of
@@ -104,7 +107,7 @@ and for the same reason: a key alone was never enough.
 Proven by the read itself, not by the setting being saved:
 
 ```
-curl https://presence-production-d272.up.railway.app/health   200, nine keys
+curl https://presence-production-d272.up.railway.app/health   200, the pinned keys
 curl https://api-production-5644.up.railway.app/api/v1/health 200, healthy
 ```
 
@@ -226,16 +229,24 @@ deployment from the current head.
 
 ## Vercel quota
 
-**The plan has moved and this file cannot tell you which one is current.** It
-read `"plan": "pro"` from `list_teams` on 2026-09-04 and `"plan": "hobby"` from
-the same field on 2026-09-17, so everything below about the free plan's 100
-deployments a day may be history or may be live guidance. **Read it from
-`list_teams` at the time you need it and say which you read**, because on Hobby
-the cap applies and on Pro it does not, and the `ignoreCommand` in both project
-roots is what it is either way. Read the plan from `list_teams` rather than
-assuming either one, and read the actual number
-from the dashboard Usage page, because there is still no quota endpoint in the
-tooling.
+**The plan has moved and this line has been wrong once already. Read it, never
+assume it.** On 2026-09-04 `list_teams` reported `"plan": "pro"` for
+`tdveal74-5020s-projects` and this file said so flatly. On 2026-09-17 at 18:00Z
+the same call reports **`"plan": "hobby"`**. Nothing in this repository records
+a decision to downgrade, and the tooling does not say when or why it changed, so
+treat the reason as unknown rather than inferring one.
+
+What follows from the reading rather than from the reason: the free plan's 100
+deployments a day is a live constraint again, not history, and the
+`ignoreCommand` in both project roots is load bearing rather than a leftover.
+The account also carries NINE Vercel projects as of that read, seven of them
+unrelated to this repository, and a per day cap is an account cap, so builds
+from `psyclehouse`, `editforge` and the rest spend the same allowance as these
+two. That was never true of the Pro reading and is worth knowing before anybody
+diagnoses a refusal here.
+
+Read the plan from `list_teams` every time, and read the actual number from the
+dashboard Usage page, because there is still no quota endpoint in the tooling.
 
 The rules below survive the plan change on their own merit. A wrong skip ships
 stale code silently whatever the plan is, and that is the failure worth
@@ -436,24 +447,80 @@ Seen five times: 2026-09-02 into 2026-09-03, again on 2026-09-04, again
 on 2026-09-05 from some point between 18:55Z (the last record created on both
 projects, commit 21caa65) and 19:23Z (the push of 88a002d, which created
 none), again on 2026-09-15 between 22:52:51Z and 23:35:20Z, and again from
-2026-09-16T22:58:52Z to 2026-09-17T19:07:13Z. The Vercel
-commit statuses on the head read `failure` with the description
-**"Account is blocked"**, pointing at
+2026-09-16 into 2026-09-17. The Vercel commit statuses on the head read
+`failure` with the description **"Account is blocked"**, pointing at
 `https://vercel.com/knowledge/why-is-my-account-deployment-blocked`.
 
-This paragraph said three until the fourth and four until the fifth, and the
-fourth is the one that killed the comfortable reading. It is the first block
-recorded since the account moved to Pro on 2026-09-04, so a block is not the
-free plan and upgrading did not stop it. Five occurrences in three weeks is a
-recurrence rather than an incident, and nothing in the tooling has ever named a
-reason for any of them. Why it keeps happening is unanswered here, and it is
-worth Tee asking Vercel rather than each session re-deriving the same
-diagnosis.
+This paragraph said three until the fourth and four until the fifth. The fourth
+killed the comfortable reading: it was the first block recorded after the
+account moved to Pro, so a block is not the free plan and upgrading did not stop
+it. The fifth is the expensive one, and it is written up below. Five
+occurrences in a fortnight is a recurrence rather than an incident, and nothing
+in the tooling has ever named a reason for any of them. Why it keeps happening
+is unanswered here, and it is worth Tee asking Vercel rather than each session
+re-deriving the same diagnosis.
 
-**Do not take 97 minutes as the shape of one.** The fifth ran 20 hours and 8
-minutes, about twelve times the only other duration this file can state, and
-nine commits landed on main inside it without producing a record on either
-project. Read the gap, never a remembered length.
+### The fifth block, 2026-09-16 into 2026-09-17, and what it stranded
+
+The one the earlier entries warned about and none of them had seen. Both
+projects created their last record at **2026-09-16 22:58:52Z** on `ce70236`.
+The next commit to main, `550479a` at 2026-09-17 01:50:57Z, created none, and
+neither did anything after it.
+
+**It cleared, and this is the first time the clearing was established by a
+deliberate test rather than noticed in passing.** Tee said the account was
+unblocked at about 18:00Z. The last hard evidence of the block was an
+"Account is blocked" status on `e97614d` at 16:52:55Z, and no push had happened
+since, so his word could not be confirmed from records that did not exist yet.
+A real commit was pushed at 19:07:12Z for that purpose, and both projects
+created records within three seconds, `dpl_4QPUZuxzsq5TgdeGDDszWfWsLbYi` and
+`dpl_6avX6GyU3mAXPAyCDsvk6DDouHxx`. The gap in records therefore ran 20 hours
+and 8 minutes, from 2026-09-16 22:58:52Z to 2026-09-17 19:07:13Z, and the block
+itself lifted at some unrecorded point between 16:52:55Z and 19:07:13Z. Against
+the ninety seven minutes of the only other occurrence this file can time, treat
+neither as typical; two measurements are not a distribution.
+
+**Use a real commit for that test, never an empty one.** There is always
+something honest to push when a read-back has just been done, because the
+read-back itself usually finds something this file or a status doc claims
+wrongly. This one found two.
+
+**And the clearing deploys nothing by itself.** A block lifting does not
+replay the commits it refused. Production stayed exactly as stale after 19:07Z
+as before it, on both surfaces, and the owed work below shipped only when a
+later commit reached main. So when a block clears, the next question is never
+"is it green now" but "what is still owed, and what will carry it".
+
+Both strands shipped later the same evening, unforced, on the first merge that
+touched each project's paths. `53b3f48` merged at 22:47:31Z, the web project's
+ignore step compared it against `f0f1e7e` and found all ten push to talk files,
+and `dpl_F89tEYKtgLgFSMkG7j8BV8CssYua` went READY at 22:48:27Z. `d8d7144`
+merged at 22:56:29Z and `dpl_EqbcffbHERX1URRkjY4o4suApUrZ` built `devon-soul`.
+The web production build on `d8d7144` was skipped, correctly, because
+`53b3f48..d8d7144` is empty over its four watched paths. The push to talk build
+was therefore merged at 04:23Z and served from 22:48:27Z, 18 hours and 25
+minutes later, with CI green throughout.
+
+Unlike 2026-09-15, this one did not run through a quiet window. It stranded a
+real production change on BOTH surfaces, which is the shape the 2026-09-15
+entry named as the thing to watch for:
+
+| surface | last READY production | owed to it at 18:00Z on 2026-09-17 |
+|---|---|---|
+| `meta-supreme-apex-genesis-web` | `f0f1e7e`, 2026-09-16 14:28:12Z | `dce4f23`, merged as PR #262 at 04:23Z: 10 files, 1,312 insertions, the whole push to talk build including `usePushToTalk.ts`, `lib/presence/capture.ts`, `public/presence/capture-worklet.js` and `scripts/capture-check.mjs` |
+| `devon-soul` | `94de84b`, 2026-09-16 12:25:30Z | `550479a` and `926098d`: `services/devon/vault.py`, 57 insertions |
+
+So for those nineteen hours the presence page's microphone lane was merged,
+green in CI, and not served by production, with nothing anywhere reporting a
+problem. GitHub Actions ran and passed on every one of those commits. The only
+evidence was an absence in `list_deployments` and a commit status nobody reads
+as a deployment fact.
+
+**The lesson to carry, beyond the block itself:** when CI is green and a merge
+is recent, that says nothing about whether the surface serves it. Run the owed
+check in this file against the last READY production deployment rather than
+against main's HEAD, and run it whenever a block is suspected, not only when
+somebody asks what is live.
 
 The 2026-09-15 gap is the cleanest recorded instance of the signature, because
 five pushes landed inside it. Both projects created their last record at
@@ -480,15 +547,8 @@ built to READY on the merge rather than skipping, because that merge carried
 block that had lasted into a `deploy/soul` change would have held a real
 production update, silently, with only an absence to show for it.
 
-**That is exactly what the fifth block did, on both projects at once.** The
-2026-09-17 read-back found `meta-supreme-apex-genesis-web` production on
-`f0f1e7e` from 2026-09-16T14:28:12Z owing ten files and 1312 insertions, all of
-them from `164fd7f`, PR #262's push to talk build, and `devon-soul` production
-on `94de84b` from 2026-09-16T12:25:30Z owing 57 insertions of
-`deploy/soul/services/devon/vault.py` from `82f6810` and `926098d`. All three
-of those commits landed inside the window. So the presence service served
-`protocols: [1, 2]` from 15:41:31Z while the page that would speak v2 sat
-undeployed, and nothing anywhere said so.
+That is exactly what the fifth block did, on both projects at once, and it is
+written up in its own section above.
 
 **A cleared block does not ship what it held, and the next push to main does.**
 The comparison base is the last successful deployment, so the owed diff
