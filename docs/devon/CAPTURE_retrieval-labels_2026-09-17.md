@@ -49,6 +49,81 @@ The vendor name, the financial record, the identifier and the recovery step are
 deliberately absent. Ask Tee directly if a later session needs them; they do not
 belong in a public file.
 
+### Q2 to Q4, answered on a card. Three real query shapes, and all three are hard.
+
+Tee picked from options rather than writing them, so these are his selections
+and not his verbatim phrasing. Recorded that way.
+
+| shape | what he picked |
+|---|---|
+| has this been on air | `did I already do this one` (delegated to Claude's recommendation) |
+| recalling a ruling | `what did we decide about faceless` |
+| pure paraphrase | `I'm fried and can't keep this pace` |
+
+Run against the SHIPPED lane over a ten document corpus worded from the
+estate's own records rather than invented:
+
+| query | lexemes under OR | chunks matched | no vendor | shipped |
+|---|---|---|---|---|
+| did I already do this one | `alreadi \| one` | 3 of 10 | 3 wrong docs | 3 wrong docs |
+| what did we decide about faceless | `decid \| faceless` | 1 of 10 | rank 1 | rank 1 |
+| I'm fried and can't keep this pace | `m \| fri \| keep \| pace` | 0 of 10 | MISS | unstable |
+
+The middle one works with no vendor at all. The other two do not, and they fail
+in two different ways that matter.
+
+**The paraphrase result is a coin flip, not a hit.** The shipped configuration
+appeared to find the burnout note at rank 3. Re-run eight times with nothing
+changing but the row ids: ranks 2, 3, 2, 4, 2, 4, 2, 1. The lexical signal
+matched ZERO chunks, so the mock dense vector is supplying noise and the noise
+sometimes lands on the right answer. Reporting that as a partial success would
+have been the same error as the 0.741 to 0.767 figure earlier in this session.
+
+## THE FINDING THIS GRILL ACTUALLY PRODUCED
+
+Both failing shapes returned documents, so the question became whether the lane
+can refuse at all. It cannot.
+
+`hybrid_retrieve` fuses four signals and two of them, rarity and age, rank the
+whole corpus regardless of the query. So a query matching nothing lexically
+still receives a full ranked pool. Measured on a three document corpus with the
+dense signal weighted out entirely:
+
+| probe | sparse rows | hybrid_retrieve returns |
+|---|---|---|
+| `xylophone quagmire zeppelin` | 0 | all 3, in corpus order |
+| `did I already do this one` | 1 | all 3, same order |
+| `I'm fried and can't keep this pace` | 0 | all 3, same order |
+| `the and of` | 0 | all 3, same order |
+| `` (empty) | 0 | nothing |
+
+Only the empty string is refused, and that is the explicit `if not query` guard
+at the top of the function.
+
+**It reaches the answer.** `synthesize_with_cross_encoder`'s docstring states
+the governance rule as "No candidates -> explicit refusal (never fabricate)",
+and its only refusal path is an empty candidate pool, which `hybrid_retrieve`
+can never produce for a non empty query. Run end to end through the real
+`query_knowledge`:
+
+```
+QUERY 'xylophone quagmire zeppelin'      cleared True   refusal_reason None   3 citations
+QUERY 'how do I recover from burnout'    cleared True   refusal_reason None   3 citations
+```
+
+Identical shape, identical citations, identical order. `POST /knowledge/query`
+cannot distinguish a question it can answer from three nonsense words, and it
+reports `cleared: True` for both.
+
+**This is not fixed by buying embeddings.** A real model would reorder the pool
+better. Rarity and age would still float the whole corpus into it, and the
+answer would still come back cleared. A better ranking over garbage is garbage
+ranked more convincingly. So a relevance floor comes BEFORE the vendor
+question, and the vendor question was what this grill was convened to answer.
+
+Not built. A floor changes what the endpoint returns, refusing questions that
+currently get answers, and that is Tee's ruling rather than a session's.
+
 ## Decisions this settles
 
 Both were put to Tee on a card and both came back "what you recommend", so he
@@ -88,7 +163,10 @@ because the distinction matters if either turns out wrong.
 - What did he actually type into the mail search, and did it return the email?
   Not yet asked, because the answer to Q1 raised whether the topic is aimed at
   the right corpus and that is a ruling rather than a follow up.
-- Nine more labelled questions to go.
+- Six more labelled questions, now lower value: the defect below outranks them.
+- `PRESENCE_EARS` is mock on the live presence service and `ELEVENLABS_API_KEY`
+  is absent from it entirely, so Tee's ruling to switch cannot be executed in
+  the order given. The key goes on first or the service does not boot.
 - Whether the capture should hold the redacted specifics at all, in some
   non public place, was offered on the card and not chosen. Redact by default
   won instead, so there is no private destination and the detail lives only in
@@ -111,6 +189,6 @@ ARTIFACT: docs/devon/CAPTURE_retrieval-labels_2026-09-17.md
 DATE: 2026-09-17
 DECISIONS: pending, session in progress
 FINDINGS: the first real digging episode Tee named is operational recall across mail, not the notes and episodes corpus the retrieval measurement scores; his verbatim answer was redacted because this repository is public
-OPEN: nine more labelled questions
-STATUS: in progress, one answer recorded, two rulings delegated to Claude and taken
+OPEN: whether retrieval gets a relevance floor, which outranks the embeddings question it was convened to settle
+STATUS: four answers recorded, two rulings delegated and taken, one defect proven end to end
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
