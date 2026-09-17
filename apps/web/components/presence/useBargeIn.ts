@@ -41,6 +41,19 @@ export type BargeInReaction = {
   source: "mic" | "manual";
 };
 
+/**
+ * The live microphone graph, for another hook to tap.
+ *
+ * Capture and barge in share one MediaStream on purpose. Two getUserMedia
+ * calls means two permission states to keep in step, two AudioContexts
+ * competing for the same device, and on some platforms the recording
+ * indicator flickering as one of them is torn down. One stream, two readers.
+ */
+export type MicTap = {
+  context: AudioContext;
+  source: MediaStreamAudioSourceNode;
+};
+
 export type BargeInOptions = {
   /** The effective presence state (local override applied). */
   presenceState: PresenceState;
@@ -75,6 +88,7 @@ export function useBargeIn(options: BargeInOptions) {
 
   const streamRef = useRef<MediaStream | null>(null);
   const contextRef = useRef<AudioContext | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const samplesRef = useRef<Float32Array<ArrayBuffer> | null>(null);
   const vadRef = useRef<VoiceActivityDetector | null>(null);
@@ -104,6 +118,8 @@ export function useBargeIn(options: BargeInOptions) {
     }
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+    sourceRef.current?.disconnect();
+    sourceRef.current = null;
     analyserRef.current = null;
     samplesRef.current = null;
     vadRef.current = null;
@@ -155,6 +171,7 @@ export function useBargeIn(options: BargeInOptions) {
       source.connect(analyser);
       streamRef.current = stream;
       contextRef.current = context;
+      sourceRef.current = source;
       analyserRef.current = analyser;
       samplesRef.current = new Float32Array(analyser.fftSize);
       vadRef.current = new VoiceActivityDetector(vadOptions);
@@ -201,7 +218,32 @@ export function useBargeIn(options: BargeInOptions) {
 
   const getMicLevel = useCallback(() => levelRef.current, []);
 
+  /**
+   * The live graph, or null when the microphone is not open.
+   *
+   * Read through a callback rather than returned as state because the nodes
+   * are not React values: handing them out in the render result would make
+   * every consumer re-render whenever the mic opens, and would hold a
+   * reference to a context that stop() has already closed.
+   */
+  const getTap = useCallback((): MicTap | null => {
+    const context = contextRef.current;
+    const source = sourceRef.current;
+    if (!context || !source) return null;
+    return { context, source };
+  }, []);
+
   useEffect(() => () => stop(), [stop]);
 
-  return { mic, message, userSpeaking, lastReaction, start, stop, manualBargeIn, getMicLevel };
+  return {
+    mic,
+    message,
+    userSpeaking,
+    lastReaction,
+    start,
+    stop,
+    manualBargeIn,
+    getMicLevel,
+    getTap,
+  };
 }

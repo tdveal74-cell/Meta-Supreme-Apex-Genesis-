@@ -99,8 +99,14 @@ CI is TEN jobs, and on most pull requests you will see five. Five are in
 `api`, plus `dependency-audit` on every push). The sixth is
 `.github/workflows/web-ci.yml`, path filtered to the web workspace, so a run of
 Python-only PRs makes CI look like five. The seventh arrived on 2026-09-10:
-`.github/workflows/audio-ci.yml`, filtered to the FIVE files that can change
-what the speaker produces, so it appears only on a change to the playback path.
+`.github/workflows/audio-ci.yml`, filtered to the files that can change what
+the speaker produces, so it appears only on a change to the audio path. It said
+FIVE files until 2026-09-17, when the push to talk build added a second check to
+the same job: `check:capture` drives the shipped capture worklet through the same
+Chromium and measures the stream it hands over. Nine paths now, and the job runs
+in both directions, the speaker and the microphone. It went in here rather than
+into a ninth workflow because the whole cost of this job is the browser install,
+and a separate one would pay it twice. Count the paths from the file.
 `ruff check .` runs at the end of the api job, not as a job of its own.
 
 The audio job exists because `check:audio` ran in no workflow at all and four

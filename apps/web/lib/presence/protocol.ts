@@ -1,13 +1,65 @@
 /**
- * Presence wire protocol v1: JSON text over WebSocket between the web
+ * Presence wire protocol v2: JSON text over WebSocket between the web
  * client and the presence server.
  *
  * Pure module: no browser or Node APIs, no enums, no parameter properties,
  * no namespaces, so Node's type stripping can run it unchanged for the
  * scripts/presence-check.ts proof.
+ *
+ * v2 adds the ear: `listen_start`, `listen_chunk` and `listen_end` carry one
+ * push to talk clip up, and `transcript` carries back what the server heard
+ * before it runs the turn. v1 carried no audio in this direction at all.
+ *
+ * THE VERSION IS NEGOTIATED, NOT PINNED, ON BOTH SIDES NOW.
+ *
+ * This file used to refuse any `ready` whose protocol was not its own, and
+ * apps/presence/protocol.py used to refuse any `hello` that was not the
+ * server's. Those two pins faced each other across services that deploy
+ * separately, so bumping either one alone blacked out every open page while
+ * /health still read healthy. PR #257 fixed the server half: it accepts any
+ * version in SUPPORTED_PROTOCOLS and echoes back the one the client asked
+ * for.
+ *
+ * Fixing only the server half would leave the same trap facing the other
+ * way. A client pinned at 2 talking to a server rolled back to 1 gets a
+ * `ready` carrying 1, refuses it, and blacks out for exactly the reason the
+ * server pin used to. So this side accepts any version it supports too, and
+ * the negotiated number rides on the parsed message. A caller that wants to
+ * send `listen_*` asks whether the number it got back is 2 or better rather
+ * than assuming.
  */
 
-export const PROTOCOL_VERSION = 1;
+/** The version this client asks for in `hello`. */
+export const PROTOCOL_VERSION = 2;
+
+/** Every version this client can speak, so a `ready` can be negotiated down. */
+export const SUPPORTED_PROTOCOLS: readonly number[] = [1, 2];
+
+/** The first version that carries the ear. Below it, `listen_*` is refused. */
+export const LISTEN_MIN_PROTOCOL = 2;
+
+/**
+ * Codecs the server accepts in `listen_start`, from apps/presence/protocol.py
+ * LISTEN_CODECS. `pcm_s16le` is the AudioWorklet lane: headerless little
+ * endian 16 bit samples that the server wraps in a RIFF header before it
+ * uploads them.
+ */
+export const LISTEN_CODECS = ["pcm_s16le", "webm_opus"] as const;
+export type ListenCodec = (typeof LISTEN_CODECS)[number];
+
+/** Sample rates the server accepts for pcm_s16le, from LISTEN_RATES. */
+export const LISTEN_RATES = [16000, 24000, 44100, 48000] as const;
+export type ListenRate = (typeof LISTEN_RATES)[number];
+
+/**
+ * Clip ceilings, mirrored from apps/presence/protocol.py MAX_CLIP_BYTES and
+ * MAX_CLIP_CHUNKS so the client can stop before it sends a clip the server
+ * will drop whole. Mirrored, not authoritative: the server enforces these and
+ * closes with 4503 if a client ignores them. Checking here turns a dropped
+ * clip into a message the speaker can act on while still holding the thought.
+ */
+export const MAX_CLIP_BYTES = 8 * 1024 * 1024;
+export const MAX_CLIP_CHUNKS = 512;
 
 /** The 52 ARKit blendshape names, in Apple's documented order. */
 export const ARKIT_BLENDSHAPES = [
@@ -81,10 +133,29 @@ export type HelloMessage = {
   t: "hello";
   token: string;
   client: "web";
-  protocol: 1;
+  protocol: number;
 };
 
 export type SayMessage = { t: "say"; turn_id: string; text: string };
+
+/** Open a clip. The codec and rate are declared here and never re-sent. */
+export type ListenStartMessage = {
+  t: "listen_start";
+  turn_id: string;
+  codec: ListenCodec;
+  rate: ListenRate;
+};
+
+/** One slice of the clip. `seq` counts from zero and never repeats. */
+export type ListenChunkMessage = {
+  t: "listen_chunk";
+  turn_id: string;
+  seq: number;
+  b64: string;
+};
+
+/** Close the clip. The server transcribes what arrived and starts the turn. */
+export type ListenEndMessage = { t: "listen_end"; turn_id: string };
 
 export type InterruptMessage = { t: "interrupt"; turn_id: string; at_ms: number };
 
@@ -100,6 +171,9 @@ export type PingMessage = { t: "ping"; at_ms: number };
 export type ClientMessage =
   | HelloMessage
   | SayMessage
+  | ListenStartMessage
+  | ListenChunkMessage
+  | ListenEndMessage
   | InterruptMessage
   | RenderMessage
   | PingMessage;
@@ -109,7 +183,9 @@ export type ClientMessage =
 export type ReadyMessage = {
   t: "ready";
   session_id: string;
-  protocol: 1;
+  /** The version the server agreed to, which is the one this client asked
+   *  for unless the server is older than this build. */
+  protocol: number;
   speech: SpeechProvider;
   inference: string;
   fallback: string;
@@ -164,6 +240,22 @@ export type MetricsMessage = {
   tokens: number;
 };
 
+/**
+ * What the server heard, sent before the turn it will now run.
+ *
+ * `confidence` is null when the transcriber reported none, and that is kept
+ * apart from zero on purpose: MockHearing has no confidence to report, and a
+ * zero here would read as "heard, and certain it was nothing", which is the
+ * opposite of what it means.
+ */
+export type TranscriptMessage = {
+  t: "transcript";
+  turn_id: string;
+  text: string;
+  confidence: number | null;
+  provider: string;
+};
+
 export type PongMessage = { t: "pong"; at_ms: number; server_ms: number };
 
 export type ErrorMessage = { t: "error"; code: number; message: string };
@@ -176,6 +268,7 @@ export type ServerMessage =
   | AudioMessage
   | InterruptAckMessage
   | MetricsMessage
+  | TranscriptMessage
   | PongMessage
   | ErrorMessage;
 
@@ -183,6 +276,20 @@ const BLENDSHAPE_SET: ReadonlySet<string> = new Set<string>(ARKIT_BLENDSHAPES);
 
 export function isBlendshape(name: unknown): name is Blendshape {
   return typeof name === "string" && BLENDSHAPE_SET.has(name);
+}
+
+const SUPPORTED_PROTOCOL_SET: ReadonlySet<number> = new Set(SUPPORTED_PROTOCOLS);
+
+/**
+ * Whether a negotiated protocol carries the ear.
+ *
+ * A caller checks this before it opens a clip. Sending `listen_start` to a
+ * server that answered 1 is refused there with 4505, which closes the socket,
+ * so the page loses the turn it was in the middle of rather than just the
+ * recording.
+ */
+export function canListen(protocol: number): boolean {
+  return Number.isFinite(protocol) && protocol >= LISTEN_MIN_PROTOCOL;
 }
 
 const PRESENCE_STATES: ReadonlySet<string> = new Set(["idle", "listening", "thinking", "speaking"]);
@@ -240,7 +347,8 @@ export function parseServerMessage(raw: string): ServerMessage | null {
       const livekit = value.livekit;
       if (
         !isString(value.session_id) ||
-        value.protocol !== PROTOCOL_VERSION ||
+        !isFiniteNumber(value.protocol) ||
+        !SUPPORTED_PROTOCOL_SET.has(value.protocol) ||
         !isString(value.speech) ||
         !SPEECH_PROVIDERS.has(value.speech) ||
         !isString(value.inference) ||
@@ -254,7 +362,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
       return {
         t,
         session_id: value.session_id,
-        protocol: 1,
+        protocol: value.protocol,
         speech: value.speech as SpeechProvider,
         inference: value.inference,
         fallback: value.fallback,
@@ -362,6 +470,24 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         frames_sent: value.frames_sent,
         frames_dropped: value.frames_dropped,
         tokens: value.tokens,
+      };
+    }
+    case "transcript": {
+      const confidence = value.confidence;
+      if (
+        !isString(value.turn_id) ||
+        !isString(value.text) ||
+        !(confidence === null || isFiniteNumber(confidence)) ||
+        !isString(value.provider)
+      ) {
+        return null;
+      }
+      return {
+        t,
+        turn_id: value.turn_id,
+        text: value.text,
+        confidence: confidence === null ? null : confidence,
+        provider: value.provider,
       };
     }
     case "pong": {

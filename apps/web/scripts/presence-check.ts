@@ -12,9 +12,26 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   ARKIT_BLENDSHAPES,
+  LISTEN_CODECS,
+  LISTEN_MIN_PROTOCOL,
+  LISTEN_RATES,
+  MAX_CLIP_BYTES,
+  MAX_CLIP_CHUNKS,
+  PROTOCOL_VERSION,
+  SUPPORTED_PROTOCOLS,
+  canListen,
   isBlendshape,
   parseServerMessage,
 } from "../lib/presence/protocol.ts";
+import {
+  BYTES_PER_SAMPLE,
+  ClipBudget,
+  blocksPerChunk,
+  bytesToBase64,
+  floatToPcm16,
+  isListenRate,
+  rateRefusal,
+} from "../lib/presence/capture.ts";
 import { FrameBuffer, lerpWeights } from "../lib/presence/frame-buffer.ts";
 import { VoiceActivityDetector } from "../lib/presence/vad.ts";
 import {
@@ -75,7 +92,15 @@ check("parseServerMessage rejects garbage without throwing", () => {
     '{"t":"frame","turn_id":"a","seq":1,"at_ms":10,"priority":0,"weights":[]}',
     '{"t":"state","state":"dancing","turn_id":null,"at_ms":1}',
     '{"t":"state","state":"idle","turn_id":null}',
-    '{"t":"ready","session_id":"s","protocol":2,"speech":"mock","inference":"x","fallback":"y","livekit":{"configured":false,"url":null}}',
+    // Was protocol 2 until this client spoke v2. Moved to 3 rather than
+    // deleted: an UNSUPPORTED version must still parse to null, and the
+    // identical edit had to be made to test_malformed_hello_closes_4400 on
+    // the server in #257 for the same reason. A version example that quietly
+    // becomes valid turns this assertion into a tautology.
+    '{"t":"ready","session_id":"s","protocol":3,"speech":"mock","inference":"x","fallback":"y","livekit":{"configured":false,"url":null}}',
+    '{"t":"transcript","turn_id":"a","text":"hi","confidence":"high","provider":"mock"}',
+    '{"t":"transcript","turn_id":"a","text":"hi","provider":"mock"}',
+    '{"t":"listen_chunk","turn_id":"a","seq":0,"b64":"AAAA"}',
     '{"t":"ready","session_id":"s","protocol":1,"speech":"mock","inference":"x","fallback":"y","livekit":{"configured":"no","url":null}}',
     '{"t":"metrics","turn_id":"a","provider":"p","fell_back":false,"ttft_ms":1,"breaker":"tripped","frames_sent":1,"frames_dropped":0,"tokens":1}',
     '{"t":"audio","turn_id":"a","seq":1,"at_ms":0,"codec":"opus","rate":16000,"b64":""}',
@@ -623,6 +648,201 @@ check("each service base reaches a real host in a production build", () => {
     );
     assert.ok(development.length > 0, `${name}'s development arm is empty`);
   }
+});
+
+/* protocol v2: the ear */
+
+check("the client asks for v2 and can still be negotiated down to v1", () => {
+  assert.equal(PROTOCOL_VERSION, 2);
+  assert.ok(SUPPORTED_PROTOCOLS.includes(1), "v1 must stay supported");
+  assert.ok(SUPPORTED_PROTOCOLS.includes(2));
+
+  // The load bearing one. apps/presence/protocol.py used to refuse any hello
+  // that was not the server's version, and this file used to refuse any ready
+  // that was not its own. Two pins facing each other across services that
+  // deploy separately: bumping either alone blacks out every open page while
+  // /health still reads healthy. #257 fixed the server half. If this side
+  // ever pins again, a rollback to a v1 server does the same damage in the
+  // other direction, so BOTH of these have to parse.
+  const ready = (protocol: number) =>
+    parseServerMessage(
+      JSON.stringify({
+        t: "ready",
+        session_id: "s",
+        protocol,
+        speech: "mock",
+        inference: "x",
+        fallback: "y",
+        livekit: { configured: false, url: null },
+      }),
+    );
+
+  const atTwo = ready(2);
+  assert.ok(atTwo !== null, "a v2 server must be accepted");
+  if (atTwo.t !== "ready") throw new Error("unreachable");
+  assert.equal(atTwo.protocol, 2);
+
+  const atOne = ready(1);
+  assert.ok(atOne !== null, "a v1 server must still be accepted, not blacked out");
+  if (atOne.t !== "ready") throw new Error("unreachable");
+  assert.equal(atOne.protocol, 1, "the negotiated number rides on the message");
+
+  assert.equal(ready(3), null, "a version this client cannot speak is refused");
+  assert.equal(ready(0), null);
+});
+
+check("canListen gates the ear on the version the server agreed to", () => {
+  assert.equal(LISTEN_MIN_PROTOCOL, 2);
+  assert.ok(!canListen(1), "a v1 server has no ear, so a clip must not be opened");
+  assert.ok(canListen(2));
+  assert.ok(canListen(3));
+  assert.ok(!canListen(Number.NaN));
+  assert.ok(!canListen(Number.POSITIVE_INFINITY));
+});
+
+check("the transcript keeps a missing confidence apart from zero", () => {
+  const withNone = parseServerMessage(
+    '{"t":"transcript","turn_id":"a","text":"what time is it","confidence":null,"provider":"mock"}',
+  );
+  assert.ok(withNone !== null);
+  if (withNone.t !== "transcript") throw new Error("unreachable");
+  assert.equal(withNone.confidence, null);
+  assert.notEqual(withNone.confidence, 0, "null and 0 are different claims on the wire");
+  assert.equal(withNone.text, "what time is it");
+  assert.equal(withNone.provider, "mock");
+
+  const withOne = parseServerMessage(
+    '{"t":"transcript","turn_id":"a","text":"hi","confidence":1,"provider":"elevenlabs"}',
+  );
+  assert.ok(withOne !== null);
+  if (withOne.t !== "transcript") throw new Error("unreachable");
+  assert.equal(withOne.confidence, 1);
+
+  // An empty transcript is a real answer: the vendor heard nothing in the
+  // clip. It must parse, so the page can say so rather than showing a hole.
+  const empty = parseServerMessage(
+    '{"t":"transcript","turn_id":"a","text":"","confidence":0,"provider":"mock"}',
+  );
+  assert.ok(empty !== null);
+  if (empty.t !== "transcript") throw new Error("unreachable");
+  assert.equal(empty.text, "");
+  assert.equal(empty.confidence, 0);
+});
+
+/* capture */
+
+check("floatToPcm16 uses the whole range without wrapping the loudest sample", () => {
+  const bytes = floatToPcm16(new Float32Array([-1, 1, 0, -2, 2, Number.NaN, Number.POSITIVE_INFINITY]));
+  assert.equal(bytes.length, 7 * BYTES_PER_SAMPLE);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const read = (i: number) => view.getInt16(i * BYTES_PER_SAMPLE, true);
+
+  // Two's complement has one more negative value than positive, so the two
+  // ends scale by different numbers. Scaling both by 32768 would wrap +1.0 to
+  // -32768, which is the loudest possible click on every peak of every clip.
+  assert.equal(read(0), -32768, "-1.0 is the most negative sample");
+  assert.equal(read(1), 32767, "+1.0 must not wrap to negative");
+  assert.equal(read(2), 0);
+  assert.equal(read(3), -32768, "out of range clamps rather than wrapping");
+  assert.equal(read(4), 32767);
+  assert.equal(read(5), 0, "NaN becomes silence, never two arbitrary bytes");
+  assert.equal(read(6), 0, "Infinity is a bug upstream, not a loud sound");
+});
+
+check("bytesToBase64 agrees with a known good encoder on every padding case", () => {
+  // Written out rather than taken from btoa, so it is checked against
+  // something else rather than against itself. Every remainder of 3 appears.
+  for (let n = 0; n <= 130; n += 1) {
+    const bytes = new Uint8Array(n);
+    for (let i = 0; i < n; i += 1) bytes[i] = (i * 7 + n * 31) % 256;
+    assert.equal(
+      bytesToBase64(bytes),
+      Buffer.from(bytes).toString("base64"),
+      `length ${n} disagrees with Buffer`,
+    );
+  }
+  assert.equal(bytesToBase64(new Uint8Array(0)), "");
+  assert.equal(bytesToBase64(new Uint8Array([0])), "AA==");
+  assert.equal(bytesToBase64(new Uint8Array([0, 0])), "AAA=");
+  assert.equal(bytesToBase64(new Uint8Array([0, 0, 0])), "AAAA");
+  assert.equal(bytesToBase64(new Uint8Array([255, 255, 255])), "////");
+});
+
+check("the rate is refused rather than resampled", () => {
+  assert.deepEqual([...LISTEN_RATES], [16000, 24000, 44100, 48000]);
+  assert.deepEqual([...LISTEN_CODECS], ["pcm_s16le", "webm_opus"]);
+  for (const rate of LISTEN_RATES) {
+    assert.ok(isListenRate(rate));
+    assert.equal(rateRefusal(rate), "", `${rate} is in LISTEN_RATES and must be accepted`);
+  }
+  // 32000 and 22050 are real hardware rates. Converting them casually aliases,
+  // and audio at the wrong rate does not fail loudly: it transcribes to a
+  // fluent sentence nobody said. The refusal names the rate.
+  assert.ok(!isListenRate(32000));
+  assert.ok(rateRefusal(32000).includes("32000"));
+  assert.ok(rateRefusal(22050).includes("22050"));
+  assert.ok(rateRefusal(0).length > 0);
+  assert.ok(rateRefusal(Number.NaN).length > 0);
+});
+
+check("the clip budget refuses before the chunk is kept, like the server", () => {
+  assert.equal(MAX_CLIP_BYTES, 8 * 1024 * 1024);
+  assert.equal(MAX_CLIP_CHUNKS, 512);
+
+  // Order matters and is the same as ClipInProgress.append in
+  // apps/presence/hearing.py: ask first, keep second. Checking after would
+  // make the ceiling a report of how far past it we already went.
+  const budget = new ClipBudget(10, 3);
+  assert.equal(budget.refuse(4), null);
+  budget.keep(4);
+  assert.equal(budget.bytes, 4);
+  assert.equal(budget.chunks, 1);
+
+  assert.equal(budget.refuse(6), null, "exactly at the ceiling still fits");
+  budget.keep(6);
+  assert.equal(budget.bytes, 10);
+
+  const overBytes = budget.refuse(1);
+  assert.ok(overBytes !== null);
+  assert.equal(overBytes.reason, "bytes");
+  assert.ok(overBytes.message.length > 0, "a refusal the speaker cannot read is a crash to them");
+
+  const chunky = new ClipBudget(1000, 2);
+  chunky.keep(1);
+  chunky.keep(1);
+  const overChunks = chunky.refuse(1);
+  assert.ok(overChunks !== null);
+  assert.equal(overChunks.reason, "chunks", "the chunk ceiling is checked first, as on the server");
+
+  chunky.reset();
+  assert.equal(chunky.bytes, 0);
+  assert.equal(chunky.chunks, 0);
+  assert.equal(chunky.refuse(1), null);
+
+  const held = new ClipBudget();
+  held.keep(48000 * BYTES_PER_SAMPLE);
+  assert.equal(held.seconds(48000), 1, "one second of 48 kHz mono s16le");
+  assert.equal(held.seconds(0), 0, "a nonsense rate reports no time, never Infinity");
+});
+
+check("chunking keeps an ordinary sentence inside the chunk ceiling", () => {
+  // A worklet block is 128 samples, 2.67 ms at 48 kHz. One message per block
+  // would be 375 a second and would hit MAX_CLIP_CHUNKS in under a second and
+  // a half, so the ceiling would stop ordinary speech rather than runaway
+  // clips. This is the arithmetic that stops that.
+  for (const rate of LISTEN_RATES) {
+    const per = blocksPerChunk(rate, 128);
+    assert.ok(per >= 1, `${rate} must gather at least one block`);
+    const chunkMs = (per * 128 * 1000) / rate;
+    assert.ok(chunkMs > 100 && chunkMs < 400, `${rate} chunks every ${chunkMs} ms`);
+    const oneMinute = Math.ceil(60000 / chunkMs);
+    assert.ok(
+      oneMinute < MAX_CLIP_CHUNKS,
+      `a one minute clip at ${rate} needs ${oneMinute} chunks, over the ${MAX_CLIP_CHUNKS} ceiling`,
+    );
+  }
+  assert.equal(blocksPerChunk(0, 128), 1, "a nonsense rate still gathers something");
+  assert.equal(blocksPerChunk(48000, 0), 1);
 });
 
 console.log(`presence-check: ${checks} checks passed`);

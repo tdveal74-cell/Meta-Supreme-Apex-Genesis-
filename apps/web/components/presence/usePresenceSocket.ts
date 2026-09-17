@@ -27,6 +27,7 @@ import {
   type PresenceState,
   type ReadyMessage,
   type ServerMessage,
+  type TranscriptMessage,
 } from "@/lib/presence/protocol";
 
 /** The storage slot DevonChat writes at sign-in and RealShell reads. */
@@ -112,6 +113,7 @@ export function usePresenceSocket(token: string, options: PresenceSocketOptions 
   const [caption, setCaption] = useState("");
   const [metrics, setMetrics] = useState<MetricsMessage | null>(null);
   const [lastAck, setLastAck] = useState<InterruptAckMessage | null>(null);
+  const [transcript, setTranscript] = useState<TranscriptMessage | null>(null);
   const [rttMs, setRttMs] = useState<number | null>(null);
 
   const sendRef = useRef<((message: ClientMessage) => boolean) | null>(null);
@@ -243,6 +245,13 @@ export function usePresenceSocket(token: string, options: PresenceSocketOptions 
         case "metrics":
           setMetrics(message);
           return;
+        case "transcript":
+          // What the server heard, before the turn it is about to run. Shown
+          // rather than swallowed: a transcriber that misheard produces a
+          // confident answer to a question nobody asked, and the only place
+          // that is catchable is here, beside the answer.
+          if (turnIsCurrent(message.turn_id)) setTranscript(message);
+          return;
         case "pong":
           setRttMs(performance.now() - message.at_ms);
           return;
@@ -343,6 +352,29 @@ export function usePresenceSocket(token: string, options: PresenceSocketOptions 
     return sent ? turnId : null;
   }, []);
 
+  /**
+   * Open a spoken turn: mint its id and register it the way `say` does.
+   *
+   * The server reuses the clip's turn_id for the turn it starts after
+   * transcribing (apps/presence/main.py calls begin_turn with it), so
+   * registering here is what makes the tokens and frames that come back pass
+   * turnIsCurrent. Without it the answer to a spoken question would be
+   * dropped as a stray.
+   */
+  const beginListening = useCallback((): string => {
+    const turnId = newTurnId();
+    sayTurnRef.current = turnId;
+    ignoredTurnRef.current = null;
+    setCaption("");
+    setTranscript(null);
+    return turnId;
+  }, []);
+
+  /** Send one client message. The capture hook owns the audio, not this. */
+  const sendClient = useCallback((message: ClientMessage): boolean => {
+    return sendRef.current?.(message) ?? false;
+  }, []);
+
   const sendRender = useCallback((behindMs: number, fps: number): boolean => {
     const turnId = stateTurnRef.current ?? sayTurnRef.current;
     if (!turnId) return false;
@@ -366,9 +398,12 @@ export function usePresenceSocket(token: string, options: PresenceSocketOptions 
     caption,
     metrics,
     lastAck,
+    transcript,
     rttMs,
     say,
     interrupt,
+    beginListening,
+    sendClient,
     sendRender,
     diagnostics,
   };

@@ -21,7 +21,8 @@
     "check:panels": "node --experimental-strip-types scripts/panel-smoke.mjs",
     "check:dock": "node --experimental-strip-types scripts/dock-smoke.mjs",
     "check:command": "node --experimental-strip-types scripts/command-smoke.mjs",
-    "check:audio": "node --experimental-strip-types scripts/audio-check.mjs"
+    "check:audio": "node --experimental-strip-types scripts/audio-check.mjs",
+    "check:capture": "node --experimental-strip-types scripts/capture-check.mjs"
   },
   "dependencies": {
     "@meta-supreme/ui": "workspace:*",
