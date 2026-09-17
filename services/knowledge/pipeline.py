@@ -19,6 +19,7 @@ from services.intelligence.providers.embeddings import (
 )
 from services.knowledge.chunking import chunk_text
 from services.knowledge.distillation import distill_content
+from services.knowledge.fts import FTS_FILL_NEW_CHUNKS_SQL
 from services.knowledge.retrieval import RetrievalCandidate, hybrid_retrieve
 from services.knowledge.synthesis import (
     SynthesizedAnswer,
@@ -165,16 +166,10 @@ async def ingest_and_distill(
         await db.flush()
         from sqlalchemy import text as sql_text
 
-        await db.execute(
-            sql_text(
-                """
-                UPDATE embeddings
-                SET fts = to_tsvector('english', COALESCE(content, ''))
-                WHERE knowledge_item_id = :kid AND fts IS NULL
-                """
-            ),
-            {"kid": item.id},
-        )
+        # Shared with app/services/knowledge.py and the 021 backfill, from
+        # services.knowledge.fts. Three hand written copies is how the title
+        # came to be missing from two of them.
+        await db.execute(sql_text(FTS_FILL_NEW_CHUNKS_SQL), {"kid": item.id})
 
         item.status = "ready"
         item.meta = {
