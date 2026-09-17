@@ -22,7 +22,32 @@ obvious answers.
 
 ## What Tee said
 
-_(appended as the session runs)_
+### Q1. Think of the last time you went looking for something you knew you had already written down or said on air, and had to go digging. What were you trying to find, and what did you type to look for it?
+
+REDACTED BY CLAUDE, AND THE REDACTION IS THE POINT.
+
+His answer described an account recovery hunt. He needed the original account
+setup email for a service, could not reach it directly, and reached the outcome
+by a different route through another record entirely.
+
+The verbatim answer is NOT written here. This repository is public, and an
+account recovery path tied to a named vendor and a named person is material that
+helps someone social engineer that account. The first draft of this section
+quoted him in full and the write was refused by the harness before it landed,
+which was the correct call and one this session should have made itself.
+
+What the measurement actually needs from this answer is the QUERY SHAPE, and
+that is recordable without any of the rest:
+
+    intent    find the original account setup or signup email for a vendor
+    surface   a mail client, searched by vendor name
+    corpus    Gmail
+    outcome   the direct search did not settle it; he fell back to another
+              record entirely
+
+The vendor name, the financial record, the identifier and the recovery step are
+deliberately absent. Ask Tee directly if a later session needs them; they do not
+belong in a public file.
 
 ## Decisions this settles
 
@@ -30,15 +55,35 @@ _(pending)_
 
 ## Inferred, not stated
 
-_(pending)_
+- The first real digging episode Tee produced is one DEVON's retrieval lane
+  CANNOT serve at any embedding quality. `knowledge_items` holds notes,
+  documents and episode transcripts, and it holds no mail. So the corpus the
+  retrieval measurement scores is not the corpus this search needed. Inferred by
+  Claude on 2026-09-17 from the answer plus the schema, not confirmed with Tee.
+- Falling back to a second, unrelated record is a workaround for a search that
+  failed rather than a search that succeeded. That suggests what is worth
+  measuring first is whether the lane can answer a question AT ALL, before how
+  well it ranks. Inferred by Claude on 2026-09-17, not confirmed.
+- The interview question may be aimed at the wrong thing. It asked about notes
+  and episodes; the honest answer was about operational recall across mail and
+  records. Whether the topic widens is Tee's call, not a reframe a session makes
+  on its own. Inferred by Claude on 2026-09-17, not confirmed.
 
 ## Open threads
 
-_(pending)_
+- What did he actually type into the mail search, and did it return the email?
+  Not yet asked, because the answer to Q1 raised whether the topic is aimed at
+  the right corpus and that is a ruling rather than a follow up.
+- Nine more labelled questions to go.
+- Whether the capture should hold the redacted specifics at all, in some
+  non public place, or whether the query shape is enough. Not asked.
 
 ## Contradicts
 
-_(pending)_
+- Nothing in the estate's records yet. The tension is with the SCOPE of
+  `scripts/measure_retrieval.py`, which scores `knowledge_items` and nothing
+  else, while the first real query Tee named lives in mail. That is a gap in
+  what the tool covers rather than a record that disagrees with another record.
 
 ## DEVON RECEIPT
 
@@ -47,7 +92,7 @@ TYPE: capture
 ARTIFACT: docs/devon/CAPTURE_retrieval-labels_2026-09-17.md
 DATE: 2026-09-17
 DECISIONS: pending, session in progress
-FINDINGS: pending, session in progress
-OPEN: the ten labelled questions themselves
-STATUS: in progress
+FINDINGS: the first real digging episode Tee named is operational recall across mail, not the notes and episodes corpus the retrieval measurement scores; his verbatim answer was redacted because this repository is public
+OPEN: nine more labelled questions, and whether the topic is aimed at the right corpus
+STATUS: in progress, one answer recorded
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
