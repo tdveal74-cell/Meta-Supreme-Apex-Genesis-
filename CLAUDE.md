@@ -94,7 +94,7 @@ test failure. It shows up as a hundred or more collection ERRORs.
 
 ## Reproducing CI
 
-CI is TEN jobs, and on most pull requests you will see five. Five are in
+CI is ELEVEN jobs, and on most pull requests you will see five. Five are in
 `.github/workflows/ci.yml` (`standalone` then `container` and `engine` then
 `api`, plus `dependency-audit` on every push). The sixth is
 `.github/workflows/web-ci.yml`, path filtered to the web workspace, so a run of
@@ -160,6 +160,31 @@ decision logic is unit tested in `test_pulse_watchdog.py` in the standalone job;
 those tests prove the verdict function and prove nothing about the key or the
 host, and the file says so.
 
+The eleventh arrived on 2026-09-17 alongside the tenth, and for the same reason
+one layer down: `.github/workflows/provider-watchdog.yml`, `schedule` only, every
+three hours at :30. It reads the instance's errored executions and goes red when
+a model provider is refusing calls. It exists because the content pipeline has
+now been stopped twice by exactly that and neither time did anything report it.
+On 2026-08-14 the teardown found both script writers dead on Anthropic's "Your
+credit balance is too low". On 2026-09-17 Cerebras answered HTTP 402 to eight
+scheduled runs between 01:00Z and 19:00Z, with seventeen nodes of `TQO FINAL V5`
+routed through it, and it was found by a session that had come to look at
+something else.
+
+The ruling asked for a balance alarm. Anthropic publishes no balance endpoint
+and neither does Cerebras, so that was only a third buildable and the script
+says so in its own docstring rather than implying otherwise. It watches refusals
+instead, which every vendor emits: 402 and 401 alarm because they never clear
+themselves, 429 is counted and reported because it usually does. It shares
+`N8N_VPS_KEY` with the Pulse watchdog and fails the same way when the secret is
+absent.
+
+**Do not pause a content trigger to quieten a provider outage.** This watchdog
+reads FAILURES, so a paused workflow produces none and it would report OK over a
+pipeline just as dead. The noise is the signal. That trap is written into the
+workflow file too, because it is the obvious next thing a tired operator would
+reach for.
+
 The standalone job runs with no database. This paragraph said it also runs
 with **no** `PYTHONPATH` until 2026-09-09, when a worktree agent read the file
 and found otherwise: `ci.yml` sets `PYTHONPATH` in its top level `env:` block
@@ -184,7 +209,8 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_devon_scheduler_report_honesty.py test_devon_console_voice_honesty.py \
   test_n8n_telemetry.py test_devon_vision_path.py \
   test_devon_vision_fixture.py test_pulse_watchdog.py \
-  test_devon_rule_ledger.py test_devon_wager.py test_devon_tqo_canon.py
+  test_devon_rule_ledger.py test_devon_wager.py test_devon_tqo_canon.py \
+  test_provider_watchdog.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .

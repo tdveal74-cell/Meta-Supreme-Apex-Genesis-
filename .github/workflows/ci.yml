@@ -89,7 +89,8 @@ jobs:
             test_pulse_watchdog.py \
             test_devon_rule_ledger.py \
             test_devon_wager.py \
-            test_devon_tqo_canon.py
+            test_devon_tqo_canon.py \
+            test_provider_watchdog.py
 
   dependency-audit:
     name: Dependency audit (pip-audit + pnpm audit)
