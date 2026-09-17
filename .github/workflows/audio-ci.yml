@@ -70,7 +70,7 @@ on:
 
 jobs:
   audio:
-    name: Playback in real Chromium
+    name: Playback and capture in real Chromium
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
