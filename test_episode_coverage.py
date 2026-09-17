@@ -30,6 +30,7 @@ import pytest
 from app.services.episodes import (
     COVERAGE_FLOOR,
     EPISODE_SOURCE_TYPE,
+    TRUSTED_FOR_COVERAGE,
     UNTRUSTED_FOR_COVERAGE,
     decide_coverage,
     transcript_fingerprint,
@@ -228,6 +229,48 @@ def test_the_floor_is_a_distance_and_not_a_similarity():
 
 def test_the_mock_provider_is_named_untrusted_for_a_verdict():
     assert "mock" in UNTRUSTED_FOR_COVERAGE
+    assert "mock" not in TRUSTED_FOR_COVERAGE
+
+
+def test_the_guard_is_an_allowlist_so_an_unknown_provider_refuses():
+    """Found by measurement 2026-09-17, not by design.
+
+    The provider that embeds is resolved from DEFAULT_AI_PROVIDER, which on
+    this estate holds a CHAT provider name, and only mock and openai can embed
+    at all. A denylist of ("mock",) therefore let 'cerebras' through the guard
+    into a search that raised ProviderConfigError, so a clear refusal became a
+    503 about configuration. An allowlist fails closed.
+    """
+    assert TRUSTED_FOR_COVERAGE == ("openai",)
+    for chat_provider in ("cerebras", "anthropic", "openrouter", "", "gpt-4"):
+        assert chat_provider not in TRUSTED_FOR_COVERAGE
+
+
+@pytest.mark.asyncio
+async def test_a_chat_provider_name_refuses_rather_than_reaching_the_search(
+    monkeypatch,
+):
+    """The behavioural half: 'cerebras' cannot embed, so it must never get as
+    far as a query whose distances would then be meaningless or raise."""
+    import app.services.episodes as episodes
+
+    reached = []
+
+    async def fake_search(db, **kwargs):
+        reached.append(kwargs)
+        return [hit("Jobs decompose", 0.01)]
+
+    monkeypatch.setattr(episodes, "search_knowledge", fake_search)
+    monkeypatch.setattr(episodes, "embedding_provider_name", lambda: "cerebras")
+
+    verdict = await episodes.already_covered(
+        None, owner_id="owner-1", question="jobs decompose"
+    )
+    assert reached == [], "a provider that cannot embed reached the search"
+    assert verdict["answerable"] is False
+    assert verdict["covered"] is False
+    assert "cerebras" in verdict["reason"]
+    assert "openai" in verdict["reason"]
 
 
 @pytest.mark.asyncio

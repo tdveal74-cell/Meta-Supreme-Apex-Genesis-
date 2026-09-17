@@ -38,6 +38,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.presence.hearing import (
+    ELEVENLABS_STT_MODELS,
     ELEVENLABS_STT_URL,
     ClipInProgress,
     ClipTooLarge,
@@ -642,6 +643,27 @@ def test_an_empty_key_is_refused_at_construction():
     with pytest.raises(HearingNotConfigured) as info:
         ElevenLabsHearing("")
     assert "ELEVENLABS_API_KEY" in str(info.value)
+
+
+def test_every_model_the_vendor_named_is_accepted():
+    """Found by mutation: dropping scribe_v2 from the allowlist broke nothing.
+
+    The vendor named all four itself, 2026-09-17, in a 400 answering a request
+    that carried a synthesis model id and no audio (ElevenLabs request_id
+    32075172af16f7586c8e5186da95d44c). The list said only the first two until
+    that probe ran, so `ELEVENLABS_STT_MODEL=scribe_v2` would have been
+    refused at startup for a model the vendor accepts.
+    """
+    named_by_the_vendor = (
+        "scribe_v1",
+        "scribe_v1_experimental",
+        "scribe_v2",
+        "scribe_v2_medical",
+    )
+    assert set(ELEVENLABS_STT_MODELS) == set(named_by_the_vendor)
+    for model in named_by_the_vendor:
+        ear = ElevenLabsHearing(FAKE_KEY, model=model)
+        assert ear.model == model
 
 
 def test_a_synthesis_model_is_refused_at_construction():
