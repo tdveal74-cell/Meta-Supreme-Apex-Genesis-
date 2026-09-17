@@ -25,7 +25,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.knowledge import Embedding, KnowledgeItem
-from services.intelligence.providers.embeddings import create_embedding_provider
+from services.intelligence.providers.embeddings import (
+    create_embedding_provider,
+    resolve_embedding_provider_name,
+)
 from services.knowledge.chunking import chunk_text
 
 logger = logging.getLogger(__name__)
@@ -35,13 +38,18 @@ def _embedding_provider():
     """Build the configured embedding provider (OpenAI or deterministic mock).
 
     Metered like the completion provider: embeddings reach the same keys.
+
+    The provider NAME comes from `resolve_embedding_provider_name`, which reads
+    `EMBEDDING_PROVIDER`. This function used to look for a
+    `DEFAULT_EMBEDDING_PROVIDER` field that does not exist and fall through to
+    `DEFAULT_AI_PROVIDER`, which welded embeddings to the chat provider and
+    broke them outright on an estate whose chat runs on Cerebras. The shared
+    resolver carries the measurement.
     """
     from app.services.provider_usage import MeteredEmbeddingProvider
 
     provider = create_embedding_provider(
-        settings.DEFAULT_EMBEDDING_PROVIDER
-        if hasattr(settings, "DEFAULT_EMBEDDING_PROVIDER")
-        else settings.DEFAULT_AI_PROVIDER,
+        resolve_embedding_provider_name(settings),
         openai_api_key=getattr(settings, "OPENAI_API_KEY", None),
         model=getattr(settings, "EMBEDDING_MODEL", None),
     )

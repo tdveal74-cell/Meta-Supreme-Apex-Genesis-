@@ -23,7 +23,7 @@ import re
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import httpx
 
@@ -250,6 +250,65 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 # ---------------------------------------------------------------------------
 
 SUPPORTED_EMBEDDING_PROVIDERS = ("mock", "openai")
+
+
+def resolve_embedding_provider_name(settings: Any) -> str:
+    """Name the provider that embeds, from the field that names itself.
+
+    THIS EXISTS BECAUSE THE TWO LANES WERE WELDED TO THE CHAT PROVIDER.
+
+    Until 2026-09-17 both embedding resolvers, `app.services.knowledge` and
+    `services.knowledge.pipeline`, looked for a settings field called
+    `DEFAULT_EMBEDDING_PROVIDER` and fell through to `DEFAULT_AI_PROVIDER`
+    when they did not find one. They never found one: that field does not
+    exist and never did. `EMBEDDING_PROVIDER` does exist, defaults to "mock",
+    and `app/core/config.py` documents it in its own comment as the switch to
+    flip for real semantic retrieval. Nothing read it.
+
+    The consequence was not cosmetic. Embeddings inherited the CHAT provider,
+    and this estate runs chat on Cerebras, which `SUPPORTED_EMBEDDING_PROVIDERS`
+    does not carry. So `EMBEDDING_PROVIDER=openai` on the production api changed
+    nothing and every embedding call resolved to 'cerebras' and raised
+    ProviderConfigError. Reproduced 2026-09-17 with the production shape:
+    EMBEDDING_PROVIDER=openai, DEFAULT_AI_PROVIDER=cerebras, no OPENAI_API_KEY,
+    and the documented control was dead.
+
+    An earlier draft of this paragraph said Cerebras has no embeddings endpoint.
+    That may well be true and it was not checked: `api.cerebras.ai` is blocked
+    by this container's egress policy, so the claim could not be run. It is also
+    not the load bearing fact. What breaks the estate is that this factory
+    builds 'mock' and 'openai' and nothing else, so a chat provider name
+    reaching it raises whatever the vendor does or does not offer.
+
+    There is no fallback to `DEFAULT_AI_PROVIDER` here on purpose. That
+    fallback IS the weld. A chat provider name reaching this function is how
+    the two got tied together, and re-adding it to be helpful would tie them
+    again the first time someone sets a chat provider that cannot embed.
+
+    A deployment that previously got real embeddings by setting
+    `DEFAULT_AI_PROVIDER=openai` and leaving `EMBEDDING_PROVIDER` alone now
+    gets mock instead, which is a downgrade that must never be silent: mock
+    vectors are deterministic and plausible, and under them a sourdough recipe
+    scored 0.6406 against the jobs episode while an on topic question scored
+    0.6170. So that case warns rather than passing quietly.
+    """
+    name = getattr(settings, "EMBEDDING_PROVIDER", None)
+    resolved = name.strip().lower() if isinstance(name, str) and name.strip() else "mock"
+
+    if resolved == "mock":
+        chat = getattr(settings, "DEFAULT_AI_PROVIDER", None)
+        chat_name = chat.strip().lower() if isinstance(chat, str) else ""
+        if chat_name in SUPPORTED_EMBEDDING_PROVIDERS and chat_name != "mock":
+            logger.warning(
+                "Embeddings are on mock while DEFAULT_AI_PROVIDER=%s can embed. "
+                "Before 2026-09-17 embeddings followed the chat provider and this "
+                "would have been real vectors. Set EMBEDDING_PROVIDER=%s if that "
+                "is what you meant; mock vectors are deterministic and will happily "
+                "rank an unrelated document above a relevant one.",
+                chat_name,
+                chat_name,
+            )
+    return resolved
 
 
 def create_embedding_provider(
