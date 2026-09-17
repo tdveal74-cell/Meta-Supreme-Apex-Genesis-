@@ -46,14 +46,28 @@ What is verified here and what is not, stated plainly:
   * ``/v1/speech-to-txt`` as a negative control -> 404, so a wrong path fails
     loudly and the responses above are this endpoint's, not a catch-all's.
 
-  What is still INFERRED rather than proven is the header NAME. n8n injected
-  the auth through its own ``elevenLabsApi`` credential, which implements the
-  vendor's scheme, so a request authenticated and did not 401; that this
-  module's literal ``xi-api-key`` is that same header is strong inference from
-  n8n's implementation, not a measurement of this module's own request.
+  The header NAME is confirmed too, by a second probe the same day that made
+  the vendor name it. Three requests with no credential attached, so the
+  header was this probe's own rather than one n8n injected:
 
-  No clip has been transcribed through THIS code. The default stays ``mock``
-  for that reason.
+  * no auth header at all -> 401 ``"Neither authorization header nor
+    xi-api-key received, please provide one."`` The vendor names the header
+    itself.
+  * a junk value in ``xi-api-key`` -> 401 ``"Invalid API key"``, status
+    ``invalid_api_key``. A DIFFERENT message, so the header was read and the
+    value rejected rather than the header ignored.
+  * the same junk in a made up ``x-eleven-key`` -> 401 with the FIRST message
+    again, identical to sending nothing. A wrong header name is invisible to
+    them, which is the control that makes the case above mean anything.
+
+  So ``xi-api-key`` is the header, it accepts an ``authorization`` header as
+  an alternative, and this module sends the former.
+  ``test_the_measured_response_shape_parses`` already pins that name on our
+  side of the wire.
+
+  What has still NEVER happened is a clip transcribed through THIS code. Every
+  request above was refused before any audio was read, deliberately, so the
+  probes cost no transcription. That is why the default stays ``mock``.
 
 The vendor's error body is never forwarded. That rule is not caution, it is
 a measured finding: a critic put a 401 through the Cartesia path on
@@ -83,7 +97,10 @@ ELEVENLABS_STT_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 #:   'eleven_multilingual_v2' is not a valid model_id. Available models:
 #:   'scribe_v1', 'scribe_v1_experimental', 'scribe_v2', 'scribe_v2_medical'
 #:
-#: ElevenLabs request_id 32075172af16f7586c8e5186da95d44c.
+#: ElevenLabs request_id 32075172af16f7586c8e5186da95d44c. A second probe
+#: then sent ``model_id=scribe_v2`` with a real credential and got the file
+#: refusal rather than a model refusal, so the vendor accepts it in practice
+#: and not only in a list: request_id dbb139c906b22de2b8d4852361a1fd57.
 #:
 #: This list said only the first two until that probe ran, which would have
 #: refused `scribe_v2` at startup as an invalid model while the vendor
