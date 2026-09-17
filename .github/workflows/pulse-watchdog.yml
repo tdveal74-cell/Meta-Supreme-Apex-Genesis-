@@ -1,0 +1,83 @@
+name: Pulse watchdog
+
+# THE ONE THING IN THE ESTATE THAT CAN SEE A STOPPED PULSE
+#
+# The Build 13 Pulse beats every six hours on the VPS and writes one row to
+# devon_heartbeat_log. One of its findings is `missed_beat`. That finding is
+# computed BY the Pulse, so it can report a LATE beat and can never report a
+# STOPPED one: a workflow that does not run writes nothing, and nothing looks
+# exactly like a healthy quiet estate.
+#
+# Every organ that could watch it lives on the same n8n instance and dies with
+# it. So the watcher has to be somewhere else, and this is somewhere else.
+#
+# WHY IT IS A SEPARATE WORKFLOW AND NOT A JOB IN ci.yml. ci.yml runs on pushes
+# and pull requests, which is the wrong clock entirely: an outage that begins
+# on a quiet weekend would go unnoticed until somebody happened to open a PR.
+# This one is driven by `schedule` and nothing else.
+#
+# WHY IT DOES NOT SEND EMAIL. The alarm channel is the job FAILING: GitHub
+# mails the repository owner when a scheduled workflow on the default branch
+# goes red. An alerting path with its own SMTP credential would be one more
+# thing that can rot quietly, which is the failure this estate has already paid
+# for once, when the Pulse's own Gmail credential died on 1 September and every
+# alert after it died at the send with nobody told.
+#
+# IT NAGS ON PURPOSE. Every three hours while the Pulse is down, this goes red
+# again. The outage of 2026-09-16 ran thirteen hours with nobody told, so a
+# watchdog that alarms once and then falls quiet would not have fixed the thing
+# that actually went wrong.
+#
+# TWO WAYS TO FAIL, AND THEY SAY DIFFERENT THINGS. Exit 1 is "the Pulse has
+# stopped". Exit 2 is "I could not check" - no key, instance unreachable, a
+# read that came back at the row cap and might be truncated. Both go red,
+# because an unchecked Pulse reported as healthy is the same lie the Pulse
+# itself cannot help telling. See scripts/pulse_watchdog.py.
+#
+# BEFORE THIS CAN WORK, one repository secret must exist: N8N_VPS_KEY, an n8n
+# API key for https://n8n.editforge.online. Until it is set this job goes red
+# every run with exit 2 and a message saying exactly that, which is deliberate:
+# a watchdog that skips quietly when unconfigured would report green while
+# watching nothing.
+#
+# SCHEDULED WORKFLOWS ONLY RUN ON THE DEFAULT BRANCH. Nothing here takes effect
+# from a pull request; it starts working when this file is on main.
+#
+# The decision logic is unit tested in test_pulse_watchdog.py, which runs in the
+# standalone job of ci.yml. Those tests prove the verdict function, including
+# that a fresh reflection row cannot be mistaken for a beat. They prove nothing
+# about whether the key is valid or the host is reachable; only a real run does
+# that, and a real run needs the secret.
+
+on:
+  schedule:
+    # Every three hours. The Pulse beats every six and counts a beat missed at
+    # 7.5h (MISSED_BEAT_H in n8n/devon/heartbeat/compose_pulse.js), so this
+    # notices within about three hours of the Pulse's own definition of dead.
+    - cron: "0 */3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pulse-watchdog
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    name: Is the Build 13 Pulse still beating
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # No pip install. The script uses only the standard library, which is what
+      # lets this job be the thing that still works when other things do not.
+      - name: Read the beat log from outside n8n
+        env:
+          N8N_VPS_KEY: ${{ secrets.N8N_VPS_KEY }}
+        run: python3 scripts/pulse_watchdog.py

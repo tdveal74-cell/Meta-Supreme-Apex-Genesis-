@@ -94,7 +94,7 @@ test failure. It shows up as a hundred or more collection ERRORs.
 
 ## Reproducing CI
 
-CI is NINE jobs, and on most pull requests you will see five. Five are in
+CI is TEN jobs, and on most pull requests you will see five. Five are in
 `.github/workflows/ci.yml` (`standalone` then `container` and `engine` then
 `api`, plus `dependency-audit` on every push). The sixth is
 `.github/workflows/web-ci.yml`, path filtered to the web workspace, so a run of
@@ -143,6 +143,23 @@ does not, no pixel and no sample. The steward skill still says five jobs plus
 a sixth; that count is older still. Before editing this number again, count it
 from the files.
 
+The tenth arrived on 2026-09-17: `.github/workflows/pulse-watchdog.yml`, and it
+is the first one that will NEVER appear on a pull request. It has no `push` and
+no `pull_request` trigger at all, only `schedule` every three hours and
+`workflow_dispatch`, so it runs on `main` and nowhere else. It reads the Build
+13 beat log on the VPS over the n8n public API and exits non-zero when the
+newest `pulse` row is older than the Pulse's own `MISSED_BEAT_H`. It exists
+because `missed_beat` is computed BY the Pulse, so the Pulse can report a late
+beat and never a stopped one, and every organ that could watch it lives on the
+same instance and dies with it. The alarm channel is the job going red and
+GitHub mailing the owner; there is deliberately no SMTP in it. It needs one
+repository secret, `N8N_VPS_KEY`, and until that exists every run goes red with
+exit 2 saying so, which is the intended direction: a watchdog that skipped
+quietly when unconfigured would report green while watching nothing. Its
+decision logic is unit tested in `test_pulse_watchdog.py` in the standalone job;
+those tests prove the verdict function and prove nothing about the key or the
+host, and the file says so.
+
 The standalone job runs with no database. This paragraph said it also runs
 with **no** `PYTHONPATH` until 2026-09-09, when a worktree agent read the file
 and found otherwise: `ci.yml` sets `PYTHONPATH` in its top level `env:` block
@@ -166,7 +183,7 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_knowledge_graph_fixtures.py test_devon_scheduler_honesty.py \
   test_devon_scheduler_report_honesty.py test_devon_console_voice_honesty.py \
   test_n8n_telemetry.py test_devon_vision_path.py \
-  test_devon_vision_fixture.py
+  test_devon_vision_fixture.py test_pulse_watchdog.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .
