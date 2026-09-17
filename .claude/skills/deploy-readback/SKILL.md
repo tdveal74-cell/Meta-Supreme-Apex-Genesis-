@@ -490,14 +490,27 @@ of those commits landed inside the window. So the presence service served
 `protocols: [1, 2]` from 15:41:31Z while the page that would speak v2 sat
 undeployed, and nothing anywhere said so.
 
-**A cleared block does not ship what it held.** The comparison base is the last
-successful deployment, so the owed diff survives and the next push to main
-carries it, but until that push there is nothing in flight and no status
-anywhere is wrong. Check what is owed the moment a block lifts, and if main has
-not moved since, say the surfaces are still stale and name the commit that will
-ship them. Do not reach for Redeploy: it rebuilds the commit of the record it
-starts from, and during a block no record was created for the commits that
-matter, so the newest thing it can rebuild is the stale one already live.
+**A cleared block does not ship what it held, and the next push to main does.**
+The comparison base is the last successful deployment, so the owed diff
+survives intact and the first build after the block carries the whole of it.
+Both projects did exactly that: `53b3f48` merged at 22:47:31Z, compared against
+`f0f1e7e`, found all ten web files and went READY at 22:48:27Z, and `d8d7144`
+merged at 22:56:29Z and built `devon-soul`. The web project's production build
+on `d8d7144` was then skipped, correctly, because `53b3f48..d8d7144` is empty
+over its four watched paths. Nothing had to be forced.
+
+Do not reach for Redeploy: it rebuilds the commit of the record it starts from,
+and during a block no record was created for the commits that matter, so the
+newest thing it can rebuild is the stale one already live. A branch push is no
+use either, because a preview's comparison base is that branch's own last
+deployment rather than production.
+
+**And re-read the state immediately before publishing a claim about it.** The
+2026-09-17 read-back was written at 22:46Z saying both surfaces were stale with
+a measured payload owed to each. It was right at 22:46Z and wrong by 22:48Z,
+because another session merged PR #270 in between. A block ending is exactly
+when several sessions ship at once, so a read-back taken during one has the
+shortest useful life of any claim in this file.
 
 It is not the daily cap. The cap names itself (`api-deployments-free-per-day`)
 and it is a refusal of one deployment; a block is account wide and the tooling
