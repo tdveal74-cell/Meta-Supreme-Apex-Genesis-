@@ -73,8 +73,30 @@ EPISODE_SOURCE_TYPE = "episode_transcript"
 #: takes it as an argument so moving it is one call rather than an edit here.
 COVERAGE_FLOOR = 0.45
 
-#: Embedding providers whose distances are not trustworthy enough to answer
-#: a yes or no question about what was said on air.
+#: The ONLY embedding providers whose distances may answer a yes or no
+#: question about what was said on air. An allowlist, not a denylist, and the
+#: inversion was earned rather than chosen.
+#:
+#: Measured 2026-09-17. The provider that actually embeds is resolved by
+#: `app/services/knowledge.py:34-48`, and it reads `DEFAULT_AI_PROVIDER`, not
+#: `EMBEDDING_PROVIDER`, because `DEFAULT_EMBEDDING_PROVIDER` is not a field
+#: on settings at all. `app/services/knowledge_graph.py:204-218` had already
+#: written that down and verified it by running it. Only `mock` and `openai`
+#: can embed; every other value raises ProviderConfigError.
+#:
+#: So `DEFAULT_AI_PROVIDER` on this estate is a CHAT provider name, and a
+#: denylist of ("mock",) let `cerebras` or `anthropic` sail straight through
+#: the guard into a search that then raised, turning a clear "these distances
+#: cannot carry a verdict" into a 503 about provider configuration. Same
+#: outcome for the caller, a worse answer for the reader.
+#:
+#: An allowlist fails closed: anything not named here refuses, and a new
+#: provider has to be measured before it is trusted rather than trusted until
+#: it is caught.
+TRUSTED_FOR_COVERAGE = ("openai",)
+
+#: Kept as the inverse view for readers and for the test that pins the
+#: mock's exclusion. Derived, never edited by hand.
 UNTRUSTED_FOR_COVERAGE = ("mock",)
 
 #: How many passages a coverage answer will carry back at most.
@@ -281,17 +303,26 @@ async def already_covered(
         }
 
     provider = embedding_provider_name()
-    if provider in UNTRUSTED_FOR_COVERAGE:
+    if provider not in TRUSTED_FOR_COVERAGE:
+        detail = (
+            "Measured 2026-09-16: an on topic question scored 0.617 against "
+            "an episode and a sourdough recipe scored 0.641 against the same "
+            "one, so no floor separates them."
+            if provider in UNTRUSTED_FOR_COVERAGE
+            else (
+                "Only "
+                + ", ".join(TRUSTED_FOR_COVERAGE)
+                + " has been measured well enough to carry a verdict here."
+            )
+        )
         return {
             "covered": False,
             "answerable": False,
             "question": asked,
             "reason": (
                 f"the embedding provider is {provider!r}, whose distances "
-                "cannot separate a matching episode from an unrelated one. "
-                "Measured 2026-09-16: an on topic question scored 0.617 "
-                "against an episode and a sourdough recipe scored 0.641 "
-                "against the same one. Refusing to answer rather than "
+                f"cannot be trusted to separate a matching episode from an "
+                f"unrelated one. {detail} Refusing to answer rather than "
                 "returning a verdict built on that. This is not a claim "
                 "about the catalogue."
             ),

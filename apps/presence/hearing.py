@@ -29,13 +29,31 @@ What is verified here and what is not, stated plainly:
   ``language_code``, ``language_probability`` and a ``words`` array carrying
   per word logprobs. ``language_probability`` is what this module reads as
   confidence, and it came back 1.0 on clean speech.
-- The request shape is NOT executed from this repository. ``elevenlabs.io``
-  is blocked by this container's network egress proxy, so the endpoint,
-  the ``xi-api-key`` header, the multipart ``file`` and ``model_id`` fields
-  and the ``scribe_v1`` model id were taken from a secondary source rather
-  than read from the vendor. One clip through ``PRESENCE_EARS=elevenlabs``
-  against the live key settles it. Until someone runs that, the default
-  stays ``mock`` so nothing depends silently on an unexecuted path.
+- The request shape IS now confirmed, 2026-09-17, against the live account.
+  ``elevenlabs.io`` is still blocked by this container's egress proxy
+  (``CONNECT tunnel failed, 403``), so the probe ran through n8n, the same
+  route the HeyGen contract was read by. Four requests, each answered by the
+  vendor naming the thing back:
+
+  * ``POST /v1/speech-to-text`` with no body -> 422 ``{"loc": ["body",
+    "model_id"], "msg": "Field required"}``. The path exists and the field is
+    ``model_id``.
+  * ``model_id=scribe_v1`` with no file -> 400 ``"Must provide either file or
+    a URL parameter."``, ``param: "file"``. ``scribe_v1`` is accepted and the
+    file field is ``file``.
+  * a synthesis model id -> 400 listing the four valid models, see
+    ``ELEVENLABS_STT_MODELS``.
+  * ``/v1/speech-to-txt`` as a negative control -> 404, so a wrong path fails
+    loudly and the responses above are this endpoint's, not a catch-all's.
+
+  What is still INFERRED rather than proven is the header NAME. n8n injected
+  the auth through its own ``elevenLabsApi`` credential, which implements the
+  vendor's scheme, so a request authenticated and did not 401; that this
+  module's literal ``xi-api-key`` is that same header is strong inference from
+  n8n's implementation, not a measurement of this module's own request.
+
+  No clip has been transcribed through THIS code. The default stays ``mock``
+  for that reason.
 
 The vendor's error body is never forwarded. That rule is not caution, it is
 a measured finding: a critic put a 401 through the Cartesia path on
@@ -58,11 +76,25 @@ from apps.presence.settings import PresenceSettings
 #: what that means and what would settle it.
 ELEVENLABS_STT_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 
-#: The two transcription models the vendor exposes. ``scribe_v1`` is the
-#: stable one. The n8n node's own model picker lists SYNTHESIS models only,
-#: measured 2026-09-16, which is why that node leaves the field unset and why
-#: this one cannot borrow its answer.
-ELEVENLABS_STT_MODELS = ("scribe_v1", "scribe_v1_experimental")
+#: The transcription models the vendor exposes, read from the vendor rather
+#: than from a doc page. Measured 2026-09-17 by POSTing a synthesis model id
+#: to the real endpoint, which answered 400 and listed the valid set:
+#:
+#:   'eleven_multilingual_v2' is not a valid model_id. Available models:
+#:   'scribe_v1', 'scribe_v1_experimental', 'scribe_v2', 'scribe_v2_medical'
+#:
+#: ElevenLabs request_id 32075172af16f7586c8e5186da95d44c.
+#:
+#: This list said only the first two until that probe ran, which would have
+#: refused `scribe_v2` at startup as an invalid model while the vendor
+#: accepted it. A secondary source named two of four; the vendor named all
+#: four, for free, in an error it volunteers to a request with no audio.
+ELEVENLABS_STT_MODELS = (
+    "scribe_v1",
+    "scribe_v1_experimental",
+    "scribe_v2",
+    "scribe_v2_medical",
+)
 DEFAULT_STT_MODEL = "scribe_v1"
 
 STT_CONNECT_TIMEOUT_S = 10.0
