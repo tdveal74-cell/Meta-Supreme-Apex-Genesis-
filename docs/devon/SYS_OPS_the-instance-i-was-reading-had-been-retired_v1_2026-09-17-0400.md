@@ -165,6 +165,11 @@ second time in a week this estate has produced that argument.
 
 ## What is NOT proved
 
+True as written, at 0400Z. Two of the three paragraphs below moved later the
+same day, and the amendment underneath them carries what changed with the
+evidence. They are left standing rather than edited, because a status doc is a
+record of a moment and quietly rewriting one destroys the thing it is for.
+
 The watchdog has never reached the live instance. The repository secret
 `N8N_VPS_KEY` does not exist, so every scheduled run will exit 2 and go red
 until Tee sets it. That is the intended direction rather than a defect, because
@@ -181,6 +186,56 @@ untested, because only Tee can do that.
 Nothing here audits what else in the estate still addresses the retired Cloud
 instance. Two cases are now known, TSWS 00 and the Heartbeat, both found by
 accident. A deliberate sweep has not been run.
+
+## What changed after this was written
+
+Written at 0400Z on 2026-09-17. By 2100Z the same day three of its open items
+had moved, so they are recorded here rather than left to rot in an OPEN block
+that reads as current.
+
+**The watchdog now reaches the live instance, on its own schedule.** Tee added
+the repository secret. Four runs exist and all four say what they should. Run 1
+at 11:16:57Z was dispatched by hand before the secret existed and failed with
+exit 2 saying so, which is the direction the design intended rather than a
+defect. Run 2 at 11:40:09Z was dispatched after it and reported:
+
+> OK: the Pulse last beat at 2026-09-17T10:00:15.107000Z, 1.7h ago, inside the
+> 7.5h threshold. 77 pulse row(s) read.
+
+Runs 3 and 4 at 16:21:01Z and 20:59:10Z were `schedule` events rather than
+dispatches, and run 4 read:
+
+> OK: the Pulse last beat at 2026-09-17T16:00:15.448000Z, 5.0h ago, inside the
+> 7.5h threshold. 79 pulse row(s) read.
+
+So the three hourly cadence is proven working and not only the manual path, and
+the HTTP path, the key and the host are no longer unexercised.
+
+The count moving 77 to 79 across those nine hours is worth one sentence,
+because it looks like two scheduled beats and is not. One is the 16:00:15Z
+beat. The other is row 97 at 12:30:49Z, the manual Heartbeat execution that
+proved the feeder fix earlier the same day. It was checked rather than assumed,
+which is the only reason this paragraph does not quietly report a cadence it
+never measured.
+
+**PR 261 is merged**, as `e647762` on `main`.
+
+**The connector's name in the OPEN block was wrong.** It read `n8n_vps`. The
+account carries an `n8n` connector and an `n8n vps` connector, and the one that
+reaches the VPS is the second, with a space in its name. That name was written
+from memory rather than read back, which is the first law's failure exactly, in
+a doc whose whole subject is that failure. The instruction around it was right:
+Tee attaches it in the claude.ai Routines UI, because `create_trigger` refuses
+the `connectors` parameter for this organisation, measured twice, once before
+the connector existed and once after.
+
+**The standalone reflection is still not proved to work, and the block is now
+confirmed rather than assumed.** The Routine is still `enabled: false` with
+`mcp_connections: []`. It was fired once as a test with no connector attached
+and behaved exactly as its own prompt instructs: the session came up with
+`Bash, Write, Edit, Read, Glob, Grep, Agent` and no n8n at all, wrote nothing,
+and went idle. Whether attaching the connector clears it remains untested,
+because only Tee can attach it.
 
 ## DEVON RECEIPT
 
@@ -205,15 +260,20 @@ FINDINGS: The 2026-09-16 outage report was wrong. The Pulse never stopped; the
   was already shipped better on 2026-09-16, one was half blocked by an
   organisation level limit on Routine connectors, and one would have repeated a
   mistake Tee had already reversed.
-OPEN: Tee to add repository secret N8N_VPS_KEY, without which the watchdog goes
-  red every run. Tee to attach the n8n_vps connector to the disabled standalone
-  reflection Routine in the claude.ai Routines UI and enable it; until then the
-  reflection still depends on one build session being awake. No deliberate sweep
-  has been run for other code or notes still addressing the retired Cloud
-  instance. A genuine PROMOTE through the learning lane remains repo task 15.
-  PR 261 is open as a draft and unmerged.
+OPEN: Tee to attach the connector named "n8n vps", with a space, to the
+  disabled standalone reflection Routine in the claude.ai Routines UI and
+  enable it; until then the reflection still depends on one build session being
+  awake. This line said n8n_vps until 2026-09-17 at 2110Z, which is not the
+  name of anything; see the amendment above. No deliberate sweep has been run
+  for other code or notes still addressing the retired Cloud instance. A
+  genuine PROMOTE through the learning lane remains repo task 15. The beat log
+  stood at 99 rows on 2026-09-17 and grows about five a day, four beats and one
+  reflection, so the watchdog's 250 row refusal ceiling arrives around the
+  middle of October and the read needs narrowing or the log pruning first.
 STATUS: Cloud republish reverted and verified. Reflection re-pointed, written
-  and read back on the VPS. Watchdog built, unit tested and pushed; never run
-  against the live instance.
+  and read back on the VPS. Watchdog built, unit tested and pushed; it had
+  never run against the live instance when this was written, and by 2100Z the
+  same day it had done so four times, three of them green and two of those on
+  its own schedule.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
