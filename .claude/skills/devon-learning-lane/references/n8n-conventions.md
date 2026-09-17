@@ -134,6 +134,51 @@ spent thirty nodes to learn what node 1 could have told it.
 Preflight what the run cannot proceed without, not everything. The test is
 whether the run is guaranteed to fail without it.
 
+## The guard itself is code, so test the path it is guarding
+
+Measured 2026-09-17, on the devon-hears spend guard, which had been wrong since
+the day it was built.
+
+`$binary.<prop>.fileSize` is a HUMAN READABLE STRING. n8n sets it to `"38.4 kB"`.
+The number is on a different key, `bytes`, and it is `38444`. An IF node
+comparing fileSize as a number does not quietly answer false, it throws and
+kills the run:
+
+```
+NodeOperationError: Conversion error: the string '38.4 kB'
+can't be converted to a number [condition 0, item 0]
+```
+
+`typeValidation: loose` does not save it. The resolved parameters on the failing
+node read `looseTypeValidation: false`, so the option did not apply the way the
+author expected.
+
+When the throw happens in a webhook lane whose response comes from a Respond to
+Webhook node, the caller gets an EMPTY BODY. No status, no reason, nothing to
+read. That is the least diagnosable failure a lane can have, and it is what a
+size guard written against fileSize produces on every real file.
+
+THE PART THAT GENERALISES IS NOT THE KEY NAME. It is that the guard and the
+guarded path were different code, so testing one proved nothing about the other.
+devon-hears was built, merged, written up in a status doc and recorded as
+working on the strength of one execution that carried NO audio. That execution
+passes honestly: with no binary the ternary yields a real `0`, `0 > 0` is false,
+and the refusal fires. The comparison that throws is only reached when a file is
+actually attached, which is the only case anybody cares about.
+
+So: a guard that refuses on absence must be exercised with PRESENCE too, and the
+cheap way is a throwaway copy of the guard node fed a real file over the live
+webhook. It costs nothing, spends no vendor call, and it is the only thing that
+would have caught this.
+
+Two smaller measurements from the same probe, worth keeping:
+
+- multipart/form-data lands on `data0`, not `data`, so a lane reading
+  `$binary.data` refuses a multipart upload as if no file arrived. Post the file
+  as a RAW body with its own content type.
+- the mime type rides through untouched, so `audio/wav` and `audio/m4a` both
+  reach the node as sent.
+
 ## A Data Table name that contains another table's name captures it
 
 Ruled by measurement 2026-09-16, after it cost the TQO lane four and a half

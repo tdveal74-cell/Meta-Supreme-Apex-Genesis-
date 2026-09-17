@@ -729,10 +729,30 @@ WEBHOOKS = {
             "gate with a landmine and once by reading the route's own AST, and "
             "both halves were shown failing on a mutation that reintroduced "
             "the call. "
-            "STILL NOT PROVEN, and narrower than it was: no AUDIO has been "
-            "through this lane. Two executions exist, 288 on 2026-09-16 and "
-            "335 on 2026-09-17, both success and BOTH IN MANUAL MODE, so the "
-            "production webhook has never taken a request. Execution 335 "
+            "THE LANE COULD NOT TRANSCRIBE ANYTHING UNTIL 2026-09-17, and "
+            "nothing in the estate knew. Is There Audio To Hear gated on "
+            "$binary.data.fileSize, and n8n's fileSize is a HUMAN READABLE "
+            "STRING, '38.4 kB'. A number comparison against it does not "
+            "answer false, it THROWS: 'Conversion error: the string 38.4 kB "
+            "can't be converted to a number'. The run died at node 2 and the "
+            "caller got an EMPTY BODY, no status and no reason. typeValidation "
+            "loose did not help; the failing node resolved "
+            "looseTypeValidation false. The number is on .bytes, 38444, and "
+            "the gate reads that now. "
+            "WHY IT SURVIVED A BUILD, A MERGE AND A STATUS DOC: the guard and "
+            "the guarded path are different code. Every execution ever run "
+            "carried NO audio, and that path never reaches the comparison, "
+            "because no binary makes the ternary yield a real 0 and 0 > 0 is "
+            "an honest false. Testing the refusal proved nothing about the "
+            "only case that matters. Measured on a throwaway copy of the same "
+            "node over the live webhook: fileSize throws on wav and on m4a, "
+            "bytes answers true on both, the no audio refusal is unchanged "
+            "either way, and multipart lands on data0 rather than data so it "
+            "refuses as if nothing arrived. Post the note as a RAW body. "
+            "STILL NOT PROVEN: no AUDIO has been "
+            "through this lane. Executions 288 and 335, both success and BOTH "
+            "IN MANUAL MODE, plus 390 after the fix, so the "
+            "production webhook has never taken a request. 335 and 390 "
             "routed a request carrying no audio to Refuse Before Spending "
             "without reaching the transcriber, which proves that refusal on "
             "the real lane rather than on a copy. ElevenLabs has still never "
@@ -930,7 +950,7 @@ WORKFLOWS = {
     # for what the door structurally cannot do.
     "DEVON Hears": {
         "id": "6KGsMrVCVJe2nYnE",
-        "state": "active, two manual executions, no production webhook request yet",
+        "state": "active, audio gate fixed 2026-09-17, no production webhook request yet",
     },
     "Capture Webhook": {"id": "Me7DDHBDX28ppvHA", "state": "active"},
     "Pipeline Watchdog": {"id": "IZBVlXQ8Y5dsGTRS", "state": "active, every 4h, timezone pinned America/New_York 2026-09-07"},
