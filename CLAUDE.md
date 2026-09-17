@@ -185,6 +185,38 @@ pipeline just as dead. The noise is the signal. That trap is written into the
 workflow file too, because it is the obvious next thing a tired operator would
 reach for.
 
+**A lane that swallows its provider's refusal is invisible to an error list.**
+Found hours after that script shipped, by reading the live nodes for a different
+question. `TQO FINAL V5` throws on a refusal and lands in the error list. `DEVON
+Face` and `DEVON Drive Draft Writer` do not: both set `neverError` and
+`onError: continueRegularOutput` on their Cerebras node, on purpose, so a 402
+there produces a SUCCESSFUL execution and Face answers "I could not reach my
+language lane, ask again in a minute", which reads the same on day one and day
+eight. The watchdog now reads the newest successful runs of every lane that
+calls a provider host and swallows the answer, derived from the workflows rather
+than listed, so a third lane written that way is covered the day it lands.
+
+One lane cannot be covered and is named in the output on every run instead.
+`DEVON Drive Draft Writer` sets `saveDataSuccessExecution: none`, so a
+successful run leaves nothing for any execution reader to open. Its refusal is
+not lost; it rides back on the envelope as `refused` with the reason and the
+state ledger holds it. Reporting coverage that does not exist is the failure the
+script exists to prevent, so it discloses the gap in both the OK line and the
+ALARM line.
+
+Graded honestly, because over-calling a finding is its own error: the first
+version DID catch the 2026-09-17 outage and the test replaying it passes
+unchanged. The gap is an outage confined to the soft failing lanes, which is
+what a provider split or a paused content trigger would produce.
+
+**The standalone list above drifted and was regenerated from `ci.yml`.** It
+named 30 files while the job ran 36, missing `test_devon_data_tables.py`,
+`test_devon_table_id_conversion.py`, `test_devon_provider_billing.py`,
+`test_devon_spoken_input.py`, `test_presence_hearing.py` and
+`test_presence_livekit_publisher.py`, so a local run reported 114 fewer tests
+than CI and a commit message carried the wrong count. Regenerate it from the
+job rather than editing it by hand.
+
 The standalone job runs with no database. This paragraph said it also runs
 with **no** `PYTHONPATH` until 2026-09-09, when a worktree agent read the file
 and found otherwise: `ci.yml` sets `PYTHONPATH` in its top level `env:` block
@@ -201,9 +233,12 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_workflow_engine.py test_devon_hermes_expansion.py \
   test_devon_hermes_durable_followon.py test_devon_learning_loop.py \
   test_devon_operating_layer.py test_devon_editforge_execution.py \
+  test_devon_data_tables.py test_devon_table_id_conversion.py \
+  test_devon_provider_billing.py test_devon_spoken_input.py \
   test_devon_hermes_surface.py test_devon_receipts.py \
   test_devon_capture_enrichment.py test_presence_cartesia.py \
-  test_presence_service.py test_devon_owned_voice.py \
+  test_presence_service.py test_presence_hearing.py \
+  test_presence_livekit_publisher.py test_devon_owned_voice.py \
   test_devon_learning_context_honesty.py test_knowledge_graph.py \
   test_knowledge_graph_fixtures.py test_devon_scheduler_honesty.py \
   test_devon_scheduler_report_honesty.py test_devon_console_voice_honesty.py \

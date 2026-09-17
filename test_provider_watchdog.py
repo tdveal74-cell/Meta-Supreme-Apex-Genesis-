@@ -27,6 +27,9 @@ from scripts.provider_watchdog import (
     RATE,
     classify,
     parse_iso,
+    refusals_in_run_data,
+    saves_no_success_data,
+    swallowing_provider_nodes,
     verdict,
 )
 
@@ -227,3 +230,219 @@ def test_the_broad_payment_phrases_are_deliberate(phrase):
     rather than an accident.
     """
     assert classify(f"the request failed: {phrase}") == PAYMENT
+
+
+# ---------------------------------------------------------------------------
+# The soft failure path, added 2026-09-17 after reading the live nodes.
+#
+# Every node fixture below is copied from the real workflow as the n8n API
+# returned it that day, trimmed to the keys the functions read. Inventing the
+# shape would test the invention, and the whole reason this path exists is that
+# the real shape was not what the first version assumed.
+# ---------------------------------------------------------------------------
+
+#: DEVON Face (Build 15), node `Cerebras Chat`. Swallows twice over.
+FACE_PROVIDER_NODE = {
+    "name": "Cerebras Chat",
+    "type": "n8n-nodes-base.httpRequest",
+    "parameters": {
+        "method": "POST",
+        "url": "https://api.cerebras.ai/v1/chat/completions",
+        "options": {
+            "timeout": 45000,
+            "response": {"response": {"fullResponse": True, "neverError": True}},
+        },
+    },
+    "onError": "continueRegularOutput",
+}
+
+#: DEVON Face, node `File Job`. Swallows identically, and is not a provider.
+#: The negative control that stops the host check being decorative.
+FACE_INTAKE_NODE = {
+    "name": "File Job",
+    "type": "n8n-nodes-base.httpRequest",
+    "parameters": {
+        "method": "POST",
+        "url": "https://n8n.editforge.online/webhook/devon-intake",
+        "options": {
+            "timeout": 240000,
+            "response": {"response": {"fullResponse": True, "neverError": True}},
+        },
+    },
+    "onError": "continueRegularOutput",
+}
+
+
+def test_it_finds_the_real_face_provider_node():
+    workflow = {"nodes": [FACE_PROVIDER_NODE, FACE_INTAKE_NODE]}
+    assert swallowing_provider_nodes(workflow) == ["Cerebras Chat"]
+
+
+def test_it_ignores_a_swallowing_node_that_is_not_a_provider():
+    assert swallowing_provider_nodes({"nodes": [FACE_INTAKE_NODE]}) == []
+
+
+def test_it_ignores_a_provider_node_that_throws():
+    """A lane that errors is already covered by the error list; counting it here
+    would double report the same outage under two node names."""
+    throwing = {
+        "name": "Write Script (Cerebras)",
+        "parameters": {
+            "url": "https://api.cerebras.ai/v1/chat/completions",
+            "options": {"timeout": 60000},
+        },
+    }
+    assert swallowing_provider_nodes({"nodes": [throwing]}) == []
+
+
+def test_never_error_alone_is_enough_to_swallow():
+    node = {
+        "name": "Quiet",
+        "parameters": {
+            "url": "https://openrouter.ai/api/v1/chat/completions",
+            "options": {"response": {"response": {"neverError": True}}},
+        },
+    }
+    assert swallowing_provider_nodes({"nodes": [node]}) == ["Quiet"]
+
+
+def test_on_error_alone_is_enough_to_swallow():
+    node = {
+        "name": "Quiet Too",
+        "parameters": {"url": "https://api.anthropic.com/v1/messages"},
+        "onError": "continueRegularOutput",
+    }
+    assert swallowing_provider_nodes({"nodes": [node]}) == ["Quiet Too"]
+
+
+def test_a_workflow_with_no_nodes_key_does_not_throw():
+    assert swallowing_provider_nodes({}) == []
+    assert swallowing_provider_nodes({"nodes": [None, "junk", 7]}) == []
+
+
+def test_the_drive_draft_writer_settings_read_as_unwatchable():
+    """Copied from the live workflow on 2026-09-17."""
+    workflow = {
+        "settings": {
+            "executionOrder": "v1",
+            "availableInMCP": True,
+            "errorWorkflow": "bqcnIS0Qv4RkTCU1",
+            "saveDataSuccessExecution": "none",
+            "executionTimeout": 120,
+        }
+    }
+    assert saves_no_success_data(workflow) is True
+
+
+def test_the_face_settings_read_as_watchable():
+    workflow = {
+        "settings": {
+            "executionOrder": "v1",
+            "availableInMCP": True,
+            "errorWorkflow": "bqcnIS0Qv4RkTCU1",
+            "executionTimeout": 300,
+        }
+    }
+    assert saves_no_success_data(workflow) is False
+    assert saves_no_success_data({}) is False
+
+
+def _run_data(node: str, payload):
+    """The shape n8n returns for one node, one run, one output branch."""
+    return {node: [{"data": {"main": [[{"json": payload}]]}}]}
+
+
+def test_a_402_inside_a_successful_run_is_a_payment_refusal():
+    data = _run_data("Cerebras Chat", {"statusCode": 402, "body": {}})
+    assert refusals_in_run_data(data, ["Cerebras Chat"]) == [("Cerebras Chat", PAYMENT)]
+
+
+def test_a_200_inside_a_successful_run_is_not_a_refusal():
+    data = _run_data("Cerebras Chat", {"statusCode": 200, "body": {"choices": []}})
+    assert refusals_in_run_data(data, ["Cerebras Chat"]) == []
+
+
+def test_a_429_inside_a_successful_run_is_counted_as_rate():
+    data = _run_data("Cerebras Chat", {"statusCode": 429})
+    assert refusals_in_run_data(data, ["Cerebras Chat"]) == [("Cerebras Chat", RATE)]
+
+
+def test_a_200_carrying_an_error_object_is_still_read():
+    """Some providers answer 200 with the refusal in the body. The status code
+    says nothing there, so the message is what has to be read."""
+    data = _run_data(
+        "Cerebras Chat",
+        {"statusCode": 200, "body": {"error": {"message": "Your credit balance is too low"}}},
+    )
+    assert refusals_in_run_data(data, ["Cerebras Chat"]) == [("Cerebras Chat", PAYMENT)]
+
+
+def test_only_the_named_nodes_are_read():
+    """Every other node's output is model text or ledger rows, and scanning it
+    for a status code would invent refusals out of ordinary data."""
+    data = _run_data("Parse Reply", {"statusCode": 402})
+    assert refusals_in_run_data(data, ["Cerebras Chat"]) == []
+
+
+def test_the_walk_is_bounded():
+    items = [{"json": {"statusCode": 402}} for _ in range(50)]
+    data = {"Cerebras Chat": [{"data": {"main": [items]}}]}
+    found = refusals_in_run_data(data, ["Cerebras Chat"], max_items=3)
+    assert len(found) == 3
+
+
+def test_malformed_run_data_never_throws():
+    for junk in (None, [], "text", {"Cerebras Chat": "not a list"},
+                 {"Cerebras Chat": [{"data": {"main": "no"}}]},
+                 {"Cerebras Chat": [{"data": {"main": [[None, 7, {"json": None}]]}}]}):
+        assert refusals_in_run_data(junk, ["Cerebras Chat"]) == []
+
+
+def test_a_soft_refusal_alone_raises_the_alarm():
+    """The whole point. No errored execution anywhere, and the alarm still fires."""
+    now = datetime(2026, 9, 17, 22, 0, tzinfo=timezone.utc)
+    soft = [
+        {
+            "id": "812",
+            "workflow_id": "sPv6Cq7elbjoi5Nw",
+            "node": "Cerebras Chat",
+            "started_at": "2026-09-17T19:30:00.000Z",
+            "kind": PAYMENT,
+        }
+    ]
+    code, line = verdict(soft, now)
+    assert code == ALARM
+    assert "Cerebras Chat" in line
+
+
+def test_the_unwatchable_lane_is_named_on_a_clean_run():
+    now = datetime(2026, 9, 17, 22, 0, tzinfo=timezone.utc)
+    code, line = verdict([], now, blind=["DEVON — Drive Draft Writer (Build 16)"])
+    assert code == OK
+    assert "NOT WATCHED" in line
+    assert "Drive Draft Writer" in line
+
+
+def test_the_unwatchable_lane_is_named_on_an_alarming_run_too():
+    """A live alarm does not make the unwatched lane watched."""
+    now = datetime(2026, 9, 17, 22, 0, tzinfo=timezone.utc)
+    failures = [
+        {
+            "id": "410",
+            "workflow_id": "qEkGOUsNyVaRAmm6",
+            "node": "Write Script (Cerebras)",
+            "started_at": "2026-09-17T19:00:00.070Z",
+            "kind": PAYMENT,
+        }
+    ]
+    code, line = verdict(failures, now, blind=["DEVON — Drive Draft Writer (Build 16)"])
+    assert code == ALARM
+    assert "NOT WATCHED" in line
+
+
+def test_a_clean_estate_reads_clean():
+    """No blind lanes means no disclosure sentence, so the note carries signal."""
+    now = datetime(2026, 9, 17, 22, 0, tzinfo=timezone.utc)
+    code, line = verdict([], now, blind=[])
+    assert code == OK
+    assert "NOT WATCHED" not in line
