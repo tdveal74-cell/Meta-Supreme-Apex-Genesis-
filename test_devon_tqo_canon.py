@@ -191,21 +191,34 @@ def test_the_banned_mark_detector_works_both_ways():
     assert len(banned_marks(good + "\n" + bad)) == 1
 
 
-def test_the_live_mirror_currently_violates_the_dash_rule():
-    """The finding, stated as a measurement rather than a pinned count.
+def test_the_mirror_carries_no_banned_mark():
+    """Flipped on 2026-09-17, deliberately, in the change that fixed the node.
 
-    The NCO branch instructs the model to emit a description line carrying a
-    banned mark, while hard rule 1 bans it studio wide and the QC gate caps the
-    voice dimension at 3 for any occurrence. Asserting only that at least one
-    exists keeps this test honest without failing the day it is fixed: when the
-    node is clean this flips to zero and the assertion below is the one to
-    delete, deliberately, in the same change.
+    This test previously asserted the opposite: that the live node violated hard
+    rule 1, with seventeen banned marks across sixteen lines, one of them
+    mandating the mark in every NCO description. Its docstring said that when
+    the node was cleaned this assertion was the one to delete in the same
+    change. Tee ruled to fix all seventeen, the live node was edited and read
+    back byte identical, and this is now the regression guard in the other
+    direction.
     """
-    hits = banned_marks(mirror_text())
-    assert len(hits) >= 1
-    assert any("NCO Forge" in line for line in hits), (
-        "the description line is the one that reaches an audience"
+    assert banned_marks(mirror_text()) == ()
+
+
+def test_the_nco_description_line_is_still_mandated_and_is_clean():
+    """The one line that reaches an audience, pinned so a regression is loud.
+
+    Deleting the line would also pass a bare dash check, so the line has to be
+    present as well as clean.
+    """
+    text = mirror_text()
+    line = next(
+        (raw.strip() for raw in text.splitlines() if raw.strip().startswith("NCO Forge")),
+        None,
     )
+    assert line is not None, "the mandated NCO description line is gone from the prompt"
+    assert banned_marks(line) == ()
+    assert line == "NCO Forge. ${ctx.tagline}"
 
 
 def test_the_ledger_reports_how_much_of_the_canon_is_still_absolute():

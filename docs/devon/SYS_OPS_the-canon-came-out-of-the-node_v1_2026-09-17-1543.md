@@ -73,15 +73,17 @@ two descriptions between them, neither carrying a banned mark. So the clean
 result came from absent data rather than from clean data, and it is recorded
 that way. Latent in source, unproven in output.
 
-## What was deliberately not done
+## What was deliberately not done, and what Tee then ruled
 
-The live node is untouched. Sending an assembled rule set in place of the block
-it ships today changes what the audience receives, and the teardown puts that
-behind a blind comparison of ten scripts scored against the existing rubric.
-Wiring it is also a write to an active 240 node workflow that publishes under
-Tee's name, which is a HIGH_IMPACT effect and his to authorize. Both the fix for
-the dash contradiction and the assembly guard in front of the model call are on
-a card to him rather than applied.
+The assembled rule set is not wired in front of the model call. Sending it in
+place of the block that ships today changes what the audience receives, and the
+teardown puts that behind a blind comparison of ten scripts scored against the
+existing rubric. That stays unwired, and Tee ruled it the next arc.
+
+The dash contradiction was put to him on a card in the same breath and he ruled
+to fix all seventeen. That was done the same day and is recorded in
+`SYS_OPS_the-dash-contradiction-was-fixed-in-the-live-node_v1_2026-09-17-1652.md`,
+which supersedes this document on that one point.
 
 ## DEVON RECEIPT
 
@@ -92,7 +94,7 @@ ARTIFACT: SYS_OPS_the-canon-came-out-of-the-node_v1_2026-09-17-1543.md
 DATE: 2026-09-17
 DECISIONS: Tee ruled on a card to migrate the canon rather than close the arc with unwired doctrine, and to hold PR #268 open and stack the migration on the same branch so the doctrine and its first real use land together. Mine: mirror the node before expressing it, so the canon is checked against an artifact in the repository rather than against a live read nobody can reproduce; trace every rule to a distinctive phrase in that mirror and fail the build when one stops matching, rather than trusting a copy; leave the live node unchanged, because wiring the assembly changes what publishes and is a write to an active workflow; and test the dash finding as a working detector rather than by pinning the live count of 17, which would have failed the day the node is fixed.
 FINDINGS: The teardown's node name, node count and word count are all wrong against a 2026-09-17 read: there is no Write Script (Claude) node, the workflow is 240 nodes not 212, and the canon is 805 words for TQO and 550 for NCO against roughly four thousand claimed. Its structural finding holds: no exception layer, no compliance split, no diff. The NCO branch mandates an em dash in every episode description while hard rule 1 bans it studio wide and the QC gate in the same workflow caps voice at 3 for any occurrence, so an NCO episode that obeys its own prompt is built to be marked down by its own gate; 17 banned marks are in that node. Four of the seven compliance grade rules exist only in the QC gate and were never written into the prompt that does the writing. Ten of twelve craft rules carry no exception yet. The v5 author had already lifted the taglines into a context node, so the identity board pattern the teardown recommends was already in place.
-OPEN: The live node is unchanged, so nothing about what publishes has moved. The dash contradiction is unfixed and is a live edit for Tee. The assembly guard is not in front of the model call, and wiring it needs the blind ten script comparison the teardown specifies plus authorization to write to an active workflow. Whether the mandated dash ever reached a published description is unknown and cannot be settled from the n8n data tables, which hold no NCO descriptions at all; the Airtable store the teardown counted was not read in this session. The rest of the QC chain, Token Budget: QC, Run QC (Cerebras) and Parse QC + Set Verdict, is still live only and unmirrored, as are 237 of the 240 nodes. The two Vercel statuses on PR #268 are an account level block, established as reproducing on the base and clearable only by Tee.
+OPEN: The assembly guard is not in front of the model call, so nothing about how the prompt is built has moved. The dash contradiction was ruled and fixed the same day, which this document's own body records and the 1652 doc carries the receipts for. The assembly guard is not in front of the model call, and wiring it needs the blind ten script comparison the teardown specifies plus authorization to write to an active workflow. Whether the mandated dash ever reached a published description is unknown and cannot be settled from the n8n data tables, which hold no NCO descriptions at all; the Airtable store the teardown counted was not read in this session. The rest of the QC chain, Token Budget: QC, Run QC (Cerebras) and Parse QC + Set Verdict, is still live only and unmirrored, as are 237 of the 240 nodes. The two Vercel statuses on PR #268 are an account level block, established as reproducing on the base and clearable only by Tee.
 STATUS: On branch claude/review-incorporate-feedback-ke22i8, PR #268, held open on Tee's ruling to merge after this migration. Measured on the final tree: 13 canon tests pass; two mutations of the mirror, an edited rule phrase and a removed dash, each produced named failures and were reverted; the standalone job reproduced with PYTHONPATH unset and the full api suite results are recorded on the pull request. Not shipped, not merged, awaiting Tee.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```

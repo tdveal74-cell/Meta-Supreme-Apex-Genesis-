@@ -14,9 +14,9 @@ WHAT WAS ACTUALLY THERE, MEASURED RATHER THAN QUOTED
 
 The teardown that prompted this work said the canon was roughly four thousand
 words. It is not, and the number matters because it was the whole cost argument.
-Measured from the mirror on 2026-09-17: the TQO block is 805 words and 4,822
-characters, the NCO block is 550 words and 3,543 characters. The node's own
-source is 1,608 words including the code around both blocks. The teardown is
+Measured from the mirror on 2026-09-17, after the dash fix below: the TQO block
+is 805 words and 4,831 characters, the NCO block is 543 words and 3,558
+characters. Before that fix they were 805 and 4,822, and 550 and 3,543. The teardown is
 dated 14 August and the workflow has moved since, so treat its figure as stale
 rather than wrong at the time; either way this file counts from the artifact.
 
@@ -41,20 +41,26 @@ the hook formulas and the b-roll count.
 No way to diff a change. Until the mirror landed beside this file, a change to
 what writes every episode left no trace in any repository.
 
-THE LIVE CONTRADICTION THIS SPLIT FOUND IMMEDIATELY
+THE LIVE CONTRADICTION THIS SPLIT FOUND, AND WHAT WAS DONE ABOUT IT
 
-The NCO branch instructs the model to emit `NCO Forge ` followed by an em dash
-and the tagline, as "this exact line", in the description of every episode.
-Tee's first hard rule bans that mark studio wide with no exceptions, and the QC
-gate in the same workflow caps the voice dimension at 3 for any occurrence and
-requires it in the findings. So an NCO episode that follows its own script
-prompt exactly is built to be marked down by its own quality gate.
+The NCO branch instructed the model to emit `NCO Forge `, a banned mark, and the
+tagline, as "this exact line", in the description of every episode. Tee's first
+hard rule bans that mark studio wide with no exceptions, and the QC gate in the
+same workflow caps the voice dimension at 3 for any occurrence and requires it
+in the findings. An NCO episode that followed its own script prompt exactly was
+built to be marked down by its own quality gate.
 
-Seventeen em dashes are in that node's source in total, measured 2026-09-17.
-Whether any reached a published description is NOT established: the
-`nco_content` data table holds 25 rows and not one of them has a description
-written, so there is nothing there to check. Latent in source, unproven in
-output, and unproven for want of data rather than for want of a defect.
+Seventeen banned marks were in that node, across sixteen lines. Tee ruled on a
+card on 2026-09-17 to fix all of them, and the live node was edited the same
+day: every one restructured into sentences rather than given a substitute mark,
+which is what hard rule 1 asks for. The node was read back byte identical to the
+mirror afterwards, exactly one node of 240 changed, connections untouched and
+the workflow still active.
+
+Whether the mandated mark ever reached a published description was never
+established, and the check that looked was close to vacuous: the `nco_content`
+data table holds 25 rows and not one of them has a description written, so there
+was nothing there to check. Recorded as unproven rather than clean.
 
 THE LINE
 
@@ -90,8 +96,8 @@ MIRROR = pathlib.Path(__file__).resolve().parents[2] / "n8n" / "tqo-v5" / "build
 #: Measured from the mirror on 2026-09-17, so the assembly floor is a number
 #: somebody counted rather than a default somebody liked. `check_assembly`
 #: takes no default for exactly this reason.
-MEASURED_WORDS: Dict[str, int] = {"tqo": 805, "nco": 550}
-MEASURED_CHARS: Dict[str, int] = {"tqo": 4822, "nco": 3543}
+MEASURED_WORDS: Dict[str, int] = {"tqo": 805, "nco": 543}
+MEASURED_CHARS: Dict[str, int] = {"tqo": 4831, "nco": 3558}
 
 #: Built from code points rather than written out, so this file needs no
 #: exemption marker and no formatter can quietly rewrite the literal back.

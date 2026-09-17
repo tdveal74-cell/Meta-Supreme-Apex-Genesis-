@@ -29,13 +29,21 @@ honest, so a live edit that is not carried back turns the build red instead of
 sitting undetected. Edit either one and run
 `python3 -m pytest -q test_devon_tqo_canon.py`.
 
-One finding is open in the mirrored source as of that read. The NCO branch
-instructs the model to emit a description line carrying an em dash, as "this
-exact line", while hard rule 1 bans that mark studio wide and `Build QC Prompt`
-caps the voice dimension at 3 for any occurrence. Seventeen banned marks are in
-the node in total. Whether any reached a published description is not
+That mirror immediately found a contradiction, and it is now fixed. The NCO
+branch instructed the model to emit a description line carrying a banned mark,
+as "this exact line", while hard rule 1 bans that mark studio wide and
+`Build QC Prompt` caps the voice dimension at 3 for any occurrence. Seventeen
+banned marks were in the node, across sixteen lines. Tee ruled on a card to fix
+all of them, and the live node was edited on 2026-09-17 at 16:40:13Z: every one
+restructured into sentences rather than given a substitute mark. The node was
+read back byte identical to this mirror, exactly one node of 240 changed, the
+connections untouched and the workflow still active. The mandated line now reads
+`NCO Forge. ${ctx.tagline}`, which renders as "NCO Forge. Leaders aren't born.
+They're forged."
+
+Whether the mandated mark ever reached a published description was never
 established: `nco_content` holds 25 rows and none of them has a description
-written, so there was nothing to check. Fixing it is a live edit and Tee's call.
+written, so there was nothing to check. Recorded as unproven rather than clean.
 
 The rest of the QC chain is live only and worth mirroring next: `Token Budget:
 QC` converts the Anthropic shape this node emits into the Cerebras
