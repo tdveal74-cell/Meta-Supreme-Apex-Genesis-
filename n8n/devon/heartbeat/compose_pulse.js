@@ -10,11 +10,17 @@
 // by its display name, which carries an em dash; this repository bans that
 // character in what it ships, so the two lines above name the workflow by id
 // and this paragraph does not exist in the live node. From the first const
-// below to the last line of the file, the two are byte identical: measured on
-// 2026-09-16 by diffing this file against the jsCode of version 738d6d58,
-// 12013 bytes each and no differing line. Aligning the headers as well would
-// cost a republish of an active workflow for a comment, and the version
-// published on 2026-09-16 is the one the 10:00Z beat has to prove.
+// below to the last line of the file, the two are meant to be byte identical.
+//
+// HOW FAR THAT HAS ACTUALLY BEEN CHECKED, which is not as far as the sentence
+// above sounds. On 2026-09-16 it was measured: this file diffed against the
+// jsCode of version 738d6d58, 12013 bytes each and no differing line. The
+// 2026-09-17 version, 493461c8, was applied FROM this file and then proved
+// behaviourally rather than by diff: beat 97 at 12:30:49Z emitted the new
+// vitals key feederRanAt and stayed silent on a 30h lastFedAt, which is what
+// the tests here predict and what the retired rule would have alarmed on. So
+// the executable behaviour is verified and a byte diff of that version is not.
+// Re-measure before relying on identity, and do not repeat the claim untested.
 const BEAT_INTERVAL_H = 6;
 const MISSED_BEAT_H = 7.5;
 const EMAIL_EVERY_H = 22;
@@ -35,7 +41,13 @@ const STUCK_JOB_H = 24;
 //   to be waiting. A feeder that died on a quiet week was invisible to it.
 //
 // So the one finding is split in two, and each now means one thing. Neither
-// reads a wall clock guess; both read the feed log's own newest fed_at.
+// reads a wall clock guess.
+//
+// They read the feed log's newest fed_at until 2026-09-17, when that turned out
+// to be a second substitution of the same kind: fed_at is when a row was
+// WRITTEN, and the feeder writes nothing on a run with nothing to carry. Both
+// now read devon_feeder_run_log, which the feeder stamps on every run. The long
+// note beside feederRanTs below has the measurement.
 const FEEDER_PERIOD_H = 24;
 const FEEDER_GRACE_H = 2;
 const EXPIRY_H = 72;
@@ -81,6 +93,7 @@ const jobs = rowsOf('Read Jobs', 'intent_id');
 const feed = rowsOf('Read Feed', 'intent_id');
 const soul = rowsOf('Read Soul Log', 'intent_id');
 const beats = rowsOf('Read Beats', 'beat_at');
+const feederRuns = rowsOf('Read Feeder Runs', 'ran_at');
 const TERMINAL = { COMPLETED: true, CANCELLED: true };
 const jobsByState = countBy(jobs, 'state');
 const stuckJobs = [];
@@ -97,31 +110,66 @@ for (const f of feed) {
   const ws = Number(f.webhook_status);
   if ((ws === 200 || ws === 201) && !String(f.gate_decision || '').trim()) { malformed.push(String(f.intent_id)); }
 }
-// When the feeder last ran, read off the feed log rather than assumed.
+// When the feeder last WROTE a row. Still worth reporting in vitals, but it is
+// NOT when the feeder last ran, and the difference is the whole of the
+// 2026-09-17 repair below.
 let lastFedTs = null;
 for (const f of feed) {
   const t = stampOf(f.fed_at);
   if (t === null) { continue; }
   if (lastFedTs === null || t > lastFedTs) { lastFedTs = t; }
 }
+// WHEN THE FEEDER LAST RAN, read off its own run log.
+//
+// Until 2026-09-17 both feeder findings took max(fed_at) from the feed log and
+// called it the last run. Those are the same number only while there is
+// something to feed. The feeder writes a feed row ONLY for a COMPLETED job it
+// has not already carried: with nothing to carry, `Select Unfed Jobs` returns
+// an empty array, so Feed Learning Webhook, Log Or Alert and Record Feed Log
+// never execute and the run leaves no trace in that table at all.
+//
+// So on a quiet estate feederQuietH grew without bound and feeder_down fired on
+// every beat forever. Measured on 2026-09-17: the 10:00:15Z beat mailed Tee
+// "the feeder has not run in 28h" while VPS execution 350 shows it ran at
+// 06:00:53Z that morning, found nothing to carry and exited in 85ms. Worse than
+// noise: an always-on alarm cannot change state, so a genuine outage would have
+// looked exactly like that Tuesday.
+//
+// The feeder now upserts one row into devon_feeder_run_log on EVERY run,
+// including empty ones, from a branch hung off Fetch Feed Log rather than off
+// Log Or Alert. That placement is not incidental: the feeder's own sticky note
+// records proof run 6261, where a branch hung off Log Or Alert never ran on a
+// quiet day. Reading a data table keeps this workflow free of credentials,
+// which is what lets its execution data saving stay on.
+let feederRanTs = null;
+for (const r of feederRuns) {
+  const t = stampOf(r.ran_at);
+  if (t === null) { continue; }
+  if (feederRanTs === null || t > feederRanTs) { feederRanTs = t; }
+}
 const completed = [];
 for (const j of jobs) { if (String(j.state) === 'COMPLETED') { completed.push(j); } }
-const feederQuietH = lastFedTs === null ? null : (nowMs - lastFedTs) / 3600000;
+const feederQuietH = feederRanTs === null ? null : (nowMs - feederRanTs) / 3600000;
+// NEVER STAMPED is its own finding rather than a silent pass or a feeder_down.
+// An empty run log means the feeder has not stamped since this was deployed, or
+// is not stamping at all, and those need a different look than a missed slot.
+// It must never read as healthy.
+const feederNeverStamped = completed.length > 0 && feederRanTs === null;
 // DOWN: the feeder has missed its own daily slot. This does not need a job to
 // be waiting, which is the whole point: a dead feeder on a quiet week still
 // shows. It does need at least one COMPLETED job to have existed ever, so a
 // genuinely empty estate is not alarmed at forever.
-const feederDown = completed.length > 0 && (lastFedTs === null || feederQuietH > FEEDER_PERIOD_H + FEEDER_GRACE_H);
+const feederDown = completed.length > 0 && feederRanTs !== null && feederQuietH > FEEDER_PERIOD_H + FEEDER_GRACE_H;
 // SKIPPED: the feeder RAN after this job completed and still did not carry it.
-// That is a defect rather than a wait, and it surfaces on the first beat after
-// the feeder's own slot, which is sooner than any wall clock threshold could be
-// without also crying wolf.
+// That is a defect rather than a wait. It reads the run log too, so "ran after"
+// now means ran, not wrote: before this it could only see a skip on a day the
+// feeder happened to carry something else.
 const skipped = [];
 for (const j of completed) {
   if (fedIds[String(j.intent_id)]) { continue; }
   const t = stampOf(j.updatedAt || j.createdAt);
   if (t === null) { continue; }
-  if (lastFedTs !== null && lastFedTs > t) { skipped.push(String(j.intent_id)); }
+  if (feederRanTs !== null && feederRanTs > t) { skipped.push(String(j.intent_id)); }
 }
 const soulByState = countBy(soul, 'state');
 const expiringSoon = [];
@@ -160,8 +208,11 @@ const firstBeat = !lastPulse;
 const findings = [];
 function finding(key, alert, text) { findings.push({ key: key, alert: alert, text: text }); }
 if (stuckJobs.length) { finding('stuck_jobs', true, 'Jobs stuck non-terminal beyond ' + STUCK_JOB_H + 'h: ' + stuckJobs.join(', ')); }
+if (feederNeverStamped) {
+  finding('feeder_never_stamped', true, 'The Build 12 feeder has never stamped its run log (devon_feeder_run_log is empty or carries no readable ran_at). Either it has not run since the run stamp was added on 2026-09-17, or it is running and not stamping. I cannot tell a missed slot from a missing stamp, so I am reporting the stamp rather than guessing at the feeder. Check its executions.');
+}
 if (feederDown) {
-  finding('feeder_down', true, 'The Build 12 feeder has not run in ' + (feederQuietH === null ? 'any window I can see, and its log carries no readable fed_at at all' : Math.round(feederQuietH) + 'h') + '. It runs daily at 02:00 America/New_York, so anything past ' + (FEEDER_PERIOD_H + FEEDER_GRACE_H) + 'h is a missed slot. ' + completed.length + ' COMPLETED job(s) are in the ledger. Check its executions.');
+  finding('feeder_down', true, 'The Build 12 feeder has not run in ' + Math.round(feederQuietH) + 'h, by its own run log. It runs daily at 02:00 America/New_York, so anything past ' + (FEEDER_PERIOD_H + FEEDER_GRACE_H) + 'h is a missed slot. ' + completed.length + ' COMPLETED job(s) are in the ledger. Check its executions.');
 }
 if (skipped.length) { finding('feeder_skipped', true, 'The feeder ran AFTER these COMPLETED jobs and did not carry them, so they are skipped rather than waiting for their slot: ' + skipped.join(', ')); }
 if (malformed.length) { finding('malformed_feed', true, 'Feed rows with HTTP 200 but no readable gate decision (terminal and invisible to the committer; repair per runbook): ' + malformed.join(', ')); }
@@ -192,7 +243,7 @@ const dailyDue = hSinceEmail === null || hSinceEmail >= EMAIL_EVERY_H;
 const sendEmail = newAlerts.length > 0 || dailyDue;
 const vitals = {
   jobs: { total: jobs.length, byState: jobsByState },
-  feed: { fed: feed.length, byDecision: feedByDecision, lastFedAt: lastFedTs === null ? '' : new Date(lastFedTs).toISOString() },
+  feed: { fed: feed.length, byDecision: feedByDecision, lastFedAt: lastFedTs === null ? '' : new Date(lastFedTs).toISOString(), feederRanAt: feederRanTs === null ? '' : new Date(feederRanTs).toISOString() },
   soul: { byState: soulByState },
   beats: { previousPulse: lastPulse ? lastPulse.beat_at : '', lastEmailed: lastEmailed ? lastEmailed.beat_at : '' }
 };
@@ -208,7 +259,8 @@ if (firstBeat) {
 lines.push('VITALS');
 lines.push('Jobs in the ledger: ' + jobs.length + ' (' + fmtCounts(jobsByState) + ')');
 lines.push('Learning feed: ' + feed.length + ' fed (' + fmtCounts(feedByDecision) + ')');
-if (lastFedTs !== null) { lines.push('Feeder last ran: ' + new Date(lastFedTs).toISOString() + ' (' + Math.round(feederQuietH) + 'h ago)'); }
+if (feederRanTs !== null) { lines.push('Feeder last ran: ' + new Date(feederRanTs).toISOString() + ' (' + Math.round(feederQuietH) + 'h ago, from its run log)'); }
+if (lastFedTs !== null) { lines.push('Feeder last fed a row: ' + new Date(lastFedTs).toISOString() + ' (a quiet run carries nothing, so this lags the run above)'); }
 lines.push('Soul commit log: ' + fmtCounts(soulByState));
 if (lastPulse) { lines.push('Previous pulse: ' + lastPulse.beat_at); }
 lines.push('');
