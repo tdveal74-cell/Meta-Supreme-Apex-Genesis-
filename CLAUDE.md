@@ -240,9 +240,21 @@ the same miss the first law describes. It also touches two lists in
 matters. Miss either list and every test touching the new tables fails with
 `relation "agent_..." does not exist`. Count the places with
 `grep -n "<previous head>" .github/workflows/ci.yml` before editing, never
-from this paragraph.
+from this paragraph. `_DATA_TABLES` is the truncate list, so it only changes
+when the migration adds a table; 021 added none and touched only the first.
 
 Confirm the current head with `alembic heads`, never from a doc.
+
+**An uncommitted migration turns one test red, and it is not a defect.** Found
+with 021 on 2026-09-17. `test_estate_reconcile.py::test_the_deployed_head_is_
+read_at_the_newest_successful_deployment` fails with `assert '020' == '021'`
+while the new revision file sits in the working tree unstaged or uncommitted.
+The two readers genuinely disagree at that moment: `_alembic_head()` globs
+`database/migrations/versions` on disk and sees the new file, while
+`_deployed_alembic_head` runs `git ls-tree` at a commit and does not. Commit
+the migration and the test passes; 83 passed immediately after. Do not chase
+it, and do not "fix" the test. It is measuring the right thing, which is that
+the deployed head comes from the deployed commit rather than from your tree.
 
 ## Adding a module to services/devon
 

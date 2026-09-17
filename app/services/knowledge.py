@@ -30,6 +30,7 @@ from services.intelligence.providers.embeddings import (
     resolve_embedding_provider_name,
 )
 from services.knowledge.chunking import chunk_text
+from services.knowledge.fts import FTS_FILL_NEW_CHUNKS_SQL
 
 logger = logging.getLogger(__name__)
 
@@ -255,18 +256,11 @@ async def ingest_knowledge(
             )
         await db.flush()
 
-        # FTS back-fill, same idiom as services/knowledge/pipeline.py — the
-        # lexical leg of hybrid retrieval reads this column.
-        await db.execute(
-            text(
-                """
-                UPDATE embeddings
-                SET fts = to_tsvector('english', COALESCE(content, ''))
-                WHERE knowledge_item_id = :kid AND fts IS NULL
-                """
-            ),
-            {"kid": item.id},
-        )
+        # FTS back-fill. The expression is shared with services/knowledge/
+        # pipeline.py and with the 021 backfill, from services.knowledge.fts,
+        # because three hand written copies is how the title came to be missing
+        # from two of them.
+        await db.execute(text(FTS_FILL_NEW_CHUNKS_SQL), {"kid": item.id})
 
         item.status = "ready"
         item.meta = {
