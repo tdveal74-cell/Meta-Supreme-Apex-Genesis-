@@ -51,7 +51,21 @@ belong in a public file.
 
 ## Decisions this settles
 
-_(pending)_
+Both were put to Tee on a card and both came back "what you recommend", so he
+delegated rather than picked. Recorded that way rather than as his choice,
+because the distinction matters if either turns out wrong.
+
+- **The grill stays on notes and episodes.** Claude's recommendation, taken
+  2026-09-17. Ten labels against the corpus that exists, so the embeddings
+  funding question gets a real number. The cost is stated and accepted: the
+  first answer says Tee's actual searching happens elsewhere, so the number
+  will describe a corpus he may not search often. The mail finding stays filed
+  for a later arc rather than being chased now.
+- **Captures redact by default.** Claude's recommendation, taken 2026-09-17.
+  Operational specifics never go into this repository: no service names tied to
+  accounts, no financial records, no recovery routes. The capture records the
+  shape and says what it withheld. A later session that needs the detail asks
+  Tee directly.
 
 ## Inferred, not stated
 
@@ -76,7 +90,11 @@ _(pending)_
   the right corpus and that is a ruling rather than a follow up.
 - Nine more labelled questions to go.
 - Whether the capture should hold the redacted specifics at all, in some
-  non public place, or whether the query shape is enough. Not asked.
+  non public place, was offered on the card and not chosen. Redact by default
+  won instead, so there is no private destination and the detail lives only in
+  Tee's head. That is a deliberate gap rather than an oversight.
+- The mail corpus finding is parked, not resolved. `knowledge_items` still
+  cannot answer the one real query Tee produced.
 
 ## Contradicts
 
@@ -93,6 +111,6 @@ ARTIFACT: docs/devon/CAPTURE_retrieval-labels_2026-09-17.md
 DATE: 2026-09-17
 DECISIONS: pending, session in progress
 FINDINGS: the first real digging episode Tee named is operational recall across mail, not the notes and episodes corpus the retrieval measurement scores; his verbatim answer was redacted because this repository is public
-OPEN: nine more labelled questions, and whether the topic is aimed at the right corpus
-STATUS: in progress, one answer recorded
+OPEN: nine more labelled questions
+STATUS: in progress, one answer recorded, two rulings delegated to Claude and taken
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
