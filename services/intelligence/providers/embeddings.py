@@ -266,12 +266,19 @@ def resolve_embedding_provider_name(settings: Any) -> str:
     flip for real semantic retrieval. Nothing read it.
 
     The consequence was not cosmetic. Embeddings inherited the CHAT provider,
-    and this estate runs chat on Cerebras, which has no embeddings endpoint.
-    So `EMBEDDING_PROVIDER=openai` on the production api changed nothing and
-    every embedding call resolved to 'cerebras' and raised
+    and this estate runs chat on Cerebras, which `SUPPORTED_EMBEDDING_PROVIDERS`
+    does not carry. So `EMBEDDING_PROVIDER=openai` on the production api changed
+    nothing and every embedding call resolved to 'cerebras' and raised
     ProviderConfigError. Reproduced 2026-09-17 with the production shape:
     EMBEDDING_PROVIDER=openai, DEFAULT_AI_PROVIDER=cerebras, no OPENAI_API_KEY,
     and the documented control was dead.
+
+    An earlier draft of this paragraph said Cerebras has no embeddings endpoint.
+    That may well be true and it was not checked: `api.cerebras.ai` is blocked
+    by this container's egress policy, so the claim could not be run. It is also
+    not the load bearing fact. What breaks the estate is that this factory
+    builds 'mock' and 'openai' and nothing else, so a chat provider name
+    reaching it raises whatever the vendor does or does not offer.
 
     There is no fallback to `DEFAULT_AI_PROVIDER` here on purpose. That
     fallback IS the weld. A chat provider name reaching this function is how
