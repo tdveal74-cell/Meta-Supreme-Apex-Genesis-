@@ -24,6 +24,7 @@ import {
 } from "./DevonAvatarCanvas";
 import { useAudioPlayback, type PlaybackDiagnostics } from "./useAudioPlayback";
 import { useBargeIn } from "./useBargeIn";
+import { usePushToTalk } from "./usePushToTalk";
 import { useLiveKitAudio } from "./useLiveKitAudio";
 import { readDevonToken, TOKEN_SLOT, usePresenceSocket } from "./usePresenceSocket";
 
@@ -111,7 +112,7 @@ export function PresenceStage() {
   // before it existed every chunk was counted and dropped.
   const playback = useAudioPlayback();
   const socket = usePresenceSocket(token, { onAudio: playback.play });
-  const { buffer, connection, ready, presence, caption, metrics, lastAck, rttMs, say, interrupt, sendRender, diagnostics } = socket;
+  const { buffer, connection, ready, presence, caption, metrics, lastAck, transcript, rttMs, say, interrupt, beginListening, sendClient, sendRender, diagnostics } = socket;
 
   // Local "listening" override set by barge-in; the next server state clears it.
   const [override, setOverride] = useState<{ atMs: number } | null>(null);
@@ -209,7 +210,30 @@ export function PresenceStage() {
   // HUD refresh from the refs that change every animation frame.
   const [hud, setHud] = useState<HudSample>(EMPTY_HUD);
   const [playbackHud, setPlaybackHud] = useState<PlaybackDiagnostics>(EMPTY_PLAYBACK);
-  const { getMicLevel } = bargeIn;
+  const { getMicLevel, getTap } = bargeIn;
+
+  /**
+   * The ear. It shares bargeIn's microphone rather than opening a second one,
+   * so Start mic is the prerequisite and the hook says so rather than
+   * prompting on its own.
+   *
+   * `ready.protocol` is the version the SERVER agreed to, not the one this
+   * page asked for. Against a server rolled back to v1 that number is 1, the
+   * hook refuses before it opens a clip, and the page keeps working with the
+   * text box. That is the whole point of negotiating rather than pinning.
+   */
+  const pushToTalk = usePushToTalk({
+    getTap,
+    send: sendClient,
+    negotiatedProtocol: ready?.protocol ?? null,
+    newTurnId: beginListening,
+  });
+  const { settle: settleCapture } = pushToTalk;
+  useEffect(() => {
+    // The transcript is the server saying it heard the clip, so the control
+    // goes back to ready on it rather than on a timer.
+    if (transcript) settleCapture();
+  }, [transcript, settleCapture]);
   const playbackDiagnostics = playback.diagnostics;
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -403,6 +427,37 @@ export function PresenceStage() {
             <span className="text-[11px] leading-4 text-[#718898]">Opens only on this click. Attack 40 ms, hangover 300 ms, threshold 0.02 RMS.</span>
           </div>
           {bargeIn.message ? <p className="mt-2 text-[11px] leading-5 text-red-200/90">{bargeIn.message}</p> : null}
+
+          <div className="mt-3 border-t border-white/10 pt-3">
+            <Stat label="Capture" value={pushToTalk.state} tone={pushToTalk.state === "recording" ? "good" : pushToTalk.state === "error" || pushToTalk.state === "unavailable" ? "bad" : "off"} />
+            <Stat label="Held" value={`${pushToTalk.heldSeconds.toFixed(1)}s`} />
+            <Stat label="Heard" value={transcript ? `${transcript.provider}${transcript.confidence === null ? "" : ` ${transcript.confidence.toFixed(2)}`}` : "n/a"} />
+            <button
+              type="button"
+              onPointerDown={() => void pushToTalk.press()}
+              onPointerUp={pushToTalk.release}
+              onPointerLeave={pushToTalk.release}
+              onPointerCancel={pushToTalk.release}
+              onKeyDown={(event) => {
+                if (event.repeat) return;
+                if (event.key === " " || event.key === "Enter") void pushToTalk.press();
+              }}
+              onKeyUp={(event) => {
+                if (event.key === " " || event.key === "Enter") pushToTalk.release();
+              }}
+              disabled={!live || bargeIn.mic !== "live"}
+              className="mt-2 w-full select-none border border-[#4fb3a5]/50 bg-[#4fb3a5]/10 px-3 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-[#9fe3d6] transition hover:bg-[#4fb3a5]/20 disabled:opacity-40"
+            >
+              {pushToTalk.state === "recording" ? "Listening, release to send" : "Hold to talk"}
+            </button>
+            <p className="mt-2 text-[11px] leading-4 text-[#718898]">
+              Hold, speak, release. The clip goes up as pcm_s16le and the server answers with what it heard before it runs the turn.
+            </p>
+            {pushToTalk.message ? <p className="mt-2 text-[11px] leading-5 text-red-200/90">{pushToTalk.message}</p> : null}
+            {transcript ? (
+              <p className="mt-2 text-[11px] leading-5 text-[#9fe3d6]">Heard: {transcript.text || "(nothing)"}</p>
+            ) : null}
+          </div>
         </Panel>
 
         <Panel title="Voice">

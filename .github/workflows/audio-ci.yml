@@ -2,6 +2,13 @@ name: Audio CI
 
 # WHY THIS IS ITS OWN WORKFLOW, PATH FILTERED
 #
+# Two checks now, one in each direction, sharing one browser install.
+# `audio-check.mjs` measures what the speaker produces and `capture-check.mjs`
+# measures what the microphone lane hands over. The capture half arrived with
+# the push to talk build; it was put HERE rather than in a ninth workflow
+# because the whole cost of this job is the Playwright and Chromium install,
+# and a second workflow would pay it twice for the same reason.
+#
 # `apps/web/scripts/audio-check.mjs` drives the SHIPPED playback scheduler through
 # real Chromium and measures the rendered samples. It is the only check in this
 # estate that can catch a buffer declared at the wrong sample rate, a chunk
@@ -27,6 +34,19 @@ name: Audio CI
 # A change anywhere else in apps/web cannot alter the rendered samples, so it does
 # not pay for a browser.
 #
+# The capture half adds the files that can change what the microphone lane
+# hands over, read the same way:
+#   public/presence/capture-worklet.js       the worklet the check drives
+#   lib/presence/capture.ts                  the encoder it feeds
+#   components/presence/usePushToTalk.ts     the hook that calls both
+#   scripts/capture-check.mjs                the check itself
+# capture-check.mjs proves the one thing no pure check can: that the worklet
+# hands over a CONTIGUOUS stream. A known tone goes in and the concatenated
+# chunks are measured, so a dropped, duplicated or reordered block moves the
+# recovered frequency. Mutating the shipped worklet to stop flushing its tail
+# turns it red with 36096 samples where 48000 were sent, which is the last
+# quarter second of every sentence.
+#
 # IT FAILS LOUDLY WHEN THE BROWSER IS MISSING. `loadPlaywright` and `findChromium`
 # both THROW rather than skip, so a runner without Chromium turns this job red
 # instead of green. That is deliberate: a green job that checked nothing is worse
@@ -41,6 +61,10 @@ on:
       - "apps/web/components/presence/PresenceStage.tsx"
       - "apps/web/components/devon/DevonChat.tsx"
       - "apps/web/scripts/audio-check.mjs"
+      - "apps/web/public/presence/capture-worklet.js"
+      - "apps/web/lib/presence/capture.ts"
+      - "apps/web/components/presence/usePushToTalk.ts"
+      - "apps/web/scripts/capture-check.mjs"
       - ".github/workflows/audio-ci.yml"
   workflow_dispatch:
 
@@ -86,3 +110,6 @@ jobs:
 
       - name: Playback checks in real Chromium
         run: pnpm --filter @meta-supreme/web check:audio
+
+      - name: Capture in real Chromium
+        run: pnpm --filter @meta-supreme/web check:capture
