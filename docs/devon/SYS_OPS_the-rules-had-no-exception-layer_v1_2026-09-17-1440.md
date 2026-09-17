@@ -51,9 +51,12 @@ Infinite Brain video: store the anti patterns beside the best practices as
 records of the same standing, because a best practice is right most of the time
 and the rest of the time is the part that has to be written down.
 
-The finding it lands on is sharper than the idea. The TQO show canon is roughly
-four thousand words inside a single n8n node, carrying a long ABSOLUTE RULES
-block with no exception layer at all. Every rule in it reads as unconditional.
+The finding it lands on is sharper than the idea. The TQO show canon lives
+inside a single n8n node with no exception layer at all, and every rule in it
+reads as unconditional. The teardown sized that canon at roughly four thousand
+words. It was read from the live node on 2026-09-17 and measured instead: the
+TQO block is 805 words, the NCO block is 550, and the node source is 1,608 words
+in total. The structural finding stands and the number does not.
 A model given a rule that is absolute and a case the rule does not fit will
 either obey it stupidly or break it silently, and nothing records which one
 happened.
@@ -118,10 +121,13 @@ reason saying it is the first one and it is a guess.
 
 ## What this does not do
 
-Neither module is wired into a lane. They are doctrine, effect free, sitting
-beside `precedence.py` and `flagship.py`, and importing them does nothing. The
-show canon is still four thousand words inside an n8n node, and moving it is a
-separate job that touches the live estate rather than this repository.
+The two doctrine modules are not wired into a lane. They are effect free,
+sitting beside `precedence.py` and `flagship.py`, and importing them does
+nothing. The canon has since been lifted into `services/devon/tqo_canon.py` and
+mirrored into `n8n/tqo-v5/`, which is recorded in the status doc that closes
+that second arc. The live node is unchanged: sending an assembled prompt instead
+of the block it ships today changes what the audience receives, and that is
+Tee's to authorize behind the blind comparison the teardown specifies.
 
 Nothing here re-verified a single live-state claim in the teardown. The
 Anthropic balance, the render and TTS host exposure, the unrotated credentials,

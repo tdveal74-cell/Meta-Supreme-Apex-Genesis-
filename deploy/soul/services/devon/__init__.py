@@ -26,6 +26,9 @@ LAYERS
                  refuses to go out having dropped one that may not
     wager        a prediction recorded before the measurement, and the miss
                  carried into the next prediction
+    tqo_canon    the TQO and NCO show canon as rules, lifted from the live
+                 n8n node and checked against its mirror. Not re-exported,
+                 like vault: it is show data, imported by the caller
 
   Assistant:
     persona      who DEVON is and the rules he works under

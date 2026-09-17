@@ -7,11 +7,35 @@ this repository. The DEVON organs next door have been mirrored and diffed since
 holds or ships an episode left no diff and no review.
 
 This directory starts closing that. It is not complete and does not pretend to
-be: one node is here, the one that was changed.
+be: three nodes of 240 are here, the one that was changed and the two that hold
+the canon.
 
 | File | Node | What it decides |
 |---|---|---|
 | `build_qc_prompt.js` | `Build QC Prompt` | The whole QC rubric, both verdicts, and the hard blockers that hold an episode regardless of score |
+| `build_script_prompt.js` | `Build Script Prompt` | The show canon: the whole system prompt that writes every episode of both shows |
+| `show_context_script.js` | `Show Context: Script` | The identity board the prompt reads: channel, taglines, positioning, table ids and the per run limits |
+
+The second and third arrived on 2026-09-17, read from the live public API at
+workflow `updatedAt` 2026-09-16T14:02:48.875Z, 240 nodes, active. Measured from
+that read rather than described: the TQO block is 805 words and 4,822
+characters, the NCO block is 550 words and 3,543 characters, and the node source
+is 1,608 words in total.
+
+`services/devon/tqo_canon.py` is the same canon expressed as rules that know
+whether they bend, and `test_devon_tqo_canon.py` fails when a rule's text stops
+appearing in `build_script_prompt.js`. That is the mechanism that keeps the copy
+honest, so a live edit that is not carried back turns the build red instead of
+sitting undetected. Edit either one and run
+`python3 -m pytest -q test_devon_tqo_canon.py`.
+
+One finding is open in the mirrored source as of that read. The NCO branch
+instructs the model to emit a description line carrying an em dash, as "this
+exact line", while hard rule 1 bans that mark studio wide and `Build QC Prompt`
+caps the voice dimension at 3 for any occurrence. Seventeen banned marks are in
+the node in total. Whether any reached a published description is not
+established: `nco_content` holds 25 rows and none of them has a description
+written, so there was nothing to check. Fixing it is a live edit and Tee's call.
 
 The rest of the QC chain is live only and worth mirroring next: `Token Budget:
 QC` converts the Anthropic shape this node emits into the Cerebras
