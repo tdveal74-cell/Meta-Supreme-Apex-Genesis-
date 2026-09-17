@@ -69,6 +69,12 @@ def secret_key_refusal(
     return ""
 
 
+#: The smallest output budget a reasoning vision model can answer inside. Below
+#: this the thinking alone can consume the whole allowance and `content` comes
+#: back empty, which reads as a broken backend rather than as a budget.
+MIN_VISION_OUTPUT_TOKENS = 512
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -168,6 +174,15 @@ class Settings(BaseSettings):
     # image, so a frame is charged at the text rate; bounding the bytes bounds
     # how far that under charge can run.
     VISION_MAX_IMAGE_BYTES: int = 5 * 1024 * 1024
+    # The output budget for one description, and the reason it is not small.
+    # Ruled 2026-09-17 after the deployed api service answered an approved
+    # vision.describe three times on inclusionai/ling-3.0-flash-vl:free: twice
+    # with nothing at all, once with nine words, and every time reporting
+    # exactly 700 output tokens against a 700 budget. A reasoning model pays
+    # for its thinking out of this number, so a budget sized for the answer
+    # alone buys silence. 2000 leaves room for both. A model that does not
+    # reason will not spend what it does not need.
+    VISION_MAX_OUTPUT_TOKENS: int = 2000
     # The ONLY directory vision.describe may read from. Unset means the tool
     # refuses every call, which is the shipped default: what writes into this
     # directory on a Railway container is a deployment decision, not a default.
@@ -350,6 +365,19 @@ class Settings(BaseSettings):
                 f"{self.VISION_INPUT_TOKEN_WEIGHT}, which charges an image for "
                 "less than the vendor reported. 1.0 is parity; a vendor that "
                 "prices image input above text takes a number above 1.0."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _refuse_an_output_budget_that_buys_silence(self) -> "Settings":
+        if self.VISION_MAX_OUTPUT_TOKENS < MIN_VISION_OUTPUT_TOKENS:
+            raise ValueError(
+                "VISION_MAX_OUTPUT_TOKENS is "
+                f"{self.VISION_MAX_OUTPUT_TOKENS}, at or under the "
+                f"{MIN_VISION_OUTPUT_TOKENS} floor. A reasoning model spends "
+                "this budget on thinking before the description starts, so a "
+                "small number returns an empty answer with a healthy 200 and "
+                "no error. That is the failure this floor exists to refuse."
             )
         return self
 
