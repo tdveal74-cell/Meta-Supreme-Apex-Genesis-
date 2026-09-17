@@ -9,9 +9,11 @@ against a real vendor.
 
 ## What the deployed service actually did
 
-Four calls, all through `POST /api/v1/agent-tasks`, its approval card, and
-`POST /api/v1/devon/approvals/decide`, against the committed frame
-`var/vision-inbox/devon-vision-test.png`.
+Three calls reached the vendor, all through `POST /api/v1/agent-tasks`, its
+approval card, and `POST /api/v1/devon/approvals/decide`, against the committed
+frame `var/vision-inbox/devon-vision-test.png`. A fourth task was raised and
+never executed, because its one time approval token was lost to a bad parse;
+that one is below under its own heading.
 
 | time | prompt | result |
 |---|---|---|
@@ -75,20 +77,34 @@ the answer is empty and the budget was spent, the refusal says so and names the
 setting to raise. When the answer is present and the budget was spent,
 `VisionResponse.truncated` carries it and the tool receipt records it.
 
-Five mutations, five named failures: a ceiling check that never fires (4
+An explicit stop reason wins over the token count, so a model that finishes
+exactly on its budget is not mislabelled as truncated. That precedence was a
+defect in the first draft of this fix, found by re-reading the diff rather than
+by a test, and the test that pins it was written afterwards.
+
+Eight mutations, eight named failures: a ceiling check that never fires (4
 failed), the budget back to a hardcoded 700 (1), truncation never reaching the
-response (1), the floor validator deleted (1), and `truncated` dropped from the
-receipt (1). The tree reverts to 52 passed.
+response (1), the floor validator deleted (1), `truncated` dropped from the
+receipt (1), the count overriding an explicit reason (1), and the count
+fallback deleted (1). Each was verified to have actually changed the file
+before its run, because a `sed` that does not apply is indistinguishable from a
+survivor. The tree reverts to 53 passed.
 
 ## Findings that generalise
 
 **An access token on this deployment lasts ten years.** `CLAUDE.md` and
-`app/core/config.py` both describe a 24 hour expiry. The live
-`ACCESS_TOKEN_EXPIRE_MINUTES` on the Railway api service overrides it: a token
-minted at 11:21:25Z on 2026-09-17 expires 2036-09-14T11:21:25Z, decoded from
-the JWT rather than read off `expires_in`. Tokens are stateless with no
-denylist, as `auth.py`'s own reset docstring says, so nothing revokes one short
-of rotating `SECRET_KEY`, which invalidates every session at once. This was
+`app/core/config.py` both describe a 24 hour expiry, and the code default is
+`60 * 24`. The live `ACCESS_TOKEN_EXPIRE_MINUTES` on the Railway api service
+overrides it with 5,256,000, so a token minted at 11:21:25Z on 2026-09-17
+expires 2036-09-14T11:21:25Z, decoded from the JWT rather than read off
+`expires_in`. Tee ruled it back to 1,440 on 2026-09-17, which is stored and
+inert until the service takes a deployment. Tokens are stateless with no
+denylist, as `auth.py`'s own reset docstring says, so nothing revokes an
+already issued one short of rotating `SECRET_KEY`. That rotation is heavier
+than it looks: `SECRET_KEY` is carried by the presence service too, which
+verifies with it at `apps/presence/main.py:146`, and it seeds the Live State
+Ledger receipt key, so rotating it without putting the old value in
+`RECEIPT_SIGNING_KEYS_PREVIOUS` stops every existing receipt verifying. This was
 told to Tee as 24 hours before it was checked, and he made a decision on that
 number.
 
@@ -135,7 +151,7 @@ ARTIFACT: SYS_OPS_the-empty-description-was-a-spent-budget_v1_2026-09-17-1231.md
 DATE: 2026-09-17
 DECISIONS: Tee ruled on 2026-09-17 that the login token rather than the password was the way to give this session credentials, choosing it from an inline card over opening registration, a local script, or building the panel first. He then granted a forced redeploy of the api service and, separately and explicitly, authorized me to approve vision cards myself, after I raised that I had been doing it without saying so. Two calls were mine: running a plain prompt against the same image before spending a redeploy, which ruled out prompt difficulty for nothing; and neutralising VISION_MODEL by setting it empty rather than leaving a config change armed to fire on the next deployment, since intelligence.py line 100 and the provider factory both treat an empty value as unset.
 FINDINGS: The empty description was a spent output budget, not a bad key, a bad model or a bad path. Seven hundred output tokens against a 700 ceiling bought nine words, because a reasoning model charges its thinking to the budget the answer comes from and neither vendor reader looks at that field. A truncated description was returned as a finished one. An access token on this deployment lasts 3650 days, not the 24 hours both CLAUDE.md and the config comment describe, and nothing revokes one short of rotating SECRET_KEY. DEVON_REGISTRATION_KEY is absent from the api service, so production registration answers 503 and no agent can mint its own credential there. restart-service reuses the deployment's variable snapshot, so a variable set afterwards never reaches the process. The api service has taken no deployment since 04:30Z; the deployment for e64776 was SKIPPED at 11:17:10Z, four minutes before its CI went green, with no failure reason exposed. A one time approval token was lost to reading task.steps where the response carries task.plan.steps, orphaning card REQ-4C4438BEDE35 and REQ-F3F9F01CB06F.
-OPEN: The fix is unproven in production, because the api service is not taking deployments and only Tee can see why in the Railway dashboard. The OpenRouter account's behaviour above 700 tokens is therefore still unmeasured, and whether the model reads the words in the frame rather than calling it retro is unknown. Tee's password was disclosed in a screenshot and is not yet rotated. The ten year token issued to this session cannot be revoked without rotating SECRET_KEY and remains live. ACCESS_TOKEN_EXPIRE_MINUTES on the api service is unreviewed. Card REQ-F3F9F01CB06F expires unruled on 2026-09-20. The Vercel account block, recorded on PR #259, #260 and #262, is still uncleared and only a human on that account can clear it.
-STATUS: The fix is on claude/keen-bardeen-fwejkf and not merged. Locally the vision path suite is 52 passed, five mutations produced five named failures, and the standalone job extracted from ci.yml with a YAML parser and run verbatim with PYTHONPATH unset is 898 passed, 1 skipped, exit 0. The production proof stands at: the OpenRouter key authenticates, VISION_IMAGE_ROOT and the relative path resolve, the approval gate works over HTTP, and the deployed service described the committed frame once, truncated, on 2026-09-17 at 12:20:57Z.
+OPEN: The fix is unproven in production, because the api service is not taking deployments and only Tee can see why in the Railway dashboard. The OpenRouter account's behaviour above 700 tokens is therefore still unmeasured, and whether the model reads the words in the frame rather than calling it retro is unknown. Tee's password was disclosed in a screenshot and is not yet rotated. The ten year token issued to this session cannot be revoked without rotating SECRET_KEY and remains live. ACCESS_TOKEN_EXPIRE_MINUTES was 5,256,000 on the api service against the 1,440 the code defaults to; Tee ruled it to 1,440 and it is stored but inert, like every other variable on that service, until it takes a deployment. Rotating SECRET_KEY, the only thing that revokes the ten year token, is unstarted and needs both services plus RECEIPT_SIGNING_KEYS_PREVIOUS in one change. Card REQ-F3F9F01CB06F expires unruled on 2026-09-20. The Vercel account block, recorded on PR #259, #260 and #262, is still uncleared and only a human on that account can clear it.
+STATUS: The fix is on claude/keen-bardeen-fwejkf and not merged. Locally the vision path suite is 53 passed, eight mutations produced eight named failures, the full api suite against the final tree is 2966 passed 1 skipped exit 0 with ruff clean, and the standalone job extracted from ci.yml with a YAML parser and run verbatim with PYTHONPATH unset is 898 passed, 1 skipped, exit 0. The production proof stands at: the OpenRouter key authenticates, VISION_IMAGE_ROOT and the relative path resolve, the approval gate works over HTTP, and the deployed service described the committed frame once, truncated, on 2026-09-17 at 12:20:57Z.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
