@@ -681,7 +681,8 @@ WEBHOOKS = {
         "workflow": "6KGsMrVCVJe2nYnE",
         "auth": "header x-devon-key",
         "open_ruling": (
-            "BUILT 2026-09-16 and deliberately INACTIVE. Item 1 of the ears "
+            "BUILT 2026-09-16, deliberately inactive that day, and ACTIVE when "
+            "the estate was read on 2026-09-17. Item 1 of the ears "
             "build, ruled by Tee on an inline card that same day: a purpose "
             "built door rather than an extension of devon-inbox, and a read "
             "only service parse rather than a lane that logs in as him each "
@@ -706,11 +707,18 @@ WEBHOOKS = {
             "one. A credential made by hand in the UI has no such limit, and "
             "the validator's own warning says plain generic types are for "
             "reusing an existing credential, which is exactly this path. "
-            "WHAT IS STILL MISSING is the endpoint. POST /api/v1/devon/hear "
-            "ships in the same change as this entry and does not exist on the "
-            "Railway api service until it merges and deploys. The credential "
+            "THE ENDPOINT IS DEPLOYED, measured on 2026-09-17 rather than "
+            "inferred from a merge. An unkeyed POST to "
+            "api-production-5644.up.railway.app/api/v1/devon/hear answers 401 "
+            "'Invalid or missing service key.', and a made up sibling path "
+            "answers 404 'Not Found', so the 401 is this route refusing a "
+            "bare caller rather than a catch all. This paragraph read WHAT IS "
+            "STILL MISSING IS THE ENDPOINT until then, which was true the day "
+            "it was written and stale from the moment PR #252 deployed. "
+            "The credential "
             "value itself is unreadable from here, so that the two sides carry "
-            "the SAME string is unproven until a real execution says so. "
+            "the SAME string is STILL unproven, and manual executions cannot "
+            "prove it: manual mode never checks the webhook header. "
             "WHAT THE DOOR CANNOT DO IS STRUCTURAL, NOT A FLAG. It calls "
             "parse, a pure function in the effect free services/devon package, "
             "and never Devon.ask, which is the thing that gates an intent and "
@@ -721,11 +729,19 @@ WEBHOOKS = {
             "gate with a landmine and once by reading the route's own AST, and "
             "both halves were shown failing on a mutation that reintroduced "
             "the call. "
-            "NOT PROVEN: no voice note has been through this lane. No "
-            "execution exists, ElevenLabs has never been called from it, and "
-            "the transcription model is left unset on purpose because that "
+            "STILL NOT PROVEN, and narrower than it was: no AUDIO has been "
+            "through this lane. Two executions exist, 288 on 2026-09-16 and "
+            "335 on 2026-09-17, both success and BOTH IN MANUAL MODE, so the "
+            "production webhook has never taken a request. Execution 335 "
+            "routed a request carrying no audio to Refuse Before Spending "
+            "without reaching the transcriber, which proves that refusal on "
+            "the real lane rather than on a copy. ElevenLabs has still never "
+            "been called from it. "
+            "The transcription model is left unset on purpose because that "
             "node's model picker lists synthesis models only, measured against "
-            "the live credential on 2026-09-16. "
+            "the live credential on 2026-09-16. What remains is one keyed POST "
+            "carrying audio to the production URL, and that needs Tee's key "
+            "from his phone. "
             "THE LOG RESOLVES BY ID. devon_hearing_log is Tht7qGrqF66E48EA and "
             "Log The Turn addresses it in id mode, never by name, because a "
             "name is capturable by any other table name that contains it. The "
@@ -904,10 +920,18 @@ KEY_ROTATION = (
 
 WORKFLOWS = {
     "iPhone Inbox Capture": {"id": "CEy7WAl4QAzHfG46", "state": "active"},
-    # Built 2026-09-16, inactive on purpose: the endpoint it calls is not
-    # deployed and its service credential is empty. See the devon-hears entry
-    # in WEBHOOKS for both, and for what the door structurally cannot do.
-    "DEVON Hears": {"id": "6KGsMrVCVJe2nYnE", "state": "inactive, never executed"},
+    # Built 2026-09-16. This comment said inactive, with an undeployed endpoint
+    # and an empty credential, and every part of that had stopped being true by
+    # 2026-09-17. Read from the estate rather than from the record: active is
+    # true, executions 288 and 335 both succeeded, and an unkeyed POST to the
+    # door answers 401 where a missing route answers 404. Both executions ran
+    # in MANUAL mode, so the production webhook has still never taken a
+    # request. See the devon-hears entry in WEBHOOKS for the measurements and
+    # for what the door structurally cannot do.
+    "DEVON Hears": {
+        "id": "6KGsMrVCVJe2nYnE",
+        "state": "active, two manual executions, no production webhook request yet",
+    },
     "Capture Webhook": {"id": "Me7DDHBDX28ppvHA", "state": "active"},
     "Pipeline Watchdog": {"id": "IZBVlXQ8Y5dsGTRS", "state": "active, every 4h, timezone pinned America/New_York 2026-09-07"},
     "Precedence Guard": {"id": "4BXO9CX8MdYYyGMq", "state": "active, daily 07:00 America/New_York, timezone pinned 2026-09-07"},
