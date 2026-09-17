@@ -67,11 +67,13 @@ class VisionAdapter:
         provider_factory: Callable[[], VisionProvider],
         image_root: Optional[str] = None,
         max_image_bytes: int = DEFAULT_MAX_IMAGE_BYTES,
+        max_output_tokens: Optional[int] = None,
     ) -> None:
         self.approvals = approvals
         self._provider_factory = provider_factory
         self._image_root = image_root
         self._max_image_bytes = max_image_bytes
+        self._max_output_tokens = max_output_tokens
 
     def register(self, registry: ToolRegistry) -> None:
         registry.register(
@@ -141,7 +143,9 @@ class VisionAdapter:
 
         prompt = str(args.get("prompt") or "").strip() or _DEFAULT_PROMPT
         answer = await provider.describe(
-            VisionRequest(image=loaded, prompt=prompt, max_tokens=700)
+            VisionRequest(
+                image=loaded, prompt=prompt, max_tokens=self._output_budget()
+            )
         )
 
         # Flat and non secret. `sanitize_receipt_payload` strips by exact
@@ -159,11 +163,27 @@ class VisionAdapter:
                 "latency_ms": answer.latency_ms,
                 "input_tokens": answer.usage.input_tokens,
                 "output_tokens": answer.usage.output_tokens,
+                # A cut off description reads exactly like a finished one, so
+                # the receipt says which it was rather than leaving the reader
+                # to infer it from the length.
+                "truncated": answer.truncated,
                 "provider_receipt_id": request_id,
             },
         )
 
     # -- loading, with the root as the only door --------------------------
+
+    def _output_budget(self) -> int:
+        """How many output tokens one description may cost.
+
+        Read at call time, like the root, so a deployment can raise it without
+        a code change when a model's thinking eats the allowance.
+        """
+        if self._max_output_tokens is not None:
+            return int(self._max_output_tokens)
+        from app.core.config import settings
+
+        return int(settings.VISION_MAX_OUTPUT_TOKENS)
 
     def _root(self) -> str:
         if self._image_root is not None:

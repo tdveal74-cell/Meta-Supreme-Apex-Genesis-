@@ -54,6 +54,51 @@ OPENROUTER_VISION_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_DEFAULT_VISION_MODEL = "inclusionai/ling-3.0-flash-vl:free"
 
 
+#: What each vendor calls "I stopped because the budget ran out". OpenAI and
+#: OpenRouter say `length` in finish_reason; Anthropic says `max_tokens` in
+#: stop_reason.
+_CEILING_REASONS = frozenset({"length", "max_tokens"})
+
+
+def _hit_the_ceiling(stop_reason: object, spent: int, budget: int) -> bool:
+    """Did the model run out of output budget rather than finish?
+
+    Measured against the deployed api service on 2026-09-17, on
+    `inclusionai/ling-3.0-flash-vl:free`: one call spent all 700 of its output
+    tokens and returned nine words, and two identical calls before it returned
+    none at all. A reasoning model charges its thinking to the same budget the
+    answer comes out of, and no field either reader below looks at carries that
+    thinking. So an exhausted budget and a broken backend produce the same
+    empty string, and only this tells them apart.
+
+    An explicit reason wins over the count. A model that says it stopped of
+    its own accord and happens to land exactly on the budget has finished, and
+    calling that truncated would put a false warning on a whole answer. The
+    count is the fallback for a vendor that reports no reason at all.
+    """
+    reason = str(stop_reason or "").strip().lower()
+    if reason:
+        return reason in _CEILING_REASONS
+    return budget > 0 and spent >= budget
+
+
+def _no_description(
+    *, provider: str, vendor: str, truncated: bool, spent: int, budget: int
+) -> ProviderResponseError:
+    """The empty answer, named by its cause rather than by its symptom."""
+    if truncated:
+        return ProviderResponseError(
+            f"{vendor} vision spent its entire {budget} token output budget "
+            f"({spent} reported) and left no description. Raise "
+            "VISION_MAX_OUTPUT_TOKENS: a reasoning model pays for its thinking "
+            "out of the same budget the answer comes from.",
+            provider=provider,
+        )
+    return ProviderResponseError(
+        f"{vendor} vision answered with an empty description", provider=provider
+    )
+
+
 def _raise_for_status(response: httpx.Response, *, provider: str, vendor: str) -> None:
     """One mapping for every vision backend.
 
@@ -222,19 +267,30 @@ class AnthropicVisionProvider(_HttpVisionProvider):
             if block.get("type") == "text"
         ]
         text = "".join(parts).strip()
+        usage = data.get("usage", {})
+        spent = int(usage.get("output_tokens", 0))
+        truncated = _hit_the_ceiling(data.get("stop_reason"), spent, request.max_tokens)
         if not text:
+            if truncated:
+                raise _no_description(
+                    provider=self.name,
+                    vendor=self.vendor,
+                    truncated=True,
+                    spent=spent,
+                    budget=request.max_tokens,
+                )
             raise ProviderResponseError(
                 "Anthropic vision answered with no text block", provider=self.name
             )
-        usage = data.get("usage", {})
         return VisionResponse(
             text=text,
             usage=TokenUsage(
                 input_tokens=int(usage.get("input_tokens", 0)),
-                output_tokens=int(usage.get("output_tokens", 0)),
+                output_tokens=spent,
             ),
             model=data.get("model", self.resolve_model(request)),
             provider=self.name,
+            truncated=truncated,
         )
 
 
@@ -284,20 +340,28 @@ class OpenAIVisionProvider(_HttpVisionProvider):
             )
         message = choices[0].get("message") or {}
         text = str(message.get("content") or "").strip()
-        if not text:
-            raise ProviderResponseError(
-                f"{self.vendor} vision answered with an empty description",
-                provider=self.name,
-            )
         usage = data.get("usage", {})
+        spent = int(usage.get("completion_tokens", 0))
+        truncated = _hit_the_ceiling(
+            choices[0].get("finish_reason"), spent, request.max_tokens
+        )
+        if not text:
+            raise _no_description(
+                provider=self.name,
+                vendor=self.vendor,
+                truncated=truncated,
+                spent=spent,
+                budget=request.max_tokens,
+            )
         return VisionResponse(
             text=text,
             usage=TokenUsage(
                 input_tokens=int(usage.get("prompt_tokens", 0)),
-                output_tokens=int(usage.get("completion_tokens", 0)),
+                output_tokens=spent,
             ),
             model=data.get("model", self.resolve_model(request)),
             provider=self.name,
+            truncated=truncated,
         )
 
 

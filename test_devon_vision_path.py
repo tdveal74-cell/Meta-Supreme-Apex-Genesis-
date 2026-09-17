@@ -718,3 +718,194 @@ def test_openrouter_needs_a_key_like_every_other_paid_backend():
     with pytest.raises(ProviderConfigError) as exc:
         create_vision_provider("openrouter")
     assert "OpenRouter vision needs an API key" in str(exc.value)
+
+
+# ---------------------------------------------------------------------------
+# The output budget. Measured on the deployed service, not reasoned about.
+#
+# On 2026-09-17 an approved vision.describe ran three times against the Railway
+# api service on inclusionai/ling-3.0-flash-vl:free. Twice it raised
+# "answered with an empty description". The third returned nine words, and all
+# three reported exactly 700 output tokens against the 700 the adapter asked
+# for. A reasoning model charges its thinking to the same budget the answer
+# comes out of, so the allowance ran out before the description started. The
+# 200 and the empty string are what that looks like from here, and the old code
+# could not tell it from a broken backend.
+# ---------------------------------------------------------------------------
+
+def _openrouter(handler):
+    return OpenRouterVisionProvider(
+        api_key="k", transport=httpx.MockTransport(handler)
+    )
+
+
+def _chat(content, finish_reason, spent):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"content": content}, "finish_reason": finish_reason}
+                ],
+                "model": "m",
+                "usage": {"prompt_tokens": 147, "completion_tokens": spent},
+            },
+        )
+
+    return handler
+
+
+async def test_an_exhausted_budget_is_named_rather_than_called_empty():
+    """The refusal has to say why, or the next reader changes the model again.
+
+    This is the exact shape the live service returned: 200, one choice, empty
+    content, finish_reason length, and completion_tokens equal to the budget.
+    """
+    provider = _openrouter(_chat("", "length", 256))
+    with pytest.raises(ProviderResponseError) as exc:
+        await provider.describe(_request())
+
+    message = str(exc.value)
+    assert "256 token output budget" in message
+    assert "VISION_MAX_OUTPUT_TOKENS" in message
+    assert "empty description" not in message
+
+
+async def test_the_budget_is_named_from_the_count_when_the_reason_is_missing():
+    """A vendor that omits finish_reason still reports what it spent."""
+    provider = _openrouter(_chat("", None, 256))
+    with pytest.raises(ProviderResponseError) as exc:
+        await provider.describe(_request())
+    assert "256 token output budget" in str(exc.value)
+
+
+async def test_a_genuinely_empty_answer_still_reads_as_empty():
+    """The new message must not swallow the old case.
+
+    A model that stopped of its own accord after five tokens and said nothing
+    is a different fault, and calling it a budget problem would send the next
+    reader to raise a number that was never the cause.
+    """
+    provider = _openrouter(_chat("   ", "stop", 5))
+    with pytest.raises(ProviderResponseError) as exc:
+        await provider.describe(_request())
+
+    assert "empty description" in str(exc.value)
+    assert "budget" not in str(exc.value)
+
+
+async def test_a_truncated_description_comes_back_marked():
+    """Nine words that stop mid sentence read exactly like nine finished ones."""
+    provider = _openrouter(
+        _chat("This image is a small retro, 8-bit style graphic", "length", 256)
+    )
+    answer = await provider.describe(_request())
+
+    assert answer.truncated is True
+    assert answer.text.endswith("graphic")
+    assert answer.usage.output_tokens == 256
+
+
+async def test_a_finished_description_is_not_marked_truncated():
+    provider = _openrouter(_chat("Three stripes: red, green, blue.", "stop", 12))
+    answer = await provider.describe(_request())
+
+    assert answer.truncated is False
+    assert answer.usage.output_tokens == 12
+
+
+async def test_anthropic_names_its_own_ceiling_the_same_way():
+    """Anthropic says max_tokens in stop_reason where OpenAI says length."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "content": [],
+                "model": "m",
+                "stop_reason": "max_tokens",
+                "usage": {"input_tokens": 147, "output_tokens": 256},
+            },
+        )
+
+    provider = AnthropicVisionProvider(
+        api_key="k", transport=httpx.MockTransport(handler)
+    )
+    with pytest.raises(ProviderResponseError) as exc:
+        await provider.describe(_request())
+
+    assert "256 token output budget" in str(exc.value)
+    assert "no text block" not in str(exc.value)
+
+
+async def test_the_receipt_says_whether_the_description_was_cut_off(tmp_path):
+    """The metadata is what a human reads back weeks later."""
+    from services.vision.base import TokenUsage, VisionResponse
+
+    class _Truncating(MockVisionProvider):
+        async def describe(self, request: VisionRequest):
+            return VisionResponse(
+                text="This image is a small retro, 8-bit style graphic",
+                usage=TokenUsage(input_tokens=147, output_tokens=request.max_tokens),
+                model="m",
+                provider="openrouter",
+                truncated=True,
+            )
+
+    _write_png(tmp_path)
+    approvals, registry = _registry(tmp_path, _Truncating())
+    args = {"image_path": "shot.png", "prompt": "p"}
+    result = await registry.execute(
+        "vision.describe", {**args, APPROVAL_METADATA_KEY: _approved(approvals, args)}
+    )
+
+    assert result.ok is True
+    assert result.metadata["truncated"] is True
+
+
+async def test_the_budget_comes_from_settings_rather_than_a_literal(tmp_path):
+    """700 was hardcoded, so no deployment could raise it without a release."""
+    from app.core.config import settings
+
+    seen = []
+
+    class _Recorder(MockVisionProvider):
+        async def describe(self, request: VisionRequest):
+            seen.append(request.max_tokens)
+            return await super().describe(request)
+
+    _write_png(tmp_path)
+    approvals, registry = _registry(tmp_path, _Recorder())
+    args = {"image_path": "shot.png", "prompt": "p"}
+    await registry.execute(
+        "vision.describe", {**args, APPROVAL_METADATA_KEY: _approved(approvals, args)}
+    )
+
+    assert seen == [settings.VISION_MAX_OUTPUT_TOKENS]
+    assert settings.VISION_MAX_OUTPUT_TOKENS >= 2000, (
+        "the default has to clear a reasoning model's thinking, not just the answer"
+    )
+
+
+def test_an_output_budget_under_the_floor_is_refused():
+    """700 would be refused now. That is the point of the floor."""
+    from app.core.config import MIN_VISION_OUTPUT_TOKENS, Settings
+
+    with pytest.raises(ValueError) as exc:
+        Settings(VISION_MAX_OUTPUT_TOKENS=MIN_VISION_OUTPUT_TOKENS - 1)
+
+    assert "VISION_MAX_OUTPUT_TOKENS" in str(exc.value)
+    assert MIN_VISION_OUTPUT_TOKENS > 0
+
+
+async def test_an_explicit_stop_beats_a_count_that_lands_on_the_budget():
+    """A finished answer that costs exactly the budget is finished, not cut off.
+
+    The count is a fallback for a vendor that reports no reason. Letting it
+    override a reason the vendor did give would put a false truncation warning
+    on a complete description.
+    """
+    provider = _openrouter(_chat("A complete answer, exactly on budget.", "stop", 256))
+    answer = await provider.describe(_request())
+
+    assert answer.truncated is False

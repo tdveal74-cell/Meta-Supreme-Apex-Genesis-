@@ -109,6 +109,10 @@ class VisionResponse:
     model: str
     provider: str
     latency_ms: int = 0
+    #: True when the model stopped because it ran out of output budget rather
+    #: than because it finished. A truncated description reads like a complete
+    #: one, so the caller is told rather than left to guess from the length.
+    truncated: bool = False
 
 
 class VisionProvider(ABC):
