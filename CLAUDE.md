@@ -183,7 +183,8 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_knowledge_graph_fixtures.py test_devon_scheduler_honesty.py \
   test_devon_scheduler_report_honesty.py test_devon_console_voice_honesty.py \
   test_n8n_telemetry.py test_devon_vision_path.py \
-  test_devon_vision_fixture.py test_pulse_watchdog.py
+  test_devon_vision_fixture.py test_pulse_watchdog.py \
+  test_devon_rule_ledger.py test_devon_wager.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .
@@ -242,6 +243,23 @@ matters. Miss either list and every test touching the new tables fails with
 from this paragraph.
 
 Confirm the current head with `alembic heads`, never from a doc.
+
+## Adding a module to services/devon
+
+A new `.py` file there is three places, not one. The module itself, then a byte
+identical copy under `deploy/soul/services/devon/`, then `__init__.py` in both
+if the package exports it. `test_deploy_soul.py` builds its vendored map by
+globbing the real directory, so a new module is required in the deployed copy
+the moment it exists, and a drifted copy fails on bytes rather than on
+behaviour. Found on 2026-09-17 by the full api suite and by nothing before it:
+the standalone job, ruff and the module's own tests were all green while the
+soul service would have shipped without the new rules. `test_devon_integrity.py`
+also globs the directory, so the dash ban, the network import ban and the
+`ast.parse` check apply the moment the file lands, and a doctrine module named
+in its `DOCTRINE_MODULES` map must declare a `SOURCE` or `SOURCES` that names a
+checkable origin.
+
+Copy with `cp`, never by hand, and re-run `python3 -m pytest -q test_deploy_soul.py`.
 
 ## Ship discipline
 

@@ -53,7 +53,9 @@ def test_the_package_has_the_expected_modules():
         "persona",
         "precedence",
         "receipts",
+        "rule_ledger",
         "vault",
+        "wager",
     }
     assert expected <= names
 
@@ -130,6 +132,10 @@ DOCTRINE_MODULES = {
     "persona": "SOURCES",
     "commands": "SOURCES",
     "approval": "SOURCE",
+    # Compiled from an outside teardown rather than the vault, so the source
+    # key names the upstream document instead of a Drive id.
+    "rule_ledger": "SOURCE",
+    "wager": "SOURCES",
 }
 
 

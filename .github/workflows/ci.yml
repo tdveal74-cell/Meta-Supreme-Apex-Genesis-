@@ -86,7 +86,9 @@ jobs:
             test_n8n_telemetry.py \
             test_devon_vision_path.py \
             test_devon_vision_fixture.py \
-            test_pulse_watchdog.py
+            test_pulse_watchdog.py \
+            test_devon_rule_ledger.py \
+            test_devon_wager.py
 
   dependency-audit:
     name: Dependency audit (pip-audit + pnpm audit)
