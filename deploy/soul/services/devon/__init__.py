@@ -21,6 +21,15 @@ LAYERS
     vault        the Drive, Notion, Airtable and n8n map, inert data only
     flagship     the ship gate and its scoring
 
+  Imported doctrine, compiled from an outside source rather than the vault:
+    rule_ledger  rules that know whether they bend, and an assembly that
+                 refuses to go out having dropped one that may not
+    wager        a prediction recorded before the measurement, and the miss
+                 carried into the next prediction
+    tqo_canon    the TQO and NCO show canon as rules, lifted from the live
+                 n8n node and checked against its mirror. Not re-exported,
+                 like vault: it is show data, imported by the caller
+
   Assistant:
     persona      who DEVON is and the rules he works under
     commands     one router for the command language and the device intents
@@ -167,6 +176,28 @@ from services.devon.receipts import (
     render_v1,
     validate,
 )
+from services.devon.rule_ledger import (
+    UNCONDITIONAL_DOMAINS,
+    Assembly,
+    AssemblyCheck,
+    AssemblyRefused,
+    Bend,
+    Rule,
+    RuleClass,
+    RuleError,
+    RuleLedger,
+    check_assembly,
+    require_assembly,
+)
+from services.devon.wager import (
+    Adjustment,
+    Calibration,
+    Measurement,
+    Wager,
+    WagerBook,
+    WagerError,
+    open_wager,
+)
 
 __all__ = [
     "CONTEXT_SOURCES",
@@ -181,6 +212,7 @@ __all__ = [
     "PORTFOLIO",
     "SECURITY_GUARANTEES",
     "TEE_SOUL_FACETS",
+    "UNCONDITIONAL_DOMAINS",
     "Authority",
     "Executor",
     "IntentState",
@@ -217,17 +249,23 @@ __all__ = [
     "POLICY_VERSION",
     "RETURN_VERSION",
     "TYPE_CODES",
+    "Adjustment",
     "Area",
     "AreaError",
     "ApprovalQueue",
     "ApprovalRequest",
     "ApprovalState",
+    "Assembly",
+    "AssemblyCheck",
+    "AssemblyRefused",
     "Assessment",
     "ArtifactReference",
     "ArtifactReturnPlan",
     "AuditFinding",
     "AuditPlan",
     "AuditVerdict",
+    "Bend",
+    "Calibration",
     "Candidate",
     "ChangeKind",
     "ContractIssue",
@@ -247,16 +285,24 @@ __all__ = [
     "ParsedCommand",
     "ParsedName",
     "ReadBack",
+    "Measurement",
     "Receipt",
     "ReceiptError",
     "ReceiptFormat",
     "Risk",
+    "Rule",
+    "RuleClass",
+    "RuleError",
+    "RuleLedger",
     "RoutingDecision",
     "Ruling",
     "SourceReference",
     "Surface",
     "TaskProfile",
     "Verdict",
+    "Wager",
+    "WagerBook",
+    "WagerError",
     "WriteCheck",
     "WriteRequest",
     "approval_gated_intents",
@@ -266,6 +312,7 @@ __all__ = [
     "canonical_codes",
     "canonical_labels",
     "capability_status",
+    "check_assembly",
     "check_punctuation",
     "check_write",
     "classify",
@@ -276,11 +323,13 @@ __all__ = [
     "law3_validate_readback",
     "normalize_code",
     "normalize_label",
+    "open_wager",
     "parse",
     "parse_filename",
     "parse_receipt",
     "plan_artifact_return",
     "render_standing",
+    "require_assembly",
     "render_v1",
     "require_area",
     "resolve",

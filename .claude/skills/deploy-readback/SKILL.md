@@ -222,14 +222,24 @@ deployment from the current head.
 
 ## Vercel quota
 
-**The account is on the Pro plan as of 2026-09-04**, read from `list_teams`,
-which reports `"plan": "pro"` for `tdveal74-5020s-projects`. Everything below
-about the free plan's 100 deployments a day is kept as history, because it is
-what shaped these rules and it explains the `ignoreCommand` that is still in
-both project roots. It no longer describes this account's limit. Read the plan
-from `list_teams` rather than assuming either one, and read the actual number
-from the dashboard Usage page, because there is still no quota endpoint in the
-tooling.
+**The plan has moved and this line has been wrong once already. Read it, never
+assume it.** On 2026-09-04 `list_teams` reported `"plan": "pro"` for
+`tdveal74-5020s-projects` and this file said so flatly. On 2026-09-17 at 18:00Z
+the same call reports **`"plan": "hobby"`**. Nothing in this repository records
+a decision to downgrade, and the tooling does not say when or why it changed, so
+treat the reason as unknown rather than inferring one.
+
+What follows from the reading rather than from the reason: the free plan's 100
+deployments a day is a live constraint again, not history, and the
+`ignoreCommand` in both project roots is load bearing rather than a leftover.
+The account also carries NINE Vercel projects as of that read, seven of them
+unrelated to this repository, and a per day cap is an account cap, so builds
+from `psyclehouse`, `editforge` and the rest spend the same allowance as these
+two. That was never true of the Pro reading and is worth knowing before anybody
+diagnoses a refusal here.
+
+Read the plan from `list_teams` every time, and read the actual number from the
+dashboard Usage page, because there is still no quota endpoint in the tooling.
 
 The rules below survive the plan change on their own merit. A wrong skip ships
 stale code silently whatever the plan is, and that is the failure worth
@@ -426,21 +436,74 @@ Distinguish them by evidence, never by assumption:
 
 ### An account block is a third thing, and it looks like neither
 
-Seen four times: 2026-09-02 into 2026-09-03, again on 2026-09-04, again
+Seen five times: 2026-09-02 into 2026-09-03, again on 2026-09-04, again
 on 2026-09-05 from some point between 18:55Z (the last record created on both
 projects, commit 21caa65) and 19:23Z (the push of 88a002d, which created
-none), and again on 2026-09-15 between 22:52:51Z and 23:35:20Z. The Vercel
-commit statuses on the head read `failure` with the description
-**"Account is blocked"**, pointing at
+none), again on 2026-09-15 between 22:52:51Z and 23:35:20Z, and again from
+2026-09-16 into 2026-09-17. The Vercel commit statuses on the head read
+`failure` with the description **"Account is blocked"**, pointing at
 `https://vercel.com/knowledge/why-is-my-account-deployment-blocked`.
 
-This paragraph said three until the fourth, and the fourth is the one that
-kills the comfortable reading. It is the first block recorded since the account
-moved to Pro on 2026-09-04, so a block is not the free plan and upgrading did
-not stop it. Four occurrences in a fortnight is a recurrence rather than an
-incident, and nothing in the tooling has ever named a reason for any of them.
-Why it keeps happening is unanswered here, and it is worth Tee asking Vercel
-rather than each session re-deriving the same diagnosis.
+This paragraph said three until the fourth and four until the fifth. The fourth
+killed the comfortable reading: it was the first block recorded after the
+account moved to Pro, so a block is not the free plan and upgrading did not stop
+it. The fifth is the expensive one, and it is written up below. Five
+occurrences in a fortnight is a recurrence rather than an incident, and nothing
+in the tooling has ever named a reason for any of them. Why it keeps happening
+is unanswered here, and it is worth Tee asking Vercel rather than each session
+re-deriving the same diagnosis.
+
+### The fifth block, 2026-09-16 into 2026-09-17, and what it stranded
+
+The one the earlier entries warned about and none of them had seen. Both
+projects created their last record at **2026-09-16 22:58:52Z** on `ce70236`.
+The next commit to main, `550479a` at 2026-09-17 01:50:57Z, created none, and
+neither did anything after it.
+
+**It cleared, and this is the first time the clearing was established by a
+deliberate test rather than noticed in passing.** Tee said the account was
+unblocked at about 18:00Z. The last hard evidence of the block was an
+"Account is blocked" status on `e97614d` at 16:52:55Z, and no push had happened
+since, so his word could not be confirmed from records that did not exist yet.
+A real commit was pushed at 19:07:12Z for that purpose, and both projects
+created records within three seconds, `dpl_4QPUZuxzsq5TgdeGDDszWfWsLbYi` and
+`dpl_6avX6GyU3mAXPAyCDsvk6DDouHxx`. The gap in records therefore ran 20 hours
+and 8 minutes, from 2026-09-16 22:58:52Z to 2026-09-17 19:07:13Z, and the block
+itself lifted at some unrecorded point between 16:52:55Z and 19:07:13Z. Against
+the ninety seven minutes of the only other occurrence this file can time, treat
+neither as typical; two measurements are not a distribution.
+
+**Use a real commit for that test, never an empty one.** There is always
+something honest to push when a read-back has just been done, because the
+read-back itself usually finds something this file or a status doc claims
+wrongly. This one found two.
+
+**And the clearing deploys nothing by itself.** A block lifting does not
+replay the commits it refused. Production stayed exactly as stale after 19:07Z
+as before it, on both surfaces, and the owed work below shipped only when a
+later commit reached main. So when a block clears, the next question is never
+"is it green now" but "what is still owed, and what will carry it".
+
+Unlike 2026-09-15, this one did not run through a quiet window. It stranded a
+real production change on BOTH surfaces, which is the shape the 2026-09-15
+entry named as the thing to watch for:
+
+| surface | last READY production | owed to it at 18:00Z on 2026-09-17 |
+|---|---|---|
+| `meta-supreme-apex-genesis-web` | `f0f1e7e`, 2026-09-16 14:28:12Z | `dce4f23`, merged as PR #262 at 04:23Z: 10 files, 1,312 insertions, the whole push to talk build including `usePushToTalk.ts`, `lib/presence/capture.ts`, `public/presence/capture-worklet.js` and `scripts/capture-check.mjs` |
+| `devon-soul` | `94de84b`, 2026-09-16 12:25:30Z | `550479a` and `926098d`: `services/devon/vault.py`, 57 insertions |
+
+So for those nineteen hours the presence page's microphone lane was merged,
+green in CI, and not served by production, with nothing anywhere reporting a
+problem. GitHub Actions ran and passed on every one of those commits. The only
+evidence was an absence in `list_deployments` and a commit status nobody reads
+as a deployment fact.
+
+**The lesson to carry, beyond the block itself:** when CI is green and a merge
+is recent, that says nothing about whether the surface serves it. Run the owed
+check in this file against the last READY production deployment rather than
+against main's HEAD, and run it whenever a block is suspected, not only when
+somebody asks what is live.
 
 The 2026-09-15 gap is the cleanest recorded instance of the signature, because
 five pushes landed inside it. Both projects created their last record at

@@ -94,7 +94,7 @@ test failure. It shows up as a hundred or more collection ERRORs.
 
 ## Reproducing CI
 
-CI is TEN jobs, and on most pull requests you will see five. Five are in
+CI is ELEVEN jobs, and on most pull requests you will see five. Five are in
 `.github/workflows/ci.yml` (`standalone` then `container` and `engine` then
 `api`, plus `dependency-audit` on every push). The sixth is
 `.github/workflows/web-ci.yml`, path filtered to the web workspace, so a run of
@@ -160,6 +160,63 @@ decision logic is unit tested in `test_pulse_watchdog.py` in the standalone job;
 those tests prove the verdict function and prove nothing about the key or the
 host, and the file says so.
 
+The eleventh arrived on 2026-09-17 alongside the tenth, and for the same reason
+one layer down: `.github/workflows/provider-watchdog.yml`, `schedule` only, every
+three hours at :30. It reads the instance's errored executions and goes red when
+a model provider is refusing calls. It exists because the content pipeline has
+now been stopped twice by exactly that and neither time did anything report it.
+On 2026-08-14 the teardown found both script writers dead on Anthropic's "Your
+credit balance is too low". On 2026-09-17 Cerebras answered HTTP 402 to eight
+scheduled runs between 01:00Z and 19:00Z, with seventeen nodes of `TQO FINAL V5`
+routed through it, and it was found by a session that had come to look at
+something else.
+
+The ruling asked for a balance alarm. Anthropic publishes no balance endpoint
+and neither does Cerebras, so that was only a third buildable and the script
+says so in its own docstring rather than implying otherwise. It watches refusals
+instead, which every vendor emits: 402 and 401 alarm because they never clear
+themselves, 429 is counted and reported because it usually does. It shares
+`N8N_VPS_KEY` with the Pulse watchdog and fails the same way when the secret is
+absent.
+
+**Do not pause a content trigger to quieten a provider outage.** This watchdog
+reads FAILURES, so a paused workflow produces none and it would report OK over a
+pipeline just as dead. The noise is the signal. That trap is written into the
+workflow file too, because it is the obvious next thing a tired operator would
+reach for.
+
+**A lane that swallows its provider's refusal is invisible to an error list.**
+Found hours after that script shipped, by reading the live nodes for a different
+question. `TQO FINAL V5` throws on a refusal and lands in the error list. `DEVON
+Face` and `DEVON Drive Draft Writer` do not: both set `neverError` and
+`onError: continueRegularOutput` on their Cerebras node, on purpose, so a 402
+there produces a SUCCESSFUL execution and Face answers "I could not reach my
+language lane, ask again in a minute", which reads the same on day one and day
+eight. The watchdog now reads the newest successful runs of every lane that
+calls a provider host and swallows the answer, derived from the workflows rather
+than listed, so a third lane written that way is covered the day it lands.
+
+One lane cannot be covered and is named in the output on every run instead.
+`DEVON Drive Draft Writer` sets `saveDataSuccessExecution: none`, so a
+successful run leaves nothing for any execution reader to open. Its refusal is
+not lost; it rides back on the envelope as `refused` with the reason and the
+state ledger holds it. Reporting coverage that does not exist is the failure the
+script exists to prevent, so it discloses the gap in both the OK line and the
+ALARM line.
+
+Graded honestly, because over-calling a finding is its own error: the first
+version DID catch the 2026-09-17 outage and the test replaying it passes
+unchanged. The gap is an outage confined to the soft failing lanes, which is
+what a provider split or a paused content trigger would produce.
+
+**The standalone list above drifted and was regenerated from `ci.yml`.** It
+named 30 files while the job ran 36, missing `test_devon_data_tables.py`,
+`test_devon_table_id_conversion.py`, `test_devon_provider_billing.py`,
+`test_devon_spoken_input.py`, `test_presence_hearing.py` and
+`test_presence_livekit_publisher.py`, so a local run reported 114 fewer tests
+than CI and a commit message carried the wrong count. Regenerate it from the
+job rather than editing it by hand.
+
 The standalone job runs with no database. This paragraph said it also runs
 with **no** `PYTHONPATH` until 2026-09-09, when a worktree agent read the file
 and found otherwise: `ci.yml` sets `PYTHONPATH` in its top level `env:` block
@@ -176,14 +233,19 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_workflow_engine.py test_devon_hermes_expansion.py \
   test_devon_hermes_durable_followon.py test_devon_learning_loop.py \
   test_devon_operating_layer.py test_devon_editforge_execution.py \
+  test_devon_data_tables.py test_devon_table_id_conversion.py \
+  test_devon_provider_billing.py test_devon_spoken_input.py \
   test_devon_hermes_surface.py test_devon_receipts.py \
   test_devon_capture_enrichment.py test_presence_cartesia.py \
-  test_presence_service.py test_devon_owned_voice.py \
+  test_presence_service.py test_presence_hearing.py \
+  test_presence_livekit_publisher.py test_devon_owned_voice.py \
   test_devon_learning_context_honesty.py test_knowledge_graph.py \
   test_knowledge_graph_fixtures.py test_devon_scheduler_honesty.py \
   test_devon_scheduler_report_honesty.py test_devon_console_voice_honesty.py \
   test_n8n_telemetry.py test_devon_vision_path.py \
-  test_devon_vision_fixture.py test_pulse_watchdog.py
+  test_devon_vision_fixture.py test_pulse_watchdog.py \
+  test_devon_rule_ledger.py test_devon_wager.py test_devon_tqo_canon.py \
+  test_provider_watchdog.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .
@@ -254,6 +316,23 @@ The two readers genuinely disagree at that moment: `_alembic_head()` globs
 the migration and the test passes; 83 passed immediately after. Do not chase
 it, and do not "fix" the test. It is measuring the right thing, which is that
 the deployed head comes from the deployed commit rather than from your tree.
+
+## Adding a module to services/devon
+
+A new `.py` file there is three places, not one. The module itself, then a byte
+identical copy under `deploy/soul/services/devon/`, then `__init__.py` in both
+if the package exports it. `test_deploy_soul.py` builds its vendored map by
+globbing the real directory, so a new module is required in the deployed copy
+the moment it exists, and a drifted copy fails on bytes rather than on
+behaviour. Found on 2026-09-17 by the full api suite and by nothing before it:
+the standalone job, ruff and the module's own tests were all green while the
+soul service would have shipped without the new rules. `test_devon_integrity.py`
+also globs the directory, so the dash ban, the network import ban and the
+`ast.parse` check apply the moment the file lands, and a doctrine module named
+in its `DOCTRINE_MODULES` map must declare a `SOURCE` or `SOURCES` that names a
+checkable origin.
+
+Copy with `cp`, never by hand, and re-run `python3 -m pytest -q test_deploy_soul.py`.
 
 ## Ship discipline
 

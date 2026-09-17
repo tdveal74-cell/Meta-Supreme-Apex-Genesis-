@@ -1,0 +1,83 @@
+name: Provider watchdog
+
+# THE ALARM FOR THE FAILURE THAT HAS NOW STOPPED THE PIPELINE TWICE
+#
+# On 2026-08-14 a teardown found both script writers dead on Anthropic's "Your
+# credit balance is too low", with the render lane politely reporting an empty
+# queue because no work had ever reached it. On 2026-09-17 the same class of
+# failure happened again on a different vendor: Cerebras answering HTTP 402,
+# eight scheduled runs dead between 01:00Z and 19:00Z, seventeen nodes of TQO
+# FINAL V5 routed through that one provider, and nothing anywhere saying so. It
+# was found by a session that had come to look at something else.
+#
+# Both times the estate's own machinery reported nothing, because a workflow
+# that dies at its first model call still starts, still runs thirty-odd nodes,
+# and still writes an execution record that looks like any other failure.
+#
+# WHAT IT WATCHES, AND WHY NOT BALANCES. The ruling asked for a balance alarm.
+# Anthropic publishes no balance endpoint and neither does Cerebras, so a script
+# claiming to watch all three balances would be lying about two of them. This
+# watches the estate's own executions for a terminal error meaning a provider
+# refused the call, which is observable for every vendor. It is a LAGGING
+# indicator by necessity: it fires after the first refusal, and one cycle after
+# is the whole improvement over eighteen hours of silence. OpenRouter does
+# expose credit and could be led rather than lagged; that is named in
+# scripts/provider_watchdog.py as the next step rather than half built here.
+#
+# PAYMENT AND AUTH ALARM. RATE LIMITS DO NOT. A 402 or a 401 never clears
+# itself. A 429 usually does, so it is counted in the message and left to a
+# human to read. See the docstring for the full reasoning.
+#
+# WHY IT IS A SEPARATE WORKFLOW. Same reason as the Pulse watchdog next door:
+# ci.yml runs on pushes and pull requests, which is the wrong clock for an
+# outage that starts on a quiet Saturday.
+#
+# IT NAGS ON PURPOSE, and the nagging is load bearing in a way worth stating.
+# This reads FAILURES, so a paused workflow produces none and this would report
+# OK over a pipeline that is just as dead. Do not pause the content triggers to
+# quieten a provider outage: the noise is the signal. If they are ever paused
+# deliberately, this alarm is blind for the duration and somebody has to say so.
+#
+# BEFORE THIS CAN WORK it needs N8N_VPS_KEY, the same repository secret the
+# Pulse watchdog needs. Until it exists every run goes red with exit 2 saying
+# so, which is the intended direction.
+#
+# SCHEDULED WORKFLOWS ONLY RUN ON THE DEFAULT BRANCH, so nothing here takes
+# effect from a pull request; it starts working when this file is on main.
+#
+# The decision logic is unit tested in test_provider_watchdog.py, in the
+# standalone job of ci.yml, including a replay of the real 2026-09-17 failures
+# that asserts this would have fired three hours into that outage. Those tests
+# prove the verdict function and prove nothing about the key or the host.
+
+on:
+  schedule:
+    # Every three hours, matching the Pulse watchdog, and the six hour window in
+    # the script is twice that so no failure can fall between two runs.
+    - cron: "30 */3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: provider-watchdog
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    name: Is a model provider refusing the estate's calls
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # No pip install, same as the Pulse watchdog: standard library only, so
+      # this job keeps working when other things do not.
+      - name: Read the execution log for a provider refusal
+        env:
+          N8N_VPS_KEY: ${{ secrets.N8N_VPS_KEY }}
+        run: python3 scripts/provider_watchdog.py
