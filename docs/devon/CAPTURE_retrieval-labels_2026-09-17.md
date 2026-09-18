@@ -75,9 +75,15 @@ in two different ways that matter.
 **The paraphrase result is a coin flip, not a hit.** The shipped configuration
 appeared to find the burnout note at rank 3. Re-run eight times with nothing
 changing but the row ids: ranks 2, 3, 2, 4, 2, 4, 2, 1. The lexical signal
-matched ZERO chunks, so the mock dense vector is supplying noise and the noise
-sometimes lands on the right answer. Reporting that as a partial success would
-have been the same error as the 0.741 to 0.767 figure earlier in this session.
+matched ZERO chunks, so the answer was noise that sometimes landed right.
+Reporting it as a partial success would have been the same error as the 0.741
+to 0.767 figure earlier in this session.
+
+CORRECTION, made after the cause was traced. That wobble was attributed here to
+the mock dense vector alone. The `rarity` signal was also supplying noise and is
+the cleaner culprit: it reads a metadata key nothing writes, so it was 0.0 on
+every row and `rank_map_from_scores` ordered it by UUID at weight 0.35. Both
+contributed; naming only one was wrong.
 
 ## THE FINDING THIS GRILL ACTUALLY PRODUCED
 
@@ -121,8 +127,24 @@ answer would still come back cleared. A better ranking over garbage is garbage
 ranked more convincingly. So a relevance floor comes BEFORE the vendor
 question, and the vendor question was what this grill was convened to answer.
 
-Not built. A floor changes what the endpoint returns, refusing questions that
-currently get answers, and that is Tee's ruling rather than a session's.
+BUILT, on Tee's ruling of 2026-09-18, which delegated both calls to Claude's
+recommendation. Only a signal that read the query may introduce a candidate, so
+`age` now reorders what dense and sparse found and `rarity` is deleted outright
+rather than kept at weight zero. The dense signal is gated on
+`dense_is_trusted`, defaulting False, reusing the allowlist shape Tee already
+ruled for episode coverage on 2026-09-16 rather than inventing a second one.
+
+Re-measured on the same probes:
+
+```
+BEFORE  'xylophone quagmire zeppelin'    cleared True    3 citations
+        'how do I recover from burnout'  cleared True    3 citations
+AFTER   'xylophone quagmire zeppelin'    cleared False   0 citations, no_candidates
+        'how do I recover from burnout'  cleared True    1 citation, the right one
+```
+
+No threshold was invented. The floor is a rule about who may introduce a
+candidate, which needs no number.
 
 ## Decisions this settles
 

@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.models.knowledge import Embedding, KnowledgeItem
 from services.intelligence.providers.embeddings import (
     create_embedding_provider,
+    dense_signal_is_trusted,
     resolve_embedding_provider_name,
 )
 from services.knowledge.chunking import chunk_text
@@ -208,6 +209,9 @@ async def query_knowledge(
         )
         return _pack(answer, [])
 
+    # Only this layer knows which provider produced the vector, so it is the
+    # one that can say whether the distances may introduce a candidate.
+    # hybrid_retrieve fails closed without it.
     candidates = await hybrid_retrieve(
         db,
         owner_id=owner_id,
@@ -216,6 +220,9 @@ async def query_knowledge(
         limit=max(limit * 3, 18),  # larger RRF pool for the re-ranker
         project_id=project_id,
         user_tokens=user_tokens,
+        dense_is_trusted=dense_signal_is_trusted(
+            getattr(provider, "name", "") or ""
+        ),
     )
 
     completion = _completion_provider()
