@@ -251,6 +251,30 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
 SUPPORTED_EMBEDDING_PROVIDERS = ("mock", "openai")
 
+#: Providers whose DISTANCES may decide whether a document was found at all.
+#:
+#: Supporting a provider and trusting its distances are different claims.
+#: `mock` is supported, deterministic and useful for tests, and its distances
+#: are not usable for a verdict: measured 2026-09-16, a sourdough recipe scored
+#: 0.6406 against an episode about jobs while an on topic question scored
+#: 0.6170. Ranking an unrelated document higher is not a weak signal, it is a
+#: wrong one.
+#:
+#: An ALLOWLIST, so a provider added to SUPPORTED_EMBEDDING_PROVIDERS has to be
+#: measured before its distances are believed rather than trusted until it is
+#: caught. Same shape and the same reason as
+#: `app.services.episodes.TRUSTED_FOR_COVERAGE`, which answers the narrower
+#: question of whether a coverage verdict may be rendered.
+TRUSTED_FOR_RETRIEVAL = ("openai",)
+
+
+def dense_signal_is_trusted(provider_name: str) -> bool:
+    """May this provider's distances introduce a retrieval candidate?
+
+    Fails closed on anything unrecognised, including None and an empty string.
+    """
+    return (provider_name or "").strip().lower() in TRUSTED_FOR_RETRIEVAL
+
 
 def resolve_embedding_provider_name(settings: Any) -> str:
     """Name the provider that embeds, from the field that names itself.

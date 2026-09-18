@@ -1,7 +1,49 @@
-"""Hybrid 4-signal retrieval with ACL and RRF fusion.
+"""Hybrid retrieval with ACL and RRF fusion, and a floor that can refuse.
 
-Signals: dense (pgvector), sparse (fts), rarity, age decay.
-Every signal filtered by owner, project, status=ready, acl_tokens.
+Signals: dense (pgvector), sparse (fts), age decay. Every one filtered by
+owner, project, status=ready, acl_tokens.
+
+IT WAS FOUR SIGNALS AND IT COULD NOT REFUSE ANYTHING.
+
+Measured 2026-09-17. `rarity` read `metadata->>'rarity'`, which nothing in this
+repository has ever written, so it was 0.0 on every row. `rank_map_from_scores`
+sorts equal scores by id, so a signal carrying weight 0.35 was ranking
+documents by their UUID.
+
+`age` is real but reads no query at all: `_recent_pool` is
+`ORDER BY created_at DESC LIMIT 30`. So two of the four signals never saw the
+question, and together they supplied a full pool for every query. Nothing could
+return empty, and `synthesize_with_cross_encoder` refuses only on an empty
+pool, so its documented rule of "No candidates -> explicit refusal (never
+fabricate)" was unreachable. `POST /knowledge/query` answered
+`xylophone quagmire zeppelin` with `cleared: True` and three citations,
+identical in shape to a question it could actually answer.
+
+THE FLOOR IS A RULE ABOUT WHO MAY INTRODUCE A CANDIDATE, NOT A THRESHOLD.
+
+Only a signal that read the query may put a document into the pool. `age` now
+reorders what dense and sparse found and can no longer add to it, and `rarity`
+is gone rather than kept at weight zero, because dead code that looks like a
+working signal is how this was missed. No number had to be invented, which
+matters: a threshold nobody measured is a guess, and RRF scores are not
+calibrated across corpus sizes anyway.
+
+AND DENSE ONLY COUNTS WHEN ITS PROVIDER CAN CARRY A VERDICT.
+
+Tee ruled this on 2026-09-16 for episode coverage and the same measurement
+governs here: under MockEmbeddingProvider a sourdough recipe scored 0.6406
+against the jobs episode while an on topic question scored 0.6170. Distances
+that rank an unrelated document higher cannot decide whether anything was
+found. So `dense_is_trusted` defaults to FALSE and the dense query does not
+run without it, which fails closed in the same direction as
+`app.services.episodes.TRUSTED_FOR_COVERAGE`. On this estate today that leaves
+the lexical signal as the only thing that can introduce a candidate, which is
+an honest description of what actually works.
+
+`query_vec` is still required even when it goes unused, and that is worth
+fixing separately: it makes every query pay for an embedding call whose result
+is then discarded. Left alone here to keep one behavioural change to reason
+about.
 """
 
 from __future__ import annotations
@@ -155,7 +197,7 @@ async def _sparse_signal(
     return [dict(row) for row in result.mappings().all()]
 
 
-async def _rarity_and_age_pool(
+async def _recent_pool(
     db: AsyncSession,
     *,
     owner_id: str,
@@ -172,8 +214,7 @@ async def _rarity_and_age_pool(
           e.content,
           e.chunk_index,
           e.source,
-          e.created_at,
-          COALESCE((e.metadata->>'rarity')::float, 0.0) AS rarity
+          e.created_at
         FROM embeddings e
         JOIN knowledge_items ki ON ki.id = e.knowledge_item_id
         WHERE {_acl_sql()}
@@ -213,8 +254,19 @@ async def hybrid_retrieve(
     project_id: Optional[str] = None,
     user_tokens: Optional[Sequence[str]] = None,
     signal_weights: Optional[Dict[str, float]] = None,
+    dense_is_trusted: bool = False,
 ) -> List[RetrievalCandidate]:
-    """Run four signals, fuse with RRF k=60, return typed candidates."""
+    """Fuse the signals that read the query, let age reorder them, or refuse.
+
+    Returns [] when no signal that read the query found anything, which is what
+    makes the synthesizer's "never fabricate" refusal reachable. See the module
+    docstring for why that was impossible until 2026-09-17.
+
+    `dense_is_trusted` defaults False and gates the pgvector query entirely.
+    The caller knows which provider produced `query_vec`; this function does
+    not, and guessing in the permissive direction is what the 0.6406 against
+    0.6170 measurement rules out.
+    """
     query = (query or "").strip()
     if not query or not query_vec:
         return []
@@ -224,35 +276,51 @@ async def hybrid_retrieve(
     weights = signal_weights or {
         "dense": 1.0,
         "sparse": 1.0,
-        "rarity": 0.35,
         "age": 0.25,
     }
 
-    dense_rows = await _dense_signal(
-        db, owner_id=owner_id, query_vec=query_vec, project_id=project_id,
-        user_tokens=tokens, limit=limit,
+    # Not run at all on an untrusted provider, rather than run and down
+    # weighted. A distance that ranks a sourdough recipe above an on topic
+    # question is not a weak signal, it is a wrong one, and it also saves the
+    # pgvector scan.
+    dense_rows = (
+        await _dense_signal(
+            db, owner_id=owner_id, query_vec=query_vec, project_id=project_id,
+            user_tokens=tokens, limit=limit,
+        )
+        if dense_is_trusted
+        else []
     )
     sparse_rows = await _sparse_signal(
         db, owner_id=owner_id, query=query, project_id=project_id,
         user_tokens=tokens, limit=limit,
     )
-    pool = await _rarity_and_age_pool(
-        db, owner_id=owner_id, project_id=project_id,
-        user_tokens=tokens, limit=limit,
-    )
 
     dense_ids = [str(r["embedding_id"]) for r in dense_rows]
     sparse_ids = [str(r["embedding_id"]) for r in sparse_rows]
-    rarity_scores = {str(r["embedding_id"]): float(r.get("rarity") or 0.0) for r in pool}
-    age_scores = {str(r["embedding_id"]): _age_score(r.get("created_at")) for r in pool}
-    rarity_ids = rank_map_from_scores(rarity_scores)
+
+    # THE FLOOR. Only a signal that read the query may introduce a candidate,
+    # so when none of them found anything there is nothing to rank and the
+    # honest answer is none rather than the newest thirty rows.
+    introduced = set(dense_ids) | set(sparse_ids)
+    if not introduced:
+        return []
+
+    pool = await _recent_pool(
+        db, owner_id=owner_id, project_id=project_id,
+        user_tokens=tokens, limit=limit,
+    )
+    age_scores = {
+        str(r["embedding_id"]): _age_score(r.get("created_at"))
+        for r in pool
+        if str(r["embedding_id"]) in introduced
+    }
     age_ids = rank_map_from_scores(age_scores)
 
     fused = fuse_named_signals(
         {
             "dense": dense_ids,
             "sparse": sparse_ids,
-            "rarity": rarity_ids[:limit],
             "age": age_ids[:limit],
         },
         k=60,
@@ -285,7 +353,6 @@ async def hybrid_retrieve(
                 signals={
                     "dense": 1.0 if emb_id in dense_ids else 0.0,
                     "sparse": 1.0 if emb_id in sparse_ids else 0.0,
-                    "rarity": rarity_scores.get(emb_id, 0.0),
                     "age": age_scores.get(emb_id, 0.0),
                 },
                 source=row.get("source"),
