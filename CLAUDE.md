@@ -222,6 +222,35 @@ version DID catch the 2026-09-17 outage and the test replaying it passes
 unchanged. The gap is an outage confined to the soft failing lanes, which is
 what a provider split or a paused content trigger would produce.
 
+**A new schedule only workflow does not fire at its first slots, and that is
+not a defect.** Measured twice, which is the only reason it is written as a
+rule rather than a guess:
+
+| workflow | registered | first `event: schedule` run | delay |
+|---|---|---|---|
+| `pulse-watchdog.yml` | 2026-09-17T11:14:49Z | 16:21:01Z | 5h06m |
+| `provider-watchdog.yml` | 2026-09-17T22:56:31Z | 2026-09-18T04:59:54Z | 6h03m |
+
+The provider watchdog passed its 00:30Z and 03:30Z slots unfired and then ran
+at 04:59:54Z, an hour and a half after the slot it belongs to. Lateness does not
+stop after the first run either: the Pulse's scheduled runs have landed at
+16:21:01Z, 20:59:10Z, 23:29:55Z and 03:26:54Z against a `0 */3` cron, so twenty
+to ninety minutes late is ordinary and a skipped slot has been seen. Wait about
+six hours and two slots before calling a new scheduled workflow broken, and use
+`workflow_dispatch` to prove the script itself in the meantime, which is how
+both of these were proven.
+
+This corrects the reasoning in `PR #272`, not its conclusion. That merge said a
+missed slot is platform behaviour and cited the gaps between consecutive Pulse
+runs. The gap argument was the weak half: gaps say nothing about a workflow that
+has never fired. The first run delay is the half that carries it, and it was
+available and unused at the time.
+
+**The alarm going red every three hours during an outage is the design, not a
+new fault.** The channel is the job failing and GitHub mailing the owner, so a
+provider refusal that lasts a week produces a red job and an email every three
+hours for a week. Silence is the failure mode this replaced.
+
 **The standalone list above drifted and was regenerated from `ci.yml`.** It
 named 30 files while the job ran 36, missing `test_devon_data_tables.py`,
 `test_devon_table_id_conversion.py`, `test_devon_provider_billing.py`,
