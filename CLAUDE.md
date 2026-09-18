@@ -196,13 +196,26 @@ eight. The watchdog now reads the newest successful runs of every lane that
 calls a provider host and swallows the answer, derived from the workflows rather
 than listed, so a third lane written that way is covered the day it lands.
 
-One lane cannot be covered and is named in the output on every run instead.
-`DEVON Drive Draft Writer` sets `saveDataSuccessExecution: none`, so a
-successful run leaves nothing for any execution reader to open. Its refusal is
-not lost; it rides back on the envelope as `refused` with the reason and the
-state ledger holds it. Reporting coverage that does not exist is the failure the
-script exists to prevent, so it discloses the gap in both the OK line and the
-ALARM line.
+**FOUR lanes cannot be covered, and this paragraph said ONE until the watchdog
+itself corrected it.** A lane that sets `saveDataSuccessExecution: none` leaves
+nothing for any execution reader to open on a successful run, so a swallowed
+refusal there is invisible. The first live run, 2026-09-18T01:06:58Z, named
+them: `DEVON Drive Draft Writer`, `DEVON Intake Former`, `DEVON Intelligence
+Router` and `DEVON iPhone Inbox Capture`. The count was written from the two
+workflows a session happened to read rather than from the estate, which is the
+same miss the first law tabulates, committed in the commit that shipped the fix
+for it. The script derives the list precisely so nobody has to count; do not
+edit that number by hand, read it out of a run.
+
+The refusal is not lost in any of them, it is just not in an execution: the
+draft writer returns `refused` on the envelope and the state ledger holds it,
+and `iPhone Inbox Capture` falls back to keyword tagging and writes "Cerebras
+unavailable (HTTP 402), fell back to keyword matching" into the Airtable row's
+Notes. That last one matters more than it reads: every phone capture during a
+provider outage is tagged by keyword instead of by the model, and the only
+evidence is a sentence in a field nobody opens. Reporting coverage that does not
+exist is the failure the script exists to prevent, so it discloses the gap in
+both the OK line and the ALARM line.
 
 Graded honestly, because over-calling a finding is its own error: the first
 version DID catch the 2026-09-17 outage and the test replaying it passes
