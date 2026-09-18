@@ -77,7 +77,7 @@ wider than it looks: adding `services/devon/data_tables.py` triggered a
 presence rebuild on 2026-09-16.
 
 **The presence service reads itself back, which the other four cannot.**
-`GET /health` is unauthenticated and returns the nine keys pinned by
+`GET /health` is unauthenticated and returns the eleven keys pinned by
 `test_presence_service.py::test_health_says_only_these_things_and_no_more`:
 `inference` and `fallback` name the live providers, `speech` says whether the
 Cartesia clone or the mock is wired, `livekit_configured` is the deployed
@@ -86,7 +86,14 @@ wrong makes the chat's `POST /tts` fail silently with a discarded 200, and
 `breaker` carries the live circuit state. So for this one surface the honest
 answer to "what is production serving" comes from the service itself rather than
 from a deployment record, and a claim about its wiring that was not read off
-`/health` is unverified. The key set is pinned deliberately: a field added there
+`/health` is unverified.
+
+That count said nine until 2026-09-17, when a read-back counted the set in the
+test instead of trusting the sentence. Protocol v2 added `ears` and
+`protocols`, and `protocols` is the one worth reading on a stale estate: a
+client that cannot speak v2 and a service that can look identical from the
+service's side, which is how the push to talk lane was live on presence and
+unserved by the web surface for 18 hours. **Count them from the test.** The key set is pinned deliberately: a field added there
 is published to anybody, so it is a decision and not a debugging leftover.
 
 **AND A CONTAINER CAN NOW READ IT. Tee opened it on 2026-09-16.** For most of
@@ -100,7 +107,7 @@ and for the same reason: a key alone was never enough.
 Proven by the read itself, not by the setting being saved:
 
 ```
-curl https://presence-production-d272.up.railway.app/health   200, nine keys
+curl https://presence-production-d272.up.railway.app/health   200, the pinned keys
 curl https://api-production-5644.up.railway.app/api/v1/health 200, healthy
 ```
 
@@ -484,6 +491,16 @@ as before it, on both surfaces, and the owed work below shipped only when a
 later commit reached main. So when a block clears, the next question is never
 "is it green now" but "what is still owed, and what will carry it".
 
+Both strands shipped later the same evening, unforced, on the first merge that
+touched each project's paths. `53b3f48` merged at 22:47:31Z, the web project's
+ignore step compared it against `f0f1e7e` and found all ten push to talk files,
+and `dpl_F89tEYKtgLgFSMkG7j8BV8CssYua` went READY at 22:48:27Z. `d8d7144`
+merged at 22:56:29Z and `dpl_EqbcffbHERX1URRkjY4o4suApUrZ` built `devon-soul`.
+The web production build on `d8d7144` was skipped, correctly, because
+`53b3f48..d8d7144` is empty over its four watched paths. The push to talk build
+was therefore merged at 04:23Z and served from 22:48:27Z, 18 hours and 25
+minutes later, with CI green throughout.
+
 Unlike 2026-09-15, this one did not run through a quiet window. It stranded a
 real production change on BOTH surfaces, which is the shape the 2026-09-15
 entry named as the thing to watch for:
@@ -529,6 +546,31 @@ built to READY on the merge rather than skipping, because that merge carried
 `deploy/soul/services/devon/vault.py`, which is the shape worth watching: a
 block that had lasted into a `deploy/soul` change would have held a real
 production update, silently, with only an absence to show for it.
+
+That is exactly what the fifth block did, on both projects at once, and it is
+written up in its own section above.
+
+**A cleared block does not ship what it held, and the next push to main does.**
+The comparison base is the last successful deployment, so the owed diff
+survives intact and the first build after the block carries the whole of it.
+Both projects did exactly that: `53b3f48` merged at 22:47:31Z, compared against
+`f0f1e7e`, found all ten web files and went READY at 22:48:27Z, and `d8d7144`
+merged at 22:56:29Z and built `devon-soul`. The web project's production build
+on `d8d7144` was then skipped, correctly, because `53b3f48..d8d7144` is empty
+over its four watched paths. Nothing had to be forced.
+
+Do not reach for Redeploy: it rebuilds the commit of the record it starts from,
+and during a block no record was created for the commits that matter, so the
+newest thing it can rebuild is the stale one already live. A branch push is no
+use either, because a preview's comparison base is that branch's own last
+deployment rather than production.
+
+**And re-read the state immediately before publishing a claim about it.** The
+2026-09-17 read-back was written at 22:46Z saying both surfaces were stale with
+a measured payload owed to each. It was right at 22:46Z and wrong by 22:48Z,
+because another session merged PR #270 in between. A block ending is exactly
+when several sessions ship at once, so a read-back taken during one has the
+shortest useful life of any claim in this file.
 
 It is not the daily cap. The cap names itself (`api-deployments-free-per-day`)
 and it is a refusal of one deployment; a block is account wide and the tooling

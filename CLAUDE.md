@@ -282,6 +282,19 @@ pnpm audit --audit-level=moderate
 ESLint is not configured here. `next lint` drops into its interactive setup and
 exits non-zero, which looks like a lint failure and is not one.
 
+**Do not run the standalone job while the full suite is running.** Found on
+2026-09-17. The full api suite was running in the background when the standalone
+list was run in the same container, and
+`test_presence_service.py::test_interrupt_for_another_turn_acks_without_cancelling`
+failed with `assert 'frame' == 'state'`: the socket delivered an audio frame
+where the test expected the state change, which is an ordering assertion losing
+to CPU contention. The job took 14.21s under load and 7.28s alone, and it
+returned `992 passed` alone, on `origin/main` in a clean worktree, and on the
+branch. This is the CPU sibling of the database collision documented under
+"Running a critic": neither is a defect in the branch, and both cost a
+diagnostic detour if the concurrency is not noticed. Run one suite at a time,
+and re-run alone before believing a timing failure.
+
 The full failure catalogue with root causes lives in the `steward` skill.
 Check it before inventing a new theory.
 
