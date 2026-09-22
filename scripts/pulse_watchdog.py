@@ -116,6 +116,37 @@ HEARTBEAT_TABLE_ID = "RuPMZKXkqcbuHRKa"
 #: above, which took it from ``docs/devon/vps-cutover-maps_2026-09-15.json``.
 HEARTBEAT_WORKFLOW_ID = "EEDrp2jLlw2Ssd5b"
 
+#: Every lane that sends on the one Gmail app password AgSGuaA2pnZsrZcJ and
+#: whose send failure shows up as an errored execution. Counted from the
+#: workflow list on 2026-09-22 and recorded in
+#: ``docs/devon/SYS_OPS_a-fresh-beat-is-not-a-finished-run_v1_2026-09-22-0624.md``,
+#: not from the lanes a session happened to open. Names are written in ASCII
+#: here; the live workflows carry an em dash that this file has no reason to.
+ALARM_LANES = (
+    (HEARTBEAT_WORKFLOW_ID, "Heartbeat (Build 13)"),
+    ("bqcnIS0Qv4RkTCU1", "Error Alarm"),
+    ("IZBVlXQ8Y5dsGTRS", "Pipeline Watchdog"),
+)
+
+#: The fourth lane, and the one this check cannot see. ``OS - Error Handler
+#: (all pipelines)`` sets ``onError: continueRegularOutput`` on its send, so a
+#: failed alert finishes the run GREEN and never appears under
+#: ``status=error``. Listing it above would manufacture exactly the false
+#: comfort this script exists to prevent, so it is named here and declared on
+#: every run instead. Watching it needs either that flag flipped, which Tee
+#: declined on 2026-09-22 because a mail outage would then kill pipelines, or a
+#: read of execution DATA rather than status.
+UNWATCHABLE_LANE = (
+    "GbeNilHQzjmoWDz3",
+    "OS Error Handler (all pipelines)",
+    "sets onError continueRegularOutput on its send, so a failed alert reports SUCCESS",
+)
+
+#: How many rows to ask for when the narrowed, newest-first read is available.
+#: Comfortably more than the ~5 rows a day the log grows by, so a verdict never
+#: rests on a handful, and far under the cap below.
+NARROW_LIMIT = 50
+
 #: How many errored runs of the Heartbeat to list. Only the newest decides the
 #: verdict; the rest are counted so the message can say how deep the outage
 #: goes. The 2026-09-20 outage was seven consecutive failures, so a handful is
@@ -186,6 +217,27 @@ def newest_beat(rows: Sequence[Dict[str, Any]]) -> Tuple[Optional[datetime], int
         if newest is None or stamp > newest:
             newest = stamp
     return newest, seen, unreadable
+
+
+def is_newest_first(rows: Sequence[Dict[str, Any]], want: int) -> bool:
+    """Did a narrowed read really come back newest first, or was it ignored?
+
+    The rows API was measured in September as ``limit`` and nothing else, so a
+    server that ignores an ordering parameter would hand back the OLDEST rows
+    instead. Acting on that would drop the newest beat and manufacture a false
+    alarm, which is worse than the row cap this narrowing exists to dodge. So
+    the response has to prove itself: at least two rows, no more than asked
+    for, integer ids, strictly descending. A server that ignored the parameter
+    cannot satisfy that by accident, and if it fails the caller falls back to
+    the wide read and the old refusal. Pure, so the guard is testable without a
+    network or a key.
+    """
+    if want < 2 or len(rows) < 2 or len(rows) > want:
+        return False
+    ids = [row.get("id") for row in rows]
+    if not all(isinstance(value, int) for value in ids):
+        return False
+    return all(earlier > later for earlier, later in zip(ids, ids[1:], strict=False))
 
 
 def verdict(
@@ -271,8 +323,9 @@ def run_verdict(
     now: datetime,
     threshold_h: float = MISSED_BEAT_H,
     detail: str = "",
+    lane: str = "Heartbeat (Build 13)",
 ) -> Tuple[int, str]:
-    """Exit code and message for "did the Heartbeat's runs actually finish".
+    """Exit code and message for "did this lane's runs actually finish".
 
     Separate from ``verdict`` because it answers a different question about a
     different source. ``verdict`` reads the receipt the Pulse leaves behind;
@@ -283,14 +336,14 @@ def run_verdict(
 
     if seen == 0 or newest is None:
         return OK, (
-            "OK: no errored run of the Heartbeat came back, so the beat above was "
-            "written by a run that finished."
+            f"OK: no errored run of {lane} came back, so every run of it finished "
+            "rather than dying on its way to Tee."
         )
 
     age_h = (now - newest).total_seconds() / 3600.0
     if age_h > threshold_h:
         return OK, (
-            f"OK: the newest errored Heartbeat run started {age_h:.1f}h ago, outside the "
+            f"OK: the newest errored {lane} run started {age_h:.1f}h ago, outside the "
             f"{threshold_h}h window, so it is old news rather than a live outage. "
             f"{seen} errored run(s) were listed."
         )
@@ -300,7 +353,7 @@ def run_verdict(
     which = f" Execution {execution_id}." if execution_id else ""
     plural = "" if seen == 1 else "s"
     return ALARM, (
-        f"ALARM: the Heartbeat BEAT but did not FINISH. Its newest errored run started "
+        f"ALARM: {lane} RAN but did not FINISH. Its newest errored run started "
         f"{stamp}, {age_h:.1f}h ago, inside the {threshold_h}h window{where}.{which} "
         f"{seen} errored run{plural} were listed. A beat row is written early, on a branch "
         "parallel to the email, so a fresh beat proves the Pulse started and proves nothing "
@@ -350,14 +403,43 @@ def get_json(base: str, key: str, path: str) -> Dict[str, Any]:
     return payload
 
 
-def fetch_rows(base: str, key: str, table_id: str) -> List[Dict[str, Any]]:
-    """Rows from the n8n public API, or a RuntimeError naming what went wrong."""
-    path = f"/api/v1/data-tables/{table_id}/rows?limit={PAGE}"
+def _rows_at(base: str, key: str, path: str) -> List[Dict[str, Any]]:
     payload = get_json(base, key, path)
     rows = payload.get("data")
     if not isinstance(rows, list):
         raise RuntimeError(f"GET {base.rstrip('/')}{path} -> no 'data' array in the response")
     return rows
+
+
+def fetch_rows(base: str, key: str, table_id: str) -> List[Dict[str, Any]]:
+    """Rows from the n8n public API, or a RuntimeError naming what went wrong.
+
+    Tries a narrowed newest-first read before the wide one. The beat log grows
+    about five rows a day and stood at 120 on 2026-09-22, so the 250 row cap
+    that makes ``verdict`` refuse arrives in about a month. A watchdog that
+    starts crying CANNOT CHECK on schedule is one Tee stops reading, which is
+    worse than the cap itself.
+
+    Whether this API honours ordering is NOT known here: it was measured in
+    September as limit-only, and no key is reachable from the container this
+    was written in, so it could not be tried. That is why the narrowed read has
+    to prove itself through ``is_newest_first`` rather than be trusted. A server
+    that ignores the parameters hands back rows this rejects, and the wide read
+    below runs exactly as it did before. The first scheduled run on main is what
+    settles which path this instance takes.
+    """
+    narrow = (
+        f"/api/v1/data-tables/{table_id}/rows"
+        f"?limit={NARROW_LIMIT}&sortBy=id%3Adesc"
+    )
+    try:
+        rows = _rows_at(base, key, narrow)
+    except RuntimeError:
+        rows = []
+    if is_newest_first(rows, NARROW_LIMIT):
+        return rows
+
+    return _rows_at(base, key, f"/api/v1/data-tables/{table_id}/rows?limit={PAGE}")
 
 
 def fetch_failed_runs(
@@ -441,28 +523,50 @@ def main(argv: Optional[List[str]] = None) -> int:
     # The beat is necessary and not sufficient. A run that writes its row and
     # then dies at the send leaves a beat that looks perfect, which is what this
     # script reported for thirty six hours in September 2026. So ask the
-    # instance whether the runs themselves finished.
-    print(f"Reading errored runs of the Heartbeat ({workflow_id}).")
-    try:
-        runs = fetch_failed_runs(base, key, workflow_id)
-    except RuntimeError as exc:
-        print(
-            f"CANNOT CHECK: the beat log was read but the run list was not ({exc}). "
-            "A fresh beat alone does not prove the Pulse finished, so this is not "
-            "reported as healthy.",
-            file=sys.stderr,
-        )
-        return combine(beat_code, CANNOT_CHECK)
+    # instance whether the runs themselves finished, for every lane that can
+    # answer, because all of them send on the one credential.
+    code = beat_code
+    lanes = tuple(
+        (workflow_id, label) if lane_id == HEARTBEAT_WORKFLOW_ID else (lane_id, label)
+        for lane_id, label in ALARM_LANES
+    )
 
-    newest, execution_id, _ = newest_failure(runs)
-    detail = ""
-    if newest is not None and execution_id and (now - newest).total_seconds() / 3600.0 <= MISSED_BEAT_H:
-        detail = failure_detail(base, key, execution_id)
+    for lane_id, label in lanes:
+        print(f"Reading errored runs of {label} ({lane_id}).")
+        try:
+            runs = fetch_failed_runs(base, key, lane_id)
+        except RuntimeError as exc:
+            print(
+                f"CANNOT CHECK: {label}'s run list was not readable ({exc}). "
+                "A fresh beat alone does not prove a lane delivered, so this is not "
+                "reported as healthy.",
+                file=sys.stderr,
+            )
+            code = combine(code, CANNOT_CHECK)
+            continue
 
-    run_code, run_message = run_verdict(runs, now, detail=detail)
-    print(run_message, file=sys.stderr if run_code else sys.stdout)
+        newest, execution_id, _ = newest_failure(runs)
+        detail = ""
+        if (
+            newest is not None
+            and execution_id
+            and (now - newest).total_seconds() / 3600.0 <= MISSED_BEAT_H
+        ):
+            detail = failure_detail(base, key, execution_id)
 
-    return combine(beat_code, run_code)
+        run_code, run_message = run_verdict(runs, now, detail=detail, lane=label)
+        print(run_message, file=sys.stderr if run_code else sys.stdout)
+        code = combine(code, run_code)
+
+    # Said on every run, green or red, so this never reads as four lanes watched.
+    blind_id, blind_label, blind_why = UNWATCHABLE_LANE
+    print(
+        f"NOT WATCHED: {blind_label} ({blind_id}) {blind_why}, so it cannot appear "
+        "in the check above however broken it is. It sends on the same credential, "
+        "so a dead password still shows up in the lanes that do report."
+    )
+
+    return code
 
 
 if __name__ == "__main__":  # pragma: no cover

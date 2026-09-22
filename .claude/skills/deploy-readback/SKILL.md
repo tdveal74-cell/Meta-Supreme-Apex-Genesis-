@@ -232,9 +232,11 @@ deployment from the current head.
 **The plan has moved and this line has been wrong once already. Read it, never
 assume it.** On 2026-09-04 `list_teams` reported `"plan": "pro"` for
 `tdveal74-5020s-projects` and this file said so flatly. On 2026-09-17 at 18:00Z
-the same call reports **`"plan": "hobby"`**. Nothing in this repository records
-a decision to downgrade, and the tooling does not say when or why it changed, so
-treat the reason as unknown rather than inferring one.
+the same call reports **`"plan": "hobby"`**. The reason was unknown when that
+was written and is not any more: Tee said in session on 2026-09-22 that he
+downgraded it deliberately, and that it is unrelated to the Cerebras billing
+lapse the same window contains. Recorded here so nobody re-derives it, and so
+nobody reads the two as one event again.
 
 What follows from the reading rather than from the reason: the free plan's 100
 deployments a day is a live constraint again, not history, and the
