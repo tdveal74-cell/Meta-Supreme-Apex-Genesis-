@@ -160,6 +160,29 @@ decision logic is unit tested in `test_pulse_watchdog.py` in the standalone job;
 those tests prove the verdict function and prove nothing about the key or the
 host, and the file says so.
 
+**It shipped reading one signal and that signal lied for thirty six hours.**
+Found 2026-09-22. `Record Beat` sits on a branch parallel to the email branch,
+both fed by `Compose Pulse`, so the beat row lands about 150ms into a run that
+then takes twelve seconds to die. The Heartbeat failed seven consecutive runs
+from 2026-09-20T16:00 to 2026-09-22T04:00, every one killed at `Send Pulse` by
+`Invalid login: 535-5.7.8`, and the watchdog printed `OK: the Pulse last beat at
+2026-09-21T22:00:15.119000Z, 5.6h ago` from the row an errored run had written.
+The script now also reads errored executions of the Heartbeat itself and alarms
+on one inside the same window. The lesson generalises past this file: a monitor
+that reads an artifact produced BEFORE the failure it looks for will keep
+reading a healthy artifact off a dead organ. That is the third instance in one
+arc, after the `neverError` provider nodes and `saveDataSuccessExecution: none`.
+
+**All four alerting lanes share one credential, and it has now died twice.**
+Counted from the workflow list on 2026-09-22, not from a lane. `Send Pulse` on
+the Heartbeat, `Alert Tee` on `DEVON - Error Alarm`, `Send Watchdog Alert` on
+`DEVON Pipeline Watchdog` and `Send Email Alert` on `OS - Error Handler (all
+pipelines)` all use SMTP credential `AgSGuaA2pnZsrZcJ`. The Gmail OAuth
+credential they replaced died the same way on 2026-09-01. The last of the four
+sets `onError: continueRegularOutput`, so the error handler every pipeline names
+reports SUCCESS while no fault email goes anywhere. The two GitHub Actions
+watchdogs still work, and only because they deliberately carry no SMTP.
+
 The eleventh arrived on 2026-09-17 alongside the tenth, and for the same reason
 one layer down: `.github/workflows/provider-watchdog.yml`, `schedule` only, every
 three hours at :30. It reads the instance's errored executions and goes red when

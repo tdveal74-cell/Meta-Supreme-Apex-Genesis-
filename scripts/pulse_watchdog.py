@@ -54,6 +54,39 @@ very little, so they are separate exit codes and separate messages:
 
 Both 1 and 2 fail the job on purpose. Silence about an unchecked Pulse would be
 the same lie the Pulse itself cannot avoid telling.
+
+A FRESH BEAT DOES NOT MEAN A FINISHED RUN
+=========================================
+
+This script shipped reading one thing, the newest beat's timestamp, and that was
+not enough. Measured on 2026-09-22, thirty six hours into an outage it reported
+OK through:
+
+    DEVON - Heartbeat (Build 13) failed seven consecutive runs, 2026-09-20T16:00
+    through 2026-09-22T04:00. Execution 729 started at 04:00:15.037Z, wrote beat
+    row 116 at 04:00:15.184Z, and died at 04:00:27.596Z at the node ``Send
+    Pulse`` on ``Invalid login: 535-5.7.8 Username and Password not accepted``.
+
+``Record Beat`` sits on a branch parallel to the email branch, both fed by
+``Compose Pulse``, so the row lands about 150ms into a run that then takes
+twelve seconds to die. Reading that row, this script found a beat 5.6h old,
+inside the threshold, and printed OK four times a day while Tee's mail went
+nowhere. The failure was found by a session that had come to look at something
+else, which is the same way the 2026-09-17 provider outage was found.
+
+So the beat is now a necessary condition and not a sufficient one. The script
+also asks n8n for ERRORED executions of the Heartbeat itself, and alarms when
+one landed inside the same threshold window. That catches every way the Pulse
+can die after writing its receipt, not just this one.
+
+GRADED HONESTLY, because over-calling a finding is its own error: a single
+transient failure now turns this job red for up to 7.5h, which is two or three
+red runs and two or three emails about something already recovered. That is the
+right trade only because this exact shape has now cost the estate twice, nine
+days of dead Gmail OAuth from 2026-09-01 and thirty six hours of dead SMTP from
+2026-09-20, and in both cases the channel that should have reported it was the
+channel that had failed. The Heartbeat runs four times a day; one failure is
+worth one red job.
 """
 
 from __future__ import annotations
@@ -62,6 +95,7 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -76,6 +110,17 @@ DEFAULT_BASE_URL = "https://n8n.editforge.online"
 #: ``devon_heartbeat_log`` on the VPS. Same id as the ``TABLES`` map in
 #: ``scripts/vps_backfill_devon_logs.py``, which is what backfilled it.
 HEARTBEAT_TABLE_ID = "RuPMZKXkqcbuHRKa"
+
+#: The Heartbeat workflow itself, so this script can ask whether the run that
+#: wrote the newest beat actually finished. Same id as the module docstring
+#: above, which took it from ``docs/devon/vps-cutover-maps_2026-09-15.json``.
+HEARTBEAT_WORKFLOW_ID = "EEDrp2jLlw2Ssd5b"
+
+#: How many errored runs of the Heartbeat to list. Only the newest decides the
+#: verdict; the rest are counted so the message can say how deep the outage
+#: goes. The 2026-09-20 outage was seven consecutive failures, so a handful is
+#: enough to tell one bad run from a stuck lane.
+MAX_FAILED_RUNS = 10
 
 #: Hours after which a missing beat is an alarm. This is NOT a fresh guess: it
 #: is ``MISSED_BEAT_H`` from ``n8n/devon/heartbeat/compose_pulse.js``, so the
@@ -198,9 +243,93 @@ def verdict(
     )
 
 
-def fetch_rows(base: str, key: str, table_id: str) -> List[Dict[str, Any]]:
-    """Rows from the n8n public API, or a RuntimeError naming what went wrong."""
-    url = f"{base.rstrip('/')}/api/v1/data-tables/{table_id}/rows?limit={PAGE}"
+def newest_failure(executions: Sequence[Dict[str, Any]]) -> Tuple[Optional[datetime], Optional[str], int]:
+    """(newest errored start, that execution's id, how many errored runs were seen).
+
+    The caller asks n8n for errored executions of one workflow, so everything in
+    the list is a failure by construction and nothing here re-checks a status
+    field. The maximum is taken over the whole list rather than trusting the
+    response order, for the same reason ``newest_beat`` does: this API promises
+    none.
+    """
+    newest: Optional[datetime] = None
+    newest_id: Optional[str] = None
+    seen = 0
+    for run in executions:
+        seen += 1
+        stamp = parse_iso(run.get("startedAt"))
+        if stamp is None:
+            continue
+        if newest is None or stamp > newest:
+            newest = stamp
+            newest_id = str(run.get("id") or "") or None
+    return newest, newest_id, seen
+
+
+def run_verdict(
+    executions: Sequence[Dict[str, Any]],
+    now: datetime,
+    threshold_h: float = MISSED_BEAT_H,
+    detail: str = "",
+) -> Tuple[int, str]:
+    """Exit code and message for "did the Heartbeat's runs actually finish".
+
+    Separate from ``verdict`` because it answers a different question about a
+    different source. ``verdict`` reads the receipt the Pulse leaves behind;
+    this reads whether the run that left it lived long enough to do its job.
+    Pure, so the decision is testable without a network or a key.
+    """
+    newest, execution_id, seen = newest_failure(executions)
+
+    if seen == 0 or newest is None:
+        return OK, (
+            "OK: no errored run of the Heartbeat came back, so the beat above was "
+            "written by a run that finished."
+        )
+
+    age_h = (now - newest).total_seconds() / 3600.0
+    if age_h > threshold_h:
+        return OK, (
+            f"OK: the newest errored Heartbeat run started {age_h:.1f}h ago, outside the "
+            f"{threshold_h}h window, so it is old news rather than a live outage. "
+            f"{seen} errored run(s) were listed."
+        )
+
+    stamp = newest.isoformat().replace("+00:00", "Z")
+    where = f" ({detail})" if detail else ""
+    which = f" Execution {execution_id}." if execution_id else ""
+    plural = "" if seen == 1 else "s"
+    return ALARM, (
+        f"ALARM: the Heartbeat BEAT but did not FINISH. Its newest errored run started "
+        f"{stamp}, {age_h:.1f}h ago, inside the {threshold_h}h window{where}.{which} "
+        f"{seen} errored run{plural} were listed. A beat row is written early, on a branch "
+        "parallel to the email, so a fresh beat proves the Pulse started and proves nothing "
+        "about whether it delivered. Open the execution on the VPS and read the failing node."
+    )
+
+
+def combine(beat_code: int, run_code: int) -> int:
+    """The exit code for two verdicts, where a definite finding beats an absence.
+
+    ALARM wins over CANNOT_CHECK on purpose. A stopped Pulse is news; "I could
+    not read the run list" is the lack of news, and letting the second mask the
+    first would bury the only thing worth saying. OK loses to both.
+    """
+    if ALARM in (beat_code, run_code):
+        return ALARM
+    if CANNOT_CHECK in (beat_code, run_code):
+        return CANNOT_CHECK
+    return OK
+
+
+def get_json(base: str, key: str, path: str) -> Dict[str, Any]:
+    """One GET against the n8n public API, or a RuntimeError naming what broke.
+
+    Every read in this script goes through here so that a 401, an unreachable
+    host and a non-JSON body all reach the caller as the same kind of refusal
+    rather than as three different silences.
+    """
+    url = f"{base.rstrip('/')}{path}"
     request = urllib.request.Request(url, method="GET")
     request.add_header("X-N8N-API-KEY", key)
     request.add_header("Accept", "application/json")
@@ -216,16 +345,75 @@ def fetch_rows(base: str, key: str, table_id: str) -> List[Dict[str, Any]]:
         payload = json.loads(body) if body else {}
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"GET {url} -> response was not JSON: {body[:300]!r}") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"GET {url} -> response was not an object: {body[:300]!r}")
+    return payload
+
+
+def fetch_rows(base: str, key: str, table_id: str) -> List[Dict[str, Any]]:
+    """Rows from the n8n public API, or a RuntimeError naming what went wrong."""
+    path = f"/api/v1/data-tables/{table_id}/rows?limit={PAGE}"
+    payload = get_json(base, key, path)
     rows = payload.get("data")
     if not isinstance(rows, list):
-        raise RuntimeError(f"GET {url} -> no 'data' array in the response: {body[:300]!r}")
+        raise RuntimeError(f"GET {base.rstrip('/')}{path} -> no 'data' array in the response")
     return rows
+
+
+def fetch_failed_runs(
+    base: str, key: str, workflow_id: str, limit: int = MAX_FAILED_RUNS
+) -> List[Dict[str, Any]]:
+    """Errored executions of one workflow, newest first as n8n returns them.
+
+    The ``status=error`` filter does the work, so nothing downstream has to
+    interpret a status field whose name has changed across n8n versions. The
+    same filter is already proven against this instance by
+    ``scripts/provider_watchdog.py``.
+    """
+    path = (
+        f"/api/v1/executions?status=error"
+        f"&workflowId={urllib.parse.quote(workflow_id)}&limit={int(limit)}"
+    )
+    payload = get_json(base, key, path)
+    runs = payload.get("data")
+    if not isinstance(runs, list):
+        raise RuntimeError(f"GET {base.rstrip('/')}{path} -> no 'data' array in the response")
+    return runs
+
+
+def failure_detail(base: str, key: str, execution_id: str) -> str:
+    """"node X: message" for one errored execution, or "" if it cannot be read.
+
+    This is a nicety and never a finding. An alarm that knows the failing node
+    saves Tee a click; an alarm that cannot read it is still a correct alarm, so
+    every error here is swallowed rather than allowed to downgrade the verdict
+    to CANNOT CHECK. n8n redacts credential values in execution payloads, and
+    only the node name and the error message are taken, so nothing secret is
+    printed.
+    """
+    try:
+        payload = get_json(base, key, f"/api/v1/executions/{execution_id}?includeData=true")
+    except RuntimeError:
+        return ""
+    error = (((payload.get("data") or {}).get("resultData") or {}).get("error") or {})
+    if not isinstance(error, dict):
+        return ""
+    node = ((error.get("node") or {}) if isinstance(error.get("node"), dict) else {}).get("name")
+    message = error.get("message")
+    node_text = str(node).strip() if node else ""
+    message_text = " ".join(str(message).split())[:200] if message else ""
+    if node_text and message_text:
+        return f"node {node_text}: {message_text}"
+    return node_text or message_text
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     base = os.environ.get("N8N_VPS_URL", "").strip() or DEFAULT_BASE_URL
     key = os.environ.get("N8N_VPS_KEY", "").strip()
     table_id = os.environ.get("DEVON_HEARTBEAT_TABLE_ID", "").strip() or HEARTBEAT_TABLE_ID
+    workflow_id = (
+        os.environ.get("DEVON_HEARTBEAT_WORKFLOW_ID", "").strip() or HEARTBEAT_WORKFLOW_ID
+    )
 
     if not key:
         print(
@@ -239,15 +427,42 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     print(f"Reading the beat log from {base} (table {table_id}).")
 
+    now = datetime.now(timezone.utc)
+
     try:
         rows = fetch_rows(base, key, table_id)
     except RuntimeError as exc:
         print(f"CANNOT CHECK: {exc}", file=sys.stderr)
         return CANNOT_CHECK
 
-    code, message = verdict(rows, datetime.now(timezone.utc))
-    print(message, file=sys.stderr if code else sys.stdout)
-    return code
+    beat_code, beat_message = verdict(rows, now)
+    print(beat_message, file=sys.stderr if beat_code else sys.stdout)
+
+    # The beat is necessary and not sufficient. A run that writes its row and
+    # then dies at the send leaves a beat that looks perfect, which is what this
+    # script reported for thirty six hours in September 2026. So ask the
+    # instance whether the runs themselves finished.
+    print(f"Reading errored runs of the Heartbeat ({workflow_id}).")
+    try:
+        runs = fetch_failed_runs(base, key, workflow_id)
+    except RuntimeError as exc:
+        print(
+            f"CANNOT CHECK: the beat log was read but the run list was not ({exc}). "
+            "A fresh beat alone does not prove the Pulse finished, so this is not "
+            "reported as healthy.",
+            file=sys.stderr,
+        )
+        return combine(beat_code, CANNOT_CHECK)
+
+    newest, execution_id, _ = newest_failure(runs)
+    detail = ""
+    if newest is not None and execution_id and (now - newest).total_seconds() / 3600.0 <= MISSED_BEAT_H:
+        detail = failure_detail(base, key, execution_id)
+
+    run_code, run_message = run_verdict(runs, now, detail=detail)
+    print(run_message, file=sys.stderr if run_code else sys.stdout)
+
+    return combine(beat_code, run_code)
 
 
 if __name__ == "__main__":  # pragma: no cover
