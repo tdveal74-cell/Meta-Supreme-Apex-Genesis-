@@ -50,6 +50,19 @@ Rules that follow from it:
   equals `versionId` and `activeVersion.sameAsDraft` is true. The status docs
   have done this read back since 2026-09-15; it belongs here because this file
   is what a session reads first.
+- **A green watchdog run means no refusal inside its window, never that the
+  outage is over.** Claimed 2026-09-22, from three consecutive green provider
+  watchdog runs at 20:05Z, 00:13Z and 05:15Z. It cost one execution read to
+  disprove: `TQO FINAL V5` execution 679 took HTTP 402 from Cerebras at
+  2026-09-21T10:20:00Z. The watchdog was right and the reading was wrong.
+  `WINDOW_H` is 6.0 and the lane that calls Cerebras fires once a day on
+  `Daily 6am - Script Writer`, 10:20Z, so roughly eighteen hours out of every
+  twenty four are green whether or not the provider is refusing. It did alarm,
+  three times, runs 13 and 14 on 2026-09-20 and run 18 on 2026-09-21, the last
+  reading `ALARM: ... Failing node(s): Write Script (Cerebras)`. Before reading
+  a green watchdog as recovery, check how often the lane it watches actually
+  calls the provider. Where the cadence is longer than the window, green is the
+  expected answer and carries no information.
 
 When a check genuinely cannot be run here, say so with the reason and name who
 can run it. The 2026-09-06 rotation negative test is the model: the network
