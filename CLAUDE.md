@@ -186,9 +186,10 @@ host, and the file says so.
 **It shipped reading one signal and that signal lied for thirty six hours.**
 Found 2026-09-22. `Record Beat` sits on a branch parallel to the email branch,
 both fed by `Compose Pulse`, so the beat row lands about 150ms into a run that
-then takes twelve seconds to die. The Heartbeat failed seven consecutive runs
-from 2026-09-20T16:00 to 2026-09-22T04:00, every one killed at `Send Pulse` by
-`Invalid login: 535-5.7.8`, and the watchdog printed `OK: the Pulse last beat at
+then takes twelve seconds to die. The Heartbeat failed TEN consecutive runs
+from 2026-09-20T16:00 to 2026-09-22T22:00, seven of them by the time this
+paragraph was first written, every one killed at `Send Pulse` by `Invalid login:
+535-5.7.8`, and the watchdog printed `OK: the Pulse last beat at
 2026-09-21T22:00:15.119000Z, 5.6h ago` from the row an errored run had written.
 The script now also reads errored executions of the Heartbeat itself and alarms
 on one inside the same window. The lesson generalises past this file: a monitor
@@ -233,6 +234,30 @@ went anywhere. Tee ruled it loud that day and executions 766 and 769 now read
 `status: error` where the same lane read `status: success` before. The two
 GitHub Actions watchdogs still work, and only because they deliberately carry no
 SMTP.
+
+**That credential is live again as of 2026-09-22T22:25:33Z, and the proof is not
+the settings dialog.** Tee repaired `AgSGuaA2pnZsrZcJ` in place rather than
+making a new one, and it is still the only credential of type `smtp` on the
+instance, so all twenty nodes came back on the one fix. Proving it took reading
+the lane's own receipt, because a green execution does not separate a send from
+a skipped send: `Only If Email` returns `[]` on a quiet beat, so execution 601
+on 2026-09-20 read `success` in 0.165s having sent nothing at all. The receipt
+is `devon_heartbeat_log` row 122, `beat_at 2026-09-22T22:25:32.599Z`, where
+`emailed` flipped to `yes` at 22:25:33.426Z, and `Mark Emailed` runs only off
+the success output of `Send Pulse`. Row 121, the 22:00:15Z beat twenty five
+minutes earlier, still reads `no` on the same workflow, unedited since
+2026-09-17T12:30Z, with the same credential id on the node. To prove a mail
+credential here, run the Heartbeat and read that column. Do not report a
+credential panel's test button as a result.
+
+Google Drive `NW3vR6nNcMoUkJyJ` was still unverified at that moment, and could
+not be settled from an execution list. `DEVON Precedence Guard` swallows its
+Drive failure and dies at the send, so its `status: error` cannot separate a
+dead credential from a live one, and `DEVON - _To Delete Auto-Purge` retains
+exactly one execution, the 2026-09-20T14:00:56Z clean read that brackets the
+death. With mail alive the Guard's 2026-09-23T11:00:55Z run is the first that
+delivers its own verdict in words, either a clean duplicate check or the line
+saying it could not read `_Devon Core` and this is NOT a clean result.
 
 **A second credential is also dead, and TWO of the lanes it feeds write a
 false record rather than failing.** Google Drive OAuth credential
