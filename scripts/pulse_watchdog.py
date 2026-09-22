@@ -116,6 +116,37 @@ HEARTBEAT_TABLE_ID = "RuPMZKXkqcbuHRKa"
 #: above, which took it from ``docs/devon/vps-cutover-maps_2026-09-15.json``.
 HEARTBEAT_WORKFLOW_ID = "EEDrp2jLlw2Ssd5b"
 
+#: How many errored executions to pull ESTATE WIDE, newest first. Not a list of
+#: lanes: a hand written list is what went wrong here. CLAUDE.md records SIXTEEN
+#: workflows sending across TWENTY emailSend nodes on one credential, measured
+#: on 2026-09-22 after this file's first version watched three of them and
+#: called that an estate count. Asking the instance for its own failures needs
+#: no list and picks up a workflow added tomorrow.
+ESTATE_RUN_LIMIT = 15
+
+#: The node type every alerting send uses. Errored executions are classified by
+#: this rather than alarmed on wholesale, because the estate carries unrelated
+#: failures at all times (the Cerebras lanes have been returning 402 since about
+#: 2026-09-17) and a watchdog that is permanently red teaches nothing.
+MAIL_NODE_TYPE = "n8n-nodes-base.emailSend"
+
+#: The lane this check still cannot see, whatever it reads. OS Error Handler
+#: (all pipelines) sets ``onError: continueRegularOutput`` on its send, so a
+#: failed alert finishes the run GREEN and never appears under ``status=error``.
+#: Going estate wide does not fix that: there is no errored execution to find.
+#: Declared on every run rather than quietly omitted. Tee declined flipping the
+#: flag on 2026-09-22, because a mail outage would then kill pipelines.
+UNWATCHABLE_LANE = (
+    "GbeNilHQzjmoWDz3",
+    "OS Error Handler (all pipelines)",
+    "sets onError continueRegularOutput on its send, so a failed alert reports SUCCESS",
+)
+
+#: How many rows to ask for when the narrowed, newest-first read is available.
+#: Comfortably more than the ~5 rows a day the log grows by, so a verdict never
+#: rests on a handful, and far under the cap below.
+NARROW_LIMIT = 50
+
 #: How many errored runs of the Heartbeat to list. Only the newest decides the
 #: verdict; the rest are counted so the message can say how deep the outage
 #: goes. The 2026-09-20 outage was seven consecutive failures, so a handful is
@@ -186,6 +217,27 @@ def newest_beat(rows: Sequence[Dict[str, Any]]) -> Tuple[Optional[datetime], int
         if newest is None or stamp > newest:
             newest = stamp
     return newest, seen, unreadable
+
+
+def is_newest_first(rows: Sequence[Dict[str, Any]], want: int) -> bool:
+    """Did a narrowed read really come back newest first, or was it ignored?
+
+    The rows API was measured in September as ``limit`` and nothing else, so a
+    server that ignores an ordering parameter would hand back the OLDEST rows
+    instead. Acting on that would drop the newest beat and manufacture a false
+    alarm, which is worse than the row cap this narrowing exists to dodge. So
+    the response has to prove itself: at least two rows, no more than asked
+    for, integer ids, strictly descending. A server that ignored the parameter
+    cannot satisfy that by accident, and if it fails the caller falls back to
+    the wide read and the old refusal. Pure, so the guard is testable without a
+    network or a key.
+    """
+    if want < 2 or len(rows) < 2 or len(rows) > want:
+        return False
+    ids = [row.get("id") for row in rows]
+    if not all(isinstance(value, int) for value in ids):
+        return False
+    return all(earlier > later for earlier, later in zip(ids, ids[1:], strict=False))
 
 
 def verdict(
@@ -272,7 +324,7 @@ def run_verdict(
     threshold_h: float = MISSED_BEAT_H,
     detail: str = "",
 ) -> Tuple[int, str]:
-    """Exit code and message for "did the Heartbeat's runs actually finish".
+    """Exit code and message for "did DEVON's alerting runs actually finish".
 
     Separate from ``verdict`` because it answers a different question about a
     different source. ``verdict`` reads the receipt the Pulse leaves behind;
@@ -283,14 +335,14 @@ def run_verdict(
 
     if seen == 0 or newest is None:
         return OK, (
-            "OK: no errored run of the Heartbeat came back, so the beat above was "
-            "written by a run that finished."
+            "OK: no alerting run of any DEVON workflow came back errored, so every "
+            "send that ran finished rather than dying on its way to Tee."
         )
 
     age_h = (now - newest).total_seconds() / 3600.0
     if age_h > threshold_h:
         return OK, (
-            f"OK: the newest errored Heartbeat run started {age_h:.1f}h ago, outside the "
+            f"OK: the newest errored alerting run started {age_h:.1f}h ago, outside the "
             f"{threshold_h}h window, so it is old news rather than a live outage. "
             f"{seen} errored run(s) were listed."
         )
@@ -300,7 +352,7 @@ def run_verdict(
     which = f" Execution {execution_id}." if execution_id else ""
     plural = "" if seen == 1 else "s"
     return ALARM, (
-        f"ALARM: the Heartbeat BEAT but did not FINISH. Its newest errored run started "
+        f"ALARM: a DEVON alerting send RAN but did not DELIVER. Its newest errored run started "
         f"{stamp}, {age_h:.1f}h ago, inside the {threshold_h}h window{where}.{which} "
         f"{seen} errored run{plural} were listed. A beat row is written early, on a branch "
         "parallel to the email, so a fresh beat proves the Pulse started and proves nothing "
@@ -350,9 +402,7 @@ def get_json(base: str, key: str, path: str) -> Dict[str, Any]:
     return payload
 
 
-def fetch_rows(base: str, key: str, table_id: str) -> List[Dict[str, Any]]:
-    """Rows from the n8n public API, or a RuntimeError naming what went wrong."""
-    path = f"/api/v1/data-tables/{table_id}/rows?limit={PAGE}"
+def _rows_at(base: str, key: str, path: str) -> List[Dict[str, Any]]:
     payload = get_json(base, key, path)
     rows = payload.get("data")
     if not isinstance(rows, list):
@@ -360,8 +410,42 @@ def fetch_rows(base: str, key: str, table_id: str) -> List[Dict[str, Any]]:
     return rows
 
 
+def fetch_rows(base: str, key: str, table_id: str) -> List[Dict[str, Any]]:
+    """Rows from the n8n public API, or a RuntimeError naming what went wrong.
+
+    Tries a narrowed newest-first read before the wide one. The beat log grows
+    about five rows a day and stood at 120 on 2026-09-22, so the 250 row cap
+    that makes ``verdict`` refuse arrives in about a month. A watchdog that
+    starts crying CANNOT CHECK on schedule is one Tee stops reading, which is
+    worse than the cap itself.
+
+    Whether this API honours ordering is NOT known here: it was measured in
+    September as limit-only, and no key is reachable from the container this
+    was written in, so it could not be tried. That is why the narrowed read has
+    to prove itself through ``is_newest_first`` rather than be trusted. A server
+    that ignores the parameters hands back rows this rejects, and the wide read
+    below runs exactly as it did before. The first scheduled run on main is what
+    settles which path this instance takes.
+    """
+    narrow = (
+        f"/api/v1/data-tables/{table_id}/rows"
+        f"?limit={NARROW_LIMIT}&sortBy=id%3Adesc"
+    )
+    try:
+        rows = _rows_at(base, key, narrow)
+    except RuntimeError:
+        rows = []
+    if is_newest_first(rows, NARROW_LIMIT):
+        return rows
+
+    return _rows_at(base, key, f"/api/v1/data-tables/{table_id}/rows?limit={PAGE}")
+
+
 def fetch_failed_runs(
-    base: str, key: str, workflow_id: str, limit: int = MAX_FAILED_RUNS
+    base: str,
+    key: str,
+    workflow_id: Optional[str] = None,
+    limit: int = MAX_FAILED_RUNS,
 ) -> List[Dict[str, Any]]:
     """Errored executions of one workflow, newest first as n8n returns them.
 
@@ -370,15 +454,64 @@ def fetch_failed_runs(
     same filter is already proven against this instance by
     ``scripts/provider_watchdog.py``.
     """
-    path = (
-        f"/api/v1/executions?status=error"
-        f"&workflowId={urllib.parse.quote(workflow_id)}&limit={int(limit)}"
-    )
+    path = f"/api/v1/executions?status=error&limit={int(limit)}"
+    if workflow_id:
+        path += f"&workflowId={urllib.parse.quote(workflow_id)}"
     payload = get_json(base, key, path)
     runs = payload.get("data")
     if not isinstance(runs, list):
         raise RuntimeError(f"GET {base.rstrip('/')}{path} -> no 'data' array in the response")
     return runs
+
+
+def failure_node(base: str, key: str, execution_id: str) -> Tuple[str, str, str]:
+    """(node name, node type, message) for one errored execution, or three "".
+
+    The node TYPE is what makes an estate wide read usable. This instance always
+    carries unrelated failures, so alarming on every errored execution would
+    leave the watchdog permanently red and therefore unread. Every error is
+    swallowed rather than allowed to downgrade a verdict, for the same reason
+    ``failure_detail`` swallows its own. n8n redacts credential values in
+    execution payloads and only the name, the type and the message are taken.
+    """
+    try:
+        payload = get_json(base, key, f"/api/v1/executions/{execution_id}?includeData=true")
+    except RuntimeError:
+        return "", "", ""
+    error = (((payload.get("data") or {}).get("resultData") or {}).get("error") or {})
+    if not isinstance(error, dict):
+        return "", "", ""
+    node = error.get("node") if isinstance(error.get("node"), dict) else {}
+    name = str((node or {}).get("name") or "").strip()
+    node_type = str((node or {}).get("type") or "").strip()
+    message = " ".join(str(error.get("message") or "").split())[:200]
+    return name, node_type, message
+
+
+def mail_failures(
+    runs: Sequence[Dict[str, Any]],
+    resolved: Dict[str, Tuple[str, str, str]],
+    now: datetime,
+    threshold_h: float = MISSED_BEAT_H,
+) -> List[Dict[str, Any]]:
+    """The errored runs inside the window whose failing node is a mail send.
+
+    Pure: the caller does the reading and hands the answers in, so the decision
+    is testable without a network or a key. A run whose node could not be
+    resolved is KEPT rather than dropped, because an unreadable failure inside
+    the window is exactly when guessing is least affordable, and ``run_verdict``
+    is the thing that decides what to do about it.
+    """
+    keep: List[Dict[str, Any]] = []
+    for run in runs:
+        stamp = parse_iso(run.get("startedAt"))
+        if stamp is None or (now - stamp).total_seconds() / 3600.0 > threshold_h:
+            continue
+        _, node_type, _ = resolved.get(str(run.get("id") or ""), ("", "", ""))
+        if node_type and node_type != MAIL_NODE_TYPE:
+            continue
+        keep.append(run)
+    return keep
 
 
 def failure_detail(base: str, key: str, execution_id: str) -> str:
@@ -411,9 +544,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     base = os.environ.get("N8N_VPS_URL", "").strip() or DEFAULT_BASE_URL
     key = os.environ.get("N8N_VPS_KEY", "").strip()
     table_id = os.environ.get("DEVON_HEARTBEAT_TABLE_ID", "").strip() or HEARTBEAT_TABLE_ID
-    workflow_id = (
-        os.environ.get("DEVON_HEARTBEAT_WORKFLOW_ID", "").strip() or HEARTBEAT_WORKFLOW_ID
-    )
+    # DEVON_HEARTBEAT_WORKFLOW_ID is deliberately no longer read. The run check
+    # names no workflow at all now, so an override that points it at one would
+    # narrow the estate read back into the hand list this replaced.
 
     if not key:
         print(
@@ -441,29 +574,64 @@ def main(argv: Optional[List[str]] = None) -> int:
     # The beat is necessary and not sufficient. A run that writes its row and
     # then dies at the send leaves a beat that looks perfect, which is what this
     # script reported for thirty six hours in September 2026. So ask the
-    # instance whether the runs themselves finished.
-    print(f"Reading errored runs of the Heartbeat ({workflow_id}).")
+    # instance whether its alerting runs finished. Estate wide and unfiltered by
+    # workflow, because the first version of this check watched three lanes out
+    # of sixteen and described that as counted from the estate.
+    print(f"Reading errored runs across the estate (newest {ESTATE_RUN_LIMIT}).")
     try:
-        runs = fetch_failed_runs(base, key, workflow_id)
+        runs = fetch_failed_runs(base, key, limit=ESTATE_RUN_LIMIT)
     except RuntimeError as exc:
         print(
             f"CANNOT CHECK: the beat log was read but the run list was not ({exc}). "
-            "A fresh beat alone does not prove the Pulse finished, so this is not "
+            "A fresh beat alone does not prove a send delivered, so this is not "
             "reported as healthy.",
             file=sys.stderr,
         )
         return combine(beat_code, CANNOT_CHECK)
 
-    newest, execution_id, _ = newest_failure(runs)
-    detail = ""
-    if newest is not None and execution_id and (now - newest).total_seconds() / 3600.0 <= MISSED_BEAT_H:
-        detail = failure_detail(base, key, execution_id)
+    # Only failures inside the window are worth a detail read, and only their
+    # failing node decides whether this is an alerting outage or one of the
+    # unrelated failures this estate always carries.
+    resolved: Dict[str, Tuple[str, str, str]] = {}
+    for run in runs:
+        stamp = parse_iso(run.get("startedAt"))
+        execution_id = str(run.get("id") or "")
+        if not execution_id or stamp is None:
+            continue
+        if (now - stamp).total_seconds() / 3600.0 > MISSED_BEAT_H:
+            continue
+        resolved[execution_id] = failure_node(base, key, execution_id)
 
-    run_code, run_message = run_verdict(runs, now, detail=detail)
+    mail = mail_failures(runs, resolved, now)
+    detail = ""
+    newest, execution_id, _ = newest_failure(mail)
+    if execution_id:
+        name, _, message = resolved.get(execution_id, ("", "", ""))
+        if name and message:
+            detail = f"node {name}: {message}"
+        elif name or message:
+            detail = name or message
+
+    run_code, run_message = run_verdict(mail, now, detail=detail)
     print(run_message, file=sys.stderr if run_code else sys.stdout)
 
-    return combine(beat_code, run_code)
+    skipped = len(runs) - len(mail)
+    if skipped > 0:
+        print(
+            f"{skipped} errored run(s) were read and set aside as not alerting failures "
+            "or outside the window. This estate carries unrelated errors at all times, "
+            "and a watchdog that alarms on all of them is one nobody reads."
+        )
 
+    # Said on every run, green or red, so this never reads as everything watched.
+    blind_id, blind_label, blind_why = UNWATCHABLE_LANE
+    print(
+        f"NOT WATCHED: {blind_label} ({blind_id}) {blind_why}, so it cannot appear "
+        "in the check above however broken it is. Going estate wide does not reach "
+        "it either, because there is no errored execution to find."
+    )
+
+    return combine(beat_code, run_code)
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
