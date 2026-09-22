@@ -34,18 +34,74 @@ A node that throws is the safe case: the run dies and nothing is claimed. The
 expensive cases are the two that swallow and then write.
 
 `DEVON - Duplicate Sweep`. `Move to _To Delete` carries
-`onError: continueRegularOutput`. `Mark Superseded` then writes into Airtable a
+`onError: continueRegularOutput`. `Mark Superseded` then wrote into Airtable a
 Notes string that `Find Duplicates` composed BEFORE the move was attempted,
-ending "Moved to _To Delete on <date>", and sets `Triaged: true`. Every
-duplicate it touched since the credential died reads as filed and closed. None
-of them moved.
+ending "Moved to _To Delete on <date>", and set `Triaged: true` whatever came
+back.
 
 `TQO FINAL V5`. `Repurpose: Drop Caption File` and `Repurpose: Drop Video` both
-swallow. `Repurpose: Mark Handed Off` then PATCHes the Airtable slot to
-`Status: Ready`, stamps `Posted At`, and writes a note saying the file was
+swallow. `Repurpose: Mark Handed Off` then PATCHed the Airtable slot to
+`Status: Ready`, stamped `Posted At`, and wrote a note saying the file was
 dropped in the Repurpose folder and that "if nothing appears, the workflow on
-their side is not pointed at this folder". It records a handoff that did not
-happen and points at a downstream lane for it.
+their side is not pointed at this folder". It recorded a handoff that did not
+happen and pointed at a downstream lane for it.
+
+## The blast radius was zero, and the first version of this doc said otherwise
+
+The paragraphs above first read "every duplicate it touched since the credential
+died reads as filed and closed". That was taken from the code and never from the
+data, which is the first law's own failure mode inside the doc whose subject is
+that failure.
+
+Measured the same evening. `Inbox Captures` (tbl4ziFRbl5mnUcKc) holds 13 rows,
+all of them read: none carries a "Moved to _To Delete" note, none is Triaged,
+and exactly one has a `Filename` populated at all, so `Find Duplicates` cannot
+form a pair. `Publishing Slots` (tblQgQ3JdpoKOANXh) holds zero rows. Neither
+lane has ever written a false record.
+
+The defect is real and would have landed on the first matching row. It had not
+landed. Over-calling a finding spends Tee's attention and is its own error, so
+the correction is recorded here rather than quietly edited out.
+
+## The repair, and why the two lanes recover differently
+
+Ruled by Tee 2026-09-22 from a card: fix the code first, leave the records.
+
+`Confirm Move` on the Duplicate Sweep and `Confirm Drop` on the TQO repurpose
+lane both read the Drive file id back and compose the note honestly in both
+directions. A failure is named, the file is named, and nothing claims a move
+that did not happen. On the repurpose lane the failure PATCH carries the `Notes`
+field ONLY: `Status` and `Posted At` are left exactly as they were, and no new
+`Status` option is invented, because `typecast` is on in that request and an
+unknown option name would silently add one to Tee's base. An error path does not
+get to make a schema change.
+
+Nineteen fixture cases run in node against both bodies before either was
+published: the success shape, a dead credential, a 200 carrying no file id, and
+an error object with no message. Both published and read back;
+`activeVersionId` equals `versionId` on each.
+
+They recover differently and that is worth knowing before trusting either.
+`Find Duplicates` reads every capture row with no `Triaged` filter, so the sweep
+re-detects the same duplicate and rewrites its own note on the next run.
+`Repurpose: Due Slots` selects on `{Status}='Pending'`, so a slot flipped to
+`Ready` is never selected again and would have been stranded permanently.
+
+## Another session was editing TQO FINAL V5 at the same time
+
+Two versions landed on `qEkGOUsNyVaRAmm6` between the read at 21:45Z and the
+write at 22:04Z, both authored via MCP: `0bd1a2f5` at 21:55:23Z rebuilding the
+packaging lane so the model ranks and Tee picks, and `f78ebf25` at 21:56:16Z, a
+comment. The node count moved 250 to 251 under the read, which is how it was
+noticed.
+
+Nothing was published on that basis alone. The diff `27e53292..f78ebf25` was
+read first and touches only the Idea and Packaging lane: `Package: Plan Batch`,
+`Package: Write Options`, `Package: Context` and neighbours. Not one of the
+three Repurpose nodes appears in it. The draft was then published by explicit
+`versionId` and the diff `f78ebf25..9d00e60f` read back to confirm it adds one
+node, modifies one `jsonBody`, rewires three connections and touches nothing
+else.
 
 Graded honestly, because over-calling a finding is its own error. Those nine
 `TQO FINAL V5` nodes have NOT fired since the credential died. Every failed
@@ -160,8 +216,8 @@ AREA: Systems
 TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_two-dead-credentials-counted-from-the-estate_v1_2026-09-22-2151.md
 DATE: 2026-09-22
-DECISIONS: Tee ruled "Find what else depends on it first" for the dead Google Drive credential, and "Leave it as a floor" for the SMTP count. The sweep required opening every node anyway, so the real SMTP count was produced and both written numbers were corrected rather than left wrong.
-FINDINGS: Google Drive NW3vR6nNcMoUkJyJ feeds 18 nodes across 6 workflows; two of them swallow the failure and then write a false record into Airtable. SMTP AgSGuaA2pnZsrZcJ carries every emailSend in the estate, 20 nodes across 16 workflows, including the compliance lane and the only backup. The TQO Drive damage is armed but not yet realised because the Cerebras outage stopped the pipeline upstream. The pre-compaction record was wrong about the Precedence Guard's node name and error mode, and overstated the iPhone capture blast radius.
-OPEN: Both credentials remain dead and both fixes are Tee's. Whether to revert the false Airtable records is an unruled data question.
-STATUS: Sweep complete, 45 of 45 active workflows read and verified. Corrections landed in CLAUDE.md and in the live sticky note.
+DECISIONS: Tee ruled "Find what else depends on it first" for the dead Google Drive credential, "Leave it as a floor" for the SMTP count, and on a second card "Fix the code first, leave the records" for the two false-write paths. The sweep required opening every node anyway, so the real SMTP count was produced and both written numbers were corrected rather than left wrong.
+FINDINGS: Google Drive NW3vR6nNcMoUkJyJ feeds 18 nodes across 6 workflows; two of them swallowed the failure and would then have written a false record into Airtable, though measurement of both tables shows neither ever did. SMTP AgSGuaA2pnZsrZcJ carries every emailSend in the estate, 20 nodes across 16 workflows, including the compliance lane and the only backup. The TQO Drive damage is armed but not yet realised because the Cerebras outage stopped the pipeline upstream. The pre-compaction record was wrong about the Precedence Guard's node name and error mode, and overstated the iPhone capture blast radius.
+OPEN: Both credentials remain dead and both fixes are Tee's. Another session is editing TQO FINAL V5 concurrently; its packaging-lane work and this repurpose-lane fix do not overlap, but a third change should read the version history first.
+STATUS: Sweep complete, 45 of 45 active workflows read and verified. Both false-write paths repaired, published and read back. Corrections landed in CLAUDE.md, in the live sticky note, and in this doc's own over-called blast radius.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f

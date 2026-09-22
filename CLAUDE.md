@@ -260,17 +260,40 @@ A node that throws is safe here: the run dies and nothing is claimed. The two
 that are worse than being down are the ones that swallow and then write.
 
 `DEVON - Duplicate Sweep`: `Move to _To Delete` swallows, and `Mark Superseded`
-then writes into Airtable a Notes string composed BEFORE the move was attempted,
-"Moved to _To Delete on <date>", and sets `Triaged: true`. Every duplicate it
-touched since the credential died is recorded as filed and closed, and none of
-them moved.
+then wrote into Airtable a Notes string composed BEFORE the move was attempted,
+"Moved to _To Delete on <date>", and set `Triaged: true` whatever came back.
 
 `TQO FINAL V5`: `Repurpose: Drop Caption File` and `Repurpose: Drop Video` both
-swallow, and `Repurpose: Mark Handed Off` then PATCHes the slot to `Status:
+swallow, and `Repurpose: Mark Handed Off` then PATCHed the slot to `Status:
 Ready` with a `Posted At` stamp and a note saying the file was dropped in the
 Repurpose folder and "if nothing appears, the workflow on their side is not
-pointed at this folder". It blames a downstream lane for a file that was never
-written.
+pointed at this folder". It blamed a downstream lane for a file this one never
+wrote.
+
+**BLAST RADIUS ZERO, AND THE FIRST WRITE-UP OF THIS SAID OTHERWISE.** That
+version read "every duplicate it touched since the credential died is recorded
+as filed and closed", which was taken from the code and never from the data.
+Measured 2026-09-22: `Inbox Captures` (tbl4ziFRbl5mnUcKc) holds 13 rows, all
+read; none carries a "Moved to _To Delete" note, none is Triaged, and exactly
+one has a `Filename` at all, so no duplicate pair can form. `Publishing Slots`
+(tblQgQ3JdpoKOANXh) holds zero rows. Neither lane has ever written a false
+record. The defect is real and would have landed on the first matching row; it
+had not landed. Grade the blast radius from the store, not from the branch that
+would have taken it.
+
+Both were repaired the same day on Tee's ruling, fix the code and leave the
+records. A `Confirm Move` node and a `Confirm Drop` node read the Drive file id
+back and compose the note honestly in both directions, and on a failure the
+repurpose PATCH carries the Notes field ONLY, leaving `Status` and `Posted At`
+untouched rather than inventing a new option under `typecast`. Nineteen fixture
+cases, both bodies, success and dead credential and 200-with-no-id and an empty
+error object.
+
+The two lanes recover differently, which is worth knowing before trusting
+either. `Find Duplicates` reads every capture row with no `Triaged` filter, so
+the sweep re-detects the same duplicate and rewrites its own note on the next
+run. `Repurpose: Due Slots` selects on `{Status}='Pending'`, so a slot flipped
+to `Ready` is never selected again and would have been stranded permanently.
 
 Graded honestly: those nine TQO nodes have NOT fired since the credential died.
 Every `TQO FINAL V5` failure from 2026-09-19 on is the Cerebras 402, execution
