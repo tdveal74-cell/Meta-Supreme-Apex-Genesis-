@@ -16,11 +16,25 @@ second assertion is the negative control. Without it the test passes against a
 broken implementation and proves nothing, which this repository has shipped
 before.
 
-Everything here is pure: rows in, verdict out. No network, no API key, no clock.
+THE SECOND CASE THAT CARRIES THIS FILE is ``test_the_outage_of_2026_09_20_is_
+caught_and_the_beat_alone_would_have_missed_it``. The beat reading above is
+necessary and was never sufficient: the Heartbeat writes its row about 150ms
+into a run, on a branch parallel to the email, so a run that beats and then dies
+at the send leaves a beat that looks perfect. That is exactly what happened for
+thirty six hours from 2026-09-20, and this script printed OK four times a day
+through it. That test replays the real executions and carries the same kind of
+negative control, asserting that the beat reading alone still says OK.
+
+Most cases here are pure: rows in, verdict out, no network and no clock. Three
+are not, and say so in their names: they stub the two fetchers and drive
+``main`` itself, because ``verdict`` and ``run_verdict`` are separate functions
+and main() is the only place that knows both have to run. A pure function
+nobody calls is worth nothing.
 """
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -31,8 +45,11 @@ from scripts.pulse_watchdog import (
     MISSED_BEAT_H,
     OK,
     PAGE,
+    combine,
     newest_beat,
+    newest_failure,
     parse_iso,
+    run_verdict,
     verdict,
 )
 
@@ -202,3 +219,233 @@ def test_the_threshold_still_matches_the_pulse_that_writes_the_log():
         f"scripts/pulse_watchdog.py says {MISSED_BEAT_H}h. Reconcile them: while they "
         "disagree the watchdog is measuring something the Pulse does not mean."
     )
+
+
+# --------------------------------------------------------------------------
+# A fresh beat is not a finished run
+#
+# Everything below was copied out of the live instance on 2026-09-22, during
+# the outage that this script reported OK through. The timestamps, execution
+# ids, node name and SMTP reply are verbatim, so these cases replay a real
+# failure rather than an imagined one.
+# --------------------------------------------------------------------------
+
+OUTAGE_NOW = datetime(2026, 9, 22, 5, 0, 0, tzinfo=timezone.utc)
+
+#: Beat row 116, written by execution 729 about 150ms into a run that then took
+#: twelve seconds to die. Read from devon_heartbeat_log on 2026-09-22.
+OUTAGE_BEAT = {
+    "kind": "pulse",
+    "beat_at": "2026-09-22T04:00:15.127Z",
+    "vitals": "{}",
+    "findings": "reflection_missing | No fresh reflection",
+}
+
+#: The seven consecutive failures, as /api/v1/executions?status=error returns
+#: them. Deliberately not in newest-first order: this API promises none.
+OUTAGE_RUNS = [
+    {"id": "698", "workflowId": "EEDrp2jLlw2Ssd5b", "status": "error",
+     "startedAt": "2026-09-21T16:00:15.042Z", "stoppedAt": "2026-09-21T16:00:26.817Z"},
+    {"id": "729", "workflowId": "EEDrp2jLlw2Ssd5b", "status": "error",
+     "startedAt": "2026-09-22T04:00:15.037Z", "stoppedAt": "2026-09-22T04:00:27.596Z"},
+    {"id": "714", "workflowId": "EEDrp2jLlw2Ssd5b", "status": "error",
+     "startedAt": "2026-09-21T22:00:15.037Z", "stoppedAt": "2026-09-21T22:00:27.237Z"},
+    {"id": "675", "workflowId": "EEDrp2jLlw2Ssd5b", "status": "error",
+     "startedAt": "2026-09-21T10:00:15.037Z", "stoppedAt": "2026-09-21T10:00:26.661Z"},
+    {"id": "654", "workflowId": "EEDrp2jLlw2Ssd5b", "status": "error",
+     "startedAt": "2026-09-21T04:00:15.040Z", "stoppedAt": "2026-09-21T04:00:27.237Z"},
+    {"id": "639", "workflowId": "EEDrp2jLlw2Ssd5b", "status": "error",
+     "startedAt": "2026-09-20T22:00:15.025Z", "stoppedAt": "2026-09-20T22:00:26.252Z"},
+    {"id": "623", "workflowId": "EEDrp2jLlw2Ssd5b", "status": "error",
+     "startedAt": "2026-09-20T16:00:15.036Z", "stoppedAt": "2026-09-20T16:00:27.935Z"},
+]
+
+#: Execution 729 opened with includeData=true, trimmed to the keys this script
+#: reads. The message is the SMTP server's own reply.
+OUTAGE_DETAIL_PAYLOAD = {
+    "id": "729",
+    "status": "error",
+    "data": {
+        "resultData": {
+            "lastNodeExecuted": "Send Pulse",
+            "error": {
+                "name": "NodeApiError",
+                "httpCode": "EAUTH",
+                "node": {"name": "Send Pulse", "type": "n8n-nodes-base.emailSend"},
+                "message": (
+                    "Invalid login: 535-5.7.8 Username and Password not accepted. For more "
+                    "information, go to\n535 5.7.8  https://support.google.com/mail/"
+                    "?p=BadCredentials 2adb3069b0e04-5b8d46ad0e9sm155103e87.2 - gsmtp"
+                ),
+            },
+        }
+    },
+}
+
+
+def test_the_outage_of_2026_09_20_is_caught_and_the_beat_alone_would_have_missed_it():
+    """The load bearing case for the run check, replayed from the real outage.
+
+    The Heartbeat beat on time and died twelve seconds later at the send, four
+    times a day for thirty six hours, and this script printed OK through all of
+    it. The negative control is the whole point: it asserts that the beat
+    reading, on its own, still says everything is fine. Without it this test
+    would pass against an implementation that had changed nothing.
+    """
+    run_code, run_message = run_verdict(OUTAGE_RUNS, OUTAGE_NOW)
+
+    assert run_code == ALARM, (
+        "seven consecutive failed Heartbeat runs, the newest an hour old, were not "
+        f"an alarm. Got {run_code}: {run_message}"
+    )
+    assert "729" in run_message, run_message
+    assert "7 errored runs were listed" in run_message, run_message
+
+    # Negative control. This is what the watchdog saw for thirty six hours.
+    beat_code, beat_message = verdict([OUTAGE_BEAT], OUTAGE_NOW)
+    assert beat_code == OK, (
+        "the negative control no longer reproduces the blind spot, so the case above "
+        f"no longer proves the run check is doing anything. Got {beat_code}: {beat_message}"
+    )
+    assert "1.0h ago" in beat_message
+
+    assert combine(beat_code, run_code) == ALARM
+
+
+def test_main_runs_both_checks_so_the_wiring_cannot_rot():
+    """A pure function nobody calls is worth nothing, so drive main() itself.
+
+    ``verdict`` and ``run_verdict`` are separate on purpose, which means main()
+    is the only place that knows both must run. This stubs the two fetchers and
+    asserts the exit code comes back ALARM on a table whose newest beat is fresh.
+    """
+    from scripts import pulse_watchdog as mod
+
+    calls = []
+
+    def fake_rows(base, key, table_id):
+        calls.append("rows")
+        return [OUTAGE_BEAT]
+
+    def fake_runs(base, key, workflow_id, limit=mod.MAX_FAILED_RUNS):
+        calls.append("runs")
+        assert workflow_id == mod.HEARTBEAT_WORKFLOW_ID
+        return OUTAGE_RUNS
+
+    original = (mod.fetch_rows, mod.fetch_failed_runs, mod.failure_detail)
+    mod.fetch_rows, mod.fetch_failed_runs = fake_rows, fake_runs
+    mod.failure_detail = lambda base, key, execution_id: "node Send Pulse: Invalid login"
+    os.environ["N8N_VPS_KEY"] = "test-key-not-a-real-one"
+    try:
+        code = mod.main([])
+    finally:
+        mod.fetch_rows, mod.fetch_failed_runs, mod.failure_detail = original
+        os.environ.pop("N8N_VPS_KEY", None)
+
+    assert calls == ["rows", "runs"], (
+        f"main() did not run both checks; it ran {calls}. A fresh beat on its own is "
+        "exactly the reading that missed the September outage."
+    )
+    assert code == ALARM, f"main() returned {code} on a live outage"
+
+
+def test_an_unreadable_run_list_is_never_reported_healthy():
+    """Half a check is not a pass. The beat alone stopped being sufficient."""
+    from scripts import pulse_watchdog as mod
+
+    def fake_runs(base, key, workflow_id, limit=mod.MAX_FAILED_RUNS):
+        raise RuntimeError("HTTP 401: unauthorized")
+
+    original = (mod.fetch_rows, mod.fetch_failed_runs)
+    mod.fetch_rows = lambda base, key, table_id: [OUTAGE_BEAT]
+    mod.fetch_failed_runs = fake_runs
+    os.environ["N8N_VPS_KEY"] = "test-key-not-a-real-one"
+    try:
+        code = mod.main([])
+    finally:
+        mod.fetch_rows, mod.fetch_failed_runs = original
+        os.environ.pop("N8N_VPS_KEY", None)
+
+    assert code == CANNOT_CHECK, (
+        f"a fresh beat plus an unreadable run list came back as {code}. That is the "
+        "shape of reporting green while watching nothing."
+    )
+
+
+def test_a_failure_older_than_the_window_is_not_a_live_outage():
+    """Once the credential is fixed the alarm has to stop, or it teaches nothing."""
+    later = OUTAGE_NOW + timedelta(hours=MISSED_BEAT_H + 1)
+    code, message = run_verdict(OUTAGE_RUNS, later)
+    assert code == OK, message
+    assert "old news" in message
+
+
+def test_no_errored_runs_is_ok_and_says_why():
+    code, message = run_verdict([], OUTAGE_NOW)
+    assert code == OK, message
+    assert "finished" in message
+
+
+def test_the_newest_failure_wins_whatever_order_the_runs_arrive_in():
+    newest, execution_id, seen = newest_failure(OUTAGE_RUNS)
+    assert execution_id == "729", execution_id
+    assert seen == 7
+    assert newest == parse_iso("2026-09-22T04:00:15.037Z")
+
+    reversed_newest, reversed_id, reversed_seen = newest_failure(list(reversed(OUTAGE_RUNS)))
+    assert (reversed_newest, reversed_id, reversed_seen) == (newest, execution_id, seen)
+
+
+def test_a_run_with_an_unreadable_start_does_not_become_the_newest():
+    runs = list(OUTAGE_RUNS) + [{"id": "999", "startedAt": "not a date"}]
+    _, execution_id, seen = newest_failure(runs)
+    assert execution_id == "729", execution_id
+    assert seen == 8
+
+
+def test_combine_lets_a_finding_beat_an_absence_of_one():
+    assert combine(OK, OK) == OK
+    assert combine(OK, ALARM) == ALARM
+    assert combine(ALARM, OK) == ALARM
+    assert combine(OK, CANNOT_CHECK) == CANNOT_CHECK
+    # The one that matters: a known dead Pulse must not be downgraded to
+    # "I could not look" because the second read failed.
+    assert combine(ALARM, CANNOT_CHECK) == ALARM
+    assert combine(CANNOT_CHECK, ALARM) == ALARM
+
+
+def test_the_alarm_names_the_failing_node_when_it_can_read_it():
+    from scripts import pulse_watchdog as mod
+
+    original = mod.get_json
+    mod.get_json = lambda base, key, path: OUTAGE_DETAIL_PAYLOAD
+    try:
+        detail = mod.failure_detail("https://example.invalid", "k", "729")
+    finally:
+        mod.get_json = original
+
+    assert detail.startswith("node Send Pulse: Invalid login: 535-5.7.8"), detail
+    assert len(detail) <= 220, "the detail is not being truncated"
+
+    code, message = run_verdict(OUTAGE_RUNS, OUTAGE_NOW, detail=detail)
+    assert code == ALARM
+    assert "Send Pulse" in message, message
+
+
+def test_detail_that_cannot_be_read_never_downgrades_a_good_alarm():
+    """The node name is a nicety. Losing it must not lose the finding."""
+    from scripts import pulse_watchdog as mod
+
+    original = mod.get_json
+
+    def boom(base, key, path):
+        raise RuntimeError("HTTP 500")
+
+    mod.get_json = boom
+    try:
+        assert mod.failure_detail("https://example.invalid", "k", "729") == ""
+    finally:
+        mod.get_json = original
+
+    code, _ = run_verdict(OUTAGE_RUNS, OUTAGE_NOW, detail="")
+    assert code == ALARM
