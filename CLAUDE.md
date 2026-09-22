@@ -196,15 +196,41 @@ that reads an artifact produced BEFORE the failure it looks for will keep
 reading a healthy artifact off a dead organ. That is the third instance in one
 arc, after the `neverError` provider nodes and `saveDataSuccessExecution: none`.
 
-**All four alerting lanes share one credential, and it has now died twice.**
-Counted from the workflow list on 2026-09-22, not from a lane. `Send Pulse` on
-the Heartbeat, `Alert Tee` on `DEVON - Error Alarm`, `Send Watchdog Alert` on
-`DEVON Pipeline Watchdog` and `Send Email Alert` on `OS - Error Handler (all
-pipelines)` all use SMTP credential `AgSGuaA2pnZsrZcJ`. The Gmail OAuth
-credential they replaced died the same way on 2026-09-01. The last of the four
-sets `onError: continueRegularOutput`, so the error handler every pipeline names
-reports SUCCESS while no fault email goes anywhere. The two GitHub Actions
-watchdogs still work, and only because they deliberately carry no SMTP.
+**AT LEAST SIX alerting lanes share one credential, and this paragraph said
+FOUR until the estate corrected it the same day.** SMTP credential
+`AgSGuaA2pnZsrZcJ`, verified on these nodes: `Send Pulse` on the Heartbeat,
+`Alert Tee` on `DEVON - Error Alarm`, `Send Watchdog Alert` on `DEVON Pipeline
+Watchdog`, `Send Email Alert` on `OS - Error Handler (all pipelines)`, and then
+on 2026-09-22 at 16:39Z two more that had been failing daily at fixed slots:
+`Send Capture Nudge` on `DEVON Capture Nudge` (execution 768) and `Send
+Precedence Alert` on `DEVON Precedence Guard` (execution 765). The Gmail OAuth
+credential they replaced died the same way on 2026-09-01.
+
+The count is written as a floor rather than a number because it is still not an
+estate count. The four were taken from the workflows a session chose to open on
+name, and then written up as "counted from the workflow list", which was false.
+That is the same miss the first law tabulates, committed twice in one session,
+the second time inside the commit correcting the first. A lane that has not
+needed to send since the outage began will not appear in an error list either,
+so the error list is also a floor. A real count enumerates every active
+workflow's nodes and reads the credential id off each `emailSend`. Nobody has
+run that. Do not raise this number by reading another execution; run the
+enumeration or leave it as a floor.
+
+`OS - Error Handler` set `onError: continueRegularOutput` until 2026-09-22, so
+the error handler every pipeline names reported SUCCESS while no fault email
+went anywhere. Tee ruled it loud that day and executions 766 and 769 now read
+`status: error` where the same lane read `status: success` before. The two
+GitHub Actions watchdogs still work, and only because they deliberately carry no
+SMTP.
+
+**A second credential is also dead and was found the same way.** `DEVON
+Precedence Guard` fails at its Drive read before it reaches the send, and its
+own alert body names it: "Could not read _Devon Core, so duplicates could not be
+checked. The credential \"Google Drive account\" needs to be reconnected. This
+is NOT a clean result." The duplicate guard has been blind since at least
+2026-09-21, and the email saying so died on the SMTP credential. One dead
+credential hid another.
 
 The eleventh arrived on 2026-09-17 alongside the tenth, and for the same reason
 one layer down: `.github/workflows/provider-watchdog.yml`, `schedule` only, every
