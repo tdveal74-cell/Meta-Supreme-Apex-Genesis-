@@ -40,6 +40,16 @@ Rules that follow from it:
   radius. Over-calling a finding spends Tee's attention and is its own error.
 - **Green is not correct.** CI passed on every one of those. Tests do not read
   the artifact; a human or an executed adversarial case does.
+- **An n8n edit is a DRAFT until it is published, and the tool says success
+  either way.** Found 2026-09-22 on `OS - Error Handler (all pipelines)`.
+  `update_workflow` returned `appliedOperations: 2` while the running workflow
+  was untouched: `versionId` held the new draft and `activeVersionId` still held
+  the old live version. Reporting that as fixed would have been a false claim
+  about production with a successful tool call behind it. Call
+  `publish_workflow`, then read the workflow back and check `activeVersionId`
+  equals `versionId` and `activeVersion.sameAsDraft` is true. The status docs
+  have done this read back since 2026-09-15; it belongs here because this file
+  is what a session reads first.
 
 When a check genuinely cannot be run here, say so with the reason and name who
 can run it. The 2026-09-06 rotation negative test is the model: the network
