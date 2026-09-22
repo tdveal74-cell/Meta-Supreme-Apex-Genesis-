@@ -283,6 +283,45 @@ OUTAGE_DETAIL_PAYLOAD = {
 }
 
 
+# The two tests below drive main(), which reads datetime.now() itself and takes
+# no now to inject. Handing it the frozen fixtures above worked on the day they
+# were written and then rotted: by 2026-09-22T11:30Z the beat was 7.5h old, so
+# the beat half began alarming on its own and both tests stopped measuring what
+# they name. One failed outright. The other kept passing for the opposite
+# reason, its run half having aged into "old news" while the stale beat supplied
+# the alarm it asserts, which is the worse of the two because nothing shows it.
+#
+# So a main() test shifts the whole fixture forward by the distance between
+# OUTAGE_NOW and the real now. Every interval inside it is preserved to the
+# millisecond, so the scenario replayed is the same one, just anchored to the
+# clock main() will actually read.
+
+
+def _shift(value, delta):
+    """Move one fixture timestamp by delta, keeping its exact format."""
+    moved = parse_iso(value) + delta
+    return moved.isoformat().replace("+00:00", "Z")
+
+
+def as_if_now(beat=None, runs=None):
+    """Return (beat, runs) re-anchored so OUTAGE_NOW lands on the real now."""
+    delta = datetime.now(timezone.utc) - OUTAGE_NOW
+    out_beat = None
+    if beat is not None:
+        out_beat = dict(beat)
+        out_beat["beat_at"] = _shift(beat["beat_at"], delta)
+    out_runs = None
+    if runs is not None:
+        out_runs = []
+        for r in runs:
+            moved = dict(r)
+            for key in ("startedAt", "stoppedAt"):
+                if moved.get(key):
+                    moved[key] = _shift(moved[key], delta)
+            out_runs.append(moved)
+    return out_beat, out_runs
+
+
 def test_the_outage_of_2026_09_20_is_caught_and_the_beat_alone_would_have_missed_it():
     """The load bearing case for the run check, replayed from the real outage.
 
@@ -321,16 +360,28 @@ def test_main_runs_both_checks_so_the_wiring_cannot_rot():
     """
     from scripts import pulse_watchdog as mod
 
+    live_beat, live_runs = as_if_now(OUTAGE_BEAT, OUTAGE_RUNS)
+
+    # The negative control, and it has to be computed against the same clock
+    # main() will read. Without it this test cannot tell the run check firing
+    # from the beat check firing, and on 2026-09-22 that is exactly what it
+    # stopped being able to tell.
+    beat_alone, _ = verdict([live_beat], datetime.now(timezone.utc))
+    assert beat_alone == OK, (
+        "the re-anchored beat is not fresh, so this test is measuring the beat "
+        "check rather than the run check it names."
+    )
+
     calls = []
 
     def fake_rows(base, key, table_id):
         calls.append("rows")
-        return [OUTAGE_BEAT]
+        return [live_beat]
 
     def fake_runs(base, key, workflow_id, limit=mod.MAX_FAILED_RUNS):
         calls.append("runs")
         assert workflow_id == mod.HEARTBEAT_WORKFLOW_ID
-        return OUTAGE_RUNS
+        return live_runs
 
     original = (mod.fetch_rows, mod.fetch_failed_runs, mod.failure_detail)
     mod.fetch_rows, mod.fetch_failed_runs = fake_rows, fake_runs
@@ -356,8 +407,19 @@ def test_an_unreadable_run_list_is_never_reported_healthy():
     def fake_runs(base, key, workflow_id, limit=mod.MAX_FAILED_RUNS):
         raise RuntimeError("HTTP 401: unauthorized")
 
+    live_beat, _ = as_if_now(OUTAGE_BEAT)
+
+    # Same control as above: the whole claim is that a FRESH beat plus an
+    # unreadable run list is not a pass. A stale beat would alarm on its own and
+    # the assertion below would be proving the wrong thing.
+    beat_alone, _ = verdict([live_beat], datetime.now(timezone.utc))
+    assert beat_alone == OK, (
+        "the re-anchored beat is not fresh, so this test would assert against a "
+        "beat alarm rather than the unreadable run list it names."
+    )
+
     original = (mod.fetch_rows, mod.fetch_failed_runs)
-    mod.fetch_rows = lambda base, key, table_id: [OUTAGE_BEAT]
+    mod.fetch_rows = lambda base, key, table_id: [live_beat]
     mod.fetch_failed_runs = fake_runs
     os.environ["N8N_VPS_KEY"] = "test-key-not-a-real-one"
     try:

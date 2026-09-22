@@ -40,6 +40,29 @@ Rules that follow from it:
   radius. Over-calling a finding spends Tee's attention and is its own error.
 - **Green is not correct.** CI passed on every one of those. Tests do not read
   the artifact; a human or an executed adversarial case does.
+- **An n8n edit is a DRAFT until it is published, and the tool says success
+  either way.** Found 2026-09-22 on `OS - Error Handler (all pipelines)`.
+  `update_workflow` returned `appliedOperations: 2` while the running workflow
+  was untouched: `versionId` held the new draft and `activeVersionId` still held
+  the old live version. Reporting that as fixed would have been a false claim
+  about production with a successful tool call behind it. Call
+  `publish_workflow`, then read the workflow back and check `activeVersionId`
+  equals `versionId` and `activeVersion.sameAsDraft` is true. The status docs
+  have done this read back since 2026-09-15; it belongs here because this file
+  is what a session reads first.
+- **A green watchdog run means no refusal inside its window, never that the
+  outage is over.** Claimed 2026-09-22, from three consecutive green provider
+  watchdog runs at 20:05Z, 00:13Z and 05:15Z. It cost one execution read to
+  disprove: `TQO FINAL V5` execution 679 took HTTP 402 from Cerebras at
+  2026-09-21T10:20:00Z. The watchdog was right and the reading was wrong.
+  `WINDOW_H` is 6.0 and the lane that calls Cerebras fires once a day on
+  `Daily 6am - Script Writer`, 10:20Z, so roughly eighteen hours out of every
+  twenty four are green whether or not the provider is refusing. It did alarm,
+  three times, runs 13 and 14 on 2026-09-20 and run 18 on 2026-09-21, the last
+  reading `ALARM: ... Failing node(s): Write Script (Cerebras)`. Before reading
+  a green watchdog as recovery, check how often the lane it watches actually
+  calls the provider. Where the cadence is longer than the window, green is the
+  expected answer and carries no information.
 
 When a check genuinely cannot be run here, say so with the reason and name who
 can run it. The 2026-09-06 rotation negative test is the model: the network
@@ -173,15 +196,120 @@ that reads an artifact produced BEFORE the failure it looks for will keep
 reading a healthy artifact off a dead organ. That is the third instance in one
 arc, after the `neverError` provider nodes and `saveDataSuccessExecution: none`.
 
-**All four alerting lanes share one credential, and it has now died twice.**
-Counted from the workflow list on 2026-09-22, not from a lane. `Send Pulse` on
-the Heartbeat, `Alert Tee` on `DEVON - Error Alarm`, `Send Watchdog Alert` on
-`DEVON Pipeline Watchdog` and `Send Email Alert` on `OS - Error Handler (all
-pipelines)` all use SMTP credential `AgSGuaA2pnZsrZcJ`. The Gmail OAuth
-credential they replaced died the same way on 2026-09-01. The last of the four
-sets `onError: continueRegularOutput`, so the error handler every pipeline names
-reports SUCCESS while no fault email goes anywhere. The two GitHub Actions
-watchdogs still work, and only because they deliberately carry no SMTP.
+**SIXTEEN workflows send on one credential, across TWENTY `emailSend` nodes,
+and this paragraph said FOUR and then AT LEAST SIX before anyone counted.** SMTP
+credential `AgSGuaA2pnZsrZcJ` carries every alerting node in the estate. Not one
+`emailSend` anywhere sits on a different credential, so one dead password takes
+the whole channel. The Gmail OAuth credential it replaced died the same way on
+2026-09-01.
+
+Counted on 2026-09-22 by reading all 45 active workflows and the credential id
+on every node, not by opening the ones a session could name. The workflows:
+Heartbeat, `DEVON - Error Alarm`, `DEVON Pipeline Watchdog`, `OS - Error Handler
+(all pipelines)`, `DEVON Capture Nudge`, `DEVON Precedence Guard`, `DEVON -
+Monthly Credential Review`, `DEVON - _To Delete Auto-Purge`, `DEVON - Weekly
+Table Backup`, `DEVON - Ledger Janitor`, `DEVON Approval Queue`, `DEVON Soul
+Layer Write-Back`, `DEVON - Build 12 Ledger Feeder` (two nodes), `DEVON - Driver
+Poll`, `DEVON - Soul Committer` (three nodes), `OS 29 - Platform Policy Sensor`
+(two nodes).
+
+Two of those change what the outage costs. `OS 29 - Platform Policy Sensor` is
+the compliance lane, scanning platform policy pages daily, and email is its only
+channel. `DEVON - Weekly Table Backup` has no sink but email either: it builds
+four CSVs and discards them, so there is no backup at all while the send is
+dead.
+
+The two earlier numbers are the lesson. FOUR came from the workflows a session
+chose to open on name and was written up as "counted from the workflow list",
+which was false. AT LEAST SIX came from adding two the error list happened to
+surface, which is still reading the lane rather than the estate, and it was
+written as a floor precisely because nobody had run the enumeration. Running it
+took reading 45 workflows. Do not raise or lower this number by reading another
+execution; re-run the enumeration.
+
+`OS - Error Handler` set `onError: continueRegularOutput` until 2026-09-22, so
+the error handler every pipeline names reported SUCCESS while no fault email
+went anywhere. Tee ruled it loud that day and executions 766 and 769 now read
+`status: error` where the same lane read `status: success` before. The two
+GitHub Actions watchdogs still work, and only because they deliberately carry no
+SMTP.
+
+**A second credential is also dead, and TWO of the lanes it feeds write a
+false record rather than failing.** Google Drive OAuth credential
+`NW3vR6nNcMoUkJyJ`, dead between 2026-09-20T14:00:57Z and 2026-09-21T11:00:55Z,
+bracketed by the Auto-Purge's last clean read. Found because `DEVON Precedence
+Guard` composes its own honest alarm, "Could not read _Devon Core, so duplicates
+could not be checked. The credential \"Google Drive account\" needs to be
+reconnected. This is NOT a clean result", and then dies at the send on the SMTP
+credential. One dead credential hid another.
+
+Counted from the estate on 2026-09-22, all 45 active workflows, credential id on
+every node: EIGHTEEN Drive nodes across SIX workflows. The count matters less
+than the split by error handling.
+
+| workflow | nodes | on failure |
+|---|---|---|
+| `TQO FINAL V5` | 9 | 3 throw, 6 swallow |
+| `DEVON - Drive Draft Writer` | 3 | swallow, then refuse with a named reason |
+| `DEVON - iPhone Inbox Capture` | 2 | both throw |
+| `DEVON - _To Delete Auto-Purge` | 2 | the read throws, so nothing is purged |
+| `DEVON Precedence Guard` | 1 | swallows, composes the BLIND alarm above |
+| `DEVON - Duplicate Sweep` | 1 | swallows, then writes a false record |
+
+A node that throws is safe here: the run dies and nothing is claimed. The two
+that are worse than being down are the ones that swallow and then write.
+
+`DEVON - Duplicate Sweep`: `Move to _To Delete` swallows, and `Mark Superseded`
+then wrote into Airtable a Notes string composed BEFORE the move was attempted,
+"Moved to _To Delete on <date>", and set `Triaged: true` whatever came back.
+
+`TQO FINAL V5`: `Repurpose: Drop Caption File` and `Repurpose: Drop Video` both
+swallow, and `Repurpose: Mark Handed Off` then PATCHed the slot to `Status:
+Ready` with a `Posted At` stamp and a note saying the file was dropped in the
+Repurpose folder and "if nothing appears, the workflow on their side is not
+pointed at this folder". It blamed a downstream lane for a file this one never
+wrote.
+
+**BLAST RADIUS ZERO, AND THE FIRST WRITE-UP OF THIS SAID OTHERWISE.** That
+version read "every duplicate it touched since the credential died is recorded
+as filed and closed", which was taken from the code and never from the data.
+Measured 2026-09-22: `Inbox Captures` (tbl4ziFRbl5mnUcKc) holds 13 rows, all
+read; none carries a "Moved to _To Delete" note, none is Triaged, and exactly
+one has a `Filename` at all, so no duplicate pair can form. `Publishing Slots`
+(tblQgQ3JdpoKOANXh) holds zero rows. Neither lane has ever written a false
+record. The defect is real and would have landed on the first matching row; it
+had not landed. Grade the blast radius from the store, not from the branch that
+would have taken it.
+
+Both were repaired the same day on Tee's ruling, fix the code and leave the
+records. A `Confirm Move` node and a `Confirm Drop` node read the Drive file id
+back and compose the note honestly in both directions, and on a failure the
+repurpose PATCH carries the Notes field ONLY, leaving `Status` and `Posted At`
+untouched rather than inventing a new option under `typecast`. Nineteen fixture
+cases, both bodies, success and dead credential and 200-with-no-id and an empty
+error object.
+
+The two lanes recover differently, which is worth knowing before trusting
+either. `Find Duplicates` reads every capture row with no `Triaged` filter, so
+the sweep re-detects the same duplicate and rewrites its own note on the next
+run. `Repurpose: Due Slots` selects on `{Status}='Pending'`, so a slot flipped
+to `Ready` is never selected again and would have been stranded permanently.
+
+Graded honestly: those nine TQO nodes have NOT fired since the credential died.
+Every `TQO FINAL V5` failure from 2026-09-19 on is the Cerebras 402, execution
+614 read back to confirm, and the successful runs exit in under a second having
+found no work. The provider outage stopped the pipeline upstream of every Drive
+node. That damage is armed, not done, and it lands the day a model provider
+answers again.
+
+The whole TSWS block, all six workflows, carries no Drive credential at all. It
+works through the render worker on the VPS filesystem.
+
+Second order: the Action Router's allowlist routes `drive.draft` to the Drive
+Draft Writer, and the Face's system prompt names that executor as the one chosen
+when a job "reads like a draft, outline, script, memo, brief or checklist". It
+refuses cleanly, but `saveDataSuccessExecution: none` means the refusals leave
+no execution to read.
 
 The eleventh arrived on 2026-09-17 alongside the tenth, and for the same reason
 one layer down: `.github/workflows/provider-watchdog.yml`, `schedule` only, every
