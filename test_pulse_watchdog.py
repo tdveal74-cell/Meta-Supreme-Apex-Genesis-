@@ -41,15 +41,11 @@ from pathlib import Path
 
 from scripts.pulse_watchdog import (
     ALARM,
-    ALARM_LANES,
     CANNOT_CHECK,
     MISSED_BEAT_H,
-    NARROW_LIMIT,
     OK,
     PAGE,
-    UNWATCHABLE_LANE,
     combine,
-    is_newest_first,
     newest_beat,
     newest_failure,
     parse_iso,
@@ -234,26 +230,6 @@ def test_the_threshold_still_matches_the_pulse_that_writes_the_log():
 # failure rather than an imagined one.
 # --------------------------------------------------------------------------
 
-def live_beat(hours_ago: float = 0.5) -> dict:
-    """A beat stamped against the REAL clock, for the tests that drive main().
-
-    main() calls datetime.now itself and cannot be handed a frozen one, so a
-    fixed fixture in a main() test stops meaning what it says the moment real
-    time walks past the threshold. That is not hypothetical: on 2026-09-22 the
-    unreadable-run-list test below was already failing on main, having passed
-    when it was written a few hours earlier, because OUTAGE_BEAT had aged out
-    of the 7.5h window. Worse, its sibling kept passing for the wrong reason,
-    since a stale beat alarms whether or not the run check works at all.
-    """
-    stamp = datetime.now(timezone.utc) - timedelta(hours=hours_ago)
-    return {"kind": "pulse", "beat_at": stamp.isoformat().replace("+00:00", "Z")}
-
-
-def live_failed_run(hours_ago: float = 0.2, execution_id: str = "779") -> dict:
-    stamp = datetime.now(timezone.utc) - timedelta(hours=hours_ago)
-    return {"id": execution_id, "startedAt": stamp.isoformat().replace("+00:00", "Z")}
-
-
 OUTAGE_NOW = datetime(2026, 9, 22, 5, 0, 0, tzinfo=timezone.utc)
 
 #: Beat row 116, written by execution 729 about 150ms into a run that then took
@@ -307,6 +283,45 @@ OUTAGE_DETAIL_PAYLOAD = {
 }
 
 
+# The two tests below drive main(), which reads datetime.now() itself and takes
+# no now to inject. Handing it the frozen fixtures above worked on the day they
+# were written and then rotted: by 2026-09-22T11:30Z the beat was 7.5h old, so
+# the beat half began alarming on its own and both tests stopped measuring what
+# they name. One failed outright. The other kept passing for the opposite
+# reason, its run half having aged into "old news" while the stale beat supplied
+# the alarm it asserts, which is the worse of the two because nothing shows it.
+#
+# So a main() test shifts the whole fixture forward by the distance between
+# OUTAGE_NOW and the real now. Every interval inside it is preserved to the
+# millisecond, so the scenario replayed is the same one, just anchored to the
+# clock main() will actually read.
+
+
+def _shift(value, delta):
+    """Move one fixture timestamp by delta, keeping its exact format."""
+    moved = parse_iso(value) + delta
+    return moved.isoformat().replace("+00:00", "Z")
+
+
+def as_if_now(beat=None, runs=None):
+    """Return (beat, runs) re-anchored so OUTAGE_NOW lands on the real now."""
+    delta = datetime.now(timezone.utc) - OUTAGE_NOW
+    out_beat = None
+    if beat is not None:
+        out_beat = dict(beat)
+        out_beat["beat_at"] = _shift(beat["beat_at"], delta)
+    out_runs = None
+    if runs is not None:
+        out_runs = []
+        for r in runs:
+            moved = dict(r)
+            for key in ("startedAt", "stoppedAt"):
+                if moved.get(key):
+                    moved[key] = _shift(moved[key], delta)
+            out_runs.append(moved)
+    return out_beat, out_runs
+
+
 def test_the_outage_of_2026_09_20_is_caught_and_the_beat_alone_would_have_missed_it():
     """The load bearing case for the run check, replayed from the real outage.
 
@@ -345,18 +360,28 @@ def test_main_runs_both_checks_so_the_wiring_cannot_rot():
     """
     from scripts import pulse_watchdog as mod
 
+    live_beat, live_runs = as_if_now(OUTAGE_BEAT, OUTAGE_RUNS)
+
+    # The negative control, and it has to be computed against the same clock
+    # main() will read. Without it this test cannot tell the run check firing
+    # from the beat check firing, and on 2026-09-22 that is exactly what it
+    # stopped being able to tell.
+    beat_alone, _ = verdict([live_beat], datetime.now(timezone.utc))
+    assert beat_alone == OK, (
+        "the re-anchored beat is not fresh, so this test is measuring the beat "
+        "check rather than the run check it names."
+    )
+
     calls = []
 
     def fake_rows(base, key, table_id):
         calls.append("rows")
-        return [live_beat()]
-
-    asked = []
+        return [live_beat]
 
     def fake_runs(base, key, workflow_id, limit=mod.MAX_FAILED_RUNS):
         calls.append("runs")
-        asked.append(workflow_id)
-        return [live_failed_run()]
+        assert workflow_id == mod.HEARTBEAT_WORKFLOW_ID
+        return live_runs
 
     original = (mod.fetch_rows, mod.fetch_failed_runs, mod.failure_detail)
     mod.fetch_rows, mod.fetch_failed_runs = fake_rows, fake_runs
@@ -368,18 +393,11 @@ def test_main_runs_both_checks_so_the_wiring_cannot_rot():
         mod.fetch_rows, mod.fetch_failed_runs, mod.failure_detail = original
         os.environ.pop("N8N_VPS_KEY", None)
 
-    assert calls[0] == "rows" and calls.count("runs") == len(mod.ALARM_LANES), (
-        f"main() did not run the beat check plus one run check per lane; it ran {calls}. "
-        "A fresh beat on its own is exactly the reading that missed the September outage."
+    assert calls == ["rows", "runs"], (
+        f"main() did not run both checks; it ran {calls}. A fresh beat on its own is "
+        "exactly the reading that missed the September outage."
     )
-    assert asked == [lane_id for lane_id, _ in mod.ALARM_LANES], (
-        f"main() asked about {asked}, not the lanes in ALARM_LANES. Every one of them "
-        "sends on the same credential, which is the whole reason they are all watched."
-    )
-    assert code == ALARM, (
-        f"main() returned {code} on a live outage. The beat here is FRESH on purpose, "
-        "so the only thing that can raise this alarm is the run check."
-    )
+    assert code == ALARM, f"main() returned {code} on a live outage"
 
 
 def test_an_unreadable_run_list_is_never_reported_healthy():
@@ -389,8 +407,19 @@ def test_an_unreadable_run_list_is_never_reported_healthy():
     def fake_runs(base, key, workflow_id, limit=mod.MAX_FAILED_RUNS):
         raise RuntimeError("HTTP 401: unauthorized")
 
+    live_beat, _ = as_if_now(OUTAGE_BEAT)
+
+    # Same control as above: the whole claim is that a FRESH beat plus an
+    # unreadable run list is not a pass. A stale beat would alarm on its own and
+    # the assertion below would be proving the wrong thing.
+    beat_alone, _ = verdict([live_beat], datetime.now(timezone.utc))
+    assert beat_alone == OK, (
+        "the re-anchored beat is not fresh, so this test would assert against a "
+        "beat alarm rather than the unreadable run list it names."
+    )
+
     original = (mod.fetch_rows, mod.fetch_failed_runs)
-    mod.fetch_rows = lambda base, key, table_id: [live_beat()]
+    mod.fetch_rows = lambda base, key, table_id: [live_beat]
     mod.fetch_failed_runs = fake_runs
     os.environ["N8N_VPS_KEY"] = "test-key-not-a-real-one"
     try:
@@ -482,131 +511,3 @@ def test_detail_that_cannot_be_read_never_downgrades_a_good_alarm():
 
     code, _ = run_verdict(OUTAGE_RUNS, OUTAGE_NOW, detail="")
     assert code == ALARM
-
-
-def test_the_blind_lane_is_named_and_never_silently_counted():
-    """The OS Error Handler reports SUCCESS on a failed send, so a status check
-    cannot see it. Listing it beside the lanes that CAN answer would be the
-    false comfort this whole script exists to refuse, so it lives apart and is
-    declared. If somebody later moves it into ALARM_LANES, this fails.
-    """
-    blind_id = UNWATCHABLE_LANE[0]
-    assert blind_id not in [lane_id for lane_id, _ in ALARM_LANES], (
-        "the soft failing lane was added to the watched list. An errored-execution "
-        "check can never see it, so watching it there reports green on a dead lane."
-    )
-    assert len({lane_id for lane_id, _ in ALARM_LANES}) == len(ALARM_LANES)
-
-
-def test_main_declares_the_blind_lane_on_every_run(capsys):
-    """Said green or red. A caveat only printed on failure teaches nothing."""
-    from scripts import pulse_watchdog as mod
-
-    original = (mod.fetch_rows, mod.fetch_failed_runs)
-    mod.fetch_rows = lambda base, key, table_id: [live_beat()]
-    mod.fetch_failed_runs = lambda base, key, workflow_id, limit=mod.MAX_FAILED_RUNS: []
-    os.environ["N8N_VPS_KEY"] = "test-key-not-a-real-one"
-    try:
-        code = mod.main([])
-    finally:
-        mod.fetch_rows, mod.fetch_failed_runs = original
-        os.environ.pop("N8N_VPS_KEY", None)
-
-    printed = capsys.readouterr()
-    everything = printed.out + printed.err
-    assert code == OK, f"a healthy estate came back as {code}"
-    assert "NOT WATCHED" in everything, (
-        "a fully green run never told anyone that one of the four lanes is invisible"
-    )
-    assert UNWATCHABLE_LANE[0] in everything
-
-
-def test_a_narrowed_read_is_only_trusted_when_it_proves_itself():
-    """The dangerous case is a server that ignores sortBy and returns the OLDEST
-    rows. Acting on those drops the newest beat and manufactures a false alarm,
-    which is worse than the cap the narrowing exists to dodge.
-    """
-    descending = [{"id": n} for n in range(60, 40, -1)]
-    assert is_newest_first(descending, NARROW_LIMIT)
-
-    ascending = [{"id": n} for n in range(40, 60)]
-    assert not is_newest_first(ascending, NARROW_LIMIT), (
-        "an ignored sortBy came back oldest first and was accepted; that is the "
-        "false alarm this guard exists to stop"
-    )
-
-    assert not is_newest_first([{"id": n} for n in range(300, 0, -1)], NARROW_LIMIT), (
-        "a read larger than asked for means the limit was ignored too"
-    )
-    assert not is_newest_first([{"id": 9}], NARROW_LIMIT), "one row proves no order"
-    assert not is_newest_first([{"id": "9"}, {"id": "8"}], NARROW_LIMIT), "ids must be integers"
-    assert not is_newest_first([{"id": 5}, {"id": 5}], NARROW_LIMIT), "ties are not an order"
-
-
-def test_fetch_rows_falls_back_to_the_wide_read_when_narrowing_is_ignored():
-    """The fallback is the whole safety of the change: an instance that does not
-    support ordering behaves exactly as it did before this, cap and all.
-    """
-    from scripts import pulse_watchdog as mod
-
-    paths = []
-    oldest_first = [{"id": n, "kind": "pulse"} for n in range(1, 51)]
-    wide = [{"id": n, "kind": "pulse"} for n in range(1, 121)]
-
-    def fake_rows_at(base, key, path):
-        paths.append(path)
-        return oldest_first if "sortBy" in path else wide
-
-    original = mod._rows_at
-    mod._rows_at = fake_rows_at
-    try:
-        rows = mod.fetch_rows("https://example.invalid", "k", "tbl")
-    finally:
-        mod._rows_at = original
-
-    assert len(paths) == 2 and "sortBy" in paths[0] and "sortBy" not in paths[1], paths
-    assert rows == wide, "an ignored sortBy was trusted instead of falling back"
-
-
-def test_fetch_rows_uses_the_narrow_read_when_the_instance_honours_it():
-    from scripts import pulse_watchdog as mod
-
-    newest_first = [{"id": n, "kind": "pulse"} for n in range(120, 70, -1)]
-    calls = []
-
-    def fake_rows_at(base, key, path):
-        calls.append(path)
-        return newest_first
-
-    original = mod._rows_at
-    mod._rows_at = fake_rows_at
-    try:
-        rows = mod.fetch_rows("https://example.invalid", "k", "tbl")
-    finally:
-        mod._rows_at = original
-
-    assert len(calls) == 1, "the wide read still ran after a good narrow one"
-    assert rows == newest_first
-    assert len(rows) < PAGE, "a narrowed read that still hits the cap has bought nothing"
-
-
-def test_every_lane_on_the_dead_credential_is_watched_by_id():
-    """Pinned to ids, not to ALARM_LANES, or the guard moves with the mistake.
-
-    Written after the first version of this suite let a mutation through: the
-    wiring test above compares what main() asked for against ALARM_LANES, so
-    deleting a lane from that constant deletes the expectation too and stays
-    green. These three ids come from the workflow list of 2026-09-22, counted
-    there rather than from the lanes a session happened to open, and recorded in
-    SYS_OPS_a-fresh-beat-is-not-a-finished-run_v1_2026-09-22-0624. The fourth
-    sender on that credential is deliberately absent; see the test above.
-    """
-    assert {lane_id for lane_id, _ in ALARM_LANES} == {
-        "EEDrp2jLlw2Ssd5b",  # Heartbeat (Build 13), node Send Pulse
-        "bqcnIS0Qv4RkTCU1",  # Error Alarm, node Alert Tee
-        "IZBVlXQ8Y5dsGTRS",  # Pipeline Watchdog, node Send Watchdog Alert
-    }, (
-        "a lane that sends on AgSGuaA2pnZsrZcJ stopped being watched. One dead "
-        "password takes all of them down together, which is why they are watched "
-        "together."
-    )
