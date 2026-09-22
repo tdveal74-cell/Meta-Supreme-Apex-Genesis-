@@ -34,6 +34,25 @@ name: Pulse watchdog
 # because an unchecked Pulse reported as healthy is the same lie the Pulse
 # itself cannot help telling. See scripts/pulse_watchdog.py.
 #
+# IT READS TWO THINGS NOW, AND IT SHIPPED READING ONE. The beat row is written
+# about 150ms into a run, on a branch parallel to the email, so a run that beats
+# and then dies at the send leaves a beat that looks perfect. That is what
+# happened from 2026-09-20T16:00 to 2026-09-22T04:00: seven consecutive failed
+# Heartbeat runs, every one of them killed at `Send Pulse` by `Invalid login:
+# 535-5.7.8 Username and Password not accepted`, and this job printed OK four
+# times a day through all of it. The prediction six comments up, that an
+# alerting path with its own credential is one more thing that can rot quietly,
+# came true a second time on the SMTP password that had replaced the Gmail
+# OAuth token, and the DEVON Error Alarm died on the same credential one second
+# after each failure. So the script also asks n8n for errored executions of the
+# Heartbeat itself and alarms when one landed inside the same 7.5h window.
+#
+# THAT MAKES ONE TRANSIENT FAILURE GO RED FOR UP TO 7.5h, two or three runs and
+# two or three emails about something already recovered. Deliberate. This shape
+# has cost the estate twice now, nine days in September and thirty six hours in
+# the same month, and the Heartbeat only runs four times a day, so one failure
+# is worth one red job.
+#
 # BEFORE THIS CAN WORK, one repository secret must exist: N8N_VPS_KEY, an n8n
 # API key for https://n8n.editforge.online. Until it is set this job goes red
 # every run with exit 2 and a message saying exactly that, which is deliberate:
