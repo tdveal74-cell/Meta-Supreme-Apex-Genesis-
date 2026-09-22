@@ -42,10 +42,16 @@ from pathlib import Path
 from scripts.pulse_watchdog import (
     ALARM,
     CANNOT_CHECK,
+    ESTATE_RUN_LIMIT,
+    MAIL_NODE_TYPE,
     MISSED_BEAT_H,
+    NARROW_LIMIT,
     OK,
     PAGE,
+    UNWATCHABLE_LANE,
     combine,
+    is_newest_first,
+    mail_failures,
     newest_beat,
     newest_failure,
     parse_iso,
@@ -378,19 +384,30 @@ def test_main_runs_both_checks_so_the_wiring_cannot_rot():
         calls.append("rows")
         return [live_beat]
 
-    def fake_runs(base, key, workflow_id, limit=mod.MAX_FAILED_RUNS):
+    def fake_runs(base, key, workflow_id=None, limit=mod.MAX_FAILED_RUNS):
         calls.append("runs")
-        assert workflow_id == mod.HEARTBEAT_WORKFLOW_ID
+        assert workflow_id is None, (
+            f"main() asked only about {workflow_id}. The first version of this check "
+            "watched three lanes of sixteen and called that an estate count; asking "
+            "the instance for its own failures is what replaced the list."
+        )
         return live_runs
 
     original = (mod.fetch_rows, mod.fetch_failed_runs, mod.failure_detail)
+    original_node = mod.failure_node
     mod.fetch_rows, mod.fetch_failed_runs = fake_rows, fake_runs
     mod.failure_detail = lambda base, key, execution_id: "node Send Pulse: Invalid login"
+    mod.failure_node = lambda base, key, execution_id: (
+        "Send Pulse",
+        mod.MAIL_NODE_TYPE,
+        "Invalid login: 535-5.7.8 Username and Password not accepted.",
+    )
     os.environ["N8N_VPS_KEY"] = "test-key-not-a-real-one"
     try:
         code = mod.main([])
     finally:
         mod.fetch_rows, mod.fetch_failed_runs, mod.failure_detail = original
+        mod.failure_node = original_node
         os.environ.pop("N8N_VPS_KEY", None)
 
     assert calls == ["rows", "runs"], (
@@ -404,7 +421,7 @@ def test_an_unreadable_run_list_is_never_reported_healthy():
     """Half a check is not a pass. The beat alone stopped being sufficient."""
     from scripts import pulse_watchdog as mod
 
-    def fake_runs(base, key, workflow_id, limit=mod.MAX_FAILED_RUNS):
+    def fake_runs(base, key, workflow_id=None, limit=mod.MAX_FAILED_RUNS):
         raise RuntimeError("HTTP 401: unauthorized")
 
     live_beat, _ = as_if_now(OUTAGE_BEAT)
@@ -511,3 +528,155 @@ def test_detail_that_cannot_be_read_never_downgrades_a_good_alarm():
 
     code, _ = run_verdict(OUTAGE_RUNS, OUTAGE_NOW, detail="")
     assert code == ALARM
+
+
+def test_an_unrelated_failure_does_not_alarm_the_alerting_watchdog():
+    """Estate wide means reading failures that are none of this check's business.
+
+    The Cerebras lanes have returned 402 since about 2026-09-17 and error on a
+    schedule. Alarming on every errored execution would leave this permanently
+    red, and a watchdog nobody reads is the failure mode the whole file is about.
+    """
+    now = datetime.now(timezone.utc)
+    recent = (now - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+    runs = [{"id": "900", "startedAt": recent}, {"id": "901", "startedAt": recent}]
+    resolved = {
+        "900": ("Write Package (Cerebras)", "n8n-nodes-base.httpRequest", "402 payment required"),
+        "901": ("Send Pulse", MAIL_NODE_TYPE, "Invalid login: 535-5.7.8"),
+    }
+    kept = mail_failures(runs, resolved, now)
+    assert [r["id"] for r in kept] == ["901"], kept
+
+    code, message = run_verdict(kept, now)
+    assert code == ALARM, message
+
+    only_unrelated = mail_failures([runs[0]], resolved, now)
+    assert only_unrelated == []
+    assert run_verdict(only_unrelated, now)[0] == OK
+
+
+def test_an_unreadable_node_is_kept_rather_than_assumed_harmless():
+    """Guessing is least affordable exactly when the failure cannot be read."""
+    now = datetime.now(timezone.utc)
+    recent = (now - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+    runs = [{"id": "902", "startedAt": recent}]
+    kept = mail_failures(runs, {}, now)
+    assert [r["id"] for r in kept] == ["902"], (
+        "an errored run whose node could not be read was dropped. That is a silent "
+        "downgrade to healthy on the one reading that cannot be trusted."
+    )
+
+
+def test_failures_outside_the_window_are_not_carried_in():
+    now = datetime.now(timezone.utc)
+    old = (now - timedelta(hours=MISSED_BEAT_H + 2)).isoformat().replace("+00:00", "Z")
+    runs = [{"id": "903", "startedAt": old}]
+    assert mail_failures(runs, {"903": ("Send Pulse", MAIL_NODE_TYPE, "x")}, now) == []
+
+
+def test_main_declares_the_blind_lane_on_every_run(capsys):
+    """Said green or red. Going estate wide does not reach a lane that reports
+    SUCCESS on a failed send, so the caveat survives the rework.
+    """
+    from scripts import pulse_watchdog as mod
+
+    live_beat, _ = as_if_now(beat=OUTAGE_BEAT)
+    original = (mod.fetch_rows, mod.fetch_failed_runs)
+    mod.fetch_rows = lambda base, key, table_id: [live_beat]
+    mod.fetch_failed_runs = lambda base, key, workflow_id=None, limit=mod.MAX_FAILED_RUNS: []
+    os.environ["N8N_VPS_KEY"] = "test-key-not-a-real-one"
+    try:
+        code = mod.main([])
+    finally:
+        mod.fetch_rows, mod.fetch_failed_runs = original
+        os.environ.pop("N8N_VPS_KEY", None)
+
+    everything = "".join(capsys.readouterr())
+    assert code == OK, f"a healthy estate came back as {code}"
+    assert "NOT WATCHED" in everything, (
+        "a fully green run never told anyone that one lane is invisible to this check"
+    )
+    assert UNWATCHABLE_LANE[0] in everything
+
+
+def test_a_narrowed_read_is_only_trusted_when_it_proves_itself():
+    """The dangerous case is a server that ignores sortBy and returns the OLDEST
+    rows. Acting on those drops the newest beat and manufactures a false alarm,
+    which is worse than the cap the narrowing exists to dodge.
+    """
+    assert is_newest_first([{"id": n} for n in range(60, 40, -1)], NARROW_LIMIT)
+    assert not is_newest_first([{"id": n} for n in range(40, 60)], NARROW_LIMIT), (
+        "an ignored sortBy came back oldest first and was accepted"
+    )
+    assert not is_newest_first([{"id": n} for n in range(300, 0, -1)], NARROW_LIMIT)
+    assert not is_newest_first([{"id": 9}], NARROW_LIMIT), "one row proves no order"
+    assert not is_newest_first([{"id": "9"}, {"id": "8"}], NARROW_LIMIT), "ids must be ints"
+    assert not is_newest_first([{"id": 5}, {"id": 5}], NARROW_LIMIT), "ties are not an order"
+
+
+def test_fetch_rows_falls_back_to_the_wide_read_when_narrowing_is_ignored():
+    """The fallback is the whole safety of the change: an instance that does not
+    support ordering behaves exactly as it did before, cap and all.
+    """
+    from scripts import pulse_watchdog as mod
+
+    paths = []
+    oldest_first = [{"id": n, "kind": "pulse"} for n in range(1, 51)]
+    wide = [{"id": n, "kind": "pulse"} for n in range(1, 121)]
+
+    def fake_rows_at(base, key, path):
+        paths.append(path)
+        return oldest_first if "sortBy" in path else wide
+
+    original = mod._rows_at
+    mod._rows_at = fake_rows_at
+    try:
+        rows = mod.fetch_rows("https://example.invalid", "k", "tbl")
+    finally:
+        mod._rows_at = original
+
+    assert len(paths) == 2 and "sortBy" in paths[0] and "sortBy" not in paths[1], paths
+    assert rows == wide, "an ignored sortBy was trusted instead of falling back"
+
+
+def test_fetch_rows_uses_the_narrow_read_when_the_instance_honours_it():
+    from scripts import pulse_watchdog as mod
+
+    newest_first = [{"id": n, "kind": "pulse"} for n in range(120, 70, -1)]
+    calls = []
+
+    def fake_rows_at(base, key, path):
+        calls.append(path)
+        return newest_first
+
+    original = mod._rows_at
+    mod._rows_at = fake_rows_at
+    try:
+        rows = mod.fetch_rows("https://example.invalid", "k", "tbl")
+    finally:
+        mod._rows_at = original
+
+    assert len(calls) == 1, "the wide read still ran after a good narrow one"
+    assert rows == newest_first
+    assert len(rows) < PAGE, "a narrowed read that still hits the cap has bought nothing"
+
+
+def test_the_estate_read_names_no_workflow_at_all():
+    """The structural fix, pinned. A path carrying workflowId is a list again."""
+    from scripts import pulse_watchdog as mod
+
+    seen = []
+
+    def fake_get_json(base, key, path):
+        seen.append(path)
+        return {"data": []}
+
+    original = mod.get_json
+    mod.get_json = fake_get_json
+    try:
+        mod.fetch_failed_runs("https://example.invalid", "k", limit=ESTATE_RUN_LIMIT)
+    finally:
+        mod.get_json = original
+
+    assert "workflowId" not in seen[0], seen
+    assert "status=error" in seen[0] and f"limit={ESTATE_RUN_LIMIT}" in seen[0], seen
