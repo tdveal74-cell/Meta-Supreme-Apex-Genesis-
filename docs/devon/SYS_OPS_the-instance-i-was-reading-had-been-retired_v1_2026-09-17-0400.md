@@ -237,6 +237,39 @@ and behaved exactly as its own prompt instructs: the session came up with
 and went idle. Whether attaching the connector clears it remains untested,
 because only Tee can attach it.
 
+**That correction was itself wrong, in the other direction.** Read back from
+the estate on 2026-09-22 at 2330Z, from the `mcp_connections` array on every one
+of the account's seventeen Routines: the connector is stored as `n8n_vps`, with
+an underscore, under uuid `b34c21d0-1fc6-40fe-9739-34739e8c469c`. The claim
+above that `n8n_vps` is not the name of anything is false. Both spellings are
+one connector. The claude.ai Routines form renders it `n8n vps`, with a space,
+which is what Tee sees and what his 2026-09-22 screenshot showed; the API stores
+the underscored form. The first correction read the UI and then asserted
+something about the API it had not read, which is the same failure one layer
+down, in the paragraph fixing it.
+
+**The refusal is not a name problem, and that is now settled.** The `connectors`
+parameter was passed `["n8n_vps"]`, the provably stored name, on 2026-09-22 at
+2328Z, and answered `create_trigger: the connectors parameter is not available
+for this organization. Omit the connectors parameter.` That is the fourth
+measurement and the first one where a wrong name is excluded as the cause.
+
+**A Routine on this account already carries `n8n_vps`, which the paragraph above
+could not say.** `Money and access watch (daily 7:45 AM ET)`,
+`trig_01PFGVyQTnAoSRR2GBmfvRbU`, created 2026-09-18T01:29:02Z, holds fifty eight
+connectors including `n8n_vps`, `n8n_Knowledge` and `n8n`, and its last run
+succeeded at 2026-09-22T11:45:17Z. It was made in the claude.ai Routines form,
+whose New routine page attaches every connected connector by default. So the
+instruction in the OPEN block is not a hope about a UI nobody had used: the path
+is proven on this account, by a Routine that runs.
+
+Two more things the same read settles. Every Routine created through
+`create_trigger` carries `mcp_connections: []`, and so does every `send_later`
+reminder; the ones that carry connectors were all made in the form. And
+`created_via` reads `meta_mcp` on all seventeen, including the ones Tee made
+himself, so it does not mean created by a tool call and must not be read that
+way. `created_kind` is the field that separates them.
+
 ## DEVON RECEIPT
 
 ```
@@ -260,11 +293,16 @@ FINDINGS: The 2026-09-16 outage report was wrong. The Pulse never stopped; the
   was already shipped better on 2026-09-16, one was half blocked by an
   organisation level limit on Routine connectors, and one would have repeated a
   mistake Tee had already reversed.
-OPEN: Tee to attach the connector named "n8n vps", with a space, to the
-  disabled standalone reflection Routine in the claude.ai Routines UI and
-  enable it; until then the reflection still depends on one build session being
-  awake. This line said n8n_vps until 2026-09-17 at 2110Z, which is not the
-  name of anything; see the amendment above. No deliberate sweep has been run
+OPEN: Tee to build the standalone reflection Routine in the claude.ai Routines
+  UI, from the New routine form, keeping the connector the form shows as
+  "n8n vps" and the API stores as `n8n_vps`, and to delete the disabled
+  `trig_017G3E46NB3VbL7i3swaxp2R` once the new one is proved. The Edit form
+  carries no connector section, so an existing Routine cannot be repaired that
+  way, and `create_trigger` refuses the parameter for this organisation. Until
+  then the reflection still depends on one build session being awake. This line
+  said n8n_vps until 2026-09-17 at 2110Z, then said that spelling was not the
+  name of anything until 2026-09-22 at 2330Z; both are the same connector and
+  the second correction overshot. See the amendments above. No deliberate sweep has been run
   for other code or notes still addressing the retired Cloud instance. A
   genuine PROMOTE through the learning lane remains repo task 15. The beat log
   stood at 99 rows on 2026-09-17 and grows about five a day, four beats and one
