@@ -262,23 +262,43 @@ stroke, set `lastEmailed` to its own timestamp. `EMAIL_EVERY_H` is 22, so the
 scheduled beats at 04:00, 10:00 and 16:00 were 5.6h, 11.6h and 17.6h past it and
 NONE of them should send. Execution 819 fired unattended at 2026-09-23T04:00:15Z
 and returned success in 0.213s with row 124 reading `emailed: no`, which is the
-lane working correctly and proving nothing about the send. The first unattended
-send was therefore pushed to the 22:00:15Z beat, 23.6h out, a full day after the
-repair. This estate is mostly rate limited alert lanes, so the shape recurs:
+lane working correctly and proving nothing about the send. THE HEARTBEAT'S OWN
+first unattended send was therefore pushed to its 22:00:15Z beat, 23.6h out.
+
+**That sentence said "the first unattended send" until 11:18Z the same day, and
+it was a lane fact written as an estate fact, in the commit that follows "count
+from the estate, not from the lane."** Reading the mailbox rather than the one
+workflow: estate mail resumed at 2026-09-22T23:35:54Z, seventy minutes after the
+repair, and SEVEN messages were delivered before the Heartbeat's window even
+opened. `DEVON Precedence Guard` execution 855 is the confirmed scheduled one,
+`mode: trigger` at 2026-09-23T11:00:55Z, delivered and carrying a real result.
+The rate limit rule above is still true of the lane it was written about, and
+the estate was never waiting on it. When a claim is about the whole channel,
+read the whole channel: the mailbox is one search.
+
+This estate is mostly rate limited alert lanes, so the shape recurs:
 Heartbeat on `EMAIL_EVERY_H`, and every finding keyed so a persisting condition
 alerts once and then rides the daily pulse. Before hand firing one, work out
 what its own clock will do afterwards, and expect to wait a full period for the
 unattended proof. What a manual run does prove is the credential and the send
 path; what only a scheduled run proves is the schedule.
 
-Google Drive `NW3vR6nNcMoUkJyJ` was still unverified at that moment, and could
-not be settled from an execution list. `DEVON Precedence Guard` swallows its
-Drive failure and dies at the send, so its `status: error` cannot separate a
-dead credential from a live one, and `DEVON - _To Delete Auto-Purge` retains
-exactly one execution, the 2026-09-20T14:00:56Z clean read that brackets the
-death. With mail alive the Guard's 2026-09-23T11:00:55Z run is the first that
-delivers its own verdict in words, either a clean duplicate check or the line
-saying it could not read `_Devon Core` and this is NOT a clean result.
+**GOOGLE DRIVE IS ALIVE TOO, measured 2026-09-23T11:00:55Z, so everything below
+about it being dead is history rather than state.** It could not
+be settled from an execution list: `DEVON Precedence Guard` swallows its Drive
+failure and dies at the send, so its `status: error` could not separate a dead
+credential from a live one, and `DEVON - _To Delete Auto-Purge` retains exactly
+one execution, the 2026-09-20T14:00:56Z clean read that bracketed the death.
+With mail alive the Guard's own verdict finally arrived: execution 855,
+`mode: trigger`, success in 3.136s against 0.52s and 0.98s on the two dead days,
+and the email reads `Scanned 188 files in _Devon Core` with real file ids and
+created timestamps. A swallowed failure cannot produce that, so `NW3vR6nNcMoUkJyJ`
+is live and the EIGHTEEN Drive nodes across SIX workflows below are back.
+
+Two open items came with it, and they are Tee's rather than defects: one
+byte-identical duplicate pair in `_Devon Core`, both named
+`SYS_LOG_ruling-build01-closure_2026-08-23.md`, and one unversioned canon file,
+`CONTEXT-PILL_2026-09-22-2220.md`.
 
 **A second credential is also dead, and TWO of the lanes it feeds write a
 false record rather than failing.** Google Drive OAuth credential
