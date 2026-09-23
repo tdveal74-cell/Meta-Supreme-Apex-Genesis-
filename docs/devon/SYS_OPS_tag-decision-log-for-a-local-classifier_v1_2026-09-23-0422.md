@@ -56,11 +56,40 @@ The provider outage is still live, so every capture logged today will read
 `keyword` or `none`. That is the log telling the truth, and it is the case for
 this work.
 
+## What the estate holds to learn from
+
+Measured the same day, on Tee's instruction to check the n8n data tables too.
+All 55 tables on n8n.editforge.online were listed with their columns, and every
+one that could hold a labelled decision was counted.
+
+The 300 row threshold is not reachable at the current rate. Of the 13 rows in
+`Inbox Captures`, one is a real capture (`SHORTCUTSBUILDGUIDE 2.md`, 2026-08-06).
+Nine are shortcut tests: four titled `title`, three `Untitled capture`, one
+`Provided Input` and one `2331756`. Three are executor proof rows for Builds 14
+and 17 and the VPS cutover. Seven weeks of the lane produced one labelable row.
+
+No other table is a shortcut:
+
+| source | rows | what they are |
+|---|---|---|
+| `at_tqo_inbox_captures` `0tmm2baLwVWFdZAR` | 11 | one time copy at 2026-09-15T23:38:32Z, never updated, missing the two later rows |
+| `devon_state_ledger` `QZvdxllOjWevb3Vo` | 9 | proof and test jobs |
+| `devon_hearing_log` `Tht7qGrqF66E48EA` | 1 | a throwaway probe |
+| `at_tqo_audience_intelligence` `Q8bQ41V0Oz7xHrCt` | 0 | |
+| `devon_chat_log` `DKCusDJfIF8CPxyb` | 0 | |
+| `script_exemplars` `k3A66wV0vUoeaElo` | 0 | |
+| Airtable `Thread Receipts` `tblEhgEZoNr2ztbB3` | 4 | carries an Area, too few |
+
+The mirror table was deliberately left alone. Nothing writes it, so adding the
+three new columns to it would record nothing.
+
+The logging stays: it costs nothing per capture and it is correct. What changed
+is the premise of step two. Which way the plan goes from here is Tee's ruling.
+
 ## Next
 
 1. Tee ticks Area Confirmed on captures as he reviews them, fixing Area first
-   when it is wrong. The 13 existing rows can be confirmed too; they carry no
-   Tagged Area, so they are labels without a machine answer.
+   when it is wrong.
 2. At about 300 confirmed rows, train a small classifier (ModernBERT or
    SetFit), calibrate it, and run it in shadow beside the live tagger.
 3. Only after the shadow comparison does it decide anything, above a threshold,
@@ -76,7 +105,7 @@ TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_tag-decision-log-for-a-local-classifier_v1_2026-09-23-0422.md
 DATE: 2026-09-23
 DECISIONS: Tee ruled "Go with your recommendations": do not build a general model, build the typed decision pattern on the iPhone capture tagger, log labels first, train at about 300 confirmed rows, shadow before deciding.
-FINDINGS: Apply Area computed area_source on every capture and nothing persisted it. Cerebras still answered HTTP 402 at 2026-09-23T04:22:18Z.
-OPEN: Labeling is Tee's. Training, calibration and the shadow run wait on the row count. Cerebras billing remains unresolved.
+FINDINGS: Apply Area computed area_source on every capture and nothing persisted it. Cerebras still answered HTTP 402 at 2026-09-23T04:22:18Z. All 55 n8n data tables checked: no source in the estate holds labelled decisions in volume, and Inbox Captures holds one real capture in seven weeks, so the 300 row threshold is not reachable at the current rate. at_tqo_inbox_captures is a frozen one time copy.
+OPEN: Whether to park the classifier, fix the Cerebras billing instead, or seed labels by hand is Tee's ruling. Cerebras billing remains unresolved.
 STATUS: Three fields created, Index Capture published and read back, one probe proven from the store and deleted.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
