@@ -238,8 +238,9 @@ class Settings(BaseSettings):
 
     # DEVON remains the approval and orchestration authority. EditForge is the
     # authenticated media execution boundary. The token is never returned by
-    # status routes or written into receipts.
-    EDITFORGE_URL: str = "https://editforge.vercel.app"
+    # status routes or written into receipts. Since 2026-09-23 the one EditForge
+    # is the VPS studio; the Vercel copy was retired on Tee's ruling.
+    EDITFORGE_URL: str = "https://editforge.online"
     EDITFORGE_TOKEN: str | None = None
     EDITFORGE_TIMEOUT_SECONDS: float = 60.0
 
