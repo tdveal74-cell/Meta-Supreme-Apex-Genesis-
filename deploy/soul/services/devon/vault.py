@@ -957,7 +957,7 @@ KEY_ROTATION = (
 WORKFLOWS = {
     # Since 2026-09-23 (active version 881a2a3c) Index Capture also writes the
     # tag decision log: Tagged Area and Tag Source, next to the Area Tee
-    # corrects. See INBOX_TAG_LOG below.
+    # corrects. See INBOX_TAG_LOG above.
     "iPhone Inbox Capture": {"id": "CEy7WAl4QAzHfG46", "state": "active"},
     # Built 2026-09-16. This comment said inactive, with an undeployed endpoint
     # and an empty credential, and every part of that had stopped being true by
