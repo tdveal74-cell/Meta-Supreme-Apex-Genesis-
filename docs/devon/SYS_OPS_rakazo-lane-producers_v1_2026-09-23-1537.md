@@ -99,6 +99,61 @@ EditForge's own edit command code names the four properties `tqo`,
 `nco-forge`, `tsws` and `ascension-caudex`, which is a second source for ACX
 being Ascension Caudex. Tee has still not said so.
 
+## Google Drive, QA/QC, and the deploy
+
+Tee ruled two more things at about 15:58Z, both on cards: the bots reach his
+Drive through n8n, and they keep every V5 QA/QC step through an independent QC
+bot plus hard gates.
+
+Drive. `DEVON - Drive Read for Bots` (`o9w8btGoLyKAh5Lc`) searches and reads
+Drive with the live Google Drive credential, read only, and has no node that
+could write. EditForge's `drive_search` and `drive_read` reach it. Executions
+869 and 871 found the four TQO canon index versions and read v4 as markdown,
+25,398 characters. At 16:24:28Z the TQO Producer called EditForge's
+`drive_read` on that file and got the same 25,398 characters and its first
+line, "The canon of record for The Quiet Operator." The Composio or Pipedream
+401 on Rakazo's own Drive connector is not fixed; this route goes around it.
+
+QA/QC. Read from V5's own nodes, the gates split into measured and judged.
+The measured ones now run in n8n on the script text itself, in
+`DEVON - Bot QC Record` (`MmFNWeewHEuG5x8T`), writing to data table
+`bot_qc_verdicts` (`uW1IBc8D2hmFgYIn`): V5's `Script Gate: Quality` floors
+(1,200 to 2,400 words, no dashes, doctor 70, b-roll 6 for TQO and NCO, and for
+TQO the objective inside the first 70 words, 3 to 5 steps, a comments
+question, no subscribe ask, no retired audit) and V5's `Originality Scan`
+against the lane's back catalogue in `tqo_content`, `nco_content`,
+`at_tqo_tsws_content` or `at_tqo_acx_content`. One deliberate difference from
+V5: a missing originality score fails here, where V5 let it pass. Every
+verdict carries a fingerprint of the exact script it judged. Execution 876
+compared a test script against 2 prior TQO episodes and failed it on the word
+floor.
+
+The judged ones, V5's Script Doctor and QC prompts, run in a new QC Inspector
+bot (`cmueatuqt005r2kp4igzyqftf`), which reads them verbatim from Drive file
+`SYS_SPEC_bot-qc-prompts_v1_2026-09-23.md` (`1D3PghtjBgtR9Os0gCU6EP5g09IfeEc51`)
+and records verdicts with EditForge's `record_qc`. QC clears only at SHIP 80.
+Human review is Tee's alone, with AI disclosure required. The handoff webhook
+now refuses unless the latest script gate, QC and human review all clear, and
+QC was judged on the same script fingerprint as the script gate. Execution
+875 refused a frame that had none of them and wrote nothing.
+
+Graded honestly: `record_qc` and `ship_to_n8n` share EditForge's one token, so
+a producer ignoring its instructions could record a QC verdict itself. The
+measured gates cannot be faked that way, because n8n computes them. V5's QC
+prompt also grades a repurpose batch the bots do not make; the Inspector
+judges Part A and says so.
+
+Deploy. EditForge PR #69 merged as `6dc5927`, images published in run
+35886920957, and `deploy-hostinger.yml` swapped to `6dc592777947` in run
+35887912366 after a clean dry run. At 16:24:01Z the TSWS Producer called
+`canvas_list_projects` on the live server and got 1 project and 7 templates.
+The Vercel status on EditForge PRs reads "Deployment was blocked" and did on
+#68 too; the repo ships to the VPS, not Vercel.
+
+The four producers' instructions now read canon from Drive, route final
+scripts to the QC Inspector, and ship with `ship_to_n8n` behind the gate; the
+TSWS Producer builds in Canvas.
+
 ## First briefs, 15:31Z
 
 A readiness run for the producers: tools, Drive, canon, gaps, a proposed first
@@ -132,18 +187,14 @@ instructions, so none of them has seen it in a run yet.
 
 ## Open
 
-- Drive contents are unreadable to every bot. Until fixed, each producer can
-  name canon files but not read them, and drafts would rest on its
-  instructions alone.
 - TQO canon v4 needs Tee's confirmation. NCO Forge needs the D9-B consent
   scope. ACX needs Tee to say what it makes. Idea Scout needs its eight
   answers.
-- Not yet run: the handoff write path, the header match between EditForge and
-  n8n, and n8n downloading an EditForge master. The first real ship proves
-  all three.
-- EditForge PR #69 must merge and deploy before the bots have Canvas, the
-  edit worker or `ship_to_n8n`, and their instructions still describe the
-  Airtable handoff until they are updated after that deploy.
+- Not yet run: the handoff write path and n8n downloading an EditForge
+  master. The header match is proven by the live drive_read. The first real
+  ship proves the rest.
+- Test rows labelled TEST-QC-WIRING-2026-09-23 sit in `bot_qc_verdicts`; they
+  gate only that frame id.
 - V5 still has 47 nodes calling Airtable outside the repurpose branch.
 - The two probe bots and the Gemini connection on a retired model remain.
 
@@ -153,8 +204,8 @@ AREA: Systems
 TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_rakazo-lane-producers_v1_2026-09-23-1537.md
 DATE: 2026-09-23
-DECISIONS: Tee ruled one production bot per lane for TQO, TSWS, NCO Forge and ACX, paid renders only on his go, and bots make while n8n ships. Idea Scout was adopted from botdirectory.ai under his delegation. Tee ruled Airtable migrated so the repurpose lane moves to n8n data tables, a repurpose only schedule with render and publish left off, all of EditForge for the bots, and Canvas as the TSWS bot's department.
-FINDINGS: Five bots live on Sonnet 5 through the Claude subscription. V5's repurpose branch was on Airtable and not scheduled at all; it now reads the data tables and runs at 9:00 and 21:00 New York, published and read back at version e0264d05. A bot handoff webhook is live and refuses bad input without writing. EditForge PR #69 gives bots Canvas, the edit worker, catalog, stock, planners and ship_to_n8n, human gates kept. Every bot can list Drive but not read it, 401 upgrade your workspace, likely the connector service plan, unverified.
-OPEN: Merge and deploy EditForge PR #69, then update the four producers' handoff instructions to ship_to_n8n. First real ship proves the handoff write, the header match and the n8n download. Fix Drive content reads. Tee to confirm TQO canon v4, D9-B consent scope for NCO Forge, what ACX makes, and answer Idea Scout. 47 Airtable nodes remain in V5.
-STATUS: Bots built and briefed, repurpose moved and scheduled, EditForge tools in review, blocked on Drive reads and Tee's answers.
+DECISIONS: Tee ruled one production bot per lane for TQO, TSWS, NCO Forge and ACX, paid renders only on his go, and bots make while n8n ships. Idea Scout was adopted from botdirectory.ai under his delegation. Tee ruled Airtable migrated so the repurpose lane moves to n8n data tables, a repurpose only schedule with render and publish left off, all of EditForge for the bots, and Canvas as the TSWS bot's department. Tee ruled the bots reach Drive through n8n and keep every V5 QA/QC step through an independent QC Inspector plus hard gates.
+FINDINGS: Four producers, Idea Scout and a QC Inspector live on Sonnet 5 through the Claude subscription. EditForge 6dc5927 is deployed and bots used Canvas and read Drive live through it at 16:24Z, 25,398 characters of TQO canon. V5's repurpose branch now reads the data tables on its own 9:00 and 21:00 schedule. V5's measured QA/QC gates run in n8n on the script text and the handoff refuses without script gate, QC 80 and human review on the same script. Rakazo's own Drive connector still returns 401 upgrade your workspace and is bypassed, not fixed.
+OPEN: First real ship proves the handoff write and the n8n download. record_qc shares one token with the producers. Tee to confirm TQO canon v4, D9-B consent scope for NCO Forge, what ACX makes, and answer Idea Scout. 47 Airtable nodes remain in V5. Probe bots and the retired Gemini connection to clean up.
+STATUS: Bots built, briefed, reading Drive, gated by QA/QC, EditForge deployed; waiting on Tee's answers and a first real brief.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
