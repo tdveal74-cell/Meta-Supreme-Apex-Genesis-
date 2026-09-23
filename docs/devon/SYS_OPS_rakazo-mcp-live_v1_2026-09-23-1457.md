@@ -68,9 +68,8 @@ to work for that to happen.
 
 ## What is not proven
 
-- EditForge being registered inside Rakazo was not observed directly. The
-  installer's own output from that step was not seen here. `rakazo_status` or
-  `list_bots` through the connector will show it.
+- EditForge being registered inside Rakazo was not observed at filing time.
+  Settled at 15:01Z: `create_bot` found it and answered `editforge: given`.
 - Whether a Rakazo bot can actually reach `editforge.online` from inside its
   sandbox is still unproven, because no bot on a paid model can run at all.
   See the next section.
