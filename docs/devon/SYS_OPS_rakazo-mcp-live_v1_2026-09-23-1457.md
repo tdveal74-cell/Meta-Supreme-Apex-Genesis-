@@ -72,7 +72,30 @@ to work for that to happen.
   installer's own output from that step was not seen here. `rakazo_status` or
   `list_bots` through the connector will show it.
 - Whether a Rakazo bot can actually reach `editforge.online` from inside its
-  sandbox has not been tried.
+  sandbox is still unproven, because no bot on a paid model can run at all.
+  See the next section.
+
+## Bot runs are down, and it is the model
+
+Measured through the connector at 15:01Z to 15:03Z. A probe bot given
+EditForge (`create_bot` answered `editforge: given`, which settles the first
+open item above) failed its run with no reply on Anthropic `claude-sonnet-4-5`
+and again on OpenRouter `google/gemini-2.5-flash-lite`. A control bot with no
+EditForge failed the same way on OpenRouter, so EditForge is not the cause. The
+same control bot on the local `qwen3:1.7b` was accepted and sat in `running`
+instead of failing; it had not replied when this was written.
+
+It predates the connector. The Chief's last reply is 2026-09-20T07:34Z, and
+every message to it since, 08:35Z that day and two test messages at 08:28Z
+and 08:31Z today, went unanswered.
+
+Tee confirmed the cause: the Anthropic API account needs funding. Why
+OpenRouter failed the same way was not checked. The failed run's reason is not
+readable through the connector, because Rakazo drops a run from the thread
+once it ends.
+
+Two probe bots stay in the space for the retest, `EditForge Probe` and
+`Control Probe`. None of Tee's six bots was changed.
 
 ## Open
 
@@ -90,7 +113,7 @@ TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_rakazo-mcp-live_v1_2026-09-23-1457.md
 DATE: 2026-09-23
 DECISIONS: Tee ruled EditForge gets full access inside Rakazo with the token, objection on paid render spend logged. The connector uses Tee's own Rakazo login and runs on the EditForge VPS. Model connection and bot creation were added to its tools.
-FINDINGS: rakazo-mcp is live at rakazo-mcp.editforge.online, health 200 and 401 without the key per n8n execution 864, and the connector answered in Claude. Code in rakazo-deploy eee3b36, server sha 9b97ba54, installer sha d9e4576c. editforge.online and rakazo.editforge.online both answered 200 after the install; the other front door sites were checked only by the installer, whose output was not seen here.
-OPEN: EditForge registration inside Rakazo not directly observed. Bot reach to editforge.online untested. App-made bots need EditForge turned on by hand. Rotate the key if front door logs are shared. Anthropic key for the Floor Agent on the 24th.
-STATUS: Live, confirmed by Tee.
+FINDINGS: Every bot run on a paid model fails, Anthropic and OpenRouter alike, since 2026-09-20T07:34Z; Tee confirmed the Anthropic API needs funding. EditForge is registered in Rakazo, create_bot reported it given. rakazo-mcp is live at rakazo-mcp.editforge.online, health 200 and 401 without the key per n8n execution 864, and the connector answered in Claude. Code in rakazo-deploy eee3b36, server sha 9b97ba54, installer sha d9e4576c. editforge.online and rakazo.editforge.online both answered 200 after the install; the other front door sites were checked only by the installer, whose output was not seen here.
+OPEN: Fund the Anthropic API, then rerun the EditForge probe on a paid model and set the default to Sonnet 5 if Tee wants it. OpenRouter failing too is unexplained. Bot reach to editforge.online untested. App-made bots need EditForge turned on by hand. Rotate the key if front door logs are shared. Anthropic key for the Floor Agent on the 24th.
+STATUS: Connector live, confirmed by Tee. Bots down on model funding.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
