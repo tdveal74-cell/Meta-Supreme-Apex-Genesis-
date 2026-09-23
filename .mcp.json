@@ -1,0 +1,81 @@
+{
+  "mcpServers": {
+    "hostinger-hosting": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "--package=@hostinger/mcp@1.63.2",
+        "hostinger-hosting-mcp"
+      ],
+      "env": {
+        "HOSTINGER_API_TOKEN": "${HOSTINGER_API_TOKEN}"
+      }
+    },
+    "hostinger-domains": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "--package=@hostinger/mcp@1.63.2",
+        "hostinger-domains-mcp"
+      ],
+      "env": {
+        "HOSTINGER_API_TOKEN": "${HOSTINGER_API_TOKEN}"
+      }
+    },
+    "hostinger-dns": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "--package=@hostinger/mcp@1.63.2",
+        "hostinger-dns-mcp"
+      ],
+      "env": {
+        "HOSTINGER_API_TOKEN": "${HOSTINGER_API_TOKEN}"
+      }
+    },
+    "hostinger-billing": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "--package=@hostinger/mcp@1.63.2",
+        "hostinger-billing-mcp"
+      ],
+      "env": {
+        "HOSTINGER_API_TOKEN": "${HOSTINGER_API_TOKEN}"
+      }
+    },
+    "hostinger-reach": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "--package=@hostinger/mcp@1.63.2",
+        "hostinger-reach-mcp"
+      ],
+      "env": {
+        "HOSTINGER_API_TOKEN": "${HOSTINGER_API_TOKEN}"
+      }
+    },
+    "hostinger-vps": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "--package=@hostinger/mcp@1.63.2",
+        "hostinger-vps-mcp"
+      ],
+      "env": {
+        "HOSTINGER_API_TOKEN": "${HOSTINGER_API_TOKEN}"
+      }
+    },
+    "hostinger-ecommerce": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "--package=@hostinger/mcp@1.63.2",
+        "hostinger-ecommerce-mcp"
+      ],
+      "env": {
+        "HOSTINGER_API_TOKEN": "${HOSTINGER_API_TOKEN}"
+      }
+    }
+  }
+}

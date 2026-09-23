@@ -774,3 +774,24 @@ claude plugin install test-generator@meta-supreme-pinned
 
 Remove any `@claude-community` copy of the same name, which would otherwise
 load beside the pinned one and win.
+
+## Project MCP servers
+
+`.mcp.json` declares seven Hostinger servers from `@hostinger/mcp`, pinned at
+`1.63.2` rather than `@latest`. The pin fixes the server code only: the
+package's own dependencies are caret ranges that npx resolves fresh on each
+install. The token is never in the file. Each server reads
+`${HOSTINGER_API_TOKEN}` from the environment of the process that starts
+Claude Code, so export it first. Project scoped servers sit at `Pending
+approval` until approved.
+
+Without the variable the servers still connect and list their tools, because
+Claude Code passes the literal string `${HOSTINGER_API_TOKEN}` as the token.
+Every call then returns `HTTP 401: Unauthenticated`. Measured 2026-09-23 on
+`hostinger-dns-mcp`. Read a 401 from these tools as a missing export before
+suspecting the account. `claude mcp list` also warns `Missing environment
+variables` per server. An empty value is worse: the package falls through to
+a browser OAuth login, which hangs where no browser can open.
+
+The claude.ai Hostinger connector overlaps these servers and needs none of
+this. Whether its tool set matches all seven has not been checked.
