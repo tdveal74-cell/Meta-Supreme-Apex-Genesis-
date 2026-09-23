@@ -1,0 +1,951 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src 'self'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-ilwGFkE3fUQy4TApdpRD20frox2D9Jr69GCFoGGYm9w='; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Quiet Operator</title>
+<meta name="description" content="A calm YouTube channel that teaches AI tools and career strategy to mid-career professionals. Each episode says what you will be able to do inside its first 30 seconds and gives you at least one action you can take today.">
+<link rel="canonical" href="https://tqohq.online/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="The Quiet Operator">
+<meta property="og:title" content="The Quiet Operator">
+<meta property="og:description" content="Which parts of your work should a tool do, and which should stay yours? A calm teaching channel on AI tools and career strategy.">
+<meta property="og:url" content="https://tqohq.online/">
+<meta name="twitter:card" content="summary">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0a1628" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='5' y='2.5' width='22' height='27' rx='2' fill='%23f6edb2' stroke='%230a1628' stroke-width='2'/%3E%3Cpath d='M9.5 9h13' stroke='%230a1628' stroke-width='2.6'/%3E%3Cpath d='M9.5 15h13M9.5 19.5h13M9.5 24h8' stroke='%230a1628' stroke-width='1.6'/%3E%3C/svg%3E">
+<style>
+/* Atkinson Hyperlegible Next, SIL Open Font License 1.1, see fonts/OFL-atkinson-hyperlegible-next.txt */
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  src: url("fonts/atkinson-hyperlegible-next-latin.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light dark;
+  --paper: #ffffff;
+  --ink: #0a1628;
+  --ink-2: #4b5870;
+  --rule: #d3d8e1;
+  --pen: #1f3fa6;
+  --pen-deep: #16307f;
+  --on-pen: #ffffff;
+  --copy: #f6edb2;
+  --copy-ink: #0a1628;
+  --copy-ink-2: #574f1e;
+  --copy-rule: #dccf85;
+  --copy-edge: #f6edb2;
+  --copy-mark: #0a1628;
+  --perf: #ffffff;
+  --field: #f1f3f7;
+  --field-line: #6b778c;
+  --err: #a3261c;
+  --select: #f6edb2;
+  --off: #d3d8e1;
+  --off-ink: #4b5870;
+
+  --font: "Atkinson Hyperlegible Next", ui-sans-serif, system-ui, sans-serif;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-pen: cubic-bezier(0.6, 0.04, 0.2, 1);
+  --gutter: clamp(1rem, 4.2vw, 3rem);
+  --label: 2.6rem;
+  --col-gap: 0.625rem;
+  --measure: 34em;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0a1628;
+    --ink: #e8ecf3;
+    --ink-2: #a6b1c4;
+    --rule: #26344d;
+    --pen: #9db8ff;
+    --pen-deep: #c3d3ff;
+    --on-pen: #0a1628;
+    --copy: #18140e;
+    --copy-ink: #efe7d6;
+    --copy-ink-2: #c4b597;
+    --copy-rule: #3d3223;
+    --copy-edge: #d39a52;
+    --copy-mark: #e2ac68;
+    --perf: #d39a52;
+    --field: #12203a;
+    --field-line: #8a96ac;
+    --err: #ff9e91;
+    --select: #4a3a1e;
+    --off: #26344d;
+    --off-ink: #a6b1c4;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0a1628;
+  --ink: #e8ecf3;
+  --ink-2: #a6b1c4;
+  --rule: #26344d;
+  --pen: #9db8ff;
+  --pen-deep: #c3d3ff;
+  --on-pen: #0a1628;
+  --copy: #18140e;
+  --copy-ink: #efe7d6;
+  --copy-ink-2: #c4b597;
+  --copy-rule: #3d3223;
+  --copy-edge: #d39a52;
+  --copy-mark: #e2ac68;
+  --perf: #d39a52;
+  --field: #12203a;
+  --field-line: #8a96ac;
+  --err: #ff9e91;
+  --select: #4a3a1e;
+  --off: #26344d;
+  --off-ink: #a6b1c4;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scrollbar-color: var(--ink-2) var(--paper);
+  accent-color: var(--pen);
+}
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  caret-color: var(--pen);
+  font-family: var(--font);
+  font-size: 1.125rem;
+  font-weight: 400;
+  line-height: 1.55;
+  font-kerning: normal;
+  font-variant-numeric: lining-nums;
+  text-rendering: optimizeLegibility;
+  overflow-wrap: break-word;
+}
+
+::selection { background: var(--select); color: var(--ink); }
+
+h1, h2, h3, p, ol, ul, figure { margin: 0; }
+p, li { text-wrap: pretty; }
+
+a {
+  color: var(--pen);
+  text-decoration-line: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.22em;
+  transition: text-decoration-thickness 0.2s var(--ease-out), color 0.2s var(--ease-out);
+}
+a:hover { text-decoration-thickness: 2.5px; color: var(--pen-deep); }
+
+:focus-visible {
+  outline: 3px solid var(--pen);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.skip {
+  position: absolute;
+  left: var(--gutter);
+  top: 0.75rem;
+  z-index: 10;
+  padding: 0.6rem 0.9rem;
+  background: var(--pen);
+  color: var(--on-pen);
+  font-weight: 650;
+  text-decoration: none;
+  border-radius: 3px;
+  transform: translateY(-180%);
+  transition: transform 0.25s var(--ease-out);
+}
+.skip:focus-visible { transform: translateY(0); color: var(--on-pen); }
+
+.sheet {
+  width: 100%;
+  max-width: 78rem;
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+/* The one grid: a label column and a value column, the memo's own layout. */
+.row {
+  display: grid;
+  grid-template-columns: var(--label) minmax(0, 1fr);
+  column-gap: var(--col-gap);
+}
+.row > .span { grid-column: 1 / -1; }
+
+.double-rule {
+  height: 6px;
+  border-top: 3px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+}
+
+/* Letterhead */
+.letterhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.15rem 1.5rem;
+  padding-block: 1.25rem 0.85rem;
+}
+.wordmark {
+  font-size: 1.0625rem;
+  font-weight: 720;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+.letterhead-note {
+  font-size: 0.9375rem;
+  color: var(--ink-2);
+  line-height: 1.3;
+}
+
+/* Memo header */
+.memo-head { padding-bottom: 0.25rem; }
+.field {
+  padding-block: 0.8rem;
+  border-bottom: 1px solid var(--rule);
+  align-items: first baseline;
+}
+.field-label {
+  font-size: 0.9375rem;
+  font-weight: 560;
+  color: var(--ink-2);
+  line-height: 1.3;
+}
+.field-value { line-height: 1.4; }
+.field-re { padding-block: 1rem 1.3rem; }
+.field-note .field-value { max-width: var(--measure); }
+.field-cc { align-items: center; padding-block: 0.9rem 1rem; border-bottom: 0; }
+
+h1 {
+  font-size: clamp(1.75rem, 1.1rem + 4vw, 4.15rem);
+  font-weight: 380;
+  line-height: 1.08;
+  letter-spacing: -0.024em;
+  text-wrap: balance;
+  max-width: 17em;
+}
+
+.tick {
+  display: block;
+  overflow: visible;
+  color: var(--pen);
+}
+.tick path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1 2;
+  stroke-dashoffset: 0;
+}
+
+/* Buttons: one filled pen-blue control, for the one ask. */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 3.25rem;
+  padding: 0.7rem 1.4rem;
+  font: inherit;
+  font-size: 1.0625rem;
+  font-weight: 650;
+  line-height: 1.2;
+  text-align: center;
+  text-wrap: balance;
+  text-decoration: none;
+  color: var(--on-pen);
+  background: var(--pen);
+  border: 2px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background-color 0.2s var(--ease-out), transform 0.15s var(--ease-out);
+}
+.button:hover { background: var(--pen-deep); color: var(--on-pen); }
+.button:active { transform: translateY(1px); }
+.button:focus-visible { outline-offset: 3px; }
+.button:disabled {
+  background: var(--off);
+  color: var(--off-ink);
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Body of the memo */
+.memo-body { padding-block: 2rem 4.25rem; }
+.memo-body p { max-width: var(--measure); }
+.memo-body p + p { margin-top: 1.1em; }
+.memo-body .lead {
+  font-size: 1.25rem;
+  line-height: 1.5;
+  max-width: 31em;
+}
+
+/* The attachment: a carbon copy with a perforated top edge. */
+.attached {
+  position: relative;
+  background: var(--copy);
+  color: var(--copy-ink);
+  padding-block: 3.75rem 4rem;
+  border-block: 1px solid var(--copy-edge);
+}
+.attached::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 18px;
+  background-image: radial-gradient(circle, var(--perf) 2.4px, transparent 2.9px);
+  background-size: 13px 18px;
+  background-repeat: repeat-x;
+  background-position: 3px 4px;
+}
+.attached ::selection { background: var(--copy-ink); color: var(--copy); }
+
+h2 {
+  font-size: clamp(1.6rem, 1.2rem + 1.7vw, 2.5rem);
+  font-weight: 450;
+  line-height: 1.12;
+  letter-spacing: -0.018em;
+  text-wrap: balance;
+  max-width: 20em;
+}
+.section-intro {
+  margin-top: 0.9rem;
+  max-width: var(--measure);
+}
+.section-intro + .section-intro { margin-top: 0.6rem; }
+.attached .section-intro { color: var(--copy-ink-2); }
+
+.parts { margin-top: 2.75rem; }
+.part {
+  padding-block: 1.6rem 1.75rem;
+  border-top: 1px solid var(--copy-rule);
+  row-gap: 0.85rem;
+}
+.part:last-of-type { border-bottom: 1px solid var(--copy-rule); }
+.part-note { grid-column: 1 / -1; }
+.part-spec { grid-column: 1 / -1; }
+h3 {
+  font-size: 1.0625rem;
+  font-weight: 680;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+}
+.part-note p {
+  margin-top: 0.2rem;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--copy-ink-2);
+  max-width: 30em;
+}
+.spec-objective {
+  font-size: clamp(1.375rem, 1.15rem + 1vw, 1.875rem);
+  font-weight: 430;
+  line-height: 1.28;
+  letter-spacing: -0.012em;
+  text-wrap: balance;
+  max-width: 24em;
+}
+.spec-move {
+  font-size: clamp(1.25rem, 1.1rem + 0.6vw, 1.5rem);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+/* The first minute, measured in discrete ticks. */
+.ruler { margin-top: 1rem; max-width: 22rem; }
+.ruler-track { position: relative; height: 2.1rem; }
+.ruler-window {
+  position: absolute;
+  left: 0;
+  width: 50%;
+  bottom: 0.95rem;
+  height: 5px;
+  background: var(--copy-mark);
+}
+.ruler-end {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 2px;
+  height: 2.1rem;
+  margin-left: -1px;
+  background: var(--copy-mark);
+}
+.ruler-ticks {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 0.75rem;
+  border-bottom: 1px solid var(--copy-ink-2);
+}
+.ruler-ticks span {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 0.35rem;
+  background: var(--copy-ink-2);
+}
+.ruler-ticks span.major { height: 0.75rem; }
+.ruler-ticks span:last-child { margin-left: -1px; }
+.ruler-labels {
+  position: relative;
+  height: 1.2rem;
+  margin-top: 0.3rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  color: var(--copy-ink-2);
+}
+.ruler-labels li { position: absolute; top: 0; transform: translateX(-50%); }
+.ruler-labels li:first-child { left: 0; transform: none; }
+.ruler-labels li:nth-child(2) { left: 50%; }
+.ruler-labels li:last-child { left: 100%; transform: translateX(-100%); }
+.ruler figcaption {
+  margin-top: 0.4rem;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--copy-ink-2);
+}
+
+/* Checklist with hand ticks */
+.checks { list-style: none; padding: 0; max-width: var(--measure); }
+.check { position: relative; }
+.check + .check { border-top: 1px solid var(--copy-rule); }
+.check input {
+  position: absolute;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin: 0;
+  top: 0.95rem;
+  left: 0;
+  opacity: 0;
+}
+.check label {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  column-gap: 1.1rem;
+  align-items: start;
+  min-height: 3rem;
+  padding-block: 0.8rem;
+  cursor: pointer;
+}
+.box {
+  position: relative;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-top: 0.12rem;
+  border: 2px solid var(--copy-ink-2);
+  border-radius: 2px;
+  transition: background-color 0.2s var(--ease-out);
+}
+.box .tick {
+  position: absolute;
+  left: 0.05rem;
+  bottom: 0.1rem;
+  width: 2.35rem;
+  height: 1.95rem;
+  pointer-events: none;
+}
+.box .tick path {
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 0.42s var(--ease-pen);
+}
+.check input:checked + label .box .tick path { stroke-dashoffset: 0; }
+.check label:hover .box { background-color: color-mix(in srgb, var(--copy-ink) 9%, transparent); }
+.check input:focus-visible + label .box {
+  outline: 3px solid var(--pen);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .box .tick path { transition: none; }
+}
+
+.spec-flag {
+  margin-top: 1.5rem;
+  font-size: 0.9375rem;
+  color: var(--copy-ink-2);
+  max-width: var(--measure);
+}
+
+/* Note on how episodes are made */
+.note { padding-block: 3.75rem 3.5rem; }
+.note-body { margin-top: 1.4rem; }
+.note-body p { max-width: var(--measure); }
+.note-body p + p { margin-top: 1em; }
+.note-body .reviewed {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  column-gap: 1.1rem;
+  align-items: start;
+  margin-top: 1.6rem;
+  padding-block: 1rem;
+  border-block: 1px solid var(--rule);
+}
+.reviewed .box { border-color: var(--ink-2); }
+.reviewed .box .tick path { stroke-dashoffset: 0; transition: none; }
+.note-body .reviewed + p { margin-top: 1.4rem; }
+.aside-line { color: var(--ink-2); }
+
+.section-rule {
+  margin: 0;
+  height: 1px;
+  border: 0;
+  background: var(--rule);
+}
+
+/* Distribution list */
+.distribution { padding-block: 3.5rem 4.5rem; }
+.signup { margin-top: 2rem; max-width: 44rem; }
+.inputs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+/* A typed form box: the label sits inside, with its tag at the right. */
+.box-field {
+  display: grid;
+  background: var(--paper);
+  border: 2px solid var(--field-line);
+  border-radius: 3px;
+  transition: border-color 0.2s var(--ease-out);
+}
+.box-field:hover { border-color: var(--ink); }
+.box-field label {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0.875rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.3;
+  cursor: text;
+}
+.box-field .tag { font-weight: 400; color: var(--ink-2); }
+.box-field input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 2.6rem;
+  padding: 0.2rem 0.875rem 0.65rem;
+  font: inherit;
+  font-size: 1.125rem;
+  line-height: 1.4;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.box-field input:focus { outline: none; }
+.box-field:focus-within {
+  border-color: var(--pen);
+  outline: 3px solid var(--pen);
+  outline-offset: 2px;
+}
+.box-field.is-invalid { border-color: var(--err); }
+.field-error {
+  padding: 0 0.875rem 0.7rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--err);
+}
+.field-error:empty { padding: 0; }
+
+.consent {
+  margin-top: 1.25rem;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--ink-2);
+  max-width: 34em;
+}
+.submit-row { margin-top: 1.25rem; }
+.noscript {
+  margin-top: 1rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  max-width: 34em;
+}
+.status {
+  margin-top: 1rem;
+  max-width: 34em;
+  padding: 0.85rem 1rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  background: var(--field);
+  border: 1px solid var(--field-line);
+  border-radius: 3px;
+}
+/* Kept rendered while empty, so the live region exists before its first message. */
+.status:empty { margin: 0; padding: 0; border: 0; }
+.status[data-state="error"] { border-color: var(--err); border-width: 2px; }
+.status[data-state="unknown"] { border-color: var(--ink-2); border-width: 2px; }
+
+/* Sign-off */
+.signoff { padding-block: 0 2.25rem; }
+.signoff-inner { padding-block: 2rem 1.5rem; }
+.sig-name { font-weight: 720; font-size: 1.0625rem; letter-spacing: -0.01em; }
+.elsewhere {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.75rem;
+  margin-top: 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+.elsewhere a { display: inline-block; padding-block: 0.35rem; }
+
+/* Wider screens: the label column opens up and becomes the page's spine. */
+@media (min-width: 40em) {
+  :root { --label: 4.25rem; --col-gap: 1.25rem; }
+  .letterhead { padding-block: 1.75rem 1.1rem; }
+  .inputs { grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); align-items: start; }
+  .button { width: auto; }
+}
+
+@media (min-width: 60em) {
+  :root { --label: 12.5rem; --col-gap: 2.5rem; }
+  body { font-size: 1.1875rem; }
+  .letterhead { padding-block: 2.25rem 1.25rem; }
+  .field { padding-block: 1rem; }
+  .field-re { padding-block: 1.4rem 1.9rem; }
+  .field-label { font-size: 1rem; }
+  .field-cc { padding-block: 1.1rem 1.25rem; }
+  .memo-body { padding-block: 2.75rem 6rem; }
+  .row > .span { grid-column: 2; }
+  .memo-body .lead { font-size: 1.375rem; }
+  .attached { padding-block: 5rem 5.5rem; }
+  .parts { margin-top: 3.5rem; }
+  .part { row-gap: 0; padding-block: 2rem 2.25rem; }
+  .part-note { grid-column: 1; padding-right: 0.5rem; }
+  .part-spec { grid-column: 2; }
+  .note { padding-block: 6rem 6rem; }
+  .distribution { padding-block: 6rem 6.5rem; }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to main content</a>
+<a class="skip" href="#distribution">Skip to the signup form</a>
+
+<header class="sheet">
+  <div class="letterhead">
+    <p class="wordmark">The Quiet Operator</p>
+    <p class="letterhead-note">A teaching channel on YouTube</p>
+  </div>
+  <div class="double-rule" aria-hidden="true"></div>
+</header>
+
+<main id="main">
+  <div class="sheet memo-head">
+    <div class="row field">
+      <p class="field-label">To</p>
+      <p class="field-value">Anyone whose work AI is starting to reach</p>
+    </div>
+    <div class="row field">
+      <p class="field-label">From</p>
+      <p class="field-value">The Quiet Operator</p>
+    </div>
+    <div class="row field field-re">
+      <p class="field-label">Re</p>
+      <h1>Which parts of your work should a tool do, and which should stay yours?</h1>
+    </div>
+    <div class="row field field-note">
+      <p class="field-label">Note</p>
+      <p class="field-value">Episodes are made with AI tools. Any presenter on screen is an AI avatar of the man who makes this channel, speaking in a clone of his own voice.</p>
+    </div>
+    <div class="row field field-cc">
+      <p class="field-label">Cc</p>
+      <p class="field-value"><a class="button" href="#distribution">Get new episodes by email</a></p>
+    </div>
+  </div>
+
+  <div class="sheet row memo-body">
+    <p class="lead span">Inside its first 30 seconds, every episode tells you what you will be able to do by the end. Each one gives you at least one action you can take today.</p>
+    <p class="span">The channel teaches AI tools and career strategy to mid-career professionals. It is calm on purpose.</p>
+  </div>
+
+  <section class="attached" aria-labelledby="attached-title">
+    <div class="sheet">
+      <div class="row">
+        <div class="span">
+          <h2 id="attached-title">Attached: what an episode leaves you with</h2>
+          <p class="section-intro">The shape of an episode, filled in with an example written for this page. The boxes work. Nothing you tick is saved.</p>
+        </div>
+      </div>
+
+      <div class="parts">
+        <div class="row part">
+          <div class="part-note">
+            <h3>Learning objective</h3>
+            <p>One sentence, inside the first 30 seconds. It names what you can do by the end.</p>
+            <figure class="ruler">
+              <div class="ruler-track" aria-hidden="true">
+                <div class="ruler-window"></div>
+                <div class="ruler-end"></div>
+                <div class="ruler-ticks"><span class="major" style="left:0%"></span><span style="left:8.3333%"></span><span style="left:16.6667%"></span><span class="major" style="left:25%"></span><span style="left:33.3333%"></span><span style="left:41.6667%"></span><span class="major" style="left:50%"></span><span style="left:58.3333%"></span><span style="left:66.6667%"></span><span class="major" style="left:75%"></span><span style="left:83.3333%"></span><span style="left:91.6667%"></span><span class="major" style="left:100%"></span></div>
+              </div>
+              <ol class="ruler-labels" aria-hidden="true">
+                <li>0:00</li>
+                <li>0:30</li>
+                <li>1:00</li>
+              </ol>
+              <figcaption>The first minute of an episode.</figcaption>
+            </figure>
+          </div>
+          <div class="part-spec">
+            <p class="spec-objective">By the end, you can test one of your weekly tasks with an AI tool and decide whether it stays yours.</p>
+          </div>
+        </div>
+
+        <div class="row part">
+          <div class="part-note">
+            <h3 id="checklist-title">Checklist</h3>
+            <p data-unconfirmed>Three to five steps you can repeat.</p>
+          </div>
+          <div class="part-spec">
+            <ol class="checks" aria-labelledby="checklist-title">
+              <li class="check">
+                <input type="checkbox" id="step-1">
+                <label for="step-1"><span class="box" aria-hidden="true"><svg class="tick" viewBox="0 0 48 40" focusable="false"><path pathLength="1" d="M4 21.5C7.5 23 11 27 15.5 34C20 25 29 12 44 4.5"/></svg></span><span>List the tasks you repeat every week, then circle the one that takes the most time and the least judgment.</span></label>
+              </li>
+              <li class="check">
+                <input type="checkbox" id="step-2">
+                <label for="step-2"><span class="box" aria-hidden="true"><svg class="tick" viewBox="0 0 48 40" focusable="false"><path pathLength="1" d="M4 21.5C7.5 23 11 27 15.5 34C20 25 29 12 44 4.5"/></svg></span><span>Try that task once with an AI tool your employer allows.</span></label>
+              </li>
+              <li class="check">
+                <input type="checkbox" id="step-3">
+                <label for="step-3"><span class="box" aria-hidden="true"><svg class="tick" viewBox="0 0 48 40" focusable="false"><path pathLength="1" d="M4 21.5C7.5 23 11 27 15.5 34C20 25 29 12 44 4.5"/></svg></span><span>Check the result line by line. Note every fix you had to make.</span></label>
+              </li>
+              <li class="check">
+                <input type="checkbox" id="step-4">
+                <label for="step-4"><span class="box" aria-hidden="true"><svg class="tick" viewBox="0 0 48 40" focusable="false"><path pathLength="1" d="M4 21.5C7.5 23 11 27 15.5 34C20 25 29 12 44 4.5"/></svg></span><span>Decide whether the task stays yours, and write down why.</span></label>
+              </li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="row part">
+          <div class="part-note">
+            <h3>One usable action</h3>
+            <p data-unconfirmed>Something you can do today. Every episode has at least one. The close asks one question for the comments, and never asks you to like and subscribe.</p>
+          </div>
+          <div class="part-spec">
+            <p class="spec-move">Today, do the first step and nothing else.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <p class="spec-flag span">Example written for this page. It is not taken from a published episode.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="note" id="note" aria-labelledby="note-title">
+    <div class="sheet row">
+      <div class="span">
+        <h2 id="note-title">Note on how episodes are made</h2>
+      </div>
+      <div class="note-body span">
+        <p>An AI model drafts each script and produces its narration.</p>
+        <p>When an avatar presents, it is built from footage of the man who makes this channel. None of it is a rented or stock persona.</p>
+        <p>Before an episode is published, an automated check reads its script. It holds any episode that states an outside statistic without a named source, including the "experts say" and "studies show" kind.</p>
+        <p class="reviewed"><span class="box" aria-hidden="true"><svg class="tick" viewBox="0 0 48 40" focusable="false"><path pathLength="1" d="M4 21.5C7.5 23 11 27 15.5 34C20 25 29 12 44 4.5"/></svg></span><span>Nothing is published until a person has reviewed it and ticked it off by hand.</span></p>
+        <p class="aside-line">This page was drafted with AI tools too.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="sheet"><hr class="section-rule"></div>
+
+  <section class="distribution" id="distribution" aria-labelledby="distribution-title">
+    <div class="sheet row">
+      <div class="span">
+        <h2 id="distribution-title">Add your name to the distribution list</h2>
+      </div>
+
+      <form class="signup span" id="signup" method="post" novalidate>
+        <div class="inputs">
+          <div class="box-field" id="email-field">
+            <label for="email">Email address <span class="tag">Required</span></label>
+            <input type="email" id="email" name="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" required aria-describedby="email-error">
+            <p class="field-error" id="email-error" role="alert"></p>
+          </div>
+          <div class="box-field">
+            <label for="first-name">First name <span class="tag">Optional</span></label>
+            <input type="text" id="first-name" name="first_name" autocomplete="given-name" maxlength="60">
+          </div>
+        </div>
+        <p class="consent" data-unconfirmed>By adding your address, you agree to get an email each time a new episode is published. You can unsubscribe at any time from a link in every email. The <a href="privacy.html">privacy notice</a> says what is kept and why.</p>
+        <div class="submit-row">
+          <button class="button" id="signup-submit" type="submit" disabled>Get new episodes by email</button>
+        </div>
+        <p class="status" id="signup-status" role="status" aria-live="polite"></p>
+        <noscript><p class="noscript">This form needs JavaScript to send. With it switched off, nothing you type here is sent.</p></noscript>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer class="sheet signoff">
+  <div class="double-rule" aria-hidden="true"></div>
+  <div class="row signoff-inner">
+    <div class="span">
+      <p class="sig-name">The Quiet Operator</p>
+      <ul class="elsewhere">
+        <li><a href="privacy.html">Privacy notice</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+
+<script>
+const SIGNUP_ENDPOINT = "";
+const SIGNUP_TIMEOUT_MS = 15000;
+// SIGNUP_ENDPOINT is where the form posts. While it is empty the form sends nothing
+// and says signup is not open yet. This file is public: never put an API token or
+// any other secret in it. With an endpoint set, the page reports only what it knows:
+//   Received       a 2xx answer, not redirected, whose body does not report an error
+//   Not added      a readable error status, or a body that reports an error
+//   Not confirmed  no readable answer (network, CORS, redirect or timeout), because
+//                  the provider may have stored the address anyway
+(function () {
+  "use strict";
+  var form = document.getElementById("signup");
+  if (!form) return;
+  var email = document.getElementById("email");
+  var field = document.getElementById("email-field");
+  var error = document.getElementById("email-error");
+  var status = document.getElementById("signup-status");
+  var submit = document.getElementById("signup-submit");
+  var label = submit.textContent;
+  var pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  var seconds = Math.round(SIGNUP_TIMEOUT_MS / 1000);
+
+  submit.disabled = false;
+
+  // Written a frame after clearing, so a repeated message is announced again.
+  function say(message, state) {
+    status.textContent = "";
+    status.removeAttribute("data-state");
+    requestAnimationFrame(function () {
+      status.textContent = message;
+      status.setAttribute("data-state", state);
+      status.scrollIntoView({ block: "nearest" });
+    });
+  }
+  function clearStatus() {
+    status.textContent = "";
+    status.removeAttribute("data-state");
+  }
+  function showError(message) {
+    error.textContent = message;
+    field.classList.add("is-invalid");
+    email.setAttribute("aria-invalid", "true");
+  }
+  function clearError() {
+    error.textContent = "";
+    field.classList.remove("is-invalid");
+    email.removeAttribute("aria-invalid");
+  }
+  function busy(on) {
+    submit.disabled = on;
+    submit.textContent = on ? "Sending" : label;
+    if (on) form.setAttribute("aria-busy", "true");
+    else form.removeAttribute("aria-busy");
+  }
+  // A body that says it failed wins over a 2xx status.
+  function reportsError(text) {
+    try {
+      var body = JSON.parse(text);
+      if (!body || typeof body !== "object") return false;
+      return body.success === false || body.ok === false || Boolean(body.error) ||
+        (Array.isArray(body.errors) && body.errors.length > 0);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  email.addEventListener("input", function () {
+    if (error.textContent && pattern.test(email.value.trim())) clearError();
+  });
+
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
+    clearStatus();
+    var value = email.value.trim();
+    if (value === "") {
+      showError("Enter an email address.");
+      email.focus();
+      return;
+    }
+    if (!pattern.test(value)) {
+      showError("Check the address. It needs an @ and a domain, like name@example.com.");
+      email.focus();
+      return;
+    }
+    clearError();
+
+    if (!SIGNUP_ENDPOINT) {
+      say("Signup is not open yet. Nothing was sent, and nothing was stored.", "closed");
+      return;
+    }
+
+    busy(true);
+    var controller = typeof AbortController === "function" ? new AbortController() : null;
+    var timer = controller ? setTimeout(function () { controller.abort(); }, SIGNUP_TIMEOUT_MS) : null;
+    fetch(SIGNUP_ENDPOINT, {
+      method: "POST",
+      body: new FormData(form),
+      headers: { "Accept": "application/json" },
+      credentials: "omit",
+      signal: controller ? controller.signal : undefined
+    }).then(function (response) {
+      if (response.redirected) {
+        say("Not confirmed. The list provider answered with a redirect, so this page cannot tell whether your address was added.", "unknown");
+        return;
+      }
+      if (response.status < 200 || response.status >= 300) {
+        say("Not added. The list provider answered with an error (HTTP " + response.status + "). Try again in a few minutes.", "error");
+        return;
+      }
+      return response.text().then(function (text) {
+        if (reportsError(text)) {
+          say("Not added. The list provider answered, but reported a problem with the address. Check it and try again.", "error");
+        } else {
+          form.reset();
+          say("Received. The list provider accepted your address.", "ok");
+        }
+      });
+    }).catch(function (problem) {
+      if (problem && problem.name === "AbortError") {
+        say("Not confirmed. The list provider did not answer within " + seconds + " seconds, so this page cannot tell whether your address was added.", "unknown");
+      } else {
+        say("Not confirmed. This page could not read an answer from the list provider, so it cannot tell whether your address was added.", "unknown");
+      }
+    }).then(function () {
+      if (timer) clearTimeout(timer);
+      busy(false);
+    });
+  });
+})();
+</script>
+</body>
+</html>

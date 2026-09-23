@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src 'self'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy notice, The Quiet Operator</title>
+<meta name="description" content="What The Quiet Operator keeps when you join its email list, why it is kept, where it is stored, and how to leave the list.">
+<link rel="canonical" href="https://tqohq.online/privacy.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="The Quiet Operator">
+<meta property="og:title" content="Privacy notice, The Quiet Operator">
+<meta property="og:description" content="What is kept when you join the email list, why, where it is stored, and how to leave.">
+<meta property="og:url" content="https://tqohq.online/privacy.html">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0a1628" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='5' y='2.5' width='22' height='27' rx='2' fill='%23f6edb2' stroke='%230a1628' stroke-width='2'/%3E%3Cpath d='M9.5 9h13' stroke='%230a1628' stroke-width='2.6'/%3E%3Cpath d='M9.5 15h13M9.5 19.5h13M9.5 24h8' stroke='%230a1628' stroke-width='1.6'/%3E%3C/svg%3E">
+<style>
+/* Atkinson Hyperlegible Next, SIL Open Font License 1.1, see fonts/OFL-atkinson-hyperlegible-next.txt */
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  src: url("fonts/atkinson-hyperlegible-next-latin.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light dark;
+  --paper: #ffffff;
+  --ink: #0a1628;
+  --ink-2: #4b5870;
+  --rule: #d3d8e1;
+  --pen: #1f3fa6;
+  --pen-deep: #16307f;
+  --on-pen: #ffffff;
+  --select: #f6edb2;
+  --font: "Atkinson Hyperlegible Next", ui-sans-serif, system-ui, sans-serif;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --gutter: clamp(1rem, 4.2vw, 3rem);
+  --label: 2.6rem;
+  --col-gap: 0.625rem;
+  --measure: 34em;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0a1628;
+    --ink: #e8ecf3;
+    --ink-2: #a6b1c4;
+    --rule: #26344d;
+    --pen: #9db8ff;
+    --pen-deep: #c3d3ff;
+    --on-pen: #0a1628;
+    --select: #4a3a1e;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0a1628;
+  --ink: #e8ecf3;
+  --ink-2: #a6b1c4;
+  --rule: #26344d;
+  --pen: #9db8ff;
+  --pen-deep: #c3d3ff;
+  --on-pen: #0a1628;
+  --select: #4a3a1e;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scrollbar-color: var(--ink-2) var(--paper);
+  accent-color: var(--pen);
+}
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  caret-color: var(--pen);
+  font-family: var(--font);
+  font-size: 1.125rem;
+  line-height: 1.55;
+  font-kerning: normal;
+  text-rendering: optimizeLegibility;
+  overflow-wrap: break-word;
+}
+::selection { background: var(--select); color: var(--ink); }
+h1, h2, p, ul { margin: 0; }
+p, li { text-wrap: pretty; }
+a {
+  color: var(--pen);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.22em;
+  transition: text-decoration-thickness 0.2s var(--ease-out), color 0.2s var(--ease-out);
+}
+a:hover { text-decoration-thickness: 2.5px; color: var(--pen-deep); }
+:focus-visible { outline: 3px solid var(--pen); outline-offset: 3px; border-radius: 2px; }
+
+.skip {
+  position: absolute;
+  left: var(--gutter);
+  top: 0.75rem;
+  z-index: 10;
+  padding: 0.6rem 0.9rem;
+  background: var(--pen);
+  color: var(--on-pen);
+  font-weight: 650;
+  text-decoration: none;
+  border-radius: 3px;
+  transform: translateY(-180%);
+  transition: transform 0.25s var(--ease-out);
+}
+.skip:focus-visible { transform: translateY(0); color: var(--on-pen); }
+
+.sheet { width: 100%; max-width: 78rem; margin-inline: auto; padding-inline: var(--gutter); }
+.row { display: grid; grid-template-columns: var(--label) minmax(0, 1fr); column-gap: var(--col-gap); }
+.row > .span { grid-column: 1 / -1; }
+.double-rule { height: 6px; border-top: 3px solid var(--ink); border-bottom: 1px solid var(--ink); }
+
+.letterhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.15rem 1.5rem;
+  padding-block: 1.25rem 0.85rem;
+}
+.wordmark { font-size: 1.0625rem; font-weight: 720; letter-spacing: -0.01em; line-height: 1.25; }
+.wordmark a { color: inherit; text-decoration: none; }
+.wordmark a:hover { text-decoration: underline; }
+.letterhead-note { font-size: 0.9375rem; color: var(--ink-2); line-height: 1.3; }
+
+.field { padding-block: 0.8rem; border-bottom: 1px solid var(--rule); align-items: first baseline; }
+.field-label { font-size: 0.9375rem; font-weight: 560; color: var(--ink-2); line-height: 1.3; }
+.field-value { line-height: 1.4; max-width: var(--measure); }
+.field-re { padding-block: 1rem 1.3rem; }
+
+h1 {
+  font-size: clamp(1.75rem, 1.1rem + 3.2vw, 3.4rem);
+  font-weight: 380;
+  line-height: 1.08;
+  letter-spacing: -0.024em;
+  text-wrap: balance;
+  max-width: 17em;
+}
+
+.clauses { padding-block: 1.25rem 4rem; }
+.clause {
+  padding-block: 1.4rem 1.5rem;
+  border-bottom: 1px solid var(--rule);
+  row-gap: 0.5rem;
+}
+.clause-title,
+.clause-body { grid-column: 1 / -1; }
+.clause-title {
+  font-size: 1.0625rem;
+  font-weight: 680;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+}
+.clause-body p { max-width: var(--measure); }
+.clause-body p + p { margin-top: 0.8em; }
+.dated { margin-top: 2rem; color: var(--ink-2); font-size: 0.9375rem; max-width: var(--measure); }
+
+.signoff { padding-block: 0 2.25rem; }
+.signoff-inner { padding-block: 2rem 1.5rem; }
+.sig-name { font-weight: 720; font-size: 1.0625rem; letter-spacing: -0.01em; }
+.elsewhere { display: flex; flex-wrap: wrap; gap: 0.5rem 1.75rem; margin-top: 0.75rem; padding: 0; list-style: none; }
+.elsewhere a { display: inline-block; padding-block: 0.35rem; }
+
+@media (min-width: 40em) {
+  :root { --label: 4.25rem; --col-gap: 1.25rem; }
+  .letterhead { padding-block: 1.75rem 1.1rem; }
+}
+@media (min-width: 60em) {
+  :root { --label: 12.5rem; --col-gap: 2.5rem; }
+  body { font-size: 1.1875rem; }
+  .letterhead { padding-block: 2.25rem 1.25rem; }
+  .field { padding-block: 1rem; }
+  .field-re { padding-block: 1.4rem 1.9rem; }
+  .field-label { font-size: 1rem; }
+  .row > .span { grid-column: 2; }
+  .clauses { padding-block: 2rem 6rem; }
+  .clause { row-gap: 0; padding-block: 1.75rem 1.9rem; align-items: first baseline; }
+  .clause-title { grid-column: 1; padding-right: 0.5rem; }
+  .clause-body { grid-column: 2; }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to main content</a>
+
+<header class="sheet">
+  <div class="letterhead">
+    <p class="wordmark"><a href="index.html">The Quiet Operator</a></p>
+    <p class="letterhead-note">A teaching channel on YouTube</p>
+  </div>
+  <div class="double-rule" aria-hidden="true"></div>
+</header>
+
+<main id="main">
+  <div class="sheet">
+    <div class="row field">
+      <p class="field-label">To</p>
+      <p class="field-value">Anyone who joins the distribution list</p>
+    </div>
+    <div class="row field">
+      <p class="field-label">From</p>
+      <p class="field-value">The Quiet Operator</p>
+    </div>
+    <div class="row field field-re">
+      <p class="field-label">Re</p>
+      <h1>What happens to your email address</h1>
+    </div>
+    <div class="row field">
+      <p class="field-label">Note</p>
+      <p class="field-value">Signup is not open yet. Until it opens, the form on the home page sends nothing and stores nothing.</p>
+    </div>
+  </div>
+
+  <div class="sheet clauses">
+    <section class="row clause" aria-labelledby="kept">
+      <h2 class="clause-title" id="kept">What is kept</h2>
+      <div class="clause-body">
+        <p>Your email address, and your first name if you give it. The form asks for nothing else.</p>
+        <p>When you send the form, the service that receives it also sees your IP address and browser details, which come with every web request.</p>
+        <p>The email provider may keep records of its own, such as the date you joined. Its own privacy policy covers those.</p>
+      </div>
+    </section>
+    <section class="row clause" aria-labelledby="why">
+      <h2 class="clause-title" id="why">Why</h2>
+      <div class="clause-body" data-unconfirmed>
+        <p>To send you an email each time a new episode is published. If you give a first name, it is used to address those emails.</p>
+      </div>
+    </section>
+    <section class="row clause" aria-labelledby="where">
+      <h2 class="clause-title" id="where">Where it is stored</h2>
+      <div class="clause-body">
+        <p>With Hostinger Reach, the email service the list runs on.</p>
+      </div>
+    </section>
+    <section class="row clause" aria-labelledby="leave">
+      <h2 class="clause-title" id="leave">How to leave</h2>
+      <div class="clause-body">
+        <p data-unconfirmed>Every email has an unsubscribe link. Use it at any time and the emails stop. Your address stays on the list, marked unsubscribed.</p>
+      </div>
+    </section>
+    <section class="row clause" aria-labelledby="delete">
+      <h2 class="clause-title" id="delete">Deletion</h2>
+      <div class="clause-body" data-unconfirmed>
+        <p>Unsubscribing does not delete your address or your name. There is no route yet for asking to have them deleted.</p>
+      </div>
+    </section>
+    <div class="row">
+      <p class="dated span">Drafted on 23 September 2026. It applies from the day signup opens.</p>
+    </div>
+  </div>
+</main>
+
+<footer class="sheet signoff">
+  <div class="double-rule" aria-hidden="true"></div>
+  <div class="row signoff-inner">
+    <div class="span">
+      <p class="sig-name">The Quiet Operator</p>
+      <ul class="elsewhere">
+        <li><a href="index.html">Back to the home page</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+</body>
+</html>
