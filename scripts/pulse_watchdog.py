@@ -323,6 +323,7 @@ def run_verdict(
     now: datetime,
     threshold_h: float = MISSED_BEAT_H,
     detail: str = "",
+    classified: bool = True,
 ) -> Tuple[int, str]:
     """Exit code and message for "did DEVON's alerting runs actually finish".
 
@@ -351,8 +352,23 @@ def run_verdict(
     where = f" ({detail})" if detail else ""
     which = f" Execution {execution_id}." if execution_id else ""
     plural = "" if seen == 1 else "s"
+    # Only say "alerting send" when the failing node was READ as one. A run kept
+    # because its node could not be resolved is still an alarm, deliberately,
+    # but calling it a mail failure would assert what was never checked. That is
+    # exactly what happened on run 32, 2026-09-23T10:52Z, where a Cerebras
+    # payment_required was reported as an alerting send that did not deliver.
+    opening = (
+        "ALARM: a DEVON alerting send RAN but did not DELIVER."
+        if classified
+        else (
+            "ALARM: an errored run inside the window could NOT be classified, because its "
+            "failing node could not be read. This is kept rather than dropped precisely "
+            "because an unreadable failure is when guessing is least affordable. It may be "
+            "an alerting send and it may be unrelated; this script does not know which."
+        )
+    )
     return ALARM, (
-        f"ALARM: a DEVON alerting send RAN but did not DELIVER. Its newest errored run started "
+        f"{opening} Its newest errored run started "
         f"{stamp}, {age_h:.1f}h ago, inside the {threshold_h}h window{where}.{which} "
         f"{seen} errored run{plural} were listed. A beat row is written early, on a branch "
         "parallel to the email, so a fresh beat proves the Pulse started and proves nothing "
@@ -464,7 +480,37 @@ def fetch_failed_runs(
     return runs
 
 
-def failure_node(base: str, key: str, execution_id: str) -> Tuple[str, str, str]:
+_NODE_TYPES: Dict[str, Dict[str, str]] = {}
+
+
+def node_type_by_name(base: str, key: str, workflow_id: str, node_name: str) -> str:
+    """The type of one node of one workflow, or "" if it cannot be read.
+
+    Cached per workflow so an estate read of fifteen failures costs at most one
+    extra GET per distinct lane. Every error is swallowed for the same reason
+    ``failure_node`` swallows its own: a type this cannot resolve leaves the run
+    UNCLASSIFIED, which the verdict then says out loud rather than guessing.
+    """
+    table = _NODE_TYPES.get(workflow_id)
+    if table is None:
+        table = {}
+        try:
+            payload = get_json(base, key, f"/api/v1/workflows/{workflow_id}")
+        except RuntimeError:
+            payload = {}
+        for node in payload.get("nodes") or []:
+            if not isinstance(node, dict):
+                continue
+            name = str(node.get("name") or "").strip()
+            if name:
+                table[name] = str(node.get("type") or "").strip()
+        _NODE_TYPES[workflow_id] = table
+    return table.get(node_name, "")
+
+
+def failure_node(
+    base: str, key: str, execution_id: str, workflow_id: str = ""
+) -> Tuple[str, str, str]:
     """(node name, node type, message) for one errored execution, or three "".
 
     The node TYPE is what makes an estate wide read usable. This instance always
@@ -478,13 +524,26 @@ def failure_node(base: str, key: str, execution_id: str) -> Tuple[str, str, str]
         payload = get_json(base, key, f"/api/v1/executions/{execution_id}?includeData=true")
     except RuntimeError:
         return "", "", ""
-    error = (((payload.get("data") or {}).get("resultData") or {}).get("error") or {})
+    result = (payload.get("data") or {}).get("resultData") or {}
+    error = result.get("error") or {}
     if not isinstance(error, dict):
         return "", "", ""
     node = error.get("node") if isinstance(error.get("node"), dict) else {}
     name = str((node or {}).get("name") or "").strip()
     node_type = str((node or {}).get("type") or "").strip()
     message = " ".join(str(error.get("message") or "").split())[:200]
+
+    # A bare throw from a Code node carries no `node` object at all, measured on
+    # execution 848 on 2026-09-23: `error` held only message, stack and
+    # lineNumber. Before this fallback that empty type reached mail_failures,
+    # which keeps an unreadable run, and the alarm then called a Cerebras
+    # payment_required an alerting send that did not deliver. `lastNodeExecuted`
+    # names it, and the workflow definition gives the type, so the run is
+    # classified rather than guessed at.
+    if not name:
+        name = str(result.get("lastNodeExecuted") or "").strip()
+    if name and not node_type and workflow_id:
+        node_type = node_type_by_name(base, key, workflow_id, name)
     return name, node_type, message
 
 
@@ -600,7 +659,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             continue
         if (now - stamp).total_seconds() / 3600.0 > MISSED_BEAT_H:
             continue
-        resolved[execution_id] = failure_node(base, key, execution_id)
+        resolved[execution_id] = failure_node(
+            base, key, execution_id, str(run.get("workflowId") or "")
+        )
 
     mail = mail_failures(runs, resolved, now)
     detail = ""
@@ -612,7 +673,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         elif name or message:
             detail = name or message
 
-    run_code, run_message = run_verdict(mail, now, detail=detail)
+    newest_type = resolved.get(execution_id or "", ("", "", ""))[1]
+    run_code, run_message = run_verdict(
+        mail, now, detail=detail, classified=newest_type == MAIL_NODE_TYPE
+    )
     print(run_message, file=sys.stderr if run_code else sys.stdout)
 
     skipped = len(runs) - len(mail)
