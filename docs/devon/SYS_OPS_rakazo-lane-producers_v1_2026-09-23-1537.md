@@ -45,19 +45,59 @@ Tee's rules.
 
 ## The n8n handoff
 
-Read from the live `TQO FINAL V5` (`qEkGOUsNyVaRAmm6`, 252 nodes, published
-version equals draft) and the Airtable schema, not assumed. No n8n change was
-needed. The repurpose branch, fed by `Every 3h - Pipeline Pass` and gated to
-9:00 and 21:00 New York time, reads `Publishing` (`tblQgQ3JdpoKOANXh`) for
-`Status = Pending` past `Scheduled For`, then finds the render in `EditForge
-Generation Queue` (`tblsWef63twib7dIr`) by `Frame ID` with `Status = Approved`
-and a non empty `Output URL`, downloads it and drops it in the platform's
-Repurpose folder. It routes on `Platform` only, so every brand can use it.
+Tee ruled at about 15:45Z that Airtable is migrated to n8n data tables, which
+overturned the first version of this section. That version sent the bots to
+write Airtable rows, read from the live `TQO FINAL V5` (`qEkGOUsNyVaRAmm6`) as
+it then stood. The live workflow was half migrated: its content lane ran on 33
+data table nodes while 52 nodes still called Airtable, the whole repurpose
+branch among them. On Tee's ruling the repurpose branch moved.
 
-So on Tee's "ship", a producer writes one Generation Queue row and one
-Publishing row per platform, with its own `Brand` option, and never sets
-`Ready` or `Posted`. If it cannot write to Airtable it hands Tee the rows to
-paste. The old Brand field marked OLD is never used.
+In V5, six nodes changed, names kept so every reference still resolves.
+`Repurpose: Due Slots`, `Fetch Asset`, `Find Render` and `Mark Handed Off` now
+read and write `at_tqo_publishing` (`FrJojhuZu0kGNxni`), `at_tqo_assets`
+(`sQStJ0EDlH6ZFK7R`) and `at_tqo_editforge_generation_queue`
+(`nQdokQVuN9rjZRYC`). `Plan Drops` does the due time test in code, because
+`scheduled_for` is stored as text, and treats an empty or unparsable time as
+not due. `Confirm Drop` keeps the 2026-09-22 rule: a failed drop writes the
+note and leaves status and posted time as they were. Both code nodes were run
+against six fixture rows and three Drive answers before publishing.
+
+The lane had not been running at all. `Every 3h - Pipeline Pass`, its only
+feed, was already disabled, and it also feeds V5's render and publish passes,
+which upload to YouTube. Tee ruled a repurpose only trigger instead,
+`Repurpose: 9am and 9pm`, feeding `Repurpose: Config` alone. Render and
+publish stay off. Published and read back: V5 `versionId` and
+`activeVersionId` both `e0264d05-69ce-4140-bf8b-b319cf6b1669`, 253 nodes.
+
+Bots cannot reach n8n data tables, so a new workflow takes the handoff:
+`DEVON - Bot Handoff to Repurpose` (`wXl6p7hKN74lKH0e`), webhook
+`bot-handoff`, authenticated with n8n's existing "EditForge MCP Token"
+credential. It validates brand, platforms, times and an https master URL,
+then upserts one render row (`Approved`) and one `Pending` slot per platform,
+keyed so a retry cannot duplicate. Execution 867 proved the refusal path
+writes nothing. The write path has not run.
+
+EditForge PR #69 adds `ship_to_n8n`, which posts that handoff signed with
+EditForge's own `EDITFORGE_MCP_TOKEN`. No new secret reaches a bot. Whether
+n8n's credential matches that header exactly is inferred, not measured; the
+first real ship settles it.
+
+## All of EditForge, and Canvas
+
+Tee ruled the bots get all of EditForge and that the TSWS bot works in the
+Canvas department ("Canvas & Floor Agent"). EditForge's MCP had no Canvas
+tools. PR #69 adds Canvas project list, read, create from template and save,
+a render plan preview, the edit worker (submit, list, cancel, retry), the
+asset catalog, the stock library, and the gen video, voice and avatar
+planners. Left out on purpose: sign in and passkeys, recording a rubric pass,
+Canvas render and its confirmation hash, the Floor Agent, uploads, and a long
+form planner that only plans a built in sample. Master renders stay refused
+without a rubric pass Tee records. 460 EditForge tests pass, typecheck and
+lint clean, three mutations caught.
+
+EditForge's own edit command code names the four properties `tqo`,
+`nco-forge`, `tsws` and `ascension-caudex`, which is a second source for ACX
+being Ascension Caudex. Tee has still not said so.
 
 ## First briefs, 15:31Z
 
@@ -98,8 +138,13 @@ instructions, so none of them has seen it in a run yet.
 - TQO canon v4 needs Tee's confirmation. NCO Forge needs the D9-B consent
   scope. ACX needs Tee to say what it makes. Idea Scout needs its eight
   answers.
-- Not yet tried: a bot writing to Airtable, and n8n downloading an EditForge
-  master from the URL a bot records. The first real ship proves both.
+- Not yet run: the handoff write path, the header match between EditForge and
+  n8n, and n8n downloading an EditForge master. The first real ship proves
+  all three.
+- EditForge PR #69 must merge and deploy before the bots have Canvas, the
+  edit worker or `ship_to_n8n`, and their instructions still describe the
+  Airtable handoff until they are updated after that deploy.
+- V5 still has 47 nodes calling Airtable outside the repurpose branch.
 - The two probe bots and the Gemini connection on a retired model remain.
 
 ## DEVON RECEIPT
@@ -108,8 +153,8 @@ AREA: Systems
 TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_rakazo-lane-producers_v1_2026-09-23-1537.md
 DATE: 2026-09-23
-DECISIONS: Tee ruled one production bot per lane for TQO, TSWS, NCO Forge and ACX, paid renders only on his go, and bots make while n8n ships. Idea Scout was adopted from botdirectory.ai under his delegation.
-FINDINGS: Five bots live on Sonnet 5 through the Claude subscription. The handoff uses V5's existing repurpose branch through the Publishing and EditForge Generation Queue tables with no n8n change. First briefs cost nothing and all four producers report the same blocker, Drive listing works and content download returns 401 upgrade your workspace, likely the connector service plan, unverified. ACX is very likely Ascension Caudex, unconfirmed.
-OPEN: Fix Drive content reads for bots. Tee to confirm TQO canon v4, D9-B consent scope for NCO Forge, what ACX makes, and answer Idea Scout. First real ship proves the Airtable write and the n8n download. Probe bots and the retired Gemini connection to clean up.
-STATUS: Bots built and briefed, blocked on Drive reads and Tee's answers.
+DECISIONS: Tee ruled one production bot per lane for TQO, TSWS, NCO Forge and ACX, paid renders only on his go, and bots make while n8n ships. Idea Scout was adopted from botdirectory.ai under his delegation. Tee ruled Airtable migrated so the repurpose lane moves to n8n data tables, a repurpose only schedule with render and publish left off, all of EditForge for the bots, and Canvas as the TSWS bot's department.
+FINDINGS: Five bots live on Sonnet 5 through the Claude subscription. V5's repurpose branch was on Airtable and not scheduled at all; it now reads the data tables and runs at 9:00 and 21:00 New York, published and read back at version e0264d05. A bot handoff webhook is live and refuses bad input without writing. EditForge PR #69 gives bots Canvas, the edit worker, catalog, stock, planners and ship_to_n8n, human gates kept. Every bot can list Drive but not read it, 401 upgrade your workspace, likely the connector service plan, unverified.
+OPEN: Merge and deploy EditForge PR #69, then update the four producers' handoff instructions to ship_to_n8n. First real ship proves the handoff write, the header match and the n8n download. Fix Drive content reads. Tee to confirm TQO canon v4, D9-B consent scope for NCO Forge, what ACX makes, and answer Idea Scout. 47 Airtable nodes remain in V5.
+STATUS: Bots built and briefed, repurpose moved and scheduled, EditForge tools in review, blocked on Drive reads and Tee's answers.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
