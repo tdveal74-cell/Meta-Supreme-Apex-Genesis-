@@ -40,6 +40,11 @@ Rules that follow from it:
   radius. Over-calling a finding spends Tee's attention and is its own error.
 - **Green is not correct.** CI passed on every one of those. Tests do not read
   the artifact; a human or an executed adversarial case does.
+- **Never predict from a number your own action changed.** Found 2026-09-23,
+  against the paragraph below that was written to prevent it. A prediction was
+  made from `lastEmailed` at 2026-09-19T16:00Z while the session's own manual
+  run six hours earlier had already moved it to 2026-09-22T22:25Z. Re-read the
+  value out of the artifact, not out of the plan you made before you acted.
 - **An n8n edit is a DRAFT until it is published, and the tool says success
   either way.** Found 2026-09-22 on `OS - Error Handler (all pipelines)`.
   `update_workflow` returned `appliedOperations: 2` while the running workflow
@@ -249,6 +254,22 @@ minutes earlier, still reads `no` on the same workflow, unedited since
 2026-09-17T12:30Z, with the same credential id on the node. To prove a mail
 credential here, run the Heartbeat and read that column. Do not report a
 credential panel's test button as a result.
+
+**Testing a rate limited alert lane by hand SPENDS the window you meant to watch
+it in, and that manual run is not proof the schedule works.** Ruled worth filing
+by Tee 2026-09-23. The manual run at 22:25:32Z proved the send and, in the same
+stroke, set `lastEmailed` to its own timestamp. `EMAIL_EVERY_H` is 22, so the
+scheduled beats at 04:00, 10:00 and 16:00 were 5.6h, 11.6h and 17.6h past it and
+NONE of them should send. Execution 819 fired unattended at 2026-09-23T04:00:15Z
+and returned success in 0.213s with row 124 reading `emailed: no`, which is the
+lane working correctly and proving nothing about the send. The first unattended
+send was therefore pushed to the 22:00:15Z beat, 23.6h out, a full day after the
+repair. This estate is mostly rate limited alert lanes, so the shape recurs:
+Heartbeat on `EMAIL_EVERY_H`, and every finding keyed so a persisting condition
+alerts once and then rides the daily pulse. Before hand firing one, work out
+what its own clock will do afterwards, and expect to wait a full period for the
+unattended proof. What a manual run does prove is the credential and the send
+path; what only a scheduled run proves is the schedule.
 
 Google Drive `NW3vR6nNcMoUkJyJ` was still unverified at that moment, and could
 not be settled from an execution list. `DEVON Precedence Guard` swallows its
