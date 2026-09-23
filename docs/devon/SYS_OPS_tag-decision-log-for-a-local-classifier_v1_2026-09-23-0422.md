@@ -84,7 +84,9 @@ The mirror table was deliberately left alone. Nothing writes it, so adding the
 three new columns to it would record nothing.
 
 The logging stays: it costs nothing per capture and it is correct. What changed
-is the premise of step two. Which way the plan goes from here is Tee's ruling.
+is the premise of step two. Tee ruled on a card the same day: pay Cerebras and
+park the model. Restoring the provider ends the keyword fallback on this lane and
+restarts TQO FINAL V5, and the classifier waits until real rows exist.
 
 ## Next
 
@@ -104,8 +106,8 @@ AREA: Systems
 TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_tag-decision-log-for-a-local-classifier_v1_2026-09-23-0422.md
 DATE: 2026-09-23
-DECISIONS: Tee ruled "Go with your recommendations": do not build a general model, build the typed decision pattern on the iPhone capture tagger, log labels first, train at about 300 confirmed rows, shadow before deciding.
+DECISIONS: Tee ruled "Go with your recommendations": do not build a general model, build the typed decision pattern on the iPhone capture tagger, log labels first, train at about 300 confirmed rows, shadow before deciding. On the data table audit he then ruled: pay Cerebras, park the model.
 FINDINGS: Apply Area computed area_source on every capture and nothing persisted it. Cerebras still answered HTTP 402 at 2026-09-23T04:22:18Z. All 55 n8n data tables checked: no source in the estate holds labelled decisions in volume, and Inbox Captures holds one real capture in seven weeks, so the 300 row threshold is not reachable at the current rate. at_tqo_inbox_captures is a frozen one time copy.
-OPEN: Whether to park the classifier, fix the Cerebras billing instead, or seed labels by hand is Tee's ruling. Cerebras billing remains unresolved.
+OPEN: Tee tops up Cerebras billing. Recovery is proven by a capture reading Tag Source cerebras, never by a green provider watchdog run. The classifier is parked until confirmed rows exist.
 STATUS: Three fields created, Index Capture published and read back, one probe proven from the store and deleted.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
