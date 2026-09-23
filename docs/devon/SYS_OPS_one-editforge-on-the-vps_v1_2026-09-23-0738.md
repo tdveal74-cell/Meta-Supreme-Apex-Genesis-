@@ -35,7 +35,7 @@ One codebase, `tdveal74-cell/EditForge`, deployed twice. Vercel built `main`
    and editforge.online/api/health answered healthy with productionReady,
    executionReady, workerReachable and artifactStore all true. The edge
    container read Running, not recreated.
-6. n8n `DEVON — EditForge Handoff (Build 07)` now submits to
+6. The n8n EditForge Handoff, Build 07 (`LnbtB81ItUYptbWg`), now submits to
    editforge.online. Published and read back: activeVersionId equals versionId,
    sameAsDraft true, the code node identical to what was written, no reference
    to Vercel left in the workflow.
