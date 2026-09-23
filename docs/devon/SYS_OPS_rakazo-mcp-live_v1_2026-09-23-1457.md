@@ -70,31 +70,47 @@ to work for that to happen.
 
 - EditForge being registered inside Rakazo was not observed at filing time.
   Settled at 15:01Z: `create_bot` found it and answered `editforge: given`.
-- Whether a Rakazo bot can actually reach `editforge.online` from inside its
-  sandbox is still unproven, because no bot on a paid model can run at all.
-  See the next section.
+- Whether a Rakazo bot can reach EditForge was unproven at filing time.
+  Settled at 15:17:31Z, below.
 
-## Bot runs are down, and it is the model
+## Bot runs were down on three providers, each for its own reason
 
-Measured through the connector at 15:01Z to 15:03Z. A probe bot given
-EditForge (`create_bot` answered `editforge: given`, which settles the first
-open item above) failed its run with no reply on Anthropic `claude-sonnet-4-5`
-and again on OpenRouter `google/gemini-2.5-flash-lite`. A control bot with no
-EditForge failed the same way on OpenRouter, so EditForge is not the cause. The
-same control bot on the local `qwen3:1.7b` was accepted and sat in `running`
-instead of failing; it had not replied when this was written.
+Measured through the connector from 15:01Z, then read out of the `runs` table
+on the VPS, because Rakazo drops a failed run from the thread and the worker
+logs every one of those jobs as `success`. The first reading here, "it is the
+model", was one provider's answer written as all three:
 
-It predates the connector. The Chief's last reply is 2026-09-20T07:34Z, and
-every message to it since, 08:35Z that day and two test messages at 08:28Z
-and 08:31Z today, went unanswered.
+| provider | model | error in `runs.error` |
+|---|---|---|
+| Anthropic (API key) | claude-sonnet-4-5 | 400, credit balance is too low; the 08:28Z run also said the key is not scoped to a workspace |
+| OpenRouter | google/gemini-2.5-flash-lite | 402, insufficient credits, the account never purchased any |
+| Google | gemini-2.5-flash | 404, the model is no longer available to new users |
 
-Tee confirmed the cause: the Anthropic API account needs funding. Why
-OpenRouter failed the same way was not checked. The failed run's reason is not
-readable through the connector, because Rakazo drops a run from the thread
-once it ends.
+The Google row is a retired model id, not billing. `gemini-flash-latest` also
+failed and its reason was not read. The local `qwen3:1.7b` did not fail but
+never answered either, and that run was cancelled.
 
-Two probe bots stay in the space for the retest, `EditForge Probe` and
-`Control Probe`. None of Tee's six bots was changed.
+It predates the connector: the Chief's last reply is 2026-09-20T07:34Z.
+
+## The fix, and the EditForge proof
+
+On Tee's ruling, Anthropic was signed in with his Claude subscription in place
+of the unfunded API key, through `connect_model` and `finish_model_signin`. It
+replaced the same connection, `cmuducb81002h2kp4r9sh25pb`, now labelled
+"Claude subscription", model `claude-sonnet-5`, default. Bot usage now draws on
+Tee's Claude plan limits.
+
+At 15:17:31Z the `EditForge Probe` bot on that model called EditForge's
+`editforge_status` and returned its real answer: `store: file`,
+`storeReachable: true`, and six providers `readyToRun`, among them runway,
+elevenlabs, kokoro-local, hyperframes-local, heygen and mock. That proves the
+whole chain: EditForge registered in Rakazo, the token accepted, and a bot's
+sandbox reaching editforge.online.
+
+A Gemini connection labelled "Gemini free tier" remains, on a retired model
+id. Two probe bots remain in the space, `EditForge Probe` and `Control Probe`.
+None of Tee's six bots was edited; those without their own model now run on the
+default, and whether each carries its own model setting was not checked.
 
 ## Open
 
@@ -111,8 +127,8 @@ AREA: Systems
 TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_rakazo-mcp-live_v1_2026-09-23-1457.md
 DATE: 2026-09-23
-DECISIONS: Tee ruled EditForge gets full access inside Rakazo with the token, objection on paid render spend logged. The connector uses Tee's own Rakazo login and runs on the EditForge VPS. Model connection and bot creation were added to its tools.
-FINDINGS: Every bot run on a paid model fails, Anthropic and OpenRouter alike, since 2026-09-20T07:34Z; Tee confirmed the Anthropic API needs funding. EditForge is registered in Rakazo, create_bot reported it given. rakazo-mcp is live at rakazo-mcp.editforge.online, health 200 and 401 without the key per n8n execution 864, and the connector answered in Claude. Code in rakazo-deploy eee3b36, server sha 9b97ba54, installer sha d9e4576c. editforge.online and rakazo.editforge.online both answered 200 after the install; the other front door sites were checked only by the installer, whose output was not seen here.
-OPEN: Fund the Anthropic API, then rerun the EditForge probe on a paid model and set the default to Sonnet 5 if Tee wants it. OpenRouter failing too is unexplained. Bot reach to editforge.online untested. App-made bots need EditForge turned on by hand. Rotate the key if front door logs are shared. Anthropic key for the Floor Agent on the 24th.
-STATUS: Connector live, confirmed by Tee. Bots down on model funding.
+DECISIONS: Tee ruled EditForge gets full access inside Rakazo with the token, objection on paid render spend logged. The connector uses Tee's own Rakazo login and runs on the EditForge VPS. Model connection and bot creation were added to its tools. Tee ruled the bots run on his Claude subscription rather than a funded API key.
+FINDINGS: Bot runs had failed since 2026-09-20T07:34Z on three separate causes read from the runs table: Anthropic API credit too low, OpenRouter never funded, Gemini 2.5 Flash retired. With Anthropic moved to Tee's Claude subscription on Sonnet 5, a bot called EditForge editforge_status at 15:17:31Z and got the live answer, so EditForge is registered, the token works and bots reach editforge.online. rakazo-mcp is live, health 200 and 401 without the key per n8n execution 864. Code in rakazo-deploy eee3b36, server sha 9b97ba54, installer sha d9e4576c.
+OPEN: Bot usage now shares Tee's Claude plan limits. The Gemini connection sits on a retired model id. Whether each of the six bots carries its own model setting was not checked. Two probe bots to keep or delete. App-made bots need EditForge turned on by hand. Rotate the key if front door logs are shared. list_models output is cut at about 60000 characters, fix in rakazo-deploy. Anthropic key for the Floor Agent on the 24th.
+STATUS: Connector live, bots running on the Claude subscription, EditForge reach proven.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
