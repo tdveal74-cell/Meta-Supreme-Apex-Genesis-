@@ -40,7 +40,7 @@ Visitors come straight from a video, often mid-scroll on a phone. They are wary 
 
 - Voice: calm, precise, anti-hype, proof-driven, quietly confident. He explains; he does not perform (build_qc_prompt.js:17, tee-voice).
 - House rules: no em or en dashes, no exclamation marks, no hype vocabulary, sentence case headings, no invented numbers, no "experts say".
-- The AI disclosure has no exception path (TQO canon ruling 11). Any presenter on screen is Tee's own AI avatar speaking in his own cloned voice. Nothing is rented as a persona (deploy/lipsync/README.md). As of 2026-09-16 the presenter was not built, so the page states this as a rule, never as a description of current episodes.
+- The AI disclosure has no exception path (TQO canon ruling 11). Any presenter on screen is Tee's own AI avatar speaking in his own cloned voice. Nothing is rented as a persona (deploy/lipsync/README.md). As of 2026-09-16 the presenter was not built, so the page states this as a rule, never as a description of current episodes. Ruled by Tee 2026-09-23: the page's Note uses the pipeline's mandated disclosure verbatim, "Presented with a synthetic voice and synthetic likeness of Terrance Veal, used with his consent", so the site and every video description say the same thing and name him.
 - Imagery: never a stranger standing in for him, no stock people, no robots or brains (build_script_prompt.js:84).
 - TQO must not borrow the TSWS brand or the Meta Supreme ecosystem site's palette or fonts (SYS_SPEC_devon-ecosystem, lines 161 to 163).
 
