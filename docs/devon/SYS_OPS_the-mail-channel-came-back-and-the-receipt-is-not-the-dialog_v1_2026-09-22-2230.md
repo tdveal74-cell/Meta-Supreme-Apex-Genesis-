@@ -57,9 +57,19 @@ so the correction is visible rather than silent.
 
 ## What this does not prove
 
-It does not prove the inbox. The SMTP server accepted the message. Whether it
-landed is one look at Gmail for a DEVON Pulse subject stamped 22:25Z, and that
-look is Tee's. The unattended proof is the 2026-09-23T04:00:15Z beat.
+Acceptance by an SMTP server is not delivery, so this section first said the
+inbox was unconfirmed and left the look to Tee. He asked what to look for, which
+made it cheaper to run the check than to describe it. The Gmail thread is there:
+subject "DEVON Pulse: all quiet", from and to tdveal74@gmail.com, dated
+2026-09-22T22:25:32Z, carrying the labels SENT and INBOX. Its first body line
+reads `DEVON PULSE 2026-09-22T22:25:32.599Z`, matching row 122's `beat_at` to
+the millisecond, so it is that send and not another. Exactly one such thread
+exists in the two day window, which is the right count, because every send from
+2026-09-20T16:00 until this one failed.
+
+So the mail path is proven end to end, composed through delivered. What is still
+unproven is the SCHEDULE: execution 805 was started by hand, and the unattended
+proof is the 2026-09-23T04:00:15Z beat.
 
 Google Drive `NW3vR6nNcMoUkJyJ` is unverified and was not guessed at. The
 Precedence Guard's last run, 2026-09-22T11:00:55Z, errored, but that lane
@@ -89,6 +99,6 @@ ARTIFACT: docs/devon/SYS_OPS_the-mail-channel-came-back-and-the-receipt-is-not-t
 DATE: 2026-09-22
 DECISIONS: Tee reported the SMTP credential fixed and authorized the merge of PR #275 with "Merge now, record the recovery next". The report was treated as a claim and verified against the lane's own receipt before being written down.
 FINDINGS: SMTP AgSGuaA2pnZsrZcJ is live again as of 2026-09-22T22:25:33.426Z, proven by devon_heartbeat_log row 122 flipping emailed to yes off the success output of Send Pulse, with row 121 twenty five minutes earlier still reading no on the same unedited workflow. The credential was repaired in place and is still the only smtp credential on the instance, so all twenty emailSend nodes across sixteen workflows recovered on one fix. A green execution could not have carried this: Only If Email returns an empty array on a quiet beat, and execution 601 read success in 0.165s having sent nothing. The outage ran ten consecutive runs, not the seven recorded that morning.
-OPEN: The inbox is unconfirmed; acceptance by the SMTP server is not delivery, and that look is Tee's. Google Drive NW3vR6nNcMoUkJyJ is unverified and cannot be settled from an execution list, because the Precedence Guard swallows its Drive failure and dies at the send. The Cerebras payment refusal still stops the content pipeline.
+OPEN: The scheduled lane is unproven until the 2026-09-23T04:00:15Z beat, because execution 805 was started by hand. The inbox is confirmed: the Gmail thread dated 2026-09-22T22:25:32Z carries INBOX and its first body line matches row 122's beat_at exactly, so acceptance and delivery are both established. Google Drive NW3vR6nNcMoUkJyJ is unverified and cannot be settled from an execution list, because the Precedence Guard swallows its Drive failure and dies at the send. The Cerebras payment refusal still stops the content pipeline.
 STATUS: Mail channel recovered and verified. CLAUDE.md corrected on both the failure count and the recovery. PR #275 merged as 67d15ea on Tee's explicit authorization.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
