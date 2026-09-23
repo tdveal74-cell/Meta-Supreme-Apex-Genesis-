@@ -19,6 +19,9 @@ is 805 words and 4,831 characters, the NCO block is 543 words and 3,558
 characters. Before that fix they were 805 and 4,822, and 550 and 3,543. The teardown is
 dated 14 August and the workflow has moved since, so treat its figure as stale
 rather than wrong at the time; either way this file counts from the artifact.
+Re-measured on 2026-09-23, after the episode promises ruling put a Learning
+Objective, a 3 to 5 step checklist and a one question close into the TQO block:
+973 words and 5,790 characters. The NCO block did not change.
 
 Two more of its claims did not survive contact. There is no `Write Script
 (Claude)` node: the writer is `Write Script (Cerebras)` and the prompt is built
@@ -96,8 +99,8 @@ MIRROR = pathlib.Path(__file__).resolve().parents[2] / "n8n" / "tqo-v5" / "build
 #: Measured from the mirror on 2026-09-17, so the assembly floor is a number
 #: somebody counted rather than a default somebody liked. `check_assembly`
 #: takes no default for exactly this reason.
-MEASURED_WORDS: Dict[str, int] = {"tqo": 805, "nco": 543}
-MEASURED_CHARS: Dict[str, int] = {"tqo": 4831, "nco": 3558}
+MEASURED_WORDS: Dict[str, int] = {"tqo": 973, "nco": 543}
+MEASURED_CHARS: Dict[str, int] = {"tqo": 5790, "nco": 3558}
 
 #: Built from code points rather than written out, so this file needs no
 #: exemption marker and no formatter can quietly rewrite the literal back.
@@ -268,13 +271,15 @@ CRAFT: Tuple[Rule, ...] = (
         id="tqo.close.one-quiet-cta",
         text=(
             "The last 5 seconds carry ONE quiet call: a question worth answering in "
-            "the comments, or the free audit. Never a begging like-and-subscribe "
-            "stack. The brand does not beg."
+            "the comments, and nothing after it. Never a like or subscribe ask, "
+            "and never a pointer to an audit, a download or a link. The brand "
+            "does not beg. Ruled by Tee 2026-09-23, when the free audit pointer "
+            "was dropped."
         ),
         rule_class=RuleClass.CRAFT,
         scope=("tqo",),
         confidence=0.9,
-        source="build_script_prompt.js TQO branch, CTA beat",
+        source="build_script_prompt.js TQO branch, CLOSE beat",
     ),
     Rule(
         id="tqo.format.pick-one",
