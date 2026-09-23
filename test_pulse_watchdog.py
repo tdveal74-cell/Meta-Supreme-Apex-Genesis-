@@ -50,6 +50,7 @@ from scripts.pulse_watchdog import (
     PAGE,
     UNWATCHABLE_LANE,
     combine,
+    failure_node,
     is_newest_first,
     mail_failures,
     newest_beat,
@@ -397,7 +398,7 @@ def test_main_runs_both_checks_so_the_wiring_cannot_rot():
     original_node = mod.failure_node
     mod.fetch_rows, mod.fetch_failed_runs = fake_rows, fake_runs
     mod.failure_detail = lambda base, key, execution_id: "node Send Pulse: Invalid login"
-    mod.failure_node = lambda base, key, execution_id: (
+    mod.failure_node = lambda base, key, execution_id, workflow_id="": (
         "Send Pulse",
         mod.MAIL_NODE_TYPE,
         "Invalid login: 535-5.7.8 Username and Password not accepted.",
@@ -680,3 +681,89 @@ def test_the_estate_read_names_no_workflow_at_all():
 
     assert "workflowId" not in seen[0], seen
     assert "status=error" in seen[0] and f"limit={ESTATE_RUN_LIMIT}" in seen[0], seen
+
+
+def test_a_bare_code_node_throw_is_named_from_last_node_executed(monkeypatch):
+    """Measured on execution 848, 2026-09-23T10:20:00Z, workflow qEkGOUsNyVaRAmm6.
+
+    Its `resultData.error` carried only description, level, lineNumber, message,
+    shouldReport, stack and tags. There was no `node` key at all, so the type
+    came back "" and mail_failures kept the run, and the alarm then called a
+    Cerebras payment_required a DEVON alerting send that did not deliver.
+    `lastNodeExecuted` names the node and the workflow definition gives its type.
+    """
+    import scripts.pulse_watchdog as mod
+
+    def fake_get_json(base, key, path):
+        if "/executions/" in path:
+            return {
+                "data": {
+                    "resultData": {
+                        "lastNodeExecuted": "Package: Parse and Rank",
+                        "error": {
+                            "message": '"payment_required"} Row 1 was left at Idea',
+                            "lineNumber": 26,
+                        },
+                    }
+                }
+            }
+        return {
+            "nodes": [
+                {"name": "Package: Parse and Rank", "type": "n8n-nodes-base.code"},
+                {"name": "Notify", "type": MAIL_NODE_TYPE},
+            ]
+        }
+
+    monkeypatch.setattr(mod, "get_json", fake_get_json)
+    monkeypatch.setattr(mod, "_NODE_TYPES", {})
+    name, node_type, message = failure_node("base", "key", "848", "qEkGOUsNyVaRAmm6")
+
+    assert name == "Package: Parse and Rank", (
+        f"the failing node was not named, it read {name!r}. n8n attaches no `node` "
+        "object to a bare Code node throw, so lastNodeExecuted is the only name there is."
+    )
+    assert node_type == "n8n-nodes-base.code", (
+        f"the node type read {node_type!r}. An empty type reaches mail_failures, "
+        "which keeps the run, and a provider refusal is then reported as a dead "
+        "mail credential. That is what run 32 did on 2026-09-23."
+    )
+    assert "payment_required" in message
+
+
+def test_a_provider_failure_named_this_way_is_not_alarmed_as_a_mail_failure():
+    """The end the fallback exists for: run 32's false alarm cannot recur."""
+    now = datetime.now(timezone.utc)
+    recent = (now - timedelta(minutes=30)).isoformat().replace("+00:00", "Z")
+    runs = [{"id": "848", "startedAt": recent, "workflowId": "qEkGOUsNyVaRAmm6"}]
+    resolved = {
+        "848": ("Package: Parse and Rank", "n8n-nodes-base.code", "payment_required"),
+    }
+    assert mail_failures(runs, resolved, now) == [], (
+        "a Cerebras payment_required reaching a Code node was kept as an alerting "
+        "failure. This estate throws one of these every day at 10:20Z, so keeping "
+        "it makes the watchdog permanently red and therefore unread."
+    )
+
+
+def test_an_unclassified_alarm_does_not_claim_it_was_a_mail_failure():
+    """Fail open, but never assert the cause that was not established.
+
+    A run whose node genuinely cannot be read is still an alarm. Describing it
+    as an alerting send that did not deliver states as fact the one thing the
+    script could not check.
+    """
+    now = datetime.now(timezone.utc)
+    recent = (now - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+    runs = [{"id": "904", "startedAt": recent}]
+
+    code, message = run_verdict(runs, now, classified=False)
+    assert code == ALARM, message
+    assert "could NOT be classified" in message, message
+    assert "a DEVON alerting send RAN but did not DELIVER" not in message, (
+        "an unreadable failure was reported as a mail failure. The script never "
+        "read its node, so that is an assertion it cannot support."
+    )
+
+    code, message = run_verdict(runs, now, classified=True)
+    assert code == ALARM
+    assert "a DEVON alerting send RAN but did not DELIVER" in message, message
