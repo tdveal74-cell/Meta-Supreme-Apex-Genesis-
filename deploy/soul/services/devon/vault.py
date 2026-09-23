@@ -294,6 +294,22 @@ AIRTABLE_ROW_TABLES = {
     },
 }
 
+# The training log for a local tag classifier, ruled by Tee 2026-09-23. Written
+# on Inbox Captures by iPhone Inbox Capture at capture time. tagged_area is the
+# machine's answer and is never edited; label is the field Tee corrects; a row
+# counts as a training label only once confirmed is ticked. Train at about 300
+# confirmed rows, not before. Triaged belongs to the Duplicate Sweep and is not
+# part of this log.
+INBOX_TAG_LOG = {
+    "table": "tbl4ziFRbl5mnUcKc",
+    "tagged_area": "fldUOQIkF333gwofd",
+    "tag_source": "fld2m30zLSF7O0iOm",
+    "tag_sources": ("cerebras", "keyword", "none"),
+    "label": "fldpbMPz2xBcEo0Ia",
+    "confirmed": "fldq7Mr38uyGFbnpG",
+    "train_at": 300,
+}
+
 # Which tools DEVON's zapier.mcp executor (Build 19) may call on the Zapier MCP
 # server, each with the blast radius it really has. The executor
 # (n8n/devon/zapier-executor/validate_and_plan.js) carries the same map inline
@@ -939,6 +955,9 @@ KEY_ROTATION = (
 )
 
 WORKFLOWS = {
+    # Since 2026-09-23 (active version 881a2a3c) Index Capture also writes the
+    # tag decision log: Tagged Area and Tag Source, next to the Area Tee
+    # corrects. See INBOX_TAG_LOG above.
     "iPhone Inbox Capture": {"id": "CEy7WAl4QAzHfG46", "state": "active"},
     # Built 2026-09-16. This comment said inactive, with an undeployed endpoint
     # and an empty credential, and every part of that had stopped being true by
