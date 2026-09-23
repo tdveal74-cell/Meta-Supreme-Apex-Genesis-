@@ -8,38 +8,52 @@
 // /opt/pw-browsers. Both are required: if either is missing the script throws, so a
 // machine without a browser goes red rather than green.
 //
+// The signup form is Hostinger Reach's own page, framed on index.html without any
+// Hostinger script (ruled by Tee 2026-09-23). The hosted form can never load here, and
+// a check must never touch the real list, so every browser context in this script
+// routes the one allowed URL, the Reach form document, to a local stand-in page and
+// aborts every other off-file request. Screenshots therefore show the stand-in.
+//
 // Every HTML file in dir is loaded over file:// and checked. The run FAILS (exit 1) on:
 //   em or en dashes (U+2012 to U+2015) in visible text, attributes or source
 //   a banned house word
 //   horizontal overflow at 320px or 390px
-//   any request to a non-file URL
+//   any request to a non-file URL other than the Reach form document in a frame,
+//     named outright when it goes to cdn-reach.hostinger.com or to an impression URL
 //   zero or several h1 elements
-//   a form control with no label, or a link or button with no name
+//   a form control or frame with no label or title, or a link or button with no name
 //   an image with no alt text
 //   a font file that fails to load
 //   a console error or uncaught page error
 //   a relative link or #fragment that points nowhere
-//   a signup form that claims success it did not receive, or breaks with JS off
 //   an exclamation mark, a curly quote or an ellipsis in visible text
-//   a missing Content-Security-Policy, or one whose script hash or connect-src is stale
-//   a form status region or field error that is not in the page from load
-//   a form answer drawn off screen at 393x659, the iPhone Safari visible area
-//   any wrong answer from the form against a local stand-in for the list provider,
-//     served from a second origin: CORS allowed, no CORS, 503, a 200 whose body
-//     reports an error, a redirect, and no answer before the timeout
-// It WARNS (exit 0) with "DEPLOY BLOCKER: SIGNUP_ENDPOINT is empty" while it is empty,
-// and while any passage is marked data-unconfirmed. Once SIGNUP_ENDPOINT is set, a
-// data-unconfirmed passage FAILS the run: those wait on a ruling from Tee.
+//   a missing Content-Security-Policy, or one that is not exactly as tight as the page
+//     needs: script-src only the inline hashes, frame-src only the Reach origin on the
+//     page with the frame and nothing on any other, connect-src 'none' everywhere
+//   the reach frame check: the frame's src, title and sandbox tokens, no
+//     allow-top-navigation, a white background of its own in light and dark, sizing
+//     from a reach:resize message sent by the frame (the CSS min-height gives way to it,
+//     between a 120px floor and a cap), no sizing from any other window or origin, no
+//     redirect followed, empty web storage, IndexedDB and CacheStorage, and the frame at
+//     its min-height with the fallback link when JavaScript is off
+//   the phone fold: at 393x659, the iPhone Safari visible area, the submit is off screen
+//     after tapping the Cc button, measured against a stand-in sized from the Reach
+//     template with its heading and paragraph
+//   an inline script that names a browser store (document.cookie, cookieStore,
+//     indexedDB, localStorage, sessionStorage, caches or serviceWorker)
+//   any page that references Hostinger's embed script, cdn-reach.hostinger.com or a
+//     data-reach-form mount point
+// It WARNS (exit 0) with "DEPLOY BLOCKER" while any passage is marked data-unconfirmed.
+// Those wait on a ruling from Tee.
 //
-// Screenshots at 390x844 and 1280x800, light and dark, go to TQO_SHOTS_DIR when set,
-// otherwise to the session scratchpad path below.
+// Screenshots at 390x844 and 1280x800, light and dark, and at 393x659 after the Cc tap,
+// go to TQO_SHOTS_DIR when set, otherwise to the session scratchpad path below.
 
 import { createRequire } from "node:module";
 import { readdirSync, existsSync, statSync, readFileSync, mkdirSync } from "node:fs";
-import { join, dirname, resolve, basename, extname } from "node:path";
+import { join, dirname, resolve, basename } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
-import http from "node:http";
 
 const require = createRequire(import.meta.url);
 
@@ -47,6 +61,62 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const DIR = resolve(process.argv[2] || HERE);
 const SHOTS = process.env.TQO_SHOTS_DIR ||
   "/tmp/claude-0/-home-user-Meta-Supreme-Apex-Genesis-/331556fb-8043-5725-a414-72bc8745c2d9/scratchpad/shots";
+
+// The Reach form, as created and activated by Tee on 2026-09-23 ("TQO home page").
+const REACH_ORIGIN = "https://reach-forms.hostingerusercontent.com";
+const REACH_FORM = REACH_ORIGIN + "/form/d2047809-a203-479e-8db7-f598580f7b7b";
+const REACH_DECOY = REACH_FORM + "?decoy";
+const REACH_HOME = "index.html";
+const REACH_TITLE = "Signup form, run by Hostinger Reach";
+const REACH_SANDBOX = ["allow-scripts", "allow-forms", "allow-same-origin", "allow-popups", "allow-popups-to-escape-sandbox"];
+// The Reach template measured 543px at its tallest (a 288px frame, the 320 viewport,
+// with an 8px body margin). The CSS min-height must hold at least that with no script.
+const REACH_TEMPLATE_HEIGHT = 543;
+// Once Reach reports its height, the frame takes it, but never below this floor...
+const REACH_FLOOR = 120;
+// ...and however tall Reach says it is, the frame must never grow past this.
+const REACH_CAP_LIMIT = 2400;
+const REACH_SCRIPT = /embed\.js|cdn-reach\.hostinger\.com|data-reach-form/gi;
+// The one ask on a phone: 393x659 is the iPhone Safari visible area. After the Cc button's
+// jump, the form's submit must be on screen there.
+const FOLD = { width: 393, height: 659 };
+// Browser storage the page's own script must never name. Over file:// Chromium drops
+// cookie writes silently, so a cookie can only be caught by reading the source.
+const STORAGE_API = /\b(?:document\s*\.\s*cookie|cookieStore|indexedDB|localStorage|sessionStorage|caches|serviceWorker)\b/g;
+
+// The stand-in served at REACH_FORM. It is sized from the Reach template "TQO home page"
+// as read on 2026-09-23: the same 8px body margin, box sizes and type sizes, with the
+// template's own heading and paragraph, so the phone fold case measures the form as Reach
+// serves it today. It says in its title and in the badge's place that it is a stand-in,
+// loads nothing, and sends one reach:resize with its own height, margins included.
+const STUB_BADGE = "data:image/svg+xml," + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="159" height="40"><rect width="159" height="40" fill="#ffe58a"/>' +
+  '<text x="79.5" y="25" font-family="sans-serif" font-size="13" font-weight="600" text-anchor="middle" fill="#111">Test stand-in</text></svg>');
+const STUB = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test stand-in for the Reach form</title>
+<style>
+body { margin: 8px; }
+.f { width: 100%; background: #fff; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; box-sizing: border-box; }
+.w { max-width: 520px; width: 100%; margin: 0 auto; padding: 32px 20px; box-sizing: border-box; }
+h1 { margin: 0 0 12px; font-size: 26px; font-weight: 700; line-height: 1.2; color: #111; }
+p { margin: 0 0 24px; font-size: 16px; line-height: 1.5; color: #444; }
+label { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500; line-height: 1.4; color: #333; }
+input { width: 100%; padding: 12px; border: 1px solid #d1d1d1; border-radius: 8px; font-family: inherit; font-size: 16px; color: #111; box-sizing: border-box; background: #fff; }
+.gap { min-height: 22px; }
+button { width: 100%; margin-top: 8px; padding: 14px; border: none; border-radius: 8px; background: #111; color: #fff; font-family: inherit; font-size: 16px; font-weight: 600; }
+.badge { margin-top: 20px; padding: 8px 0; width: 100%; text-align: center; }
+.badge img { max-height: 40px; }
+</style></head><body><div class="f"><div class="w">
+<h1>Stay in the loop</h1>
+<p>Get an email each time a new TQO episode is published.</p>
+<div><label for="n">First name</label><input id="n" type="text"><div class="gap"></div></div>
+<div><label for="e">Email</label><input id="e" type="email" placeholder="your@email.com"><div class="gap"></div></div>
+<button type="button" data-reach-submit>Join the club</button>
+<div class="badge"><img alt="Test stand-in, not the Reach form" width="159" height="40" src="${STUB_BADGE}"></div>
+</div></div>
+<script>var b = document.body; parent.postMessage({ type: "reach:resize", payload: { height: Math.ceil(b.getBoundingClientRect().bottom + parseFloat(getComputedStyle(b).marginBottom)) } }, "*");</script>
+</body></html>`;
 
 function loadPlaywright() {
   try {
@@ -92,8 +162,7 @@ const BANNED_OPENER = /(?:^|[.?!]\s+)(Additionally|Moreover|Notably)\b/g;
 const DASH = /[\u2012-\u2015]/;
 // House punctuation: no exclamation marks, straight quotes only, no ellipses.
 const PUNCT = /!|\u2026|\.\.\.|[\u2018\u2019\u201c\u201d]/g;
-const SUCCESS = /received|success|thank|subscribed|you're in|you are in|welcome|accepted/i;
-const ENDPOINT_RE = /\bconst\s+SIGNUP_ENDPOINT\s*=\s*(["'])(.*?)\1/;
+const LOCAL = /^(file|data|about|blob):/;
 
 function sha256(text) { return "'sha256-" + createHash("sha256").update(text).digest("base64") + "'"; }
 function inlineScripts(src) { return [...src.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]); }
@@ -104,6 +173,21 @@ function cspOf(src) {
     const [name, ...values] = d.split(/\s+/);
     return [name, values];
   }));
+}
+function sameSet(a, b) { return a.length === b.length && a.every((x) => b.includes(x)); }
+function hasFrame(src) { return /<iframe\b/i.test(src); }
+function describe(url) {
+  if (/cdn-reach\.hostinger\.com/i.test(url)) return "the Reach CDN, " + url;
+  if (/impression/i.test(url)) return "an impression beacon, " + url;
+  return url;
+}
+async function until(test, ms) {
+  const end = Date.now() + ms;
+  for (;;) {
+    try { if (await test()) return true; } catch (e) { /* the page may be mid-navigation */ }
+    if (Date.now() > end) return false;
+    await new Promise((r) => setTimeout(r, 50));
+  }
 }
 
 const results = [];
@@ -125,42 +209,72 @@ mkdirSync(SHOTS, { recursive: true });
 const browser = await chromium.launch({ executablePath });
 
 const foreignRequests = [];
+const framedRequests = [];
 const consoleProblems = [];
 
-// ignore: a URL prefix that the form test intercepts itself, so it never leaves the machine.
-function watch(page, file, ignore = "") {
+// Every context gets this route: the Reach form document goes to the stand-in, and
+// every other off-file request is aborted, so nothing this script does leaves the machine.
+async function newContext(options) {
+  const context = await browser.newContext(options);
+  await context.route((url) => !LOCAL.test(url.href), (route) => {
+    const req = route.request();
+    const url = req.url();
+    if ((url === REACH_FORM || url === REACH_DECOY) && req.resourceType() === "document" && req.method() === "GET") {
+      return route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: STUB });
+    }
+    return route.abort("blockedbyclient");
+  });
+  return context;
+}
+
+function watch(page, file) {
   page.on("request", (r) => {
     const url = r.url();
-    if (ignore && url.startsWith(ignore)) return;
-    if (!url.startsWith("file:") && !url.startsWith("data:") && !url.startsWith("about:")) {
-      foreignRequests.push(file + ": " + url);
+    if (LOCAL.test(url)) return;
+    let framed = false;
+    try { framed = Boolean(r.frame().parentFrame()); } catch (e) { framed = false; }
+    if (url === REACH_FORM && r.resourceType() === "document" && framed) {
+      framedRequests.push(file);
+      return;
     }
+    foreignRequests.push(file + ": " + describe(url));
   });
   page.on("console", (m) => {
     if (m.type() !== "error") return;
-    if (ignore && (m.location().url || "").startsWith(ignore)) return;
     consoleProblems.push(file + ": console error: " + m.text());
   });
   page.on("pageerror", (e) => consoleProblems.push(file + ": uncaught: " + e.message));
 }
 
-async function open(context, file, ignore = "") {
+async function open(context, file) {
   const page = await context.newPage();
-  watch(page, file, ignore);
+  watch(page, file);
   await page.goto(pathToFileURL(join(DIR, file)).href, { waitUntil: "load" });
   await page.evaluate(() => document.fonts.ready);
   return page;
 }
 
+function reachFrameOf(page, url = REACH_FORM) { return page.frames().find((f) => f.url() === url); }
+
+// The frame is lazy: bring it near the screen, let the stand-in load and send its size,
+// then go back to the top. Returns false when the size never arrived.
+async function wakeFrame(page) {
+  const el = page.locator("iframe").first();
+  await el.scrollIntoViewIfNeeded();
+  const sized = await until(async () => (await el.evaluate((f) => f.style.height)) !== "", 4000);
+  await page.evaluate(() => window.scrollTo({ top: 0, left: 0, behavior: "instant" }));
+  return sized;
+}
+
 const perPage = {};
-for (const file of htmlFiles) perPage[file] = { overflow: [], fonts: [], h1: null, labels: [], alts: [], links: [], form: [], regions: [], harness: [] };
+for (const file of htmlFiles) perPage[file] = { overflow: [], fonts: [], h1: null, labels: [], alts: [], wake: [] };
 
 for (const file of htmlFiles) {
   const info = perPage[file];
 
   // 1. Text, attributes and structure, read once at 390 in light.
   {
-    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: "light" });
+    const context = await newContext({ viewport: { width: 390, height: 844 }, colorScheme: "light" });
     const page = await open(context, file);
     const snapshot = await page.evaluate(() => {
       const CONTENT_ATTRS = ["content", "alt", "title", "aria-label", "aria-description", "placeholder", "value", "label"];
@@ -197,6 +311,9 @@ for (const file of htmlFiles) {
         const name = (el.textContent || "").trim() || (el.getAttribute("aria-label") || "").trim();
         if (!name) unlabeled.push(el.tagName.toLowerCase() + " with no name");
       }
+      for (const el of document.querySelectorAll("iframe")) {
+        if (!(el.getAttribute("title") || "").trim()) unlabeled.push("iframe with no title");
+      }
 
       const noAlt = [];
       for (const img of document.querySelectorAll("img, input[type=image]")) {
@@ -212,32 +329,9 @@ for (const file of htmlFiles) {
       const ids = [...document.querySelectorAll("[id]")].map((e) => e.id);
       const unconfirmed = [...document.querySelectorAll("[data-unconfirmed]")]
         .map((e) => e.textContent.replace(/\s+/g, " ").trim().slice(0, 64));
-      // Live regions must exist before their first message, or it may never be heard.
-      const regions = [];
-      for (const form of document.querySelectorAll("form")) {
-        const live = form.querySelector('[role="status"], [aria-live]');
-        if (!live) regions.push("the form has no status region");
-        else if (getComputedStyle(live).display === "none") regions.push("the status region is display:none on load");
-        for (const input of form.querySelectorAll("input[aria-describedby]")) {
-          for (const id of input.getAttribute("aria-describedby").split(/\s+/)) {
-            const el = document.getElementById(id);
-            if (!el) continue;
-            if (el.getAttribute("role") !== "alert" && !el.hasAttribute("aria-live")) regions.push("#" + id + " is not a live region");
-            if (el.hidden || getComputedStyle(el).display === "none") regions.push("#" + id + " is not rendered on load");
-          }
-        }
-      }
-      return { texts, attrs, allAttrs, scripts, h1, unlabeled, noAlt, hrefs, ids, unconfirmed, regions };
+      return { texts, attrs, allAttrs, scripts, h1, unlabeled, noAlt, hrefs, ids, unconfirmed };
     });
     collected[file] = snapshot;
-    info.regions = snapshot.regions;
-    // The accessibility tree itself, read over CDP: a status role must be there on load.
-    if (/<form\b/i.test(sources[file])) {
-      const cdp = await context.newCDPSession(page);
-      const { nodes } = await cdp.send("Accessibility.getFullAXTree");
-      const status = nodes.filter((n) => n.role && n.role.value === "status" && !n.ignored);
-      if (!status.length) info.regions.push("no status node in the accessibility tree on load");
-    }
     info.h1 = snapshot.h1;
     info.labels = snapshot.unlabeled;
     info.alts = snapshot.noAlt;
@@ -264,7 +358,7 @@ for (const file of htmlFiles) {
 
   // 2. Overflow at the two narrow widths.
   for (const width of [320, 390]) {
-    const context = await browser.newContext({ viewport: { width, height: 800 }, colorScheme: "light" });
+    const context = await newContext({ viewport: { width, height: 800 }, colorScheme: "light" });
     const page = await open(context, file);
     const over = await page.evaluate(() => {
       const root = document.documentElement;
@@ -281,202 +375,350 @@ for (const file of htmlFiles) {
     await context.close();
   }
 
-  // 3. Screenshots, light and dark, phone and desktop.
+  // 3. Screenshots, light and dark, phone and desktop. A framed page is woken first, so
+  // the frame holds the stand-in at its sent size, and at 390 the frame's own section
+  // gets a viewport shot too.
   const stem = basename(file, ".html");
   for (const scheme of ["light", "dark"]) {
     for (const v of [{ w: 390, h: 844, dpr: 2 }, { w: 1280, h: 800, dpr: 1 }]) {
-      const context = await browser.newContext({ viewport: { width: v.w, height: v.h }, deviceScaleFactor: v.dpr, colorScheme: scheme });
+      const context = await newContext({ viewport: { width: v.w, height: v.h }, deviceScaleFactor: v.dpr, colorScheme: scheme });
       const page = await open(context, file);
+      const framed = hasFrame(sources[file]);
+      if (framed && !(await wakeFrame(page))) info.wake.push(`${v.w}x${v.h} ${scheme}: the stand-in's size never reached the frame`);
+      // The page, not the browser, sets what shows behind the Reach page: white, in
+      // both schemes, whatever the framed document or the browser's canvas does.
+      if (framed) {
+        const bg = await page.locator("iframe").first().evaluate((f) => getComputedStyle(f).backgroundColor);
+        if (bg !== "rgb(255, 255, 255)") info.wake.push(`${v.w}x${v.h} ${scheme}: the frame's own background is ${bg}, not white`);
+      }
       await page.waitForTimeout(250);
       await page.screenshot({ path: join(SHOTS, `${stem}-${v.w}x${v.h}-${scheme}.png`) });
       await page.screenshot({ path: join(SHOTS, `${stem}-${v.w}x${v.h}-${scheme}-full.png`), fullPage: true });
+      if (framed && v.w === 390) {
+        await page.locator("iframe").first().evaluate((f) => (f.closest("section") || f).scrollIntoView({ block: "start", behavior: "instant" }));
+        await page.waitForTimeout(150);
+        await page.screenshot({ path: join(SHOTS, `${stem}-${v.w}x${v.h}-${scheme}-reach-frame.png`) });
+      }
       await context.close();
     }
   }
-
-  // 4. The signup form, with JavaScript on and off.
-  if (/<form\b/i.test(sources[file])) {
-    const endpointMatch = ENDPOINT_RE.exec(sources[file]);
-    const endpointUrl = endpointMatch ? endpointMatch[2] : "";
-    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: "light" });
-    const page = await open(context, file, endpointUrl);
-    // With an endpoint set, answer it here. The check must never post a test address to the real list.
-    let mockStatus = 503;
-    if (endpointUrl) {
-      await page.route((url) => url.href.startsWith(endpointUrl), (route) =>
-        route.fulfill({ status: mockStatus, headers: { "access-control-allow-origin": "*" }, contentType: "application/json", body: "{}" }));
-    }
-    const form = page.locator("form").first();
-    const readStatus = async (p) => ((await p.locator('[role="status"]').first().textContent()) || "").trim();
-    const hasEmail = await page.locator('input[type="email"]').count();
-    // The script enables the submit. Still disabled with JS on means it never ran.
-    const scriptRan = hasEmail ? await form.locator('[type="submit"]').isEnabled() : false;
-    if (!hasEmail) info.form.push("the form has no email input");
-    else if (!scriptRan) info.form.push("with JS on, the submit button is still disabled, so the page script never ran (see the csp and console lines)");
-    else {
-      await page.fill('input[type="email"]', "not-an-address");
-      await form.locator('[type="submit"]').click();
-      await page.waitForTimeout(150);
-      const invalid = await page.locator('input[type="email"][aria-invalid="true"]').count();
-      if (!invalid) info.form.push("an invalid address was not flagged");
-      await page.fill('input[type="email"]', "reader@example.com");
-      await form.locator('[type="submit"]').click();
-      await page.waitForTimeout(400);
-      const status = await readStatus(page);
-      if (endpointMatch && endpointUrl === "") {
-        if (!/not open yet/i.test(status)) info.form.push("with SIGNUP_ENDPOINT empty, the status did not say signup is not open yet (read: " + JSON.stringify(status) + ")");
-        if (SUCCESS.test(status)) info.form.push("with SIGNUP_ENDPOINT empty, the status claims success: " + JSON.stringify(status));
-      } else if (endpointUrl) {
-        // The first submit met a mocked 503, which must never read as success.
-        if (SUCCESS.test(status)) info.form.push("a mocked HTTP 503 from the endpoint was reported as success: " + JSON.stringify(status));
-        if (!status) info.form.push("a mocked HTTP 503 from the endpoint produced no message");
-        mockStatus = 200;
-        await page.fill('input[type="email"]', "reader@example.com");
-        await form.locator('[type="submit"]').click();
-        await page.waitForTimeout(600);
-        const ok = await readStatus(page);
-        if (!SUCCESS.test(ok)) info.form.push("a mocked HTTP 200 from the endpoint was not reported as received (read: " + JSON.stringify(ok) + ")");
-      }
-      // A screenshot of the form state, for the reviewer.
-      await page.locator("form").first().screenshot({ path: join(SHOTS, `${stem}-form-after-submit.png`) });
-    }
-    await context.close();
-
-    // The answer must land on screen. 393x659 is the iPhone Safari visible area with its
-    // toolbars shown; the submit button starts at the bottom edge, the worst case.
-    if (hasEmail && scriptRan) {
-      const small = await browser.newContext({ viewport: { width: 393, height: 659 }, deviceScaleFactor: 2, colorScheme: "light" });
-      const phone = await open(small, file, endpointUrl);
-      if (endpointUrl) {
-        await phone.route((url) => url.href.startsWith(endpointUrl), (route) =>
-          route.fulfill({ status: 200, headers: { "access-control-allow-origin": "*" }, contentType: "application/json", body: "{}" }));
-      }
-      await phone.fill('input[type="email"]', "reader@example.com");
-      await phone.evaluate(() => {
-        const b = document.querySelector('form [type="submit"]').getBoundingClientRect();
-        window.scrollBy(0, b.bottom - (window.innerHeight - 8));
-      });
-      await phone.waitForTimeout(100);
-      await phone.locator('form [type="submit"]').click();
-      await phone.waitForTimeout(900);
-      const box = await phone.evaluate(() => {
-        const s = document.querySelector('[role="status"]').getBoundingClientRect();
-        return { top: Math.round(s.top), bottom: Math.round(s.bottom), h: window.innerHeight };
-      });
-      if (box.top < 0 || box.bottom > box.h || box.bottom - box.top < 1) {
-        info.form.push(`at 393x659 the form's answer is off screen after submit (top ${box.top}, bottom ${box.bottom}, viewport ${box.h})`);
-      }
-      await phone.screenshot({ path: join(SHOTS, `${stem}-393x659-after-submit.png`) });
-      await small.close();
-    }
-
-    const noJs = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: "light", javaScriptEnabled: false });
-    const plain = await open(noJs, file);
-    const state = await plain.evaluate(() => {
-      const f = document.querySelector("form");
-      const button = f && f.querySelector('[type="submit"]');
-      const note = [...document.querySelectorAll("noscript")].map((n) => n.textContent).join(" ");
-      return { disabled: button ? button.disabled : null, note: note.trim() };
-    });
-    if (state.disabled !== true) info.form.push("with JS off, the submit button is live, so a post would go nowhere");
-    if (!state.note) info.form.push("with JS off, no noscript line explains the form");
-    await plain.locator("form").first().screenshot({ path: join(SHOTS, `${stem}-form-no-js.png`) });
-    await noJs.close();
-
-    // 5. The form against a stand-in for the list provider, on a second origin.
-    info.harness = await standIn(file);
-  }
 }
+
+// 4. The Reach frame, on the one page that carries it.
+const reach = await reachFrame();
+
+// 5. The one ask on a phone, after the Cc button's jump.
+const fold = await phoneFold();
 
 await browser.close();
 
-// The page is served over http from one local origin, with SIGNUP_ENDPOINT pointed at a
-// stand-in on another, so CORS applies exactly as it will in production. The page's own
-// Content-Security-Policy is kept, re-pinned to the rewritten script and the stand-in.
-// Each case says what the visitor must be told, and what they must never be told.
-async function standIn(file) {
+// A visitor on an iPhone taps the Cc button. The page jumps to the signup section, and the
+// submit inside the frame must then be on screen at 393x659, the Safari visible area. The
+// stand-in carries the Reach template's own heading and paragraph, so this measures the
+// form as Reach serves it today; deleting them in Reach only moves the button up.
+async function phoneFold() {
   const problems = [];
-  let mode = "cors-200";
-  const posts = [];
-  const cors = { "access-control-allow-origin": "*" };
-  const json = { ...cors, "content-type": "application/json" };
-  const provider = http.createServer((req, res) => {
-    const send = (status, headers, body) => { try { res.writeHead(status, headers); res.end(body); } catch (e) { /* client gone */ } };
-    if (req.method === "OPTIONS") { posts.push({ mode, preflight: true }); return send(204, { ...cors, "access-control-allow-methods": "POST", "access-control-allow-headers": "accept, content-type" }, ""); }
-    if (req.url === "/done") return send(200, json, "{}");
-    let body = "";
-    req.on("data", (c) => { body += c; });
-    req.on("end", () => {
-      posts.push({ mode, stored: body.includes("reader@example.com") });
-      if (mode === "cors-200") return send(200, json, "{}");
-      if (mode === "cors-503") return send(503, json, "{}");
-      if (mode === "nocors-200") return send(200, { "content-type": "application/json" }, "{}");
-      if (mode === "cors-200-error") return send(200, json, JSON.stringify({ success: false, error: "invalid_email" }));
-      if (mode === "cors-302") return send(302, { ...cors, location: "/done" }, "");
-      if (mode === "slow") return setTimeout(() => send(200, json, "{}"), 2500);
-      return send(500, json, "{}");
+  const done = [];
+  if (!sources[REACH_HOME] || !hasFrame(sources[REACH_HOME])) return { problems: [`${REACH_HOME} has no frame to measure`], done };
+  const home = pathToFileURL(join(DIR, REACH_HOME)).href;
+  const context = await newContext({
+    viewport: FOLD, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: "light", reducedMotion: "reduce",
+  });
+  const page = await context.newPage();
+  watch(page, REACH_HOME + " at " + FOLD.width + "x" + FOLD.height);
+  page.setDefaultTimeout(8000);
+  try {
+    await page.goto(home, { waitUntil: "load" });
+    await page.evaluate(() => document.fonts.ready);
+    const cc = page.locator('a[href="#distribution"].button');
+    if ((await cc.count()) !== 1) throw new Error(`there are ${await cc.count()} Cc buttons that jump to #distribution, not one`);
+    await cc.tap();
+    const el = page.locator("iframe").first();
+    let frame = null;
+    await until(() => (frame = reachFrameOf(page)), 4000);
+    if (!frame) throw new Error("after the Cc jump the frame never loaded the Reach form URL");
+    await frame.waitForLoadState("load");
+    if (!(await until(async () => (await el.evaluate((f) => f.style.height)) !== "", 3000))) {
+      throw new Error("after the Cc jump the stand-in's size never reached the frame");
+    }
+    await page.waitForTimeout(300);
+    const top = await el.evaluate((f) => f.getBoundingClientRect().top);
+    const vh = await page.evaluate(() => innerHeight);
+    const heading = await page.evaluate(() => {
+      const h = document.getElementById("distribution-title");
+      return h ? h.getBoundingClientRect().top : null;
     });
-  });
-  await new Promise((r) => provider.listen(0, "127.0.0.1", r));
-  const endpoint = "http://127.0.0.1:" + provider.address().port + "/submit";
-
-  const types = { ".html": "text/html; charset=utf-8", ".woff2": "font/woff2", ".txt": "text/plain; charset=utf-8" };
-  const site = http.createServer((req, res) => {
-    const path = decodeURIComponent(new URL(req.url, "http://x").pathname).replace(/^\/+/, "") || file;
-    const full = join(DIR, path);
-    if (!full.startsWith(DIR) || !existsSync(full) || statSync(full).isDirectory()) { res.writeHead(404); return res.end(); }
-    let body = readFileSync(full);
-    if (path === file) {
-      let src = body.toString("utf8")
-        .replace(ENDPOINT_RE, () => 'const SIGNUP_ENDPOINT = "' + endpoint + '"')
-        .replace(/(\bconst\s+SIGNUP_TIMEOUT_MS\s*=\s*)\d+/, (m, a) => a + "1500");
-      const hashes = inlineScripts(src).map(sha256).join(" ");
-      src = src.replace(/(script-src )[^;"]+/, (m, a) => a + hashes)
-        .replace(/(connect-src )[^;"]+/, (m, a) => a + new URL(endpoint).origin);
-      body = Buffer.from(src, "utf8");
-    }
-    res.writeHead(200, { "content-type": types[extname(full)] || "application/octet-stream" });
-    res.end(body);
-  });
-  await new Promise((r) => site.listen(0, "127.0.0.1", r));
-  const pageUrl = "http://127.0.0.1:" + site.address().port + "/" + file;
-
-  const cases = [
-    { mode: "cors-200", say: /^Received\b/, never: /not added|not confirmed/i },
-    { mode: "cors-503", say: /^Not added\b/, never: SUCCESS },
-    { mode: "cors-200-error", say: /^Not added\b/, never: SUCCESS },
-    { mode: "nocors-200", say: /^Not confirmed\b/, never: /received|accepted|not added|could not be reached/i, stored: true },
-    { mode: "cors-302", say: /^Not confirmed\b/, never: SUCCESS },
-    { mode: "slow", say: /^Not confirmed\b/, never: /received|accepted|not added/i },
-  ];
-  for (const c of cases) {
-    mode = c.mode;
-    const before = posts.length;
-    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: "light" });
-    const page = await context.newPage();
-    const policy = [];
-    page.on("console", (m) => { if (/Content Security Policy/i.test(m.text())) policy.push(m.text().slice(0, 120)); });
-    page.on("pageerror", (e) => policy.push("uncaught: " + e.message));
-    await page.goto(pageUrl, { waitUntil: "load" });
-    await page.fill('input[type="email"]', "reader@example.com");
-    await page.locator('form [type="submit"]').click();
-    let said = "";
-    for (let i = 0; i < 60; i++) {
-      said = ((await page.locator('[role="status"]').first().textContent()) || "").trim();
-      if (said) break;
-      await page.waitForTimeout(100);
-    }
-    if (!c.say.test(said)) problems.push(`${c.mode}: expected ${c.say} but read ${JSON.stringify(said)}`);
-    if (c.never.test(said)) problems.push(`${c.mode}: told the visitor ${JSON.stringify(said)}`);
-    if (c.stored && !posts.slice(before).some((p) => p.stored)) problems.push(`${c.mode}: the stand-in never received the address, so the case proved nothing`);
-    for (const p of policy) problems.push(`${c.mode}: ${p}`);
-    await context.close();
+    const inside = await frame.evaluate(() => {
+      const box = (s) => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; };
+      return { email: box('input[type="email"]'), submit: box("[data-reach-submit]") };
+    });
+    if (!inside.submit || !inside.email) throw new Error("the stand-in has no email field or submit to measure");
+    const at = (b) => ({ top: Math.round(top + b.top), bottom: Math.round(top + b.bottom) });
+    const email = at(inside.email);
+    const submit = at(inside.submit);
+    if (heading === null || heading < 0 || heading > vh) problems.push(`after the Cc jump the section heading is not on screen (top ${heading})`);
+    if (email.bottom > vh) problems.push(`after the Cc jump the email field ends at ${email.bottom}px, below the ${vh}px fold`);
+    if (submit.bottom > vh) problems.push(`after the Cc jump the submit is at ${submit.top} to ${submit.bottom}px, below the ${vh}px fold`);
+    if (!problems.length) done.push(`${FOLD.width}x${FOLD.height} after tapping Cc: frame top ${Math.round(top)}px, email ${email.top} to ${email.bottom}px, submit ${submit.top} to ${submit.bottom}px, all above the ${vh}px fold`);
+    await page.screenshot({ path: join(SHOTS, `${basename(REACH_HOME, ".html")}-${FOLD.width}x${FOLD.height}-light-after-cc.png`) });
+  } catch (e) {
+    problems.push("the phone fold case stopped: " + String(e.message || e).split("\n")[0]);
   }
-  for (const server of [provider, site]) {
-    if (server.closeAllConnections) server.closeAllConnections();
-    await new Promise((r) => server.close(r));
+  await context.close();
+  return { problems, done };
+}
+
+// The frame's contract, tested against the stand-in. Each case must bite: the decoy
+// cases prove they reached the page before their answer counts.
+async function reachFrame() {
+  const problems = [];
+  const done = [];
+  for (const f of htmlFiles) {
+    if (f !== REACH_HOME && hasFrame(sources[f])) problems.push(`${f} carries a frame; only ${REACH_HOME} may`);
   }
-  return problems;
+  if (!sources[REACH_HOME]) return { problems: problems.concat(`there is no ${REACH_HOME}`), done };
+  if (!hasFrame(sources[REACH_HOME])) return { problems: problems.concat(`${REACH_HOME} has no frame`), done };
+  for (const f of htmlFiles) for (const w of perPage[f].wake) problems.push(`${f} ${w}`);
+
+  const home = pathToFileURL(join(DIR, REACH_HOME)).href;
+  const context = await newContext({ viewport: { width: 390, height: 844 }, colorScheme: "light" });
+  const page = await context.newPage();
+  const seen = [];
+  const errors = [];
+  const navigations = [];
+  page.on("request", (r) => { if (!LOCAL.test(r.url())) seen.push({ url: r.url(), type: r.resourceType() }); });
+  page.on("console", (m) => { if (m.type() === "error") errors.push("console error: " + m.text()); });
+  page.on("pageerror", (e) => errors.push("uncaught: " + e.message));
+  await page.goto(home, { waitUntil: "load" });
+  page.on("framenavigated", (f) => { if (f === page.mainFrame()) navigations.push(f.url()); });
+
+  // (a) The frame's attributes, as written. The min-height is the stylesheet's, read with
+  // any inline value the script has already set put aside, because the frame may have
+  // loaded and reported its size before this line runs.
+  const attrs = await page.evaluate(() => [...document.querySelectorAll("iframe")].map((f) => {
+    const inline = f.style.minHeight;
+    f.style.minHeight = "";
+    const cs = getComputedStyle(f);
+    const cssMin = parseFloat(cs.minHeight) || 0;
+    f.style.minHeight = inline;
+    return {
+      src: f.getAttribute("src"), title: f.getAttribute("title"), sandbox: f.getAttribute("sandbox"),
+      loading: f.getAttribute("loading"), referrerpolicy: f.getAttribute("referrerpolicy"),
+      allow: f.getAttribute("allow"), srcdoc: f.hasAttribute("srcdoc"),
+      border: [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth],
+      width: f.getBoundingClientRect().width, room: f.parentElement.clientWidth,
+      cap: cs.maxWidth === "none" ? Infinity : parseFloat(cs.maxWidth),
+      minHeight: cssMin,
+    };
+  }));
+  if (attrs.length !== 1) problems.push(`${REACH_HOME} has ${attrs.length} frames, not one`);
+  const a = attrs[0];
+  const minH = a ? a.minHeight : 0;
+  if (a) {
+    if (a.src !== REACH_FORM) problems.push(`src is ${JSON.stringify(a.src)}, not ${REACH_FORM}`);
+    if (a.title !== REACH_TITLE) problems.push(`title is ${JSON.stringify(a.title)}, not ${JSON.stringify(REACH_TITLE)}`);
+    const tokens = (a.sandbox === null ? [] : a.sandbox.split(/\s+/).filter(Boolean));
+    if (a.sandbox === null) problems.push("the frame has no sandbox attribute");
+    const top = tokens.filter((t) => /^allow-top-navigation/.test(t));
+    if (top.length) problems.push("sandbox allows top navigation: " + top.join(" "));
+    if (!sameSet([...new Set(tokens)], REACH_SANDBOX)) problems.push(`sandbox is "${tokens.join(" ")}", not "${REACH_SANDBOX.join(" ")}"`);
+    if (a.loading !== "lazy") problems.push(`loading is ${JSON.stringify(a.loading)}, not "lazy"`);
+    if (a.referrerpolicy !== "strict-origin-when-cross-origin") problems.push(`referrerpolicy is ${JSON.stringify(a.referrerpolicy)}`);
+    if (a.allow !== null) problems.push(`the frame delegates permissions: allow="${a.allow}"`);
+    if (a.srcdoc) problems.push("the frame has a srcdoc, which would replace the Reach page");
+    if (a.border.some((b) => b !== "0px")) problems.push("the frame has a border: " + a.border.join(" "));
+    if (Math.abs(a.width - Math.min(a.room, a.cap)) > 0.5) problems.push(`the frame is ${a.width}px wide in ${a.room}px of room, not 100% up to its ${a.cap}px cap`);
+    if (minH < REACH_TEMPLATE_HEIGHT) problems.push(`the CSS min-height is ${minH}px, below the ${REACH_TEMPLATE_HEIGHT}px the Reach template needs with no script`);
+    done.push(`(a) src, title, sandbox "${REACH_SANDBOX.join(" ")}", lazy, no border, full width, min-height ${minH}px`);
+  }
+  // Every store a page script can reach from file://. Cookies are not here: Chromium
+  // drops cookie writes over file:// without an error, so the "storage apis" check reads
+  // the script's source for them instead.
+  const storage = () => page.evaluate(async () => {
+    const out = {};
+    try { out.local = localStorage.length; out.session = sessionStorage.length; } catch (e) { out.error = "web storage: " + e.message; }
+    try { out.idb = (await indexedDB.databases()).map((d) => d.name); } catch (e) { out.error = "IndexedDB: " + e.message; }
+    try { out.caches = await caches.keys(); } catch (e) { out.error = "CacheStorage: " + e.message; }
+    return out;
+  });
+  const atLoad = await storage();
+
+  // The stand-in loads when the frame nears the screen and sends its own size.
+  // Any step that throws ends the message cases as a named failure, never a crash.
+  page.setDefaultTimeout(8000);
+  const el = page.locator("iframe").first();
+  await el.scrollIntoViewIfNeeded();
+  let frame = null;
+  await until(() => (frame = reachFrameOf(page)), 4000);
+  if (!frame) {
+    problems.push("the frame never loaded the Reach form URL (served by the stand-in)");
+  } else try {
+    await frame.waitForLoadState("load");
+    const origin = await frame.evaluate(() => location.origin);
+    if (origin !== REACH_ORIGIN) problems.push(`the stand-in ran at ${origin}, not ${REACH_ORIGIN}, so the origin cases prove nothing`);
+    const height = () => el.evaluate((f) => Math.round(f.getBoundingClientRect().height));
+    const settle = () => page.waitForTimeout(150);
+    if (!(await until(async () => (await el.evaluate((f) => f.style.height)) !== "", 3000))) {
+      problems.push("the stand-in's load-time reach:resize never set a height");
+    } else {
+      // The stand-in's own report fits it exactly: the frame takes that height, below the
+      // CSS min-height, with no dead space under the form and no scroll bar inside it.
+      await settle();
+      const fit = await frame.evaluate(() => ({ scroll: document.documentElement.scrollHeight, inner: innerHeight }));
+      const own = await height();
+      if (own >= minH) problems.push(`after the stand-in reported its size the frame is ${own}px, still held at its ${minH}px min-height`);
+      if (fit.scroll > fit.inner) problems.push(`after sizing, the stand-in scrolls inside the frame: ${fit.scroll}px of content in ${fit.inner}px`);
+      if (own < minH && fit.scroll <= fit.inner) done.push(`(b) the stand-in's own report made the frame ${own}px, under the ${minH}px min-height, with no inner scroll`);
+    }
+
+    // (b) A reach:resize from the frame sets the height.
+    const send = (target, message) => target.evaluate((m) => parent.postMessage(m, "*"), message);
+    await send(frame, { type: "reach:resize", payload: { height: 700 } });
+    await settle();
+    const b = await height();
+    if (b !== 700) problems.push(`a reach:resize of 700 from the frame left it at ${b}px`);
+    else done.push("reach:resize 700 from the frame made it 700px");
+    await send(frame, { type: "reach:resize", payload: { height: 300 } });
+    await settle();
+    const under = await height();
+    if (under !== 300) problems.push(`a reach:resize of 300 from the frame left it at ${under}px, so the CSS min-height never gave way`);
+
+    // The clamp: never below the floor, never past the cap.
+    await send(frame, { type: "reach:resize", payload: { height: 10 } });
+    await settle();
+    const low = await height();
+    if (low !== REACH_FLOOR) problems.push(`a reach:resize of 10 made the frame ${low}px, not the ${REACH_FLOOR}px floor`);
+    await send(frame, { type: "reach:resize", payload: { height: 1e7 } });
+    await settle();
+    const high = await height();
+    if (high > REACH_CAP_LIMIT || high <= low) problems.push(`a reach:resize of 10000000 made the frame ${high}px`);
+    else if (under === 300) done.push(`300 made it 300px; clamped to ${low}px and ${high}px`);
+
+    // Shapes that are not a finite height change nothing. Each case starts from 700, so
+    // one failure cannot hide or fake another. Labels are written out because
+    // JSON.stringify prints NaN and Infinity as null.
+    const bad = [
+      ["height NaN", { type: "reach:resize", payload: { height: NaN } }],
+      ["height Infinity", { type: "reach:resize", payload: { height: Infinity } }],
+      ["height -Infinity", { type: "reach:resize", payload: { height: -Infinity } }],
+      ['height "900", a string', { type: "reach:resize", payload: { height: "900" } }],
+      ["payload 900, not an object", { type: "reach:resize", payload: 900 }],
+      ["no payload", { type: "reach:resize" }],
+      ['type "reach:size"', { type: "reach:size", payload: { height: 900 } }],
+      ['the bare string "reach:resize"', "reach:resize"],
+    ];
+    for (const [label, m] of bad) {
+      await send(frame, { type: "reach:resize", payload: { height: 700 } });
+      await settle();
+      await send(frame, m);
+      await settle();
+      const h = await height();
+      if (h !== 700) problems.push(`a message with ${label} changed the height to ${h}px`);
+    }
+    await send(frame, { type: "reach:resize", payload: { height: 700 } });
+    await settle();
+
+    // (c) The right shape from the wrong window, or the wrong origin, changes nothing.
+    await page.evaluate(() => window.postMessage({ type: "reach:resize", payload: { height: 900 } }, "*"));
+    await settle();
+    const c1 = await height();
+    if (c1 !== 700) problems.push(`a reach:resize posted by the top window changed the height to ${c1}px`);
+
+    // A second frame at the Reach origin: right origin, wrong source.
+    await page.evaluate((src) => {
+      const d = document.createElement("iframe");
+      d.id = "decoy";
+      d.src = src;
+      document.body.append(d);
+    }, REACH_DECOY);
+    let decoy = null;
+    await until(() => (decoy = reachFrameOf(page, REACH_DECOY)), 4000);
+    if (!decoy) problems.push("the decoy frame at the Reach origin never loaded, so the source case proved nothing");
+    else {
+      await decoy.waitForLoadState("load");
+      const decoyOrigin = await decoy.evaluate(() => location.origin);
+      if (decoyOrigin !== REACH_ORIGIN) problems.push(`the decoy ran at ${decoyOrigin}, so the source case proved nothing`);
+      await send(decoy, { type: "reach:resize", payload: { height: 900 } });
+      await settle();
+      const c2 = await height();
+      if (c2 !== 700) problems.push(`a reach:resize from another frame at the Reach origin changed the height to ${c2}px`);
+      else done.push("(c) ignored from the top window and from a second Reach-origin frame");
+    }
+    await page.evaluate(() => { const d = document.getElementById("decoy"); if (d) d.remove(); });
+
+    // (d) reach:redirect and reach:submitted are ignored: no navigation, no request.
+    const before = seen.length;
+    await send(frame, { type: "reach:redirect", payload: { url: pathToFileURL(join(DIR, "privacy.html")).href } });
+    await send(frame, { type: "reach:redirect", payload: { url: "https://example.com/thanks" } });
+    await send(frame, { type: "reach:submitted", payload: {} });
+    await page.waitForTimeout(500);
+    if (page.url() !== home || navigations.length) problems.push("a reach:redirect navigated the page to " + (navigations[0] || page.url()));
+    const after = seen.slice(before);
+    if (after.length) problems.push("reach:redirect or reach:submitted caused requests: " + after.map((r) => r.url).join(", "));
+    if (page.url() === home && !navigations.length && !after.length) done.push("(d) reach:redirect and reach:submitted did nothing");
+    if (page.url() !== home || navigations.length) throw new Error("the page left " + home + ", so the origin case could not run");
+
+    // The same frame, moved off the Reach origin: right source, wrong origin.
+    await el.evaluate((f) => { f.src = "about:blank"; });
+    await until(() => frame.url() === "about:blank", 3000);
+    const blankOrigin = await frame.evaluate(() => location.origin).catch(() => REACH_ORIGIN);
+    if (frame.url() !== "about:blank" || blankOrigin === REACH_ORIGIN) problems.push("the frame could not be moved off the Reach origin, so the origin case proved nothing");
+    else {
+      await send(frame, { type: "reach:resize", payload: { height: 900 } });
+      await settle();
+      const c3 = await height();
+      if (c3 !== 700) problems.push(`a reach:resize from the frame at origin ${blankOrigin} changed the height to ${c3}px`);
+      else done.push(`ignored from the frame itself once at origin ${blankOrigin}`);
+    }
+  } catch (e) {
+    problems.push("the message cases stopped: " + String(e.message || e).split("\n")[0]);
+  }
+
+  // (e) Nothing stored, at load or after all of the above.
+  const atEnd = await storage();
+  const empty = (s) => !s.error && !s.local && !s.session && !s.idb.length && !s.caches.length;
+  for (const [when, s] of [["at load", atLoad], ["after the messages", atEnd]]) {
+    if (s.error) problems.push(`storage could not be read ${when}: ${s.error}`);
+    else if (!empty(s)) problems.push(`storage is not empty ${when}: ${s.local} in localStorage, ${s.session} in sessionStorage, IndexedDB ${JSON.stringify(s.idb)}, CacheStorage ${JSON.stringify(s.caches)}`);
+  }
+  if (empty(atLoad) && empty(atEnd)) done.push("(e) localStorage, sessionStorage, IndexedDB and CacheStorage empty");
+
+  // Only the Reach form document, and the test's own decoy of it, may leave the page.
+  for (const r of seen) {
+    if ((r.url === REACH_FORM || r.url === REACH_DECOY) && r.type === "document") continue;
+    problems.push("request to " + describe(r.url));
+  }
+  for (const e of errors) problems.push(e);
+  await context.close();
+
+  // (f) JavaScript off: the frame still stands at its min-height, with the fallback link.
+  const off = await newContext({ viewport: { width: 390, height: 844 }, colorScheme: "light", javaScriptEnabled: false });
+  const plain = await off.newPage();
+  const offSeen = [];
+  plain.on("request", (r) => { if (!LOCAL.test(r.url())) offSeen.push(r.url()); });
+  plain.setDefaultTimeout(8000);
+  await plain.goto(home, { waitUntil: "load" });
+  const plainFrame = plain.locator("iframe").first();
+  if (!(await plainFrame.count())) problems.push("with JS off there is no frame");
+  else try {
+    await plainFrame.scrollIntoViewIfNeeded();
+    const loaded = await until(() => reachFrameOf(plain), 4000);
+    const box = await plainFrame.boundingBox();
+    const offMin = await plainFrame.evaluate((f) => parseFloat(getComputedStyle(f).minHeight) || 0);
+    if (!loaded) problems.push("with JS off the frame never loaded the Reach form URL");
+    if (!box || Math.abs(box.height - offMin) > 0.5) problems.push(`with JS off the frame is ${box ? box.height : 0}px tall, not its min-height ${offMin}px`);
+    const fallback = plain.locator(`a[href="${REACH_FORM}"]`);
+    const text = (await fallback.count()) ? ((await fallback.first().textContent()) || "").trim() : "";
+    if (!text || !(await fallback.first().isVisible())) problems.push("with JS off there is no visible fallback link to the Reach form");
+    if (loaded && box && Math.abs(box.height - offMin) <= 0.5 && text) done.push(`(f) with JS off the frame stands at ${offMin}px and the fallback link "${text}" is there`);
+    await plainFrame.evaluate((f) => (f.closest("section") || f).scrollIntoView({ block: "start", behavior: "instant" }));
+    await plain.screenshot({ path: join(SHOTS, `${basename(REACH_HOME, ".html")}-390x844-light-no-js-reach-frame.png`) });
+  } catch (e) {
+    problems.push("the JS off case stopped: " + String(e.message || e).split("\n")[0]);
+  }
+  for (const u of offSeen) if (u !== REACH_FORM) problems.push("with JS off, request to " + describe(u));
+  await off.close();
+  return { problems, done };
 }
 
 // Dashes: source, text and every attribute value.
@@ -517,7 +759,8 @@ async function standIn(file) {
 }
 
 record("requests", foreignRequests.length ? "FAIL" : "PASS",
-  foreignRequests.length ? [...new Set(foreignRequests)].slice(0, 6).join("; ") : "every request stayed on file: or data:");
+  foreignRequests.length ? [...new Set(foreignRequests)].slice(0, 6).join("; ")
+    : `every request stayed on file: or data:, except ${framedRequests.length} framed document request(s) for ${REACH_FORM}, each answered by the local stand-in`);
 
 {
   const bad = htmlFiles.filter((f) => perPage[f].h1 !== 1).map((f) => f + " has " + perPage[f].h1);
@@ -526,7 +769,7 @@ record("requests", foreignRequests.length ? "FAIL" : "PASS",
 
 {
   const bad = htmlFiles.flatMap((f) => perPage[f].labels.map((l) => f + ": " + l));
-  record("labels", bad.length ? "FAIL" : "PASS", bad.length ? bad.join("; ") : "every control, link and button has a name");
+  record("labels", bad.length ? "FAIL" : "PASS", bad.length ? bad.join("; ") : "every control, frame, link and button has a name");
 }
 
 {
@@ -561,13 +804,6 @@ record("console", consoleProblems.length ? "FAIL" : "PASS",
   record("links", bad.length ? "FAIL" : "PASS", bad.length ? bad.join("; ") : "every relative link and fragment resolves");
 }
 
-{
-  const bad = htmlFiles.flatMap((f) => perPage[f].form.map((l) => f + ": " + l));
-  const formPages = htmlFiles.filter((f) => /<form\b/i.test(sources[f]));
-  record("form honesty", bad.length ? "FAIL" : "PASS",
-    bad.length ? bad.join("; ") : `${formPages.join(", ")}: flags a bad address, claims success only on a 2xx (none while the endpoint is empty), explains itself with JS off`);
-}
-
 // House punctuation in visible text, content attributes and script strings.
 {
   const hits = [];
@@ -582,79 +818,76 @@ record("console", consoleProblems.length ? "FAIL" : "PASS",
     hits.length ? [...new Set(hits)].slice(0, 6).join("; ") : "no exclamation marks, curly quotes or ellipses");
 }
 
-{
-  const bad = htmlFiles.flatMap((f) => perPage[f].regions.map((l) => f + ": " + l));
-  const formPages = htmlFiles.filter((f) => /<form\b/i.test(sources[f]));
-  record("live regions", bad.length ? "FAIL" : "PASS",
-    bad.length ? bad.join("; ") : `${formPages.join(", ")}: status region and field error are in the page and the accessibility tree from load`);
-}
-
-{
-  const bad = htmlFiles.flatMap((f) => perPage[f].harness.map((l) => f + ": " + l));
-  const formPages = htmlFiles.filter((f) => /<form\b/i.test(sources[f]));
-  record("form answers", bad.length ? "FAIL" : "PASS",
-    bad.length ? bad.join("; ") : `${formPages.join(", ")} against a second-origin stand-in: 200 received; 503 and an error body not added; no CORS, a redirect and a timeout not confirmed`);
-}
-
-// Content-Security-Policy: present, pinned to the inline scripts as they are now, and
-// letting the form reach its endpoint and nothing else.
+// Content-Security-Policy: present, pinned to the inline scripts as they are now, framing
+// only Reach and only where the frame is, and letting the page connect nowhere.
 {
   const bad = [];
   for (const file of htmlFiles) {
     const src = sources[file];
     const csp = cspOf(src);
     if (!csp) { bad.push(file + ": no Content-Security-Policy meta"); continue; }
-    if (!(csp["default-src"] || []).includes("'none'")) bad.push(file + ": default-src is not 'none'");
-    const scripts = inlineScripts(src);
+    if (!sameSet(csp["default-src"] || [], ["'none'"])) bad.push(file + ": default-src is not 'none'");
+    if (/<script\b[^>]*\bsrc\s*=/i.test(src)) bad.push(file + ": loads a script file");
+    const hashes = inlineScripts(src).map(sha256);
     const allowed = csp["script-src"] || [];
-    if (!scripts.length && !allowed.includes("'none'")) bad.push(file + ": no inline script, so script-src should be 'none'");
-    for (const body of scripts) {
-      const h = sha256(body);
+    if (!hashes.length && !sameSet(allowed, ["'none'"])) bad.push(file + ": no inline script, so script-src should be 'none'");
+    for (const h of hashes) {
       if (!allowed.includes(h)) bad.push(file + ": script-src does not carry the inline script's hash, which is now " + h);
     }
-    const m = ENDPOINT_RE.exec(src);
-    const connect = csp["connect-src"] || [];
-    if (m && m[2]) {
-      let origin = "";
-      try { origin = new URL(m[2]).origin; } catch (e) { bad.push(file + ": SIGNUP_ENDPOINT is not a URL"); }
-      if (origin && !connect.includes(origin)) bad.push(file + ": connect-src must name " + origin);
-    } else if (!connect.includes("'none'")) bad.push(file + ": connect-src should be 'none' while nothing is sent");
+    if (hashes.length && !sameSet(allowed, [...new Set(hashes)])) bad.push(file + ": script-src allows more than the inline script's hash: " + allowed.join(" "));
+    if (!sameSet(csp["connect-src"] || [], ["'none'"])) bad.push(file + ": connect-src should be 'none', the page sends nothing");
+    const frameSrc = csp["frame-src"];
+    if (hasFrame(src)) {
+      if (!frameSrc || !sameSet(frameSrc, [REACH_ORIGIN])) bad.push(file + ": frame-src must be exactly " + REACH_ORIGIN + ", not " + (frameSrc ? frameSrc.join(" ") : "missing"));
+    } else if (frameSrc && !sameSet(frameSrc, ["'none'"])) bad.push(file + ": has no frame, so frame-src must be 'none' or absent, not " + frameSrc.join(" "));
+    if (csp["child-src"] && !sameSet(csp["child-src"], ["'none'"])) bad.push(file + ": child-src widens framing: " + csp["child-src"].join(" "));
+    for (const d of ["form-action", "base-uri"]) if (!sameSet(csp[d] || [], ["'none'"])) bad.push(file + ": " + d + " is not 'none'");
   }
   record("csp", bad.length ? "FAIL" : "PASS",
-    bad.length ? bad.join("; ") : "each page has a policy; script hashes and connect-src match the source");
+    bad.length ? bad.join("; ") : `each page has a policy; script-src is the inline hash or 'none'; frame-src is ${REACH_ORIGIN} on ${REACH_HOME} only; connect-src 'none'`);
 }
 
-// Passages marked data-unconfirmed wait on a ruling from Tee. Allowed while signup is closed.
 {
-  const endpointSet = htmlFiles.some((f) => { const m = ENDPOINT_RE.exec(sources[f]); return m && m[2]; });
+  record("reach frame", reach.problems.length ? "FAIL" : "PASS",
+    reach.problems.length ? reach.problems.join("; ") : `${REACH_HOME}, frame routed to a local stand-in: ` + reach.done.join("; ") + "; the frame's own background is white in light and dark");
+}
+
+record("phone fold", fold.problems.length ? "FAIL" : "PASS",
+  fold.problems.length ? fold.problems.join("; ") : fold.done.join("; ") + ", against a stand-in sized from the Reach template with its heading and paragraph");
+
+// The page's own scripts name no browser store. This is read from the source because
+// Chromium drops cookie writes over file:// silently, so no run here could see one.
+{
+  const hits = [];
+  for (const file of htmlFiles) {
+    const src = sources[file];
+    const scriptStart = [...src.matchAll(/<script>/g)].map((m) => m.index + m[0].length);
+    inlineScripts(src).forEach((body, i) => {
+      for (const m of body.matchAll(STORAGE_API)) hits.push(`${file}:${lineOf(src, scriptStart[i] + m.index)} "${m[0]}"`);
+    });
+  }
+  record("storage apis", hits.length ? "FAIL" : "PASS",
+    hits.length ? hits.join("; ") : "no inline script names document.cookie, cookieStore, indexedDB, localStorage, sessionStorage, caches or serviceWorker");
+}
+
+// Hostinger's own embed script is ruled out. Any trace of it in a page fails the run.
+{
+  const hits = [];
+  for (const file of htmlFiles) {
+    for (const m of sources[file].matchAll(REACH_SCRIPT)) hits.push(`${file}:${lineOf(sources[file], m.index)} "${m[0]}"`);
+  }
+  record("no reach script", hits.length ? "FAIL" : "PASS",
+    hits.length ? hits.join("; ") : "no page references embed.js, cdn-reach.hostinger.com or data-reach-form");
+}
+
+// Passages marked data-unconfirmed wait on a ruling from Tee. They block deploy, not the build.
+{
   const marked = htmlFiles.flatMap((f) => collected[f].unconfirmed.map((t) => `${f}: "${t}"`));
   if (!marked.length) record("unconfirmed", "PASS", "no passage is marked data-unconfirmed");
-  else record("unconfirmed", endpointSet ? "FAIL" : "WARN",
-    (endpointSet ? "SIGNUP_ENDPOINT is set while these still wait on Tee: " : "DEPLOY BLOCKER: these wait on Tee's ruling: ") + marked.join("; "));
+  else record("unconfirmed", "WARN", "DEPLOY BLOCKER: these wait on Tee's ruling: " + marked.join("; "));
 }
 
-// The endpoint constant. Missing is a failure; empty is a deploy blocker, not a build failure.
-{
-  const formPages = htmlFiles.filter((f) => /<form\b/i.test(sources[f]));
-  const missing = [];
-  const empty = [];
-  const insecure = [];
-  for (const f of formPages) {
-    const m = ENDPOINT_RE.exec(sources[f]);
-    if (!m) missing.push(f);
-    else if (m[2] === "") empty.push(f);
-    else if (!/^https:\/\//.test(m[2])) insecure.push(f + " (" + m[2] + ")");
-  }
-  // Once the endpoint is set, any page still saying signup is not open is stale.
-  const stale = empty.length ? [] : htmlFiles.filter((f) => collected[f].texts.some((t) => /not open yet/i.test(t)));
-  if (missing.length) record("signup endpoint", "FAIL", "no const SIGNUP_ENDPOINT in " + missing.join(", "));
-  else if (insecure.length) record("signup endpoint", "FAIL", "SIGNUP_ENDPOINT is not https in " + insecure.join(", "));
-  else if (empty.length) record("signup endpoint", "WARN", "DEPLOY BLOCKER: SIGNUP_ENDPOINT is empty in " + empty.join(", "));
-  else if (stale.length) record("signup endpoint", "FAIL", "SIGNUP_ENDPOINT is set but these pages still say signup is not open yet: " + stale.join(", "));
-  else record("signup endpoint", "PASS", "SIGNUP_ENDPOINT is set to an https URL");
-}
-
-record("screenshots", "INFO", `390x844 and 1280x800, light and dark, for ${htmlFiles.join(", ")} in ${SHOTS}`);
+record("screenshots", "INFO", `390x844 and 1280x800, light and dark, for ${htmlFiles.join(", ")}, plus the framed section at 390x844 light, dark and with JS off, and the phone fold at 393x659 after the Cc tap, in ${SHOTS}. The Reach frame in them shows the local stand-in page, not the real Hostinger form, which cannot load here`);
 
 const width = Math.max(...results.map((r) => r.name.length));
 console.log(`Checked ${htmlFiles.length} page(s) in ${DIR} with ${executablePath}`);

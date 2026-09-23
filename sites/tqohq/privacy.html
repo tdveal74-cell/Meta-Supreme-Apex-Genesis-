@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src 'self'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src 'self'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; frame-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Privacy notice, The Quiet Operator</title>
 <meta name="description" content="What The Quiet Operator keeps when you join its email list, why it is kept, where it is stored, and how to leave the list.">
@@ -203,7 +203,7 @@ h1 {
   <div class="sheet">
     <div class="row field">
       <p class="field-label">To</p>
-      <p class="field-value">Anyone who joins the distribution list</p>
+      <p class="field-value">Anyone who visits the home page or joins the distribution list</p>
     </div>
     <div class="row field">
       <p class="field-label">From</p>
@@ -215,17 +215,26 @@ h1 {
     </div>
     <div class="row field">
       <p class="field-label">Note</p>
-      <p class="field-value">Signup is not open yet. Until it opens, the form on the home page sends nothing and stores nothing.</p>
+      <p class="field-value">The signup form on the home page is run by Hostinger Reach, inside a frame. What you type there goes to Hostinger Reach, not through this site.</p>
     </div>
   </div>
 
   <div class="sheet clauses">
+    <section class="row clause" aria-labelledby="form">
+      <h2 class="clause-title" id="form">The signup form</h2>
+      <div class="clause-body">
+        <p>The form on the home page is Hostinger Reach's own page, shown inside a frame. Hostinger Reach is the email service the list runs on.</p>
+        <p>What you type into the form goes straight to Hostinger Reach. It does not pass through this site, and this site keeps no copy.</p>
+        <p>This site's own pages load no Hostinger script and run no analytics and no counters. The form inside the frame is Hostinger Reach's own page. It runs Hostinger's own code, which this site cannot see into or change.</p>
+        <p>Your browser asks Hostinger Reach for the form when you open the home page, though some browsers wait until you scroll near it. This happens whether or not you join. Like any web server, Hostinger Reach then sees your IP address and browser details, and that the request came from this site.</p>
+        <p>The page inside the frame, and the images it loads from Hostinger, may set Hostinger cookies, such as Cloudflare's __cf_bm, and may keep data in your browser under Hostinger's own address. This can happen whether or not you join. Hostinger's own privacy policy covers those.</p>
+      </div>
+    </section>
     <section class="row clause" aria-labelledby="kept">
       <h2 class="clause-title" id="kept">What is kept</h2>
       <div class="clause-body">
-        <p>Your email address, and your first name if you give it. The form asks for nothing else.</p>
-        <p>When you send the form, the service that receives it also sees your IP address and browser details, which come with every web request.</p>
-        <p>The email provider may keep records of its own, such as the date you joined. Its own privacy policy covers those.</p>
+        <p>Hostinger Reach keeps your email address, your first name if you give it, and a tag, "form:TQO home page", that records which form you joined through. The form asks for nothing else.</p>
+        <p>Hostinger Reach may keep records of its own, such as the date you joined, and whatever its page inside the frame records. Its own privacy policy covers those.</p>
       </div>
     </section>
     <section class="row clause" aria-labelledby="why">
@@ -237,7 +246,7 @@ h1 {
     <section class="row clause" aria-labelledby="where">
       <h2 class="clause-title" id="where">Where it is stored</h2>
       <div class="clause-body">
-        <p>With Hostinger Reach, the email service the list runs on.</p>
+        <p>With Hostinger Reach, the email service the list runs on. Nothing from the form is stored on this site.</p>
       </div>
     </section>
     <section class="row clause" aria-labelledby="leave">
@@ -253,7 +262,7 @@ h1 {
       </div>
     </section>
     <div class="row">
-      <p class="dated span">Drafted on 23 September 2026. It applies from the day signup opens.</p>
+      <p class="dated span">Drafted on 23 September 2026. It applies from the day the home page goes live.</p>
     </div>
   </div>
 </main>

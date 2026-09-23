@@ -30,6 +30,7 @@ Visitors come straight from a video, often mid-scroll on a phone. They are wary 
 
 ## Capabilities and Constraints
 
+- (2026-09-23) Tee ruled that the signup form is the Hostinger Reach form "TQO home page", framed on the page without Hostinger's script, so this page's own code sends no beacons and uses no browser storage. This supersedes the native form, `SIGNUP_ENDPOINT` and the endpoint deploy blocker described below. It also supersedes the Stack line: this page's own code now makes one third-party request, the frame, and Chromium makes it as soon as the home page opens. The framed Reach page is Hostinger's and makes its own requests, at least to cdn-reach.hostinger.com for its badge image, which sets a Hostinger cookie. It may also use cookies and storage of its own under its own origin. Signups go straight to Reach, tagged "form:TQO home page".
 - One primary call to action, the email form. At most one soft rider.
 - The form takes email (required) and first name (optional). It shows one consent line and links to privacy.html. The endpoint is read from `SIGNUP_ENDPOINT` in the inline script, which is empty today. While it is empty, submitting says signup is not open yet and stores nothing. With an endpoint set, the page reports success only on a 2xx answer.
 - (open, inferred) What the list sends is not on record. The page proposes an email each time a new episode is published, and marks that offer `data-unconfirmed`. Tee must confirm it before deploy.

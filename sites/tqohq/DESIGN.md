@@ -138,6 +138,8 @@ components:
 
 Recorded from the built pages, `index.html` and `privacy.html`, after the build. Where this file and the pages disagree, the pages win.
 
+**Note, 2026-09-23.** The native signup form was replaced by Hostinger Reach's own form in a frame. The Inputs and Status line sections below, and the button's second use as the submit, therefore describe what was removed. The frame sits in the value column, full width up to 520px, with no border, a white background of its own (`paper`, `#ffffff`, in both schemes) and a 560px min-height that gives way to the height Reach reports. Its look is set inside Reach, not by this system, so in dark mode it shows as a white panel. One line above it, at label size in `ink-2`, names Reach and carries the fallback link. The consent line and the privacy link sit under it, at the same size. The design detector cannot see into the frame: run on the Reach template as read, it names Reach's own font stack, colors, 8px radius and 14px labels as outside this system.
+
 ## Overview
 
 Each page is an interoffice memo addressed to the visitor: a letterhead, To, From, Re and Note fields, then the body. The home page adds a Cc row, an attachment and a distribution list. Everything is typed except one mark: a blue ballpoint tick, the only thing drawn by hand, meaning a person checked this. The register is calm and exact. Emphasis comes from size and position, never from color or ornament.
