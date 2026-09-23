@@ -16,31 +16,31 @@ and read the last line.
 **Stage** (the test address only):
 
 ```
-f=$(mktemp) && if curl -fsSL -o "$f" https://raw.githubusercontent.com/tdveal74-cell/Meta-Supreme-Apex-Genesis-/SCRIPT_COMMIT/sites/tqohq/deploy/install-on-vps.sh && echo "SCRIPT_SHA256  $f" | sha256sum -c --quiet >/dev/null 2>&1; then bash "$f" stage; else echo "RESULT: NOT DONE, nothing on the box was changed, because the installer could not be downloaded from GitHub, or it did not match its pinned fingerprint."; fi; rm -f "$f"
+f=$(mktemp) && if curl -fsSL -o "$f" https://raw.githubusercontent.com/tdveal74-cell/Meta-Supreme-Apex-Genesis-/6aa73757e580c79cca4c381055af92e7ccea6cf3/sites/tqohq/deploy/install-on-vps.sh && echo "6dcfc139adf776db8c47b7769973304df7d44877850b89c03f282dd40c97ecb4  $f" | sha256sum -c --quiet >/dev/null 2>&1; then bash "$f" stage; else echo "RESULT: NOT DONE, nothing on the box was changed, because the installer could not be downloaded from GitHub, or it did not match its pinned fingerprint."; fi; rm -f "$f"
 ```
 
 **Live** (only after the DNS for tqohq.online and www.tqohq.online points at the VPS):
 
 ```
-f=$(mktemp) && if curl -fsSL -o "$f" https://raw.githubusercontent.com/tdveal74-cell/Meta-Supreme-Apex-Genesis-/SCRIPT_COMMIT/sites/tqohq/deploy/install-on-vps.sh && echo "SCRIPT_SHA256  $f" | sha256sum -c --quiet >/dev/null 2>&1; then bash "$f" live; else echo "RESULT: NOT DONE, nothing on the box was changed, because the installer could not be downloaded from GitHub, or it did not match its pinned fingerprint."; fi; rm -f "$f"
+f=$(mktemp) && if curl -fsSL -o "$f" https://raw.githubusercontent.com/tdveal74-cell/Meta-Supreme-Apex-Genesis-/6aa73757e580c79cca4c381055af92e7ccea6cf3/sites/tqohq/deploy/install-on-vps.sh && echo "6dcfc139adf776db8c47b7769973304df7d44877850b89c03f282dd40c97ecb4  $f" | sha256sum -c --quiet >/dev/null 2>&1; then bash "$f" live; else echo "RESULT: NOT DONE, nothing on the box was changed, because the installer could not be downloaded from GitHub, or it did not match its pinned fingerprint."; fi; rm -f "$f"
 ```
 
 **Rollback** (take it all back out):
 
 ```
-f=$(mktemp) && if curl -fsSL -o "$f" https://raw.githubusercontent.com/tdveal74-cell/Meta-Supreme-Apex-Genesis-/SCRIPT_COMMIT/sites/tqohq/deploy/install-on-vps.sh && echo "SCRIPT_SHA256  $f" | sha256sum -c --quiet >/dev/null 2>&1; then bash "$f" rollback; else echo "RESULT: NOT DONE, nothing on the box was changed, because the installer could not be downloaded from GitHub, or it did not match its pinned fingerprint."; fi; rm -f "$f"
+f=$(mktemp) && if curl -fsSL -o "$f" https://raw.githubusercontent.com/tdveal74-cell/Meta-Supreme-Apex-Genesis-/6aa73757e580c79cca4c381055af92e7ccea6cf3/sites/tqohq/deploy/install-on-vps.sh && echo "6dcfc139adf776db8c47b7769973304df7d44877850b89c03f282dd40c97ecb4  $f" | sha256sum -c --quiet >/dev/null 2>&1; then bash "$f" rollback; else echo "RESULT: NOT DONE, nothing on the box was changed, because the installer could not be downloaded from GitHub, or it did not match its pinned fingerprint."; fi; rm -f "$f"
 ```
 
 **Status** (changes nothing, just looks):
 
 ```
-f=$(mktemp) && if curl -fsSL -o "$f" https://raw.githubusercontent.com/tdveal74-cell/Meta-Supreme-Apex-Genesis-/SCRIPT_COMMIT/sites/tqohq/deploy/install-on-vps.sh && echo "SCRIPT_SHA256  $f" | sha256sum -c --quiet >/dev/null 2>&1; then bash "$f" status; else echo "RESULT: NOT DONE, nothing on the box was changed, because the installer could not be downloaded from GitHub, or it did not match its pinned fingerprint."; fi; rm -f "$f"
+f=$(mktemp) && if curl -fsSL -o "$f" https://raw.githubusercontent.com/tdveal74-cell/Meta-Supreme-Apex-Genesis-/6aa73757e580c79cca4c381055af92e7ccea6cf3/sites/tqohq/deploy/install-on-vps.sh && echo "6dcfc139adf776db8c47b7769973304df7d44877850b89c03f282dd40c97ecb4  $f" | sha256sum -c --quiet >/dev/null 2>&1; then bash "$f" status; else echo "RESULT: NOT DONE, nothing on the box was changed, because the installer could not be downloaded from GitHub, or it did not match its pinned fingerprint."; fi; rm -f "$f"
 ```
 
-Before the lines are handed to you, `SCRIPT_COMMIT` is replaced with the
-commit that holds this script, and `SCRIPT_SHA256` with the sha256 of the
-script at that commit. A line that still says either will refuse and change
-nothing. The fingerprint check means that whatever GitHub answers, an error
+The lines are pinned to commit `6aa73757e580c79cca4c381055af92e7ccea6cf3`, the commit that holds the
+reviewed script, and to that script's sha256, `6dcfc139adf776db8c47b7769973304df7d44877850b89c03f282dd40c97ecb4`,
+filled in on 2026-09-23. A line whose commit or fingerprint does not match
+refuses and changes nothing. The fingerprint check means that whatever GitHub answers, an error
 page, an empty file or a different script, is never run: only the exact
 script that was reviewed.
 
