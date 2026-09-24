@@ -111,6 +111,23 @@ paths it drives. Commits `d839092` and `e5ef3a4` on branch
 `claude/rakazo-n8n-bot-gating-g3fpuv` of rakazo-deploy. The built installer has not been delivered to the VPS, and
 it does not need to be for this change: it alters one printed line.
 
+## Rulings after filing
+
+Asked on a card at about 11:15Z.
+
+- Gate proof: Tee messages Pipeline Operator himself in the Rakazo app, asking
+  it to archive `6kwEVgUOsErRhvxE`, and denies the card. A request from him is
+  what the bot said it needs.
+- House rules into standing instructions: yes. Blocked as asked. `update_bot`
+  in rakazo-mcp passes the whole `instructions` field to Rakazo's
+  `bots/update` (`mcp/server.mjs:556`), and no tool reads a bot's current
+  instructions: `botSummary` (`mcp/server.mjs:389`) returns id, name, title and
+  model only. Writing the rules through it would replace each bot's existing
+  instructions with no copy to restore from, so nothing was written. Two ways
+  through: Tee appends the three rules in the app's instruction editor, or
+  rakazo-mcp gains a read of a bot's instructions first and the append runs
+  after that read.
+
 ## Open
 
 1. Prove the gate. Three routes, Tee's call: send Pipeline Operator the
@@ -122,8 +139,8 @@ it does not need to be for this change: it alters one printed line.
 2. Find out why `n8n:archive_workflow` came back "unknown or not authorized".
    If Rakazo hides gated tools from a bot rather than pausing them, bots cannot
    request a write at all, and the approval path never fires.
-3. Decide whether the house rules belong in each bot's standing instructions
-   through `update_bot`, where they would hold for every run.
+3. Get the house rules into both bots' standing instructions, ruled yes,
+   blocked on `update_bot` replacing the field with no read of it first.
 4. `prepare_workflow_pin_data` is ungated. Read what it does before leaving
    it that way.
 
@@ -135,6 +152,6 @@ ARTIFACT: docs/devon/SYS_OPS_n8n-bot-access_v1_2026-09-24-1102.md
 DATE: 2026-09-24
 DECISIONS: Tee asked for 17 n8n write tools gated in Rakazo, n8n given to Pipeline Operator and DEVON Chief of Staff, one read and one denied write as proof, three house rules sent to both bots, and the --plug-n8n rotate warning in rakazo-deploy corrected. The write test targeted inactive workflow 6kwEVgUOsErRhvxE so a mistaken approval would stop nothing scheduled.
 FINDINGS: list_approval_rules reads back 17 require_approval rules, one per named tool. list_mcp_servers shows n8n on exactly the two bots at 39 tools each, EditForge kept. Pipeline Operator's search_workflows answer matched this session's own read id for id, count 72. No approval card appeared: the first archive attempt, named n8n:archive_workflow, returned "Tool is unknown or not authorized for this bot" and the workflow read back unchanged; the bot then refused a second attempt on its own safety rules and was not pressed. Both bots confirmed the house rules in thread. rakazo-deploy d839092 and e5ef3a4 reword the prompt; unit 36 passed, installer paths 72 passed. The first archive attempt's tool name and error rest on the bot's own report.
-OPEN: The approval gate is configured and unproven, and the house rules told both bots it is in force; Tee picks the route to exercise it. Why a gated n8n write came back "unknown or not authorized" rather than pausing. Whether the house rules should go into each bot's standing instructions. prepare_workflow_pin_data is ungated and unread. The rakazo-deploy branch needs a PR and Tee's merge.
+OPEN: The approval gate is configured and unproven, and the house rules told both bots it is in force; Tee picks the route to exercise it. Why a gated n8n write came back "unknown or not authorized" rather than pausing. House rules ruled into standing instructions, blocked because update_bot replaces the whole field and nothing reads it first. Tee proves the gate himself from the Rakazo app. prepare_workflow_pin_data is ungated and unread. The rakazo-deploy branch needs a PR and Tee's merge.
 STATUS: Access granted and read back. Write gate unproven.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
