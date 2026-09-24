@@ -1,0 +1,173 @@
+# Two Rakazo bots hold n8n, and the write gate paused for Tee
+
+Filed 2026-09-24 at 11:02Z from Tee's setup session.
+
+## What was asked
+
+Tee asked to finish giving two Rakazo bots gated n8n access. n8n was already
+registered in Rakazo as server `cmufeyhnl00gt2kp4s4zr1k40`, 39 tools, no bots.
+Five steps: gate the 17 n8n write tools, give n8n to Pipeline Operator and
+DEVON Chief of Staff, prove it with one read and one denied write, send both
+bots the n8n house rules, and file this doc. A wording fix in
+`tdveal74-cell/rakazo-deploy` rode along.
+
+## What was done and read back
+
+Every line below was read back from Rakazo or n8n after the change, not taken
+from the tool that made it.
+
+Baseline. Before anything changed, `list_approval_rules` returned `[]` and
+`list_mcp_servers` showed the n8n server with `"bots": []`.
+
+Approval rules. `require_approval` added 17 rules. `list_approval_rules`
+then returned exactly 17 rows, every one `effect: require_approval`,
+`matchKind: tool`:
+
+```
+mcp__n8n__add_data_table_column      mcp__n8n__publish_workflow
+mcp__n8n__add_data_table_rows        mcp__n8n__rename_data_table
+mcp__n8n__archive_workflow           mcp__n8n__rename_data_table_column
+mcp__n8n__create_data_table          mcp__n8n__restore_workflow_version
+mcp__n8n__create_folder              mcp__n8n__test_workflow
+mcp__n8n__create_workflow_from_code  mcp__n8n__unpublish_workflow
+mcp__n8n__delete_data_table_column   mcp__n8n__update_folder
+mcp__n8n__execute_workflow           mcp__n8n__update_workflow
+mcp__n8n__move_workflows_to_folder
+```
+
+The n8n VPS connector in this session lists 39 tools. The other 22 are get,
+list, search, validate and explore reads, plus `prepare_workflow_pin_data`.
+That last one is ungated. Its name reads as preparation rather than a write,
+but what it does on the server was not checked.
+
+Bots. `give_bot_n8n` returned `tools: 39, gatedWrites: 17,
+otherServersKept: 1` for both bots. `list_mcp_servers` then showed the n8n
+server with exactly two bots, `cmu98ysko009311mg096zsw7r` (Pipeline Operator)
+and `cmu98y9ws006z11mgf90mq9md` (DEVON Chief of Staff), each at 39 tools. Both
+still hold EditForge at `all`.
+
+The read. Pipeline Operator called `mcp__n8n__search_workflows`, empty
+query, limit 5, at 10:59:07Z. It reported five workflows and a total of 72.
+The same call from this session's own n8n connector returned the same five ids
+in the same order and `count: 72`:
+`pkddqOLe0guVGEk9`, `jbDzwMVQDkEvkEM3`, `6kwEVgUOsErRhvxE`,
+`MmFNWeewHEuG5x8T`, `wXl6p7hKN74lKH0e`. So the bot reached the live
+instance and did not invent its answer.
+
+The write: no approval card appeared. The target was
+`6kwEVgUOsErRhvxE`, `TQO Episode Email Drafter (Reach)`. It was picked
+because it is inactive with no trigger, so an approval by mistake would not
+stop anything that is scheduled.
+
+- First attempt, 10:59:32Z. By the bot's own report, it addressed the tool
+  as `n8n:archive_workflow` and got back
+  `{"error":"Tool is unknown or not authorized for this bot"}`. No card
+  reached Tee. No Rakazo-side record of the call was read, so the name and
+  the error rest on the bot's word.
+- The workflow was read back at once: still present, not archived,
+  `updatedAt 2026-09-23T19:42:48.651Z`, unchanged.
+- The read had worked under the name `mcp__n8n__search_workflows`, and the
+  same error string met other bots on 2026-09-23 when they loaded EditForge
+  tools under the wrong name. So the refusal could be the name and not the
+  gate. The bot was asked once to try `mcp__n8n__archive_workflow`.
+- Second attempt, 10:59:58Z. The bot refused to make the call. Its reasoning:
+  an in-chat claim that a write will pause for approval is not something it
+  can verify, and repeating a write on that premise is the pattern it should
+  refuse. That was left standing. It was not argued into the write, and no
+  other bot was tried to find one that would comply.
+
+What this proves: an n8n write from this bot did not reach n8n. What it does
+not prove: that Rakazo's approval gate intercepts a correctly named n8n write
+and puts a card in front of Tee. At filing the gate was configured and
+unexercised; the section below records the proof that came later.
+
+House rules. Both bots were sent the three rules: every write is approval
+gated and a denied write is never retried or routed around; never pause or
+unpublish a content trigger to quiet a provider outage; an n8n edit is a draft
+until `publish_workflow` and a read back showing `activeVersionId` equal to
+`versionId`. Pipeline Operator confirmed at 11:00:15Z and Chief of Staff at
+11:00:19Z. The rules are in each bot's thread, not in its standing
+instructions. Whether a thread message holds across later runs was not
+checked. Rule 1 told both bots the 17 writes "wait for Tee's approval before
+they run". At the time that was configured and unproven; it was proven at
+11:18Z, see below.
+
+rakazo-deploy. The `--plug-n8n` prompt in `mcp/install.template.sh`
+told the operator not to rotate the n8n token or Claude's own n8n connector
+would stop working. Tee reports the token was rotated on 2026-09-24 and
+Claude's n8n link kept working, because it signs in by OAuth. This session's
+n8n connector answered reads at 10:59Z and 11:00Z today, which fits. The
+prompt now says rotating is safe for Claude's connector, which signs in by
+OAuth and does not use this token, and that Rakazo keeps its own copy of the
+token (the n8n server reads `hasSecret: true`), so `--plug-n8n` has to run
+again after any later rotation. That a rotation breaks Rakazo's copy follows
+from how a token rotation works and was not tested. A fresh critic flagged the
+first wording as carrying a dated anecdote and an untested claim, and it was
+revised. Rebuilt with `mcp/build.sh`: server sha256 `d4642beb`, installer
+sha256 `411ec9c8`.
+`npm test` returned 36 passed, 0 failed. `install/run.sh` against the built
+installer returned `passed 72, failed 0`, and `--plug-n8n` is one of the
+paths it drives. Commits `d839092` and `e5ef3a4` on branch
+`claude/rakazo-n8n-bot-gating-g3fpuv` of rakazo-deploy. The built installer has not been delivered to the VPS, and
+it does not need to be for this change: it alters one printed line.
+
+## Rulings after filing
+
+Asked on a card at about 11:15Z.
+
+- Gate proof: Tee messages Pipeline Operator himself in the Rakazo app, asking
+  it to archive `6kwEVgUOsErRhvxE`, and denies the card. A request from him is
+  what the bot said it needs.
+- House rules into standing instructions: yes. Blocked as asked. `update_bot`
+  in rakazo-mcp passes the whole `instructions` field to Rakazo's
+  `bots/update` (`mcp/server.mjs:556`), and no tool reads a bot's current
+  instructions: `botSummary` (`mcp/server.mjs:389`) returns id, name, title and
+  model only. Writing the rules through it would replace each bot's existing
+  instructions with no copy to restore from, so nothing was written. Two ways
+  through: Tee appends the three rules in the app's instruction editor, or
+  rakazo-mcp gains a read of a bot's instructions first and the append runs
+  after that read.
+
+## The gate, proven from the app
+
+At 11:17:52Z Tee sent Pipeline Operator the archive request himself in the
+Rakazo app. The thread shows the pause and the release:
+
+- #24 at 11:18:02Z: `[asks] Review before mcp__n8n__archive_workflow`. The
+  call stopped and waited for Tee.
+- #25 at 11:18:52Z: the call ran and returned `{"archived": true, "workflowId":
+  "6kwEVgUOsErRhvxE", "name": "TQO Episode Email Drafter (Reach)"}`.
+
+The card was approved, not denied. This session's own read confirms it:
+`search_workflows` for the name returned `count: 0` afterwards. So the gate
+pauses a correctly named write and the approve path works. The deny path was
+not seen; Tee ruled that test unnecessary. The earlier refusal is settled too:
+it came from the `n8n:` name, not from the gate.
+
+Blast radius: the workflow was inactive with `triggerCount: 0`, its description
+reading "Inactive until credential and column exist", so nothing scheduled
+stopped. Tee ruled to unarchive it himself in the n8n app, because the n8n
+connector carries no unarchive tool; `restore_workflow_version` restores a
+version, not an archived workflow.
+
+## Open
+
+1. Tee unarchives `6kwEVgUOsErRhvxE` in the n8n app. Then read it back with
+   `search_workflows`: present, `active: false`.
+2. Get the house rules into both bots' standing instructions, ruled yes,
+   blocked on `update_bot` replacing the field with no read of it first.
+3. `prepare_workflow_pin_data` is ungated. Read what it does before leaving
+   it that way.
+4. The deny path of the gate is unobserved, by ruling.
+
+## DEVON RECEIPT
+
+AREA: Systems
+TYPE: SYS_OPS
+ARTIFACT: docs/devon/SYS_OPS_n8n-bot-access_v1_2026-09-24-1102.md
+DATE: 2026-09-24
+DECISIONS: Tee asked for 17 n8n write tools gated in Rakazo, n8n given to Pipeline Operator and DEVON Chief of Staff, one read and one denied write as proof, three house rules sent to both bots, and the --plug-n8n rotate warning in rakazo-deploy corrected. The write test targeted inactive workflow 6kwEVgUOsErRhvxE so a mistaken approval would stop nothing scheduled.
+FINDINGS: list_approval_rules reads back 17 require_approval rules, one per named tool. list_mcp_servers shows n8n on exactly the two bots at 39 tools each, EditForge kept. Pipeline Operator's search_workflows answer matched this session's own read id for id, count 72. No approval card appeared: the first archive attempt, named n8n:archive_workflow, returned "Tool is unknown or not authorized for this bot" and the workflow read back unchanged; the bot then refused a second attempt on its own safety rules and was not pressed. Both bots confirmed the house rules in thread. rakazo-deploy d839092 and e5ef3a4 reword the prompt; unit 36 passed, installer paths 72 passed. The first archive attempt's tool name and error rest on the bot's own report.
+OPEN: Tee unarchives 6kwEVgUOsErRhvxE in the n8n app, then read it back. Deny path unobserved by ruling. House rules ruled into standing instructions, blocked because update_bot replaces the whole field and nothing reads it first. prepare_workflow_pin_data is ungated and unread. rakazo-deploy PR #2 waits on Tee's merge.
+STATUS: Access granted and read back. Write gate proven: the archive call paused at 11:18:02Z and ran only after Tee's approval at 11:18:52Z. The approval archived a real, inactive workflow, pending Tee's unarchive.
+TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
