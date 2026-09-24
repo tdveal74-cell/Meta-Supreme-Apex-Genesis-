@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# Fake curl for the install-on-vps.sh harness.
+#
+#   raw.githubusercontent.com  -> the harness's local file server (FAKE_RAW_URL),
+#                                 or the real URL when FAKE_RAW_MODE=real
+#   the public IPv4 services   -> FAKE_STATE/public-ip
+#   the DNS-over-HTTPS JSON API -> AAAA rows of FAKE_STATE/dns
+#   --resolve NAME:443|80:127.0.0.1 probes -> the local caddy on its high
+#                                 ports, verified against caddy's local CA
+#                                 unless -k was given
+#   anything else              -> refused and written to unexpected.log
+#
+#   FAKE_TLS_DOWN     names whose TLS handshake fails, as when Caddy has no
+#                     certificate for them yet (exit 35, like real curl)
+#   FAKE_DOH_DOWN=1   the DNS-over-HTTPS services do not answer
+set -uo pipefail
+
+: "${FAKE_STATE:?}" "${FAKE_HTTPS_PORT:?}" "${FAKE_HTTP_PORT:?}"
+REAL_CURL=/usr/bin/curl
+
+printf '%q ' "$@" >>"$FAKE_STATE/curl.log"
+printf '\n' >>"$FAKE_STATE/curl.log"
+
+unexpected() {
+	printf 'fake-curl: %s\n' "$*" >>"$FAKE_STATE/unexpected.log"
+	exit 6
+}
+
+orig=("$@")
+pass=()
+url=""
+insecure=0
+wfmt=""
+resolve=()
+noproxy=""
+proto=""
+while (($#)); do
+	case "$1" in
+	-k) insecure=1; shift ;;
+	--noproxy) noproxy="$2"; shift 2 ;;
+	--proto) proto="$2"; shift 2 ;;
+	-o | -w | -H | --max-time | --connect-timeout | --retry)
+		if [[ "$1" == -w ]]; then wfmt="$2"; fi
+		pass+=("$1" "$2")
+		shift 2
+		;;
+	--resolve) resolve+=("$2"); shift 2 ;;
+	--tlsv1.2) shift ;;
+	-4 | -s | -S | -sS | -f | -fsS | -fsSL | -L) pass+=("$1"); shift ;;
+	-*) unexpected "unknown option $1" ;;
+	*)
+		[[ -z "$url" ]] || unexpected "two urls: $url $1"
+		url="$1"
+		shift
+		;;
+	esac
+done
+[[ -n "$url" ]] || unexpected "no url"
+
+rest="${url#*://}"
+scheme="${url%%://*}"
+host="${rest%%[/?]*}"
+path="/${rest#*/}"
+[[ "$rest" == */* ]] || path="/"
+
+fail_like_curl() {
+	if [[ -n "$wfmt" ]]; then
+		out="${wfmt//%\{http_code\}/000}"
+		out="${out//%\{redirect_url\}/}"
+		printf '%s' "$out"
+	fi
+	exit "$1"
+}
+
+case "$host" in
+raw.githubusercontent.com)
+	((${#resolve[@]} == 0)) || unexpected "resolve on raw url"
+	[[ "$proto" == "=https" ]] || unexpected "raw download without --proto =https"
+	if [[ "${FAKE_RAW_MODE:-local}" == real ]]; then
+		exec "$REAL_CURL" "${orig[@]}"
+	fi
+	exec "$REAL_CURL" --noproxy '*' "${pass[@]}" "${FAKE_RAW_URL:?}${path}"
+	;;
+api.ipify.org | ipv4.icanhazip.com | checkip.amazonaws.com)
+	[[ -f "$FAKE_STATE/public-ip" ]] || exit 7
+	cat "$FAKE_STATE/public-ip"
+	exit 0
+	;;
+cloudflare-dns.com | dns.google)
+	[[ "${FAKE_DOH_DOWN:-}" != 1 ]] || exit 7
+	q="${url#*\?}"
+	name=""
+	type=""
+	IFS='&' read -r -a kv <<<"$q"
+	for p in "${kv[@]}"; do
+		case "$p" in
+		name=*) name="${p#name=}" ;;
+		type=*) type="${p#type=}" ;;
+		esac
+	done
+	[[ "$type" == AAAA ]] || unexpected "doh type $type"
+	answers=""
+	while read -r n t a; do
+		if [[ "$n" == "$name" && "$t" == AAAA ]]; then
+			answers+="${answers:+,}{\"name\":\"$name.\",\"type\":28,\"TTL\":300,\"data\":\"$a\"}"
+		fi
+	done <"$FAKE_STATE/dns"
+	printf '{"Status":0,"TC":false,"RD":true,"RA":true,"AD":false,"CD":false,"Question":[{"name":"%s.","type":28}]' "$name"
+	if [[ -n "$answers" ]]; then
+		printf ',"Answer":[%s]' "$answers"
+	fi
+	printf '}\n'
+	exit 0
+	;;
+esac
+
+# Everything else must be a probe of this box through --resolve to 127.0.0.1,
+# and must never go through a proxy.
+((${#resolve[@]} == 1)) || unexpected "no --resolve for $url"
+[[ "$noproxy" == "*" ]] || unexpected "probe without --noproxy '*': $url"
+IFS=: read -r rname rport raddr <<<"${resolve[0]}"
+[[ "$raddr" == 127.0.0.1 && "$rname" == "$host" ]] || unexpected "resolve ${resolve[0]} for $url"
+case "$scheme:$rport" in
+https:443) port="$FAKE_HTTPS_PORT" ;;
+http:80) port="$FAKE_HTTP_PORT" ;;
+*) unexpected "port $scheme:$rport" ;;
+esac
+for down in ${FAKE_TLS_DOWN:-}; do
+	if [[ "$scheme" == https && "$host" == "$down" ]]; then
+		fail_like_curl 35
+	fi
+done
+extra=()
+if [[ "$scheme" == https ]]; then
+	if ((insecure)); then
+		extra+=(-k)
+	else
+		extra+=(--cacert "$FAKE_STATE/caddy-data/caddy/pki/authorities/local/root.crt")
+	fi
+fi
+exec "$REAL_CURL" --noproxy '*' "${pass[@]}" "${extra[@]}" --resolve "$host:$port:127.0.0.1" "$scheme://$host:$port$path"

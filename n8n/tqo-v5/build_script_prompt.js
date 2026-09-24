@@ -2,7 +2,6 @@
 // the description end-line reads ctx.tagline, so brand evolution is a one-node
 // edit in the Show Context layer, never prompt surgery.
 const ctx = $('Show Context: Script').first().json;
-const LANDING_URL = "https://jobsecurityaudit.netlify.app/";
 
 const row = $json;
 const topic = ($json.Topic ?? $json.fields?.Topic ?? '').trim();
@@ -51,15 +50,16 @@ Voice: calm, precise, anti-hype, proof-driven, quietly confident. Never fear-mon
 
 THE HOOK IS EVERYTHING. The first 10-15 seconds decide whether this video is watched or skipped - treat the opening as most of the job. The hook must stop a distracted 45-year-old mid-scroll. Rules for the hook:
 - Open on the single most specific, concrete claim, number, or tension in the whole topic. Never a warm-up, never "in this video," never a dictionary definition.
-- Name a real, stakes-laden tension this viewer already feels, then promise exactly what they will walk away able to do.
+- Name a real, stakes-laden tension this viewer already feels, then state the learning objective below. Both land inside the first 30 seconds.
 - Calm is the weapon: everyone else does the loud version. A quiet, exact, slightly contrarian first line outperforms hype for this audience.
-- Openers that work when they fit the material (never forced): "Most people are doing this wrong"; "The truth about [topic] no one tells you"; "I was wrong about this"; "If I had to start over, I'd do this"; "Do this before it's too late." Deliver them in the calm register, not the loud one.
+- Openers that work when they fit the material (never forced): "Most people are doing this wrong"; "The truth about [topic] no one tells you"; "I was wrong about this"; "If I had to start over, I'd do this." Deliver them in the calm register, not the loud one. Never open on urgency or a countdown; the viewer is never rushed.
 
 THE BEAT STRUCTURE (hold it through the whole script):
 - HOOK (first 3 seconds of narration): stops the scroll with the specific claim.
-- VALUE (immediately after): deliver the promise. Say what they will be able to do.
+- LEARNING OBJECTIVE (immediately after, finished inside the first 30 seconds, about the first 70 spoken words): one sentence saying what they will be able to do by the end, such as "By the end of this episode, you will be able to ...". Return it word for word in learning_objective.
 - PROOF (the body): every claim carries a receipt. A number, a named tool, a documented before-and-after, a step the viewer can verify today.
-- CTA (the last 5 seconds): ONE quiet call. Either a question worth answering in the comments, or the free audit. Never a begging like-and-subscribe stack; the brand does not beg.
+- CHECKLIST (inside the body): 3 to 5 plain steps the viewer can repeat, spoken in order as step one, step two and so on. Return the same steps in checklist.
+- CLOSE (the last 5 seconds): ONE question for the comments, specific to this episode and answerable from the viewer's own work, and nothing after it. Never ask the viewer to like or subscribe and never point to an audit, a download or a link; the brand does not beg.
 
 Pick the ONE best-fit proven format for this topic and shape the whole script around it:
 - LISTICLE: "N things / N moves / N mistakes" - concrete, countable, skimmable. Best for tools, tactics, errors.
@@ -76,14 +76,17 @@ For the given Topic, produce:
 
 1. title - under 60 characters, containing the primary keyword, specific and intriguing without clickbait, in the calm brand voice.
 
-2. script - a long-form spoken narration of 1200-2000 words, target 1600. Hard floor 1200 words. Single narrator, natural spoken rhythm, no on-screen directions or headings. Structure for retention: the hook above in the first 10-15 seconds; then 8 to 12 distinct sections, each making one clear point backed by a concrete example, a number, a mini-story, or a proof point, with smooth spoken transitions that re-hook attention; at least one specific action the viewer can take today; and a calm, resonant close that lands the core idea, asks the one comment-worthy question, and points to the free audit. Depth, not padding.
+2. script - a long-form spoken narration of 1200-2000 words, target 1600. Hard floor 1200 words. Single narrator, natural spoken rhythm, no on-screen directions or headings. Structure for retention: the hook above in the first 10-15 seconds and the learning objective inside the first 30; then 8 to 12 distinct sections, each making one clear point backed by a concrete example, a number, a mini-story, or a proof point, with smooth spoken transitions that re-hook attention; the 3 to 5 step checklist, spoken inside one of those sections; at least one specific action the viewer can take today; and a calm, resonant close that lands the core idea and ends on the one comment-worthy question. Depth, not padding.
 
-3. description - 2 to 3 sentences on the video's value, leading with the primary keyword, then this exact line on its own:
-Free Job Security Audit - see how exposed your role really is: ${LANDING_URL}
+3. description - 2 to 3 sentences on the video's value, leading with the primary keyword. No link, no audit and no subscribe line. Leave the checklist out; the pipeline writes it into the description from the checklist field.
 
 4. broll - an array of 8 to 12 short visual search phrases (2-4 words each), one per major section of the script, IN ORDER. These are CUTAWAYS over a presenter, not the main visual. Terrance is on screen for the episode and these cover only the beats that need an illustration. Name the thing being illustrated: a concrete object, screen, document or place, never a person standing in for him. No generic office workers, no anonymous professionals at desks, no handshakes. If a beat needs no illustration, name a neutral object rather than a person.
 
-Return ONLY a valid JSON object, no markdown fences, no commentary, in exactly this shape: {"title": "...", "script": "...", "description": "...", "broll": ["...", "..."]}`;
+5. learning_objective - the learning objective sentence exactly as the script speaks it, character for character.
+
+6. checklist - an array of 3 to 5 steps, each a short plain sentence the viewer can repeat, in the order the script speaks them, with no number or bullet in front.
+
+Return ONLY a valid JSON object, no markdown fences, no commentary, in exactly this shape: {"title": "...", "script": "...", "description": "...", "broll": ["...", "..."], "learning_objective": "...", "checklist": ["...", "...", "..."]}`;
 }
 
 // DEVON grounding, ruled by Tee 15 Sep 2026 on an inline card: retrieval from

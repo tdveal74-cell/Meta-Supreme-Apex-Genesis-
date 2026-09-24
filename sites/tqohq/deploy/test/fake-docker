@@ -1,0 +1,214 @@
+#!/usr/bin/env bash
+# Fake docker for the install-on-vps.sh harness.
+#
+# Answers the three things the installer asks docker for: ps (with the
+# compose labels), inspect (the mount list) and exec into the edge. exec runs
+# the REAL caddy binary against the fake root's Caddyfile, with /srv/static
+# rewritten to the fake root's static folder, the way the container would
+# see its bind mounts. What comes back (adapt's JSON, the admin API's
+# /config/, Caddy's messages) is rewritten the other way, so the installer
+# sees /srv/static and /etc/caddy/Caddyfile as it would on the box.
+# Harness-only subcommands start and stop that caddy.
+#
+# The Caddyfile mount is modelled the way Docker does a single-file bind
+# mount: at start the "container" takes a hard link to the host file's inode
+# and reads only that from then on. A host file rewritten in place is seen at
+# once; a host file replaced by a new one (sed -i, mv, cp
+# --remove-destination) is not, and its inode number cannot be recycled
+# while the link holds the old one.
+#
+# Environment (set by run.sh):
+#   FAKE_ROOT, FAKE_STATE, FAKE_CADDY, FAKE_ADMIN_PORT
+#   FAKE_EDGE_COUNT      0, 1 (default) or 2 running edge containers
+#   FAKE_VALIDATE_FAIL   "always", or "with-block" (only once the file carries
+#                        the installer's BEGIN marker), or "silent" (always,
+#                        and with no output at all, as when docker exec itself
+#                        fails or the answer is lost)
+#   FAKE_BREAK_HOST      once the file carries the marker, this site is
+#                        renamed in what caddy loads, so it goes dark
+#   FAKE_502_HOST        once the file carries the marker, this site's
+#                        reverse_proxy is pointed at FAKE_DEAD_PORT, so it
+#                        still answers, with 502 instead of 200
+#   FAKE_WRONG_ROOT      once the file carries the marker, the tqohq root is
+#                        pointed at the meta site's folder, so the new
+#                        address answers 200 with the wrong page
+set -euo pipefail
+
+: "${FAKE_ROOT:?}" "${FAKE_STATE:?}" "${FAKE_CADDY:?}" "${FAKE_ADMIN_PORT:?}"
+
+EDGE_ID="4f1e0c2a9b7d"
+OTHER_ID="9a8b7c6d5e4f"
+HOST_CADDYFILE="$FAKE_ROOT/opt/editforge/app/Caddyfile"
+HOST_STATIC="$FAKE_ROOT/opt/devon/static"
+TRANSLATED="$FAKE_STATE/Caddyfile.translated"
+MOUNTED="$FAKE_STATE/mounted-Caddyfile"
+MARKER="# BEGIN tqohq managed by install-on-vps.sh"
+EXPECT_FORMAT='{{range .Mounts}}{{.Type}}{{"\t"}}{{.Source}}{{"\t"}}{{.Destination}}{{"\n"}}{{end}}'
+
+printf '%q ' "$@" >>"$FAKE_STATE/docker.log"
+printf '\n' >>"$FAKE_STATE/docker.log"
+
+die() {
+	printf 'fake-docker: %s\n' "$*" >&2
+	printf 'fake-docker: %s\n' "$*" >>"$FAKE_STATE/unexpected.log"
+	exit 125
+}
+
+has_marker() { grep -qx -F -- "$MARKER" "$MOUNTED"; }
+
+translate() {
+	sed "s#/srv/static#$HOST_STATIC#g" "$MOUNTED" >"$TRANSLATED.tmp"
+	if [[ -n "${FAKE_BREAK_HOST:-}" ]] && has_marker; then
+		sed -i "s#^${FAKE_BREAK_HOST//./\\.} {#broken-${FAKE_BREAK_HOST} {#" "$TRANSLATED.tmp"
+	fi
+	if [[ -n "${FAKE_502_HOST:-}" ]] && has_marker; then
+		awk -v h="${FAKE_502_HOST} {" -v d="${FAKE_DEAD_PORT:?}" \
+			'$0 == h { on = 1 } on && /reverse_proxy/ { sub(/127\.0\.0\.1:[0-9]+/, "127.0.0.1:" d) } on && /^}/ { on = 0 } { print }' \
+			"$TRANSLATED.tmp" >"$TRANSLATED.tmp2"
+		mv -f "$TRANSLATED.tmp2" "$TRANSLATED.tmp"
+	fi
+	if [[ "${FAKE_WRONG_ROOT:-}" == 1 ]] && has_marker; then
+		sed -i "s#root \\* $HOST_STATIC/tqohq\$#root * $HOST_STATIC/meta#" "$TRANSLATED.tmp"
+	fi
+	mv -f "$TRANSLATED.tmp" "$TRANSLATED"
+}
+
+run_caddy() {
+	(
+		cd "$FAKE_STATE"
+		exec env -u HTTPS_PROXY -u HTTP_PROXY -u https_proxy -u http_proxy -u ALL_PROXY -u all_proxy \
+			XDG_DATA_HOME="$FAKE_STATE/caddy-data" XDG_CONFIG_HOME="$FAKE_STATE/caddy-config" \
+			"$FAKE_CADDY" "$@"
+	)
+}
+
+back_translate() { sed -e "s#$TRANSLATED#/etc/caddy/Caddyfile#g" -e "s#$HOST_STATIC#/srv/static#g"; }
+
+case "${1:-}" in
+ps)
+	[[ "$*" == "ps --filter label=com.docker.compose.project=editforge --filter label=com.docker.compose.service=edge --format {{.ID}}" ]] ||
+		die "unexpected ps arguments: $*"
+	n="${FAKE_EDGE_COUNT:-1}"
+	if ((n >= 1)); then printf '%s\n' "$EDGE_ID"; fi
+	if ((n >= 2)); then printf '%s\n' "$OTHER_ID"; fi
+	;;
+inspect)
+	[[ "${2:-}" == --format && "${3:-}" == "$EXPECT_FORMAT" && "${4:-}" == "$EDGE_ID" && $# -eq 4 ]] ||
+		die "unexpected inspect arguments: $*"
+	printf 'volume\t/var/lib/docker/volumes/editforge_caddy_data/_data\t/data\n'
+	printf 'volume\t/var/lib/docker/volumes/editforge_caddy_config/_data\t/config\n'
+	printf 'bind\t%s\t/etc/caddy/Caddyfile\n' "$HOST_CADDYFILE"
+	printf 'bind\t%s\t/srv/static\n' "$HOST_STATIC"
+	printf '\n'
+	;;
+exec)
+	[[ "${2:-}" == "$EDGE_ID" ]] || {
+		printf 'Error response from daemon: No such container: %s\n' "${2:-}" >&2
+		exit 1
+	}
+	shift 2
+	case "$1" in
+	cat)
+		[[ "$*" == "cat /etc/caddy/Caddyfile" ]] || die "unexpected exec: $*"
+		cat "$MOUNTED"
+		;;
+	stat)
+		[[ "$*" == "stat -L -c %i /etc/caddy/Caddyfile" ]] || die "unexpected exec: $*"
+		stat -L -c %i "$MOUNTED"
+		;;
+	wget)
+		[[ "${2:-}" == -q && "${3:-}" == -O && "${4:-}" == - && $# -eq 5 ]] || die "unexpected exec: $*"
+		[[ "$5" =~ ^http://127\.0\.0\.1:[0-9]+/config/$ ]] || die "unexpected wget url: $5"
+		# Inside the container the config names /srv/static and
+		# /etc/caddy/Caddyfile, never the fake root's paths.
+		curl --noproxy '*' -fsS "$5" | back_translate
+		;;
+	caddy)
+		sub="${2:-}"
+		[[ "${3:-}" == --config && "${4:-}" == /etc/caddy/Caddyfile && "${5:-}" == --adapter && "${6:-}" == caddyfile && $# -eq 6 ]] ||
+			die "unexpected caddy arguments: $*"
+		case "$sub" in
+		validate | adapt | reload) ;;
+		*) die "unexpected caddy subcommand: $sub" ;;
+		esac
+		if [[ "$sub" == validate && "${FAKE_VALIDATE_FAIL:-}" == silent ]]; then
+			exit 1
+		fi
+		if [[ "$sub" == validate ]]; then
+			if [[ "${FAKE_VALIDATE_FAIL:-}" == always ]] || { [[ "${FAKE_VALIDATE_FAIL:-}" == with-block ]] && has_marker; }; then
+				# Shaped like Caddy's own output, and deliberately carrying the
+				# basic_auth hash so the installer's redaction is exercised.
+				hash=$(grep -o '\$2a\$[0-9][0-9]\$[./A-Za-z0-9]*' "$MOUNTED" | head -n 1)
+				printf '{"level":"info","ts":1790000000.0,"msg":"using config from file","file":"/etc/caddy/Caddyfile"}\n' >&2
+				printf 'Error: adapting config using caddyfile: parsing caddyfile tokens for '\''basic_auth'\'': wrong argument count or unexpected line ending after '\''%s'\'', at /etc/caddy/Caddyfile:57\n' "$hash" >&2
+				exit 1
+			fi
+		fi
+		translate
+		if [[ "$sub" == adapt ]]; then
+			run_caddy adapt --config "$TRANSLATED" --adapter caddyfile 2> >(back_translate >&2) | back_translate
+		else
+			run_caddy "$sub" --config "$TRANSLATED" --adapter caddyfile 2>&1 | back_translate
+		fi
+		;;
+	*)
+		die "unexpected exec: $*"
+		;;
+	esac
+	;;
+__start-edge)
+	ln -f "$HOST_CADDYFILE" "$MOUNTED"
+	translate
+	run_caddy start --config "$TRANSLATED" --adapter caddyfile --pidfile "$FAKE_STATE/caddy.pid" >"$FAKE_STATE/caddy-start.log" 2>&1
+	up=0
+	for _ in $(seq 1 50); do
+		if curl --noproxy '*' -fsS -o /dev/null "http://localhost:$FAKE_ADMIN_PORT/config/"; then
+			up=1
+			break
+		fi
+		sleep 0.1
+	done
+	((up)) || die "caddy did not start"
+	# The admin API answers before Caddy has issued its certificates, and a
+	# site probed in that gap gives no answer at all (measured: one site's
+	# certificate landed a second after the rest, and the first probe of it
+	# read 000). Wait until every HTTPS site has its certificate on disk.
+	curl --noproxy '*' -fsS "http://localhost:$FAKE_ADMIN_PORT/config/" >"$FAKE_STATE/start-config.json"
+	python3 - "$FAKE_STATE/start-config.json" "${FAKE_HTTPS_PORT:?}" "$FAKE_STATE/caddy-data/caddy/certificates/local" <<'EOF' || die "caddy did not issue every certificate within 90 seconds"
+import json, os, sys, time
+cfg, port, certs = json.load(open(sys.argv[1])), sys.argv[2], sys.argv[3]
+names = set()
+for srv in cfg.get("apps", {}).get("http", {}).get("servers", {}).values():
+    if not any(l.endswith(":" + port) for l in srv.get("listen", [])):
+        continue
+    for route in srv.get("routes", []):
+        for m in route.get("match", []):
+            names.update(m.get("host", []))
+want = [n.replace("*", "wildcard_") for n in names]
+# 20 seconds was measured too short once on 2026-09-23 (case O, first run in a
+# fresh container); the local CA issues more slowly the first time it starts.
+deadline = time.time() + 90
+while time.time() < deadline:
+    if all(os.path.exists(os.path.join(certs, n, n + ".crt")) for n in want):
+        sys.exit(0)
+    time.sleep(0.1)
+sys.exit(1)
+EOF
+	exit 0
+	;;
+__stop-edge)
+	if [[ -f "$FAKE_STATE/caddy.pid" ]]; then
+		pid=$(cat "$FAKE_STATE/caddy.pid")
+		curl --noproxy '*' -fsS -o /dev/null -X POST "http://localhost:$FAKE_ADMIN_PORT/stop" 2>/dev/null || true
+		for _ in $(seq 1 50); do
+			kill -0 "$pid" 2>/dev/null || break
+			sleep 0.1
+		done
+		kill -9 "$pid" 2>/dev/null || true
+		rm -f "$FAKE_STATE/caddy.pid"
+	fi
+	;;
+*)
+	die "unexpected command: $*"
+	;;
+esac

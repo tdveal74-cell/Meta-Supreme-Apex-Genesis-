@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Fake getent for the install-on-vps.sh harness: "ahostsv4 NAME" answers from
+# the A rows of FAKE_STATE/dns, in getent's own layout, exit 2 when none.
+set -euo pipefail
+: "${FAKE_STATE:?}"
+printf '%q ' "$@" >>"$FAKE_STATE/getent.log"
+printf '\n' >>"$FAKE_STATE/getent.log"
+[[ "${1:-}" == ahostsv4 && $# -eq 2 ]] || {
+	printf 'fake-getent: unexpected %s\n' "$*" >>"$FAKE_STATE/unexpected.log"
+	exit 1
+}
+found=0
+while read -r n t a; do
+	if [[ "$n" == "$2" && "$t" == A ]]; then
+		printf '%-15s STREAM %s\n%-15s DGRAM  \n%-15s RAW    \n' "$a" "$2" "$a" "$a"
+		found=1
+	fi
+done <"$FAKE_STATE/dns"
+((found)) || exit 2

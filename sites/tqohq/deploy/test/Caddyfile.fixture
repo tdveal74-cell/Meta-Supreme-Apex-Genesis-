@@ -1,0 +1,69 @@
+# Harness fixture: stands in for the host Caddyfile on the EditForge VPS.
+# fixture-only-marker-7f3a9c: if this line ever shows in the installer's output, file content leaked.
+# The global block is harness only: high ports, Caddy's internal CA, no trust store install.
+{
+	admin localhost:@@ADMIN_PORT@@
+	http_port @@HTTP_PORT@@
+	https_port @@HTTPS_PORT@@
+	local_certs
+	skip_install_trust
+	email ops@example.invalid
+}
+
+(quiet_log) {
+	log {
+		output discard
+	}
+}
+
+editforge.online {
+	import quiet_log
+	reverse_proxy 127.0.0.1:@@APP_PORT@@
+}
+
+meta.editforge.online {
+	root * /srv/static/meta
+	file_server
+}
+
+rakazo.editforge.online {
+	reverse_proxy 127.0.0.1:@@APP_PORT@@
+}
+
+hud.editforge.online {
+	root * /srv/static/hud
+	file_server
+}
+
+tqohr.editforge.online, www.tqohr.editforge.online {
+	respond "tqohr <ok> & fine" 200
+}
+
+tsws.editforge.online {
+	root * /srv/static/tsws
+	encode gzip
+	file_server
+}
+
+studio-private.editforge.online {
+	basic_auth {
+		tee @@BCRYPT@@
+	}
+	reverse_proxy 127.0.0.1:@@APP_PORT@@
+}
+
+*.preview.editforge.online {
+	@inner host inner.preview.editforge.online
+	handle @inner {
+		respond "inner" 200
+	}
+	respond "preview" 200
+}
+
+http://plain.editforge.online {
+	respond "plain http" 200
+}
+
+upstream-down.editforge.online {
+	reverse_proxy 127.0.0.1:@@DEAD_PORT@@
+}

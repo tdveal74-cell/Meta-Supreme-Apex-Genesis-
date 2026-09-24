@@ -20,7 +20,10 @@ The second and third arrived on 2026-09-17, read from the live public API at
 workflow `updatedAt` 2026-09-16T14:02:48.875Z, 240 nodes, active. Measured from
 that read rather than described: the TQO block is 805 words and 4,822
 characters, the NCO block is 550 words and 3,543 characters, and the node source
-is 1,608 words in total.
+is 1,608 words in total. Re-measured on 2026-09-23 after the episode promises change
+(Learning Objective, 3 to 5 step checklist, one question close, no audit
+pointer): the TQO block is 973 words and 5,790 characters, the NCO block is
+unchanged at 543 and 3,558, and the node source is 1,764 words.
 
 `services/devon/tqo_canon.py` is the same canon expressed as rules that know
 whether they bend, and `test_devon_tqo_canon.py` fails when a rule's text stops
