@@ -78,7 +78,29 @@ tool directly or through `pipedream_execute_tool`, and tell it to pass the
 safety rules into every helper, because helpers started with `run_subagent`
 do not inherit a bot's instructions.
 
-Thoth's first real filing is pending at 01:06Z; this section is completed before merge.
+First real filing, end to end through the deployed EditForge and the
+production webhook:
+
+- 01:05:09Z, execution 913: Thoth ran `research_file` index. Nothing was on
+  file for "executor".
+- 01:10Z: he filed `SYS_SOURCE_executor-sh-profile_v1_2026-09-24.md`,
+  6,846 bytes, read back, id `1WzUPr_ab-2qzsA6LRhMnpeajgCmSDzVQ`.
+
+His piece and the research this session did for Tee disagree on two points,
+and neither is settled here:
+
+- Whether Executor holds botdirectory.ai's sponsor slot. Thoth read the live
+  site on 2026-09-24 and found no Executor among 13 sponsors. This session read
+  the site's source at commit 7334e5c, where Executor is the connect sponsor.
+- Which Google scope the Drive integration requests. Thoth could not find the
+  Google plugin in the repository's current tree and left the scope
+  unverified. This session read `auth/drive` at commit d27e673.
+
+The live pages and a clone at a fixed commit can both be right. Graded
+unverified until one read settles it.
+
+Thoth's chat replies still contained em dashes on both runs. The filed piece
+did not: the filer refuses them.
 
 ## The Drive read fix for the lane bots
 
