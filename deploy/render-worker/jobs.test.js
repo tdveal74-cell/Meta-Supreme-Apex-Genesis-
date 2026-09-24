@@ -424,7 +424,7 @@ t('parse reports what was composited', () => {
   const r = J.JOBS.presenter_composite.build(pc()).parse();
   assert.deepStrictEqual(r, { output: 'p/master.mp4', cutaways: 2, captions: true, bed: true,
     narration: 'avatar audio', pinned: true, planned_duration: 60, fps: 25, normalized_to: '1920x1080',
-    layout: 'full', emphasis: 0, full_cutaways: 2 });
+    layout: 'full', emphasis: 0, full_cutaways: 2, still_cutaways: 0 });
 });
 t('overlapping windows are refused at submit', () => {
   const p = pc(); p.cutaways[1].start = 9;
@@ -530,6 +530,60 @@ t('the full layout ignores the full flag and never splits the avatar', () => {
   assert.ok(!g.includes('split=2'), g);
   assert.ok(!g.includes('color=c='), g);
   assert.ok(g.includes('[2:v]trim=start=0.000000:end=3.000000,setpts=PTS-STARTPTS,scale=1920:1080:force_original_aspect_ratio=decrease'), g);
+});
+
+section('\n-- P3: presenter_composite still cutaways, the owned b-roll --');
+const sc = (cut) => ({
+  avatar: touch('r/avatar.mp4'), output: 'r/master.mp4', duration: 30,
+  cutaways: [{ path: touch('r/desk.png'), start: 4, end: 10, ...cut }],
+});
+t('a png cutaway is inferred still and gets an 8 percent push in over exactly its frames', () => {
+  const g = graph(J.JOBS.presenter_composite.build(sc({})));
+  // 6s at 25fps is 150 frames, so the zoom runs 0..149.
+  assert.ok(g.includes("zoompan=z='1+0.08*on/149':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=150:s=1920x1080:fps=25"), g);
+  assert.ok(g.includes('[1:v]scale=7680:4320:force_original_aspect_ratio=decrease'), 'the still must be laid out oversampled before zoompan: ' + g);
+  assert.ok(g.includes('setpts=PTS+4.000000/TB[c0]'), g);
+});
+t('REGRESSION: a still with motion never goes through trim or tpad', () => {
+  const g = graph(J.JOBS.presenter_composite.build(sc({})));
+  const c0 = g.split(';').find(s => s.endsWith('[c0]'));
+  assert.ok(!c0.includes('trim='), c0);
+  assert.ok(!c0.includes('tpad='), c0);
+});
+t('pull_out runs the zoom backwards, none keeps the held frame path', () => {
+  const out = graph(J.JOBS.presenter_composite.build(sc({ motion: 'pull_out' })));
+  assert.ok(out.includes("zoompan=z='1.08-0.08*on/149'"), out);
+  const none = graph(J.JOBS.presenter_composite.build(sc({ motion: 'none' })));
+  assert.ok(!none.includes('zoompan'), none);
+  assert.ok(none.includes('tpad=stop_mode=clone'), none);
+});
+t('declaration beats inference in both directions', () => {
+  const asClip = graph(J.JOBS.presenter_composite.build(sc({ still: false })));
+  assert.ok(!asClip.includes('zoompan'), asClip);
+  const p = sc({}); p.cutaways[0].path = touch('r/frame.bin'); p.cutaways[0].still = true;
+  assert.ok(graph(J.JOBS.presenter_composite.build(p)).includes('zoompan'));
+});
+t('a stacked payload-zone still zooms at the zone size, oversampled inside 8192', () => {
+  const p = { ...st(), cutaways: [{ path: touch('q/desk.jpg'), start: 2, end: 6 }], emphasis: [] };
+  const g = graph(J.JOBS.presenter_composite.build(p));
+  // 1250 is the zone height; 4x of 1250 is 5000 and 4x of 1080 is 4320, both under 8192.
+  assert.ok(g.includes('[1:v]scale=4320:5000:force_original_aspect_ratio=decrease'), g);
+  assert.ok(g.includes(':d=100:s=1080x1250:fps=25'), g);
+});
+t('the oversample shrinks rather than exceeding 8192 on a 4K canvas', () => {
+  const g = graph(J.JOBS.presenter_composite.build({ ...sc({}), width: 3840, height: 2160 }));
+  assert.ok(g.includes('[1:v]scale=7680:4320:'), g);
+});
+t('parse counts the still cutaways', () => {
+  assert.strictEqual(J.JOBS.presenter_composite.build(sc({})).parse().still_cutaways, 1);
+  assert.strictEqual(J.JOBS.presenter_composite.build(pc()).parse().still_cutaways, 0);
+});
+t('refuses motion on a clip, an unknown motion, a still with an in point, and a non boolean still', () => {
+  const clip = sc({ motion: 'push_in' }); clip.cutaways[0].path = touch('r/clip.mp4');
+  assert.throws(() => J.JOBS.presenter_composite.build(clip), /only a still can carry motion/);
+  assert.throws(() => J.JOBS.presenter_composite.build(sc({ motion: 'spin' })), /motion: must be one of/);
+  assert.throws(() => J.JOBS.presenter_composite.build(sc({ in: 2 })), /a still has no timeline/);
+  assert.throws(() => J.JOBS.presenter_composite.build(sc({ still: 'yes' })), /still: must be true or false/);
 });
 
 section('\n-- A3: -nostdin reaches ffmpeg and never ffprobe --');
