@@ -280,6 +280,17 @@ def test_other_platforms_are_confined_to_the_capture_inbox():
         assert "one writer" in reason
 
 
+def test_rakazo_bots_write_research_only():
+    from services.devon import vault
+
+    assert not vault.PERMISSIONS["Rakazo"].may_write_canon
+    allowed, _ = vault.may_write("Rakazo", vault.RESEARCH_FOLDER["id"])
+    assert allowed
+    for elsewhere in (vault.FOLDERS["_Devon Core"], vault.CAPTURE_INBOX["id"], vault.FOLDERS["3. Resources"]):
+        allowed, _ = vault.may_write("Rakazo", elsewhere)
+        assert not allowed
+
+
 def test_an_unknown_platform_writes_nowhere():
     from services.devon import vault
 

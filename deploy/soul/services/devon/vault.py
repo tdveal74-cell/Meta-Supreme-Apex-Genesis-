@@ -77,6 +77,16 @@ CAPTURE_INBOX = {
     "id": "1ZusR2B7GWMf2MsCipgb5srZ8mS5z4F0B",
 }
 
+# The one home for bot research, created 2026-09-24 under 3. Resources on
+# Tee's ruling that Thoth's archive lives in the vault. Written only by the
+# n8n workflow DEVON - Bot Research Filer (jbDzwMVQDkEvkEM3), which creates
+# AREA_SOURCE_slug_vN_YYYY-MM-DD.md files, refuses a duplicate slug, and moves
+# a superseded piece to 4. Archive as SUPERSEDED_. It never deletes or shares.
+RESEARCH_FOLDER = {
+    "name": "3. Resources/Research",
+    "id": "1Y0Dp4WsrxgFRbLMEIKP6vlmhYeaIlxJb",
+}
+
 # Mirror Reads was created 2026-08-14 and held zero files when listed on
 # 2026-08-22. Recorded so that a caller expecting mirror output knows the folder
 # is producing nothing rather than assuming a read failure.
@@ -1246,6 +1256,19 @@ PERMISSIONS: Dict[str, WritePermission] = {
         allowed_folder_name=CAPTURE_INBOX["name"],
         may_write_canon=False,
         naming_pattern="CAPTURE_YYYY-MM-DD_gemini_topic.md",
+    ),
+    "Rakazo": WritePermission(
+        platform="Rakazo",
+        allowed_folder_id=RESEARCH_FOLDER["id"],
+        allowed_folder_name=RESEARCH_FOLDER["name"],
+        may_write_canon=False,
+        naming_pattern="AREA_SOURCE_slug_vN_YYYY-MM-DD.md",
+        note=(
+            "Tee's Rakazo bots file research here and nowhere else, only through "
+            "EditForge's research_file tool and the Bot Research Filer workflow, "
+            "which also retires their own superseded pieces to 4. Archive. Ruled "
+            "2026-09-24 when Thoth's archive was placed in the vault."
+        ),
     ),
 }
 
