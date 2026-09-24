@@ -11,9 +11,14 @@ All from Tee, 2026-09-24.
 
 - TSWS goes full motion. In chat, in his words: "TSWS is going full motion".
 - Runway Act-Two carries TSWS full motion first, and one TSWS scene is trialled
-  through Wan 2.2 Animate on a rented 48GB GPU for a side by side. Chosen on a
+  through Wan 2.2 Animate on a rented GPU for a side by side. Chosen on a
   card, the recommended option. The stated cost was Runway credits per episode
   until the trial wins.
+- Rent, never buy, and run at top quality. In chat, in his words: "I want to
+  rent and I want top quality". This moves the trial off the 48GB tier onto
+  80GB, where the 14B models run natively at 720p with no quantization and no
+  offloading. It supersedes the 48GB trial card above; the ruling to trial
+  stands.
 - This doc. Chosen on a card, the recommended option.
 
 ## What full motion means here
@@ -80,6 +85,14 @@ Rental prices are unverified and move; check before spending.
 | TSWS full motion, ACX micro-drama | 48GB | L40S or RTX A6000 | about $0.80 to $1.20 an hour |
 | Heavy batch days | 80GB | A100 or H100 | about $1.50 to $3 an hour |
 
+Under the top quality ruling every show runs on the 80GB row, H100 first. A
+smaller card only saves money by quantizing or offloading, which is exactly
+the quality Tee ruled out, and one tier means one endpoint for EditForge to
+call. The trial rents an on demand H100 by the hour. If the trial wins, the
+pipeline moves to a serverless GPU billed per second, so idle time between
+episodes costs nothing; which vendor is UNVERIFIED and is a choice for the
+adapter arc.
+
 The VPS is taken to be CPU only; that is UNVERIFIED and was not read. Nobody has
 measured render minutes per finished minute on any of these, so no monthly cost
 or buy decision can be made yet. The trial produces that number.
@@ -101,7 +114,7 @@ AREA: TSWS
 TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_tsws-full-motion_v1_2026-09-24-0808.md
 DATE: 2026-09-24
-DECISIONS: Tee ruled that TSWS goes full motion, that Runway Act-Two carries it first, and that one TSWS scene is trialled through Wan 2.2 Animate on a rented 48GB GPU for a side by side.
+DECISIONS: Tee ruled that TSWS goes full motion, that Runway Act-Two carries it first, that one TSWS scene is trialled through Wan 2.2 Animate for a side by side, and that GPU is rented, never bought, at top quality, which puts every show on the 80GB tier, H100 first.
 FINDINGS: Full motion puts TSWS on the EditForge micro-drama path, which needs its own identity registry record for Auren and Vespera; the render worker calls no generative model, so full motion is a new lane in front of TSWS 03, and Act-Two is mapped in EditForge but has never rendered live. Open source alternatives to Runway and HeyGen exist; the 24GB tier covers lip sync and the 48GB tier covers full motion. Licences, VRAM and prices are from training data and unverified today. ACX was read as Ascension Caudex from the Area vocabulary.
 OPEN: A TSWS identity registry record. Confirm the recorded consent covers motion, or re-record it. The Wan 2.2 Animate trial scene with Tee watching end to end. Read TSWS 04 to confirm no TSWS workflow already generates picture.
 STATUS: Ruled; nothing built; trial not run.
