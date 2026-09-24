@@ -749,13 +749,16 @@ commit above: a green that means nothing. Set it to absolute worktree paths.
 
 ## Skills in this repository
 
-`.claude/skills/` carries seven. Six are ours: `steward` (CI and PR
+`.claude/skills/` carries eight. Seven are ours: `steward` (CI and PR
 conventions, load it for anything touching either), `deploy-readback` (what the
 production surfaces are actually serving), `estate-reconcile` (checking records
 against the live estate), `devon-learning-lane` (the Build 12 learning lane and
 the n8n house conventions), `devon-grill` (interviewing Tee for the context no
 file holds, filed as `docs/devon/CAPTURE_*`), `shadow-we-share-brand` (the
-podcast's brand system, its flagship standard, palette, mark and voice).
+podcast's brand system, its flagship standard, palette, mark and voice),
+`startup-reverse-engineering` (turning a named startup into one business to
+build: the steal, the wedge and a verdict, with every figure sourced or marked
+unverified).
 
 This paragraph said six and five until 2026-09-12, when a session counted the
 directory instead of the sentence. `shadow-we-share-brand` had been committed
@@ -764,7 +767,7 @@ since `962f104` and was named nowhere. Do not edit these two numbers by hand:
 reads the directory and fails when they drift, which is the only reason this
 line can now be trusted.
 
-The seventh, `scroll-craft`, is vendored third-party work: Nate Herk's
+The eighth, `scroll-craft`, is vendored third-party work: Nate Herk's
 scroll-driven landing page skill, MIT, copied from `nateherkai/scroll-craft`.
 Never edit it in place, fixes go upstream, and `test_vendored_skills.py`
 enforces that against `MANIFEST.sha256` rather than trusting the prose. Read
