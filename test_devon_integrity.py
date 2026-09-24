@@ -286,8 +286,24 @@ def test_rakazo_bots_write_research_only():
     assert not vault.PERMISSIONS["Rakazo"].may_write_canon
     allowed, _ = vault.may_write("Rakazo", vault.RESEARCH_FOLDER["id"])
     assert allowed
-    for elsewhere in (vault.FOLDERS["_Devon Core"], vault.CAPTURE_INBOX["id"], vault.FOLDERS["3. Resources"]):
+    for show, folder in vault.SCRIPT_DRAFT_FOLDERS.items():
+        allowed, _ = vault.may_write("Rakazo", folder)
+        assert allowed, show
+    assert set(vault.SCRIPT_DRAFT_FOLDERS) == {"TQO", "TSWS", "NCO", "ACX"}
+    elsewhere_ids = (
+        vault.FOLDERS["_Devon Core"],
+        vault.CAPTURE_INBOX["id"],
+        vault.FOLDERS["3. Resources"],
+        vault.SHOW_TREES["TQO"]["00_CANON"],
+        vault.SHOW_TREES["TSWS"]["00_CANON"],
+        vault.AREA_FOLDERS["TQO"],
+        vault.AREA_FOLDERS["Podcast"],
+    )
+    for elsewhere in elsewhere_ids:
         allowed, _ = vault.may_write("Rakazo", elsewhere)
+        assert not allowed, elsewhere
+    for platform in ("ChatGPT", "Grok", "Gemini"):
+        allowed, _ = vault.may_write(platform, vault.SCRIPT_DRAFT_FOLDERS["TQO"])
         assert not allowed
 
 
