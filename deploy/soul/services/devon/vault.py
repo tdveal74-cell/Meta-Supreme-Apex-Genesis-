@@ -154,6 +154,19 @@ DRAFT_FOLDERS: Dict[str, str] = {
     "_unknown": CAPTURE_INBOX["id"],
 }
 
+# Where the Rakazo script writers save a draft for Tee's review, one folder per
+# show, written only by the n8n workflow DEVON - Bot Script Drafter
+# (pkddqOLe0guVGEk9), created 2026-09-24. It creates AREA_SCRIPT_slug_vN_date
+# as a Google Doc, numbers the version after every file on that slug including
+# V5's and SUPERSEDED_ ones, and leaves earlier versions where they are. It
+# never publishes, renames, moves, deletes or shares.
+SCRIPT_DRAFT_FOLDERS: Dict[str, str] = {
+    "TQO": SHOW_TREES["TQO"]["01_SCRIPTS"],
+    "TSWS": SHOW_TREES["TSWS"]["01_SCRIPTS"],
+    "NCO": AREA_FOLDERS["NCO"],
+    "ACX": AREA_FOLDERS["ACX"],
+}
+
 # Restricted, untouched by every sweep. Never read, list, or move without a ruling.
 RESTRICTED: Dict[str, str] = {
     "TSWS MEMOIR VAULT": "1j88Euvldadd3wouVK2cxHZadaRQZ3p32",
@@ -1218,6 +1231,8 @@ class WritePermission:
     may_write_canon: bool
     naming_pattern: Optional[str] = None
     note: str = ""
+    # Further folders the platform may also write to, each named in the note.
+    also_folder_ids: Tuple[str, ...] = ()
 
 
 # Structure over instruction where both are available. "Write only when directed"
@@ -1267,8 +1282,13 @@ PERMISSIONS: Dict[str, WritePermission] = {
             "Tee's Rakazo bots file research here and nowhere else, only through "
             "EditForge's research_file tool and the Bot Research Filer workflow, "
             "which also retires their own superseded pieces to 4. Archive. Ruled "
-            "2026-09-24 when Thoth's archive was placed in the vault."
+            "2026-09-24 when Thoth's archive was placed in the vault. The script "
+            "writers also save drafts for Tee's review into SCRIPT_DRAFT_FOLDERS, "
+            "only through EditForge's script_draft tool and the Bot Script "
+            "Drafter workflow, as AREA_SCRIPT_slug_vN_YYYY-MM-DD Google Docs. "
+            "Ruled 2026-09-24 when the script writers were created."
         ),
+        also_folder_ids=tuple(SCRIPT_DRAFT_FOLDERS.values()),
     ),
 }
 
@@ -1288,6 +1308,8 @@ def may_write(platform: str, destination_folder_id: str) -> Tuple[bool, str]:
         )
     if permission.allowed_folder_id is None:
         return True, f"{platform} may write across the vault."
+    if destination_folder_id in permission.also_folder_ids:
+        return True, f"{platform} writing to a folder its note names."
     if destination_folder_id != permission.allowed_folder_id:
         return False, (
             f"{platform} may write only to {permission.allowed_folder_name} "
