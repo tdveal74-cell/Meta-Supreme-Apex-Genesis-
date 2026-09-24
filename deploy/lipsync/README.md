@@ -22,9 +22,9 @@ and a reader who stopped there would act on a fact that is one day stale.
 and does not care how it was made, so the base track is swappable and neither
 route is thrown away by choosing the other today.
 
-A third route was ruled on 2026-09-24: a talking photo animated from Tee's own
-picture, plus b-roll stills generated from his character sheet. Its gates and
-open items are in `deploy/talking-photo/README.md`.
+Ruled 2026-09-24: no third presenter route. B-roll stills of Tee generated from
+his own character sheets go in as cutaways; their gates and open items are in
+`deploy/owned-stills/README.md`.
 
 The credentials exist, and the first pass said they did not. Corrected the
 same day: the n8n instance carries TWO HeyGen credentials, `Xz4mxIvFgUjLBowu`

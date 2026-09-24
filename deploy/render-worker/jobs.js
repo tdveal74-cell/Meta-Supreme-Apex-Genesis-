@@ -745,9 +745,8 @@ const JOBS = {
    * 'pull_out' or 'none', and has no `in`. Added 2026-09-24 for the owned
    * b-roll: stills of Tee generated from his own character sheet.
    *
-   * The `avatar` input does not care how it was made: HeyGen, MuseTalk over
-   * owned footage, or a talking photo animated from Tee's own picture. See
-   * deploy/talking-photo/README.md for the third route and its gates.
+   * See deploy/owned-stills/README.md for where the stills come from and
+   * the gates they pass before they reach this job.
    *
    * params: { avatar, output, cutaways?: [{path, start, end, in?, full?, still?, motion?}],
    *           captions?, caption_style?, bed?, bed_gain?, narration?, duration?,
@@ -833,7 +832,7 @@ const JOBS = {
         if (c.motion !== undefined && !still) throw new BadJob(`cutaways[${k}].motion: only a still can carry motion`);
         const motion = still ? oneOf(c.motion ?? 'push_in', `cutaways[${k}].motion`, STILL_MOTIONS) : 'none';
         if (still && IN !== 0) throw new BadJob(`cutaways[${k}].in: a still has no timeline to start into`);
-        return { f, s, e, IN, full, still, motion };
+        return { k, f, s, e, IN, full, still, motion };
       }).sort((a, b) => a.s - b.s);
       for (let i = 1; i < windows.length; i++) {
         if (windows[i].s < windows[i - 1].e) {
@@ -879,7 +878,7 @@ const JOBS = {
           // at an oversampled size first makes each step a fraction of an
           // output pixel. The factor is capped so the canvas stays inside 8192.
           const F = Math.round(len * fps);
-          if (F < 2) throw new BadJob(`cutaways[${i}]: a still with motion needs at least two frames at ${fps}fps`);
+          if (F < 2) throw new BadJob(`cutaways[${w.k}]: a still with motion needs at least two frames at ${fps}fps`);
           const over = Math.max(1, Math.min(STILL_OVERSAMPLE, Math.floor(8192 / Math.max(zw, zh))));
           const z = w.motion === 'push_in'
             ? `1+${STILL_ZOOM}*on/${F - 1}`

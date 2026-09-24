@@ -574,6 +574,17 @@ t('the oversample shrinks rather than exceeding 8192 on a 4K canvas', () => {
   const g = graph(J.JOBS.presenter_composite.build({ ...sc({}), width: 3840, height: 2160 }));
   assert.ok(g.includes('[1:v]scale=7680:4320:'), g);
 });
+t('a moving still fades in and out like a clip, and with fade 0 carries no fade', () => {
+  const c0 = (b) => graph(b).split(';').find(s => s.endsWith('[c0]'));
+  const g = c0(J.JOBS.presenter_composite.build(sc({})));
+  assert.ok(g.includes('fade=t=in:st=0:d=0.3:alpha=1,fade=t=out:st=5.700000:d=0.3:alpha=1'), g);
+  assert.ok(!c0(J.JOBS.presenter_composite.build({ ...sc({}), fade: 0 })).includes('fade='));
+});
+t('a moving still under two frames is refused, named by the CALLER index, not the sorted one', () => {
+  const p = { avatar: touch('r/avatar.mp4'), output: 'r/master.mp4', duration: 30, fade: 0,
+    cutaways: [{ path: touch('r/late.png'), start: 5, end: 5.02 }, { path: touch('r/early.png'), start: 1, end: 2 }] };
+  assert.throws(() => J.JOBS.presenter_composite.build(p), /cutaways\[0\]: a still with motion needs at least two frames/);
+});
 t('parse counts the still cutaways', () => {
   assert.strictEqual(J.JOBS.presenter_composite.build(sc({})).parse().still_cutaways, 1);
   assert.strictEqual(J.JOBS.presenter_composite.build(pc()).parse().still_cutaways, 0);

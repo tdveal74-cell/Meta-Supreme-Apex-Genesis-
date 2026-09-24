@@ -466,6 +466,14 @@ sidechain chain. One ffmpeg pass. Windows must be disjoint and inside the
 planned duration; the captions path and style are refused rather than escaped
 when they carry a character the filter string cannot take verbatim.
 
+A cutaway may also be a still image (added 2026-09-24, declared with `still` or
+inferred from the extension). A still gets `motion`: `push_in` by default,
+`pull_out` or `none`, an 8 percent zoom across the window via zoompan on an
+oversampled frame. This changes a still's default from held to moving, so a
+text card or end card must send `"motion": "none"`. Measured on a real render
+with ffmpeg 6.1.1: 300 frames for a 12 s pin, no frozen step across 130 inner
+frames, and the zone still confined to the top 1250 px in the stacked layout.
+
 Measured in the container on 2026-09-15 with imageio's static ffmpeg 7.0.2,
 on synthetic media (a 12 s testsrc avatar with a pulsed 440 Hz tone, a 3 s red
 clip over a 5 s window, a 6 s blue clip, a 4 s 220 Hz bed, one caption):
