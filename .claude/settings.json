@@ -24,5 +24,8 @@
         ]
       }
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "blotato-help"
+  ]
 }
