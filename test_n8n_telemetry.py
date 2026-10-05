@@ -1722,6 +1722,7 @@ async def test_a_cap_with_an_anchor_estimates_a_spend_and_carries_its_basis() ->
                 N8N_EXECUTION_CAP_ANCHOR_AT="2026-09-06T13:00:00Z",
                 N8N_EXECUTION_CAP_RESETS_AT="2026-10-01",
             ),
+            read_at=_NOW,
         ),
         "primary",
     )
