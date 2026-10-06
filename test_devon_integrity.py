@@ -138,6 +138,9 @@ DOCTRINE_MODULES = {
     "rule_ledger": "SOURCE",
     "tqo_canon": "SOURCE",
     "wager": "SOURCES",
+    # Lifted from five Show Context nodes and Series Addendum in TQO FINAL V5,
+    # so the source key names the workflow and the export it is traced against.
+    "show_registry": "SOURCE",
 }
 
 

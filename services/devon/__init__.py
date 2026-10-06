@@ -29,6 +29,10 @@ LAYERS
     tqo_canon    the TQO and NCO show canon as rules, lifted from the live
                  n8n node and checked against its mirror. Not re-exported,
                  like vault: it is show data, imported by the caller
+    show_registry
+                 the show identity board as data, lifted from the five Show
+                 Context nodes and Series Addendum in TQO FINAL V5 and traced
+                 into the export. Not re-exported, for the same reason
 
   Assistant:
     persona      who DEVON is and the rules he works under
