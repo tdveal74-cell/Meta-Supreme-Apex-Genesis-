@@ -37,13 +37,11 @@ from services.devon.show_registry import (
     show_segment,
 )
 
-#: The drift the lift found. Adding a key here is a visible test edit; the map
-#: in the module may only carry keys listed here, and only while the node
-#: still carries the stale value.
-EXPECTED_DRIFT = {
-    ("Show Context: Promote", "nco", "tagline"),
-    ("Show Context: Publish", "nco", "tagline"),
-}
+#: The drift the module may still carry. Adding a key here is a visible test
+#: edit; the map in the module may only carry keys listed here, and only while
+#: the node still carries the stale value. The two the lift found, the NCO
+#: tagline on Promote and Publish, were repaired on 2026-10-06 and left.
+EXPECTED_DRIFT: set = set()
 
 
 def _traces(js_key: str, value: object, code: str) -> bool:

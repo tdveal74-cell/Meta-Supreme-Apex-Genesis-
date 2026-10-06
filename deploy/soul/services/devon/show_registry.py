@@ -20,17 +20,18 @@ build red, and so a value borrowed from the other show's branch does not pass.
 
 WHAT THE LIFT FOUND
 
-The five nodes disagree with each other on one value. `Show Context: Script`
-gives NCO Forge the tagline "Leaders aren't born. They're forged." under a
-comment citing the Aug 2026 audit, `Show Context: Render` carries the same
-line, and `Show Context: Promote` and `Show Context: Publish` still carry
-"Military Mindset. Civilian Impact." This registry carries the audited line
-and names the two stale nodes in KNOWN_NODE_DRIFT. The test pins that map's
-keys, so a new entry is a visible test edit rather than a data edit, and the
-map can only shrink. Editing those two nodes is a ruling for Tee, not a side
-effect of this module. Blast radius of the drift, read from the export: the
-only consumer of `tagline` downstream is `Build Script Prompt`, which reads
-`Show Context: Script`, the node that already carries the audited line.
+The five nodes disagreed with each other on one value. `Show Context: Script`
+gave NCO Forge the tagline "Leaders aren't born. They're forged." under a
+comment citing the Aug 2026 audit, `Show Context: Render` carried the same
+line, and `Show Context: Promote` and `Show Context: Publish` still carried
+"Military Mindset. Civilian Impact." Nothing downstream read `tagline` off
+either stale node (the only consumer is `Build Script Prompt`, which reads
+`Show Context: Script`), so the blast radius was zero. Tee ruled the two
+nodes fixed on 2026-10-06; the one line edits were published as version
+3befd7a5 and read back, and the exports were regenerated from it, which is
+why KNOWN_NODE_DRIFT is empty. The map stays: the test pins its keys, so a
+new entry is a visible test edit rather than a data edit, and it can only
+shrink.
 
 WHAT IS NOT HERE
 
@@ -60,7 +61,7 @@ SOURCE = {
         "and 'Series Addendum' in TQO FINAL V5"
     ),
     "workflow_id": "qEkGOUsNyVaRAmm6",
-    "version_id": "b99b38ab-83dc-4106-9c70-32987310cc88",
+    "version_id": "3befd7a5-aaae-4dfb-ae98-52e720c7da3b",
     "export": "n8n/tqo-v5/exports/qEkGOUsNyVaRAmm6_active.json",
     "read": "2026-10-06",
 }
@@ -217,6 +218,14 @@ VOICE = VoiceLane(
 
 #: One Reach profile serves both shows today, the uuid both Brief branches carry.
 REACH_PROFILE = "af497848-65de-40f7-82ac-b0f4f162a141"
+
+#: The two data tables on the n8n instance that carry registry_rows() and
+#: series_rows(), created 2026-10-06 in project qbrcjkbIoorbwot6 and seeded by
+#: scripts/show_registry_seed.py, which also reads them back against this module.
+REGISTRY_TABLES: Dict[str, str] = {
+    "show_registry": "xmNWLUm49QyZ4ysO",
+    "show_series": "s1IxySUuphOVrOqU",
+}
 
 TQO = Show(
     key="tqo",
@@ -516,14 +525,13 @@ NODE_FIELDS: Dict[str, Dict[str, str]] = {
     },
 }
 
-#: Values a node still carries that this registry has moved past. Found while
-#: lifting; each is one node edit on Tee's ruling. The test pins this map's
-#: keys and checks each entry in both directions, so an entry can only be
-#: removed, and only once the node has been fixed.
-KNOWN_NODE_DRIFT: Dict[Tuple[str, str, str], str] = {
-    ("Show Context: Promote", "nco", "tagline"): "Military Mindset. Civilian Impact.",
-    ("Show Context: Publish", "nco", "tagline"): "Military Mindset. Civilian Impact.",
-}
+#: Values a node still carries that this registry has moved past, keyed
+#: (node name, show key, registry path). The lift found two, the NCO tagline on
+#: Promote and Publish, and both were repaired and published as 3befd7a5 on
+#: 2026-10-06. The test pins this map's keys and checks each entry in both
+#: directions, so an entry can only be removed, and only once the node has
+#: been fixed.
+KNOWN_NODE_DRIFT: Dict[Tuple[str, str, str], str] = {}
 
 
 def get_show(key: str) -> Show:

@@ -86,8 +86,8 @@ row and fails when either row drifts from the export of the same role.
 
 | version | id | nodes |
 |---|---|---|
-| active | `b99b38ab` | 265 nodes |
-| draft | `b99b38ab` | 265 nodes |
+| active | `3befd7a5` | 265 nodes |
+| draft | `3befd7a5` | 265 nodes |
 
 Every webhook path and webhook id in the exports reads `redacted`. The Gumroad
 sale ping carries no authentication, so its random path suffix is the only
@@ -125,3 +125,10 @@ words must carry both a question mark and the word comments, and the script
 ends on a question that never says comments. That is the gate working as
 written against a writer prompt that does not demand the word, and it is a
 ruling for Tee rather than a defect in this change.
+
+The exports were regenerated once more on 2026-10-06 at 16:10Z from
+`3befd7a5`, the publish that gave `Show Context: Promote` and `Show Context:
+Publish` the NCO tagline the other three Show Context nodes already carried.
+The show registry lift (`services/devon/show_registry.py`) found that drift,
+Tee ruled the two nodes fixed, and `test_devon_show_registry.py` now traces
+the registry against this export with an empty drift map.
