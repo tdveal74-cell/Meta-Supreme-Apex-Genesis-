@@ -136,6 +136,9 @@ Publish` the NCO tagline that `Show Context: Script` and `Show Context: Render`
 already carried. Those are the only two: `Show Context: Brief`, the fifth node,
 has no tagline key at all in this export, so four nodes carry the line and the
 fifth never did.
+The show registry lift (`services/devon/show_registry.py`) found that drift,
+Tee ruled the two nodes fixed, and `test_devon_show_registry.py` now traces
+the registry against this export with an empty drift map.
 
 They were regenerated again at 20:42Z from `36013f35`, published at 20:36Z on
 Tee's card ruling to disable the Gemini chat agent lane now rather than wait
@@ -147,6 +150,3 @@ against the live version before publishing: the seven `disabled` flags were
 the only difference and the connections were identical. The read back shows
 `versionId` equal to `activeVersionId` and all seven disabled in the active
 version. The nodes stay in the graph, disabled, until the split removes them.
-The show registry lift (`services/devon/show_registry.py`) found that drift,
-Tee ruled the two nodes fixed, and `test_devon_show_registry.py` now traces
-the registry against this export with an empty drift map.

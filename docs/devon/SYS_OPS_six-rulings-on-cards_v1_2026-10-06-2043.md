@@ -54,8 +54,30 @@ touch it, because the lane calls only v3.
 ## The Sunday Brief goes to Tee first
 
 Ruling: wire the lane to Reach and send one Brief to Tee's address only, for
-him to read end to end before any list receives it. Open at the time of
-writing; see OPEN.
+him to read end to end before any list receives it.
+
+The lane was already wired to Reach. It never sends: it creates a template and
+an unsent campaign, and the send happens by hand in the Reach dashboard. Its
+two manual entry points also fan into Script, Promote, Render and Publish, so
+on a second card Tee ruled a temporary trigger wired only to the TQO Brief.
+It went into the draft alone and was never published: the draft was diffed
+against live (`36013f35`) and differed by that one node and its one edge. It
+was fired once in manual mode as execution 2295 and then removed. The draft
+graph reads back identical to live, and production never left `36013f35`.
+
+The test found a defect, and nothing it made should be sent. Execution 2295
+succeeded and created template `355f83f8` and campaign `8d28dba8` in Reach,
+subject "Brief cannot be generated", headline "No script provided". The lane
+took row 5, but the script never reached the writer. `Build Brief Prompt`
+reads `$('Get Latest Content')`, the raw data table row, whose keys are
+lowercase, and then looks for `f.Script`. Only `DT Shim: Latest Content`
+produces `Script`, and its output in the same run carries all 8,156
+characters. So on the data table path the writer gets an empty script every
+time. Nothing checks for that: both Reach check nodes test only for an HTTP
+2xx and a uuid. The signature line in `Assemble Email HTML` also carries an
+`&mdash;`, which Tee's voice rules forbid. Had the script reached the writer,
+this Brief would have been about row 5, whose named claims are not sourced
+yet.
 
 ## Rows 4 and 5, read live
 
@@ -102,7 +124,7 @@ TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_six-rulings-on-cards_v1_2026-10-06-2043.md
 DATE: 2026-10-06
 DECISIONS: Tee ruled on inline cards: disable the V5 chat agent lane now; run the registry check daily as a GitHub Action; hold the Avatar lane for two approved looks; send the Sunday Brief to him alone before any list; re-read rows 4 and 5 live before ruling; start the first stage after row 46's pass. On the rows card he ruled row 4's seven days true as told, row 4 to re-render with the presenter and its packaging dashes fixed now, row 5's named claims sourced or cut before QC, and the writer of record decided after row 46.
-FINDINGS: The chat agent lane is seven nodes that nothing else connects to, and two of its tools can POST or PUT any workflow on the instance. V5 published as 36013f35 with only the seven disabled flags changed, read back. Row 4's description claims a likeness its 45 clip stock render lacks, and its OS 30 hold is four dashes plus a 6.8 packaging grade. Row 5 is rendered but never QC'd and names a bank and a retailer with no source. The registry check runs on bare stdlib Python 3.11 and 3.13.
-OPEN: The Sunday Brief wired to Reach with one test send to Tee. Row 5's claims sourced or cut, then QC, then a re-render. Row 4's re-render once the Avatar looks are approved, and the 6.8 packaging grade regraded. The 2026-10-07 10:32Z read of row 46's pass, then the writer of record card and the Script stage build. The first workflow_dispatch run of registry-check.yml after merge.
+FINDINGS: The chat agent lane is seven nodes that nothing else connects to, and two of its tools can POST or PUT any workflow on the instance. V5 published as 36013f35 with only the seven disabled flags changed, read back. Row 4's description claims a likeness its 45 clip stock render lacks, and its OS 30 hold is four dashes plus a 6.8 packaging grade. Row 5 is rendered but never QC'd and names a bank and a retailer with no source. The Brief lane's prompt node reads the raw row instead of the shim, so the writer always gets an empty script, and execution 2295 put a draft titled "Brief cannot be generated" into Reach reporting success. The registry check runs on bare stdlib Python 3.11 and 3.13.
+OPEN: The Brief lane fix (read the shim, refuse an empty script, take the dash out of the signature) and what happens to Reach drafts 355f83f8 and 8d28dba8, both Tee's to rule; the test send to Tee waits on the fix. Row 5's claims sourced or cut, then QC, then a re-render. Row 4's re-render once the Avatar looks are approved, and the 6.8 packaging grade regraded. The 2026-10-07 10:32Z read of row 46's pass, then the writer of record card and the Script stage build. The first workflow_dispatch run of registry-check.yml after merge.
 STATUS: V5 active and draft both 36013f35, read back; tqo_content row 4 platform_packaging rewritten and read back; registry-check.yml committed in this doc's PR, which had not run CI at the time of writing.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
