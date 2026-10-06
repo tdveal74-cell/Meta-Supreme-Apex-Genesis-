@@ -103,11 +103,19 @@ file, and `deploy/lipsync/README.md` recorded on 2026-09-16 that HeyGen's own
 v2 response named the 2026-10-31 removal and ruled the render call built on
 v3. There is no migration to do.
 
-Unverified from here: the comparison page itself. This container's egress
-blocks developers.heygen.com, and the permission policy declined a read only
-fetch workflow on the instance, so the endpoint by endpoint table was not read.
-The next live test of the Avatar lane is the proof that v3 still answers the
-three endpoints it uses.
+The comparison page itself could not be opened from this container: its
+egress blocks developers.heygen.com, and the permission policy declined a read
+only fetch workflow on the instance. What a web search returned of the page:
+v1 and v2 stay operational through 2026-10-31 and are retired from
+2026-11-01; `POST /v1/video/generate` and `POST /v2/video/generate` are
+replaced by `POST /v3/videos` with a type discriminated, nested body; status
+polling, avatar and voice listing, webhooks and pagination all move to v3.
+The lane's three calls are the v3 ones, and they were answered by the live
+API on manual execution 2221 (2026-10-06T01:07Z): `/v3/users/me` 200 with
+the wallet at 13.58, `POST /v3/videos` 200 with video id `8622143d` from a
+body of `type: 'avatar'`, `avatar_id`, `audio_url` and `title`, and
+`GET /v3/videos/{id}` polled eight times to `completed` with a 62.6 second
+mp4. That is the measurement; the page's own table remains unread.
 
 ## DEVON RECEIPT
 
