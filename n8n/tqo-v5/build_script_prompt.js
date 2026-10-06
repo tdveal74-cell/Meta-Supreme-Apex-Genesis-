@@ -59,7 +59,7 @@ THE BEAT STRUCTURE (hold it through the whole script):
 - LEARNING OBJECTIVE (immediately after, finished inside the first 30 seconds, about the first 70 spoken words): one sentence saying what they will be able to do by the end, such as "By the end of this episode, you will be able to ...". Return it word for word in learning_objective.
 - PROOF (the body): every claim carries a receipt. A number, a named tool, a documented before-and-after, a step the viewer can verify today.
 - CHECKLIST (inside the body): 3 to 5 plain steps the viewer can repeat, spoken in order as step one, step two and so on. Return the same steps in checklist.
-- CLOSE (the last 5 seconds): ONE question for the comments, specific to this episode and answerable from the viewer's own work, and nothing after it. Never ask the viewer to like or subscribe and never point to an audit, a download or a link; the brand does not beg.
+- CLOSE (the last 5 seconds): ONE question for the comments, specific to this episode and answerable from the viewer's own work, and nothing after it. Say the word comments in the last spoken sentence, as in: Tell me in the comments, then the question; the Script Gate holds the episode otherwise. Never ask the viewer to like or subscribe and never point to an audit, a download or a link; the brand does not beg.
 
 Pick the ONE best-fit proven format for this topic and shape the whole script around it:
 - LISTICLE: "N things / N moves / N mistakes" - concrete, countable, skimmable. Best for tools, tactics, errors.
