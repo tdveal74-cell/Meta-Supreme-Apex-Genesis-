@@ -57,3 +57,32 @@ findings written onto the row.
 Nothing here executes. n8n holds the graph, the credentials and the schedule.
 A change made here has to be applied to the live node, and a change made live
 has to be copied back, or this file is a lie about what gates the channel.
+
+## The two versions, exported
+
+The workflow carries two graphs at once, and every count above was taken from
+the wrong one. The public API returns the draft at the top level and the
+published version under `activeVersion`; the editor shows the draft, the
+schedule runs the published version. Read on 2026-10-06, the published version
+`e04868cf` (activated 2026-10-05T22:40:30Z) is 265 nodes, 22 roots and 17
+trigger type nodes, while the draft `206299ba` (saved 2026-10-06T01:25:46Z) is
+290 nodes: it adds the 24 node HeyGen Avatar lane and the manual trigger
+`TEST Render Only (Claude 5 Oct)`, removes nothing, and modifies `Build Movie`
+and `Presenter: Attach Clips`. The 240 at the top of this file was measured on
+2026-09-16 and no version from that day survives on the instance, so it is a
+sentence rather than a count.
+
+`exports/qEkGOUsNyVaRAmm6_active.json` and `exports/qEkGOUsNyVaRAmm6_draft.json`
+are the two graphs as `scripts/tqo_v5_export.py` wrote them, with the read time
+inside each file. Regenerate them with that script, never by hand, and read the
+counts out of its output. `test_tqo_v5_exports.py` computes both counts from
+the files and fails when this paragraph drifts from them.
+
+The same test names one defect. `Script: Already Written?` is an IF node at
+typeVersion 1 carrying a typeVersion 2 condition shape. The engine copy in the
+executions reads `{"conditions": {}, "combineOperation": "all"}`, and IF v1
+sends an item with nothing to test to its TRUE output, which is wired to
+`Script: Hydrate from Row`, which throws on an empty script. So a locked row
+cannot reach `Write Script (Cerebras)` in either version. The test's allowlist
+carries that one name and can only shrink: the fix is to retype the node,
+publish, regenerate the exports, and delete the name.
