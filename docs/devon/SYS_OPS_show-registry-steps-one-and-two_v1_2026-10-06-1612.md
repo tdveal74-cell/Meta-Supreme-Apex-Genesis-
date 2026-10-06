@@ -88,14 +88,35 @@ on the credential as first stored. The proof workflow was archived
 afterwards. Reach is live; nothing sends through it yet, and enabling the
 Sunday Brief lane is a ruling still to ask for.
 
+## HeyGen v1 and v2 deprecation, read against the estate
+
+Tee forwarded HeyGen's notice the same afternoon: API v1 and v2 are removed
+on 2026-10-31, migrate to v3. The estate was counted rather than assumed, all
+152 workflows on the instance (51 active) and the repository. No active
+workflow calls api.heygen.com. The only v2 calls on the instance sit in two
+archived, inactive September probes (`remaining_quota` and avatar details)
+that never run. The Avatar lane draft 206299ba, the one place a HeyGen render
+is wired, calls only `/v3/users/me`, `/v3/videos` and `/v3/videos/{id}` across
+its 290 nodes, and the one inactive TEMP engine test is v3 as well. The
+repository holds no HeyGen API call: the render worker consumes the finished
+file, and `deploy/lipsync/README.md` recorded on 2026-09-16 that HeyGen's own
+v2 response named the 2026-10-31 removal and ruled the render call built on
+v3. There is no migration to do.
+
+Unverified from here: the comparison page itself. This container's egress
+blocks developers.heygen.com, and the permission policy declined a read only
+fetch workflow on the instance, so the endpoint by endpoint table was not read.
+The next live test of the Avatar lane is the proof that v3 still answers the
+three endpoints it uses.
+
 ## DEVON RECEIPT
 
 AREA: Systems
 TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_show-registry-steps-one-and-two_v1_2026-10-06-1612.md
 DATE: 2026-10-06
-DECISIONS: Tee ruled on cards to merge PR #307, to fix the two stale NCO tagline nodes now with a read back, and to create and seed the show_registry and show_series data tables now. Earlier the same day he ruled the show registry module and its test as step one of the stage split.
-FINDINGS: The first trace was a whole node substring match and eight mutations passed it green; the keyed, branch scoped trace fails all eight. Promote and Publish carried the pre audit NCO tagline with zero blast radius. The rows endpoint pages by nextCursor and the insert is POST on the rows route. The stale show_context_script.js mirror lacked packageLimit and nothing tested it. Reach execution 2276 returned 200 after three 401s.
+DECISIONS: Tee ruled on cards to merge PR #307, to fix the two stale NCO tagline nodes now with a read back, to create and seed the show_registry and show_series data tables now, and to file the HeyGen deprecation reading here. Earlier the same day he ruled the show registry module and its test as step one of the stage split.
+FINDINGS: The first trace was a whole node substring match and eight mutations passed it green; the keyed, branch scoped trace fails all eight. Promote and Publish carried the pre audit NCO tagline with zero blast radius. The rows endpoint pages by nextCursor and the insert is POST on the rows route. The stale show_context_script.js mirror lacked packageLimit and nothing tested it. Reach execution 2276 returned 200 after three 401s. HeyGen's v1 and v2 removal on 2026-10-31 touches nothing live: zero active calls, two archived v2 probes, the Avatar lane draft on v3 only.
 OPEN: The 2026-10-07 10:20Z pass on row 46 under the tightened close rule, read at 10:32Z. Rows 4 and 5 and which writer feeds the table, unruled. The Avatar lane and TEST trigger in version 206299ba awaiting their own publish. Enabling the Sunday Brief lane now that Reach is live. The first stage workflow that reads show_registry instead of a Show Context node. The chat agent lane with workflow PUT inside V5, to be removed in the split.
 STATUS: PR #307 merged as 08708f8; V5 published as 3befd7a5 and read back; both tables seeded and read back clean twice; this doc's PR not yet opened at the time of writing, so its CI has not run.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
