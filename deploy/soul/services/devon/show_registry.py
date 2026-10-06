@@ -330,8 +330,9 @@ NCO = Show(
     promote_limit=1,
     package_limit=3,
     # Flip only after the NCO Forge channel's own YouTube credential is attached
-    # to 'Upload to YouTube (NCO Forge)'. Both upload nodes carry the TQO
-    # credential today, and an n8n credential binds to a node, not to a row.
+    # to 'Upload to YouTube (NCO Forge)'. Both upload nodes carry the same
+    # credential today, 'YouTube account 1', and an n8n credential binds to a
+    # node, not to a row.
     youtube_ready=False,
     voice=VOICE,
     brief=Brief(
