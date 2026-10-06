@@ -74,9 +74,22 @@ sentence rather than a count.
 
 `exports/qEkGOUsNyVaRAmm6_active.json` and `exports/qEkGOUsNyVaRAmm6_draft.json`
 are the two graphs as `scripts/tqo_v5_export.py` wrote them, with the read time
-inside each file. Regenerate them with that script, never by hand, and read the
-counts out of its output. `test_tqo_v5_exports.py` computes both counts from
-the files and fails when this paragraph drifts from them.
+inside each file. Regenerate them with that script, never by hand, and copy the
+table below from its output. `test_tqo_v5_exports.py` reads the table row by
+row and fails when either row drifts from the export of the same role.
+
+| version | id | nodes |
+|---|---|---|
+| active | `b99b38ab` | 265 nodes |
+| draft | `b99b38ab` | 265 nodes |
+
+Every webhook path and webhook id in the exports reads `redacted`. The Gumroad
+sale ping carries no authentication, so its random path suffix is the only
+barrier on that door and the repository is not the place for it; the exporter
+strips every path and id rather than deciding which ones are secrets, and the
+test proves the Gumroad path is absent. The first export of 2026-10-06 carried
+the path before this was understood, so the live path is due for rotation on
+Tee's ruling, together with the ping URL configured on the Gumroad side.
 
 The same test records one defect by name, and the name is now gone from its
 allowlist because the fix is published. `Script: Already Written?` was an IF

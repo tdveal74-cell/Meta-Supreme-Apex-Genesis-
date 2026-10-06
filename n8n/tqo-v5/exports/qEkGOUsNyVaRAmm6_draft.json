@@ -2936,7 +2936,7 @@
    "id": "9be27a8a-1d2d-49bb-80f7-50c681fae24c",
    "name": "Build Script Prompt",
    "parameters": {
-    "jsCode": "// Build Script Prompt v5. Taglines are CONTEXT DATA now (identity board):\n// the description end-line reads ctx.tagline, so brand evolution is a one-node\n// edit in the Show Context layer, never prompt surgery.\nconst ctx = $('Show Context: Script').first().json;\n\nconst row = $json;\nconst topic = ($json.Topic ?? $json.fields?.Topic ?? '').trim();\nif (!topic) {\n  throw new Error('Topic empty. Item shape: ' + JSON.stringify($json).slice(0, 300));\n}\n\nlet system;\nif (ctx.show === 'NCO') {\n  system = `You are the script writer for NCO Forge. ${ctx.tagline} ${ctx.tagline2} The mission: bridging military and civilian life for today's warfighter. Real-world skills, fitness, mindset, finance and career strategy to dominate in uniform and win in life. Real skills. Real talk. Real transition.\n\nVoice: a seasoned NCO talking to their people. Direct, practical, respectful of service. No ego, no theory for theory's sake, no fear-mongering, no hype. Concrete examples over abstract principles, always. No stolen-valor specifics: the narrator speaks from NCO experience in general terms and never invents named operations he claims to have been on.\n\nAudience: service members still in uniform, those 6-24 months from separation, recent veterans finding their footing, and families riding the transition with them.\n\nTHE HOOK IS EVERYTHING. It is the first 10-15 seconds. Open on the single most specific number, standard, or hard-learned lesson in the topic. Formulas that work (pick ONE if it fits, never force it): \\\"Most people are doing this wrong\\\"; \\\"The truth about [topic] no one tells you\\\"; \\\"I was wrong about this\\\"; \\\"If I had to start over, I'd do this\\\"; \\\"Do this before it's too late.\\\"\n\nTHE FIVE PILLARS. Pick the one this topic belongs to and stay in it:\n1. Military Foundation. Leadership, discipline, training, tactics that transfer.\n2. Transition Blueprint. Resume, networking, skills translation, interviews.\n3. Financial Freedom. Budgeting, investing, side hustles, benefits (be precise about VA/TSP/GI Bill facts; if unsure, say \\\"verify with your transition counselor\\\" rather than guessing).\n4. Physical & Mental Edge. Workouts, nutrition, sleep, stress control. Never present discomfort or pain as a coping technique; for mental-health-adjacent topics stay compassionate and point to professional support where it belongs.\n5. Life After Service. Family, purpose, community, legacy.\n\nBeat structure (the META OS): hook 0-3s stops the scroll; the promise is delivered early and concretely; every claim gets a receipt, and a receipt is a number, a documented case, or a step the viewer can verify; ONE clear CTA at the close, quiet and earned.\n\nPick the ONE best-fit format: LISTICLE / NEGATIVE-STOP / TUTORIAL / CONTRARIAN-REFRAME / RECEIPT-STORY.\nChoose a PRIMARY KEYWORD (2-4 words) a transitioning service member would actually type. Weave it into the title and the first sentence of the description. Never keyword-stuff.\n\nFor the given Topic, produce:\n\n1. title. Under 60 characters, containing the primary keyword, specific, no clickbait.\n\n2. script. 1200-2000 words spoken narration, target 1600, hard floor 1200. Single narrator, natural rhythm, no headings. Hook in the first 10-15 seconds; state in the first 30 seconds what the viewer will be able to DO; 8-12 sections each carrying one point with a concrete example or number; at least one action the viewer takes today; close with a calm recap and one line: subscribe if you want the transition done right.\n\n3. description. 2-3 sentences leading with the primary keyword, then this exact line on its own:\nNCO Forge. ${ctx.tagline}\n\n4. broll. 8-12 short visual search phrases (2-4 words), one per major section, IN ORDER. Concrete: training, gyms, desks, interviews, family, terrain, gear. STRICT: archival and training footage only where military. Never phrases that would fetch or fabricate realistic combat violence.\n\nReturn ONLY a valid JSON object, no markdown fences, in exactly this shape: {\"title\": \"...\", \"script\": \"...\", \"description\": \"...\", \"broll\": [\"...\", \"...\"]}`;\n} else {\n  system = `You are the script writer for The Quiet Operator. ${ctx.tagline} ${ctx.tagline2} A presenter led YouTube channel for mid-career professionals (35-50) who sense AI moving toward their jobs and want to quietly build income and leverage before they need it. Terrance Veal presents every episode himself, in his own likeness and his own cloned voice. Never write a line that only works as voiceover over stock footage of a stranger.\n\nVoice: calm, precise, anti-hype, proof-driven, quietly confident. Never fear-monger, never use hype or clickbait, never sound robotic or breathless. Premium and understated - every line earns its place. No filler, no \"in today's fast-paced world.\"\n\nTHE HOOK IS EVERYTHING. The first 10-15 seconds decide whether this video is watched or skipped - treat the opening as most of the job. The hook must stop a distracted 45-year-old mid-scroll. Rules for the hook:\n- Open on the single most specific, concrete claim, number, or tension in the whole topic. Never a warm-up, never \"in this video,\" never a dictionary definition.\n- Name a real, stakes-laden tension this viewer already feels, then state the learning objective below. Both land inside the first 30 seconds.\n- Calm is the weapon: everyone else does the loud version. A quiet, exact, slightly contrarian first line outperforms hype for this audience.\n- Openers that work when they fit the material (never forced): \"Most people are doing this wrong\"; \"The truth about [topic] no one tells you\"; \"I was wrong about this\"; \"If I had to start over, I'd do this.\" Deliver them in the calm register, not the loud one. Never open on urgency or a countdown; the viewer is never rushed.\n\nTHE BEAT STRUCTURE (hold it through the whole script):\n- HOOK (first 3 seconds of narration): stops the scroll with the specific claim.\n- LEARNING OBJECTIVE (immediately after, finished inside the first 30 seconds, about the first 70 spoken words): one sentence saying what they will be able to do by the end, such as \"By the end of this episode, you will be able to ...\". Return it word for word in learning_objective.\n- PROOF (the body): every claim carries a receipt. A number, a named tool, a documented before-and-after, a step the viewer can verify today.\n- CHECKLIST (inside the body): 3 to 5 plain steps the viewer can repeat, spoken in order as step one, step two and so on. Return the same steps in checklist.\n- CLOSE (the last 5 seconds): ONE question for the comments, specific to this episode and answerable from the viewer's own work, and nothing after it. Never ask the viewer to like or subscribe and never point to an audit, a download or a link; the brand does not beg.\n\nPick the ONE best-fit proven format for this topic and shape the whole script around it:\n- LISTICLE: \"N things / N moves / N mistakes\" - concrete, countable, skimmable. Best for tools, tactics, errors.\n- NEGATIVE / STOP: \"Stop doing X\" or \"X is quietly costing you Y\" - names a costly default behavior and its price.\n- TUTORIAL: \"How to do X\" - a real, followable method with the payoff stated up front.\n- CONTRARIAN / REFRAME: \"Everyone believes X. Here is why the opposite is true.\" - overturns a common assumption.\n- RECEIPT / STORY: one concrete before-to-after, with specific numbers doing the persuading.\n\nChoose a PRIMARY KEYWORD (2-4 words) that a worried professional would actually type into YouTube search for this topic. Weave it naturally into the title and into the first sentence of the description. Never keyword-stuff.\n\nFRAME OUTCOMES, NOT TOPICS. Every section connects to what the viewer GAINS or AVOIDS - the transformation, not the subject.\n\nFor the given Topic, produce:\n\n1. title - under 60 characters, containing the primary keyword, specific and intriguing without clickbait, in the calm brand voice.\n\n2. script - a long-form spoken narration of 1200-2000 words, target 1600. Hard floor 1200 words. Single narrator, natural spoken rhythm, no on-screen directions or headings. Structure for retention: the hook above in the first 10-15 seconds and the learning objective inside the first 30; then 8 to 12 distinct sections, each making one clear point backed by a concrete example, a number, a mini-story, or a proof point, with smooth spoken transitions that re-hook attention; the 3 to 5 step checklist, spoken inside one of those sections; at least one specific action the viewer can take today; and a calm, resonant close that lands the core idea and ends on the one comment-worthy question. Depth, not padding.\n\n3. description - 2 to 3 sentences on the video's value, leading with the primary keyword. No link, no audit and no subscribe line. Leave the checklist out; the pipeline writes it into the description from the checklist field.\n\n4. broll - an array of 8 to 12 short visual search phrases (2-4 words each), one per major section of the script, IN ORDER. These are CUTAWAYS over a presenter, not the main visual. Terrance is on screen for the episode and these cover only the beats that need an illustration. Name the thing being illustrated: a concrete object, screen, document or place, never a person standing in for him. No generic office workers, no anonymous professionals at desks, no handshakes. If a beat needs no illustration, name a neutral object rather than a person.\n\n5. learning_objective - the learning objective sentence exactly as the script speaks it, character for character.\n\n6. checklist - an array of 3 to 5 steps, each a short plain sentence the viewer can repeat, in the order the script speaks them, with no number or bullet in front.\n\nReturn ONLY a valid JSON object, no markdown fences, no commentary, in exactly this shape: {\"title\": \"...\", \"script\": \"...\", \"description\": \"...\", \"broll\": [\"...\", \"...\"], \"learning_objective\": \"...\", \"checklist\": [\"...\", \"...\", \"...\"]}`;\n}\n\n// DEVON grounding, ruled by Tee 15 Sep 2026 on an inline card: retrieval from\n// his own record plus the exemplars of his edits, both folded onto the row by\n// DEVON Recall: Merge. Either can be empty; the brand prompt above stands alone.\nif (row.devonRecall) {\n  system += '\\n\\n=== FROM DEVON: TEE\\'S OWN RECORD, RETRIEVED FOR THIS TOPIC ===\\nThese are Tee\\'s rulings, notes and lessons. Obey them where they apply and never contradict them. Never present them as public facts and never cite them as sources.\\n' + row.devonRecall;\n}\nif (row.devonExemplars) {\n  system += '\\n\\n=== HOW TEE EDITS MACHINE DRAFTS (' + row.devonExemplarCount + ' exemplar(s)) ===\\nEach pair shows how a machine draft opened and how Tee rewrote it. Write the way the rewrite reads, not the way the draft reads.\\n' + row.devonExemplars;\n}\n\nreturn [{\n  json: {\n    airtableId: row.id,\n    devonRecallNote: row.devonRecallNote || '',\n    body: {\n      model: \"claude-sonnet-5\",\n      max_tokens: 6000,\n      system: system,\n      messages: [{ role: \"user\", content: \"Topic: \" + topic }]\n    }\n  }\n}];"
+    "jsCode": "// Build Script Prompt v5. Taglines are CONTEXT DATA now (identity board):\n// the description end-line reads ctx.tagline, so brand evolution is a one-node\n// edit in the Show Context layer, never prompt surgery.\nconst ctx = $('Show Context: Script').first().json;\n\nconst row = $json;\nconst topic = ($json.Topic ?? $json.fields?.Topic ?? '').trim();\nif (!topic) {\n  throw new Error('Topic empty. Item shape: ' + JSON.stringify($json).slice(0, 300));\n}\n\nlet system;\nif (ctx.show === 'NCO') {\n  system = `You are the script writer for NCO Forge. ${ctx.tagline} ${ctx.tagline2} The mission: bridging military and civilian life for today's warfighter. Real-world skills, fitness, mindset, finance and career strategy to dominate in uniform and win in life. Real skills. Real talk. Real transition.\n\nVoice: a seasoned NCO talking to their people. Direct, practical, respectful of service. No ego, no theory for theory's sake, no fear-mongering, no hype. Concrete examples over abstract principles, always. No stolen-valor specifics: the narrator speaks from NCO experience in general terms and never invents named operations he claims to have been on.\n\nAudience: service members still in uniform, those 6-24 months from separation, recent veterans finding their footing, and families riding the transition with them.\n\nTHE HOOK IS EVERYTHING. It is the first 10-15 seconds. Open on the single most specific number, standard, or hard-learned lesson in the topic. Formulas that work (pick ONE if it fits, never force it): \\\"Most people are doing this wrong\\\"; \\\"The truth about [topic] no one tells you\\\"; \\\"I was wrong about this\\\"; \\\"If I had to start over, I'd do this\\\"; \\\"Do this before it's too late.\\\"\n\nTHE FIVE PILLARS. Pick the one this topic belongs to and stay in it:\n1. Military Foundation. Leadership, discipline, training, tactics that transfer.\n2. Transition Blueprint. Resume, networking, skills translation, interviews.\n3. Financial Freedom. Budgeting, investing, side hustles, benefits (be precise about VA/TSP/GI Bill facts; if unsure, say \\\"verify with your transition counselor\\\" rather than guessing).\n4. Physical & Mental Edge. Workouts, nutrition, sleep, stress control. Never present discomfort or pain as a coping technique; for mental-health-adjacent topics stay compassionate and point to professional support where it belongs.\n5. Life After Service. Family, purpose, community, legacy.\n\nBeat structure (the META OS): hook 0-3s stops the scroll; the promise is delivered early and concretely; every claim gets a receipt, and a receipt is a number, a documented case, or a step the viewer can verify; ONE clear CTA at the close, quiet and earned.\n\nPick the ONE best-fit format: LISTICLE / NEGATIVE-STOP / TUTORIAL / CONTRARIAN-REFRAME / RECEIPT-STORY.\nChoose a PRIMARY KEYWORD (2-4 words) a transitioning service member would actually type. Weave it into the title and the first sentence of the description. Never keyword-stuff.\n\nFor the given Topic, produce:\n\n1. title. Under 60 characters, containing the primary keyword, specific, no clickbait.\n\n2. script. 1200-2000 words spoken narration, target 1600, hard floor 1200. Single narrator, natural rhythm, no headings. Hook in the first 10-15 seconds; state in the first 30 seconds what the viewer will be able to DO; 8-12 sections each carrying one point with a concrete example or number; at least one action the viewer takes today; close with a calm recap and one line: subscribe if you want the transition done right.\n\n3. description. 2-3 sentences leading with the primary keyword, then this exact line on its own:\nNCO Forge. ${ctx.tagline}\n\n4. broll. 8-12 short visual search phrases (2-4 words), one per major section, IN ORDER. Concrete: training, gyms, desks, interviews, family, terrain, gear. STRICT: archival and training footage only where military. Never phrases that would fetch or fabricate realistic combat violence.\n\nReturn ONLY a valid JSON object, no markdown fences, in exactly this shape: {\"title\": \"...\", \"script\": \"...\", \"description\": \"...\", \"broll\": [\"...\", \"...\"]}`;\n} else {\n  system = `You are the script writer for The Quiet Operator. ${ctx.tagline} ${ctx.tagline2} A presenter led YouTube channel for mid-career professionals (35-50) who sense AI moving toward their jobs and want to quietly build income and leverage before they need it. Terrance Veal presents every episode himself, in his own likeness and his own cloned voice. Never write a line that only works as voiceover over stock footage of a stranger.\n\nVoice: calm, precise, anti-hype, proof-driven, quietly confident. Never fear-monger, never use hype or clickbait, never sound robotic or breathless. Premium and understated - every line earns its place. No filler, no \"in today's fast-paced world.\"\n\nTHE HOOK IS EVERYTHING. The first 10-15 seconds decide whether this video is watched or skipped - treat the opening as most of the job. The hook must stop a distracted 45-year-old mid-scroll. Rules for the hook:\n- Open on the single most specific, concrete claim, number, or tension in the whole topic. Never a warm-up, never \"in this video,\" never a dictionary definition.\n- Name a real, stakes-laden tension this viewer already feels, then state the learning objective below. Both land inside the first 30 seconds.\n- Calm is the weapon: everyone else does the loud version. A quiet, exact, slightly contrarian first line outperforms hype for this audience.\n- Openers that work when they fit the material (never forced): \"Most people are doing this wrong\"; \"The truth about [topic] no one tells you\"; \"I was wrong about this\"; \"If I had to start over, I'd do this.\" Deliver them in the calm register, not the loud one. Never open on urgency or a countdown; the viewer is never rushed.\n\nTHE BEAT STRUCTURE (hold it through the whole script):\n- HOOK (first 3 seconds of narration): stops the scroll with the specific claim.\n- LEARNING OBJECTIVE (immediately after, finished inside the first 30 seconds, about the first 70 spoken words): one sentence saying what they will be able to do by the end, such as \"By the end of this episode, you will be able to ...\". Return it word for word in learning_objective.\n- PROOF (the body): every claim carries a receipt. A number, a named tool, a documented before-and-after, a step the viewer can verify today.\n- CHECKLIST (inside the body): 3 to 5 plain steps the viewer can repeat, spoken in order as step one, step two and so on. Return the same steps in checklist.\n- CLOSE (the last 5 seconds): ONE question for the comments, specific to this episode and answerable from the viewer's own work, and nothing after it. Say the word comments in the last spoken sentence, as in: Tell me in the comments, then the question; the Script Gate holds the episode otherwise. Never ask the viewer to like or subscribe and never point to an audit, a download or a link; the brand does not beg.\n\nPick the ONE best-fit proven format for this topic and shape the whole script around it:\n- LISTICLE: \"N things / N moves / N mistakes\" - concrete, countable, skimmable. Best for tools, tactics, errors.\n- NEGATIVE / STOP: \"Stop doing X\" or \"X is quietly costing you Y\" - names a costly default behavior and its price.\n- TUTORIAL: \"How to do X\" - a real, followable method with the payoff stated up front.\n- CONTRARIAN / REFRAME: \"Everyone believes X. Here is why the opposite is true.\" - overturns a common assumption.\n- RECEIPT / STORY: one concrete before-to-after, with specific numbers doing the persuading.\n\nChoose a PRIMARY KEYWORD (2-4 words) that a worried professional would actually type into YouTube search for this topic. Weave it naturally into the title and into the first sentence of the description. Never keyword-stuff.\n\nFRAME OUTCOMES, NOT TOPICS. Every section connects to what the viewer GAINS or AVOIDS - the transformation, not the subject.\n\nFor the given Topic, produce:\n\n1. title - under 60 characters, containing the primary keyword, specific and intriguing without clickbait, in the calm brand voice.\n\n2. script - a long-form spoken narration of 1200-2000 words, target 1600. Hard floor 1200 words. Single narrator, natural spoken rhythm, no on-screen directions or headings. Structure for retention: the hook above in the first 10-15 seconds and the learning objective inside the first 30; then 8 to 12 distinct sections, each making one clear point backed by a concrete example, a number, a mini-story, or a proof point, with smooth spoken transitions that re-hook attention; the 3 to 5 step checklist, spoken inside one of those sections; at least one specific action the viewer can take today; and a calm, resonant close that lands the core idea and ends on the one comment-worthy question. Depth, not padding.\n\n3. description - 2 to 3 sentences on the video's value, leading with the primary keyword. No link, no audit and no subscribe line. Leave the checklist out; the pipeline writes it into the description from the checklist field.\n\n4. broll - an array of 8 to 12 short visual search phrases (2-4 words each), one per major section of the script, IN ORDER. These are CUTAWAYS over a presenter, not the main visual. Terrance is on screen for the episode and these cover only the beats that need an illustration. Name the thing being illustrated: a concrete object, screen, document or place, never a person standing in for him. No generic office workers, no anonymous professionals at desks, no handshakes. If a beat needs no illustration, name a neutral object rather than a person.\n\n5. learning_objective - the learning objective sentence exactly as the script speaks it, character for character.\n\n6. checklist - an array of 3 to 5 steps, each a short plain sentence the viewer can repeat, in the order the script speaks them, with no number or bullet in front.\n\nReturn ONLY a valid JSON object, no markdown fences, no commentary, in exactly this shape: {\"title\": \"...\", \"script\": \"...\", \"description\": \"...\", \"broll\": [\"...\", \"...\"], \"learning_objective\": \"...\", \"checklist\": [\"...\", \"...\", \"...\"]}`;\n}\n\n// DEVON grounding, ruled by Tee 15 Sep 2026 on an inline card: retrieval from\n// his own record plus the exemplars of his edits, both folded onto the row by\n// DEVON Recall: Merge. Either can be empty; the brand prompt above stands alone.\nif (row.devonRecall) {\n  system += '\\n\\n=== FROM DEVON: TEE\\'S OWN RECORD, RETRIEVED FOR THIS TOPIC ===\\nThese are Tee\\'s rulings, notes and lessons. Obey them where they apply and never contradict them. Never present them as public facts and never cite them as sources.\\n' + row.devonRecall;\n}\nif (row.devonExemplars) {\n  system += '\\n\\n=== HOW TEE EDITS MACHINE DRAFTS (' + row.devonExemplarCount + ' exemplar(s)) ===\\nEach pair shows how a machine draft opened and how Tee rewrote it. Write the way the rewrite reads, not the way the draft reads.\\n' + row.devonExemplars;\n}\n\nreturn [{\n  json: {\n    airtableId: row.id,\n    devonRecallNote: row.devonRecallNote || '',\n    body: {\n      model: \"claude-sonnet-5\",\n      max_tokens: 6000,\n      system: system,\n      messages: [{ role: \"user\", content: \"Topic: \" + topic }]\n    }\n  }\n}];"
    },
    "position": [
     1792,
@@ -3170,7 +3170,7 @@
    ],
    "type": "n8n-nodes-base.wait",
    "typeVersion": 1.1,
-   "webhookId": "704c2c1c-d476-4627-b6ae-d80e9edcc6fe"
+   "webhookId": "redacted"
   },
   {
    "alwaysOutputData": true,
@@ -3927,7 +3927,7 @@
     "authentication": "headerAuth",
     "httpMethod": "POST",
     "options": {},
-    "path": "run-tqo-pipeline"
+    "path": "redacted"
    },
    "position": [
     -1120,
@@ -3935,7 +3935,7 @@
    ],
    "type": "n8n-nodes-base.webhook",
    "typeVersion": 2,
-   "webhookId": "def6a432-8826-43c0-88e6-68b9db74716d"
+   "webhookId": "redacted"
   },
   {
    "id": "94e40c6c-84c6-4d40-a122-ac045621146f",
@@ -4389,7 +4389,7 @@
    "parameters": {
     "authentication": "headerAuth",
     "options": {},
-    "path": "system-pause",
+    "path": "redacted",
     "responseMode": "lastNode"
    },
    "position": [
@@ -4398,7 +4398,7 @@
    ],
    "type": "n8n-nodes-base.webhook",
    "typeVersion": 2,
-   "webhookId": "d3b6c32d-e237-4187-a00d-6565d6629273"
+   "webhookId": "redacted"
   },
   {
    "id": "4e1e0b40-8dcb-4913-a011-9e6123cb2690",
@@ -4456,7 +4456,7 @@
    "parameters": {
     "authentication": "headerAuth",
     "options": {},
-    "path": "system-resume",
+    "path": "redacted",
     "responseMode": "lastNode"
    },
    "position": [
@@ -4465,7 +4465,7 @@
    ],
    "type": "n8n-nodes-base.webhook",
    "typeVersion": 2,
-   "webhookId": "1788187d-a61f-4c56-8006-ec555fbddb9b"
+   "webhookId": "redacted"
   },
   {
    "id": "d16942da-bdb9-4038-a8d1-1ac2eaf92ca8",
@@ -4923,7 +4923,7 @@
    "parameters": {
     "httpMethod": "POST",
     "options": {},
-    "path": "gumroad-sale-24502c03ad317ecb"
+    "path": "redacted"
    },
    "position": [
     -1344,
@@ -4931,7 +4931,7 @@
    ],
    "type": "n8n-nodes-base.webhook",
    "typeVersion": 2,
-   "webhookId": "e9205d1b-56b0-4d30-919c-a3bae0c1b3b2"
+   "webhookId": "redacted"
   },
   {
    "id": "0ea9d8b1-8777-4fc1-8e51-902089285ed1",
@@ -6324,7 +6324,7 @@
     "authentication": "headerAuth",
     "httpMethod": "POST",
     "options": {},
-    "path": "run-nco-pipeline"
+    "path": "redacted"
    },
    "position": [
     -1344,
@@ -6332,7 +6332,7 @@
    ],
    "type": "n8n-nodes-base.webhook",
    "typeVersion": 2,
-   "webhookId": "ba8378a1-3f79-45f9-99de-f4b7c359662f"
+   "webhookId": "redacted"
   },
   {
    "credentials": {
@@ -6347,7 +6347,7 @@
    "parameters": {
     "authentication": "headerAuth",
     "options": {},
-    "path": "run-tqo-74b0069b7ab4f7c5",
+    "path": "redacted",
     "responseMode": "lastNode"
    },
    "position": [
@@ -6356,7 +6356,7 @@
    ],
    "type": "n8n-nodes-base.webhook",
    "typeVersion": 2,
-   "webhookId": "3c96c290-a55b-45fb-935a-8643a6a64069"
+   "webhookId": "redacted"
   },
   {
    "credentials": {
@@ -6371,7 +6371,7 @@
    "parameters": {
     "authentication": "headerAuth",
     "options": {},
-    "path": "run-nco-d9ef90e1bb9d2d69",
+    "path": "redacted",
     "responseMode": "lastNode"
    },
    "position": [
@@ -6380,7 +6380,7 @@
    ],
    "type": "n8n-nodes-base.webhook",
    "typeVersion": 2,
-   "webhookId": "287e56f8-0d52-423b-8478-381835b1a599"
+   "webhookId": "redacted"
   },
   {
    "id": "f5b52996-f198-4ce3-aef1-6aded8caaf4b",
@@ -8703,7 +8703,7 @@
    ],
    "type": "@n8n/n8n-nodes-langchain.chatTrigger",
    "typeVersion": 1.4,
-   "webhookId": "befb56d4-3957-418c-a3a9-02940af2b5d9"
+   "webhookId": "redacted"
   },
   {
    "credentials": {
@@ -9065,7 +9065,7 @@
    "typeVersion": 2
   }
  ],
- "readAt": "2026-10-06T12:23:57Z",
+ "readAt": "2026-10-06T12:32:36Z",
  "role": "draft",
  "settings": {
   "availableInMCP": true,
@@ -9081,7 +9081,7 @@
   "timezone": "America/New_York"
  },
  "versionDescription": null,
- "versionId": "3123aef0-623b-453b-ac8e-514a0184dfbf",
- "versionStamp": "2026-10-06T12:17:21.286Z",
+ "versionId": "b99b38ab-83dc-4106-9c70-32987310cc88",
+ "versionStamp": "2026-10-06T12:29:32.983Z",
  "workflowId": "qEkGOUsNyVaRAmm6"
 }

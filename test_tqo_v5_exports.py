@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 
 EXPORTS = pathlib.Path(__file__).parent / "n8n" / "tqo-v5" / "exports"
 README = pathlib.Path(__file__).parent / "n8n" / "tqo-v5" / "README.md"
@@ -57,18 +58,41 @@ def test_both_exports_name_the_workflow_and_their_role() -> None:
         assert export["nodes"] and isinstance(export["connections"], dict)
 
 
-def test_readme_counts_are_the_exports_counts() -> None:
-    text = README.read_text()
+ROW = re.compile(r"^\| (active|draft) \| `([0-9a-f]{8})` \| (\d+) nodes \|", re.MULTILINE)
+
+
+def _readme_rows() -> dict[str, tuple[str, int]]:
+    """The README's version table, one row per role, so a count and a version
+    id are checked against the export of the same role rather than anywhere in
+    the prose."""
+    rows = {role: (version, int(count)) for role, version, count in ROW.findall(README.read_text())}
+    assert set(rows) == {"active", "draft"}, f"README.md version table rows found: {sorted(rows)}"
+    return rows
+
+
+def test_readme_table_rows_match_the_export_of_the_same_role() -> None:
+    rows = _readme_rows()
     for role in ("active", "draft"):
         export = _load(role)
-        cited = f"{len(export['nodes'])} nodes"
-        assert cited in text, (
-            f"README.md does not cite '{cited}' for the {role} export; "
-            "regenerate the exports and copy the count the script prints"
+        version, count = rows[role]
+        assert version == export["versionId"][:8], (
+            f"README.md names {role} as {version}; the export is {export['versionId'][:8]}"
         )
-        assert export["versionId"][:8] in text, (
-            f"README.md does not name the {role} version {export['versionId'][:8]}"
+        assert count == len(export["nodes"]), (
+            f"README.md says {role} has {count} nodes; the export has {len(export['nodes'])}"
         )
+
+
+def test_webhook_paths_and_ids_are_redacted() -> None:
+    """The Gumroad door carries no authentication, so its path suffix is the
+    secret. The exporter strips every webhook path and id; this proves it."""
+    for role in ("active", "draft"):
+        raw = (EXPORTS / f"{WORKFLOW_ID}_{role}.json").read_text()
+        assert "gumroad-sale-" not in raw, f"{role} export carries the Gumroad path"
+        for node in _load(role)["nodes"]:
+            if node.get("type") == "n8n-nodes-base.webhook":
+                assert node["parameters"].get("path") == "redacted", node["name"]
+            assert node.get("webhookId", "redacted") == "redacted", node["name"]
 
 
 def test_no_if_node_carries_a_shape_its_version_cannot_read() -> None:

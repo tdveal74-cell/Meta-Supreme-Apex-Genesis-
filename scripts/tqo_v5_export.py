@@ -11,12 +11,22 @@ draft is taken against a record of both.
 Usage::
 
     python3 scripts/tqo_v5_export.py            # reads N8N_VPS_URL and N8N_VPS_KEY
-    python3 scripts/tqo_v5_export.py --from FILE  # re-export from a saved API read
+    python3 scripts/tqo_v5_export.py --from FILE --read-at 2026-10-06T07:10:00Z
+
+``--from`` re-exports a saved API body and needs the time that body was read
+stated by hand, because a file's modification time is when it was last
+written, copied or checked out, not when n8n answered.
 
 Nothing here writes to the instance. The public API GET returns the draft at
 the top level and the published version under ``activeVersion``; when the two
 version ids are equal there is no unpublished draft and both files carry the
 same graph, which is the state the test wants to see after a publish.
+
+Webhook paths and webhook ids are redacted before anything is written. One of
+the doors, the Gumroad sale ping, carries no authentication and its random
+path suffix is the only thing between the internet and a Gumroad API read, so
+the path is a secret and the repository is not the place for it. The graph,
+the node names and every other parameter survive, which is what a diff needs.
 """
 
 from __future__ import annotations
@@ -47,6 +57,22 @@ def _read_live() -> tuple[dict, str]:
     return payload, read_at
 
 
+REDACTED = "redacted"
+
+
+def _redact(nodes: list[dict]) -> list[dict]:
+    """Strip the one kind of value in a workflow export that is a secret."""
+    out = []
+    for node in nodes:
+        node = json.loads(json.dumps(node))
+        if node.get("type") == "n8n-nodes-base.webhook" and "path" in node.get("parameters", {}):
+            node["parameters"]["path"] = REDACTED
+        if "webhookId" in node:
+            node["webhookId"] = REDACTED
+        out.append(node)
+    return out
+
+
 def _shape(payload: dict, role: str, read_at: str) -> dict:
     if role == "draft":
         graph = payload
@@ -66,7 +92,7 @@ def _shape(payload: dict, role: str, read_at: str) -> dict:
         "readAt": read_at,
         "active": payload.get("active"),
         "settings": payload.get("settings"),
-        "nodes": graph["nodes"],
+        "nodes": _redact(graph["nodes"]),
         "connections": graph["connections"],
     }
 
@@ -86,12 +112,17 @@ def export(payload: dict, read_at: str) -> list[pathlib.Path]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--from", dest="source", help="a saved GET /api/v1/workflows/{id} body")
+    parser.add_argument(
+        "--read-at",
+        dest="read_at",
+        help="when the saved body was read from n8n, as an ISO 8601 UTC time; required with --from",
+    )
     args = parser.parse_args()
     if args.source:
+        if not args.read_at:
+            sys.exit("--from needs --read-at: a file's mtime is not when n8n was read")
         payload = json.loads(pathlib.Path(args.source).read_text())
-        read_at = dt.datetime.fromtimestamp(
-            pathlib.Path(args.source).stat().st_mtime, dt.timezone.utc
-        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        read_at = args.read_at
     else:
         payload, read_at = _read_live()
     if "activeVersion" not in payload:
