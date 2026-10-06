@@ -94,8 +94,9 @@ sale ping carries no authentication, so its random path suffix is the only
 barrier on that door and the repository is not the place for it; the exporter
 strips every path and id rather than deciding which ones are secrets, and the
 test proves the Gumroad path is absent. The first export of 2026-10-06 carried
-the path before this was understood, so the live path is due for rotation on
-Tee's ruling, together with the ping URL configured on the Gumroad side.
+the path before this was understood, so on Tee's ruling the live path was
+rotated to a fresh suffix the same day and published as `22519c20`, with the
+new ping URL handed to him for the Gumroad side and kept out of this repository.
 
 The same test records one defect by name, and the name is now gone from its
 allowlist because the fix is published. `Script: Already Written?` was an IF
@@ -108,9 +109,12 @@ ever to reach a pass, went TRUE out of that node and died at line 12 of the
 next one with no script written. On Tee's ruling the published version
 `e04868cf` was restored as the draft, the one node recreated at typeVersion 2
 with identical parameters, id, position and edges, read back as the only
-difference, and published as `3123aef0` at 2026-10-06T12:22Z. The exports were
-regenerated after that publish, so both files now carry 265 nodes and the same
-version id, and the allowlist in the test is empty. The Avatar lane and the
+difference, and published as `3123aef0` at 2026-10-06T12:22Z, and the
+allowlist in the test is empty. The committed exports have carried three
+versions on 2026-10-06: `e04868cf` and the draft `206299ba` in the morning,
+`b99b38ab` from 12:32Z (the close rule publish, which PR #303 merged), and
+`3befd7a5` from 16:10Z. `3123aef0` and the Gumroad rotation `22519c20` were
+published between those reads and never exported on their own. The Avatar lane and the
 `TEST Render Only` trigger stay in version history as `206299ba` for a publish
 of their own.
 
@@ -128,7 +132,10 @@ ruling for Tee rather than a defect in this change.
 
 The exports were regenerated once more on 2026-10-06 at 16:10Z from
 `3befd7a5`, the publish that gave `Show Context: Promote` and `Show Context:
-Publish` the NCO tagline the other three Show Context nodes already carried.
+Publish` the NCO tagline that `Show Context: Script` and `Show Context: Render`
+already carried. Those are the only two: `Show Context: Brief`, the fifth node,
+has no tagline key at all in this export, so four nodes carry the line and the
+fifth never did.
 The show registry lift (`services/devon/show_registry.py`) found that drift,
 Tee ruled the two nodes fixed, and `test_devon_show_registry.py` now traces
 the registry against this export with an empty drift map.

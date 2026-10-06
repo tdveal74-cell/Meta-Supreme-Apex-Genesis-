@@ -112,3 +112,16 @@ def test_the_known_mismatch_list_only_shrinks() -> None:
         f"{sorted(stale)} no longer mismatch in the published export; "
         "remove them from KNOWN_IF_MISMATCH"
     )
+
+
+def test_exports_of_the_same_version_carry_the_same_graph() -> None:
+    """The exporter writes both roles from one API read, so equal version ids
+    must mean equal nodes and connections; anything else is a hand edit."""
+    active, draft = _load("active"), _load("draft")
+    if active["versionId"] != draft["versionId"]:
+        return
+    def by_name(node: dict) -> str:
+        return node["name"]
+
+    assert sorted(active["nodes"], key=by_name) == sorted(draft["nodes"], key=by_name), "same version, different nodes"
+    assert active["connections"] == draft["connections"], "same version, different connections"

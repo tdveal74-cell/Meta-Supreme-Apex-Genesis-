@@ -9,11 +9,22 @@ module, so a seed that silently wrote nothing cannot read as done.
     python3 scripts/show_registry_seed.py --check          # read back, diff, exit 1 on drift
     python3 scripts/show_registry_seed.py --seed           # insert the rows the table lacks, then check
     python3 scripts/show_registry_seed.py --seed --dry-run # say what would be inserted
+    python3 scripts/show_registry_seed.py --spec           # print the create payload derived from the module
 
-It needs `N8N_VPS_URL` and `N8N_VPS_KEY` in the environment, the same pair
-the two GitHub Actions watchdogs use, and it never deletes or updates a row:
+It needs `N8N_VPS_KEY` in the environment, the secret the two GitHub Actions
+watchdogs use, and reads `N8N_VPS_URL` with the same default they fall back
+to, and it never deletes or updates a row:
 a row whose values drifted from the module is reported, not rewritten,
-because which side is right is a ruling rather than a script's call.
+because which side is right is a ruling rather than a script's call. For the
+same reason `--seed` inserts nothing into a table whose diff reports any
+problem, a drifted value, a duplicate, a stranger or an extra column: it
+prints the problems, refuses, and exits 1.
+
+Before any insert it reads the table's own definition and refuses when the
+table's name is not the `REGISTRY_TABLES` key or its column set is not the
+module's row keys, because the id in that dict is the only thing that aims
+the POST, and a stale or edited id would otherwise read some other table,
+find every module row missing, and write into it.
 """
 
 from __future__ import annotations
@@ -32,15 +43,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from services.devon.show_registry import REGISTRY_TABLES, registry_rows, series_rows  # noqa: E402
 
 SYSTEM_COLUMNS = {"id", "createdAt", "updatedAt"}
+#: The instance the watchdogs default to, scripts/pulse_watchdog.py line 108.
+DEFAULT_BASE_URL = "https://n8n.editforge.online"
+#: The n8n project the two tables live in.
+PROJECT_ID = "qbrcjkbIoorbwot6"
 #: Which columns identify a row in each table.
 ROW_KEYS = {"show_registry": ("key",), "show_series": ("show", "key")}
 
 
 def _api(path: str, method: str = "GET", body: object = None) -> object:
-    base = os.environ.get("N8N_VPS_URL", "").rstrip("/")
+    base = (os.environ.get("N8N_VPS_URL", "").strip() or DEFAULT_BASE_URL).rstrip("/")
     key = os.environ.get("N8N_VPS_KEY", "")
-    if not base or not key:
-        raise SystemExit("N8N_VPS_URL and N8N_VPS_KEY are required")
+    if not key:
+        raise SystemExit("N8N_VPS_KEY is required")
     data = None if body is None else json.dumps(body).encode("utf-8")
     request = urllib.request.Request(
         f"{base}/api/v1{path}",
@@ -76,8 +91,62 @@ def insert_rows(table_id: str, rows: List[Dict[str, object]]) -> object:
     return _api(f"/data-tables/{table_id}/rows", "POST", {"data": rows, "returnType": "count"})
 
 
+def describe_table(table_id: str) -> object:
+    """The table's own definition: `name`, `projectId` and `columns` as a list of {name, type, ...}.
+
+    Shape read from the live instance on 2026-10-06 for both registry tables.
+    """
+    return _api(f"/data-tables/{table_id}")
+
+
+def check_table(table: str, table_id: str, payload: object) -> List[str]:
+    """Reasons the table behind `table_id` is not the one `table` names, empty when it is.
+
+    The name must equal the `REGISTRY_TABLES` key and the column names must equal
+    the module's row keys exactly, in both directions, so a stale id pointing at
+    another real table is refused before a single row is posted into it.
+    """
+    if not isinstance(payload, dict):
+        return [f"{table} ({table_id}): unexpected table payload: {str(payload)[:200]}"]
+    reasons: List[str] = []
+    name = payload.get("name")
+    if name != table:
+        reasons.append(f"{table} ({table_id}): the table is named {name!r}, not {table!r}")
+    columns = payload.get("columns")
+    if not isinstance(columns, list):
+        return reasons + [f"{table} ({table_id}): the table payload carries no column list"]
+    live = {column["name"] for column in columns if isinstance(column, dict) and isinstance(column.get("name"), str)}
+    wanted = set(expected(table)[0])
+    if live != wanted:
+        reasons.append(
+            f"{table} ({table_id}): columns differ from the module: "
+            f"table only {sorted(live - wanted)}, module only {sorted(wanted - live)}"
+        )
+    return reasons
+
+
+def _reported_count(result: object) -> str:
+    """The insert response as the instance gave it, never as a claim of what landed."""
+    if isinstance(result, dict) and isinstance(result.get("count"), int):
+        return f"count {result['count']}"
+    return json.dumps(result)[:200]
+
+
 def _identity(table: str, row: Dict[str, object]) -> Tuple[object, ...]:
     return tuple(row.get(column) for column in ROW_KEYS[table])
+
+
+def column_spec(table: str) -> Dict[str, object]:
+    """The create payload for one table, derived from the module's row shape.
+
+    n8n data table columns are string, number, boolean or date; a bool is
+    checked before an int because a Python bool is an int.
+    """
+    columns = []
+    for name, value in expected(table)[0].items():
+        kind = "boolean" if isinstance(value, bool) else "number" if isinstance(value, (int, float)) else "string"
+        columns.append({"name": name, "type": kind})
+    return {"name": table, "projectId": PROJECT_ID, "columns": columns}
 
 
 def expected(table: str) -> List[Dict[str, object]]:
@@ -114,25 +183,46 @@ def main(argv: List[str]) -> int:
     parser.add_argument("--seed", action="store_true", help="insert the rows the tables lack")
     parser.add_argument("--check", action="store_true", help="read the tables back and diff them against the module")
     parser.add_argument("--dry-run", action="store_true", help="with --seed, print the rows instead of inserting them")
+    parser.add_argument("--spec", action="store_true", help="print the create payload for both tables and exit; touches nothing")
     args = parser.parse_args(argv)
+    if args.spec:
+        print(json.dumps([column_spec(table) for table in REGISTRY_TABLES], indent=2))
+        return 0
     if not (args.seed or args.check):
-        parser.error("pass --seed, --check or both")
+        parser.error("pass --seed, --check, --spec or a combination")
     clean = True
     for table, table_id in REGISTRY_TABLES.items():
         live = read_rows(table_id)
         missing, problems = diff(table, live)
-        if args.seed and missing:
-            if args.dry_run:
+        # A table that reads DRIFT gets nothing inserted. A row whose key drifted
+        # on the instance (' nco' for 'nco') is a stranger to the diff and the
+        # module's row is missing, so seeding here would leave two near identical
+        # rows for a stage workflow to choose between. Settling that is a ruling.
+        refused = bool(args.seed and missing and problems)
+        if args.seed and missing and not problems:
+            refusals = check_table(table, table_id, describe_table(table_id))
+            if refusals:
+                for line in refusals:
+                    print(line)
+                print(f"{table} ({table_id}): REFUSED to insert {len(missing)} rows, the id does not point at this table")
+                clean = False
+            elif args.dry_run:
                 print(f"{table} ({table_id}): would insert {len(missing)} rows")
                 for row in missing:
                     print("  ", json.dumps(row, ensure_ascii=False)[:160])
             else:
+                posted = [_identity(table, row) for row in missing]
                 result = insert_rows(table_id, missing)
-                print(f"{table} ({table_id}): inserted {len(missing)} rows -> {json.dumps(result)[:200]}")
+                print(f"{table} ({table_id}): posted {len(posted)} rows, instance reports {_reported_count(result)}")
                 live = read_rows(table_id)
                 missing, problems = diff(table, live)
+                still_missing = {_identity(table, row) for row in missing}
+                landed = [identity for identity in posted if identity not in still_missing]
+                print(f"{table} ({table_id}): {len(landed)} of {len(posted)} posted rows inserted, proven by read back")
         for line in problems:
             print(line)
+        if refused:
+            print(f"{table} ({table_id}): REFUSED to insert {len(missing)} rows: the table reads DRIFT, settle the lines above first")
         if missing:
             print(f"{table} ({table_id}): {len(missing)} rows missing: {[_identity(table, row) for row in missing]}")
         clean = clean and not missing and not problems

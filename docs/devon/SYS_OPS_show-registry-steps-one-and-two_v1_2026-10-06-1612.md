@@ -1,4 +1,4 @@
-# The show registry is in the repository and on the instance, and the five Show Context nodes finally agree
+# The show registry is in the repository and on the instance, and the four Show Context nodes that carry a tagline finally agree
 
 Step one and step two of splitting `TQO FINAL V5` by stage, both on
 2026-10-06, both on Tee's rulings from cards. Step one is PR #307, merged as
@@ -9,6 +9,12 @@ node that carries it. Step two is on the instance: the two stale tagline nodes
 repaired and published as `3befd7a5`, and the `show_registry` and
 `show_series` data tables created and seeded from the module, read back
 clean. This doc also closes the Reach item the morning's doc left open.
+
+The test counts, the critic counts, the publish read back and the table read
+backs below are this session's own measurements. Their receipts are the
+commit messages and PR bodies on #307, #308 and #309 and the n8n version and
+execution ids named in the text; the repository holds the commits, not the
+runs.
 
 ## Step one: what the critics did to the first trace
 
@@ -44,7 +50,8 @@ merge on a card and the PR merged as `08708f8`.
 
 ## Step two: the two nodes, then the two tables
 
-The lift found the five nodes disagreeing on one value: `Show Context:
+The lift found the four Show Context nodes that carry a tagline disagreeing
+on it (`Show Context: Brief` carries none): `Show Context:
 Promote` and `Show Context: Publish` still carried "Military Mindset.
 Civilian Impact." for NCO Forge while Script and Render carried the Aug 2026
 audit line. Blast radius read from the export was zero, because the only
@@ -62,9 +69,13 @@ gone. The exports were regenerated from that version at 16:10Z, both files
 
 The tables are new on the instance, in project `qbrcjkbIoorbwot6`:
 `show_registry` is `xmNWLUm49QyZ4ysO` with 34 columns and `show_series` is
-`s1IxySUuphOVrOqU` with 9, column types taken from the module's row shapes
+`s1IxySUuphOVrOqU` with 9, created through the n8n MCP `create_data_table`
+call with column types taken from the module's row shapes
 (number for the three limits, the stale claim hours and the series position,
-boolean for the two readiness flags, string for the rest). Neither existed
+boolean for the two readiness flags, string for the rest);
+`scripts/show_registry_seed.py --spec` prints that same create payload from
+the module, so a lost table or a third show is recreated from the module
+rather than from memory. Neither existed
 before: the 61 tables on the instance were listed and none matched.
 `scripts/show_registry_seed.py` wrote 2 and 16 rows and read both tables back
 against the module, CLEAN, and a second run inserted nothing and read CLEAN
@@ -130,6 +141,6 @@ ARTIFACT: docs/devon/SYS_OPS_show-registry-steps-one-and-two_v1_2026-10-06-1612.
 DATE: 2026-10-06
 DECISIONS: Tee ruled on cards to merge PR #307, to fix the two stale NCO tagline nodes now with a read back, to create and seed the show_registry and show_series data tables now, and to file the HeyGen deprecation reading here. Earlier the same day he ruled the show registry module and its test as step one of the stage split.
 FINDINGS: The first trace was a whole node substring match and eight mutations passed it green; the keyed, branch scoped trace fails all eight. Promote and Publish carried the pre audit NCO tagline with zero blast radius. The rows endpoint pages by nextCursor and the insert is POST on the rows route. The stale show_context_script.js mirror lacked packageLimit and nothing tested it. Reach execution 2276 returned 200 after three 401s. HeyGen's v1 and v2 removal on 2026-10-31 touches nothing live: zero active calls, two archived v2 probes, the Avatar lane draft on v3 only.
-OPEN: The 2026-10-07 10:20Z pass on row 46 under the tightened close rule, read at 10:32Z. Rows 4 and 5 and which writer feeds the table, unruled. The Avatar lane and TEST trigger in version 206299ba awaiting their own publish. Enabling the Sunday Brief lane now that Reach is live. The first stage workflow that reads show_registry instead of a Show Context node. The chat agent lane with workflow PUT inside V5, to be removed in the split.
+OPEN: The 2026-10-07 10:20Z pass on row 46 under the tightened close rule, to be read at 10:32Z that day. Nothing schedules `scripts/show_registry_seed.py --check` yet, so a change to the module drifts from the two tables with no alarm until someone runs it; a scheduled read back is a ruling for Tee. Rows 4 and 5 and which writer feeds the table, unruled. The Avatar lane and TEST trigger in version 206299ba awaiting their own publish. Enabling the Sunday Brief lane now that Reach is live. The first stage workflow that reads show_registry instead of a Show Context node. The chat agent lane with workflow PUT inside V5, to be removed in the split.
 STATUS: PR #307 merged as 08708f8; V5 published as 3befd7a5 and read back; both tables seeded and read back clean twice; this doc's PR not yet opened at the time of writing, so its CI has not run.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f

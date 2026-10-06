@@ -20,7 +20,8 @@ build red, and so a value borrowed from the other show's branch does not pass.
 
 WHAT THE LIFT FOUND
 
-The five nodes disagreed with each other on one value. `Show Context: Script`
+Four of the five nodes carry a tagline, and they disagreed on it; `Show
+Context: Brief` carries none. `Show Context: Script`
 gave NCO Forge the tagline "Leaders aren't born. They're forged." under a
 comment citing the Aug 2026 audit, `Show Context: Render` carried the same
 line, and `Show Context: Promote` and `Show Context: Publish` still carried
