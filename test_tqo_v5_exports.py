@@ -27,8 +27,9 @@ WORKFLOW_ID = "qEkGOUsNyVaRAmm6"
 
 # Mismatched IF nodes known to exist in the published export. Shrink this the
 # moment a fix is published and the export regenerated; never add to it to
-# make a test green.
-KNOWN_IF_MISMATCH = {"Script: Already Written?"}
+# make a test green. Script: Already Written? was the one entry until the fix
+# was published as version 3123aef0 on 2026-10-06 and the exports regenerated.
+KNOWN_IF_MISMATCH: set[str] = set()
 
 
 def _load(role: str) -> dict:

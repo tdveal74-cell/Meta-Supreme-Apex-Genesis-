@@ -9019,6 +9019,19 @@
    "typeVersion": 2
   },
   {
+   "id": "allspice-e23f172c8537",
+   "name": "Script: Hydrate from Row",
+   "parameters": {
+    "jsCode": "// Script: Hydrate from Row. Tee ruling 2026-10-01: the pipeline must USE a\n// script that already exists on the row instead of rewriting it. This node\n// shapes the row's stored script into the same d-shape Build Doctor Prompt\n// expects from Parse Script JSON, so an existing script enters the chain at\n// the doctor, not at the writer. Nothing here invents content: the title,\n// description, b-roll, learning objective and checklist come from the row\n// where they exist, empty where they do not.\nconst row = $('One Idea at a Time').first().json;\nconst f = row.fields || row;\nconst script = String(f.Script ?? f.script ?? '').trim();\nif (!script) {\n  throw new Error('Script: Hydrate from Row reached with an empty script. This node only runs for rows that already carry one.');\n}\nconst list = (v) => Array.isArray(v) ? v.map(s => String(s).trim()).filter(Boolean) : [];\nconst tags = String(f.Tags ?? f.tags ?? '').trim();\nconst broll = String(f['B-Roll Keywords'] ?? f.broll_keywords ?? '').trim();\nreturn [{\n  json: {\n    recordId: row.id,\n    title: String(f['Video Title'] ?? f.video_title ?? f.Topic ?? '').trim(),\n    script,\n    description: String(f.Description ?? f.description ?? '').trim(),\n    tags,\n    broll,\n    learningObjective: String(f.learning_objective ?? '').trim(),\n    checklist: list(f.checklist),\n    __source: 'existing-row-script',\n  }\n}];"
+   },
+   "position": [
+    2400,
+    5060
+   ],
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2
+  },
+  {
    "id": "allspice-9e48f79fbfb5",
    "name": "Script: Already Written?",
    "parameters": {
@@ -9049,23 +9062,10 @@
     5184
    ],
    "type": "n8n-nodes-base.if",
-   "typeVersion": 1
-  },
-  {
-   "id": "allspice-e23f172c8537",
-   "name": "Script: Hydrate from Row",
-   "parameters": {
-    "jsCode": "// Script: Hydrate from Row. Tee ruling 2026-10-01: the pipeline must USE a\n// script that already exists on the row instead of rewriting it. This node\n// shapes the row's stored script into the same d-shape Build Doctor Prompt\n// expects from Parse Script JSON, so an existing script enters the chain at\n// the doctor, not at the writer. Nothing here invents content: the title,\n// description, b-roll, learning objective and checklist come from the row\n// where they exist, empty where they do not.\nconst row = $('One Idea at a Time').first().json;\nconst f = row.fields || row;\nconst script = String(f.Script ?? f.script ?? '').trim();\nif (!script) {\n  throw new Error('Script: Hydrate from Row reached with an empty script. This node only runs for rows that already carry one.');\n}\nconst list = (v) => Array.isArray(v) ? v.map(s => String(s).trim()).filter(Boolean) : [];\nconst tags = String(f.Tags ?? f.tags ?? '').trim();\nconst broll = String(f['B-Roll Keywords'] ?? f.broll_keywords ?? '').trim();\nreturn [{\n  json: {\n    recordId: row.id,\n    title: String(f['Video Title'] ?? f.video_title ?? f.Topic ?? '').trim(),\n    script,\n    description: String(f.Description ?? f.description ?? '').trim(),\n    tags,\n    broll,\n    learningObjective: String(f.learning_objective ?? '').trim(),\n    checklist: list(f.checklist),\n    __source: 'existing-row-script',\n  }\n}];"
-   },
-   "position": [
-    2400,
-    5060
-   ],
-   "type": "n8n-nodes-base.code",
    "typeVersion": 2
   }
  ],
- "readAt": "2026-10-06T10:00:56Z",
+ "readAt": "2026-10-06T12:23:57Z",
  "role": "active",
  "settings": {
   "availableInMCP": true,
@@ -9080,8 +9080,8 @@
   "timeSavedMode": "fixed",
   "timezone": "America/New_York"
  },
- "versionDescription": "Editor: Claude chat session. Builds on bdcee20c. Attach Clips v3.1 per critic findings: require voice_track_in_clip true, trim keys, refuse clips with no drive_file_id, newest row wins a duplicate segment, read Process Each Video with .item (pattern proven in exec 1872). 12 local harness cases pass.",
- "versionId": "e04868cf-e113-4842-9532-44d4da83a9be",
- "versionStamp": "2026-10-05T22:40:13.082Z",
+ "versionDescription": "Draft restored from published e04868cf, then one node changed. Script: Already Written? was typeVersion 1 carrying a typeVersion 2 condition shape; the engine read it as having no conditions and IF v1 routed every locked row to TRUE, into Script: Hydrate from Row, which throws on an empty script. Measured on scheduled execution 2257 (2026-10-06T10:20Z, row 46). Node recreated at typeVersion 2 with identical parameters, id, position and edges. Nothing else changed. Publish on Tee's ruling; then one watched pass on row 46.",
+ "versionId": "3123aef0-623b-453b-ac8e-514a0184dfbf",
+ "versionStamp": "2026-10-06T12:17:21.299Z",
  "workflowId": "qEkGOUsNyVaRAmm6"
 }
