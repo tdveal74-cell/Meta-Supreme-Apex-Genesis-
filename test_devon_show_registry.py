@@ -37,13 +37,11 @@ from services.devon.show_registry import (
     show_segment,
 )
 
-#: The drift the lift found. Adding a key here is a visible test edit; the map
-#: in the module may only carry keys listed here, and only while the node
-#: still carries the stale value.
-EXPECTED_DRIFT = {
-    ("Show Context: Promote", "nco", "tagline"),
-    ("Show Context: Publish", "nco", "tagline"),
-}
+#: The drift the module may still carry. Adding a key here is a visible test
+#: edit; the map in the module may only carry keys listed here, and only while
+#: the node still carries the stale value. The two the lift found, the NCO
+#: tagline on Promote and Publish, were repaired on 2026-10-06 and left.
+EXPECTED_DRIFT: set = set()
 
 
 def _traces(js_key: str, value: object, code: str) -> bool:
@@ -137,6 +135,11 @@ def test_the_voice_lane_traces_into_the_render_node():
     assert re.search(rf"const TEE_CLONE = {js_pattern(TEE_CLONE)};", code)
     assert re.search(r"const TQO_VOICE = TEE_CLONE;", code)
     assert re.search(r"const NCO_VOICE = TEE_CLONE;", code)
+    for show in SHOWS.values():
+        segment = show_segment(code, show.show)
+        assert re.search(rf"\.\.\.VOICE,\s*voiceId:\s*{show.show}_VOICE,", segment), (
+            f"the {show.show} object no longer spreads VOICE and assigns voiceId: {show.show}_VOICE"
+        )
     assert re.search(rf"const SPEECHIFY_VOICE = {js_pattern(VOICE.speechify_voice_id)};", code)
     assert re.search(rf"const SPEECHIFY_MODEL = {js_pattern(VOICE.speechify_model)};", code)
     assert re.search(rf"const VOICE_READY = {js_pattern(VOICE.voice_ready)};", code)
