@@ -135,6 +135,11 @@ def test_the_voice_lane_traces_into_the_render_node():
     assert re.search(rf"const TEE_CLONE = {js_pattern(TEE_CLONE)};", code)
     assert re.search(r"const TQO_VOICE = TEE_CLONE;", code)
     assert re.search(r"const NCO_VOICE = TEE_CLONE;", code)
+    for show in SHOWS.values():
+        segment = show_segment(code, show.show)
+        assert re.search(rf"\.\.\.VOICE,\s*voiceId:\s*{show.show}_VOICE,", segment), (
+            f"the {show.show} object no longer spreads VOICE and assigns voiceId: {show.show}_VOICE"
+        )
     assert re.search(rf"const SPEECHIFY_VOICE = {js_pattern(VOICE.speechify_voice_id)};", code)
     assert re.search(rf"const SPEECHIFY_MODEL = {js_pattern(VOICE.speechify_model)};", code)
     assert re.search(rf"const VOICE_READY = {js_pattern(VOICE.voice_ready)};", code)
