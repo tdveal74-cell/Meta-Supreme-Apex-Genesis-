@@ -3,7 +3,7 @@
 Ruled by Tee on 2026-10-06, as step one of splitting that workflow into one
 small workflow per stage. The stages will couple through the content ledger
 and this registry, so a new show becomes a record here rather than a new
-branch in fifteen Code nodes.
+branch in the Code nodes that V5_SHOW_BRANCHES counts.
 
 WHERE THE VALUES COME FROM
 
@@ -14,33 +14,42 @@ Five Code nodes in the workflow each return a per show object selected on
 below was copied from the published version named in SOURCE, read through the
 export this repository keeps under `n8n/tqo-v5/exports/`, and
 `test_devon_show_registry.py` traces each value back into the node that
-carries it, so a live edit that is not carried here turns the build red.
+carries it, keyed on the node's own field name and inside the branch that
+builds this show's object, so a live edit that is not carried here turns the
+build red, and so a value borrowed from the other show's branch does not pass.
 
 WHAT THE LIFT FOUND
 
 The five nodes disagree with each other on one value. `Show Context: Script`
-and `Show Context: Render` give NCO Forge the tagline "Leaders aren't born.
-They're forged." with a comment citing the Aug 2026 brand audit, while
-`Show Context: Promote` and `Show Context: Publish` still carry "Military
-Mindset. Civilian Impact." This registry carries the audited line and names
-the two stale nodes in KNOWN_NODE_DRIFT, which the test lets shrink and never
-grow. Editing those two nodes is a ruling for Tee, not a side effect of this
-module.
+gives NCO Forge the tagline "Leaders aren't born. They're forged." under a
+comment citing the Aug 2026 audit, `Show Context: Render` carries the same
+line, and `Show Context: Promote` and `Show Context: Publish` still carry
+"Military Mindset. Civilian Impact." This registry carries the audited line
+and names the two stale nodes in KNOWN_NODE_DRIFT. The test pins that map's
+keys, so a new entry is a visible test edit rather than a data edit, and the
+map can only shrink. Editing those two nodes is a ruling for Tee, not a side
+effect of this module. Blast radius of the drift, read from the export: the
+only consumer of `tagline` downstream is `Build Script Prompt`, which reads
+`Show Context: Script`, the node that already carries the audited line.
 
 WHAT IS NOT HERE
 
-The prompts. `Build Script Prompt`, `Series Addendum`, `Build QC Prompt` and
-seven more builders still branch on `isNCO` in their bodies, so a third show
-registered here would be written with TQO's prompt until the canon blocks move
-behind the blind comparison `tqo_canon.py` reserves for Tee. This module is the
-routing, limits, voice, publish and brief data, and the series map. Nothing in
-it performs a network call or an effect.
+The prompts. `Build Script Prompt` branches on `ctx.show === 'NCO'` and sixteen
+Code nodes carry `isNCO`, `Series Addendum` and `Build QC Prompt` among them;
+V5_SHOW_BRANCHES counts every spelling from the export. A third show
+registered here would therefore be written with TQO's prompt until the canon
+blocks move behind the blind comparison `tqo_canon.py` reserves for Tee. This
+module is the routing, limits, voice, publish and brief data, and the series
+map. `voiceNote` from the Render node is the one per show value left out: it
+is a comment string with no consumer. Nothing in this module performs a
+network call or an effect.
 """
 
 from __future__ import annotations
 
 import json
 import pathlib
+import re
 from dataclasses import asdict, dataclass
 from typing import Dict, Mapping, Optional, Tuple
 
@@ -56,24 +65,45 @@ SOURCE = {
     "read": "2026-10-06",
 }
 
-#: The export this registry is traced against. Regenerate it with
-#: scripts/tqo_v5_export.py, never by hand.
+#: The export this registry is traced against, resolved from the repository
+#: checkout. Regenerate it with scripts/tqo_v5_export.py, never by hand. The
+#: byte identical copy under deploy/soul cannot see it, and nothing there calls
+#: export_nodes(); the read is for the test, not for the service.
 EXPORT = pathlib.Path(__file__).resolve().parents[2] / "n8n" / "tqo-v5" / "exports" / "qEkGOUsNyVaRAmm6_active.json"
 
-#: Tee's Professional Voice Clone, trained 9 Aug 2026 on a purpose recorded
-#: read. Both shows narrate in it: voice and identity owned, never rented.
+#: How many Code nodes in the export still branch on the show, in any of the
+#: spellings below. Counted by the test from the export; do not edit by hand.
+V5_SHOW_BRANCHES = 25
+SHOW_BRANCH_SPELLINGS: Tuple[str, ...] = (
+    r"\bisNCO\b",
+    r"\$json\.nco\b",
+    r"ctx\.show\s*===\s*['\"]NCO['\"]",
+    r"===\s*['\"]NCO['\"]",
+)
+
+#: Tee's Professional Voice Clone. The Render node's own comment records it as
+#: trained 9 Aug 2026 on a purpose recorded read; that comment is the only
+#: provenance in the tree. Both shows narrate in it: voice and identity owned,
+#: never rented.
 TEE_CLONE = "ypnKDQtIhp4N3yn4UnqO"
 
 
 @dataclass(frozen=True)
 class VoiceLane:
-    """What `Show Context: Render` hands the narration lane."""
+    """What `Show Context: Render` hands the narration lane.
+
+    `provider_eleven` and `provider_speechify` are the two candidate narrator
+    strings; `Mark Ready + Save URL` picks one from the run's own execution
+    record, so the row names who actually spoke. Neither is a prediction.
+    """
 
     voice_id: str
     voice_ready: bool
     eleven_model: str
     speechify_voice_id: str
     speechify_model: str
+    provider_eleven: str
+    provider_speechify: str
     stale_claim_hours: int
     settings: Mapping[str, float]
 
@@ -146,17 +176,24 @@ class Show:
         return None
 
     def row(self) -> Dict[str, object]:
-        """The flat, JSON serialisable record for the `show_registry` table."""
+        """The flat record for the `show_registry` data table step two creates.
+
+        Every value is a string, a number or a boolean, which with date are the
+        four column types an n8n data table takes, so the lists and the voice
+        settings travel as JSON strings and a stage workflow parses them.
+        """
         record = asdict(self)
         record.pop("series")
         record.pop("aliases")
         voice = record.pop("voice")
         brief = record.pop("brief")
-        record.update({f"voice_{k}": v for k, v in voice.items()})
-        record.update({f"brief_{k}": v for k, v in brief.items()})
-        record["required_tags"] = list(self.required_tags)
-        record["brief_sections"] = list(self.brief.sections)
-        record["voice_settings"] = dict(self.voice.settings)
+        for name, value in voice.items():
+            record[name if name.startswith("voice_") else f"voice_{name}"] = value
+        for name, value in brief.items():
+            record[f"brief_{name}"] = value
+        record["required_tags"] = json.dumps(list(self.required_tags))
+        record["brief_sections"] = json.dumps(list(self.brief.sections))
+        record["voice_settings"] = json.dumps(dict(self.voice.settings))
         return record
 
 
@@ -166,6 +203,8 @@ VOICE = VoiceLane(
     eleven_model="eleven_multilingual_v2",
     speechify_voice_id="geffen_32",
     speechify_model="simba-3.2",
+    provider_eleven="elevenlabs, Tee clone",
+    provider_speechify="speechify geffen_32 STOPGAP VOICE, not for publish",
     stale_claim_hours=3,
     settings={
         "stability": 0.5,
@@ -176,7 +215,7 @@ VOICE = VoiceLane(
     },
 )
 
-#: One Reach profile serves both shows today: tqohq.online, uuid below.
+#: One Reach profile serves both shows today, the uuid both Brief branches carry.
 REACH_PROFILE = "af497848-65de-40f7-82ac-b0f4f162a141"
 
 TQO = Show(
@@ -383,8 +422,9 @@ NCO = Show(
             ),
         ),
     ),
-    # Old Airtable select values still resolve, one hop, so no historical row
-    # is orphaned. A segment on the alias rides onto the resolved series.
+    # The node's own comment: old Airtable select values still resolve, one
+    # hop, so no historical row is orphaned. A segment on the alias rides onto
+    # the resolved series.
     aliases={
         "nco after action": ("after action", None),
         "the hard conversation": ("hard call", None),
@@ -398,7 +438,8 @@ NCO = Show(
 SHOWS: Dict[str, Show] = {TQO.key: TQO, NCO.key: NCO}
 
 #: Which registry fields each Show Context node carries, by the node's own
-#: key names. The test traces every one of these into the node's source.
+#: key names. The test traces every one of these into the branch of the node
+#: that builds this show's object, keyed on the node's field name.
 NODE_FIELDS: Dict[str, Dict[str, str]] = {
     "Show Context: Script": {
         "show": "show",
@@ -442,6 +483,7 @@ NODE_FIELDS: Dict[str, Dict[str, str]] = {
         "requiredTags": "required_tags",
         "scriptLimit": "script_limit",
         "promoteLimit": "promote_limit",
+        "staleClaimHours": "voice.stale_claim_hours",
     },
     "Show Context: Publish": {
         "show": "show",
@@ -467,14 +509,16 @@ NODE_FIELDS: Dict[str, Dict[str, str]] = {
         "mlGroupId": "brief.mailerlite_group_id",
         "voice": "brief.voice",
         "moveLabel": "brief.move_label",
+        "sections": "brief.sections",
         "sectionNotes": "brief.section_notes",
         "audience": "brief.audience",
     },
 }
 
 #: Values a node still carries that this registry has moved past. Found while
-#: lifting; each is one node edit on Tee's ruling. The test fails if a listed
-#: drift is gone from the node and still listed here, so the map only shrinks.
+#: lifting; each is one node edit on Tee's ruling. The test pins this map's
+#: keys and checks each entry in both directions, so an entry can only be
+#: removed, and only once the node has been fixed.
 KNOWN_NODE_DRIFT: Dict[Tuple[str, str, str], str] = {
     ("Show Context: Promote", "nco", "tagline"): "Military Mindset. Civilian Impact.",
     ("Show Context: Publish", "nco", "tagline"): "Military Mindset. Civilian Impact.",
@@ -551,16 +595,40 @@ def export_nodes() -> Dict[str, str]:
     }
 
 
-def js_literal(value: object) -> Tuple[str, ...]:
-    """The forms a registry value takes inside a Code node, any of which traces."""
+def js_pattern(value: object) -> str:
+    """A regex matching this registry value as a Code node would write it.
+
+    A string may be quoted either way, a list is its items in order, a bool is
+    the bare keyword and an integer is its digits with nothing numeric after
+    them. Floats are compared numerically by the caller, not matched here.
+    """
     if isinstance(value, bool):
-        return ("true" if value else "false",)
-    if isinstance(value, (int, float)):
-        return (repr(value),)
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return re.escape(str(value)) + r"(?![\d.])"
     if isinstance(value, (tuple, list)):
         if not value:
-            return ("[]",)
-        inner = ", ".join(f"'{item}'" for item in value)
-        return (f"[{inner}]",)
-    text = str(value)
-    return (f"'{text}'", f'"{text}"')
+            return r"\[\s*\]"
+        return r"\[\s*" + r"\s*,\s*".join(js_pattern(item) for item in value) + r"\s*\]"
+    text = re.escape(str(value))
+    return f"(?:'{text}'|\"{text}\")"
+
+
+def keyed(js_key: str, value: object) -> str:
+    """The regex for `js_key: <value>` as one field of a node's object."""
+    return rf"(?<![\w$]){re.escape(js_key)}:\s*{js_pattern(value)}"
+
+
+def show_segment(code: str, show_label: str) -> str:
+    """The slice of a Show Context node that builds one show's object.
+
+    Every Show Context node returns `nco ? {...} : {...}`, each object opening
+    on its `show:` field, so the segment runs from this show's `show:` marker
+    to the next show's marker or to the end of the node.
+    """
+    markers = {match.group(1): match.start() for match in re.finditer(r"\bshow:\s*'([A-Z]+)'", code)}
+    if show_label not in markers:
+        raise KeyError(f"no show: '{show_label}' object in this node")
+    start = markers[show_label]
+    later = [position for position in markers.values() if position > start]
+    return code[start : min(later)] if later else code[start:]

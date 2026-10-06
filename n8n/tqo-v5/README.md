@@ -7,17 +7,23 @@ this repository. The DEVON organs next door have been mirrored and diffed since
 holds or ships an episode left no diff and no review.
 
 This directory starts closing that. It is not complete and does not pretend to
-be: three nodes of 240 are here, the one that was changed and the two that hold
-the canon.
+be: two nodes are mirrored here, the one that was changed and the one that holds
+the canon, and the identity board that `Show Context: Script` returns now lives
+as data in `services/devon/show_registry.py`, traced into the export below by
+`test_devon_show_registry.py`.
 
 | File | Node | What it decides |
 |---|---|---|
 | `build_qc_prompt.js` | `Build QC Prompt` | The whole QC rubric, both verdicts, and the hard blockers that hold an episode regardless of score |
 | `build_script_prompt.js` | `Build Script Prompt` | The show canon: the whole system prompt that writes every episode of both shows |
-| `show_context_script.js` | `Show Context: Script` | The identity board the prompt reads: channel, taglines, positioning, table ids and the per run limits |
 
-The second and third arrived on 2026-09-17, read from the live public API at
-workflow `updatedAt` 2026-09-16T14:02:48.875Z, 240 nodes, active. Measured from
+The second arrived on 2026-09-17 beside a `show_context_script.js` mirror of
+`Show Context: Script`, both read from the live public API at workflow
+`updatedAt` 2026-09-16T14:02:48.875Z, 240 nodes, active. That mirror was
+retired on 2026-10-06: no test read it, and by then it lacked the
+`packageLimit` the live node carries, so the file the README called the
+identity board was wrong and nothing could say so. The registry module and
+its test replaced it. Measured from
 that read rather than described: the TQO block is 805 words and 4,822
 characters, the NCO block is 550 words and 3,543 characters, and the node source
 is 1,608 words in total. Re-measured on 2026-09-23 after the episode promises change
