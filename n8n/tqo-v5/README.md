@@ -57,3 +57,65 @@ findings written onto the row.
 Nothing here executes. n8n holds the graph, the credentials and the schedule.
 A change made here has to be applied to the live node, and a change made live
 has to be copied back, or this file is a lie about what gates the channel.
+
+## The two versions, exported
+
+The workflow carries two graphs at once, and every count above was taken from
+the wrong one. The public API returns the draft at the top level and the
+published version under `activeVersion`; the editor shows the draft, the
+schedule runs the published version. Read on 2026-10-06, the published version
+`e04868cf` (activated 2026-10-05T22:40:30Z) is 265 nodes, 22 roots and 17
+trigger type nodes, while the draft `206299ba` (saved 2026-10-06T01:25:46Z) is
+290 nodes: it adds the 24 node HeyGen Avatar lane and the manual trigger
+`TEST Render Only (Claude 5 Oct)`, removes nothing, and modifies `Build Movie`
+and `Presenter: Attach Clips`. The 240 at the top of this file was measured on
+2026-09-16 and no version from that day survives on the instance, so it is a
+sentence rather than a count.
+
+`exports/qEkGOUsNyVaRAmm6_active.json` and `exports/qEkGOUsNyVaRAmm6_draft.json`
+are the two graphs as `scripts/tqo_v5_export.py` wrote them, with the read time
+inside each file. Regenerate them with that script, never by hand, and copy the
+table below from its output. `test_tqo_v5_exports.py` reads the table row by
+row and fails when either row drifts from the export of the same role.
+
+| version | id | nodes |
+|---|---|---|
+| active | `b99b38ab` | 265 nodes |
+| draft | `b99b38ab` | 265 nodes |
+
+Every webhook path and webhook id in the exports reads `redacted`. The Gumroad
+sale ping carries no authentication, so its random path suffix is the only
+barrier on that door and the repository is not the place for it; the exporter
+strips every path and id rather than deciding which ones are secrets, and the
+test proves the Gumroad path is absent. The first export of 2026-10-06 carried
+the path before this was understood, so the live path is due for rotation on
+Tee's ruling, together with the ping URL configured on the Gumroad side.
+
+The same test records one defect by name, and the name is now gone from its
+allowlist because the fix is published. `Script: Already Written?` was an IF
+node at typeVersion 1 carrying a typeVersion 2 condition shape. The engine copy
+in the executions read `{"conditions": {}, "combineOperation": "all"}`, and IF
+v1 sends an item with nothing to test to its TRUE output, which is wired to
+`Script: Hydrate from Row`, which throws on an empty script. Measured on
+scheduled execution 2257, 2026-10-06T10:20Z: row 46, the first locked TQO row
+ever to reach a pass, went TRUE out of that node and died at line 12 of the
+next one with no script written. On Tee's ruling the published version
+`e04868cf` was restored as the draft, the one node recreated at typeVersion 2
+with identical parameters, id, position and edges, read back as the only
+difference, and published as `3123aef0` at 2026-10-06T12:22Z. The exports were
+regenerated after that publish, so both files now carry 265 nodes and the same
+version id, and the allowlist in the test is empty. The Avatar lane and the
+`TEST Render Only` trigger stay in version history as `206299ba` for a publish
+of their own.
+
+The fix was proven the same hour by one watched pass fired on the published
+version: execution 2269, 2026-10-06T12:23Z, took row 46 out of the FALSE edge
+of the retyped node into `Package: Context`, wrote the script through
+`Write Script (Cerebras)` and one expansion (828 to 1,465 words), ran the
+doctor (76, repaired), dash repair (11 sentences restructured, 0 dashes left)
+and the originality scan (95), and saved it. The Script Gate then held the row
+at status Error on one rule, line 69 of `Script Gate: Quality`: the last 60
+words must carry both a question mark and the word comments, and the script
+ends on a question that never says comments. That is the gate working as
+written against a writer prompt that does not demand the word, and it is a
+ruling for Tee rather than a defect in this change.
