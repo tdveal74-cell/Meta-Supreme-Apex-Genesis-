@@ -8692,6 +8692,7 @@
    "typeVersion": 1.2
   },
   {
+   "disabled": true,
    "id": "dc90b679-98e3-4102-a4ed-81dd5f0a794a",
    "name": "When chat message received",
    "parameters": {
@@ -8712,6 +8713,7 @@
      "name": "Google Gemini(PaLM) Api account"
     }
    },
+   "disabled": true,
    "id": "b583c915-0fc2-4902-80e2-5ab46306addf",
    "name": "Google Gemini Chat Model",
    "parameters": {
@@ -8726,6 +8728,7 @@
    "typeVersion": 1.1
   },
   {
+   "disabled": true,
    "id": "a9c50719-5ad5-4c61-93aa-c0129c11089f",
    "name": "AI Agent",
    "parameters": {
@@ -8745,6 +8748,7 @@
      "name": "N8N TOOL"
     }
    },
+   "disabled": true,
    "id": "52f830e5-3c20-41bc-b97e-1dcbbe2b026c",
    "name": "READER",
    "parameters": {
@@ -8768,6 +8772,7 @@
      "name": "N8N TOOL"
     }
    },
+   "disabled": true,
    "id": "127456ba-2c3f-4772-937d-f27610598ac9",
    "name": "CREATOR",
    "parameters": {
@@ -8804,6 +8809,7 @@
      "name": "N8N TOOL"
     }
    },
+   "disabled": true,
    "id": "aaa7ebd2-c424-4e4f-9f9e-9960eb3accb7",
    "name": "UPDATER",
    "parameters": {
@@ -8822,6 +8828,7 @@
    "typeVersion": 4.5
   },
   {
+   "disabled": true,
    "id": "c558c9fa-083f-4849-a837-d975941ed3d2",
    "name": "Simple Memory",
    "parameters": {},
@@ -9065,7 +9072,7 @@
    "typeVersion": 2
   }
  ],
- "readAt": "2026-10-06T16:10:46Z",
+ "readAt": "2026-10-06T20:42:25Z",
  "role": "active",
  "settings": {
   "availableInMCP": true,
@@ -9080,8 +9087,8 @@
   "timeSavedMode": "fixed",
   "timezone": "America/New_York"
  },
- "versionDescription": "Show Context: Promote and Show Context: Publish carried the pre audit NCO tagline, Military Mindset. Civilian Impact., while Show Context: Script and Show Context: Render carry the Aug 2026 audit line. Both now read Leaders aren't born. They're forged. One line each; nothing else changed. Ruled by Tee 2026-10-06 after the show registry lift (PR #307) found the drift.",
- "versionId": "3befd7a5-aaae-4dfb-ae98-52e720c7da3b",
- "versionStamp": "2026-10-06T16:05:53.027Z",
+ "versionDescription": "Tee ruled 2026-10-06 via card: disable the Gemini chat agent lane now. Its UPDATER and CREATOR tools can PUT or POST any workflow on the instance. Seven nodes disabled, no node removed, no connection changed.",
+ "versionId": "36013f35-06c9-45cd-8fb2-c80fecade765",
+ "versionStamp": "2026-10-06T20:36:41.771Z",
  "workflowId": "qEkGOUsNyVaRAmm6"
 }
