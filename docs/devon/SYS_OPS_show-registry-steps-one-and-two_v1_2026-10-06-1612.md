@@ -103,19 +103,24 @@ file, and `deploy/lipsync/README.md` recorded on 2026-09-16 that HeyGen's own
 v2 response named the 2026-10-31 removal and ruled the render call built on
 v3. There is no migration to do.
 
-The comparison page itself could not be opened from this container: its
-egress blocks developers.heygen.com, and the permission policy declined a read
-only fetch workflow on the instance. What a web search returned of the page:
-v1 and v2 stay operational through 2026-10-31 and are retired from
-2026-11-01; `POST /v1/video/generate` and `POST /v2/video/generate` are
-replaced by `POST /v3/videos` with a type discriminated, nested body; status
-polling, avatar and voice listing, webhooks and pagination all move to v3.
-The lane's three calls are the v3 ones, and they were answered by the live
-API on manual execution 2221 (2026-10-06T01:07Z): `/v3/users/me` 200 with
-the wallet at 13.58, `POST /v3/videos` 200 with video id `8622143d` from a
-body of `type: 'avatar'`, `avatar_id`, `audio_url` and `title`, and
-`GET /v3/videos/{id}` polled eight times to `completed` with a 62.6 second
-mp4. That is the measurement; the page's own table remains unread.
+The comparison page was read in full once Tee allowed developers.heygen.com
+in the environment's network list (the first attempt was blocked at the
+egress proxy, and the permission policy declined a read only fetch workflow
+on the instance). Its table: v1 and v2 stay operational through 2026-10-31
+and are retired from 2026-11-01; every legacy response carries
+`Deprecation: true`, a `Sunset` header and a `warning.v3_endpoint` naming the
+replacement; `POST /v2/video/generate` becomes `POST /v3/videos` with a
+discriminated body (`type: "avatar"`, `"image"`, `"cinematic_avatar"` or
+`"studio"`); `GET /v2/videos/{video_id}` becomes `GET /v3/videos/{video_id}`;
+`GET /v2/user/remaining_quota` becomes `GET /v3/users/me`; `GET /v2/avatars`
+becomes `GET /v3/avatars`; pagination is cursor based on every v3 list. The
+lane's three calls are exactly the three v3 replacements, with `type:
+'avatar'` in the body, and they were answered by the live API on manual
+execution 2221 (2026-10-06T01:07Z): `/v3/users/me` 200 with the wallet at
+13.58, `POST /v3/videos` 200 with video id `8622143d` from a body of `type:
+'avatar'`, `avatar_id`, `audio_url` and `title`, and `GET /v3/videos/{id}`
+polled eight times to `completed` with a 62.6 second mp4. The two archived
+probes' v2 calls map to `/v3/users/me` and `/v3/avatars` and stay archived.
 
 ## DEVON RECEIPT
 
