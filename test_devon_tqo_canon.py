@@ -41,6 +41,7 @@ TRACES = {
     "compliance.owned-presenter": "his own likeness and his own cloned voice",
     "compliance.no-stolen-valor": "never invents named operations",
     "compliance.no-combat-violence-footage": "realistic combat violence",
+    "compliance.no-invented-experience": "EVIDENCE: NOTHING INVENTED",
     "tqo.hook.first-fifteen-seconds": "decide whether this video is watched or skipped",
     "tqo.voice.calm-register": "Calm is the weapon",
     "tqo.length.1200-2000": "hard floor 1200",
