@@ -179,3 +179,44 @@ def test_the_sources_nodes_match_their_mirrors_and_sit_on_their_edges() -> None:
             assert not nodes[name].get("disabled"), f"{role}: {name} is disabled"
             assert _targets(export["connections"], before) == [name], f"{role}: {before} does not feed {name} alone"
             assert _targets(export["connections"], name) == [after], f"{role}: {name} does not feed {after}"
+
+
+#: The length check after the doctor, ruled by Tee 2026-10-07 after test 2357
+#: and published as 83ec66d9. It sits between Parse Doctor Verdict and Fetch
+#: Prior Episodes, and Originality Scan and DT Shim: Prior REST read its last
+#: node by name, so a script lengthened here is the script every later node
+#: measures and saves. Fetch Prior Episodes always outputs, because the first
+#: episode of a show has no prior script and the run stopped there in test 2361.
+LENGTH_NODES = {
+    "Script: Short After Doctor?": "length_after_doctor.js",
+    "Parse Expanded After Doctor": "parse_expanded_after_doctor.js",
+    "Script: Final Text": "script_final_text.js",
+}
+
+
+def test_the_length_check_after_the_doctor_is_wired_and_mirrored() -> None:
+    mirrors = EXPORTS.parent
+    for role in ("active", "draft"):
+        export = _load(role)
+        nodes = {node["name"]: node for node in export["nodes"]}
+        conn = export["connections"]
+        for name, mirror in LENGTH_NODES.items():
+            assert nodes[name]["parameters"]["jsCode"] == (mirrors / mirror).read_text(), f"{role}: {name} drifted from {mirror}"
+            assert not nodes[name].get("disabled"), f"{role}: {name} is disabled"
+        assert _targets(conn, "Parse Doctor Verdict") == ["Script: Short After Doctor?"], role
+        assert _targets(conn, "Script: Short After Doctor?") == ["Expand After Doctor?"], role
+        assert conn["Expand After Doctor?"]["main"][0][0]["node"] == "Expand After Doctor (Cerebras)", role
+        assert conn["Expand After Doctor?"]["main"][1][0]["node"] == "Script: Final Text", role
+        assert _targets(conn, "Expand After Doctor (Cerebras)") == ["Parse Expanded After Doctor"], role
+        assert _targets(conn, "Parse Expanded After Doctor") == ["Script: Final Text"], role
+        assert _targets(conn, "Script: Final Text") == ["Fetch Prior Episodes"], role
+        cond = nodes["Expand After Doctor?"]["parameters"]["conditions"]
+        assert cond["options"]["typeValidation"] == "strict", role
+        (only,) = cond["conditions"]
+        assert only["leftValue"] == "={{ $json.needsExpansion3 }}", role
+        assert only["operator"] == {"operation": "true", "singleValue": True, "type": "boolean"}, role
+        assert nodes["Fetch Prior Episodes"].get("alwaysOutputData") is True, role
+        for reader in ("Originality Scan", "DT Shim: Prior REST"):
+            code = nodes[reader]["parameters"]["jsCode"]
+            assert "$('Script: Final Text')" in code and "$('Parse Doctor Verdict')" not in code, f"{role}: {reader}"
+        assert nodes["Build Script Prompt"]["parameters"]["jsCode"] == (mirrors / "build_script_prompt.js").read_text(), role

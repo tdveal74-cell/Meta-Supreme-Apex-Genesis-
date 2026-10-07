@@ -86,8 +86,8 @@ row and fails when either row drifts from the export of the same role.
 
 | version | id | nodes |
 |---|---|---|
-| active | `c2d51b46` | 269 nodes |
-| draft | `c2d51b46` | 269 nodes |
+| active | `c470353f` | 274 nodes |
+| draft | `c470353f` | 274 nodes |
 
 Every webhook path and webhook id in the exports reads `redacted`. The Gumroad
 sale ping carries no authentication, so its random path suffix is the only
@@ -279,3 +279,98 @@ Row 46 carried exactly that sentence past both gates; it was cut by hand under
 Tee's earlier ruling, and the gate replayed on the row refuses the old text and
 passes the new. No live run could exercise it, because no locked Idea row was
 left to write.
+
+The exports were regenerated at `12266aff` on four more rulings Tee made on
+cards the same afternoon. `83ec66d9` carried them and `12266aff` shortened one
+line of it so the TQO canon stays under a thousand words.
+
+- `Script: Short After Doctor?`, `Expand After Doctor?`, `Expand After Doctor
+  (Cerebras)`, `Parse Expanded After Doctor` and `Script: Final Text` sit
+  between `Parse Doctor Verdict` and `Fetch Prior Episodes`. A script the
+  doctor left under 1,200 words gets one more expansion of the final text. The
+  parse keeps it only if it is longer, keeps the first two sentences and the
+  last sentence verbatim, and adds no number; otherwise the doctored text goes
+  on and the gate fails it on the floor as before. `Originality Scan` and `DT
+  Shim: Prior REST` now read `Script: Final Text` by name.
+- `Fetch Prior Episodes` always outputs. The first episode of a show has no
+  prior script, the node returned nothing and the run stopped there without
+  an error, which test 2361 on NCO row 26 found. Every NCO script would have
+  died at that node until one existed.
+- `Sources Gate` blanks military identifiers before it reads numerals: form
+  numbers such as DD-214, 24 hour times such as 0600 or 1800 hours, and unit
+  ordinals such as the 101st. An ordinal after ranked or before percentile is
+  still a figure, and MOS codes are left out because 11B reads the same as
+  eleven billion. It also refuses a sentence about the future that carries a
+  figure and names no approved source.
+- `Build Script Prompt`: the section line in both show blocks asks for a
+  mechanism, a step or a sourced figure where it asked for "a concrete example
+  or number". The canon measurement in `tqo_canon.py` is re-counted.
+
+All of it ran first on an inactive copy, `bNNR1v39mtUktl5D`, then went to the
+live workflow by PUT and the copy was archived. Execution 2362 on the copy
+wrote NCO row 26's first script: 934 words, 1,501 after the second expansion,
+1,494 after the doctor, so the new check passed it through, and the Sources
+Gate held it as Error on one invented figure, a "50 person team". The NCO
+Presenter Rule held: the script speaks to camera and has no narrator line. The
+expansion branch after the doctor has not yet run live; its parse is proven by
+`length_after_doctor.test.mjs`. The `12266aff` wording change went live by PUT
+without its own copy run, because it is one phrase inside a template literal;
+the mirror parses and the canon test counts it.
+
+The exports were regenerated at `54e8154d` the same afternoon, after a third
+critic graded `12266aff` PASS-WITH-CONDITIONS and proved the military blanking
+broke the ruling it was built for. "The VA 70% disability rating" passed,
+because the form pattern blanked "VA 70" and left a bare percent sign, and so
+did "1500 hours to finish", "Only 0750 soldiers" and "the 12th consecutive
+year", all of which the gate before it refused. `54e8154d` changes `Sources
+Gate`, `Parse Expanded After Doctor` and one stale comment in `Parse Doctor
+Verdict`, and nothing else.
+
+- A form number needs its hyphen or the word Form. A 24 hour time needs a
+  preposition before it and either a leading zero or the word hours, and "by"
+  takes only the leading zero, so "by 2030 hours" stays a year. An ordinal
+  needs a unit noun after it. Nothing touching a percent, a decimal, a
+  thousands comma or a magnitude is blanked.
+- A figure now carries its magnitude and every spelling of percent, so a
+  sourced 41 percent no longer lends itself to "41 million" or "41K", and a
+  count of eleven or more written in words must be in the sources.
+- The projection check reads going to, could, may, might, likely to, 'll,
+  next year and by the end of, counts one third and the other fractions only
+  as "of" phrases, and a source is named only as a whole word in its own
+  capitals, so the verb "ramp" no longer names the publisher Ramp.
+- The parse after the doctor keeps a lengthening only if every doctored
+  sentence survives verbatim and in order, the close appears once, and no
+  dash, number, number word or capitalised name was added.
+
+All twenty seven leaks the critic listed are cases in `sources_gate.test.mjs`
+and every one is refused; its lengthening cases are in
+`length_after_doctor.test.mjs`. Replayed on the live rows, the new gate still
+passes nothing it should not: row 46 now reads Error on "twelve" (Gallup's
+12.1 rounded), and row 26 on "50" and "fifteen", which is how the gate already
+treated 12 and 15 written as digits. Row 46 is already ticked and is not
+gated again. It went live by PUT without a copy run, because it changes the
+bodies of two Code nodes whose harnesses drive the real files.
+
+The exports were regenerated at `c470353f` after a fourth critic graded
+`54e8154d` PASS-WITH-CONDITIONS. Most of what it found predates the day's
+work and sat in the first version of the gate: a numeral of ten or under
+passed whenever its unit was a spelling the gate did not read, so "9 in 10",
+"7 out of 10", "3/4", "3x" and "9 pct" all reached Scripted, and a sourced
+percent or year lent its digits to a bare count, so "41 managers quit" and "a
+plant of 2024 workers" passed on Korn Ferry's 41% and Gallup's 2024. Fraction
+words outside one to four thirds, "per cent" after a small number word, and a
+source named by "said", "data shows", "per" or "a Stanford study" passed too.
+An hours figure followed by "of", "a" or "on" was still read as a clock time.
+
+`c470353f` changes `Sources Gate` and `Parse Expanded After Doctor` only. A
+small number in a ratio or with any unit is a figure; only a unitless source
+numeral stands for a bare count, and a sourced year stands only as a year;
+fractions, "out of" and "twice" are spelled figures; the attribution checks
+read more verbs and more shapes; the time exception refuses an hours count.
+It also stops refusing DD 214 without its hyphen, SF 86, DA 2166-9,
+regulation numbers such as AR 670-1, Article 15, Chapter 13 and 24/7. The
+parse counts figures rather than seeing them, so a doctored number cannot be
+reused, refuses a name in a sentence's first word when the doctored text
+never uses the word, and refuses any doctored sentence repeated. Every input
+the critic listed is a case in the two node tests. Replayed, row 46 reads
+Error on "twelve" only and row 26 on "50" and "fifteen" only.

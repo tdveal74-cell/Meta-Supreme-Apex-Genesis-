@@ -106,6 +106,136 @@ assert.equal(run("Cuts hit 77% of teams.", { show: "NCO" }).status, "Error");
 // A named person is not an unnamed source.
 assert.equal(run(CITED + " In an interview with Gallup chief scientist Jim Harter, he said spans keep widening.").status, "Scripted");
 
+// Military identifiers in NCO prose are names, not figures (ruled 2026-10-07),
+// and only in their narrow forms.
+for (const good of [
+  "First formation is at 0600, and it was at 0600 in the 101st Airborne too.",
+  "Bring your DD-214 and your DA Form 2166-9 to the counter.",
+  "Chow closes after 1800 hours.",
+  "I served in the 82nd Airborne Division for three years.",
+]) assert.equal(run(CITED + " " + good, { show: "NCO" }).status, "Scripted", good);
+// The third critic's leaks, 2026-10-07. Every one passed the first version of
+// the blanking and must be refused: a percent or a magnitude behind a form
+// prefix, a duration read as a clock time, a count read as an ordinal.
+for (const bad of [
+  "The VA 70% disability rating changes everything.",
+  "The VA 70 percent rating changes everything.",
+  "DA 77% of soldiers agree.",
+  "The VA 40,000 claim backlog is real.",
+  "VA 2.5 million veterans wait.",
+  "The course takes 1500 hours to finish.",
+  "Soldiers log 2000 hours a year.",
+  "Only 0750 soldiers reenlisted.",
+  "Retention fell for the 12th consecutive year.",
+  "The unit came in 37th in the Army.",
+  "The unit finishing 37th in the Army was cut.",
+  "He scored in the 90th-percentile band.",
+  "Retention fell for the 2,000th time.",
+  "By 2030 hours were cut.",
+  "I served with the 82nd for three years.",
+  "Promotion takes 11B, said nobody.",
+  "Pay starts at $50K, and the 1800 recruits all got it.",
+  // A unit or magnitude makes a different figure from the sourced numeral.
+  "41 million managers lost jobs.",
+  "41K managers lost jobs.",
+  "10 million jobs vanished.",
+  "The share hit 12.1 % of managers.",
+  "The share hit 10.9 per cent of managers.",
+  "Twelve companies cut managers.",
+]) assert.equal(run(CITED + " " + bad, { show: "NCO" }).status, "Error", bad);
+assert.equal(run(CITED + " Korn Ferry put it at 41 % of professionals.").status, "Scripted");
+
+// A projection stated as fact needs an approved name in its own sentence, even
+// when its figure is sourced (ruled 2026-10-07), and a verb is not a name.
+for (const bad of [
+  "By 2030, 41% of managers will be gone.",
+  "Half of these roles will disappear.",
+  "One in five companies is expected to cut managers next.",
+  "One-third of all managers will be gone by next year.",
+  "One third of all managers will be gone by next year.",
+  "41% of managers are going to be gone.",
+  "41% of managers could be gone next year.",
+  "Managers'll be cut by 41%.",
+  "41 percent of managers are likely to be cut.",
+  "Hiring will ramp down, and 41% of managers will be gone.",
+]) assert.match(run(CITED + " " + bad).gateReason, /a projection with a figure and no approved source named/, bad);
+for (const good of [
+  "Gartner expects that one in five companies will cut over half of their managers.",
+  "You will need 3 things.",
+  "This will change how you plan.",
+  "You will spend half the meeting listening.",
+  "This will take half an hour.",
+]) assert.equal(run(CITED + " " + good).status, "Scripted", good);
+
+// The fourth critic's cases, 2026-10-07. A small number in a ratio, a unit the
+// gate did not read, a fraction word, a sourced percent or year lending its
+// digits to a count, an hours figure dressed as a clock time, and a source
+// named without a reporting verb: all must be refused.
+for (const bad of [
+  "About 9 pct noticed.",
+  "About 9\u00a0per\u00a0cent noticed.",
+  "About 9\uff05 noticed.",
+  "About 9 percentage points.",
+  "7 of 10 managers left.",
+  "7 out of 10 managers left.",
+  "2 in 5 managers left.",
+  "9 in 10 managers left.",
+  "1 in 3 managers left.",
+  "Roughly 3/4 of managers left.",
+  "Managers are 3x more likely to leave.",
+  "Managers are 10x more likely to leave.",
+  "Managers are 4 times more likely to leave.",
+  "Cuts hit 5 K roles.",
+  "Cuts hit 5 mn roles.",
+  "Cuts hit 5 bn in pay.",
+  "Cuts hit 5 hundred roles.",
+  "About 5\u00bd percent left.",
+  "About \u00bd of managers left.",
+  "About \u2153 of managers left.",
+  "Last quarter, 41 managers quit at one plant.",
+  "A plant of 2024 workers lost its managers.",
+  "A quarter of managers left.",
+  "A fifth of managers quit within weeks.",
+  "A tenth of managers left.",
+  "Six tenths of managers left.",
+  "Seven eighths of managers left.",
+  "three fourths of managers left.",
+  "One out of three managers left.",
+  "Nine out of ten managers felt it.",
+  "Nine per cent of managers felt it.",
+  "Five per cent of managers left.",
+  "Most managers lose productivity after 2000 hours of overtime.",
+  "Burnout begins after 1900 hours on the job.",
+  "Engineers spend from 1200 hours a year in meetings.",
+  "Challenger data shows 41% of professionals saw cuts.",
+  "Challenger said 41% of professionals saw cuts.",
+  "Per Challenger, 41% of professionals saw cuts.",
+  "A Challenger report shows the same.",
+  "Research from Challenger shows the same.",
+  "A Stanford study shows 41% of professionals saw cuts.",
+  "Stanford researchers found 41% of professionals saw cuts.",
+  "A 2024 study found 41% of professionals saw cuts.",
+  "In a Stanford survey, 41% of professionals saw cuts.",
+  "Goldman Sachs analysts estimate 41% of professionals saw cuts.",
+  "Managers should expect one-third of layoffs to hit them in the coming years.",
+  "About \uff17\uff13% noticed.",
+  "Managers doubled their hours."
+]) assert.equal(run(CITED + " " + bad, { show: "NCO" }).status, "Error", bad);
+// And the ordinary NCO prose it would otherwise have refused.
+for (const good of [
+  "File your DD 214 now, and your DD214 too.",
+  "Read AR 670-1, FM 7-22, ATP 3-21.8 and AR 600-8-22.",
+  "Fill out SF 86 and DA 2166-9.",
+  "He took an Article 15 and a Chapter 13.",
+  "Readiness is 24/7.",
+  "Chow closes after 1800 hours, then lights out.",
+  "Korn Ferry put it at 41% of professionals.",
+  "Gallup counted 12.1 direct reports.",
+  "Bloomberg and Live Data Technologies counted one-third of all layoffs in 2023.",
+  "Here are 3 steps and 5 questions.",
+  "The Korn Ferry survey said manager roles were cut."
+]) assert.equal(run(CITED + " " + good, { show: "NCO" }).status, "Scripted", good);
+
 // The writer side, for both shows: the rule is appended and the sources are listed.
 const writerNode = (file, show, body) =>
   new Function("$", "$input", readFileSync(new URL("./" + file, import.meta.url), "utf8"))(
