@@ -1,0 +1,77 @@
+name: Carousels for review
+
+# EVERY EPISODE'S CAROUSEL, DRAWN FOR TEE TO READ, AND NEVER POSTED.
+#
+# Ruled by Tee 2026-10-07 on an inline card: one carousel per episode,
+# automatic, from our own HTML templates, delivered as files for review only.
+# TQO FINAL V5 already writes each episode's carousel as text into the row's
+# platform_packaging; tools/carousel/render.mjs reads both content tables,
+# checks each carousel against the packaging rules and the row's own script,
+# and draws 1080 by 1350 slides plus a contact sheet in real Chromium.
+#
+# IT ONLY READS. Nothing here writes to the instance and nothing posts. The
+# slides are uploaded as this run's artifact, and the run summary lists every
+# carousel drawn and every one refused with its reasons.
+#
+# A MISSING KEY GOES RED. Without N8N_VPS_KEY the renderer exits 2, the same
+# direction as the watchdogs and the registry check: a run that could see
+# nothing must not report an empty, green day.
+#
+# It runs at 12:13Z, after the 10:20Z script pass and the 11:00Z promote pass
+# that writes the packaging. A schedule only workflow is often late and skips
+# its first slots (see CLAUDE.md), so use workflow_dispatch to prove it.
+#
+# The rules themselves are unit tested by tools/carousel/carousel.test.mjs in
+# the standalone job of ci.yml, with no browser and no network.
+
+on:
+  schedule:
+    - cron: "13 12 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: carousel-render
+  cancel-in-progress: false
+
+jobs:
+  render:
+    name: Draw every episode's carousel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Global rather than a devDependency, as the audio and panel jobs do, so
+      # the lockfile and web-ci's path filter are untouched.
+      - name: Install Playwright and Chromium
+        run: |
+          npm install -g playwright@1.56.1
+          npx --yes playwright@1.56.1 install --with-deps chromium
+          GLOBAL_ROOT="$(npm root -g)"
+          echo "PLAYWRIGHT_MODULE=${GLOBAL_ROOT}/playwright/index.mjs" >> "$GITHUB_ENV"
+          CHROME="$(node -e "process.stdout.write(require('${GLOBAL_ROOT}/playwright').chromium.executablePath())")"
+          test -x "$CHROME" || { echo "playwright reported a chromium path that is not executable: $CHROME"; exit 1; }
+          echo "CHROMIUM_BINARY=${CHROME}" >> "$GITHUB_ENV"
+
+      - name: Draw the carousels
+        env:
+          N8N_VPS_KEY: ${{ secrets.N8N_VPS_KEY }}
+        run: node tools/carousel/render.mjs --out out/carousels
+
+      - name: Summary
+        if: always()
+        run: test -f out/carousels/summary.md && cat out/carousels/summary.md >> "$GITHUB_STEP_SUMMARY" || echo "no summary was written" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: carousels-${{ github.run_id }}
+          path: out/carousels
+          retention-days: 30
+          if-no-files-found: warn

@@ -122,7 +122,7 @@ test failure. It shows up as a hundred or more collection ERRORs.
 
 ## Reproducing CI
 
-CI is TWELVE jobs, and on most pull requests you will see five. Five are in
+CI is THIRTEEN jobs, and on most pull requests you will see five. Five are in
 `.github/workflows/ci.yml` (`standalone` then `container` and `engine` then
 `api`, plus `dependency-audit` on every push). The sixth is
 `.github/workflows/web-ci.yml`, path filtered to the web workspace, so a run of
@@ -476,6 +476,15 @@ drift, on a stranger row or on a missing `N8N_VPS_KEY`. It never seeds: settling
 drift is a ruling. Tee ruled it daily on a card the same day, because a check
 on merge alone would miss a hand edit made in the n8n editor. Counted from the
 `jobs:` keys of the eight files in `.github/workflows`, not from this paragraph.
+
+The thirteenth arrived on 2026-10-07: `.github/workflows/carousel-render.yml`,
+`schedule` only, once a day at 12:13Z, plus `workflow_dispatch`. Tee ruled one
+carousel per episode, automatic, from our own HTML templates, for review only.
+It reads both content tables, draws every packaged carousel in Chromium with
+`tools/carousel/render.mjs`, and uploads the slides as the run's artifact. It
+never posts and never writes to the instance, and it goes red on a missing
+`N8N_VPS_KEY` like the other scheduled jobs. Counted from the `jobs:` keys of
+the nine files in `.github/workflows`, not from this paragraph.
 
 **The standalone list above drifted and was regenerated from `ci.yml`.** It
 named 30 files while the job ran 36, missing `test_devon_data_tables.py`,
