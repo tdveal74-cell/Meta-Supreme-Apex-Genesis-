@@ -62,7 +62,7 @@ SOURCE = {
         "and 'Series Addendum' in TQO FINAL V5"
     ),
     "workflow_id": "qEkGOUsNyVaRAmm6",
-    "version_id": "12266aff-b21b-4da5-9577-46ee673e3ced",
+    "version_id": "54e8154d-56df-43a5-9fcb-f0b906c47288",
     "export": "n8n/tqo-v5/exports/qEkGOUsNyVaRAmm6_active.json",
     "read": "2026-10-07",
 }

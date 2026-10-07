@@ -106,32 +106,65 @@ assert.equal(run("Cuts hit 77% of teams.", { show: "NCO" }).status, "Error");
 // A named person is not an unnamed source.
 assert.equal(run(CITED + " In an interview with Gallup chief scientist Jim Harter, he said spans keep widening.").status, "Scripted");
 
-// Military identifiers in NCO prose are names, not figures (ruled 2026-10-07).
+// Military identifiers in NCO prose are names, not figures (ruled 2026-10-07),
+// and only in their narrow forms.
 for (const good of [
   "First formation is at 0600, and it was at 0600 in the 101st Airborne too.",
   "Bring your DD-214 and your DA Form 2166-9 to the counter.",
-  "Chow closes at 1800 hours.",
-  "I served with the 82nd for three years.",
+  "Chow closes after 1800 hours.",
+  "I served in the 82nd Airborne Division for three years.",
 ]) assert.equal(run(CITED + " " + good, { show: "NCO" }).status, "Scripted", good);
-// A rank or a percentile is still a figure, and so is anything with a unit.
+// The third critic's leaks, 2026-10-07. Every one passed the first version of
+// the blanking and must be refused: a percent or a magnitude behind a form
+// prefix, a duration read as a clock time, a count read as an ordinal.
 for (const bad of [
-  "The unit ranked 37th in the Army.",
-  "He scored in the 90th percentile.",
-  "Pay starts at $50K, and the 1800 recruits all got it.",
+  "The VA 70% disability rating changes everything.",
+  "The VA 70 percent rating changes everything.",
+  "DA 77% of soldiers agree.",
+  "The VA 40,000 claim backlog is real.",
+  "VA 2.5 million veterans wait.",
+  "The course takes 1500 hours to finish.",
+  "Soldiers log 2000 hours a year.",
+  "Only 0750 soldiers reenlisted.",
+  "Retention fell for the 12th consecutive year.",
+  "The unit came in 37th in the Army.",
+  "The unit finishing 37th in the Army was cut.",
+  "He scored in the 90th-percentile band.",
+  "Retention fell for the 2,000th time.",
+  "By 2030 hours were cut.",
+  "I served with the 82nd for three years.",
   "Promotion takes 11B, said nobody.",
+  "Pay starts at $50K, and the 1800 recruits all got it.",
+  // A unit or magnitude makes a different figure from the sourced numeral.
+  "41 million managers lost jobs.",
+  "41K managers lost jobs.",
+  "10 million jobs vanished.",
+  "The share hit 12.1 % of managers.",
+  "The share hit 10.9 per cent of managers.",
+  "Twelve companies cut managers.",
 ]) assert.equal(run(CITED + " " + bad, { show: "NCO" }).status, "Error", bad);
+assert.equal(run(CITED + " Korn Ferry put it at 41 % of professionals.").status, "Scripted");
 
 // A projection stated as fact needs an approved name in its own sentence, even
-// when its figure is sourced (ruled 2026-10-07).
+// when its figure is sourced (ruled 2026-10-07), and a verb is not a name.
 for (const bad of [
   "By 2030, 41% of managers will be gone.",
   "Half of these roles will disappear.",
   "One in five companies is expected to cut managers next.",
+  "One-third of all managers will be gone by next year.",
+  "One third of all managers will be gone by next year.",
+  "41% of managers are going to be gone.",
+  "41% of managers could be gone next year.",
+  "Managers'll be cut by 41%.",
+  "41 percent of managers are likely to be cut.",
+  "Hiring will ramp down, and 41% of managers will be gone.",
 ]) assert.match(run(CITED + " " + bad).gateReason, /a projection with a figure and no approved source named/, bad);
 for (const good of [
   "Gartner expects that one in five companies will cut over half of their managers.",
   "You will need 3 things.",
   "This will change how you plan.",
+  "You will spend half the meeting listening.",
+  "This will take half an hour.",
 ]) assert.equal(run(CITED + " " + good).status, "Scripted", good);
 
 // The writer side, for both shows: the rule is appended and the sources are listed.

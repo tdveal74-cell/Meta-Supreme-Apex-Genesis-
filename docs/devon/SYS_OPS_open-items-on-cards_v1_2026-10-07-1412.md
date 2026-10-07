@@ -51,6 +51,20 @@ to camera. It also restates the World Economic Forum's 2030 figure as "in a
 decade" and advises estimating numbers on a resume, neither of which a gate
 can see; both are Tee's to judge on the row.
 
+## The third critic, and V5 `54e8154d`
+
+A fresh critic on `12266aff` returned PASS-WITH-CONDITIONS and showed the
+military blanking let a percentage through behind a form prefix ("The VA 70%
+disability rating") and let durations and counts through as clock times and
+ordinals, every one of which the gate before it refused. That was live from
+about 14:09Z to 14:22Z. `54e8154d` narrows each pattern, carries magnitude and
+spelled counts in the figure check, widens the projection check, matches a
+source name only as a whole word in its capitals, and holds the parse after
+the doctor to every doctored sentence surviving verbatim. All of the critic's
+inputs are now test cases and all are refused. No live V5 execution ran in
+that window, the newest being 2357 at 13:13Z; the only run on the leaking
+gate was test copy execution 2362, which held row 26 as Error anyway.
+
 ## The presenter lane
 
 A read only audit found that neither show can render a presenter episode
@@ -87,7 +101,7 @@ TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_open-items-on-cards_v1_2026-10-07-1412.md
 DATE: 2026-10-07
 DECISIONS: Tee ruled on cards: tick row 46 now; fix row 26's lock with a presenter pitch; NCO logo by a prompt and reference he generates from; v2 brand by style guide PDFs; re-check length after the doctor; allow named military terms; gate future claims; reword the show blocks to sourced figures; research and re-gate row 5; clear row 4's audit pointer; he re-exports the v9 file; the six landscape looks are approved; check the consent PDF. Avatar lane and spend cap held for a cheaper option he has found.
-FINDINGS: PR #314 merged as 7c124a7. Fetch Prior Episodes stopped every first NCO script silently; fixed. V5 12266aff published and read back. Execution 2362 wrote NCO row 26's first script, held as Error on one invented figure. Neither show can render a presenter episode on live V5. The consent PDF is dated 8/19/2026 with the header placeholder unfilled.
+FINDINGS: PR #314 merged as 7c124a7. Fetch Prior Episodes stopped every first NCO script silently; fixed. V5 12266aff published and read back; a third critic found its military blanking let a percentage through, fixed in 54e8154d. Execution 2362 wrote NCO row 26's first script, held as Error on one invented figure. Neither show can render a presenter episode on live V5. The consent PDF is dated 8/19/2026 with the header placeholder unfilled.
 OPEN: The avatar lane and a HeyGen spend cap, waiting on Tee's cheaper option. Row 4's re-render. Row 26's review. Row 5's research run at 09:40Z on 2026-10-08. The expansion branch after the doctor has not run live. The v2 style guides, the NCO logo and the v9 re-export are Tee's. Row 46 is ticked without a watched video.
-STATUS: V5 active and draft 12266aff, read back; test copy bNNR1v39mtUktl5D archived; this doc's PR not yet opened at the time of writing.
+STATUS: V5 active and draft 54e8154d, read back; test copy bNNR1v39mtUktl5D archived; this doc's PR not yet opened at the time of writing.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f

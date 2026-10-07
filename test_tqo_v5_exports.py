@@ -210,7 +210,11 @@ def test_the_length_check_after_the_doctor_is_wired_and_mirrored() -> None:
         assert _targets(conn, "Expand After Doctor (Cerebras)") == ["Parse Expanded After Doctor"], role
         assert _targets(conn, "Parse Expanded After Doctor") == ["Script: Final Text"], role
         assert _targets(conn, "Script: Final Text") == ["Fetch Prior Episodes"], role
-        assert "needsExpansion3" in json.dumps(nodes["Expand After Doctor?"]["parameters"]), role
+        cond = nodes["Expand After Doctor?"]["parameters"]["conditions"]
+        assert cond["options"]["typeValidation"] == "strict", role
+        (only,) = cond["conditions"]
+        assert only["leftValue"] == "={{ $json.needsExpansion3 }}", role
+        assert only["operator"] == {"operation": "true", "singleValue": True, "type": "boolean"}, role
         assert nodes["Fetch Prior Episodes"].get("alwaysOutputData") is True, role
         for reader in ("Originality Scan", "DT Shim: Prior REST"):
             code = nodes[reader]["parameters"]["jsCode"]

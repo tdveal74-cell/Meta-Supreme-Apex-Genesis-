@@ -19,9 +19,14 @@ try { const l = JSON.parse(String(row.sources || '')); if (Array.isArray(l)) lis
 // which let "30 minutes" through in execution 2351 (found by the critic).
 const unlink = (t) => String(t || '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
 const sourceText = list.map(s => unlink(s.quote_text || s.quote) + ' ' + String(s.claim || '')).join(' ');
-const NUM = /\$?\d[\d,]*(?:\.\d+)?(?:%|\s?percent\b)?/gi;
-const bare = (t) => t.replace(/\s?percent$/i, '').replace(/[$,%]/g, '').replace(/\.$/, '');
-const unit = (t) => (/^\$/.test(t) ? '$' : '') + bare(t) + (/(%|percent)$/i.test(t) ? '%' : '');
+// A figure is the numeral with its unit: a dollar sign, a percent in any
+// spelling, or a magnitude. "41 million" is not "41", so a sourced 41 percent
+// cannot lend itself to an invented 41 million (third critic, 2026-10-07).
+const NUM = /\$?\d[\d,]*(?:\.\d+)?(?:\s?%|\s?(?:percent|per cent)\b|\s?(?:thousand|million|billion|trillion)\b|[KMB]\b)?/gi;
+const MAG = /(?:\s?(?:thousand|million|billion|trillion)|[KMB])$/i;
+const magOf = (t) => { const m = MAG.exec(t); return m ? m[0].trim()[0].toUpperCase() : ''; };
+const bare = (t) => t.replace(MAG, '').replace(/\s?(?:%|percent|per cent)$/i, '').replace(/[$,%]/g, '').replace(/\.$/, '');
+const unit = (t) => (/^\$/.test(t) ? '$' : '') + bare(t) + (/(?:%|percent|per cent)$/i.test(t) ? '%' : '') + magOf(t);
 const sourcedBare = new Set((sourceText.match(NUM) || []).map(bare));
 const sourcedUnit = new Set((sourceText.match(NUM) || []).map(unit));
 const brief = new Set(([row.topic, row.angle, row.idea, row.video_title].join(' ').match(NUM) || []).map(bare));
@@ -29,24 +34,31 @@ const script = String(d.script || '');
 const unsourced = [];
 const flag = (shown) => { if (!unsourced.includes(shown)) unsourced.push(shown); };
 // Military identifiers are names, not figures, ruled by Tee 2026-10-07 for NCO
-// Forge prose: a form number (DD-214, DA Form 2166-9), a 24 hour time written with its leading zero or with "hours" (0600, 1800
-// hours) and a unit ordinal (the 101st, 82nd Airborne). They are blanked before
-// the numeral scan only. An ordinal after ranked or placed, or before
-// percentile, is a figure and stays. Never a percentage or a dollar amount.
-// MOS codes are left out on purpose: 11B reads the same as 11B for eleven
-// billion, so they fail closed to Error for Tee to clear.
+// Forge prose, and blanked before the numeral scan only. Each pattern is
+// narrow on purpose, because the first version blanked "VA 70" out of "VA 70%"
+// and "1500" out of "1500 hours to finish" (third critic, 2026-10-07):
+//   a form number written with its hyphen or the word Form: DD-214, DA Form 2166-9;
+//   a 24 hour time after at, until, till, before, after or from, with its
+//   leading zero (at 0600) or with hours (after 1800 hours); by takes only the
+//   leading zero form, so "by 2030 hours" stays a year;
+//   a unit ordinal followed by a unit noun: the 101st Airborne, 82nd Division.
+// Nothing touching a percent, a decimal, a thousands comma or a magnitude is
+// ever blanked. A bare ordinal or an MOS code (11B reads as eleven billion)
+// fails closed to Error for Tee to clear.
+const NOT_A_FIGURE = '(?![.,]\\d)(?!\\s*(?:%|percent|per cent|thousand|million|billion))';
+const UNIT_NOUN = '(?:Airborne|Infantry|Division|Brigade|Battalion|Regiment|Cavalry|Armored|Marine|Marines|Fighter|Wing|Squadron|Fleet|Corps|Army|Ranger|Rangers|Signal|Engineer|Engineers|Aviation|Mountain|Expeditionary|Artillery|Sustainment|Special|MEU|BCT|SFG|ID)';
 const MILITARY = [
-  /\b(?:DD|DA|SF|VA|AF|NAVPERS|NAVMC|OPNAV|WD AGO)(?:\s+Form)?[\s-]?\d+(?:-\d+)*\b/g,
-  /\b(?:0\d|1\d|2[0-3])[0-5]\d(?=\s*(?:hours|hrs)\b)/gi,
-  /\b0\d[0-5]\d\b/g,
-  /\b(?<!(?:ranked|ranks|ranking|placed|place|finished)\s+)\d+(?:st|nd|rd|th)\b(?!\s+percentile)/gi
+  new RegExp('\\b(?:DD|DA|SF|VA|AF|NAVPERS|NAVMC|OPNAV)(?:-|\\s+Form\\s+)\\d+(?:-\\d+)*\\b' + NOT_A_FIGURE, 'g'),
+  new RegExp('(?<=\\b(?:[Aa]t|[Bb]y|[Uu]ntil|[Tt]ill|[Bb]efore|[Aa]fter|[Ff]rom)\\s)0\\d[0-5]\\d\\b' + NOT_A_FIGURE, 'g'),
+  new RegExp('(?<=\\b(?:[Aa]t|[Uu]ntil|[Tt]ill|[Bb]efore|[Aa]fter|[Ff]rom)\\s)(?:1\\d|2[0-3])[0-5]\\d(?=\\s(?:hours|hrs)\\b)', 'g'),
+  new RegExp('\\b\\d{1,3}(?:st|nd|rd|th)\\b(?=\\s(?:[A-Z][a-z]+\\s)?' + UNIT_NOUN + '\\b)', 'g')
 ];
 const blankMilitary = (t) => MILITARY.reduce((a, re) => a.replace(re, (m) => ' '.repeat(m.length)), t);
 const numText = blankMilitary(script);
 for (const raw of (numText.match(NUM) || [])) {
   const k = bare(raw);
   const n = Number(k);
-  const withUnit = /[$%]|percent/i.test(raw);
+  const withUnit = /[$%]|percent|per cent/i.test(raw) || MAG.test(raw);
   if (withUnit ? sourcedUnit.has(unit(raw)) : sourcedBare.has(k)) continue;
   if (!withUnit && Number.isInteger(n) && n <= 10) continue;
   if (/^(19|20)\d\d$/.test(k) && brief.has(k)) continue;
@@ -58,6 +70,13 @@ const flat = (t) => String(t || '').toLowerCase().replace(/[-‐‑]/g, ' ').rep
 const sourceFlat = flat(sourceText);
 const W = '(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|a hundred)';
 const SPELLED = new RegExp('\\b(?:' + W + '[ -]?){1,3}(?:percent|hundred|thousand|million|billion)\\b|\\b(?:one|two|three|four)[ -](?:thirds?|quarters?|fifths?|tenths?)\\b|\\b' + W + ' in ' + W + '\\b', 'gi');
+// A count of eleven or more written in words is a figure too: "Twelve
+// companies cut managers" passed every version before this one.
+const TEENS = '(?:eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)';
+const SPELLED_COUNT = new RegExp('\\b' + TEENS + '(?:[ -](?:one|two|three|four|five|six|seven|eight|nine))?\\b', 'gi');
+for (const m of (script.match(SPELLED_COUNT) || [])) {
+  if (!sourceFlat.includes(flat(m))) flag(m.trim());
+}
 for (const m of (script.match(SPELLED) || [])) {
   if (!sourceFlat.includes(flat(m))) flag(m.trim());
 }
@@ -78,16 +97,19 @@ for (const t of sentences) { SAID.lastIndex = 0; while ((m = SAID.exec(t))) { if
 // this report that", which row 46 carried past both gates. A sentence that
 // names an approved origin is left to the checks above.
 const GROUP = /\b(?:managers|leaders|companies|employers|teams|workers|professionals|people|users|clients|veterans|soldiers|recruiters|executives|organizations|organisations|readers|viewers)\b[^.!?]{0,90}?\b(?:report|reported|say|said|find|found|tell|told|agree|agreed)\s+that\b/i;
-const approved = (t) => list.some(s => [s.origin, s.publisher].some(n => n && t.toLowerCase().includes(String(n).toLowerCase())));
+// A source counts as named only as a whole word in its own capitals: the verb
+// "ramp" is not the publisher Ramp (third critic, 2026-10-07).
+const esc = (x) => String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const approved = (t) => list.some(s => [s.origin, s.publisher].some(n => n && new RegExp('(?<![\\w])' + esc(n) + '(?![\\w])').test(t)));
 const UNNAMED = /\b(?:interview|conversation|call|chat|discussion|meeting) with (?:a|an|one|several|some|two|three) (?:[\w-]+ ){0,4}(?:director|manager|executive|leader|officer|founder|employee|worker|analyst|engineer|consultant|recruiter|professional)s?\b/i;
 const UNNAMED_ORG = /\b(?:[Aa]n?|[Oo]ne|[Ss]everal|[Ss]ome|[Mm]any) (?:[a-z][\w-]* ){0,3}(?:firm|company|companies|bank|retailer|startup|employer|organization|organisation|study|studies|survey|report|analysis|case)s?\b(?= (?:reported|found|showed|shows|says|said|indicated|indicates|estimated|revealed|noted|cut|saw|told))/;
 // A projection stated as fact. A sentence about the future that carries a
 // figure must name an approved origin, because a figure the sources hold as a
 // count of the past can be restated as a forecast nobody made (ruled by Tee
 // 2026-10-07, the gap the second critic graded open).
-const FUTURE = /\b(?:will|won't|is expected to|are expected to|is projected to|are projected to|is forecast to|are forecast to|is set to|are set to|by (?:19|20)\d\d)\b/i;
-const FRACTION = /\b(?:half|a third|a quarter|three quarters|two thirds|one in \w+)\b/i;
-const hasFigure = (t) => FRACTION.test(t) || (blankMilitary(t).replace(/\b(?:19|20)\d\d\b/g, '').match(NUM) || []).some(r => /[$%]|percent/i.test(r) || Number(bare(r)) > 10);
+const FUTURE = /\b(?:will|won't|shall|going to|could|may|might|likely to|expected to|projected to|forecast to|set to|on track to|next (?:year|month|quarter|decade)|within (?:a|the next) (?:year|decade)|by (?:19|20)\d\d|by the end of)\b|\w'll\b/i;
+const FRACTION = /\b(?:half of|(?:a|one)[ -]third of|one[ -]third|(?:a|one)[ -]quarter of|three[ -]quarters of|two[ -]thirds of|one in (?:two|three|four|five|six|seven|eight|nine|ten|\d+))\b/i;
+const hasFigure = (t) => FRACTION.test(t) || (t.match(SPELLED_COUNT) || []).length > 0 || (blankMilitary(t).replace(/\b(?:19|20)\d\d\b/g, '').match(NUM) || []).some(r => /[$%]|percent|per cent/i.test(r) || MAG.test(r) || Number(bare(r)) > 10);
 const projections = sentences.filter(t => FUTURE.test(t) && hasFigure(t) && !approved(t)).map(t => '"' + t.trim().slice(0, 140) + '"');
 const unnamed = sentences.filter(t => UNNAMED.test(t) || UNNAMED_ORG.test(t) || (GROUP.test(t) && !approved(t))).map(t => '"' + t.trim().slice(0, 140) + '"');
 const extra = [];
