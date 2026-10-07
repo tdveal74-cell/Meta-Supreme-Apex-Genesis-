@@ -122,6 +122,13 @@ function normalizeChain(W, H) {
 
 const STILL_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tif', '.tiff']);
 
+// Motion for a still cutaway in presenter_composite. 8 percent over the window
+// is a slow push, felt more than seen; a larger figure reads as a zoom effect,
+// which is the thing the restraint rubric exists to stop.
+const STILL_MOTIONS = ['push_in', 'pull_out', 'none'];
+const STILL_ZOOM = 0.08;
+const STILL_OVERSAMPLE = 4;
+
 /** Inference of last resort. A declared shots[i].still always wins over this. */
 function isStill(f) { return STILL_EXT.has(path.extname(f).toLowerCase()); }
 
@@ -733,7 +740,15 @@ const JOBS = {
    * No guards (duck_mix's protected-silence envelope) in this first cut. A
    * teaching episode has no protected silence the way a TSWS episode does.
    *
-   * params: { avatar, output, cutaways?: [{path, start, end, in?, full?}],
+   * A cutaway may be a still image (declared with `still`, else inferred from
+   * the extension). A still carries `motion`: 'push_in' (the default),
+   * 'pull_out' or 'none', and has no `in`. Added 2026-09-24 for the owned
+   * b-roll: stills of Tee generated from his own character sheet.
+   *
+   * See deploy/owned-stills/README.md for where the stills come from and
+   * the gates they pass before they reach this job.
+   *
+   * params: { avatar, output, cutaways?: [{path, start, end, in?, full?, still?, motion?}],
    *           captions?, caption_style?, bed?, bed_gain?, narration?, duration?,
    *           width?, height?, fps?, fade?, crf?, preset?,
    *           layout?: 'full' | 'stacked', plate_color?, emphasis?: [{start, end}] }
@@ -806,7 +821,18 @@ const JOBS = {
         // it sits in the payload zone unless it asks for the whole canvas.
         if (c.full !== undefined && typeof c.full !== 'boolean') throw new BadJob(`cutaways[${k}].full: must be true or false, not ${JSON.stringify(c.full)}`);
         const full = stacked ? c.full === true : true;
-        return { f, s, e, IN, full };
+        // A still (the owned b-roll of Tee at a desk, generated from his
+        // character sheet) is a single decoded frame. Without motion it holds
+        // dead for the whole window, so it gets a slow push in unless the
+        // caller says otherwise. Declaration beats inference, as in
+        // assemble_cut, and motion on a moving clip is refused rather than
+        // ignored because zoompan on video restarts its zoom every frame.
+        if (c.still !== undefined && typeof c.still !== 'boolean') throw new BadJob(`cutaways[${k}].still: must be true or false, not ${JSON.stringify(c.still)}`);
+        const still = c.still === undefined ? isStill(f) : c.still;
+        if (c.motion !== undefined && !still) throw new BadJob(`cutaways[${k}].motion: only a still can carry motion`);
+        const motion = still ? oneOf(c.motion ?? 'push_in', `cutaways[${k}].motion`, STILL_MOTIONS) : 'none';
+        if (still && IN !== 0) throw new BadJob(`cutaways[${k}].in: a still has no timeline to start into`);
+        return { k, f, s, e, IN, full, still, motion };
       }).sort((a, b) => a.s - b.s);
       for (let i = 1; i < windows.length; i++) {
         if (windows[i].s < windows[i - 1].e) {
@@ -842,7 +868,27 @@ const JOBS = {
           ? `,fade=t=in:st=0:d=${xf}:alpha=1,fade=t=out:st=${(len - xf).toFixed(6)}:d=${xf}:alpha=1`
           : '';
         // full frame fills the canvas; the payload zone shows the clip whole.
-        const geometry = w.full ? (stacked ? fillChain(W, H) : normalizeChain(W, H)) : normalizeChain(W, splitY);
+        const zw = W, zh = w.full ? H : splitY;
+        const geometryAt = (gw, gh) => w.full ? (stacked ? fillChain(gw, gh) : normalizeChain(gw, gh)) : normalizeChain(gw, gh);
+        const geometry = geometryAt(zw, zh);
+        if (w.still && w.motion !== 'none') {
+          // zoompan emits d frames from ONE input frame, which is exactly the
+          // image demuxer's output. It rounds its crop origin to whole pixels,
+          // so at output size a slow zoom visibly steps; laying the frame out
+          // at an oversampled size first makes each step a fraction of an
+          // output pixel. The factor is capped so the canvas stays inside 8192.
+          const F = Math.round(len * fps);
+          if (F < 2) throw new BadJob(`cutaways[${w.k}]: a still with motion needs at least two frames at ${fps}fps`);
+          const over = Math.max(1, Math.min(STILL_OVERSAMPLE, Math.floor(8192 / Math.max(zw, zh))));
+          const z = w.motion === 'push_in'
+            ? `1+${STILL_ZOOM}*on/${F - 1}`
+            : `${1 + STILL_ZOOM}-${STILL_ZOOM}*on/${F - 1}`;
+          parts.push(
+            `[${i + 1}:v]${geometryAt(zw * over, zh * over)},` +
+            `zoompan=z='${z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${F}:s=${zw}x${zh}:fps=${fps},` +
+            `setsar=1,format=yuva420p${fades},setpts=PTS+${w.s.toFixed(6)}/TB[c${i}]`);
+          return;
+        }
         parts.push(
           `[${i + 1}:v]trim=start=${w.IN.toFixed(6)}:end=${(w.IN + len).toFixed(6)},setpts=PTS-STARTPTS,` +
           `${geometry},fps=${fps},` +
@@ -948,6 +994,7 @@ const JOBS = {
           layout,
           emphasis: emphasis.length,
           full_cutaways: windows.filter(w => w.full).length,
+          still_cutaways: windows.filter(w => w.still).length,
         }),
       };
     },
