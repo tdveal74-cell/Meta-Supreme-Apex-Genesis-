@@ -1,0 +1,657 @@
+{
+  "active": true,
+  "connections": {
+    "Any Pages?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Extract Quotes (Cerebras)",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Write Research to Row",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Any Quote Survived?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Build Doctor Prompt",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Write Research to Row",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Build Doctor Prompt": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Script Doctor Approves (Cerebras)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Build Extract Prompt": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Any Pages?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Compose Approved Sources": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Write Research to Row",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Credit Floor": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Get Idea Rows",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Daily 09:40Z Research": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Firecrawl Balance",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Extract Quotes (Cerebras)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Quote Check",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Firecrawl Balance": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Credit Floor",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Firecrawl Search": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Build Extract Prompt",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Get Idea Rows": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Rows Needing Sources",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "One Row at a Time": {
+      "main": [
+        [],
+        [
+          {
+            "index": 0,
+            "node": "Firecrawl Search",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Quote Check": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Any Quote Survived?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Rows Needing Sources": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "One Row at a Time",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Run Research by Hand": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Firecrawl Balance",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Script Doctor Approves (Cerebras)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Compose Approved Sources",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Write Research to Row": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "One Row at a Time",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "TQO Research: Sources for Locked Rows",
+  "nodes": [
+    {
+      "id": "d68f8c6e-254d-4188-86ed-0b74b689cfce",
+      "name": "Run Research by Hand",
+      "parameters": {},
+      "position": [
+        0,
+        300
+      ],
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1
+    },
+    {
+      "id": "55c06f7f-f657-4eab-9e29-f029ec05782a",
+      "name": "Daily 09:40Z Research",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "expression": "40 9 * * *",
+              "field": "cronExpression"
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        500
+      ],
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2
+    },
+    {
+      "credentials": {
+        "firecrawlApi": {
+          "id": "Nld2jqeJyTfv8jNh",
+          "name": "Firecrawl API - OS 29"
+        }
+      },
+      "id": "13d4bdcc-2cd8-451c-98d6-54fc57026e8a",
+      "name": "Firecrawl Balance",
+      "parameters": {
+        "operation": "teamCreditUsage",
+        "resource": "Account"
+      },
+      "position": [
+        220,
+        300
+      ],
+      "type": "@mendable/n8n-nodes-firecrawl.firecrawl",
+      "typeVersion": 1
+    },
+    {
+      "id": "d05df1d8-e257-41aa-b08e-224c7b168a5b",
+      "name": "Credit Floor",
+      "parameters": {
+        "jsCode": "// Firecrawl bills every search result it scrapes. Read the balance first and\n// refuse the whole run below the floor, naming what was seen, rather than\n// discovering an empty account halfway through a row.\nconst FLOOR = 100;\nconst r = $input.first().json || {};\nconst d = (r.data && typeof r.data === 'object') ? r.data : r;\nconst cands = [d.remainingCredits, d.remaining_credits, d.credits, r.remainingCredits, r.remaining_credits];\nlet remaining = null;\nfor (const c of cands) { if (c !== undefined && c !== null && c !== '' && !isNaN(Number(c))) { remaining = Number(c); break; } }\nif (remaining === null) {\n  throw new Error('Refusing to research: could not read the Firecrawl balance. Keys seen: ' + (Object.keys(r).join(', ') || '(none)') + '; data keys: ' + (Object.keys(d).join(', ') || '(none)'));\n}\nif (remaining < FLOOR) {\n  throw new Error('Refusing to research: Firecrawl has ' + remaining + ' credits left, under the floor of ' + FLOOR + '.');\n}\nreturn [{ json: { firecrawlCredits: remaining } }];\n",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        440,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "executeOnce": true,
+      "id": "378538cf-565e-41f5-ac0a-65d9c92eed50",
+      "name": "Get Idea Rows",
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "2GtmrFcTNqVMbddh"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "condition": "eq",
+              "keyName": "status",
+              "keyValue": "Idea"
+            }
+          ]
+        },
+        "matchType": "allConditions",
+        "operation": "get",
+        "resource": "row",
+        "returnAll": true
+      },
+      "position": [
+        660,
+        300
+      ],
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1
+    },
+    {
+      "id": "e5a21e04-2ccc-4158-b178-e80001c2f6e8",
+      "name": "Rows Needing Sources",
+      "parameters": {
+        "jsCode": "// A row needs research when the package is locked, the row is still an Idea and\n// it carries no usable source. The writer skips exactly these rows (Package:\n// Plan Batch in TQO FINAL V5), so this is the only way one of them moves.\nconst MAX_ROWS = 2;\nconst s = (v) => (v === null || v === undefined) ? '' : String(v).trim();\nfunction sourcesOk(raw) {\n  let list = null;\n  try { list = JSON.parse(s(raw)); } catch (e) { return false; }\n  return Array.isArray(list) && list.some(x => x && s(x.url) && s(x.quote));\n}\nconst rows = $input.all().map(i => i.json)\n  .filter(j => s(j.status) === 'Idea' && s(j.package_locked) && !sourcesOk(j.sources))\n  .sort((a, b) => Number(a.id) - Number(b.id))\n  .slice(0, MAX_ROWS);\nreturn rows.map(j => ({ json: {\n  id: j.id,\n  topic: s(j.topic) || s(j.video_title),\n  angle: s(j.angle),\n  idea: s(j.idea),\n  primary_subject: s(j.primary_subject),\n  notes: s(j.notes),\n  searchQuery: (s(j.primary_subject) || s(j.topic)) + ' 2026 report data -site:linkedin.com -site:instagram.com -site:facebook.com -site:tiktok.com -site:x.com -site:youtube.com'\n} }));\n",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        880,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "1fe506ca-30bb-4ab6-bcf8-887ad26d7bf7",
+      "name": "One Row at a Time",
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "position": [
+        1100,
+        300
+      ],
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3
+    },
+    {
+      "credentials": {
+        "firecrawlApi": {
+          "id": "Nld2jqeJyTfv8jNh",
+          "name": "Firecrawl API - OS 29"
+        }
+      },
+      "id": "870a35e4-0d60-4a53-8a43-806974f67cca",
+      "name": "Firecrawl Search",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "additionalFields": {
+          "customProperties": "{\n  \"limit\": 8,\n  \"scrapeOptions\": { \"formats\": [\"markdown\"], \"onlyMainContent\": true }\n}"
+        },
+        "operation": "search",
+        "query": "={{ $json.searchQuery }}",
+        "requestOptions": {
+          "timeout": 120000
+        },
+        "resource": "MapSearch",
+        "useCustomBody": true
+      },
+      "position": [
+        1320,
+        400
+      ],
+      "type": "@mendable/n8n-nodes-firecrawl.firecrawl",
+      "typeVersion": 1
+    },
+    {
+      "id": "a496a299-5b27-44f2-8a15-78d2e92da24f",
+      "name": "Build Extract Prompt",
+      "parameters": {
+        "jsCode": "// Search results arrive with each page's own text, fetched by Firecrawl. The\n// model is handed that text and asked to copy quotes out of it. Nothing it\n// returns is trusted: Quote Check below matches every quote against the same\n// text character for character.\nconst row = $('One Row at a Time').first().json;\nconst r = $input.first().json || {};\nconst raw = Array.isArray(r.data) ? r.data : (r.data && Array.isArray(r.data.web) ? r.data.web : (Array.isArray(r.web) ? r.web : []));\nconst PAGE_CHARS = 8000;\nconst pages = [];\nfor (const p of raw) {\n  const url = String(p.url || (p.metadata && (p.metadata.sourceURL || p.metadata.url)) || '').trim();\n  const md = String(p.markdown || '').trim();\n  if (!url || md.length < 200) continue;\n  pages.push({ n: pages.length + 1, url: url, title: String(p.title || (p.metadata && p.metadata.title) || '').trim(), markdown: md });\n}\nconst searchNote = r.error ? ('search error: ' + String(r.error.message || r.error).slice(0, 300)) : '';\nif (!pages.length) {\n  return [{ json: { id: row.id, hasPages: false, pages: [], research_note: 'No source written: the search returned no readable pages' + (searchNote ? ' (' + searchNote + ')' : '') + '. Query: ' + row.searchQuery } }];\n}\nconst system = [\n  'You extract evidence for a factual video script. You copy, you never write.',\n  'From the numbered pages below, pick up to six passages that state a specific, checkable fact about the episode topic: a number, a date, a named finding or a named organisation\\'s stated result.',\n  'Each quote must be copied character for character from the page text, one or two sentences, between 40 and 400 characters. Do not fix typos, do not join sentences from different places, do not add or drop words.',\n  'Skip any passage that cites an unnamed study, firm, survey or expert. Skip opinion, prediction and marketing copy.',\n  'publisher is the organisation or person that published the page, as the page names it. If the page does not name one, skip that page.',\n  'origin is the organisation that produced the figure or finding (the survey, dataset, filing or report), named exactly as the page names it. The quote must name the origin in its own words, unless the publisher itself produced the figure, in which case origin equals publisher. If the page repeats a figure without naming who produced it, skip that passage.',\n  'claim is one plain sentence saying what the quote shows, adding nothing the quote does not say.',\n  'Return JSON only: {\"sources\":[{\"page\":1,\"publisher\":\"...\",\"origin\":\"...\",\"quote\":\"...\",\"claim\":\"...\"}]}. Return {\"sources\":[]} if nothing qualifies.'\n].join(' ');\nconst user = 'EPISODE TOPIC: ' + row.topic + '\\nANGLE: ' + row.angle + '\\nIDEA: ' + row.idea + '\\n\\n' +\n  pages.map(p => '=== PAGE ' + p.n + ' ===\\nURL: ' + p.url + '\\nTITLE: ' + p.title + '\\nTEXT:\\n' + p.markdown.slice(0, PAGE_CHARS)).join('\\n\\n');\nconst body = { model: 'gpt-oss-120b', messages: [{ role: 'system', content: system }, { role: 'user', content: user }], max_completion_tokens: 8000, reasoning_effort: 'medium', response_format: { type: 'json_object' } };\nreturn [{ json: { id: row.id, hasPages: true, pages: pages, body: body } }];\n",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        1540,
+        400
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "252f0b5f-50ee-4dab-b47d-7eadf4eddebf",
+      "name": "Any Pages?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "80d1ba32-46c5-4883-9c77-abd9a04b81ad",
+              "leftValue": "={{ $json.hasPages }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              }
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1760,
+        400
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ENoUSqySnkK0NVsl",
+          "name": "Cerebras Cloud"
+        }
+      },
+      "id": "029c0f76-833a-4977-a307-5dfdd6f0534a",
+      "maxTries": 3,
+      "name": "Extract Quotes (Cerebras)",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "method": "POST",
+        "options": {
+          "timeout": 300000
+        },
+        "sendBody": true,
+        "sendHeaders": true,
+        "specifyBody": "json",
+        "url": "https://api.cerebras.ai/v1/chat/completions"
+      },
+      "position": [
+        1980,
+        300
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "id": "95f0d428-17cb-4c8a-a3da-607a6024e8dc",
+      "name": "Quote Check",
+      "parameters": {
+        "jsCode": "// The mechanical check Tee approved under the doctor. A quote survives only if\n// it is found, after whitespace and punctuation normalising and nothing else,\n// inside the text Firecrawl fetched from that same URL. Markdown link and\n// emphasis syntax is removed from both sides first, because a quote copied\n// from rendered text will not carry the asterisks. It also checks provenance:\n// the organisation that produced the figure must be named inside the quote,\n// unless the publisher produced it, so a blog repeating an unattributed number\n// cannot pass however well the model vouches for it.\nconst prev = $('Build Extract Prompt').first().json;\nconst pages = prev.pages || [];\nconst norm = (t) => String(t || '')\n  .replace(/!\\[[^\\]]*\\]\\([^)]*\\)/g, ' ')\n  .replace(/\\[([^\\]]*)\\]\\([^)]*\\)/g, '$1')\n  .replace(/[*_`]/g, '')\n  .replace(/[#>|]/g, ' ')\n  .replace(/[\u2018\u2019\u201b\u2032]/g, \"'\")\n  .replace(/[\u201c\u201d\u201f\u2033]/g, '\"')\n  .replace(/[\u2013\u2014\u2212]/g, '-')\n  .replace(/\u00a0/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .toLowerCase();\nlet parsed = null;\nconst content = (((($input.first().json || {}).choices || [])[0] || {}).message || {}).content || '';\ntry { parsed = JSON.parse(content); } catch (e) { parsed = null; }\nconst offered = (parsed && Array.isArray(parsed.sources)) ? parsed.sources : [];\nconst checked = [];\nconst dropped = [];\nconst seen = new Set();\nfor (const s of offered) {\n  const page = pages.find(p => p.n === Number(s.page));\n  const quote = String(s.quote || '').trim();\n  const why = (r) => dropped.push({ page: s.page, quote: quote.slice(0, 160), reason: r });\n  if (!page) { why('no such page'); continue; }\n  if (quote.length < 40 || quote.length > 400) { why('quote length ' + quote.length); continue; }\n  if (!String(s.publisher || '').trim()) { why('no publisher'); continue; }\n  if (!norm(page.markdown).includes(norm(quote))) { why('quote not found on the page'); continue; }\n  const origin = String(s.origin || '').trim();\n  if (!origin) { why('no origin named'); continue; }\n  const primary = norm(origin) === norm(s.publisher);\n  if (!primary && !norm(quote).includes(norm(origin))) { why('origin ' + origin + ' is not named in the quote'); continue; }\n  if (!norm(page.markdown).includes(norm(origin))) { why('origin ' + origin + ' not found on the page'); continue; }\n  const key = page.url + '|' + norm(quote);\n  if (seen.has(key)) { why('duplicate'); continue; }\n  seen.add(key);\n  const quoteText = quote.replace(/!\\[[^\\]]*\\]\\([^)]*\\)/g, '').replace(/\\[([^\\]]*)\\]\\([^)]*\\)/g, '$1').replace(/^[\\s>*-]+/, '').replace(/\\s+/g, ' ').trim();\n  checked.push({ url: page.url, title: page.title, publisher: String(s.publisher).trim(), origin: origin, primary: primary, quote: quote, quote_text: quoteText, claim: String(s.claim || '').trim() });\n}\nconst note = parsed === null\n  ? 'No source written: the extraction reply was not JSON.'\n  : (checked.length ? '' : 'No source written: ' + offered.length + ' quote(s) offered, none survived the quote check' + (dropped.length ? ' (' + dropped.map(d => d.reason).join('; ') + ')' : '') + '.');\nreturn [{ json: { id: prev.id, checked: checked, dropped: dropped, offered: offered.length, research_note: note } }];\n",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        2200,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "669c5384-9018-4ee9-acfe-54a0b0602e2d",
+      "name": "Any Quote Survived?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "7fe17328-4ca0-4b47-9b25-9911ef466f4d",
+              "leftValue": "={{ ($json.checked || []).length }}",
+              "operator": {
+                "operation": "gt",
+                "type": "number"
+              },
+              "rightValue": 0
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        2420,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "87639b9e-0db2-4dc2-aca5-1fed113654c4",
+      "name": "Build Doctor Prompt",
+      "parameters": {
+        "jsCode": "// The script doctor approves or rejects each checked source. It is handed only\n// the quotes that already passed the mechanical check, and it can only say yes\n// or no to each: Compose Approved Sources keeps the checked text, so nothing the\n// doctor writes reaches the row except its verdict and reason.\nconst row = $('One Row at a Time').first().json;\nconst list = $input.first().json.checked || [];\nconst system = [\n  'You are the script doctor for The Quiet Operator, a calm, anti-hype channel on AI and careers. You approve the evidence a script may cite.',\n  'For each numbered source decide approve or reject.',\n  'Approve only when all hold: the origin is a named organisation a viewer can look up (a government agency, a research or analyst firm, a company reporting on itself, a newsroom reporting its own finding); the quote states a specific fact or a named organisation\\'s published projection; the fact bears directly on the episode topic; the claim line says no more than the quote, and calls a projection a projection.',\n  'Reject when the origin is a vendor, coach or app that sells the thing the figure measures, when the origin is only a blog or social post, when the figure is from an unnamed survey, or when the figure would mislead out of context. When in doubt, reject: a rejected source costs one row a day, an approved bad one goes on air in Tee\\'s voice.',\n  'Return JSON only: {\"verdicts\":[{\"index\":0,\"verdict\":\"approve\",\"reason\":\"...\"}]} with one entry per source, index matching the list.'\n].join(' ');\nconst user = 'EPISODE TOPIC: ' + row.topic + '\\nANGLE: ' + row.angle + '\\nIDEA: ' + row.idea + '\\n\\nSOURCES:\\n' +\n  list.map((s, i) => '[' + i + '] PUBLISHER: ' + s.publisher + '\\nORIGIN OF THE FIGURE: ' + s.origin + (s.primary ? ' (the publisher itself)' : '') + '\\nURL: ' + s.url + '\\nQUOTE: \"' + (s.quote_text || s.quote) + '\"\\nCLAIM: ' + s.claim).join('\\n\\n');\nconst body = { model: 'gpt-oss-120b', messages: [{ role: 'system', content: system }, { role: 'user', content: user }], max_completion_tokens: 4000, reasoning_effort: 'medium', response_format: { type: 'json_object' } };\nreturn [{ json: { id: $input.first().json.id, checked: list, dropped: $input.first().json.dropped, body: body } }];\n",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        2640,
+        200
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ENoUSqySnkK0NVsl",
+          "name": "Cerebras Cloud"
+        }
+      },
+      "id": "2bf27289-c86c-4dc1-8cdf-b93f90327d06",
+      "maxTries": 3,
+      "name": "Script Doctor Approves (Cerebras)",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "method": "POST",
+        "options": {
+          "timeout": 300000
+        },
+        "sendBody": true,
+        "sendHeaders": true,
+        "specifyBody": "json",
+        "url": "https://api.cerebras.ai/v1/chat/completions"
+      },
+      "position": [
+        2860,
+        200
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "id": "69b3cca7-4766-4580-90a5-2d80c7091e5f",
+      "name": "Compose Approved Sources",
+      "parameters": {
+        "jsCode": "// Only checked sources the doctor approved reach the row, and each one keeps the\n// exact text that passed the quote check. A doctor reply that cannot be read\n// approves nothing.\nconst prev = $('Build Doctor Prompt').first().json;\nconst checked = prev.checked || [];\nlet parsed = null;\nconst content = (((($input.first().json || {}).choices || [])[0] || {}).message || {}).content || '';\ntry { parsed = JSON.parse(content); } catch (e) { parsed = null; }\nconst verdicts = (parsed && Array.isArray(parsed.verdicts)) ? parsed.verdicts : [];\nconst now = new Date().toISOString();\nconst approved = [];\nconst rejected = [];\nchecked.forEach((s, i) => {\n  const v = verdicts.find(x => Number(x.index) === i);\n  if (v && String(v.verdict).toLowerCase() === 'approve') approved.push({ ...s, approved_by: 'script doctor', doctor_reason: String(v.reason || '').slice(0, 300), checked_at: now });\n  else rejected.push({ url: s.url, reason: v ? String(v.reason || 'rejected').slice(0, 200) : 'no verdict' });\n});\nconst note = approved.length\n  ? approved.length + ' source(s) approved on ' + now.slice(0, 10) + '; ' + rejected.length + ' rejected by the doctor; ' + (prev.dropped || []).length + ' dropped by the quote check.'\n  : 'No source written: ' + checked.length + ' passed the quote check and the doctor approved none' + (parsed === null ? ' (reply was not JSON)' : '') + (rejected.length ? ': ' + rejected.map(r => r.reason).join('; ') : '') + '.';\nreturn [{ json: { id: prev.id, sources: approved.length ? JSON.stringify(approved) : '', research_note: note.slice(0, 2000), approved: approved.length } }];\n",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        3080,
+        200
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "44ae86a2-aaa1-4acf-ab2d-2a180820e8cc",
+      "name": "Write Research to Row",
+      "parameters": {
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "sources",
+              "id": "sources",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "research_note",
+              "id": "research_note",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "research_note": "={{ $json.research_note }}",
+            "sources": "={{ $json.sources || '' }}"
+          }
+        },
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "2GtmrFcTNqVMbddh"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "condition": "eq",
+              "keyName": "id",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "matchType": "allConditions",
+        "operation": "update",
+        "options": {},
+        "resource": "row"
+      },
+      "position": [
+        3300,
+        400
+      ],
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1
+    },
+    {
+      "id": "061aa9e6-954d-4a01-98db-19ef36c6b6b8",
+      "name": "About This Stage",
+      "parameters": {
+        "color": 4,
+        "content": "## TQO Research\nRuled by Tee 2026-10-07: a research step, script doctor approve, a mechanical quote check under the doctor, Firecrawl.\n\nOnly locked Idea rows with no usable sources, two per run. It never changes status: a row with no approved source stays Idea and research_note says why. TQO FINAL V5 skips a locked row until sources exist.\n\nRuns daily at 09:40Z, ruled by Tee 2026-10-07, 40 minutes before the 10:20Z writer. Timezone is UTC so the November clock change does not move it.",
+        "height": 260,
+        "width": 420
+      },
+      "position": [
+        0,
+        0
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    }
+  ],
+  "readAt": "2026-10-07T12:40:00Z",
+  "role": "active",
+  "settings": {
+    "availableInMCP": true,
+    "errorWorkflow": "GbeNilHQzjmoWDz3",
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "timezone": "Etc/UTC"
+  },
+  "versionId": "3796e545-9226-4393-989d-9fbbd2cfa1a8",
+  "workflowId": "0zLNB34UOOTq6mck"
+}

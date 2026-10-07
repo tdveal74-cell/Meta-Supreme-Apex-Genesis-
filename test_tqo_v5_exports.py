@@ -148,3 +148,32 @@ def test_the_chat_agent_lane_stays_disabled() -> None:
         for name in CHAT_AGENT_LANE:
             if name in nodes:
                 assert nodes[name].get("disabled") is True, f"{role} export: {name} is enabled"
+
+
+#: The three nodes that hold the writer to the row's approved sources, ruled by
+#: Tee 2026-10-07 after row 46 and published as 61d4aeeb. Each sits on an edge
+#: that existed before it, so the test pins both the body and the wiring: a
+#: node that drifts from its mirror, or an edge that skips it, is a regression.
+SOURCES_NODES = {
+    "Sources Rule": ("sources_rule.js", "Build Script Prompt", "Series Addendum"),
+    "Doctor Sources": ("doctor_sources.js", "Build Doctor Prompt", "Token Budget: Doctor"),
+    "Sources Gate": ("sources_gate.js", "Script Gate: Quality", "Save Script to Airtable"),
+}
+
+
+def _targets(connections: dict, source: str) -> list[str]:
+    outs = connections.get(source, {}).get("main", [])
+    return [edge["node"] for branch in outs for edge in (branch or [])]
+
+
+def test_the_sources_nodes_match_their_mirrors_and_sit_on_their_edges() -> None:
+    mirrors = EXPORTS.parent
+    for role in ("active", "draft"):
+        export = _load(role)
+        nodes = {node["name"]: node for node in export["nodes"]}
+        for name, (mirror, before, after) in SOURCES_NODES.items():
+            assert name in nodes, f"{role} export has no {name}"
+            assert nodes[name]["parameters"]["jsCode"] == (mirrors / mirror).read_text(), f"{role}: {name} drifted from {mirror}"
+            assert not nodes[name].get("disabled"), f"{role}: {name} is disabled"
+            assert _targets(export["connections"], before) == [name], f"{role}: {before} does not feed {name} alone"
+            assert _targets(export["connections"], name) == [after], f"{role}: {name} does not feed {after}"

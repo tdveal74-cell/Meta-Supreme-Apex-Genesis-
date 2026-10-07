@@ -165,7 +165,7 @@
     [
      {
       "index": 0,
-      "node": "Token Budget: Doctor",
+      "node": "Doctor Sources",
       "type": "main"
      }
     ]
@@ -220,7 +220,7 @@
     [
      {
       "index": 0,
-      "node": "Series Addendum",
+      "node": "Sources Rule",
       "type": "main"
      }
     ]
@@ -523,6 +523,17 @@
      {
       "index": 0,
       "node": "Repair Dashes?",
+      "type": "main"
+     }
+    ]
+   ]
+  },
+  "Doctor Sources": {
+   "main": [
+    [
+     {
+      "index": 0,
+      "node": "Token Budget: Doctor",
       "type": "main"
      }
     ]
@@ -1981,7 +1992,7 @@
     [
      {
       "index": 0,
-      "node": "Save Script to Airtable",
+      "node": "Sources Gate",
       "type": "main"
      }
     ]
@@ -2221,6 +2232,28 @@
       "index": 0,
       "node": "AI Agent",
       "type": "ai_memory"
+     }
+    ]
+   ]
+  },
+  "Sources Gate": {
+   "main": [
+    [
+     {
+      "index": 0,
+      "node": "Save Script to Airtable",
+      "type": "main"
+     }
+    ]
+   ]
+  },
+  "Sources Rule": {
+   "main": [
+    [
+     {
+      "index": 0,
+      "node": "Series Addendum",
+      "type": "main"
      }
     ]
    ]
@@ -8473,7 +8506,7 @@
    "id": "d25fdd96-ecd5-47a3-8247-3b782c421fb8",
    "name": "Package: Plan Batch",
    "parameters": {
-    "jsCode": "// Package: Plan Batch. Decides what this pass does with the Idea rows, in the\n// order ruled 16 Sep 2026: the model ranks, Tee picks, the package locks, and\n// only then is the script written. Three kinds of Idea row arrive here.\n//   locked:  package_locked is set. Either Tee's pick (1, 2 or 3, naming an\n//            entry in package_options.ranked) or any other mark with his own\n//            title already in video_title. These go first and are scripted,\n//            up to scriptLimit.\n//   pending: package_options is filled and package_locked is empty. Tee has\n//            not picked. Nothing to do, so they are left out of this pass and\n//            never block the rows behind them.\n//   fresh:   neither. These are packaged (options written, no lock), up to\n//            packageLimit.\n// A locked row whose pick cannot be resolved is left out with a note rather\n// than thrown on, because one mistyped cell must not end the day for both\n// brands. Package: Context is strict about the same thing, so a row that gets\n// there always resolves.\nconst ctx = $('Show Context: Script').first().json;\nconst scriptLimit = Number(ctx.scriptLimit) > 0 ? Number(ctx.scriptLimit) : 2;\nconst packageLimit = Number(ctx.packageLimit) > 0 ? Number(ctx.packageLimit) : 3;\nconst s = v => String(v == null ? '' : v).trim();\n\n// Every reason Package: Context would refuse a row is checked here first, so a\n// refused row is left out of the pass with its reason in the plan note instead\n// of throwing and ending the day for both brands.\nconst DASH = /[—–]/;\nfunction pickResolves(j) {\n  const f = j.fields || j;\n  const mark = s(j.package_locked);\n  if (/^[1-3]$/.test(mark)) {\n    let opts = null;\n    try { opts = JSON.parse(s(j.package_options)); } catch (e) { return 'package_locked is ' + mark + ' but package_options is not readable JSON'; }\n    const ranked = opts && Array.isArray(opts.ranked) ? opts.ranked : [];\n    const p = ranked[Number(mark) - 1];\n    if (!p || !s(p.title)) return 'package_locked is ' + mark + ' but package_options has no ranked entry ' + mark;\n    if (DASH.test(s(p.title))) return 'ranked option ' + mark + ' carries an em or en dash in its title. Pick another option';\n    return '';\n  }\n  // Any other mark means Tee wrote the package himself. It needs a title and a\n  // thumbnail headline of its own, because deriving the headline from the title\n  // is the one thing the 16 Sep ruling forbids. Half the TQO idea rows already\n  // carry a seeded video_title, so a stray mark must not lock one by accident.\n  const title = s(f['Video Title'] || j.video_title);\n  const head = s(f['Thumbnail Headline'] || j.thumbnail_headline);\n  if (!title) return 'package_locked is \"' + mark + '\" but video_title is empty. Use 1, 2 or 3 for a ranked option, or write the title you want into video_title and a headline into thumbnail_headline';\n  if (!head) return 'package_locked is \"' + mark + '\" with your own title but thumbnail_headline is empty. Write the thumbnail text too, or use 1, 2 or 3 for a ranked option';\n  if (DASH.test(title)) return 'package_locked is \"' + mark + '\" but video_title carries an em or en dash. Restructure the title, never swap the punctuation';\n  return '';\n}\n\nconst items = $input.all();\nconst locked = [], pending = [], fresh = [], unresolved = [];\nfor (const it of items) {\n  const j = it.json || {};\n  if (s(j.package_locked)) {\n    const problem = pickResolves(j);\n    if (problem) unresolved.push('row ' + j.id + ': ' + problem); else locked.push(it);\n  } else if (s(j.package_options)) pending.push(it);\n  else fresh.push(it);\n}\nconst out = [...locked.slice(0, scriptLimit), ...fresh.slice(0, packageLimit)];\nconst note = 'plan: ' + items.length + ' idea rows in, ' + locked.length + ' locked (' + Math.min(locked.length, scriptLimit) + ' scripted this pass), '\n  + pending.length + ' pending a pick, ' + fresh.length + ' fresh (' + Math.min(fresh.length, packageLimit) + ' packaged this pass)'\n  + (unresolved.length ? '; left out, pick unresolved: ' + unresolved.join(' | ') : '');\nreturn out.map(it => ({ json: { ...it.json, __plan: note } }));\n"
+    "jsCode": "// Package: Plan Batch. Decides what this pass does with the Idea rows, in the\n// order ruled 16 Sep 2026: the model ranks, Tee picks, the package locks, and\n// only then is the script written. Three kinds of Idea row arrive here.\n//   locked:  package_locked is set. Either Tee's pick (1, 2 or 3, naming an\n//            entry in package_options.ranked) or any other mark with his own\n//            title already in video_title. These go first and are scripted,\n//            up to scriptLimit.\n//   pending: package_options is filled and package_locked is empty. Tee has\n//            not picked. Nothing to do, so they are left out of this pass and\n//            never block the rows behind them.\n//   fresh:   neither. These are packaged (options written, no lock), up to\n//            packageLimit.\n// A locked row whose pick cannot be resolved is left out with a note rather\n// than thrown on, because one mistyped cell must not end the day for both\n// brands. Package: Context is strict about the same thing, so a row that gets\n// there always resolves.\nconst ctx = $('Show Context: Script').first().json;\nconst scriptLimit = Number(ctx.scriptLimit) > 0 ? Number(ctx.scriptLimit) : 2;\nconst packageLimit = Number(ctx.packageLimit) > 0 ? Number(ctx.packageLimit) : 3;\nconst s = v => String(v == null ? '' : v).trim();\n\n// Every reason Package: Context would refuse a row is checked here first, so a\n// refused row is left out of the pass with its reason in the plan note instead\n// of throwing and ending the day for both brands.\nconst DASH = /[—–]/;\nfunction pickResolves(j) {\n  const f = j.fields || j;\n  const mark = s(j.package_locked);\n  if (/^[1-3]$/.test(mark)) {\n    let opts = null;\n    try { opts = JSON.parse(s(j.package_options)); } catch (e) { return 'package_locked is ' + mark + ' but package_options is not readable JSON'; }\n    const ranked = opts && Array.isArray(opts.ranked) ? opts.ranked : [];\n    const p = ranked[Number(mark) - 1];\n    if (!p || !s(p.title)) return 'package_locked is ' + mark + ' but package_options has no ranked entry ' + mark;\n    if (DASH.test(s(p.title))) return 'ranked option ' + mark + ' carries an em or en dash in its title. Pick another option';\n    return '';\n  }\n  // Any other mark means Tee wrote the package himself. It needs a title and a\n  // thumbnail headline of its own, because deriving the headline from the title\n  // is the one thing the 16 Sep ruling forbids. Half the TQO idea rows already\n  // carry a seeded video_title, so a stray mark must not lock one by accident.\n  const title = s(f['Video Title'] || j.video_title);\n  const head = s(f['Thumbnail Headline'] || j.thumbnail_headline);\n  if (!title) return 'package_locked is \"' + mark + '\" but video_title is empty. Use 1, 2 or 3 for a ranked option, or write the title you want into video_title and a headline into thumbnail_headline';\n  if (!head) return 'package_locked is \"' + mark + '\" with your own title but thumbnail_headline is empty. Write the thumbnail text too, or use 1, 2 or 3 for a ranked option';\n  if (DASH.test(title)) return 'package_locked is \"' + mark + '\" but video_title carries an em or en dash. Restructure the title, never swap the punctuation';\n  return '';\n}\n\n// Sources, ruled by Tee 7 Oct 2026 after row 46: a TQO script may only cite\n// sources that the Research stage found, quote-checked against the live page\n// and the doctor approved, stored on the row as a JSON array of {url, quote}.\n// A locked TQO row without them is left out of this pass with no writer call\n// and stays Idea. NCO has no sources column yet, so NCO is not held here.\nconst needsSources = ctx.show !== 'NCO';\nfunction sourcesOk(j) {\n  let list = null;\n  try { list = JSON.parse(s(j.sources)); } catch (e) { return false; }\n  return Array.isArray(list) && list.some(x => x && s(x.url) && s(x.quote));\n}\n\nconst items = $input.all();\nconst locked = [], pending = [], fresh = [], unresolved = [], awaiting = [];\nfor (const it of items) {\n  const j = it.json || {};\n  if (s(j.package_locked)) {\n    const problem = pickResolves(j);\n    if (problem) unresolved.push('row ' + j.id + ': ' + problem);\n    else if (needsSources && !sourcesOk(j)) awaiting.push('row ' + j.id);\n    else locked.push(it);\n  } else if (s(j.package_options)) pending.push(it);\n  else fresh.push(it);\n}\nconst out = [...locked.slice(0, scriptLimit), ...fresh.slice(0, packageLimit)];\nconst note = 'plan: ' + items.length + ' idea rows in, ' + locked.length + ' locked (' + Math.min(locked.length, scriptLimit) + ' scripted this pass), '\n  + pending.length + ' pending a pick, ' + fresh.length + ' fresh (' + Math.min(fresh.length, packageLimit) + ' packaged this pass)'\n  + (unresolved.length ? '; left out, pick unresolved: ' + unresolved.join(' | ') : '')\n  + (awaiting.length ? '; left out, waiting for approved sources: ' + awaiting.join(', ') : '');\nreturn out.map(it => ({ json: { ...it.json, __plan: note } }));\n"
    },
    "position": [
     224,
@@ -9070,9 +9103,48 @@
    ],
    "type": "n8n-nodes-base.if",
    "typeVersion": 2
+  },
+  {
+   "id": "ddcd67e2-8c2b-4540-b85c-0c778474c577",
+   "name": "Sources Rule",
+   "parameters": {
+    "jsCode": "// Sources Rule, ruled by Tee 2026-10-07 after row 46: real sources on the row,\n// which the writer may cite and nothing else. The sources are approved by TQO\n// Research (0zLNB34UOOTq6mck) and read from the row's sources column. TQO only,\n// because NCO was not ruled. It is its own node so the measured show blocks in\n// Build Script Prompt stay byte for byte. Sources Gate refuses what this allows.\nconst ctx = $('Show Context: Script').first().json;\nconst row = $('One Idea at a Time').first().json;\nconst j = $input.first().json;\nif (ctx.show === 'NCO' || !j.body) return [{ json: j }];\nlet list = [];\ntry { const l = JSON.parse(String(row.sources || '')); if (Array.isArray(l)) list = l.filter(x => x && x.url && x.quote); } catch (e) { list = []; }\nconst rule = list.length\n  ? '=== SOURCES YOU MAY CITE, APPROVED FOR THIS EPISODE ===\\n' + list.map((s, i) => '[S' + (i + 1) + '] ' + (s.origin || s.publisher) + ', reported by ' + s.publisher + ': \"' + (s.quote_text || s.quote) + '\"').join('\\n') + '\\n' + [\n      'SOURCES RULE: every number, percentage, dollar amount and dated finding in the script comes from the sources above, exactly as the quote gives it, and from nothing else.',\n      'Name the origin in the sentence that uses its figure, as in: according to Gallup. Never name any other study, survey, report, tracker or organisation as a source.',\n      'Keep the time a figure belongs to. If the quote gives a year or says last year, say so, and never move an old figure into the present.',\n      'Call a projection a projection.',\n      'Use no other numerals except counts of ten or under and a year the sources or the episode idea name. If a point needs a number the sources do not hold, make the point without a number.'\n    ].join(' ')\n  : 'SOURCES RULE: no sources were approved for this episode, so the script states no figures, percentages, dollar amounts or named studies at all. Make every point without a number.';\nreturn [{ json: { ...j, body: { ...j.body, system: String(j.body.system || '') + '\\n\\n' + rule }, sourcesApproved: list.length } }];\n"
+   },
+   "position": [
+    1792,
+    1504
+   ],
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2
+  },
+  {
+   "id": "6fd19307-1665-490f-8a69-2322ec526696",
+   "name": "Doctor Sources",
+   "parameters": {
+    "jsCode": "// Doctor Sources, ruled by Tee 2026-10-07 with the Sources Rule: the doctor sees\n// the approved sources, so it keeps a sourced figure and cuts any other. TQO only.\nconst ctx = $('Show Context: Script').first().json;\nconst row = $('One Idea at a Time').first().json;\nconst j = $input.first().json;\nif (ctx.show === 'NCO' || !j.claudeBody) return [{ json: j }];\nlet list = [];\ntry { const l = JSON.parse(String(row.sources || '')); if (Array.isArray(l)) list = l.filter(x => x && x.url && x.quote); } catch (e) { list = []; }\nconst block = list.length\n  ? 'APPROVED SOURCES (the only figures and named sources that may stand):\\n' + list.map((s, i) => '[S' + (i + 1) + '] ' + (s.origin || s.publisher) + ', reported by ' + s.publisher + ': \"' + (s.quote_text || s.quote) + '\"').join('\\n')\n  : 'APPROVED SOURCES: none. No figure, percentage, dollar amount or named study may stand.';\nconst rule = 'SOURCES: a figure, percentage, dollar amount or named study that is not in APPROVED SOURCES is invented. Cut it or make the point without it. Never change a sourced figure or the year it belongs to.';\nconst cb = j.claudeBody;\nconst msgs = (cb.messages || []).slice();\nif (msgs.length) msgs[0] = { ...msgs[0], content: block + '\\n\\n' + String(msgs[0].content || '') };\nreturn [{ json: { ...j, claudeBody: { ...cb, system: String(cb.system || '') + '\\n' + rule, messages: msgs } } }];\n"
+   },
+   "position": [
+    4928,
+    1600
+   ],
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2
+  },
+  {
+   "id": "5b4caf59-f815-4b30-a961-245495ad50a5",
+   "name": "Sources Gate",
+   "parameters": {
+    "jsCode": "// Sources Gate, ruled by Tee 2026-10-07: the gate refuses any figure that is not\n// in the row's approved sources. Measured, never judged. Every numeral in the\n// script must appear in a source quote or claim, except counts of ten or under\n// and a year the episode idea names. A sentence that says according to someone\n// must name an approved origin or publisher, and no unnamed person may be cited\n// as a source, as in an interview with a senior HR director. TQO only. A\n// failure lands as Error with the reason in qc_findings, the same as every\n// other gate failure.\nconst ctx = $('Show Context: Script').first().json;\nconst d = $input.first().json;\nif (ctx.show === 'NCO') return [{ json: d }];\nconst row = $('One Idea at a Time').first().json;\nlet list = [];\ntry { const l = JSON.parse(String(row.sources || '')); if (Array.isArray(l)) list = l.filter(x => x && x.url && x.quote); } catch (e) { list = []; }\nconst NUM = /\\$?\\d[\\d,]*(?:\\.\\d+)?%?/g;\nconst key = (t) => t.replace(/[$,%]/g, '').replace(/\\.$/, '');\nconst nums = (t) => (String(t || '').match(NUM) || []).map(key);\nconst sourced = new Set(nums(list.map(s => [s.quote, s.quote_text, s.claim].join(' ')).join(' ')));\nconst brief = new Set(nums([row.topic, row.angle, row.idea, row.video_title].join(' ')));\nconst script = String(d.script || '');\nconst unsourced = [];\nfor (const raw of (script.match(NUM) || [])) {\n  const k = key(raw);\n  const n = Number(k);\n  if (sourced.has(k)) continue;\n  if (!/[$%]/.test(raw) && Number.isInteger(n) && n <= 10) continue;\n  if (/^(19|20)\\d\\d$/.test(k) && brief.has(k)) continue;\n  const shown = raw.replace(/[,.]+$/, '');\n  if (!unsourced.includes(shown)) unsourced.push(shown);\n}\nconst names = list.map(s => (String(s.origin || '') + ' ' + String(s.publisher || '')).toLowerCase()).join(' | ');\nconst strangers = [];\nconst ATTR = /\\b[Aa]ccording to (?:the |a |an )?([A-Z][\\w&.'-]*)/g;\nlet m;\nwhile ((m = ATTR.exec(script))) { const w = m[1].replace(/['.]s?$/, '').toLowerCase(); if (!names.includes(w) && !strangers.includes(m[1])) strangers.push(m[1]); }\nconst UNNAMED = /\\b(?:interview|conversation|call|chat|discussion|meeting) with (?:a|an|one|several|some|two|three) (?:[\\w-]+ ){0,4}(?:director|manager|executive|leader|officer|founder|employee|worker|analyst|engineer|consultant|recruiter|professional)s?\\b/i;\nconst unnamed = script.split(/(?<=[.!?])\\s+/).filter(t => UNNAMED.test(t)).map(t => '\"' + t.trim().slice(0, 140) + '\"');\nconst extra = [];\nif (unnamed.length) extra.push('evidence, an unnamed person cited as a source: ' + unnamed.join(' '));\nif (unsourced.length) extra.push('sources, ' + unsourced.length + ' figure(s) not in the approved sources: ' + unsourced.slice(0, 12).join(', '));\nif (strangers.length) extra.push('sources, attributed to ' + strangers.join(', ') + ', which is not an approved source');\nconst line = '  sources: ' + list.length + ' approved | ' + (script.match(NUM) || []).length + ' numeral(s) | ' + unsourced.length + ' unsourced | ' + strangers.length + ' unapproved attribution(s)';\nif (!extra.length) {\n  const report = String(d.gateReport || '').replace('\\n  writer:', '\\n' + line + '\\n  writer:');\n  return [{ json: { ...d, gateReport: report, lastFeedback: String(d.lastFeedback || '').replace(String(d.gateReport || ''), report) } }];\n}\nconst failures = (d.gateFailures || []).concat(extra);\nconst stamp = new Date().toISOString();\nconst report = String(d.gateReport || '').replace(/^SCRIPT GATE PASS/, 'SCRIPT GATE FAIL').replace('\\n  writer:', '\\n' + line + '\\n  writer:').replace('\\n\\nCleared for Promote.', '') + '\\n\\nSOURCES GATE FAILED BECAUSE:\\n' + extra.map(f => '  - ' + f).join('\\n') + '\\n\\nSet status to Scripted to accept it as is, or to Idea to write it again.';\nreturn [{ json: { ...d,\n  status: 'Error',\n  gateFailures: failures,\n  gateReport: report,\n  gateReason: 'SCRIPT GATE FAILED ' + stamp + '. ' + failures.join('; ') + '. Set status to Scripted to accept it as is, or to Idea to write it again.',\n  lastFeedback: String(d.lastFeedback || '').replace(String(d.gateReport || ''), report)\n} }];\n"
+   },
+   "position": [
+    7392,
+    1600
+   ],
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2
   }
  ],
- "readAt": "2026-10-07T11:59:30Z",
+ "readAt": "2026-10-07T12:37:54Z",
  "role": "active",
  "settings": {
   "availableInMCP": true,
@@ -9087,8 +9159,8 @@
   "timeSavedMode": "fixed",
   "timezone": "America/New_York"
  },
- "versionDescription": "Tee ruled 2026-10-07 after row 46. Build Script Prompt gains an EVIDENCE block for both shows, outside the two measured show blocks: no invented first person experience, no unnamed sources, labelled pictures only.",
- "versionId": "54fbda3d-417f-4e48-a560-5495be7b8dde",
- "versionStamp": "2026-10-07T11:42:28.394Z",
+ "versionDescription": "Test 2351 on row 46 carried an invented interview with a senior HR director at a manufacturing firm. The evidence patterns need first person; this catches the third person form.",
+ "versionId": "61d4aeeb-ea5d-48da-9821-2902e805a4af",
+ "versionStamp": "2026-10-07T12:34:47.063Z",
  "workflowId": "qEkGOUsNyVaRAmm6"
 }
