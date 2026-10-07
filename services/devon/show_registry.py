@@ -62,9 +62,9 @@ SOURCE = {
         "and 'Series Addendum' in TQO FINAL V5"
     ),
     "workflow_id": "qEkGOUsNyVaRAmm6",
-    "version_id": "36013f35-06c9-45cd-8fb2-c80fecade765",
+    "version_id": "99e32b37-c37a-4896-b31e-31c3bd70e99c",
     "export": "n8n/tqo-v5/exports/qEkGOUsNyVaRAmm6_active.json",
-    "read": "2026-10-06",
+    "read": "2026-10-07",
 }
 
 #: The export this registry is traced against, resolved from the repository
