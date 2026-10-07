@@ -66,6 +66,15 @@ QC_TRACES = {
 }
 
 
+#: Rules whose text lives in one of the small V5 nodes beside the script prompt,
+#: traced to that node's mirror. A rule may also appear in TRACES; this map
+#: checks the extra node carries it too.
+NODE_TRACES = {
+    "compliance.sources-only": ("sources_rule.js", "SOURCES RULE: every number, percentage, dollar amount"),
+    "compliance.owned-presenter": ("nco_presenter_rule.js", "in his own likeness and his own cloned voice"),
+}
+
+
 def qc_text() -> str:
     from services.devon.tqo_canon import MIRROR
 
@@ -84,7 +93,7 @@ def test_every_rule_is_traceable_to_the_mirror():
     book = ledger()
     script, qc = mirror_text(), qc_text()
 
-    covered = set(TRACES) | set(QC_TRACES)
+    covered = set(TRACES) | set(QC_TRACES) | set(NODE_TRACES)
     ids = {rule.id for rule in book.rules}
     assert covered == ids, (
         "every rule needs a trace phrase; untraced: "
@@ -95,6 +104,10 @@ def test_every_rule_is_traceable_to_the_mirror():
         assert phrase in script, f"{rule_id}: '{phrase}' is no longer in the script prompt mirror"
     for rule_id, phrase in QC_TRACES.items():
         assert phrase in qc, f"{rule_id}: '{phrase}' is no longer in the QC prompt mirror"
+    from services.devon.tqo_canon import MIRROR
+
+    for rule_id, (mirror, phrase) in NODE_TRACES.items():
+        assert phrase in (MIRROR.parent / mirror).read_text(encoding="utf-8"), f"{rule_id}: '{phrase}' is no longer in {mirror}"
 
 
 def test_a_trace_phrase_that_is_absent_actually_fails():

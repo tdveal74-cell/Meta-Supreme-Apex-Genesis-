@@ -1,12 +1,12 @@
 // Sources Rule, ruled by Tee 2026-10-07 after row 46: real sources on the row,
 // which the writer may cite and nothing else. The sources are approved by TQO
-// Research (0zLNB34UOOTq6mck) and read from the row's sources column. TQO only,
-// because NCO was not ruled. It is its own node so the measured show blocks in
-// Build Script Prompt stay byte for byte. Sources Gate refuses what this allows.
-const ctx = $('Show Context: Script').first().json;
+// Research (0zLNB34UOOTq6mck) and read from the row's sources column. Both
+// shows: NCO was ruled to the same standard later the same day. It is its own
+// node so the measured show blocks in Build Script Prompt stay byte for byte.
+// Sources Gate refuses what this allows.
 const row = $('One Idea at a Time').first().json;
 const j = $input.first().json;
-if (ctx.show === 'NCO' || !j.body) return [{ json: j }];
+if (!j.body) return [{ json: j }];
 let list = [];
 try { const l = JSON.parse(String(row.sources || '')); if (Array.isArray(l)) list = l.filter(x => x && x.url && x.quote); } catch (e) { list = []; }
 const rule = list.length

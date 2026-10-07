@@ -86,8 +86,8 @@ row and fails when either row drifts from the export of the same role.
 
 | version | id | nodes |
 |---|---|---|
-| active | `61d4aeeb` | 268 nodes |
-| draft | `61d4aeeb` | 268 nodes |
+| active | `c2d51b46` | 269 nodes |
+| draft | `c2d51b46` | 269 nodes |
 
 Every webhook path and webhook id in the exports reads `redacted`. The Gumroad
 sale ping carries no authentication, so its random path suffix is the only
@@ -211,10 +211,71 @@ added, none changed, and three edges each split around a new node.
 All three are TQO only. The sources come from TQO Research
 (`0zLNB34UOOTq6mck`, recorded under `n8n/tqo-research/`), which runs daily at
 09:40Z. Manual execution 2351 on the draft wrote row 46 with its four approved
-sources: the writer cited all four with the origin named and the year kept,
-then invented a 150 person division, an interview with an unnamed HR director
-and a 300 person plant. The gate held the row as Error on those six figures
+sources: the script cited all four with the origin named, then carried a 150
+person division, an interview with an unnamed HR director and a 300 person
+plant. The gate held the row as Error on those six figures
 and on a close with no question. The unnamed person check was added to the
 gate after that run, replayed on its script, and published with the rest.
 Live and draft were read back equal, with all three bodies byte for byte in
 the active version.
+
+That paragraph first said the writer invented those three. A fresh critic
+traced execution 2351 node by node and found otherwise: the first pass wrote
+769 words using only sourced numbers, and the expansion step added all of
+them, because `Script: Needs Expansion?`, `Script: Still Short?` and the length
+line in `Token Budget: Script` asked it to lengthen each section "with a
+concrete example ... or a number". The same critic found the gate reading
+numbers out of markdown link URLs inside raw quotes, which let "30 minutes"
+through in 2351, and found the 2023 figure narrowed to tech and moved to "last
+year" in that script, so "the year kept" was not true either.
+
+The exports were regenerated on 2026-10-07 at 13:16Z from `d7f4d56f`. It came
+by way of `a6a2295a` the same hour, and every change below was ruled on a card.
+
+- NCO Forge is held to the same sources standard. The three sources nodes drop
+  their NCO bypass and `Package: Plan Batch` holds a locked row of either show
+  that has no sources. `nco_content` gained `sources` and `research_note`.
+- `NCO Presenter Rule`, between `Sources Rule` and `Series Addendum`, tells the
+  NCO writer that Terrance Veal presents every episode on camera in his own
+  likeness and cloned voice. The NCO block in `Build Script Prompt` still says
+  single narrator and is measured by the canon, so the line is appended rather
+  than edited in. `nco_presenter_rule.js` mirrors it.
+- The two expansion prompts and the length line now say to lengthen with a
+  mechanism, a step or a closer reading of a figure already in the draft, and
+  never to add a number, company, person, study, interview or case.
+- `Sources Gate` reads numbers from each source's `quote_text` and claim, never
+  a raw quote with a link in it. It also refuses spelled out figures the sources
+  do not carry, an unnamed firm or study that reported something, a name
+  followed by found or predicts that is not an approved origin, and a unit that
+  does not match, so `$41` is not `41%`.
+- `Save Doctor Verdict` reads `last_feedback` and the gate status from
+  `Sources Gate`, so a row that fails only that gate no longer says Cleared for
+  Promote.
+- `Token Budget: Script` tells the TQO writer to end on one question for the
+  comments that ends with a question mark. Runs 2269, 2351 and 2356 had all
+  closed on an instruction and failed the 23 Sep close rule.
+- `Save Script to Airtable` and `Save QC to Airtable` are renamed `Save Script
+  to Data Table` and `Save QC to Data Table`, which is what they always were.
+  Fifteen nodes still call the Airtable API directly; Tee ruled they move as
+  their stages are rebuilt in the split.
+
+Two manual runs on row 46 proved the fixes. Execution 2356 on `a6a2295a`
+expanded 936 words to 1,656 with no new figure and passed the Sources Gate with
+0 unsourced; it failed only the close. Execution 2357 on `d7f4d56f` passed the
+close and the Sources Gate and failed the floor at 1,124 words, because the
+expansion reached 1,292 and the doctor then trimmed it, and the second
+expansion is checked before the doctor runs. That gap is older than this change
+and is open. Row 46 holds the 2356 script, with the close made a question and
+four unsupported sentences cut by hand on Tee's ruling, as Scripted for his
+review; `script_machine` keeps the machine text.
+
+The exports were regenerated again at 13:58Z from `c2d51b46`, which changes
+`Sources Gate` and nothing else, on a second critic's findings that Tee ruled
+fixed. The attribution checks now run one sentence at a time: "according to
+Gallup. Microsoft found that" had let Microsoft through on Gallup's approval.
+A nameless group cited as a source, as in "managers who applied this report
+that", is refused unless an approved origin is named in the same sentence.
+Row 46 carried exactly that sentence past both gates; it was cut by hand under
+Tee's earlier ruling, and the gate replayed on the row refuses the old text and
+passes the new. No live run could exercise it, because no locked Idea row was
+left to write.

@@ -59,6 +59,10 @@ jobs:
         run: node n8n/tqo-research/research.test.mjs
       - name: The Sources Gate refuses figures the sources do not hold
         run: node n8n/tqo-v5/sources_gate.test.mjs
+      # The carousel rules, ruled by Tee 2026-10-07. No browser here: the drawing
+      # runs in carousel-render.yml.
+      - name: The carousel rules behave
+        run: node tools/carousel/carousel.test.mjs
       - name: Offline suite (no database, no keys)
         run: |
           python -m pytest -q --tb=short \

@@ -1,9 +1,9 @@
 // Doctor Sources, ruled by Tee 2026-10-07 with the Sources Rule: the doctor sees
-// the approved sources, so it keeps a sourced figure and cuts any other. TQO only.
-const ctx = $('Show Context: Script').first().json;
+// the approved sources, so it keeps a sourced figure and cuts any other. Both
+// shows, NCO from the same day's second ruling.
 const row = $('One Idea at a Time').first().json;
 const j = $input.first().json;
-if (ctx.show === 'NCO' || !j.claudeBody) return [{ json: j }];
+if (!j.claudeBody) return [{ json: j }];
 let list = [];
 try { const l = JSON.parse(String(row.sources || '')); if (Array.isArray(l)) list = l.filter(x => x && x.url && x.quote); } catch (e) { list = []; }
 const block = list.length

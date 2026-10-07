@@ -4,9 +4,10 @@
 (``0zLNB34UOOTq6mck``) as it was read back after the publish on 2026-10-07,
 and the ``.js`` files beside it are its Code node bodies, named after the
 nodes in snake case. This module fails when a body drifts from its record, and
-it pins the two promises the stage makes about the row: it writes only the
-``sources`` and ``research_note`` columns, never ``status``, and it reads only
-locked Idea rows. The behaviour of the bodies is tested by
+it pins the promises the stage makes about the row: it writes only the
+``sources`` and ``research_note`` columns, never ``status``, back to the table
+the row came from, and it reads Idea rows from both ``tqo_content`` and
+``nco_content``. The behaviour of the bodies is tested by
 ``n8n/tqo-research/research.test.mjs`` in the standalone job.
 """
 
@@ -49,6 +50,10 @@ def test_the_stage_writes_sources_and_a_note_and_never_the_status() -> None:
     assert len(writes) == 1
     columns = writes[0]["parameters"]["columns"]["value"]
     assert set(columns) == {"sources", "research_note"}
+    # Both shows since the NCO ruling: the row's own table travels with it.
+    assert writes[0]["parameters"]["dataTableId"]["value"] == "={{ $json.tableRef }}"
+    reads = {node["name"]: node["parameters"]["dataTableId"]["value"] for node in NODES.values() if node["type"] == "n8n-nodes-base.dataTable" and node["parameters"].get("operation") == "get"}
+    assert reads == {"Get TQO Idea Rows": "2GtmrFcTNqVMbddh", "Get NCO Idea Rows": "DSH1tn4TZjzAEKxp"}
 
 
 def test_it_runs_daily_at_0940_utc_and_alarms_through_the_shared_handler() -> None:
@@ -62,6 +67,12 @@ def test_it_runs_daily_at_0940_utc_and_alarms_through_the_shared_handler() -> No
 def test_the_balance_is_read_before_any_row_is() -> None:
     edges = {src: [e["node"] for branch in v.get("main", []) for e in (branch or [])] for src, v in RECORD["connections"].items()}
     assert edges["Firecrawl Balance"] == ["Credit Floor"]
-    assert edges["Credit Floor"] == ["Get Idea Rows"]
+    assert edges["Credit Floor"] == ["Get TQO Idea Rows"]
+    assert edges["Get TQO Idea Rows"] == ["Get NCO Idea Rows"]
+    assert edges["Get NCO Idea Rows"] == ["Rows Needing Sources"]
+    # Without this an empty table emits no item and n8n stops the chain, so one
+    # show with no Idea rows would silently stop research for the other.
+    for name in ("Get TQO Idea Rows", "Get NCO Idea Rows"):
+        assert NODES[name].get("alwaysOutputData") is True, name
     for trigger in ("Run Research by Hand", "Daily 09:40Z Research"):
         assert edges[trigger] == ["Firecrawl Balance"]

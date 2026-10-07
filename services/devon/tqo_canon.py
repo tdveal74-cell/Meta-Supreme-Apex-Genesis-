@@ -147,7 +147,25 @@ COMPLIANCE: Tuple[Rule, ...] = (
             "over stock footage of a stranger."
         ),
         rule_class=RuleClass.COMPLIANCE,
-        source="build_script_prompt.js TQO branch; channel identity, never rented",
+        source=(
+            "build_script_prompt.js TQO branch; channel identity, never rented. NCO "
+            "Forge carries the same line through nco_presenter_rule.js, ruled by Tee "
+            "2026-10-07"
+        ),
+    ),
+    Rule(
+        id="compliance.sources-only",
+        text=(
+            "Every number, percentage, dollar amount and dated finding in a script "
+            "comes from the sources approved on its row, named by origin in the "
+            "sentence that uses it. If a point needs a number the sources do not "
+            "hold, make the point without a number."
+        ),
+        rule_class=RuleClass.COMPLIANCE,
+        source=(
+            "sources_rule.js, ruled by Tee 2026-10-07 after row 46, both shows; "
+            "Sources Gate refuses any figure the sources do not hold"
+        ),
     ),
     Rule(
         id="compliance.no-stolen-valor",

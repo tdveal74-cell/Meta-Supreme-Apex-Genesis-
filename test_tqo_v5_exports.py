@@ -151,13 +151,15 @@ def test_the_chat_agent_lane_stays_disabled() -> None:
 
 
 #: The three nodes that hold the writer to the row's approved sources, ruled by
-#: Tee 2026-10-07 after row 46 and published as 61d4aeeb. Each sits on an edge
+#: Tee 2026-10-07 after row 46 and published as 61d4aeeb, and the NCO Presenter
+#: Rule that joined them in d7f4d56f the same day. Each sits on an edge
 #: that existed before it, so the test pins both the body and the wiring: a
 #: node that drifts from its mirror, or an edge that skips it, is a regression.
 SOURCES_NODES = {
-    "Sources Rule": ("sources_rule.js", "Build Script Prompt", "Series Addendum"),
+    "Sources Rule": ("sources_rule.js", "Build Script Prompt", "NCO Presenter Rule"),
+    "NCO Presenter Rule": ("nco_presenter_rule.js", "Sources Rule", "Series Addendum"),
     "Doctor Sources": ("doctor_sources.js", "Build Doctor Prompt", "Token Budget: Doctor"),
-    "Sources Gate": ("sources_gate.js", "Script Gate: Quality", "Save Script to Airtable"),
+    "Sources Gate": ("sources_gate.js", "Script Gate: Quality", "Save Script to Data Table"),
 }
 
 

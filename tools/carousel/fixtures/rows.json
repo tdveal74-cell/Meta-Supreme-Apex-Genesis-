@@ -1,0 +1,19 @@
+{
+  "note": "Row 4's carousel block as read from tqo_content on 2026-10-07, and the figures its script carries. The NCO entry is a template sample written for the test, not an episode.",
+  "TQO": [
+    {
+      "id": 4,
+      "status": "Ready",
+      "platform_packaging": "HOOK\nx\n\nCAROUSEL - The Quiet Move Framework <P10>\n  1. The Quiet Move: Make every green check count\n  2. Capability: It did the work on real files\n  3. Replacement: It compressed reading, not coding\n  4. Leverage: One person audited two platforms in a week\n  5. Friction: A single rule can stop the agent\n  6. Action: Write the rule for the reader\n  7. Quiet Move: Pick a number, verify it\n\nCANONICAL RULE <P7>\nx\n",
+      "script": "Seven days. Two platforms. One person. Day 1 through Day 7."
+    }
+  ],
+  "NCO": [
+    {
+      "id": 0,
+      "status": "Scripted",
+      "platform_packaging": "CAROUSEL - Template sample, not an episode <P1>\n  1. The Forge Rule: Read the standard before you meet it\n  2. Standard: Know what the board will ask\n  3. Reality: The board asks what you did\n  4. Judgment: Say what you would change\n  5. Proof: Bring the counseling you wrote\n  6. Habit: Rehearse it out loud twice\n  7. Forge Rule: Prepare like the board is tomorrow\n",
+      "script": ""
+    }
+  ]
+}
