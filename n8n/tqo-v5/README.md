@@ -86,8 +86,8 @@ row and fails when either row drifts from the export of the same role.
 
 | version | id | nodes |
 |---|---|---|
-| active | `36013f35` | 265 nodes |
-| draft | `36013f35` | 265 nodes |
+| active | `99e32b37` | 265 nodes |
+| draft | `99e32b37` | 265 nodes |
 
 Every webhook path and webhook id in the exports reads `redacted`. The Gumroad
 sale ping carries no authentication, so its random path suffix is the only
@@ -150,3 +150,16 @@ against the live version before publishing: the seven `disabled` flags were
 the only difference and the connections were identical. The read back shows
 `versionId` equal to `activeVersionId` and all seven disabled in the active
 version. The nodes stay in the graph, disabled, until the split removes them.
+
+They were regenerated again on 2026-10-07 from `99e32b37`, the Brief lane fix
+Tee ruled on a card that morning. `Build Brief Prompt` had read
+`$('Get Latest Content')`, the raw data table row, whose keys are lowercase,
+and then looked for `f.Script`, so the writer was handed an empty script every
+time. Manual execution 2295 put a Reach draft headed "No script provided" into
+the account and reported success. The node now reads `DT Shim: Latest Content`
+and throws when the script is empty, and the signature line in `Assemble Email
+HTML` no longer opens with `&mdash;`. Only those two nodes differ from
+`36013f35`; the connections are identical. Manual execution 2337 ran the fixed
+lane from a temporary trigger that was added to the draft and removed before
+publishing: the prompt carried 8,291 characters and the Brief came back with
+zero dashes. The Brief lane only creates Reach drafts and never sends.
