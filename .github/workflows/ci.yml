@@ -52,6 +52,13 @@ jobs:
       # asserted.
       - name: The Pulse's feeder findings behave
         run: node n8n/devon/heartbeat/compose_pulse.test.mjs
+      # Two more, for the stage that puts sources on a TQO row and the gate that
+      # holds the writer to them, ruled by Tee 2026-10-07 after row 46. Both
+      # drive the real node bodies over sentences from executions 2349 to 2351.
+      - name: TQO Research keeps only quotes that are on the page
+        run: node n8n/tqo-research/research.test.mjs
+      - name: The Sources Gate refuses figures the sources do not hold
+        run: node n8n/tqo-v5/sources_gate.test.mjs
       - name: Offline suite (no database, no keys)
         run: |
           python -m pytest -q --tb=short \

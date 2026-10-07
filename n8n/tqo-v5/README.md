@@ -86,8 +86,8 @@ row and fails when either row drifts from the export of the same role.
 
 | version | id | nodes |
 |---|---|---|
-| active | `54fbda3d` | 265 nodes |
-| draft | `54fbda3d` | 265 nodes |
+| active | `61d4aeeb` | 268 nodes |
+| draft | `61d4aeeb` | 268 nodes |
 
 Every webhook path and webhook id in the exports reads `redacted`. The Gumroad
 sale ping carries no authentication, so its random path suffix is the only
@@ -179,3 +179,42 @@ scored 0. Manual execution 2344 rewrote row 46 on the draft: 0 invented first
 person lines, but the writer then invented a named attribution and unsourced
 figures, which no pattern can catch, and the gate held it as Error on length
 and the close. That is why the next step is real sources on the row.
+
+`6d67e0a8` was published the same day and never exported on its own. It
+changed one node, `Package: Plan Batch`, on Tee's ruling that real sources go
+on the row: a locked TQO row whose new `sources` column carries no entry with
+both a `url` and a `quote` is left out of the pass with no writer call, stays
+Idea, and is named in the plan note as waiting for approved sources. NCO is not
+held, because NCO was not ruled. Row 46 was reset to Idea under it with its
+script cleared.
+
+The exports were regenerated on 2026-10-07 at 12:37Z from `61d4aeeb`, which
+adds three Code nodes on existing wires and edits no existing node, so the
+measured show blocks in `Build Script Prompt` and the canon traced to them do
+not move. The diff against `6d67e0a8` was read before publishing: three nodes
+added, none changed, and three edges each split around a new node.
+
+- `Sources Rule`, between `Build Script Prompt` and `Series Addendum`, appends
+  the row's approved sources to the writer's system prompt with the rule that
+  every number, percentage, dollar amount and dated finding comes from them,
+  named by origin in the sentence that uses it. A row with no sources is told
+  to state no figures at all. `sources_rule.js` mirrors it.
+- `Doctor Sources`, between `Build Doctor Prompt` and `Token Budget: Doctor`,
+  hands the doctor the same list as APPROVED SOURCES. `doctor_sources.js`.
+- `Sources Gate`, between `Script Gate: Quality` and `Save Script to Airtable`,
+  refuses any numeral not found in a source quote or claim, except counts of
+  ten or under and a year the episode idea names, any "according to" that does
+  not name an approved origin or publisher, and any unnamed person cited as a
+  source. A failure lands as Error with the reason in `qc_findings`, like every
+  other gate failure. `sources_gate.js`.
+
+All three are TQO only. The sources come from TQO Research
+(`0zLNB34UOOTq6mck`, recorded under `n8n/tqo-research/`), which runs daily at
+09:40Z. Manual execution 2351 on the draft wrote row 46 with its four approved
+sources: the writer cited all four with the origin named and the year kept,
+then invented a 150 person division, an interview with an unnamed HR director
+and a 300 person plant. The gate held the row as Error on those six figures
+and on a close with no question. The unnamed person check was added to the
+gate after that run, replayed on its script, and published with the rest.
+Live and draft were read back equal, with all three bodies byte for byte in
+the active version.
