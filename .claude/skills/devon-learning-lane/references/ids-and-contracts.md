@@ -19,7 +19,7 @@ history, and the two instances share no ids.
 | devon_state_ledger data table | `QZvdxllOjWevb3Vo` | one row per intent; `learning_state` belongs to the envelope and is rewritten on every upsert — never use it as a foreign marker |
 | Ledger Feeder workflow | `GEbNoDMBdGqDfZJ2` | daily poll at 02:00 instance time (15-min until 2026-09-05); feeds COMPLETED jobs once each; since Build 18 (2026-09-06) a second branch off Fetch Feed Log posts one `LEARNING_CAPTURED` per fed, unmarked job to `devon-event` with `learning` set to `{state: captured, captured_at, by: ledger-feeder, gate_decision, feed_status}`, a COMPLETED to COMPLETED same state update; the feed log stays the only dedupe key, a mark the bus did not persist emails Tee and is retried next run; source in `n8n/devon/ledger-feeder/` |
 | devon_build12_feed_log table | `U0PqQWiq4nadKFlm` | intent_id, fed_at, webhook_status, gate_decision, claim, area (area may be empty; parse `. Area: X.` from claim as fallback) |
-| Build 12 Upstream Test workflow | `VzJsSlDswkIJ9wok` | webhook `devon-build12-upstream`; header auth `x-devon-key` ON since 2026-08-26 (credential Devon Capture Key); MCP-available since 2026-08-26 |
+| Build 12 Upstream Test workflow (the gate) | `VzJsSlDswkIJ9wok` | webhook `devon-build12-upstream`; header auth `x-devon-key` ON since 2026-08-26 (credential Devon Capture Key); MCP-available since 2026-08-26; active version `17f51ee2` since 2026-10-07 (was `a8b070c5`): no test fallbacks, issuer failures throw, see the payload section below; saves no successful executions, errors go to the OS Error Handler `GbeNilHQzjmoWDz3` |
 | Approval Queue workflow | `Ia28EHrxtiI8cjeA` | webhooks `devon-approve-request` (POST, x-devon-key) and `devon-approve-decide` (GET, token in link) |
 | approval_queue table | `AomDw2Oa9XCUluRX` | status pending/approved/rejected; 72h expiry; contains a plaintext token column — never read it |
 | Soul Committer workflow | `drP96ernQvbrvzIZ` | hourly poll since 2026-09-06 (15-min before; Tee's ruling on the execution burn, version `49007534`); propose + resolve branches; first draft `Wo7zPxpGH8kiBRy8` archived unpublished after adversarial review |
@@ -128,7 +128,43 @@ devon-subconscious, never devon-soul.
 Response body carries the gate decision (`decision`, e.g. PROMOTE /
 REQUIRES_HUMAN / REJECT / HOLD); the feeder records it as `gate_decision`.
 Gate promotes only on complete + clear + >= 2 independent sources, so a
-single-job feed can never PROMOTE by itself.
+single-job feed can never PROMOTE by itself. Measured 2026-10-07: the feeder
+sends exactly one id, so HOLD_SUBCONSCIOUS is the best any fed job can get,
+and the subconscious write, the Soul Committer and the Approval Queue are
+unreachable from real work. Ruled the same day: group related jobs so they
+can clear the two-source bar, spec first.
+
+Gate behaviour since version `17f51ee2` (ruled by Tee 2026-10-07; drafted,
+tested by hand on executions 2384 to 2387, reviewed by two read-only critics
+with no blockers, then published and read back):
+
+- No test fallbacks. A claim that is missing, not text, or under 12
+  characters, or a body with no `source_intent_ids`, throws `REFUSED: ...`.
+  Before, the first was replaced with a canned claim and the second with two
+  fabricated ids, exactly the PROMOTE threshold. Ids are trimmed and upper
+  cased before duplicates are dropped, so one job cannot count twice.
+- The issuer body is built with `JSON.stringify`, so a quote, backslash or
+  newline in a job summary can no longer break it. Proved on 2384 to 2387
+  with all three in the claim.
+- The issuer runs with `fullResponse` and a 25s timeout (under the feeder's
+  30s). Assemble Result throws on a non-2xx answer, on a 2xx that is not a
+  receipt, and on `complete: false` (timeout, provider error, or both souls
+  unread). The webhook then answers 500, so the feeder logs FAILED, emails,
+  and re-feeds the job on its next run instead of logging REQUIRES_HUMAN as
+  fed forever. A partial read (`complete: true`, `conflict_status`
+  requires_human) is still a legitimate REQUIRES_HUMAN and is still fed.
+  The 500 path itself is reasoned from n8n and the feeder code, not yet
+  executed: manual runs do not answer an HTTP caller or fire the error
+  workflow.
+- Every failure message names the first source id, and carries no colon or
+  line break of its own, because n8n's Code node keeps only the text after
+  the LAST colon of a thrown message, and only its first line. Measured on
+  2385: `REFUSED: no source_intent_ids` arrived as description `REFUSED`
+  and message `no source_intent_ids ...`.
+- Open, ruled to Tee rather than built: a job that can never pass (for
+  example a claim over the service's 2000 character limit, which answers
+  422) has no exit. It fails, emails and retries every day until someone
+  intervenes, and the only manual exit is a hand-written feed log row.
 
 ## Approval queue contract
 
