@@ -86,8 +86,8 @@ row and fails when either row drifts from the export of the same role.
 
 | version | id | nodes |
 |---|---|---|
-| active | `54e8154d` | 274 nodes |
-| draft | `54e8154d` | 274 nodes |
+| active | `c470353f` | 274 nodes |
+| draft | `c470353f` | 274 nodes |
 
 Every webhook path and webhook id in the exports reads `redacted`. The Gumroad
 sale ping carries no authentication, so its random path suffix is the only
@@ -350,3 +350,27 @@ passes nothing it should not: row 46 now reads Error on "twelve" (Gallup's
 treated 12 and 15 written as digits. Row 46 is already ticked and is not
 gated again. It went live by PUT without a copy run, because it changes the
 bodies of two Code nodes whose harnesses drive the real files.
+
+The exports were regenerated at `c470353f` after a fourth critic graded
+`54e8154d` PASS-WITH-CONDITIONS. Most of what it found predates the day's
+work and sat in the first version of the gate: a numeral of ten or under
+passed whenever its unit was a spelling the gate did not read, so "9 in 10",
+"7 out of 10", "3/4", "3x" and "9 pct" all reached Scripted, and a sourced
+percent or year lent its digits to a bare count, so "41 managers quit" and "a
+plant of 2024 workers" passed on Korn Ferry's 41% and Gallup's 2024. Fraction
+words outside one to four thirds, "per cent" after a small number word, and a
+source named by "said", "data shows", "per" or "a Stanford study" passed too.
+An hours figure followed by "of", "a" or "on" was still read as a clock time.
+
+`c470353f` changes `Sources Gate` and `Parse Expanded After Doctor` only. A
+small number in a ratio or with any unit is a figure; only a unitless source
+numeral stands for a bare count, and a sourced year stands only as a year;
+fractions, "out of" and "twice" are spelled figures; the attribution checks
+read more verbs and more shapes; the time exception refuses an hours count.
+It also stops refusing DD 214 without its hyphen, SF 86, DA 2166-9,
+regulation numbers such as AR 670-1, Article 15, Chapter 13 and 24/7. The
+parse counts figures rather than seeing them, so a doctored number cannot be
+reused, refuses a name in a sentence's first word when the doctored text
+never uses the word, and refuses any doctored sentence repeated. Every input
+the critic listed is a case in the two node tests. Replayed, row 46 reads
+Error on "twelve" only and row 26 on "50" and "fifteen" only.

@@ -39,19 +39,37 @@ for (const x of a) {
   if (i === -1) return keep('a sentence of the doctored text was changed or dropped: "' + x.slice(0, 80) + '"');
   at = i + 1;
 }
-if (/[—–]/.test(script)) return keep('it added an em or en dash');
-const nums = (t) => new Set((t.match(/\d[\d,]*(?:\.\d+)?/g) || []).map(x => x.replace(/,/g, '')));
-const had = nums(old);
-const added = [...nums(script)].filter(n => !had.has(n));
-if (added.length) return keep('it added figure(s) the doctored text did not carry: ' + added.slice(0, 8).join(', '));
-const WORDS = /\b(?:eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundreds?|thousands?|millions?|billions?|trillions?|percent|dozens?|half|third|thirds|quarter|quarters|majority)\b/gi;
-const wordsIn = (t) => new Set((t.match(WORDS) || []).map(w => w.toLowerCase()));
-const hadWords = wordsIn(old);
-const newWords = [...wordsIn(script)].filter(w => !hadWords.has(w));
-if (newWords.length) return keep('it added number word(s) the doctored text did not carry: ' + newWords.join(', '));
-const names = (t) => new Set(sent(t).flatMap(x => x.split(/\s+/).slice(1)).map(w => w.replace(/^[^\w]+|[^\w]+$/g, '')).filter(w => /^[A-Z]/.test(w)));
-const hadNames = names(old);
-const newNames = [...names(script)].filter(w => !hadNames.has(w) && !/^(?:I|I'm|I've|I'll|I'd)$/.test(w));
+// Nothing of the doctored text may repeat more often than it did, so a
+// lengthening cannot pad itself by doubling a sentence (fourth critic).
+const tally = (xs) => xs.reduce((m, x) => m.set(x, (m.get(x) || 0) + 1), new Map());
+const ta = tally(a), tb = tally(b);
+for (const [x, n] of tb) if (ta.has(x) && n > ta.get(x)) return keep('a sentence of the doctored text appears more often: "' + x.slice(0, 80) + '"');
+if (/[\u2012-\u2015]/.test(script)) return keep('it added a dash');
+// Figures are counted, not just seen, so a number the doctored text carried
+// once cannot be reused in a new sentence. Small number words count only in a
+// ratio ("nine out of ten", "two in five"); every other number word counts
+// wherever it stands.
+const FIG = /\d[\d,]*(?:\.\d+)?|[\u00bc-\u00be\u2150-\u215e]|\b(?:one|two|three|four|five|six|seven|eight|nine|ten)(?=\s+(?:out of|in|of every|per)\s)|\b(?:eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundreds?|thousands?|millions?|billions?|trillions?|percent|cent|pct|dozens?|half|halves|thirds?|quarters?|fourths?|fifths?|sixths?|sevenths?|eighths?|ninths?|tenths?|majority|twice|thrice|double|doubled|triple|tripled|quadrupled|halved)\b/gi;
+const figs = (t) => tally((t.match(FIG) || []).map(x => x.toLowerCase().replace(/,/g, '')));
+const fa = figs(old), fb = figs(script);
+const more = [...fb].filter(([x, n]) => n > (fa.get(x) || 0)).map(([x]) => x);
+if (more.length) return keep('it added figure(s) or number word(s) the doctored text did not carry, or carried fewer times: ' + more.slice(0, 8).join(', '));
+// A new capitalised word is a name, wherever it stands. At the start of a
+// sentence it is a name when the doctored text never uses the word at all,
+// so "Amazon cut its managers" is refused and "This means" is not.
+const tokens = (x) => x.split(/\s+/).map(w => w.replace(/^[^\w]+|[^\w']+$/g, '')).filter(Boolean);
+const oldLower = new Set(tokens(old).map(w => w.toLowerCase()));
+const hadNames = new Set(a.flatMap(x => tokens(x).slice(1)).filter(w => /^[A-Z]/.test(w)));
+const SELF = /^(?:I|I'm|I've|I'll|I'd)$/;
+const newNames = [];
+for (const x of b) {
+  if (ta.has(x)) continue;
+  tokens(x).forEach((w, i) => {
+    if (!/^[A-Z]/.test(w) || SELF.test(w)) return;
+    const fresh = i === 0 ? !oldLower.has(w.toLowerCase()) : !hadNames.has(w);
+    if (fresh && !newNames.includes(w)) newNames.push(w);
+  });
+}
 if (newNames.length) return keep('it added name(s) the doctored text did not carry: ' + newNames.slice(0, 8).join(', '));
 
 return [{ json: {

@@ -63,6 +63,16 @@ for (const [bad, why] of [
   ["A new hook. Here is why. " + MID + " " + plenty + " " + CLOSE, /the hook changed/],
   [[HOOK, MID, plenty, "Subscribe for more."].join(" "), /the last sentence changed/],
   [HOOK + " " + words(50) + ". " + CLOSE, /no longer/],
+  // The fourth critic's cases, 2026-10-07.
+  [add(plenty + " Amazon cut its managers the same way."), /name\(s\).*Amazon/],
+  [add(plenty + " (Jassy) cut managers."), /name\(s\).*Jassy/],
+  [add(plenty + " Gartner predicts the same."), /name\(s\).*Gartner/],
+  [add(plenty + " Nine out of ten managers felt it."), /number word\(s\).*nine/],
+  [add(plenty + " Nine per cent of managers felt it."), /number word\(s\)/],
+  [add(plenty + " A fifth of managers quit within weeks."), /number word\(s\).*fifth/],
+  [add(plenty + " The plant had 2023 workers."), /carried fewer times: 2023/],
+  [[HOOK, MID, MID, CLOSE].join(" "), /appears more often/],
+  [[HOOK, MID, HOOK, CLOSE].join(" "), /appears more often/],
 ]) {
   r = parse($p, null, reply(bad))[0].json;
   assert.equal(r.script, short.script, String(why));
