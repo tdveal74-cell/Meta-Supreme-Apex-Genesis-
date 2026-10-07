@@ -614,7 +614,7 @@ WEBHOOKS = {
     # envelope without driving it.
     "devon-intake": {
         "job": "form one v1 job envelope from a capture and drive it through the organs",
-        "destination": "Job Driver TT4TfFXyH9O7lfdc, then the Build 02 ledger by way of the organs",
+        "destination": "Job Driver MfJCYeJqVjBLFrCu, then the Build 02 ledger by way of the organs",
         "workflow": "TciVQhWJA0y92x9P",
         "auth": "header x-devon-key",
         "open_ruling": None,
@@ -657,7 +657,7 @@ WEBHOOKS = {
     # in a path string.
     "bf371d93-da93-4e81-b50b-4ffe988aeae5/chat": {
         "job": "the Face: hosted chat where Tee talks to DEVON",
-        "destination": "Cerebras, then devon-intake for any job Tee files; memory in devon_chat_log nwnHN8o2dgHjtk7f",
+        "destination": "Cerebras, then devon-intake for any job Tee files; memory in devon_chat_log DKCusDJfIF8CPxyb",
         "workflow": "sPv6Cq7elbjoi5Nw",
         "auth": "n8n user login",
         "open_ruling": None,
@@ -1133,7 +1133,7 @@ WORKFLOWS = {
     # Build 15, the face. n8n hosted chat behind n8n user auth where Tee talks
     # to DEVON from the phone. Cerebras answers with the live ledger, the last
     # driver passes and the last heartbeat in front of it, plus this session's
-    # turns from devon_chat_log (nwnHN8o2dgHjtk7f). Status answers cite only
+    # turns from devon_chat_log (DKCusDJfIF8CPxyb). Status answers cite only
     # measured context. A request to do something is filed through
     # devon-intake, the same door every poster uses, so the same tags, brief,
     # router, cards and ledger apply; an ambiguous ask becomes a dry run and

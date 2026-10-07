@@ -141,22 +141,26 @@ Decision: Tee taps the emailed approve/reject link; the row's `status`
 becomes `approved`/`rejected` with `decided_at`. Rows never auto-expire in
 the table; consumers must treat pending past `expires_at` as rejected.
 
-Known queue defects (found 2026-08-25, reported to Tee, unpatched — live
-workflow edits are permission-blocked from sessions):
+Queue defects found 2026-08-25. Status re-read from the live workflow
+definition (version `c85c41ee`) on 2026-10-07; the table and the run data were
+not read:
 
-1. Build Request's `rand()` uses signed shifts (`>>`); random words >= 2^31
-   index `SET[negative]` and concatenate the literal text `undefined` into
-   request ids and tokens (seen live: `REQ-20260825-Jundef`). Half of all id
-   suffixes collapse to one of 62 strings, so same-day id collisions are
-   realistic, and token entropy is far below design. Fix: `>>>` for the three
-   shifted indexes in Build Request. Consumers must treat request ids as
-   opaque and possibly colliding until patched.
-2. Find Request scans only the 200 newest rows; a still-valid approval link
-   for an older request denies with "No request found" once 200+ newer
-   requests exist inside its TTL.
-3. Record Decision runs AFTER Respond Decided with onError continue: the
-   browser can show "Recorded" while the table write failed, silently losing
-   a decision. This is why committer EXPIRED notes say "no recorded decision".
+1. FIXED. Build Request's `rand()` used signed shifts (`>>`), so random words
+   >= 2^31 indexed `SET[negative]` and put the literal text `undefined` into
+   request ids and tokens (seen live: `REQ-20260825-Jundef`). It now uses
+   unsigned shifts (`>>>`) over `crypto.getRandomValues`, and the canvas note
+   says not to change them back. Ids minted before the fix can still carry
+   `undefined`; treat request ids as opaque.
+2. OPEN. Find Request still reads only the 200 newest rows, unfiltered, and
+   matches in Check Decision; a still-valid approval link for an older
+   request denies with "No request found" once 200+ newer requests exist
+   inside its TTL.
+3. PARTLY FIXED. The order is now Check Decision, then Record Decision, then
+   Respond Decided, so the browser is no longer answered first. But Record
+   Decision still sets onError continueRegularOutput, so a failed table write
+   still reaches Respond Decided and the page can still say "Recorded" for a
+   decision that never landed. This is why committer EXPIRED notes say "no
+   recorded decision".
 
 ## Soul record shape (committer → devon-soul)
 
