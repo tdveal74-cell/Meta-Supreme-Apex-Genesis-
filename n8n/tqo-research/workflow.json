@@ -218,7 +218,7 @@
   "name": "TQO Research: Sources for Locked Rows",
   "nodes": [
     {
-      "id": "ea14ed17-517b-4214-8f42-2edb6f088ea1",
+      "id": "4af7a028-4cda-4bf3-8589-c2a856c15939",
       "name": "Run Research by Hand",
       "parameters": {},
       "position": [
@@ -229,7 +229,7 @@
       "typeVersion": 1
     },
     {
-      "id": "48763ecd-e14e-496a-b461-2f3b9f3cd875",
+      "id": "7c2fde19-af78-4d02-bbff-bf5d8423756d",
       "name": "Daily 09:40Z Research",
       "parameters": {
         "rule": {
@@ -255,7 +255,7 @@
           "name": "Firecrawl API - OS 29"
         }
       },
-      "id": "ef5f45f4-ef20-499e-9a93-9a1881cfec5c",
+      "id": "539ef34c-d524-4de4-b697-6de6046215bd",
       "name": "Firecrawl Balance",
       "parameters": {
         "operation": "teamCreditUsage",
@@ -269,7 +269,7 @@
       "typeVersion": 1
     },
     {
-      "id": "b2663264-5fab-4479-a77e-df7d42bf24b2",
+      "id": "ec078d10-b618-4f5e-9e04-9342f2175876",
       "name": "Credit Floor",
       "parameters": {
         "jsCode": "// Firecrawl bills every search result it scrapes. Read the balance first and\n// refuse the whole run below the floor, naming what was seen, rather than\n// discovering an empty account halfway through a row.\nconst FLOOR = 100;\nconst r = $input.first().json || {};\nconst d = (r.data && typeof r.data === 'object') ? r.data : r;\nconst cands = [d.remainingCredits, d.remaining_credits, d.credits, r.remainingCredits, r.remaining_credits];\nlet remaining = null;\nfor (const c of cands) { if (c !== undefined && c !== null && c !== '' && !isNaN(Number(c))) { remaining = Number(c); break; } }\nif (remaining === null) {\n  throw new Error('Refusing to research: could not read the Firecrawl balance. Keys seen: ' + (Object.keys(r).join(', ') || '(none)') + '; data keys: ' + (Object.keys(d).join(', ') || '(none)'));\n}\nif (remaining < FLOOR) {\n  throw new Error('Refusing to research: Firecrawl has ' + remaining + ' credits left, under the floor of ' + FLOOR + '.');\n}\nreturn [{ json: { firecrawlCredits: remaining } }];\n",
@@ -284,8 +284,9 @@
       "typeVersion": 2
     },
     {
+      "alwaysOutputData": true,
       "executeOnce": true,
-      "id": "5ec5435b-1d00-455f-90bb-d4ad318ee4cd",
+      "id": "c5ebcd17-9cdd-46fa-8986-937b09e99dca",
       "name": "Get TQO Idea Rows",
       "parameters": {
         "dataTableId": {
@@ -315,8 +316,9 @@
       "typeVersion": 1.1
     },
     {
+      "alwaysOutputData": true,
       "executeOnce": true,
-      "id": "56317782-10a5-48c1-8754-2a01019d8266",
+      "id": "af2d2850-0551-4bcf-a142-0efaddd4935c",
       "name": "Get NCO Idea Rows",
       "parameters": {
         "dataTableId": {
@@ -346,7 +348,7 @@
       "typeVersion": 1.1
     },
     {
-      "id": "64581b62-1dbc-47d3-8e12-a1587954f6c6",
+      "id": "20aa27c9-7bbc-43f5-b6e9-f938799a2025",
       "name": "Rows Needing Sources",
       "parameters": {
         "jsCode": "// A row needs research when the package is locked, the row is still an Idea and\n// it carries no usable source. The writer skips exactly these rows (Package:\n// Plan Batch in TQO FINAL V5), so this is the only way one of them moves. Both\n// shows: NCO was ruled to the same standard the same day, at most two rows each.\nconst MAX_ROWS = 2;\n// A row that found nothing is left alone for RETRY_DAYS, read from the date its\n// own research_note opens with, so two rows that cannot be sourced do not take\n// both places every day and starve every newer locked row behind them.\nconst RETRY_DAYS = 7;\nconst today = Date.parse(new Date().toISOString().slice(0, 10));\nfunction pausedNote(note) {\n  const m = /^\\[(\\d{4}-\\d{2}-\\d{2})\\] No source written/.exec(s(note));\n  return !!m && (today - Date.parse(m[1])) / 86400000 < RETRY_DAYS;\n}\nconst TABLES = [\n  { show: 'TQO', tableRef: '2GtmrFcTNqVMbddh', node: 'Get TQO Idea Rows' },\n  { show: 'NCO', tableRef: 'DSH1tn4TZjzAEKxp', node: 'Get NCO Idea Rows' }\n];\nconst s = (v) => (v === null || v === undefined) ? '' : String(v).trim();\nfunction sourcesOk(raw) {\n  let list = null;\n  try { list = JSON.parse(s(raw)); } catch (e) { return false; }\n  return Array.isArray(list) && list.some(x => x && s(x.url) && s(x.quote));\n}\nconst rows = [];\nfor (const t of TABLES) {\n  rows.push(...$(t.node).all().map(i => i.json)\n    .filter(j => j.id !== undefined && s(j.status) === 'Idea' && s(j.package_locked) && !sourcesOk(j.sources) && !pausedNote(j.research_note))\n    .sort((a, b) => Number(a.id) - Number(b.id))\n    .slice(0, MAX_ROWS)\n    .map(j => ({ ...j, __show: t.show, __tableRef: t.tableRef })));\n}\nreturn rows.map(j => ({ json: {\n  id: j.id,\n  show: j.__show,\n  tableRef: j.__tableRef,\n  topic: s(j.topic) || s(j.video_title),\n  angle: s(j.angle),\n  idea: s(j.idea),\n  primary_subject: s(j.primary_subject),\n  notes: s(j.notes),\n  searchQuery: (s(j.primary_subject) || s(j.topic)) + ' 2026 report data -site:linkedin.com -site:instagram.com -site:facebook.com -site:tiktok.com -site:x.com -site:youtube.com'\n} }));\n",
@@ -361,7 +363,7 @@
       "typeVersion": 2
     },
     {
-      "id": "2d354dd3-e5b4-4a2a-b3f8-ee124ee0b309",
+      "id": "b956bf69-0dbb-4116-b063-b17f8b70cb93",
       "name": "One Row at a Time",
       "parameters": {
         "batchSize": 1,
@@ -381,7 +383,7 @@
           "name": "Firecrawl API - OS 29"
         }
       },
-      "id": "5691c7cf-7844-499d-8904-35b9feca2031",
+      "id": "f6b09312-1703-44f9-a690-aff947594f32",
       "name": "Firecrawl Search",
       "onError": "continueRegularOutput",
       "parameters": {
@@ -404,7 +406,7 @@
       "typeVersion": 1
     },
     {
-      "id": "f246d428-b98d-411f-af42-7207755f9f12",
+      "id": "04e55ddb-291a-40e2-9a65-6c711a6d355e",
       "name": "Build Extract Prompt",
       "parameters": {
         "jsCode": "// Search results arrive with each page's own text, fetched by Firecrawl. The\n// model is handed that text and asked to copy quotes out of it. Nothing it\n// returns is trusted: Quote Check below matches every quote against the same\n// text character for character.\nconst row = $('One Row at a Time').first().json;\nconst r = $input.first().json || {};\nconst raw = Array.isArray(r.data) ? r.data : (r.data && Array.isArray(r.data.web) ? r.data.web : (Array.isArray(r.web) ? r.web : []));\nconst PAGE_CHARS = 8000;\nconst pages = [];\nfor (const p of raw) {\n  const url = String(p.url || (p.metadata && (p.metadata.sourceURL || p.metadata.url)) || '').trim();\n  const md = String(p.markdown || '').trim();\n  if (!url || md.length < 200) continue;\n  pages.push({ n: pages.length + 1, url: url, title: String(p.title || (p.metadata && p.metadata.title) || '').trim(), markdown: md });\n}\nconst searchNote = r.error ? ('search error: ' + String(r.error.message || r.error).slice(0, 300)) : '';\nif (!pages.length) {\n  return [{ json: { id: row.id, show: row.show, tableRef: row.tableRef, hasPages: false, pages: [], research_note: '[' + new Date().toISOString().slice(0, 10) + '] No source written: the search returned no readable pages' + (searchNote ? ' (' + searchNote + ')' : '') + '. Query: ' + row.searchQuery } }];\n}\nconst system = [\n  'You extract evidence for a factual video script. You copy, you never write.',\n  'From the numbered pages below, pick up to six passages that state a specific, checkable fact about the episode topic: a number, a date, a named finding or a named organisation\\'s stated result.',\n  'Each quote must be copied character for character from the page text, one or two sentences, between 40 and 400 characters. Do not fix typos, do not join sentences from different places, do not add or drop words.',\n  'Skip any passage that cites an unnamed study, firm, survey or expert. Skip opinion, prediction and marketing copy.',\n  'publisher is the organisation or person that published the page, as the page names it. If the page does not name one, skip that page.',\n  'origin is the organisation that produced the figure or finding (the survey, dataset, filing or report), named exactly as the page names it. The quote must name the origin in its own words, unless the publisher itself produced the figure, in which case origin equals publisher. If the page repeats a figure without naming who produced it, skip that passage.',\n  'claim is one plain sentence saying what the quote shows, adding nothing the quote does not say.',\n  'Return JSON only: {\"sources\":[{\"page\":1,\"publisher\":\"...\",\"origin\":\"...\",\"quote\":\"...\",\"claim\":\"...\"}]}. Return {\"sources\":[]} if nothing qualifies.'\n].join(' ');\nconst user = 'EPISODE TOPIC: ' + row.topic + '\\nANGLE: ' + row.angle + '\\nIDEA: ' + row.idea + '\\n\\n' +\n  pages.map(p => '=== PAGE ' + p.n + ' ===\\nURL: ' + p.url + '\\nTITLE: ' + p.title + '\\nTEXT:\\n' + p.markdown.slice(0, PAGE_CHARS)).join('\\n\\n');\nconst body = { model: 'gpt-oss-120b', messages: [{ role: 'system', content: system }, { role: 'user', content: user }], max_completion_tokens: 8000, reasoning_effort: 'medium', response_format: { type: 'json_object' } };\nreturn [{ json: { id: row.id, show: row.show, tableRef: row.tableRef, hasPages: true, pages: pages, body: body } }];\n",
@@ -419,14 +421,14 @@
       "typeVersion": 2
     },
     {
-      "id": "b1f422a2-cc1b-4de7-9007-82a066b4002d",
+      "id": "6669098b-fe87-4e1a-acac-1ed3b7a0bcf7",
       "name": "Any Pages?",
       "parameters": {
         "conditions": {
           "combinator": "and",
           "conditions": [
             {
-              "id": "7fe8b3f7-0325-44db-bef7-7a7509de9102",
+              "id": "32a31622-ec10-4a22-93ac-b6309a1589dd",
               "leftValue": "={{ $json.hasPages }}",
               "operator": {
                 "operation": "true",
@@ -458,7 +460,7 @@
           "name": "Cerebras Cloud"
         }
       },
-      "id": "8ece860a-eaeb-40aa-928b-579607928440",
+      "id": "cc239c70-f32a-49ef-84b2-c3aa12b69cd2",
       "maxTries": 3,
       "name": "Extract Quotes (Cerebras)",
       "parameters": {
@@ -492,10 +494,10 @@
       "waitBetweenTries": 5000
     },
     {
-      "id": "6820eb67-4ecb-4af6-99c3-65ec1aedd481",
+      "id": "e2dc842c-8197-4d0b-872d-5f76c0cc8c2a",
       "name": "Quote Check",
       "parameters": {
-        "jsCode": "// The mechanical check Tee approved under the doctor. A quote survives only if\n// it is found, after whitespace and punctuation normalising and nothing else,\n// inside the text Firecrawl fetched from that same URL. Markdown link and\n// emphasis syntax is removed from both sides first, because a quote copied\n// from rendered text will not carry the asterisks. It also checks provenance:\n// the organisation that produced the figure must be named inside the quote,\n// unless the publisher produced it. A page claiming to be the origin is refused\n// when the quote credits unnamed studies or research. A blog stating a number\n// as its own is the one case left to the doctor, which can approve it, as it\n// approved vendor blogs in execution 2349.\nconst prev = $('Build Extract Prompt').first().json;\nconst pages = prev.pages || [];\nconst norm = (t) => String(t || '')\n  .replace(/!\\[[^\\]]*\\]\\([^)]*\\)/g, ' ')\n  .replace(/\\[([^\\]]*)\\]\\([^)]*\\)/g, '$1')\n  .replace(/[*_`]/g, '')\n  .replace(/[#>|]/g, ' ')\n  .replace(/[\u2018\u2019\u201b\u2032]/g, \"'\")\n  .replace(/[\u201c\u201d\u201f\u2033]/g, '\"')\n  .replace(/[\u2013\u2014\u2212]/g, '-')\n  .replace(/\u00a0/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .toLowerCase();\nconst UNNAMED = /\\b(?:studies|research|experts|surveys|reports|data|analysts) (?:show|shows|suggest|suggests|say|says|find|finds|found|indicate|indicates)\\b/i;\nlet parsed = null;\nconst content = (((($input.first().json || {}).choices || [])[0] || {}).message || {}).content || '';\ntry { parsed = JSON.parse(content); } catch (e) { parsed = null; }\nconst offered = (parsed && Array.isArray(parsed.sources)) ? parsed.sources : [];\nconst checked = [];\nconst dropped = [];\nconst seen = new Set();\nfor (const s of offered) {\n  const page = pages.find(p => p.n === Number(s.page));\n  const quote = String(s.quote || '').trim();\n  const why = (r) => dropped.push({ page: s.page, quote: quote.slice(0, 160), reason: r });\n  if (!page) { why('no such page'); continue; }\n  if (quote.length < 40 || quote.length > 400) { why('quote length ' + quote.length); continue; }\n  if (!String(s.publisher || '').trim()) { why('no publisher'); continue; }\n  if (!norm(page.markdown).includes(norm(quote))) { why('quote not found on the page'); continue; }\n  const origin = String(s.origin || '').trim();\n  if (!origin) { why('no origin named'); continue; }\n  const primary = norm(origin) === norm(s.publisher);\n  if (!primary && !norm(quote).includes(norm(origin))) { why('origin ' + origin + ' is not named in the quote'); continue; }\n  if (!norm(page.markdown).includes(norm(origin))) { why('origin ' + origin + ' not found on the page'); continue; }\n  if (primary && UNNAMED.test(quote)) { why('the page names itself as origin of a figure it credits to unnamed research'); continue; }\n  const key = page.url + '|' + norm(quote);\n  if (seen.has(key)) { why('duplicate'); continue; }\n  seen.add(key);\n  const quoteText = quote.replace(/!\\[[^\\]]*\\]\\([^)]*\\)/g, '').replace(/\\[([^\\]]*)\\]\\([^)]*\\)/g, '$1').replace(/^[\\s>*-]+/, '').replace(/\\s+/g, ' ').trim();\n  checked.push({ url: page.url, title: page.title, publisher: String(s.publisher).trim(), origin: origin, primary: primary, quote: quote, quote_text: quoteText, claim: String(s.claim || '').trim() });\n}\nconst stamp = '[' + new Date().toISOString().slice(0, 10) + '] ';\nconst note = parsed === null\n  ? stamp + 'No source written: the extraction reply was not JSON.'\n  : (checked.length ? '' : stamp + 'No source written: ' + offered.length + ' quote(s) offered, none survived the quote check' + (dropped.length ? ' (' + dropped.map(d => d.reason).join('; ') + ')' : '') + '.');\nreturn [{ json: { id: prev.id, show: prev.show, tableRef: prev.tableRef, checked: checked, dropped: dropped, offered: offered.length, research_note: note } }];\n",
+        "jsCode": "// The mechanical check Tee approved under the doctor. A quote survives only if\n// it is found, after whitespace and punctuation normalising and nothing else,\n// inside the text Firecrawl fetched from that same URL. Markdown link and\n// emphasis syntax is removed from both sides first, because a quote copied\n// from rendered text will not carry the asterisks. It also checks provenance:\n// the organisation that produced the figure must be named inside the quote,\n// unless the publisher produced it. A page claiming to be the origin is refused\n// when the quote credits unnamed studies or research. A blog stating a number\n// as its own is the one case left to the doctor, which can approve it, as it\n// approved vendor blogs in execution 2349.\nconst prev = $('Build Extract Prompt').first().json;\nconst pages = prev.pages || [];\nconst norm = (t) => String(t || '')\n  .replace(/!\\[[^\\]]*\\]\\([^)]*\\)/g, ' ')\n  .replace(/\\[([^\\]]*)\\]\\([^)]*\\)/g, '$1')\n  .replace(/[*_`]/g, '')\n  .replace(/[#>|]/g, ' ')\n  .replace(/[\u2018\u2019\u201b\u2032]/g, \"'\")\n  .replace(/[\u201c\u201d\u201f\u2033]/g, '\"')\n  .replace(/[\u2013\u2014\u2212]/g, '-')\n  .replace(/\u00a0/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .toLowerCase();\n// A figure credited to research nobody names. \"Gallup research finds\" and \"our\n// data show\" are the page speaking for itself and stay; \"studies show\" and\n// \"recent research suggests\" do not (narrowed after the second critic found the\n// first version refusing a primary source's own findings).\nconst UNNAMED_RE = /(\\S+\\s+)?(?:studies|research|experts|surveys|reports|data|analysts) (?:show|shows|suggest|suggests|say|says|find|finds|found|indicate|indicates)\\b/gi;\nconst creditsUnnamed = (quote, origin) => {\n  const own = new Set(['our', 'its', 'their', ...norm(origin).split(' ')]);\n  let m;\n  UNNAMED_RE.lastIndex = 0;\n  while ((m = UNNAMED_RE.exec(quote))) {\n    const before = norm(m[1] || '').replace(/[^a-z0-9]/g, '');\n    if (!before || !own.has(before)) return true;\n  }\n  return false;\n};\nlet parsed = null;\nconst content = (((($input.first().json || {}).choices || [])[0] || {}).message || {}).content || '';\ntry { parsed = JSON.parse(content); } catch (e) { parsed = null; }\nconst offered = (parsed && Array.isArray(parsed.sources)) ? parsed.sources : [];\nconst checked = [];\nconst dropped = [];\nconst seen = new Set();\nfor (const s of offered) {\n  const page = pages.find(p => p.n === Number(s.page));\n  const quote = String(s.quote || '').trim();\n  const why = (r) => dropped.push({ page: s.page, quote: quote.slice(0, 160), reason: r });\n  if (!page) { why('no such page'); continue; }\n  if (quote.length < 40 || quote.length > 400) { why('quote length ' + quote.length); continue; }\n  if (!String(s.publisher || '').trim()) { why('no publisher'); continue; }\n  if (!norm(page.markdown).includes(norm(quote))) { why('quote not found on the page'); continue; }\n  const origin = String(s.origin || '').trim();\n  if (!origin) { why('no origin named'); continue; }\n  const primary = norm(origin) === norm(s.publisher);\n  if (!primary && !norm(quote).includes(norm(origin))) { why('origin ' + origin + ' is not named in the quote'); continue; }\n  if (!norm(page.markdown).includes(norm(origin))) { why('origin ' + origin + ' not found on the page'); continue; }\n  if (primary && creditsUnnamed(quote, origin)) { why('the page names itself as origin of a figure it credits to unnamed research'); continue; }\n  const key = page.url + '|' + norm(quote);\n  if (seen.has(key)) { why('duplicate'); continue; }\n  seen.add(key);\n  const quoteText = quote.replace(/!\\[[^\\]]*\\]\\([^)]*\\)/g, '').replace(/\\[([^\\]]*)\\]\\([^)]*\\)/g, '$1').replace(/^[\\s>*-]+/, '').replace(/\\s+/g, ' ').trim();\n  checked.push({ url: page.url, title: page.title, publisher: String(s.publisher).trim(), origin: origin, primary: primary, quote: quote, quote_text: quoteText, claim: String(s.claim || '').trim() });\n}\nconst stamp = '[' + new Date().toISOString().slice(0, 10) + '] ';\nconst note = parsed === null\n  ? stamp + 'No source written: the extraction reply was not JSON.'\n  : (checked.length ? '' : stamp + 'No source written: ' + offered.length + ' quote(s) offered, none survived the quote check' + (dropped.length ? ' (' + dropped.map(d => d.reason).join('; ') + ')' : '') + '.');\nreturn [{ json: { id: prev.id, show: prev.show, tableRef: prev.tableRef, checked: checked, dropped: dropped, offered: offered.length, research_note: note } }];\n",
         "language": "javaScript",
         "mode": "runOnceForAllItems"
       },
@@ -507,14 +509,14 @@
       "typeVersion": 2
     },
     {
-      "id": "6bd21d7a-94b9-4a7e-8d6d-425069cd7188",
+      "id": "5769a0dc-9ff1-40bd-837b-4074e8ad872f",
       "name": "Any Quote Survived?",
       "parameters": {
         "conditions": {
           "combinator": "and",
           "conditions": [
             {
-              "id": "0bccf4fd-4dc1-430b-a487-f0c0afc479f3",
+              "id": "a3514331-7f69-4ba0-94d2-649643cf9301",
               "leftValue": "={{ ($json.checked || []).length }}",
               "operator": {
                 "operation": "gt",
@@ -540,7 +542,7 @@
       "typeVersion": 2.2
     },
     {
-      "id": "a3f3c83a-0d34-4209-ad23-9b1f1ee6e821",
+      "id": "0cd6ca59-efa1-44aa-bbf6-595a507a926a",
       "name": "Build Doctor Prompt",
       "parameters": {
         "jsCode": "// The script doctor approves or rejects each checked source. It is handed only\n// the quotes that already passed the mechanical check, and it can only say yes\n// or no to each: Compose Approved Sources keeps the checked text, so nothing the\n// doctor writes reaches the row except its verdict and reason.\nconst row = $('One Row at a Time').first().json;\nconst list = $input.first().json.checked || [];\nconst system = [\n  row.show === 'NCO'\n    ? 'You are the script doctor for NCO Forge, a channel for service members, those leaving service and veterans on transition, careers, fitness, finance and mindset. You approve the evidence a script may cite.'\n    : 'You are the script doctor for The Quiet Operator, a calm, anti-hype channel on AI and careers. You approve the evidence a script may cite.',\n  'For each numbered source decide approve or reject.',\n  'Approve only when all hold: the origin is a named organisation a viewer can look up (a government agency, a research or analyst firm, a company reporting on itself, a newsroom reporting its own finding); the quote states a specific fact or a named organisation\\'s published projection; the fact bears directly on the episode topic; the claim line says no more than the quote, and calls a projection a projection.',\n  'Reject when the origin is a vendor, coach or app that sells the thing the figure measures, when the origin is only a blog or social post, when the figure is from an unnamed survey, or when the figure would mislead out of context. When in doubt, reject: a rejected source costs one row a day, an approved bad one goes on air in Tee\\'s voice.',\n  'Return JSON only: {\"verdicts\":[{\"index\":0,\"verdict\":\"approve\",\"reason\":\"...\"}]} with one entry per source, index matching the list.'\n].join(' ');\nconst user = 'EPISODE TOPIC: ' + row.topic + '\\nANGLE: ' + row.angle + '\\nIDEA: ' + row.idea + '\\n\\nSOURCES:\\n' +\n  list.map((s, i) => '[' + i + '] PUBLISHER: ' + s.publisher + '\\nORIGIN OF THE FIGURE: ' + s.origin + (s.primary ? ' (the publisher itself)' : '') + '\\nURL: ' + s.url + '\\nQUOTE: \"' + (s.quote_text || s.quote) + '\"\\nCLAIM: ' + s.claim).join('\\n\\n');\nconst body = { model: 'gpt-oss-120b', messages: [{ role: 'system', content: system }, { role: 'user', content: user }], max_completion_tokens: 4000, reasoning_effort: 'medium', response_format: { type: 'json_object' } };\nreturn [{ json: { id: $input.first().json.id, show: $input.first().json.show, tableRef: $input.first().json.tableRef, checked: list, dropped: $input.first().json.dropped, body: body } }];\n",
@@ -561,7 +563,7 @@
           "name": "Cerebras Cloud"
         }
       },
-      "id": "96539773-123a-4a54-94a3-360fefcbcc66",
+      "id": "6eaa8ed0-5213-41e4-821e-2e817a813d13",
       "maxTries": 3,
       "name": "Script Doctor Approves (Cerebras)",
       "parameters": {
@@ -595,7 +597,7 @@
       "waitBetweenTries": 5000
     },
     {
-      "id": "e24eea57-f551-494c-8938-21083bb8514d",
+      "id": "081ed01b-cdaa-4137-a094-e8cb6a791fd9",
       "name": "Compose Approved Sources",
       "parameters": {
         "jsCode": "// Only checked sources the doctor approved reach the row, and each one keeps the\n// exact text that passed the quote check. A doctor reply that cannot be read\n// approves nothing.\nconst prev = $('Build Doctor Prompt').first().json;\nconst checked = prev.checked || [];\nlet parsed = null;\nconst content = (((($input.first().json || {}).choices || [])[0] || {}).message || {}).content || '';\ntry { parsed = JSON.parse(content); } catch (e) { parsed = null; }\nconst verdicts = (parsed && Array.isArray(parsed.verdicts)) ? parsed.verdicts : [];\nconst now = new Date().toISOString();\nconst approved = [];\nconst rejected = [];\nchecked.forEach((s, i) => {\n  const v = verdicts.find(x => Number(x.index) === i);\n  if (v && String(v.verdict).toLowerCase() === 'approve') approved.push({ ...s, approved_by: 'script doctor', doctor_reason: String(v.reason || '').slice(0, 300), checked_at: now });\n  else rejected.push({ url: s.url, reason: v ? String(v.reason || 'rejected').slice(0, 200) : 'no verdict' });\n});\nconst note = '[' + now.slice(0, 10) + '] ' + (approved.length\n  ? approved.length + ' source(s) approved on ' + now.slice(0, 10) + '; ' + rejected.length + ' rejected by the doctor; ' + (prev.dropped || []).length + ' dropped by the quote check.'\n  : 'No source written: ' + checked.length + ' passed the quote check and the doctor approved none' + (parsed === null ? ' (reply was not JSON)' : '') + (rejected.length ? ': ' + rejected.map(r => r.reason).join('; ') : '') + '.');\nreturn [{ json: { id: prev.id, show: prev.show, tableRef: prev.tableRef, sources: approved.length ? JSON.stringify(approved) : '', research_note: note.slice(0, 2000), approved: approved.length } }];\n",
@@ -610,7 +612,7 @@
       "typeVersion": 2
     },
     {
-      "id": "f0b7118c-1d77-49e6-997e-02e36f7c8b5e",
+      "id": "cee4e810-4bda-4e93-bb0d-8cc97ca86666",
       "name": "Write Research to Row",
       "parameters": {
         "columns": {
@@ -668,7 +670,7 @@
       "typeVersion": 1.1
     },
     {
-      "id": "bdd7dc36-7280-42ca-8d62-8b3f4ac5f47d",
+      "id": "ec429c84-3764-441b-81e3-3f3dd1094685",
       "name": "About This Stage",
       "parameters": {
         "color": 4,
@@ -684,7 +686,7 @@
       "typeVersion": 1
     }
   ],
-  "readAt": "2026-10-07T13:10:00Z",
+  "readAt": "2026-10-07T13:55:00Z",
   "role": "active",
   "settings": {
     "availableInMCP": true,
@@ -694,6 +696,6 @@
     "saveManualExecutions": true,
     "timezone": "Etc/UTC"
   },
-  "versionId": "964214fc-3ae7-42e7-bb26-4775145bfb30",
+  "versionId": "641bcc0c-f217-44ae-bb75-124fa8fac012",
   "workflowId": "0zLNB34UOOTq6mck"
 }

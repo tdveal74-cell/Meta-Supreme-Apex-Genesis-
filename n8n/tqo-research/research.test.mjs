@@ -64,6 +64,18 @@ assert.deepEqual(blog.dropped.map((d) => d.reason), ["the page names itself as o
 const ghost = run("quote_check.js", offer([{ page: 1, publisher: "Acme Coaching Blog", origin: "Gallup", quote: "Studies show 73% of managers will be replaced by AI by 2027, and nobody is ready for it at all.", claim: "c" }]), { "Build Extract Prompt": blogEx })[0].json;
 assert.match(ghost.dropped[0].reason, /is not named in the quote/);
 
+// A primary source speaking for itself stays; research nobody names does not
+// (narrowed after the second critic found Gallup's own findings refused).
+const GALLUP = { success: true, data: [{ url: "https://www.gallup.com/x", title: "G", markdown: "# Gallup\n\nGallup research finds that managers account for 70% of the variance in team engagement across units. Our data show that 70% of the variance holds year over year in every sector. Recent studies show that 70% of managers feel stretched thin at work today. ".repeat(2) }] };
+const gEx = run("build_extract_prompt.js", GALLUP, { "One Row at a Time": row })[0].json;
+const g = run("quote_check.js", offer([
+  { page: 1, publisher: "Gallup", origin: "Gallup", quote: "Gallup research finds that managers account for 70% of the variance in team engagement across units.", claim: "c" },
+  { page: 1, publisher: "Gallup", origin: "Gallup", quote: "Our data show that 70% of the variance holds year over year in every sector.", claim: "c" },
+  { page: 1, publisher: "Gallup", origin: "Gallup", quote: "Recent studies show that 70% of managers feel stretched thin at work today.", claim: "c" },
+]), { "Build Extract Prompt": gEx })[0].json;
+assert.equal(g.checked.length, 2, JSON.stringify(g.dropped));
+assert.deepEqual(g.dropped.map((d) => d.reason), ["the page names itself as origin of a figure it credits to unnamed research"]);
+
 // No origin, no publisher, a page that does not exist, a duplicate.
 const korn = { page: 1, publisher: "Ramp", origin: "Korn Ferry", quote: "And last year, 41% of professionals in a Korn Ferry survey said their company had cut roles at the manager level.", claim: "c" };
 qc = check([{ ...korn, origin: "" }, { ...korn, publisher: "" }, { ...korn, page: 9 }, korn, korn]);

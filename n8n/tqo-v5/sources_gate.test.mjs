@@ -77,6 +77,16 @@ const comma = { ...ROW, sources: JSON.stringify([{ ...SOURCES[1], quote_text: "K
 assert.equal(run("Korn Ferry counted 1200 managers.", { row: comma }).status, "Scripted");
 assert.equal(run("Korn Ferry counted 1,300 managers.", { row: comma }).status, "Error");
 
+// The second critic's cases, 2026-10-07. An approved name ending one sentence
+// no longer carries an unapproved one in the next past the check, and a group
+// with no name standing in for a source is refused unless an approved origin
+// is named in the same sentence.
+assert.match(run(CITED + " Spans grew, according to Gallup. Microsoft found that managers are leaving.").gateReason, /attributed to Microsoft/);
+assert.match(run(CITED + " Managers who have applied this three step plan report that it frees up time.").gateReason, /unnamed person or organisation cited as a source: "Managers who have applied/);
+assert.match(run(CITED + " Companies that tried this found that it works.").gateReason, /unnamed person or organisation/);
+assert.equal(run(CITED + " Managers report to directors, and that is the point.").status, "Scripted");
+assert.equal(run(CITED + " In the Korn Ferry survey, professionals said that manager roles were cut.").status, "Scripted");
+
 // No sources means no figures beyond small counts.
 out = run("Here are 3 steps and 5 questions.", { row: { ...ROW, sources: "" } });
 assert.equal(out.status, "Scripted");
@@ -112,7 +122,18 @@ for (const show of ["TQO", "NCO"]) {
 // NCO is presenter led from the same ruling. TQO's own prompt already says so,
 // so the NCO Presenter Rule leaves TQO untouched.
 const ncoPresenter = writerNode("nco_presenter_rule.js", "NCO", { system: "SYS", messages: [] });
+assert.match(ncoPresenter.body.system, /Where anything above says narrator, it means him speaking to camera\./);
 assert.match(ncoPresenter.body.system, /PRESENTER: Terrance Veal presents every NCO Forge episode himself, on camera, in his own likeness and his own cloned voice\./);
 assert.equal(writerNode("nco_presenter_rule.js", "TQO", { system: "SYS", messages: [] }).body.system, "SYS");
+
+// The doctor sees the same approved sources for both shows, NCO included.
+for (const show of ["TQO", "NCO"]) {
+  const doc = new Function("$", "$input", readFileSync(new URL("./doctor_sources.js", import.meta.url), "utf8"))(
+    (node) => ({ first: () => ({ json: node === "Show Context: Script" ? { show } : ROW }) }),
+    { first: () => ({ json: { recordId: 46, original: {}, claudeBody: { system: "S", messages: [{ role: "user", content: "SCRIPT: x" }] } } }) },
+  )[0].json;
+  assert.match(doc.claudeBody.messages[0].content, /^APPROVED SOURCES \(the only figures and named sources that may stand\):\n\[S1\] Bloomberg and Live Data Technologies/, show);
+  assert.match(doc.claudeBody.system, /SOURCES: a figure, percentage, dollar amount or named study that is not in APPROVED SOURCES is invented\./, show);
+}
 
 console.log("Sources Gate: every case behaves");

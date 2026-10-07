@@ -86,8 +86,8 @@ row and fails when either row drifts from the export of the same role.
 
 | version | id | nodes |
 |---|---|---|
-| active | `d7f4d56f` | 269 nodes |
-| draft | `d7f4d56f` | 269 nodes |
+| active | `c2d51b46` | 269 nodes |
+| draft | `c2d51b46` | 269 nodes |
 
 Every webhook path and webhook id in the exports reads `redacted`. The Gumroad
 sale ping carries no authentication, so its random path suffix is the only
@@ -268,3 +268,14 @@ expansion is checked before the doctor runs. That gap is older than this change
 and is open. Row 46 holds the 2356 script, with the close made a question and
 four unsupported sentences cut by hand on Tee's ruling, as Scripted for his
 review; `script_machine` keeps the machine text.
+
+The exports were regenerated again at 13:58Z from `c2d51b46`, which changes
+`Sources Gate` and nothing else, on a second critic's findings that Tee ruled
+fixed. The attribution checks now run one sentence at a time: "according to
+Gallup. Microsoft found that" had let Microsoft through on Gallup's approval.
+A nameless group cited as a source, as in "managers who applied this report
+that", is refused unless an approved origin is named in the same sentence.
+Row 46 carried exactly that sentence past both gates; it was cut by hand under
+Tee's earlier ruling, and the gate replayed on the row refuses the old text and
+passes the new. No live run could exercise it, because no locked Idea row was
+left to write.

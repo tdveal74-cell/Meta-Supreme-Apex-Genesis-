@@ -38,11 +38,18 @@ interoffice memo in navy ink on white bond, labels beside values, no shadow or
 card, one face (Atkinson Hyperlegible Next, embedded from the site's own
 licensed copy), and pen blue only on the hand drawn tick of the Quiet Move.
 
-NCO Forge has no recorded design system anywhere in this repository. Its
-template is a first draft for Tee to judge: a field note on manila, olive ink,
-and one forge red square that appears only beside the Forge Rule. It is not a
-brand decision until he makes one. The sample in `fixtures/rows.json` is
-labelled as a sample and is not an episode.
+NCO Forge follows its brand package v1 on Tee's Drive
+(`NCO_BRAND_brand-package_v1`, 2026-08-03, read through its 2026-09-24 text
+extract): Deep Navy `#0A1628` as the ground, Gold `#C5A46E` for the wordmark,
+labels and the Forge Rule block, Olive `#3D4F2F` for the rule under the
+wordmark, and Inter, one of the package's recommended bold sans serifs,
+subset into `fonts/` under its OFL licence. The package's logo artwork could
+not be read through the Drive connector, so the wordmark is set in type. Tee
+ruled 2026-10-07 to use v1 now; `NCO_Forge_Brand_Package_v2.zip` (9 MB) and
+`TQO_Brand_Package_v2.zip` were too large for the connector and are unread, and
+both templates move to v2 when he supplies its style guide in a readable size.
+The sample in `fixtures/rows.json` is labelled as a sample and is not an
+episode.
 
 ## What it does not do
 

@@ -22,7 +22,21 @@ const norm = (t) => String(t || '')
   .replace(/\s+/g, ' ')
   .trim()
   .toLowerCase();
-const UNNAMED = /\b(?:studies|research|experts|surveys|reports|data|analysts) (?:show|shows|suggest|suggests|say|says|find|finds|found|indicate|indicates)\b/i;
+// A figure credited to research nobody names. "Gallup research finds" and "our
+// data show" are the page speaking for itself and stay; "studies show" and
+// "recent research suggests" do not (narrowed after the second critic found the
+// first version refusing a primary source's own findings).
+const UNNAMED_RE = /(\S+\s+)?(?:studies|research|experts|surveys|reports|data|analysts) (?:show|shows|suggest|suggests|say|says|find|finds|found|indicate|indicates)\b/gi;
+const creditsUnnamed = (quote, origin) => {
+  const own = new Set(['our', 'its', 'their', ...norm(origin).split(' ')]);
+  let m;
+  UNNAMED_RE.lastIndex = 0;
+  while ((m = UNNAMED_RE.exec(quote))) {
+    const before = norm(m[1] || '').replace(/[^a-z0-9]/g, '');
+    if (!before || !own.has(before)) return true;
+  }
+  return false;
+};
 let parsed = null;
 const content = (((($input.first().json || {}).choices || [])[0] || {}).message || {}).content || '';
 try { parsed = JSON.parse(content); } catch (e) { parsed = null; }
@@ -43,7 +57,7 @@ for (const s of offered) {
   const primary = norm(origin) === norm(s.publisher);
   if (!primary && !norm(quote).includes(norm(origin))) { why('origin ' + origin + ' is not named in the quote'); continue; }
   if (!norm(page.markdown).includes(norm(origin))) { why('origin ' + origin + ' not found on the page'); continue; }
-  if (primary && UNNAMED.test(quote)) { why('the page names itself as origin of a figure it credits to unnamed research'); continue; }
+  if (primary && creditsUnnamed(quote, origin)) { why('the page names itself as origin of a figure it credits to unnamed research'); continue; }
   const key = page.url + '|' + norm(quote);
   if (seen.has(key)) { why('duplicate'); continue; }
   seen.add(key);

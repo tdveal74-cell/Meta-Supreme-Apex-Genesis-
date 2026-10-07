@@ -49,15 +49,24 @@ for (const m of (script.match(SPELLED) || [])) {
 const names = list.map(s => (String(s.origin || '') + ' ' + String(s.publisher || '')).toLowerCase()).join(' | ');
 const strangers = [];
 const stranger = (name) => { const w = name.replace(/['.]s?$/, '').toLowerCase(); if (!names.includes(w) && !strangers.includes(name)) strangers.push(name); };
+// Read one sentence at a time, so an approved name ending one sentence cannot
+// carry an unapproved name in the next one past the check (found by the second
+// critic, 2026-10-07: "according to Gallup. Microsoft found that").
+const sentences = script.split(/(?<=[.!?])\s+/);
 const ATTR = /\b[Aa]ccording to (?:the |a |an )?(?:[a-z]+ ){0,2}([A-Z][\w&.'-]*)/g;
 let m;
-while ((m = ATTR.exec(script))) stranger(m[1]);
+for (const t of sentences) { ATTR.lastIndex = 0; while ((m = ATTR.exec(t))) stranger(m[1]); }
 const COMMON = /^(?:It|This|That|These|Those|He|She|They|We|You|I|The|A|An|One|Each|Every|Most|Some|Our|Your|Their|His|Her|Its|What|Which|Who|Nobody|Everyone|Research|Data|AI|More|Less|Fewer|Many|Few|All|Both|Here|There|Today|Now|But|And|So|If|When|Then|Even|Still|Also|Leaders|Managers|Companies|Teams|Workers|Employers)$/;
-const SAID = /\b([A-Z][\w&.'-]+)(?: [A-Z][\w&.'-]+){0,3} (?:found|finds|reported|estimated|estimates|predicted|predicts|projected|surveyed)\b/g;
-while ((m = SAID.exec(script))) { if (!COMMON.test(m[1])) stranger(m[1]); }
+const SAID = /\b([A-Z][\w&.'-]+)(?: [A-Z][\w&'-]+){0,3} (?:found|finds|reported|estimated|estimates|predicted|predicts|projected|surveyed)\b/g;
+for (const t of sentences) { SAID.lastIndex = 0; while ((m = SAID.exec(t))) { if (!COMMON.test(m[1])) stranger(m[1]); } }
+// A group with no name standing in for a source, as in "managers who applied
+// this report that", which row 46 carried past both gates. A sentence that
+// names an approved origin is left to the checks above.
+const GROUP = /\b(?:managers|leaders|companies|employers|teams|workers|professionals|people|users|clients|veterans|soldiers|recruiters|executives|organizations|organisations|readers|viewers)\b[^.!?]{0,90}?\b(?:report|reported|say|said|find|found|tell|told|agree|agreed)\s+that\b/i;
+const approved = (t) => list.some(s => [s.origin, s.publisher].some(n => n && t.toLowerCase().includes(String(n).toLowerCase())));
 const UNNAMED = /\b(?:interview|conversation|call|chat|discussion|meeting) with (?:a|an|one|several|some|two|three) (?:[\w-]+ ){0,4}(?:director|manager|executive|leader|officer|founder|employee|worker|analyst|engineer|consultant|recruiter|professional)s?\b/i;
 const UNNAMED_ORG = /\b(?:[Aa]n?|[Oo]ne|[Ss]everal|[Ss]ome|[Mm]any) (?:[a-z][\w-]* ){0,3}(?:firm|company|companies|bank|retailer|startup|employer|organization|organisation|study|studies|survey|report|analysis|case)s?\b(?= (?:reported|found|showed|shows|says|said|indicated|indicates|estimated|revealed|noted|cut|saw|told))/;
-const unnamed = script.split(/(?<=[.!?])\s+/).filter(t => UNNAMED.test(t) || UNNAMED_ORG.test(t)).map(t => '"' + t.trim().slice(0, 140) + '"');
+const unnamed = sentences.filter(t => UNNAMED.test(t) || UNNAMED_ORG.test(t) || (GROUP.test(t) && !approved(t))).map(t => '"' + t.trim().slice(0, 140) + '"');
 const extra = [];
 if (unnamed.length) extra.push('evidence, an unnamed person or organisation cited as a source: ' + unnamed.join(' '));
 if (unsourced.length) extra.push('sources, ' + unsourced.length + ' figure(s) not in the approved sources: ' + unsourced.slice(0, 12).join(', '));

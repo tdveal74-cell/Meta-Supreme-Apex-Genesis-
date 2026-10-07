@@ -22,7 +22,8 @@ It runs daily at 09:40Z, in UTC so the November clock change does not move it,
 
 1. `Firecrawl Balance` reads the account and `Credit Floor` refuses the whole
    run under 100 credits, or when it cannot read the balance at all.
-2. `Get TQO Idea Rows` and `Get NCO Idea Rows` read both tables, and `Rows
+2. `Get TQO Idea Rows` and `Get NCO Idea Rows` read both tables, each set to
+   pass an empty item on so one empty table cannot stop the other, and `Rows
    Needing Sources` takes Idea rows with `package_locked` set and no usable
    source, oldest first, two per show. A row whose last note says no source was
    written is left alone for seven days, read from the date the note opens
@@ -37,7 +38,8 @@ It runs daily at 09:40Z, in UTC so the November clock change does not move it,
    else, if it names its origin in its own words unless the publisher produced
    the figure, and if that origin is on the page. A changed digit fails. A page
    naming itself as the origin of a figure it credits to unnamed studies or
-   research fails too. A blog stating a number as its own still passes this
+   research fails too, though "Gallup research finds" or "our data show" on
+   Gallup's own page is the page speaking for itself and passes. A blog stating a number as its own still passes this
    step, and only the doctor stands between it and the row.
 6. `Script Doctor Approves (Cerebras)` votes approve or reject on each checked
    source, briefed for the channel the row belongs to. It cannot edit one: `Compose Approved Sources` keeps the checked text
@@ -67,3 +69,9 @@ took NCO row 26 alone and wrote to `nco_content`. The doctor rejected Novoresume
 twice and iHire as vendors, the quote check dropped two quotes that were not on
 their pages, and one World Economic Forum source was approved. The live
 workflow was then updated to that graph and read back as `964214fc`.
+
+Version `641bcc0c`, the same day, took two of a second critic's findings: the
+narrowed primary source check above, and the empty table guard. Test copy
+execution 2358 read 40 TQO and 28 NCO Idea rows, picked none because both
+researched rows were no longer waiting, and read a balance of 1,253, which puts
+execution 2355 at 10 credits.

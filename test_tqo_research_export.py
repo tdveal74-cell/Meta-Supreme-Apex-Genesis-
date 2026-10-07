@@ -70,5 +70,9 @@ def test_the_balance_is_read_before_any_row_is() -> None:
     assert edges["Credit Floor"] == ["Get TQO Idea Rows"]
     assert edges["Get TQO Idea Rows"] == ["Get NCO Idea Rows"]
     assert edges["Get NCO Idea Rows"] == ["Rows Needing Sources"]
+    # Without this an empty table emits no item and n8n stops the chain, so one
+    # show with no Idea rows would silently stop research for the other.
+    for name in ("Get TQO Idea Rows", "Get NCO Idea Rows"):
+        assert NODES[name].get("alwaysOutputData") is True, name
     for trigger in ("Run Research by Hand", "Daily 09:40Z Research"):
         assert edges[trigger] == ["Firecrawl Balance"]
