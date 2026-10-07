@@ -11,8 +11,12 @@
  * 2026-08-03, read through its 2026-09-24 text extract): Deep Navy #0A1628 as
  * the ground, Gold #C5A46E for accents and highlights, Olive #3D4F2F for depth,
  * a bold sans serif from its recommended list (Inter), and the NCO FORGE
- * wordmark set in type. The package's logo artwork and its v2 revision were
- * not readable from here, so neither is used.
+ * wordmark set in type. The mark, a shield with an anvil and a star in the
+ * package's gold and olive, is brand/nco-mark.png: Tee generated it from a
+ * prompt on 2026-10-07 and ruled it in on a card the same day. Its olive field
+ * had four holes punched through by background removal; they were filled with
+ * the field's own colour. It sits on the cover and the closing slide only. The
+ * v2 package revision was not readable from here and is not used.
  *
  * Every face is embedded as a data URI, Atkinson Hyperlegible Next from the
  * tqohq site's own copy and Inter from tools/carousel/fonts, so a render never
@@ -27,6 +31,8 @@ const ATKINSON = `@font-face{font-family:"F";src:url(data:font/woff2;base64,${b6
 const INTER = [["regular", 400], ["semibold", 600], ["bold", 700], ["extrabold", 800]]
   .map(([file, weight]) => `@font-face{font-family:"F";src:url(data:font/woff2;base64,${b64(`./fonts/inter-${file}.woff2`)}) format("woff2");font-weight:${weight};}`)
   .join("");
+
+const NCO_MARK = `data:image/png;base64,${b64("./brand/nco-mark.png")}`;
 
 const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -70,6 +76,8 @@ html,body{width:1080px;height:1350px;background:var(--paper);color:var(--ink);fo
 .tick{width:96px;height:96px;border:3px solid var(--ink);border-radius:2px;position:relative;margin-top:8px}
 .tick svg{position:absolute;left:8px;top:-34px;width:136px;height:126px;overflow:visible}
 .forge{width:96px;height:96px;background:var(--mark);margin-top:8px}
+.markclose{width:120px;height:auto;margin-top:4px}
+.markcover{width:150px;height:auto;margin-bottom:44px}
 .close .lab{font-size:34px;font-weight:${theme.w.label};color:var(--ink2);margin-bottom:18px}
 .close .v{font-size:90px;font-weight:${theme.w.close};line-height:1.08;letter-spacing:-0.022em;text-wrap:balance}
 .foot{display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--rule);padding-top:22px;font-size:28px;font-weight:${theme.w.label};color:var(--ink2)}
@@ -90,9 +98,9 @@ export function slideHtml({ show, title, slides, index }) {
   if (index === 0) {
     main = `<div class="row"><span class="l">From</span><span class="v">Terrance Veal</span></div>
 <div class="row"><span class="l">Re</span><span class="v re">${esc(title)}</span></div>
-<div class="main"><div class="hook">${esc(line)}</div></div>`;
+<div class="main">${show === "NCO" ? `<img class="markcover" src="${NCO_MARK}" alt="">` : ""}<div class="hook">${esc(line)}</div></div>`;
   } else if (index === total - 1) {
-    const box = show === "NCO" ? `<div class="forge"></div>` : `<div class="tick">${TICK}</div>`;
+    const box = show === "NCO" ? `<img class="markclose" src="${NCO_MARK}" alt="">` : `<div class="tick">${TICK}</div>`;
     main = `<div class="main"><div class="close">${box}<div><div class="lab">${esc(theme.closer)}</div><div class="v">${esc(line)}</div></div></div></div>`;
   } else {
     main = `<div class="main"><div class="item"><span class="l">${index + 1}</span><div>${label ? `<div class="lab">${esc(label)}</div>` : ""}<div class="v">${esc(line)}</div></div></div></div>`;

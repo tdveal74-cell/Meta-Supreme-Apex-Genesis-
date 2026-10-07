@@ -71,6 +71,12 @@ for (let i = 0; i < 7; i += 1) {
 assert.match(tqo(0), /From<\/span><span class="v">Terrance Veal/);
 assert.match(tqo(3), /4 of 7/);
 assert.match(slideHtml({ show: "TQO", title: "<b>", slides: ["<script>x</script>", ...seven().slice(1)], index: 0 }), /&lt;script&gt;/);
-assert.match(slideHtml({ show: "NCO", title: "T", slides: seven("Forge Rule: do it"), index: 6 }), /class="forge"/);
+// The NCO mark, ruled in by Tee 2026-10-07, sits on the cover and the closing
+// slide only, and never on TQO.
+for (let i = 0; i < 7; i++) {
+  const html = slideHtml({ show: "NCO", title: "T", slides: seven("Forge Rule: do it"), index: i });
+  assert.equal(/class="mark(?:cover|close)" src="data:image\/png;base64,/.test(html), i === 0 || i === 6, `NCO mark on slide ${i + 1}`);
+  assert.equal(/data:image\/png/.test(tqo(i)), false, `no mark on TQO slide ${i + 1}`);
+}
 
 console.log("Carousel: every case behaves");
