@@ -86,8 +86,8 @@ row and fails when either row drifts from the export of the same role.
 
 | version | id | nodes |
 |---|---|---|
-| active | `99e32b37` | 265 nodes |
-| draft | `99e32b37` | 265 nodes |
+| active | `54fbda3d` | 265 nodes |
+| draft | `54fbda3d` | 265 nodes |
 
 Every webhook path and webhook id in the exports reads `redacted`. The Gumroad
 sale ping carries no authentication, so its random path suffix is the only
@@ -163,3 +163,19 @@ HTML` no longer opens with `&mdash;`. Only those two nodes differ from
 lane from a temporary trigger that was added to the draft and removed before
 publishing: the prompt carried 8,291 characters and the Brief came back with
 zero dashes. The Brief lane only creates Reach drafts and never sends.
+
+And again on 2026-10-07 from `54fbda3d`, the evidence fix Tee ruled after row
+46. That script, written by this pipeline and passed by the doctor, the scan
+and the gate, put eight unsupported lines in his mouth: advice he never gave,
+conversations with HR leaders and unnamed firms and case studies. Three nodes
+changed and nothing else. `Build Script Prompt` gains an EVIDENCE block for
+both shows, outside the two measured show blocks, and `build_script_prompt.js`
+mirrors it. `Build Doctor Prompt` gains a rule against invented experience and
+now receives the DEVON recall as TEE'S RECORD, so his real material can stand.
+`Script Gate: Quality` refuses ten patterns of invented first person
+experience and unnamed sources. Measured on the gate code itself: row 46's old
+script went from Scripted to Error on 8 hits, row 4 (his real seven day log)
+scored 0. Manual execution 2344 rewrote row 46 on the draft: 0 invented first
+person lines, but the writer then invented a named attribution and unsourced
+figures, which no pattern can catch, and the gate held it as Error on length
+and the close. That is why the next step is real sources on the row.

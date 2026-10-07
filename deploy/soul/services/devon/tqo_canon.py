@@ -169,6 +169,20 @@ COMPLIANCE: Tuple[Rule, ...] = (
         source="build_qc_prompt.js hard blockers; QC holds the episode regardless of score",
     ),
     Rule(
+        id="compliance.no-invented-experience",
+        text=(
+            "Terrance only says he did, saw, heard or advised something when it "
+            "appears in his own record. Never invent a person he advised, a "
+            "conversation, a client or a result, and never cite an unnamed firm, "
+            "study, report or case study."
+        ),
+        rule_class=RuleClass.COMPLIANCE,
+        source=(
+            "build_script_prompt.js EVIDENCE block, ruled by Tee 2026-10-07 after "
+            "row 46; Script Gate: Quality refuses the same patterns"
+        ),
+    ),
+    Rule(
         id="compliance.crisis-support-resource",
         text=(
             "Self harm, suicide, a mental health crisis or leaving service is never "

@@ -89,6 +89,18 @@ For the given Topic, produce:
 Return ONLY a valid JSON object, no markdown fences, no commentary, in exactly this shape: {"title": "...", "script": "...", "description": "...", "broll": ["...", "..."], "learning_objective": "...", "checklist": ["...", "...", "..."]}`;
 }
 
+// Evidence, ruled by Tee 7 Oct 2026 after row 46 put advice he never gave and
+// conversations he never had into his mouth. Both shows, so it sits outside the
+// two measured blocks above. Script Gate: Quality refuses the same patterns.
+system += '\n\n' + [
+  'EVIDENCE: NOTHING INVENTED. Terrance only says he did, saw, heard or advised something when it appears in his own record below.',
+  'Never invent a person he advised, a client, a colleague, a conversation, a meeting or a result he got.',
+  'Never cite an unnamed firm, bank, team, study, survey, report or case study, and never put a quoted phrase in the mouth of an unnamed company.',
+  'A receipt is a public source named in the sentence, a named tool the viewer can check, or a step the viewer can do today.',
+  'When an example helps and no real one is supplied, say plainly that it is a picture, as in: picture a manager who. Give it no name, no employer and no numbers.',
+  'If a claim has no receipt, cut the claim.'
+].join(' ');
+
 // DEVON grounding, ruled by Tee 15 Sep 2026 on an inline card: retrieval from
 // his own record plus the exemplars of his edits, both folded onto the row by
 // DEVON Recall: Merge. Either can be empty; the brand prompt above stands alone.
