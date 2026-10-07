@@ -28,7 +28,22 @@ const brief = new Set(([row.topic, row.angle, row.idea, row.video_title].join(' 
 const script = String(d.script || '');
 const unsourced = [];
 const flag = (shown) => { if (!unsourced.includes(shown)) unsourced.push(shown); };
-for (const raw of (script.match(NUM) || [])) {
+// Military identifiers are names, not figures, ruled by Tee 2026-10-07 for NCO
+// Forge prose: a form number (DD-214, DA Form 2166-9), a 24 hour time written with its leading zero or with "hours" (0600, 1800
+// hours) and a unit ordinal (the 101st, 82nd Airborne). They are blanked before
+// the numeral scan only. An ordinal after ranked or placed, or before
+// percentile, is a figure and stays. Never a percentage or a dollar amount.
+// MOS codes are left out on purpose: 11B reads the same as 11B for eleven
+// billion, so they fail closed to Error for Tee to clear.
+const MILITARY = [
+  /\b(?:DD|DA|SF|VA|AF|NAVPERS|NAVMC|OPNAV|WD AGO)(?:\s+Form)?[\s-]?\d+(?:-\d+)*\b/g,
+  /\b(?:0\d|1\d|2[0-3])[0-5]\d(?=\s*(?:hours|hrs)\b)/gi,
+  /\b0\d[0-5]\d\b/g,
+  /\b(?<!(?:ranked|ranks|ranking|placed|place|finished)\s+)\d+(?:st|nd|rd|th)\b(?!\s+percentile)/gi
+];
+const blankMilitary = (t) => MILITARY.reduce((a, re) => a.replace(re, (m) => ' '.repeat(m.length)), t);
+const numText = blankMilitary(script);
+for (const raw of (numText.match(NUM) || [])) {
   const k = bare(raw);
   const n = Number(k);
   const withUnit = /[$%]|percent/i.test(raw);
@@ -66,12 +81,21 @@ const GROUP = /\b(?:managers|leaders|companies|employers|teams|workers|professio
 const approved = (t) => list.some(s => [s.origin, s.publisher].some(n => n && t.toLowerCase().includes(String(n).toLowerCase())));
 const UNNAMED = /\b(?:interview|conversation|call|chat|discussion|meeting) with (?:a|an|one|several|some|two|three) (?:[\w-]+ ){0,4}(?:director|manager|executive|leader|officer|founder|employee|worker|analyst|engineer|consultant|recruiter|professional)s?\b/i;
 const UNNAMED_ORG = /\b(?:[Aa]n?|[Oo]ne|[Ss]everal|[Ss]ome|[Mm]any) (?:[a-z][\w-]* ){0,3}(?:firm|company|companies|bank|retailer|startup|employer|organization|organisation|study|studies|survey|report|analysis|case)s?\b(?= (?:reported|found|showed|shows|says|said|indicated|indicates|estimated|revealed|noted|cut|saw|told))/;
+// A projection stated as fact. A sentence about the future that carries a
+// figure must name an approved origin, because a figure the sources hold as a
+// count of the past can be restated as a forecast nobody made (ruled by Tee
+// 2026-10-07, the gap the second critic graded open).
+const FUTURE = /\b(?:will|won't|is expected to|are expected to|is projected to|are projected to|is forecast to|are forecast to|is set to|are set to|by (?:19|20)\d\d)\b/i;
+const FRACTION = /\b(?:half|a third|a quarter|three quarters|two thirds|one in \w+)\b/i;
+const hasFigure = (t) => FRACTION.test(t) || (blankMilitary(t).replace(/\b(?:19|20)\d\d\b/g, '').match(NUM) || []).some(r => /[$%]|percent/i.test(r) || Number(bare(r)) > 10);
+const projections = sentences.filter(t => FUTURE.test(t) && hasFigure(t) && !approved(t)).map(t => '"' + t.trim().slice(0, 140) + '"');
 const unnamed = sentences.filter(t => UNNAMED.test(t) || UNNAMED_ORG.test(t) || (GROUP.test(t) && !approved(t))).map(t => '"' + t.trim().slice(0, 140) + '"');
 const extra = [];
 if (unnamed.length) extra.push('evidence, an unnamed person or organisation cited as a source: ' + unnamed.join(' '));
+if (projections.length) extra.push('sources, a projection with a figure and no approved source named: ' + projections.join(' '));
 if (unsourced.length) extra.push('sources, ' + unsourced.length + ' figure(s) not in the approved sources: ' + unsourced.slice(0, 12).join(', '));
 if (strangers.length) extra.push('sources, attributed to ' + strangers.join(', ') + ', which is not an approved source');
-const line = '  sources: ' + list.length + ' approved | ' + (script.match(NUM) || []).length + ' numeral(s) | ' + unsourced.length + ' unsourced | ' + strangers.length + ' unapproved attribution(s)';
+const line = '  sources: ' + list.length + ' approved | ' + (numText.match(NUM) || []).length + ' numeral(s) | ' + unsourced.length + ' unsourced | ' + strangers.length + ' unapproved attribution(s)';
 if (!extra.length) {
   const report = String(d.gateReport || '').replace('\n  writer:', '\n' + line + '\n  writer:');
   return [{ json: { ...d, gateReport: report, lastFeedback: String(d.lastFeedback || '').replace(String(d.gateReport || ''), report) } }];

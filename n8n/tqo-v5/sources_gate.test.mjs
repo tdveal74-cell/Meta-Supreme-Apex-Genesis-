@@ -106,6 +106,34 @@ assert.equal(run("Cuts hit 77% of teams.", { show: "NCO" }).status, "Error");
 // A named person is not an unnamed source.
 assert.equal(run(CITED + " In an interview with Gallup chief scientist Jim Harter, he said spans keep widening.").status, "Scripted");
 
+// Military identifiers in NCO prose are names, not figures (ruled 2026-10-07).
+for (const good of [
+  "First formation is at 0600, and it was at 0600 in the 101st Airborne too.",
+  "Bring your DD-214 and your DA Form 2166-9 to the counter.",
+  "Chow closes at 1800 hours.",
+  "I served with the 82nd for three years.",
+]) assert.equal(run(CITED + " " + good, { show: "NCO" }).status, "Scripted", good);
+// A rank or a percentile is still a figure, and so is anything with a unit.
+for (const bad of [
+  "The unit ranked 37th in the Army.",
+  "He scored in the 90th percentile.",
+  "Pay starts at $50K, and the 1800 recruits all got it.",
+  "Promotion takes 11B, said nobody.",
+]) assert.equal(run(CITED + " " + bad, { show: "NCO" }).status, "Error", bad);
+
+// A projection stated as fact needs an approved name in its own sentence, even
+// when its figure is sourced (ruled 2026-10-07).
+for (const bad of [
+  "By 2030, 41% of managers will be gone.",
+  "Half of these roles will disappear.",
+  "One in five companies is expected to cut managers next.",
+]) assert.match(run(CITED + " " + bad).gateReason, /a projection with a figure and no approved source named/, bad);
+for (const good of [
+  "Gartner expects that one in five companies will cut over half of their managers.",
+  "You will need 3 things.",
+  "This will change how you plan.",
+]) assert.equal(run(CITED + " " + good).status, "Scripted", good);
+
 // The writer side, for both shows: the rule is appended and the sources are listed.
 const writerNode = (file, show, body) =>
   new Function("$", "$input", readFileSync(new URL("./" + file, import.meta.url), "utf8"))(

@@ -35,7 +35,7 @@ For the given Topic, produce:
 
 1. title. Under 60 characters, containing the primary keyword, specific, no clickbait.
 
-2. script. 1200-2000 words spoken narration, target 1600, hard floor 1200. Single narrator, natural rhythm, no headings. Hook in the first 10-15 seconds; state in the first 30 seconds what the viewer will be able to DO; 8-12 sections each carrying one point with a concrete example or number; at least one action the viewer takes today; close with a calm recap and one line: subscribe if you want the transition done right.
+2. script. 1200-2000 words spoken narration, target 1600, hard floor 1200. Single narrator, natural rhythm, no headings. Hook in the first 10-15 seconds; state in the first 30 seconds what the viewer will be able to DO; 8-12 sections each carrying one point with a mechanism, a step, or a figure from the approved sources; at least one action the viewer takes today; close with a calm recap and one line: subscribe if you want the transition done right.
 
 3. description. 2-3 sentences leading with the primary keyword, then this exact line on its own:
 NCO Forge. ${ctx.tagline}
@@ -76,7 +76,7 @@ For the given Topic, produce:
 
 1. title - under 60 characters, containing the primary keyword, specific and intriguing without clickbait, in the calm brand voice.
 
-2. script - a long-form spoken narration of 1200-2000 words, target 1600. Hard floor 1200 words. Single narrator, natural spoken rhythm, no on-screen directions or headings. Structure for retention: the hook above in the first 10-15 seconds and the learning objective inside the first 30; then 8 to 12 distinct sections, each making one clear point backed by a concrete example, a number, a mini-story, or a proof point, with smooth spoken transitions that re-hook attention; the 3 to 5 step checklist, spoken inside one of those sections; at least one specific action the viewer can take today; and a calm, resonant close that lands the core idea and ends on the one comment-worthy question. Depth, not padding.
+2. script - a long-form spoken narration of 1200-2000 words, target 1600. Hard floor 1200 words. Single narrator, natural spoken rhythm, no on-screen directions or headings. Structure for retention: the hook above in the first 10-15 seconds and the learning objective inside the first 30; then 8 to 12 distinct sections, each making one clear point backed by a mechanism, a step, or an approved source's figure, with smooth spoken transitions that re-hook attention; the 3 to 5 step checklist, spoken inside one of those sections; at least one specific action the viewer can take today; and a calm, resonant close that lands the core idea and ends on the one comment-worthy question. Depth, not padding.
 
 3. description - 2 to 3 sentences on the video's value, leading with the primary keyword. No link, no audit and no subscribe line. Leave the checklist out; the pipeline writes it into the description from the checklist field.
 

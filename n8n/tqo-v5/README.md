@@ -86,8 +86,8 @@ row and fails when either row drifts from the export of the same role.
 
 | version | id | nodes |
 |---|---|---|
-| active | `c2d51b46` | 269 nodes |
-| draft | `c2d51b46` | 269 nodes |
+| active | `12266aff` | 274 nodes |
+| draft | `12266aff` | 274 nodes |
 
 Every webhook path and webhook id in the exports reads `redacted`. The Gumroad
 sale ping carries no authentication, so its random path suffix is the only
@@ -279,3 +279,40 @@ Row 46 carried exactly that sentence past both gates; it was cut by hand under
 Tee's earlier ruling, and the gate replayed on the row refuses the old text and
 passes the new. No live run could exercise it, because no locked Idea row was
 left to write.
+
+The exports were regenerated at `12266aff` on four more rulings Tee made on
+cards the same afternoon. `83ec66d9` carried them and `12266aff` shortened one
+line of it so the TQO canon stays under a thousand words.
+
+- `Script: Short After Doctor?`, `Expand After Doctor?`, `Expand After Doctor
+  (Cerebras)`, `Parse Expanded After Doctor` and `Script: Final Text` sit
+  between `Parse Doctor Verdict` and `Fetch Prior Episodes`. A script the
+  doctor left under 1,200 words gets one more expansion of the final text. The
+  parse keeps it only if it is longer, keeps the first two sentences and the
+  last sentence verbatim, and adds no number; otherwise the doctored text goes
+  on and the gate fails it on the floor as before. `Originality Scan` and `DT
+  Shim: Prior REST` now read `Script: Final Text` by name.
+- `Fetch Prior Episodes` always outputs. The first episode of a show has no
+  prior script, the node returned nothing and the run stopped there without
+  an error, which test 2361 on NCO row 26 found. Every NCO script would have
+  died at that node until one existed.
+- `Sources Gate` blanks military identifiers before it reads numerals: form
+  numbers such as DD-214, 24 hour times such as 0600 or 1800 hours, and unit
+  ordinals such as the 101st. An ordinal after ranked or before percentile is
+  still a figure, and MOS codes are left out because 11B reads the same as
+  eleven billion. It also refuses a sentence about the future that carries a
+  figure and names no approved source.
+- `Build Script Prompt`: the section line in both show blocks asks for a
+  mechanism, a step or a sourced figure where it asked for "a concrete example
+  or number". The canon measurement in `tqo_canon.py` is re-counted.
+
+All of it ran first on an inactive copy, `bNNR1v39mtUktl5D`, then went to the
+live workflow by PUT and the copy was archived. Execution 2362 on the copy
+wrote NCO row 26's first script: 934 words, 1,501 after the second expansion,
+1,494 after the doctor, so the new check passed it through, and the Sources
+Gate held it as Error on one invented figure, a "50 person team". The NCO
+Presenter Rule held: the script speaks to camera and has no narrator line. The
+expansion branch after the doctor has not yet run live; its parse is proven by
+`length_after_doctor.test.mjs`. The `12266aff` wording change went live by PUT
+without its own copy run, because it is one phrase inside a template literal;
+the mirror parses and the canon test counts it.

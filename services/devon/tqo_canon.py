@@ -101,9 +101,11 @@ MIRROR = pathlib.Path(__file__).resolve().parents[2] / "n8n" / "tqo-v5" / "build
 
 #: Measured from the mirror on 2026-09-17, so the assembly floor is a number
 #: somebody counted rather than a default somebody liked. `check_assembly`
-#: takes no default for exactly this reason.
-MEASURED_WORDS: Dict[str, int] = {"tqo": 999, "nco": 543}
-MEASURED_CHARS: Dict[str, int] = {"tqo": 5937, "nco": 3558}
+#: takes no default for exactly this reason. Re-measured on 2026-10-07, when
+#: Tee ruled that the section line in both blocks ask for a mechanism, a step
+#: or a sourced figure in place of "a concrete example or number".
+MEASURED_WORDS: Dict[str, int] = {"tqo": 997, "nco": 549}
+MEASURED_CHARS: Dict[str, int] = {"tqo": 5928, "nco": 3588}
 
 #: Built from code points rather than written out, so this file needs no
 #: exemption marker and no formatter can quietly rewrite the literal back.
