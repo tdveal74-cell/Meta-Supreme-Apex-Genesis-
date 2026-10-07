@@ -1,0 +1,66 @@
+name: Show registry check
+
+# THE MODULE AND THE TWO TABLES CAN DRIFT, AND UNTIL THIS FILE NOTHING SAID SO.
+#
+# services/devon/show_registry.py is the source for two n8n data tables on the
+# VPS, show_registry (xmNWLUm49QyZ4ysO) and show_series (s1IxySUuphOVrOqU). A
+# change to the module that lands on main without a reseed, or a hand edit to a
+# table in the n8n editor, leaves the stage workflows reading one thing while
+# the repository says another. scripts/show_registry_seed.py --check reads both
+# tables back and diffs them against the module; this runs it once a day.
+#
+# Ruled by Tee 2026-10-06 on an inline card: a daily GitHub Action on the same
+# secret the two watchdogs use, rather than a check on merge only (which would
+# miss a hand edit on the instance) or leaving it manual.
+#
+# IT ONLY READS. The script is run with --check and never --seed, so this job
+# cannot insert, update or delete a row. Settling drift is a ruling, not a job.
+#
+# THE ALARM IS THE JOB GOING RED, the same channel as pulse-watchdog.yml and
+# provider-watchdog.yml: GitHub mails the owner when a scheduled workflow on the
+# default branch fails. There is deliberately no SMTP here. Drift goes red every
+# day until it is settled, which is the intended nag.
+#
+# A MISSING KEY GOES RED TOO. Without N8N_VPS_KEY the script exits 1 printing
+# "N8N_VPS_KEY is required". A check that skipped quietly when unconfigured
+# would report green while reading nothing.
+#
+# A NEW SCHEDULE DOES NOT FIRE AT ITS FIRST SLOTS. Measured twice on the two
+# watchdogs (5h06m and 6h03m to the first scheduled run, see CLAUDE.md). Use
+# workflow_dispatch to prove the script before the schedule has fired.
+#
+# The diff itself is unit tested in test_show_registry_seed.py in the standalone
+# job of ci.yml, with no network. Those tests prove the diff and the refusals;
+# they prove nothing about the key or the host, which only a real run does.
+
+on:
+  schedule:
+    # Once a day at 07:41Z. The minute is off the hour so it does not queue
+    # behind every other :00 schedule on the platform.
+    - cron: "41 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: registry-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Do the registry tables match the module
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # No pip install. The script and the module it imports use only the
+      # standard library, proven on 2026-10-06 in a venv with no packages.
+      - name: Read both tables back and diff them against the module
+        env:
+          N8N_VPS_KEY: ${{ secrets.N8N_VPS_KEY }}
+        run: python3 scripts/show_registry_seed.py --check

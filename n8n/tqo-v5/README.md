@@ -86,8 +86,8 @@ row and fails when either row drifts from the export of the same role.
 
 | version | id | nodes |
 |---|---|---|
-| active | `3befd7a5` | 265 nodes |
-| draft | `3befd7a5` | 265 nodes |
+| active | `36013f35` | 265 nodes |
+| draft | `36013f35` | 265 nodes |
 
 Every webhook path and webhook id in the exports reads `redacted`. The Gumroad
 sale ping carries no authentication, so its random path suffix is the only
@@ -139,3 +139,14 @@ fifth never did.
 The show registry lift (`services/devon/show_registry.py`) found that drift,
 Tee ruled the two nodes fixed, and `test_devon_show_registry.py` now traces
 the registry against this export with an empty drift map.
+
+They were regenerated again at 20:42Z from `36013f35`, published at 20:36Z on
+Tee's card ruling to disable the Gemini chat agent lane now rather than wait
+for the split. That lane is seven nodes, `When chat message received`, `AI
+Agent`, `Google Gemini Chat Model`, `Simple Memory` and three HTTP tools,
+`READER`, `CREATOR` and `UPDATER`, the last two able to POST or PUT any
+workflow on the instance. No other node connects to it. The draft was diffed
+against the live version before publishing: the seven `disabled` flags were
+the only difference and the connections were identical. The read back shows
+`versionId` equal to `activeVersionId` and all seven disabled in the active
+version. The nodes stay in the graph, disabled, until the split removes them.

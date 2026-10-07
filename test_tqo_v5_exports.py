@@ -125,3 +125,26 @@ def test_exports_of_the_same_version_carry_the_same_graph() -> None:
 
     assert sorted(active["nodes"], key=by_name) == sorted(draft["nodes"], key=by_name), "same version, different nodes"
     assert active["connections"] == draft["connections"], "same version, different connections"
+
+
+#: The Gemini chat agent lane, disabled on Tee's ruling of 2026-10-06 and
+#: published as 36013f35. CREATOR and UPDATER can POST or PUT any workflow on
+#: the instance. The nodes stay in the graph until the stage split removes
+#: them; until then an export that carries any of them enabled is a regression.
+CHAT_AGENT_LANE = (
+    "When chat message received",
+    "AI Agent",
+    "Google Gemini Chat Model",
+    "Simple Memory",
+    "READER",
+    "CREATOR",
+    "UPDATER",
+)
+
+
+def test_the_chat_agent_lane_stays_disabled() -> None:
+    for role in ("active", "draft"):
+        nodes = {node["name"]: node for node in _load(role)["nodes"]}
+        for name in CHAT_AGENT_LANE:
+            if name in nodes:
+                assert nodes[name].get("disabled") is True, f"{role} export: {name} is enabled"
