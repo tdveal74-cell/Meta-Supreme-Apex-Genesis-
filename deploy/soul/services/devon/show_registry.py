@@ -62,7 +62,7 @@ SOURCE = {
         "and 'Series Addendum' in TQO FINAL V5"
     ),
     "workflow_id": "qEkGOUsNyVaRAmm6",
-    "version_id": "61d4aeeb-ea5d-48da-9821-2902e805a4af",
+    "version_id": "d7f4d56f-0d2a-4a66-8f59-1b2f8a87c094",
     "export": "n8n/tqo-v5/exports/qEkGOUsNyVaRAmm6_active.json",
     "read": "2026-10-07",
 }
@@ -76,8 +76,10 @@ EXPORT = pathlib.Path(__file__).resolve().parents[2] / "n8n" / "tqo-v5" / "expor
 #: How many Code nodes in the export still branch on the show, in any of the
 #: spellings below. Counted by the test from the export; do not edit by hand.
 #: It went from 25 to 28 on 2026-10-07 with 61d4aeeb, when Sources Rule,
-#: Doctor Sources and Sources Gate arrived TQO only, because NCO was not ruled.
-V5_SHOW_BRANCHES = 28
+#: Doctor Sources and Sources Gate arrived TQO only, and to 26 with d7f4d56f the
+#: same day, when NCO was ruled to the same standard and those three stopped
+#: branching, while Token Budget: Script began to, for the TQO close line.
+V5_SHOW_BRANCHES = 26
 SHOW_BRANCH_SPELLINGS: Tuple[str, ...] = (
     r"\bisNCO\b",
     r"\$json\.nco\b",

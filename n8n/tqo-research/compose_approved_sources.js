@@ -15,7 +15,7 @@ checked.forEach((s, i) => {
   if (v && String(v.verdict).toLowerCase() === 'approve') approved.push({ ...s, approved_by: 'script doctor', doctor_reason: String(v.reason || '').slice(0, 300), checked_at: now });
   else rejected.push({ url: s.url, reason: v ? String(v.reason || 'rejected').slice(0, 200) : 'no verdict' });
 });
-const note = approved.length
+const note = '[' + now.slice(0, 10) + '] ' + (approved.length
   ? approved.length + ' source(s) approved on ' + now.slice(0, 10) + '; ' + rejected.length + ' rejected by the doctor; ' + (prev.dropped || []).length + ' dropped by the quote check.'
-  : 'No source written: ' + checked.length + ' passed the quote check and the doctor approved none' + (parsed === null ? ' (reply was not JSON)' : '') + (rejected.length ? ': ' + rejected.map(r => r.reason).join('; ') : '') + '.';
-return [{ json: { id: prev.id, sources: approved.length ? JSON.stringify(approved) : '', research_note: note.slice(0, 2000), approved: approved.length } }];
+  : 'No source written: ' + checked.length + ' passed the quote check and the doctor approved none' + (parsed === null ? ' (reply was not JSON)' : '') + (rejected.length ? ': ' + rejected.map(r => r.reason).join('; ') : '') + '.');
+return [{ json: { id: prev.id, show: prev.show, tableRef: prev.tableRef, sources: approved.length ? JSON.stringify(approved) : '', research_note: note.slice(0, 2000), approved: approved.length } }];

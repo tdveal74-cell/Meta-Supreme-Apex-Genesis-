@@ -15,7 +15,7 @@ for (const p of raw) {
 }
 const searchNote = r.error ? ('search error: ' + String(r.error.message || r.error).slice(0, 300)) : '';
 if (!pages.length) {
-  return [{ json: { id: row.id, hasPages: false, pages: [], research_note: 'No source written: the search returned no readable pages' + (searchNote ? ' (' + searchNote + ')' : '') + '. Query: ' + row.searchQuery } }];
+  return [{ json: { id: row.id, show: row.show, tableRef: row.tableRef, hasPages: false, pages: [], research_note: '[' + new Date().toISOString().slice(0, 10) + '] No source written: the search returned no readable pages' + (searchNote ? ' (' + searchNote + ')' : '') + '. Query: ' + row.searchQuery } }];
 }
 const system = [
   'You extract evidence for a factual video script. You copy, you never write.',
@@ -30,4 +30,4 @@ const system = [
 const user = 'EPISODE TOPIC: ' + row.topic + '\nANGLE: ' + row.angle + '\nIDEA: ' + row.idea + '\n\n' +
   pages.map(p => '=== PAGE ' + p.n + ' ===\nURL: ' + p.url + '\nTITLE: ' + p.title + '\nTEXT:\n' + p.markdown.slice(0, PAGE_CHARS)).join('\n\n');
 const body = { model: 'gpt-oss-120b', messages: [{ role: 'system', content: system }, { role: 'user', content: user }], max_completion_tokens: 8000, reasoning_effort: 'medium', response_format: { type: 'json_object' } };
-return [{ json: { id: row.id, hasPages: true, pages: pages, body: body } }];
+return [{ json: { id: row.id, show: row.show, tableRef: row.tableRef, hasPages: true, pages: pages, body: body } }];

@@ -1,5 +1,6 @@
 /**
- * Does the Sources Gate refuse what the approved sources do not hold?
+ * Does the Sources Gate refuse what the approved sources do not hold, and do
+ * the writer side nodes hand the writer the sources and the presenter rule?
  *
  *   node n8n/tqo-v5/sources_gate.test.mjs
  *
@@ -38,7 +39,7 @@ assert.match(out.gateReport, /sources: 4 approved \| \d+ numeral\(s\) \| 0 unsou
 out = run(CITED + " For example, in a software division that cut 150 positions, roughly one third (about 50) were middle level managers. In a follow up interview with a senior HR director at a manufacturing firm, the director confirmed it: out of a 300 person plant, 124 managers had been reduced in the previous 12 months.");
 assert.equal(out.status, "Error");
 assert.match(out.gateReason, /figure\(s\) not in the approved sources: 150, 50, 300, 124, 12/);
-assert.match(out.gateReason, /an unnamed person cited as a source/);
+assert.match(out.gateReason, /an unnamed person or organisation cited as a source/);
 assert.match(out.lastFeedback, /^earlier\n\nSCRIPT GATE FAIL/);
 
 // Execution 2344's inventions: salary bands, a price, and an attribution to someone not approved.
@@ -49,6 +50,32 @@ assert.match(out.gateReason, /attributed to Challenger, which is not an approved
 // A year the idea does not name, or a percentage no source holds, is a figure like any other.
 assert.equal(run(CITED + " It began in 2019.").status, "Error");
 assert.equal(run(CITED + " About 7% noticed.").status, "Error");
+
+// The critic's cases, 2026-10-07. A raw quote carrying a markdown link must
+// not lend the numbers in its URL: 2351 slipped "30 minutes" through on a
+// Bloomberg slug ending -30-of-white-collar-layoffs.
+const LINKED = [{ ...SOURCES[0], quote: "- Middle managers made up [one-third of all layoffs](https://www.bloomberg.com/news/articles/2024-03-15/middle-manager-jobs-make-up-30-of-white-collar-layoffs) in 2023." }, ...SOURCES.slice(1)];
+assert.match(run(CITED + " Send it 30 minutes before the call.", { row: { ...ROW, sources: JSON.stringify(LINKED.map(({ quote_text, ...rest }) => (rest.origin === "Bloomberg and Live Data Technologies" ? rest : { ...rest, quote_text }))) } }).gateReason, /not in the approved sources: 30\b/);
+// Figures in words, unnamed firms, a study named after "according to a recent", a name that "found".
+for (const bad of [
+  "Forty-three percent of managers were cut.",
+  "Seventy thousand jobs vanished.",
+  "Nearly two thirds of all managers were cut.",
+  "A multinational consulting firm reported a sharp reduction.",
+  "According to a recent Stanford study, it is worse.",
+  "McKinsey found that most managers will be replaced.",
+  "Seats cost $41 a month.",
+]) assert.equal(run(CITED + " " + bad).status, "Error", bad);
+// What the sources do say, in words or with a unit, passes; so do thousands separators.
+for (const good of [
+  "That is one in five companies, by Gartner's projection.",
+  "Exactly one-third of the layoffs hit managers, according to Bloomberg and Live Data Technologies.",
+  "Korn Ferry put it at 41% of professionals.",
+  "It found nothing new.",
+]) assert.equal(run(CITED + " " + good).status, "Scripted", good);
+const comma = { ...ROW, sources: JSON.stringify([{ ...SOURCES[1], quote_text: "Korn Ferry counted 1,200 managers." }]) };
+assert.equal(run("Korn Ferry counted 1200 managers.", { row: comma }).status, "Scripted");
+assert.equal(run("Korn Ferry counted 1,300 managers.", { row: comma }).status, "Error");
 
 // No sources means no figures beyond small counts.
 out = run("Here are 3 steps and 5 questions.", { row: { ...ROW, sources: "" } });
@@ -62,12 +89,30 @@ assert.equal(out.status, "Error");
 assert.match(out.gateReport, /FAILED BECAUSE:\n  - script is 900 words/);
 assert.match(out.gateReport, /SOURCES GATE FAILED BECAUSE:/);
 
-// NCO was not ruled, so NCO passes through untouched.
-const nco = run("Cuts hit 41% of teams.", { show: "NCO" });
-assert.equal(nco.status, "Scripted");
-assert.equal(nco.gateReport, PASSED);
+// NCO was ruled to the same standard the same day, so the show makes no difference.
+assert.equal(run("Cuts hit 41% of teams.", { show: "NCO" }).status, "Scripted");
+assert.equal(run("Cuts hit 77% of teams.", { show: "NCO" }).status, "Error");
 
 // A named person is not an unnamed source.
 assert.equal(run(CITED + " In an interview with Gallup chief scientist Jim Harter, he said spans keep widening.").status, "Scripted");
+
+// The writer side, for both shows: the rule is appended and the sources are listed.
+const writerNode = (file, show, body) =>
+  new Function("$", "$input", readFileSync(new URL("./" + file, import.meta.url), "utf8"))(
+    (node) => ({ first: () => ({ json: node === "Show Context: Script" ? { show } : ROW }) }),
+    { first: () => ({ json: { airtableId: 46, body } }) },
+  )[0].json;
+for (const show of ["TQO", "NCO"]) {
+  const w = writerNode("sources_rule.js", show, { system: "SYS", messages: [] });
+  assert.equal(w.sourcesApproved, 4);
+  assert.match(w.body.system, /^SYS\n\n=== SOURCES YOU MAY CITE/);
+  assert.match(w.body.system, /\[S2\] Korn Ferry, reported by Ramp: "And last year, 41%/);
+}
+
+// NCO is presenter led from the same ruling. TQO's own prompt already says so,
+// so the NCO Presenter Rule leaves TQO untouched.
+const ncoPresenter = writerNode("nco_presenter_rule.js", "NCO", { system: "SYS", messages: [] });
+assert.match(ncoPresenter.body.system, /PRESENTER: Terrance Veal presents every NCO Forge episode himself, on camera, in his own likeness and his own cloned voice\./);
+assert.equal(writerNode("nco_presenter_rule.js", "TQO", { system: "SYS", messages: [] }).body.system, "SYS");
 
 console.log("Sources Gate: every case behaves");
