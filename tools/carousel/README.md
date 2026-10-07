@@ -41,10 +41,14 @@ licensed copy), and pen blue only on the hand drawn tick of the Quiet Move.
 NCO Forge follows its brand package v1 on Tee's Drive
 (`NCO_BRAND_brand-package_v1`, 2026-08-03, read through its 2026-09-24 text
 extract): Deep Navy `#0A1628` as the ground, Gold `#C5A46E` for the wordmark,
-labels and the Forge Rule block, Olive `#3D4F2F` for the rule under the
-wordmark, and Inter, one of the package's recommended bold sans serifs,
-subset into `fonts/` under its OFL licence. The package's logo artwork could
-not be read through the Drive connector, so the wordmark is set in type. Tee
+labels, Olive `#3D4F2F` for the rule under the wordmark, and Inter, one of
+the package's recommended bold sans serifs, subset into `fonts/` under its OFL
+licence. The wordmark is set in type. The mark, a shield with an anvil and a
+star in the package's gold and olive, is `brand/nco-mark.png`, cropped to 480
+px. Tee generated it from a prompt and ruled it in on 2026-10-07; it sits on
+the cover and on the closing slide in place of the gold Forge Rule block. The
+generator's background removal had punched four holes through its olive
+field, and they were filled with the field's own colour before it went in. Tee
 ruled 2026-10-07 to use v1 now; `NCO_Forge_Brand_Package_v2.zip` (9 MB) and
 `TQO_Brand_Package_v2.zip` were too large for the connector and are unread, and
 both templates move to v2 when he supplies its style guide in a readable size.
