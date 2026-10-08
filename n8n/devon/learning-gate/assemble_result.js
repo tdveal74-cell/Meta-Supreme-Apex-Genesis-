@@ -3,7 +3,10 @@
 // search is not a decision: it throws, the webhook answers 500, and the
 // feeder logs FAILED, emails, and retries the job on its next poll instead
 // of logging it as fed. Ruled by Tee 2026-10-07.
-const candidate = $('Candidate Former').first().json.candidate;
+// The candidate is read from Search Needed, the IF in front of the issuer,
+// so whichever node formed it (the preflight today, the Phase 3 Evidence
+// Verifier later) this reads the candidate that was actually searched.
+const candidate = $('Search Needed').first().json.candidate;
 const res = $input.first().json || {};
 const statusCode = typeof res.statusCode === "number" ? res.statusCode : null;
 
@@ -21,9 +24,12 @@ function clip(v) {
   try { s = typeof v === "string" ? v : JSON.stringify(v); } catch (e) { s = String(v); }
   return String(s).slice(0, 300).replace(/:/g, "=").replace(/[\r\n]+/g, " ");
 }
-// Names the job in every failure, so the feeder's FAILED line and the fault
-// email can be matched without lining up timestamps.
-const job = "job " + String((candidate.source_intent_ids || [])[0] || "unknown").replace(/:/g, "=");
+// Names the job, or from the grouping build the lesson group, in every
+// failure, so the feeder's FAILED line and the fault email can be matched
+// without lining up timestamps.
+const job = candidate.learning_intent_id
+  ? "lesson group " + String(candidate.learning_intent_id).replace(/:/g, "=")
+  : "job " + String((candidate.source_intent_ids || [])[0] || "unknown").replace(/:/g, "=");
 
 if (statusCode === null || statusCode < 200 || statusCode >= 300) {
   throw new Error("Conflict-search issuer failed with HTTP " + statusCode + " for " + job + ", so there is no receipt and no gate decision. Body was " + clip(receipt));
