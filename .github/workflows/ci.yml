@@ -68,8 +68,9 @@ jobs:
       # The learning lane grouping build, ruled by Tee 2026-10-08. The rule block
       # decides which completed jobs count as independent evidence for a lesson,
       # driven over the real 2026-09-16 ledger row; the gate test drives the
-      # gate's own node bodies over every POST the feeder has ever made and hands
-      # the answer to the feeder's own Log Or Alert node.
+      # gate's own node bodies over the claim of every POST the feeder has ever
+      # made, and over one POST the feeder's own code builds from that real row,
+      # and hands the answer to the feeder's own Log Or Alert node.
       - name: The lesson grouping rules count only independent, human verified jobs
         run: node n8n/devon/learning/lesson_evidence.test.mjs
       - name: The Learning Gate refuses before it searches and promotes only what it verified

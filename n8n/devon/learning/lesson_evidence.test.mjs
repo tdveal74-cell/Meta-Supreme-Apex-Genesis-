@@ -11,14 +11,19 @@
  * COMPLETED job on the instance, read on 2026-10-08, with its trace cut to two
  * entries, and one of the eight CANCELLED test jobs. Every other job below is
  * that real row with one or two fields changed, so each case isolates exactly
- * one rule. The case list is the spec's T1 list, rule by rule.
+ * one rule. The case list follows the spec's T1 list, rule by rule, with two
+ * departures. The drive.draft case is synthetic, not a real envelope: the
+ * Drive Draft Writer reads no structural payload beyond refusing editforge
+ * (drive-draft-writer/validate_and_plan.js lines 75 and 76), so an action and
+ * a note is what one carries. And T1's byte for byte pin of the two pasted
+ * copies lands in Phase 3, when the copies exist.
  */
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const SOURCE = readFileSync(new URL("./lesson_evidence.js", import.meta.url), "utf8");
-const R = new Function(SOURCE + "\nreturn { lessonCheckMember, lessonCheckPair, lessonVerifyGroup, lessonPickMembers, lessonActFingerprint, LESSON_ULID };")();
+const R = new Function(SOURCE + "\nreturn { lessonCheckMember, lessonCheckPair, lessonVerifyGroup, lessonPickMembers, lessonActFingerprint, lessonIdList, LESSON_ULID, LESSON_PREFLIGHT_REFUSALS };")();
 const FX = JSON.parse(readFileSync(new URL("./fixtures_ledger_2026-09-16.json", import.meta.url), "utf8"));
 const REAL_ID = "01M2KT8WM4RPZ90BCTZPVXH6HK";
 const KEY = "read-receipts-before-trust";
@@ -276,7 +281,8 @@ check("the feeder collapses case duplicates and reports every excluded id", () =
   const c = FX.cancelled_row;
   const picked = R.lessonPickMembers([A, A.toLowerCase(), c.intent_id, "SMOKETEST0FEEDER0000000000"], ctxFor([a, c]));
   assert.deepEqual(picked.members, [A]);
-  assert.equal(picked.excluded.length, 2);
+  assert.equal(picked.excluded.length, 3);
+  assert.match(picked.excluded.find((x) => x.id === A).reasons.join(), /a repeat/);
 });
 
 check("today's pool cannot form a group: one real job, a cancelled one, three Cloud-era orphans", () => {
@@ -286,6 +292,162 @@ check("today's pool cannot form a group: one real job, a cancelled one, three Cl
   const picked = R.lessonPickMembers(ids, ctxFor(pool, { entry: { lesson_key: KEY, status: "active", evidence_ids: ids } }));
   assert.deepEqual(picked.members, [REAL_ID]);
   assert.equal(picked.members.length < 2, true);
+});
+
+// ---- the critic's cases, 2026-10-08 -------------------------------------------
+
+check("the gate refuses a whole group whose pairs are all independent when one member fails a member rule", () => {
+  const bad = [
+    ["never watched by Tee", job(B, { edit: verifiedOn("2026-09-18"), cols: { verification_method: "auto_no_artifact", human_watched: false } }), {}],
+    ["already backing a promoted group", b, { groups: [{ learning_intent_id: "01M3PR0M0TED00000000000000", source_intent_ids: [B, C], gate_decision: "PROMOTE" }] }],
+    ["under a retired lesson", b, { entry: { lesson_key: KEY, status: "retired", evidence_ids: [A, B] } }],
+    ["never declared", b, { entry: { lesson_key: KEY, status: "active", evidence_ids: [A] } }],
+  ];
+  for (const [name, row, extra] of bad) {
+    const v = R.lessonVerifyGroup([A, B], ctxFor([a, row], extra));
+    assert.equal(v.pairs.every((p) => p.ok), true, name + ": " + v.pairs.map((p) => p.reasons.join()).join());
+    assert.equal(v.members[1].ok, false, name);
+    assert.equal(v.ok, false, name);
+    assert.equal(v.verified_count, 0, name);
+  }
+});
+
+check("E6 holds a member for every decision that reached the search or is unknown, and frees it for the four preflight refusals only", () => {
+  const r = job(A);
+  const g = (decision) => ({ groups: [{ learning_intent_id: "01M3OTHERGR0P000000000000", source_intent_ids: [A, B], gate_decision: decision }] });
+  for (const d of ["PROMOTE", "REJECT_CONFLICT", "REQUIRES_HUMAN", "HOLD_SUBCONSCIOUS", "REJECT_WEAK_EVIDENCE", "", "SOMETHING_NEW"]) {
+    assert.match(reasons(R.lessonCheckMember(A, ctxFor([r], g(d)))), /E6 already backs group/, d);
+  }
+  assert.deepEqual([...R.LESSON_PREFLIGHT_REFUSALS].sort(), ["REJECT_MALFORMED", "REJECT_SECRET", "REJECT_UNREGISTERED", "REJECT_UNVERIFIED_SOURCE"]);
+  for (const d of R.LESSON_PREFLIGHT_REFUSALS) {
+    assert.equal(R.lessonCheckMember(A, ctxFor([r], g(d))).ok, true, d);
+  }
+});
+
+check("I3 refuses a grandparent and a cousin whose linking rows are not in hand, and a blank parent column cannot hide the envelope's", () => {
+  const grandchild = job(B, { edit: (e) => { verifiedOn("2026-09-18")(e); e.parent_intent_id = C; } });
+  const p1 = R.lessonCheckPair(A, B, ctxFor([a, grandchild]));
+  assert.equal(p1.ok, false);
+  assert.match(p1.reasons.join(), /I3 a parent chain leaves the rows in hand/);
+  const D = "01M3DDDDDDDDDDDDDDDDDDDDDD";
+  const cousin = job(A, { edit: (e) => { verifiedOn("2026-09-16")(e); e.parent_intent_id = D; } });
+  assert.match(R.lessonCheckPair(A, B, ctxFor([cousin, grandchild])).reasons.join(), /I3 a parent chain leaves/);
+  const blank = job(B, { edit: (e) => { verifiedOn("2026-09-18")(e); e.parent_intent_id = A; }, cols: { parent_intent_id: " " } });
+  assert.match(R.lessonCheckPair(A, B, ctxFor([a, blank])).reasons.join(), /I3 one is the other's ancestor/);
+  const viaC = job(C, { edit: (e) => { verifiedOn("2026-09-20")(e); e.parent_intent_id = A; } });
+  const twoHops = job(B, { edit: (e) => { verifiedOn("2026-09-18")(e); e.parent_intent_id = C; } });
+  assert.match(R.lessonCheckPair(A, B, ctxFor([a, twoHops, viaC])).reasons.join(), /I3 one is the other's ancestor/);
+});
+
+check("every id list is read whatever shape the table hands it back in, and an unread list refuses", () => {
+  for (const shape of [JSON.stringify([A, B]), A + "," + B, A + ", " + B, A + " " + B, A + ";" + B, "['" + A + "', '" + B + "']", JSON.stringify(JSON.stringify([A, B])), { [A]: 1, [B]: 1 }, [A.toLowerCase(), B]]) {
+    assert.deepEqual(R.lessonIdList(shape), [A, B], JSON.stringify(shape));
+  }
+  assert.deepEqual(R.lessonIdList(A + "X"), []);
+  const r = job(A);
+  assert.equal(R.lessonCheckMember(A, ctxFor([r], { entry: { lesson_key: KEY, status: "active", evidence_ids: JSON.stringify([A.toLowerCase()]) } })).ok, true);
+  for (const shape of [A + " " + B, A + ";" + B, JSON.stringify(JSON.stringify([A, B]))]) {
+    const g = { groups: [{ learning_intent_id: "01M3OTHERGR0P000000000000", source_intent_ids: shape, gate_decision: "REQUIRES_HUMAN" }] };
+    assert.match(reasons(R.lessonCheckMember(A, ctxFor([r], g))), /E6 already backs group/, shape);
+  }
+  assert.match(reasons(R.lessonCheckMember(A, ctxFor([r], { committedIds: JSON.stringify([A]) }))), /E6 already named by a soul commit/);
+  assert.match(reasons(R.lessonCheckMember(A, ctxFor([r], { groups: "[]" }))), /E6 the group log was not read/);
+  assert.match(reasons(R.lessonCheckMember(A, ctxFor([r], { committedIds: undefined }))), /E6 the soul commit list was not read/);
+});
+
+check("E6 excludes the group under check by its normalised id, and only when there is one", () => {
+  const r = job(A);
+  const ownLower = { learning_intent_id: "01M3GR0UPSELF0000000000000".toLowerCase(), source_intent_ids: [A, B], gate_decision: "" };
+  assert.equal(R.lessonCheckMember(A, ctxFor([r], { selfGroupId: "01M3GR0UPSELF0000000000000", groups: [ownLower] })).ok, true);
+  const anon = { source_intent_ids: [A, B], gate_decision: "PROMOTE" };
+  assert.match(reasons(R.lessonCheckMember(A, ctxFor([r], { selfGroupId: undefined, groups: [anon] }))), /E6 already backs group unknown/);
+  assert.deepEqual(R.lessonPickMembers([A], ctxFor([r], { selfGroupId: undefined, groups: [anon] })).members, []);
+});
+
+check("I5 is not split by invisible characters, number versus string, or a key that holds nothing", () => {
+  const act = (fields, extra = {}) => R.lessonActFingerprint({ intent: { payload: { action: "airtable.row", airtable: { table: "Inbox Captures", fields }, ...extra } } });
+  assert.equal(act({ Title: "Same" }), act({ Title: "Same​" }));
+  assert.equal(act({ Title: "Same" }), act({ Title: "﻿Same⁠" }));
+  assert.equal(act({ Title: "ＳＡＭＥ" }), act({ Title: "same" }));
+  assert.equal(act({ Count: 1 }), act({ Count: "1" }));
+  assert.equal(act({ Title: "Same" }), act({ Title: "Same", Notes: "" }));
+  assert.equal(act({ Title: "Same", Body: "B" }), act({ Body: "B", Title: "Same" }));
+  const z = (args) => R.lessonActFingerprint({ intent: { payload: { action: "zapier.mcp", zapier: { tool: "t", arguments: args } } } });
+  assert.equal(z({ a: 1, b: null }), z({ a: "1" }));
+  assert.notEqual(z({ a: 1 }), z({ a: 2 }));
+  assert.notEqual(act({ Title: "Same" }), act({ Title: "Other" }));
+});
+
+check("the E-rule belts each refuse on their own", () => {
+  const one = (name, row, re, extra = {}) => assert.match(reasons(R.lessonCheckMember(row.intent_id, ctxFor([row], extra))), re, name);
+  one("not terminal", job(A, { cols: { terminal: false } }), /E2 not terminal/);
+  one("receipt failed", job(A, { cols: { receipt_outcome: "failed" } }), /E2 receipt outcome is failed/);
+  one("envelope unreadable", job(A, { cols: {} }), /E2 envelope unreadable/, { rowsById: { [A]: Object.assign(job(A), { envelope: "not json" }) } });
+  one("array envelope", job(A), /E2 envelope unreadable/, { rowsById: { [A]: Object.assign(job(A), { envelope: "[1]" }) } });
+  one("verification failed", job(A, { cols: { verification_state: "failed" } }), /E3 verification is failed/);
+  one("no verified_at", job(A, { edit: (e) => { delete e.verification.verified_at; } }), /E3 no readable verified_at/);
+  one("evidence with a prefix", job(A, { edit: (e) => { e.verification.evidence = ["x verify_card REQ-20260916-J1ApUy approved by Tee"]; } }), /E3 no verify card/);
+  one("evidence that only says approved", job(A, { edit: (e) => { e.verification.evidence = ["approved"]; } }), /E3 no verify card/);
+  one("human_watched as a string", job(A, { cols: { human_watched: "yes" } }), /E3 human_watched is not true/);
+  one("auto_verify as a string", job(A, { edit: (e) => { e.intent.payload.auto_verify = "true"; } }), /E5 filed with auto_verify/);
+  const long = A + "Z";
+  assert.match(reasons(R.lessonCheckMember(long, ctxFor([]))), /^E1/);
+  const r = job(A);
+  assert.equal(R.lessonCheckMember(A, ctxFor([r], { entry: { lesson_key: KEY, status: "active", evidence_ids: [A.toLowerCase()] } })).ok, true);
+  const prefix = job(A, { edit: (e) => { e.intent.payload.lesson_key = "read"; } });
+  assert.match(reasons(R.lessonCheckMember(A, ctxFor([prefix], { entry: { lesson_key: KEY, status: "active", evidence_ids: [] } }))), /E4 not declared/);
+  const obj = Object.assign(job(A), { envelope: JSON.parse(job(A).envelope) });
+  assert.equal(R.lessonCheckMember(A, ctxFor([obj])).ok, true);
+});
+
+check("each I rule reads its column, falls back to the envelope, and refuses when both are empty", () => {
+  const noKeyCol = job(B, { edit: (e) => { verifiedOn("2026-09-18")(e); e.idempotency_key = a.idempotency_key; }, cols: { idempotency_key: "" } });
+  assert.match(R.lessonCheckPair(A, B, ctxFor([a, noKeyCol])).reasons.join(), /I2 the same idempotency key/);
+  const colKey = job(B, { edit: verifiedOn("2026-09-18"), cols: { idempotency_key: a.idempotency_key } });
+  assert.match(R.lessonCheckPair(A, B, ctxFor([a, colKey])).reasons.join(), /I2 the same idempotency key/);
+  const noKey = job(B, { edit: (e) => { verifiedOn("2026-09-18")(e); e.idempotency_key = ""; }, cols: { idempotency_key: "" } });
+  assert.match(R.lessonCheckPair(A, B, ctxFor([a, noKey])).reasons.join(), /I2 an idempotency key is missing/);
+  const colParent = job(B, { edit: verifiedOn("2026-09-18"), cols: { parent_intent_id: A.toLowerCase() } });
+  assert.match(R.lessonCheckPair(A, B, ctxFor([a, colParent])).reasons.join(), /I3 one is the other's ancestor/);
+  const exEnv = job(B, { edit: (e) => { verifiedOn("2026-09-18")(e); e.execution.workflow_id = a.workflow_id; e.execution.execution_id = a.execution_id; }, cols: { workflow_id: "", execution_id: "" } });
+  assert.match(R.lessonCheckPair(A, B, ctxFor([a, exEnv])).reasons.join(), /I7 the same workflow execution/);
+  const noEx = job(B, { edit: (e) => { verifiedOn("2026-09-18")(e); e.execution.execution_id = ""; }, cols: { execution_id: "" } });
+  assert.match(R.lessonCheckPair(A, B, ctxFor([a, noEx])).reasons.join(), /I7 a workflow and execution id pair is missing/);
+  const noDay = job(B, { edit: (e) => { delete e.verification.verified_at; } });
+  assert.match(R.lessonCheckPair(A, B, ctxFor([a, noDay])).reasons.join(), /I6 a verified date is missing/);
+  const offset = job(B, { edit: (e) => { e.verification.verified_at = "2026-09-15T23:30:00-05:00"; } });
+  assert.match(R.lessonCheckPair(A, B, ctxFor([a, offset])).reasons.join(), /I6 verified on the same UTC day 2026-09-16/);
+  const recOnly = job(B, { edit: (e) => { verifiedOn("2026-09-18")(e); e.artifacts = [{ kind: "airtable_record", uri: "https://elsewhere/x", record_id: "recSHARED" }]; } });
+  const recA = job(A, { edit: (e) => { verifiedOn("2026-09-16")(e); e.artifacts = [{ kind: "airtable_record", uri: "https://airtable.com/y", record_id: "recSHARED" }]; } });
+  assert.match(R.lessonCheckPair(A, B, ctxFor([recA, recOnly])).reasons.join(), /I4 they share an artifact/);
+  const uriCase = job(B, { edit: (e) => { verifiedOn("2026-09-18")(e); e.artifacts = [{ uri: JSON.parse(a.envelope).artifacts[0].uri.toUpperCase() }]; } });
+  assert.match(R.lessonCheckPair(A, B, ctxFor([a, uriCase])).reasons.join(), /I4 they share an artifact/);
+  const driveA = job(A, { edit: (e) => { verifiedOn("2026-09-16")(e); e.artifacts = [{ kind: "drive_file", uri: "https://docs.google.com/document/d/F1/edit", drive_file_id: "F1" }]; } });
+  const driveB = job(B, { edit: (e) => { verifiedOn("2026-09-18")(e); e.artifacts = [{ kind: "drive_file", uri: "https://docs.google.com/document/d/F1/", drive_file_id: "F1" }]; } });
+  assert.match(R.lessonCheckPair(A, B, ctxFor([driveA, driveB])).reasons.join(), /I4 they share an artifact/);
+});
+
+check("I5 reads the zapier and editforge objects, and leaves labels and lesson keys out", () => {
+  const zap = (id, day, args, extra = {}) => job(id, { edit: (e) => { verifiedOn(day)(e); e.intent.payload = { action: "zapier.mcp", zapier: { tool: "gmail_send", arguments: args }, ...extra }; } });
+  assert.match(R.lessonCheckPair(A, B, ctxFor([zap(A, "2026-09-16", { to: "x" }), zap(B, "2026-09-18", { to: "x" }, { lesson_key: "other-lesson" })])).reasons.join(), /I5 the same structural act/);
+  assert.equal(R.lessonCheckPair(A, B, ctxFor([zap(A, "2026-09-16", { to: "x" }), zap(B, "2026-09-18", { to: "y" })])).ok, true);
+  const ef = (id, day, prompt, label) => job(id, { edit: (e) => { verifiedOn(day)(e); e.intent.payload = { action: "editforge.job", editforge: { kind: "voice", prompt, provider: "mock", label } }; } });
+  assert.match(R.lessonCheckPair(A, B, ctxFor([ef(A, "2026-09-16", "p", "one"), ef(B, "2026-09-18", "p", "two")])).reasons.join(), /I5 the same structural act/);
+  assert.equal(R.lessonCheckPair(A, B, ctxFor([ef(A, "2026-09-16", "p", "one"), ef(B, "2026-09-18", "q", "one")])).ok, true);
+});
+
+check("the feeder caps a group at five, oldest first by instant rather than by string", () => {
+  const ids = ["01M5A", "01M5B", "01M5C", "01M5D", "01M5E", "01M5F"].map((p) => (p + "0".repeat(26)).slice(0, 26));
+  const days = ["2026-09-21", "2026-09-11", "2026-09-12", "2026-09-13", "2026-09-14", "2026-09-15"];
+  const rows = ids.map((id, i) => job(id, { edit: verifiedOn(days[i]) }));
+  const picked = R.lessonPickMembers(ids, ctxFor(rows));
+  assert.equal(picked.members.length, 5);
+  assert.deepEqual(picked.members, ids.slice(1));
+  assert.match(picked.excluded.find((x) => x.id === ids[0]).reasons.join(), /already holds 5/);
+  // 01:00 at +05:00 is 20:00Z, an hour BEFORE 21:00Z, though it sorts after it as a string.
+  const earlierInstant = job(A, { edit: (e) => { e.verification.verified_at = "2026-09-16T01:00:00+05:00"; } });
+  const laterInstant = job(B, { edit: (e) => { e.verification.verified_at = "2026-09-15T21:00:00Z"; } });
+  assert.deepEqual(R.lessonPickMembers([B, A], ctxFor([earlierInstant, laterInstant], { distinctDays: false })).members, [A, B]);
 });
 
 console.log(n + " checks passed");

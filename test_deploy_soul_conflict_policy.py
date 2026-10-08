@@ -296,5 +296,23 @@ def test_recall_of_only_superseded_records_is_an_empty_200_not_a_502(probe):
     assert partial["status_code"] == 200
     assert partial["ids"] == []
     assert "did not complete" in partial["reply"]
+
+
+def test_recall_never_calls_a_withheld_window_a_measured_empty(probe):
+    """A withheld record spent a slot, so an active one may sit below it.
+
+    Found 2026-10-08 by the Phase 1 critic: a window of superseded records
+    answered "That is a measured empty, not a guess", which it was not.
+    """
+    found = probe["recall_all_superseded"]
+    assert "measured empty, not a guess" not in found["reply"]
+    assert "This is not a measured empty" in found["reply"]
+    assert "1 retrieved record(s) were withheld" in found["reply"]
+    assert "1 retrieved record(s) were withheld" in probe["recall_partial_all_superseded"]["reply"]
+    assert "2 retrieved record(s) were withheld" in probe["recall_status_mix"]["reply"]
+    empty = probe["recall_measured_empty"]
+    assert empty["status_code"] == 200
+    assert "measured empty, not a guess" in empty["reply"]
+    assert "withheld" not in empty["reply"]
     assert probe["recall_failed_both"] == 502
     assert probe["recall_anonymous"] == 401

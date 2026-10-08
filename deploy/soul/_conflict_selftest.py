@@ -303,7 +303,7 @@ STATUS_MIX = recall_of(
     record("t-active", 0.80, "A live ruling.", status="active"),
     record("t-nostatus", 0.70, "A ruling written before status existed."),
     record("t-superseded", 0.90, "OLD-TEE-TEXT must never be recited.", status="superseded"),
-    record("d-active", 0.60, "A live lesson.", source="devon-soul", kind="lesson", status="active"),
+    record("d-active", 0.85, "A live lesson.", source="devon-soul", kind="lesson", status="active"),
     record("d-superseded", 0.95, "OLD-DEVON-TEXT must never be recited.", source="devon-soul", kind="lesson", status="superseded"),
     record("d-upper", 0.50, "A lesson whose status is capitalised.", source="devon-soul", kind="lesson", status="Active"),
 )
@@ -322,6 +322,7 @@ out["recall_partial_all_superseded"] = recall_digest(
         )
     )
 )
+out["recall_measured_empty"] = recall_digest(recall_for(StubLayer(recall_of())))
 out["recall_failed_both"] = recall_for(
     StubLayer(recall_of(errors=["tee-soul-layer unavailable: boom", "devon-soul unavailable: boom"]))
 ).status_code

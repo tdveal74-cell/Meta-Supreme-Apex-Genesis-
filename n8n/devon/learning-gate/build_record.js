@@ -12,8 +12,9 @@ const learningIntentId = String(candidate.learning_intent_id || "");
 if (!/^[0-9A-HJKMNP-TV-Z]{26}$/.test(learningIntentId)) {
   throw new Error("Build Record reached without a learning intent id, so nothing is written and nothing was promoted");
 }
-if (!Array.isArray(candidate.verified_ids) || candidate.verified_ids.length < 2 || candidate.verified_ids.length !== candidate.verified_count) {
-  throw new Error("Build Record reached without a verified member list for lesson group " + learningIntentId + ", so nothing is written and nothing was promoted");
+const memberIds = Array.isArray(candidate.verified_ids) ? candidate.verified_ids.map(function (id) { return typeof id === "string" ? id.trim().toUpperCase() : ""; }) : [];
+if (memberIds.length < 2 || memberIds.length !== candidate.verified_count || new Set(memberIds).size !== memberIds.length || !memberIds.every(function (id) { return /^[0-9A-HJKMNP-TV-Z]{26}$/.test(id); })) {
+  throw new Error("Build Record reached without a verified list of distinct members for lesson group " + learningIntentId + ", so nothing is written and nothing was promoted");
 }
 const top = Array.isArray(receipt.matched_records) && receipt.matched_records.length ? receipt.matched_records[0] : null;
 
@@ -26,7 +27,7 @@ const record = {
   learning_intent_id: learningIntentId,
   area: candidate.area,
   proposed_scope: candidate.proposed_scope,
-  source_intent_ids: candidate.verified_ids,
+  source_intent_ids: memberIds,
   independent_evidence_count: candidate.verified_count,
   conflict_check_receipt_id: receipt.receipt_id || "",
   conflict_status: receipt.conflict_status || "",

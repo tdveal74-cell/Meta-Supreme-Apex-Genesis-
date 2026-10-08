@@ -563,11 +563,31 @@ async def soul_recall(
     # in conflict-search; a ruling with no status field passes unchanged. The
     # counts are taken from the filtered list so they still add up to it.
     # Required before the first lesson can commit, by the 2026-08-24 ruling.
-    records = [r for r in recall.to_dicts() if _is_active(r)]
+    retrieved = recall.to_dicts()
+    records = [r for r in retrieved if _is_active(r)]
     response = Devon().recall_answer(q, records, partial_errors=recall.errors)
+    reply = response.reply
+    # A withheld record still spent a window slot, so an active one may rank
+    # below it and was never fetched. The reply says so rather than calling
+    # the result a measured empty, which it is not. Found 2026-10-08 by the
+    # Phase 1 critic; the keys of the response are unchanged.
+    withheld = len(retrieved) - len(records)
+    if withheld:
+        note = (
+            f"{withheld} retrieved record(s) were withheld because they are no "
+            "longer active, and an active record may rank below them and was "
+            "not fetched."
+        )
+        if not records and not recall.errors:
+            reply = (
+                f"Nothing active recalled about {q}. This is not a measured "
+                "empty: " + note
+            )
+        else:
+            reply = reply + "\n" + note
     return {
         "query": recall.query,
-        "reply": response.reply,
+        "reply": reply,
         "records": records,
         "tee_count": sum(1 for r in records if r.get("source") == TEE_SOURCE),
         "devon_count": sum(1 for r in records if r.get("source") == DEVON_SOURCE),

@@ -9,9 +9,13 @@ const receipt = input.receipt;
 // promotes. Until Phase 3 nothing reaches this node, and if anything did, it
 // could not carry a verified count, so it would HOLD.
 // The count only stands when the member list the verifier returned agrees
-// with it; a count with no matching list counts as none.
+// with it, and every member is a distinct ULID once case is ignored. A count
+// with no matching list, or a list that repeats one job or carries junk,
+// counts as none, so a verifier fault cannot pass one job off as two sources.
 const verifiedIds = candidate && Array.isArray(candidate.verified_ids) ? candidate.verified_ids : [];
-const verified = candidate && typeof candidate.verified_count === "number" && candidate.verified_count === verifiedIds.length ? candidate.verified_count : 0;
+const memberIds = verifiedIds.map(function (id) { return typeof id === "string" ? id.trim().toUpperCase() : ""; });
+const membersSound = memberIds.every(function (id) { return /^[0-9A-HJKMNP-TV-Z]{26}$/.test(id); }) && new Set(memberIds).size === memberIds.length;
+const verified = candidate && membersSound && typeof candidate.verified_count === "number" && candidate.verified_count === memberIds.length ? candidate.verified_count : 0;
 const floor = candidate && typeof candidate.min_sources === "number" && candidate.min_sources >= 2 ? candidate.min_sources : 2;
 
 const result = {
@@ -25,7 +29,7 @@ const result = {
 };
 
 // Gate rules (mirror of devon_build12_learning_gate.py, narrowed by the grouping spec)
-if (!candidate || !candidate.claim || candidate.claim.length < 12) {
+if (!candidate || typeof candidate.claim !== "string" || candidate.claim.trim().length < 12) {
   result.decision = "REJECT_WEAK_EVIDENCE";
   result.reason = "claim missing or too vague";
 } else if (!receipt || receipt.complete !== true) {

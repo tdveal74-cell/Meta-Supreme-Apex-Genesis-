@@ -38,6 +38,9 @@ The Learning Gate's six joined under `learning-gate/` on 2026-10-08, copied
 from live version `17f51ee2` before the grouping build's Phase 1 changed any of
 them, so the change is reviewable as a diff. Until then its code had lived only
 in n8n.
+Phase 1 then edited them here and published them as `e4da9aed`, adding
+`refuse_before_search.js`, so the directory holds seven. Its own test is
+`learning-gate/gate.test.mjs`.
 
 ## These are copies, and copies drift
 

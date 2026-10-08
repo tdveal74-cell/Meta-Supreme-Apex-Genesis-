@@ -35,7 +35,7 @@ const SECRET_SHAPES = [
   ["a GitHub token", String.raw`\bgh[pousr]_[A-Za-z0-9]{30,}`],
   ["a Google API key", String.raw`\bAIza[0-9A-Za-z_-]{30,}`],
   ["an Airtable token", String.raw`\bpat[A-Za-z0-9]{14}\.[0-9a-f]{40,}`],
-  ["a JSON web token", String.raw`\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.`],
+  ["a JSON web token", String.raw`(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.`],
   ["a bearer credential", String.raw`\b[Bb][Ee][Aa][Rr][Ee][Rr]\s+[A-Za-z0-9._~+/=-]{16,}`],
   ["an x-devon-key value", String.raw`[Xx]-[Dd][Ee][Vv][Oo][Nn]-[Kk][Ee][Yy]\s*[:=]\s*\S{8,}`],
 ];
@@ -51,12 +51,34 @@ function answer(decision, reason, extra) {
   return [{ json: { candidate: null, preflight: Object.assign({ decision: decision, reason: reason, search_needed: false }, extra || {}) } }];
 }
 function norm(id) { return typeof id === "string" ? id.trim().toUpperCase() : ""; }
-function stringsIn(v, out, depth) {
-  if (depth > 8 || out.length > 2000) { return out; }
-  if (typeof v === "string") { out.push(v); }
-  else if (Array.isArray(v)) { for (const x of v) { stringsIn(x, out, depth + 1); } }
-  else if (v && typeof v === "object") { for (const k of Object.keys(v)) { out.push(k); stringsIn(v[k], out, depth + 1); } }
-  return out;
+// The scan is bounded BEFORE any pattern runs, and a body it cannot read
+// whole is refused rather than scanned in part. Unbounded, a 100 KB claim of
+// repeated "eyJ-" held the preflight for seven seconds and a 6 MB run after a
+// key prefix threw RangeError out of the regex engine, which is a 500 and an
+// error email for a refusal. Measured 2026-10-08 by the Phase 1 critic and
+// reproduced. The feeder's largest possible body is about 2,500 characters
+// (a 2,000 character summary, intake-former/form_job.js), so the bound sits
+// well clear of every real POST.
+const SCAN_MAX_DEPTH = 8;
+const SCAN_MAX_STRINGS = 2000;
+const SCAN_MAX_CHARS = 16384;
+function keep(acc, s) {
+  acc.texts.push(s);
+  acc.chars += s.length;
+  if (acc.texts.length > SCAN_MAX_STRINGS || acc.chars > SCAN_MAX_CHARS) { acc.cut = true; }
+}
+function stringsIn(v, acc, depth) {
+  if (acc.cut) { return acc; }
+  if (depth > SCAN_MAX_DEPTH) {
+    if (typeof v === "string" || (v && typeof v === "object")) { acc.cut = true; }
+    return acc;
+  }
+  if (typeof v === "string") { keep(acc, v); }
+  else if (Array.isArray(v)) { for (const x of v) { stringsIn(x, acc, depth + 1); if (acc.cut) { break; } } }
+  else if (v && typeof v === "object") {
+    for (const k of Object.keys(v)) { keep(acc, k); if (acc.cut) { break; } stringsIn(v[k], acc, depth + 1); if (acc.cut) { break; } }
+  }
+  return acc;
 }
 
 function credentialKey(v, depth) {
@@ -112,14 +134,20 @@ if (kind === "lesson") {
   }
 }
 
+const scan = stringsIn(body, { texts: [], chars: 0, cut: false }, 0);
+if (scan.cut) {
+  return answer("REJECT_MALFORMED", "the request is too large or too deeply nested to scan for secrets whole", { kind: kind });
+}
 const namedKey = credentialKey(body, 0);
 if (namedKey) {
   return answer("REJECT_SECRET", "the request carries a field named like a credential", { kind: kind });
 }
-const texts = stringsIn(body, [], 0);
 for (const [label, source] of SECRET_SHAPES) {
   const re = new RegExp(source);
-  if (texts.some(function (t) { return re.test(t); })) {
+  let hit;
+  try { hit = scan.texts.some(function (t) { return re.test(t); }); }
+  catch (e) { return answer("REJECT_MALFORMED", "the request could not be scanned for secrets", { kind: kind }); }
+  if (hit) {
     // The matched text is never echoed back, only the shape it matched.
     return answer("REJECT_SECRET", "the request carries something shaped like " + label, { kind: kind });
   }
