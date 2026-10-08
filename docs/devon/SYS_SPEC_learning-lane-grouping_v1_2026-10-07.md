@@ -4,7 +4,7 @@ type: SYS_SPEC
 version: 1
 date: 2026-10-07
 area: Systems
-status: proposed, not built
+status: Phase 0 and Phase 1 built 2026-10-08 on Tee's ruling, Phases 2 to 4 proposed
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 base_commit: 67694be
 owner: DEVON
@@ -14,6 +14,13 @@ decides: Tee
 # Build 12 Learning Lane: Grouping Completed Jobs into Declared Lessons, v1
 
 ## This is a spec, and nothing in it has been built
+
+**Status note, 2026-10-08.** The heading above was true when this was
+written. Tee ruled Phase 0 and Phase 1 built on 2026-10-08, and they are: the
+rule block and the lesson registry in the repo, the recall filter, and the
+gate's preflight published live as version `e4da9aed`, then re-published as
+`dc307024` after the critic. What shipped, what moved to Phase 3 and what was found is recorded
+in `docs/devon/SYS_OPS_learning-lane-grouping-phase-0-and-1_v1_2026-10-08-0650.md`. Phases 2 to 4 below are still proposals.
 
 No workflow, data table, repo file, Pinecone index or service was changed to
 produce this document. Everything below is a proposal for Tee to approve or
@@ -341,6 +348,11 @@ copies byte for byte.
     most one proposal, ever.
   - A group refused before the search never was a proposal, so its members stay
     free for a different key.
+  - A HOLD_SUBCONSCIOUS answered before the search (steps 5 and 7) still holds
+    its members. The gate answers HOLD_SUBCONSCIOUS after the search too, and
+    the decision string alone cannot tell the two apart, so a HOLD holds.
+    Freeing a pre-search HOLD would need the group log's receipt id, which is a
+    ruling for Tee. Added 2026-10-08 after the Phase 1 critic.
 
 **Independence between members.** A pair of members counts as two observations
 only if all of these hold:
@@ -354,8 +366,18 @@ only if all of these hold:
   - their walked parent chains do not meet.
 
   `parent_intent_id` is empty on every ledger row today [V].
-- **I4.** They share no artifact `uri` or `record_id`. Two jobs pointing at one
-  doc or row are one observation.
+
+  A chain is read only while its rows are in hand. A chain that reaches a
+  parent whose row was not read, loops, or runs past twenty hops cannot prove
+  two jobs unrelated, so the pair is refused. At the gate the rows in hand are
+  the members' own, so today any member with a parent is refused; Phase 3 may
+  fetch ancestors instead. Added 2026-10-08 after the Phase 1 critic found the
+  walk stopped after one hop and passed a grandparent and a cousin.
+- **I4.** They share no artifact `uri`, `record_id` or `drive_file_id`. Two
+  jobs pointing at one doc or row are one observation. A Zapier artifact
+  carries only the first URL its tool answered, which can be empty, so two
+  Zapier jobs on one external object can still count twice; URLs are not
+  normalised to close that, because some tools name the object in the query.
 - **I5.** Their structural act fingerprints differ.
   - The fingerprint is a deterministic hash of the structural acts only: the
     action, the Airtable table and fields, the Zapier tool and arguments, and

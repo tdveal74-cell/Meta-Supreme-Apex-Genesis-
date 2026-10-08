@@ -242,3 +242,77 @@ def test_opposition_cues_match_words_not_fragments(probe):
     assert probe["cues"]["read_only"] == "read-only"
     assert probe["cues"]["donot_joined"] is None
     assert probe["cues"]["typographic"] == "don't"
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/soul/recall: the same status:active filter (spec item 11, T3)
+# ---------------------------------------------------------------------------
+
+RECALL_KEYS = sorted(["query", "reply", "records", "tee_count", "devon_count", "errors"])
+RECALL_RECORD_KEYS = sorted(
+    ["id", "text", "score", "source", "kind", "heading", "area", "dated", "metadata"]
+)
+
+
+def test_recall_returns_active_records_from_both_souls(probe):
+    found = probe["recall_status_mix"]
+    assert found["status_code"] == 200
+    for kept in ("t-active", "d-active", "d-upper"):
+        assert kept in found["ids"], f"{kept} is active and was dropped"
+
+
+def test_recall_never_returns_a_superseded_record(probe):
+    """A superseded record is dropped from the list AND from the reply,
+    whichever soul it came from and however high it scored."""
+    found = probe["recall_status_mix"]
+    assert "t-superseded" not in found["ids"]
+    assert "d-superseded" not in found["ids"]
+    assert "OLD-TEE-TEXT" not in found["reply"]
+    assert "OLD-DEVON-TEXT" not in found["reply"]
+
+
+def test_recall_reads_a_missing_status_as_active(probe):
+    """Every tee-soul-layer ruling written before the field existed has
+    no status; _is_active reads that as active and recall must agree."""
+    assert "t-nostatus" in probe["recall_status_mix"]["ids"]
+
+
+def test_recall_response_shape_is_unchanged(probe):
+    """The console and TQO's DEVON Recall: Merge read these keys by name."""
+    found = probe["recall_status_mix"]
+    assert found["keys"] == RECALL_KEYS
+    assert found["record_keys"] == RECALL_RECORD_KEYS
+    assert found["ids"] == ["t-active", "t-nostatus", "d-active", "d-upper"]  # order kept
+    assert found["tee_count"] + found["devon_count"] == len(found["ids"])
+    assert (found["tee_count"], found["devon_count"]) == (2, 2)
+
+
+def test_recall_of_only_superseded_records_is_an_empty_200_not_a_502(probe):
+    found = probe["recall_all_superseded"]
+    assert found["status_code"] == 200
+    assert found["ids"] == [] and found["errors"] == []
+    assert "OLD-TEE-TEXT" not in found["reply"]
+    partial = probe["recall_partial_all_superseded"]
+    assert partial["status_code"] == 200
+    assert partial["ids"] == []
+    assert "did not complete" in partial["reply"]
+
+
+def test_recall_never_calls_a_withheld_window_a_measured_empty(probe):
+    """A withheld record spent a slot, so an active one may sit below it.
+
+    Found 2026-10-08 by the Phase 1 critic: a window of superseded records
+    answered "That is a measured empty, not a guess", which it was not.
+    """
+    found = probe["recall_all_superseded"]
+    assert "measured empty, not a guess" not in found["reply"]
+    assert "This is not a measured empty" in found["reply"]
+    assert "1 retrieved record(s) were withheld" in found["reply"]
+    assert "1 retrieved record(s) were withheld" in probe["recall_partial_all_superseded"]["reply"]
+    assert "2 retrieved record(s) were withheld" in probe["recall_status_mix"]["reply"]
+    empty = probe["recall_measured_empty"]
+    assert empty["status_code"] == 200
+    assert "measured empty, not a guess" in empty["reply"]
+    assert "withheld" not in empty["reply"]
+    assert probe["recall_failed_both"] == 502
+    assert probe["recall_anonymous"] == 401

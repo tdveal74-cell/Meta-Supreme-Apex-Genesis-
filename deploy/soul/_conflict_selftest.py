@@ -268,4 +268,64 @@ out["cues"] = {
     "typographic": main._opposing_cue("Don’t write there."),
 }
 
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/soul/recall carries the same status:active filter. Each record
+# below names its own fate in its id; the superseded texts carry a marker so
+# the reply can be checked for a recital of something the list dropped.
+# ---------------------------------------------------------------------------
+
+def recall_for(layer, q="what was settled", headers=AUTH):
+    main._layer = lambda: layer
+    try:
+        return client.get("/api/v1/soul/recall", params={"q": q}, headers=headers)
+    finally:
+        main._layer = REAL_LAYER
+
+
+def recall_digest(response):
+    body = response.json()
+    records = body.get("records") or []
+    return {
+        "status_code": response.status_code,
+        "keys": sorted(body.keys()),
+        "record_keys": sorted(records[0].keys()) if records else [],
+        "ids": [r.get("id") for r in records],
+        "tee_count": body.get("tee_count"),
+        "devon_count": body.get("devon_count"),
+        "reply": body.get("reply"),
+        "errors": body.get("errors"),
+    }
+
+
+STATUS_MIX = recall_of(
+    record("t-active", 0.80, "A live ruling.", status="active"),
+    record("t-nostatus", 0.70, "A ruling written before status existed."),
+    record("t-superseded", 0.90, "OLD-TEE-TEXT must never be recited.", status="superseded"),
+    record("d-active", 0.85, "A live lesson.", source="devon-soul", kind="lesson", status="active"),
+    record("d-superseded", 0.95, "OLD-DEVON-TEXT must never be recited.", source="devon-soul", kind="lesson", status="superseded"),
+    record("d-upper", 0.50, "A lesson whose status is capitalised.", source="devon-soul", kind="lesson", status="Active"),
+)
+
+out["recall_status_mix"] = recall_digest(recall_for(StubLayer(STATUS_MIX)))
+out["recall_all_superseded"] = recall_digest(
+    recall_for(StubLayer(recall_of(record("t-only-old", 0.90, "OLD-TEE-TEXT.", status="superseded"))))
+)
+out["recall_partial_all_superseded"] = recall_digest(
+    recall_for(
+        StubLayer(
+            recall_of(
+                record("t-only-old", 0.90, "OLD-TEE-TEXT.", status="superseded"),
+                errors=["devon-soul unavailable: boom"],
+            )
+        )
+    )
+)
+out["recall_measured_empty"] = recall_digest(recall_for(StubLayer(recall_of())))
+out["recall_failed_both"] = recall_for(
+    StubLayer(recall_of(errors=["tee-soul-layer unavailable: boom", "devon-soul unavailable: boom"]))
+).status_code
+out["recall_anonymous"] = recall_for(StubLayer(STATUS_MIX), headers={}).status_code
+
 print(json.dumps(out))

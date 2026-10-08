@@ -17,6 +17,7 @@ and the node bodies are the part worth reviewing like code.
 | `face/` | DEVON Face (Build 15) | `sPv6Cq7elbjoi5Nw` |
 | `ledger-feeder/` | DEVON Build 12 Ledger Feeder (Build 18 mark branch) | `GEbNoDMBdGqDfZJ2` |
 | `zapier-executor/` | DEVON Zapier Executor (Build 19) | `MIELNCkP9IyHWVlr` |
+| `learning-gate/` | DEVON Build 12 Upstream Test, the Learning Gate | `VzJsSlDswkIJ9wok` |
 
 File names are the node names in snake case. `job-driver/decide.js` is the
 Decide node.
@@ -33,6 +34,15 @@ that exist and let it attach an airtable object to a job. The Ledger Feeder's
 five joined under `ledger-feeder/` on 2026-09-06 with Build 18, which added
 the two mark nodes (`select_unmarked_jobs.js`, `mark_receipts.js`) beside
 the three that were already live.
+The Learning Gate's six joined under `learning-gate/` on 2026-10-08, copied
+from live version `17f51ee2` before the grouping build's Phase 1 changed any of
+them, so the change is reviewable as a diff. Until then its code had lived only
+in n8n.
+Phase 1 then edited them here and published them as `e4da9aed`, adding
+`refuse_before_search.js`, so the directory holds seven. The critic's fixes
+were published as `dc307024` the same day, and the seven bodies here equal
+that live version byte for byte, read back through the API. Its own test is
+`learning-gate/gate.test.mjs`.
 
 ## These are copies, and copies drift
 
@@ -72,7 +82,7 @@ nothing until it is published.
 
 ## Not every node is here
 
-These are the Code node bodies of nine workflows plus the Spine's two. The
+These are the Code node bodies of ten workflows plus the Spine's two. The
 graph, the HTTP nodes, the credentials, the data table nodes and the sticky
 notes live only in n8n. So does every other organ. When a review needs one of
 those, read it with `get_workflow_details` against the live workflow id in the

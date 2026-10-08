@@ -555,13 +555,42 @@ async def soul_recall(
             ),
         )
 
-    response = Devon().recall_answer(q, recall.to_dicts(), partial_errors=recall.errors)
+    # The binding filter conflict-search already applies: status active where
+    # the field exists, a missing field read as active. It runs after the
+    # failure check above, so a read that failed still answers 502 rather than
+    # an empty 200, and before the reply is phrased, so the reply cannot
+    # recite a record the list dropped. Both souls are filtered, as they are
+    # in conflict-search; a ruling with no status field passes unchanged. The
+    # counts are taken from the filtered list so they still add up to it.
+    # Required before the first lesson can commit, by the 2026-08-24 ruling.
+    retrieved = recall.to_dicts()
+    records = [r for r in retrieved if _is_active(r)]
+    response = Devon().recall_answer(q, records, partial_errors=recall.errors)
+    reply = response.reply
+    # A withheld record still spent a window slot, so an active one may rank
+    # below it and was never fetched. The reply says so rather than calling
+    # the result a measured empty, which it is not. Found 2026-10-08 by the
+    # Phase 1 critic; the keys of the response are unchanged.
+    withheld = len(retrieved) - len(records)
+    if withheld:
+        note = (
+            f"{withheld} retrieved record(s) were withheld because they are no "
+            "longer active, and an active record may rank below them and was "
+            "not fetched."
+        )
+        if not records and not recall.errors:
+            reply = (
+                f"Nothing active recalled about {q}. This is not a measured "
+                "empty: " + note
+            )
+        else:
+            reply = reply + "\n" + note
     return {
         "query": recall.query,
-        "reply": response.reply,
-        "records": recall.to_dicts(),
-        "tee_count": recall.tee_count,
-        "devon_count": recall.devon_count,
+        "reply": reply,
+        "records": records,
+        "tee_count": sum(1 for r in records if r.get("source") == TEE_SOURCE),
+        "devon_count": sum(1 for r in records if r.get("source") == DEVON_SOURCE),
         "errors": recall.errors,
     }
 
