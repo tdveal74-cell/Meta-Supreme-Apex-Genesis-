@@ -1,0 +1,208 @@
+{
+ "cancelled_row": {
+  "actor_source": "tee-e2e-watch",
+  "actor_type": "human",
+  "approval_expires_at": "",
+  "approval_scope": "",
+  "approval_state": "not_required",
+  "area": "Systems",
+  "artifact_count": 0,
+  "attempts": 2,
+  "blast_radius": "none",
+  "created_at": "2026-08-24T01:01:51Z",
+  "envelope": "{\"schema_version\":\"1.0.0\",\"intent_id\":\"01M0RMKF6ZGZE2TX6XT1QSHEKA\",\"state\":\"CANCELLED\",\"area\":\"Systems\",\"actor\":{\"type\":\"human\",\"source\":\"tee-e2e-watch\"},\"intent\":{\"summary\":\"E2E WATCH job A, level 0, full four organ pass\",\"level\":0,\"blast_radius\":\"none\"},\"approval\":{\"state\":\"not_required\"},\"trace\":[{\"event_id\":\"01M0RMKG07E6NBS1BJ0PW326YA\",\"at\":\"2026-08-24T01:01:52Z\",\"type\":\"INTENT_RECEIVED\",\"actor\":\"n8n\",\"note\":\"Spine adapter received this job in state RECEIVED, will advance to UNDERSTANDING.\"},{\"event_id\":\"01M0RMKGGRM2VZJBXA159BVWW1\",\"at\":\"2026-08-24T01:01:52Z\",\"type\":\"ACTION_STARTED\",\"actor\":\"n8n\",\"note\":\"RECEIVED to UNDERSTANDING on workflow Oi7o1sTEqhxhOaJL\"},{\"event_id\":\"01M0RMKGRXQDRVZM4GP347NWBZ\",\"at\":\"2026-08-24T01:01:52Z\",\"type\":\"ACTION_COMPLETED\",\"actor\":\"n8n\",\"note\":\"Spine adapter advanced this job RECEIVED to UNDERSTANDING.\"},{\"event_id\":\"01M0RMKHW5Q95B2HCS8BMJ0QN9\",\"at\":\"2026-08-24T01:01:53Z\",\"type\":\"INTENT_RECEIVED\",\"actor\":\"devon\",\"note\":\"Runtime received this job in state UNDERSTANDING.\"},{\"event_id\":\"01M0RMKJHF5QMKYC3H8QXDDBPM\",\"at\":\"2026-08-24T01:01:54Z\",\"type\":\"CONTEXT_LOADED\",\"actor\":\"devon\",\"note\":\"Area Systems, level 0, blast radius none.\"},{\"event_id\":\"01M0RMKJHF8ZF4SMMN49F6KSZJ\",\"at\":\"2026-08-24T01:01:54Z\",\"type\":\"SUBCONSCIOUS_RECALLED\",\"actor\":\"devon\",\"note\":\"No prior jobs in Area Systems. Subconscious is empty, which is an answer, not a gap.\"},{\"event_id\":\"01M0RMKJHFGZHRCTNT88MMNA5H\",\"at\":\"2026-08-24T01:01:54Z\",\"type\":\"PLAN_CREATED\",\"actor\":\"devon\",\"note\":\"Blast radius none permits execution without a new grant. Recommended next state AUTHORIZED.\"},{\"event_id\":\"01M0RMKJR9N9YZ98EWHBVB1VTK\",\"at\":\"2026-08-24T01:01:54Z\",\"type\":\"PLAN_CREATED\",\"actor\":\"devon\",\"note\":\"Runtime planned this job.\"},{\"event_id\":\"01M0RMKKR82SQJFKHZF0VRVVS6\",\"at\":\"2026-08-24T01:01:55Z\",\"type\":\"CONTEXT_LOADED\",\"actor\":\"devon\",\"note\":\"Router received this job at level 0, blast radius none.\"},{\"event_id\":\"01M0RMKM84Q8M2ERWG6V82PAV8\",\"at\":\"2026-08-24T01:01:56Z\",\"type\":\"COUNCIL_CALLED\",\"actor\":\"devon\",\"note\":\"Routed to deterministic at level 0. Level 0. No cognition required and blast radius is none.\"},{\"event_id\":\"01M0RMKMFSMMTH2RYK021EV4PY\",\"at\":\"2026-08-24T01:01:56Z\",\"type\":\"COUNCIL_CALLED\",\"actor\":\"devon\",\"note\":\"Router routed this job to deterministic, next state AUTHORIZED.\"},{\"event_id\":\"01M0RMKNESPYR1KP34JPCMGFEY\",\"at\":\"2026-08-24T01:01:57Z\",\"type\":\"ACTION_STARTED\",\"actor\":\"devon\",\"note\":\"Action router dispatching spine.echo to workflow Oi7o1sTEqhxhOaJL, blast radius none.\"},{\"event_id\":\"01M0RMKP9NG90ZF605CBJSS0XZ\",\"at\":\"2026-08-24T01:01:58Z\",\"type\":\"INTENT_RECEIVED\",\"actor\":\"n8n\",\"note\":\"Spine adapter received this job in state AUTHORIZED, will advance to EXECUTING.\"},{\"event_id\":\"01M0RMKPRMQ63AD2VST4GCW104\",\"at\":\"2026-08-24T01:01:58Z\",\"type\":\"ACTION_STARTED\",\"actor\":\"n8n\",\"note\":\"AUTHORIZED to EXECUTING on workflow Oi7o1sTEqhxhOaJL\"},{\"event_id\":\"01M0RMKQ63MQHTPGPX9N2BZXYA\",\"at\":\"2026-08-24T01:01:59Z\",\"type\":\"ACTION_COMPLETED\",\"actor\":\"n8n\",\"note\":\"Spine adapter advanced this job AUTHORIZED to EXECUTING.\"},{\"event_id\":\"01M0RMKR432YCYF37M1HRSAAGW\",\"at\":\"2026-08-24T01:02:00Z\",\"type\":\"ACTION_COMPLETED\",\"actor\":\"devon\",\"note\":\"Action spine.echo on workflow Oi7o1sTEqhxhOaJL. Outcome executor_accepted, executor state EXECUTING.\"},{\"at\":\"2026-08-26T02:27:45.811Z\",\"actor\":\"ledger-janitor\",\"note\":\"Swept by the Ledger Janitor: non-terminal for 49h, past the 24h TTL (one-time 24h override at Tee's direction, 2026-08-26).\"}],\"created_at\":\"2026-08-24T01:01:51Z\",\"updated_at\":\"2026-08-26T02:27:45.811Z\",\"event_id\":\"01M0RMKR432YCYF37M1HRSAAGW\",\"execution\":{\"state\":\"running\",\"executor\":\"n8n\",\"workflow_id\":\"Oi7o1sTEqhxhOaJL\",\"execution_id\":\"3240\",\"attempts\":2,\"max_attempts\":3,\"started_at\":\"2026-08-24T01:01:52Z\"},\"state_reason\":\"Swept by the Ledger Janitor: non-terminal for 49h, past the 24h TTL (one-time 24h override at Tee's direction, 2026-08-26).\"}",
+  "event_id": "01M0RMKR432YCYF37M1HRSAAGW",
+  "execution_id": "3240",
+  "execution_state": "running",
+  "executor": "n8n",
+  "human_watched": false,
+  "idempotency_key": "",
+  "intent_id": "01M0RMKF6ZGZE2TX6XT1QSHEKA",
+  "intent_level": 0,
+  "intent_summary": "E2E WATCH job A, level 0, full four organ pass",
+  "learning_state": "",
+  "ledger_written_at": "2026-08-26T02:27:46Z",
+  "on_behalf_of": "",
+  "parent_intent_id": "",
+  "receipt_outcome": "",
+  "schema_version": "1.0.0",
+  "state": "CANCELLED",
+  "state_reason": "Swept by the Ledger Janitor: non-terminal for 49h, past the 24h TTL (one-time 24h override at Tee's direction, 2026-08-26).",
+  "terminal": true,
+  "trace_count": 17,
+  "updated_at": "2026-08-26T02:27:45.811Z",
+  "verification_method": "",
+  "verification_state": "",
+  "workflow_id": "Oi7o1sTEqhxhOaJL"
+ },
+ "envelope": {
+  "actor": {
+   "on_behalf_of": "tee",
+   "source": "vps-cutover-verification",
+   "type": "devon"
+  },
+  "approval": {
+   "card_executor": "Airtable Row Writer (airtable.row): one row will be written into the Inbox Captures table of the DEVON base (payload fingerprint 068eeb86), titled VPS cutover proof: first job driven end to end on n8n.editforge.online, carrying the fields Title, Body as the job declares them plus DEVON key and DEVON job. Body begins: Filed 2026-09-16 to prove the DEVON lane runs end to end on the VPS after the 2026-09-15 cutover: intake, ledger, router, approval card and the airtable.row exe [182 characters in a",
+   "decided_at": "2026-09-16T00:57:40.279Z",
+   "decided_by": "tee",
+   "expires_at": "2026-09-17T00:57:40Z",
+   "queue_row_id": "REQ-20260916-37xZi6",
+   "requested_at": "2026-09-16T00:36:14Z",
+   "scope": "execute exactly as planned: VPS cutover verification: one real job driven end to end on the VPS",
+   "state": "granted"
+  },
+  "area": "Systems",
+  "artifacts": [
+   {
+    "base_id": "app28z7XnKzjfTXwc",
+    "by": "airtable.row",
+    "created_at": "2026-09-16T01:00:43.000Z",
+    "executor_execution_id": "188",
+    "fields": [
+     "Title",
+     "Body"
+    ],
+    "key_verified": true,
+    "kind": "airtable_record",
+    "name": "VPS cutover proof: first job driven end to end on n8n.editforge.online",
+    "record_id": "recoe6wzzAdkKpEnj",
+    "reused": false,
+    "table": "Inbox Captures",
+    "table_id": "tbl4ziFRbl5mnUcKc",
+    "uri": "https://airtable.com/app28z7XnKzjfTXwc/tbl4ziFRbl5mnUcKc/recoe6wzzAdkKpEnj"
+   }
+  ],
+  "canon_refs": [],
+  "created_at": "2026-09-16T00:36:07Z",
+  "event_id": "01M2MCVPZ8EZGBNT2R5CXQ4H29",
+  "execution": {
+   "attempts": 2,
+   "execution_id": "188",
+   "executor": "n8n",
+   "finished_at": "2026-09-16T01:00:43Z",
+   "max_attempts": 3,
+   "started_at": "2026-09-16T00:36:09Z",
+   "state": "succeeded",
+   "workflow_id": "glEO2xa4IZmHDbkg"
+  },
+  "idempotency_key": "vps-cutover-proof-20260916",
+  "intent": {
+   "blast_radius": "reversible_write",
+   "level": 2,
+   "payload": {
+    "action": "airtable.row",
+    "airtable": {
+     "fields": {
+      "Body": "Filed 2026-09-16 to prove the DEVON lane runs end to end on the VPS after the 2026-09-15 cutover: intake, ledger, router, approval card and the airtable.row executor. Safe to delete.",
+      "Title": "VPS cutover proof: first job driven end to end on n8n.editforge.online"
+     },
+     "table": "Inbox Captures"
+    },
+    "brief": {
+     "by": "cerebras gpt-oss-120b",
+     "done_when": [
+      "Airtable row appears with the specified Title and Body",
+      "Ledger shows a new entry for the test job",
+      "Approval card status is marked completed"
+     ],
+     "plan": [
+      "Check VPS network connectivity and n8n endpoint availability",
+      "Trigger the test job on n8n.editforge.online via DEVON",
+      "Verify intake record is created in the system",
+      "Confirm ledger entry and approval card processed",
+      "Check Airtable row exists with correct Title and Body"
+     ],
+     "reason": "The task is a reversible write within DEVON's capabilities and does not involve disallowed actions.",
+     "recommendation": "proceed",
+     "risks": [
+      "Duplicate record if job reruns",
+      "Network latency causing timeout",
+      "Misconfiguration leading to missing entries"
+     ]
+    }
+   },
+   "summary": "VPS cutover verification: one real job driven end to end on the VPS"
+  },
+  "intent_id": "01M2KT8WM4RPZ90BCTZPVXH6HK",
+  "learning": {
+   "by": "ledger-feeder",
+   "captured_at": "2026-09-16T06:00:54.986Z",
+   "feed_status": 200,
+   "gate_decision": "HOLD_SUBCONSCIOUS",
+   "state": "captured"
+  },
+  "parent_intent_id": null,
+  "receipt": {
+   "artifact_count": 1,
+   "issued_at": "2026-09-16T03:00:41Z",
+   "outcome": "completed",
+   "summary": "Tee verified the output end to end and approved card REQ-20260916-J1ApUy at 2026-09-16T02:02:49.955Z. Job: VPS cutover verification: one real job driven end to end on the VPS"
+  },
+  "schema_version": "1.0.0",
+  "soul_refs": [],
+  "state": "COMPLETED",
+  "state_reason": null,
+  "trace": [
+   {
+    "actor": "n8n",
+    "at": "2026-09-16T00:36:08Z",
+    "event_id": "01M2KT8XWY372V6841DZZ94KCF",
+    "note": "Spine adapter received this job in state RECEIVED, will advance to UNDERSTANDING.",
+    "type": "INTENT_RECEIVED"
+   },
+   {
+    "actor": "n8n",
+    "at": "2026-09-16T00:36:09Z",
+    "event_id": "01M2KT8YGGT354BQGGDPVH06Z9",
+    "note": "RECEIVED to UNDERSTANDING on workflow VUXIyCaur9lejAhL",
+    "type": "ACTION_STARTED"
+   }
+  ],
+  "updated_at": "2026-09-16T06:00:58Z",
+  "verification": {
+   "evidence": [
+    "verify_card REQ-20260916-J1ApUy",
+    "verify_card REQ-20260916-J1ApUy approved by Tee"
+   ],
+   "human_watched": true,
+   "method": "human_watch",
+   "state": "passed",
+   "verified_at": "2026-09-16T03:00:41Z"
+  }
+ },
+ "row": {
+  "actor_source": "vps-cutover-verification",
+  "actor_type": "devon",
+  "approval_expires_at": "2026-09-17T00:57:40Z",
+  "approval_scope": "execute exactly as planned: VPS cutover verification: one real job driven end to end on the VPS",
+  "approval_state": "granted",
+  "area": "Systems",
+  "artifact_count": 1,
+  "attempts": 2,
+  "blast_radius": "reversible_write",
+  "created_at": "2026-09-16T00:36:07Z",
+  "event_id": "01M2MCVPZ8EZGBNT2R5CXQ4H29",
+  "execution_id": "188",
+  "execution_state": "succeeded",
+  "executor": "n8n",
+  "human_watched": true,
+  "idempotency_key": "vps-cutover-proof-20260916",
+  "intent_id": "01M2KT8WM4RPZ90BCTZPVXH6HK",
+  "intent_level": 2,
+  "intent_summary": "VPS cutover verification: one real job driven end to end on the VPS",
+  "learning_state": "captured",
+  "ledger_written_at": "2026-09-16T06:00:58Z",
+  "on_behalf_of": "tee",
+  "parent_intent_id": "",
+  "receipt_outcome": "completed",
+  "schema_version": "1.0.0",
+  "state": "COMPLETED",
+  "state_reason": "",
+  "terminal": true,
+  "trace_count": 24,
+  "updated_at": "2026-09-16T06:00:58Z",
+  "verification_method": "human_watch",
+  "verification_state": "passed",
+  "workflow_id": "glEO2xa4IZmHDbkg"
+ }
+}

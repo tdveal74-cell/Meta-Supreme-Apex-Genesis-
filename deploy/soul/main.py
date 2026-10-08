@@ -555,13 +555,22 @@ async def soul_recall(
             ),
         )
 
-    response = Devon().recall_answer(q, recall.to_dicts(), partial_errors=recall.errors)
+    # The binding filter conflict-search already applies: status active where
+    # the field exists, a missing field read as active. It runs after the
+    # failure check above, so a read that failed still answers 502 rather than
+    # an empty 200, and before the reply is phrased, so the reply cannot
+    # recite a record the list dropped. Both souls are filtered, as they are
+    # in conflict-search; a ruling with no status field passes unchanged. The
+    # counts are taken from the filtered list so they still add up to it.
+    # Required before the first lesson can commit, by the 2026-08-24 ruling.
+    records = [r for r in recall.to_dicts() if _is_active(r)]
+    response = Devon().recall_answer(q, records, partial_errors=recall.errors)
     return {
         "query": recall.query,
         "reply": response.reply,
-        "records": recall.to_dicts(),
-        "tee_count": recall.tee_count,
-        "devon_count": recall.devon_count,
+        "records": records,
+        "tee_count": sum(1 for r in records if r.get("source") == TEE_SOURCE),
+        "devon_count": sum(1 for r in records if r.get("source") == DEVON_SOURCE),
         "errors": recall.errors,
     }
 
