@@ -26,16 +26,26 @@ Build 02 state ledger (n8n data table, jobs one row per intent)
      since 2026-09-06 it also marks each fed job's envelope learning.state
      captured through the Event Bus, one LEARNING_CAPTURED per job)
     → devon-build12-upstream webhook
-      → Candidate Former → Conflict-Search Issuer → Learning Gate
+      → Candidate Former (a PREFLIGHT since gate e4da9aed, 2026-10-08:
+         refusals answered as data; a single job HOLDs with no search spent;
+         every lesson REJECT_UNREGISTERED until grouping Phase 3)
+        → Search Needed → Conflict-Search Issuer → Learning Gate
         (issuer = POST /api/v1/soul/conflict-search on devon-soul.vercel.app,
-         the ONLY trusted receipt source; gate PROMOTEs only on
-         receipt.complete && conflict_status "clear" && >= 2 independent sources)
+         the ONLY trusted receipt source; gate PROMOTEs only a LESSON whose
+         members it verified itself, with receipt.complete && conflict_status
+         "clear" && verified members >= the lesson's min_sources, never < 2)
         → PROMOTE writes devon-subconscious/experience (automatic)
         → PROMOTE also enters the Soul Committer intake:
            proposal → DEVON Approval Queue email → Tee decides
            → approved: ONE record into devon-soul/experience
            → rejected or expired: closed forever
 ```
+
+A single job can never PROMOTE: a lesson is something Tee declares in
+`services/devon/lesson_registry.py`, and grouping is specified in
+`docs/devon/SYS_SPEC_learning-lane-grouping_v1_2026-10-07.md` (Phase 0 and
+Phase 1 built 2026-10-08, Phases 2 and 3 not yet). The independence rules
+live once in `n8n/devon/learning/lesson_evidence.js`.
 
 Weak conflict matches (score < 0.35) clear; adjacent and strong matches stop at
 a human; a strong match carrying prohibition language is a conflict. Full
@@ -68,7 +78,8 @@ policy semantics, every live id, and every payload contract:
 |---|---|---|
 | Conflict policy b12.1 | repo `deploy/soul/main.py` (tests: `test_deploy_soul_conflict_policy.py`) | code + tests are canonical |
 | Ledger Feeder | n8n workflow, daily poll (15-min until 2026-09-05) | feeds once each, then mirrors the feed log onto the envelope as LEARNING_CAPTURED (Build 18, 2026-09-06); ids in reference |
-| Upstream gate | n8n workflow (webhook, x-devon-key since 2026-08-26) | receipt contract in reference |
+| Upstream gate | n8n workflow (webhook, x-devon-key since 2026-08-26); every Code node mirrored in repo `n8n/devon/learning-gate/` (tests: `gate.test.mjs`) | preflight, receipt contract and decisions in reference |
+| Grouping rules and lesson registry | repo `n8n/devon/learning/lesson_evidence.js` and `services/devon/lesson_registry.py` (tests: `lesson_evidence.test.mjs`, `test_devon_lesson_registry.py`) | no lesson declared yet; registry table and feeder branch arrive in Phase 3 |
 | Soul Committer | n8n workflow, hourly poll (15-min until 2026-09-06, Tee's ruling on the execution burn) | state machine in reference |
 | Vault map | repo `services/devon/vault.py` WEBHOOKS/WORKFLOWS | keep truthful on every change |
 | Heartbeat (Build 13) | n8n pulse + claude.ai reflection Routine | continuity and self-monitoring, `references/heartbeat.md` |

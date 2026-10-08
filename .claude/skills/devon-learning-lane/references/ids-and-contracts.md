@@ -19,7 +19,7 @@ history, and the two instances share no ids.
 | devon_state_ledger data table | `QZvdxllOjWevb3Vo` | one row per intent; `learning_state` belongs to the envelope and is rewritten on every upsert — never use it as a foreign marker |
 | Ledger Feeder workflow | `GEbNoDMBdGqDfZJ2` | daily poll at 02:00 instance time (15-min until 2026-09-05); feeds COMPLETED jobs once each; since Build 18 (2026-09-06) a second branch off Fetch Feed Log posts one `LEARNING_CAPTURED` per fed, unmarked job to `devon-event` with `learning` set to `{state: captured, captured_at, by: ledger-feeder, gate_decision, feed_status}`, a COMPLETED to COMPLETED same state update; the feed log stays the only dedupe key, a mark the bus did not persist emails Tee and is retried next run; source in `n8n/devon/ledger-feeder/` |
 | devon_build12_feed_log table | `U0PqQWiq4nadKFlm` | intent_id, fed_at, webhook_status, gate_decision, claim, area (area may be empty; parse `. Area: X.` from claim as fallback) |
-| Build 12 Upstream Test workflow (the gate) | `VzJsSlDswkIJ9wok` | webhook `devon-build12-upstream`; header auth `x-devon-key` ON since 2026-08-26 (credential Devon Capture Key); MCP-available since 2026-08-26; active version `17f51ee2` since 2026-10-07 (was `a8b070c5`): no test fallbacks, issuer failures throw, see the payload section below; saves no successful executions, errors go to the OS Error Handler `GbeNilHQzjmoWDz3` |
+| Build 12 Upstream Test workflow (the gate) | `VzJsSlDswkIJ9wok` | webhook `devon-build12-upstream`; header auth `x-devon-key` ON since 2026-08-26 (credential Devon Capture Key); MCP-available since 2026-08-26; active version `dc307024` since 2026-10-08 (the critic's fixes to `e4da9aed`, which was grouping Phase 1; before that `17f51ee2`, then `a8b070c5`): grouping Phase 1, a preflight refuses before any search and a single job HOLDs, see the payload section below; repo copy of every Code node in `n8n/devon/learning-gate/`; saves no successful executions, errors go to the OS Error Handler `GbeNilHQzjmoWDz3` |
 | Approval Queue workflow | `Ia28EHrxtiI8cjeA` | webhooks `devon-approve-request` (POST, x-devon-key) and `devon-approve-decide` (GET, token in link) |
 | approval_queue table | `AomDw2Oa9XCUluRX` | status pending/approved/rejected; 72h expiry; contains a plaintext token column — never read it |
 | Soul Committer workflow | `drP96ernQvbrvzIZ` | hourly poll since 2026-09-06 (15-min before; Tee's ruling on the execution burn, version `49007534`); propose + resolve branches; first draft `Wo7zPxpGH8kiBRy8` archived unpublished after adversarial review |
@@ -125,14 +125,71 @@ devon-subconscious, never devon-soul.
 {"claim": "...", "source_intent_ids": ["<ULID>"], "proposed_scope": "<area>",
  "confidence": 0.6-0.8, "source": "ledger-feeder", "ledger": {...provenance}}
 ```
-Response body carries the gate decision (`decision`, e.g. PROMOTE /
-REQUIRES_HUMAN / REJECT / HOLD); the feeder records it as `gate_decision`.
+That is the `kind: "job"` shape; `kind` is absent on every feeder POST and
+defaults to job. From Phase 3 a second shape exists, `kind: "lesson"`:
+`{"kind": "lesson", "lesson_key": "<slug>", "learning_intent_id": "<ULID>",
+"source_intent_ids": ["<ULID>", ...2 to 5]}`, with NO claim (the gate reads
+the claim from the registry). The response body carries the decision at
+`gate.decision`; the feeder records it as `gate_decision`.
 Gate promotes only on complete + clear + >= 2 independent sources, so a
 single-job feed can never PROMOTE by itself. Measured 2026-10-07: the feeder
 sends exactly one id, so HOLD_SUBCONSCIOUS is the best any fed job can get,
 and the subconscious write, the Soul Committer and the Approval Queue are
 unreachable from real work. Ruled the same day: group related jobs so they
 can clear the two-source bar, spec first.
+
+Gate behaviour since version `e4da9aed` (grouping Phase 1, ruled by Tee
+2026-10-08; tested on a throwaway stub copy, executions 2412 to 2423, then
+published, read back, and probed live through the real door with the real
+header, execution 2424), and as amended by `dc307024` the same day after the
+critic (draft run in manual mode, executions 2430 and 2431, then published
+and read back byte for byte). The code is `n8n/devon/learning-gate/` in the
+repo and `node n8n/devon/learning-gate/gate.test.mjs` drives it:
+
+- Candidate Former is a PREFLIGHT, and every refusal is DATA, never a
+  throw: the webhook answers 200 with `gate.decision` set, `receipt: null`
+  and `gate.search_spent: false`, from the node Refuse Before Search. In
+  order: `REJECT_MALFORMED` (body not an object, unknown kind, ids not a
+  list of strings, any id not a ULID after trim and upper case, a repeat
+  once case is ignored, a job with other than exactly one id, a lesson
+  carrying a claim, a bad `learning_intent_id` or `lesson_key`, fewer than
+  2 or more than 5 lesson ids, and from `dc307024` a body too large or too
+  deep to scan whole: more than 8 levels, 2000 strings or 16384 characters,
+  bounded before any pattern runs, so hostile input cannot throw or hold the
+  runner); `REJECT_SECRET` (a field NAMED like a
+  credential with any value, the reference gate's rule, or any string
+  shaped like a credential this estate holds, the list in
+  `services/devon/lesson_registry.py` SECRET_SHAPES, pinned equal by
+  `test_devon_lesson_registry.py`); `REJECT_WEAK_EVIDENCE` (a job claim
+  missing or under 12 characters).
+- A single job answers `HOLD_SUBCONSCIOUS` with NO conflict search spent.
+  So REQUIRES_HUMAN and REJECT_CONFLICT no longer appear on the job path,
+  and the 2026-10-07 poison job (a claim over the service's 2000 character
+  limit retrying a 422 forever) cannot happen for a job any more, because
+  a job never reaches the issuer.
+- Every lesson answers `REJECT_UNREGISTERED` ("the lesson path is not
+  enabled yet") until Phase 3 creates the registry and group log tables
+  and sets `LESSON_PATH_ENABLED`. So NOTHING can reach the search branch or
+  PROMOTE in Phase 1.
+- The search branch is made correct for Phase 3, unreachable today:
+  Assemble Result reads the candidate from Search Needed; the Learning Gate
+  promotes only `kind: "lesson"` with a `verified_count` that equals the
+  length of `verified_ids`, every member a distinct ULID once case is
+  ignored (from `dc307024`), and meets `min_sources` (never the caller's id
+  count); Build Record keys the subconscious record on
+  `learning_intent_id` (a retry rewrites the same record), adds `kind`,
+  `status: active`, `lesson_key`, `conflict_check_receipt_id` and the top
+  match, and throws without a valid id or a list of distinct members;
+  Write Result THROWS
+  on a non-2xx upsert instead of answering 200 PROMOTE with `ok: false`.
+- Every consumer of the decision was read on 2026-10-08 and treats it as
+  an opaque string: the feeder logs any 200 as fed and terminal, the Pulse
+  only flags an EMPTY decision, the Soul Committer filters `eq PROMOTE`.
+  The feeder's email footer still says the gate rules "PROMOTE or
+  REQUIRES_HUMAN"; it is incomplete rather than false and was left alone.
+
+History, superseded in part by `e4da9aed` above: refusals are now data rather than
+thrown `REFUSED:` messages, and a job no longer reaches the issuer.
 
 Gate behaviour since version `17f51ee2` (ruled by Tee 2026-10-07; drafted,
 tested by hand on executions 2384 to 2387, reviewed by two read-only critics
@@ -161,7 +218,8 @@ with no blockers, then published and read back):
   the LAST colon of a thrown message, and only its first line. Measured on
   2385: `REFUSED: no source_intent_ids` arrived as description `REFUSED`
   and message `no source_intent_ids ...`.
-- Open, ruled to Tee rather than built: a job that can never pass (for
+- RESOLVED for jobs by `e4da9aed`, since a job never reaches the issuer.
+  Was open, ruled to Tee rather than built: a job that can never pass (for
   example a claim over the service's 2000 character limit, which answers
   422) has no exit. It fails, emails and retries every day until someone
   intervenes, and the only manual exit is a hand-written feed log row.

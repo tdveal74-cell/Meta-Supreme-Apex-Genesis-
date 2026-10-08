@@ -39,7 +39,9 @@ from live version `17f51ee2` before the grouping build's Phase 1 changed any of
 them, so the change is reviewable as a diff. Until then its code had lived only
 in n8n.
 Phase 1 then edited them here and published them as `e4da9aed`, adding
-`refuse_before_search.js`, so the directory holds seven. Its own test is
+`refuse_before_search.js`, so the directory holds seven. The critic's fixes
+were published as `dc307024` the same day, and the seven bodies here equal
+that live version byte for byte, read back through the API. Its own test is
 `learning-gate/gate.test.mjs`.
 
 ## These are copies, and copies drift

@@ -4,7 +4,7 @@ type: SYS_SPEC
 version: 1
 date: 2026-10-07
 area: Systems
-status: proposed, not built
+status: Phase 0 and Phase 1 built 2026-10-08 on Tee's ruling, Phases 2 to 4 proposed
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 base_commit: 67694be
 owner: DEVON
@@ -14,6 +14,13 @@ decides: Tee
 # Build 12 Learning Lane: Grouping Completed Jobs into Declared Lessons, v1
 
 ## This is a spec, and nothing in it has been built
+
+**Status note, 2026-10-08.** The heading above was true when this was
+written. Tee ruled Phase 0 and Phase 1 built on 2026-10-08, and they are: the
+rule block and the lesson registry in the repo, the recall filter, and the
+gate's preflight published live as version `e4da9aed`, then re-published as
+`dc307024` after the critic. What shipped, what moved to Phase 3 and what was found is recorded
+in `docs/devon/SYS_OPS_learning-lane-grouping-phase-0-and-1_v1_2026-10-08-0650.md`. Phases 2 to 4 below are still proposals.
 
 No workflow, data table, repo file, Pinecone index or service was changed to
 produce this document. Everything below is a proposal for Tee to approve or
