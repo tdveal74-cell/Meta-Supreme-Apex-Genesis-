@@ -86,8 +86,8 @@ row and fails when either row drifts from the export of the same role.
 
 | version | id | nodes |
 |---|---|---|
-| active | `c470353f` | 274 nodes |
-| draft | `c470353f` | 274 nodes |
+| active | `9320520f` | 274 nodes |
+| draft | `9320520f` | 274 nodes |
 
 Every webhook path and webhook id in the exports reads `redacted`. The Gumroad
 sale ping carries no authentication, so its random path suffix is the only
@@ -374,3 +374,18 @@ reused, refuses a name in a sentence's first word when the doctored text
 never uses the word, and refuses any doctored sentence repeated. Every input
 the critic listed is a case in the two node tests. Replayed, row 46 reads
 Error on "twelve" only and row 26 on "50" and "fifteen" only.
+
+The exports were regenerated at `9320520f` on 2026-10-10. `Save Script to Data
+Table` set `video_title` from `$('Package: Context')`, a node the already
+written path never runs: a locked Idea row that still carries a script is
+hydrated from the row, re-doctored and gated without packaging. The 10:20Z
+passes on 2026-10-08, 10-09 and 10-10 (executions 2446, 2519 and 2592) all died
+there on TQO row 5, which had been sent back to Idea with its old script still
+in place, and saved nothing. The expression now checks
+`$('Package: Context').isExecuted` first and falls back to the script's own
+title, the same guard `Script: Fill Run Fields` already carried in a `try`.
+Proven on inactive copy `TtpqbEmgNP98Guag`, execution 2628, where row 5 took
+the same path and saved through `Save Doctor Verdict` and `Script: Fill Run
+Fields`; the copy was archived after the live workflow took the change. Row 5
+was then cleared to Idea with no script, on Tee's ruling, so the next pass
+writes it fresh.

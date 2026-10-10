@@ -220,3 +220,13 @@ def test_the_length_check_after_the_doctor_is_wired_and_mirrored() -> None:
             code = nodes[reader]["parameters"]["jsCode"]
             assert "$('Script: Final Text')" in code and "$('Parse Doctor Verdict')" not in code, f"{role}: {reader}"
         assert nodes["Build Script Prompt"]["parameters"]["jsCode"] == (mirrors / "build_script_prompt.js").read_text(), role
+
+
+def test_save_script_survives_the_already_written_path() -> None:
+    """A locked Idea row that still has a script skips Package: Context, and
+    Save Script must not read it unguarded (executions 2446, 2519, 2592)."""
+    for role in ("active", "draft"):
+        nodes = {node["name"]: node for node in _load(role)["nodes"]}
+        title = nodes["Save Script to Data Table"]["parameters"]["columns"]["value"]["video_title"]
+        assert title.startswith("={{ $('Package: Context').isExecuted && "), f"{role}: {title}"
+        assert title.endswith(": $json.title }}"), f"{role}: {title}"
