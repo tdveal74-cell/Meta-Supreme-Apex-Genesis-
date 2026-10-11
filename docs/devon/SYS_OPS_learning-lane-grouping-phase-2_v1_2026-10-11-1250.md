@@ -92,11 +92,40 @@ record, not inferred:
 | Vercel `devon-soul` | `dpl_7F5N45RjWEXCKzwQAHfHG4nq5pZa` | READY, target production | `3dc1b55` |
 | Vercel `meta-supreme-apex-genesis-web` | `dpl_J3Jj1jhRRwkULtVZjB3mmVUBTXdK` | CANCELED by its ignore rule, correctly: nothing under its paths changed since its production build on `21aab2c` | not rebuilt |
 
-So the filtered code is what production serves. Whether recall itself is
-switched on there, `SOUL_RECALL_ENABLED` and a key on `api` and
-`scheduler-cron`, is not something these tools can read: Railway returns
-variable names only. That stays unverified, and Tee can check it in the
-Railway dashboard.
+So the filtered code is what production serves.
+
+**Recall is switched off on both Railway services, read the same day.** This
+paragraph first said the question could not be read here because Railway
+returns variable names only, and handed it to Tee. That was wrong. An absent
+name answers it, and `SYS_OPS_the-soul-tile-reads-railway_v1_2026-09-15.md`
+had settled the same question for `api` the same way a month earlier. Tee
+sent screenshots of both Variables tabs, and `list-variables` on the
+production environment agreed with them name for name: `api` carries 34
+service variables and `scheduler-cron` 8, beside Railway's own `RAILWAY_*`,
+and neither carries `SOUL_RECALL_ENABLED`, `PINECONE_API_KEY`,
+`SOUL_DEVON_HOST`, `SOUL_TEE_HOST` or `DEVON_RULING_KEY`. No `.env` is tracked
+in the repository, so none is baked into the image either.
+
+So `SOUL_RECALL_ENABLED` holds its default `False` (`app/core/config.py:216`),
+`get_soul_layer()` returns None (`app/services/soul.py:29`), `GET
+/api/v1/soul/recall` answers 503 "Soul recall is switched off", and the
+planning recall and `knowledge_loop` skip the soul. The Phase 2 filter on
+those two services is deployed and dormant: it has nothing to filter until
+Tee switches recall on, which is his call and his keys.
+
+`devon-soul` on Vercel is the other way round. Its `/api/v1/health`, read
+through the Vercel fetch tool at 15:44:02Z because the network policy here
+refuses the host, answered `soul_key_set: true`. Its recall and its
+conflict-search filter through its own `_is_active` (`deploy/soul/main.py`
+lines 567 and 684), which predates Phase 2 and which the app's `is_active` was
+written to equal.
+
+The gated second Python writer of devon-soul is shut by two locks on `api`,
+not one. `/soul/approve` refuses while `DEVON_RULING_KEY` is unset
+(`app/services/knowledge_loop.py:105`), and `/soul/commit` writes the ledger
+only and skips devon-soul while the layer is off. In production today the
+Soul Committer is the only thing that can write devon-soul, which is what the
+lane's rule says.
 
 ## What is in the repo
 
@@ -201,7 +230,8 @@ Written into `ids-and-contracts.md` and the spec where each applies:
 ## Open
 
 - The app's recall filter is deployed on all three surfaces, read back
-  above. Whether recall is switched on in production is unverified.
+  above. Recall is off on Railway `api` and `scheduler-cron`, so the filter
+  there is dormant until Tee switches it on; `devon-soul` has its key.
 - The carded claim is bound to the searched claim only by the Phase 3 rule
   above.
 - The Pulse's text for a stuck approved row still says "still need your
@@ -213,8 +243,8 @@ Written into `ids-and-contracts.md` and the spec where each applies:
 - Carried from Phase 0 and 1: the `_is_active` empty status edge, the Build
   02 guard's forgeable verification text (decision 11), 52 active workflows
   counted against 45 in CLAUDE.md, the Heartbeat sticky's old SMTP id, two
-  unpublished drafts, `vault.py`'s stale Cloud ids, and the gated second
-  Python writer of devon-soul.
+  unpublished drafts, and `vault.py`'s stale Cloud ids. The gated second
+  Python writer of devon-soul is closed as off in production, read above.
 
 ## DEVON RECEIPT
 
@@ -224,6 +254,6 @@ ARTIFACT: docs/devon/SYS_OPS_learning-lane-grouping-phase-2_v1_2026-10-11-1250.m
 DATE: 2026-10-11
 DECISIONS: Tee ruled on four cards on 2026-10-11: one card per lesson, the committer card being the lesson's approval; rejection and expiry both close it for good and burn its members; the committer reads the ledger rows and the group log row itself; the app's recall readers are filtered in Phase 2. Earlier the same day: Phase 2 goes ahead, and the second job comes from real work.
 FINDINGS: Committer live as 69829bd0 after e98bda27 and 3f4fdc36, read back byte for byte, saving still off. Group log 3zmclyNLggMdRG2g created empty, commit log columns added. T6 on a stubbed copy, executions 2674 to 2676, 2681 and 2682, then archived and its tables deleted. 27 critic findings, 25 confirmed or plausible, 2 refuted, none armed; the worst, adoption skipping every lesson check, is fixed and re-measured, and every surviving mutation now fails the suite.
-OPEN: App recall filter deployed on api, scheduler-cron and devon-soul at 3dc1b55, read back; whether SOUL_RECALL_ENABLED is set in production unverified; claim to receipt binding rests on the Phase 3 contract; Pulse wording for a stuck approved row; is_active non-Mapping divergence; items carried from Phase 0 and 1.
+OPEN: App recall filter deployed on api, scheduler-cron and devon-soul at 3dc1b55, read back; recall is off on api and scheduler-cron, which carry no SOUL_RECALL_ENABLED or PINECONE_API_KEY (list-variables and Tee's screenshots, 2026-10-11), so the filter is dormant there until Tee switches it on; claim to receipt binding rests on the Phase 3 contract; Pulse wording for a stuck approved row; is_active non-Mapping divergence; items carried from Phase 0 and 1.
 STATUS: Soul Committer drP96ernQvbrvzIZ active 69829bd0, lessons only; nothing can be carded until Phase 3 declares a lesson and the feeder forms a group. PR #323 merged as 3dc1b55 on Tee's card ruling, and its deploys read back the same day.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
