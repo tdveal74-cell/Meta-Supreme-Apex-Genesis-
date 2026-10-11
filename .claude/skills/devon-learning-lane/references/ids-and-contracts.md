@@ -188,6 +188,30 @@ repo and `node n8n/devon/learning-gate/gate.test.mjs` drives it:
   The feeder's email footer still says the gate rules "PROMOTE or
   REQUIRES_HUMAN"; it is incomplete rather than false and was left alone.
 
+What makes a real job count as lesson evidence (Tee ruled 2026-10-11 that the
+lane's second job comes from real work routed through DEVON, not from a seeded
+job). Read from `n8n/devon/job-driver/decide.js` and the rule block
+`n8n/devon/learning/lesson_evidence.js`:
+
+- It runs on an executor that leaves an artifact, `airtable.row` or
+  `drive.draft` today, so the Job Driver raises a verify card. A job filed with
+  `auto_verify`, blast radius none and no artifact completes as
+  `auto_no_artifact` with no card, and E3 and E5 refuse it.
+- Tee approves the verify card himself after watching the output. That writes
+  `verify_card REQ-... approved by Tee` into the evidence, which is the only
+  string E3 accepts.
+- It does something different from the job it will pair with. The 2026-09-16
+  job wrote one Inbox Captures row; another row with different fields, or a
+  Drive draft, is a different act under I5. Two Drive drafts always count once,
+  because a draft carries no structural payload.
+- It is approved on a different UTC day from its partner (I6), with its own
+  idempotency key and execution (I2, I7). Those hold on their own for any
+  separately filed job.
+- Independence is necessary, not sufficient. The two jobs must both show the
+  rule Tee writes as the lesson claim, and he lists their ids in the registry
+  when he declares it (E4). Until Phase 3 opens the lesson path, the job answers
+  HOLD_SUBCONSCIOUS at the gate on its first feed, which is expected.
+
 History, superseded in part by `e4da9aed` above: refusals are now data rather than
 thrown `REFUSED:` messages, and a job no longer reaches the issuer.
 

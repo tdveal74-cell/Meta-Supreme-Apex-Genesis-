@@ -1116,6 +1116,16 @@ Each item puts the recommended answer first.
     the live gate?**
     - Recommended: yes. Neither can write to any store.
 
+### Ruled since
+
+- **2026-10-11, on a card: the second job comes from real work.** The ledger
+  holds one eligible job, the 2026-09-16 cutover, and a lesson needs two. Tee
+  ruled that the second comes from a real task he routes through DEVON, rather
+  than a job seeded only to clear the bar or a ruling that the lane is dormant.
+  Phase 2 and Phase 3 go ahead as ruled on 2026-10-08. What makes such a job
+  count is in the learning lane skill, `references/ids-and-contracts.md`, under
+  "What makes a real job count".
+
 ## Not verified for this spec
 
 - **The Pinecone indexes.** Their current contents were not read. Earlier records
