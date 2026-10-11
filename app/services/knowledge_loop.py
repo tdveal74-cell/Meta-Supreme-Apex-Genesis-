@@ -37,7 +37,7 @@ from app.services.capture_enrichment import suggest_area
 from app.services.live_state_ledger import ledger
 from services import memory as memory_store
 from services.devon import ecosystem, provenance
-from services.devon.approval import ApprovalQueue, ApprovalState
+from services.devon.approval import EXPIRY_HOURS, ApprovalQueue, ApprovalState
 from services.devon.assistant import Devon, FilingPlan
 from services.intelligence.soul import (
     ALLOWED_KINDS,
@@ -79,6 +79,19 @@ class _ApprovedDecision:
 
 def _now_date() -> str:
     return datetime.now(timezone.utc).date().isoformat()
+
+
+def _utcnow() -> datetime:
+    """The loop's clock, one seam so a test can move it past a window."""
+    return datetime.now(timezone.utc)
+
+
+def _window_closed(record: Any) -> str:
+    return (
+        f"This approval's window closed at {record.expires_at.isoformat()}, "
+        f"{EXPIRY_HOURS} hours after its card was raised, so it is never "
+        "spent. Propose it again and rule the new card."
+    )
 
 
 def _sha256(text: str) -> str:
@@ -694,6 +707,12 @@ class KnowledgeLoop:
                 result.message or "Approval refused.",
                 status_code=403,
             )
+        # A repeat approve of a card past its window would otherwise repair
+        # the ledger grant and answer "Commit it" for a commit that refuses.
+        if already_approved:
+            held = _queue().get(request_id)
+            if held is not None and held.is_expired(_utcnow()):
+                raise KnowledgeLoopRefused(_window_closed(held), status_code=403)
 
         # The ledger's own word that the ruling-key lane ruled. Commit reads
         # this row and never an event name, so a queue decision made anywhere
@@ -744,7 +763,8 @@ class KnowledgeLoop:
         approved, the ledger's approvals row says approved (only ``approve``
         above writes that, after the ruling key), and the plan that names
         this request is on the bound intent. An APPROVAL_GRANTED event alone
-        proves nothing here.
+        proves nothing here. The approval must also still be inside its
+        card's window; an old one is refused rather than spent.
         """
         # The owner-scoped binding comes first, so another account's request
         # id learns nothing from the shared queue's state.
@@ -771,6 +791,14 @@ class KnowledgeLoop:
                 f"State is {record.state.value}, not approved.",
                 status_code=403,
             )
+        # An approval is spent only inside the window its card was raised for.
+        # The queue expires a PENDING card at expires_at but never an APPROVED
+        # one, so without this an approval granted long ago, through a lane
+        # since closed, would still spend into devon-soul the day the soul
+        # layer is switched on. Refused before the spend, like every check
+        # here, so the record stays exactly as it was.
+        if record.is_expired(_utcnow()):
+            raise KnowledgeLoopRefused(_window_closed(record), status_code=403)
 
         if binding["state"] != "approved":
             raise KnowledgeLoopRefused(
