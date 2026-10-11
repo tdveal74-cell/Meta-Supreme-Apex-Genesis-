@@ -221,6 +221,16 @@ Railway legitimately sits behind main when the intervening commits cannot
 change the container (docs, `vercel.json`, CI workflow files). Say so with the
 reason rather than treating it as drift.
 
+**That is true of `presence` only.** It is the one service with watch
+patterns, so it records SKIPPED on a commit outside them. `api` and
+`scheduler-cron` have none and build every commit to main, docs included,
+which the table above already says. A session forgot it on 2026-10-11 and
+told Tee on a merge card that a docs-only merge would redeploy no Railway
+service; the records-only merges of PR #324 and PR #325 each produced a fresh
+`api` and `scheduler-cron` deployment. Rebuilding identical code is harmless.
+Predicting it wrong is the first law's failure, so read `list-deployments`
+before saying what a merge will deploy.
+
 ## Redeploying Railway: do not use `redeploy`
 
 The `redeploy` tool reuses the existing build, so it re-ships the **same, stale
