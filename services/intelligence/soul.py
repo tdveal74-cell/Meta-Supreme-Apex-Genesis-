@@ -35,7 +35,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import httpx
 
@@ -93,6 +93,25 @@ class SoulWriteRefused(ProviderError):
     """A devon-soul write was refused — the reason is in the message."""
 
 
+def is_active(record: Mapping[str, Any]) -> bool:
+    """Whether a recalled record may be shown: status active, or no status.
+
+    The 2026-08-24 ruling: recall filters on status active before the first
+    lesson is promoted. A record carries its status at the top level or, as a
+    recalled SoulRecord does, inside its metadata. Every tee ruling and every
+    devon record written before the field existed has none, and reads as
+    active. The same reading as `_is_active` in deploy/soul/main.py, which
+    the soul service applies on its own routes; a test holds the two equal.
+    """
+    status_val = record.get("status")
+    if status_val is None:
+        meta = record.get("metadata")
+        status_val = meta.get("status") if isinstance(meta, Mapping) else None
+    if status_val is None:
+        return True
+    return str(status_val).lower() == "active"
+
+
 @dataclass(frozen=True)
 class SoulRecord:
     """One recalled record, labeled with which soul it came from."""
@@ -130,15 +149,52 @@ class SoulRecall:
     tee_count: int
     devon_count: int
     errors: List[str] = field(default_factory=list)
+    #: Records the search returned and `active_only` dropped. Each one spent a
+    #: slot in its soul's window, so an active record may rank below it and
+    #: was never fetched: a recall that withheld anything is not a measured
+    #: empty, and says so.
+    withheld: int = 0
 
     @property
     def empty(self) -> bool:
         return not self.records
 
+    @property
+    def withheld_note(self) -> str:
+        """The sentence a reader gets when records were withheld, else empty."""
+        if not self.withheld:
+            return ""
+        return (
+            f"{self.withheld} retrieved record(s) were withheld because they are "
+            "no longer active, and an active record may rank below them and was "
+            "not fetched."
+        )
+
+    def active_only(self) -> "SoulRecall":
+        """The same recall with every record that is no longer active removed.
+
+        Every reader in the app calls this; the soul service filters on its
+        own routes, and its conflict search must still see what was withheld
+        to tell a full window from an empty one, which is why `recall` itself
+        returns everything. The counts are retaken from the kept records, so
+        they still add up to the list, and the order is kept.
+        """
+        kept = [r for r in self.records if is_active(r.to_dict())]
+        return SoulRecall(
+            query=self.query,
+            records=kept,
+            tee_count=sum(1 for r in kept if r.source == TEE_SOURCE),
+            devon_count=sum(1 for r in kept if r.source == DEVON_SOURCE),
+            errors=list(self.errors),
+            withheld=self.withheld + len(self.records) - len(kept),
+        )
+
     def as_context(self) -> str:
         """Render for a model's context window, hierarchy and framing intact."""
         if not self.records:
-            return ""
+            # A window of withheld records is not an empty soul, and the
+            # reader is told so rather than handed a blank.
+            return self.withheld_note
         lines = [CONTEXT_NOT_COMMAND, ""]
         for record in self.records:
             label = "TEE RULING" if record.source == TEE_SOURCE else "DEVON EXPERIENCE"
@@ -147,6 +203,9 @@ class SoulRecall:
         if self.errors:
             lines.append("")
             lines.append("Recall was partial: " + "; ".join(self.errors))
+        if self.withheld:
+            lines.append("")
+            lines.append(self.withheld_note)
         return "\n".join(lines)
 
     def to_dicts(self) -> List[Dict[str, Any]]:
@@ -163,6 +222,13 @@ class SoulWriteCandidate:
     area: Optional[str] = None
     observed_on: str = ""
     source_note: str = ""
+    #: A lesson the Build 12 learning lane promoted (grouping spec, Phase 2,
+    #: ruled by Tee 2026-10-11) names its registry key, the learning intent
+    #: the feeder minted for the group, and the completed jobs it stands on.
+    #: Every other write leaves them empty and the record omits them.
+    lesson_key: Optional[str] = None
+    learning_intent_id: Optional[str] = None
+    source_intent_ids: Tuple[str, ...] = ()
 
     def what_happens(self) -> str:
         """The approval text — an approver cannot consent to the undescribed."""
@@ -174,7 +240,7 @@ class SoulWriteCandidate:
         )
 
     def to_record(self) -> Dict[str, Any]:
-        return {
+        record: Dict[str, Any] = {
             "_id": self.candidate_id,
             "text": self.text,
             "kind": self.kind,
@@ -183,7 +249,22 @@ class SoulWriteCandidate:
             "source_note": self.source_note,
             "author": "devon",
             "approved": True,  # set here because to_record is only reached via commit
+            # Recall shows a record only while it is active (is_active). A new
+            # record is active; a later supersession rewrites this field.
+            "status": "active",
         }
+        # The lesson fields go in only when there is a lesson, so no record
+        # carries an empty key or an empty member list as if it meant
+        # something. The Soul Committer's Resolve Approved node builds the
+        # same record in n8n (n8n/devon/soul-committer/resolve_approved.js),
+        # and its test holds the two key sets equal.
+        if self.lesson_key:
+            record["lesson_key"] = self.lesson_key
+        if self.learning_intent_id:
+            record["learning_intent_id"] = self.learning_intent_id
+        if self.source_intent_ids:
+            record["source_intent_ids"] = list(self.source_intent_ids)
+        return record
 
 
 class SoulLayer:

@@ -61,7 +61,10 @@ async def soul_recall_payload(soul: "SoulLayer", goal: str) -> Dict[str, Any]:
     can never be mistaken for both souls answering empty.
     """
     try:
-        recall = await soul.recall(goal)
+        # Only active records reach a plan, by the 2026-08-24 ruling. A
+        # withheld count rides in the context text, so the planner is told the
+        # recall was not a measured empty.
+        recall = (await soul.recall(goal)).active_only()
     except Exception as exc:
         return {
             "context": "",

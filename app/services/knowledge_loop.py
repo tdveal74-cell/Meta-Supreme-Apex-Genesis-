@@ -1063,11 +1063,17 @@ class KnowledgeLoop:
         layer = soul_service.get_soul_layer()
         soul_hits: list[dict] = []
         soul_errors: list[str] = []
+        soul_withheld = 0
         if layer is not None:
             try:
-                recall = await layer.recall(query, top_k_tee=2, top_k_devon=5)
+                # Only active records, by the 2026-08-24 ruling; how many were
+                # withheld is said rather than left to read as an empty soul.
+                recall = (
+                    await layer.recall(query, top_k_tee=2, top_k_devon=5)
+                ).active_only()
                 soul_hits = [r.to_dict() for r in recall.records]
                 soul_errors = list(recall.errors)
+                soul_withheld = recall.withheld
             except Exception as exc:
                 soul_errors.append(str(exc)[:300])
         return {
@@ -1075,6 +1081,7 @@ class KnowledgeLoop:
             "ledger": hits,
             "soul": soul_hits,
             "soul_errors": soul_errors,
+            "soul_withheld": soul_withheld,
             "soul_recall_enabled": layer is not None,
             "findable_without_vault_tools": bool(hits),
             "live": layer is not None,

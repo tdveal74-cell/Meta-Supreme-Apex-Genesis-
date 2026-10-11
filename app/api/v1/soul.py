@@ -104,7 +104,14 @@ async def soul_recall(
     """
     layer = _layer()
     try:
-        recall = await layer.recall(q, top_k_tee=top_k_tee, top_k_devon=top_k_devon)
+        # The 2026-08-24 ruling: recall shows only active records before the
+        # first lesson is promoted. Filtered before the reply is phrased, so
+        # the reply cannot recite a record the list dropped; the soul
+        # service's own recall route does the same, and says the same when it
+        # withheld any.
+        recall = (
+            await layer.recall(q, top_k_tee=top_k_tee, top_k_devon=top_k_devon)
+        ).active_only()
     except ProviderError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -113,9 +120,18 @@ async def soul_recall(
 
     devon = Devon()
     response = devon.recall_answer(q, recall.to_dicts(), partial_errors=recall.errors)
+    reply = response.reply
+    if recall.withheld:
+        if not recall.records and not recall.errors:
+            reply = (
+                f"Nothing active recalled about {q}. This is not a measured "
+                "empty: " + recall.withheld_note
+            )
+        else:
+            reply = reply + "\n" + recall.withheld_note
     return SoulRecallResponse(
         query=recall.query,
-        reply=response.reply,
+        reply=reply,
         records=recall.to_dicts(),
         tee_count=recall.tee_count,
         devon_count=recall.devon_count,

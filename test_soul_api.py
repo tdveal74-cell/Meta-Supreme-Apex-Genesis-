@@ -206,3 +206,72 @@ async def test_recall_says_503_when_enabled_without_a_key(
         assert "PINECONE_API_KEY" in response.json()["detail"]
     finally:
         get_soul_layer.cache_clear()
+
+
+def _status_layer(tee_hits, devon_hits):
+    def handler(request):
+        hits = tee_hits if "tee-soul-layer" in str(request.url) else devon_hits
+        return httpx.Response(200, json={"result": {"hits": hits}})
+
+    return SoulLayer(
+        api_key="pc-test-key",
+        tee_host=TEE_HOST,
+        devon_host=DEVON_HOST,
+        transport=httpx.MockTransport(handler),
+    )
+
+
+def _status_hit(_id, text, score, status=None):
+    fields = {"text": text}
+    if status is not None:
+        fields["status"] = status
+    return {"_id": _id, "_score": score, "fields": fields}
+
+
+async def test_recall_never_returns_a_superseded_record(
+    client, auth_headers, monkeypatch
+):
+    """The 2026-08-24 ruling, required before the first lesson commits: a
+    superseded record is dropped from the list and from the reply, the
+    counts add up to what is shown, and the withheld window is disclosed."""
+    layer = _status_layer(
+        [_status_hit("t-active", "a standing ruling", 0.4, "active"),
+         _status_hit("t-old", "OLD-TEE-TEXT", 0.9, "superseded"),
+         _status_hit("t-none", "a ruling with no status", 0.3)],
+        [_status_hit("d-old", "OLD-DEVON-TEXT", 0.99, "superseded"),
+         _status_hit("d-active", "a lesson", 0.5, "active")],
+    )
+    monkeypatch.setattr(soul_service, "get_soul_layer", lambda: layer)
+
+    response = await client.get("/api/v1/soul/recall?q=anything", headers=auth_headers)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [r["id"] for r in body["records"]] == ["t-active", "t-none", "d-active"]
+    assert (body["tee_count"], body["devon_count"]) == (2, 1)
+    assert "OLD-TEE-TEXT" not in body["reply"] and "OLD-DEVON-TEXT" not in body["reply"]
+    assert "2 retrieved record(s) were withheld" in body["reply"]
+    assert body["errors"] == []
+    assert sorted(body) == sorted(["query", "reply", "records", "tee_count", "devon_count", "errors"])
+
+
+async def test_a_window_of_superseded_records_is_not_a_measured_empty(
+    client, auth_headers, monkeypatch
+):
+    layer = _status_layer(
+        [_status_hit("t-old", "OLD-TEE-TEXT", 0.9, "superseded")], []
+    )
+    monkeypatch.setattr(soul_service, "get_soul_layer", lambda: layer)
+
+    response = await client.get("/api/v1/soul/recall?q=anything", headers=auth_headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["records"] == []
+    assert "measured empty, not a guess" not in body["reply"]
+    assert "This is not a measured empty" in body["reply"]
+    assert "1 retrieved record(s) were withheld" in body["reply"]
+
+    empty = _status_layer([], [])
+    monkeypatch.setattr(soul_service, "get_soul_layer", lambda: empty)
+    response = await client.get("/api/v1/soul/recall?q=anything", headers=auth_headers)
+    assert "measured empty, not a guess" in response.json()["reply"]
+    assert "withheld" not in response.json()["reply"]
