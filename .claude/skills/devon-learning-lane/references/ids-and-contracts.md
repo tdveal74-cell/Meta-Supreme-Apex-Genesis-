@@ -22,7 +22,7 @@ history, and the two instances share no ids.
 | Build 12 Upstream Test workflow (the gate) | `VzJsSlDswkIJ9wok` | webhook `devon-build12-upstream`; header auth `x-devon-key` ON since 2026-08-26 (credential Devon Capture Key); MCP-available since 2026-08-26; active version `dc307024` since 2026-10-08 (the critic's fixes to `e4da9aed`, which was grouping Phase 1; before that `17f51ee2`, then `a8b070c5`): grouping Phase 1, a preflight refuses before any search and a single job HOLDs, see the payload section below; repo copy of every Code node in `n8n/devon/learning-gate/`; saves no successful executions, errors go to the OS Error Handler `GbeNilHQzjmoWDz3` |
 | Approval Queue workflow | `Ia28EHrxtiI8cjeA` | webhooks `devon-approve-request` (POST, x-devon-key) and `devon-approve-decide` (GET, token in link) |
 | approval_queue table | `AomDw2Oa9XCUluRX` | status pending/approved/rejected; 72h expiry; contains a plaintext token column — never read it |
-| Soul Committer workflow | `drP96ernQvbrvzIZ` | hourly poll since 2026-09-06 (15-min before; Tee's ruling on the execution burn, version `49007534`); propose + resolve branches; active version `e98bda27` since 2026-10-11, grouping Phase 2, LESSONS ONLY (before that `5e149077`), see "Soul Committer v3" below; repo copy of every Code node in `n8n/devon/soul-committer/`, test `committer.test.mjs`; first draft `Wo7zPxpGH8kiBRy8` archived unpublished after adversarial review |
+| Soul Committer workflow | `drP96ernQvbrvzIZ` | hourly poll since 2026-09-06 (15-min before; Tee's ruling on the execution burn, version `49007534`); propose + resolve branches; active version `69829bd0` since 2026-10-11, grouping Phase 2, LESSONS ONLY: published as `e98bda27`, the Phase 2 critic's code fixes as `3f4fdc36`, and the sticky note made truthful as `69829bd0` (before all three `5e149077`), see "Soul Committer v3" below; repo copy of every Code node in `n8n/devon/soul-committer/`, test `committer.test.mjs`; first draft `Wo7zPxpGH8kiBRy8` archived unpublished after adversarial review |
 | devon_soul_commit_log table | `x8U4QqvXTVgINg3h` | intent_id, state (PROPOSED/COMMITTED/REJECTED/EXPIRED/REVERTED, and REFUSED since 2026-10-11), request_id, record_id, claim, area, proposed_at, resolved_at, note, lesson_key, source_intent_ids (the last two added 2026-10-11; source_intent_ids is a JSON array string; null on the one older row). A job id named by ANY row here, as intent_id or in source_intent_ids, whatever the state, can never back another lesson |
 | devon_lesson_group_log table | `3zmclyNLggMdRG2g` | created 2026-10-11 for grouping Phase 2, EMPTY until the Phase 3 feeder writes it; the committer reads it (filter gate_decision eq PROMOTE). group_key, lesson_key, claim_sha, learning_intent_id, source_intent_ids, state (FORMED/FED/FAILED/STUCK), gate_decision, webhook_status, attempts, receipt_id, conflict_status, top_match, formed_at, fed_at, note |
 | Error Alarm workflow | `bqcnIS0Qv4RkTCU1` | shared error workflow; emails Tee when a workflow that names it crashes out-of-band |
@@ -119,7 +119,10 @@ and the app's recall readers filter on status active in the same phase.
 - Proven on a throwaway copy with every store and host stubbed (T6,
   executions 2674 to 2676 of `ujNCbaYsTdiINpdr`): the card, a refusal with no
   group, a refusal for a reused member, a commit, a rejection, and an idle
-  run. The same runs settled that a defineBelow update preserves the columns
+  run; then, with the critic's fixes, executions 2681 and 2682: a fenced
+  multi-line excerpt with one Conflict check line, a refusal email naming the
+  burned jobs, a junk member list refused. The copy is archived and its four
+  throwaway tables deleted. The same runs settled that a defineBelow update preserves the columns
   it does not name: lesson_key and source_intent_ids survived both Update
   Commit Log and Update Closed Rows.
 

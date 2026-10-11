@@ -23,7 +23,7 @@ gate's preflight published live as version `e4da9aed`, then re-published as
 in `docs/devon/SYS_OPS_learning-lane-grouping-phase-0-and-1_v1_2026-10-08-0650.md`.
 
 **Status note, 2026-10-11.** Phase 2 is built on Tee's rulings of that day:
-the Soul Committer cards lessons only and is live as `e98bda27`, the record
+the Soul Committer cards lessons only and is live as `69829bd0`, the record
 carries `status: active` and the lesson fields, and the app's three recall
 readers filter on status in the repo, live once the api, scheduler-cron and
 devon-soul deploys of the merge are read back. Two Phase 3 items moved forward

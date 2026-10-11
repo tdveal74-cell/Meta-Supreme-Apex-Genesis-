@@ -448,6 +448,11 @@ check("an approved row without its lesson fields writes nothing and stays PROPOS
 check("a pending or rejected card writes nothing; retries keep the record id and count attempts", () => {
   assert.deepEqual(commitFor([pending()], [{ ...APPROVED, status: "pending" }]), []);
   assert.deepEqual(commitFor([pending()], [{ ...APPROVED, status: "rejected" }]), []);
+  const newer = pending({ intent_id: "01M4GRP9A1B2C3D4E5F6G7H8J9", request_id: "REQ-20261014-ZZZ999", proposed_at: "2026-10-14T00:00:00Z" });
+  const both = commitFor([newer, pending()], [APPROVED, { request_id: "REQ-20261014-ZZZ999", status: "approved" }]);
+  assert.equal(both.length, 1, "one commit per poll");
+  assert.equal(both[0].request_id, "REQ-20261013-AbC123", "oldest first, whatever order the rows arrive in");
+  assert.equal(both[0].deferred, 1);
   const retry = commitFor([pending({ note: "commit FAILED HTTP 500 attempt 3 at x" })])[0];
   assert.equal(retry.attempt, 4);
   assert.equal(retry.record_id, "devon-2026-10-13-REQ-20261013-AbC123");
