@@ -7355,7 +7355,7 @@
       "script_machine": "={{ $json.script }}",
       "status": "={{ $json.status }}",
       "tags": "={{ $json.tags }}",
-      "video_title": "={{ $('Package: Context').first().json.packageLocked ? $('Package: Context').first().json.videoTitle : $json.title }}"
+      "video_title": "={{ $('Package: Context').isExecuted && $('Package: Context').first().json.packageLocked ? $('Package: Context').first().json.videoTitle : $json.title }}"
      }
     },
     "dataTableId": {
@@ -9341,7 +9341,7 @@
    "typeVersion": 2
   }
  ],
- "readAt": "2026-10-07T14:31:45Z",
+ "readAt": "2026-10-10T23:01:12Z",
  "role": "draft",
  "settings": {
   "availableInMCP": true,
@@ -9357,7 +9357,7 @@
   "timezone": "America/New_York"
  },
  "versionDescription": null,
- "versionId": "c470353f-5614-4f21-90ef-7fb403887b43",
- "versionStamp": "2026-10-07T14:31:44.518Z",
+ "versionId": "9320520f-2e59-4558-853b-2761e5023d67",
+ "versionStamp": "2026-10-10T23:00:32.477Z",
  "workflowId": "qEkGOUsNyVaRAmm6"
 }
