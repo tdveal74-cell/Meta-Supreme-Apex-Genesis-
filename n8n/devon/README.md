@@ -18,6 +18,7 @@ and the node bodies are the part worth reviewing like code.
 | `ledger-feeder/` | DEVON Build 12 Ledger Feeder (Build 18 mark branch) | `GEbNoDMBdGqDfZJ2` |
 | `zapier-executor/` | DEVON Zapier Executor (Build 19) | `MIELNCkP9IyHWVlr` |
 | `learning-gate/` | DEVON Build 12 Upstream Test, the Learning Gate | `VzJsSlDswkIJ9wok` |
+| `soul-committer/` | DEVON Soul Committer (Build 12) | `drP96ernQvbrvzIZ` |
 
 File names are the node names in snake case. `job-driver/decide.js` is the
 Decide node.
@@ -43,6 +44,16 @@ Phase 1 then edited them here and published them as `e4da9aed`, adding
 were published as `dc307024` the same day, and the seven bodies here equal
 that live version byte for byte, read back through the API. Its own test is
 `learning-gate/gate.test.mjs`.
+The Soul Committer's twelve joined under `soul-committer/` on 2026-10-11,
+copied from live version `5e149077` before the grouping build's Phase 2 changed
+any of them, for the same reason: the change is then a diff. Until then its
+code had lived only in n8n. Phase 2 then edited them here and published them
+as `e98bda27` the same day, adding `only_refused_items.js` and
+`refusal_notice.js`, so the directory holds fourteen. The critic's fixes were
+published as `3f4fdc36` and a sticky note correction as `69829bd0`, and the
+fourteen bodies here equal that live version byte for byte, read back through
+the API. Its own test is
+`soul-committer/committer.test.mjs`.
 
 ## These are copies, and copies drift
 
@@ -82,7 +93,10 @@ nothing until it is published.
 
 ## Not every node is here
 
-These are the Code node bodies of ten workflows plus the Spine's two. The
+These are the Code node bodies of the eleven workflows in the table, the
+Spine's two, and the Heartbeat's Compose Pulse under `heartbeat/`, whose header
+says how it differs from the live node. This sentence said ten workflows until
+2026-10-11, when it was counted from the directories rather than edited. The
 graph, the HTTP nodes, the credentials, the data table nodes and the sticky
 notes live only in n8n. So does every other organ. When a review needs one of
 those, read it with `get_workflow_details` against the live workflow id in the

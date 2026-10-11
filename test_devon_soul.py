@@ -26,8 +26,10 @@ from services.intelligence.soul import (
     CONTEXT_NOT_COMMAND,
     DEVON_NAMESPACE,
     SoulLayer,
+    SoulWriteCandidate,
     SoulWriteRefused,
     ensure_devon_index,
+    is_active,
 )
 
 TEE_HOST = "https://tee-soul-layer-test.svc.example.pinecone.io"
@@ -397,3 +399,199 @@ def test_soul_factory_returns_none_while_recall_is_switched_off():
 
     get_soul_layer.cache_clear()
     assert get_soul_layer() is None
+
+
+# ---------------------------------------------------------------------------
+# Recall shows only active records (2026-08-24 ruling; grouping spec Phase 2)
+# ---------------------------------------------------------------------------
+
+
+def _status_mix_handler(request):
+    if "tee-soul-layer" in str(request.url):
+        return _search_response([
+            _hit("t-active", "a standing ruling", 0.9, status="active"),
+            _hit("t-old", "OLD-TEE-TEXT", 0.95, status="superseded"),
+            _hit("t-none", "a ruling from before the field", 0.5),
+        ])
+    return _search_response([
+        _hit("d-old", "OLD-DEVON-TEXT", 0.99, status="retired"),
+        _hit("d-upper", "a lesson", 0.7, status="ACTIVE"),
+    ])
+
+
+def test_active_only_drops_every_record_that_is_no_longer_active():
+    recall = run(_layer(_status_mix_handler).recall("anything"))
+    assert [r.id for r in recall.records] == ["t-active", "t-old", "t-none", "d-old", "d-upper"]
+
+    active = recall.active_only()
+    # Order kept, Tee first; counts retaken so they add up to the list.
+    assert [r.id for r in active.records] == ["t-active", "t-none", "d-upper"]
+    assert (active.tee_count, active.devon_count) == (2, 1)
+    assert active.withheld == 2
+    assert active.errors == []
+    context = active.as_context()
+    assert "OLD-TEE-TEXT" not in context and "OLD-DEVON-TEXT" not in context
+    assert "2 retrieved record(s) were withheld" in context
+    # The raw recall is untouched: the soul service's conflict search needs
+    # to see what was withheld to tell a full window from an empty one.
+    assert len(recall.records) == 5 and recall.withheld == 0
+
+
+def test_a_window_of_withheld_records_is_never_read_as_an_empty_soul():
+    def handler(request):
+        return _search_response([_hit("x", "OLD-TEXT", 0.9, status="superseded")])
+
+    active = run(_layer(handler).recall("anything")).active_only()
+    assert active.records == [] and active.withheld == 2
+    assert active.as_context() == active.withheld_note
+    assert "2 retrieved record(s) were withheld" in active.as_context()
+    nothing = run(_layer(lambda r: _search_response([])).recall("anything")).active_only()
+    assert nothing.withheld == 0 and nothing.as_context() == ""
+
+
+def test_active_only_keeps_a_partial_failure_in_errors():
+    def handler(request):
+        if "tee-soul-layer" in str(request.url):
+            return _search_response([_hit("t1", "OLD", 0.9, status="superseded")])
+        return httpx.Response(500, text="index down")
+
+    active = run(_layer(handler).recall("anything")).active_only()
+    assert active.records == [] and active.withheld == 1
+    assert active.errors and "devon-soul unavailable" in active.errors[0]
+
+
+@pytest.mark.parametrize(
+    "record, expected",
+    [
+        ({"status": "active"}, True),
+        ({"status": "ACTIVE"}, True),
+        ({"status": "superseded"}, False),
+        ({"status": "retired"}, False),
+        ({"status": ""}, False),
+        ({}, True),
+        ({"metadata": {}}, True),
+        ({"metadata": {"status": "active"}}, True),
+        ({"metadata": {"status": "superseded"}}, False),
+        ({"status": None, "metadata": {"status": "superseded"}}, False),
+        ({"status": "active", "metadata": {"status": "superseded"}}, True),
+        # Added after the Phase 2 critic: every one of these separates the two
+        # readings if either starts stripping, folding or truth testing.
+        ({"status": " active"}, False),
+        ({"status": "active\n"}, False),
+        ({"status": False}, False),
+        ({"status": ["active"]}, False),
+        ({"metadata": {"status": None}}, True),
+        ({"metadata": ""}, True),
+    ],
+)
+def test_is_active_reads_exactly_as_the_soul_service_does(record, expected):
+    """The app's filter and the soul service's `_is_active` must agree on
+    every record, or one surface shows what the other hides. The service's
+    function is lifted from deploy/soul/main.py by its source, not imported,
+    so the vendored tree is never pinned on this session's path."""
+    import ast
+    import pathlib
+    from typing import Any
+
+    source = pathlib.Path("deploy/soul/main.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    fn = next(
+        n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_is_active"
+    )
+    namespace: dict = {"Any": Any}
+    exec(compile(ast.Module(body=[fn], type_ignores=[]), "deploy/soul/main.py", "exec"), namespace)
+    assert is_active(record) is expected
+    assert namespace["_is_active"](record) is expected
+
+
+def test_every_app_recall_reads_active_records_only():
+    """A new reader of the soul that forgets the filter would show a
+    superseded record as context. Every `.recall(` call in app/, apps/,
+    services/ and scripts/ must be the receiver of `.active_only()`, read call
+    by call rather than statement by statement, so a call in an if, for, while
+    or with header, a call beside a filtered one in the same statement, a
+    `.recall` taken without calling it, and getattr(x, "recall") are all
+    caught. Found 2026-10-11 by the Phase 2 critic, whose six probes passed the
+    first, statement level version. The soul service (deploy/soul) is outside
+    these trees on purpose: it filters on its own routes and its conflict
+    search needs the raw window."""
+    import ast
+    import pathlib
+
+    offenders = []
+    calls = 0
+    for root in ("app", "apps", "services", "scripts"):
+        for path in sorted(pathlib.Path(root).rglob("*.py")):
+            if "node_modules" in path.parts:
+                continue
+            source = path.read_text(encoding="utf-8")
+            if "recall" not in source:
+                continue
+            tree = ast.parse(source)
+            parent = {}
+            for node in ast.walk(tree):
+                for child in ast.iter_child_nodes(node):
+                    parent[child] = node
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id == "getattr"
+                    and len(node.args) >= 2
+                    and isinstance(node.args[1], ast.Constant)
+                    and node.args[1].value == "recall"
+                ):
+                    offenders.append(f"{path}:{node.lineno} getattr recall")
+                if not (isinstance(node, ast.Attribute) and node.attr == "recall"):
+                    continue
+                call = parent.get(node)
+                if not (isinstance(call, ast.Call) and call.func is node):
+                    offenders.append(f"{path}:{node.lineno} recall taken without a call")
+                    continue
+                calls += 1
+                up = parent.get(call)
+                if isinstance(up, ast.Await):
+                    up = parent.get(up)
+                filtered = (
+                    isinstance(up, ast.Attribute)
+                    and up.attr == "active_only"
+                    and isinstance(parent.get(up), ast.Call)
+                    and parent[up].func is up
+                )
+                if not filtered:
+                    offenders.append(f"{path}:{node.lineno}")
+    assert calls >= 3, f"expected the three app readers, found {calls} recall call(s)"
+    assert offenders == [], f"recall without active_only: {offenders}"
+
+
+def test_a_lesson_record_names_its_key_its_intent_and_its_jobs():
+    candidate = SoulWriteCandidate(
+        candidate_id="devon-2026-10-11-REQ-20261011-AbC123",
+        text="a reusable rule",
+        kind="lesson",
+        area="Systems",
+        observed_on="2026-10-11",
+        source_note="Build 12 lesson k PROMOTE",
+        lesson_key="k",
+        learning_intent_id="01M3GRP0000000000000000000",
+        source_intent_ids=("01M2KT8WM4RPZ90BCTZPVXH6HK", "01M3ZZZZZZZZZZZZZZZZZZZZZZ"),
+    )
+    record = candidate.to_record()
+    assert record["status"] == "active"
+    assert record["kind"] == "lesson"
+    assert record["lesson_key"] == "k"
+    assert record["learning_intent_id"] == "01M3GRP0000000000000000000"
+    assert record["source_intent_ids"] == ["01M2KT8WM4RPZ90BCTZPVXH6HK", "01M3ZZZZZZZZZZZZZZZZZZZZZZ"]
+    assert isinstance(record["source_intent_ids"], list)
+    json.dumps(record)  # one NDJSON line, as SoulLayer.commit sends it
+
+
+def test_a_record_with_no_lesson_carries_status_and_no_empty_lesson_fields():
+    record = SoulWriteCandidate(candidate_id="c", text="t", kind="pattern").to_record()
+    assert record["status"] == "active"
+    assert record["kind"] == "pattern"
+    for key in ("lesson_key", "learning_intent_id", "source_intent_ids"):
+        assert key not in record
+    assert sorted(record) == sorted(
+        ["_id", "text", "kind", "area", "observed_on", "source_note", "author", "approved", "status"]
+    )

@@ -35,16 +35,23 @@ Build 02 state ledger (n8n data table, jobs one row per intent)
          members it verified itself, with receipt.complete && conflict_status
          "clear" && verified members >= the lesson's min_sources, never < 2)
         → PROMOTE writes devon-subconscious/experience (automatic)
-        → PROMOTE also enters the Soul Committer intake:
-           proposal → DEVON Approval Queue email → Tee decides
-           → approved: ONE record into devon-soul/experience
-           → rejected or expired: closed forever
+        → PROMOTE also enters the Soul Committer intake (LESSONS ONLY since
+           committer e98bda27, 2026-10-11: it reads the group log row and the
+           members' own ledger rows itself, and refuses for good what it
+           cannot card):
+           one card per lesson, quoting each member's ledger text uncut
+           → DEVON Approval Queue email → Tee decides
+           → approved: ONE record into devon-soul/experience, status active,
+             naming its lesson key, learning intent and member jobs
+           → rejected or expired: closed forever, member jobs burned
 ```
 
 A single job can never PROMOTE: a lesson is something Tee declares in
 `services/devon/lesson_registry.py`, and grouping is specified in
 `docs/devon/SYS_SPEC_learning-lane-grouping_v1_2026-10-07.md` (Phase 0 and
-Phase 1 built 2026-10-08, Phases 2 and 3 not yet). The independence rules
+Phase 1 built 2026-10-08, Phase 2 built 2026-10-11 with the committer live
+and the app's recall filter live only once its deploys are read back, Phase 3
+not yet). The independence rules
 live once in `n8n/devon/learning/lesson_evidence.js`.
 
 Weak conflict matches (score < 0.35) clear; adjacent and strong matches stop at
@@ -80,7 +87,7 @@ policy semantics, every live id, and every payload contract:
 | Ledger Feeder | n8n workflow, daily poll (15-min until 2026-09-05) | feeds once each, then mirrors the feed log onto the envelope as LEARNING_CAPTURED (Build 18, 2026-09-06); ids in reference |
 | Upstream gate | n8n workflow (webhook, x-devon-key since 2026-08-26); every Code node mirrored in repo `n8n/devon/learning-gate/` (tests: `gate.test.mjs`) | preflight, receipt contract and decisions in reference |
 | Grouping rules and lesson registry | repo `n8n/devon/learning/lesson_evidence.js` and `services/devon/lesson_registry.py` (tests: `lesson_evidence.test.mjs`, `test_devon_lesson_registry.py`) | no lesson declared yet; registry table and feeder branch arrive in Phase 3 |
-| Soul Committer | n8n workflow, hourly poll (15-min until 2026-09-06, Tee's ruling on the execution burn) | state machine in reference |
+| Soul Committer | n8n workflow, hourly poll (15-min until 2026-09-06, Tee's ruling on the execution burn); every Code node mirrored in repo `n8n/devon/soul-committer/` (tests: `committer.test.mjs`) | lessons only since 2026-10-11; state machine in reference |
 | Vault map | repo `services/devon/vault.py` WEBHOOKS/WORKFLOWS | keep truthful on every change |
 | Heartbeat (Build 13) | n8n pulse + claude.ai reflection Routine | continuity and self-monitoring, `references/heartbeat.md` |
 | Ledger Janitor | n8n workflow, daily 02:30 America/New_York | sweeps jobs non-terminal past 96h to CANCELLED through the guarded ledger webhook; ids in reference |

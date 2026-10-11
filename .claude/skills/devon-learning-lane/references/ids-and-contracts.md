@@ -22,8 +22,9 @@ history, and the two instances share no ids.
 | Build 12 Upstream Test workflow (the gate) | `VzJsSlDswkIJ9wok` | webhook `devon-build12-upstream`; header auth `x-devon-key` ON since 2026-08-26 (credential Devon Capture Key); MCP-available since 2026-08-26; active version `dc307024` since 2026-10-08 (the critic's fixes to `e4da9aed`, which was grouping Phase 1; before that `17f51ee2`, then `a8b070c5`): grouping Phase 1, a preflight refuses before any search and a single job HOLDs, see the payload section below; repo copy of every Code node in `n8n/devon/learning-gate/`; saves no successful executions, errors go to the OS Error Handler `GbeNilHQzjmoWDz3` |
 | Approval Queue workflow | `Ia28EHrxtiI8cjeA` | webhooks `devon-approve-request` (POST, x-devon-key) and `devon-approve-decide` (GET, token in link) |
 | approval_queue table | `AomDw2Oa9XCUluRX` | status pending/approved/rejected; 72h expiry; contains a plaintext token column — never read it |
-| Soul Committer workflow | `drP96ernQvbrvzIZ` | hourly poll since 2026-09-06 (15-min before; Tee's ruling on the execution burn, version `49007534`); propose + resolve branches; first draft `Wo7zPxpGH8kiBRy8` archived unpublished after adversarial review |
-| devon_soul_commit_log table | `x8U4QqvXTVgINg3h` | intent_id, state (PROPOSED/COMMITTED/REJECTED/EXPIRED/REVERTED), request_id, record_id, claim, area, proposed_at, resolved_at, note |
+| Soul Committer workflow | `drP96ernQvbrvzIZ` | hourly poll since 2026-09-06 (15-min before; Tee's ruling on the execution burn, version `49007534`); propose + resolve branches; active version `69829bd0` since 2026-10-11, grouping Phase 2, LESSONS ONLY: published as `e98bda27`, the Phase 2 critic's code fixes as `3f4fdc36`, and the sticky note made truthful as `69829bd0` (before all three `5e149077`), see "Soul Committer v3" below; repo copy of every Code node in `n8n/devon/soul-committer/`, test `committer.test.mjs`; first draft `Wo7zPxpGH8kiBRy8` archived unpublished after adversarial review |
+| devon_soul_commit_log table | `x8U4QqvXTVgINg3h` | intent_id, state (PROPOSED/COMMITTED/REJECTED/EXPIRED/REVERTED, and REFUSED since 2026-10-11), request_id, record_id, claim, area, proposed_at, resolved_at, note, lesson_key, source_intent_ids (the last two added 2026-10-11; source_intent_ids is a JSON array string; null on the one older row). A job id named by ANY row here, as intent_id or in source_intent_ids, whatever the state, can never back another lesson |
+| devon_lesson_group_log table | `3zmclyNLggMdRG2g` | created 2026-10-11 for grouping Phase 2, EMPTY until the Phase 3 feeder writes it; the committer reads it (filter gate_decision eq PROMOTE). group_key, lesson_key, claim_sha, learning_intent_id, source_intent_ids, state (FORMED/FED/FAILED/STUCK), gate_decision, webhook_status, attempts, receipt_id, conflict_status, top_match, formed_at, fed_at, note |
 | Error Alarm workflow | `bqcnIS0Qv4RkTCU1` | shared error workflow; emails Tee when a workflow that names it crashes out-of-band |
 | Learning Lane Table Reader | `VGwrZPdZ5se2pr03` | manual, read-only view of feed log, commit log, state ledger, heartbeat log; deliberately never reads approval_queue (token column) |
 | Heartbeat workflow (Build 13) | `EEDrp2jLlw2Ssd5b` | 6h pulse: vitals, keyed findings, roughly daily email; see `references/heartbeat.md` |
@@ -39,6 +40,91 @@ history, and the two instances share no ids.
 | Action Router workflow (Build 05) | `NYcEp03Oqlvq86Mb` | webhook `devon-action` (POST, x-devon-key); dispatches an AUTHORIZED envelope to an allowlisted executor (spine.echo at ceiling read, drive.draft at ceiling reversible_write); since 2026-09-05 a refusal answers as data: refused true, reason, intent_id, state, action, known_actions, HTTP 200, and an executor's own refusal is carried through with the reason posted into the ledger (receipt says marked true); successful executions are not saved |
 | Drive Draft Writer workflow (Build 16) | `FdQgiX2Thgk38CSa` | webhook `devon-drive-draft` (POST, x-devon-key), called only by the Action Router as action `drive.draft` at ceiling reversible_write; requires a granted, unexpired approval on every envelope whatever the blast radius label says; the entry report carries a single flight lock (execution running under this workflow, ten minute age out) and nothing is written unless the ledger took it; finds an existing draft by idempotency key and intent id, Cerebras writes the draft, one Google Doc in the DRAFT_FOLDERS folder for the Area, the file is read back under its key so the artifact records properties_verified, advances AUTHORIZED to EXECUTING with the artifact; refusals answer as data; source in `n8n/devon/drive-draft-writer/`; successful executions are not saved |
 | devon_chat_log table | `DKCusDJfIF8CPxyb` | Face memory, one row per turn: session_id, role (user or assistant), content, at, action (none, file_job, dry_run), intent_id; no tokens, no secrets |
+
+### Soul Committer v3: lessons only (grouping Phase 2, 2026-10-11)
+
+Tee ruled four things on 2026-10-11: one card per lesson, and that card is the
+lesson's approval; a rejected card and an expired one both close it for good;
+the committer reads the members' ledger rows and the group log row itself;
+and the app's recall readers filter on status active in the same phase.
+
+- A PROMOTE feed row is carded only when the group log row with the same
+  `learning_intent_id` (the feed row's `intent_id`) reads state FED,
+  gate_decision PROMOTE, conflict_status clear, a receipt_id, a lesson_key,
+  and 2 to 5 distinct member ULIDs; when the feed row's own lesson_key and
+  member list, if present, agree with it; when the group's member list is an
+  array of ULIDs and nothing else; when every member has exactly one
+  ledger row that is COMPLETED, verification passed, human_watch, with a
+  readable envelope naming itself, a `verify_card REQ-... approved by Tee`
+  evidence line and a readable verified_at; and when no member appears in ANY
+  commit-log row. The ledger read is `Fetch Member Jobs` (those three column
+  filters); the group read is `Fetch Lesson Groups`.
+- The card's `what_happens` quotes the claim byte for byte, the lesson key,
+  the area and the learning intent, then for each member its id, verify card,
+  verified_at, `receipt.summary` and every verification evidence line,
+  verbatim and uncut, then the receipt id, the conflict status and the
+  top_match exactly as the group row holds them. Every line of an excerpt
+  after its first is fenced with `     | `, so a multi-line summary cannot
+  print a line that reads as the card's own. `evidence` still starts
+  `intent <learning_intent_id>;`.
+- A card already in the queue for the intent (a lost response) is ADOPTED
+  only when this poll reads the lesson as sound AND the queued `what_happens`
+  quotes the exact claim that would be committed. A queued card for an
+  unsound lesson is refused with its request id kept on the REFUSED row, so
+  approving it commits nothing; a queued text that does not quote the claim
+  is left alone and the committer raises its own card. Fixed after the
+  Phase 2 critic, which showed the old evidence-prefix adoption could skip
+  every lesson check.
+- Anything else is REFUSED for good: one commit-log row in state REFUSED
+  with every reason in the note, and one email through Notify Propose
+  Failures naming the jobs it burns. Nothing reaches the queue or devon-soul.
+  The row lists members only when its group row reads PROMOTE (`[]` when there
+  is no such group row), BUT the row's own `intent_id` always counts as used:
+  a hand corrected single job PROMOTE that is refused burns that job until the
+  row is deleted. To read a refused lesson again after the cause is fixed,
+  delete its commit-log row on Tee's ruling.
+- CONTRACT FOR PHASE 3, which the feeder and the gate must keep:
+  1. Write the group row FED with the decision, receipt id, conflict status
+     and top match BEFORE the feed log row. A feed row written first is
+     refused for good.
+  2. Write the feed row's claim from the gate's own answer (`gate.claim`, the
+     text it searched), never from a later registry read. The repair path
+     that writes a missing feed row without a second POST may write it only
+     when the registry row's current `claim_sha` equals the group row's
+     `claim_sha`; otherwise mark the group STUCK, name both shas, and send one
+     email. Once the registry table exists, the committer also compares the
+     registry claim and `claim_sha` with the feed claim and the group row and
+     refuses on a difference. Until then nothing binds the carded claim to
+     the searched one except this rule (Phase 2 critic, F1 and CS2).
+  3. Build E6's `committedIds` from every commit-log row's `intent_id` and
+     `source_intent_ids`, which is what the committer reads, in the feeder
+     AND in the gate: the gate needs its own Fetch Commit Log
+     (`x8U4QqvXTVgINg3h`, id mode, executeOnce, alwaysOutputData with the
+     empty item guard), because the rule block refuses every member when the
+     list was not read.
+  4. Form Lesson Groups appends each group it forms to `ctx.groups` as a
+     FORMED row before it picks members for the next key, so two keys
+     declaring one job cannot both take it in one run; T5 covers two keys
+     sharing one declared job. Decide in Phase 3 whether the gate's E6 reads
+     the whole group log or only its own row; with only its own row, the
+     group half of E6 is empty at the gate and rests on the feeder.
+- Resolve Approved commits only a row carrying a lesson_key and 2 to 5
+  distinct members; any other approved row writes nothing and stays PROPOSED
+  for good, since Resolve Closed skips approved rows. The Pulse cannot see the
+  approval: from 48 hours it lists the row under cards_expiring as still
+  needing a decision, and from 76 hours (EXPIRY_H 72 plus RESOLVE_GRACE_H 4 in
+  `compose_pulse.js`) it raises soul_overdue, whose text names the 96 hour
+  absence window and a failing commit, neither of which applies. Read the
+  row's lesson_key and source_intent_ids.
+- Proven on a throwaway copy with every store and host stubbed (T6,
+  executions 2674 to 2676 of `ujNCbaYsTdiINpdr`): the card, a refusal with no
+  group, a refusal for a reused member, a commit, a rejection, and an idle
+  run; then, with the critic's fixes, executions 2681 and 2682: a fenced
+  multi-line excerpt with one Conflict check line, a refusal email naming the
+  burned jobs, a junk member list refused. The copy is archived and its four
+  throwaway tables deleted. The same runs settled that a defineBelow update preserves the columns
+  it does not name: lesson_key and source_intent_ids survived both Update
+  Commit Log and Update Closed Rows.
 
 ### Soul Committer v2 semantics (why it is shaped this way)
 
@@ -282,13 +368,24 @@ not read:
 
 ## Soul record shape (committer → devon-soul)
 
-Mirrors `SoulWriteCandidate.to_record()` in `services/intelligence/soul.py`:
+Mirrors `SoulWriteCandidate.to_record()` in `services/intelligence/soul.py`,
+same keys in the same order, held equal by `committer.test.mjs`. Since
+2026-10-11 (grouping Phase 2):
 ```json
 {"_id": "devon-<YYYY-MM-DD>-<FULL request_id>", "text": "<claim>", "kind": "lesson",
  "area": "...", "observed_on": "YYYY-MM-DD",
- "source_note": "Build 12 learning gate PROMOTE; source intent ...; approval ...",
- "author": "devon", "approved": true}
+ "source_note": "Build 12 lesson <key> PROMOTE; learning intent <id>; sources <ids>; approval <request_id>",
+ "author": "devon", "approved": true, "status": "active",
+ "lesson_key": "<key>", "learning_intent_id": "<ULID>",
+ "source_intent_ids": ["<ULID>", "<ULID>"]}
 ```
+`status: active` is on every record `to_record` builds, lesson or not; the
+three lesson fields appear only when there is a lesson, never empty. Recall
+hides a record that carries a status other than active, compared without
+regard to case; a record with no status field, at the top level or in its
+metadata, reads as active, which covers every tee ruling and every devon
+record written before 2026-10-11 (`is_active` in `soul.py`, `_is_active` in
+`deploy/soul/main.py`, held equal by a test).
 `kind` must be one of lesson/correction/pattern/preference (ALLOWED_KINDS).
 The `_id` embeds the FULL request id with its case intact (example:
 `devon-2026-08-25-REQ-20260825-Ab12Cd`), so it derives deterministically from

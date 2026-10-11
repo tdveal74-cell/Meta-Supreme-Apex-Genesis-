@@ -4,7 +4,7 @@ type: SYS_SPEC
 version: 1
 date: 2026-10-07
 area: Systems
-status: Phase 0 and Phase 1 built 2026-10-08 on Tee's ruling, Phases 2 to 4 proposed
+status: Phase 0 and Phase 1 built 2026-10-08 and Phase 2 built 2026-10-11 on Tee's rulings, Phases 3 and 4 proposed
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 base_commit: 67694be
 owner: DEVON
@@ -20,7 +20,18 @@ written. Tee ruled Phase 0 and Phase 1 built on 2026-10-08, and they are: the
 rule block and the lesson registry in the repo, the recall filter, and the
 gate's preflight published live as version `e4da9aed`, then re-published as
 `dc307024` after the critic. What shipped, what moved to Phase 3 and what was found is recorded
-in `docs/devon/SYS_OPS_learning-lane-grouping-phase-0-and-1_v1_2026-10-08-0650.md`. Phases 2 to 4 below are still proposals.
+in `docs/devon/SYS_OPS_learning-lane-grouping-phase-0-and-1_v1_2026-10-08-0650.md`.
+
+**Status note, 2026-10-11.** Phase 2 is built on Tee's rulings of that day:
+the Soul Committer cards lessons only and is live as `69829bd0`, the record
+carries `status: active` and the lesson fields, and the app's three recall
+readers filter on status in the repo, live once the api, scheduler-cron and
+devon-soul deploys of the merge are read back. Two Phase 3 items moved forward
+to make it work: the group log table `devon_lesson_group_log` exists, empty,
+so the committer can read it, and the commit log has its two new columns. What
+shipped and what was found is in `docs/devon/SYS_OPS_learning-lane-grouping-phase-2_v1_2026-10-11-1250.md`, and
+the Phase 2 critic added four items to Phase 3, marked below where they apply.
+Phases 3 and 4 below are still proposals.
 
 No workflow, data table, repo file, Pinecone index or service was changed to
 produce this document. Everything below is a proposal for Tee to approve or
@@ -234,6 +245,10 @@ and C:
      - `learning_intent_id` is a ULID, minted once from `crypto.getRandomValues`
        and stored.
    - If a `group_key` already exists in any state, the group is skipped.
+   - Added by the Phase 2 critic: each group formed in a run is appended to
+     the run's own group list as a FORMED row before members are picked for
+     the next key, so two keys that declare one job cannot both take it in one
+     run. T5 covers two keys sharing one declared job.
    - This keeps the estate's invariant: the intent is committed durably before
      the adapter runs.
 4. **FEED.**
@@ -273,6 +288,13 @@ and C:
      `source_intent_ids` and an `evidence_note`. That row is the committer's
      existing intake. If a group row says PROMOTE but has no feed log row, the
      next run repairs it without a second POST.
+   - Added by the Phase 2 critic: the group row is written FED before the feed
+     log row, because the committer refuses for good a PROMOTE whose group row
+     is not yet FED. The feed row's claim is copied from the gate's answer,
+     the text it searched. The repair writes the feed row only when the
+     registry's current `claim_sha` equals the group row's; otherwise the
+     group is marked STUCK, both shas are named, and one email goes out, so a
+     reworded claim is never carded under an older receipt.
    - **On a non-2xx answer,** the row becomes FAILED, `attempts` goes up by one,
      and the next run retries under the same `learning_intent_id`. At 5
      attempts the row becomes STUCK, one email goes out, and it is never posted
@@ -483,7 +505,8 @@ the synthetic empty item.
 | Fetch Group Log | the feeder's group log, filter `learning_intent_id eq` | registration match |
 | Fetch Registry | `devon_lesson_registry`, filter `lesson_key eq` | the key's status, claim, area, scope, `min_sources` and `evidence_ids` |
 | Fetch Source Rows | ledger `QZvdxllOjWevb3Vo`, `anyCondition` over five `intent_id eq` slots | the members' own rows |
-| Evidence Verifier | the three reads above | runs E1 to E6 and I1 to I7, computes the verified count, sets `search_needed` |
+| Fetch Commit Log | commit log `x8U4QqvXTVgINg3h`, no filter (added by the Phase 2 critic) | E6's commit half: every row's `intent_id` and `source_intent_ids`, built as the feeder and the committer build it; without it the rule block refuses every member |
+| Evidence Verifier | the four reads above | runs E1 to E6 and I1 to I7, computes the verified count, sets `search_needed` |
 | Preflight Passed (IF) | the verifier's output | true goes to the issuer; false goes to Refuse Before Search |
 | Refuse Before Search | the verifier's output | emits the normal response shape, with `gate.decision` set and `receipt: null` |
 
@@ -1117,6 +1140,15 @@ Each item puts the recommended answer first.
     - Recommended: yes. Neither can write to any store.
 
 ### Ruled since
+
+- **2026-10-11, on four cards, for Phase 2.** Decision 8: yes, one card per
+  lesson, and the Soul Committer card is the lesson's approval. Decision 6:
+  a rejection and an expiry both close the group for good and burn its
+  members, and the key stays open. The card's member excerpts, receipt and
+  top match are read by the committer itself, from the ledger and the group
+  log, rather than packed by the feeder into a note of up to 1000 characters,
+  so every excerpt is verbatim and uncut. And the app's recall readers gain
+  the status filter in Phase 2 rather than in a later PR.
 
 - **2026-10-11, on a card: the second job comes from real work.** The ledger
   holds one eligible job, the 2026-09-16 cutover, and a lesson needs two. Tee
