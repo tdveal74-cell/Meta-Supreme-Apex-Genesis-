@@ -52,7 +52,8 @@ and the app's recall readers filter on status active in the same phase.
   `learning_intent_id` (the feed row's `intent_id`) reads state FED,
   gate_decision PROMOTE, conflict_status clear, a receipt_id, a lesson_key,
   and 2 to 5 distinct member ULIDs; when the feed row's own lesson_key and
-  member list, if present, agree with it; when every member has exactly one
+  member list, if present, agree with it; when the group's member list is an
+  array of ULIDs and nothing else; when every member has exactly one
   ledger row that is COMPLETED, verification passed, human_watch, with a
   readable envelope naming itself, a `verify_card REQ-... approved by Tee`
   evidence line and a readable verified_at; and when no member appears in ANY
@@ -62,23 +63,59 @@ and the app's recall readers filter on status active in the same phase.
   the area and the learning intent, then for each member its id, verify card,
   verified_at, `receipt.summary` and every verification evidence line,
   verbatim and uncut, then the receipt id, the conflict status and the
-  top_match exactly as the group row holds them. `evidence` still starts
-  `intent <learning_intent_id>;`, so adoption is unchanged.
+  top_match exactly as the group row holds them. Every line of an excerpt
+  after its first is fenced with `     | `, so a multi-line summary cannot
+  print a line that reads as the card's own. `evidence` still starts
+  `intent <learning_intent_id>;`.
+- A card already in the queue for the intent (a lost response) is ADOPTED
+  only when this poll reads the lesson as sound AND the queued `what_happens`
+  quotes the exact claim that would be committed. A queued card for an
+  unsound lesson is refused with its request id kept on the REFUSED row, so
+  approving it commits nothing; a queued text that does not quote the claim
+  is left alone and the committer raises its own card. Fixed after the
+  Phase 2 critic, which showed the old evidence-prefix adoption could skip
+  every lesson check.
 - Anything else is REFUSED for good: one commit-log row in state REFUSED
-  with every reason in the note and the group's member ids (`[]` when no group
-  row exists, so nothing unverified is burned), and one email through Notify
-  Propose Failures. Nothing reaches the queue or devon-soul. To read a refused
-  lesson again after the cause is fixed, delete its commit-log row on Tee's
-  ruling.
-- CONTRACT FOR PHASE 3, which the feeder must keep: write the group row FED
-  with the decision, receipt id, conflict status and top match BEFORE the feed
-  log row; write the feed row's claim as the claim the gate searched; and
-  build E6's `committedIds` from every commit-log row's `intent_id` and
-  `source_intent_ids`, which is what the committer reads. A feed row written
-  first would be refused for good.
+  with every reason in the note, and one email through Notify Propose
+  Failures naming the jobs it burns. Nothing reaches the queue or devon-soul.
+  The row lists members only when its group row reads PROMOTE (`[]` when there
+  is no such group row), BUT the row's own `intent_id` always counts as used:
+  a hand corrected single job PROMOTE that is refused burns that job until the
+  row is deleted. To read a refused lesson again after the cause is fixed,
+  delete its commit-log row on Tee's ruling.
+- CONTRACT FOR PHASE 3, which the feeder and the gate must keep:
+  1. Write the group row FED with the decision, receipt id, conflict status
+     and top match BEFORE the feed log row. A feed row written first is
+     refused for good.
+  2. Write the feed row's claim from the gate's own answer (`gate.claim`, the
+     text it searched), never from a later registry read. The repair path
+     that writes a missing feed row without a second POST may write it only
+     when the registry row's current `claim_sha` equals the group row's
+     `claim_sha`; otherwise mark the group STUCK, name both shas, and send one
+     email. Once the registry table exists, the committer also compares the
+     registry claim and `claim_sha` with the feed claim and the group row and
+     refuses on a difference. Until then nothing binds the carded claim to
+     the searched one except this rule (Phase 2 critic, F1 and CS2).
+  3. Build E6's `committedIds` from every commit-log row's `intent_id` and
+     `source_intent_ids`, which is what the committer reads, in the feeder
+     AND in the gate: the gate needs its own Fetch Commit Log
+     (`x8U4QqvXTVgINg3h`, id mode, executeOnce, alwaysOutputData with the
+     empty item guard), because the rule block refuses every member when the
+     list was not read.
+  4. Form Lesson Groups appends each group it forms to `ctx.groups` as a
+     FORMED row before it picks members for the next key, so two keys
+     declaring one job cannot both take it in one run; T5 covers two keys
+     sharing one declared job. Decide in Phase 3 whether the gate's E6 reads
+     the whole group log or only its own row; with only its own row, the
+     group half of E6 is empty at the gate and rests on the feeder.
 - Resolve Approved commits only a row carrying a lesson_key and 2 to 5
-  distinct members; any other approved row writes nothing and stays PROPOSED,
-  which the Pulse names once it is open past 96 hours.
+  distinct members; any other approved row writes nothing and stays PROPOSED
+  for good, since Resolve Closed skips approved rows. The Pulse cannot see the
+  approval: from 48 hours it lists the row under cards_expiring as still
+  needing a decision, and from 76 hours (EXPIRY_H 72 plus RESOLVE_GRACE_H 4 in
+  `compose_pulse.js`) it raises soul_overdue, whose text names the 96 hour
+  absence window and a failing commit, neither of which applies. Read the
+  row's lesson_key and source_intent_ids.
 - Proven on a throwaway copy with every store and host stubbed (T6,
   executions 2674 to 2676 of `ujNCbaYsTdiINpdr`): the card, a refusal with no
   group, a refusal for a reused member, a commit, a rejection, and an idle
@@ -341,8 +378,11 @@ same keys in the same order, held equal by `committer.test.mjs`. Since
 ```
 `status: active` is on every record `to_record` builds, lesson or not; the
 three lesson fields appear only when there is a lesson, never empty. Recall
-hides a record whose status is anything but active (`is_active` in
-`soul.py`, `_is_active` in `deploy/soul/main.py`, held equal by a test).
+hides a record that carries a status other than active, compared without
+regard to case; a record with no status field, at the top level or in its
+metadata, reads as active, which covers every tee ruling and every devon
+record written before 2026-10-11 (`is_active` in `soul.py`, `_is_active` in
+`deploy/soul/main.py`, held equal by a test).
 `kind` must be one of lesson/correction/pattern/preference (ALLOWED_KINDS).
 The `_id` embeds the FULL request id with its case intact (example:
 `devon-2026-08-25-REQ-20260825-Ab12Cd`), so it derives deterministically from

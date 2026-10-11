@@ -12,9 +12,12 @@
 // stands on, read from the commit-log row the card was raised with, and says
 // status active so recall shows it. A row without a lesson key and 2 to 5
 // distinct member ids is NOT committed and nothing is written: it stays
-// PROPOSED, the approval stands, and the Pulse names it once it is open past
-// 96 hours. That is the direction that fails closed if the commit log ever
-// loses those columns; once they are back the next poll commits it.
+// PROPOSED, the approval stands, and the Pulse names it as soul_overdue once
+// it is open past 76 hours (EXPIRY_H 72 plus RESOLVE_GRACE_H 4 in
+// compose_pulse.js); that finding does not say why, so read the row's
+// lesson_key and source_intent_ids. That is the direction that fails closed if
+// the commit log ever loses those columns; once they are back the next poll
+// commits it.
 function idList(v) {
   let s;
   if (typeof v === 'string') { s = v; }

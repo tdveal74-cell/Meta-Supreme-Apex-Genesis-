@@ -49,7 +49,9 @@ Build 02 state ledger (n8n data table, jobs one row per intent)
 A single job can never PROMOTE: a lesson is something Tee declares in
 `services/devon/lesson_registry.py`, and grouping is specified in
 `docs/devon/SYS_SPEC_learning-lane-grouping_v1_2026-10-07.md` (Phase 0 and
-Phase 1 built 2026-10-08, Phase 2 built 2026-10-11, Phase 3 not yet). The independence rules
+Phase 1 built 2026-10-08, Phase 2 built 2026-10-11 with the committer live
+and the app's recall filter live only once its deploys are read back, Phase 3
+not yet). The independence rules
 live once in `n8n/devon/learning/lesson_evidence.js`.
 
 Weak conflict matches (score < 0.35) clear; adjacent and strong matches stop at

@@ -474,6 +474,14 @@ def test_active_only_keeps_a_partial_failure_in_errors():
         ({"metadata": {"status": "superseded"}}, False),
         ({"status": None, "metadata": {"status": "superseded"}}, False),
         ({"status": "active", "metadata": {"status": "superseded"}}, True),
+        # Added after the Phase 2 critic: every one of these separates the two
+        # readings if either starts stripping, folding or truth testing.
+        ({"status": " active"}, False),
+        ({"status": "active\n"}, False),
+        ({"status": False}, False),
+        ({"status": ["active"]}, False),
+        ({"metadata": {"status": None}}, True),
+        ({"metadata": ""}, True),
     ],
 )
 def test_is_active_reads_exactly_as_the_soul_service_does(record, expected):
@@ -498,35 +506,60 @@ def test_is_active_reads_exactly_as_the_soul_service_does(record, expected):
 
 def test_every_app_recall_reads_active_records_only():
     """A new reader of the soul that forgets the filter would show a
-    superseded record as context. Every call to `.recall(` in app/ and
-    services/ must sit in a statement that also calls `.active_only()`.
-    The soul service (deploy/soul) is outside both trees on purpose: it
-    filters on its own routes and its conflict search needs the raw window."""
+    superseded record as context. Every `.recall(` call in app/, apps/,
+    services/ and scripts/ must be the receiver of `.active_only()`, read call
+    by call rather than statement by statement, so a call in an if, for, while
+    or with header, a call beside a filtered one in the same statement, a
+    `.recall` taken without calling it, and getattr(x, "recall") are all
+    caught. Found 2026-10-11 by the Phase 2 critic, whose six probes passed the
+    first, statement level version. The soul service (deploy/soul) is outside
+    these trees on purpose: it filters on its own routes and its conflict
+    search needs the raw window."""
     import ast
     import pathlib
 
     offenders = []
     calls = 0
-    for root in ("app", "services"):
+    for root in ("app", "apps", "services", "scripts"):
         for path in sorted(pathlib.Path(root).rglob("*.py")):
+            if "node_modules" in path.parts:
+                continue
             source = path.read_text(encoding="utf-8")
-            if ".recall(" not in source:
+            if "recall" not in source:
                 continue
             tree = ast.parse(source)
-            for stmt in ast.walk(tree):
-                if not isinstance(stmt, ast.stmt) or isinstance(
-                    stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Try, ast.If, ast.With, ast.AsyncWith, ast.For, ast.While)
+            parent = {}
+            for node in ast.walk(tree):
+                for child in ast.iter_child_nodes(node):
+                    parent[child] = node
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id == "getattr"
+                    and len(node.args) >= 2
+                    and isinstance(node.args[1], ast.Constant)
+                    and node.args[1].value == "recall"
                 ):
+                    offenders.append(f"{path}:{node.lineno} getattr recall")
+                if not (isinstance(node, ast.Attribute) and node.attr == "recall"):
                     continue
-                names = [
-                    n.func.attr
-                    for n in ast.walk(stmt)
-                    if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
-                ]
-                if "recall" in names:
-                    calls += 1
-                    if "active_only" not in names:
-                        offenders.append(f"{path}:{stmt.lineno}")
+                call = parent.get(node)
+                if not (isinstance(call, ast.Call) and call.func is node):
+                    offenders.append(f"{path}:{node.lineno} recall taken without a call")
+                    continue
+                calls += 1
+                up = parent.get(call)
+                if isinstance(up, ast.Await):
+                    up = parent.get(up)
+                filtered = (
+                    isinstance(up, ast.Attribute)
+                    and up.attr == "active_only"
+                    and isinstance(parent.get(up), ast.Call)
+                    and parent[up].func is up
+                )
+                if not filtered:
+                    offenders.append(f"{path}:{node.lineno}")
     assert calls >= 3, f"expected the three app readers, found {calls} recall call(s)"
     assert offenders == [], f"recall without active_only: {offenders}"
 

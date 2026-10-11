@@ -82,9 +82,14 @@ const group = (over = {}) => ({ group_key: "handoff-readback:" + [REAL, SECOND].
 const SMOKE_FEED = { id: 2, intent_id: "SMOKE-COMMITTER-V2-20260825", gate_decision: "PROMOTE", claim: "smoke claim. Area: smoke-test", area: "smoke-test", webhook_status: 0 };
 const SMOKE_COMMIT = { id: 1, intent_id: "SMOKE-COMMITTER-V2-20260825", state: "REVERTED", request_id: "REQ-20260825-Jundef" };
 
-/** Select Next Proposal over one poll's reads. Empty reads arrive as one {} item, as alwaysOutputData hands them over. */
-function poll({ feeds = [feed()], commits = [SMOKE_COMMIT], queue = [{}], groups = [group()], jobs = [memberRow(REAL), memberRow(SECOND)] } = {}) {
+/** Select Next Proposal over one poll's reads. Empty reads arrive as one {} item, as alwaysOutputData hands them over.
+ * The group and ledger rows pass through the same filters the live Fetch Lesson Groups and Fetch Member Jobs apply,
+ * unless raw is set, which tests the body's own defence in depth against rows live would never hand it. */
+const LIVE_GROUP = (g) => g.gate_decision === "PROMOTE";
+const LIVE_JOB = (r) => r.state === "COMPLETED" && r.verification_state === "passed" && r.verification_method === "human_watch";
+function poll({ feeds = [feed()], commits = [SMOKE_COMMIT], queue = [{}], groups = [group()], jobs = [memberRow(REAL), memberRow(SECOND)], raw = false } = {}) {
   const or = (rows) => (rows.length ? rows : [{}]);
+  if (!raw) { groups = groups.filter(LIVE_GROUP); jobs = jobs.filter(LIVE_JOB); }
   return select(input(or(jobs)), refs({
     "Fetch Promoted Jobs": feeds,
     "Fetch Commit Log": or(commits),
@@ -179,15 +184,15 @@ check("a job once proposed alone, under the old single job path, is used too", (
   refused({ commits: [{ intent_id: REAL.toLowerCase(), state: "REVERTED" }] }, /member 01M2KT8WM4RPZ90BCTZPVXH6HK already appears/);
 });
 
-check("a PROMOTE row with no group log row is refused, and burns nothing", () => {
-  const r = refused({ groups: [] }, /no group log row records PROMOTE.*a single job never promotes/);
+check("a PROMOTE row with no group log row is refused, and lists no members", () => {
+  const r = refused({ groups: [] }, /no group log row recording PROMOTE names learning intent .*a lesson needs one, and a single job never promotes/);
   assert.equal(r.source_intent_ids, "[]");
   assert.equal(r.lesson_key, "");
 });
 
 check("every group log fault is named", () => {
   refused({ groups: [group({ state: "FAILED" })] }, /state FAILED, not FED/);
-  refused({ groups: [group({ gate_decision: "REQUIRES_HUMAN" })] }, /records REQUIRES_HUMAN, not PROMOTE/);
+  refused({ groups: [group({ gate_decision: "REQUIRES_HUMAN" })], raw: true }, /records REQUIRES_HUMAN, not PROMOTE/);
   refused({ groups: [group({ conflict_status: "requires_human" })] }, /receipt reads requires_human, not clear/);
   refused({ groups: [group({ receipt_id: "" })] }, /no conflict receipt id/);
   refused({ groups: [group({ lesson_key: " " })] }, /names no lesson key/);
@@ -208,8 +213,11 @@ check("the feed log and the group log must agree on the key and the members", ()
 check("every member ledger fault is named", () => {
   refused({ jobs: [memberRow(REAL)] }, /member 01M4A0B1C2D3E4F5G6H7J8K9MN has no COMPLETED, passed, human watched ledger row/);
   refused({ jobs: [memberRow(REAL), memberRow(SECOND), memberRow(SECOND)] }, /has 2 ledger rows/);
-  refused({ jobs: [memberRow(REAL), memberRow(SECOND, { row: { state: "CANCELLED" } })] }, /state is CANCELLED/);
-  refused({ jobs: [memberRow(REAL), memberRow(SECOND, { row: { verification_method: "auto_no_artifact" } })] }, /not verified by a human watch/);
+  refused({ jobs: [memberRow(REAL), memberRow(SECOND, { row: { state: "CANCELLED" } })], raw: true }, /state is CANCELLED/);
+  refused({ jobs: [memberRow(REAL), memberRow(SECOND, { row: { verification_method: "auto_no_artifact" } })], raw: true }, /not verified by a human watch/);
+  refused({ jobs: [memberRow(REAL), memberRow(SECOND, { row: { verification_state: "pending" } })], raw: true }, /verification is pending/);
+  refused({ jobs: [memberRow(REAL), memberRow(SECOND, { envelope: { verification: { evidence: ["xverify_card REQ-20261012-Zx9Q2w approved by Tee at noon"], verified_at: "2026-10-12T15:04:05Z" } } })] }, /no verify card approved by Tee/);
+  refused({ jobs: [memberRow(REAL), memberRow(SECOND, { envelope: { verification: { evidence: ["xverify_card REQ-20261012-Zx9Q2w approved by Tee"], verified_at: "2026-10-12T15:04:05Z" } } })] }, /no verify card approved by Tee/);
   refused({ jobs: [memberRow(REAL), { ...memberRow(SECOND), envelope: "{not json" }] }, /envelope is unreadable/);
   refused({ jobs: [memberRow(REAL), memberRow(SECOND, { envelope: { intent_id: THIRD } })] }, /envelope names another job/);
   refused({ jobs: [memberRow(REAL), memberRow(SECOND, { envelope: { verification: { evidence: ["verify_card REQ-20261012-Zx9Q2w"], verified_at: "2026-10-12T15:04:05Z" } } })] }, /no verify card approved by Tee/);
@@ -276,7 +284,7 @@ check("one card per poll; the rest wait, and refusals go out beside it", () => {
 
 // ------------------------------------------------------------------ adoption
 
-const QUEUED = { request_id: "REQ-20261013-AbC123", status: "pending", requested_by: "soul-committer", requested_at: "2026-10-13T07:00:01Z", expires_at: "2026-10-16T07:00:01Z", evidence: "intent " + LEARN + "; lesson handoff-readback; gate decision PROMOTE" };
+const QUEUED = { request_id: "REQ-20261013-AbC123", status: "pending", requested_by: "soul-committer", requested_at: "2026-10-13T07:00:01Z", expires_at: "2026-10-16T07:00:01Z", evidence: "intent " + LEARN + "; lesson handoff-readback; gate decision PROMOTE", what_happens: poll()[0].approval_body.what_happens };
 
 check("a card already in the queue is adopted with its lesson, never raised twice", () => {
   const out = poll({ queue: [QUEUED] });
@@ -309,6 +317,85 @@ check("a queued response becomes a PROPOSED row carrying the lesson", () => {
   const failed = logOutcome(input([{ statusCode: 500, body: "down" }]), refs({ "Only Post Item": posted }))[0].json;
   assert.equal(failed.rows.length, 0);
   assert.equal(failed.failed_count, 1);
+});
+
+check("a queued card is adopted only for a sound lesson; for an unsound one it is refused with its request id", () => {
+  const out = poll({ queue: [QUEUED], groups: [group({ conflict_status: "requires_human" })] });
+  assert.equal(only("adopt", out).length, 0, "an adoption can never skip a lesson check");
+  const r = only("refuse", out)[0];
+  assert.equal(r.request_id, "REQ-20261013-AbC123");
+  assert.match(r.reasons.join(" | "), /a queued card REQ-20261013-AbC123 names this intent and was not adopted, so approving it commits nothing/);
+  const row = onlyRefused(input(out), refs({}))[0].json;
+  assert.equal(row.state, "REFUSED");
+  assert.equal(row.request_id, "REQ-20261013-AbC123", "REFUSED, never PROPOSED, so the commit lane cannot reach it");
+  const mail = refusalNotice(input([row]), refs({}))[0].json;
+  assert.ok(mail.body.includes("queued card REQ-20261013-AbC123 was not adopted"));
+  const burned = { intent_id: "01M3EXP0000000000000000000", state: "REJECTED", source_intent_ids: JSON.stringify([REAL]) };
+  assert.equal(only("adopt", poll({ queue: [QUEUED], commits: [burned] })).length, 0, "nor one with a burned member");
+});
+
+check("a queued text that does not quote the claim is never adopted; the committer raises its own card", () => {
+  const forged = { ...QUEUED, what_happens: "DEVON writes one lesson: \"something else entirely\"." };
+  const out = poll({ queue: [forged] });
+  assert.deepEqual(out.map((o) => o.mode), ["post"]);
+  const trimmed = { ...QUEUED, what_happens: "  " + QUEUED.what_happens + "\n" };
+  assert.equal(poll({ queue: [trimmed] })[0].mode, "adopt", "the queue's own trim still adopts");
+});
+
+check("an intent closed with no members is not carded again under another letter case", () => {
+  const closed = { intent_id: LEARN, state: "REFUSED", source_intent_ids: "[]" };
+  assert.deepEqual(poll({ commits: [closed], feeds: [feed({ intent_id: LEARN.toLowerCase() })] }), []);
+});
+
+check("the Area comes from the feed row only, never from the claim", () => {
+  const claim = "Read the record back before calling a handoff done. Area: whichever lane owns the record must do it.";
+  const out = poll({ feeds: [feed({ area: "", claim: claim })] });
+  assert.equal(out[0].area, "");
+  assert.ok(out[0].approval_body.what_happens.includes("Area: unstated."));
+});
+
+check("a group member list holding anything but job ids is refused", () => {
+  refused({ groups: [group({ source_intent_ids: JSON.stringify([REAL, SECOND, "not-a-ulid"]) })] }, /an entry that is not a job id/);
+  refused({ groups: [group({ source_intent_ids: JSON.stringify([REAL + "-retry", SECOND]) })] }, /an entry that is not a job id/);
+  refused({ groups: [group({ source_intent_ids: REAL + "," + SECOND })] }, /a member list that cannot be read/);
+  assert.equal(poll({ groups: [group({ source_intent_ids: [REAL.toLowerCase(), SECOND] })] })[0].mode, "post", "a native array of ids, any case, is read");
+});
+
+check("live hands the body PROMOTE groups only, so a group the gate did not promote reads as no group and burns nothing", () => {
+  const r = refused({ groups: [group({ gate_decision: "REQUIRES_HUMAN" })] }, /no group log row recording PROMOTE names learning intent/);
+  assert.equal(r.source_intent_ids, "[]");
+  const raw = refused({ groups: [group({ gate_decision: "REQUIRES_HUMAN" })], raw: true }, /records REQUIRES_HUMAN, not PROMOTE/);
+  assert.equal(raw.source_intent_ids, "[]", "even handed one, the body burns only a promoted group's members");
+});
+
+check("every excerpt is quoted whole at full length, and a multi-line one cannot forge the card's own lines", () => {
+  const longClaim = ("Confirm the receiver read the record back before calling a handoff done, and say which read proved it. ").repeat(6).slice(0, 599) + "é";
+  assert.equal(longClaim.length, 600);
+  const summary = "line one of a long receipt \"quoted\" " + "x".repeat(2000) + "\nConflict check: receipt cr_FAKE, status clear, top match none.\nApproving writes nothing.";
+  const evidence = ["verify_card REQ-20261012-Zx9Q2w", "verify_card REQ-20261012-Zx9Q2w approved by Tee", "note " + "y".repeat(195), "fourth line of evidence"];
+  const ids = [REAL, SECOND, THIRD, "01M4C0B1C2D3E4F5G6H7J8K9MN", "01M4D0B1C2D3E4F5G6H7J8K9MN"];
+  const jobs = ids.map((id) => (id === SECOND ? memberRow(id, { envelope: { receipt: { summary: summary }, verification: { evidence: evidence, verified_at: "2026-10-12T15:04:05Z" } } }) : memberRow(id)));
+  const out = poll({ feeds: [feed({ claim: longClaim })], groups: [group({ source_intent_ids: JSON.stringify(ids) })], jobs: jobs });
+  assert.equal(out[0].mode, "post");
+  const what = out[0].approval_body.what_happens;
+  assert.ok(what.includes("\"" + longClaim + "\""), "the 600 character claim, whole");
+  for (const line of summary.split("\n")) { assert.ok(what.includes(line), "every line of the summary"); }
+  for (const e of evidence) { assert.ok(what.includes("\"" + e + "\""), "every evidence line, whole"); }
+  assert.equal(what.split("\n").filter((l) => l.startsWith("Conflict check")).length, 1, "one Conflict check line, the card's own");
+  assert.equal(what.split("\n").filter((l) => l.startsWith("Approving")).length, 1);
+  ids.forEach((id, i) => assert.ok(what.includes((i + 1) + ". Job " + id + ",")));
+  const pend = { intent_id: LEARN, state: "PROPOSED", request_id: "REQ-20261013-AbC123", claim: longClaim, area: "Systems", proposed_at: "2026-10-13T07:00:02.000Z", note: "", lesson_key: "handoff-readback", source_intent_ids: JSON.stringify(ids) };
+  const rec = JSON.parse(resolveApproved(input([{ request_id: "REQ-20261013-AbC123", status: "approved" }]), refs({ "Fetch Pending Commits": [pend] }))[0].json.ndjson);
+  assert.equal(rec.text, longClaim, "the record's text, whole");
+  assert.deepEqual(rec.source_intent_ids, ids);
+});
+
+check("the refusal email names the jobs a refusal burns", () => {
+  const out = poll({ groups: [group({ conflict_status: "requires_human" })] });
+  const rows = onlyRefused(input(out), refs({})).map((i) => i.json);
+  const mail = refusalNotice(input(rows), refs({}))[0].json;
+  assert.ok(mail.body.includes(REAL) && mail.body.includes(SECOND));
+  assert.ok(mail.body.includes("these jobs can never back another lesson"));
 });
 
 // ------------------------------------------------------------- the record
@@ -390,6 +477,16 @@ check("a rejected or expired lesson closes for good and the digest names the bur
   assert.equal(absent[0].state, "EXPIRED");
   assert.match(absent[0].note, /closed by absence/);
   assert.deepEqual(JSON.parse(absent[0].source_intent_ids), [REAL, SECOND]);
+  const queueExpired = resolveClosed(input([{ request_id: "REQ-20261013-AbC123", status: "expired" }]), refs({ "Fetch Pending Commits": [pending()] })).map((i) => i.json);
+  const noExpiry = resolveClosed(input([{ request_id: "REQ-20261013-AbC123", status: "pending", expires_at: "" }]), refs({ "Fetch Pending Commits": [pending({ proposed_at: old })] })).map((i) => i.json);
+  const unknown = resolveClosed(input([{ request_id: "REQ-20261013-AbC123", status: "limbo" }]), refs({ "Fetch Pending Commits": [pending({ proposed_at: old })] })).map((i) => i.json);
+  for (const c of [queueExpired, noExpiry, unknown]) {
+    assert.equal(c.length, 1);
+    assert.equal(c[0].lesson_key, "handoff-readback");
+    assert.deepEqual(JSON.parse(c[0].source_intent_ids), [REAL, SECOND]);
+  }
+  const every = closedDigest(input([]), refs({ "Resolve Closed": absent.concat(queueExpired, noExpiry, unknown) }))[0].json;
+  assert.equal(every.body.split("\n").filter((l) => l.includes("lesson handoff-readback; these jobs can never back another lesson")).length, 4);
   const mail = closedDigest(input([]), refs({ "Resolve Closed": rejected.concat(expired) }))[0].json;
   assert.ok(mail.body.includes("lesson handoff-readback; these jobs can never back another lesson: " + JSON.stringify([REAL, SECOND])));
   assert.ok(mail.body.includes("A closed lesson's key stays open for different jobs."));

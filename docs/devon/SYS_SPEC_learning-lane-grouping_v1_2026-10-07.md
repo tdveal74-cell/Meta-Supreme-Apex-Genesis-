@@ -25,10 +25,12 @@ in `docs/devon/SYS_OPS_learning-lane-grouping-phase-0-and-1_v1_2026-10-08-0650.m
 **Status note, 2026-10-11.** Phase 2 is built on Tee's rulings of that day:
 the Soul Committer cards lessons only and is live as `e98bda27`, the record
 carries `status: active` and the lesson fields, and the app's three recall
-readers filter on status. Two Phase 3 items moved forward to make it work: the
-group log table `devon_lesson_group_log` exists, empty, so the committer can
-read it, and the commit log has its two new columns. What shipped and what was
-found is in the Phase 2 status doc under `docs/devon/SYS_OPS_learning-lane-grouping-phase-2_*`.
+readers filter on status in the repo, live once the api, scheduler-cron and
+devon-soul deploys of the merge are read back. Two Phase 3 items moved forward
+to make it work: the group log table `devon_lesson_group_log` exists, empty,
+so the committer can read it, and the commit log has its two new columns. What
+shipped and what was found is in `docs/devon/SYS_OPS_learning-lane-grouping-phase-2_v1_2026-10-11-1250.md`, and
+the Phase 2 critic added four items to Phase 3, marked below where they apply.
 Phases 3 and 4 below are still proposals.
 
 No workflow, data table, repo file, Pinecone index or service was changed to
@@ -243,6 +245,10 @@ and C:
      - `learning_intent_id` is a ULID, minted once from `crypto.getRandomValues`
        and stored.
    - If a `group_key` already exists in any state, the group is skipped.
+   - Added by the Phase 2 critic: each group formed in a run is appended to
+     the run's own group list as a FORMED row before members are picked for
+     the next key, so two keys that declare one job cannot both take it in one
+     run. T5 covers two keys sharing one declared job.
    - This keeps the estate's invariant: the intent is committed durably before
      the adapter runs.
 4. **FEED.**
@@ -282,6 +288,13 @@ and C:
      `source_intent_ids` and an `evidence_note`. That row is the committer's
      existing intake. If a group row says PROMOTE but has no feed log row, the
      next run repairs it without a second POST.
+   - Added by the Phase 2 critic: the group row is written FED before the feed
+     log row, because the committer refuses for good a PROMOTE whose group row
+     is not yet FED. The feed row's claim is copied from the gate's answer,
+     the text it searched. The repair writes the feed row only when the
+     registry's current `claim_sha` equals the group row's; otherwise the
+     group is marked STUCK, both shas are named, and one email goes out, so a
+     reworded claim is never carded under an older receipt.
    - **On a non-2xx answer,** the row becomes FAILED, `attempts` goes up by one,
      and the next run retries under the same `learning_intent_id`. At 5
      attempts the row becomes STUCK, one email goes out, and it is never posted
@@ -492,7 +505,8 @@ the synthetic empty item.
 | Fetch Group Log | the feeder's group log, filter `learning_intent_id eq` | registration match |
 | Fetch Registry | `devon_lesson_registry`, filter `lesson_key eq` | the key's status, claim, area, scope, `min_sources` and `evidence_ids` |
 | Fetch Source Rows | ledger `QZvdxllOjWevb3Vo`, `anyCondition` over five `intent_id eq` slots | the members' own rows |
-| Evidence Verifier | the three reads above | runs E1 to E6 and I1 to I7, computes the verified count, sets `search_needed` |
+| Fetch Commit Log | commit log `x8U4QqvXTVgINg3h`, no filter (added by the Phase 2 critic) | E6's commit half: every row's `intent_id` and `source_intent_ids`, built as the feeder and the committer build it; without it the rule block refuses every member |
+| Evidence Verifier | the four reads above | runs E1 to E6 and I1 to I7, computes the verified count, sets `search_needed` |
 | Preflight Passed (IF) | the verifier's output | true goes to the issuer; false goes to Refuse Before Search |
 | Refuse Before Search | the verifier's output | emits the normal response shape, with `gate.decision` set and `receipt: null` |
 
