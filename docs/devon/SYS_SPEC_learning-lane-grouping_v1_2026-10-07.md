@@ -4,7 +4,7 @@ type: SYS_SPEC
 version: 1
 date: 2026-10-07
 area: Systems
-status: Phase 0 and Phase 1 built 2026-10-08 on Tee's ruling, Phases 2 to 4 proposed
+status: Phase 0 and Phase 1 built 2026-10-08 and Phase 2 built 2026-10-11 on Tee's rulings, Phases 3 and 4 proposed
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 base_commit: 67694be
 owner: DEVON
@@ -20,7 +20,16 @@ written. Tee ruled Phase 0 and Phase 1 built on 2026-10-08, and they are: the
 rule block and the lesson registry in the repo, the recall filter, and the
 gate's preflight published live as version `e4da9aed`, then re-published as
 `dc307024` after the critic. What shipped, what moved to Phase 3 and what was found is recorded
-in `docs/devon/SYS_OPS_learning-lane-grouping-phase-0-and-1_v1_2026-10-08-0650.md`. Phases 2 to 4 below are still proposals.
+in `docs/devon/SYS_OPS_learning-lane-grouping-phase-0-and-1_v1_2026-10-08-0650.md`.
+
+**Status note, 2026-10-11.** Phase 2 is built on Tee's rulings of that day:
+the Soul Committer cards lessons only and is live as `e98bda27`, the record
+carries `status: active` and the lesson fields, and the app's three recall
+readers filter on status. Two Phase 3 items moved forward to make it work: the
+group log table `devon_lesson_group_log` exists, empty, so the committer can
+read it, and the commit log has its two new columns. What shipped and what was
+found is in the Phase 2 status doc under `docs/devon/SYS_OPS_learning-lane-grouping-phase-2_*`.
+Phases 3 and 4 below are still proposals.
 
 No workflow, data table, repo file, Pinecone index or service was changed to
 produce this document. Everything below is a proposal for Tee to approve or
@@ -1117,6 +1126,15 @@ Each item puts the recommended answer first.
     - Recommended: yes. Neither can write to any store.
 
 ### Ruled since
+
+- **2026-10-11, on four cards, for Phase 2.** Decision 8: yes, one card per
+  lesson, and the Soul Committer card is the lesson's approval. Decision 6:
+  a rejection and an expiry both close the group for good and burn its
+  members, and the key stays open. The card's member excerpts, receipt and
+  top match are read by the committer itself, from the ledger and the group
+  log, rather than packed by the feeder into a note of up to 1000 characters,
+  so every excerpt is verbatim and uncut. And the app's recall readers gain
+  the status filter in Phase 2 rather than in a later PR.
 
 - **2026-10-11, on a card: the second job comes from real work.** The ledger
   holds one eligible job, the 2026-09-16 cutover, and a lesson needs two. Tee

@@ -47,7 +47,11 @@ that live version byte for byte, read back through the API. Its own test is
 The Soul Committer's twelve joined under `soul-committer/` on 2026-10-11,
 copied from live version `5e149077` before the grouping build's Phase 2 changed
 any of them, for the same reason: the change is then a diff. Until then its
-code had lived only in n8n.
+code had lived only in n8n. Phase 2 then edited them here and published them
+as `e98bda27` the same day, adding `only_refused_items.js` and
+`refusal_notice.js`, so the directory holds fourteen, equal to that live
+version byte for byte, read back through the API. Its own test is
+`soul-committer/committer.test.mjs`.
 
 ## These are copies, and copies drift
 
