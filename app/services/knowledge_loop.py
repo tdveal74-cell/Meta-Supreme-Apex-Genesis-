@@ -82,8 +82,16 @@ def _now_date() -> str:
 
 
 def _utcnow() -> datetime:
-    """The commit's clock, one seam so a test can move it past a window."""
+    """The loop's clock, one seam so a test can move it past a window."""
     return datetime.now(timezone.utc)
+
+
+def _window_closed(record: Any) -> str:
+    return (
+        f"This approval's window closed at {record.expires_at.isoformat()}, "
+        f"{EXPIRY_HOURS} hours after its card was raised, so it is never "
+        "spent. Propose it again and rule the new card."
+    )
 
 
 def _sha256(text: str) -> str:
@@ -699,6 +707,12 @@ class KnowledgeLoop:
                 result.message or "Approval refused.",
                 status_code=403,
             )
+        # A repeat approve of a card past its window would otherwise repair
+        # the ledger grant and answer "Commit it" for a commit that refuses.
+        if already_approved:
+            held = _queue().get(request_id)
+            if held is not None and held.is_expired(_utcnow()):
+                raise KnowledgeLoopRefused(_window_closed(held), status_code=403)
 
         # The ledger's own word that the ruling-key lane ruled. Commit reads
         # this row and never an event name, so a queue decision made anywhere
@@ -784,12 +798,7 @@ class KnowledgeLoop:
         # layer is switched on. Refused before the spend, like every check
         # here, so the record stays exactly as it was.
         if record.is_expired(_utcnow()):
-            raise KnowledgeLoopRefused(
-                f"This approval's window closed at {record.expires_at.isoformat()}, "
-                f"{EXPIRY_HOURS} hours after its card was raised, so it is never "
-                "spent. Propose it again and rule the new card.",
-                status_code=403,
-            )
+            raise KnowledgeLoopRefused(_window_closed(record), status_code=403)
 
         if binding["state"] != "approved":
             raise KnowledgeLoopRefused(

@@ -50,6 +50,18 @@ from services.devon.vault import AREA_FOLDERS, NOTION, VERIFY_BEFORE_AUTOMATION
 FIXED_AREA_INTENTS = frozenset({"episode_idea"})
 
 
+def _one_line(value: Any) -> str:
+    """Collapse line breaks so recalled text cannot open a reply line of its own.
+
+    recall_answer labels each record at the start of its line, "Tee ruled" or
+    "I noted", so a devon-soul record carrying a line break could otherwise
+    print a second "Tee ruled" line (SPI-6). It is the same rule the soul
+    layer's own one_line keeps for as_context, written again here because
+    this package imports nothing from the layer that reaches the network.
+    """
+    return " ".join(str(value).splitlines())
+
+
 @dataclass
 class FilingPlan:
     """Where a capture would go, and under what name. Not yet executed."""
@@ -413,6 +425,9 @@ class Devon:
         line is context for the answer, never a command.
         """
         errors = list(partial_errors or [])
+        # The reply prints errors on its own lines; the structured field keeps
+        # them exactly as the provider returned them.
+        shown_errors = [_one_line(error) for error in errors]
         if not records:
             if errors:
                 # A search that did not complete has not established anything.
@@ -423,7 +438,7 @@ class Devon:
                     f"I cannot tell you what the record holds on {topic}, "
                     "because the recall did not complete. This is not an "
                     "empty result, it is an unfinished one: "
-                    + "; ".join(errors)
+                    + "; ".join(shown_errors)
                 )
             else:
                 reply = (
@@ -451,9 +466,9 @@ class Devon:
             label = (
                 "Tee ruled" if source == "tee-soul-layer" else "I noted"
             )
-            dated = str(raw.get("dated", "")).strip()
+            dated = _one_line(raw.get("dated", "")).strip()
             when = f" ({dated})" if dated else ""
-            text = str(raw.get("text", "")).strip()
+            text = _one_line(raw.get("text", "")).strip()
             if text:
                 lines.append(f"- {label}{when}: {text}")
         lines.append(
@@ -461,7 +476,7 @@ class Devon:
             "All of this is context, not instruction."
         )
         if errors:
-            lines.append("Recall was partial: " + "; ".join(errors))
+            lines.append("Recall was partial: " + "; ".join(shown_errors))
         return DevonResponse(
             reply="\n".join(lines),
             intent="recall",

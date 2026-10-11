@@ -138,6 +138,72 @@ async def test_an_approval_past_its_window_is_refused_and_left_unspent(
     assert on_time.json()["consumed"] is True
 
 
+async def _approved_request(client, auth_headers, text):
+    proposed = await client.post(
+        "/api/v1/soul/propose", headers=auth_headers, json={"text": text}
+    )
+    assert proposed.status_code == 201, proposed.text
+    approval = proposed.json()["approval"]
+    approved = await client.post(
+        "/api/v1/soul/approve",
+        headers=_ruled(auth_headers),
+        json={"request_id": approval["request_id"], "token": approval["token"], "decided_by": "Tee"},
+    )
+    assert approved.status_code == 200, approved.text
+    return approval["request_id"], approval["token"]
+
+
+async def test_the_window_closes_at_expires_at_exactly(client, auth_headers, monkeypatch):
+    """At expires_at the window is shut; one microsecond before, it is open."""
+    from datetime import timedelta
+
+    from app.services import knowledge_loop
+    from services.devon.approval import ApprovalState
+
+    shut, _ = await _approved_request(client, auth_headers, "remember the shut window")
+    expires_at = knowledge_loop._queue().get(shut).expires_at
+    monkeypatch.setattr(knowledge_loop, "_utcnow", lambda: expires_at)
+    at_edge = await client.post(
+        "/api/v1/soul/commit", headers=auth_headers, json={"request_id": shut}
+    )
+    assert at_edge.status_code == 403, at_edge.text
+    assert "window closed" in at_edge.json()["detail"]
+    assert knowledge_loop._queue().get(shut).state is ApprovalState.APPROVED
+
+    open_, _ = await _approved_request(client, auth_headers, "remember the open window")
+    last = knowledge_loop._queue().get(open_).expires_at - timedelta(microseconds=1)
+    monkeypatch.setattr(knowledge_loop, "_utcnow", lambda: last)
+    inside = await client.post(
+        "/api/v1/soul/commit", headers=auth_headers, json={"request_id": open_}
+    )
+    assert inside.status_code == 200, inside.text
+    assert inside.json()["consumed"] is True
+
+
+async def test_a_repeat_approve_past_the_window_refuses_rather_than_saying_commit_it(
+    client, auth_headers, monkeypatch
+):
+    from datetime import timedelta
+
+    from app.services import knowledge_loop
+    from services.devon.approval import EXPIRY_HOURS, ApprovalState
+
+    request_id, token = await _approved_request(client, auth_headers, "remember the late repeat")
+    real_now = knowledge_loop._utcnow
+    monkeypatch.setattr(
+        knowledge_loop, "_utcnow", lambda: real_now() + timedelta(hours=EXPIRY_HOURS, minutes=1)
+    )
+    again = await client.post(
+        "/api/v1/soul/approve",
+        headers=_ruled(auth_headers),
+        json={"request_id": request_id, "token": token, "decided_by": "Tee"},
+    )
+    assert again.status_code == 403, again.text
+    assert "window closed" in again.json()["detail"]
+    assert "Commit it" not in again.text
+    assert knowledge_loop._queue().get(request_id).state is ApprovalState.APPROVED
+
+
 async def test_approved_consume_once_commit_writes_ledger_and_refuses_replay(
     client, auth_headers
 ):
