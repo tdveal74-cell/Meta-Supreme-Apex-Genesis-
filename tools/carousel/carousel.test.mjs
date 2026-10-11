@@ -69,6 +69,7 @@ for (let i = 0; i < 7; i += 1) {
   assert.equal(/<svg class="mark(?:cover|close)"/.test(html), i === 0 || i === 6, `the Denominator mark belongs on the cover and the Quiet Move only (slide ${i + 1})`);
   assert.match(html, /--paper:#0a1628;/);
   assert.match(html, /--brand:#d4a017;/);
+  assert.match(html, /--ink:#f4f0e8;/);
 }
 assert.match(tqo(0), /From<\/span><span class="v">Terrance Veal/);
 assert.match(tqo(3), /4 of 7/);
