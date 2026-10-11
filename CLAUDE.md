@@ -628,7 +628,8 @@ Copy with `cp`, never by hand, and re-run `python3 -m pytest -q test_deploy_soul
 ## Ship discipline
 
 Small PRs on the designated branch, draft first, full local validation before
-every push. Merge only with Tee's explicit authorization. After a designated
+every push. Merge only with Tee's explicit authorization, which has been
+standing since 2026-10-11; the ruling is below. After a designated
 branch's PR merges, restart the branch from `origin/main` under the same name.
 Close an arc with a dated `docs/devon/SYS_OPS_*` status doc and a DEVON thread
 log receipt.
@@ -654,6 +655,23 @@ into its own description rather than into the text around the card. This
 loosens nothing above it. His authorization to merge is still explicit and
 still arrives from him; the card is how it is asked for, never a substitute for
 having it.
+
+**Merge approval is standing.** Ruled by Tee 2026-10-11, in chat, after a
+session asked him to merge PR #325, a records-only correction, on a card: "You
+have my approval to merge at all times." So a session no longer asks for a
+merge. It merges a PR it opened on its designated branch once every check on
+the PR's head commit has passed, there is no merge conflict, and no review
+thread is waiting on it, using a merge commit titled `Merge PR #N: <title>`,
+which is the form the steward skill already names for a standing grant. The
+two paragraphs above that say his authorization arrives in chat stay true: it
+arrived, once, and it stands until he withdraws it.
+
+The grant covers the merge and nothing before or after it. Full local
+validation before every push, a fresh critic before an arc closes, and the
+deploy read-back after a merge all still apply, and a red check is never
+merged past on a guess that it is a flake. It covers nothing else that is his
+to decide either: publishing an n8n workflow, setting a variable or a secret,
+and every other ruling still go to him on a card.
 
 ## The receipt on a status doc
 

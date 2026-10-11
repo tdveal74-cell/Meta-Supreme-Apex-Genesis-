@@ -168,7 +168,9 @@ Check these before inventing new theories:
   before every push
 - Merge only with Tee's explicit authorization; a standing "merge on my
   behalf" grant means merge each PR once its head run is green, using a merge
-  commit titled `Merge PR #N: <title>`
+  commit titled `Merge PR #N: <title>`. Tee gave that grant on 2026-10-11 and
+  it stands; CLAUDE.md under "Ship discipline" records it and what it does not
+  cover
 - After a designated branch's PR merges, restart the branch from origin/main
   (same name, force-with-lease) for follow-up work
 - Close every arc with a `docs/devon/SYS_OPS_*` status doc (versioned,
