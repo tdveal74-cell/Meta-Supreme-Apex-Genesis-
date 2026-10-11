@@ -61,29 +61,31 @@ async def soul_recall_payload(soul: "SoulLayer", goal: str) -> Dict[str, Any]:
     can never be mistaken for both souls answering empty.
 
     The planner serialises this whole payload into its prompt, so `records`
-    and `errors` reach the model beside `context`. Every string in them,
-    metadata keys and values included, is collapsed to one line the same way
-    `as_context` collapses record text, or a devon-soul record's line break
-    would carry a forged TEE RULING line into the prompt by this route
-    (SPI-6). Numbers and the record order are unchanged.
+    and `errors` reach the model beside `context`. Every string value in them
+    is collapsed to one line the same way `as_context` collapses record text,
+    and a metadata key carrying a line break is dropped, or a devon-soul
+    record's line break would carry a forged TEE RULING line into the prompt
+    by this route (SPI-6). Numbers and the record order are unchanged. The
+    shaping runs inside the same fallback as the recall, so a record that
+    cannot be shaped degrades to a named error like an outage does.
     """
-    from services.intelligence.soul import one_line_all
+    from services.intelligence.soul import one_line, one_line_all
     try:
         # Only active records reach a plan, by the 2026-08-24 ruling. A
         # withheld count rides in the context text, so the planner is told the
         # recall was not a measured empty.
         recall = (await soul.recall(goal)).active_only()
+        return {
+            "context": recall.as_context(),
+            "records": one_line_all(recall.to_dicts()),
+            "errors": one_line_all(list(recall.errors)),
+        }
     except Exception as exc:
         return {
             "context": "",
             "records": [],
-            "errors": one_line_all([f"soul recall unavailable: {exc}"]),
+            "errors": [one_line(f"soul recall unavailable: {exc}")],
         }
-    return {
-        "context": recall.as_context(),
-        "records": one_line_all(recall.to_dicts()),
-        "errors": one_line_all(list(recall.errors)),
-    }
 
 
 class AgentRuntime:

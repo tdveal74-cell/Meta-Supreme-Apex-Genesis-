@@ -107,17 +107,26 @@ def one_line(value: Any) -> str:
 
 
 def one_line_all(value: Any) -> Any:
-    """one_line over every string inside a value, keys included.
+    """one_line over every string value inside a value.
 
     A recalled record's metadata carries the writer's own fields (a source
     note, a lesson key, anything the payload held), and a reader that ships
     a record dict into a prompt ships all of them. Numbers, booleans and None
     pass through unchanged.
+
+    A key carrying a line break is dropped rather than collapsed. Collapsing
+    it would rewrite one key into another: "source" plus a trailing break
+    would come back as the very "source" the search strips from metadata as
+    a trust field, and two keys could merge with one value silently lost.
     """
     if isinstance(value, str):
         return one_line(value)
     if isinstance(value, Mapping):
-        return {one_line_all(k): one_line_all(v) for k, v in value.items()}
+        return {
+            k: one_line_all(v)
+            for k, v in value.items()
+            if not (isinstance(k, str) and one_line(k) != k)
+        }
     if isinstance(value, (list, tuple)):
         return [one_line_all(v) for v in value]
     return value
