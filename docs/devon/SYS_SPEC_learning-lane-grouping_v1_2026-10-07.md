@@ -25,8 +25,8 @@ in `docs/devon/SYS_OPS_learning-lane-grouping-phase-0-and-1_v1_2026-10-08-0650.m
 **Status note, 2026-10-11.** Phase 2 is built on Tee's rulings of that day:
 the Soul Committer cards lessons only and is live as `69829bd0`, the record
 carries `status: active` and the lesson fields, and the app's three recall
-readers filter on status in the repo, live once the api, scheduler-cron and
-devon-soul deploys of the merge are read back. Two Phase 3 items moved forward
+readers filter on status, deployed on api, scheduler-cron and devon-soul at
+`3dc1b55` and read back the same day. Two Phase 3 items moved forward
 to make it work: the group log table `devon_lesson_group_log` exists, empty,
 so the committer can read it, and the commit log has its two new columns. What
 shipped and what was found is in `docs/devon/SYS_OPS_learning-lane-grouping-phase-2_v1_2026-10-11-1250.md`, and

@@ -74,11 +74,29 @@ so that absence is the only evidence about its unattended hourly runs, and a
 run that did nothing and a run that never fired read the same. The schedule
 on the new version is therefore unproven beyond "no crash was reported".
 
-The app half is not live. `services/intelligence/soul.py` and its
+The app half was not live when this was first written. `services/intelligence/soul.py` and its
 vendored copy change on merge, so the merge redeploys Railway `api`,
 `scheduler-cron` (which runs the planning recall through `create_task`) and
 the Vercel `devon-soul` project; `presence` rebuilds on `services/**` with no
-behaviour change. None of it is live until those deploys are read back.
+behaviour change.
+
+**Read back after PR #323 merged as `3dc1b55`, 2026-10-11.** Main's CI passed
+all six checks on `3dc1b55` at 15:16:23Z. Then, each read off the deployment
+record, not inferred:
+
+| surface | deployment | state | commit |
+|---|---|---|---|
+| Railway `api` | `e233e122` | SUCCESS 15:17:15Z, held WAITING until CI passed; `/api/v1/health` 200 healthy at 15:24:09Z | `3dc1b55` |
+| Railway `scheduler-cron` | `ef804ce5` | SUCCESS 15:15:59Z | `3dc1b55` |
+| Railway `presence` | `67bb2875` | SUCCESS 15:10:42Z; `/health` 200, `livekit_configured` true and `audio_over_websocket` false, the working pair on a build carrying `livekit_publisher.py` | `3dc1b55` |
+| Vercel `devon-soul` | `dpl_7F5N45RjWEXCKzwQAHfHG4nq5pZa` | READY, target production | `3dc1b55` |
+| Vercel `meta-supreme-apex-genesis-web` | `dpl_J3Jj1jhRRwkULtVZjB3mmVUBTXdK` | CANCELED by its ignore rule, correctly: nothing under its paths changed since its production build on `21aab2c` | not rebuilt |
+
+So the filtered code is what production serves. Whether recall itself is
+switched on there, `SOUL_RECALL_ENABLED` and a key on `api` and
+`scheduler-cron`, is not something these tools can read: Railway returns
+variable names only. That stays unverified, and Tee can check it in the
+Railway dashboard.
 
 ## What is in the repo
 
@@ -182,8 +200,8 @@ Written into `ids-and-contracts.md` and the spec where each applies:
 
 ## Open
 
-- The app's recall filter goes live only with the merge's deploys of `api`,
-  `scheduler-cron` and `devon-soul`, each to be read back.
+- The app's recall filter is deployed on all three surfaces, read back
+  above. Whether recall is switched on in production is unverified.
 - The carded claim is bound to the searched claim only by the Phase 3 rule
   above.
 - The Pulse's text for a stuck approved row still says "still need your
@@ -206,6 +224,6 @@ ARTIFACT: docs/devon/SYS_OPS_learning-lane-grouping-phase-2_v1_2026-10-11-1250.m
 DATE: 2026-10-11
 DECISIONS: Tee ruled on four cards on 2026-10-11: one card per lesson, the committer card being the lesson's approval; rejection and expiry both close it for good and burn its members; the committer reads the ledger rows and the group log row itself; the app's recall readers are filtered in Phase 2. Earlier the same day: Phase 2 goes ahead, and the second job comes from real work.
 FINDINGS: Committer live as 69829bd0 after e98bda27 and 3f4fdc36, read back byte for byte, saving still off. Group log 3zmclyNLggMdRG2g created empty, commit log columns added. T6 on a stubbed copy, executions 2674 to 2676, 2681 and 2682, then archived and its tables deleted. 27 critic findings, 25 confirmed or plausible, 2 refuted, none armed; the worst, adoption skipping every lesson check, is fixed and re-measured, and every surviving mutation now fails the suite.
-OPEN: App recall filter live only after the api, scheduler-cron and devon-soul deploys are read back; claim to receipt binding rests on the Phase 3 contract; Pulse wording for a stuck approved row; is_active non-Mapping divergence; items carried from Phase 0 and 1.
-STATUS: Soul Committer drP96ernQvbrvzIZ active 69829bd0, lessons only; nothing can be carded until Phase 3 declares a lesson and the feeder forms a group. Repo work on claude/devon-build12-conflict-policy-tuiypu, PR #323, not merged at the time of writing.
+OPEN: App recall filter deployed on api, scheduler-cron and devon-soul at 3dc1b55, read back; whether SOUL_RECALL_ENABLED is set in production unverified; claim to receipt binding rests on the Phase 3 contract; Pulse wording for a stuck approved row; is_active non-Mapping divergence; items carried from Phase 0 and 1.
+STATUS: Soul Committer drP96ernQvbrvzIZ active 69829bd0, lessons only; nothing can be carded until Phase 3 declares a lesson and the feeder forms a group. PR #323 merged as 3dc1b55 on Tee's card ruling, and its deploys read back the same day.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
