@@ -86,6 +86,58 @@ async def test_unapproved_soul_commit_is_refused(client, auth_headers):
     assert "Unapproved" in committed.json()["detail"]
 
 
+async def test_an_approval_past_its_window_is_refused_and_left_unspent(
+    client, auth_headers, monkeypatch
+):
+    """An old approval never spends into the soul; a refusal spends nothing."""
+    from datetime import timedelta
+
+    from app.services import knowledge_loop
+    from services.devon.approval import EXPIRY_HOURS, ApprovalState
+
+    proposed = await client.post(
+        "/api/v1/soul/propose",
+        headers=auth_headers,
+        json={"text": "remember the pricing hold from Monday"},
+    )
+    assert proposed.status_code == 201, proposed.text
+    approval = proposed.json()["approval"]
+    request_id = approval["request_id"]
+
+    approved = await client.post(
+        "/api/v1/soul/approve",
+        headers=_ruled(auth_headers),
+        json={"request_id": request_id, "token": approval["token"], "decided_by": "Tee"},
+    )
+    assert approved.status_code == 200, approved.text
+
+    real_now = knowledge_loop._utcnow
+    monkeypatch.setattr(
+        knowledge_loop,
+        "_utcnow",
+        lambda: real_now() + timedelta(hours=EXPIRY_HOURS, minutes=1),
+    )
+    late = await client.post(
+        "/api/v1/soul/commit",
+        headers=auth_headers,
+        json={"request_id": request_id},
+    )
+    assert late.status_code == 403, late.text
+    assert "window closed" in late.json()["detail"]
+    assert knowledge_loop._queue().get(request_id).state is ApprovalState.APPROVED
+
+    # The refusal was the clock and nothing else: inside the window the same
+    # approval still spends, exactly once.
+    monkeypatch.setattr(knowledge_loop, "_utcnow", real_now)
+    on_time = await client.post(
+        "/api/v1/soul/commit",
+        headers=auth_headers,
+        json={"request_id": request_id},
+    )
+    assert on_time.status_code == 200, on_time.text
+    assert on_time.json()["consumed"] is True
+
+
 async def test_approved_consume_once_commit_writes_ledger_and_refuses_replay(
     client, auth_headers
 ):
