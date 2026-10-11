@@ -75,6 +75,12 @@ jobs:
         run: node n8n/devon/learning/lesson_evidence.test.mjs
       - name: The Learning Gate refuses before it searches and promotes only what it verified
         run: node n8n/devon/learning-gate/gate.test.mjs
+      # Phase 2 of the same build, ruled by Tee 2026-10-11: the Soul Committer
+      # cards a lesson only, quoting each member job's own ledger row (the real
+      # 2026-09-16 row among them), refuses for good what it cannot card, and
+      # writes the record to_record describes.
+      - name: The Soul Committer cards only lessons and writes what Tee approved
+        run: node n8n/devon/soul-committer/committer.test.mjs
       - name: Offline suite (no database, no keys)
         run: |
           python -m pytest -q --tb=short \

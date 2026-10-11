@@ -24,6 +24,7 @@ for (let i = 0; i < responses.length; i++) {
     rows.push({ intent_id: src.intent_id, state: 'COMMITTED', record_id: src.record_id, resolved_at: nowIso, note: 'HTTP ' + code + ', approved at ' + (src.decided_at || 'unknown') });
     lines.push('COMMITTED ' + src.record_id + ' to devon-soul, namespace experience (HTTP ' + code + ')');
     lines.push('  ' + src.claim);
+    lines.push('  lesson ' + String(src.lesson_key || 'unnamed') + ', standing on ' + (Array.isArray(src.source_intent_ids) ? src.source_intent_ids.join(', ') : 'no listed jobs'));
   } else {
     failed++;
     const attempt = src.attempt || 1;

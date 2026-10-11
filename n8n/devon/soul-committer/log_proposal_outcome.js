@@ -13,7 +13,7 @@ for (let i = 0; i < responses.length; i++) {
   const body = (res.body && typeof res.body === 'object') ? res.body : {};
   const ok = (res.statusCode === 200 || res.statusCode === 201) && body.queued === true && body.request_id;
   if (ok) {
-    rows.push({ intent_id: src.intent_id, state: 'PROPOSED', request_id: String(body.request_id), record_id: '', claim: src.claim || '', area: src.area || '', proposed_at: nowIso, resolved_at: '', note: 'awaiting decision, expires ' + String(body.expires_at || '') });
+    rows.push({ intent_id: src.intent_id, state: 'PROPOSED', request_id: String(body.request_id), record_id: '', claim: src.claim || '', area: src.area || '', proposed_at: nowIso, resolved_at: '', note: 'awaiting decision, expires ' + String(body.expires_at || ''), lesson_key: String(src.lesson_key || ''), source_intent_ids: String(src.source_intent_ids || '[]') });
   } else {
     failures.push({ intent_id: src.intent_id || 'unknown', status: String(res.statusCode || 'no response'), detail: JSON.stringify(res.body || res.error || res).slice(0, 300) });
   }
