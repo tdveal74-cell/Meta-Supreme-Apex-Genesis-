@@ -56,10 +56,9 @@ star in the package's gold and olive, is `brand/nco-mark.png`, cropped to 480
 px. Tee generated it from a prompt and ruled it in on 2026-10-07; it sits on
 the cover and on the closing slide in place of the gold Forge Rule block. The
 generator's background removal had punched four holes through its olive
-field, and they were filled with the field's own colour before it went in. Tee
-ruled 2026-10-07 to use v1 now; `NCO_Forge_Brand_Package_v2.zip` (9 MB) and
-`TQO_Brand_Package_v2.zip` were too large for the connector and are unread, and
-both templates move to v2 when he supplies its style guide in a readable size.
+field, and they were filled with the field's own colour before it went in. Both v2
+packages were too large for the Drive connector until Tee uploaded them to the
+session on 2026-10-11, which is when they were read.
 The sample in `fixtures/rows.json` is labelled as a sample and is not an
 episode.
 
