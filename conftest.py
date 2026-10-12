@@ -81,6 +81,7 @@ _INCREMENTAL_SCHEMAS = (
     "021_fts_includes_title.sql",
     "022_company_post_drafts.sql",
     "023_company_lead_drafts.sql",
+    "024_company_comment_drafts.sql",
 )
 
 _DSN = TEST_DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
@@ -90,6 +91,7 @@ _TEST_DB_NAME = _DSN.rsplit("/", 1)[1]
 # Tables wiped between tests (order respects FKs; agents and executors stay
 # seeded, the latter by 012_live_state_ledger.sql).
 _DATA_TABLES = (
+    "company_comment_drafts",
     "company_lead_drafts",
     "company_post_drafts",
     "provider_usage",

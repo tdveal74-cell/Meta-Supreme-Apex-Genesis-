@@ -18,12 +18,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db.session import get_db
 from app.security.deps import CurrentUser
-from app.services import company_queue, company_sales_queue
+from app.services import company_queue, company_sales_queue, company_support_queue
 from app.services.provider_usage import read_usage, utc_today
 from services.company.functions import list_functions
 from services.company.marketing import PostDraft, QueueRefusal
 from services.company.sales import LeadDraft
 from services.company.scoreboard import build_scoreboard
+from services.company.support import CommentDraft
 
 router = APIRouter(prefix="/company", tags=["Company"])
 
@@ -279,3 +280,98 @@ async def approve_lead_draft(draft_id: str, current_user: CurrentUser, db: DbSes
 async def reject_lead_draft(draft_id: str, current_user: CurrentUser, db: DbSession,
                             body: DecisionIn = DecisionIn()) -> LeadDraftOut:
     return await _decide_lead(draft_id, False, body, current_user, db)
+
+
+# ---------------------------------------------------------------------------
+# The Support approval queue. Draft only: no route here posts a comment, and
+# none can. A decision is the signed-in account's own.
+# ---------------------------------------------------------------------------
+
+
+class CommentDraftIn(BaseModel):
+    video_id: str = Field(..., max_length=11)
+    comment_id: str = Field(..., max_length=129)
+    commenter_name: str = Field(..., max_length=200)
+    # Storage guards only, not product limits.
+    comment_text: str = Field(..., max_length=8000)
+    reply_text: str = Field(..., max_length=8000)
+    reply_basis: str = Field(..., max_length=2000)
+    ai_disclosure: str = Field(..., max_length=1000)
+
+
+class CommentDraftOut(BaseModel):
+    draft_id: str
+    video_id: str
+    comment_id: str
+    commenter_name: str
+    comment_text: str
+    reply_text: str
+    reply_basis: str
+    ai_disclosure: str
+    status: str
+    decided_by: Optional[str]
+    decision_note: Optional[str]
+
+
+def _comment_out(d: CommentDraft) -> CommentDraftOut:
+    return CommentDraftOut(
+        draft_id=d.draft_id, video_id=d.video_id, comment_id=d.comment_id,
+        commenter_name=d.commenter_name, comment_text=d.comment_text,
+        reply_text=d.reply_text, reply_basis=d.reply_basis, ai_disclosure=d.ai_disclosure,
+        status=d.status.value, decided_by=d.decided_by, decision_note=d.decision_note,
+    )
+
+
+@router.post("/support/drafts", response_model=CommentDraftOut, status_code=201,
+             summary="Queue a drafted reply to a YouTube comment for approval")
+async def queue_comment_draft(body: CommentDraftIn, current_user: CurrentUser,
+                              db: DbSession) -> CommentDraftOut:
+    try:
+        draft = await company_support_queue.insert_comment_draft(
+            db, str(current_user.id), video_id=body.video_id, comment_id=body.comment_id,
+            commenter_name=body.commenter_name, comment_text=body.comment_text,
+            reply_text=body.reply_text, reply_basis=body.reply_basis,
+            ai_disclosure=body.ai_disclosure,
+        )
+    except QueueRefusal as exc:
+        status = 409 if "already has a draft" in str(exc) else 422
+        raise HTTPException(status_code=status, detail=str(exc)) from None
+    return _comment_out(draft)
+
+
+@router.get("/support/drafts", response_model=List[CommentDraftOut],
+            summary="List the caller's comment drafts")
+async def list_comment_queue(
+    current_user: CurrentUser, db: DbSession,
+    status: Optional[str] = Query(None, pattern="^(drafted|approved|rejected)$"),
+) -> List[CommentDraftOut]:
+    drafts = await company_support_queue.list_comment_drafts(db, str(current_user.id), status)
+    return [_comment_out(d) for d in drafts]
+
+
+async def _decide_comment(draft_id: str, approved: bool, body: DecisionIn,
+                          current_user, db: AsyncSession) -> CommentDraftOut:
+    try:
+        decided = await company_support_queue.decide_comment_draft(
+            db, str(current_user.id), draft_id, approved=approved,
+            decided_by=current_user.email, note=body.note,
+        )
+    except QueueRefusal as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    if decided is None:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    return _comment_out(decided)
+
+
+@router.post("/support/drafts/{draft_id}/approve", response_model=CommentDraftOut,
+             summary="Record an approval. Does not post anything.")
+async def approve_comment_draft(draft_id: str, current_user: CurrentUser, db: DbSession,
+                                body: DecisionIn = DecisionIn()) -> CommentDraftOut:
+    return await _decide_comment(draft_id, True, body, current_user, db)
+
+
+@router.post("/support/drafts/{draft_id}/reject", response_model=CommentDraftOut,
+             summary="Record a rejection.")
+async def reject_comment_draft(draft_id: str, current_user: CurrentUser, db: DbSession,
+                               body: DecisionIn = DecisionIn()) -> CommentDraftOut:
+    return await _decide_comment(draft_id, False, body, current_user, db)

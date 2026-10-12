@@ -47,6 +47,7 @@ def test_only_a_function_with_code_is_marked_built_or_partial():
         "ops_finance": Status.BUILT,
         "marketing": Status.PARTIAL,
         "sales": Status.PARTIAL,
+        "support": Status.PARTIAL,
     }
     for f in with_code:
         assert (ROOT / f.built_in).is_file()
