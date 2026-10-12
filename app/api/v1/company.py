@@ -18,10 +18,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db.session import get_db
 from app.security.deps import CurrentUser
-from app.services import company_queue, company_sales_queue, company_support_queue
+from app.services import (
+    company_product_queue,
+    company_queue,
+    company_research_queue,
+    company_sales_queue,
+    company_support_queue,
+)
 from app.services.provider_usage import read_usage, utc_today
 from services.company.functions import list_functions
 from services.company.marketing import PostDraft, QueueRefusal
+from services.company.product import DuplicateProposal, Proposal
+from services.company.research import DuplicateFinding, Finding
 from services.company.sales import LeadDraft
 from services.company.scoreboard import build_scoreboard
 from services.company.support import CommentDraft
@@ -375,3 +383,184 @@ async def approve_comment_draft(draft_id: str, current_user: CurrentUser, db: Db
 async def reject_comment_draft(draft_id: str, current_user: CurrentUser, db: DbSession,
                                body: DecisionIn = DecisionIn()) -> CommentDraftOut:
     return await _decide_comment(draft_id, False, body, current_user, db)
+
+
+# ---------------------------------------------------------------------------
+# The Research findings log. Read only in effect: nothing here searches,
+# fetches or acts on a finding. A decision is the signed-in account's own.
+# ---------------------------------------------------------------------------
+
+
+class FindingIn(BaseModel):
+    claim: str = Field(..., max_length=4000)
+    evidence_kind: str = Field(..., max_length=16)
+    evidence_ref: str = Field(..., max_length=2001)
+    # Quoted source text, a storage guard only.
+    evidence_excerpt: Optional[str] = Field(None, max_length=8000)
+    recommendation: str = Field(..., max_length=4000)
+
+
+class FindingOut(BaseModel):
+    draft_id: str
+    claim: str
+    evidence_kind: str
+    evidence_ref: str
+    evidence_excerpt: Optional[str]
+    recommendation: str
+    status: str
+    decided_by: Optional[str]
+    decision_note: Optional[str]
+
+
+def _finding_out(f: Finding) -> FindingOut:
+    return FindingOut(
+        draft_id=f.draft_id, claim=f.claim, evidence_kind=f.evidence_kind,
+        evidence_ref=f.evidence_ref, evidence_excerpt=f.evidence_excerpt,
+        recommendation=f.recommendation, status=f.status.value,
+        decided_by=f.decided_by, decision_note=f.decision_note,
+    )
+
+
+@router.post("/research/findings", response_model=FindingOut, status_code=201,
+             summary="Record a finding for review")
+async def queue_finding(body: FindingIn, current_user: CurrentUser, db: DbSession) -> FindingOut:
+    try:
+        f = await company_research_queue.insert_finding(
+            db, str(current_user.id), claim=body.claim, evidence_kind=body.evidence_kind,
+            evidence_ref=body.evidence_ref, evidence_excerpt=body.evidence_excerpt,
+            recommendation=body.recommendation,
+        )
+    except DuplicateFinding as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except QueueRefusal as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return _finding_out(f)
+
+
+@router.get("/research/findings", response_model=List[FindingOut],
+            summary="List the caller's findings")
+async def list_finding_queue(
+    current_user: CurrentUser, db: DbSession,
+    status: Optional[str] = Query(None, pattern="^(drafted|approved|rejected)$"),
+) -> List[FindingOut]:
+    findings = await company_research_queue.list_findings(db, str(current_user.id), status)
+    return [_finding_out(f) for f in findings]
+
+
+async def _decide_finding(draft_id: str, approved: bool, body: DecisionIn,
+                          current_user, db: AsyncSession) -> FindingOut:
+    try:
+        decided = await company_research_queue.decide_finding(
+            db, str(current_user.id), draft_id, approved=approved,
+            decided_by=current_user.email, note=body.note,
+        )
+    except QueueRefusal as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    if decided is None:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    return _finding_out(decided)
+
+
+@router.post("/research/findings/{draft_id}/approve", response_model=FindingOut,
+             summary="Record an adoption. Does not act on the finding.")
+async def approve_finding(draft_id: str, current_user: CurrentUser, db: DbSession,
+                          body: DecisionIn = DecisionIn()) -> FindingOut:
+    return await _decide_finding(draft_id, True, body, current_user, db)
+
+
+@router.post("/research/findings/{draft_id}/reject", response_model=FindingOut,
+             summary="Record a dismissal.")
+async def reject_finding(draft_id: str, current_user: CurrentUser, db: DbSession,
+                         body: DecisionIn = DecisionIn()) -> FindingOut:
+    return await _decide_finding(draft_id, False, body, current_user, db)
+
+
+# ---------------------------------------------------------------------------
+# The Product proposals log. Propose only: no route here builds, commits or
+# runs anything, and none can. A decision is the signed-in account's own.
+# ---------------------------------------------------------------------------
+
+
+class ProposalIn(BaseModel):
+    title: str = Field(..., max_length=200)
+    problem: str = Field(..., max_length=4000)
+    proposal: str = Field(..., max_length=8000)
+    acceptance_check: str = Field(..., max_length=4000)
+    reference_artifact: str = Field(..., max_length=2000)
+    size: str = Field(..., max_length=8)
+
+
+class ProposalOut(BaseModel):
+    draft_id: str
+    title: str
+    problem: str
+    proposal: str
+    acceptance_check: str
+    reference_artifact: str
+    size: str
+    status: str
+    decided_by: Optional[str]
+    decision_note: Optional[str]
+
+
+def _proposal_out(p: Proposal) -> ProposalOut:
+    return ProposalOut(
+        draft_id=p.draft_id, title=p.title, problem=p.problem, proposal=p.proposal,
+        acceptance_check=p.acceptance_check, reference_artifact=p.reference_artifact,
+        size=p.size, status=p.status.value, decided_by=p.decided_by,
+        decision_note=p.decision_note,
+    )
+
+
+@router.post("/product/proposals", response_model=ProposalOut, status_code=201,
+             summary="Queue a change proposal for approval")
+async def queue_proposal(body: ProposalIn, current_user: CurrentUser, db: DbSession) -> ProposalOut:
+    try:
+        p = await company_product_queue.insert_proposal(
+            db, str(current_user.id), title=body.title, problem=body.problem,
+            proposal=body.proposal, acceptance_check=body.acceptance_check,
+            reference_artifact=body.reference_artifact, size=body.size,
+        )
+    except DuplicateProposal as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except QueueRefusal as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return _proposal_out(p)
+
+
+@router.get("/product/proposals", response_model=List[ProposalOut],
+            summary="List the caller's proposals")
+async def list_proposal_queue(
+    current_user: CurrentUser, db: DbSession,
+    status: Optional[str] = Query(None, pattern="^(drafted|approved|rejected)$"),
+) -> List[ProposalOut]:
+    proposals = await company_product_queue.list_proposals(db, str(current_user.id), status)
+    return [_proposal_out(p) for p in proposals]
+
+
+async def _decide_proposal(draft_id: str, approved: bool, body: DecisionIn,
+                           current_user, db: AsyncSession) -> ProposalOut:
+    try:
+        decided = await company_product_queue.decide_proposal(
+            db, str(current_user.id), draft_id, approved=approved,
+            decided_by=current_user.email, note=body.note,
+        )
+    except QueueRefusal as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    if decided is None:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    return _proposal_out(decided)
+
+
+@router.post("/product/proposals/{draft_id}/approve", response_model=ProposalOut,
+             summary="Record an approval. Does not build anything.")
+async def approve_proposal(draft_id: str, current_user: CurrentUser, db: DbSession,
+                           body: DecisionIn = DecisionIn()) -> ProposalOut:
+    return await _decide_proposal(draft_id, True, body, current_user, db)
+
+
+@router.post("/product/proposals/{draft_id}/reject", response_model=ProposalOut,
+             summary="Record a rejection.")
+async def reject_proposal(draft_id: str, current_user: CurrentUser, db: DbSession,
+                          body: DecisionIn = DecisionIn()) -> ProposalOut:
+    return await _decide_proposal(draft_id, False, body, current_user, db)
