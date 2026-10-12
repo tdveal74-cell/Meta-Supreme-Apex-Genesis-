@@ -76,7 +76,7 @@ COMPANY_FUNCTIONS: Dict[str, FunctionAgent] = {
             build_order=2,
             notes=[
                 "Ruled 2026-10-12: draft and queue only. Nothing is scheduled or published by the agent.",
-                "Built: the approval queue rules. Not built: storage and a route.",
+                "Built: the approval queue rules, storage (migration 022) and routes. Not built: a Blotato read and an episode feed.",
                 "Every post stays human approved and carries AI disclosure.",
             ],
         ),
