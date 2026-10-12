@@ -47,6 +47,13 @@ async def test_refused_comments_never_reach_the_table(client, auth_headers, patc
     assert (await client.get(BASE, headers=auth_headers)).json() == []
 
 
+async def test_a_trailing_newline_cannot_slip_a_comment_past_the_once_only_rule(client, auth_headers):
+    assert (await client.post(BASE, json=GOOD, headers=auth_headers)).status_code == 201
+    r = await client.post(BASE, json={**GOOD, "comment_id": GOOD["comment_id"] + "\n"}, headers=auth_headers)
+    assert r.status_code == 422, r.text
+    assert len((await client.get(BASE, headers=auth_headers)).json()) == 1
+
+
 async def test_oversized_fields_are_refused(client, auth_headers):
     r = await client.post(BASE, json={**GOOD, "reply_text": "x" * 8001}, headers=auth_headers)
     assert r.status_code == 422, r.text
@@ -151,6 +158,8 @@ async def test_the_table_refuses_a_row_a_caller_wrote_around_the_rules(client, a
         "('o','b','dQw4w9WgXcQ','c','n','t','r','   ','AI disclosure here','drafted')",
         "('o','c','dQw4w9WgXcQ','c','n','t','r','basis here ok','   ','drafted')",
         "('o','d','dQw4w9WgXcQ','c','n','t','r','basis here ok','AI disclosure here','approved')",
+        "('o','g','dQw4w9WgXcQ',E'c\\n','n','t','r','basis here ok','AI disclosure here','drafted')",
+        "('o','h','dQw4w9WgXcQ','a b','n','t','r','basis here ok','AI disclosure here','drafted')",
     ]
     async with AsyncSessionLocal() as s:
         for row in bad_rows:

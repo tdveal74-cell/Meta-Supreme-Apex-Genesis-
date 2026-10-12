@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS company_comment_drafts (
         CHECK (status IN ('drafted', 'approved', 'rejected')),
     CONSTRAINT company_comment_drafts_video_chk
         CHECK (video_id ~ '^[A-Za-z0-9_-]{11}$'),
+    CONSTRAINT company_comment_drafts_comment_id_chk
+        CHECK (comment_id ~ '^[A-Za-z0-9_-]{1,64}(\.[A-Za-z0-9_-]{1,64})?$'),
     CONSTRAINT company_comment_drafts_basis_chk
         CHECK (length(btrim(reply_basis)) > 0),
     CONSTRAINT company_comment_drafts_disclosure_chk

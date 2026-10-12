@@ -60,6 +60,29 @@ def test_bad_fields_are_refused_with_a_named_reason(field, value, match):
         create_comment_draft(**{**GOOD, field: value})
 
 
+@pytest.mark.parametrize("field,value", [
+    ("video_id", "dQw4w9WgXcQ\n"),
+    ("comment_id", "UgxABC123_-xyz\n"),
+    ("comment_id", "UgxABC123.9xYz\n"),
+    ("comment_id", ("a" * 64) + "." + ("b" * 64) + "\n"),
+])
+def test_a_trailing_newline_is_not_part_of_an_id(field, value):
+    with pytest.raises(QueueRefusal, match=field):
+        create_comment_draft(**{**GOOD, field: value})
+
+
+@pytest.mark.parametrize("value", ["\u200b\u200b", "\u200b", "\u2060 \ufeff"])
+def test_a_reply_with_no_visible_character_is_refused(value):
+    with pytest.raises(QueueRefusal, match="no visible"):
+        create_comment_draft(**{**GOOD, "reply_text": value})
+
+
+def test_a_commenter_name_longer_than_the_column_is_a_refusal_not_a_database_error():
+    with pytest.raises(QueueRefusal, match="longer than"):
+        create_comment_draft(**{**GOOD, "commenter_name": "x" * 201})
+    assert create_comment_draft(**{**GOOD, "commenter_name": "x" * 200})
+
+
 def test_a_reply_id_is_the_parent_id_a_dot_and_a_suffix():
     assert create_comment_draft(**{**GOOD, "comment_id": "UgxABC123.9xYz_-1"}).comment_id
 
@@ -78,7 +101,7 @@ def test_a_nul_byte_is_refused_everywhere(field):
         create_comment_draft(**{**GOOD, field: "a\x00b valid text here"})
 
 
-@pytest.mark.parametrize("name", ["Bob\r\nX", "Bo​b", "Bob\x01", "Bob‮evil"])
+@pytest.mark.parametrize("name", ["Bob\r\nX", "Bo\u200bb", "Bob\x01", "Bob\u202eevil", "Bob\u2028X", "Bob\u2029X"])
 def test_a_commenter_name_with_control_or_invisible_characters_is_refused(name):
     with pytest.raises(QueueRefusal, match="commenter_name"):
         create_comment_draft(**{**GOOD, "commenter_name": name})

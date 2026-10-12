@@ -10,7 +10,8 @@ What it refuses:
   1. A video id or comment id that is not shaped like a YouTube one. Both are
      identifiers that a later posting step would hand to the platform, so they
      are held to the characters YouTube uses and nothing else.
-  2. A drafted reply with em or en dashes or look-alikes, or a NUL byte. Tee's
+  2. A drafted reply with em or en dashes or look-alikes, a NUL byte, or no
+     visible character at all. Tee's
      prose rule for anything delivered. The viewer's comment is their own words
      and is only checked for NUL, because it is not ours to rewrite.
   3. A reply with no stated basis of at least 10 visible characters. The basis
@@ -40,12 +41,15 @@ from services.company.marketing import (
 )
 
 MIN_BASIS_CHARS = 10
+MAX_NAME_CHARS = 200
 
 # YouTube video ids are 11 characters of [A-Za-z0-9_-]. Comment ids use the same
 # alphabet, and a reply id is the parent id, a dot, then a suffix. Neither id is
-# ever allowed whitespace, a slash or a quote.
-_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
-_COMMENT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}(\.[A-Za-z0-9_-]{1,64})?$")
+# ever allowed whitespace, a slash or a quote. They are matched with fullmatch:
+# a "$" anchor also matches before a final newline, which would store an id the
+# platform never issued and let the same comment through the unique key twice.
+_VIDEO_ID_RE = re.compile(r"[A-Za-z0-9_-]{11}")
+_COMMENT_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}(\.[A-Za-z0-9_-]{1,64})?")
 
 
 @dataclass(frozen=True)
@@ -82,15 +86,19 @@ def create_comment_draft(
     ai_disclosure: str,
 ) -> CommentDraft:
     _plain_field(draft_id, "draft_id")
-    if not _VIDEO_ID_RE.match(video_id or ""):
+    if not _VIDEO_ID_RE.fullmatch(video_id or ""):
         raise QueueRefusal("video_id is not shaped like a YouTube video id")
-    if not _COMMENT_ID_RE.match(comment_id or ""):
+    if not _COMMENT_ID_RE.fullmatch(comment_id or ""):
         raise QueueRefusal("comment_id is not shaped like a YouTube comment id")
     _plain_field(commenter_name, "commenter_name")
-    if any(unicodedata.category(ch) in ("Cc", "Cf") for ch in commenter_name):
+    if any(unicodedata.category(ch) in ("Cc", "Cf", "Zl", "Zp") for ch in commenter_name):
         raise QueueRefusal("commenter_name contains a control or invisible character")
+    if len(commenter_name.strip()) > MAX_NAME_CHARS:
+        raise QueueRefusal(f"commenter_name is longer than {MAX_NAME_CHARS} characters")
     _plain_field(comment_text, "comment_text")
     _check_text(reply_text, "reply text")
+    if _visible_len(reply_text) == 0:
+        raise QueueRefusal("reply text has no visible characters")
     _plain_field(reply_basis, "reply_basis")
     if _visible_len(reply_basis) < MIN_BASIS_CHARS:
         raise QueueRefusal(
