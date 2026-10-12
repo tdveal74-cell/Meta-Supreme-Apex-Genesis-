@@ -41,10 +41,15 @@ def test_six_functions_in_ruled_build_order():
     assert [f.slug for f in funcs][:4] == ["ops_finance", "marketing", "sales", "support"]
 
 
-def test_only_a_function_with_code_is_marked_built():
-    built = [f for f in COMPANY_FUNCTIONS.values() if f.status is Status.BUILT]
-    assert [f.slug for f in built] == ["ops_finance"]
-    assert (ROOT / built[0].built_in).is_file()
+def test_only_a_function_with_code_is_marked_built_or_partial():
+    with_code = [f for f in COMPANY_FUNCTIONS.values() if f.status is not Status.PLANNED]
+    assert {f.slug: f.status for f in with_code} == {
+        "ops_finance": Status.BUILT,
+        "marketing": Status.PARTIAL,
+    }
+    for f in with_code:
+        assert (ROOT / f.built_in).is_file()
+    assert all(f.built_in is None for f in COMPANY_FUNCTIONS.values() if f.status is Status.PLANNED)
 
 
 def test_outward_functions_stay_gated_above_read():

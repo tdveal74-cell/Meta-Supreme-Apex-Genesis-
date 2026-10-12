@@ -31,6 +31,7 @@ class Impact(str, Enum):
 
 class Status(str, Enum):
     BUILT = "built"
+    PARTIAL = "partial"
     PLANNED = "planned"
 
 
@@ -61,7 +62,7 @@ COMPANY_FUNCTIONS: Dict[str, FunctionAgent] = {
             status=Status.BUILT,
             built_in="services/company/scoreboard.py",
             build_order=1,
-            notes=["Revenue is not connected yet, so it reports as not measured."],
+            notes=["Revenue is not connected yet, so it reports as not measured.", "Ruled 2026-10-12: Stripe is the revenue source. It needs Tee to authorize it in connector settings first."],
         ),
         FunctionAgent(
             slug="marketing",
@@ -70,9 +71,14 @@ COMPANY_FUNCTIONS: Dict[str, FunctionAgent] = {
             key_tools=["content lanes", "social scheduler"],
             outcome="Grow brand and audience",
             max_impact=Impact.HIGH_IMPACT,
-            status=Status.PLANNED,
+            status=Status.PARTIAL,
+            built_in="services/company/marketing.py",
             build_order=2,
-            notes=["Every post stays human approved and carries AI disclosure."],
+            notes=[
+                "Ruled 2026-10-12: draft and queue only. Nothing is scheduled or published by the agent.",
+                "Built: the approval queue rules. Not built: storage and a route.",
+                "Every post stays human approved and carries AI disclosure.",
+            ],
         ),
         FunctionAgent(
             slug="sales",
@@ -83,7 +89,7 @@ COMPANY_FUNCTIONS: Dict[str, FunctionAgent] = {
             max_impact=Impact.HIGH_IMPACT,
             status=Status.PLANNED,
             build_order=3,
-            notes=["No lead source is confirmed to exist yet."],
+            notes=["Ruled 2026-10-12: leads arrive as email or form replies. Outreach stays gated, Tee approves every send."],
         ),
         FunctionAgent(
             slug="support",
@@ -94,7 +100,7 @@ COMPANY_FUNCTIONS: Dict[str, FunctionAgent] = {
             max_impact=Impact.WRITE,
             status=Status.PLANNED,
             build_order=4,
-            notes=["No support channel is confirmed to exist yet."],
+            notes=["Ruled 2026-10-12: audience questions arrive as YouTube comments. Every reply is human approved."],
         ),
         FunctionAgent(
             slug="research",
