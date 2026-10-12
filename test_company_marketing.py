@@ -90,3 +90,29 @@ def test_a_nul_byte_is_refused_in_every_text_field():
     for field in ("text", "ai_disclosure", "show", "episode_ref", "platform", "draft_id"):
         with pytest.raises(QueueRefusal, match="NUL"):
             create_draft(**{**GOOD, field: "a\x00b"})
+
+
+@pytest.mark.parametrize("ch", ["\u2012", "\u2015", "\u2e3a", "\u2e3b", "\ufe58", "\ufe63", "\uff0d"])
+def test_dash_lookalikes_are_refused_in_text_and_disclosure(ch):
+    for field in ("text", "ai_disclosure"):
+        with pytest.raises(QueueRefusal, match="dash"):
+            create_draft(**{**GOOD, field: f"before {ch} after the rest"})
+
+
+def test_the_minus_sign_is_still_allowed_so_arithmetic_works():
+    d = create_draft(**{**GOOD, "text": "Cut 5 \u2212 2 steps from the checklist."})
+    assert d.status is DraftStatus.DRAFTED
+
+
+@pytest.mark.parametrize("junk", [".", "AI", "\u200b", "\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b", "a\u200bb\u200bc\u200b", "         x         "])
+def test_a_disclosure_with_under_ten_visible_characters_is_refused(junk):
+    with pytest.raises(QueueRefusal, match="visible characters"):
+        create_draft(**{**GOOD, "ai_disclosure": junk})
+
+
+def test_the_ten_visible_character_boundary_is_exact():
+    ten = "Made with AI"  # 10 visible characters, the space does not count
+    nine = "Made wit AI"  # 9
+    assert create_draft(**{**GOOD, "ai_disclosure": ten}).ai_disclosure == ten
+    with pytest.raises(QueueRefusal, match="visible characters"):
+        create_draft(**{**GOOD, "ai_disclosure": nine})
