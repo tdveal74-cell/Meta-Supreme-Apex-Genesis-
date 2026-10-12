@@ -84,3 +84,9 @@ def test_the_module_cannot_reach_a_platform():
         elif isinstance(node, ast.ImportFrom) and node.module:
             mods = [node.module.split(".")[0]]
         assert not banned & set(mods)
+
+
+def test_a_nul_byte_is_refused_in_every_text_field():
+    for field in ("text", "ai_disclosure", "show", "episode_ref", "platform", "draft_id"):
+        with pytest.raises(QueueRefusal, match="NUL"):
+            create_draft(**{**GOOD, field: "a\x00b"})
