@@ -9,6 +9,7 @@ from app.api.v1 import (
     agent_tasks,
     agents,
     auth,
+    company,
     conversations,
     decisions,
     devon,
@@ -49,6 +50,7 @@ api_router.include_router(knowledge.router)
 api_router.include_router(knowledge_fkr.router)
 api_router.include_router(memory.router)
 api_router.include_router(usage.router)
+api_router.include_router(company.router)
 api_router.include_router(decisions.router)
 api_router.include_router(workflows.router)
 api_router.include_router(episodes.router)
