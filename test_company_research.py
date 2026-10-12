@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import unicodedata
 
 import pytest
 
@@ -39,7 +40,7 @@ def test_the_excerpt_is_optional():
 
 @pytest.mark.parametrize("field,value,match", [
     ("claim", "short", "visible characters"),
-    ("claim", "​" * 20, "visible characters"),
+    ("claim", "\u200b" * 20, "claim contains"),
     ("evidence_kind", "rumour", "evidence_kind"),
     ("evidence_kind", "", "evidence_kind"),
     ("evidence_ref", "short", "visible characters"),
@@ -147,3 +148,35 @@ def test_the_module_cannot_reach_the_network():
         elif isinstance(node, ast.ImportFrom) and node.module:
             mods = [node.module.split(".")[0]]
         assert not banned & set(mods)
+
+
+def test_the_claim_key_folds_encoding_and_invisible_characters():
+    base = "The caf\u00e9 price is 40 dollars"
+    for same in (
+        unicodedata.normalize("NFD", base),
+        "The caf\u00e9 pri\u200bce is 40 dollars",
+        "The caf\u00e9 price is 40 dollars\u00a0",
+        "\uff34he caf\u00e9 price is 40 dollars",
+    ):
+        assert claim_key(same) == claim_key(base)
+    assert claim_key("The cafe price is 40 dollars") != claim_key(base)
+
+
+@pytest.mark.parametrize("claim", ["Claim\x07 long enough here", "Claim\nlong enough here",
+                                   "Claim\u200b long enough here", "Claim\u2028long enough here"])
+def test_a_claim_with_control_or_invisible_characters_is_refused(claim):
+    with pytest.raises(QueueRefusal, match="claim contains"):
+        create_finding(**{**GOOD, "claim": claim})
+
+
+def test_claim_and_recommendation_are_stored_stripped():
+    f = create_finding(**{**GOOD, "claim": "  A claim that is long enough.  ",
+                          "recommendation": "\n  Do the thing, and do it well.  "})
+    assert f.claim == "A claim that is long enough." and f.recommendation == "Do the thing, and do it well."
+
+
+def test_a_nul_in_a_decision_note_is_a_refusal_not_a_database_error():
+    f = create_finding(**GOOD)
+    for fn in (approve, reject):
+        with pytest.raises(QueueRefusal, match="NUL"):
+            fn(f, "Tee", "bad\x00note")

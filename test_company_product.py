@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import unicodedata
 
 import pytest
 
@@ -111,3 +112,22 @@ def test_the_module_cannot_reach_the_network_or_run_anything():
         elif isinstance(node, ast.ImportFrom) and node.module:
             mods = [node.module.split(".")[0]]
         assert not banned & set(mods)
+
+
+def test_the_title_key_folds_encoding_and_invisible_characters():
+    base = "Caf\u00e9 menu update"
+    for same in (
+        unicodedata.normalize("NFD", base),
+        "Caf\u00e9 me\u200bnu update",
+        "Caf\u00e9\u00a0menu update",
+        "\uff23af\u00e9 menu update",
+    ):
+        assert title_key(same) == title_key(base)
+    assert title_key("Cafe menu update") != title_key(base)
+
+
+def test_a_nul_in_a_decision_note_is_a_refusal_not_a_database_error():
+    p = create_proposal(**GOOD)
+    for fn in (approve, reject):
+        with pytest.raises(QueueRefusal, match="NUL"):
+            fn(p, "Tee", "bad\x00note")

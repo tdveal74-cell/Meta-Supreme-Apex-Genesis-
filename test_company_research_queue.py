@@ -187,3 +187,16 @@ async def test_a_nul_byte_in_a_decision_note_is_a_422_not_a_500(client, auth_hea
         r = await client.post(f"{BASE}/{d['draft_id']}/{verb}", json={"note": "a\x00b"}, headers=auth_headers)
         assert r.status_code == 422, r.text
     assert (await client.get(BASE, headers=auth_headers)).json()[0]["status"] == "drafted"
+
+
+async def test_the_same_claim_spelled_another_way_is_still_a_duplicate(client, auth_headers):
+    import unicodedata
+
+    assert (await client.post(BASE, json=GOOD, headers=auth_headers)).status_code == 201
+    for claim in (unicodedata.normalize("NFD", GOOD["claim"].replace("PMs", "caf\u00e9s")),):
+        first = await client.post(BASE, json={**GOOD, "claim": GOOD["claim"].replace("PMs", "caf\u00e9s")},
+                                  headers=auth_headers)
+        again = await client.post(BASE, json={**GOOD, "claim": claim}, headers=auth_headers)
+        assert first.status_code == 201 and again.status_code == 409, again.text
+    zw = GOOD["claim"][:10] + "\u200b" + GOOD["claim"][10:]
+    assert (await client.post(BASE, json={**GOOD, "claim": zw}, headers=auth_headers)).status_code == 422

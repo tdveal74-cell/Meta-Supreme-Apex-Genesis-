@@ -67,8 +67,15 @@ class Proposal:
 
 
 def title_key(title: str) -> str:
-    """Case and whitespace insensitive identity of a title."""
-    return hashlib.sha256(" ".join(title.casefold().split()).encode("utf-8")).hexdigest()
+    """Identity of a title, ignoring case, spacing and how it was encoded.
+
+    NFKC folds a composed and a decomposed accent, and full-width forms, to one
+    spelling. Invisible characters are dropped so a zero-width space cannot make
+    a second copy of the same title.
+    """
+    folded = unicodedata.normalize("NFKC", title)
+    folded = "".join(ch for ch in folded if unicodedata.category(ch) not in ("Cf", "Cc") or ch.isspace())
+    return hashlib.sha256(" ".join(folded.casefold().split()).encode("utf-8")).hexdigest()
 
 
 def _plain_field(value: str, label: str) -> None:
@@ -125,6 +132,8 @@ def _decide(p: Proposal, status: DraftStatus, decided_by: str, note: Optional[st
         raise QueueRefusal("a human decision needs a named decider")
     if who.lower() in AUTOMATED_ACTORS:
         raise QueueRefusal(f"{who!r} is an automated actor, not a human decider")
+    if note is not None and "\x00" in note:
+        raise QueueRefusal("decision note contains a NUL byte")
     if status is DraftStatus.APPROVED and p.size == "large" and _visible_len(note or "") < MIN_TEXT_CHARS:
         raise QueueRefusal(
             "approving a large proposal needs a note of at least "

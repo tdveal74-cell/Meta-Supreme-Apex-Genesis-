@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import unicodedata
 from dataclasses import dataclass, replace
 from typing import Optional
 
@@ -47,7 +48,11 @@ EVIDENCE_KINDS = ("source", "measured", "unverified")
 MIN_TEXT_CHARS = 10
 MAX_REF_CHARS = 2000
 
-# A plain https URL: no whitespace, angle brackets, quotes, control or invisible
+# A plain https URL. This is a shape check and is NOT a fetch-safety filter: it
+# lets through internal names that end in a letter TLD (a metadata hostname, a
+# wildcard DNS name that resolves to a private address). Nothing here fetches.
+# Whatever fetches a source later must resolve the host and refuse private
+# ranges and redirects at connect time. No whitespace, angle brackets, quotes, control or invisible
 # characters anywhere. Matched with fullmatch, since "$" also matches before a
 # final newline.
 _URL_RE = re.compile(
@@ -76,8 +81,15 @@ class Finding:
 
 
 def claim_key(claim: str) -> str:
-    """Case and whitespace insensitive identity of a claim."""
-    return hashlib.sha256(" ".join(claim.casefold().split()).encode("utf-8")).hexdigest()
+    """Identity of a claim, ignoring case, spacing and how it was encoded.
+
+    NFKC folds a composed and a decomposed accent, and full-width forms, to one
+    spelling. Invisible characters are dropped so a zero-width space cannot make
+    a second copy of the same claim.
+    """
+    folded = unicodedata.normalize("NFKC", claim)
+    folded = "".join(ch for ch in folded if unicodedata.category(ch) not in ("Cf", "Cc") or ch.isspace())
+    return hashlib.sha256(" ".join(folded.casefold().split()).encode("utf-8")).hexdigest()
 
 
 def _plain_field(value: str, label: str) -> None:
@@ -98,6 +110,8 @@ def create_finding(
 ) -> Finding:
     _plain_field(draft_id, "draft_id")
     _check_text(claim, "claim")
+    if any(unicodedata.category(ch) in ("Cc", "Cf", "Zl", "Zp") for ch in claim):
+        raise QueueRefusal("claim contains a control or invisible character")
     if _visible_len(claim) < MIN_TEXT_CHARS:
         raise QueueRefusal(f"claim needs at least {MIN_TEXT_CHARS} visible characters")
     if evidence_kind not in EVIDENCE_KINDS:
@@ -116,9 +130,9 @@ def create_finding(
     if _visible_len(recommendation) < MIN_TEXT_CHARS:
         raise QueueRefusal(f"recommendation needs at least {MIN_TEXT_CHARS} visible characters")
     return Finding(
-        draft_id=draft_id, claim_key=claim_key(claim), claim=claim,
+        draft_id=draft_id, claim_key=claim_key(claim), claim=claim.strip(),
         evidence_kind=evidence_kind, evidence_ref=ref,
-        evidence_excerpt=evidence_excerpt or None, recommendation=recommendation,
+        evidence_excerpt=evidence_excerpt or None, recommendation=recommendation.strip(),
     )
 
 
@@ -130,6 +144,8 @@ def _decide(f: Finding, status: DraftStatus, decided_by: str, note: Optional[str
         raise QueueRefusal("a human decision needs a named decider")
     if who.lower() in AUTOMATED_ACTORS:
         raise QueueRefusal(f"{who!r} is an automated actor, not a human decider")
+    if note is not None and "\x00" in note:
+        raise QueueRefusal("decision note contains a NUL byte")
     if status is DraftStatus.APPROVED and f.evidence_kind == "unverified":
         if _visible_len(note or "") < MIN_TEXT_CHARS:
             raise QueueRefusal(
