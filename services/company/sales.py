@@ -28,6 +28,8 @@ were written down.
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Optional
@@ -43,6 +45,16 @@ from services.company.marketing import (
 
 SOURCES = ("email", "form")
 MIN_REASON_CHARS = 10
+MAX_EMAIL_CHARS = 254
+
+# The address comes from an untrusted inbound message and may one day feed a To
+# header, so it is held to a strict shape: one @, no whitespace, angle brackets,
+# commas, semicolons, quotes, control or invisible characters in the local part,
+# and a dotted ASCII domain with no empty labels and an alphabetic top level.
+_EMAIL_RE = re.compile(
+    r"^[^\s@<>,;\"\x00-\x1f\x7f\u200b-\u200f\u2028-\u202f\u2060-\u206f\ufeff]+"
+    r"@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$"
+)
 
 
 class Qualification(str, Enum):
@@ -90,10 +102,11 @@ def create_lead_draft(
     if source not in SOURCES:
         raise QueueRefusal(f"source must be one of {', '.join(SOURCES)}")
     _plain_field(contact_name, "contact_name")
+    if any(unicodedata.category(ch) in ("Cc", "Cf") for ch in contact_name):
+        raise QueueRefusal("contact_name contains a control or invisible character")
     _plain_field(contact_email, "contact_email")
     addr = contact_email.strip()
-    local, _, domain = addr.partition("@")
-    if not local or "." not in domain or any(c.isspace() for c in addr) or addr.count("@") != 1:
+    if len(addr) > MAX_EMAIL_CHARS or not _EMAIL_RE.match(addr):
         raise QueueRefusal("contact_email is not shaped like an email address")
     _plain_field(inbound_excerpt, "inbound_excerpt")
     try:

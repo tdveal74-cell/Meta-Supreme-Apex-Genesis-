@@ -138,3 +138,31 @@ async def test_the_table_refuses_a_row_a_caller_wrote_around_the_rules(client, a
             with pytest.raises(IntegrityError):
                 await s.execute(text(base + row))
             await s.rollback()
+
+
+async def test_a_nul_byte_in_a_decision_note_is_a_422_not_a_500(client, auth_headers):
+    d = (await client.post(BASE, json=GOOD, headers=auth_headers)).json()
+    for verb in ("approve", "reject"):
+        r = await client.post(f"{BASE}/{d['draft_id']}/{verb}", json={"note": "a\x00b"}, headers=auth_headers)
+        assert r.status_code == 422, r.text
+    assert (await client.get(BASE, headers=auth_headers)).json()[0]["status"] == "drafted"
+
+
+async def test_the_marketing_decision_routes_share_the_note_fix(client, auth_headers):
+    mk = "/api/v1/company/marketing/drafts"
+    d = (await client.post(mk, json={
+        "show": "TQO", "episode_ref": "ep-1", "platform": "youtube_community",
+        "text": "New episode out now.", "ai_disclosure": "Made with an AI voice.",
+    }, headers=auth_headers)).json()
+    r = await client.post(f"{mk}/{d['draft_id']}/approve", json={"note": "a\x00b"}, headers=auth_headers)
+    assert r.status_code == 422, r.text
+
+
+@pytest.mark.parametrize("patch", [
+    {"contact_email": "<jordan@example.com>"},
+    {"contact_name": "Bob\r\nBcc: evil@x.co"},
+])
+async def test_the_routes_refuse_the_injection_shaped_lead_fields(client, auth_headers, patch):
+    r = await client.post(BASE, json={**GOOD, **patch}, headers=auth_headers)
+    assert r.status_code == 422, r.text
+    assert (await client.get(BASE, headers=auth_headers)).json() == []

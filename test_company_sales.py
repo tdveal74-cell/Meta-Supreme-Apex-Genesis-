@@ -111,3 +111,35 @@ def test_the_module_cannot_reach_a_mail_system():
         elif isinstance(node, ast.ImportFrom) and node.module:
             mods = [node.module.split(".")[0]]
         assert not banned & set(mods)
+
+
+@pytest.mark.parametrize("addr", [
+    "<a@b.co>", "a@b.co>", "a@b.", "a@.b", "a@b..co", "a@b,c.co",
+    "a\x01@b.co", "a@b.co\u200b", "\u200ba@b.co", "a@b.co,c@d.co", "a@b.co;c@d.co",
+    'a"b@c.co', "a@b.c", "a@-b.co", "a@b-.co", "a@b.co\r\nBcc: x@y.co", "a@" + "b" * 250 + ".co",
+])
+def test_the_email_shape_refuses_what_a_mail_header_could_not_carry(addr):
+    with pytest.raises(QueueRefusal, match="email"):
+        create_lead_draft(**{**GOOD, "contact_email": addr})
+
+
+@pytest.mark.parametrize("addr", ["jordan@example.com", "j.lee+tag@sub.example.co.uk", "o'brien@example.org",
+                                  "\u00e9mile@example.fr"])
+def test_ordinary_addresses_still_pass(addr):
+    assert create_lead_draft(**{**GOOD, "contact_email": addr}).contact_email == addr
+
+
+@pytest.mark.parametrize("name", ["Bob\r\nBcc: evil@x.co", "Bob\nX", "Bo\u200bb", "Bob\x01", "Bob\u202eevil"])
+def test_a_contact_name_with_control_or_invisible_characters_is_refused(name):
+    with pytest.raises(QueueRefusal, match="contact_name"):
+        create_lead_draft(**{**GOOD, "contact_name": name})
+
+
+def test_a_plain_name_with_a_hyphen_or_accent_passes():
+    assert create_lead_draft(**{**GOOD, "contact_name": "Anne-Marie O\u2019Neil"}).contact_name
+
+
+@pytest.mark.parametrize("ch", ["\ufe31", "\ufe32"])
+def test_the_vertical_em_and_en_dashes_are_refused(ch):
+    with pytest.raises(QueueRefusal, match="dash"):
+        create_lead_draft(**{**GOOD, "reply_text": f"before {ch} after the rest"})

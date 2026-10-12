@@ -110,7 +110,10 @@ class DraftIn(BaseModel):
 
 
 class DecisionIn(BaseModel):
-    note: Optional[str] = Field(None, max_length=2000)
+    # The pattern refuses a NUL byte, which the database cannot store. It is a
+    # pattern and not a validator because a validator's ValueError cannot be
+    # serialised by this app's validation error handler, which turns a 422 into a 500.
+    note: Optional[str] = Field(None, max_length=2000, pattern=r"^[^\x00]*$")
 
 
 class DraftOut(BaseModel):
