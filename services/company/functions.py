@@ -117,9 +117,13 @@ COMPANY_FUNCTIONS: Dict[str, FunctionAgent] = {
             key_tools=["web search", "data analysis"],
             outcome="Identify new markets, strategic insights",
             max_impact=Impact.READ,
-            status=Status.PLANNED,
+            status=Status.PARTIAL,
+            built_in="services/company/research.py",
             build_order=5,
-            notes=["The Council's Analyst and Oracle seats already cover part of this."],
+            notes=[
+                "The Council's Analyst and Oracle seats already cover part of this.",
+                "Built: the findings log rules (every finding declares source, measured or unverified), storage (migration 025) and routes. Not built: the search itself.",
+            ],
         ),
         FunctionAgent(
             slug="product",
@@ -128,9 +132,13 @@ COMPANY_FUNCTIONS: Dict[str, FunctionAgent] = {
             key_tools=["code tools"],
             outcome="Build and ship products faster",
             max_impact=Impact.WRITE,
-            status=Status.PLANNED,
+            status=Status.PARTIAL,
+            built_in="services/company/product.py",
             build_order=6,
-            notes=["The Council's Engineer seat and the EditForge lane already cover part of this."],
+            notes=[
+                "The Council's Engineer seat and the EditForge lane already cover part of this.",
+                "Built: the change-proposal rules (each carries an acceptance check and a reference artifact), storage (migration 026) and routes. Not built: anything that writes code or opens a pull request.",
+            ],
         ),
     )
 }
