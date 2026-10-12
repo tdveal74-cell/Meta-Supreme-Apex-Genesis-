@@ -92,7 +92,7 @@ def test_a_nul_byte_is_refused_in_every_text_field():
             create_draft(**{**GOOD, field: "a\x00b"})
 
 
-@pytest.mark.parametrize("ch", ["\u2012", "\u2015", "\u2e3a", "\u2e3b", "\ufe58", "\ufe63", "\uff0d"])
+@pytest.mark.parametrize("ch", ["\u2012", "\u2015", "\u2e3a", "\u2e3b", "\ufe31", "\ufe32", "\ufe58", "\ufe63", "\uff0d"])
 def test_dash_lookalikes_are_refused_in_text_and_disclosure(ch):
     for field in ("text", "ai_disclosure"):
         with pytest.raises(QueueRefusal, match="dash"):

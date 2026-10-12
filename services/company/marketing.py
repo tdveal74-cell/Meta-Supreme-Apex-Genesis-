@@ -28,11 +28,11 @@ from typing import Optional
 
 # Em and en dash, as ruled, plus the characters that read as a dash on a page:
 # figure dash, horizontal bar, two-em and three-em dash, small em dash, small
-# hyphen-minus and fullwidth hyphen-minus. The minus sign U+2212 is left out on
+# hyphen-minus, fullwidth hyphen-minus and the vertical em and en dashes. The minus sign U+2212 is left out on
 # purpose so a post can still carry arithmetic. Ruled by Tee 2026-10-12.
 BANNED_DASHES = (
     "\u2012", "\u2013", "\u2014", "\u2015", "\u2e3a", "\u2e3b",
-    "\ufe58", "\ufe63", "\uff0d",
+    "\ufe31", "\ufe32", "\ufe58", "\ufe63", "\uff0d",
 )
 MIN_DISCLOSURE_CHARS = 10
 AUTOMATED_ACTORS = {"claude", "agent", "auto", "bot", "system", "marketing", "devon"}
