@@ -102,9 +102,13 @@ COMPANY_FUNCTIONS: Dict[str, FunctionAgent] = {
             key_tools=["knowledge base", "ticketing"],
             outcome="High quality support, 24/7",
             max_impact=Impact.WRITE,
-            status=Status.PLANNED,
+            status=Status.PARTIAL,
+            built_in="services/company/support.py",
             build_order=4,
-            notes=["Ruled 2026-10-12: audience questions arrive as YouTube comments. Every reply is human approved."],
+            notes=[
+                "Ruled 2026-10-12: audience questions arrive as YouTube comments. Every reply is human approved.",
+                "Built: the draft-reply approval queue rules, storage (migration 024) and routes. Not built: reading comments (the vidIQ reader needs credits), the episode knowledge base, and posting.",
+            ],
         ),
         FunctionAgent(
             slug="research",
