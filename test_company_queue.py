@@ -78,7 +78,7 @@ async def test_one_account_cannot_see_or_decide_another_accounts_draft(client, a
     async with AsyncSessionLocal() as s:
         other = await insert_draft(
             s, "some-other-account", show="TQO", episode_ref="x", platform="p",
-            post_text="hello", ai_disclosure="AI made",
+            post_text="hello", ai_disclosure="Made with AI voice.",
         )
         await s.commit()
     assert (await client.get(BASE, headers=auth_headers)).json() == []
@@ -161,3 +161,14 @@ async def test_oversized_fields_are_refused(client, auth_headers, patch):
     assert r.status_code == 422, r.text
     ok = await client.post(BASE, json={**GOOD, "text": "x" * 4000}, headers=auth_headers)
     assert ok.status_code == 201, ok.text
+
+
+@pytest.mark.parametrize("patch", [
+    {"ai_disclosure": "."},
+    {"ai_disclosure": "\u200b"},
+    {"text": "before \u2015 after"},
+])
+async def test_lookalike_dashes_and_junk_disclosures_are_refused_by_the_route(client, auth_headers, patch):
+    r = await client.post(BASE, json={**GOOD, **patch}, headers=auth_headers)
+    assert r.status_code == 422, r.text
+    assert (await client.get(BASE, headers=auth_headers)).json() == []
