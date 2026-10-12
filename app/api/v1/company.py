@@ -18,10 +18,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db.session import get_db
 from app.security.deps import CurrentUser
-from app.services import company_queue
+from app.services import company_queue, company_sales_queue
 from app.services.provider_usage import read_usage, utc_today
 from services.company.functions import list_functions
 from services.company.marketing import PostDraft, QueueRefusal
+from services.company.sales import LeadDraft
 from services.company.scoreboard import build_scoreboard
 
 router = APIRouter(prefix="/company", tags=["Company"])
@@ -180,3 +181,98 @@ async def approve_draft(draft_id: str, current_user: CurrentUser, db: DbSession,
 async def reject_draft(draft_id: str, current_user: CurrentUser, db: DbSession,
                        body: DecisionIn = DecisionIn()) -> DraftOut:
     return await _decide(draft_id, False, body, current_user, db)
+
+
+# ---------------------------------------------------------------------------
+# The Sales approval queue. Qualify and draft only: no route here sends a
+# message, and none can. A decision is the signed-in account's own.
+# ---------------------------------------------------------------------------
+
+
+class LeadDraftIn(BaseModel):
+    source: str = Field(..., max_length=16)
+    contact_name: str = Field(..., max_length=200)
+    contact_email: str = Field(..., max_length=320)
+    # Storage guards only, not product limits.
+    inbound_excerpt: str = Field(..., max_length=8000)
+    qualification: str = Field(..., max_length=16)
+    qualification_reason: str = Field(..., max_length=2000)
+    reply_text: str = Field(..., max_length=8000)
+    ai_disclosure: str = Field(..., max_length=1000)
+
+
+class LeadDraftOut(BaseModel):
+    draft_id: str
+    source: str
+    contact_name: str
+    contact_email: str
+    inbound_excerpt: str
+    qualification: str
+    qualification_reason: str
+    reply_text: str
+    ai_disclosure: str
+    status: str
+    decided_by: Optional[str]
+    decision_note: Optional[str]
+
+
+def _lead_out(d: LeadDraft) -> LeadDraftOut:
+    return LeadDraftOut(
+        draft_id=d.draft_id, source=d.source, contact_name=d.contact_name,
+        contact_email=d.contact_email, inbound_excerpt=d.inbound_excerpt,
+        qualification=d.qualification.value, qualification_reason=d.qualification_reason,
+        reply_text=d.reply_text, ai_disclosure=d.ai_disclosure, status=d.status.value,
+        decided_by=d.decided_by, decision_note=d.decision_note,
+    )
+
+
+@router.post("/sales/drafts", response_model=LeadDraftOut, status_code=201,
+             summary="Queue a qualified lead and drafted reply for approval")
+async def queue_lead_draft(body: LeadDraftIn, current_user: CurrentUser, db: DbSession) -> LeadDraftOut:
+    try:
+        draft = await company_sales_queue.insert_lead_draft(
+            db, str(current_user.id), source=body.source, contact_name=body.contact_name,
+            contact_email=body.contact_email, inbound_excerpt=body.inbound_excerpt,
+            qualification=body.qualification, qualification_reason=body.qualification_reason,
+            reply_text=body.reply_text, ai_disclosure=body.ai_disclosure,
+        )
+    except QueueRefusal as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return _lead_out(draft)
+
+
+@router.get("/sales/drafts", response_model=List[LeadDraftOut], summary="List the caller's lead drafts")
+async def list_lead_queue(
+    current_user: CurrentUser, db: DbSession,
+    status: Optional[str] = Query(None, pattern="^(drafted|approved|rejected)$"),
+) -> List[LeadDraftOut]:
+    drafts = await company_sales_queue.list_lead_drafts(db, str(current_user.id), status)
+    return [_lead_out(d) for d in drafts]
+
+
+async def _decide_lead(draft_id: str, approved: bool, body: DecisionIn,
+                       current_user, db: AsyncSession) -> LeadDraftOut:
+    try:
+        decided = await company_sales_queue.decide_lead_draft(
+            db, str(current_user.id), draft_id, approved=approved,
+            decided_by=current_user.email, note=body.note,
+        )
+    except QueueRefusal as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    if decided is None:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    return _lead_out(decided)
+
+
+@router.post("/sales/drafts/{draft_id}/approve", response_model=LeadDraftOut,
+             summary="Record an approval. Does not send anything.")
+async def approve_lead_draft(draft_id: str, current_user: CurrentUser, db: DbSession,
+                             body: DecisionIn = DecisionIn()) -> LeadDraftOut:
+    return await _decide_lead(draft_id, True, body, current_user, db)
+
+
+@router.post("/sales/drafts/{draft_id}/reject", response_model=LeadDraftOut,
+             summary="Record a rejection.")
+async def reject_lead_draft(draft_id: str, current_user: CurrentUser, db: DbSession,
+                            body: DecisionIn = DecisionIn()) -> LeadDraftOut:
+    return await _decide_lead(draft_id, False, body, current_user, db)

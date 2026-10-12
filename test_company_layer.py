@@ -46,6 +46,7 @@ def test_only_a_function_with_code_is_marked_built_or_partial():
     assert {f.slug: f.status for f in with_code} == {
         "ops_finance": Status.BUILT,
         "marketing": Status.PARTIAL,
+        "sales": Status.PARTIAL,
     }
     for f in with_code:
         assert (ROOT / f.built_in).is_file()

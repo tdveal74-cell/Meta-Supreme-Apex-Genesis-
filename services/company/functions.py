@@ -87,9 +87,13 @@ COMPANY_FUNCTIONS: Dict[str, FunctionAgent] = {
             key_tools=["lead source", "email drafts"],
             outcome="Increase qualified leads and revenue",
             max_impact=Impact.HIGH_IMPACT,
-            status=Status.PLANNED,
+            status=Status.PARTIAL,
+            built_in="services/company/sales.py",
             build_order=3,
-            notes=["Ruled 2026-10-12: leads arrive as email or form replies. Outreach stays gated, Tee approves every send."],
+            notes=[
+                "Ruled 2026-10-12: leads arrive as email or form replies. Outreach stays gated, Tee approves every send.",
+                "Built: the qualify-and-draft approval queue rules, storage (migration 023) and routes. Not built: reading the inbox or the form, and sending.",
+            ],
         ),
         FunctionAgent(
             slug="support",
