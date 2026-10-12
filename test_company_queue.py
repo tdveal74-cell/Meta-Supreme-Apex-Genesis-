@@ -139,3 +139,25 @@ async def _read(owner_id, draft_id):
 
     async with AsyncSessionLocal() as s:
         return await company_queue.get_draft(s, owner_id, draft_id)
+
+
+@pytest.mark.parametrize("patch", [
+    {"text": "a\x00b"},
+    {"show": "a\x00b"},
+    {"ai_disclosure": "AI\x00made"},
+])
+async def test_a_nul_byte_is_refused_with_422_not_a_500(client, auth_headers, patch):
+    r = await client.post(BASE, json={**GOOD, **patch}, headers=auth_headers)
+    assert r.status_code == 422, r.text
+    assert (await client.get(BASE, headers=auth_headers)).json() == []
+
+
+@pytest.mark.parametrize("patch", [
+    {"text": "x" * 4001},
+    {"ai_disclosure": "x" * 1001},
+])
+async def test_oversized_fields_are_refused(client, auth_headers, patch):
+    r = await client.post(BASE, json={**GOOD, **patch}, headers=auth_headers)
+    assert r.status_code == 422, r.text
+    ok = await client.post(BASE, json={**GOOD, "text": "x" * 4000}, headers=auth_headers)
+    assert ok.status_code == 201, ok.text

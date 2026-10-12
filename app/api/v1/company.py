@@ -103,12 +103,13 @@ class DraftIn(BaseModel):
     show: str = Field(..., max_length=120)
     episode_ref: str = Field(..., max_length=200)
     platform: str = Field(..., max_length=80)
-    text: str
-    ai_disclosure: str
+    # Storage guards only. These are not platform limits, which are unverified.
+    text: str = Field(..., max_length=4000)
+    ai_disclosure: str = Field(..., max_length=1000)
 
 
 class DecisionIn(BaseModel):
-    note: Optional[str] = None
+    note: Optional[str] = Field(None, max_length=2000)
 
 
 class DraftOut(BaseModel):

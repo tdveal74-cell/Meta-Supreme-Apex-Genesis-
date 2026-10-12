@@ -51,6 +51,8 @@ class PostDraft:
 def _check_text(text: str, label: str) -> None:
     if not text or not text.strip():
         raise QueueRefusal(f"{label} is empty")
+    if "\x00" in text:
+        raise QueueRefusal(f"{label} contains a NUL byte")
     if any(d in text for d in BANNED_DASHES):
         raise QueueRefusal(f"{label} contains an em or en dash")
 
@@ -61,6 +63,8 @@ def create_draft(*, draft_id: str, show: str, episode_ref: str, platform: str,
                          ("episode_ref", episode_ref), ("platform", platform)):
         if not value or not value.strip():
             raise QueueRefusal(f"{label} is empty")
+        if "\x00" in value:
+            raise QueueRefusal(f"{label} contains a NUL byte")
     _check_text(text, "post text")
     if not ai_disclosure or not ai_disclosure.strip():
         raise QueueRefusal("no AI disclosure: a draft cannot be queued without one")
