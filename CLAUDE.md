@@ -786,7 +786,7 @@ commit above: a green that means nothing. Set it to absolute worktree paths.
 
 ## Skills in this repository
 
-`.claude/skills/` carries eight. Seven are ours: `steward` (CI and PR
+`.claude/skills/` carries ten. Nine are ours: `steward` (CI and PR
 conventions, load it for anything touching either), `deploy-readback` (what the
 production surfaces are actually serving), `estate-reconcile` (checking records
 against the live estate), `devon-learning-lane` (the Build 12 learning lane and
@@ -795,7 +795,12 @@ file holds, filed as `docs/devon/CAPTURE_*`), `shadow-we-share-brand` (the
 podcast's brand system, its flagship standard, palette, mark and voice),
 `startup-reverse-engineering` (turning a named startup into one business to
 build: the steal, the wedge and a verdict, with every figure sourced or marked
-unverified).
+unverified), `tsws-repair-workflows` (running and judging the three TSWS
+editable repair methods and their synthetic tests, with the eleven defects the
+2026-10-13 gauntlet found and the test that now guards each one), and
+`genjutsu-open-workflow` (installing or judging the Genjutsu persona-swap app,
+what it sends off the machine, and the three changes required before any key
+goes in).
 
 This paragraph said six and five until 2026-09-12, when a session counted the
 directory instead of the sentence. `shadow-we-share-brand` had been committed
@@ -804,7 +809,7 @@ since `962f104` and was named nowhere. Do not edit these two numbers by hand:
 reads the directory and fails when they drift, which is the only reason this
 line can now be trusted.
 
-The eighth, `scroll-craft`, is vendored third-party work: Nate Herk's
+The tenth, `scroll-craft`, is vendored third-party work: Nate Herk's
 scroll-driven landing page skill, MIT, copied from `nateherkai/scroll-craft`.
 Never edit it in place, fixes go upstream, and `test_vendored_skills.py`
 enforces that against `MANIFEST.sha256` rather than trusting the prose. Read
