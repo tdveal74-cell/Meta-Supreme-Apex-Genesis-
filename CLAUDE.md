@@ -796,7 +796,7 @@ podcast's brand system, its flagship standard, palette, mark and voice),
 `startup-reverse-engineering` (turning a named startup into one business to
 build: the steal, the wedge and a verdict, with every figure sourced or marked
 unverified), `tsws-repair-workflows` (running and judging the three TSWS
-editable repair methods and their synthetic tests, with the nineteen defects
+editable repair methods and their synthetic tests, with the twenty defects
 the 2026-10-13 gauntlet found and the test that now guards each one), and
 `genjutsu-open-workflow` (installing or judging the Genjutsu persona-swap app,
 what it sends off the machine, and the three changes required before any key

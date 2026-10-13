@@ -1,6 +1,6 @@
 ---
 name: tsws-repair-workflows
-description: Run, extend or judge the three TSWS editable repair workflows (shot composer, shot cleanup, scene builder) and their synthetic test suite. Load when a repair job for The Shadow We Share is being planned or run, when an Episode 1 shot (SH020, SH045, SH070, SH100, SH150, SH160) comes up, when someone asks whether a repair "passed", or before touching the n8n orchestration draft. Compiled 2026-10-13 from the build and the three-cycle fresh-critic gauntlet that found nineteen defects the tests had not.
+description: Run, extend or judge the three TSWS editable repair workflows (shot composer, shot cleanup, scene builder) and their synthetic test suite. Load when a repair job for The Shadow We Share is being planned or run, when an Episode 1 shot (SH020, SH045, SH070, SH100, SH150, SH160) comes up, when someone asks whether a repair "passed", or before touching the n8n orchestration draft. Compiled 2026-10-13 from the build and the three-cycle fresh-critic gauntlet that found twenty defects the tests had not.
 ---
 
 # TSWS editable repair workflows
@@ -65,6 +65,9 @@ The first draft passed its own 34 tests. A fresh critic, given only the package 
 - A required aperture id that no element carried passed the aperture check with an empty record. It fails with a reason now, and the badaperture spec proves it.
 - Blender writes the render date, the render time and Cycles' own timings into PNG text chunks on every frame, and Cycles does so whatever the stamp flags say. The scene determinism test caught it (240 of 240 frames pixel-identical, 0 byte-identical); the frames are rewritten without text chunks after each Blender stage.
 - A check-only negative that crashed left the positive run's copied `09_checks.json` in its mirror, and the test read it as its own result: 12 exercised frames on shells that had been moved 500 m off-frame. The harness now deletes the mirrored receipt before a check-only run and reports a missing one. A test that can read a stale artifact proves nothing; make the artifact impossible before the run.
+- The violation branch counted every shell as "nearer" including shells still worn on heads, while the falling alpha it tests never contains a worn shell, so on a three-actor job a body behind a worn shell was never examined and the check could pass on an overlap it never measured. Found in cycle 3. Released shells only, in both loops now.
+
+Two more changes were raised, refuted on measurement, and applied anyway because the geometry is right and the cost is nil: the sun sits 50 degrees off vertical, so the shadow far metric now also excludes the sun-projected shadow point of every released shell (the Blender stage writes `sun_direction_world` into `shell_sim.json`); the refuter showed an airborne shell's shadow is too faint to trip the limit except in one coincidental frame. And the status field on a never-exercised check, below.
 
 One change the gauntlet argued about rather than found. The critic said two composer checks returned FAIL when their situation never arose (no shell ever over a nearer body; no briefcase blob found); the refuter called that a disclosed design, since the guide and the check's own note said so. The status field went in anyway, because on a real shot with no occlusion event the first form could never pass and the agent could not tell untested from failed without reading the numbers. Guarded by `composer.negative_occlusion_not_exercised` and `composer.negative_briefcase_not_detected`. Tee can overrule it; the first form is one line.
 
