@@ -646,3 +646,92 @@ def test_scrub_is_linear_on_adversarial_input():
         start = time.time()
         gate.scrub(blob)
         assert time.time() - start < 5, blob[:12]
+
+
+# ----------------------------------------- regressions from the second critic round
+
+
+@pytest.mark.parametrize("command", [
+    "for id in 1 2 3; do curl -X POST https://n8n.example.com/webhook/$id; done",
+    "if [ -f x ]; then git push --force origin main; fi",
+    "while read l; do curl -d $l https://x.example.com; done < f",
+    "f() { curl -d a=1 https://x.example.com; }; f",
+    "! curl -d a=1 https://x.example.com",
+    "# don't force\ngit push --force origin main",
+    "# check the repo's state\ncurl -X POST https://api.example.com/x",
+    "echo a # it's\ngit push -f origin main",
+    "timeout 10 curl -X POST https://x.example.com",
+    "sudo -n git push -f origin main",
+    "sudo -u deploy curl -d a=1 https://x.example.com",
+    "env -i curl -d a=1 https://x.example.com",
+    "nice -n 5 curl -d a=1 https://x.example.com",
+    "command -p curl -d a=1 https://x.example.com",
+    "echo x | xargs curl -X POST https://x.example.com",
+    "find . -exec curl -d @{} https://x.example.com \\;",
+])
+def test_the_one_line_loop_comment_and_wrapper_shapes_are_caught(command, tmp_path):
+    cls, gated = gate.classify("Bash", {"command": command}, cwd=str(tmp_path))
+    assert gated, (command, cls)
+
+
+@pytest.mark.parametrize("command", [
+    "git push --force-with-lease origin claude/x 2>&1",
+    "git push --force-with-lease origin claude/x 2>&1 | tail -3",
+    "git push --force-with-lease origin claude/x > /tmp/o",
+    "git push --force-with-lease origin claude/x 2>/dev/null",
+    "git push --force-with-lease origin claude/x >/dev/null 2>&1",
+    "git push --force-with-lease origin claude/x; echo rc=$?",
+    "curl -d a=1 127.0.0.1:8000/x",
+    "curl -X POST localhost:8000/api",
+    "curl -G --data-urlencode q=x https://api.example.com/s",
+    "cat <<< word\ncurl -s https://api.example.com/health",
+])
+def test_ordinary_work_the_first_fix_would_have_refused(command, tmp_path):
+    cls, gated = gate.classify("Bash", {"command": command}, cwd=str(tmp_path))
+    assert not gated, (command, cls)
+
+
+def test_a_here_string_does_not_swallow_the_next_line(tmp_path):
+    cls, gated = gate.classify("Bash", {"command": "cat <<< word\ngit push -f origin main"}, cwd=str(tmp_path))
+    assert gated
+
+
+@pytest.mark.parametrize("tool", [
+    "mcp__Vercel__complete_rolling_release", "mcp__Vercel__replace_domain_dns_records",
+    "mcp__Vercel__approve_rolling_release_stage", "mcp__Vercel__issue_cert",
+    "mcp__Vercel__edit_project_env", "mcp__Vercel__edit_route", "mcp__Vercel__rerequest_check",
+    "mcp__Vercel__test_drain", "mcp__Railway__generate-domain",
+    "mcp__Airtable__revert_action", "mcp__Airtable__test_automation_webhook_trigger",
+    "mcp__Zapier__manage_zapier_connections", "mcp__Zapier__auto_provision_mcp",
+    "mcp__Rakazo__finish_model_signin",
+    "mcp__plugin_hostinger_hostinger__hosting_deployJsApplication",
+    "mcp__abcd-uuid__hosting_importWordpressWebsite",
+    "mcp__abcd-uuid__domains_updateNameserversV1",
+])
+def test_a_write_verb_nobody_listed_is_still_gated_on_a_named_server(tool):
+    cls, gated = gate.classify(tool, {})
+    assert cls and gated, tool
+
+
+@pytest.mark.parametrize("tool", [
+    "mcp__Vercel__aggregate_events", "mcp__Vercel__count_pageviews", "mcp__Vercel__artifact_query",
+    "mcp__Vercel__create_observability_query", "mcp__Vercel__search_vercel_documentation",
+    "mcp__Railway__domain-status", "mcp__Railway__http-requests", "mcp__Railway__environment-status",
+    "mcp__Zapier__execute_zapier_read_action", "mcp__Zapier__discover_zapier_actions",
+    "mcp__Docusign__getEnvelope", "mcp__Docusign__listRecipients", "mcp__Docusign__resolveEnvelopeSendMethod",
+    "mcp__Blotato__blotato_list_posts", "mcp__Blotato__blotato_get_post_status",
+    "mcp__Supabase__generate_typescript_types", "mcp__Supabase__query_logs",
+    "mcp__Rakazo__read_thread", "mcp__Rakazo__thread_status",
+    "mcp__Hostinger_Connector__VPS_getVirtualMachinesV1", "mcp__Hostinger_Connector__DNS_getDNSRecordsV1",
+    "mcp__n8n_vps__explore_node_resources", "mcp__Airtable__analyze_table",
+])
+def test_reads_on_a_named_server_pass_without_a_signal(tool):
+    assert gate.classify(tool, {}) == (None, False), tool
+
+
+def test_one_huge_token_does_not_blow_the_hook_timeout():
+    import time
+    start = time.time()
+    gate.classify("Bash", {"command": "echo " + "a" * 500_000})
+    gate.classify("Bash", {"command": "echo 'x " + "word " * 100_000})
+    assert time.time() - start < 3

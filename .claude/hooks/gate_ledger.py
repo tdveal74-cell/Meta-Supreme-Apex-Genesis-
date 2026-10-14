@@ -88,28 +88,32 @@ GATED_SUFFIXES = {
     "DNS_updateDNSRecordsV1",
 }
 
-# Servers where every write verb is gated, not just the listed suffixes. A tool
-# on one of these whose name starts with a mutating verb is gated, so a sibling
-# tool nobody listed is still caught. Servers outside this list rely on
-# GATED_SUFFIXES alone, and a connector under a UUID name is matched there only.
+# Servers where every tool is gated unless it is a read, not just the listed
+# suffixes, so a sibling tool nobody listed is still caught. Servers outside
+# this list rely on GATED_SUFFIXES alone, and a connector under a UUID name is
+# matched by those suffixes and by the Hostinger prefixes only.
 NAMED_SERVERS = (
     "n8n", "railway", "airtable", "vercel", "supabase", "hostinger", "rakazo",
     "blotato", "docusign", "zapier",
 )
-WRITE_VERB = re.compile(
-    r"^(add|create|delete|update|remove|archive|publish|unpublish|execute|run|set|"
-    r"send|deploy|restart|redeploy|rename|move|restore|apply|submit|reset|purchase|"
-    r"buy|stage|invalidate|promote|request|upsert|stop|pause|unpause|share|post|reply|"
-    r"accept|assign|transfer|activate|revoke|put|patch|write|connect|disconnect|"
-    r"cancel|retry|kill|upload|import|enable|disable|trigger|give|require|"
-    r"resume|pin|unpin|trash|test_webhook|start|merge|rebase|domains_purchase|billing_)",
+# On a named server every tool is gated EXCEPT a read. Listing the reads is the
+# safer direction: a write verb nobody thought of is caught, and the cost of a
+# read nobody listed is one refusal while no human signal is fresh.
+READ_VERB = re.compile(
+    r"^(get|list|search|read|describe|fetch|analyze|query|show|find|check|validate|explore|"
+    r"prepare|whoami|ping|status|inspect|lookup|count|aggregate|help|view|preview|download|"
+    r"resolve|compare|calculate|discover|learn|health|artifact_query|web_fetch|git_namespaces|"
+    r"filter_project|thread_status|rakazo_status|generate_typescript_types|domain-status|"
+    r"environment-status|http-|execute_zapier_read_action|create_observability_query|"
+    r"send_feedback|test_workflow$)",
     re.I,
 )
 # Hostinger tools carry their own prefix, so they are caught under any server
 # name, a UUID included.
 HOSTINGER_WRITE = re.compile(
     r"^(VPS_(create|delete|update|restart|recreate|stop|start|purchase|set|attach|detach|restore)"
-    r"|DNS_(update|delete|reset|create)|domains_purchase)",
+    r"|DNS_(update|delete|reset|create)|domains_(purchase|update|enable|disable|create|delete)"
+    r"|hosting_(deploy|import|create|delete|update))",
     re.I,
 )
 # send_message is gated only on the Rakazo bot platform. The Claude Code Remote
@@ -176,9 +180,9 @@ def _strip_heredocs(command):
     while i < len(lines):
         line = lines[i]
         out.append(line)
-        m = re.search(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1", line)
+        m = re.search(r"(?<!<)<<(?!<)-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1", line)
         i += 1
-        if m:
+        if m and line[:m.start()].count("'") % 2 == 0 and line[:m.start()].count('"') % 2 == 0:
             term = m.group(2)
             while i < len(lines) and lines[i].strip() != term:
                 i += 1
@@ -212,6 +216,9 @@ def _statements(command, depth=0):
         elif ch == "\\" and i + 1 < n:
             buf.append(ch + command[i + 1])
             i += 1
+        elif ch == "#" and quote is None and (i == 0 or command[i - 1] in " \t\n;&|("):
+            nl = command.find("\n", i)
+            i = (n if nl < 0 else nl) - 1
         elif ch == "$" and command[i:i + 2] == "$(":
             body, i = _paren_body(command, i + 2)
             subs.append(body)
@@ -243,16 +250,65 @@ def _statements(command, depth=0):
     return out
 
 
-def _argv(statement):
-    try:
-        argv = shlex.split(statement)
-    except ValueError:
-        argv = statement.split()
-    while argv and (
-        re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", argv[0]) or os.path.basename(argv[0]) in SHELL_WRAPPERS
-    ):
-        argv = argv[1:]
+RESERVED = {"then", "do", "else", "elif", "if", "while", "until", "!", "{", "}", "time", "coproc"}
+REDIRECT_BARE = re.compile(r"^(\d*>{1,2}|\d*<|&>{1,2})$")
+REDIRECT_ATTACHED = re.compile(r"^(\d*>{1,2}|\d*<|&>{1,2})\S")
+# wrapper -> flags that consume a value
+WRAPPER_VALUE_FLAGS = {
+    "sudo": {"-u", "-g", "-h", "-p", "-C", "-D", "-R", "-T"},
+    "env": {"-u", "-C", "-S"},
+    "nice": {"-n"},
+    "timeout": {"-s", "-k"},
+    "xargs": {"-I", "-n", "-P", "-d", "-L", "-s", "-E", "-a"},
+    "command": set(),
+}
+
+
+def _unwrap(argv):
+    """Strips shell reserved words, redirections, env assignments and wrappers
+    that carry their own flags (timeout 10 curl, sudo -n git, xargs curl)."""
+    out, skip = [], False
+    for t in argv:
+        if skip:
+            skip = False
+            continue
+        if REDIRECT_BARE.match(t):
+            skip = True  # the redirect target, or nothing when the statement ends
+            continue
+        if REDIRECT_ATTACHED.match(t):
+            continue
+        out.append(t)
+    argv = out
+    for _ in range(8):
+        while argv and (argv[0] in RESERVED or re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", argv[0])):
+            argv = argv[1:]
+        if not argv:
+            return argv
+        prog = os.path.basename(argv[0])
+        if prog in ("nohup", "exec", "builtin"):
+            argv = argv[1:]
+        elif prog in WRAPPER_VALUE_FLAGS:
+            value_flags = WRAPPER_VALUE_FLAGS[prog]
+            rest, i = argv[1:], 0
+            while i < len(rest) and rest[i].startswith("-"):
+                i += 2 if rest[i] in value_flags else 1
+            if prog == "timeout" and i < len(rest):
+                i += 1  # the duration
+            argv = rest[i:]
+        else:
+            return argv
     return argv
+
+
+def _argv(statement):
+    if len(statement) > 20000:
+        argv = statement.split()  # shlex is quadratic on one huge token
+    else:
+        try:
+            argv = shlex.split(statement)
+        except ValueError:
+            argv = statement.split()
+    return _unwrap(argv)
 
 
 def _expand(statement, depth=0):
@@ -267,6 +323,16 @@ def _expand(statement, depth=0):
                 for s in _statements(argv[i + 1]):
                     yield from _expand(s, depth + 1)
                 return
+    if depth < 4 and prog == "find" and ("-exec" in argv or "-execdir" in argv):
+        k = next(i for i, a in enumerate(argv) if a in ("-exec", "-execdir"))
+        inner = []
+        for a in argv[k + 1:]:
+            if a in (";", "+"):
+                break
+            inner.append(a)
+        sub = _unwrap(inner)
+        if sub:
+            yield sub
     if depth < 4 and prog == "eval":
         for s in _statements(" ".join(argv[1:])):
             yield from _expand(s, depth + 1)
@@ -282,7 +348,16 @@ def _git_cwd(argv, cwd):
     return cwd
 
 
+_BRANCH = {}
+
+
 def _current_branch(cwd):
+    if cwd not in _BRANCH:
+        _BRANCH[cwd] = _lookup_branch(cwd)
+    return _BRANCH[cwd]
+
+
+def _lookup_branch(cwd):
     try:
         out = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
@@ -362,6 +437,8 @@ def _curl_mutating(argv):
     if os.path.basename(argv[0]) != "curl":
         return False
     mutating = False
+    explicit = False
+    get_mode = False
     urls = []
     for i in range(1, len(argv)):
         a = argv[i]
@@ -370,22 +447,33 @@ def _curl_mutating(argv):
             name, _, val = a.partition("=")
             if name in CURL_BODY_LONG:
                 mutating = True
+            elif name == "--get":
+                get_mode = True
             elif name == "--request" and (val or nxt).upper() in WRITE_METHODS:
-                mutating = True
+                mutating = explicit = True
         elif a.startswith("-") and len(a) > 1:
             letters = a[1:]
             for k, ch in enumerate(letters):
+                if ch == "G":
+                    get_mode = True
                 if ch in "dFT":
                     mutating = True
                     break
                 if ch == "X":
                     if (letters[k + 1:] or nxt).upper() in WRITE_METHODS:
-                        mutating = True
+                        mutating = explicit = True
                     break
                 if ch in CURL_ARG_LETTERS:
                     break
-        elif re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", a) or re.match(r"^[\w.-]+\.[A-Za-z]{2,}(/|:|$)", a):
+        elif (
+            re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", a)
+            or re.match(r"^[\w.-]+\.[A-Za-z]{2,}(/|:|$)", a)
+            or re.match(r"^[\w.\[\]:-]+:\d+(/\S*)?$", a)
+            or re.match(r"^localhost(/|$)", a)
+        ):
             urls.append(a)
+    if get_mode and not explicit:
+        return False
     if not mutating:
         return False
     if not urls:
@@ -442,8 +530,8 @@ def classify(tool_name, tool_input, cwd=""):
         return suffix, True
     if HOSTINGER_WRITE.match(suffix):
         return suffix, True
-    verb = re.sub(r"^(blotato|zapier)_", "", suffix)
-    if any(name in server for name in NAMED_SERVERS) and WRITE_VERB.match(verb):
+    verb = re.sub(r"^(blotato|zapier|VPS|DNS|domains|hosting|billing|reach)_", "", suffix)
+    if any(name in server for name in NAMED_SERVERS) and not READ_VERB.match(verb):
         return suffix, True
     return None, False
 

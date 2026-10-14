@@ -687,14 +687,15 @@ sits inside 30 minutes before it: a message Tee typed, or an answered
 Do not rephrase the call to get past it.
 
 - Gated: every n8n write (publish, unpublish, archive, execute, update,
-  restore, data table writes, folder moves), every write verb on a server named
+  restore, data table writes, folder moves); every tool on a server named
   Railway, Airtable, Vercel, Supabase, Hostinger, Rakazo, Blotato, Docusign or
-  Zapier, Rakazo `send_message`, GitHub Actions triggers, Drive trash, a curl
-  that writes to a non-local host, and any force push, delete push or mirror
-  push except `--force-with-lease` to a `claude/` branch. A connector registered
-  under a UUID name is matched by the listed suffixes only, and its sibling
-  tools are not caught. Drive create and update, GitHub pull request and
-  comment calls are deliberately not gated.
+  Zapier except a read (get, list, search, describe, query and the like, listed
+  in `READ_VERB`); GitHub Actions triggers; Drive trash; a curl that writes to a
+  non-local host; and any force push, delete push or mirror push except
+  `--force-with-lease` to a `claude/` branch. A connector registered under a
+  UUID name is matched by the listed suffixes and the Hostinger prefixes only,
+  and Rakazo `send_message` needs the server name. Drive create and update, and
+  GitHub pull request and comment calls, are deliberately not gated.
 - Ledger only: merges, because the standing approval of 2026-10-11 covers them,
   and `test_workflow`. The gated list is `GATED_SUFFIXES` in the file; moving a
   tool in or out is a commit, and a ruling.
@@ -713,12 +714,18 @@ Do not rephrase the call to get past it.
   session and is not a durable archive. Nothing reads it into DEVON yet.
 
 Not a sandbox: it reads the command text of curl and git, so a write through
-wget or an inline script is invisible to it. It catches the unprompted call,
+wget, `gh pr merge`, `gh workflow run`, `gh api -X POST`, `npx vercel`,
+`railway up`, an inline python or node script, or the GitHub MCP file tools
+(`push_files`, `create_or_update_file`, `enable_pr_auto_merge`) is invisible to
+it. It catches the unprompted call,
 which is what the audit measured. A gated call reads the whole transcript, about
 0.4 s on a 53 MB file. A session with no human in it, a scheduled or webhook
 run, is refused on every gated call by design.
 
-Unverified: a subagent's hook input. The script reads the session file when
+Unverified: what the harness does with the wrapper's `exit 1` when the script or
+python3 is missing. The contract was recalled, not measured, and it is meant to
+be a visible non-blocking error rather than python's blocking exit 2. Also
+unverified: a subagent's hook input. The script reads the session file when
 `transcript_path` is under `/subagents/`, which a fixture and a critic's
 synthetic run pin and no live subagent call has confirmed. Settings reload at session start, so the first
 session after this merges is where the live behaviour is measured.
