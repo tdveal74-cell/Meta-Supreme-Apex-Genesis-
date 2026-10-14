@@ -16,7 +16,8 @@ from services.company import marketing, product, research, sales, support
 from services.company.marketing import QueueRefusal, _visible_len
 
 DASHES = ["—", "–", "―", "‒", "－", "︱", "﹘"]
-BLANKS = ["⠀", "ㅤ", "ᅟ", "ᅠ", "ﾠ", "́", "​", " ", " "]
+BLANKS = ["\u2800", "\u3164", "\u115f", "\u1160", "\uffa0", "\u0301", "\u200b", "\u00a0", "\u2028",
+          "\ufffc", "\U0001d159", "\u2065", "\ufff0", "\ufff8", "\U000e0002", "\U000e0080", "\ue000", "\U000f0000"]
 
 
 @pytest.mark.parametrize("text,expected", [
@@ -34,6 +35,14 @@ BLANKS = ["⠀", "ㅤ", "ᅟ", "ᅠ", "ﾠ", "́", "​", " ", " "]
     ("Made with AI", 10),
     ("⠀" * 9 + "Made with AI", 10),
     ("x" * 10, 10),
+    ("\ufffc" * 12, 0),
+    ("\U0001d159" * 12, 0),
+    ("\u2065\ufff0\ufff8\U000e0002\U000e0080", 0),
+    ("\ue000" * 12, 0),
+    ("\U0001f600" * 12, 12),
+    ("\u2705" * 12, 12),
+    ("\u4e2d\u6587" * 6, 12),
+    ("\U0001f9d1\u200d\U0001f4bb", 2),
 ])
 def test_the_counter_counts_what_a_reader_can_see(text, expected):
     assert _visible_len(text) == expected
@@ -167,3 +176,16 @@ def test_hyphen_lookalikes_are_not_refused(hyphen):
         draft_id="l", source="email", contact_name="Jordan Lee", contact_email="jordan@example.com",
         inbound_excerpt="Do you coach?", qualification="qualified",
         qualification_reason="Asked about career strategy.", reply_text=text).reply_text == text
+
+
+def test_a_reference_that_is_only_dashes_after_https_is_prose_not_a_url():
+    for ref in ("https://" + "\u2014" * 8, "https://\u2013.\u2013", "https://localhost\u2014notes"):
+        with pytest.raises(QueueRefusal, match="reference_artifact"):
+            product.create_proposal(**{**PROD, "reference_artifact": ref})
+
+
+@pytest.mark.parametrize("url", [
+    "https://example.com", "https://example.com:8443/a\u2013b?x=\u2014#f", "https://docs.example.co.uk/a/b",
+])
+def test_a_real_host_url_is_left_verbatim(url):
+    assert product.create_proposal(**{**PROD, "reference_artifact": url}).reference_artifact == url

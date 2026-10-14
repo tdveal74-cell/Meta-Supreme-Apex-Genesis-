@@ -46,8 +46,12 @@ from services.company.marketing import (
 
 # A reference artifact may be a bare URL, and a URL is not prose: it is left
 # verbatim and only NUL checked. Anything with a space in it is prose and takes
-# the dash rule. Ruled by Tee 2026-10-14.
-_BARE_URL_RE = re.compile(r"https://\S+")
+# the dash rule. The URL must have a real host, so a run of dashes after
+# "https://" is prose and takes the dash rule. Ruled by Tee 2026-10-14.
+_BARE_URL_RE = re.compile(
+    r"https://(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}"
+    r"(?::[0-9]{1,5})?(?:[/?#]\S*)?"
+)
 
 SIZES = ("small", "medium", "large")
 MIN_TEXT_CHARS = 10
