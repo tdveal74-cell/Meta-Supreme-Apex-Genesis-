@@ -189,3 +189,55 @@ def test_a_reference_that_is_only_dashes_after_https_is_prose_not_a_url():
 ])
 def test_a_real_host_url_is_left_verbatim(url):
     assert product.create_proposal(**{**PROD, "reference_artifact": url}).reference_artifact == url
+
+
+# ---- Tee, 2026-10-14 (second set of cards): grounds fields and ten more look-alikes
+
+NEW_LOOKALIKES = ["〜", "〰", "゠", "⹀", "֊", "־",
+                  "᠆", "⸗", "⸚", "\U00010ead"]
+SALES_GOOD = dict(
+    draft_id="l", source="email", contact_name="Jordan Lee", contact_email="jordan@example.com",
+    inbound_excerpt="Do you coach?", qualification="qualified",
+    qualification_reason="Asked about career strategy.", reply_text="Thanks for writing.",
+)
+SUPPORT_GOOD = dict(
+    draft_id="d", video_id="dQw4w9WgXcQ", comment_id="Ugx1", commenter_name="Jo",
+    comment_text="Does it work?", reply_text="Yes, it works.",
+    reply_basis="Shown in the episode demo.", ai_disclosure="Drafted with AI, sent by Tee.",
+)
+
+
+@pytest.mark.parametrize("dash", DASHES + NEW_LOOKALIKES)
+def test_a_dash_in_sales_qualification_reason_is_refused(dash):
+    with pytest.raises(QueueRefusal, match="dash"):
+        sales.create_lead_draft(**{**SALES_GOOD, "qualification_reason": f"Asked {dash} about strategy."})
+
+
+@pytest.mark.parametrize("dash", DASHES + NEW_LOOKALIKES)
+def test_a_dash_in_support_reply_basis_is_refused(dash):
+    with pytest.raises(QueueRefusal, match="dash"):
+        support.create_comment_draft(**{**SUPPORT_GOOD, "reply_basis": f"Shown {dash} in the demo."})
+
+
+def test_the_grounds_fields_still_accept_hyphens_and_a_minus_sign():
+    reason = "Asked about well‐known and non‑stop growth, 5 − 2 steps."
+    assert sales.create_lead_draft(**{**SALES_GOOD, "qualification_reason": reason}).qualification_reason == reason
+    basis = "Shown in the well‐known demo, 5 − 2 steps."
+    assert support.create_comment_draft(**{**SUPPORT_GOOD, "reply_basis": basis}).reply_basis == basis
+
+
+@pytest.mark.parametrize("dash", NEW_LOOKALIKES)
+def test_the_ten_new_lookalikes_are_refused_everywhere_the_rule_runs(dash):
+    assert dash in marketing.BANNED_DASHES
+    with pytest.raises(QueueRefusal, match="dash"):
+        marketing.create_draft(draft_id="d", show="TQO", episode_ref="ep-1", platform="youtube_community",
+                               text=f"A post {dash} with a dash.", ai_disclosure="Made with AI")
+    d = marketing.create_draft(draft_id="d", show="TQO", episode_ref="ep-1", platform="youtube_community",
+                               text="A real post about the episode.", ai_disclosure="Made with AI")
+    with pytest.raises(QueueRefusal, match="dash"):
+        marketing.approve(d, "tee", note=f"fine {dash} go")
+
+
+def test_the_allowed_hyphens_and_minus_are_still_off_the_banned_list():
+    for ch in ("‐", "‑", "−", "-"):
+        assert ch not in marketing.BANNED_DASHES

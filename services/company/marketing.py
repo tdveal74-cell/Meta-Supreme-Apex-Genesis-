@@ -33,6 +33,12 @@ from typing import Optional
 BANNED_DASHES = (
     "\u2012", "\u2013", "\u2014", "\u2015", "\u2e3a", "\u2e3b",
     "\ufe31", "\ufe32", "\ufe58", "\ufe63", "\uff0d",
+    # Added 2026-10-14 on Tee's ruling: wave dash, wavy dash, katakana double
+    # hyphen, double hyphen, Armenian hyphen, Hebrew maqaf, Mongolian todo soft
+    # hyphen, double oblique hyphen, hyphen with diaeresis and the Yezidi
+    # hyphenation mark. U+2010, U+2011 and U+2212 stay allowed.
+    "\u301c", "\u3030", "\u30a0", "\u2e40", "\u058a", "\u05be",
+    "\u1806", "\u2e17", "\u2e1a", "\U00010ead",
 )
 MIN_DISCLOSURE_CHARS = 10
 AUTOMATED_ACTORS = {"claude", "agent", "auto", "bot", "system", "marketing", "devon"}
