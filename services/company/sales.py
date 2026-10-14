@@ -15,10 +15,12 @@ What it refuses:
   3. A drafted reply with em or en dashes or look-alikes, or a NUL byte. Tee's
      prose rule for anything delivered. The inbound excerpt is the lead's own
      words and is only checked for NUL, because it is not ours to rewrite.
-  4. A drafted reply with no AI disclosure of at least 10 visible characters.
-     Tee's disclosure rule has no exception path, so this reuses the Marketing
-     rule. Whether a one to one email needs the same line is Tee's call to
-     loosen; the safe direction is to require it.
+  4. A disclosure that is present but not real: under 10 visible characters, or
+     with dashes. A one to one email needs no disclosure line. Tee ruled that on
+     2026-10-14 after being offered the opposite as the recommendation, so this
+     is the one place in the company layer where the disclosure may be absent.
+     When a disclosure is given it must still be real, so a lone period does not
+     pass for one. Marketing posts and Support replies still require it.
   5. An approval with no human named, or one named as an automated actor, and
      a second decision on a draft that already has one.
 
@@ -39,6 +41,7 @@ from services.company.marketing import (
     MIN_DISCLOSURE_CHARS,
     DraftStatus,
     QueueRefusal,
+    _check_note,
     _check_text,
     _visible_len,
 )
@@ -73,7 +76,7 @@ class LeadDraft:
     qualification: Qualification
     qualification_reason: str
     reply_text: str
-    ai_disclosure: str
+    ai_disclosure: Optional[str]
     status: DraftStatus = DraftStatus.DRAFTED
     decided_by: Optional[str] = None
     decision_note: Optional[str] = None
@@ -96,7 +99,7 @@ def create_lead_draft(
     qualification: str,
     qualification_reason: str,
     reply_text: str,
-    ai_disclosure: str,
+    ai_disclosure: Optional[str] = None,
 ) -> LeadDraft:
     _plain_field(draft_id, "draft_id")
     if source not in SOURCES:
@@ -122,11 +125,14 @@ def create_lead_draft(
             f"qualification_reason needs at least {MIN_REASON_CHARS} visible characters"
         )
     _check_text(reply_text, "reply text")
-    _check_text(ai_disclosure, "ai_disclosure")
-    if _visible_len(ai_disclosure) < MIN_DISCLOSURE_CHARS:
-        raise QueueRefusal(
-            f"ai_disclosure needs at least {MIN_DISCLOSURE_CHARS} visible characters"
-        )
+    if ai_disclosure is not None and not ai_disclosure.strip():
+        ai_disclosure = None
+    if ai_disclosure is not None:
+        _check_text(ai_disclosure, "ai_disclosure")
+        if _visible_len(ai_disclosure) < MIN_DISCLOSURE_CHARS:
+            raise QueueRefusal(
+                f"ai_disclosure needs at least {MIN_DISCLOSURE_CHARS} visible characters"
+            )
     return LeadDraft(
         draft_id=draft_id, source=source, contact_name=contact_name.strip(),
         contact_email=addr, inbound_excerpt=inbound_excerpt, qualification=qual,
@@ -143,6 +149,7 @@ def _decide(draft: LeadDraft, status: DraftStatus, decided_by: str, note: Option
         raise QueueRefusal("a human decision needs a named decider")
     if who.lower() in AUTOMATED_ACTORS:
         raise QueueRefusal(f"{who!r} is an automated actor, not a human decider")
+    _check_note(note)
     return replace(draft, status=status, decided_by=who, decision_note=note)
 
 

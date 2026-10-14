@@ -36,6 +36,7 @@ from services.company.marketing import (
     MIN_DISCLOSURE_CHARS,
     DraftStatus,
     QueueRefusal,
+    _check_note,
     _check_text,
     _visible_len,
 )
@@ -124,6 +125,7 @@ def _decide(draft: CommentDraft, status: DraftStatus, decided_by: str, note: Opt
         raise QueueRefusal("a human decision needs a named decider")
     if who.lower() in AUTOMATED_ACTORS:
         raise QueueRefusal(f"{who!r} is an automated actor, not a human decider")
+    _check_note(note)
     return replace(draft, status=status, decided_by=who, decision_note=note)
 
 
