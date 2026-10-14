@@ -101,6 +101,7 @@ def create_comment_draft(
     if _visible_len(reply_text) == 0:
         raise QueueRefusal("reply text has no visible characters")
     _plain_field(reply_basis, "reply_basis")
+    _check_text(reply_basis, "reply_basis")
     if _visible_len(reply_basis) < MIN_BASIS_CHARS:
         raise QueueRefusal(
             f"reply_basis needs at least {MIN_BASIS_CHARS} visible characters"

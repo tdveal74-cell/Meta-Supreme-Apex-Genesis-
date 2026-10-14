@@ -120,6 +120,7 @@ def create_lead_draft(
             + ", ".join(q.value for q in Qualification)
         ) from None
     _plain_field(qualification_reason, "qualification_reason")
+    _check_text(qualification_reason, "qualification_reason")
     if _visible_len(qualification_reason) < MIN_REASON_CHARS:
         raise QueueRefusal(
             f"qualification_reason needs at least {MIN_REASON_CHARS} visible characters"
