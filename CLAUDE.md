@@ -686,27 +686,41 @@ sits inside 30 minutes before it: a message Tee typed, or an answered
 `AskUserQuestion` card. A refusal means put the decision on a card and retry.
 Do not rephrase the call to get past it.
 
-- Gated: n8n publish, unpublish, archive, execute, update and restore, Railway
-  variables and deploys, Airtable writes, Drive trash, Rakazo bot calls, Vercel
-  and Supabase writes, Hostinger DNS and VPS writes, GitHub Actions triggers, a
-  curl that writes to a non-local host, and any force push that is not
-  `--force-with-lease` to a `claude/` branch.
+- Gated: every n8n write (publish, unpublish, archive, execute, update,
+  restore, data table writes, folder moves), every write verb on a server named
+  Railway, Airtable, Vercel, Supabase, Hostinger, Rakazo, Blotato, Docusign or
+  Zapier, Rakazo `send_message`, GitHub Actions triggers, Drive trash, a curl
+  that writes to a non-local host, and any force push, delete push or mirror
+  push except `--force-with-lease` to a `claude/` branch. A connector registered
+  under a UUID name is matched by the listed suffixes only, and its sibling
+  tools are not caught. Drive create and update, GitHub pull request and
+  comment calls are deliberately not gated.
 - Ledger only: merges, because the standing approval of 2026-10-11 covers them,
   and `test_workflow`. The gated list is `GATED_SUFFIXES` in the file; moving a
   tool in or out is a commit, and a ruling.
 - A webhook turn, a scheduled check-in, a task notification, a peer agent
   report and a context summary are all user turns in the transcript and none of
-  them is a signal. The test is `origin.kind == "human"` on the entry.
+  them is a signal. The test is `origin.kind == "human"` on the entry. An
+  answered card is presence, not consent: the hook cannot read the answer, so a
+  card answered no still opens the window, and reading the answer stays the
+  model's job.
 - It fails closed on a gated call when the transcript cannot be read, and there
-  is no environment switch that turns it off. A broken reader cannot lock a
+  is no environment switch that turns it off. A ledger that cannot be written
+  does not refuse a call. A broken reader cannot lock a
   session out of reading or editing, because only gated calls are touched.
 - The ledger is `.claude/ledger/gate-ledger.jsonl`, ignored by git and scrubbed
   of anything shaped like a token. It lives in the container, so it records the
   session and is not a durable archive. Nothing reads it into DEVON yet.
 
-Unverified: a subagent's hook input. The script reads the parent transcript
-when `transcript_path` is under `/subagents/`, which a fixture pins and no live
-subagent call has confirmed. Settings reload at session start, so the first
+Not a sandbox: it reads the command text of curl and git, so a write through
+wget or an inline script is invisible to it. It catches the unprompted call,
+which is what the audit measured. A gated call reads the whole transcript, about
+0.4 s on a 53 MB file. A session with no human in it, a scheduled or webhook
+run, is refused on every gated call by design.
+
+Unverified: a subagent's hook input. The script reads the session file when
+`transcript_path` is under `/subagents/`, which a fixture and a critic's
+synthetic run pin and no live subagent call has confirmed. Settings reload at session start, so the first
 session after this merges is where the live behaviour is measured.
 
 ## The receipt on a status doc

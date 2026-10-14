@@ -20,10 +20,11 @@ Design choices that are rulings, not defaults:
     refused with that reason. A gate that fails open reports safety while
     watching nothing, which is the failure this repository's watchdogs were
     built around. Only gated calls are affected, so a broken reader cannot lock
-    the session out of reading or editing files.
+    the session out of reading or editing files. A ledger that cannot be
+    written does NOT refuse a call: the decision does not depend on it.
   * There is no environment switch and no flag that disables it. Compliance
-    items have no exception path. Changing what is gated means editing GATED
-    below, in a commit.
+    items have no exception path. Changing what is gated means editing the
+    lists below, in a commit.
   * Merges are ledger only. Tee's standing merge approval of 2026-10-11 covers
     them, and the CI green condition lives in CLAUDE.md, where a hook cannot
     check it.
@@ -32,6 +33,13 @@ Design choices that are rulings, not defaults:
     turns in the transcript and none of them is a person. The discriminator is
     origin.kind == "human" on the entry. A transcript with no origin field at
     all (an older format) falls back to a prefix test.
+  * An answered card is PRESENCE, not consent. The hook cannot read what the
+    answer was, so a card answered "no" still opens the window. Reading the
+    answer before acting stays the model's job.
+  * What this is not: a sandbox. It reads the command text of the tools it was
+    taught, and Claude could route an HTTP write through a client it does not
+    know (wget, an inline python script). It exists to catch the unprompted
+    call, which is what the audit measured, not a deliberate evasion.
 
 The ledger is JSON lines at .claude/ledger/gate-ledger.jsonl under the project
 directory. It lives in the container, which is reclaimed after inactivity, so it
@@ -42,78 +50,109 @@ scrubbed of anything shaped like a token before they are written.
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 
 WINDOW_MIN = 30
+# A signal stamped later than this beyond now is clock skew or a forgery, and
+# is ignored instead of counting as "just now" forever.
+SKEW_MIN = 5
 
 # Tool name suffixes, matched after the last "__" so a connector that arrives
-# under a UUID instead of a name is still caught. The list is the executed
-# high tier outward set from the 2026-10-14 audit, less merges.
+# under a UUID instead of a name is still caught. The executed high tier outward
+# set from the 2026-10-14 audit, less merges, plus the sibling write tools of
+# the same platforms.
 GATED_SUFFIXES = {
-    "publish_workflow",
-    "unpublish_workflow",
-    "archive_workflow",
-    "execute_workflow",
-    "update_workflow",
-    "restore_workflow_version",
-    "rename_data_table",
-    "rename_data_table_column",
-    "set-variables",
-    "actions_run_trigger",
-    "update_bot",
-    "create_bot",
-    "give_bot_n8n",
-    "update_records_for_table",
-    "create_records_for_table",
-    "delete_records_for_table",
-    "update_field",
-    "create_field",
-    "trash_file",
-    "deploy_to_vercel",
-    "create_deployment",
-    "create-deployment",
-    "create_git_project",
-    "redeploy",
-    "restart-service",
-    "railway-agent",
-    "apply_migration",
-    "execute_sql",
-    "submit_media_job",
+    # n8n
+    "publish_workflow", "unpublish_workflow", "archive_workflow", "execute_workflow",
+    "update_workflow", "restore_workflow_version", "create_workflow_from_code",
+    "rename_data_table", "rename_data_table_column", "add_data_table_rows",
+    "create_data_table", "add_data_table_column", "delete_data_table_column",
+    "move_workflows_to_folder",
+    # Railway, Vercel, Supabase, deploy surfaces
+    "set-variables", "railway-agent", "redeploy", "restart-service",
+    "create-deployment", "create_deployment", "deploy_to_vercel", "create_git_project",
+    "apply_migration", "execute_sql",
+    # GitHub, Drive, media
+    "actions_run_trigger", "trash_file", "submit_media_job",
+    # Airtable
+    "update_records_for_table", "create_records_for_table", "delete_records_for_table",
+    "update_field", "create_field", "create_table", "update_table", "delete_table",
+    "create_automation", "update_automation", "delete_automation", "submit_form",
+    # Rakazo
+    "update_bot", "create_bot", "give_bot_n8n",
+    # Hostinger
     "DNS_updateDNSRecordsV1",
 }
-# Hostinger VPS tools are gated when the verb mutates.
-VPS_MUTATING = re.compile(
-    r"^VPS_(create|delete|update|restart|recreate|stop|start|purchase|set|attach|detach|restore)",
+
+# Servers where every write verb is gated, not just the listed suffixes. A tool
+# on one of these whose name starts with a mutating verb is gated, so a sibling
+# tool nobody listed is still caught. Servers outside this list rely on
+# GATED_SUFFIXES alone, and a connector under a UUID name is matched there only.
+NAMED_SERVERS = (
+    "n8n", "railway", "airtable", "vercel", "supabase", "hostinger", "rakazo",
+    "blotato", "docusign", "zapier",
+)
+WRITE_VERB = re.compile(
+    r"^(add|create|delete|update|remove|archive|publish|unpublish|execute|run|set|"
+    r"send|deploy|restart|redeploy|rename|move|restore|apply|submit|reset|purchase|"
+    r"buy|stage|invalidate|promote|request|upsert|stop|pause|unpause|share|post|reply|"
+    r"accept|assign|transfer|activate|revoke|put|patch|write|connect|disconnect|"
+    r"cancel|retry|kill|upload|import|enable|disable|trigger|give|require|"
+    r"resume|pin|unpin|trash|test_webhook|start|merge|rebase|domains_purchase|billing_)",
+    re.I,
+)
+# Hostinger tools carry their own prefix, so they are caught under any server
+# name, a UUID included.
+HOSTINGER_WRITE = re.compile(
+    r"^(VPS_(create|delete|update|restart|recreate|stop|start|purchase|set|attach|detach|restore)"
+    r"|DNS_(update|delete|reset|create)|domains_purchase)",
     re.I,
 )
 # send_message is gated only on the Rakazo bot platform. The Claude Code Remote
 # send_message is a message to a sibling session, which is not outward.
-RAKAZO_PREFIX = "mcp__Rakazo__"
+RAKAZO = "rakazo"
 
 # Ledger only: recorded, never refused.
 LEDGER_ONLY_SUFFIXES = {"merge_pull_request", "test_workflow"}
 
-SHELL_SPLIT = re.compile(r"&&|\|\||;|\||\n")
-LOCAL_HOST = re.compile(r"^(https?://)?(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|\[::1\])([:/]|$)", re.I)
+SHELL_WRAPPERS = {"sudo", "command", "env", "time", "nohup", "exec", "nice", "builtin"}
+SHELLS = {"bash", "sh", "zsh", "dash"}
 
+# (pattern, keep): keep is None to replace the whole match, 2 to keep group 1
+# and replace group 2, 3 to keep groups 1 and 3 and replace group 2.
 TOKEN_SHAPES = [
-    re.compile(r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"),
-    re.compile(r"\b[0-9a-fA-F]{40,}\b"),
-    re.compile(r"\b(?:sk|pk|csk|key|ghp|gho|ghs|xox[bp]|AKIA)[-_][A-Za-z0-9_-]{16,}"),
-    re.compile(r"(?i)\b(authorization|bearer|api[_-]?key|key|token|secret|password)(['\":= ]+)([^\s'\",}]{8,})"),
-    re.compile(r"\b[A-Za-z0-9+=_-]{40,}\b"),
+    (re.compile(r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"), None),
+    (re.compile(r"\b[0-9a-fA-F]{48,}\b"), None),
+    (re.compile(r"\b(?:sk|pk|csk|key|ghp|gho|ghs|xox[bp])[-_][A-Za-z0-9_-]{16,}"), None),
+    (re.compile(r"\bAKIA[0-9A-Z]{12,}\b"), None),
+    # user:password@host in a URL, and curl -u user:password
+    (re.compile(r"(://[^/\s:@]+:)([^/\s@]{3,})(@)"), 3),
+    (re.compile(r"(\s-u\s+[^\s:]+:)(\S{3,})"), 2),
+    # NAME=value where the name ends in a secret word, including SMTP_PASS and
+    # STRIPE_SECRET, which a leading word boundary would miss.
+    (re.compile(
+        r"(?i)([A-Za-z0-9_.-]*(?:authorization|bearer|api[_-]?key|secret[_-]?access[_-]?key|"
+        r"key|token|secret|passwd|password|pass)['\"]?\s*[:= ]\s*['\"]?)([^\s'\",}&]{8,})"
+    ), 2),
+    # a long mixed case token with no hyphen or slash, which a branch name or a
+    # path never is
+    (re.compile(r"\b(?=[A-Za-z0-9+=_]*[A-Z])(?=[A-Za-z0-9+=_]*[a-z])(?=[A-Za-z0-9+=_]*\d)[A-Za-z0-9+=_]{40,}\b"), None),
 ]
 
 
 def scrub(text):
     text = str(text)
-    for shape in TOKEN_SHAPES:
-        if shape.groups >= 3:
-            text = shape.sub(lambda m: m.group(1) + m.group(2) + "[REDACTED]", text)
-        else:
+    for shape, keep in TOKEN_SHAPES:
+        if keep is None:
             text = shape.sub("[REDACTED]", text)
+        elif keep == 2:
+            text = shape.sub(lambda m: m.group(1) + "[REDACTED]", text)
+        else:
+            text = shape.sub(lambda m: m.group(1) + "[REDACTED]" + m.group(3), text)
     return text
 
 
@@ -125,11 +164,122 @@ def ledger_path():
     return os.path.join(project_dir(), ".claude", "ledger", "gate-ledger.jsonl")
 
 
-# --------------------------------------------------------------- classification
+# --------------------------------------------------------- reading a shell line
 
 
-def _segments(command):
-    return [s.strip() for s in SHELL_SPLIT.split(command) if s.strip()]
+def _strip_heredocs(command):
+    """Removes heredoc bodies, which are data and are full of words that look
+    like commands."""
+    out = []
+    lines = command.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        out.append(line)
+        m = re.search(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1", line)
+        i += 1
+        if m:
+            term = m.group(2)
+            while i < len(lines) and lines[i].strip() != term:
+                i += 1
+            i += 1  # the terminator
+    return "\n".join(out)
+
+
+def _paren_body(command, start):
+    """Given the index just after an opening "$(", returns (body, end_index)."""
+    n = len(command)
+    j, depth = start, 1
+    while j < n and depth:
+        depth += (command[j] == "(") - (command[j] == ")")
+        j += 1
+    return command[start:j - 1], j - 1
+
+
+def _statements(command, depth=0):
+    """Splits a shell line into statements, quote aware, and pulls the bodies
+    of $( ) and backticks out as statements of their own."""
+    command = _strip_heredocs(command).replace("\\\n", " ")
+    stmts, buf, subs = [], [], []
+    i, n = 0, len(command)
+    quote = None
+    while i < n:
+        ch = command[i]
+        if quote == "'":
+            buf.append(ch)
+            if ch == "'":
+                quote = None
+        elif ch == "\\" and i + 1 < n:
+            buf.append(ch + command[i + 1])
+            i += 1
+        elif ch == "$" and command[i:i + 2] == "$(":
+            body, i = _paren_body(command, i + 2)
+            subs.append(body)
+            buf.append(" ")
+        elif ch == "`":
+            j = command.find("`", i + 1)
+            j = n if j < 0 else j
+            subs.append(command[i + 1:j])
+            buf.append(" ")
+            i = j
+        elif quote == '"':
+            buf.append(ch)
+            if ch == '"':
+                quote = None
+        elif ch in "'\"":
+            quote = ch
+            buf.append(ch)
+        elif ch in ";|&\n()":
+            stmts.append("".join(buf))
+            buf = []
+        else:
+            buf.append(ch)
+        i += 1
+    stmts.append("".join(buf))
+    out = [s.strip() for s in stmts if s.strip()]
+    if depth < 4:
+        for body in subs:
+            out.extend(_statements(body, depth + 1))
+    return out
+
+
+def _argv(statement):
+    try:
+        argv = shlex.split(statement)
+    except ValueError:
+        argv = statement.split()
+    while argv and (
+        re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", argv[0]) or os.path.basename(argv[0]) in SHELL_WRAPPERS
+    ):
+        argv = argv[1:]
+    return argv
+
+
+def _expand(statement, depth=0):
+    """Yields argv lists, recursing into bash -c and eval."""
+    argv = _argv(statement)
+    if not argv:
+        return
+    prog = os.path.basename(argv[0])
+    if depth < 4 and prog in SHELLS:
+        for i, a in enumerate(argv[1:], 1):
+            if re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", a) and i + 1 < len(argv):
+                for s in _statements(argv[i + 1]):
+                    yield from _expand(s, depth + 1)
+                return
+    if depth < 4 and prog == "eval":
+        for s in _statements(" ".join(argv[1:])):
+            yield from _expand(s, depth + 1)
+        return
+    yield argv
+
+
+def _git_cwd(argv, cwd):
+    for i, a in enumerate(argv):
+        if a == "-C" and i + 1 < len(argv):
+            path = argv[i + 1]
+            return path if os.path.isabs(path) or not cwd else os.path.join(cwd, path)
+    return cwd
 
 
 def _current_branch(cwd):
@@ -143,112 +293,157 @@ def _current_branch(cwd):
         return ""
 
 
-def _push_force_kind(segment, cwd):
-    """Returns (kind, target) for a git push segment, or None.
+PUSH_ARG_FLAGS = {"-o", "--push-option", "--repo", "--receive-pack", "--exec"}
 
-    kind is "plain" for --force or -f, "lease" for --force-with-lease, "plus"
-    for a +refspec, "none" for a push with no force. target is the branch the
-    push writes, "" when it cannot be told.
-    """
-    tokens = segment.split()
-    if "git" not in tokens or "push" not in tokens:
+
+def _git_push(argv, cwd):
+    """Returns (cls, gated) for a git argv, or None when it is not a push."""
+    if os.path.basename(argv[0]) != "git" or "push" not in argv:
         return None
-    gi = tokens.index("git")
-    rest = tokens[gi + 1:]
-    if "push" not in rest:
-        return None
-    args = rest[rest.index("push") + 1:]
-    kind = "none"
+    pi = argv.index("push")
+    cwd = _git_cwd(argv[:pi], cwd)
+    force = lease = delete = mirror = every = False
     positional = []
-    for a in args:
-        if a == "--force" or a == "-f" or (re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", a) and not a.startswith("--")):
-            kind = "plain"
+    skip = False
+    for a in argv[pi + 1:]:
+        if skip:
+            skip = False
+            continue
+        if a in PUSH_ARG_FLAGS:
+            skip = True
+        elif a == "--force" or re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", a):
+            force = True
         elif a.startswith("--force-with-lease") or a == "--force-if-includes":
-            if kind != "plain":
-                kind = "lease"
+            lease = True
+        elif a in ("--delete", "-d", "--prune"):
+            delete = True
+        elif a == "--mirror":
+            mirror = True
+        elif a in ("--all", "--tags"):
+            every = True
         elif a.startswith("-"):
             continue
         else:
             positional.append(a)
-    # positional is [remote, refspec...]
-    refspecs = positional[1:] if len(positional) > 1 else []
-    target = ""
+    remote = positional[0] if positional else ""
+    refspecs = positional[1:]
+    plus = any(s.startswith("+") for s in refspecs)
+    delete = delete or any(s.startswith(":") for s in refspecs)
+    targets = []
     for spec in refspecs:
-        if spec.startswith("+"):
-            if kind == "none":
-                kind = "plus"
-            spec = spec[1:]
-        dst = spec.split(":")[-1]
+        spec = spec.lstrip("+")
+        dst = spec.split(":")[-1] if ":" in spec else spec
         dst = re.sub(r"^refs/heads/", "", dst)
-        if dst == "HEAD" or not dst:
+        if dst in ("HEAD", ""):
             dst = _current_branch(cwd)
-        target = dst
+        targets.append(dst)
     if not refspecs:
-        target = _current_branch(cwd)
-    return kind, target
+        targets = [_current_branch(cwd)]
+    if not (force or plus or lease or delete or mirror):
+        return "git_push", False
+    parts = [name for name, on in (
+        ("plain", force), ("plus", plus), ("lease", lease), ("delete", delete), ("mirror", mirror)
+    ) if on]
+    own = bool(targets) and all(t.startswith("claude/") for t in targets)
+    url_remote = "://" in remote or "@" in remote
+    gated = force or plus or delete or mirror or every or not own or url_remote
+    return "git_force_push:" + "+".join(parts), gated
 
 
-def _curl_mutating(segment):
-    tokens = segment.split()
-    if "curl" not in tokens:
+CURL_ARG_LETTERS = set("oHuAebcxwmKEQrCyYzZ")
+CURL_BODY_LONG = {
+    "--data", "--data-raw", "--data-binary", "--data-urlencode", "--data-ascii",
+    "--json", "--form", "--form-string", "--upload-file",
+}
+WRITE_METHODS = ("POST", "PUT", "PATCH", "DELETE")
+
+
+def _curl_mutating(argv):
+    if os.path.basename(argv[0]) != "curl":
         return False
-    body = segment
-    mutating = bool(
-        re.search(r"(?:^|\s)-X\s*(POST|PUT|PATCH|DELETE)\b", body, re.I)
-        or re.search(r"--request\s+(POST|PUT|PATCH|DELETE)\b", body, re.I)
-        or re.search(r"(?:^|\s)(-d|--data|--data-raw|--data-binary|--data-urlencode|-F|--form|-T|--upload-file)\b", body)
-    )
+    mutating = False
+    urls = []
+    for i in range(1, len(argv)):
+        a = argv[i]
+        nxt = argv[i + 1] if i + 1 < len(argv) else ""
+        if a.startswith("--"):
+            name, _, val = a.partition("=")
+            if name in CURL_BODY_LONG:
+                mutating = True
+            elif name == "--request" and (val or nxt).upper() in WRITE_METHODS:
+                mutating = True
+        elif a.startswith("-") and len(a) > 1:
+            letters = a[1:]
+            for k, ch in enumerate(letters):
+                if ch in "dFT":
+                    mutating = True
+                    break
+                if ch == "X":
+                    if (letters[k + 1:] or nxt).upper() in WRITE_METHODS:
+                        mutating = True
+                    break
+                if ch in CURL_ARG_LETTERS:
+                    break
+        elif re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", a) or re.match(r"^[\w.-]+\.[A-Za-z]{2,}(/|:|$)", a):
+            urls.append(a)
     if not mutating:
         return False
-    urls = re.findall(r"https?://[^\s'\"]+", body)
     if not urls:
         return True
-    return not all(LOCAL_HOST.match(u) for u in urls)
+    for u in urls:
+        host = (urlparse(u if "://" in u else "http://" + u).hostname or "").lower()
+        if host not in ("localhost", "0.0.0.0", "::1") and not re.fullmatch(r"127\.\d+\.\d+\.\d+", host):
+            return True
+    return False
+
+
+# ---------------------------------------------------------------- classification
 
 
 def classify(tool_name, tool_input, cwd=""):
     """Returns (cls, gated). cls is None for a call that is not tracked."""
     tool_input = tool_input if isinstance(tool_input, dict) else {}
-    suffix = tool_name.rsplit("__", 1)[-1] if tool_name.startswith("mcp__") else tool_name
 
-    if tool_name == "Bash":
+    if tool_name.lower() == "bash":
         command = str(tool_input.get("command", ""))
-        classes = []
-        gated = False
-        for seg in _segments(command):
-            push = _push_force_kind(seg, cwd)
-            if push:
-                kind, target = push
-                if kind == "none":
-                    classes.append("git_push")
-                else:
-                    classes.append("git_force_push:" + kind)
-                    protected = target in ("main", "master", "")
-                    own = target.startswith("claude/")
-                    if kind == "plain" or protected or not own:
-                        gated = True
-            elif _curl_mutating(seg):
-                classes.append("curl_mutating")
-                gated = True
-            elif re.search(r"\bgit\s+reset\s+--hard\b", seg):
-                classes.append("git_reset_hard")
-            elif re.search(r"\bgit\s+branch\s+-[dD]\b", seg):
-                classes.append("git_branch_delete")
-            elif re.search(r"\brm\s+(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\b", seg):
-                classes.append("rm_recursive")
+        classes, gated = [], False
+        for stmt in _statements(command):
+            for argv in _expand(stmt):
+                prog = os.path.basename(argv[0])
+                push = _git_push(argv, cwd)
+                if push:
+                    classes.append(push[0])
+                    gated = gated or push[1]
+                elif prog == "curl" and _curl_mutating(argv):
+                    classes.append("curl_mutating")
+                    gated = True
+                elif prog == "git" and "reset" in argv and "--hard" in argv:
+                    classes.append("git_reset_hard")
+                elif prog == "git" and "branch" in argv and ("-d" in argv or "-D" in argv):
+                    classes.append("git_branch_delete")
+                elif prog == "rm" and any(
+                    a == "--recursive" or re.fullmatch(r"-[a-zA-Z]*[rR][a-zA-Z]*", a) for a in argv[1:]
+                ):
+                    classes.append("rm_recursive")
         if not classes:
             return None, False
         return ",".join(classes), gated
 
     if not tool_name.startswith("mcp__"):
         return None, False
+    parts = tool_name.split("__")
+    suffix = parts[-1]
+    server = parts[1].lower() if len(parts) > 2 else ""
     if suffix in LEDGER_ONLY_SUFFIXES:
         return suffix, False
     if suffix in GATED_SUFFIXES:
         return suffix, True
-    if suffix == "send_message" and tool_name.startswith(RAKAZO_PREFIX):
+    if suffix == "send_message" and RAKAZO in server:
         return suffix, True
-    if VPS_MUTATING.match(suffix):
+    if HOSTINGER_WRITE.match(suffix):
+        return suffix, True
+    verb = re.sub(r"^(blotato|zapier)_", "", suffix)
+    if any(name in server for name in NAMED_SERVERS) and WRITE_VERB.match(verb):
         return suffix, True
     return None, False
 
@@ -265,29 +460,52 @@ NOT_HUMAN_PREFIXES = (
 
 def _parse_ts(value):
     try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        ts = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
     except Exception:
         return None
+
+
+def _message_text(content):
+    """Returns (text, has_image) for a content that is a string or a block list."""
+    if isinstance(content, str):
+        return content, False
+    if isinstance(content, list):
+        texts, image = [], False
+        for b in content:
+            if isinstance(b, dict):
+                if b.get("type") == "text":
+                    texts.append(str(b.get("text", "")))
+                elif b.get("type") == "image":
+                    image = True
+        return "\n".join(texts), image
+    return "", False
 
 
 def _is_human(entry):
     if entry.get("type") != "user" or entry.get("isMeta"):
         return False
     content = (entry.get("message") or {}).get("content")
-    if not isinstance(content, str) or not content.strip():
+    if isinstance(content, list) and any(isinstance(b, dict) and b.get("type") == "tool_result" for b in content):
+        return False
+    text, has_image = _message_text(content)
+    if not text.strip() and not has_image:
+        return False
+    if text.lstrip().startswith("[Request interrupted"):
         return False
     origin = entry.get("origin")
     if isinstance(origin, dict):
         return origin.get("kind") == "human"
-    return not content.lstrip().startswith(NOT_HUMAN_PREFIXES)
+    return has_image or not text.lstrip().startswith(NOT_HUMAN_PREFIXES)
 
 
 def main_transcript(path):
-    """A subagent's hook can point at a file under <session>/subagents/. The
-    person spoke in the parent file, so read that one."""
-    if "/subagents/" in path:
-        parent = os.path.dirname(os.path.dirname(path)) + ".jsonl"
-        return parent
+    """A subagent's hook can point at a file under <session>/subagents/, or
+    deeper (<session>/subagents/workflows/wf_x/agent-y.jsonl). The person spoke
+    in the session file, so read that one."""
+    marker = "/subagents/"
+    if marker in path:
+        return path[:path.index(marker)] + ".jsonl"
     return path
 
 
@@ -296,14 +514,15 @@ def latest_signal(path, now):
     when the transcript holds none. Raises when it cannot be read."""
     card_ids = set()
     newest = None
-    with open(path, encoding="utf-8") as fh:
+    horizon = now + timedelta(minutes=SKEW_MIN)
+    with open(path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
             try:
                 entry = json.loads(line, strict=False)
             except Exception:
                 continue
             ts = _parse_ts(entry.get("timestamp"))
-            if ts is None:
+            if ts is None or ts > horizon:
                 continue
             kind = None
             if _is_human(entry):
@@ -329,7 +548,7 @@ def latest_signal(path, now):
                 newest = (kind, ts)
     if newest is None:
         return None
-    return newest[0], (now - newest[1]).total_seconds() / 60.0
+    return newest[0], max(0.0, (now - newest[1]).total_seconds() / 60.0)
 
 
 def decide(cls, gated, payload, now):
@@ -354,11 +573,19 @@ def decide(cls, gated, payload, now):
 # ----------------------------------------------------------------------- ledger
 
 
+PRIORITY_KEYS = re.compile(r"(^|_)(id|ids|name|workflowid|pullnumber|number|repo|owner|branch|url|path)$", re.I)
+
+
 def summarize(tool_name, tool_input):
-    if tool_name == "Bash":
-        return scrub(str((tool_input or {}).get("command", "")))[:400]
+    if tool_name.lower() == "bash":
+        return scrub(str((tool_input or {}).get("command", "")))[:600]
     try:
-        return scrub(json.dumps(tool_input, default=str, sort_keys=True))[:400]
+        if isinstance(tool_input, dict):
+            keys = sorted(tool_input, key=lambda k: (0 if PRIORITY_KEYS.search(str(k)) else 1, str(k)))
+            ordered = {k: tool_input[k] for k in keys}
+        else:
+            ordered = tool_input
+        return scrub(json.dumps(ordered, default=str))[:600]
     except Exception:
         return ""
 
@@ -368,6 +595,15 @@ def write_ledger(row):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(row, sort_keys=True) + "\n")
+
+
+def _try_ledger(row):
+    """A ledger that cannot be written is reported on stderr and never changes a
+    decision."""
+    try:
+        write_ledger(row)
+    except Exception as exc:
+        sys.stderr.write("gate_ledger: ledger write failed: %s: %s\n" % (type(exc).__name__, exc))
 
 
 def _row(event, payload, cls, gated, now, **extra):
@@ -395,7 +631,7 @@ def run(mode, payload, now=None):
 
     if mode == "pre":
         allow, reason, _sig = decide(cls, gated, payload, now)
-        write_ledger(_row("gate-allow" if allow else "gate-deny", payload, cls, gated, now, reason=reason))
+        _try_ledger(_row("gate-allow" if allow else "gate-deny", payload, cls, gated, now, reason=reason))
         if allow:
             return None
         return {
@@ -403,9 +639,11 @@ def run(mode, payload, now=None):
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "deny",
                 "permissionDecisionReason": (
-                    "Gate refused %s (%s): %s. Put the decision to Tee on an "
-                    "AskUserQuestion card with the recommended option first, wait "
-                    "for the answer, then retry. Do not rephrase the call to get "
+                    "Gate refused %s (%s): %s. If Tee is in this session, put the "
+                    "decision to him on an AskUserQuestion card with the recommended "
+                    "option first, wait for the answer, then retry. If no one is "
+                    "present (a scheduled or webhook session), stop and leave this "
+                    "action in your report for him. Do not rephrase the call to get "
                     "around the gate." % (name, cls, reason)
                 ),
             }
@@ -415,7 +653,7 @@ def run(mode, payload, now=None):
     extra = {}
     if mode == "fail":
         extra["error"] = scrub(str(payload.get("error", "")))[:300]
-    write_ledger(_row(event, payload, cls, gated, now, **extra))
+    _try_ledger(_row(event, payload, cls, gated, now, **extra))
     return None
 
 

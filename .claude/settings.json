@@ -26,11 +26,11 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash|mcp__.*",
+        "matcher": "Bash|bash|mcp__.*",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/.claude/hooks/gate_ledger.py pre",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/gate_ledger.py\" pre; rc=$?; [ $rc -eq 0 ] || { echo \"gate_ledger hook failed rc=$rc\" >&2; exit 1; }",
             "timeout": 15
           }
         ]
@@ -38,11 +38,11 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash|mcp__.*",
+        "matcher": "Bash|bash|mcp__.*",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/.claude/hooks/gate_ledger.py post",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/gate_ledger.py\" post; rc=$?; [ $rc -eq 0 ] || { echo \"gate_ledger hook failed rc=$rc\" >&2; exit 1; }",
             "timeout": 15
           }
         ]
@@ -50,11 +50,11 @@
     ],
     "PostToolUseFailure": [
       {
-        "matcher": "Bash|mcp__.*",
+        "matcher": "Bash|bash|mcp__.*",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 $CLAUDE_PROJECT_DIR/.claude/hooks/gate_ledger.py fail",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/gate_ledger.py\" fail; rc=$?; [ $rc -eq 0 ] || { echo \"gate_ledger hook failed rc=$rc\" >&2; exit 1; }",
             "timeout": 15
           }
         ]
