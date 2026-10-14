@@ -523,7 +523,7 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_devon_vision_fixture.py test_pulse_watchdog.py \
   test_devon_rule_ledger.py test_devon_wager.py test_devon_tqo_canon.py \
   test_provider_watchdog.py test_devon_show_registry.py test_show_registry_seed.py \
-  test_devon_lesson_registry.py
+  test_devon_lesson_registry.py test_gate_ledger.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .
@@ -673,6 +673,42 @@ merged past on a guess that it is a flake. It covers nothing else that is his
 to decide either: publishing an n8n workflow, setting a variable or a secret,
 and every other ruling still go to him on a card.
 
+## The outward gate and its ledger
+
+Ruled by Tee 2026-10-14, "Yes on all 3 decisions", after a read of every cloud
+session found 1,810 outward high tier calls and 45 merges, 49 workflow edits, 36
+publishes, 29 workflow executions and 29 force pushes that ran with no answered
+card and no message from him in the 30 minutes before.
+
+`.claude/hooks/gate_ledger.py`, wired in `.claude/settings.json` on PreToolUse,
+PostToolUse and PostToolUseFailure, refuses a gated call unless a human signal
+sits inside 30 minutes before it: a message Tee typed, or an answered
+`AskUserQuestion` card. A refusal means put the decision on a card and retry.
+Do not rephrase the call to get past it.
+
+- Gated: n8n publish, unpublish, archive, execute, update and restore, Railway
+  variables and deploys, Airtable writes, Drive trash, Rakazo bot calls, Vercel
+  and Supabase writes, Hostinger DNS and VPS writes, GitHub Actions triggers, a
+  curl that writes to a non-local host, and any force push that is not
+  `--force-with-lease` to a `claude/` branch.
+- Ledger only: merges, because the standing approval of 2026-10-11 covers them,
+  and `test_workflow`. The gated list is `GATED_SUFFIXES` in the file; moving a
+  tool in or out is a commit, and a ruling.
+- A webhook turn, a scheduled check-in, a task notification, a peer agent
+  report and a context summary are all user turns in the transcript and none of
+  them is a signal. The test is `origin.kind == "human"` on the entry.
+- It fails closed on a gated call when the transcript cannot be read, and there
+  is no environment switch that turns it off. A broken reader cannot lock a
+  session out of reading or editing, because only gated calls are touched.
+- The ledger is `.claude/ledger/gate-ledger.jsonl`, ignored by git and scrubbed
+  of anything shaped like a token. It lives in the container, so it records the
+  session and is not a durable archive. Nothing reads it into DEVON yet.
+
+Unverified: a subagent's hook input. The script reads the parent transcript
+when `transcript_path` is under `/subagents/`, which a fixture pins and no live
+subagent call has confirmed. Settings reload at session start, so the first
+session after this merges is where the live behaviour is measured.
+
 ## The receipt on a status doc
 
 Ruled 2026-09-09. Every `docs/devon/SYS_OPS_*.md` carries a `## DEVON RECEIPT`
@@ -786,7 +822,7 @@ commit above: a green that means nothing. Set it to absolute worktree paths.
 
 ## Skills in this repository
 
-`.claude/skills/` carries eight. Seven are ours: `steward` (CI and PR
+`.claude/skills/` carries nine. Eight are ours: `steward` (CI and PR
 conventions, load it for anything touching either), `deploy-readback` (what the
 production surfaces are actually serving), `estate-reconcile` (checking records
 against the live estate), `devon-learning-lane` (the Build 12 learning lane and
@@ -795,7 +831,9 @@ file holds, filed as `docs/devon/CAPTURE_*`), `shadow-we-share-brand` (the
 podcast's brand system, its flagship standard, palette, mark and voice),
 `startup-reverse-engineering` (turning a named startup into one business to
 build: the steal, the wedge and a verdict, with every figure sourced or marked
-unverified).
+unverified), `paste-loop` (handing Tee one command or Colab cell for his own
+device and judging the output he pastes back: one step, the exact success line,
+a pass or fail verdict first).
 
 This paragraph said six and five until 2026-09-12, when a session counted the
 directory instead of the sentence. `shadow-we-share-brand` had been committed
