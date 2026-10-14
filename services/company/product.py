@@ -11,10 +11,11 @@ assume", so a proposal cannot be an adjective. What it refuses:
 
   1. A title, problem or proposal with em or en dashes or look-alikes, or a NUL
      byte, or fewer than 10 visible characters (a title needs 5).
-  2. A proposal with no acceptance check of at least 10 visible characters.
-     The check says how anyone would measure that it works.
+  2. A proposal with no acceptance check of at least 10 visible characters, or
+     one with a dash. The check says how anyone would measure that it works.
   3. A proposal with no reference artifact of at least 10 visible characters.
-     It names the file, URL or document the work should match or extend.
+     It names the file, URL or document the work should match or extend. A bare
+     URL is left verbatim; anything else takes the dash rule.
   4. A size other than small, medium or large, and approving a large proposal
      without a note of at least 10 visible characters. A large build is a
      commitment, and the record should say it was taken knowingly.
@@ -29,6 +30,7 @@ is sufficient. It only checks they were written down.
 from __future__ import annotations
 
 import hashlib
+import re
 import unicodedata
 from dataclasses import dataclass, replace
 from typing import Optional
@@ -37,8 +39,18 @@ from services.company.marketing import (
     AUTOMATED_ACTORS,
     DraftStatus,
     QueueRefusal,
+    _check_note,
     _check_text,
     _visible_len,
+)
+
+# A reference artifact may be a bare URL, and a URL is not prose: it is left
+# verbatim and only NUL checked. Anything with a space in it is prose and takes
+# the dash rule. The URL must have a real host, so a run of dashes after
+# "https://" is prose and takes the dash rule. Ruled by Tee 2026-10-14.
+_BARE_URL_RE = re.compile(
+    r"https://(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}"
+    r"(?::[0-9]{1,5})?(?:[/?#]\S*)?"
 )
 
 SIZES = ("small", "medium", "large")
@@ -111,9 +123,12 @@ def create_proposal(
     _needs(problem, "problem")
     _check_text(proposal, "proposal")
     _needs(proposal, "proposal")
-    _plain_field(acceptance_check, "acceptance_check")
+    _check_text(acceptance_check, "acceptance_check")
     _needs(acceptance_check, "acceptance_check")
-    _plain_field(reference_artifact, "reference_artifact")
+    if _BARE_URL_RE.fullmatch(reference_artifact.strip()):
+        _plain_field(reference_artifact, "reference_artifact")
+    else:
+        _check_text(reference_artifact, "reference_artifact")
     _needs(reference_artifact, "reference_artifact")
     if size not in SIZES:
         raise QueueRefusal("size must be one of " + ", ".join(SIZES))
@@ -132,8 +147,7 @@ def _decide(p: Proposal, status: DraftStatus, decided_by: str, note: Optional[st
         raise QueueRefusal("a human decision needs a named decider")
     if who.lower() in AUTOMATED_ACTORS:
         raise QueueRefusal(f"{who!r} is an automated actor, not a human decider")
-    if note is not None and "\x00" in note:
-        raise QueueRefusal("decision note contains a NUL byte")
+    _check_note(note)
     if status is DraftStatus.APPROVED and p.size == "large" and _visible_len(note or "") < MIN_TEXT_CHARS:
         raise QueueRefusal(
             "approving a large proposal needs a note of at least "

@@ -15,7 +15,8 @@ cannot hide how well it is known. What it refuses:
      evidence reference of fewer than 10 visible characters.
   3. A source finding whose reference is not a plain https URL. A measured
      finding names the artifact or command that produced the number. An
-     unverified finding says what check would settle it.
+     unverified finding says what check would settle it. Those two are prose and
+     take the dash rule; a URL is left verbatim.
   4. Adopting an unverified finding without a note of at least 10 visible
      characters. Tee can adopt a lead, but the record must say it was adopted
      unverified.
@@ -40,6 +41,7 @@ from services.company.marketing import (
     AUTOMATED_ACTORS,
     DraftStatus,
     QueueRefusal,
+    _check_note,
     _check_text,
     _visible_len,
 )
@@ -122,8 +124,14 @@ def create_finding(
         raise QueueRefusal(f"evidence_ref needs at least {MIN_TEXT_CHARS} visible characters")
     if len(ref) > MAX_REF_CHARS:
         raise QueueRefusal(f"evidence_ref is longer than {MAX_REF_CHARS} characters")
-    if evidence_kind == "source" and not _URL_RE.fullmatch(ref):
-        raise QueueRefusal("a source finding needs an https URL as its evidence_ref")
+    if evidence_kind == "source":
+        if not _URL_RE.fullmatch(ref):
+            raise QueueRefusal("a source finding needs an https URL as its evidence_ref")
+    else:
+        # A measured or unverified reference is our own prose, so it takes the
+        # dash rule. A source reference is a URL and stays verbatim. Ruled by Tee
+        # 2026-10-14.
+        _check_text(ref, "evidence_ref")
     if evidence_excerpt is not None and "\x00" in evidence_excerpt:
         raise QueueRefusal("evidence_excerpt contains a NUL byte")
     _check_text(recommendation, "recommendation")
@@ -144,8 +152,7 @@ def _decide(f: Finding, status: DraftStatus, decided_by: str, note: Optional[str
         raise QueueRefusal("a human decision needs a named decider")
     if who.lower() in AUTOMATED_ACTORS:
         raise QueueRefusal(f"{who!r} is an automated actor, not a human decider")
-    if note is not None and "\x00" in note:
-        raise QueueRefusal("decision note contains a NUL byte")
+    _check_note(note)
     if status is DraftStatus.APPROVED and f.evidence_kind == "unverified":
         if _visible_len(note or "") < MIN_TEXT_CHARS:
             raise QueueRefusal(

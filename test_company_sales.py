@@ -56,7 +56,6 @@ def test_the_inbound_excerpt_may_contain_dashes_because_it_is_the_leads_own_word
     ("contact_email", "a b@example.com", "email"),
     ("contact_email", "a@@example.com", "email"),
     ("ai_disclosure", "AI", "visible characters"),
-    ("ai_disclosure", "", "empty"),
 ])
 def test_bad_fields_are_refused_with_a_named_reason(field, value, match):
     with pytest.raises(QueueRefusal, match=match):
@@ -143,3 +142,26 @@ def test_a_plain_name_with_a_hyphen_or_accent_passes():
 def test_the_vertical_em_and_en_dashes_are_refused(ch):
     with pytest.raises(QueueRefusal, match="dash"):
         create_lead_draft(**{**GOOD, "reply_text": f"before {ch} after the rest"})
+
+
+@pytest.mark.parametrize("value", [None, "", "   ", "\n\t "])
+def test_a_one_to_one_email_needs_no_disclosure(value):
+    """Ruled by Tee 2026-10-14, against the recommendation to keep requiring it."""
+    d = create_lead_draft(**{**GOOD, "ai_disclosure": value})
+    assert d.ai_disclosure is None and d.status is DraftStatus.DRAFTED
+
+
+def test_the_disclosure_may_be_left_out_entirely():
+    kwargs = {k: v for k, v in GOOD.items() if k != "ai_disclosure"}
+    assert create_lead_draft(**kwargs).ai_disclosure is None
+
+
+@pytest.mark.parametrize("value", ["AI", ".", "\u200b" * 20, "\u2800" * 12, "\u3164" * 12])
+def test_a_disclosure_that_is_given_must_still_be_real(value):
+    with pytest.raises(QueueRefusal, match="ai_disclosure"):
+        create_lead_draft(**{**GOOD, "ai_disclosure": value})
+
+
+def test_a_given_disclosure_is_kept_as_written():
+    d = create_lead_draft(**{**GOOD, "ai_disclosure": "Drafted with AI, sent by Tee."})
+    assert d.ai_disclosure == "Drafted with AI, sent by Tee."

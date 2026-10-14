@@ -61,12 +61,46 @@ class PostDraft:
     decision_note: Optional[str] = None
 
 
+# Letters and symbols that draw nothing: the braille blank and the Hangul fillers.
+# They are not whitespace or format characters by category, so a category test
+# alone counts them as visible.
+_BLANK_GLYPHS = frozenset("\u2800\u3164\u115f\u1160\uffa0\ufffc\U0001d159")
+# Reserved code points that Unicode marks default ignorable, so they draw nothing
+# even though no category says so: U+2065, U+FFF0 to U+FFF8, and the tag and
+# variation selector supplement U+E0000 to U+E0FFF. Not every unassigned code
+# point: a newer emoji is unassigned in an older Unicode table and must still count.
+_IGNORABLE_RANGES = ((0x2065, 0x2065), (0xFFF0, 0xFFF8), (0xE0000, 0xE0FFF))
+# Whitespace, control and format characters, combining marks, private use and
+# surrogates. A combining mark draws on the character before it, so it adds
+# nothing a reader can count; "e" plus an acute accent is one visible character,
+# and a mark on its own is none. A private-use character draws whatever the font
+# assigns it, usually nothing, so it is not something Tee can read.
+_NOT_VISIBLE_CATEGORIES = ("Cf", "Cc", "Zs", "Zl", "Zp", "Mn", "Me", "Co", "Cs")
+
+
+def _is_default_ignorable(ch: str) -> bool:
+    cp = ord(ch)
+    return any(lo <= cp <= hi for lo, hi in _IGNORABLE_RANGES)
+
+
 def _visible_len(text: str) -> int:
-    """Characters a reader can see: no whitespace, control or zero-width format characters."""
+    """Characters a reader can see.
+
+    Excludes whitespace, control and zero-width format characters, combining marks,
+    private-use characters, and the glyphs that render blank. Measured 2026-10-14:
+    ten braille blanks, ten Hangul fillers and twelve bare combining marks all
+    counted as visible before this and cleared the 10 character floors; the
+    independent critic then found the object replacement character, the musical
+    null notehead, reserved default-ignorable code points and private-use
+    characters doing the same.
+    """
     return sum(
         1
         for ch in text
-        if not ch.isspace() and unicodedata.category(ch) not in ("Cf", "Cc", "Zs", "Zl", "Zp")
+        if not ch.isspace()
+        and ch not in _BLANK_GLYPHS
+        and not _is_default_ignorable(ch)
+        and unicodedata.category(ch) not in _NOT_VISIBLE_CATEGORIES
     )
 
 
@@ -77,6 +111,20 @@ def _check_text(text: str, label: str) -> None:
         raise QueueRefusal(f"{label} contains a NUL byte")
     if any(d in text for d in BANNED_DASHES):
         raise QueueRefusal(f"{label} contains an em or en dash")
+
+
+def _check_note(note: Optional[str]) -> None:
+    """A decision note is shown to Tee, so it carries the same dash rule as a post.
+
+    Ruled by Tee 2026-10-14: notes, acceptance checks, reference artifacts and
+    measured references take the dash rule. Not URLs and not quoted text.
+    """
+    if note is None:
+        return
+    if "\x00" in note:
+        raise QueueRefusal("decision note contains a NUL byte")
+    if any(d in note for d in BANNED_DASHES):
+        raise QueueRefusal("decision note contains an em or en dash")
 
 
 def create_draft(*, draft_id: str, show: str, episode_ref: str, platform: str,
@@ -107,6 +155,7 @@ def _decide(draft: PostDraft, status: DraftStatus, decided_by: str, note: Option
         raise QueueRefusal("a human decision needs a named decider")
     if who.lower() in AUTOMATED_ACTORS:
         raise QueueRefusal(f"{who!r} is an automated actor, not a human decider")
+    _check_note(note)
     return replace(draft, status=status, decided_by=who, decision_note=note)
 
 
