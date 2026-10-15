@@ -301,7 +301,16 @@ def test_an_ungated_call_never_reads_the_transcript():
 REAL = pathlib.Path("/root/.claude/projects/-home-user-Meta-Supreme-Apex-Genesis-")
 
 
-@pytest.mark.skipif(not REAL.exists(), reason="no Claude Code transcript on this machine")
+def _real_transcripts_readable():
+    """False on a machine with no such directory and on one where it exists
+    and cannot be read (a CI runner is neither root nor this container)."""
+    try:
+        return REAL.is_dir() and any(REAL.glob("*.jsonl"))
+    except OSError:
+        return False
+
+
+@pytest.mark.skipif(not _real_transcripts_readable(), reason="no readable Claude Code transcript here")
 def test_the_real_transcript_shape_is_read_by_the_gate():
     """Pins the discriminator against a file the product wrote, not against the
     fixtures above. Skipped where there is none, and it asserts only shape."""
