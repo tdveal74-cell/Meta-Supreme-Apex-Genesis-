@@ -95,6 +95,12 @@ GATED_SUFFIXES = {
 NAMED_SERVERS = (
     "n8n", "railway", "airtable", "vercel", "supabase", "hostinger", "rakazo",
     "blotato", "docusign", "zapier",
+    # Remote Desktop Commander runs commands as root on the VPS. Ruled by Tee
+    # 2026-10-15 on a card, after a Codex review of PR #344 found the allow rule
+    # left it with no human check at all. The underscore form matches the cloud
+    # name and the claude_ai_ connector name, not the local plugin server
+    # "desktop-commander", which runs inside this container.
+    "desktop_commander",
 )
 # On a named server every tool is gated EXCEPT a read. Listing the reads is the
 # safer direction: a write verb nobody thought of is caught, and the cost of a
