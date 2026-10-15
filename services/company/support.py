@@ -20,7 +20,12 @@ What it refuses:
      basis. It never checks that the basis is true, only that it was written.
   4. A reply with no AI disclosure of at least 10 visible characters. Tee's
      disclosure rule has no exception path, so this reuses the Marketing rule.
-  5. An approval with no human named, or one named as an automated actor, and
+  5. A reply that cites no article, or an article id that is not a slug. The
+     rules here check the shape only. Whether the article exists, belongs to the
+     owner and is approved is checked at storage against the knowledge base
+     (services/company/knowledge.py), because that needs a lookup. Ruled by Tee
+     2026-10-15: every reply cites one article id or it is refused.
+  6. An approval with no human named, or one named as an automated actor, and
      a second decision on a draft that already has one.
 """
 
@@ -31,6 +36,7 @@ import unicodedata
 from dataclasses import dataclass, replace
 from typing import Optional
 
+from services.company.knowledge import check_article_id
 from services.company.marketing import (
     AUTOMATED_ACTORS,
     MIN_DISCLOSURE_CHARS,
@@ -66,6 +72,8 @@ class CommentDraft:
     status: DraftStatus = DraftStatus.DRAFTED
     decided_by: Optional[str] = None
     decision_note: Optional[str] = None
+    # None only for a row saved before the knowledge base existed.
+    article_id: Optional[str] = None
 
 
 def _plain_field(value: str, label: str) -> None:
@@ -85,8 +93,10 @@ def create_comment_draft(
     reply_text: str,
     reply_basis: str,
     ai_disclosure: str,
+    article_id: str,
 ) -> CommentDraft:
     _plain_field(draft_id, "draft_id")
+    check_article_id(article_id)
     if not _VIDEO_ID_RE.fullmatch(video_id or ""):
         raise QueueRefusal("video_id is not shaped like a YouTube video id")
     if not _COMMENT_ID_RE.fullmatch(comment_id or ""):
@@ -115,6 +125,7 @@ def create_comment_draft(
         draft_id=draft_id, video_id=video_id, comment_id=comment_id,
         commenter_name=commenter_name.strip(), comment_text=comment_text,
         reply_text=reply_text, reply_basis=reply_basis, ai_disclosure=ai_disclosure,
+        article_id=article_id,
     )
 
 
