@@ -744,3 +744,53 @@ def test_one_huge_token_does_not_blow_the_hook_timeout():
     gate.classify("Bash", {"command": "echo " + "a" * 500_000})
     gate.classify("Bash", {"command": "echo 'x " + "word " * 100_000})
     assert time.time() - start < 3
+
+
+# ----------------------------------------------- gh and wget, ruled 2026-10-14
+
+
+@pytest.mark.parametrize("command,cls", [
+    ("gh workflow run ci.yml", "gh_workflow_run"),
+    ("gh workflow run ci.yml -f env=prod", "gh_workflow_run"),
+    ("gh api -X POST repos/o/r/dispatches", "gh_api_write"),
+    ("gh api --method DELETE repos/o/r/git/refs/heads/x", "gh_api_write"),
+    ("gh api repos/o/r/issues -f title=x", "gh_api_write"),
+    ("gh api repos/o/r/issues --input body.json", "gh_api_write"),
+    ("gh api graphql -f query='mutation { x }'", "gh_api_graphql_mutation"),
+    ("gh release create v1.0", "gh_release_create"),
+    ("gh -R o/r secret set TOKEN", "gh_secret_set"),
+    ("gh repo delete o/r --yes", "gh_repo_delete"),
+    ("gh run rerun 123", "gh_run_rerun"),
+    ("gh issue delete 5", "gh_issue_delete"),
+    ("wget --post-data=a=1 https://x.example.com", "wget_mutating"),
+    ("wget --post-file=body.json https://x.example.com", "wget_mutating"),
+    ("wget --method=PUT https://x.example.com", "wget_mutating"),
+    ("wget --method PATCH https://x.example.com --body-data=a", "wget_mutating"),
+])
+def test_gh_and_wget_writes_are_gated(command, cls):
+    got, gated = gate.classify("Bash", {"command": command})
+    assert gated and got == cls, (command, got)
+
+
+@pytest.mark.parametrize("command", [
+    "gh pr create --title x --body y",
+    "gh pr comment 5 -b hi",
+    "gh pr view 5", "gh pr list", "gh pr checks 5", "gh issue list", "gh issue create -t x",
+    "gh api repos/o/r/issues",
+    "gh api graphql -f query='query { viewer { login } }'",
+    "gh run list", "gh workflow list", "gh release list",
+    "wget -q https://x.example.com/file.tar.gz",
+    "wget --post-data=a=1 http://127.0.0.1:8000/x",
+])
+def test_gh_and_wget_reads_and_the_daily_pr_flow_are_not_gated(command):
+    assert gate.classify("Bash", {"command": command}) == (None, False), command
+
+
+def test_gh_pr_merge_is_ledgered_and_never_refused():
+    assert gate.classify("Bash", {"command": "gh pr merge 5 --merge"}) == ("gh_pr_merge", False)
+    assert gate.classify("Bash", {"command": "gh -R o/r pr merge 5 --squash"}) == ("gh_pr_merge", False)
+
+
+def test_a_gated_gh_call_inside_a_chain_gates_the_whole_command():
+    cls, gated = gate.classify("Bash", {"command": "git status && gh workflow run ci.yml 2>&1 | tail -3"})
+    assert gated and "gh_workflow_run" in cls
