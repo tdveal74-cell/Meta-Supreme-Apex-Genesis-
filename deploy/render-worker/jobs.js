@@ -270,16 +270,24 @@ const JOBS = {
       const f = existingPath(p.path, 'path');
       return {
         bin: FP,
-        argv: ['-v','error','-show_entries','format=duration:stream=width,height,r_frame_rate',
+        argv: ['-v','error','-show_entries',
+               'format=duration:stream=width,height,r_frame_rate,color_transfer,pix_fmt',
                '-of','json', f],
         parse: (out) => {
           const j = JSON.parse(out || '{}');
           const st = (j.streams || [])[0] || {};
           const [n, d] = String(st.r_frame_rate || '0/1').split('/');
+          // color_transfer is how a caller tells an iPhone HDR take (HLG reads
+          // arib-std-b67, PQ reads smpte2084) from SDR before take_patch, which
+          // needs to be told. Added 2026-10-15 with the Voice Lab jobs.
+          const tr = st.color_transfer ?? null;
           return {
             duration: Number(j.format?.duration ?? 0),
             width: st.width ?? null, height: st.height ?? null,
             fps: Number(d) ? Number(n) / Number(d) : null,
+            pix_fmt: st.pix_fmt ?? null,
+            color_transfer: tr,
+            hdr: tr === 'arib-std-b67' || tr === 'smpte2084',
           };
         },
       };
@@ -814,6 +822,30 @@ const JOBS = {
         }
       }
 
+      // must_cover (added 2026-10-15 with Voice Lab): windows where the voice is
+      // the clone and the base track is a held frame. Each must sit wholly
+      // inside ONE cutaway, inside its fades, where the cutaway is opaque. In
+      // the stacked layout only a full-frame cutaway hides the presenter, and
+      // an emphasis window would put the head back on top, so both are checked.
+      // Refused at submit: a clone line over Tee's own face is the failure this
+      // exists to make impossible, and it would otherwise pass every other gate.
+      if (p.must_cover !== undefined && !Array.isArray(p.must_cover)) throw new BadJob('must_cover: must be an array of {start, end}');
+      const mustCover = Array.isArray(p.must_cover) ? p.must_cover : [];
+      if (mustCover.length > 64) throw new BadJob('must_cover: too many (max 64)');
+      mustCover.forEach((m, k) => {
+        if (!m || typeof m !== 'object') throw new BadJob(`must_cover[${k}]: not an object`);
+        const s = num(m.start, `must_cover[${k}].start`, { min: 0, max: 86400 });
+        const e = num(m.end,   `must_cover[${k}].end`,   { min: 0, max: 86400 });
+        if (e <= s) throw new BadJob(`must_cover[${k}]: end must exceed start`);
+        const hides = windows.some(w => w.full && w.s + xf <= s && e <= w.e - xf);
+        if (!hides) {
+          throw new BadJob(`must_cover[${k}]: ${s}s to ${e}s is not inside one opaque` +
+                           (stacked ? ' full-frame' : '') + ' cutaway; the presenter would show under the clone voice');
+        }
+        const back = emphasis.find(g => g.s < e && s < g.e);
+        if (back) throw new BadJob(`must_cover[${k}]: overlaps emphasis ${back.s}s to ${back.e}s, which puts the presenter back on top`);
+      });
+
       // Inputs: 0 is the avatar, then one per cutaway in window order, then
       // the bed (looped, so a 90 second track covers a 12 minute episode), then
       // the narration override. The indices below follow that order exactly.
@@ -948,6 +980,165 @@ const JOBS = {
           layout,
           emphasis: emphasis.length,
           full_cutaways: windows.filter(w => w.full).length,
+          must_cover: mustCover.length,
+        }),
+      };
+    },
+  },
+
+  /**
+   * Voice Lab, step two (added 2026-10-15). The real take, spliced.
+   *
+   * Input is align_script's edl with each patch line's clone audio filled in.
+   * A take item keeps that stretch of the iPhone take, picture and sound. A
+   * patch item plays the clone reading over the take's nearest frame, HELD,
+   * because a held frame under a voice is honest about being a cut and moving
+   * lips under someone else's audio is not. presenter_composite then lays a
+   * cutaway over every patch window and refuses to render if one is bare
+   * (`must_cover`), so the held frame is never what a viewer sees either.
+   *
+   * Each take item is its own input, seeked with -ss before -i. One input split
+   * N ways would make the concat buffer every decoded frame of every branch it
+   * has not reached yet, which on a 4K take is the whole machine's memory.
+   *
+   * Durations are pinned at every step: video by tpad then trim, audio by apad
+   * then atrim, and the output by -t. So the windows returned here are exact,
+   * which is what lets must_cover check them at submit rather than by eye.
+   *
+   * A patch's `duration` must be the clone file's real length, from the probe
+   * job. Shorter than the file cuts the reading off; that is stated here rather
+   * than guessed around, and the parse result echoes every duration it used.
+   *
+   * `hdr` has no default on purpose. An iPhone 15 Pro shoots HLG by default, and
+   * a 10-bit HLG take squeezed to yuv420p without a tonemap comes out grey and
+   * washed. The probe job reports `hdr`; the caller passes 'tonemap' or 'sdr'.
+   *
+   * params: { take, output, hdr: 'sdr'|'tonemap',
+   *           edl: [{kind:'take', start, end} | {kind:'patch', audio, duration}],
+   *           narration_output?, fps?, xfade?, crf?, preset? }
+   */
+  take_patch: {
+    build(p) {
+      const take = existingPath(p.take, 'take');
+      const out  = ensureDir(safePath(p.output, 'output'));
+      const hdr  = oneOf(p.hdr, 'hdr', ['sdr', 'tonemap']);
+      const fps  = num(p.fps ?? 30, 'fps', { min: 1, max: 120 });
+      const xf   = num(p.xfade ?? 0.02, 'xfade', { min: 0, max: 0.5 });
+      const narOut = (p.narration_output === undefined || p.narration_output === null || p.narration_output === '')
+        ? null : ensureDir(safePath(p.narration_output, 'narration_output'));
+      if (!Array.isArray(p.edl)) throw new BadJob('edl: must be an array (align_script returns null on a re-record)');
+      if (p.edl.length < 1) throw new BadJob('edl: need at least one item');
+      if (p.edl.length > 64) throw new BadJob('edl: too many items (max 64)');
+
+      // Every segment is a whole number of frames, on BOTH tracks. The first
+      // cut trimmed audio to the second and video to the frame, so each splice
+      // left the picture up to a frame longer than the sound: measured 13 ms on
+      // the 2026-10-15 acceptance run, and it accumulates, so a 64 item edl
+      // could drift two seconds out of sync. A take rounds to the nearest
+      // frame; a patch rounds UP, because rounding down cuts the clone's last
+      // syllable and rounding up only adds silence.
+      const minLen = 2 * xf + 1 / fps;
+      const frames = (sec, up) => Math.max(1, up ? Math.ceil(sec * fps - 1e-6) : Math.round(sec * fps));
+      const items = p.edl.map((it, k) => {
+        if (!it || typeof it !== 'object') throw new BadJob(`edl[${k}]: not an object`);
+        const kind = oneOf(it.kind, `edl[${k}].kind`, ['take', 'patch']);
+        if (kind === 'take') {
+          const s = num(it.start, `edl[${k}].start`, { min: 0, max: 86400 });
+          const e = num(it.end,   `edl[${k}].end`,   { min: 0, max: 86400 });
+          if (e - s < minLen) throw new BadJob(`edl[${k}]: ${(e - s).toFixed(3)}s is shorter than two crossfades and a frame`);
+          const len = frames(e - s, false) / fps;
+          return { kind, s, e: s + len, len, lines: it.lines };
+        }
+        const audio = existingPath(it.audio, `edl[${k}].audio`);
+        const d = num(it.duration, `edl[${k}].duration`, { min: minLen, max: 600 });
+        return { kind, audio, len: frames(d, true) / fps, source_len: d, lines: it.lines };
+      });
+      if (!items.some(it => it.kind === 'take')) {
+        throw new BadJob('edl: no take item, so there is no frame of the presenter to hold');
+      }
+
+      // The frame a patch holds: the last frame of the take before it, or the
+      // first frame of the take after it when the patch opens the episode.
+      const holdAt = (k) => {
+        for (let i = k - 1; i >= 0; i--) {
+          if (items[i].kind === 'take') return Math.max(0, items[i].e - 2 / fps);
+        }
+        for (let i = k + 1; i < items.length; i++) {
+          if (items[i].kind === 'take') return items[i].s;
+        }
+        return 0;
+      };
+
+      const picture = hdr === 'tonemap'
+        ? 'zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,' +
+          'zscale=t=bt709:m=bt709:r=tv,format=yuv420p'
+        : 'format=yuv420p';
+      const mono = 'aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=mono';
+      const fades = (len) => xf > 0
+        ? `,afade=t=in:st=0:d=${xf}:curve=tri,afade=t=out:st=${(len - xf).toFixed(6)}:d=${xf}:curve=tri`
+        : '';
+
+      const inputs = [];
+      const parts = [];
+      const pads = [];
+      const windows = [];
+      let t = 0;
+      let idx = 0;
+      items.forEach((it, k) => {
+        const L = it.len.toFixed(6);
+        if (it.kind === 'take') {
+          inputs.push('-ss', it.s.toFixed(6), '-t', L, '-i', take);
+          const i = idx++;
+          parts.push(`[${i}:v]setpts=PTS-STARTPTS,fps=${fps},${picture},setsar=1,` +
+                     `tpad=stop_mode=clone:stop_duration=1,trim=duration=${L},setpts=PTS-STARTPTS[v${k}]`);
+          parts.push(`[${i}:a]asetpts=PTS-STARTPTS,${mono},apad,atrim=duration=${L}${fades(it.len)}[a${k}]`);
+        } else {
+          // A two frame slice is enough to hold one; trim keeps the first.
+          inputs.push('-ss', holdAt(k).toFixed(6), '-t', (2 / fps).toFixed(6), '-i', take);
+          const iv = idx++;
+          inputs.push('-i', it.audio);
+          const ia = idx++;
+          parts.push(`[${iv}:v]setpts=PTS-STARTPTS,fps=${fps},${picture},setsar=1,trim=end_frame=1,` +
+                     `tpad=stop_mode=clone:stop_duration=${L},trim=duration=${L},setpts=PTS-STARTPTS[v${k}]`);
+          parts.push(`[${ia}:a]asetpts=PTS-STARTPTS,${mono},apad,atrim=duration=${L}${fades(it.len)}[a${k}]`);
+          windows.push({
+            item: k,
+            lines: Array.isArray(it.lines) ? it.lines : null,
+            start: +t.toFixed(6),
+            end: +(t + it.len).toFixed(6),
+          });
+        }
+        pads.push(`[v${k}][a${k}]`);
+        t += it.len;
+      });
+      const total = t;
+      const tail = narOut ? '[vcat][acat];[acat]asplit=2[amux][anar]' : '[vcat][amux]';
+      parts.push(`${pads.join('')}concat=n=${items.length}:v=1:a=1${tail}`);
+
+      const argv = ['-y', ...QUIET, ...inputs, '-filter_complex', parts.join(';'),
+                    '-map', '[vcat]', '-map', '[amux]', '-r', String(fps),
+                    '-c:v', 'libx264', '-crf', String(num(p.crf ?? 16, 'crf', { min: 0, max: 51, int: true })),
+                    '-preset', oneOf(p.preset ?? 'medium', 'preset', PRESETS),
+                    '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '320k',
+                    '-movflags', '+faststart', '-t', total.toFixed(6), out];
+      if (narOut) argv.push('-map', '[anar]', '-c:a', 'pcm_s24le', '-t', total.toFixed(6), narOut);
+
+      return {
+        bin: FF,
+        argv,
+        parse: () => ({
+          output: path.relative(WORK_ROOT, out),
+          narration_output: narOut === null ? null : path.relative(WORK_ROOT, narOut),
+          duration: +total.toFixed(6),
+          takes: items.filter(it => it.kind === 'take').length,
+          patches: windows.length,
+          // Feed these to presenter_composite as must_cover, unchanged.
+          patch_windows: windows,
+          // Frame-snapped lengths as rendered, then the clone files' own.
+          patch_durations: items.filter(it => it.kind === 'patch').map(it => +it.len.toFixed(6)),
+          patch_source_durations: items.filter(it => it.kind === 'patch').map(it => it.source_len),
+          hdr,
+          fps,
         }),
       };
     },
@@ -1475,7 +1666,226 @@ const JOBS = {
       };
     },
   },
+
+  /**
+   * Voice Lab, step one (added 2026-10-15). Native, no subprocess.
+   *
+   * Tee records the approved script on his iPhone, retakes and flubs included.
+   * A speech-to-text pass gives every spoken word a start and an end. This job
+   * lines the script up against those words and says, line by line, which
+   * stretch of the real take to keep and which lines nobody said cleanly.
+   * Those go to the voice clone, read from the SCRIPT, word for word.
+   *
+   * It never edits a word. A line either matched the take at `threshold` or
+   * better, or it is patched with its own script text verbatim. There is no
+   * third outcome where the job decides what the line should have said.
+   *
+   * The last good take wins. Lines are placed in reverse: the final line takes
+   * its latest clean match, and every earlier line must END before the next
+   * line's chosen take STARTS. A speaker who says a line, stumbles and says it
+   * again gets the second reading, and a stray earlier attempt can never be
+   * spliced in after a later line.
+   *
+   * Candidates that overlap are one utterance seen at several offsets. Only the
+   * best of each cluster survives, otherwise "the latest start" would pick the
+   * same reading with its first word shaved off.
+   *
+   * Too many patches is a re-record, not a patch. Above `max_patch_share` the
+   * job returns verdict 'rerecord' and NO edl, so take_patch has nothing to
+   * build from, and the per-line scores say why.
+   *
+   * params: { lines: [string], words?: [{text, start, end, type?}],
+   *           words_path?, threshold?, max_patch_share?, pad?, slack? }
+   */
+  align_script: {
+    build(p) {
+      if (!Array.isArray(p.lines)) throw new BadJob('lines: must be an array of strings');
+      if (p.lines.length < 1) throw new BadJob('lines: need at least one');
+      if (p.lines.length > 1000) throw new BadJob('lines: too many (max 1000)');
+      const lines = p.lines.map((l, i) => {
+        if (typeof l !== 'string') throw new BadJob(`lines[${i}]: not a string`);
+        if (l.length > 2000) throw new BadJob(`lines[${i}]: over 2000 characters`);
+        const toks = alignTokens(l);
+        if (toks.length === 0) throw new BadJob(`lines[${i}]: has no words`);
+        if (toks.length > 120) throw new BadJob(`lines[${i}]: over 120 words; split the line`);
+        return { text: l, toks };
+      });
+      if (p.words !== undefined && p.words_path !== undefined) {
+        throw new BadJob('words and words_path: send one, not both');
+      }
+      const wordsFile = p.words_path !== undefined ? existingPath(p.words_path, 'words_path') : null;
+      if (wordsFile === null && !Array.isArray(p.words)) {
+        throw new BadJob('words: must be an array of {text, start, end}');
+      }
+      const threshold = num(p.threshold ?? 0.9, 'threshold', { min: 0.5, max: 1 });
+      const maxShare  = num(p.max_patch_share ?? 0.3, 'max_patch_share', { min: 0, max: 1 });
+      const pad       = num(p.pad ?? 0.12, 'pad', { min: 0, max: 1 });
+      const slackFrac = num(p.slack ?? 0.2, 'slack', { min: 0, max: 0.5 });
+
+      const run = (rawWords) => {
+        if (!Array.isArray(rawWords)) throw new BadJob('words: must be an array of {text, start, end}');
+        if (rawWords.length > 20000) throw new BadJob('words: too many (max 20000)');
+        // Speech-to-text vendors interleave spacing and sound events with the
+        // words. Anything that declares a type other than 'word' is not speech.
+        const words = [];
+        rawWords.forEach((w, i) => {
+          if (!w || typeof w !== 'object') throw new BadJob(`words[${i}]: not an object`);
+          if (w.type !== undefined && w.type !== 'word') return;
+          if (typeof w.text !== 'string') throw new BadJob(`words[${i}].text: not a string`);
+          const s = num(w.start, `words[${i}].start`, { min: 0, max: 86400 });
+          const e = num(w.end,   `words[${i}].end`,   { min: 0, max: 86400 });
+          if (e < s) throw new BadJob(`words[${i}]: end before start`);
+          const toks = alignTokens(w.text);
+          // One transcript word can normalise to two tokens ("don't-know") or to
+          // none (a lone dash). Each token keeps the word's own timing.
+          toks.forEach(tk => words.push({ tok: tk, s, e }));
+        });
+        for (let i = 1; i < words.length; i++) {
+          if (words[i].s < words[i - 1].s) throw new BadJob('words: not in time order');
+        }
+        const W = words.map(w => w.tok);
+
+        // Every candidate span per line, then one per overlapping cluster.
+        const cands = lines.map(({ toks }) => {
+          const n = toks.length;
+          const k = Math.max(1, Math.round(n * slackFrac));
+          // A window that opens or closes on a word the line does not contain
+          // scores strictly below the same window with that word trimmed off.
+          // Skipping those is what keeps a 15 minute take fast.
+          const vocab = new Set(toks);
+          const best = [];
+          for (let s = 0; s < W.length; s++) {
+            if (!vocab.has(W[s])) continue;
+            let top = null;
+            for (let len = Math.max(1, n - k); len <= n + k && s + len <= W.length; len++) {
+              if (!vocab.has(W[s + len - 1])) continue;
+              const r = lcsRatio(toks, W, s, len);
+              if (top === null || r > top.score) top = { s, e: s + len - 1, score: r };
+            }
+            if (top && top.score >= threshold) best.push(top);
+          }
+          const kept = [];
+          for (const c of best) {
+            const prev = kept[kept.length - 1];
+            if (prev && c.s <= prev.e) {
+              if (c.score > prev.score) kept[kept.length - 1] = c;
+            } else {
+              kept.push(c);
+            }
+          }
+          return kept;
+        });
+
+        // Reverse placement: latest clean reading that still ends before the
+        // next placed line starts.
+        const chosen = new Array(lines.length).fill(null);
+        let bound = W.length;
+        for (let i = lines.length - 1; i >= 0; i--) {
+          let pick = null;
+          for (const c of cands[i]) if (c.e < bound && (pick === null || c.s > pick.s)) pick = c;
+          if (pick) { chosen[i] = pick; bound = pick.s; }
+        }
+
+        const report = lines.map((l, i) => {
+          const top = cands[i].reduce((a, c) => (a === null || c.score > a ? c.score : a), null);
+          return chosen[i]
+            ? { line: i, kind: 'take', score: +chosen[i].score.toFixed(4), from_word: chosen[i].s, to_word: chosen[i].e }
+            : { line: i, kind: 'patch', best_score: top === null ? null : +top.toFixed(4), text: l.text };
+        });
+        const patched = report.filter(r => r.kind === 'patch').length;
+        const share = patched / lines.length;
+        const taken = report.filter(r => r.kind === 'take').length;
+
+        if (share > maxShare || taken === 0) {
+          return {
+            verdict: 'rerecord',
+            reason: taken === 0
+              ? 'no line of the script was found in the take'
+              : `${patched} of ${lines.length} lines need the clone (${(share * 100).toFixed(1)}%), over the ${(maxShare * 100).toFixed(1)}% ceiling`,
+            lines: lines.length, patched, patch_share: +share.toFixed(4), threshold,
+            edl: null, report,
+          };
+        }
+
+        // Build the edl. Lines that sit back to back in the transcript, with no
+        // word dropped between them, stay one continuous span so the natural
+        // pause survives. A pad either side never reaches past the midpoint to
+        // the neighbouring word, so it cannot pull in half of a flubbed one.
+        const edges = (sIdx, eIdx) => {
+          const a = words[sIdx].s, b = words[eIdx].e;
+          const lo = sIdx > 0 ? (words[sIdx - 1].e + a) / 2 : 0;
+          const hi = eIdx < words.length - 1 ? (b + words[eIdx + 1].s) / 2 : b + pad;
+          return { start: Math.max(lo, a - pad), end: Math.min(hi, b + pad) };
+        };
+        const edl = [];
+        report.forEach((r) => {
+          const last = edl[edl.length - 1];
+          if (r.kind === 'patch') { edl.push({ kind: 'patch', lines: [r.line], text: r.text }); return; }
+          if (last && last.kind === 'take' && r.from_word === last.to_word + 1) {
+            last.lines.push(r.line);
+            last.to_word = r.to_word;
+          } else {
+            edl.push({ kind: 'take', lines: [r.line], from_word: r.from_word, to_word: r.to_word });
+          }
+        });
+        edl.forEach((it) => {
+          if (it.kind !== 'take') return;
+          const { start, end } = edges(it.from_word, it.to_word);
+          it.start = +start.toFixed(3);
+          it.end = +end.toFixed(3);
+        });
+
+        return {
+          verdict: patched === 0 ? 'clean' : 'patch',
+          lines: lines.length, patched, patch_share: +share.toFixed(4), threshold,
+          edl, report,
+        };
+      };
+
+      return { native: async () => {
+        if (wordsFile === null) return run(p.words);
+        const st = await fs.promises.stat(wordsFile);
+        if (!st.isFile()) throw new Error(`not a regular file (${p.words_path})`);
+        if (st.size > 16 * 1024 * 1024) throw new Error(`words_path is ${st.size} bytes, over 16 MiB`);
+        let parsed;
+        try { parsed = JSON.parse(await fs.promises.readFile(wordsFile, 'utf8')); }
+        catch (e) { throw new BadJob(`words_path: not JSON (${e.message})`); }
+        // An ElevenLabs speech-to-text response carries the list under `words`.
+        return run(Array.isArray(parsed) ? parsed : parsed && parsed.words);
+      }};
+    },
+  },
 };
+
+/**
+ * Lowercase, curly quotes folded to straight, every other mark dropped, split on
+ * whitespace and on hyphens. Digits stay digits: "3" and "three" do not match,
+ * and that is the safe direction, because a miss sends the line to the clone
+ * reading the script, never a guess at what was said.
+ */
+function alignTokens(s) {
+  return String(s)
+    .toLowerCase()
+    .replace(/[‘’ʼ]/g, "'")
+    .replace(/[^a-z0-9'\s-]/g, ' ')
+    .split(/[\s-]+/)
+    .map(t => t.replace(/^'+|'+$/g, ''))
+    .filter(Boolean);
+}
+
+/** 2 * LCS / (|a| + len), token level, against W[s .. s+len). */
+function lcsRatio(a, W, s, len) {
+  const n = a.length;
+  let prev = new Array(len + 1).fill(0);
+  let cur = new Array(len + 1).fill(0);
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= len; j++) {
+      cur[j] = a[i - 1] === W[s + j - 1] ? prev[j - 1] + 1 : Math.max(prev[j], cur[j - 1]);
+    }
+    [prev, cur] = [cur, prev];
+  }
+  return (2 * prev[len]) / (n + len);
+}
 
 module.exports = { JOBS, BadJob, safePath, existingPath, num, oneOf, setRoot, getRoot, PRESETS,
                    normalizeChain, isStill, gainEnvelope };

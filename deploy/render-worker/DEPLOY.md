@@ -34,7 +34,8 @@ Proved on that box, by execution:
   has not been re-run since; that denominator is stale until someone runs it
   against the Drive original again. Exit code 0 on each, checked individually
   rather than inferred from a chain.
-* `/health` reports 18 job types (19 once the 2026-09-15 build is deployed).
+* `/health` reports 18 job types (19 once the 2026-09-15 build is deployed, 21
+  once the 2026-10-15 Voice Lab build is).
 * Public IPv4 and IPv6 both refuse. The n8n container reaches the worker on the
   bridge address. Between those two facts the bind is proved by behaviour: it
   cannot be loopback, because the container reached it, and it cannot be
@@ -349,7 +350,8 @@ nothing else. Operational detail (`work_root`, queue depth, concurrency) is on
 `/status`, behind the token, because the first version put a filesystem path and
 a load signal in front of anyone who could reach the TLS terminator.
 
-`job_count` must read **19** from the 2026-09-15 build onward (18 before it).
+`job_count` must read **21** from the 2026-10-15 Voice Lab build onward, 19
+from the 2026-09-15 build, 18 before it.
 Fewer means an older `jobs.js` is loaded, and the sticky note's warning applies:
 a still plate renders as one frame, not a held one.
 
@@ -514,6 +516,72 @@ window 6 to 7.5 s, a blue full cutaway 8 to 11 s, one caption over 0.5 to 3 s:
 Refused rather than defaulted: `cutaways` or `emphasis` present and not an
 array, `full` as anything but a boolean, `emphasis` on the full layout, and a
 window past the planned duration when one is given.
+
+## Voice Lab (added 2026-10-15)
+
+Three changes for the TQO ship lane that does not need an avatar. Tee records
+the approved script on his iPhone. A speech-to-text pass times every word.
+`align_script` keeps the last clean reading of each line and marks the rest.
+The voice clone re-reads ONLY the marked lines, from the script, verbatim.
+`take_patch` splices the real take and the clone audio into one base track.
+`presenter_composite` lays a cutaway over every clone window and, through
+`must_cover`, refuses to render if one is bare.
+
+| job | kind | what it returns |
+|---|---|---|
+| `align_script` | native | `verdict` clean, patch or rerecord; the edl; a score for every line |
+| `take_patch` | ffmpeg | base video, optional narration wav, `patch_windows` on the new timeline |
+| `presenter_composite` `must_cover` | param | refusal at submit when a window is not inside one opaque cutaway |
+| `probe` | ffprobe | now also `pix_fmt`, `color_transfer` and `hdr` |
+
+Things to know before wiring it:
+
+* `take_patch` has no default for `hdr`. An iPhone 15 Pro records HLG by
+  default, and an HLG take squeezed to 8 bit without a tonemap comes out grey.
+  Call `probe` on the take and pass `tonemap` when it reports `hdr: true`.
+* A patch's `duration` must be the clone file's real length, from `probe`. The
+  job rounds it UP to a whole frame, so a correct length is never cut short, but
+  a wrong one is honoured.
+* The held frame under a patch is the take's frame one before the last shown,
+  by design: the seek sits two frames inside the take so it cannot fall off the
+  end of the file. The cutaway hides it either way.
+* Over 30 percent of lines patched is a re-record. `align_script` returns
+  `verdict: rerecord` with `edl: null`, and `take_patch` refuses a null edl.
+* Digits and number words do not match each other. "3" in the script against
+  "three" in the transcript sends that line to the clone. That is the safe
+  direction, and the per-line scores make it visible.
+
+### Acceptance, real ffmpeg
+
+`npm test` runs no ffmpeg and neither does render-worker-ci.yml. This does:
+
+```bash
+node voice-lab-acceptance.js            # exits non-zero on any failure
+```
+
+It builds a synthetic take whose every frame carries its own index in its
+pixels, a 440 Hz "voice", and a 1000 Hz mp3 "clone", then measures:
+
+* that every output frame comes from the exact source frame the edl asked for;
+* that picture and sound are the same length to the frame;
+* that the held frames land on the returned window;
+* that the clone is heard only inside its window, more than 30 dB clear;
+* that no join clicks;
+* that `must_cover` refuses a cutaway whose fade would show the face;
+* that no take pixel shows anywhere in the window;
+* that an HLG take tonemaps to BT.709 8 bit at the planned length.
+
+Measured in the session container on 2026-10-15 with ffmpeg 6.1.1:
+**9 passed, exit 0**. It has not been run on the box yet.
+
+It earned its place on its first run. The first `take_patch` trimmed audio to
+the second and video to the frame, so every splice left the picture up to one
+frame longer than the sound. The run measured 13 ms on one splice, and the
+error grows with every item. Every builder test was green at the time. Every
+segment is now a whole number of frames on both tracks.
+
+The same script against a copy with that snapping removed fails at frame 76 and
+exits 1. That is its negative control, run by hand, not wired.
 
 ## Wiring TSWS 00
 
