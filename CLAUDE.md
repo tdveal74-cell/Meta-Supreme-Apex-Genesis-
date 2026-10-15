@@ -523,7 +523,7 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_devon_vision_fixture.py test_pulse_watchdog.py \
   test_devon_rule_ledger.py test_devon_wager.py test_devon_tqo_canon.py \
   test_provider_watchdog.py test_devon_show_registry.py test_show_registry_seed.py \
-  test_devon_lesson_registry.py test_gate_ledger.py
+  test_devon_lesson_registry.py test_gate_ledger.py test_ledger_receipt.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .
@@ -691,13 +691,16 @@ Do not rephrase the call to get past it.
   Railway, Airtable, Vercel, Supabase, Hostinger, Rakazo, Blotato, Docusign or
   Zapier except a read (get, list, search, describe, query and the like, listed
   in `READ_VERB`); GitHub Actions triggers; Drive trash; a curl that writes to a
-  non-local host; and any force push, delete push or mirror push except
-  `--force-with-lease` to a `claude/` branch. A connector registered under a
+  non-local host; a wget that posts to one; `gh workflow run`, `gh api` writes
+  and GraphQL mutations, `gh release`, `gh repo`, `gh secret` and `gh variable`
+  changes, `gh run rerun`; and any force push, delete push or mirror push except
+  `--force-with-lease` to a `claude/` branch. The daily `gh pr` and `gh issue`
+  flow is not gated. A connector registered under a
   UUID name is matched by the listed suffixes and the Hostinger prefixes only,
   and Rakazo `send_message` needs the server name. Drive create and update, and
   GitHub pull request and comment calls, are deliberately not gated.
-- Ledger only: merges, because the standing approval of 2026-10-11 covers them,
-  and `test_workflow`. The gated list is `GATED_SUFFIXES` in the file; moving a
+- Ledger only: merges (the MCP tool and `gh pr merge`), because the standing
+  approval of 2026-10-11 covers them, and `test_workflow`. The gated list is `GATED_SUFFIXES` in the file; moving a
   tool in or out is a commit, and a ruling.
 - A webhook turn, a scheduled check-in, a task notification, a peer agent
   report and a context summary are all user turns in the transcript and none of
@@ -711,13 +714,19 @@ Do not rephrase the call to get past it.
   session out of reading or editing, because only gated calls are touched.
 - The ledger is `.claude/ledger/gate-ledger.jsonl`, ignored by git and scrubbed
   of anything shaped like a token. It lives in the container, so it records the
-  session and is not a durable archive. Nothing reads it into DEVON yet.
+  session and is not a durable archive.
+- `python3 scripts/ledger_receipt.py` renders the ledger as a DEVON RECEIPT in
+  the standing format, validated by `services/devon/receipts.py`, and prints it.
+  It writes and posts nothing. Filing it is a separate act through the
+  devon-thread-log skill (a claude.ai account skill, not in this repository) or the `devon-capture` door, which needs the
+  `x-devon-key` header. That key is not in this repository and is not set in the
+  cloud environment, so nothing posts automatically; setting it as an
+  environment secret is Tee's, and a curl to the webhook is itself gated.
 
-Not a sandbox: it reads the command text of curl and git, so a write through
-wget, `gh pr merge`, `gh workflow run`, `gh api -X POST`, `npx vercel`,
-`railway up`, an inline python or node script, or the GitHub MCP file tools
-(`push_files`, `create_or_update_file`, `enable_pr_auto_merge`) is invisible to
-it. It catches the unprompted call,
+Not a sandbox: it reads the command text of curl, wget, gh and git, so a write
+through `npx vercel`, `railway up`, an inline python or node script, or the
+GitHub MCP file tools (`push_files`, `create_or_update_file`,
+`enable_pr_auto_merge`) is invisible to it. It catches the unprompted call,
 which is what the audit measured. A gated call reads the whole transcript, about
 0.4 s on a 53 MB file. A session with no human in it, a scheduled or webhook
 run, is refused on every gated call by design.

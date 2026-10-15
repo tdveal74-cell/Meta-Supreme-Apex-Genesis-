@@ -485,6 +485,125 @@ def _curl_mutating(argv):
     return False
 
 
+def _is_local_url(u):
+    host = (urlparse(u if "://" in u else "http://" + u).hostname or "").lower()
+    return host in ("localhost", "0.0.0.0", "::1") or bool(re.fullmatch(r"127\.\d+\.\d+\.\d+", host))
+
+
+def _wget_mutating(argv):
+    """wget writing to a non-local host: --post-data, --post-file, --body-data,
+    --body-file, or --method with a write verb."""
+    if os.path.basename(argv[0]) != "wget":
+        return False
+    mutating, urls = False, []
+    for i in range(1, len(argv)):
+        a = argv[i]
+        nxt = argv[i + 1] if i + 1 < len(argv) else ""
+        name, _, val = a.partition("=")
+        if name in ("--post-data", "--post-file", "--body-data", "--body-file"):
+            mutating = True
+        elif name == "--method" and (val or nxt).upper() in WRITE_METHODS:
+            mutating = True
+        elif re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", a) or (
+            not a.startswith("-") and re.match(r"^[\w.\[\]-]+(:\d+)?(/\S*)?$", a) and ("." in a or ":" in a or a.startswith("localhost"))
+        ):
+            urls.append(a)
+    return mutating and not (urls and all(_is_local_url(u) for u in urls))
+
+
+GH_VALUE_FLAGS = {
+    "-R", "--repo", "--hostname", "-H", "--header", "-q", "--jq", "-t", "--template", "--cache",
+    "-f", "-F", "--field", "--raw-field", "--input", "-X", "--method", "-p", "--preview",
+}
+GH_GATED = {
+    "workflow": {"run", "enable", "disable"},
+    "run": {"rerun", "cancel", "delete"},
+    "release": {"create", "delete", "upload", "edit", "delete-asset"},
+    "repo": {"create", "delete", "edit", "archive", "unarchive", "rename", "fork"},
+    "secret": {"set", "delete"},
+    "variable": {"set", "delete"},
+    "ssh-key": {"add", "delete"},
+    "gpg-key": {"add", "delete"},
+    "ruleset": {"delete"},
+    "label": {"delete"},
+    "pr": {"delete"},
+    "issue": {"delete", "transfer"},
+}
+
+
+GRAPHQL_MUTATION = re.compile(r"(?<![\w$\-\"'.])mutation\b\s*[\w({]")
+
+
+def _gh_graphql(argv):
+    """A GraphQL call is read only when its query is written inline and holds no
+    mutation. A query read from a file, a variable or stdin cannot be read here,
+    so it is treated as a write rather than guessed at."""
+    inline = []
+    for j, a in enumerate(argv):
+        if a in ("-f", "-F", "--field", "--raw-field") and j + 1 < len(argv):
+            val = argv[j + 1]
+        elif re.match(r"^-[fF]\S", a):
+            val = a[2:]
+        elif a.startswith(("--field=", "--raw-field=")):
+            val = a.split("=", 1)[1]
+        else:
+            continue
+        if val.startswith("query="):
+            inline.append(val[len("query="):])
+    if not inline or any(q.startswith("@") for q in inline):
+        return "gh_api_graphql_unreadable", True
+    if any(GRAPHQL_MUTATION.search(q) for q in inline):
+        return "gh_api_graphql_mutation", True
+    if not all(re.match(r"^\s*(query\b|\{|subscription\b)", q) for q in inline):
+        return "gh_api_graphql_unreadable", True  # a variable, a substitution, an empty value
+    return None
+
+
+def _gh_class(argv):
+    """Returns (cls, gated) for a gh argv, or None when it is ordinary work.
+    pr create, comment, edit, review and close are the daily flow and are not
+    gated. pr merge is ledger only, like the merge tool."""
+    if os.path.basename(argv[0]) != "gh":
+        return None
+    positional, i = [], 1
+    while i < len(argv):
+        a = argv[i]
+        if a in GH_VALUE_FLAGS and "=" not in a:
+            i += 2
+            continue
+        if a.startswith("-"):
+            i += 1
+            continue
+        positional.append(a)
+        i += 1
+    if not positional:
+        return None
+    group = positional[0]
+    verb = positional[1] if len(positional) > 1 else ""
+    if group == "pr" and verb == "merge":
+        return "gh_pr_merge", False
+    if group == "api":
+        method, fields, endpoint = "", False, ""
+        for j, a in enumerate(argv[1:], 1):
+            name, _, val = a.partition("=")
+            nxt = argv[j + 1] if j + 1 < len(argv) else ""
+            if name in ("-X", "--method"):
+                method = (val or nxt).upper()
+            elif re.fullmatch(r"-X\w+", a):
+                method = a[2:].upper()
+            elif name in ("-f", "-F", "--field", "--raw-field", "--input") or re.match(r"^-[fF]\S", a):
+                fields = True
+        endpoint = positional[1] if len(positional) > 1 else ""
+        if endpoint == "graphql":
+            return _gh_graphql(argv)
+        if method in WRITE_METHODS or (fields and method in ("", "POST")):
+            return "gh_api_write", True
+        return None
+    if verb in GH_GATED.get(group, set()):
+        return "gh_%s_%s" % (group, verb), True
+    return None
+
+
 # ---------------------------------------------------------------- classification
 
 
@@ -505,6 +624,13 @@ def classify(tool_name, tool_input, cwd=""):
                 elif prog == "curl" and _curl_mutating(argv):
                     classes.append("curl_mutating")
                     gated = True
+                elif prog == "wget" and _wget_mutating(argv):
+                    classes.append("wget_mutating")
+                    gated = True
+                elif prog == "gh" and _gh_class(argv):
+                    cls_gh, gated_gh = _gh_class(argv)
+                    classes.append(cls_gh)
+                    gated = gated or gated_gh
                 elif prog == "git" and "reset" in argv and "--hard" in argv:
                     classes.append("git_reset_hard")
                 elif prog == "git" and "branch" in argv and ("-d" in argv or "-D" in argv):
