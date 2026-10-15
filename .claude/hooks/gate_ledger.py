@@ -504,17 +504,22 @@ def _wget_mutating(argv):
             mutating = True
         elif name == "--method" and (val or nxt).upper() in WRITE_METHODS:
             mutating = True
-        elif re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", a):
+        elif re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", a) or (
+            not a.startswith("-") and re.match(r"^[\w.\[\]-]+(:\d+)?(/\S*)?$", a) and ("." in a or ":" in a or a.startswith("localhost"))
+        ):
             urls.append(a)
     return mutating and not (urls and all(_is_local_url(u) for u in urls))
 
 
-GH_VALUE_FLAGS = {"-R", "--repo", "--hostname", "-H", "--header", "-q", "--jq", "-t", "--template", "--cache"}
+GH_VALUE_FLAGS = {
+    "-R", "--repo", "--hostname", "-H", "--header", "-q", "--jq", "-t", "--template", "--cache",
+    "-f", "-F", "--field", "--raw-field", "--input", "-X", "--method", "-p", "--preview",
+}
 GH_GATED = {
     "workflow": {"run", "enable", "disable"},
     "run": {"rerun", "cancel", "delete"},
     "release": {"create", "delete", "upload", "edit", "delete-asset"},
-    "repo": {"create", "delete", "edit", "archive", "unarchive", "rename", "fork", "sync"},
+    "repo": {"create", "delete", "edit", "archive", "unarchive", "rename", "fork"},
     "secret": {"set", "delete"},
     "variable": {"set", "delete"},
     "ssh-key": {"add", "delete"},
@@ -524,6 +529,34 @@ GH_GATED = {
     "pr": {"delete"},
     "issue": {"delete", "transfer"},
 }
+
+
+GRAPHQL_MUTATION = re.compile(r"(?<![\w$\-\"'.])mutation\b\s*[\w({]")
+
+
+def _gh_graphql(argv):
+    """A GraphQL call is read only when its query is written inline and holds no
+    mutation. A query read from a file, a variable or stdin cannot be read here,
+    so it is treated as a write rather than guessed at."""
+    inline = []
+    for j, a in enumerate(argv):
+        if a in ("-f", "-F", "--field", "--raw-field") and j + 1 < len(argv):
+            val = argv[j + 1]
+        elif re.match(r"^-[fF]\S", a):
+            val = a[2:]
+        elif a.startswith(("--field=", "--raw-field=")):
+            val = a.split("=", 1)[1]
+        else:
+            continue
+        if val.startswith("query="):
+            inline.append(val[len("query="):])
+    if not inline or any(q.startswith("@") for q in inline):
+        return "gh_api_graphql_unreadable", True
+    if any(GRAPHQL_MUTATION.search(q) for q in inline):
+        return "gh_api_graphql_mutation", True
+    if not all(re.match(r"^\s*(query\b|\{|subscription\b)", q) for q in inline):
+        return "gh_api_graphql_unreadable", True  # a variable, a substitution, an empty value
+    return None
 
 
 def _gh_class(argv):
@@ -558,11 +591,11 @@ def _gh_class(argv):
                 method = (val or nxt).upper()
             elif re.fullmatch(r"-X\w+", a):
                 method = a[2:].upper()
-            elif name in ("-f", "-F", "--field", "--raw-field", "--input"):
+            elif name in ("-f", "-F", "--field", "--raw-field", "--input") or re.match(r"^-[fF]\S", a):
                 fields = True
         endpoint = positional[1] if len(positional) > 1 else ""
         if endpoint == "graphql":
-            return ("gh_api_graphql_mutation", True) if any("mutation" in a for a in argv) else None
+            return _gh_graphql(argv)
         if method in WRITE_METHODS or (fields and method in ("", "POST")):
             return "gh_api_write", True
         return None

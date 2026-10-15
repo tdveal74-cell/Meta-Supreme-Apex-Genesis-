@@ -4,8 +4,8 @@
 The ledger at .claude/ledger/gate-ledger.jsonl lives in the container, which is
 reclaimed after inactivity. DEVON's own capture path is the receipt: one
 standard block, filed once, readable by every platform. This script turns the
-ledger into that block so a session's outward calls survive the container the
-same way every other thread does.
+ledger into that block so a session's outward calls survive the container once the
+receipt is filed, the same way every other thread does.
 
     python3 scripts/ledger_receipt.py                  # the whole ledger
     python3 scripts/ledger_receipt.py --session <id>   # one session
@@ -25,6 +25,7 @@ effect landed.
 import argparse
 import json
 import os
+import re
 import sys
 from collections import Counter
 from datetime import date
@@ -60,8 +61,21 @@ def read_rows(path):
     return rows, corrupt
 
 
-def _counts(rows, event):
-    return Counter(r.get("class") or r.get("tool") for r in rows if r.get("event") == event)
+_SAFE = re.compile(r"[^A-Za-z0-9_:.,+\- ]")
+
+
+def _clean(value, limit=80):
+    """A ledger string goes into a receipt field, so it cannot carry a newline,
+    a field label or anything else that would parse back as structure."""
+    return _SAFE.sub("_", str(value))[:limit]
+
+
+def _counts(rows, event, gated=None):
+    return Counter(
+        _clean(r.get("class") or r.get("tool"))
+        for r in rows
+        if r.get("event") == event and (gated is None or bool(r.get("gated")) is gated)
+    )
 
 
 def _line(counter):
@@ -69,25 +83,29 @@ def _line(counter):
 
 
 def build_receipt(rows, corrupt, ledger_path, today=None):
-    executed = _counts(rows, "executed")
+    executed = _counts(rows, "executed", gated=True)
+    logged_only = _counts(rows, "executed", gated=False)
     failed = _counts(rows, "failed")
     denied = _counts(rows, "gate-deny")
-    allowed = _counts(rows, "gate-allow")
-    sessions = sorted({r.get("session") for r in rows if r.get("session")})
-    days = sorted({str(r.get("ts", ""))[:10] for r in rows if r.get("ts")})
+    allowed = _counts(rows, "gate-allow", gated=True)
+    sessions = sorted({_clean(r.get("session")) for r in rows if r.get("session")})
+    days = sorted({_clean(r.get("ts", ""), 10) for r in rows if r.get("ts")})
     receipt_date = (days[-1] if days else (today or date.today()).isoformat())
 
     n_exec, n_fail = sum(executed.values()), sum(failed.values())
     n_deny, n_allow = sum(denied.values()), sum(allowed.values())
+    n_logged = sum(logged_only.values())
 
     summary = (
-        "The gate ledger holds %d executed outward calls, %d failed, %d gate decisions that allowed "
+        "The gate ledger holds %d executed gated calls, %d failed calls, %d gate decisions that allowed "
         "a gated call and %d that refused one, across %d session%s on %s."
         % (n_exec, n_fail, n_allow, n_deny, len(sessions), "" if len(sessions) == 1 else "s",
            days[0] if len(days) == 1 else "%s to %s" % (days[0], days[-1]) if days else receipt_date)
     )
     if executed:
         summary += " Executed: %s." % _line(executed)
+    if n_logged:
+        summary += " Also recorded without a gate (merges, local deletes and resets): %s." % _line(logged_only)
 
     open_threads = []
     if denied:
@@ -105,7 +123,9 @@ def build_receipt(rows, corrupt, ledger_path, today=None):
         "A call the hook does not classify, such as an inline script or the GitHub file tools, is not in it.",
     ]
     if corrupt:
-        unverified.append("%d ledger line%s could not be read and were skipped." % (corrupt, "" if corrupt == 1 else "s"))
+        unverified.append(
+            "%d ledger line%s could not be read and %s skipped." % (corrupt, "" if corrupt == 1 else "s", "was" if corrupt == 1 else "were")
+        )
 
     return Receipt(
         date=receipt_date,
