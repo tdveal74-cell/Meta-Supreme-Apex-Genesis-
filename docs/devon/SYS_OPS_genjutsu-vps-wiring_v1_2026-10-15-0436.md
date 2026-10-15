@@ -53,8 +53,8 @@ only been tested against a stand-in client.
   Tee in the container on 2026-10-15, uploaded a fresh file, fetched its
   signed link and compared the bytes. It printed `PASS link opens 200 True`:
   Cloudflare served the object over the signed GET and the bytes matched what
-  was written. That proves a link from the same `upload()` the paid steps
-  call opens straight after it is made. It was fetched from inside the
+  was written. That proves a link from the same `upload()` that
+  `seedance_bridge.py` calls opens straight after it is made. It was fetched from inside the
   container only, with an 11 byte text file, so it does not prove the link
   opens from a provider's network or later in its six hour life.
 - Each test leaves one small text file under `genjutsu/` in the bucket. The
