@@ -738,6 +738,37 @@ def test_reads_on_a_named_server_pass_without_a_signal(tool):
     assert gate.classify(tool, {}) == (None, False), tool
 
 
+@pytest.mark.parametrize("tool", [
+    "mcp__Remote_Desktop_Commander__start_process",
+    "mcp__Remote_Desktop_Commander__interact_with_process",
+    "mcp__Remote_Desktop_Commander__write_file",
+    "mcp__Remote_Desktop_Commander__edit_block",
+    "mcp__Remote_Desktop_Commander__move_file",
+    "mcp__Remote_Desktop_Commander__kill_process",
+    "mcp__Remote_Desktop_Commander__set_config_value",
+    "mcp__claude_ai_Remote_Desktop_Commander__start_process",
+])
+def test_remote_desktop_commander_writes_are_gated(tool):
+    cls, gated = gate.classify(tool, {})
+    assert cls and gated, tool
+
+
+@pytest.mark.parametrize("tool", [
+    "mcp__Remote_Desktop_Commander__list_devices",
+    "mcp__Remote_Desktop_Commander__read_file",
+    "mcp__Remote_Desktop_Commander__read_process_output",
+    "mcp__Remote_Desktop_Commander__list_directory",
+    "mcp__Remote_Desktop_Commander__get_file_info",
+])
+def test_remote_desktop_commander_reads_pass_without_a_signal(tool):
+    assert gate.classify(tool, {}) == (None, False), tool
+
+
+def test_the_local_desktop_commander_plugin_is_not_the_vps():
+    tool = "mcp__plugin_desktop-commander_desktop-commander__start_process"
+    assert gate.classify(tool, {}) == (None, False)
+
+
 def test_one_huge_token_does_not_blow_the_hook_timeout():
     import time
     start = time.time()

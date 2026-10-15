@@ -10,6 +10,7 @@ Tee ruled on inline cards on 2026-10-15:
 - Run the 30-day test of the Enhancor-derived service.
 - File these decisions to DEVON. This doc is that filing.
 - Keep Chromium on the VPS for future REA browser work.
+- Add Remote Desktop Commander to the outward gate. A Codex review of PR #344 posted a P1 finding after the merge: the allow rule left VPS root commands with no human check at all, because `.claude/hooks/gate_ledger.py` did not cover that server. Tee chose the gate over leaving it or narrowing the allow rule. Its write tools now need a typed message or an answered card in the last 30 minutes, while reads pass. A session he is in still gets no prompt. An unattended session is refused.
 
 He also set the founder constraints the teardowns use:
 - under $500 at risk, none of it borrowed
@@ -76,8 +77,8 @@ AREA: Systems
 TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_reverse-engineering-teardowns_v1_2026-10-15-0611.md
 DATE: 2026-10-15
-DECISIONS: Tee ruled on cards on 2026-10-15: Desktop Commander runs every VPS tool without a prompt, merged as PR #344 at 0272086. The enhancor.ai teardown uses public sources only, after Enhancor's terms stopped a browser capture. Run the 30-day test of the done-for-you presenter video service. File this record. Keep Chromium on the VPS.
+DECISIONS: Tee ruled on cards on 2026-10-15: Desktop Commander runs every VPS tool without a prompt, merged as PR #344 at 0272086, and its write tools sit behind the 30-minute outward gate after a Codex P1 finding. The enhancor.ai teardown uses public sources only, after Enhancor's terms stopped a browser capture. Run the 30-day test of the done-for-you presenter video service. File this record. Keep Chromium on the VPS.
 FINDINGS: REA 6.4.0 works on srv1936199, with the Claude Code registration aligned and Hopper analysing /usr/bin/ls. Enhancor's terms forbid deriving source, scraping, competitive building, data mining and unauthorised automation. Enhancor: BUILD WITH CONDITIONS as a service. Apple Creator Studio: DON'T BUILD, with pricing read from apple.com.
-OPEN: Time one TQO video; write the consent form and check the YouTube label rule; build the 40-ask list; confirm in a fresh session that the Desktop Commander allow rule skips the prompt; read the Codex review that was still running when PR #344 merged; every UNVERIFIED figure in the teardown.
-STATUS: REA is live on the VPS, the allow rule is merged, and the 30-day test is approved and not started.
+OPEN: Time one TQO video; write the consent form and check the YouTube label rule; build the 40-ask list; confirm in a fresh session that the Desktop Commander allow rule skips the prompt; measure the gate refusing a Desktop Commander write in a session with no human signal, which only the fixtures show so far; every UNVERIFIED figure in the teardown.
+STATUS: REA is live on the VPS, the allow rule is merged, the Desktop Commander gate ships with this record, and the 30-day test is approved and not started.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
