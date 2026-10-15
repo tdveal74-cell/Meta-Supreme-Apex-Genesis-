@@ -270,6 +270,36 @@ changes. No key was entered anywhere and no paid call was made. The full
 report is `GENJUTSU_SETUP_REPORT.md` beside the package on Drive, file id
 `1xl-hpZmH1NjnvW5_6cfDvxl-n7dmf2Yi`.
 
+### Genjutsu, 2026-10-15: safeguards built, installed on srv1936199
+
+The three changes were built as an overlay on upstream commit `40fd661` and
+are not upstream and not in this repository. A private S3-compatible uploader
+replaces tmpfiles and catbox. A billing grant, created only by a person at a
+terminal with `grant.py`, now stands in front of every billed call: Demucs,
+depth, SAM 3, the Enhancor draft and HD. The final preview carries a burned in
+"AI-altered video" label, a metadata comment and a sidecar hash. Three fresh
+critics read it and 14 of their findings were fixed, among them a race that
+let one grant pay twice, a web route that served unlabeled video, and a root
+only grant folder the app could not read. 36 tests pass and each guard was
+checked by breaking it and watching a test fail.
+
+Tee ran the install script on srv1936199 through Termius at about 10:46 local.
+It is one Docker project, `genjutsu`, on 127.0.0.1:3500, no keys entered. The
+screen showed the UI answering, 35 tests passed with 1 skipped in the
+container, the app able to write its folders, both keys reading MISSING, and no
+grant file. One check printed FAIL, "grant did not refuse". Run by hand it
+printed the refusal and exit 1, so the script check is flawed (a `grep -q`
+under `set -o pipefail`), not the gate. That cause is inferred and not
+reproduced. The Docker build was never run in the build environment, which has
+no Docker daemon. Nobody has opened the UI through the SSH tunnel.
+
+Open on the app: a private bucket and `MEDIA_BUCKET`, a webhook URL for
+Enhancor, and where the keys live. The grant is a file, so an agent running as
+the same user can still make one; only key custody, or a root owned grant
+folder with `sudo grant.py`, changes that. The face mesh modes are not in the
+image. Overlay sha256 `c75d4c4a1866650026f84042e41173b67d45d51d0fc2e19c071ec1147c2fa46a`,
+install script sha256 `696fabdcbe46b66d3010b0e219bad1bdcf34119f1376fdbce9ee329912968857`.
+
 ## Skills
 
 Two skills were added under `.claude/skills/` on PR #336:
@@ -304,7 +334,7 @@ audio, timelines, the Visual Producer, Episodes 2 to 12 or trailer v03.
   package); settling it is a written decision, not a wider limit.
 - The status field on a never-exercised check (item 20) is a design call Tee
   can overrule.
-- Who "mel" is, and where Genjutsu should go, are on the card.
+- Genjutsu is installed with no keys. Still Tee's: the bucket, the webhook URL, where the keys live, and whether to use the root owned grant folder. Who "mel" is stayed unknown and is dropped as a blocker.
 - The Agent Archive hook, if Tee wants it run.
 
 ## DEVON RECEIPT

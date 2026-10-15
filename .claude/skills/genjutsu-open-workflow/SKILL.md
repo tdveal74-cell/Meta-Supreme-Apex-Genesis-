@@ -23,6 +23,10 @@ As shipped, with the default hosts, it publishes a copy of Tee's voice and in on
 
 Only then decide whether the swap itself is inside "owned, never rented": the reference must be Tee's or his wife's own likeness under the recorded consent, and nothing in the code checks whose face it is.
 
+## As installed on srv1936199 (2026-10-15)
+
+The three changes above now exist as an overlay on commit 40fd661, not upstream and not in this repository: a private S3 uploader with no public fallback, a billing grant from `grant.py` that only a person at a terminal can issue and that every billed call spends, and a burned in disclosure stamp on the final preview. It runs as the Docker project `genjutsu` on 127.0.0.1:3500 of srv1936199, reached by SSH tunnel, with no keys. Tee ran the install himself in Termius. Still unset: `MEDIA_BUCKET`, a webhook URL, and the key custody decision. The grant is a file, so an agent running as the same user can forge one; the real controls are keys that no agent can read and, optionally, a root owned `GENJUTSU_GRANT_DIR` with `sudo grant.py`. An agent that hits GrantRequired stops and tells Tee. Details are in `docs/devon/SYS_OPS_tsws-editable-repair-workflows_v1_2026-10-14-2109.md`.
+
 ## What leaves the machine, by file
 
 - The complete original soundtrack, un-pitched voice included, to Replicate for Demucs: `audio_workflow.py:27-43`.
