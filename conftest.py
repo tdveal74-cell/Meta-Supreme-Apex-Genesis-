@@ -85,6 +85,7 @@ _INCREMENTAL_SCHEMAS = (
     "025_company_findings.sql",
     "026_company_proposals.sql",
     "027_lead_disclosure_optional.sql",
+    "028_support_articles.sql",
 )
 
 _DSN = TEST_DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
@@ -97,6 +98,7 @@ _DATA_TABLES = (
     "company_proposals",
     "company_findings",
     "company_comment_drafts",
+    "company_support_articles",
     "company_lead_drafts",
     "company_post_drafts",
     "provider_usage",

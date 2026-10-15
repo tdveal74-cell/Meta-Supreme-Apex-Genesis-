@@ -13,6 +13,18 @@ SALES = {
     "qualification": "qualified", "qualification_reason": "Mid-career professional asking about AI.",
     "reply_text": "Thanks for writing. The Quiet Operator covers exactly this.",
 }
+ARTICLE = {"article_id": "checklist-guide", "title": "The episode checklist",
+           "body": "Steps one to three need no code. Step four is optional for a manager."}
+
+
+@pytest.fixture(autouse=True)
+async def approved_article(client, auth_headers):
+    """Every Support reply cites an approved article, so the account has one."""
+    base = "/api/v1/company/support/articles"
+    assert (await client.post(base, json=ARTICLE, headers=auth_headers)).status_code == 201
+    assert (await client.post(f"{base}/{ARTICLE['article_id']}/approve", json={}, headers=auth_headers)).status_code == 200
+
+
 QUEUES = {
     "marketing": (f"{ROOT}/marketing/drafts", {
         "show": "TQO", "episode_ref": "ep-1", "platform": "youtube_community",
@@ -22,7 +34,8 @@ QUEUES = {
         "video_id": "dQw4w9WgXcQ", "comment_id": "UgxABC123", "commenter_name": "Jordan Lee",
         "comment_text": "Does the checklist work for a manager?",
         "reply_text": "Yes. Steps one to three need no code.",
-        "reply_basis": "Episode script, checklist section.", "ai_disclosure": "Drafted with AI, posted by Tee."}),
+        "reply_basis": "Episode script, checklist section.", "ai_disclosure": "Drafted with AI, posted by Tee.",
+        "article_id": "checklist-guide"}),
     "research": (f"{ROOT}/research/findings", {
         "claim": "Career strategy searches rose in 2026.", "evidence_kind": "source",
         "evidence_ref": "https://example.com/report", "recommendation": "Lead the next episode with it."}),

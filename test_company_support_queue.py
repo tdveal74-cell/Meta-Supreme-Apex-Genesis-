@@ -19,8 +19,35 @@ GOOD = {
     "reply_text": "Yes. Steps one to three need no code. Step four is optional.",
     "reply_basis": "Episode script, checklist section, steps one to four.",
     "ai_disclosure": "Drafted with AI, posted by Tee.",
+    "article_id": "checklist-guide",
 }
 BASE = "/api/v1/company/support/drafts"
+ARTICLES = "/api/v1/company/support/articles"
+
+
+ARTICLE = {"article_id": "checklist-guide", "title": "The episode checklist",
+           "body": "Steps one to three need no code. Step four is optional for a manager."}
+
+
+@pytest.fixture(autouse=True)
+async def approved_article(client, auth_headers):
+    """Every Support reply cites an approved article, so the account has one."""
+    base = ARTICLES
+    assert (await client.post(base, json=ARTICLE, headers=auth_headers)).status_code == 201
+    assert (await client.post(f"{base}/{ARTICLE['article_id']}/approve", json={}, headers=auth_headers)).status_code == 200
+
+
+async def seed_other_owner_article(owner: str) -> None:
+    from sqlalchemy import text
+
+    from app.db.session import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as s:
+        await s.execute(text(
+            "INSERT INTO company_support_articles (owner_id, article_id, title, body, status, decided_by) "
+            "VALUES (:o, 'checklist-guide', 'T', 'Steps one to three need no code at all.', 'approved', 'tee@example.com')"
+        ), {"o": owner})
+        await s.commit()
 
 
 async def test_a_clean_comment_is_stored_as_drafted_and_listed(client, auth_headers):
@@ -74,6 +101,7 @@ async def test_the_same_comment_id_is_allowed_for_a_different_account(client, au
     from app.services.company_support_queue import insert_comment_draft
 
     await client.post(BASE, json=GOOD, headers=auth_headers)
+    await seed_other_owner_article("some-other-account")
     async with AsyncSessionLocal() as s:
         other = await insert_comment_draft(s, "some-other-account", **GOOD)
         await s.commit()
@@ -111,6 +139,7 @@ async def test_one_account_cannot_see_or_decide_another_accounts_draft(client, a
     from app.db.session import AsyncSessionLocal
     from app.services.company_support_queue import insert_comment_draft
 
+    await seed_other_owner_article("some-other-account")
     async with AsyncSessionLocal() as s:
         other = await insert_comment_draft(s, "some-other-account", **GOOD)
         await s.commit()

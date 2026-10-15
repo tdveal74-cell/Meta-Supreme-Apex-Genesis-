@@ -57,7 +57,7 @@ def test_ten_blank_looking_characters_do_not_clear_a_ten_character_floor(blank):
     with pytest.raises(QueueRefusal):
         support.create_comment_draft(
             draft_id="d", video_id="dQw4w9WgXcQ", comment_id="Ugx1", commenter_name="Jo",
-            comment_text="q?", reply_text="Yes, it works.", reply_basis=junk,
+            comment_text="q?", reply_text="Yes, it works.", reply_basis=junk, article_id="checklist-guide",
             ai_disclosure="Drafted with AI, posted by Tee.")
     with pytest.raises(QueueRefusal):
         research.create_finding(
@@ -91,7 +91,7 @@ def _drafts():
             qualification_reason="Asked about career strategy.", reply_text="Thanks for writing."), sales),
         "support": (support.create_comment_draft(
             draft_id="c", video_id="dQw4w9WgXcQ", comment_id="Ugx1", commenter_name="Jo",
-            comment_text="q?", reply_text="Yes, it works.", reply_basis="Episode script, section two.",
+            comment_text="q?", reply_text="Yes, it works.", reply_basis="Episode script, section two.", article_id="checklist-guide",
             ai_disclosure="Drafted with AI, posted by Tee."), support),
         "research": (research.create_finding(
             draft_id="f", claim="Career strategy searches rose in 2026.", evidence_kind="source",
@@ -204,6 +204,7 @@ SUPPORT_GOOD = dict(
     draft_id="d", video_id="dQw4w9WgXcQ", comment_id="Ugx1", commenter_name="Jo",
     comment_text="Does it work?", reply_text="Yes, it works.",
     reply_basis="Shown in the episode demo.", ai_disclosure="Drafted with AI, sent by Tee.",
+    article_id="checklist-guide",
 )
 
 

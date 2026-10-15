@@ -25,6 +25,7 @@ GOOD = dict(
     reply_text="Yes. Steps one to three need no code. Step four is optional.",
     reply_basis="Episode script, checklist section, steps one to four.",
     ai_disclosure="Drafted with AI, posted by Tee.",
+    article_id="checklist-guide",
 )
 
 

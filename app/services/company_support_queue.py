@@ -15,6 +15,8 @@ from uuid import uuid4
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.company_knowledge import get_article
+from services.company.knowledge import require_citable
 from services.company.marketing import DraftStatus, QueueRefusal
 from services.company.support import (
     CommentDraft,
@@ -25,7 +27,7 @@ from services.company.support import (
 
 _COLUMNS = (
     "draft_id, video_id, comment_id, commenter_name, comment_text, reply_text, "
-    "reply_basis, ai_disclosure, status, decided_by, decision_note"
+    "reply_basis, ai_disclosure, status, decided_by, decision_note, article_id"
 )
 
 
@@ -42,6 +44,7 @@ def _row_to_draft(row) -> CommentDraft:
         status=DraftStatus(row.status),
         decided_by=row.decided_by,
         decision_note=row.decision_note,
+        article_id=row.article_id,
     )
 
 
@@ -52,11 +55,13 @@ async def insert_comment_draft(db: AsyncSession, owner_id: str, **fields) -> Com
     a draft for, whatever state that draft is in.
     """
     draft = create_comment_draft(draft_id=str(uuid4()), **fields)
+    # Every reply cites one approved article of this owner's, or it is refused.
+    require_citable(await get_article(db, owner_id, draft.article_id), draft.article_id)
     result = await db.execute(
         text(
             "INSERT INTO company_comment_drafts (owner_id, draft_id, video_id, comment_id, "
-            "commenter_name, comment_text, reply_text, reply_basis, ai_disclosure) "
-            "VALUES (:o, :d, :v, :c, :cn, :ct, :rt, :rb, :ad) "
+            "commenter_name, comment_text, reply_text, reply_basis, ai_disclosure, article_id) "
+            "VALUES (:o, :d, :v, :c, :cn, :ct, :rt, :rb, :ad, :ar) "
             "ON CONFLICT (owner_id, comment_id) DO NOTHING"
         ),
         {
@@ -69,6 +74,7 @@ async def insert_comment_draft(db: AsyncSession, owner_id: str, **fields) -> Com
             "rt": draft.reply_text,
             "rb": draft.reply_basis,
             "ad": draft.ai_disclosure,
+            "ar": draft.article_id,
         },
     )
     if result.rowcount != 1:

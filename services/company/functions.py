@@ -107,7 +107,7 @@ COMPANY_FUNCTIONS: Dict[str, FunctionAgent] = {
             build_order=4,
             notes=[
                 "Ruled 2026-10-12: audience questions arrive as YouTube comments. Every reply is human approved.",
-                "Built: the draft-reply approval queue rules, storage (migration 024) and routes. Not built: reading comments (the vidIQ reader needs credits), the episode knowledge base, and posting.",
+                "Built: the draft-reply approval queue rules, storage (migration 024) and routes, and the approved-articles knowledge base (migration 028). Ruled 2026-10-15: Tee writes and approves the articles, and every reply cites one approved article id or is refused. Not built: reading comments (the vidIQ reader needs credits) and posting.",
             ],
         ),
         FunctionAgent(

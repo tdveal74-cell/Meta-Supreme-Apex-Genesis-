@@ -19,6 +19,7 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.security.deps import CurrentUser
 from app.services import (
+    company_knowledge,
     company_product_queue,
     company_queue,
     company_research_queue,
@@ -28,6 +29,7 @@ from app.services import (
 from app.services.company_revenue import read_month_revenue
 from app.services.provider_usage import read_usage, utc_today
 from services.company.functions import list_functions
+from services.company.knowledge import Article
 from services.company.marketing import BANNED_DASHES, PostDraft, QueueRefusal
 from services.company.product import DuplicateProposal, Proposal
 from services.company.research import DuplicateFinding, Finding
@@ -313,6 +315,8 @@ class CommentDraftIn(BaseModel):
     reply_text: str = Field(..., max_length=8000)
     reply_basis: str = Field(..., max_length=2000)
     ai_disclosure: str = Field(..., max_length=1000)
+    # The approved article this reply rests on. Ruled 2026-10-15: no article, no reply.
+    article_id: str = Field(..., max_length=63)
 
 
 class CommentDraftOut(BaseModel):
@@ -327,6 +331,7 @@ class CommentDraftOut(BaseModel):
     status: str
     decided_by: Optional[str]
     decision_note: Optional[str]
+    article_id: Optional[str]
 
 
 def _comment_out(d: CommentDraft) -> CommentDraftOut:
@@ -335,6 +340,7 @@ def _comment_out(d: CommentDraft) -> CommentDraftOut:
         commenter_name=d.commenter_name, comment_text=d.comment_text,
         reply_text=d.reply_text, reply_basis=d.reply_basis, ai_disclosure=d.ai_disclosure,
         status=d.status.value, decided_by=d.decided_by, decision_note=d.decision_note,
+        article_id=d.article_id,
     )
 
 
@@ -347,7 +353,7 @@ async def queue_comment_draft(body: CommentDraftIn, current_user: CurrentUser,
             db, str(current_user.id), video_id=body.video_id, comment_id=body.comment_id,
             commenter_name=body.commenter_name, comment_text=body.comment_text,
             reply_text=body.reply_text, reply_basis=body.reply_basis,
-            ai_disclosure=body.ai_disclosure,
+            ai_disclosure=body.ai_disclosure, article_id=body.article_id,
         )
     except QueueRefusal as exc:
         status = 409 if "already has a draft" in str(exc) else 422
@@ -391,6 +397,86 @@ async def approve_comment_draft(draft_id: str, current_user: CurrentUser, db: Db
 async def reject_comment_draft(draft_id: str, current_user: CurrentUser, db: DbSession,
                                body: DecisionIn = DecisionIn()) -> CommentDraftOut:
     return await _decide_comment(draft_id, False, body, current_user, db)
+
+
+# ---------------------------------------------------------------------------
+# The Support knowledge base. Articles are written by Tee and approved by a
+# human before a reply may cite them. Nothing here posts anything.
+# ---------------------------------------------------------------------------
+
+
+class ArticleIn(BaseModel):
+    article_id: str = Field(..., max_length=63)
+    title: str = Field(..., max_length=200)
+    # Storage guard only, not a product limit.
+    body: str = Field(..., max_length=20000)
+
+
+class ArticleOut(BaseModel):
+    article_id: str
+    title: str
+    body: str
+    status: str
+    decided_by: Optional[str]
+    decision_note: Optional[str]
+
+
+def _article_out(a: Article) -> ArticleOut:
+    return ArticleOut(
+        article_id=a.article_id, title=a.title, body=a.body, status=a.status.value,
+        decided_by=a.decided_by, decision_note=a.decision_note,
+    )
+
+
+@router.post("/support/articles", response_model=ArticleOut, status_code=201,
+             summary="Save a Support article as a draft for approval")
+async def queue_article(body: ArticleIn, current_user: CurrentUser, db: DbSession) -> ArticleOut:
+    try:
+        article = await company_knowledge.insert_article(
+            db, str(current_user.id), article_id=body.article_id, title=body.title, body=body.body,
+        )
+    except QueueRefusal as exc:
+        status = 409 if "already exists" in str(exc) else 422
+        raise HTTPException(status_code=status, detail=str(exc)) from None
+    return _article_out(article)
+
+
+@router.get("/support/articles", response_model=List[ArticleOut],
+            summary="List the caller's Support articles")
+async def list_support_articles(
+    current_user: CurrentUser, db: DbSession,
+    status: Optional[str] = Query(None, pattern="^(drafted|approved|rejected)$"),
+) -> List[ArticleOut]:
+    articles = await company_knowledge.list_articles(db, str(current_user.id), status)
+    return [_article_out(a) for a in articles]
+
+
+async def _decide_article(article_id: str, approved: bool, body: DecisionIn,
+                          current_user, db: AsyncSession) -> ArticleOut:
+    try:
+        decided = await company_knowledge.decide_article(
+            db, str(current_user.id), article_id, approved=approved,
+            decided_by=current_user.email, note=body.note,
+        )
+    except QueueRefusal as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    if decided is None:
+        raise HTTPException(status_code=404, detail="Article not found")
+    return _article_out(decided)
+
+
+@router.post("/support/articles/{article_id}/approve", response_model=ArticleOut,
+             summary="Record an approval. The article becomes citable.")
+async def approve_article(article_id: str, current_user: CurrentUser, db: DbSession,
+                          body: DecisionIn = DecisionIn()) -> ArticleOut:
+    return await _decide_article(article_id, True, body, current_user, db)
+
+
+@router.post("/support/articles/{article_id}/reject", response_model=ArticleOut,
+             summary="Record a rejection.")
+async def reject_article(article_id: str, current_user: CurrentUser, db: DbSession,
+                         body: DecisionIn = DecisionIn()) -> ArticleOut:
+    return await _decide_article(article_id, False, body, current_user, db)
 
 
 # ---------------------------------------------------------------------------
