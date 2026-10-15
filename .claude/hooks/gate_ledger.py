@@ -1,0 +1,913 @@
+#!/usr/bin/env python3
+"""Gate and ledger for outward, hard to undo tool calls.
+
+Ruled by Tee 2026-10-14, after a read of all 67 cloud sessions found 1,810
+outward high tier calls and, among them, 45 merges, 49 workflow edits, 36
+publishes, 29 workflow executions and 29 force pushes that ran with no answered
+card and no message from Tee in the 30 minutes before.
+
+Two jobs, one file.
+
+  pre   PreToolUse. A GATED call is refused unless a human signal exists inside
+        WINDOW_MIN minutes before it: a message Tee typed, or an answered
+        AskUserQuestion card. Every other call passes. Every decision is logged.
+  post  PostToolUse. Appends the executed call to the ledger.
+  fail  PostToolUseFailure. Appends the failed call to the ledger.
+
+Design choices that are rulings, not defaults:
+
+  * The gate FAILS CLOSED. If the transcript cannot be read, a gated call is
+    refused with that reason. A gate that fails open reports safety while
+    watching nothing, which is the failure this repository's watchdogs were
+    built around. Only gated calls are affected, so a broken reader cannot lock
+    the session out of reading or editing files. A ledger that cannot be
+    written does NOT refuse a call: the decision does not depend on it.
+  * There is no environment switch and no flag that disables it. Compliance
+    items have no exception path. Changing what is gated means editing the
+    lists below, in a commit.
+  * Merges are ledger only. Tee's standing merge approval of 2026-10-11 covers
+    them, and the CI green condition lives in CLAUDE.md, where a hook cannot
+    check it.
+  * A signal counts only if it is Tee's. Webhook turns, scheduled check-ins,
+    task notifications, peer agent reports and summaries all arrive as user
+    turns in the transcript and none of them is a person. The discriminator is
+    origin.kind == "human" on the entry. A transcript with no origin field at
+    all (an older format) falls back to a prefix test.
+  * An answered card is PRESENCE, not consent. The hook cannot read what the
+    answer was, so a card answered "no" still opens the window. Reading the
+    answer before acting stays the model's job.
+  * What this is not: a sandbox. It reads the command text of the tools it was
+    taught, and Claude could route an HTTP write through a client it does not
+    know (wget, an inline python script). It exists to catch the unprompted
+    call, which is what the audit measured, not a deliberate evasion.
+
+The ledger is JSON lines at .claude/ledger/gate-ledger.jsonl under the project
+directory. It lives in the container, which is reclaimed after inactivity, so it
+is a record of the session, not a durable archive. Long strings in it are
+scrubbed of anything shaped like a token before they are written.
+"""
+
+import json
+import os
+import re
+import shlex
+import subprocess
+import sys
+from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
+
+WINDOW_MIN = 30
+# A signal stamped later than this beyond now is clock skew or a forgery, and
+# is ignored instead of counting as "just now" forever.
+SKEW_MIN = 5
+
+# Tool name suffixes, matched after the last "__" so a connector that arrives
+# under a UUID instead of a name is still caught. The executed high tier outward
+# set from the 2026-10-14 audit, less merges, plus the sibling write tools of
+# the same platforms.
+GATED_SUFFIXES = {
+    # n8n
+    "publish_workflow", "unpublish_workflow", "archive_workflow", "execute_workflow",
+    "update_workflow", "restore_workflow_version", "create_workflow_from_code",
+    "rename_data_table", "rename_data_table_column", "add_data_table_rows",
+    "create_data_table", "add_data_table_column", "delete_data_table_column",
+    "move_workflows_to_folder",
+    # Railway, Vercel, Supabase, deploy surfaces
+    "set-variables", "railway-agent", "redeploy", "restart-service",
+    "create-deployment", "create_deployment", "deploy_to_vercel", "create_git_project",
+    "apply_migration", "execute_sql",
+    # GitHub, Drive, media
+    "actions_run_trigger", "trash_file", "submit_media_job",
+    # Airtable
+    "update_records_for_table", "create_records_for_table", "delete_records_for_table",
+    "update_field", "create_field", "create_table", "update_table", "delete_table",
+    "create_automation", "update_automation", "delete_automation", "submit_form",
+    # Rakazo
+    "update_bot", "create_bot", "give_bot_n8n",
+    # Hostinger
+    "DNS_updateDNSRecordsV1",
+}
+
+# Servers where every tool is gated unless it is a read, not just the listed
+# suffixes, so a sibling tool nobody listed is still caught. Servers outside
+# this list rely on GATED_SUFFIXES alone, and a connector under a UUID name is
+# matched by those suffixes and by the Hostinger prefixes only.
+NAMED_SERVERS = (
+    "n8n", "railway", "airtable", "vercel", "supabase", "hostinger", "rakazo",
+    "blotato", "docusign", "zapier",
+)
+# On a named server every tool is gated EXCEPT a read. Listing the reads is the
+# safer direction: a write verb nobody thought of is caught, and the cost of a
+# read nobody listed is one refusal while no human signal is fresh.
+READ_VERB = re.compile(
+    r"^(get|list|search|read|describe|fetch|analyze|query|show|find|check|validate|explore|"
+    r"prepare|whoami|ping|status|inspect|lookup|count|aggregate|help|view|preview|download|"
+    r"resolve|compare|calculate|discover|learn|health|artifact_query|web_fetch|git_namespaces|"
+    r"filter_project|thread_status|rakazo_status|generate_typescript_types|domain-status|"
+    r"environment-status|http-|execute_zapier_read_action|create_observability_query|"
+    r"send_feedback|test_workflow$)",
+    re.I,
+)
+# Hostinger tools carry their own prefix, so they are caught under any server
+# name, a UUID included.
+HOSTINGER_WRITE = re.compile(
+    r"^(VPS_(create|delete|update|restart|recreate|stop|start|purchase|set|attach|detach|restore)"
+    r"|DNS_(update|delete|reset|create)|domains_(purchase|update|enable|disable|create|delete)"
+    r"|hosting_(deploy|import|create|delete|update))",
+    re.I,
+)
+# send_message is gated only on the Rakazo bot platform. The Claude Code Remote
+# send_message is a message to a sibling session, which is not outward.
+RAKAZO = "rakazo"
+
+# Ledger only: recorded, never refused.
+LEDGER_ONLY_SUFFIXES = {"merge_pull_request", "test_workflow"}
+
+SHELL_WRAPPERS = {"sudo", "command", "env", "time", "nohup", "exec", "nice", "builtin"}
+SHELLS = {"bash", "sh", "zsh", "dash"}
+
+# (pattern, keep): keep is None to replace the whole match, 2 to keep group 1
+# and replace group 2, 3 to keep groups 1 and 3 and replace group 2.
+TOKEN_SHAPES = [
+    (re.compile(r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"), None),
+    (re.compile(r"\b[0-9a-fA-F]{48,}\b"), None),
+    (re.compile(r"\b(?:sk|pk|csk|key|ghp|gho|ghs|xox[bp])[-_][A-Za-z0-9_-]{16,}"), None),
+    (re.compile(r"\bAKIA[0-9A-Z]{12,}\b"), None),
+    # user:password@host in a URL, and curl -u user:password
+    (re.compile(r"(://[^/\s:@]+:)([^/\s@]{3,})(@)"), 3),
+    (re.compile(r"(\s-u\s+[^\s:]+:)(\S{3,})"), 2),
+    # NAME=value where the name ends in a secret word, including SMTP_PASS and
+    # STRIPE_SECRET, which a leading word boundary would miss.
+    (re.compile(
+        r"(?i)([A-Za-z0-9_.-]*(?:authorization|bearer|api[_-]?key|secret[_-]?access[_-]?key|"
+        r"key|token|secret|passwd|password|pass)['\"]?\s*[:= ]\s*['\"]?)([^\s'\",}&]{8,})"
+    ), 2),
+    # a long mixed case token with no hyphen or slash, which a branch name or a
+    # path never is
+    (re.compile(r"\b(?=[A-Za-z0-9+=_]*[A-Z])(?=[A-Za-z0-9+=_]*[a-z])(?=[A-Za-z0-9+=_]*\d)[A-Za-z0-9+=_]{40,}\b"), None),
+]
+
+
+def scrub(text):
+    text = str(text)
+    for shape, keep in TOKEN_SHAPES:
+        if keep is None:
+            text = shape.sub("[REDACTED]", text)
+        elif keep == 2:
+            text = shape.sub(lambda m: m.group(1) + "[REDACTED]", text)
+        else:
+            text = shape.sub(lambda m: m.group(1) + "[REDACTED]" + m.group(3), text)
+    return text
+
+
+def project_dir():
+    return os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+
+
+def ledger_path():
+    return os.path.join(project_dir(), ".claude", "ledger", "gate-ledger.jsonl")
+
+
+# --------------------------------------------------------- reading a shell line
+
+
+def _strip_heredocs(command):
+    """Removes heredoc bodies, which are data and are full of words that look
+    like commands."""
+    out = []
+    lines = command.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        out.append(line)
+        m = re.search(r"(?<!<)<<(?!<)-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1", line)
+        i += 1
+        if m and line[:m.start()].count("'") % 2 == 0 and line[:m.start()].count('"') % 2 == 0:
+            term = m.group(2)
+            while i < len(lines) and lines[i].strip() != term:
+                i += 1
+            i += 1  # the terminator
+    return "\n".join(out)
+
+
+def _paren_body(command, start):
+    """Given the index just after an opening "$(", returns (body, end_index)."""
+    n = len(command)
+    j, depth = start, 1
+    while j < n and depth:
+        depth += (command[j] == "(") - (command[j] == ")")
+        j += 1
+    return command[start:j - 1], j - 1
+
+
+def _statements(command, depth=0):
+    """Splits a shell line into statements, quote aware, and pulls the bodies
+    of $( ) and backticks out as statements of their own."""
+    command = _strip_heredocs(command).replace("\\\n", " ")
+    stmts, buf, subs = [], [], []
+    i, n = 0, len(command)
+    quote = None
+    while i < n:
+        ch = command[i]
+        if quote == "'":
+            buf.append(ch)
+            if ch == "'":
+                quote = None
+        elif ch == "\\" and i + 1 < n:
+            buf.append(ch + command[i + 1])
+            i += 1
+        elif ch == "#" and quote is None and (i == 0 or command[i - 1] in " \t\n;&|("):
+            nl = command.find("\n", i)
+            i = (n if nl < 0 else nl) - 1
+        elif ch == "$" and command[i:i + 2] == "$(":
+            body, i = _paren_body(command, i + 2)
+            subs.append(body)
+            buf.append(" ")
+        elif ch == "`":
+            j = command.find("`", i + 1)
+            j = n if j < 0 else j
+            subs.append(command[i + 1:j])
+            buf.append(" ")
+            i = j
+        elif quote == '"':
+            buf.append(ch)
+            if ch == '"':
+                quote = None
+        elif ch in "'\"":
+            quote = ch
+            buf.append(ch)
+        elif ch in ";|&\n()":
+            stmts.append("".join(buf))
+            buf = []
+        else:
+            buf.append(ch)
+        i += 1
+    stmts.append("".join(buf))
+    out = [s.strip() for s in stmts if s.strip()]
+    if depth < 4:
+        for body in subs:
+            out.extend(_statements(body, depth + 1))
+    return out
+
+
+RESERVED = {"then", "do", "else", "elif", "if", "while", "until", "!", "{", "}", "time", "coproc"}
+REDIRECT_BARE = re.compile(r"^(\d*>{1,2}|\d*<|&>{1,2})$")
+REDIRECT_ATTACHED = re.compile(r"^(\d*>{1,2}|\d*<|&>{1,2})\S")
+# wrapper -> flags that consume a value
+WRAPPER_VALUE_FLAGS = {
+    "sudo": {"-u", "-g", "-h", "-p", "-C", "-D", "-R", "-T"},
+    "env": {"-u", "-C", "-S"},
+    "nice": {"-n"},
+    "timeout": {"-s", "-k"},
+    "xargs": {"-I", "-n", "-P", "-d", "-L", "-s", "-E", "-a"},
+    "command": set(),
+}
+
+
+def _unwrap(argv):
+    """Strips shell reserved words, redirections, env assignments and wrappers
+    that carry their own flags (timeout 10 curl, sudo -n git, xargs curl)."""
+    out, skip = [], False
+    for t in argv:
+        if skip:
+            skip = False
+            continue
+        if REDIRECT_BARE.match(t):
+            skip = True  # the redirect target, or nothing when the statement ends
+            continue
+        if REDIRECT_ATTACHED.match(t):
+            continue
+        out.append(t)
+    argv = out
+    for _ in range(8):
+        while argv and (argv[0] in RESERVED or re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", argv[0])):
+            argv = argv[1:]
+        if not argv:
+            return argv
+        prog = os.path.basename(argv[0])
+        if prog in ("nohup", "exec", "builtin"):
+            argv = argv[1:]
+        elif prog in WRAPPER_VALUE_FLAGS:
+            value_flags = WRAPPER_VALUE_FLAGS[prog]
+            rest, i = argv[1:], 0
+            while i < len(rest) and rest[i].startswith("-"):
+                i += 2 if rest[i] in value_flags else 1
+            if prog == "timeout" and i < len(rest):
+                i += 1  # the duration
+            argv = rest[i:]
+        else:
+            return argv
+    return argv
+
+
+def _argv(statement):
+    if len(statement) > 20000:
+        argv = statement.split()  # shlex is quadratic on one huge token
+    else:
+        try:
+            argv = shlex.split(statement)
+        except ValueError:
+            argv = statement.split()
+    return _unwrap(argv)
+
+
+def _expand(statement, depth=0):
+    """Yields argv lists, recursing into bash -c and eval."""
+    argv = _argv(statement)
+    if not argv:
+        return
+    prog = os.path.basename(argv[0])
+    if depth < 4 and prog in SHELLS:
+        for i, a in enumerate(argv[1:], 1):
+            if re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", a) and i + 1 < len(argv):
+                for s in _statements(argv[i + 1]):
+                    yield from _expand(s, depth + 1)
+                return
+    if depth < 4 and prog == "find" and ("-exec" in argv or "-execdir" in argv):
+        k = next(i for i, a in enumerate(argv) if a in ("-exec", "-execdir"))
+        inner = []
+        for a in argv[k + 1:]:
+            if a in (";", "+"):
+                break
+            inner.append(a)
+        sub = _unwrap(inner)
+        if sub:
+            yield sub
+    if depth < 4 and prog == "eval":
+        for s in _statements(" ".join(argv[1:])):
+            yield from _expand(s, depth + 1)
+        return
+    yield argv
+
+
+def _git_cwd(argv, cwd):
+    for i, a in enumerate(argv):
+        if a == "-C" and i + 1 < len(argv):
+            path = argv[i + 1]
+            return path if os.path.isabs(path) or not cwd else os.path.join(cwd, path)
+    return cwd
+
+
+_BRANCH = {}
+
+
+def _current_branch(cwd):
+    if cwd not in _BRANCH:
+        _BRANCH[cwd] = _lookup_branch(cwd)
+    return _BRANCH[cwd]
+
+
+def _lookup_branch(cwd):
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=cwd or None, capture_output=True, text=True, timeout=5,
+        )
+        return out.stdout.strip() if out.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+PUSH_ARG_FLAGS = {"-o", "--push-option", "--repo", "--receive-pack", "--exec"}
+
+
+def _git_push(argv, cwd):
+    """Returns (cls, gated) for a git argv, or None when it is not a push."""
+    if os.path.basename(argv[0]) != "git" or "push" not in argv:
+        return None
+    pi = argv.index("push")
+    cwd = _git_cwd(argv[:pi], cwd)
+    force = lease = delete = mirror = every = False
+    positional = []
+    skip = False
+    for a in argv[pi + 1:]:
+        if skip:
+            skip = False
+            continue
+        if a in PUSH_ARG_FLAGS:
+            skip = True
+        elif a == "--force" or re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", a):
+            force = True
+        elif a.startswith("--force-with-lease") or a == "--force-if-includes":
+            lease = True
+        elif a in ("--delete", "-d", "--prune"):
+            delete = True
+        elif a == "--mirror":
+            mirror = True
+        elif a in ("--all", "--tags"):
+            every = True
+        elif a.startswith("-"):
+            continue
+        else:
+            positional.append(a)
+    remote = positional[0] if positional else ""
+    refspecs = positional[1:]
+    plus = any(s.startswith("+") for s in refspecs)
+    delete = delete or any(s.startswith(":") for s in refspecs)
+    targets = []
+    for spec in refspecs:
+        spec = spec.lstrip("+")
+        dst = spec.split(":")[-1] if ":" in spec else spec
+        dst = re.sub(r"^refs/heads/", "", dst)
+        if dst in ("HEAD", ""):
+            dst = _current_branch(cwd)
+        targets.append(dst)
+    if not refspecs:
+        targets = [_current_branch(cwd)]
+    if not (force or plus or lease or delete or mirror):
+        return "git_push", False
+    parts = [name for name, on in (
+        ("plain", force), ("plus", plus), ("lease", lease), ("delete", delete), ("mirror", mirror)
+    ) if on]
+    own = bool(targets) and all(t.startswith("claude/") for t in targets)
+    url_remote = "://" in remote or "@" in remote
+    gated = force or plus or delete or mirror or every or not own or url_remote
+    return "git_force_push:" + "+".join(parts), gated
+
+
+CURL_ARG_LETTERS = set("oHuAebcxwmKEQrCyYzZ")
+CURL_BODY_LONG = {
+    "--data", "--data-raw", "--data-binary", "--data-urlencode", "--data-ascii",
+    "--json", "--form", "--form-string", "--upload-file",
+}
+WRITE_METHODS = ("POST", "PUT", "PATCH", "DELETE")
+
+
+def _curl_mutating(argv):
+    if os.path.basename(argv[0]) != "curl":
+        return False
+    mutating = False
+    explicit = False
+    get_mode = False
+    urls = []
+    for i in range(1, len(argv)):
+        a = argv[i]
+        nxt = argv[i + 1] if i + 1 < len(argv) else ""
+        if a.startswith("--"):
+            name, _, val = a.partition("=")
+            if name in CURL_BODY_LONG:
+                mutating = True
+            elif name == "--get":
+                get_mode = True
+            elif name == "--request" and (val or nxt).upper() in WRITE_METHODS:
+                mutating = explicit = True
+        elif a.startswith("-") and len(a) > 1:
+            letters = a[1:]
+            for k, ch in enumerate(letters):
+                if ch == "G":
+                    get_mode = True
+                if ch in "dFT":
+                    mutating = True
+                    break
+                if ch == "X":
+                    if (letters[k + 1:] or nxt).upper() in WRITE_METHODS:
+                        mutating = explicit = True
+                    break
+                if ch in CURL_ARG_LETTERS:
+                    break
+        elif (
+            re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", a)
+            or re.match(r"^[\w.-]+\.[A-Za-z]{2,}(/|:|$)", a)
+            or re.match(r"^[\w.\[\]:-]+:\d+(/\S*)?$", a)
+            or re.match(r"^localhost(/|$)", a)
+        ):
+            urls.append(a)
+    if get_mode and not explicit:
+        return False
+    if not mutating:
+        return False
+    if not urls:
+        return True
+    for u in urls:
+        host = (urlparse(u if "://" in u else "http://" + u).hostname or "").lower()
+        if host not in ("localhost", "0.0.0.0", "::1") and not re.fullmatch(r"127\.\d+\.\d+\.\d+", host):
+            return True
+    return False
+
+
+def _is_local_url(u):
+    host = (urlparse(u if "://" in u else "http://" + u).hostname or "").lower()
+    return host in ("localhost", "0.0.0.0", "::1") or bool(re.fullmatch(r"127\.\d+\.\d+\.\d+", host))
+
+
+def _wget_mutating(argv):
+    """wget writing to a non-local host: --post-data, --post-file, --body-data,
+    --body-file, or --method with a write verb."""
+    if os.path.basename(argv[0]) != "wget":
+        return False
+    mutating, urls = False, []
+    for i in range(1, len(argv)):
+        a = argv[i]
+        nxt = argv[i + 1] if i + 1 < len(argv) else ""
+        name, _, val = a.partition("=")
+        if name in ("--post-data", "--post-file", "--body-data", "--body-file"):
+            mutating = True
+        elif name == "--method" and (val or nxt).upper() in WRITE_METHODS:
+            mutating = True
+        elif re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", a) or (
+            not a.startswith("-") and re.match(r"^[\w.\[\]-]+(:\d+)?(/\S*)?$", a) and ("." in a or ":" in a or a.startswith("localhost"))
+        ):
+            urls.append(a)
+    return mutating and not (urls and all(_is_local_url(u) for u in urls))
+
+
+GH_VALUE_FLAGS = {
+    "-R", "--repo", "--hostname", "-H", "--header", "-q", "--jq", "-t", "--template", "--cache",
+    "-f", "-F", "--field", "--raw-field", "--input", "-X", "--method", "-p", "--preview",
+}
+GH_GATED = {
+    "workflow": {"run", "enable", "disable"},
+    "run": {"rerun", "cancel", "delete"},
+    "release": {"create", "delete", "upload", "edit", "delete-asset"},
+    "repo": {"create", "delete", "edit", "archive", "unarchive", "rename", "fork"},
+    "secret": {"set", "delete"},
+    "variable": {"set", "delete"},
+    "ssh-key": {"add", "delete"},
+    "gpg-key": {"add", "delete"},
+    "ruleset": {"delete"},
+    "label": {"delete"},
+    "pr": {"delete"},
+    "issue": {"delete", "transfer"},
+}
+
+
+GRAPHQL_MUTATION = re.compile(r"(?<![\w$\-\"'.])mutation\b\s*[\w({]")
+
+
+def _gh_graphql(argv):
+    """A GraphQL call is read only when its query is written inline and holds no
+    mutation. A query read from a file, a variable or stdin cannot be read here,
+    so it is treated as a write rather than guessed at."""
+    inline = []
+    for j, a in enumerate(argv):
+        if a in ("-f", "-F", "--field", "--raw-field") and j + 1 < len(argv):
+            val = argv[j + 1]
+        elif re.match(r"^-[fF]\S", a):
+            val = a[2:]
+        elif a.startswith(("--field=", "--raw-field=")):
+            val = a.split("=", 1)[1]
+        else:
+            continue
+        if val.startswith("query="):
+            inline.append(val[len("query="):])
+    if not inline or any(q.startswith("@") for q in inline):
+        return "gh_api_graphql_unreadable", True
+    if any(GRAPHQL_MUTATION.search(q) for q in inline):
+        return "gh_api_graphql_mutation", True
+    if not all(re.match(r"^\s*(query\b|\{|subscription\b)", q) for q in inline):
+        return "gh_api_graphql_unreadable", True  # a variable, a substitution, an empty value
+    return None
+
+
+def _gh_class(argv):
+    """Returns (cls, gated) for a gh argv, or None when it is ordinary work.
+    pr create, comment, edit, review and close are the daily flow and are not
+    gated. pr merge is ledger only, like the merge tool."""
+    if os.path.basename(argv[0]) != "gh":
+        return None
+    positional, i = [], 1
+    while i < len(argv):
+        a = argv[i]
+        if a in GH_VALUE_FLAGS and "=" not in a:
+            i += 2
+            continue
+        if a.startswith("-"):
+            i += 1
+            continue
+        positional.append(a)
+        i += 1
+    if not positional:
+        return None
+    group = positional[0]
+    verb = positional[1] if len(positional) > 1 else ""
+    if group == "pr" and verb == "merge":
+        return "gh_pr_merge", False
+    if group == "api":
+        method, fields, endpoint = "", False, ""
+        for j, a in enumerate(argv[1:], 1):
+            name, _, val = a.partition("=")
+            nxt = argv[j + 1] if j + 1 < len(argv) else ""
+            if name in ("-X", "--method"):
+                method = (val or nxt).upper()
+            elif re.fullmatch(r"-X\w+", a):
+                method = a[2:].upper()
+            elif name in ("-f", "-F", "--field", "--raw-field", "--input") or re.match(r"^-[fF]\S", a):
+                fields = True
+        endpoint = positional[1] if len(positional) > 1 else ""
+        if endpoint == "graphql":
+            return _gh_graphql(argv)
+        if method in WRITE_METHODS or (fields and method in ("", "POST")):
+            return "gh_api_write", True
+        return None
+    if verb in GH_GATED.get(group, set()):
+        return "gh_%s_%s" % (group, verb), True
+    return None
+
+
+# ---------------------------------------------------------------- classification
+
+
+def classify(tool_name, tool_input, cwd=""):
+    """Returns (cls, gated). cls is None for a call that is not tracked."""
+    tool_input = tool_input if isinstance(tool_input, dict) else {}
+
+    if tool_name.lower() == "bash":
+        command = str(tool_input.get("command", ""))
+        classes, gated = [], False
+        for stmt in _statements(command):
+            for argv in _expand(stmt):
+                prog = os.path.basename(argv[0])
+                push = _git_push(argv, cwd)
+                if push:
+                    classes.append(push[0])
+                    gated = gated or push[1]
+                elif prog == "curl" and _curl_mutating(argv):
+                    classes.append("curl_mutating")
+                    gated = True
+                elif prog == "wget" and _wget_mutating(argv):
+                    classes.append("wget_mutating")
+                    gated = True
+                elif prog == "gh" and _gh_class(argv):
+                    cls_gh, gated_gh = _gh_class(argv)
+                    classes.append(cls_gh)
+                    gated = gated or gated_gh
+                elif prog == "git" and "reset" in argv and "--hard" in argv:
+                    classes.append("git_reset_hard")
+                elif prog == "git" and "branch" in argv and ("-d" in argv or "-D" in argv):
+                    classes.append("git_branch_delete")
+                elif prog == "rm" and any(
+                    a == "--recursive" or re.fullmatch(r"-[a-zA-Z]*[rR][a-zA-Z]*", a) for a in argv[1:]
+                ):
+                    classes.append("rm_recursive")
+        if not classes:
+            return None, False
+        return ",".join(classes), gated
+
+    if not tool_name.startswith("mcp__"):
+        return None, False
+    parts = tool_name.split("__")
+    suffix = parts[-1]
+    server = parts[1].lower() if len(parts) > 2 else ""
+    if suffix in LEDGER_ONLY_SUFFIXES:
+        return suffix, False
+    if suffix in GATED_SUFFIXES:
+        return suffix, True
+    if suffix == "send_message" and RAKAZO in server:
+        return suffix, True
+    if HOSTINGER_WRITE.match(suffix):
+        return suffix, True
+    verb = re.sub(r"^(blotato|zapier|VPS|DNS|domains|hosting|billing|reach)_", "", suffix)
+    if any(name in server for name in NAMED_SERVERS) and not READ_VERB.match(verb):
+        return suffix, True
+    return None, False
+
+
+# ------------------------------------------------------------------ the signal
+
+
+NOT_HUMAN_PREFIXES = (
+    "<system-reminder", "[SYSTEM NOTIFICATION", "<task-notification", "<wake",
+    "Another Claude session sent a message", "<agent-message", "[Request interrupted",
+    "This session is being continued", "<command-name>", "<local-command",
+)
+
+
+def _parse_ts(value):
+    try:
+        ts = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def _message_text(content):
+    """Returns (text, has_image) for a content that is a string or a block list."""
+    if isinstance(content, str):
+        return content, False
+    if isinstance(content, list):
+        texts, image = [], False
+        for b in content:
+            if isinstance(b, dict):
+                if b.get("type") == "text":
+                    texts.append(str(b.get("text", "")))
+                elif b.get("type") == "image":
+                    image = True
+        return "\n".join(texts), image
+    return "", False
+
+
+def _is_human(entry):
+    if entry.get("type") != "user" or entry.get("isMeta"):
+        return False
+    content = (entry.get("message") or {}).get("content")
+    if isinstance(content, list) and any(isinstance(b, dict) and b.get("type") == "tool_result" for b in content):
+        return False
+    text, has_image = _message_text(content)
+    if not text.strip() and not has_image:
+        return False
+    if text.lstrip().startswith("[Request interrupted"):
+        return False
+    origin = entry.get("origin")
+    if isinstance(origin, dict):
+        return origin.get("kind") == "human"
+    return has_image or not text.lstrip().startswith(NOT_HUMAN_PREFIXES)
+
+
+def main_transcript(path):
+    """A subagent's hook can point at a file under <session>/subagents/, or
+    deeper (<session>/subagents/workflows/wf_x/agent-y.jsonl). The person spoke
+    in the session file, so read that one."""
+    marker = "/subagents/"
+    if marker in path:
+        return path[:path.index(marker)] + ".jsonl"
+    return path
+
+
+def latest_signal(path, now):
+    """Returns (signal_kind, age_minutes) of the newest human signal, or None
+    when the transcript holds none. Raises when it cannot be read."""
+    card_ids = set()
+    newest = None
+    horizon = now + timedelta(minutes=SKEW_MIN)
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            try:
+                entry = json.loads(line, strict=False)
+            except Exception:
+                continue
+            ts = _parse_ts(entry.get("timestamp"))
+            if ts is None or ts > horizon:
+                continue
+            kind = None
+            if _is_human(entry):
+                kind = "message"
+            elif entry.get("type") == "assistant":
+                blocks = (entry.get("message") or {}).get("content")
+                if isinstance(blocks, list):
+                    for b in blocks:
+                        if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "AskUserQuestion":
+                            card_ids.add(b.get("id"))
+            elif entry.get("type") == "user":
+                blocks = (entry.get("message") or {}).get("content")
+                if isinstance(blocks, list):
+                    for b in blocks:
+                        if (
+                            isinstance(b, dict)
+                            and b.get("type") == "tool_result"
+                            and b.get("tool_use_id") in card_ids
+                            and not b.get("is_error")
+                        ):
+                            kind = "card"
+            if kind and (newest is None or ts > newest[1]):
+                newest = (kind, ts)
+    if newest is None:
+        return None
+    return newest[0], max(0.0, (now - newest[1]).total_seconds() / 60.0)
+
+
+def decide(cls, gated, payload, now):
+    """Returns (allow, reason, signal). Pure apart from reading the transcript."""
+    if not gated:
+        return True, "not gated", None
+    path = payload.get("transcript_path") or ""
+    if not path:
+        return False, "the hook input carried no transcript_path, so no human signal could be checked", None
+    try:
+        sig = latest_signal(main_transcript(path), now)
+    except Exception as exc:
+        return False, "the transcript could not be read (%s: %s)" % (type(exc).__name__, exc), None
+    if sig is None:
+        return False, "the session holds no message from Tee and no answered card", None
+    kind, age = sig
+    if age <= WINDOW_MIN:
+        return True, "%s %.1f min ago" % (kind, age), sig
+    return False, "the newest human signal is a %s %.0f min old, outside the %d min window" % (kind, age, WINDOW_MIN), sig
+
+
+# ----------------------------------------------------------------------- ledger
+
+
+PRIORITY_KEYS = re.compile(r"(^|_)(id|ids|name|workflowid|pullnumber|number|repo|owner|branch|url|path)$", re.I)
+
+
+def summarize(tool_name, tool_input):
+    if tool_name.lower() == "bash":
+        return scrub(str((tool_input or {}).get("command", "")))[:600]
+    try:
+        if isinstance(tool_input, dict):
+            keys = sorted(tool_input, key=lambda k: (0 if PRIORITY_KEYS.search(str(k)) else 1, str(k)))
+            ordered = {k: tool_input[k] for k in keys}
+        else:
+            ordered = tool_input
+        return scrub(json.dumps(ordered, default=str))[:600]
+    except Exception:
+        return ""
+
+
+def write_ledger(row):
+    path = ledger_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row, sort_keys=True) + "\n")
+
+
+def _try_ledger(row):
+    """A ledger that cannot be written is reported on stderr and never changes a
+    decision."""
+    try:
+        write_ledger(row)
+    except Exception as exc:
+        sys.stderr.write("gate_ledger: ledger write failed: %s: %s\n" % (type(exc).__name__, exc))
+
+
+def _row(event, payload, cls, gated, now, **extra):
+    row = {
+        "ts": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "event": event,
+        "session": payload.get("session_id", ""),
+        "agent": payload.get("agent_id", ""),
+        "tool": payload.get("tool_name", ""),
+        "class": cls,
+        "gated": gated,
+        "input": summarize(payload.get("tool_name", ""), payload.get("tool_input")),
+    }
+    row.update(extra)
+    return row
+
+
+def run(mode, payload, now=None):
+    """Returns the JSON object to print on stdout, or None to print nothing."""
+    now = now or datetime.now(timezone.utc)
+    name = payload.get("tool_name", "")
+    cls, gated = classify(name, payload.get("tool_input"), payload.get("cwd", ""))
+    if cls is None:
+        return None
+
+    if mode == "pre":
+        allow, reason, _sig = decide(cls, gated, payload, now)
+        _try_ledger(_row("gate-allow" if allow else "gate-deny", payload, cls, gated, now, reason=reason))
+        if allow:
+            return None
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": (
+                    "Gate refused %s (%s): %s. If Tee is in this session, put the "
+                    "decision to him on an AskUserQuestion card with the recommended "
+                    "option first, wait for the answer, then retry. If no one is "
+                    "present (a scheduled or webhook session), stop and leave this "
+                    "action in your report for him. Do not rephrase the call to get "
+                    "around the gate." % (name, cls, reason)
+                ),
+            }
+        }
+
+    event = "executed" if mode == "post" else "failed"
+    extra = {}
+    if mode == "fail":
+        extra["error"] = scrub(str(payload.get("error", "")))[:300]
+    _try_ledger(_row(event, payload, cls, gated, now, **extra))
+    return None
+
+
+def main(argv):
+    mode = argv[1] if len(argv) > 1 else ""
+    if mode not in ("pre", "post", "fail"):
+        sys.stderr.write("usage: gate_ledger.py pre|post|fail\n")
+        return 0
+    try:
+        payload = json.load(sys.stdin)
+    except Exception:
+        payload = {}
+    try:
+        out = run(mode, payload)
+    except Exception as exc:
+        if mode == "pre":
+            name = payload.get("tool_name", "")
+            try:
+                tracked = classify(name, payload.get("tool_input"), payload.get("cwd", ""))
+            except Exception:
+                tracked = ("unknown", True)
+            if tracked[1]:
+                out = {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": (
+                            "Gate failed closed on a gated call: %s: %s" % (type(exc).__name__, exc)
+                        ),
+                    }
+                }
+            else:
+                out = None
+        else:
+            sys.stderr.write("ledger write failed: %s: %s\n" % (type(exc).__name__, exc))
+            out = None
+    if out is not None:
+        sys.stdout.write(json.dumps(out))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

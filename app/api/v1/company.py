@@ -27,7 +27,7 @@ from app.services import (
 )
 from app.services.provider_usage import read_usage, utc_today
 from services.company.functions import list_functions
-from services.company.marketing import PostDraft, QueueRefusal
+from services.company.marketing import BANNED_DASHES, PostDraft, QueueRefusal
 from services.company.product import DuplicateProposal, Proposal
 from services.company.research import DuplicateFinding, Finding
 from services.company.sales import LeadDraft
@@ -118,11 +118,16 @@ class DraftIn(BaseModel):
     ai_disclosure: str = Field(..., max_length=1000)
 
 
+# The pattern refuses a NUL byte, which the database cannot store, and the dashes
+# a decision note may not carry (ruled by Tee 2026-10-14). It is a pattern and not a
+# validator because a validator's ValueError cannot be serialised by this app's
+# validation error handler, which turns a 422 into a 500. The rules modules check
+# the same thing again, so a caller that skips the route is still refused.
+_NOTE_PATTERN = "^[^\\x00" + "".join(f"\\x{{{ord(ch):x}}}" for ch in BANNED_DASHES) + "]*$"
+
+
 class DecisionIn(BaseModel):
-    # The pattern refuses a NUL byte, which the database cannot store. It is a
-    # pattern and not a validator because a validator's ValueError cannot be
-    # serialised by this app's validation error handler, which turns a 422 into a 500.
-    note: Optional[str] = Field(None, max_length=2000, pattern=r"^[^\x00]*$")
+    note: Optional[str] = Field(None, max_length=2000, pattern=_NOTE_PATTERN)
 
 
 class DraftOut(BaseModel):
@@ -210,7 +215,8 @@ class LeadDraftIn(BaseModel):
     qualification: str = Field(..., max_length=16)
     qualification_reason: str = Field(..., max_length=2000)
     reply_text: str = Field(..., max_length=8000)
-    ai_disclosure: str = Field(..., max_length=1000)
+    # Optional on one to one email, by Tee's ruling of 2026-10-14.
+    ai_disclosure: Optional[str] = Field(None, max_length=1000)
 
 
 class LeadDraftOut(BaseModel):
@@ -222,7 +228,7 @@ class LeadDraftOut(BaseModel):
     qualification: str
     qualification_reason: str
     reply_text: str
-    ai_disclosure: str
+    ai_disclosure: Optional[str]
     status: str
     decided_by: Optional[str]
     decision_note: Optional[str]

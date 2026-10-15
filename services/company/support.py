@@ -36,6 +36,7 @@ from services.company.marketing import (
     MIN_DISCLOSURE_CHARS,
     DraftStatus,
     QueueRefusal,
+    _check_note,
     _check_text,
     _visible_len,
 )
@@ -100,6 +101,7 @@ def create_comment_draft(
     if _visible_len(reply_text) == 0:
         raise QueueRefusal("reply text has no visible characters")
     _plain_field(reply_basis, "reply_basis")
+    _check_text(reply_basis, "reply_basis")
     if _visible_len(reply_basis) < MIN_BASIS_CHARS:
         raise QueueRefusal(
             f"reply_basis needs at least {MIN_BASIS_CHARS} visible characters"
@@ -124,6 +126,7 @@ def _decide(draft: CommentDraft, status: DraftStatus, decided_by: str, note: Opt
         raise QueueRefusal("a human decision needs a named decider")
     if who.lower() in AUTOMATED_ACTORS:
         raise QueueRefusal(f"{who!r} is an automated actor, not a human decider")
+    _check_note(note)
     return replace(draft, status=status, decided_by=who, decision_note=note)
 
 
