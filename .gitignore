@@ -63,3 +63,6 @@ _id_map.json
 var/vision-inbox/*
 !var/vision-inbox/README.md
 !var/vision-inbox/devon-vision-test.png
+
+# The gate ledger is a per session record, not repository content
+.claude/ledger/
