@@ -221,6 +221,8 @@ Why it stopped. The five first-wave uploaders died when the account session limi
 
 What finishes it: three parts to upload, one plan view to upload, and six parts to read back, each as a small separate job on a model that copies long strings exactly. Nothing local is lost.
 
+Superseded on 2026-10-15. Tee uploaded the whole package as one zip from his phone, so the parts no longer matter. `TSWS_EDITABLE_REPAIR_WORKFLOWS_v01_DRAFT.zip` sits at the root of the NCO drive, file id `1ilz066WnIHW5ID81SYF_nafYuDKf6EJA`, created 2026-10-15T02:58:37Z. Drive reports 988,398 bytes, the exact size of the local zip, which holds 72 files and passed a zip integrity test. Its local sha256 is `9c9b3eeae1acee584bc1f30fab81ef132940eff82e70d796606a6f8e3368b1f6`. The Drive copy was not hashed: size matched only.
+
 ## n8n
 
 `TSWS 06 Repair Orchestration DRAFT (not published)`, id `BYAMD9YOT2jOb8sg`,
@@ -346,5 +348,5 @@ DATE: 2026-10-14
 DECISIONS: None taken by Tee in this arc. Asked on the card: who "mel" is and where Genjutsu should be installed; whether to publish n8n draft BYAMD9YOT2jOb8sg after its two Basic Auth credentials exist; whether the never-exercised status stands; whether to run the Agent Archive setup hook.
 FINDINGS: Run 8 passed 49 of 49 tests on synthetic fixtures. Three gauntlet cycles found twenty defects the first draft's own 34 tests missed, each now guarded by a test. No Episode 1 shot is repaired, because the Episode 1 media never reached the build environment. The Drive delivery is partial: 40 of 43 parts and 59 whole files are on Drive, 34 parts hash verified.
 OPEN: Episode 1 media never reached the build environment, so no Episode 1 application is done and SH045 is not built; the render worker has no tsws_repair job type; nothing has been watched end to end; small protected regions are a measurement limit; the never-exercised status is Tee's to overrule; the Genjutsu card; the Agent Archive hook.
-STATUS: DRAFT. Nothing approved or shipped. n8n draft BYAMD9YOT2jOb8sg unpublished and inactive. Drive delivery partial, finish list in receipts/DRIVE_UPLOAD_RECEIPT.json.
+STATUS: DRAFT. Nothing approved or shipped. n8n draft BYAMD9YOT2jOb8sg unpublished and inactive. Drive delivery complete as one zip, size matched, not hashed on Drive.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
