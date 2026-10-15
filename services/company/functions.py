@@ -62,7 +62,7 @@ COMPANY_FUNCTIONS: Dict[str, FunctionAgent] = {
             status=Status.BUILT,
             built_in="services/company/scoreboard.py",
             build_order=1,
-            notes=["Revenue is not connected yet, so it reports as not measured.", "Ruled 2026-10-12: Stripe is the revenue source. It needs Tee to authorize it in connector settings first."],
+            notes=["Revenue reads from Stripe with a live restricted read-only key (STRIPE_READ_KEY, set by Tee in Railway). Without the key, or on any failed read, it reports as not measured and never as zero.", "Ruled 2026-10-12: Stripe is the revenue source. Ruled 2026-10-15: a restricted key in Railway, not the Claude connector."],
         ),
         FunctionAgent(
             slug="marketing",

@@ -155,6 +155,9 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     ANTHROPIC_API_KEY: str | None = None
     CEREBRAS_API_KEY: str | None = None
+    # Read-only Stripe key for the company scoreboard. Must be a live restricted
+    # key (rk_live_); anything else is refused. Unset means revenue is not measured.
+    STRIPE_READ_KEY: str | None = None
     DEFAULT_AI_PROVIDER: str = "mock"  # mock | anthropic | openai | cerebras
 
     # Vision is its own backend, separate from DEFAULT_AI_PROVIDER, because
