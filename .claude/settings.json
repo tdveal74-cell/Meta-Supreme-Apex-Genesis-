@@ -27,5 +27,11 @@
   },
   "enabledMcpjsonServers": [
     "blotato-help"
-  ]
+  ],
+  "permissions": {
+    "allow": [
+      "mcp__Remote_Desktop_Commander",
+      "mcp__claude_ai_Remote_Desktop_Commander"
+    ]
+  }
 }
