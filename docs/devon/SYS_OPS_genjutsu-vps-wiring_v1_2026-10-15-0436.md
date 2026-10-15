@@ -53,8 +53,10 @@ only been tested against a stand-in client.
   Tee in the container on 2026-10-15, uploaded a fresh file, fetched its
   signed link and compared the bytes. It printed `PASS link opens 200 True`:
   Cloudflare served the object over the signed GET and the bytes matched what
-  was written. That proves the link a provider would be handed actually
-  opens, from the VPS. It was not fetched from outside the VPS.
+  was written. That proves a link from the same `upload()` the paid steps
+  call opens straight after it is made. It was fetched from inside the
+  container only, with an 11 byte text file, so it does not prove the link
+  opens from a provider's network or later in its six hour life.
 - Each test leaves one small text file under `genjutsu/` in the bucket. The
   two recorded here left two; any other runs were not counted.
 
@@ -94,7 +96,7 @@ TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_genjutsu-vps-wiring_v1_2026-10-15-0436.md
 DATE: 2026-10-15
 DECISIONS: Tee ran the install through Termius, uploaded the TSWS zip to Drive himself, ruled on a card to publish webhook workflow H8IdVxtzGd9ZJ3hU, made the R2 bucket and its scoped token, and wrote the bucket and webhook values into the VPS .env himself.
-FINDINGS: The webhook is live and read back with versionId equal to activeVersionId and a POST returning 200. A real upload to genjutsu-media passed with Tee's keys, and its signed link opened with HTTP 200 and matching bytes. The install's grant check false failed while the gate itself refused by hand. An iOS paste of the install script lost its line breaks and ran nothing.
+FINDINGS: The webhook is live and read back with versionId equal to activeVersionId and a POST returning 200. A real upload to genjutsu-media passed with Tee's keys, and a second upload's signed link opened with HTTP 200 and matching bytes. The install's grant check false failed while the gate itself refused by hand. An iOS paste of the install script lost its line breaks and ran nothing.
 OPEN: Replicate and Enhancor keys unset by choice; root owned grant folder undecided; install script false FAIL unfixed; TSWS Episode 1 repairs not started.
 STATUS: DRAFT. App installed with no paid keys. Nothing generated, nothing billed.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
