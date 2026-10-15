@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
+from app.core.json_guard import LoneSurrogateGuard
 from app.core.logging import setup_logging
 from app.core.tenant_context import TenantContextMiddleware
 
@@ -84,6 +85,10 @@ app = FastAPI(
 
 # Consistent JSON error responses
 register_exception_handlers(app)
+
+# A lone UTF-16 surrogate in a JSON body is answered 422 here instead of 500
+# later. Added before CORS so the 422 still carries the CORS headers.
+app.add_middleware(LoneSurrogateGuard)
 
 # CORS
 app.add_middleware(
