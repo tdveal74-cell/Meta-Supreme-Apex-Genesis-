@@ -25,6 +25,7 @@ from app.services import (
     company_sales_queue,
     company_support_queue,
 )
+from app.services.company_revenue import read_month_revenue
 from app.services.provider_usage import read_usage, utc_today
 from services.company.functions import list_functions
 from services.company.marketing import BANNED_DASHES, PostDraft, QueueRefusal
@@ -89,13 +90,14 @@ async def read_scoreboard(current_user: CurrentUser) -> ScoreboardOut:
     day = utc_today()
     usage = await read_usage(str(current_user.id), day)
     cap = int(settings.PROVIDER_DAILY_TOKEN_CAP or 0)
+    revenue, revenue_notes = await read_month_revenue()
     board = build_scoreboard(
-        revenue_month_usd=None,
+        revenue_month_usd=revenue,
         calls_today=usage.calls,
         tokens_today=usage.total_tokens,
         cap_tokens=cap if cap > 0 else None,
     )
-    return ScoreboardOut(date=day.isoformat(), notes=list(board.notes), **{
+    return ScoreboardOut(date=day.isoformat(), notes=[*revenue_notes, *board.notes], **{
         k: getattr(board, k) for k in ScoreboardOut.model_fields if k not in ("date", "notes")
     })
 
