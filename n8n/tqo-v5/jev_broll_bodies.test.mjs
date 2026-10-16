@@ -93,6 +93,31 @@ assert.deepEqual(out.map((i) => i.json.link), [
 ]);
 assert.deepEqual(out.map((i) => i.json.cand), [1, 2, 3]);
 
+// A video whose ONLY mp4 file has no width is not a candidate, whatever form the
+// missing width takes (null, absent or 0), exactly as in Build Movie. The case
+// above leaves its width-less file beside a usable one, so it cannot tell a rule
+// that drops width-less files from one that keeps them; here nothing else is
+// left to pick. A width-less mp4 next to a webm that has a width is the same
+// case, since only mp4 files count. The clips that are skipped use up no place:
+// the one usable clip is cand 1.
+const noWidth = {
+  videos: [
+    vid(21, [file(null, "w-null")]),
+    vid(22, [{ file_type: "video/mp4", link: "https://videos.pexels.com/w-absent.mp4" }]),
+    vid(23, [file(0, "w-zero")]),
+    vid(24, [file(undefined, "w-undefined")]),
+    vid(25, [file(undefined, "w-mixed"), file(1280, "w-webm", "video/webm")]),
+    vid(26, [file(1920, "w-ok")]),
+  ],
+};
+assert.deepEqual(exportCandidates(noWidth), ["https://videos.pexels.com/w-ok.mp4"], "Build Movie skips every width-less only-mp4 video");
+out = runStills([seg(0)], [item(noWidth)]);
+assert.deepEqual(out.map((i) => i.json.link), exportCandidates(noWidth));
+assert.deepEqual(out.map((i) => [i.json.cand, i.json.videoId, i.json.link]), [[1, 26, "https://videos.pexels.com/w-ok.mp4"]]);
+// A response made only of such videos leaves the segment with nothing, and the branch stops.
+out = runStills([seg(0)], [item({ videos: noWidth.videos.slice(0, 5) })]);
+assert.deepEqual(out, []);
+
 // A still that is not on the Pexels image host is never fetched, and it does not
 // use up one of the four places: cand counts the clips that were kept.
 const hosts = {
@@ -258,6 +283,17 @@ assert.equal(Object.keys(out[0].json.body.assets).length, 2);
 out = runBodies([still(0, 1), still(0, 2)], [fetched(bigA), fetched(big("/9j/", 8000001))]);
 assert.deepEqual(out[0].json.links, ["https://videos.pexels.com/s0c1.mp4"], "one character over the cap drops the later still");
 assert.deepEqual(runBodies([still(0, 1)], [fetched(big("/9j/", 20000001))]), [], "a single still over the cap leaves nothing to ask about");
+// The cap stops at the FIRST still that would push the total past it, and no
+// later still is kept, even one small enough to fit (break, not skip). Here 12M
+// then 9M reaches 21M, so the second is refused, and the 100 character third
+// would fit beside the first (12,000,100) but is ranked below the refused one,
+// so it must not be asked about either.
+const bigD = big("/9j/", 9000000);
+out = runBodies([still(0, 1), still(0, 2), still(0, 3)], [fetched(bigA), fetched(bigD), fetched(bigC)]);
+assert.equal(out.length, 1);
+assert.deepEqual(out[0].json.links, ["https://videos.pexels.com/s0c1.mp4"], "only the first survives: the small third still is not kept past the refused second");
+assert.deepEqual(Object.keys(out[0].json.body.questions), ["s0c1"]);
+assert.deepEqual(Object.keys(out[0].json.body.assets), ["<s0c1>"]);
 
 // The two nodes chained on the real fixture: whatever the stills node keeps is
 // what the bodies node asks about, and each link keeps its place.
