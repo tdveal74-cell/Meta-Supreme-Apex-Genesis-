@@ -1,12 +1,13 @@
 """Vendored third-party skills are copies, not forks.
 
-`.claude/skills/scroll-craft` is a byte for byte copy of upstream
-`nateherkai/scroll-craft` at the commit `UPSTREAM.md` records. Prose in that
-file says never edit it in place. Prose is not an invariant, so this module
+Each skill named in `VENDORED` is a byte for byte copy of an upstream folder
+at the commit its `UPSTREAM.md` records: `scroll-craft` from
+`nateherkai/scroll-craft`, and `hypit` from `hypit-ai/hypit`. Prose in those
+files says never edit them in place. Prose is not an invariant, so this module
 makes it one: a local edit, a partial sync, or a deleted file fails here
 instead of surviving as a silent fork nobody can reconcile with upstream.
 
-Regenerating the manifest is part of syncing a newer upstream, and
+Regenerating a manifest is part of syncing a newer upstream, and each
 `UPSTREAM.md` carries the one liner that does it.
 """
 
@@ -14,18 +15,25 @@ import hashlib
 import pathlib
 import re
 
-SKILL = pathlib.Path(__file__).parent / ".claude" / "skills" / "scroll-craft"
-MANIFEST = SKILL / "MANIFEST.sha256"
-UPSTREAM = SKILL / "UPSTREAM.md"
+import pytest
+
+SKILLS = pathlib.Path(__file__).parent / ".claude" / "skills"
+
+# Each vendored skill and the lines its LICENSE must still carry. The two
+# licences differ: scroll-craft is MIT, hypit is Apache 2.0 with conditions.
+VENDORED = {
+    "scroll-craft": ("MIT License", "Nate Herk"),
+    "hypit": ("Apache License 2.0", "Hypit.AI"),
+}
 
 # Written by us, so deliberately outside the manifest: everything else under
-# the skill directory is upstream's and must hash to what upstream shipped.
+# a skill directory is upstream's and must hash to what upstream shipped.
 OURS = {"UPSTREAM.md", "MANIFEST.sha256"}
 
 
-def _recorded() -> dict[str, str]:
+def _recorded(skill: pathlib.Path) -> dict[str, str]:
     entries = {}
-    for line in MANIFEST.read_text().splitlines():
+    for line in (skill / "MANIFEST.sha256").read_text().splitlines():
         if not line.strip():
             continue
         digest, rel = line.split("  ", 1)
@@ -33,46 +41,65 @@ def _recorded() -> dict[str, str]:
     return entries
 
 
-def _on_disk() -> dict[str, str]:
+def _on_disk(skill: pathlib.Path) -> dict[str, str]:
     entries = {}
-    for path in SKILL.rglob("*"):
+    for path in skill.rglob("*"):
         if not path.is_file():
             continue
-        rel = path.relative_to(SKILL).as_posix()
+        rel = path.relative_to(skill).as_posix()
         if rel in OURS:
             continue
         entries[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
     return entries
 
 
-def test_manifest_covers_every_vendored_file() -> None:
-    recorded, disk = _recorded(), _on_disk()
+def test_every_vendored_skill_is_checked_here() -> None:
+    marked = sorted(d.name for d in SKILLS.iterdir() if (d / "UPSTREAM.md").is_file())
+    assert marked == sorted(VENDORED), (
+        f"skills carrying UPSTREAM.md are {marked}, this module checks "
+        f"{sorted(VENDORED)}. A vendored skill this file does not name is not "
+        "protected from in-place edits."
+    )
+
+
+@pytest.mark.parametrize("name", sorted(VENDORED))
+def test_manifest_covers_every_vendored_file(name: str) -> None:
+    skill = SKILLS / name
+    recorded, disk = _recorded(skill), _on_disk(skill)
     assert set(recorded) == set(disk), (
-        "the vendored tree and MANIFEST.sha256 disagree about which files exist. "
-        f"only on disk: {sorted(set(disk) - set(recorded))}. "
+        f"the vendored {name} tree and its MANIFEST.sha256 disagree about which "
+        f"files exist. only on disk: {sorted(set(disk) - set(recorded))}. "
         f"only in the manifest: {sorted(set(recorded) - set(disk))}"
     )
 
 
-def test_no_vendored_file_was_edited_in_place() -> None:
-    recorded, disk = _recorded(), _on_disk()
+@pytest.mark.parametrize("name", sorted(VENDORED))
+def test_no_vendored_file_was_edited_in_place(name: str) -> None:
+    skill = SKILLS / name
+    recorded, disk = _recorded(skill), _on_disk(skill)
     drifted = sorted(rel for rel in recorded.keys() & disk.keys() if recorded[rel] != disk[rel])
     assert not drifted, (
-        f"vendored files were modified in place: {drifted}. Fixes go upstream, "
-        "not into this copy. If this is a deliberate sync, follow "
-        ".claude/skills/scroll-craft/UPSTREAM.md and regenerate the manifest."
+        f"vendored {name} files were modified in place: {drifted}. Fixes go "
+        "upstream, not into this copy. If this is a deliberate sync, follow "
+        f".claude/skills/{name}/UPSTREAM.md and regenerate the manifest."
     )
 
 
-def test_upstream_records_a_full_commit_sha() -> None:
-    text = UPSTREAM.read_text()
+@pytest.mark.parametrize("name", sorted(VENDORED))
+def test_upstream_records_a_full_commit_sha(name: str) -> None:
+    text = (SKILLS / name / "UPSTREAM.md").read_text()
     assert re.search(r"`[0-9a-f]{40}`", text), (
-        "UPSTREAM.md must record the full 40 character upstream commit the copy "
-        "was taken from, otherwise the manifest pins content nobody can trace."
+        f"{name}/UPSTREAM.md must record the full 40 character upstream commit "
+        "the copy was taken from, otherwise the manifest pins content nobody "
+        "can trace."
     )
 
 
-def test_upstream_licence_is_carried_with_the_code() -> None:
-    licence = (SKILL / "LICENSE").read_text()
-    assert "MIT License" in licence
-    assert "Nate Herk" in licence, "MIT redistribution keeps the original copyright line"
+@pytest.mark.parametrize("name", sorted(VENDORED))
+def test_upstream_licence_is_carried_with_the_code(name: str) -> None:
+    licence = (SKILLS / name / "LICENSE").read_text()
+    for marker in VENDORED[name]:
+        assert marker in licence, (
+            f"{name}/LICENSE no longer carries {marker!r}; redistribution keeps "
+            "the original licence and copyright line"
+        )
