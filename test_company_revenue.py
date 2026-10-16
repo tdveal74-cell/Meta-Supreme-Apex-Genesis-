@@ -170,3 +170,28 @@ async def test_scoreboard_route_without_a_key_stays_not_measured(client, auth_he
     monkeypatch.setattr(company_revenue.settings, "STRIPE_READ_KEY", None, raising=False)
     body = (await client.get("/api/v1/company/scoreboard", headers=auth_headers)).json()
     assert body["revenue_month_usd"] is None and body["revenue_measured"] is False
+
+
+# ---- found by an isolated critic, 2026-10-16
+
+def test_an_uncaptured_authorization_is_not_revenue():
+    r = sum_month_revenue([charge("a", 5000), charge("hold", 9000, captured=False),
+                           charge("eur_hold", 700, currency="eur", captured=False)])
+    assert r.revenue_usd == 50.0 and r.charge_count == 1
+    assert "2 uncaptured authorization(s)" in r.notes[0]
+
+
+def test_a_captured_charge_still_counts():
+    assert sum_month_revenue([charge("a", 5000, captured=True)]).revenue_usd == 50.0
+
+
+def test_cents_are_kept():
+    assert sum_month_revenue([charge("a", 1234)]).revenue_usd == 12.34
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("page", [[], [1, 2], "text"])
+async def test_a_200_that_is_not_an_object_is_not_measured(page):
+    transport, _ = stripe([page])
+    rev, notes = await read_month_revenue(NOW, key=KEY, transport=transport)
+    assert rev is None and "unreadable page" in notes[0]

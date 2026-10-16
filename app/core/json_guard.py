@@ -34,8 +34,18 @@ def _has_lone_surrogate(value: Any) -> bool:
     return False
 
 
+def _may_hold_surrogate(body: bytes) -> bool:
+    """The escape text, or any byte pattern a decoder could turn into one.
+
+    json.loads decodes bytes with surrogatepass, so a lone surrogate can arrive
+    as raw UTF-8 bytes, or in a UTF-16 or UTF-32 body where the escape text is
+    wide. Plain ASCII with no NUL cannot carry one without the escape text.
+    """
+    return bool(_SURROGATE_ESCAPE.search(body)) or not body.isascii() or b"\x00" in body
+
+
 def body_has_lone_surrogate(body: bytes) -> bool:
-    if not _SURROGATE_ESCAPE.search(body):
+    if not _may_hold_surrogate(body):
         return False
     try:
         return _has_lone_surrogate(json.loads(body))

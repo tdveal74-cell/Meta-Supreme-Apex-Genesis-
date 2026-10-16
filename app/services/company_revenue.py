@@ -54,6 +54,8 @@ async def read_month_revenue(
                 if resp.status_code != 200:
                     return None, [f"Revenue is not measured: Stripe answered HTTP {resp.status_code}."]
                 body = resp.json()
+                if not isinstance(body, dict):
+                    return None, ["Revenue is not measured: Stripe returned an unreadable page."]
                 page = body.get("data")
                 if not isinstance(page, list):
                     return None, ["Revenue is not measured: Stripe returned an unreadable page."]
