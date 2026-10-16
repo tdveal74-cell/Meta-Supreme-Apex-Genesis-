@@ -587,7 +587,9 @@ and died**, and this box has 7.8 GiB. Each input is a live decoder.
 The job now runs one ffmpeg per item, one or two inputs each, and joins the
 segments with the concat demuxer as a stream copy, so the picture is encoded
 once. The same 64 items peaked at **1,068 MiB**, and the output measured 736
-frames against 736 planned. The cap is now 400 items.
+frames against 736 planned. 256 items peaked at **1,427 MiB**, measured 2,944
+frames against 2,944 planned, and took 890 s at preset ultrafast with 4K carried
+through. The cap is now 400 items.
 
 ### Acceptance, real ffmpeg
 
