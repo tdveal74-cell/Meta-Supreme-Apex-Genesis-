@@ -364,7 +364,10 @@ N8N_HOST = "https://n8n.editforge.online"
 WEBHOOKS = {
     "devon-capture": {
         "job": "cross platform receipts",
-        "destination": "Airtable Thread Receipts tblEhgEZoNr2ztbB3",
+        # Moved off Airtable on 2026-10-16, ruled by Tee: the webhook's last
+        # node is now a data table insert, published as version 78b22003.
+        # Airtable Thread Receipts still exists and is no longer written.
+        "destination": "n8n data table at_tqo_thread_receipts JCwPJ37BmyUW21r1",
         "workflow": "Me7DDHBDX28ppvHA",
         # Stays the single checkable phrase. node_auth_for() in the reconciler
         # matches by PREFIX, so any second clause added here is silently
@@ -1162,7 +1165,11 @@ WORKFLOWS = {
     },
     "Notion Buffer Drain": {
         "id": "ptAmD28msYTvobgq",
-        "state": "active, daily 07:00 New York, Airtable Thread Receipts to the Notion Thread Log",
+        # Repointed 2026-10-16 with the capture webhook, version 1d52d17d. It
+        # reads and ticks the data table, and keys pages by a migrated row's
+        # Airtable record id or else dt:<row id>. Sync failures still log to
+        # Airtable Conflicts tblbenoy1QF9KAftn.
+        "state": "active, daily 07:00 New York, n8n data table at_tqo_thread_receipts to the Notion Thread Log",
     },
     "To Delete Auto-Purge": {"id": "2M8CIPebpl1nSLVx", "state": "active, weekly Sunday 10:00 New York"},
     # Both were one shot throwaways that only ever existed on n8n Cloud, and
