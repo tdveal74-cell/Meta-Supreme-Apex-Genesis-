@@ -98,15 +98,23 @@ correlation -24.43,+3.16; NCC -24.72,+3.26), not a jump between frames: f94 to
 f95 moves -0.38,-0.06 px. The camera pans smoothly and speeds up, reaching
 -90.4 px by f191, with dy rising to +4.4 near f52 and falling to -2.9. No hard
 cut was found: the largest frame to frame skyline step is 1.12 px, and the
-largest full frame difference ratio is 1.14 against its neighbours.
+largest full frame difference against its neighbours is 1.14 times their median
+(computed by both the measuring agent and its verifier; neither stored the ratio
+in a file).
 
 The composer's camera stage classifies it moving at 89.22 px against a 0.5 px
-limit. Translation only stabilisation brings it to 0.93 to 1.50 px depending on
-which region supplies the offsets, still moving. A near storefront drifts about
+limit. Translation only stabilisation brings it to 0.93 to 1.51 px, still
+moving. The spread comes from the probe rows, the crop and the offset source:
+skyline offsets with the package's default probe rows read 1.50 px, the same
+offsets with rows 0 to 180 read 0.99 px, and the verifier's copy stabilised with
+the package probe's own offsets read 0.9334 px. One diagnostic, stabilised and
+then probed on the same skyline region that supplied the offsets, read static at
+0.475 px; it measures the region against itself, so it does not count as a pass.
+A near storefront drifts about
 +30 px in dy by f95 while the skyline moves +3, so the motion is depth dependent
 or a generative warp (inferred). An honest pass needs a per frame camera solve,
-which v01 does not automate. A verifier reproduced every number and narrowed one
-claim: the stabilisation result depends on the offset source.
+which v01 does not automate. A verifier reproduced the measuring agent's
+numbers.
 
 ## Defects found in the repair package
 
