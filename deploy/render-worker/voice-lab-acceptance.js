@@ -127,8 +127,8 @@ await check('no click at a join: the largest sample step is no bigger than the 1
 
 console.log('\n-- presenter_composite with must_cover, measured --');
 ff(['-f', 'lavfi', '-i', `color=c=black:s=320x568:r=${FPS}:d=4,format=yuv420p,geq=lum=120:cb=128:cr=240`, '-c:v', 'libx264', '-crf', '10', '-pix_fmt', 'yuv420p', 'cut.mp4']);
-// No must_cover is sent anywhere below: take_patch wrote base.mp4.must_cover.json
-// beside the base track, and presenter_composite enforces that on its own.
+// No must_cover is sent anywhere below: take_patch wrote the clone windows into
+// base.mp4's own metadata, and presenter_composite reads them back from the file.
 const pcBase = { avatar: 'base.mp4', width: 320, height: 568, fps: FPS, duration: r.duration };
 // A frame is the held face when it reads Y 117 and V 128 (source frame 101).
 const isFace = (y, v) => Math.abs(y - 117) < 4 && Math.abs(v - 128) < 4;
@@ -137,10 +137,18 @@ const faceFramesIn = (f) => {
   const a = Math.round(w.start * FPS), b = Math.round(w.end * FPS);
   return { n: b - a, face: y.slice(a, b).filter((yy, i) => isFace(yy, v[a + i])).length };
 };
-await check('the sidecar alone enforces the window: a cutaway that misses it is refused with no must_cover sent', () => {
-  assert.ok(fs.existsSync(path.join(ROOT, 'base.mp4.must_cover.json')), 'take_patch wrote no sidecar');
+await check('the windows ride in the file: a cutaway that misses them is refused with no must_cover sent', () => {
   assert.throws(() => J.JOBS.presenter_composite.build({ ...pcBase, output: 'x.mp4', cutaways: [{ path: 'cut.mp4', start: 5.0, end: 7.0 }] }),
     /not inside one scheduled cutaway/);
+});
+await check('a COPY and a symlink of the base track carry the windows too (round three: a copy rendered 46 face frames)', () => {
+  fs.mkdirSync(path.join(ROOT, 'final'), { recursive: true });
+  fs.copyFileSync(path.join(ROOT, 'base.mp4'), path.join(ROOT, 'final/base.mp4'));
+  fs.symlinkSync(path.join(ROOT, 'base.mp4'), path.join(ROOT, 'final/link.mp4'));
+  for (const av of ['final/base.mp4', 'final/link.mp4']) {
+    assert.throws(() => J.JOBS.presenter_composite.build({ ...pcBase, avatar: av, output: 'x.mp4', cutaways: [{ path: 'cut.mp4', start: 5.0, end: 7.0 }] }),
+      /not inside one scheduled cutaway/, av);
+  }
 });
 await check('a cutaway whose 0.3 s fade overlaps the clone shows the plate through the fade, never the face', () => {
   run(J.JOBS.presenter_composite.build({ ...pcBase, output: 'fade.mp4', cutaways: [{ path: 'cut.mp4', start: 2.4, end: 5.0 }] }));

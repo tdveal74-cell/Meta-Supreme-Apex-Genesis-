@@ -17,6 +17,12 @@ const J = require('./jobs.js');
 
 const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'tsws-worker-test-'));
 J.setRoot(ROOT);
+// presenter_composite reads a base track's container tags with ffprobe, which
+// these tests never run. The stub answers from TAGS, keyed by absolute path,
+// and every other file reads as untagged. Guarded so the negative control's
+// pre-Voice-Lab fixture, which has no setter, still loads.
+const TAGS = new Map();
+if (J.setTagReader) J.setTagReader((f) => ({ format: { tags: TAGS.has(f) ? { comment: TAGS.get(f) } : {} } }));
 const touch = (rel) => {
   const abs = path.join(ROOT, rel);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
@@ -688,16 +694,22 @@ t('critic F3: a 150 line, 20,000 word alignment finishes fast and a repetitive o
   // refused in well under a second rather than holding the loop for 8 s.
   const many = Array(2000).fill(Array(30).fill('the').join(' '));
   const t2 = Date.now();
-  await assert.rejects(align({ lines: many, words: Array.from({ length: 20000 }, (_, i) => ({ text: 'the', start: i, end: i + 0.5 })) }), /too many comparisons/);
+  await assert.rejects(align({ lines: many, words: Array.from({ length: 20000 }, (_, i) => ({ text: 'the', start: i, end: i + 0.5 })) }), /too many comparisons|over 200,000 verbatim readings/);
   assert.ok(Date.now() - t2 < 2000, `refusal took ${Date.now() - t2} ms`);
 });
 t('critic N7: a symbol on either side means the line is never kept', async () => {
   const cases = [
     ['Our revenue rose 30 this year.', 'our revenue rose 30% this year'],
-    ['Our revenue rose 30% this year.', 'our revenue rose 30% this year'],
     ['It is 5 million.', 'it is $5 million'],
     ['It was 5 degrees.', 'it was -5 degrees'],
     ['Plan A & plan B.', 'plan a and plan b'],
+    // Round three: symbols outside the old list, and words with no a to z.
+    ['It costs 500.', 'it costs \u00a5500'],
+    ['It was 5 degrees.', 'it was \u00b15 degrees'],
+    ['It is 10 faster.', 'it is 10\u00d7 faster'],
+    ['It was 5 below.', 'it was \u20135 below'],
+    ['It was 5 below.', 'it was (-5) below'],
+    ['We went there.', 'we went \u6771\u4eac there'],
   ];
   for (const [line, spoken] of cases) {
     const r = await align({ lines: [line], words: say(spoken, 0), max_patch_share: 1 });
@@ -705,6 +717,33 @@ t('critic N7: a symbol on either side means the line is never kept', async () =>
   }
   const ok = await align({ lines: ['It was minus 5 degrees, a twenty-six year low.'], words: say('it was minus 5 degrees a twenty-six year low', 0) });
   assert.strictEqual(ok.verdict, 'clean');
+});
+t('round three: a perfect read of a line WITH a symbol is kept, because the symbol matches itself', async () => {
+  const r = await align({ lines: ['Our revenue rose 30% this year.'], words: say('our revenue rose 30% this year', 0) });
+  assert.strictEqual(r.verdict, 'clean', JSON.stringify(r.report));
+  const neg = await align({ lines: ['It was -5 out.'], words: say('it was \u22125 out', 0) });
+  assert.strictEqual(neg.verdict, 'clean', 'a hyphen minus and a true minus are the same sign');
+});
+t('round three: ordinary English still matches, accents fold, points and commas in numbers hold', async () => {
+  const pairs = [
+    ["Don't stop, it's 2026.", "don\u2019t stop it's 2026"],
+    ['Send me an e-mail.', 'send me an e-mail'],
+    ['A caf\u00e9 opens.', 'a cafe opens'],
+    ['We hired 1,000 people.', 'we hired 1,000 people'],
+    ['It grew 3.5 times.', 'it grew 3.5 times'],
+  ];
+  for (const [line, spoken] of pairs) {
+    const r = await align({ lines: [line], words: say(spoken, 0) });
+    assert.strictEqual(r.verdict, 'clean', `${line} vs ${spoken}: ${JSON.stringify(r.report)}`);
+  }
+  const r = await align({ lines: ['It grew 3.5 times.'], words: say('it grew 3 5 times', 0), max_patch_share: 1 });
+  assert.strictEqual(r.report[0].kind, 'patch', '"3.5" must not equal "3 5"');
+});
+t('round three: one word lines cannot pin the loop or the heap; the kept readings are capped', async () => {
+  const t0 = Date.now();
+  await assert.rejects(align({ lines: Array(399).fill('the'), words: Array.from({ length: 50000 }, (_, i) => ({ text: 'the', start: i, end: i + 0.5 })) }),
+    /over 200,000 verbatim readings|too many comparisons/);
+  assert.ok(Date.now() - t0 < 2000, `refusal took ${Date.now() - t0} ms`);
 });
 t('critic N8: a reading may not start or end inside a hyphenated spoken word', async () => {
   const r = await align({ lines: ['This is our year.'], words: say('this is our year-end', 0), max_patch_share: 1 });
@@ -890,7 +929,11 @@ t('critic N6: an output that is also an input is refused before anything is over
   assert.throws(() => J.JOBS.take_patch.build({ ...tp(), narration_output: 'vl/take.mov' }), /collides/);
   assert.throws(() => J.JOBS.take_patch.build({ ...tp(), narration_output: 'vl/base.mp4' }), /collides/);
   assert.throws(() => J.JOBS.take_patch.build({ ...tp(), narration_output: 'vl/base.mp4.parts/n.wav' }), /deletes/);
-  assert.throws(() => J.JOBS.take_patch.build({ ...tp(), output: 'vl/line1.mp3', narration_output: undefined }), /also an output/);
+  // A clone file named like a video, so the extension check lets it through
+  // to the collision check this line is about.
+  const clip = touch('vl/clone-as.mov');
+  assert.throws(() => J.JOBS.take_patch.build({ ...tp(), output: 'vl/clone-as.mov', narration_output: undefined,
+    edl: [{ kind: 'take', start: 0, end: 3 }, { kind: 'patch', audio: clip, duration: 1 }] }), /also an output/);
 });
 t('critic N11: a take that would round into the next one rounds down instead, no replay', () => {
   const p = tp(); p.take_duration = 12;
@@ -910,7 +953,25 @@ t('critic N5: take_patch exposes abort so a timed-out job can kill what it start
   const b = J.JOBS.take_patch.build(tp());
   assert.strictEqual(typeof b.abort, 'function');
   b.abort();   // with nothing running it is a no-op
-  assert.strictEqual(b.plan.sidecar.endsWith('vl/base.mp4.must_cover.json'), true);
+});
+t('round three: the join writes the clone windows into the output\'s own metadata', () => {
+  const b = J.JOBS.take_patch.build(tp());
+  const i = b.plan.join.indexOf('-metadata');
+  assert.ok(i > 0, b.plan.join.join(' '));
+  const tag = b.plan.join[i + 1];
+  assert.ok(tag.startsWith('comment=voicelab-must-cover:'), tag);
+  const parsed = JSON.parse(tag.slice('comment=voicelab-must-cover:'.length));
+  assert.deepStrictEqual(parsed.windows, [{ start: 2.533333, end: 4.8 }]);
+});
+t('round three: output must be .mp4 or .mov, and collisions are judged by real path', () => {
+  assert.throws(() => J.JOBS.take_patch.build({ ...tp(), output: 'vl/base.mkv' }), /must end \.mp4 or \.mov/);
+  fs.symlinkSync(path.join(ROOT, 'vl/take.mov'), path.join(ROOT, 'vl/take-link.mov'));
+  assert.throws(() => J.JOBS.take_patch.build({ ...tp(), take: 'vl/take-link.mov', output: 'vl/take.mov' }), /is the take itself/);
+  assert.throws(() => J.JOBS.take_patch.build({ ...tp(), output: 'vl/take-link.mov' }), /is the take itself/);
+});
+t('round three: a one frame span at xfade 0 is not refused by float rounding', () => {
+  const p = tp(); p.xfade = 0; p.edl = [{ kind: 'take', start: 1, end: 1 + 1 / 30 }];
+  assert.ok(J.JOBS.take_patch.build(p));
 });
 
 section('\n-- V3: must_cover, no clone voice over the presenter\'s face --');
@@ -936,26 +997,48 @@ t('a window outside every cutaway, or spanning two, is refused', () => {
   assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), must_cover: [{ start: 12, end: 14 }] }), /black plate with nothing on it/);
   assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), must_cover: [{ start: 3.9, end: 9 }] }), /not inside one scheduled/);
 });
-t('critic N3: a take_patch sidecar beside the base track is enforced with no must_cover sent', () => {
+t('critic N3, round three: windows carried in the base track\'s own metadata are enforced, copies included', () => {
   const base = touch('p/sc/base.mp4');
-  fs.writeFileSync(path.join(ROOT, 'p/sc/base.mp4.must_cover.json'), JSON.stringify({ job: 'take_patch', windows: [{ start: 12, end: 14 }] }));
+  const abs = path.join(ROOT, 'p/sc/base.mp4');
+  TAGS.set(abs, 'voicelab-must-cover:' + JSON.stringify({ fps: 30, windows: [{ start: 12, end: 14 }] }));
   const p = { ...pc(), avatar: base };
   assert.throws(() => J.JOBS.presenter_composite.build(p), /must_cover\[0\]: 12s to 14s/);
   assert.throws(() => J.JOBS.presenter_composite.build({ ...p, mustCover: [] }), /must_cover\[0\]/);
-  fs.writeFileSync(path.join(ROOT, 'p/sc/base.mp4.must_cover.json'), JSON.stringify({ job: 'take_patch', windows: [{ start: 5, end: 9 }] }));
-  const g = graph(J.JOBS.presenter_composite.build(p));
-  assert.ok(g.includes('drawbox'), 'the sidecar window was not plated');
-  fs.writeFileSync(path.join(ROOT, 'p/sc/base.mp4.must_cover.json'), '{not json');
-  assert.throws(() => J.JOBS.presenter_composite.build(p), /sidecar is unreadable/);
+  TAGS.set(abs, 'voicelab-must-cover:' + JSON.stringify({ fps: 30, windows: [{ start: 5, end: 9 }] }));
+  assert.ok(graph(J.JOBS.presenter_composite.build(p)).includes('drawbox'), 'the carried window was not plated');
+  // Sending the same window as must_cover too counts it once (round three, finding 2).
+  assert.strictEqual(J.JOBS.presenter_composite.build({ ...p, must_cover: [{ start: 5, end: 9 }] }).parse().must_cover, 1);
+  TAGS.set(abs, 'voicelab-must-cover:{not json');
+  assert.throws(() => J.JOBS.presenter_composite.build(p), /windows are unreadable/);
+  TAGS.delete(abs);
+});
+t('round three: a base track whose tags cannot be read is refused, never composited unchecked', () => {
+  J.setTagReader(() => { throw new Error('moov atom not found'); });
+  try {
+    assert.throws(() => J.JOBS.presenter_composite.build(pc()), /could not read its tags/);
+  } finally {
+    J.setTagReader((f) => ({ format: { tags: TAGS.has(f) ? { comment: TAGS.get(f) } : {} } }));
+  }
+});
+t('round three: 33 windows sent AND carried are 33, not 66', () => {
+  const base = touch('p/sc/many.mp4');
+  const wins = Array.from({ length: 33 }, (_, i) => ({ start: 4.2 + i * 0.15, end: 4.25 + i * 0.15 }));
+  TAGS.set(path.join(ROOT, 'p/sc/many.mp4'), 'voicelab-must-cover:' + JSON.stringify({ windows: wins }));
+  const r = J.JOBS.presenter_composite.build({ ...pc(), avatar: base, must_cover: wins }).parse();
+  assert.strictEqual(r.must_cover, 33);
 });
 t('stacked: a payload-zone cutaway leaves the face visible, so only full-frame counts', () => {
   assert.throws(() => J.JOBS.presenter_composite.build({ ...st(), emphasis: [], must_cover: [{ start: 3, end: 5 }] }), /full-frame cutaway/);
   const r = J.JOBS.presenter_composite.build({ ...st(), emphasis: [], must_cover: [{ start: 8.5, end: 10.5 }] }).parse();
   assert.strictEqual(r.must_cover, 1);
 });
+t('round three: stacked emphasis within one frame of a covered window is refused', () => {
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...st(), fps: 25, emphasis: [{ start: 7.5, end: 8.4995 }], must_cover: [{ start: 8.5, end: 10.5 }] }), /within a frame/);
+  assert.ok(J.JOBS.presenter_composite.build({ ...st(), fps: 25, emphasis: [{ start: 7.5, end: 8.45 }], must_cover: [{ start: 8.5, end: 10.5 }] }));
+});
 t('stacked: an emphasis window over, or merely touching, a covered span is refused', () => {
-  assert.throws(() => J.JOBS.presenter_composite.build({ ...st(), emphasis: [{ start: 9, end: 10 }], must_cover: [{ start: 8.5, end: 10.5 }] }), /touches emphasis/);
-  assert.throws(() => J.JOBS.presenter_composite.build({ ...st(), emphasis: [{ start: 7.5, end: 8.5 }], must_cover: [{ start: 8.5, end: 10.5 }] }), /touches emphasis/);
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...st(), emphasis: [{ start: 9, end: 10 }], must_cover: [{ start: 8.5, end: 10.5 }] }), /within a frame/);
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...st(), emphasis: [{ start: 7.5, end: 8.5 }], must_cover: [{ start: 8.5, end: 10.5 }] }), /within a frame/);
 });
 t('must_cover that is not an array is refused, never defaulted', () => {
   assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), must_cover: '[{"start":4.5,"end":9.5}]' }), /must_cover: must be an array/);

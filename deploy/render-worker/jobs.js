@@ -835,22 +835,32 @@ const JOBS = {
       // Refused at submit: a clone line over Tee's own face is the failure this
       // exists to make impossible, and it would otherwise pass every other gate.
       //
-      // A base track made by take_patch carries a sidecar of its windows, and
-      // those are enforced whether or not the caller sends must_cover. A
-      // critic omitted it, misspelled it and passed the wrong field, and each
-      // rendered the held face under the clone (N3).
+      // A base track made by take_patch carries its windows INSIDE the file,
+      // in its container metadata, and those are enforced whether or not the
+      // caller sends must_cover. A critic omitted must_cover, misspelled it and
+      // passed the wrong field, and each rendered the held face under the clone
+      // (N3). The first fix kept the windows in a sidecar file beside the base
+      // track, and a third critic copied the base with fs_ops and got 46 face
+      // frames: a copy or a symlink lost the sidecar. The tag goes wherever the
+      // file goes. Read with ffprobe at submit; a base whose tags cannot be read
+      // is refused rather than rendered unchecked.
       if (p.must_cover !== undefined && !Array.isArray(p.must_cover)) throw new BadJob('must_cover: must be an array of {start, end}');
       const mustCover = Array.isArray(p.must_cover) ? p.must_cover.slice() : [];
-      const sidecarPath = `${avatar}.must_cover.json`;
-      if (fs.existsSync(sidecarPath)) {
-        let sc;
-        try { sc = JSON.parse(fs.readFileSync(sidecarPath, 'utf8')); }
-        catch (e) { throw new BadJob(`must_cover: the base track's sidecar is unreadable (${e.message}); re-run take_patch`); }
-        if (!sc || !Array.isArray(sc.windows)) throw new BadJob("must_cover: the base track's sidecar has no windows; re-run take_patch");
-        sc.windows.forEach(w => mustCover.push({ start: w && w.start, end: w && w.end }));
-      }
-      if (mustCover.length > 64) throw new BadJob('must_cover: too many (max 64)');
-      const covered = mustCover.map((m, k) => {
+      const carried = readVoiceLabWindows(avatar);
+      if (carried) carried.forEach(w => mustCover.push({ start: w && w.start, end: w && w.end }));
+      // The documented call sends take_patch's patch_windows as must_cover AND
+      // the file carries them, so the same window arrives twice. Identical
+      // windows count once (critic, round three: 33 patches were refused as 66).
+      const seenWin = new Set();
+      const uniqueCover = mustCover.filter((m) => {
+        if (!m || typeof m !== 'object') return true;
+        const key = `${Number(m.start).toFixed(6)}-${Number(m.end).toFixed(6)}`;
+        if (seenWin.has(key)) return false;
+        seenWin.add(key);
+        return true;
+      });
+      if (uniqueCover.length > 64) throw new BadJob('must_cover: too many (max 64)');
+      const covered = uniqueCover.map((m, k) => {
         if (!m || typeof m !== 'object') throw new BadJob(`must_cover[${k}]: not an object`);
         const s = num(m.start, `must_cover[${k}].start`, { min: 0, max: 86400 });
         const e = num(m.end,   `must_cover[${k}].end`,   { min: 0, max: 86400 });
@@ -863,11 +873,13 @@ const JOBS = {
           throw new BadJob(`must_cover[${k}]: ${s}s to ${e}s is not inside one scheduled` +
                            (stacked ? ' full-frame' : '') + ' cutaway; the clone voice would play over a black plate with nothing on it');
         }
-        // Closed on both ends: between() in the overlay is inclusive, so an
-        // emphasis window that merely touches a covered one still shows a frame
-        // of the presenter (measured by the critic, one frame at the boundary).
-        const back = emphasis.find(g => g.s <= e && s <= g.e);
-        if (back) throw new BadJob(`must_cover[${k}]: touches emphasis ${back.s}s to ${back.e}s, which puts the presenter back on top`);
+        // An emphasis window lays the presenter OVER the plate, so it must stay
+        // a full output frame clear of a covered window on both sides. Touching
+        // was refused already; a third critic ended one 0.5 ms short and got a
+        // frame of face across a 30 to 25 fps conversion.
+        const gap = 1 / fps;
+        const back = emphasis.find(g => g.s < e + gap && s - gap < g.e);
+        if (back) throw new BadJob(`must_cover[${k}]: emphasis ${back.s}s to ${back.e}s is within a frame of it, which puts the presenter back on top`);
         return { s, e };
       });
 
@@ -1107,9 +1119,18 @@ const JOBS = {
       // only the concat list, so a critic pointed `output` at the take and the
       // take shrank from 107,343 bytes to 21,476 with the job returning ok.
       const partsDirAbs = `${out}.parts`;
-      if (out === take) throw new BadJob('output: is the take itself, which the job would overwrite');
-      if (narOut !== null && (narOut === take || narOut === out)) throw new BadJob('narration_output: collides with the take or the output');
-      if (narOut !== null && narOut.startsWith(partsDirAbs + path.sep)) throw new BadJob('narration_output: inside the working directory the job deletes');
+      // Compared by REAL path: a third critic symlinked the take, pointed
+      // output at the symlink's name, and the cleanup step deleted the take.
+      const realOut = realish(out), realTake = realish(take), realNar = narOut === null ? null : realish(narOut);
+      if (realOut === realTake) throw new BadJob('output: is the take itself, which the job would overwrite');
+      if (realNar !== null && (realNar === realTake || realNar === realOut)) throw new BadJob('narration_output: collides with the take or the output');
+      if (narOut !== null && (narOut.startsWith(partsDirAbs + path.sep) || realNar.startsWith(realish(partsDirAbs) + path.sep))) {
+        throw new BadJob('narration_output: inside the working directory the job deletes');
+      }
+      // The output check reads the frame count an mp4 or mov records; an mkv
+      // does not record one, and a critic's .mkv rendered in full and was then
+      // refused. Refused up front instead.
+      if (!/\.(mp4|mov)$/i.test(out)) throw new BadJob('output: must end .mp4 or .mov');
 
       // Every segment is a whole number of frames, on BOTH tracks. The first
       // cut trimmed audio to the second and video to the frame, so each splice
@@ -1127,7 +1148,7 @@ const JOBS = {
           const s = num(it.start, `edl[${k}].start`, { min: 0, max: 86400 });
           const e = num(it.end,   `edl[${k}].end`,   { min: 0, max: 86400 });
           if (e > takeDur + 1e-6) throw new BadJob(`edl[${k}]: ends at ${e}s, past the take's ${takeDur}s`);
-          if (e - s < minLen) throw new BadJob(`edl[${k}]: ${(e - s).toFixed(3)}s is shorter than two crossfades and a frame`);
+          if (e - s < minLen - 1e-6) throw new BadJob(`edl[${k}]: ${(e - s).toFixed(3)}s is shorter than two crossfades and a frame`);
           if (prevEnd !== null && s < prevEnd - 1e-6) {
             throw new BadJob(`edl[${k}]: starts at ${s}s, before the previous take ends at ${prevEnd}s; take spans must be in time order and must not overlap`);
           }
@@ -1139,7 +1160,7 @@ const JOBS = {
           return { kind, s, e: s + len, len, lines: it.lines };
         }
         const audio = existingPath(it.audio, `edl[${k}].audio`);
-        if (audio === out || audio === narOut) throw new BadJob(`edl[${k}].audio: is also an output, which the job would overwrite`);
+        if (realish(audio) === realOut || realish(audio) === realNar) throw new BadJob(`edl[${k}].audio: is also an output, which the job would overwrite`);
         const d = num(it.duration, `edl[${k}].duration`, { min: minLen, max: 600 });
         return { kind, audio, len: frames(d, true) / fps, source_len: d, lines: it.lines };
       });
@@ -1234,8 +1255,12 @@ const JOBS = {
       });
       const total = t;
       const list = `${partsDir}/list.ffconcat`;
+      // The windows ride inside the output's own metadata, where
+      // presenter_composite reads them back, so a copy of the file keeps them.
+      const tag = VOICE_LAB_TAG + JSON.stringify({ fps, duration: +total.toFixed(6), windows: windows.map(w => ({ start: w.start, end: w.end })) });
       const join = ['-y', ...QUIET, '-f', 'concat', '-safe', '0', '-i', list,
                     '-map', '0:v', '-map', '0:a', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '320k',
+                    '-metadata', `comment=${tag}`,
                     '-movflags', '+faststart', '-t', total.toFixed(6), out];
       if (narOut) join.push('-map', '0:a', '-c:a', 'pcm_s24le', '-t', total.toFixed(6), narOut);
 
@@ -1251,16 +1276,12 @@ const JOBS = {
         patch_durations: items.filter(it => it.kind === 'patch').map(it => +it.len.toFixed(6)),
         patch_source_durations: items.filter(it => it.kind === 'patch').map(it => it.source_len),
         segments: segments.length,
-        must_cover_sidecar: path.relative(WORK_ROOT, sidecar),
+        must_cover_carried_in_file: true,
         letterboxed,
         hdr,
         fps,
       });
 
-      // The sidecar presenter_composite reads next to its base track, so a
-      // caller who forgets must_cover, misspells it or passes the wrong field
-      // still gets every clone window enforced (critic N3).
-      const sidecar = `${out}.must_cover.json`;
       let letterboxed = null;
 
       const { execFile } = require('child_process');
@@ -1282,7 +1303,7 @@ const JOBS = {
 
       return {
         // Exposed so the builder tests can pin every argv without running ffmpeg.
-        plan: { segments, join, list, sidecar },
+        plan: { segments, join, list },
         result,
         // Called by server.js when JOB_TIMEOUT abandons this job. Without it the
         // abandoned job kept its ffmpeg running and the freed slot started the
@@ -1293,7 +1314,7 @@ const JOBS = {
           deadline = Date.now() + Number(process.env.JOB_TIMEOUT_MS || 6 * 3600 * 1000);
           // A failed run must not leave the last good run's files looking
           // current (critic N15), so they go first.
-          for (const f of [out, narOut, sidecar]) if (f) fs.rmSync(f, { force: true });
+          for (const f of [out, narOut]) if (f) fs.rmSync(f, { force: true });
           fs.rmSync(partsDir, { recursive: true, force: true });
 
           // What the take and the clone files really are, read here rather than
@@ -1301,10 +1322,14 @@ const JOBS = {
           // sound can outlast its picture: a hold seeked past the last frame
           // rendered no picture at all, the join dropped the clone line, and the
           // job returned ok (critic N1).
-          const tp = await probeJson(take, ['-select_streams', 'v:0', '-show_entries', 'stream=duration,width,height:format=duration']);
+          const tp = await probeJson(take, ['-select_streams', 'v:0', '-show_entries',
+            'stream=duration,width,height:stream_tags=rotate:stream_side_data=rotation']);
           const vs = (tp.streams || [])[0] || {};
-          const vidEnd = Number(vs.duration ?? tp.format?.duration);
-          if (!(vidEnd > 0)) throw new Error('take: no video stream with a duration');
+          // The PICTURE's own length, never the container's: an mkv records
+          // none per stream, and falling back to the container let a span run
+          // past the last frame with the picture frozen (critic, round three).
+          const vidEnd = Number(vs.duration);
+          if (!(vidEnd > 0)) throw new Error("take: the picture's own length is not in the file; remux it to .mov or .mp4 first");
           for (const it of items) {
             if (it.kind === 'take' && it.e > vidEnd + 0.5 / fps) {
               throw new Error(`take: a span ends at ${it.e.toFixed(3)}s but the picture ends at ${vidEnd.toFixed(3)}s`);
@@ -1323,8 +1348,12 @@ const JOBS = {
             }
           }
           if (size && vs.width && vs.height) {
-            letterboxed = Math.abs(vs.width / vs.height - size.W / size.H) > 0.01
-              ? { source: `${vs.width}x${vs.height}`, canvas: `${size.W}x${size.H}` } : false;
+            // An iPhone portrait take is stored landscape with a rotation flag,
+            // which ffmpeg applies when it decodes.
+            const rot = Math.abs(Number((vs.side_data_list || []).find(d => d.rotation !== undefined)?.rotation ?? vs.tags?.rotate ?? 0)) % 180;
+            const [sw, sh] = rot === 90 ? [vs.height, vs.width] : [vs.width, vs.height];
+            letterboxed = Math.abs(sw / sh - size.W / size.H) > 0.01
+              ? { source: `${sw}x${sh}`, canvas: `${size.W}x${size.H}` } : false;
           }
 
           fs.mkdirSync(partsDir, { recursive: true });
@@ -1333,17 +1362,19 @@ const JOBS = {
           for (const sg of segments) await exec(FF, sg.argv);
           fs.writeFileSync(list, 'ffconcat version 1.0\n' +
             segments.map(sg => `file '${sg.output}'\nduration ${(+sg.argv[sg.argv.length - 2]).toFixed(6)}\n`).join(''));
-          await exec(FF, join);
+          try { await exec(FF, join); }
+          catch (e) { for (const f of [out, narOut]) if (f) fs.rmSync(f, { force: true }); throw e; }
 
           // The output against the plan, every time. A short picture or a short
           // sound is a failure, never a result.
-          const op = await probeJson(out, ['-show_entries', 'stream=codec_type,nb_frames,duration']);
+          const op = await probeJson(out, ['-show_entries', 'stream=codec_type,nb_frames,duration:format_tags=comment']);
           const ov = (op.streams || []).find(x => x.codec_type === 'video') || {};
           const oa = (op.streams || []).find(x => x.codec_type === 'audio') || {};
           const want = Math.round(total * fps);
           const bad = [];
           if (Number(ov.nb_frames) !== want) bad.push(`picture has ${ov.nb_frames} frames, planned ${want}`);
           if (!(Math.abs(Number(oa.duration) - total) < 1 / fps)) bad.push(`sound is ${oa.duration}s, planned ${total.toFixed(6)}s`);
+          if ((op.format?.tags?.comment ?? '') !== tag) bad.push('the clone windows did not land in the file\'s metadata');
           if (narOut) {
             const np = await probeJson(narOut, ['-show_entries', 'format=duration']);
             if (!(Math.abs(Number(np.format?.duration) - total) < 0.002)) bad.push(`narration is ${np.format?.duration}s, planned ${total.toFixed(6)}s`);
@@ -1352,7 +1383,6 @@ const JOBS = {
             for (const f of [out, narOut]) if (f) fs.rmSync(f, { force: true });
             throw new Error(`the joined output does not match the plan, so it was removed: ${bad.join('; ')}`);
           }
-          fs.writeFileSync(sidecar, JSON.stringify({ job: 'take_patch', duration: +total.toFixed(6), fps, windows }, null, 2));
           // Kept on failure, for diagnosis; removed once the join has landed.
           fs.rmSync(partsDir, { recursive: true, force: true });
           return result();
@@ -1924,7 +1954,7 @@ const JOBS = {
       const lines = p.lines.map((l, i) => {
         if (typeof l !== 'string') throw new BadJob(`lines[${i}]: not a string`);
         if (l.length > 4000) throw new BadJob(`lines[${i}]: over 4000 characters`);
-        const toks = alignTokens(l, 'script');
+        const toks = alignTokens(l);
         if (toks.length === 0) throw new BadJob(`lines[${i}]: has no words`);
         return { text: l, toks };
       });
@@ -1961,7 +1991,7 @@ const JOBS = {
           // remembers whether it opens or closes its word, because a reading
           // may only start and end on a word boundary: "this is our year"
           // matched the front half of a spoken "year-end" and cut it mid word.
-          const tk = alignTokens(w.text, 'transcript');
+          const tk = alignTokens(w.text);
           tk.forEach((t, j) => words.push({ tok: t, s, e, opens: j === 0, closes: j === tk.length - 1 }));
         });
         for (let i = 1; i < words.length; i++) {
@@ -1977,17 +2007,25 @@ const JOBS = {
         // cannot interrupt one. The first bound counted starting positions,
         // and a critic held the loop 8.3 s inside it with 41 lines of 1,999
         // words; 20 million comparisons is a fraction of a second here.
+        // Every candidate also costs a fixed 8, and the readings KEPT are capped
+        // at 200,000: one word lines cost one comparison each, and a third
+        // critic held the loop 11 s and grew the heap 2.1 GiB with 399 lines of
+        // "the" against 50,000 words inside the comparison bound alone.
         let budget = 20000000;
+        let kept = 0;
         const occ = lines.map(({ toks }) => {
           const out = [];
           for (const s of byTok.get(toks[0]) || []) {
             if (s + toks.length > W.length) break;
-            budget -= toks.length;
+            budget -= toks.length + 8;
             if (budget < 0) throw new BadJob('lines: too many comparisons to search (over 20,000,000); split the take');
             if (!words[s].opens || !words[s + toks.length - 1].closes) continue;
             let ok = true;
             for (let j = 1; j < toks.length; j++) if (W[s + j] !== toks[j]) { ok = false; break; }
-            if (ok) out.push({ s, e: s + toks.length - 1 });
+            if (ok) {
+              if (++kept > 200000) throw new BadJob('lines: over 200,000 verbatim readings to place; the script repeats itself too much to align, split it');
+              out.push({ s, e: s + toks.length - 1 });
+            }
           }
           return out;
         });
@@ -2092,30 +2130,84 @@ const JOBS = {
 };
 
 /**
- * Lowercase, curly quotes folded to straight, punctuation dropped, split on
- * whitespace and on hyphens. Digits stay digits: "3" and "three" do not match,
- * and that is the safe direction, because a miss sends the line to the clone
- * reading the script, never a guess at what was said.
+ * Words are compared after folding case, accents and curly quotes. Then ONLY
+ * a fixed set of punctuation is dropped: . , ; : ! ? quotes brackets and the
+ * em dash. Every other character that is not a letter a to z, a digit or an
+ * apostrophe inside a word becomes a token of its own, \u0001 plus the
+ * character, so it matches only the same character on the other side.
  *
- * Symbols that carry meaning are NOT punctuation. The first cut dropped them,
- * and a critic got "rose 30% this year" kept for a script that says "rose 30",
- * and "$5 million" kept for "5 million". A % $ euro pound + & degree # @ or =,
- * or a minus sign in front of a digit, now becomes a token that matches
- * nothing on the other side: a script line carrying one always goes to the
- * clone, and a transcript word carrying one breaks any match across it.
+ * The first cut dropped everything else, and a critic got "rose 30% this
+ * year" kept for a script saying "rose 30". The second cut marked a LIST of
+ * symbols so they matched nothing, and a third critic walked "\u00a5500",
+ * "\u00b15", an en dash minus and whole Japanese words straight through it,
+ * while a perfect read of a line with % could never be kept at all.
+ *
+ * Digits stay digits: "3" and "three" do not match, the safe direction. A
+ * comma between digits is dropped ("1,000" is "1000"), a point between digits
+ * is a token ("3.5" never equals "3 5"), and a minus or en dash in front of a
+ * digit is a token.
  */
-function alignTokens(s, side) {
-  const MARK = side === 'script' ? ' \u0001s ' : ' \u0001t ';
-  return String(s)
+function alignTokens(s) {
+  const t = String(s)
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[\u2018\u2019\u02bc]/g, "'")
-    .replace(/(^|[\s(])[-\u2212](?=\d)/g, `$1${MARK}`)
-    .replace(/[%$\u20ac\u00a3+&\u00b0#@=]/g, MARK)
-    .replace(/[^a-z0-9'\s\u0001-]/g, ' ')
-    .split(/[\s-]+/)
-    .map(t => t.replace(/^'+|'+$/g, ''))
-    .filter(Boolean);
+    .replace(/(\d),(?=\d)/g, '$1');
+  const DROP = new Set([',', ';', ':', '!', '?', '"', '\u201c', '\u201d', '(', ')', '[', ']', '{', '}', '\u2014', '\u2026']);
+  const isWord = (c) => /[a-z0-9']/.test(c);
+  const isDigit = (c) => c !== undefined && c >= '0' && c <= '9';
+  const out = [];
+  let word = '';
+  const flush = () => { const w = word.replace(/^'+|'+$/g, ''); if (w) out.push(w); word = ''; };
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i], prev = t[i - 1], next = t[i + 1];
+    if (isWord(c)) { word += c; continue; }
+    if (c === '.' && isDigit(prev) && isDigit(next)) { flush(); out.push('\u0001.'); continue; }
+    if ((c === '-' || c === '\u2212') && isDigit(next) && !(prev && /[a-z0-9]/.test(prev))) {
+      flush(); out.push('\u0001\u2212'); continue;
+    }
+    if (/\s/.test(c) || c === '-' || c === '.' || DROP.has(c)) { flush(); continue; }
+    flush(); out.push('\u0001' + c);
+  }
+  flush();
+  return out;
+}
+
+/**
+ * The clone windows take_patch writes into its output's container metadata,
+ * read back with ffprobe. null when the file carries none. Throws a BadJob
+ * when the file cannot be read at all, so an unreadable base track is refused
+ * rather than composited unchecked.
+ */
+const VOICE_LAB_TAG = 'voicelab-must-cover:';
+let tagReader = (f) => {
+  const { execFileSync } = require('child_process');
+  return JSON.parse(execFileSync(FP, ['-v', 'error', '-show_entries', 'format_tags=comment', '-of', 'json', f],
+    { timeout: 15000, maxBuffer: 4 * 1024 * 1024 }).toString());
+};
+function readVoiceLabWindows(f) {
+  let j;
+  try { j = tagReader(f); }
+  catch (e) { throw new BadJob(`avatar: could not read its tags to check for Voice Lab windows (${String(e.message).split('\n')[0]})`); }
+  const c = j && j.format && j.format.tags && j.format.tags.comment;
+  if (typeof c !== 'string' || !c.startsWith(VOICE_LAB_TAG)) return null;
+  let parsed;
+  try { parsed = JSON.parse(c.slice(VOICE_LAB_TAG.length)); }
+  catch (e) { throw new BadJob(`avatar: its Voice Lab windows are unreadable (${e.message}); re-run take_patch`); }
+  if (!parsed || !Array.isArray(parsed.windows)) throw new BadJob('avatar: its Voice Lab tag has no windows; re-run take_patch');
+  return parsed.windows;
+}
+/** For the builder tests, which run without ffprobe. */
+function setTagReader(fn) { tagReader = fn; }
+
+/** A path's real location, resolving symlinks, for a file that may not exist yet. */
+function realish(p) {
+  try { return fs.realpathSync(p); }
+  catch (_) {
+    try { return path.join(fs.realpathSync(path.dirname(p)), path.basename(p)); }
+    catch (__) { return path.resolve(p); }
+  }
 }
 
 module.exports = { JOBS, BadJob, safePath, existingPath, num, oneOf, setRoot, getRoot, PRESETS,
-                   normalizeChain, isStill, gainEnvelope };
+                   normalizeChain, isStill, gainEnvelope, setTagReader, alignTokens };

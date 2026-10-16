@@ -552,10 +552,19 @@ Things to know before wiring it:
   refused rather than ignored.
 * **A reading starts and ends on a whole spoken word.** "this is our year" no
   longer matches the front half of a spoken "year-end".
-* **Symbols never match.** A script line carrying % $ euro pound + & degree #
-  @ = or a minus sign before a digit always goes to the clone, and a transcript
-  word carrying one breaks any match across it. A second critic had "rose 30"
-  kept against a spoken "rose 30%".
+* **Only a fixed set of punctuation is dropped.** That set is . , ; : ! ?
+  quotes, brackets, the em dash and the ellipsis. Case, accents and curly
+  quotes fold. Every other character becomes a token that matches only itself:
+  % $ euro yen the plus-minus sign, the times sign, kanji, emoji and the rest.
+  So "rose 30%" read as "rose 30%" is kept, while "rose 30" never matches a
+  spoken "rose 30%".
+  * A minus or an en dash before a digit is a token, and a hyphen minus equals
+    a true minus.
+  * A comma between digits drops, so "1,000" is "1000".
+  * A point between digits is a token, so "3.5" never equals "3 5".
+
+  The first cut dropped symbols, the second blocked a list of them, and the
+  third critic walked "¥500" and whole Japanese words through that list.
 * **Digits and number words do not match each other.** Whether ElevenLabs
   speech to text writes a spoken number as digits or as words is unverified
   here. Either way the safe direction holds: a mismatch sends the line to the
@@ -590,9 +599,23 @@ Things to know before wiring it:
   directory.
 * **When the server abandons the job at `JOB_TIMEOUT`, it calls the job's
   `abort()`**, which kills the ffmpeg that job started.
-* **It writes `<output>.must_cover.json` beside the base track.**
-  `presenter_composite` enforces those windows whether or not the caller sends
-  `must_cover`.
+* **Outputs must be `.mp4` or `.mov`, and the take must record the picture's
+  own length.** An mkv records neither the frame count nor a per-stream
+  length, so both are refused rather than half checked.
+* **Collisions are judged by real path**, so a symlinked take cannot be
+  overwritten through its link.
+* **A failed join removes its partial output.**
+* **Stacked emphasis must stay one output frame clear of a covered window.**
+* **The clone windows ride inside the base track's own metadata.** They sit
+  in the container's `comment` tag as `voicelab-must-cover:` plus JSON, and the
+  job reads the tag back before it reports success. `presenter_composite` reads
+  it with ffprobe at submit and enforces those windows whether or not the
+  caller sends `must_cover`.
+  * A window sent as `must_cover` and also carried in the file counts once.
+  * A base track whose tags cannot be read is refused.
+  * The first fix used a sidecar file instead, and a third critic copied the
+    base with `fs_ops` and rendered 46 frames of face under the clone. A copy
+    or a symlink keeps the tag.
 * **`must_cover` asks for each window to sit inside one scheduled cutaway.**
   Under every window it lays a black plate that reaches one output frame past
   each edge. A fade, an empty cutaway or a window edge between two frames
@@ -606,7 +629,12 @@ Things to know before wiring it:
   every segment's sound is a whole number of samples. This line said "a whole
   number" until a critic pointed out that 29 is one and does not divide.
 * **A portrait take on a landscape canvas is pillarboxed.** The result reports
-  it as `letterboxed`, with the source and canvas sizes.
+  it as `letterboxed`, with the source and canvas sizes after the iPhone's
+  rotation flag is applied.
+* **Lay cutaways at least one frame wider than the window on each side.** A
+  hard cut laid exactly on `patch_windows` starts on the frame grid's floor,
+  so two or three frames at its edges show the black plate. That is safe, but
+  it is a visible flash.
 * **The held frame under a patch sits two frames inside the take's end.** With
   the picture on the audio's clock, that is usually the last frame shown, so
   the still can begin one frame before the window.
@@ -651,10 +679,11 @@ pixels, a 440 Hz "voice", and a 1000 Hz mp3 "clone". Then it measures:
   canvas.
 
 Measured in the session container on 2026-10-16 with ffmpeg 6.1.1:
-**15 passed, exit 0**. It has not been run on the box yet. The additions after the
-second critic check five things:
+**16 passed, exit 0**. It has not been run on the box yet. Round three added
+one check: a copy and a symlink of the base track still carry the windows. The
+additions after the second critic check five things:
 
-* the sidecar alone enforces the window;
+* the in-file windows alone enforce the window;
 * a fade over the clone shows the plate;
 * a hard cut on a window edge that rounds up shows no face;
 * a span past the last frame of picture is refused;
