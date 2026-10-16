@@ -92,22 +92,62 @@ const jevNodes = (plans, opts = {}) => {
 
 // ---- the edit is as small as it claims to be ---------------------------------
 
-// Every line of the export survives in the new body, in order, except the five
-// lines of the selection rule (now a function that runs twice) and the last line
-// of the return (three keys appended). Longest common subsequence, so a blank
-// line cannot stand in for a missing one.
+// The whole difference between the export's Build Movie and build_movie.js is
+// pinned, not only what is missing from it. This check used to ask which export
+// lines were gone and nothing else, so a line ADDED outside the Jev code passed:
+// a verifier added `if (segs.length > 40) throw` and every test stayed green.
+// Now the line diff is computed here and its hunks are listed below, each with its
+// kind and its line range on both sides, the text of every line it removes, and
+// the code of every line it adds.
+//
+// A CHANGE TO THE JEV CODE MEANS UPDATING THESE LISTS, ON PURPOSE. Adding,
+// removing or moving a line in build_movie.js shifts a range below and turns this
+// check red, and that is meant: whoever made the edit reads the hunks and says
+// again, in this file, that every line added is Jev's. Do not loosen the check to
+// let an edit through. A new live version of Build Movie turns it red too, and
+// the fix there is to bring the mirror up to date first.
+//
+// The diff is a longest common subsequence walk, so a blank line cannot stand in
+// for a missing one. Ranges count lines from 1. For an add, `inExport` is
+// [n, n] with n the export line the new lines follow (as in diff's `105a106,184`).
+const lineDiff = (a, b) => {
+  const lcs = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+  for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--)
+    lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+  const hunks = [];
+  let open = null;
+  const close = () => { if (open) hunks.push(open); open = null; };
+  for (let i = 0, j = 0; i < a.length || j < b.length;) {
+    if (i < a.length && j < b.length && a[i] === b[j]) { close(); i++; j++; continue; }
+    open ??= { i, j, removed: [], added: [] };
+    if (j < b.length && (i === a.length || lcs[i][j + 1] >= lcs[i + 1][j])) open.added.push(b[j++]);
+    else open.removed.push(a[i++]);
+  }
+  close();
+  return hunks.map((h) => ({
+    kind: !h.removed.length ? "add" : !h.added.length ? "delete" : "change",
+    inExport: h.removed.length ? [h.i + 1, h.i + h.removed.length] : [h.i, h.i],
+    inFile: h.added.length ? [h.j + 1, h.j + h.added.length] : [h.j, h.j],
+    removed: h.removed,
+    added: h.added,
+  }));
+};
 const oldLines = ORIGINAL.split("\n");
 const newLines = NEW_SRC.replace(/\n$/, "").split("\n");
-const lcs = Array.from({ length: oldLines.length + 1 }, () => new Array(newLines.length + 1).fill(0));
-for (let i = oldLines.length - 1; i >= 0; i--) for (let j = newLines.length - 1; j >= 0; j--)
-  lcs[i][j] = oldLines[i] === newLines[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
-const removed = [];
-for (let i = 0, j = 0; i < oldLines.length;) {
-  if (j < newLines.length && oldLines[i] === newLines[j]) { i++; j++; }
-  else if (j < newLines.length && lcs[i][j + 1] >= lcs[i + 1][j]) j++;
-  else removed.push(oldLines[i++]);
-}
-assert.deepEqual(removed, [
+const hunks = lineDiff(oldLines, newLines);
+
+assert.deepEqual(hunks.map(({ kind, inExport, inFile }) => ({ kind, inExport, inFile })), [
+  { kind: "add", inExport: [105, 105], inFile: [106, 184] },     // the Jev block, and the blank line after it
+  { kind: "add", inExport: [106, 106], inFile: [186, 186] },     // the two Jev counters
+  { kind: "add", inExport: [109, 109], inFile: [190, 190] },     // the call that reads Jev's scores
+  { kind: "add", inExport: [110, 110], inFile: [192, 199] },     // the selection rule, as a function
+  { kind: "change", inExport: [118, 122], inFile: [207, 219] },  // the rule's call site: two picks, one used
+  { kind: "change", inExport: [234, 234], inFile: [331, 332] },  // the return, with the Jev keys appended
+], "the diff against the export is not the one listed here; read the note above before editing this list");
+
+// Every line the export has and build_movie.js does not: the five lines of the
+// selection rule that moved into a function, and the last line of the return.
+assert.deepEqual(hunks.flatMap((h) => h.removed), [
   "  let src = cands.find(c => !usedAll.has(c))",
   "         || cands.find(c => !recent.includes(c))",
   "         || cands.find(c => c !== lastSrc)",
@@ -116,8 +156,41 @@ assert.deepEqual(removed, [
   "                  leadPad: LEAD_PAD, runtimeSec: Math.round(bodyEnd), srt, rowId: ROW.rowId, videoTitle: TITLE } }];",
 ]);
 
+// Every line build_movie.js adds belongs to the Jev code. The first hunk is the
+// Jev block: the header comment through the end of jevOrder, then a blank line.
+// Outside functions its only code is the two constants and the two functions, so
+// a statement of any other kind dropped between them shows here.
+const [block, ...glue] = hunks.map((h) => h.added);
+assert.match(block[0], /^\/\/ JEV SHADOW/);
+assert.deepEqual(block.slice(-2), ["}", ""]);
+assert.deepEqual(block.filter((l) => l.trim() && !l.startsWith("//") && !l.startsWith(" ")),
+  ["const JEV_APPLY = false;", "const JEV_FLOOR = 2;", "function readJev() {", "}", "function jevOrder(list, scores) {", "}"]);
+// The other five hunks are glue. Their comment and blank lines carry no code. Their
+// code is exactly this, in this order: the counters, the reader call, the
+// selection rule (the export's own, moved so that it runs over two orders), the
+// two picks with the flag choosing between them, and the three keys returned.
+const GLUE_CODE = [
+  "let jevRanked = 0, jevWouldChange = 0;",
+  "const jev = readJev();",
+  "const pickFrom = (list) => list.find(c => !usedAll.has(c))",
+  "                        || list.find(c => !recent.includes(c))",
+  "                        || list.find(c => c !== lastSrc)",
+  "                        || list[0]",
+  "                        || null;",
+  "  const scores = jev.get(i);",
+  "  const todayPick = pickFrom(cands);",
+  "  const jevPick = pickFrom(jevOrder(cands, scores));",
+  "  if (scores && cands.some(c => scores.has(c))) jevRanked++;",
+  "  if (jevPick !== todayPick) jevWouldChange++;",
+  "  let src = JEV_APPLY ? jevPick : todayPick;",
+  "                  leadPad: LEAD_PAD, runtimeSec: Math.round(bodyEnd), srt, rowId: ROW.rowId, videoTitle: TITLE,",
+  "                  jevRanked, jevWouldChange, jevApplied: JEV_APPLY } }];",
+];
+assert.deepEqual(glue.flat().filter((l) => l.trim() && !/^\s*\/\//.test(l)), GLUE_CODE);
+
 // It ships in shadow, and it follows the house writing rules (no em or en dash).
 assert.equal(NEW_SRC.match(/^const JEV_APPLY = false;$/gm).length, 1);
+assert.equal(NEW_SRC.match(/^const JEV_FLOOR = 2;$/gm).length, 1);
 const DASHES = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
 assert.doesNotMatch(NEW_SRC, DASHES);
 assert.doesNotMatch(readFileSync(new URL(import.meta.url), "utf8"), DASHES);
@@ -234,11 +307,45 @@ for (const apply of [false, true]) {
   assert.deepEqual(srcs(out), [A]);
 }
 
-// Demotion: a score under 1 goes behind clips Jev did not score, and a score of
-// exactly 1 counts as good. A is 0.99 (low), B is not scored, C is exactly 1.
-fx = { ...ONE, jevNodes: jevNodes([[q(A, 1, 0.99), q(B, 2, undefined), q(C, 3, 1)]]) };
-assert.deepEqual(srcs(runNew(fx)), [A]);
-assert.deepEqual(srcs(runNew(fx, { apply: true })), [C]);
+// The floor. JEV_FLOOR is 2, level 2 of the rubric, "fits". A clip scored 2 or
+// more goes first, best first. A clip Jev did not score keeps its Pexels place
+// behind those. A clip scored under 2 goes last, best first. A Jev score is a mean
+// of the level numbers, so 1.999 is a clip that does not quite fit, and a clip
+// that is certainly level 1, clean but about something else, scores exactly 1.
+// The boundary is pinned on both sides. `vs(a, b)` is clips A then B in Pexels
+// order with the scores given (undefined: asked about, not answered).
+const vs = (scoreA, scoreB) => ({ segs: [seg(0)], px: [pex(A, B)], jevNodes: jevNodes([[q(A, 1, scoreA), q(B, 2, scoreB)]]) });
+const picked = (fx) => srcs(runNew(fx, { apply: true }));
+// A later clip jumps an unscored first clip only from exactly 2 up.
+assert.deepEqual(picked(vs(undefined, 2)), [B], "2 is in front of a clip nobody scored");
+assert.deepEqual(picked(vs(undefined, 3)), [B]);
+assert.deepEqual(picked(vs(undefined, 1.999)), [A], "1.999 is behind a clip nobody scored");
+assert.deepEqual(picked(vs(undefined, 1)), [A], "1 was in front under the old floor and is behind now");
+// A scored first clip is pushed behind an unscored one only under 2.
+assert.deepEqual(picked(vs(2, undefined)), [A]);
+assert.deepEqual(picked(vs(1.999, undefined)), [B]);
+assert.deepEqual(picked(vs(1, undefined)), [B]);
+assert.deepEqual(picked(vs(0, undefined)), [B]);
+// Whichever side of the line, shadow keeps today's clip and still reports the segment ranked.
+for (const [a, b] of [[undefined, 2], [undefined, 1.999], [2, undefined], [1.999, undefined], [1, undefined]]) {
+  out = runNew(vs(a, b));
+  assert.deepEqual(srcs(out), [A], a + "/" + b);
+  assert.equal(out.jevRanked, 1, a + "/" + b);
+}
+assert.equal(runNew(vs(undefined, 2)).jevWouldChange, 1);
+assert.equal(runNew(vs(undefined, 1.999)).jevWouldChange, 0);
+assert.equal(runNew(vs(2, undefined)).jevWouldChange, 0);
+assert.equal(runNew(vs(1.999, undefined)).jevWouldChange, 1);
+// Both scored, either side: a score at the floor beats one just under it, in either Pexels order.
+assert.deepEqual(picked(vs(1.999, 2)), [B]);
+assert.deepEqual(picked(vs(2, 1.999)), [A]);
+// All three tiers in one order. A is 1.999 (low), B is not scored, C is exactly 2.
+// Three segments with the same candidates walk it one clip at a time: C, B, A.
+fx = { segs: [seg(0), seg(1), seg(2)], px: [pex(A, B, C), pex(A, B, C), pex(A, B, C)],
+  jevNodes: jevNodes([0, 1, 2].map(() => [q(A, 1, 1.999), q(B, 2, undefined), q(C, 3, 2)])) };
+assert.deepEqual(srcs(runNew(fx)), [A, B, C]);
+assert.deepEqual(picked(fx), [C, B, A]);
+assert.equal(runNew(fx).jevRanked, 3);
 // Score 0 never leads: A is 0, B is not scored, so B goes first.
 fx = { segs: [seg(0)], px: [pex(A, B)], jevNodes: jevNodes([[q(A, 1, 0), q(B, 2, undefined)]]) };
 assert.deepEqual(srcs(runNew(fx, { apply: true })), [B]);
@@ -256,8 +363,9 @@ assert.equal(out.heldClips, 0);
 assert.equal(out.clipCount, 2);
 assert.deepEqual(strip(out), runOld(fx));
 
-// Ties keep Pexels order. B and C tie at 2, A scores 1. Three segments with the
-// same candidates walk the order one clip at a time: B, then C, then A.
+// Ties keep Pexels order. B and C tie at 2, A scores 1 and is under the floor, so
+// it is last. Three segments with the same candidates walk the order one clip at
+// a time: B, then C, then A.
 const same = [q(A, 1, 1), q(B, 2, 2), q(C, 3, 2)];
 fx = { segs: [seg(0), seg(1), seg(2)], px: [pex(A, B, C), pex(A, B, C), pex(A, B, C)], jevNodes: jevNodes([same, same, same]) };
 assert.deepEqual(srcs(runNew(fx, { apply: true })), [B, C, A]);
@@ -274,6 +382,30 @@ fx = { segs: [seg(0), seg(1), seg(2)], px: [pex(A, B, C), pex(A, B, C), pex(A, B
 assert.equal(runNew(fx).jevWouldChange, 0);
 assert.equal(runNew(fx).jevRanked, 3);
 assert.deepEqual(srcs(runNew(fx, { apply: true })), srcs(runOld(fx)));
+
+// jevWouldChange is an estimate for the ruling, not a forecast (the note beside the
+// count in build_movie.js says so). In shadow it is worked out against today's
+// memory of the clips used, and once the flag is on that memory holds Jev's clips
+// instead, so the number of clips that really change can be higher or lower than
+// it. `moved` counts the clips that differ between the shadow run and the applied
+// run. Higher: Jev takes B for segment 0, which leaves A free for segment 1, where
+// today's rule had to take B. The estimate is 1 and 2 clips move.
+const moved = (fx) => { const s = srcs(runNew(fx)), a = srcs(runNew(fx, { apply: true })); return s.filter((x, n) => x !== a[n]).length; };
+fx = { segs: [seg(0), seg(1)], px: [pex(A, B), pex(A, B)], jevNodes: jevNodes([[q(A, 1, 1), q(B, 2, 3)], null]) };
+assert.deepEqual(srcs(runNew(fx)), [A, B]);
+assert.deepEqual(picked(fx), [B, A]);
+assert.equal(runNew(fx).jevWouldChange, 1);
+assert.equal(moved(fx), 2);
+// Lower: Jev takes A for segment 0, and in segment 1 it ranks A first again. In
+// shadow A is not yet used there, so Jev's pick differs from today's B. Once
+// applied A is used by then, Jev falls through to B, and it is today's clip. The
+// estimate is 2 and 1 clip moves.
+fx = { segs: [seg(0), seg(1)], px: [pex(C, B, A), pex(B, A)],
+  jevNodes: jevNodes([[q(C, 1, 1.5), q(B, 2, 0), q(A, 3, 2)], [q(B, 1, 1.5), q(A, 2, 2)]]) };
+assert.deepEqual(srcs(runNew(fx)), [C, B]);
+assert.deepEqual(picked(fx), [A, B]);
+assert.equal(runNew(fx).jevWouldChange, 2);
+assert.equal(moved(fx), 1);
 
 // Scores 0 and 3 are in range. A single scored candidate is still a ranked segment.
 fx = { segs: [seg(0)], px: [pex(A, B)], jevNodes: jevNodes([[q(A, 1, 0), q(B, 2, 3)]]) };
@@ -353,13 +485,28 @@ const bad = {
   "string answer": "3",
   "array answer": [3],
 };
+// A is scored 2, the floor, so it leads and a believed B at 3 would take its place.
 for (const [label, answer] of Object.entries(bad)) {
-  fx = { ...ONE, jevNodes: jevNodes([[q(A, 1, 1), q(B, 2, 3)]], { mutate: (r) => ({ ...r, answers: { ...r.answers, s0c2: answer } }) }) };
+  fx = { ...ONE, jevNodes: jevNodes([[q(A, 1, 2), q(B, 2, 3)]], { mutate: (r) => ({ ...r, answers: { ...r.answers, s0c2: answer } }) }) };
   for (const apply of [false, true]) {
     out = runNew(fx, { apply });
     assert.deepEqual(srcs(out), [A], label);
     assert.equal(out.jevWouldChange, 0, label);
   }
+}
+// The same answers placed FIRST in the response, with a good answer behind them.
+// The guards skip a bad answer with `continue`. A `break` in the score range guard
+// would drop every good answer after the bad one, and no case above can tell,
+// because in each of them the bad answer is last or alone. Here the answer for A
+// is the bad one and the answer for B, behind it, is a 3 that must still count.
+for (const [label, answer] of Object.entries(bad)) {
+  fx = { ...ONE, jevNodes: jevNodes([[q(A, 1, undefined), q(B, 2, undefined)]], { mutate: (r) => ({ ...r, answers: { s0c1: answer, s0c2: { type: "score", score: 3 } } }) }) };
+  assert.deepEqual(Object.keys(fx.jevNodes["Jev: Rank B-Roll"][0].json.answers), ["s0c1", "s0c2"], "the bad answer comes first: " + label);
+  out = runNew(fx);
+  assert.deepEqual(srcs(out), [A], label);
+  assert.equal(out.jevRanked, 1, label);
+  assert.equal(out.jevWouldChange, 1, label);
+  assert.deepEqual(srcs(runNew(fx, { apply: true })), [B], label);
 }
 // The same answers on the first candidate, with nothing else scored. A bad value
 // that looks low (negative, NaN) would demote A or drop it from the order, and
@@ -373,8 +520,8 @@ for (const [label, answer] of Object.entries(bad)) {
     assert.deepEqual(strip(out), oneOld, label);
   }
 }
-// One bad answer does not take its neighbours down: A stays scored 1 and B is bad.
-fx = { ...ONE, jevNodes: jevNodes([[q(A, 1, 1), q(B, 2, 3)]], { mutate: (r) => ({ ...r, answers: { ...r.answers, s0c2: bad["over range"] } }) }) };
+// One bad answer does not take its neighbours down: A stays scored 2 and B is bad.
+fx = { ...ONE, jevNodes: jevNodes([[q(A, 1, 2), q(B, 2, 3)]], { mutate: (r) => ({ ...r, answers: { ...r.answers, s0c2: bad["over range"] } }) }) };
 assert.equal(runNew(fx).jevRanked, 1);
 // Answers under a name nobody asked, a name that is not ours, and no answers at all.
 for (const answers of [{ s0c9: { type: "score", score: 3 } }, { s7c1: { type: "score", score: 3 } }, { c2: { type: "score", score: 3 } },

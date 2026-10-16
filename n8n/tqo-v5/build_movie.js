@@ -111,8 +111,15 @@ function candidates(resp){
 // jevRanked and jevWouldChange on real episodes first. Both are counts of
 // segments and both are returned whether or not the flag is on: jevRanked is the
 // segments where Jev scored at least one candidate, jevWouldChange the segments
-// where Jev's pick differs from today's.
+// where Jev's pick differs from today's (an estimate, see the note at the count).
 const JEV_APPLY = false;
+
+// The score at which a clip counts as one that fits its sentence. A Jev score is
+// a probability weighted mean of the level numbers, so it lands between levels:
+// 1.9 is not level 2. The rubric in Jev: B-Roll Bodies puts "fits" at level 2,
+// and the level under it is a usable picture about something else. At a floor of
+// 1 that picture qualified to be preferred and picked, so the floor is 2.
+const JEV_FLOOR = 2;
 
 // Jev scores by segment: Map of segment position to a Map of clip link to a
 // score from 0 to 3. It fails open everywhere. A Jev node that did not run (the
@@ -158,19 +165,20 @@ function readJev() {
   return bySeg;
 }
 
-// Jev's order of one segment's candidates. A clip scored 1 or more goes first,
-// best score first. A clip Jev did not score keeps its Pexels place behind
-// those. A clip scored under 1 (blank, blurred, watermarked or unrelated) goes
-// last. Equal scores keep Pexels order. Nothing is ever dropped: the same clips
-// come back, only the order differs.
+// Jev's order of one segment's candidates. A clip scored JEV_FLOOR or more goes
+// first, best score first. A clip Jev did not score keeps its Pexels place behind
+// those. A clip scored under JEV_FLOOR (blank, blurred, watermarked, unrelated,
+// or usable but about something else) goes last, best score first. Equal scores
+// keep Pexels order. Nothing is ever dropped: the same clips come back, only the
+// order differs.
 function jevOrder(list, scores) {
   if (!scores) return list.slice();
   const at = (n) => scores.get(list[n]);
   const ix = list.map((_, n) => n);
   const best = (a, b) => (at(b) - at(a)) || (a - b);
-  const top = ix.filter(n => at(n) >= 1).sort(best);
+  const top = ix.filter(n => at(n) >= JEV_FLOOR).sort(best);
   const none = ix.filter(n => at(n) === undefined);
-  const low = ix.filter(n => at(n) < 1).sort(best);
+  const low = ix.filter(n => at(n) < JEV_FLOOR).sort(best);
   return [...top, ...none, ...low].map(n => list[n]);
 }
 
@@ -198,7 +206,11 @@ for (let i = 0; i < segs.length; i++) {
   // previous, then anything.
   // Both picks are always worked out, against the same memory. Today's pick
   // stands unless JEV_APPLY is on. jevWouldChange counts segments where Jev's
-  // pick differs from today's, so it still reads true once the flag is on.
+  // pick differs from today's pick against that memory, the clips used so far.
+  // In shadow that memory holds today's clips. After a flip it holds Jev's,
+  // which differ from today's from the first changed segment on, so the number
+  // of clips that actually change can be higher or lower than jevWouldChange.
+  // It is an estimate for the ruling, not a forecast.
   const scores = jev.get(i);
   const todayPick = pickFrom(cands);
   const jevPick = pickFrom(jevOrder(cands, scores));
