@@ -144,8 +144,30 @@ def go(stub, p=None, **kw):
 
 
 def test_the_shipped_mode_is_shadow():
-    """Flipping this is a ruling and a commit, never a fixture default."""
+    """Flipping this takes a ruling and a commit."""
     assert SHIPPED_ENFORCE is False
+
+
+def test_the_shipped_numbers_are_the_ones_claude_md_states():
+    assert (jev.CONFIDENCE, jev.DEADLINE_S, jev.MAX_INPUT) == (0.8, 2.5, 2000)
+    assert (jev.SCRUB_BUDGET_S, jev.BREAKER_ERRORS, jev.BREAKER_S) == (1.0, 3, 600)
+    section = (ROOT / "CLAUDE.md").read_text().split("## The Jev router")[1].split("\n## ")[0]
+    for stated in ("probability\nof 0.8", "2.5 second", "2,000\ncharacters", "1 second", "three failed", "ten minutes"):
+        assert stated.replace("\n", " ") in section.replace("\n", " "), stated
+
+
+def test_needs_human_at_threshold_asks(stub, enforce):
+    stub.answer(0.0, jev.CONFIDENCE)
+    assert go(stub)["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_a_shadow_deny_does_not_grant_a_repeat_pass(stub, project, monkeypatch):
+    """A row written in shadow mode must not let the call through once ENFORCE flips."""
+    stub.answer(0.95, 0.0)
+    assert go(stub) is None and ledger(project)[-1]["decision"] == "deny"
+    monkeypatch.setattr(jev, "ENFORCE", True)
+    assert go(stub)["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert len(stub.requests) == 2
 
 
 def test_better_tool_at_threshold_denies(stub, project, enforce):
@@ -193,6 +215,20 @@ def test_an_identical_call_is_denied_once_and_then_not_sent(stub, project, enfor
 def test_a_deny_is_not_printed_when_its_row_cannot_be_written(stub, project, monkeypatch, enforce):
     stub.answer(0.95, 0.0)
     monkeypatch.setattr(jev, "write_row", lambda row: False)
+    for _ in range(3):
+        assert go(stub) is None
+
+
+def test_write_row_is_true_only_when_the_row_is_on_disk(project, monkeypatch):
+    assert jev.write_row({"probe": 1}) is True
+    assert ledger(project)[-1] == {"probe": 1}
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", "/dev/null")
+    assert jev.write_row({"probe": 2}) is False
+
+
+def test_an_unwritable_ledger_prints_no_deny_through_the_real_writer(stub, monkeypatch, enforce):
+    stub.answer(0.95, 0.0)
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", "/dev/null")
     for _ in range(3):
         assert go(stub) is None
 
@@ -295,6 +331,63 @@ def test_an_unsafe_endpoint_is_refused_before_any_send(project, url):
     assert ledger(project)[-1]["error"] == "endpoint refused"
 
 
+def test_three_failed_requests_open_the_breaker_for_ten_minutes(project):
+    dead = "http://127.0.0.1:9/v1/systemone"
+    for _ in range(jev.BREAKER_ERRORS):
+        jev.run(payload(), key="k", endpoint=dead, now=NOW, scrub=REAL_SCRUB, timeout=0.5)
+    assert [r["outcome"] for r in ledger(project)] == ["error"] * jev.BREAKER_ERRORS
+    started = time.monotonic()
+    jev.run(payload(), key="k", endpoint=dead, now=NOW, scrub=REAL_SCRUB, timeout=0.5)
+    assert ledger(project)[-1]["outcome"] == "breaker_open"
+    assert "latency_ms" not in ledger(project)[-1]
+    assert time.monotonic() - started < 0.4
+    later = NOW.replace(minute=NOW.minute + 10)
+    jev.run(payload(), key="k", endpoint=dead, now=later, scrub=REAL_SCRUB, timeout=0.5)
+    assert ledger(project)[-1]["outcome"] == "error", "the breaker must let one request through after BREAKER_S"
+
+
+def test_an_answer_closes_the_breaker(stub, project):
+    for _ in range(jev.BREAKER_ERRORS - 1):
+        jev.run(payload(), key="k", endpoint="http://127.0.0.1:9/v1/systemone", now=NOW, scrub=REAL_SCRUB, timeout=0.5)
+    go(stub)
+    jev.run(payload(), key="k", endpoint="http://127.0.0.1:9/v1/systemone", now=NOW, scrub=REAL_SCRUB, timeout=0.5)
+    go(stub)
+    assert ledger(project)[-1]["outcome"] == "answered"
+
+
+def test_the_repeat_pass_reads_only_the_ledger_tail(stub, project, enforce):
+    stub.answer(0.95, 0.0)
+    go(stub)
+    path = project / ".claude" / "ledger" / "jev-route.jsonl"
+    deny = path.read_text()
+    path.write_text('{"pad": "%s"}\n' % ("x" * 200) * 40000 + deny)
+    started = time.monotonic()
+    assert go(stub) is None
+    assert ledger(project)[-1]["outcome"] == "repeat_pass"
+    assert time.monotonic() - started < 0.5
+
+
+def test_a_key_with_a_trailing_newline_is_stripped_and_never_written(stub, project):
+    go(stub, key="tsk_live_abcDEF123456xyz\n")
+    assert stub.requests[-1]["headers"]["Authorization"] == "Bearer tsk_live_abcDEF123456xyz"
+    assert "tsk_live" not in (project / ".claude" / "ledger" / "jev-route.jsonl").read_text()
+
+
+def test_a_key_a_header_cannot_carry_is_refused_before_any_send(stub, project):
+    go(stub, key="tsk_live_abc\nDEF123456xyz")
+    assert stub.requests == []
+    assert "tsk_live" not in (project / ".claude" / "ledger" / "jev-route.jsonl").read_text()
+
+
+def test_an_error_message_carrying_the_key_is_scrubbed(project, monkeypatch):
+    def leaky(body, key, endpoint, deadline):
+        raise ValueError("Invalid header value b'Bearer %s'" % key)
+    monkeypatch.setattr(jev, "ask_within", leaky)
+    jev.run(payload(), key="tsk_live_abcDEF123456xyz", endpoint="http://127.0.0.1:9/v1/systemone", now=NOW, scrub=REAL_SCRUB)
+    row = ledger(project)[-1]
+    assert row["outcome"] == "error" and "tsk_live" not in row["error"]
+
+
 def test_the_shipped_endpoint_and_model():
     assert jev.ENDPOINT == "https://api.typesafe.ai/v1/systemone" and jev.endpoint_ok(jev.ENDPOINT)
     assert jev.MODEL.startswith("jev-")
@@ -359,6 +452,51 @@ def test_an_unterminated_private_key_is_still_cut(stub):
     assert "MIIEowIBAAKCAQEA" not in sent_text(stub)
 
 
+PLAIN = "correcthorsebattery42"
+
+
+@pytest.mark.parametrize("tool_input", [
+    {"password": PLAIN},
+    {"username": "tee", "password": PLAIN},
+    {"variables": {"DB_PASSWORD": PLAIN}},
+    {"env": {"DB_PASSWORD": PLAIN, "N8N_VPS_KEY": "Zq81nT0wUv44"}},
+    {"key": "DB_PASSWORD", "value": PLAIN},
+    {"name": "SMTP_PASS", "value": PLAIN},
+    {"env": [{"name": "SMTP_PASS", "value": PLAIN}]},
+    {"headers": {"x-devon-key": PLAIN}},
+    {"headers": {"Authorization": "Bearer " + PLAIN}},
+    {"credentials": {"user": "tee", "secret": {"value": PLAIN}}},
+    {"auth": [PLAIN]},
+    {"token": "abc"},
+])
+def test_a_value_under_a_secret_name_never_leaves(stub, tool_input):
+    """An MCP input is structured: the name sits in the key or a sibling field,
+    so the value must be judged by its name and not by its shape."""
+    go(stub, payload(tool="mcp__railway__set_variables", tool_input=tool_input))
+    text = sent_text(stub)
+    assert PLAIN not in text and "Zq81nT0wUv44" not in text and "abc" not in text.split("token: ")[-1]
+
+
+def test_the_name_beside_a_secret_still_leaves(stub):
+    go(stub, payload(tool="mcp__railway__set_variables", tool_input={"name": "SMTP_PASS", "value": PLAIN, "service": "web"}))
+    text = sent_text(stub)
+    assert "name: SMTP_PASS" in text and "value: [REDACTED]" in text
+
+
+def test_a_token_used_as_a_dict_key_never_leaves(stub):
+    go(stub, payload(tool="mcp__x__y", tool_input={SECRETS["ghp"]: "label", "Authorization: Bearer abcdefgh12345678": "x"}))
+    text = sent_text(stub)
+    assert SECRETS["ghp"] not in text and "abcdefgh12345678" not in text
+
+
+def test_ordinary_mcp_fields_still_leave(stub):
+    go(stub, payload(tool="mcp__github__create_pull_request",
+                     tool_input={"owner": "tdveal74-cell", "repo": "app", "title": "Fix the sweep", "draft": True}))
+    text = sent_text(stub)
+    for line in ("owner: tdveal74-cell", "repo: app", "title: Fix the sweep", "draft: True"):
+        assert line in text
+
+
 def test_the_path_survives_a_long_body(stub):
     go(stub, payload(tool="Write", tool_input={"file_path": "/repo/notes/plan.md", "content": "word " * 2000}))
     text = sent_text(stub)
@@ -366,18 +504,99 @@ def test_the_path_survives_a_long_body(stub):
     assert len(text) <= jev.MAX_INPUT
 
 
-def test_scrubbing_happens_before_the_cut(stub, monkeypatch):
-    """A secret that straddles the MAX_INPUT edge must not leave as a prefix."""
+def test_the_path_survives_whatever_order_the_keys_arrive_in(stub):
+    go(stub, payload(tool="Write", tool_input={"content": "word " * 2000, "file_path": "/repo/notes/plan.md"}))
+    assert sent_text(stub).startswith("file_path: /repo/notes/plan.md")
+
+
+@pytest.mark.parametrize("pad", [" ", "\n", "w "])
+def test_scrubbing_happens_before_the_cut(stub, pad):
+    """A secret that straddles the MAX_INPUT edge must not leave as a prefix.
+    The padding is separate words, so the secret is a word of its own and the
+    order of scrub and cut decides whether its prefix leaves."""
     secret = SECRETS["ghp"]
-    content = "a" * (jev.MAX_INPUT - len("content: ") - 10) + secret
+    content = (pad * jev.MAX_INPUT)[:jev.MAX_INPUT - len("content: ") - 10] + secret
     go(stub, payload(tool="Write", tool_input={"content": content}))
-    assert secret[:10] not in sent_text(stub)
+    assert secret[:6] not in sent_text(stub)
+
+
+def test_no_fragment_survives_the_slice_edge():
+    """A token cut in half by SCRUB_SLICE is too short for any rule to know."""
+    tokens = ["%040x" % (0x9F3B << 140 | i * 7919 + 13) for i in range(70)]
+    for lead in range(0, 41, 3):
+        text = jev.call_text({"command": " " * lead + " ".join(tokens)}, REAL_SCRUB)
+        words = [w for w in text.replace("command:", "").split() if w != "[REDACTED]"]
+        assert words == [], (lead, words)
 
 
 def test_scrubbing_a_huge_input_stays_fast(stub):
     started = time.monotonic()
     go(stub, payload(tool="Write", tool_input={"file_path": "/x", "content": "a=" * 80000}))
     assert time.monotonic() - started < 2.0
+
+
+def test_many_pathological_leaves_stay_inside_the_scrub_budget():
+    """The gate's NAME=value rule is quadratic on long runs. One leaf is bounded
+    by the slice; the number of leaves is bounded by the budget."""
+    tool_input = {"k%d" % i: "a." * 1300 for i in range(40)}
+    started = time.monotonic()
+    jev.call_text(tool_input, REAL_SCRUB)
+    assert time.monotonic() - started < jev.SCRUB_BUDGET_S + 0.6
+
+
+def test_a_huge_list_is_cut_at_max_leaves():
+    started = time.monotonic()
+    text = jev.call_text({"ids": list(range(500000))}, REAL_SCRUB)
+    assert time.monotonic() - started < 0.5
+    assert text.count("\n") < jev.MAX_LEAVES
+
+
+# One sample per outbound rule that only that rule catches, after the gate's own
+# scrubber has run. The secret part must survive every other rule.
+ONLY_THIS_RULE = [
+    ("-----BEGIN OPENSSH PRIVATE KEY-----\nb3Bl bnNz\n-----END OPENSSH PRIVATE KEY-----", "b3Bl bnNz"),
+    ("echo ghu_abcdefghij0123456789", "ghu_abcdefghij"),
+    ("echo n8n_api_0123456789abcdef01234567", "0123456789abcdef01234567"),
+    ("echo 0123456789abcdef0123456789abcdef", "0123456789abcdef0123456789abcdef"),
+    ("echo QWxhZGRpbjpvcGVuIHNl/c2FtZQx9+abc12zz34", "QWxhZGRpbjpvcGVuIHNl"),
+    ('curl -H "X-Auth: glpat-' 'aB3dE5gH7jK9mN1pQ3sT"', "aB3dE5gH7jK9mN1pQ3sT"),
+    ('curl -H "X-Auth: shpat_' '0123456789abcdef0123456789abcdef"', "0123456789abcdef0123456789abcdef"),
+    ('curl -H "X-Auth: SG.abcdefghijklmnopqrstuv.wxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefg"', "abcdefghijklmnopqrstuv"),
+    ('curl -H "X-Auth: hf_' 'aBcDeFgHiJkLmNoPqRsTuVwXyZaBcDeFgH"', "hf_aBcDeFgH"),
+    ("mysql --password=abc12", "abc12"),
+]
+
+
+def test_every_outbound_rule_is_needed():
+    assert len(ONLY_THIS_RULE) == len(jev.OUTBOUND_SHAPES)
+    for i, (sample, secret) in enumerate(ONLY_THIS_RULE):
+        assert secret in REAL_SCRUB(sample), (i, "the gate already catches this sample")
+        without = REAL_SCRUB(sample)
+        for j, shape in enumerate(jev.OUTBOUND_SHAPES):
+            if j != i:
+                without = shape.sub(jev._redact, without)
+        assert secret in without, (i, "another rule already catches this sample")
+        assert secret not in jev.outbound(sample, REAL_SCRUB), i
+
+
+@pytest.mark.parametrize("text,secret", [
+    ("Server=db;Uid=sa;Pwd=abc12;", "abc12"),
+    ("export DB_PWD=abc12", "abc12"),
+    ('{"token": "abc"}', '"abc"'),
+    ("password: hunter2", "hunter2"),
+])
+def test_a_short_value_after_a_secret_name_never_leaves(text, secret):
+    assert secret not in jev.outbound(text, REAL_SCRUB)
+
+
+@pytest.mark.parametrize("command", [
+    "ls /var/lib/postgresql/16/main",
+    "pip install -r requirements.txt",
+    "git commit -m 'Fix the sweep' && git push -u origin claude/jev-route-hook",
+    "PYTHONPATH=$PWD:$PWD/apps/api python3 -m pytest -q test_jev_route.py",
+])
+def test_ordinary_commands_leave_unchanged(command):
+    assert jev.outbound(command, REAL_SCRUB) == command
 
 
 def test_the_request_shape_and_key(stub):
@@ -427,16 +646,34 @@ def test_main_fails_open_on_a_crash(stub, monkeypatch):
     assert rc == 0 and out == ""
 
 
-def test_main_on_garbage_stdin_prints_nothing(stub, monkeypatch):
-    rc, out = run_main(monkeypatch, "not json", stub.url)
+@pytest.mark.parametrize("stdin_text", ["not json", "[]", "{}", '{"tool_name": 7}', '{"tool_input": {"command": "ls"}}'])
+def test_main_on_bad_input_sends_nothing_and_says_so(stub, project, monkeypatch, stdin_text):
+    rc, out = run_main(monkeypatch, stdin_text, stub.url)
     assert rc == 0 and out == ""
+    assert stub.requests == []
+    assert ledger(project)[-1]["outcome"] == "bad_input"
+
+
+def test_a_crash_inside_run_still_leaves_a_row(stub, project, monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("Bearer tsk_live_abcDEF123456xyz")
+    monkeypatch.setattr(jev, "run", boom)
+    run_main(monkeypatch, json.dumps(payload()), stub.url)
+    row = ledger(project)[-1]
+    assert row["outcome"] == "crash" and row["error"] == "RuntimeError"
+
+
+def test_a_lone_surrogate_is_sent_and_recorded(stub, project, monkeypatch):
+    rc, out = run_main(monkeypatch, '{"tool_name": "Bash", "session_id": "s", "tool_input": {"command": "echo \\ud800"}}', stub.url)
+    assert rc == 0 and len(stub.requests) == 1
+    assert ledger(project)[-1]["outcome"] == "answered"
 
 
 def test_main_reads_only_the_key_and_the_project_dir_from_the_environment():
     source = HOOK.read_text()
-    reads = set(re.findall(r'(?:environ\.get|getenv)\(\s*"([A-Z_]+)"', source))
+    reads = set(re.findall(r"""(?:environ\.get|getenv)\(\s*["']([A-Za-z_]+)["']""", source))
     assert reads == {"CLAUDE_PROJECT_DIR", "TYPESAFE_API_KEY"}
-    assert "os.environ[" not in source
+    assert "os.environ[" not in source and "environ.copy" not in source and "dict(os.environ" not in source
 
 
 # --------------------------------------------------------------- the wiring
@@ -447,6 +684,10 @@ def jev_group():
     groups = [g for g in settings["hooks"]["PreToolUse"] if any("jev_route.py" in h["command"] for h in g["hooks"])]
     assert len(groups) == 1
     return groups[0]
+
+
+def test_the_matcher_names_exactly_the_tools_claude_md_names():
+    assert jev_group()["matcher"] == "^(Bash|bash|Edit|Write|NotebookEdit|mcp__.*)$"
 
 
 def test_the_matcher_is_exact_under_substring_search():
@@ -461,7 +702,12 @@ def test_the_matcher_is_exact_under_substring_search():
 def test_the_wrapper_maps_any_failure_to_a_visible_non_blocking_exit():
     hooks = jev_group()["hooks"]
     assert [h["command"] for h in hooks] == [WRAPPER]
-    assert all(h["timeout"] > jev.DEADLINE_S for h in hooks)
+    assert [h["timeout"] for h in hooks] == [5]
+
+
+def test_the_worst_case_fits_inside_the_hook_timeout():
+    """Start up, one scrub budget plus one leaf past it, the deadline: under 5 s."""
+    assert jev.SCRUB_BUDGET_S + 0.5 + jev.DEADLINE_S + 0.5 < jev_group()["hooks"][0]["timeout"]
 
 
 def test_no_em_or_en_dashes_in_the_hook_or_this_file():

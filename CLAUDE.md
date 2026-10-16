@@ -751,32 +751,49 @@ yes/no questions in one request: would a dedicated tool (Read, Grep, Glob,
 Edit, Write) do this step better, and does the step change something outside
 the repository or something that cannot be undone. At or above a probability
 of 0.8 the second asks Tee and, failing that, the first denies the call with a
-reason. Every other answer prints nothing, and the hook never prints allow, so
-it can narrow what runs and never widen it. Read, Grep and Glob are not sent.
+reason. Every other answer prints nothing. The hook never prints allow, so it
+can only narrow what runs. Read, Grep and Glob are not sent.
 
 It ships in shadow mode, `ENFORCE = False`: it asks, records the answer and
 prints nothing. Turning it on is a ruling and a one line commit, and
 `test_jev_route.py` pins the shipped value so a fixture cannot flip it quietly.
+A deny recorded in shadow mode never counts as the first of the two tries
+below, so flipping the flag starts every session clean.
 
 It cannot pick a tool, choose a path or retry. Jev answers typed questions and
 writes no text, and no hook can swap one tool for another.
 
-It fails open, inside a 2.5 second deadline that covers the whole call, DNS
-included. With no `TYPESAFE_API_KEY`, a refused host, a redirect, the deadline
-passing or a malformed answer, the call runs exactly as it would without the
-hook, so a quiet hook proves nothing. `.claude/ledger/jev-route.jsonl` records
-the outcome of every call it sees (`no_key`, `error`, `answered`,
-`repeat_pass`) with both probabilities and the latency, and that file is the
-only evidence that Jev decided anything. A deny prints only after its ledger
-row is written, because that row is what lets the identical call through the
-second time, so a wrong answer costs at most one detour per session.
+It fails open. The request to Jev, DNS included, runs inside a 2.5 second
+deadline, and scrubbing has its own 1 second budget, so the hook finishes
+inside its 5 second timeout. With no `TYPESAFE_API_KEY`, a refused host, a
+redirect, the deadline passing or a malformed answer, the call runs exactly as
+it would without the hook, so a quiet hook proves nothing. After three failed
+requests in a row it sends nothing for ten minutes, so a dead vendor costs
+three deadlines and not one per call.
 
-Every call it sees leaves the container: the tool name and up to 2,000
-characters of its input. Every string in the input is scrubbed on its own, as
-raw text, before anything is joined or encoded: the gate ledger's `scrub`,
-then outbound rules for private keys, GitHub tokens and long key shaped runs.
-If the scrubber cannot load, nothing is sent. A redirect is refused, so the
-key never follows one. The ledger keeps a hash of the input, never the input.
+`.claude/ledger/jev-route.jsonl` gets one row for each call the hook sees, and
+that file is the only evidence that Jev decided anything. The outcome is
+`answered`, `error`, `no_key`, `repeat_pass`, `breaker_open`, `bad_input` or
+`crash`. Only an `answered` row carries the two probabilities, and only a row
+that made a request carries the latency. A deny prints only after its ledger
+row is written, because that row is what lets the identical call through the
+second time. So a wrong deny costs one detour per distinct call per session,
+and an ask goes to Tee every time.
+
+Nothing leaves without a key, a scrubber that loaded and a valid input. Then
+the tool name and up to 2,000 characters of its input leave the container, one
+`path: value` line per scalar, shortest first so a file path survives a long
+body. A value under a secret sounding key (password, token, any key containing
+`key`, and the rest of `SECRET_NAME`) is replaced whole, and so is every value
+beside a `name` or `key` field that holds such a name, which is how MCP tools
+that set variables carry them. That rule errs wide. Every other value, and
+every dict key, is scrubbed as raw text: the gate ledger's `scrub`, then
+outbound rules for private keys, GitHub, GitLab, Shopify, SendGrid and Hugging
+Face tokens, long key shaped runs and short `NAME=value` pairs. A long path
+with no `.`, `-` or `_` in it is redacted as if it were a token; the scrubber
+errs toward sending less. A redirect is refused, so the key never follows one.
+A key with a stray newline is stripped, and an error message is scrubbed
+before it is written. The ledger stores a hash of the input and no copy of it.
 
 The request and answer shapes were checked against TypeSafe's live spec,
 `api.typesafe.ai/openapi.json` version 0.2.0, and the official `typesafe-sdk`
