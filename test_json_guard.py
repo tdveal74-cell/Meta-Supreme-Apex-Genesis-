@@ -79,3 +79,26 @@ def test_a_body_over_the_cap_is_not_parsed():
     assert len(big) > MAX_CHECKED_BYTES
     r = post("/api/v1/auth/login", big)
     assert r.json().get("detail") != MESSAGE
+
+
+RAW_LONE = bytes([0xED, 0xA0, 0x80])  # U+D800 as three raw UTF-8 bytes
+
+
+@pytest.mark.parametrize("path", ["/api/v1/auth/login", "/api/v1/auth/register"])
+@pytest.mark.parametrize("name,body", [
+    ("raw utf-8 bytes", b'{"email": "' + RAW_LONE + b'", "password": "x"}'),
+    ("raw bytes in a password", b'{"email": "a@x.com", "password": "' + RAW_LONE + b'"}'),
+    ("utf-16 with the escape text", ('{"email": "' + LONE_HIGH + '", "password": "x"}').encode("utf-16")),
+    ("utf-16-le with raw surrogate",
+     '{"email": "'.encode("utf-16-le") + b"\x00\xd8" + '", "password": "x"}'.encode("utf-16-le")),
+])
+def test_a_surrogate_that_arrives_as_bytes_is_answered_422(path, name, body):
+    r = client.post(path, content=body, headers={"content-type": "application/json"})
+    assert r.status_code == 422, name
+    assert r.json()["detail"] == MESSAGE
+
+
+def test_ordinary_non_ascii_text_still_passes():
+    text = '{"email": "a@x.com", "password": "caf' + chr(0xE9) + ' ' + chr(0x2603) + '"}'
+    assert not body_has_lone_surrogate(text.encode("utf-8"))
+    assert not body_has_lone_surrogate(text.encode("utf-16"))

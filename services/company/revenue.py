@@ -41,10 +41,15 @@ def sum_month_revenue(charges: Iterable[dict]) -> RevenueReading:
     total_cents = 0
     counted = 0
     disputed = 0
+    uncaptured = 0
     for charge in charges:
         if not isinstance(charge, dict):
             raise RevenueUnreadable("a charge is not an object")
         if charge.get("status") != "succeeded" or charge.get("paid") is not True:
+            continue
+        if charge.get("captured") is False:
+            # An authorization that was never captured holds funds and takes none.
+            uncaptured += 1
             continue
         if str(charge.get("currency", "")).lower() != "usd":
             raise RevenueUnreadable(
@@ -59,6 +64,8 @@ def sum_month_revenue(charges: Iterable[dict]) -> RevenueReading:
         if charge.get("disputed") is True:
             disputed += 1
     notes: List[str] = []
+    if uncaptured:
+        notes.append(f"{uncaptured} uncaptured authorization(s) are not counted as revenue.")
     if disputed:
         notes.append(f"{disputed} disputed charge(s) are counted at face value; dispute outcomes are unknown.")
     return RevenueReading(
