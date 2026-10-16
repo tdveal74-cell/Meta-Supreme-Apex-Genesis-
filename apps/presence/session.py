@@ -420,10 +420,21 @@ class PresenceSession:
                 # and the wait still wakes the next iteration.
                 frames_ready.clear()
                 audio_ms = self.pacer.now_ms() - speech_start
-                for frame in buffer.drain(audio_ms, self.behind_ms):
-                    await self.emit(
-                        frame_message(turn_id, frame.seq, frame.at_ms, frame.priority, frame.weights)
-                    )
+                due = buffer.drain(audio_ms, self.behind_ms)
+                for index, frame in enumerate(due):
+                    try:
+                        await self.emit(
+                            frame_message(turn_id, frame.seq, frame.at_ms, frame.priority, frame.weights)
+                        )
+                    except asyncio.CancelledError:
+                        # An interrupt landed part way through a drained batch.
+                        # What has not left goes back on the queue, so the flush
+                        # that follows counts it dropped and frames_sent stays
+                        # what the client received. Under load one drain can
+                        # carry two windows, and until this the rest counted as
+                        # sent though it never reached the socket.
+                        buffer.requeue(due[index:])
+                        raise
                 if producer.done():
                     producer.result()
                     if len(buffer) == 0 and audio_ms >= timeline_end:

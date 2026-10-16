@@ -151,3 +151,30 @@ def test_snapshot_reports_the_counters():
     assert snapshot["dropped_total"] == 1
     assert snapshot["queued"] == 0
     assert snapshot["window_ms"] == 100.0
+
+
+def test_requeued_frames_are_not_sent_and_a_flush_counts_them_dropped():
+    # An interrupt that lands while a drained batch is still leaving gives the
+    # unsent rest back. Found 2026-10-16: under CPU load one drain carried two
+    # windows, the cancel hit after the first, and frames_sent read 16 while
+    # the client had received 8.
+    buffer = SlidingWindowBuffer(window_ms=250, frame_ms=10)
+    _push_run(buffer, 6, 0)
+    due = buffer.drain(audio_ms=0)
+    assert buffer.sent == 6
+
+    buffer.requeue(due[2:])
+
+    assert buffer.sent == 2
+    assert len(buffer) == 4
+    assert buffer.flush() == 4
+    assert buffer.dropped_total == 4 and buffer.sent == 2
+
+
+def test_requeued_frames_keep_timeline_order():
+    buffer = SlidingWindowBuffer(window_ms=250, frame_ms=10)
+    _push_run(buffer, 4, 0)
+    due = buffer.drain(audio_ms=0)
+    buffer.push(500, {"jawOpen": 0.4}, 0)
+    buffer.requeue(due[1:])
+    assert [frame.at_ms for frame in buffer.drain(audio_ms=1000)] == [10.0, 20.0, 30.0, 500.0]
