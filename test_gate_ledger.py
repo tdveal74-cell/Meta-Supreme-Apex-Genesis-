@@ -770,14 +770,18 @@ def test_the_local_desktop_commander_plugin_is_not_the_vps():
 
 
 # Runpod, ruled by Tee 2026-10-16 on a card. Its tools start, stop and delete
-# paid GPU pods. The verbs below are the tool names the runpod@runpod plugin
-# 1.7.4 documents in its skills, under the server names it can arrive as.
+# paid GPU pods. The verbs below are MCP tool names listed in the runpod@runpod
+# plugin 1.7.4 concept files (pod-action is how pods start and stop), plus
+# report_feedback from Runpod's agent setup guide, under the server names the
+# plugin can arrive as.
 RUNPOD_SERVERS = ("plugin_runpod_runpod", "runpod", "claude_ai_Runpod")
 
 
 @pytest.mark.parametrize("server", RUNPOD_SERVERS)
 @pytest.mark.parametrize("verb", [
-    "create-pod", "delete-pod", "update-pod", "stop-pod", "start-pod",
+    "create-pod", "delete-pod", "update-pod", "pod-action",
+    "create-delegation", "revoke-delegation", "retry-job", "runsync-endpoint",
+    "delete-endpoint",
     "run-endpoint", "cancel-job", "purge-endpoint-queue", "deploy-hub-repo",
     "set-endpoint-gpus", "create-endpoint", "update-endpoint",
     "create-network-volume", "delete-network-volume", "create-template",
