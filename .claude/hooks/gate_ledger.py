@@ -101,6 +101,11 @@ NAMED_SERVERS = (
     # name and the claude_ai_ connector name, not the local plugin server
     # "desktop-commander", which runs inside this container.
     "desktop_commander",
+    # Runpod starts, stops and deletes paid GPU pods. Ruled by Tee 2026-10-16 on
+    # a card, the day the runpod@runpod plugin was installed. Matches the plugin
+    # server (plugin_runpod_runpod), a direct "runpod" registration and a
+    # claude.ai connector name. Reads such as list-pods and get-pod still pass.
+    "runpod",
 )
 # On a named server every tool is gated EXCEPT a read. Listing the reads is the
 # safer direction: a write verb nobody thought of is caught, and the cost of a
