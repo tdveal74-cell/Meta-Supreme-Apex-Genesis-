@@ -69,9 +69,9 @@ const stillsOf = (findStill) => stills(findStill).map((i) => i.json);
 
 // The same photos Pick Still would consider, in order, with the url it would draw.
 assert.deepEqual(stillsOf(THREE), [
-  { k: 1, photoId: 1001, url: U1 },
-  { k: 2, photoId: 1002, url: U2 },
-  { k: 3, photoId: 1003, url: U3 },
+  { k: 1, photoId: 1001, url: U1, fetchUrl: U1 },
+  { k: 2, photoId: 1002, url: U2, fetchUrl: U2 },
+  { k: 3, photoId: 1003, url: U3, fetchUrl: U3 },
 ]);
 // At most three, even if Pexels sent more.
 assert.deepEqual(stillsOf(response([P1, P2, P3, photo(1004), photo(1005)])).map((s) => s.k), [1, 2, 3]);
@@ -79,6 +79,27 @@ assert.deepEqual(stillsOf(response([P1, P2, P3, photo(1004), photo(1005)])).map(
 const noLandscape = photo(2001); delete noLandscape.src.landscape;
 const onlyLarge = photo(2002); delete onlyLarge.src.landscape; delete onlyLarge.src.large2x;
 assert.deepEqual(stillsOf(response([noLandscape, onlyLarge])).map((s) => s.url), [noLandscape.src.large2x, onlyLarge.src.large]);
+// url stays what Pick Still draws, because Pick Still matches scores by it. fetchUrl
+// is what the HTTP fetch node reads: landscape, else large, never large2x.
+// TypeSafe takes 280 to 1568 pixels a side and one rejected image fails the whole
+// request. The synthetic large2x above carries dpr=2 with w=940, which is about
+// 1880 pixels wide if Pexels documents it so; that is unverified here, no live
+// Pexels response was read, and the test only pins that large2x is never fetched.
+// Landscape missing, large2x and large present: url is large2x, fetchUrl is large.
+assert.deepEqual(stillsOf(response([noLandscape])), [{ k: 1, photoId: 2001, url: noLandscape.src.large2x, fetchUrl: noLandscape.src.large }]);
+assert.notEqual(noLandscape.src.large2x, noLandscape.src.large);
+// Only large2x: nothing to fetch inside the size limit, so no item, and k keeps its place.
+const onlyLarge2x = photo(2006); delete onlyLarge2x.src.landscape; delete onlyLarge2x.src.large;
+assert.deepEqual(stillsOf(response([onlyLarge2x])), []);
+assert.deepEqual(stillsOf(response([P1, onlyLarge2x, P3])).map((s) => s.k), [1, 3]);
+// Only large: url and fetchUrl are both large.
+assert.deepEqual(stillsOf(response([onlyLarge])), [{ k: 1, photoId: 2002, url: onlyLarge.src.large, fetchUrl: onlyLarge.src.large }]);
+// Normal case: url and fetchUrl are both landscape, and every item is just these four keys.
+assert.deepEqual(stillsOf(response([P1]))[0], { k: 1, photoId: 1001, url: U1, fetchUrl: U1 });
+for (const s of stillsOf(THREE)) assert.equal(s.url, s.fetchUrl);
+// fetchUrl obeys the Pexels host rule as well: a large on another host is not fetched.
+const foreignLarge = photo(2007); delete foreignLarge.src.landscape; foreignLarge.src.large = "https://evil.example/photos/2007.jpeg";
+assert.deepEqual(stillsOf(response([foreignLarge])), []);
 // Only the Pexels image host is fetched. The photo is skipped and k keeps its place.
 const foreign = photo(2003); foreign.src.landscape = "https://evil.example/photos/2003.jpeg";
 const lookalike = photo(2004); lookalike.src.landscape = "https://images.pexels.com.evil.example/x.jpeg";
@@ -191,6 +212,27 @@ assert.deepEqual(Object.keys(bodyOf([BIG, JPEG, BIG])[0].json.body.questions), [
 // Once one photo overflows, every photo after it goes too, small or not.
 assert.deepEqual(Object.keys(bodyOf([BIG, BIG, JPEG])[0].json.body.questions), ["p1"]);
 assert.deepEqual(bodyOf(["/9j/" + "A".repeat(20000001), JPEG, JPEG]), []);
+// The cap itself. Two stills of exactly 10,000,000 characters each total exactly
+// 20,000,000 and both fit, because only a total OVER the cap is refused. A third
+// still of any size, even the four characters of a bare JPEG prefix, is dropped.
+const HALF = "/9j/" + "A".repeat(10000000 - 4);
+assert.equal(HALF.length, 10000000);
+// bodyOf pairs files with stills by position and needs equal lengths, so the two
+// file case is given two stills items.
+out = bodyOf([HALF, HALF], { stillItems: STILLS.slice(0, 2) });
+assert.deepEqual(Object.keys(out[0].json.body.questions), ["p1", "p2"]);
+assert.equal(Object.values(out[0].json.body.assets).reduce((n, a) => n + a.data_base64.length, 0), 20000000);
+assert.deepEqual(out[0].json.urls, [U1, U2]);
+for (const third of ["/9j/", JPEG, PNG, HALF]) {
+  out = bodyOf([HALF, HALF, third]);
+  assert.deepEqual(Object.keys(out[0].json.body.questions), ["p1", "p2"], "third of length " + third.length);
+  assert.deepEqual(out[0].json.urls, [U1, U2]);
+}
+// Landing on the cap exactly at the third still fits as well: 10,000,000 plus
+// 9,999,996 plus a four character prefix is 20,000,000.
+out = bodyOf([HALF, "/9j/" + "A".repeat(9999996 - 4), "/9j/"]);
+assert.deepEqual(Object.keys(out[0].json.body.questions), ["p1", "p2", "p3"]);
+assert.equal(Object.values(out[0].json.body.assets).reduce((n, a) => n + a.data_base64.length, 0), 20000000);
 
 // ---- thumb_pick_still.js -------------------------------------------------------
 const ORIGINAL = exportCode("Thumb: Pick Still");
@@ -293,6 +335,20 @@ assert.equal(pickWith(SHIPPED, URLS, reply({ p1: score(1), p2: score(1), p3: sco
 // Scores are floats; 2.6 beats 2.4. Exactly 1 qualifies and 0.99 does not.
 assert.equal(pickWith(SHIPPED, URLS, reply({ p1: score(2.4), p2: score(1.1), p3: score(2.6) })).jevPick, U3);
 assert.equal(pickWith(SHIPPED, URLS, reply({ p1: score(0.99), p2: score(1) })).jevPick, U2);
+// The rule is a highest score of 1 or more: a lone score under 1 is not a pick,
+// and a lone score of exactly 1 is. Before this, nothing pinned the floor on its
+// own, because a 0.99 beside a 1 still gave the right photo by the tie rule.
+assert.equal(pickWith(SHIPPED, URLS, reply({ p1: score(0.5) })).jevPick, null);
+assert.equal(pickWith(SHIPPED, URLS, reply({ p1: score(1) })).jevPick, U1);
+assert.equal(pickWith(SHIPPED, URLS, reply({ p1: score(0.99) })).jevPick, null);
+assert.equal(pickWith(SHIPPED, URLS, reply({ p3: score(0.5) })).jevPick, null);
+// Applied, a lone 0.5 on photo 2 moves nothing and a lone 1 on photo 2 does.
+r = pickWith(flipped, URLS, reply({ p2: score(0.5) }));
+assert.equal(r.jevPick, null);
+assert.equal(r.photoUsed, U1);
+r = pickWith(flipped, URLS, reply({ p2: score(1) }));
+assert.equal(r.jevPick, U2);
+assert.equal(r.photoUsed, U2);
 // A photo scored 0 is never chosen, and neither is one nobody scored.
 r = pickWith(flipped, URLS, reply({ p1: score(0), p2: score(0), p3: score(0) }));
 assert.equal(r.jevPick, null);
@@ -333,6 +389,21 @@ for (const bad of [{ json: { model: "jev-latest" } }, { json: { model: "jev-late
   assert.equal(pickWith(SHIPPED, URLS, bad).jevPick, null);
   assert.equal(pickWith(SHIPPED, URLS, bad, reply({ p2: score(2) })).jevPick, U2);
 }
+
+// FIRST WINS, twice. The spec is silent on both, so these pin the shipped choice
+// rather than a ruling, and a change to either is a decision to make on purpose.
+// A url that two questions were about keeps the score of the first of them. Here
+// p1 and p3 are both about U1: p1 scores 1 and p3 scores 3. First wins, so U1
+// stays at 1 and U2 at 2 is the best; last wins would make U1 the pick at 3.
+assert.equal(pickWith(SHIPPED, [U1, U2, U1], reply({ p1: score(1), p2: score(2), p3: score(3) })).jevPick, U2);
+assert.equal(pickWith(SHIPPED, [U1, U2, U1], reply({ p1: score(3), p2: score(2), p3: score(1) })).jevPick, U1);
+// With several Rank items, the first item to answer a name keeps it. The first
+// reply says p1 is 1 and p2 is 3, the second says the reverse. First wins gives
+// U2; the second reply winning would give U1. A name only the later reply
+// answers still counts, so the replies are merged and not just the first read.
+assert.equal(pickWith(SHIPPED, URLS, reply({ p1: score(1), p2: score(3) }), reply({ p1: score(3), p2: score(1) })).jevPick, U2);
+assert.equal(pickWith(SHIPPED, URLS, reply({ p1: score(3), p2: score(1) }), reply({ p1: score(1), p2: score(3) })).jevPick, U1);
+assert.equal(pickWith(SHIPPED, URLS, reply({ p1: score(1) }), reply({ p1: score(2), p3: score(2) })).jevPick, U3);
 
 // A score is matched to a photo by the url the question was about, not by the
 // photo's place in the list. urls[k-1] is what p{k} was asked about.
