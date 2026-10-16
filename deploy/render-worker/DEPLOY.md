@@ -560,11 +560,27 @@ Things to know before wiring it:
   spoken "rose 30%".
   * A minus or an en dash before a digit is a token, and a hyphen minus equals
     a true minus.
-  * A comma between digits drops, so "1,000" is "1000".
-  * A point between digits is a token, so "3.5" never equals "3 5".
+  * A comma drops only as a thousands separator: one to three digits, then
+    groups of exactly three. "1,000" is "1000". Anywhere else a comma before a
+    digit is a token, so a decimal "1,5" is not "15" and "3,4" is not "34".
+  * A point before a digit is a token, so "3.5" never equals "3 5", ".5" is
+    not "5" and "$.99" is not "$99".
+  * A character that folds to a digit without being one, such as a superscript,
+    a fraction, or a circled or full width digit, is a token of its own. So
+    "10²" is not "102".
 
   The first cut dropped symbols, the second blocked a list of them, and the
-  third critic walked "¥500" and whole Japanese words through that list.
+  third critic walked "¥500" and whole Japanese words through that list. The
+  fourth had all five of the number cases above kept as clean readings of a
+  different number.
+* **The work is bounded by what the text folds to, not by its length.** One
+  ligature character folds to eighteen, and a fourth critic held the worker's
+  loop 20.2 s and grew it to 3.3 GiB with a transcript of them sent through
+  the worker's own `fs_ops`. A transcript word is now refused over 64
+  characters or over 16 tokens, the transcript over 100,000 tokens, and the
+  script over 100,000 tokens. The same file is refused in 155 ms at 71 MiB.
+* **A kept word is never trimmed.** When the vendor's timestamps overlap, the
+  edge stops at the word instead of the midpoint, which cut 50 ms off "done".
 * **Digits and number words do not match each other.** Whether ElevenLabs
   speech to text writes a spoken number as digits or as words is unverified
   here. Either way the safe direction holds: a mismatch sends the line to the
@@ -592,8 +608,8 @@ Things to know before wiring it:
 * **It checks its own output against the plan, and removes it on a mismatch.**
   The check covers the frame count and the length of the sound and of the
   narration.
-* **It deletes the previous run's output, narration and sidecar first**, so a
-  failed run never leaves stale files that look current.
+* **It deletes the previous run's output and narration first**, so a failed
+  run never leaves stale files that look current.
 * **An output that is also an input is refused.** That covers the take, a
   clone file, and the narration landing on the output or inside its working
   directory.
@@ -616,6 +632,23 @@ Things to know before wiring it:
   * The first fix used a sidecar file instead, and a third critic copied the
     base with `fs_ops` and rendered 46 frames of face under the clone. A copy
     or a symlink keeps the tag.
+  * The base must be `.mp4`, `.mov`, `.m4v`, `.mkv` or `.webm`, and must read
+    as one of those containers. A `.ts` drops the tag, and an mkv keeps it
+    under the key `COMMENT`, which the first reader never looked for; both
+    composited 37 face frames under the clone in the fourth critic's run. The
+    tag is now read under any key case.
+  * The tag records the length it was written for, and a base whose picture is
+    more than 1.5 frames off that length is refused. A job that re-times the
+    file copies the tag unchanged, and a critic cut one second from a base
+    and got 30 face frames from the stale windows.
+  * A window that rounds up past the end of the file is clamped to it, so a
+    patched last line is not refused against the duration pin.
+  * The finished master does not carry the tag. Tee ruled on 2026-10-16 that
+    the list of where his clone speaks does not travel inside the delivered
+    file. It stays in the job result.
+  * Stripping the tag on purpose, with `-map_metadata -1` or an outside tool,
+    still removes the protection: a file with no tag reads as a file that never
+    had one. Only send `take_patch` output, or a copy of it, as the base.
 * **`must_cover` asks for each window to sit inside one scheduled cutaway.**
   Under every window it lays a black plate that reaches one output frame past
   each edge. A fade, an empty cutaway or a window edge between two frames
@@ -679,9 +712,12 @@ pixels, a 440 Hz "voice", and a 1000 Hz mp3 "clone". Then it measures:
   canvas.
 
 Measured in the session container on 2026-10-16 with ffmpeg 6.1.1:
-**16 passed, exit 0**. It has not been run on the box yet. Round three added
-one check: a copy and a symlink of the base track still carry the windows. The
-additions after the second critic check five things:
+**19 passed, exit 0**. Round four added three checks, each of which fails
+against the round three commit: the finished master carries no clone windows,
+a base re-timed after `take_patch` is refused, and an mkv copy keeps its
+windows while a `.ts` copy is refused. Round three added one: a copy and a
+symlink of the base track still carry the windows. The additions after the
+second critic check five things:
 
 * the in-file windows alone enforce the window;
 * a fade over the clone shows the plate;

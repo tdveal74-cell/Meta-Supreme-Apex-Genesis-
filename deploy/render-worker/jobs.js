@@ -1011,6 +1011,11 @@ const JOBS = {
                     '-c:v', 'libx264', '-crf', String(num(p.crf ?? 18, 'crf', { min: 0, max: 51, int: true })),
                     '-preset', oneOf(p.preset ?? 'medium', 'preset', PRESETS),
                     '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k',
+                    // The master is the delivered file. The clone windows have
+                    // done their job by now, under the cutaways, and Tee ruled
+                    // on 2026-10-16 that the list of where his clone speaks
+                    // does not travel inside it.
+                    '-metadata', 'comment=',
                     '-movflags', '+faststart'];
       if (pinned) argv.push('-t', planned.toFixed(6));
       argv.push(out);
@@ -1254,6 +1259,12 @@ const JOBS = {
         t += it.len;
       });
       const total = t;
+      // A window rounded up past the end of the file is clamped back to it.
+      // The tagged duration rounds to nearest, so a patched LAST line ended a
+      // microsecond past it and the composite refused one frame count in three
+      // at 30 fps (critic, round four). Nothing plays past the end, so the
+      // clamp cannot uncover a frame.
+      windows.forEach((w) => { w.end = Math.min(w.end, +total.toFixed(6)); });
       const list = `${partsDir}/list.ffconcat`;
       // The windows ride inside the output's own metadata, where
       // presenter_composite reads them back, so a copy of the file keeps them.
@@ -1951,11 +1962,15 @@ const JOBS = {
       if (!Array.isArray(p.lines)) throw new BadJob('lines: must be an array of strings');
       if (p.lines.length < 1) throw new BadJob('lines: need at least one');
       if (p.lines.length > 2000) throw new BadJob('lines: too many (max 2000)');
+      let lineToks = 0;
       const lines = p.lines.map((l, i) => {
         if (typeof l !== 'string') throw new BadJob(`lines[${i}]: not a string`);
         if (l.length > 4000) throw new BadJob(`lines[${i}]: over 4000 characters`);
         const toks = alignTokens(l);
         if (toks.length === 0) throw new BadJob(`lines[${i}]: has no words`);
+        // Same reason as the cap on the transcript below: characters can fold
+        // to many tokens, so the script is bounded by what it folds to.
+        if ((lineToks += toks.length) > 100000) throw new BadJob('lines: over 100,000 tokens after folding; split the script');
         return { text: l, toks };
       });
       if (p.words !== undefined && p.words_path !== undefined) {
@@ -1978,11 +1993,17 @@ const JOBS = {
         if (rawWords.length > 50000) throw new BadJob('words: too many (max 50000)');
         // Speech-to-text vendors interleave spacing and sound events with the
         // words. Anything that declares a type other than 'word' is not speech.
+        // The word count alone did not bound the work: one word can fold to
+        // many tokens, and a fourth critic held the loop 20.2 s and grew the
+        // server to 3.3 GiB with words of a single ligature that decomposes to
+        // eighteen characters. Each word's text and token count are capped, and
+        // so is the total, checked as it grows so a hostile file stops early.
         const words = [];
         rawWords.forEach((w, i) => {
           if (!w || typeof w !== 'object') throw new BadJob(`words[${i}]: not an object`);
           if (w.type !== undefined && w.type !== 'word') return;
           if (typeof w.text !== 'string') throw new BadJob(`words[${i}].text: not a string`);
+          if (w.text.length > 64) throw new BadJob(`words[${i}].text: over 64 characters; that is not one spoken word`);
           const s = num(w.start, `words[${i}].start`, { min: 0, max: 86400 });
           const e = num(w.end,   `words[${i}].end`,   { min: 0, max: 86400 });
           if (e < s) throw new BadJob(`words[${i}]: end before start`);
@@ -1992,6 +2013,8 @@ const JOBS = {
           // may only start and end on a word boundary: "this is our year"
           // matched the front half of a spoken "year-end" and cut it mid word.
           const tk = alignTokens(w.text);
+          if (tk.length > 16) throw new BadJob(`words[${i}].text: folds to ${tk.length} tokens, over 16; that is not one spoken word`);
+          if (words.length + tk.length > 100000) throw new BadJob('words: over 100,000 tokens after folding; split the take');
           tk.forEach((t, j) => words.push({ tok: t, s, e, opens: j === 0, closes: j === tk.length - 1 }));
         });
         for (let i = 1; i < words.length; i++) {
@@ -2079,10 +2102,14 @@ const JOBS = {
         // stay one span so the natural pause survives. A pad either side never
         // reaches past the midpoint to the neighbouring word, so it cannot
         // pull in half of a flubbed one, and never runs past the take's end.
+        // When the vendor's timestamps overlap, the midpoint falls INSIDE the
+        // kept word, and a fourth critic got 50 ms cut off the end of "done".
+        // The kept words themselves are never trimmed: the edge stops at the
+        // midpoint or at the word, whichever leaves the word whole.
         const edges = (sIdx, eIdx) => {
           const a = words[sIdx].s, b = words[eIdx].e;
-          const lo = sIdx > 0 ? (words[sIdx - 1].e + a) / 2 : 0;
-          let hi = eIdx < words.length - 1 ? (b + words[eIdx + 1].s) / 2 : b + pad;
+          const lo = Math.min(a, sIdx > 0 ? (words[sIdx - 1].e + a) / 2 : 0);
+          let hi = Math.max(b, eIdx < words.length - 1 ? (b + words[eIdx + 1].s) / 2 : b + pad);
           if (takeDur !== null) hi = Math.min(hi, takeDur);
           return { start: Math.max(lo, a - pad), end: Math.min(hi, b + pad) };
         };
@@ -2143,26 +2170,47 @@ const JOBS = {
  * while a perfect read of a line with % could never be kept at all.
  *
  * Digits stay digits: "3" and "three" do not match, the safe direction. A
- * comma between digits is dropped ("1,000" is "1000"), a point between digits
- * is a token ("3.5" never equals "3 5"), and a minus or en dash in front of a
- * digit is a token.
+ * minus or en dash in front of a digit is a token, and so is a point in front
+ * of a digit (".5" is not "5", "$.99" is not "$99"). A comma between digits is
+ * dropped ONLY as a thousands separator, one to three digits then groups of
+ * exactly three ("1,000" is "1000"); anywhere else it is a token, so a
+ * decimal "1,5" is not "15" and "3,4" is not "34". A character that is not a
+ * plain digit but folds to one ("\u00b2", "\u00bd", a circled or full width
+ * digit) is a token of its own, so "10\u00b2" is not "102". The fourth critic
+ * had all five of those kept as clean readings of a different number.
  */
 function alignTokens(s) {
-  const t = String(s)
-    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[\u2018\u2019\u02bc]/g, "'")
-    .replace(/(\d),(?=\d)/g, '$1');
+  // Folded one code point at a time, so a character that folds to a digit is
+  // caught BEFORE the fold makes it indistinguishable from one.
+  const u = [];
+  for (const cp of String(s)) {
+    if (cp <= '\u007f') { u.push({ c: cp.toLowerCase(), sym: false }); continue; }
+    const n = cp.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+      .replace(/[\u2018\u2019\u02bc]/g, "'");
+    if (/[0-9]/.test(n)) { u.push({ c: cp, sym: true }); continue; }
+    for (const c of n) u.push({ c, sym: false });
+  }
   const DROP = new Set([',', ';', ':', '!', '?', '"', '\u201c', '\u201d', '(', ')', '[', ']', '{', '}', '\u2014', '\u2026']);
-  const isWord = (c) => /[a-z0-9']/.test(c);
+  const at = (i) => (i >= 0 && i < u.length && !u[i].sym ? u[i].c : undefined);
+  const isWord = (c) => c !== undefined && /[a-z0-9']/.test(c);
   const isDigit = (c) => c !== undefined && c >= '0' && c <= '9';
+  const thousands = new Set();
+  const isThousands = (i) => {
+    let k = i - 1;
+    while (isDigit(at(k))) k--;
+    const run = i - 1 - k;
+    if (run < 1 || run > 3 || (k >= 0 && !thousands.has(k) && (at(k) === ',' || at(k) === '.'))) return false;
+    return isDigit(at(i + 1)) && isDigit(at(i + 2)) && isDigit(at(i + 3)) && !isDigit(at(i + 4));
+  };
   const out = [];
   let word = '';
   const flush = () => { const w = word.replace(/^'+|'+$/g, ''); if (w) out.push(w); word = ''; };
-  for (let i = 0; i < t.length; i++) {
-    const c = t[i], prev = t[i - 1], next = t[i + 1];
+  for (let i = 0; i < u.length; i++) {
+    if (u[i].sym) { flush(); out.push('\u0001' + u[i].c); continue; }
+    const c = u[i].c, prev = at(i - 1), next = at(i + 1);
     if (isWord(c)) { word += c; continue; }
-    if (c === '.' && isDigit(prev) && isDigit(next)) { flush(); out.push('\u0001.'); continue; }
+    if (c === ',' && isDigit(prev) && isThousands(i)) { thousands.add(i); continue; }
+    if ((c === '.' || c === ',') && isDigit(next)) { flush(); out.push('\u0001' + c); continue; }
     if ((c === '-' || c === '\u2212') && isDigit(next) && !(prev && /[a-z0-9]/.test(prev))) {
       flush(); out.push('\u0001\u2212'); continue;
     }
@@ -2180,21 +2228,59 @@ function alignTokens(s) {
  * rather than composited unchecked.
  */
 const VOICE_LAB_TAG = 'voicelab-must-cover:';
+// Containers whose global comment survives a stream copy and reads back. The
+// fourth critic wrote a tagged base to .ts, which drops the tag, and to .mkv,
+// which keeps it under the key COMMENT that the first reader never looked
+// for; both composited 37 face frames under the clone.
+const TAGGED_EXT = new Set(['.mp4', '.mov', '.m4v', '.mkv', '.webm']);
+const TAGGED_FORMATS = new Set(['mov,mp4,m4a,3gp,3g2,mj2', 'matroska,webm']);
 let tagReader = (f) => {
   const { execFileSync } = require('child_process');
-  return JSON.parse(execFileSync(FP, ['-v', 'error', '-show_entries', 'format_tags=comment', '-of', 'json', f],
-    { timeout: 15000, maxBuffer: 4 * 1024 * 1024 }).toString());
+  return JSON.parse(execFileSync(FP, ['-v', 'error', '-select_streams', 'v:0',
+    '-show_entries', 'format=format_name,duration:format_tags=comment:stream=duration:stream_tags=duration', '-of', 'json', f],
+  { timeout: 15000, maxBuffer: 4 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] }).toString());
 };
 function readVoiceLabWindows(f) {
+  // Checked before ffprobe opens it: a playlist or an ffconcat as the base
+  // held the event loop 861 ms in the critic's run before being read at all.
+  if (!TAGGED_EXT.has(path.extname(f).toLowerCase())) {
+    throw new BadJob('avatar: must be .mp4, .mov, .m4v, .mkv or .webm, the containers that carry Voice Lab windows through a copy');
+  }
   let j;
   try { j = tagReader(f); }
   catch (e) { throw new BadJob(`avatar: could not read its tags to check for Voice Lab windows (${String(e.message).split('\n')[0]})`); }
-  const c = j && j.format && j.format.tags && j.format.tags.comment;
-  if (typeof c !== 'string' || !c.startsWith(VOICE_LAB_TAG)) return null;
+  const fmt = (j && j.format) || {};
+  if (!TAGGED_FORMATS.has(String(fmt.format_name))) {
+    throw new BadJob(`avatar: its container reads as ${fmt.format_name || 'unknown'}, not mp4, mov, mkv or webm, so its Voice Lab windows cannot be trusted`);
+  }
+  const tags = fmt.tags || {};
+  const key = Object.keys(tags).find(k => k.toLowerCase() === 'comment');
+  const c = key === undefined ? undefined : String(tags[key]).trimStart();
+  if (typeof c !== 'string' || !c.toLowerCase().startsWith(VOICE_LAB_TAG)) return null;
   let parsed;
   try { parsed = JSON.parse(c.slice(VOICE_LAB_TAG.length)); }
   catch (e) { throw new BadJob(`avatar: its Voice Lab windows are unreadable (${e.message}); re-run take_patch`); }
   if (!parsed || !Array.isArray(parsed.windows)) throw new BadJob('avatar: its Voice Lab tag has no windows; re-run take_patch');
+  // A job that re-times the file copies the tag unchanged, and a critic cut
+  // one second from a base and got 30 face frames from the stale windows. The
+  // tag records the length it was written for; the file must still be it.
+  const fps = Number(parsed.fps), dur = Number(parsed.duration);
+  if (!(fps > 0) || !(dur > 0)) throw new BadJob('avatar: its Voice Lab tag has no fps or duration; re-run take_patch');
+  // The PICTURE's length: an mkv has no stream duration but tags one as
+  // HH:MM:SS.fffffffff, and its format duration includes audio padding, which
+  // read 88 ms long after loudnorm_apply in the round four run.
+  const st = Array.isArray(j.streams) ? j.streams[0] : null;
+  const stTags = (st && st.tags) || {};
+  const tagKey = Object.keys(stTags).find(k => k.toLowerCase() === 'duration');
+  const hms = tagKey === undefined ? null : /^(\d+):(\d\d):(\d\d(?:\.\d+)?)$/.exec(String(stTags[tagKey]));
+  const have = Number(st && st.duration) > 0 ? Number(st.duration)
+    : hms ? (+hms[1]) * 3600 + (+hms[2]) * 60 + (+hms[3])
+      : Number(fmt.duration);
+  if (!(have > 0)) throw new BadJob('avatar: has no readable duration to check its Voice Lab windows against');
+  if (Math.abs(have - dur) > 1.5 / fps) {
+    throw new BadJob(`avatar: runs ${have}s, but its Voice Lab windows were written for a ${dur}s cut; ` +
+                     'something after take_patch changed the timeline, so run take_patch on the final cut');
+  }
   return parsed.windows;
 }
 /** For the builder tests, which run without ffprobe. */

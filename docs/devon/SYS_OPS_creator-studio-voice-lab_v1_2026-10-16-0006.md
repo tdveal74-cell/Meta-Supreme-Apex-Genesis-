@@ -112,15 +112,39 @@ All six are fixed:
 - The tokenizer allows only a fixed punctuation set to drop and lets a symbol match only itself.
 - Emphasis must stay a frame clear of a window.
 
+**A fourth verifier gave 45673c6 PASS-WITH-CONDITIONS.** It confirmed all six round three claims, and 144 composites across six base rates and eight composite rates showed 0 face frames in 15,819 frames under the clone. It then found one blocker for deploy and five should-fixes:
+- A transcript of one ligature character, which folds to eighteen, held the worker's loop 20.2 s and grew it to 3.3 GiB through the real server, and a 16 MiB file crashed the heap.
+- Five number spellings were kept as clean readings of a different number: ".5" for "5", "$.99" for "$99", "10²" for "102", "1,5" for "15" and "3,4" for "34".
+- A base written to `.ts` lost its windows, and an `.mkv` kept them under a key the reader missed; both rendered 37 face frames.
+- A base re-timed after `take_patch` kept its old windows and rendered 30 face frames.
+- A patched last line was refused against the duration pin for one frame count in three at 30 fps.
+- Overlapping vendor timestamps cut 50 ms off a kept word.
+
+All six are fixed, and each has a test that fails against 45673c6:
+- The transcript and the script are bounded by what they fold to. The same file is now refused in 155 ms at 71 MiB.
+- A comma drops only as a thousands separator, a point before a digit is a token, and a character that folds to a digit is a token of its own.
+- The base must be an mp4, mov, mkv or webm container, and the tag is read under any key case.
+- A base whose picture is more than 1.5 frames off the length its tag records is refused.
+- A window that rounds past the end of the file is clamped to it.
+- A kept word is never trimmed.
+
+Tee ruled on a card the same morning that the finished master does not carry the list of where his clone speaks, so `presenter_composite` now writes its output without the tag.
+
 **Digits never match number words.** Whether ElevenLabs speech to text writes a spoken number as digits or words is unverified here. Either way a mismatch sends the line to the clone, which is the safe direction.
 
-The suites after the second round:
-- `jobs.test.js`: 108 passed.
+The suites after round four:
+- `jobs.test.js`: 115 passed.
 - `server.test.js`: 47 passed.
-- The negative control fails 103 of 108 against the Drive original.
-- `voice-lab-acceptance.js`: 16 passed, with real ffmpeg.
+- The negative control fails 110 of 115 against the Drive original.
+- `voice-lab-acceptance.js`: 19 passed, with real ffmpeg. Its three new checks each fail against 45673c6.
 
-None of it has run on the VPS.
+None of it has run on the VPS yet.
+
+## Reaching the worker
+
+The render worker runs on N8N-HOST, which had no Desktop Commander device, so nothing in a session could reach it. Tee ruled on a card on 2026-10-16 to link it. Desktop Commander 0.3.0 needs Node 22.12 or newer, and the box's system Node is 18.19.1, which the worker runs on. So Node 22 went into `/opt/node22`, beside the system Node, and Desktop Commander runs from it as root in a tmux session named `dc`. Tee set it up from Termius on his iPhone and approved the device. A read on the box afterwards showed the worker's files dated 2026-09-15, the service active, ffmpeg 6.1.1 and 5.7 GiB available. Its writes go through the outward gate like the EditForge box's.
+
+The login banner on N8N-HOST reports a pending restart and offers Ubuntu 26.04. Both were left alone. A restart takes n8n and every pipeline down, and a release upgrade changes the system Node and ffmpeg under the worker.
 
 ## Shown to Tee
 
@@ -128,7 +152,7 @@ A private artifact, the studio map, holds the module ledger, the lane, the measu
 
 ## Open
 
-- Deploying the worker to the VPS, then running `voice-lab-acceptance.js` there and checking that `/health` reads 21 jobs.
+- Deploying the worker to N8N-HOST through Desktop Commander, then running the suites and `voice-lab-acceptance.js` there on its Node 18 and checking that `/health` reads 21 jobs.
 - The `TQO Voice Lab` n8n workflow, as an unpublished draft. Creating it is a write to the live instance and goes on a card.
 - One real episode end to end, watched by Tee.
 - The MuseTalk proof in `deploy/lipsync/README.md`, step two. A GPU pod was provisioned on 2026-10-16: one NVIDIA L40S on RunPod Secure Cloud, US-TX-3, with a 60 GB network volume at `/workspace`. Tee ruled on a card to stop it until take A is recorded and keep the volume. He confirmed it stopped the same night. This session cannot reach the pod, because the network policy blocks the RunPod API and outside DNS, so the proof runs from the pod's web terminal. If it passes, clone lines could be lip-synced onto his own face instead of covered by a cutaway.
@@ -141,8 +165,8 @@ AREA: TQO, Systems
 TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_creator-studio-voice-lab_v1_2026-10-16-0006.md
 DATE: 2026-10-16
-DECISIONS: Tee ruled on cards on 2026-10-15 to incorporate the one-person creator studio from the @restructureai Short as a layer on the shared engine rather than a separate studio, and to build the Voice Lab ship lane first. He added drive.google.com and drive.usercontent.google.com to the environment's allowed domains so the recording could be read.
-FINDINGS: The video's eight modules map onto the estate with Voice Lab, dubbing and the AI sales line missing. A single-run take_patch peaked at 13.6 GiB on 64 items of 4K HEVC against a 7.8 GiB VPS; segmented, it peaked at 1,068 MiB with 736 of 736 frames. The first acceptance run found a 13 ms per-splice A/V drift that every builder test missed. A fresh critic quarantined d535cf3 because align_script kept off-script readings at 0.9 similarity; a637d8f keeps verbatim readings only. A second critic gave a637d8f PASS-WITH-CONDITIONS and measured eight silent failures, all fixed after it, each with a test and the face-frame one with a negative control. A third gave b6789e1 PASS-WITH-CONDITIONS with six more gaps, among them a copied base track losing its windows; all six were fixed, the windows now ride in the file's metadata, and the copy case is in the acceptance run.
+DECISIONS: Tee ruled on cards on 2026-10-15 to incorporate the one-person creator studio from the @restructureai Short as a layer on the shared engine rather than a separate studio, and to build the Voice Lab ship lane first. He added drive.google.com and drive.usercontent.google.com to the environment's allowed domains so the recording could be read. On 2026-10-16 he ruled to link N8N-HOST to Desktop Commander so a session can deploy the worker, and to strip the clone window tag from the finished master.
+FINDINGS: The video's eight modules map onto the estate with Voice Lab, dubbing and the AI sales line missing. A single-run take_patch peaked at 13.6 GiB on 64 items of 4K HEVC against a 7.8 GiB VPS; segmented, it peaked at 1,068 MiB with 736 of 736 frames. The first acceptance run found a 13 ms per-splice A/V drift that every builder test missed. A fresh critic quarantined d535cf3 because align_script kept off-script readings at 0.9 similarity; a637d8f keeps verbatim readings only. A second critic gave a637d8f PASS-WITH-CONDITIONS and measured eight silent failures, all fixed after it, each with a test and the face-frame one with a negative control. A third gave b6789e1 PASS-WITH-CONDITIONS with six more gaps, among them a copied base track losing its windows; all six were fixed, the windows now ride in the file's metadata, and the copy case is in the acceptance run. A fourth gave 45673c6 PASS-WITH-CONDITIONS with 0 face frames in 15,819 and one deploy blocker, a ligature transcript that held the loop 20.2 s at 3.3 GiB; that and five should-fixes were fixed, each with a test that fails against 45673c6.
 OPEN: VPS deploy and on-box acceptance; the n8n Voice Lab draft on a card; one real episode watched end to end; clone consent record and the YouTube label rule; later phases on their own cards.
 STATUS: Render worker jobs built and measured in the container on branch claude/creator-studio-voice-lab; not deployed; nothing publishes.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f

@@ -186,6 +186,35 @@ await check('a cutaway with no frames to show (in past its end) shows the black 
   assert.ok(y.every(v => v < 20), `max Y inside the window ${Math.max(...y)}; the held face frame reads 117`);
 });
 
+const commentOf = (f) => {
+  const j = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format_tags', '-of', 'json', path.join(ROOT, f)]).toString());
+  const tags = (j.format && j.format.tags) || {};
+  const k = Object.keys(tags).find(x => x.toLowerCase() === 'comment');
+  return k === undefined ? null : tags[k];
+};
+await check('the finished master does not carry the clone windows (ruled 2026-10-16), the base track does', () => {
+  assert.ok(String(commentOf('base.mp4')).startsWith('voicelab-must-cover:'), 'the base lost its tag');
+  const c = commentOf('master.mp4');
+  assert.ok(c === null || !String(c).toLowerCase().includes('voicelab'), `the master carries: ${c}`);
+});
+await check('a base re-timed after take_patch is refused, not composited on its stale windows (round four: 30 face frames)', () => {
+  // A re-encode that cuts the first second keeps the comment tag, as the
+  // worker's own conform_grain keep_segments did in the critic's run.
+  ff(['-ss', '1', '-i', 'base.mp4', '-c:v', 'libx264', '-crf', '10', '-pix_fmt', 'yuv420p', '-c:a', 'aac', 'retimed.mp4']);
+  assert.ok(String(commentOf('retimed.mp4')).startsWith('voicelab-must-cover:'), 'the re-encode did not carry the tag, so this proves nothing');
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...pcBase, avatar: 'retimed.mp4', duration: undefined, output: 'y.mp4',
+    cutaways: [{ path: 'cut.mp4', start: 2.2, end: 5.2 }] }), /but its Voice Lab windows were written for a/);
+});
+await check('an mkv copy keeps its windows under COMMENT, and a .ts copy, which drops them, is refused', () => {
+  ff(['-i', 'base.mp4', '-map', '0', '-c', 'copy', 'copy.mkv']);
+  ff(['-i', 'base.mp4', '-map', '0', '-c', 'copy', 'copy.ts']);
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...pcBase, avatar: 'copy.mkv', output: 'z.mp4', cutaways: [{ path: 'cut.mp4', start: 5.0, end: 7.0 }] }),
+    /not inside one scheduled cutaway/);
+  assert.ok(J.JOBS.presenter_composite.build({ ...pcBase, avatar: 'copy.mkv', output: 'z.mp4', cutaways: [{ path: 'cut.mp4', start: 2.2, end: 5.2 }] }));
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...pcBase, avatar: 'copy.ts', output: 'z.mp4', cutaways: [{ path: 'cut.mp4', start: 2.2, end: 5.2 }] }),
+    /must be \.mp4, \.mov, \.m4v, \.mkv or \.webm/);
+});
+
 console.log('\n-- take_patch refuses rather than return a short episode --');
 // Sound that runs 0.3 s past the picture, as an iPhone file can: the container
 // says 12.3 s, the picture ends at 12.0 s.

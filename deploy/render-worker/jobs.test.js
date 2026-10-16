@@ -22,7 +22,19 @@ J.setRoot(ROOT);
 // and every other file reads as untagged. Guarded so the negative control's
 // pre-Voice-Lab fixture, which has no setter, still loads.
 const TAGS = new Map();
-if (J.setTagReader) J.setTagReader((f) => ({ format: { tags: TAGS.has(f) ? { comment: TAGS.get(f) } : {} } }));
+// A file's own length and container, when a test needs them to differ from
+// what its tag says. Otherwise the length is the tag's and the container mp4.
+const DURS = new Map();
+const FMTS = new Map();
+const stubReader = (f) => {
+  const c = TAGS.get(f);
+  let d = DURS.get(f);
+  if (d === undefined && typeof c === 'string') { try { d = JSON.parse(c.slice(20)).duration; } catch (_) { /* unreadable on purpose */ } }
+  const dur = String(d === undefined ? 60 : d);
+  return { format: { format_name: FMTS.get(f) || 'mov,mp4,m4a,3gp,3g2,mj2', duration: dur, tags: c === undefined ? {} : { comment: c } },
+           streams: [{ duration: dur }] };
+};
+if (J.setTagReader) J.setTagReader(stubReader);
 const touch = (rel) => {
   const abs = path.join(ROOT, rel);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
@@ -745,6 +757,48 @@ t('round three: one word lines cannot pin the loop or the heap; the kept reading
     /over 200,000 verbatim readings|too many comparisons/);
   assert.ok(Date.now() - t0 < 2000, `refusal took ${Date.now() - t0} ms`);
 });
+t('round four: a number written another way is never kept as a clean read of a different number', async () => {
+  const pairs = [
+    ['A .5 percent rise.', 'a 5 percent rise'],
+    ['Only $.99 today.', 'only $99 today'],
+    ['It covers 10² meters.', 'it covers 102 meters'],
+    ['We made 1,5 million.', 'we made 15 million'],
+    ['Do steps 3,4 now.', 'do steps 34 now'],
+    ['Add ½ cup.', 'add 12 cup'],
+    ['Pay 1234,567 now.', 'pay 1234567 now'],
+  ];
+  for (const [line, spoken] of pairs) {
+    const r = await align({ lines: [line], words: say(spoken, 0), max_patch_share: 1 });
+    assert.strictEqual(r.report[0].kind, 'patch', `${line} was kept for "${spoken}"`);
+  }
+  // Thousands separators still fold, so the safe cases are not all patched.
+  for (const [line, spoken] of [['It hit 1,000,000 views.', 'it hit 1000000 views'], ['We hired 1,000 people.', 'we hired 1000 people'], ['It was 0.5 percent.', 'it was 0.5 percent']]) {
+    const r = await align({ lines: [line], words: say(spoken, 0) });
+    assert.strictEqual(r.verdict, 'clean', `${line} vs ${spoken}: ${JSON.stringify(r.report)}`);
+  }
+});
+t('round four: one word cannot fold to unbounded tokens, and the totals are capped', async () => {
+  const lig = 'ﷺ';
+  await assert.rejects(align({ lines: ['hello'], words: [{ text: lig.repeat(2), start: 0, end: 1 }] }), /folds to \d+ tokens, over 16/);
+  await assert.rejects(align({ lines: ['hello'], words: [{ text: 'a'.repeat(65), start: 0, end: 1 }] }), /over 64 characters/);
+  const t0 = Date.now();
+  const many = Array.from({ length: 50000 }, (_, i) => ({ text: lig, start: i, end: i + 0.5 }));
+  await assert.rejects(align({ lines: ['hello'], words: many }), /over 100,000 tokens after folding/);
+  assert.ok(Date.now() - t0 < 2000, `refusal took ${Date.now() - t0} ms`);
+  assert.throws(() => J.JOBS.align_script.build({ lines: Array(40).fill(lig.repeat(200)), words: [] }), /over 100,000 tokens after folding; split the script/);
+});
+t('round four: overlapping vendor timestamps never trim the kept word', async () => {
+  const words = [
+    { text: 'we', start: 0.5, end: 0.7 }, { text: 'are', start: 0.8, end: 1.0 }, { text: 'done', start: 1.1, end: 3.0 },
+    { text: 'uh', start: 2.9, end: 3.2 },
+  ];
+  const r = await align({ lines: ['We are done.'], words });
+  assert.strictEqual(r.verdict, 'clean');
+  assert.ok(r.edl[0].end >= 3.0, `the kept span ends at ${r.edl[0].end}, inside "done"`);
+  const back = [{ text: 'uh', start: 0.2, end: 0.9 }, { text: 'we', start: 0.8, end: 1.0 }, { text: 'are', start: 1.1, end: 1.3 }, { text: 'done', start: 1.4, end: 1.8 }];
+  const r2 = await align({ lines: ['We are done.'], words: back });
+  assert.ok(r2.edl[0].start <= 0.8, `the kept span starts at ${r2.edl[0].start}, inside "we"`);
+});
 t('critic N8: a reading may not start or end inside a hyphenated spoken word', async () => {
   const r = await align({ lines: ['This is our year.'], words: say('this is our year-end', 0), max_patch_share: 1 });
   assert.strictEqual(r.report[0].kind, 'patch');
@@ -963,6 +1017,18 @@ t('round three: the join writes the clone windows into the output\'s own metadat
   const parsed = JSON.parse(tag.slice('comment=voicelab-must-cover:'.length));
   assert.deepStrictEqual(parsed.windows, [{ start: 2.533333, end: 4.8 }]);
 });
+t('round four: a patched last line ends at the tagged duration, never a microsecond past it', () => {
+  // 82 frames at 30 fps: the window end rounded up to 2.733334 and the tag's
+  // duration to nearest, 2.733333, and the composite refused the cutaway.
+  const p = tp(); p.take_duration = 12; p.xfade = 0;
+  p.edl = [{ kind: 'take', start: 0, end: 1 }, { kind: 'patch', audio: touch('vl/last.mp3'), duration: 52 / 30 }];
+  const r = J.JOBS.take_patch.build(p).result();
+  assert.strictEqual(r.duration, 2.733333);
+  assert.ok(r.patch_windows[0].end <= r.duration, JSON.stringify(r));
+  const tag = J.JOBS.take_patch.build(p).plan.join.find(a => a.startsWith('comment='));
+  const parsed = JSON.parse(tag.slice('comment=voicelab-must-cover:'.length));
+  assert.ok(parsed.windows[0].end <= parsed.duration, tag);
+});
 t('round three: output must be .mp4 or .mov, and collisions are judged by real path', () => {
   assert.throws(() => J.JOBS.take_patch.build({ ...tp(), output: 'vl/base.mkv' }), /must end \.mp4 or \.mov/);
   fs.symlinkSync(path.join(ROOT, 'vl/take.mov'), path.join(ROOT, 'vl/take-link.mov'));
@@ -1000,11 +1066,11 @@ t('a window outside every cutaway, or spanning two, is refused', () => {
 t('critic N3, round three: windows carried in the base track\'s own metadata are enforced, copies included', () => {
   const base = touch('p/sc/base.mp4');
   const abs = path.join(ROOT, 'p/sc/base.mp4');
-  TAGS.set(abs, 'voicelab-must-cover:' + JSON.stringify({ fps: 30, windows: [{ start: 12, end: 14 }] }));
+  TAGS.set(abs, 'voicelab-must-cover:' + JSON.stringify({ fps: 30, duration: 60, windows: [{ start: 12, end: 14 }] }));
   const p = { ...pc(), avatar: base };
   assert.throws(() => J.JOBS.presenter_composite.build(p), /must_cover\[0\]: 12s to 14s/);
   assert.throws(() => J.JOBS.presenter_composite.build({ ...p, mustCover: [] }), /must_cover\[0\]/);
-  TAGS.set(abs, 'voicelab-must-cover:' + JSON.stringify({ fps: 30, windows: [{ start: 5, end: 9 }] }));
+  TAGS.set(abs, 'voicelab-must-cover:' + JSON.stringify({ fps: 30, duration: 60, windows: [{ start: 5, end: 9 }] }));
   assert.ok(graph(J.JOBS.presenter_composite.build(p)).includes('drawbox'), 'the carried window was not plated');
   // Sending the same window as must_cover too counts it once (round three, finding 2).
   assert.strictEqual(J.JOBS.presenter_composite.build({ ...p, must_cover: [{ start: 5, end: 9 }] }).parse().must_cover, 1);
@@ -1017,15 +1083,48 @@ t('round three: a base track whose tags cannot be read is refused, never composi
   try {
     assert.throws(() => J.JOBS.presenter_composite.build(pc()), /could not read its tags/);
   } finally {
-    J.setTagReader((f) => ({ format: { tags: TAGS.has(f) ? { comment: TAGS.get(f) } : {} } }));
+    J.setTagReader(stubReader);
   }
 });
 t('round three: 33 windows sent AND carried are 33, not 66', () => {
   const base = touch('p/sc/many.mp4');
   const wins = Array.from({ length: 33 }, (_, i) => ({ start: 4.2 + i * 0.15, end: 4.25 + i * 0.15 }));
-  TAGS.set(path.join(ROOT, 'p/sc/many.mp4'), 'voicelab-must-cover:' + JSON.stringify({ windows: wins }));
+  TAGS.set(path.join(ROOT, 'p/sc/many.mp4'), 'voicelab-must-cover:' + JSON.stringify({ fps: 30, duration: 60, windows: wins }));
   const r = J.JOBS.presenter_composite.build({ ...pc(), avatar: base, must_cover: wins }).parse();
   assert.strictEqual(r.must_cover, 33);
+});
+t('round four: the tag is read under any key case, and a container that drops it is refused', () => {
+  const base = touch('p/r4/base.mkv');
+  const abs = path.join(ROOT, 'p/r4/base.mkv');
+  const tag = 'voicelab-must-cover:' + JSON.stringify({ fps: 30, duration: 60, windows: [{ start: 12, end: 14 }] });
+  J.setTagReader(() => ({ format: { format_name: 'matroska,webm', duration: '60', tags: { COMMENT: tag } }, streams: [{}] }));
+  try {
+    assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), avatar: base }), /must_cover\[0\]: 12s to 14s/);
+  } finally { J.setTagReader(stubReader); }
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), avatar: touch('p/r4/base.ts') }), /must be \.mp4, \.mov, \.m4v, \.mkv or \.webm/);
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), avatar: touch('p/r4/list.ffconcat') }), /must be \.mp4/);
+  const disguised = touch('p/r4/really-a-ts.mp4');
+  FMTS.set(path.join(ROOT, disguised), 'mpegts');
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), avatar: disguised }), /reads as mpegts/);
+  FMTS.delete(path.join(ROOT, disguised));
+  void abs;
+});
+t('round four: windows written for another length are refused, within a frame they are kept', () => {
+  const base = touch('p/r4/cut.mp4');
+  const abs = path.join(ROOT, base);
+  TAGS.set(abs, 'voicelab-must-cover:' + JSON.stringify({ fps: 30, duration: 60, windows: [{ start: 5, end: 9 }] }));
+  DURS.set(abs, 59);
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), avatar: base }), /runs 59s, but its Voice Lab windows were written for a 60s cut/);
+  DURS.set(abs, 60 + 1 / 30);
+  assert.ok(J.JOBS.presenter_composite.build({ ...pc(), avatar: base }));
+  TAGS.set(abs, 'voicelab-must-cover:' + JSON.stringify({ fps: 30, windows: [{ start: 5, end: 9 }] }));
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), avatar: base }), /no fps or duration/);
+  TAGS.delete(abs); DURS.delete(abs);
+});
+t('round four: the finished master does not carry the clone windows (ruled 2026-10-16)', () => {
+  const a = J.JOBS.presenter_composite.build(pc()).argv;
+  const i = a.indexOf('-metadata');
+  assert.ok(i > 0 && a[i + 1] === 'comment=', a.join(' '));
 });
 t('stacked: a payload-zone cutaway leaves the face visible, so only full-frame counts', () => {
   assert.throws(() => J.JOBS.presenter_composite.build({ ...st(), emphasis: [], must_cover: [{ start: 3, end: 5 }] }), /full-frame cutaway/);
