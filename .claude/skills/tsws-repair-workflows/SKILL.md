@@ -13,7 +13,7 @@ Drive: `TSWS_EDITABLE_REPAIR_WORKFLOWS_v01_DRAFT`, folder id `1SgR8-w-hzFEPuigh2
 
 ## The one fact that governs every claim
 
-The package was built and tested on synthetic fixtures only. Episode 1 media first reached a build container on 2026-10-16 (`docs/devon/SYS_OPS_tsws-ep01-repair-attempts_v1_2026-10-16-2007.md`), and every attempt to repair a flagged frame was refused: no Episode 1 shot is repaired, and the SH045 rig is not built. Do not describe any Episode 1 shot as repaired on the strength of this package.
+The package was built and tested on synthetic fixtures only. Episode 1 media first reached a build container on 2026-10-16 (`docs/devon/SYS_OPS_tsws-ep01-repair-attempts_v1_2026-10-16-2007.md`), and no attempt produced a usable repair of a flagged frame (the cleanup failed its checks with exit 1, and the head locked tool refused both flagged frames): no Episode 1 shot is repaired, and the SH045 rig is not built. Do not describe any Episode 1 shot as repaired on the strength of this package.
 
 ## Running a method
 
@@ -78,9 +78,9 @@ The pattern across all of them: a check that cannot fail on the fixture is not a
 Read the 2026-10-16 status doc first. What it measured:
 
 - Getting media in: the container reaches `drive.usercontent.google.com`, so a link shared file downloads; a private one returns the Google sign in page, which is the check for "shared". The Drive connector cannot set link sharing (its share tool takes an email only), so Tee switches it on and off by hand. Verify every download against the sha256 in the editor's `EDITOR_SEVEN_PARENT_ACCEPTANCE_LIST_DRAFT.csv` (Drive `1NcsO_ydV3LpXA5XToUYbKNZ7GtXewWbx`, readable through the connector). The four source archives do not hold the street native masters; those are in `CLAUDE_EP01_RESCUE_v01_DRAFT`.
-- The editor's list scopes the work: SH070 and SH100 fail on performance and need new footage, which is a paid generation and Tee's budget call. SH020 is parked for regeneration on Tee's ruling after two refused repair attempts.
-- The cleanup method fits defects fixed to the lens or the scene. On a defect attached to a moving, turning subject (SH020's shell edge) it inpainted 92.3% of the region and refused. Do not retry it on that class of defect.
-- A 2D head locked transplant was built and judged DO-NOT-SHIP: it could only touch frames that were already clean, because a head turning in depth defeats a 2D fit. The next attempt on that class of defect needs a 3D head fit or new footage.
+- The editor's list scopes the work: SH070 and SH100 fail on performance and need new footage, which is a paid generation and Tee's budget call. SH020 is parked for regeneration on Tee's ruling after two repair attempts, neither usable.
+- The cleanup method fits defects fixed to the lens or the scene. On a defect attached to a moving, turning subject (SH020's shell edge) it inpainted 92.3% of the region and failed its checks (exit 1, `HIDDEN_BACKGROUND_RECONSTRUCTION_DOMINANT_NOT_A_PASS`); the output was worse than the source and was discarded. Do not retry it on that class of defect.
+- A 2D head locked transplant was built and judged DO-NOT-SHIP: it could only touch frames that were already clean and refused both flagged frames. The likely cause is that her head turns in depth, which a 2D fit cannot follow; that is inferred from the tracking and redraw gates, not proven, so it does not rule out every 2D approach. Tee chose new footage over a 3D head fit.
 - SH150's editor note (-25,+3 at f95) is a smooth accelerating pan from f0, not a cut; translation only stabilisation still fails the composer's 0.5 px camera stage on its own probe (0.93 to 1.51 px). Only a probe on the same region that supplied the offsets reads static, which is circular. It needs a per frame camera solve.
 - Five package defects are listed in the status doc (a mislabelled plate, a frame numbering mismatch, the SH160 template's shared landmark facts and rooftop placement, no mesh path for a face shell, and `__pycache__` written without `python3 -B`).
 

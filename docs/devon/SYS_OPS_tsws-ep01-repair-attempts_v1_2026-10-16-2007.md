@@ -54,7 +54,7 @@ From the acceptance list above. It sets the scope for everything below.
 SH070 and SH100 fail on performance, which no repair method can add. Both need
 new footage, and new footage is a paid generation that waits on Tee's budget.
 
-## SH020: two repair attempts, both refused
+## SH020: two repair attempts, neither usable
 
 **The package's cleanup method.** Run on f164 to f189 with tracked per frame
 band masks along the shell edge. Exit 1,
@@ -156,7 +156,7 @@ TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_tsws-ep01-repair-attempts_v1_2026-10-16-2007.md
 DATE: 2026-10-16
 DECISIONS: Tee link shared and then revoked the four Episode 1 archives; link shared the SH020 and SH150 masters over a recommendation of SH020 only; ruled the head locked tool be built; ruled SH020 parked for software repair and moved to the regeneration list.
-FINDINGS: All six files match Drive sizes, and the two masters match the editor's sha256. The cleanup method refused SH020 with 92.3% of region pixels inpainted. The head locked tool processed 4 of 26 frames, refused f168 and f185, and was judged DO-NOT-SHIP by a second critic. SH150's -25,+3 at f95 is a smooth accelerating pan, not a cut, and translation stabilisation does not pass the composer's camera stage. Five package defects found.
+FINDINGS: All six files match Drive sizes, and the two masters match the editor's sha256. The cleanup method failed its checks on SH020 (exit 1) with 92.3% of region pixels inpainted, and its output was discarded. The head locked tool processed 4 of 26 frames, refused f168 and f185, and was judged DO-NOT-SHIP by a second critic. SH150's -25,+3 at f95 is a smooth accelerating pan, not a cut, and translation stabilisation does not pass the composer's camera stage. Five package defects found.
 OPEN: SH020 and SH150 masters still link shared at last check; SH020, SH070 and SH100 need paid regeneration; SH150 needs a camera solve; SH160 and SH045 wait on rulings; package defects unfixed.
 STATUS: DRAFT. Nothing repaired, nothing generated, nothing billed. human_review REQUIRED, continuous_playback UNVERIFIED.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
