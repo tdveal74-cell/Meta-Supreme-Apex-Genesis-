@@ -271,7 +271,7 @@ const JOBS = {
       return {
         bin: FP,
         argv: ['-v','error','-show_entries',
-               'format=duration:stream=width,height,r_frame_rate,color_transfer,pix_fmt',
+               'format=duration:stream=codec_type,width,height,r_frame_rate,color_transfer,pix_fmt',
                '-of','json', f],
         parse: (out) => {
           const j = JSON.parse(out || '{}');
@@ -279,13 +279,16 @@ const JOBS = {
           const [n, d] = String(st.r_frame_rate || '0/1').split('/');
           // color_transfer is how a caller tells an iPhone HDR take (HLG reads
           // arib-std-b67, PQ reads smpte2084) from SDR before take_patch, which
-          // needs to be told. Added 2026-10-15 with the Voice Lab jobs.
-          const tr = st.color_transfer ?? null;
+          // needs to be told. Added 2026-10-15 with the Voice Lab jobs. Read
+          // from the first VIDEO stream: the fields above keep reading stream 0
+          // exactly as they always have, for the TSWS callers.
+          const vs = (j.streams || []).find(x => x.codec_type === 'video') || {};
+          const tr = vs.color_transfer ?? null;
           return {
             duration: Number(j.format?.duration ?? 0),
             width: st.width ?? null, height: st.height ?? null,
             fps: Number(d) ? Number(n) / Number(d) : null,
-            pix_fmt: st.pix_fmt ?? null,
+            pix_fmt: vs.pix_fmt ?? null,
             color_transfer: tr,
             hdr: tr === 'arib-std-b67' || tr === 'smpte2084',
           };
@@ -832,7 +835,7 @@ const JOBS = {
       if (p.must_cover !== undefined && !Array.isArray(p.must_cover)) throw new BadJob('must_cover: must be an array of {start, end}');
       const mustCover = Array.isArray(p.must_cover) ? p.must_cover : [];
       if (mustCover.length > 64) throw new BadJob('must_cover: too many (max 64)');
-      mustCover.forEach((m, k) => {
+      const covered = mustCover.map((m, k) => {
         if (!m || typeof m !== 'object') throw new BadJob(`must_cover[${k}]: not an object`);
         const s = num(m.start, `must_cover[${k}].start`, { min: 0, max: 86400 });
         const e = num(m.end,   `must_cover[${k}].end`,   { min: 0, max: 86400 });
@@ -842,8 +845,12 @@ const JOBS = {
           throw new BadJob(`must_cover[${k}]: ${s}s to ${e}s is not inside one opaque` +
                            (stacked ? ' full-frame' : '') + ' cutaway; the presenter would show under the clone voice');
         }
-        const back = emphasis.find(g => g.s < e && s < g.e);
-        if (back) throw new BadJob(`must_cover[${k}]: overlaps emphasis ${back.s}s to ${back.e}s, which puts the presenter back on top`);
+        // Closed on both ends: between() in the overlay is inclusive, so an
+        // emphasis window that merely touches a covered one still shows a frame
+        // of the presenter (measured by the critic, one frame at the boundary).
+        const back = emphasis.find(g => g.s <= e && s <= g.e);
+        if (back) throw new BadJob(`must_cover[${k}]: touches emphasis ${back.s}s to ${back.e}s, which puts the presenter back on top`);
+        return { s, e };
       });
 
       // Inputs: 0 is the avatar, then one per cutaway in window order, then
@@ -867,6 +874,17 @@ const JOBS = {
       } else {
         parts.push(`[0:v]${normalizeChain(W, H)},fps=${fps},setpts=PTS-STARTPTS[base]`);
       }
+      // An opaque plate under every must_cover window, laid before any cutaway.
+      // The window check above proves a cutaway is SCHEDULED there; it cannot
+      // prove the clip has frames to show (a cutaway with `in` past its own end
+      // rendered 58 frames of the presenter in the critic's run). With the
+      // plate, an empty cutaway shows black, never the face.
+      let baseLbl = 'base';
+      if (covered.length) {
+        const en = covered.map(c => `between(t,${c.s.toFixed(6)},${c.e.toFixed(6)})`).join('+');
+        parts.push(`[base]drawbox=x=0:y=0:w=iw:h=ih:color=black:t=fill:enable='${en}'[baseplate]`);
+        baseLbl = 'baseplate';
+      }
       windows.forEach((w, i) => {
         inputs.push('-i', w.f);
         const len = w.e - w.s;
@@ -881,7 +899,7 @@ const JOBS = {
           `tpad=stop_mode=clone:stop_duration=${len.toFixed(6)},trim=end=${len.toFixed(6)},` +
           `format=yuva420p${fades},setpts=PTS+${w.s.toFixed(6)}/TB[c${i}]`);
       });
-      let last = 'base';
+      let last = baseLbl;
       windows.forEach((w, i) => {
         const lbl = `v${i + 1}`;
         parts.push(`[${last}][c${i}]overlay=0:0:eof_action=pass:enable='between(t,${w.s.toFixed(6)},${w.e.toFixed(6)})'[${lbl}]`);
@@ -980,7 +998,7 @@ const JOBS = {
           layout,
           emphasis: emphasis.length,
           full_cutaways: windows.filter(w => w.full).length,
-          must_cover: mustCover.length,
+          must_cover: covered.length,
         }),
       };
     },
@@ -997,56 +1015,96 @@ const JOBS = {
    * cutaway over every patch window and refuses to render if one is bare
    * (`must_cover`), so the held frame is never what a viewer sees either.
    *
-   * Each take item is its own input, seeked with -ss before -i. One input split
-   * N ways would make the concat buffer every decoded frame of every branch it
-   * has not reached yet, which on a 4K take is the whole machine's memory.
+   * ONE SEGMENT AT A TIME. The first cut put every item into one ffmpeg run as
+   * its own seeked input, and the memory of that was measured, not guessed:
+   * 64 items on a 40 s 4K HEVC HLG take, 96 inputs, peaked at 13.6 GiB and
+   * died. The VPS has 7.8 GiB. Every input is a live decoder, about 140 MB
+   * each at 4K, whether or not the concat has reached it. So this job is
+   * native: it renders each item to its own short intermediate, one or two
+   * inputs per ffmpeg run, then joins them with the concat demuxer as a
+   * stream copy. Picture is encoded once, in the segments; sound is PCM in the
+   * segments and encoded once, at the join.
    *
-   * Durations are pinned at every step: video by tpad then trim, audio by apad
-   * then atrim, and the output by -t. So the windows returned here are exact,
-   * which is what lets must_cover check them at submit rather than by eye.
+   * Durations are pinned at every step and every segment is a whole number of
+   * frames, so the windows returned here are exact, which is what lets
+   * must_cover check them at submit rather than by eye.
    *
    * A patch's `duration` must be the clone file's real length, from the probe
    * job. Shorter than the file cuts the reading off; that is stated here rather
-   * than guessed around, and the parse result echoes every duration it used.
+   * than guessed around, and the result echoes every duration it used.
    *
    * `hdr` has no default on purpose. An iPhone 15 Pro shoots HLG by default, and
    * a 10-bit HLG take squeezed to yuv420p without a tonemap comes out grey and
    * washed. The probe job reports `hdr`; the caller passes 'tonemap' or 'sdr'.
    *
-   * params: { take, output, hdr: 'sdr'|'tonemap',
+   * `take_duration` is required, from probe. The first cut never checked a span
+   * against the file, and a critic rendered a take span ending 0.05 s past the
+   * end that left the patch after it with zero frames and returned ok. Take
+   * spans must also run in time order without overlapping: an edl of 6-8, 1-3,
+   * 2-4 repeated a second of speech and returned ok.
+   *
+   * params: { take, take_duration, output, hdr: 'sdr'|'tonemap',
    *           edl: [{kind:'take', start, end} | {kind:'patch', audio, duration}],
-   *           narration_output?, fps?, xfade?, crf?, preset? }
+   *           narration_output?, fps?, xfade?, crf?, preset?, width?, height? }
+   *
+   * width and height scale every segment to the presenter canvas (with the
+   * same letterbox rule as everywhere else) instead of carrying the iPhone's
+   * 4K through. presenter_composite lands on 1920x1080 regardless, and the
+   * 4K segments cost 214 s for 24.5 s of picture at preset ultrafast in the
+   * 2026-10-15 measurement, which on the 2 core box is hours per episode.
    */
   take_patch: {
     build(p) {
       const take = existingPath(p.take, 'take');
-      const out  = ensureDir(safePath(p.output, 'output'));
+      const out  = safePath(p.output, 'output');
+      // The segment list is a file ffmpeg parses, so the paths written into it
+      // are held to the same rule as a caption path inside a filter graph.
+      if (!/^[A-Za-z0-9_./-]+$/.test(out)) {
+        throw new BadJob('output: the resolved path carries a character the concat list cannot take verbatim; rename it');
+      }
       const hdr  = oneOf(p.hdr, 'hdr', ['sdr', 'tonemap']);
-      const fps  = num(p.fps ?? 30, 'fps', { min: 1, max: 120 });
+      if (p.take_duration === undefined) throw new BadJob('take_duration: required, from the probe job');
+      const takeDur = num(p.take_duration, 'take_duration', { min: 0.001, max: 86400 });
+      const fps  = num(p.fps ?? 30, 'fps', { min: 1, max: 120, int: true });
       const xf   = num(p.xfade ?? 0.02, 'xfade', { min: 0, max: 0.5 });
+      const crf  = num(p.crf ?? 16, 'crf', { min: 0, max: 51, int: true });
+      const preset = oneOf(p.preset ?? 'medium', 'preset', PRESETS);
+      if ((p.width === undefined) !== (p.height === undefined)) throw new BadJob('width and height: send both or neither');
+      const size = p.width === undefined ? null : {
+        W: num(p.width,  'width',  { min: 16, max: 8192, int: true }),
+        H: num(p.height, 'height', { min: 16, max: 8192, int: true }),
+      };
       const narOut = (p.narration_output === undefined || p.narration_output === null || p.narration_output === '')
-        ? null : ensureDir(safePath(p.narration_output, 'narration_output'));
+        ? null : safePath(p.narration_output, 'narration_output');
       if (!Array.isArray(p.edl)) throw new BadJob('edl: must be an array (align_script returns null on a re-record)');
       if (p.edl.length < 1) throw new BadJob('edl: need at least one item');
-      if (p.edl.length > 64) throw new BadJob('edl: too many items (max 64)');
+      if (p.edl.length > 400) throw new BadJob('edl: too many items (max 400)');
 
       // Every segment is a whole number of frames, on BOTH tracks. The first
       // cut trimmed audio to the second and video to the frame, so each splice
       // left the picture up to a frame longer than the sound: measured 13 ms on
-      // the 2026-10-15 acceptance run, and it accumulates, so a 64 item edl
-      // could drift two seconds out of sync. A take rounds to the nearest
-      // frame; a patch rounds UP, because rounding down cuts the clone's last
-      // syllable and rounding up only adds silence.
+      // the 2026-10-15 acceptance run, and it accumulates. A take rounds to the
+      // nearest frame; a patch rounds UP, because rounding down cuts the
+      // clone's last syllable and rounding up only adds silence.
       const minLen = 2 * xf + 1 / fps;
       const frames = (sec, up) => Math.max(1, up ? Math.ceil(sec * fps - 1e-6) : Math.round(sec * fps));
+      let prevEnd = null;
       const items = p.edl.map((it, k) => {
         if (!it || typeof it !== 'object') throw new BadJob(`edl[${k}]: not an object`);
         const kind = oneOf(it.kind, `edl[${k}].kind`, ['take', 'patch']);
         if (kind === 'take') {
           const s = num(it.start, `edl[${k}].start`, { min: 0, max: 86400 });
           const e = num(it.end,   `edl[${k}].end`,   { min: 0, max: 86400 });
+          if (e > takeDur + 1e-6) throw new BadJob(`edl[${k}]: ends at ${e}s, past the take's ${takeDur}s`);
           if (e - s < minLen) throw new BadJob(`edl[${k}]: ${(e - s).toFixed(3)}s is shorter than two crossfades and a frame`);
-          const len = frames(e - s, false) / fps;
+          if (prevEnd !== null && s < prevEnd - 1e-6) {
+            throw new BadJob(`edl[${k}]: starts at ${s}s, before the previous take ends at ${prevEnd}s; take spans must be in time order and must not overlap`);
+          }
+          prevEnd = e;
+          // Snap to whole frames, but never past the end of the file.
+          let n = frames(e - s, false);
+          if (s + n / fps > takeDur + 1e-6) n = Math.max(1, Math.floor((takeDur - s) * fps + 1e-6));
+          const len = n / fps;
           return { kind, s, e: s + len, len, lines: it.lines };
         }
         const audio = existingPath(it.audio, `edl[${k}].audio`);
@@ -1057,11 +1115,11 @@ const JOBS = {
         throw new BadJob('edl: no take item, so there is no frame of the presenter to hold');
       }
 
-      // The frame a patch holds: the last frame of the take before it, or the
-      // first frame of the take after it when the patch opens the episode.
+      // The frame a patch holds: two frames inside the end of the take before
+      // it, or the first frame of the take after it when the patch opens.
       const holdAt = (k) => {
         for (let i = k - 1; i >= 0; i--) {
-          if (items[i].kind === 'take') return Math.max(0, items[i].e - 2 / fps);
+          if (items[i].kind === 'take') return Math.max(0, Math.min(items[i].e, takeDur) - 2 / fps);
         }
         for (let i = k + 1; i < items.length; i++) {
           if (items[i].kind === 'take') return items[i].s;
@@ -1069,38 +1127,53 @@ const JOBS = {
         return 0;
       };
 
-      const picture = hdr === 'tonemap'
-        ? 'zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,' +
-          'zscale=t=bt709:m=bt709:r=tv,format=yuv420p'
-        : 'format=yuv420p';
+      // Downscale FIRST, still at the take's own bit depth, so the float
+      // tonemap runs on a quarter of the pixels; then letterbox to the canvas.
+      const picture = (size ? `scale=${size.W}:${size.H}:force_original_aspect_ratio=decrease:flags=lanczos,` : '') +
+        (hdr === 'tonemap'
+          ? 'zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,' +
+            'zscale=t=bt709:m=bt709:r=tv,format=yuv420p'
+          : 'format=yuv420p') +
+        (size ? `,${normalizeChain(size.W, size.H)}` : '');
       const mono = 'aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=mono';
       const fades = (len) => xf > 0
         ? `,afade=t=in:st=0:d=${xf}:curve=tri,afade=t=out:st=${(len - xf).toFixed(6)}:d=${xf}:curve=tri`
         : '';
+      // Identical encoder settings in every segment, so the join can copy the
+      // video rather than encode it a second time.
+      const encode = (L) => ['-map', '[v]', '-map', '[a]', '-r', String(fps),
+        '-c:v', 'libx264', '-crf', String(crf), '-preset', preset, '-pix_fmt', 'yuv420p',
+        '-g', String(2 * fps), '-video_track_timescale', String(fps * 1000),
+        '-c:a', 'pcm_s24le', '-ar', '48000', '-ac', '1', '-t', L];
 
-      const inputs = [];
-      const parts = [];
-      const pads = [];
+      const partsDir = `${out}.parts`;
+      const segments = [];
       const windows = [];
       let t = 0;
-      let idx = 0;
       items.forEach((it, k) => {
         const L = it.len.toFixed(6);
+        const seg = path.join(partsDir, `${String(k).padStart(3, '0')}.mov`);
+        let argv;
         if (it.kind === 'take') {
-          inputs.push('-ss', it.s.toFixed(6), '-t', L, '-i', take);
-          const i = idx++;
-          parts.push(`[${i}:v]setpts=PTS-STARTPTS,fps=${fps},${picture},setsar=1,` +
-                     `tpad=stop_mode=clone:stop_duration=1,trim=duration=${L},setpts=PTS-STARTPTS[v${k}]`);
-          parts.push(`[${i}:a]asetpts=PTS-STARTPTS,${mono},apad,atrim=duration=${L}${fades(it.len)}[a${k}]`);
+          // No setpts before fps. After an input seek the clock is already zero
+          // at the seek point, which is where the audio starts; resetting it to
+          // the first decoded frame instead slid the picture up to a frame ahead
+          // of the voice (+28.4 ms measured by the critic at a 1.001 s seek).
+          // fps with start_time=0 lands each frame on the nearest slot of the
+          // audio's own clock: -5.0, +9.4 and -10.6 ms against a -4.0 ms source.
+          argv = ['-y', ...QUIET, '-ss', it.s.toFixed(6), '-t', L, '-i', take, '-filter_complex',
+            `[0:v]fps=${fps}:start_time=0,${picture},setsar=1,` +
+            `tpad=stop_mode=clone:stop_duration=1,trim=duration=${L},setpts=PTS-STARTPTS[v];` +
+            `[0:a]asetpts=PTS-STARTPTS,${mono},apad,atrim=duration=${L}${fades(it.len)}[a]`,
+            ...encode(L), seg];
         } else {
           // A two frame slice is enough to hold one; trim keeps the first.
-          inputs.push('-ss', holdAt(k).toFixed(6), '-t', (2 / fps).toFixed(6), '-i', take);
-          const iv = idx++;
-          inputs.push('-i', it.audio);
-          const ia = idx++;
-          parts.push(`[${iv}:v]setpts=PTS-STARTPTS,fps=${fps},${picture},setsar=1,trim=end_frame=1,` +
-                     `tpad=stop_mode=clone:stop_duration=${L},trim=duration=${L},setpts=PTS-STARTPTS[v${k}]`);
-          parts.push(`[${ia}:a]asetpts=PTS-STARTPTS,${mono},apad,atrim=duration=${L}${fades(it.len)}[a${k}]`);
+          argv = ['-y', ...QUIET, '-ss', holdAt(k).toFixed(6), '-t', (2 / fps).toFixed(6), '-i', take,
+            '-i', it.audio, '-filter_complex',
+            `[0:v]setpts=PTS-STARTPTS,fps=${fps},${picture},setsar=1,trim=end_frame=1,` +
+            `tpad=stop_mode=clone:stop_duration=${L},trim=duration=${L},setpts=PTS-STARTPTS[v];` +
+            `[1:a]asetpts=PTS-STARTPTS,${mono},apad,atrim=duration=${L}${fades(it.len)}[a]`,
+            ...encode(L), seg];
           windows.push({
             item: k,
             lines: Array.isArray(it.lines) ? it.lines : null,
@@ -1108,38 +1181,59 @@ const JOBS = {
             end: +(t + it.len).toFixed(6),
           });
         }
-        pads.push(`[v${k}][a${k}]`);
+        segments.push({ bin: FF, argv, output: seg });
         t += it.len;
       });
       const total = t;
-      const tail = narOut ? '[vcat][acat];[acat]asplit=2[amux][anar]' : '[vcat][amux]';
-      parts.push(`${pads.join('')}concat=n=${items.length}:v=1:a=1${tail}`);
-
-      const argv = ['-y', ...QUIET, ...inputs, '-filter_complex', parts.join(';'),
-                    '-map', '[vcat]', '-map', '[amux]', '-r', String(fps),
-                    '-c:v', 'libx264', '-crf', String(num(p.crf ?? 16, 'crf', { min: 0, max: 51, int: true })),
-                    '-preset', oneOf(p.preset ?? 'medium', 'preset', PRESETS),
-                    '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '320k',
+      const list = `${partsDir}/list.ffconcat`;
+      const join = ['-y', ...QUIET, '-f', 'concat', '-safe', '0', '-i', list,
+                    '-map', '0:v', '-map', '0:a', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '320k',
                     '-movflags', '+faststart', '-t', total.toFixed(6), out];
-      if (narOut) argv.push('-map', '[anar]', '-c:a', 'pcm_s24le', '-t', total.toFixed(6), narOut);
+      if (narOut) join.push('-map', '0:a', '-c:a', 'pcm_s24le', '-t', total.toFixed(6), narOut);
+
+      const result = () => ({
+        output: path.relative(WORK_ROOT, out),
+        narration_output: narOut === null ? null : path.relative(WORK_ROOT, narOut),
+        duration: +total.toFixed(6),
+        takes: items.filter(it => it.kind === 'take').length,
+        patches: windows.length,
+        // Feed these to presenter_composite as must_cover, unchanged.
+        patch_windows: windows,
+        // Frame-snapped lengths as rendered, then the clone files' own.
+        patch_durations: items.filter(it => it.kind === 'patch').map(it => +it.len.toFixed(6)),
+        patch_source_durations: items.filter(it => it.kind === 'patch').map(it => it.source_len),
+        segments: segments.length,
+        hdr,
+        fps,
+      });
+
+      const { execFile } = require('child_process');
+      const run = (argv) => new Promise((resolve, reject) => {
+        execFile(FF, argv, { cwd: WORK_ROOT, env: { PATH: process.env.PATH, LANG: 'C' },
+                             maxBuffer: 32 * 1024 * 1024,
+                             timeout: Number(process.env.JOB_TIMEOUT_MS || 6 * 3600 * 1000) },
+          (err, _o, errOut) => err
+            ? reject(new Error(String(errOut || err.message).trim().split('\n').slice(-8).join('\n')))
+            : resolve());
+      });
 
       return {
-        bin: FF,
-        argv,
-        parse: () => ({
-          output: path.relative(WORK_ROOT, out),
-          narration_output: narOut === null ? null : path.relative(WORK_ROOT, narOut),
-          duration: +total.toFixed(6),
-          takes: items.filter(it => it.kind === 'take').length,
-          patches: windows.length,
-          // Feed these to presenter_composite as must_cover, unchanged.
-          patch_windows: windows,
-          // Frame-snapped lengths as rendered, then the clone files' own.
-          patch_durations: items.filter(it => it.kind === 'patch').map(it => +it.len.toFixed(6)),
-          patch_source_durations: items.filter(it => it.kind === 'patch').map(it => it.source_len),
-          hdr,
-          fps,
-        }),
+        // Exposed so the builder tests can pin every argv without running ffmpeg.
+        plan: { segments, join, list },
+        result,
+        native: async () => {
+          fs.rmSync(partsDir, { recursive: true, force: true });
+          fs.mkdirSync(partsDir, { recursive: true });
+          ensureDir(out);
+          if (narOut) ensureDir(narOut);
+          for (const s of segments) await run(s.argv);
+          fs.writeFileSync(list, 'ffconcat version 1.0\n' +
+            segments.map(s => `file '${s.output}'\nduration ${(+s.argv[s.argv.length - 2]).toFixed(6)}\n`).join(''));
+          await run(join);
+          // Kept on failure, for diagnosis; removed once the join has landed.
+          fs.rmSync(partsDir, { recursive: true, force: true });
+          return result();
+        },
       };
     },
   },
@@ -1673,41 +1767,42 @@ const JOBS = {
    * Tee records the approved script on his iPhone, retakes and flubs included.
    * A speech-to-text pass gives every spoken word a start and an end. This job
    * lines the script up against those words and says, line by line, which
-   * stretch of the real take to keep and which lines nobody said cleanly.
-   * Those go to the voice clone, read from the SCRIPT, word for word.
+   * stretch of the real take to keep and which lines go to the voice clone,
+   * read from the SCRIPT, word for word.
    *
-   * It never edits a word. A line either matched the take at `threshold` or
-   * better, or it is patched with its own script text verbatim. There is no
-   * third outcome where the job decides what the line should have said.
+   * A take is kept only when it says the line EXACTLY: the same words in the
+   * same order once case and punctuation are folded away. The first cut kept
+   * anything scoring 0.9 on a word-overlap ratio, and a fresh critic showed what
+   * that means on a ten word line: "thirty percent" spoken as "forty" was kept,
+   * "never" spoken as "always" was kept, and a dropped last word was kept. Any
+   * line not said verbatim, a filler in the middle included, is patched. A
+   * patch costs a clone reading; a kept misreading puts words on air that Tee
+   * never approved.
    *
-   * The last good take wins. Lines are placed in reverse: the final line takes
-   * its latest clean match, and every earlier line must END before the next
-   * line's chosen take STARTS. A speaker who says a line, stumbles and says it
-   * again gets the second reading, and a stray earlier attempt can never be
-   * spliced in after a later line.
+   * Which readings are kept is a dynamic program over every verbatim occurrence
+   * of every line: the chosen readings must run in script order without
+   * overlapping, and the choice keeps the most script WORDS. Ties go to the
+   * later readings, so the last clean take wins. The first cut placed lines
+   * greedily from the end, and the critic showed it handing the word "why" to a
+   * skipped one word line and cloning the whole line before it.
    *
-   * Candidates that overlap are one utterance seen at several offsets. Only the
-   * best of each cluster survives, otherwise "the latest start" would pick the
-   * same reading with its first word shaved off.
-   *
-   * Too many patches is a re-record, not a patch. Above `max_patch_share` the
-   * job returns verdict 'rerecord' and NO edl, so take_patch has nothing to
-   * build from, and the per-line scores say why.
+   * Too many patches is a re-record, not a patch. Above `max_patch_share` of
+   * the lines the job returns verdict 'rerecord' and NO edl, so take_patch has
+   * nothing to build from, and the per-line report says which lines missed.
    *
    * params: { lines: [string], words?: [{text, start, end, type?}],
-   *           words_path?, threshold?, max_patch_share?, pad?, slack? }
+   *           words_path?, take_duration?, max_patch_share?, pad? }
    */
   align_script: {
     build(p) {
       if (!Array.isArray(p.lines)) throw new BadJob('lines: must be an array of strings');
       if (p.lines.length < 1) throw new BadJob('lines: need at least one');
-      if (p.lines.length > 1000) throw new BadJob('lines: too many (max 1000)');
+      if (p.lines.length > 2000) throw new BadJob('lines: too many (max 2000)');
       const lines = p.lines.map((l, i) => {
         if (typeof l !== 'string') throw new BadJob(`lines[${i}]: not a string`);
-        if (l.length > 2000) throw new BadJob(`lines[${i}]: over 2000 characters`);
+        if (l.length > 4000) throw new BadJob(`lines[${i}]: over 4000 characters`);
         const toks = alignTokens(l);
         if (toks.length === 0) throw new BadJob(`lines[${i}]: has no words`);
-        if (toks.length > 120) throw new BadJob(`lines[${i}]: over 120 words; split the line`);
         return { text: l, toks };
       });
       if (p.words !== undefined && p.words_path !== undefined) {
@@ -1717,14 +1812,17 @@ const JOBS = {
       if (wordsFile === null && !Array.isArray(p.words)) {
         throw new BadJob('words: must be an array of {text, start, end}');
       }
-      const threshold = num(p.threshold ?? 0.9, 'threshold', { min: 0.5, max: 1 });
-      const maxShare  = num(p.max_patch_share ?? 0.3, 'max_patch_share', { min: 0, max: 1 });
-      const pad       = num(p.pad ?? 0.12, 'pad', { min: 0, max: 1 });
-      const slackFrac = num(p.slack ?? 0.2, 'slack', { min: 0, max: 0.5 });
+      if (p.threshold !== undefined) {
+        throw new BadJob('threshold: removed 2026-10-15; a take is kept only when it says the line verbatim');
+      }
+      const maxShare = num(p.max_patch_share ?? 0.3, 'max_patch_share', { min: 0, max: 1 });
+      const pad      = num(p.pad ?? 0.12, 'pad', { min: 0, max: 1 });
+      const takeDur  = p.take_duration === undefined ? null
+        : num(p.take_duration, 'take_duration', { min: 0.001, max: 86400 });
 
       const run = (rawWords) => {
         if (!Array.isArray(rawWords)) throw new BadJob('words: must be an array of {text, start, end}');
-        if (rawWords.length > 20000) throw new BadJob('words: too many (max 20000)');
+        if (rawWords.length > 50000) throw new BadJob('words: too many (max 50000)');
         // Speech-to-text vendors interleave spacing and sound events with the
         // words. Anything that declares a type other than 'word' is not speech.
         const words = [];
@@ -1735,86 +1833,84 @@ const JOBS = {
           const s = num(w.start, `words[${i}].start`, { min: 0, max: 86400 });
           const e = num(w.end,   `words[${i}].end`,   { min: 0, max: 86400 });
           if (e < s) throw new BadJob(`words[${i}]: end before start`);
-          const toks = alignTokens(w.text);
-          // One transcript word can normalise to two tokens ("don't-know") or to
+          // One transcript word can fold to two tokens ("twenty-six") or to
           // none (a lone dash). Each token keeps the word's own timing.
-          toks.forEach(tk => words.push({ tok: tk, s, e }));
+          alignTokens(w.text).forEach(tk => words.push({ tok: tk, s, e }));
         });
         for (let i = 1; i < words.length; i++) {
           if (words[i].s < words[i - 1].s) throw new BadJob('words: not in time order');
         }
         const W = words.map(w => w.tok);
+        const byTok = new Map();
+        W.forEach((t, i) => { if (!byTok.has(t)) byTok.set(t, []); byTok.get(t).push(i); });
 
-        // Every candidate span per line, then one per overlapping cluster.
-        const cands = lines.map(({ toks }) => {
-          const n = toks.length;
-          const k = Math.max(1, Math.round(n * slackFrac));
-          // A window that opens or closes on a word the line does not contain
-          // scores strictly below the same window with that word trimmed off.
-          // Skipping those is what keeps a 15 minute take fast.
-          const vocab = new Set(toks);
-          const best = [];
-          for (let s = 0; s < W.length; s++) {
-            if (!vocab.has(W[s])) continue;
-            let top = null;
-            for (let len = Math.max(1, n - k); len <= n + k && s + len <= W.length; len++) {
-              if (!vocab.has(W[s + len - 1])) continue;
-              const r = lcsRatio(toks, W, s, len);
-              if (top === null || r > top.score) top = { s, e: s + len - 1, score: r };
-            }
-            if (top && top.score >= threshold) best.push(top);
+        // Every verbatim occurrence of every line. The scan is bounded so a
+        // pathological script (a hundred one word lines of "the") is refused
+        // rather than allowed to hold the event loop: this is a native job, and
+        // server.js cannot time one out.
+        let budget = 2000000;
+        const occ = lines.map(({ toks }) => {
+          const out = [];
+          for (const s of byTok.get(toks[0]) || []) {
+            if (--budget < 0) throw new BadJob('lines: too many candidate readings to search (over 2,000,000); split the take');
+            if (s + toks.length > W.length) break;
+            let ok = true;
+            for (let j = 1; j < toks.length; j++) if (W[s + j] !== toks[j]) { ok = false; break; }
+            if (ok) out.push({ s, e: s + toks.length - 1 });
           }
-          const kept = [];
-          for (const c of best) {
-            const prev = kept[kept.length - 1];
-            if (prev && c.s <= prev.e) {
-              if (c.score > prev.score) kept[kept.length - 1] = c;
-            } else {
-              kept.push(c);
-            }
-          }
-          return kept;
+          return out;
         });
 
-        // Reverse placement: latest clean reading that still ends before the
-        // next placed line starts.
+        // Keep the most script words, in order, without overlap; ties go to the
+        // later readings. A Fenwick tree over transcript positions answers
+        // "the best chain ending before position x" in log time, and a line's
+        // own occurrences are only inserted after all of them have queried, so
+        // no chain ever uses one line twice.
+        const better = (a, b) => (a.w !== b.w ? a.w > b.w : a.sec > b.sec);
+        const ZERO = { w: 0, sec: 0, node: null };
+        const tree = new Array(W.length + 1).fill(ZERO);
+        const query = (x) => { let r = ZERO; for (let i = x; i > 0; i -= i & -i) if (better(tree[i], r)) r = tree[i]; return r; };
+        const update = (x, v) => { for (let i = x + 1; i <= W.length; i += i & -i) if (better(v, tree[i])) tree[i] = v; };
+        let best = ZERO;
+        lines.forEach((l, li) => {
+          const made = occ[li].map((o) => {
+            const q = query(o.s);   // chains whose last reading ends before o.s
+            const v = { w: q.w + l.toks.length, sec: q.sec + o.s, node: { li, o, prev: q.node } };
+            if (better(v, best)) best = v;
+            return v;
+          });
+          made.forEach((v) => update(v.node.o.e, v));
+        });
         const chosen = new Array(lines.length).fill(null);
-        let bound = W.length;
-        for (let i = lines.length - 1; i >= 0; i--) {
-          let pick = null;
-          for (const c of cands[i]) if (c.e < bound && (pick === null || c.s > pick.s)) pick = c;
-          if (pick) { chosen[i] = pick; bound = pick.s; }
-        }
+        for (let n = best.node; n; n = n.prev) chosen[n.li] = n.o;
 
-        const report = lines.map((l, i) => {
-          const top = cands[i].reduce((a, c) => (a === null || c.score > a ? c.score : a), null);
-          return chosen[i]
-            ? { line: i, kind: 'take', score: +chosen[i].score.toFixed(4), from_word: chosen[i].s, to_word: chosen[i].e }
-            : { line: i, kind: 'patch', best_score: top === null ? null : +top.toFixed(4), text: l.text };
-        });
+        const report = lines.map((l, i) => chosen[i]
+          ? { line: i, kind: 'take', from_word: chosen[i].s, to_word: chosen[i].e }
+          : { line: i, kind: 'patch', said_verbatim_times: occ[i].length, text: l.text });
         const patched = report.filter(r => r.kind === 'patch').length;
+        const taken = lines.length - patched;
         const share = patched / lines.length;
-        const taken = report.filter(r => r.kind === 'take').length;
 
         if (share > maxShare || taken === 0) {
           return {
             verdict: 'rerecord',
             reason: taken === 0
-              ? 'no line of the script was found in the take'
-              : `${patched} of ${lines.length} lines need the clone (${(share * 100).toFixed(1)}%), over the ${(maxShare * 100).toFixed(1)}% ceiling`,
-            lines: lines.length, patched, patch_share: +share.toFixed(4), threshold,
+              ? 'no line of the script was said verbatim in the take'
+              : `${patched} of ${lines.length} lines were not said verbatim (${(share * 100).toFixed(1)}%), over the ${(maxShare * 100).toFixed(1)}% ceiling`,
+            lines: lines.length, patched, patch_share: +share.toFixed(4),
             edl: null, report,
           };
         }
 
-        // Build the edl. Lines that sit back to back in the transcript, with no
-        // word dropped between them, stay one continuous span so the natural
-        // pause survives. A pad either side never reaches past the midpoint to
-        // the neighbouring word, so it cannot pull in half of a flubbed one.
+        // Lines back to back in the transcript, with no word between them,
+        // stay one span so the natural pause survives. A pad either side never
+        // reaches past the midpoint to the neighbouring word, so it cannot
+        // pull in half of a flubbed one, and never runs past the take's end.
         const edges = (sIdx, eIdx) => {
           const a = words[sIdx].s, b = words[eIdx].e;
           const lo = sIdx > 0 ? (words[sIdx - 1].e + a) / 2 : 0;
-          const hi = eIdx < words.length - 1 ? (b + words[eIdx + 1].s) / 2 : b + pad;
+          let hi = eIdx < words.length - 1 ? (b + words[eIdx + 1].s) / 2 : b + pad;
+          if (takeDur !== null) hi = Math.min(hi, takeDur);
           return { start: Math.max(lo, a - pad), end: Math.min(hi, b + pad) };
         };
         const edl = [];
@@ -1837,7 +1933,7 @@ const JOBS = {
 
         return {
           verdict: patched === 0 ? 'clean' : 'patch',
-          lines: lines.length, patched, patch_share: +share.toFixed(4), threshold,
+          lines: lines.length, patched, patch_share: +share.toFixed(4),
           edl, report,
         };
       };
@@ -1871,20 +1967,6 @@ function alignTokens(s) {
     .split(/[\s-]+/)
     .map(t => t.replace(/^'+|'+$/g, ''))
     .filter(Boolean);
-}
-
-/** 2 * LCS / (|a| + len), token level, against W[s .. s+len). */
-function lcsRatio(a, W, s, len) {
-  const n = a.length;
-  let prev = new Array(len + 1).fill(0);
-  let cur = new Array(len + 1).fill(0);
-  for (let i = 1; i <= n; i++) {
-    for (let j = 1; j <= len; j++) {
-      cur[j] = a[i - 1] === W[s + j - 1] ? prev[j - 1] + 1 : Math.max(prev[j], cur[j - 1]);
-    }
-    [prev, cur] = [cur, prev];
-  }
-  return (2 * prev[len]) / (n + len);
 }
 
 module.exports = { JOBS, BadJob, safePath, existingPath, num, oneOf, setRoot, getRoot, PRESETS,

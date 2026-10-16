@@ -519,37 +519,75 @@ window past the planned duration when one is given.
 
 ## Voice Lab (added 2026-10-15)
 
-Three changes for the TQO ship lane that does not need an avatar. Tee records
-the approved script on his iPhone. A speech-to-text pass times every word.
-`align_script` keeps the last clean reading of each line and marks the rest.
-The voice clone re-reads ONLY the marked lines, from the script, verbatim.
-`take_patch` splices the real take and the clone audio into one base track.
-`presenter_composite` lays a cutaway over every clone window and, through
-`must_cover`, refuses to render if one is bare.
+This is the TQO ship lane that does not need an avatar.
+
+1. Tee records the approved script on his iPhone.
+2. A speech-to-text pass times every word.
+3. `align_script` keeps the readings that say a line **verbatim** and marks the
+   rest.
+4. The voice clone re-reads ONLY the marked lines, from the script, word for
+   word.
+5. `take_patch` splices the real take and the clone audio into one base track.
+6. `presenter_composite` lays a cutaway over every clone window. Through
+   `must_cover` it refuses to render if one is bare, and it puts an opaque
+   plate under each window so that an empty cutaway shows black, never his face.
 
 | job | kind | what it returns |
 |---|---|---|
-| `align_script` | native | `verdict` clean, patch or rerecord; the edl; a score for every line |
-| `take_patch` | ffmpeg | base video, optional narration wav, `patch_windows` on the new timeline |
-| `presenter_composite` `must_cover` | param | refusal at submit when a window is not inside one opaque cutaway |
-| `probe` | ffprobe | now also `pix_fmt`, `color_transfer` and `hdr` |
+| `align_script` | native | `verdict` clean, patch or rerecord; the edl; a line by line report |
+| `take_patch` | native, one ffmpeg per segment, then a stream copy join | base video, optional narration wav, `patch_windows` on the new timeline |
+| `presenter_composite` `must_cover` | param | refusal at submit when a window is not inside one opaque cutaway, plus a black plate under it |
+| `probe` | ffprobe | now also `pix_fmt`, `color_transfer` and `hdr`, read from the first video stream |
 
 Things to know before wiring it:
 
-* `take_patch` has no default for `hdr`. An iPhone 15 Pro records HLG by
-  default, and an HLG take squeezed to 8 bit without a tonemap comes out grey.
-  Call `probe` on the take and pass `tonemap` when it reports `hdr: true`.
-* A patch's `duration` must be the clone file's real length, from `probe`. The
-  job rounds it UP to a whole frame, so a correct length is never cut short, but
-  a wrong one is honoured.
-* The held frame under a patch is the take's frame one before the last shown,
-  by design: the seek sits two frames inside the take so it cannot fall off the
-  end of the file. The cutaway hides it either way.
-* Over 30 percent of lines patched is a re-record. `align_script` returns
+* **A take is kept only when it says the line exactly.** Case and punctuation
+  are folded away; nothing else is. A filler inside a line, a changed number or
+  a dropped word sends the line to the clone. The first cut kept anything that
+  scored 0.9 on a word overlap ratio, and a fresh critic got "forty percent"
+  kept for a script that says thirty. The old `threshold` parameter is now
+  refused rather than ignored.
+* **Readings are chosen by a dynamic program.** It keeps the most script
+  words in order, and on a tie the later reading wins.
+* **Over 30 percent of lines patched is a re-record.** `align_script` returns
   `verdict: rerecord` with `edl: null`, and `take_patch` refuses a null edl.
-* Digits and number words do not match each other. "3" in the script against
-  "three" in the transcript sends that line to the clone. That is the safe
-  direction, and the per-line scores make it visible.
+* **Digits and number words do not match each other.** ElevenLabs speech to
+  text writes numbers as words, so a script line written with digits always
+  goes to the clone. Write numbers as words in the script if the take should
+  keep them.
+* **`take_patch` has no default for `hdr`.** An iPhone 15 Pro records HLG by
+  default. Call `probe` on the take and pass `tonemap` when it reports
+  `hdr: true`. A file tagged with an HLG transfer but no primaries or matrix is
+  refused by zscale ("no path between colorspaces"), loudly; a real iPhone file
+  carries all three tags.
+* **`take_duration` is required, from `probe`.** Take spans past it are
+  refused. A span that frame snapping would push past the end is snapped
+  down instead.
+* **Take spans must run in time order and must not overlap.**
+* **Pass `width` and `height`, the presenter canvas.** Segments are then cut
+  at that size, scaled BEFORE the tonemap so the float maths runs on a
+  quarter of the pixels. Carrying 4K through cost 214 s for 24.5 s of picture
+  at preset ultrafast.
+* **A patch's `duration` must be the clone file's real length, from `probe`.**
+  The job rounds it UP to a whole frame, so a correct length is never cut
+  short, but an understated one is honoured. The result echoes both lengths.
+* **The held frame under a patch sits two frames inside the take's end.** With
+  the picture on the audio's clock, that is usually the last frame shown, so the
+  still can begin one frame before the window. The cutaway and the plate hide
+  it either way.
+* **`fps` must be a whole number**, so that every segment's audio is a whole
+  number of samples.
+
+### Memory, measured, and why take_patch is native
+
+The first `take_patch` made every edl item its own seeked input in one ffmpeg
+run. On a 40 s 4K HEVC HLG take, 64 items (96 inputs) **peaked at 13.6 GiB
+and died**, and this box has 7.8 GiB. Each input is a live decoder.
+
+The job now runs one ffmpeg per item, one or two inputs each, and joins the
+segments with the concat demuxer as a stream copy, so the picture is encoded
+once. The same 64 items peaked at **1,068 MiB**, and the output measured 736
+frames against 736 planned. The cap is now 400 items.
 
 ### Acceptance, real ffmpeg
 
@@ -560,28 +598,30 @@ node voice-lab-acceptance.js            # exits non-zero on any failure
 ```
 
 It builds a synthetic take whose every frame carries its own index in its
-pixels, a 440 Hz "voice", and a 1000 Hz mp3 "clone", then measures:
+pixels, a 440 Hz "voice", and a 1000 Hz mp3 "clone". Then it measures:
 
-* that every output frame comes from the exact source frame the edl asked for;
-* that picture and sound are the same length to the frame;
-* that the held frames land on the returned window;
+* every output frame against the source frame it should be;
+* picture against sound length, to the frame;
+* where the held frames land;
 * that the clone is heard only inside its window, more than 30 dB clear;
 * that no join clicks;
 * that `must_cover` refuses a cutaway whose fade would show the face;
-* that no take pixel shows anywhere in the window;
-* that an HLG take tonemaps to BT.709 8 bit at the planned length.
+* that no take pixel shows in the window with a real cutaway, or with an
+  empty one;
+* that an HLG take tonemaps to BT.709 8 bit, at full size and at the presenter
+  canvas.
 
-Measured in the session container on 2026-10-15 with ffmpeg 6.1.1:
-**9 passed, exit 0**. It has not been run on the box yet.
+Measured in the session container on 2026-10-16 with ffmpeg 6.1.1:
+**11 passed, exit 0**. It has not been run on the box yet.
 
-It earned its place on its first run. The first `take_patch` trimmed audio to
-the second and video to the frame, so every splice left the picture up to one
-frame longer than the sound. The run measured 13 ms on one splice, and the
-error grows with every item. Every builder test was green at the time. Every
-segment is now a whole number of frames on both tracks.
-
-The same script against a copy with that snapping removed fails at frame 76 and
+Its first run found a defect that every builder test missed. Video segments
+rounded to the frame while audio did not, so each splice drifted 13 ms. The
+same script against a copy with frame snapping removed fails at frame 76 and
 exits 1. That is its negative control, run by hand, not wired.
+
+The critic's A/V measurement found the picture up to a frame ahead of the
+voice after a seek: +28.4 ms against a -4.0 ms source. It now lands within half
+a frame: -5.0, +9.4 and -10.6 ms at 30 fps.
 
 ## Wiring TSWS 00
 

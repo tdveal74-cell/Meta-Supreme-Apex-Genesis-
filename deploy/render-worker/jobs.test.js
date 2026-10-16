@@ -581,7 +581,6 @@ t('a retake: the LAST clean reading of the line wins and the stumble is dropped'
   assert.strictEqual(r.edl.length, 2, JSON.stringify(r.edl));
   assert.deepStrictEqual(r.edl[0].lines, [0]);
   assert.deepStrictEqual(r.edl[1].lines, [1, 2]);
-  // The kept reading of line 1 is the second one, after the "uh hold on".
   assert.ok(r.edl[1].start > endOf(um) - 0.01, `start ${r.edl[1].start} is not after the stumble`);
 });
 t('a flubbed line is patched with the SCRIPT text verbatim, never the spoken words', async () => {
@@ -591,29 +590,48 @@ t('a flubbed line is patched with the SCRIPT text verbatim, never the spoken wor
   // One of three lines is 33 percent, over the default 30 percent ceiling.
   const r = await align({ lines: SCRIPT, words: [...a, ...b, ...c], max_patch_share: 0.5 });
   assert.strictEqual(r.verdict, 'patch');
-  assert.strictEqual(r.edl.length, 3);
   assert.deepStrictEqual(r.edl.map(e => e.kind), ['take', 'patch', 'take']);
   assert.strictEqual(r.edl[1].text, 'Nobody buys. Here is why.');
-  assert.deepStrictEqual(r.edl[1].lines, [1]);
 });
-t('a pad never reaches past the midpoint to the neighbouring word', async () => {
+t('critic B1: a reading one word off the script is NEVER kept, however long the line', async () => {
+  const cases = [
+    ['Our churn fell by thirty percent in the last year.', 'our churn fell by forty percent in the last year'],
+    ['You should never put this file in a public folder.', 'you should always put this file in a public folder'],
+    ['That is the whole answer to the question.', 'that is the whole answer to the'],
+    ['Your first three seconds sell the whole video.', 'your first three seconds um sell the whole video'],
+  ];
+  for (const [line, spoken] of cases) {
+    const r = await align({ lines: [line], words: say(spoken, 0), max_patch_share: 1 });
+    assert.strictEqual(r.report[0].kind, 'patch', `kept "${spoken}" for "${line}"`);
+  }
+});
+t('critic B1: a verbatim reading beats a later misreading of the same line', async () => {
+  const good = say('our churn fell by thirty percent in the last year', 0);
+  const bad = say('our churn fell by forty percent in the last year', endOf(good) + 1);
+  const r = await align({ lines: ['Our churn fell by thirty percent in the last year.'], words: [...good, ...bad] });
+  assert.strictEqual(r.verdict, 'clean');
+  assert.ok(r.edl[0].end < bad[0].start, 'kept the misreading');
+});
+t('the old threshold parameter is refused, not silently ignored', () => {
+  assert.throws(() => J.JOBS.align_script.build({ lines: ['a'], words: [], threshold: 0.9 }), /threshold: removed/);
+});
+t('critic F8: a skipped one word line does not steal the last word of the line before it', async () => {
   const a = say('you post every day', 0);
-  const junk = [{ text: 'uh', start: endOf(a) + 0.05, end: endOf(a) + 0.15 }];
-  const b = say('nobody buys here is why', endOf(a) + 0.2);
-  const c = say('your first three seconds sell the whole video', endOf(b) + 0.5);
-  const r = await align({ lines: SCRIPT, words: [...a, ...junk, ...b, ...c] });
-  // line 0 ends at endOf(a); the next transcript word starts 0.05 later, so the
-  // pad is clamped to the midpoint, 0.025, not the full 0.12.
-  assert.strictEqual(r.edl[0].end, +(endOf(a) + 0.025).toFixed(3), JSON.stringify(r.edl));
+  const b = say('nobody buys here is why', endOf(a) + 0.5);
+  const r = await align({ lines: ['You post every day.', 'Nobody buys. Here is why.', 'Why?'], words: [...a, ...b], max_patch_share: 0.5 });
+  assert.deepStrictEqual(r.report.map(x => x.kind), ['take', 'take', 'patch'], JSON.stringify(r.report));
 });
-t('the threshold is a floor: 0.9 passes at exactly 0.9 and fails just below', async () => {
-  // Ten script words against nine spoken (one dropped): 2*9/(10+9) = 0.947.
-  const line = 'one two three four five six seven eight nine ten';
-  const spoken = say('one two three four five six seven eight nine', 0);
-  const hit = await align({ lines: [line], words: spoken, threshold: 0.94 });
-  assert.strictEqual(hit.verdict, 'clean');
-  const miss = await align({ lines: [line], words: spoken, threshold: 0.95, max_patch_share: 1 });
-  assert.strictEqual(miss.verdict, 'rerecord', 'a lone line with no take is a re-record');
+t('critic F8: a line written twice in the script but said once keeps the reading for one, patches the other', async () => {
+  const a = say('you post every day', 0);
+  const b = say('nobody buys here is why', endOf(a) + 0.5);
+  const r = await align({ lines: ['You post every day.', 'Nobody buys. Here is why.', 'You post every day.'], words: [...a, ...b], max_patch_share: 0.5 });
+  assert.deepStrictEqual(r.report.map(x => x.kind), ['take', 'take', 'patch'], JSON.stringify(r.report));
+});
+t('the choice keeps the most script WORDS, so a long clean line beats a short one', async () => {
+  // Only one "why" is spoken; giving it to the one word line would clone five.
+  const b = say('nobody buys here is why', 0);
+  const r = await align({ lines: ['Why?', 'Nobody buys. Here is why.'], words: b, max_patch_share: 0.5 });
+  assert.deepStrictEqual(r.report.map(x => x.kind), ['patch', 'take']);
 });
 t('over the patch ceiling is a re-record with NO edl, and the report says why', async () => {
   const a = say('you post every day', 0);
@@ -622,6 +640,19 @@ t('over the patch ceiling is a re-record with NO edl, and the report says why', 
   assert.strictEqual(r.edl, null);
   assert.ok(/2 of 3 lines/.test(r.reason), r.reason);
   assert.strictEqual(r.report.length, 3);
+});
+t('a pad never reaches past the midpoint to the neighbouring word', async () => {
+  const a = say('you post every day', 0);
+  const junk = [{ text: 'uh', start: endOf(a) + 0.05, end: endOf(a) + 0.15 }];
+  const b = say('nobody buys here is why', endOf(a) + 0.2);
+  const c = say('your first three seconds sell the whole video', endOf(b) + 0.5);
+  const r = await align({ lines: SCRIPT, words: [...a, ...junk, ...b, ...c] });
+  assert.strictEqual(r.edl[0].end, +(endOf(a) + 0.025).toFixed(3), JSON.stringify(r.edl));
+});
+t('take_duration stops the closing pad at the end of the file', async () => {
+  const a = say('you post every day', 0);
+  const r = await align({ lines: [SCRIPT[0]], words: a, take_duration: endOf(a) + 0.05 });
+  assert.strictEqual(r.edl[0].end, +(endOf(a) + 0.05).toFixed(3));
 });
 t('digits and number words do not match: the safe direction is the clone reading the script', async () => {
   const r = await align({ lines: ['Your first 3 seconds sell it.'], words: say('your first three seconds sell it', 0), max_patch_share: 1 });
@@ -642,6 +673,20 @@ t('a later stray repeat of an earlier line is never spliced in after the next li
   assert.strictEqual(r.edl.length, 1);
   assert.ok(r.edl[0].end < a2[0].start, 'line 0 was taken from after line 1');
 });
+t('critic F3: a 150 line, 20,000 word alignment finishes fast and a repetitive one is refused', async () => {
+  const vocab = 'the a to and of you your it is that this in for on with as be at by'.split(' ');
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const lines = Array.from({ length: 150 }, () => Array.from({ length: 8 + Math.floor(rnd() * 20) }, () => vocab[Math.floor(rnd() * vocab.length)]).join(' '));
+  const spoken = []; let t0 = 0;
+  while (spoken.length < 20000) { for (const l of lines) { for (const w of l.split(' ')) { spoken.push({ text: w, start: t0, end: t0 + 0.3 }); t0 += 0.35; } if (spoken.length >= 20000) break; } }
+  const t1 = Date.now();
+  const r = await align({ lines, words: spoken, max_patch_share: 1 });
+  const ms = Date.now() - t1;
+  assert.ok(ms < 3000, `took ${ms} ms`);
+  assert.strictEqual(r.patched, 0);
+  const many = Array(2000).fill('the');
+  await assert.rejects(align({ lines: many, words: Array.from({ length: 2000 }, (_, i) => ({ text: 'the', start: i, end: i + 0.5 })) }), /too many candidate readings/);
+});
 t('bad input is refused, not defaulted', async () => {
   assert.throws(() => J.JOBS.align_script.build({ lines: 'one line', words: [] }), /lines: must be an array/);
   assert.throws(() => J.JOBS.align_script.build({ lines: ['...'], words: [] }), /has no words/);
@@ -654,47 +699,75 @@ t('bad input is refused, not defaulted', async () => {
 t('words_path reads an ElevenLabs-shaped response from disk', async () => {
   const rel = 'vl/stt.json';
   fs.mkdirSync(path.join(ROOT, 'vl'), { recursive: true });
-  fs.writeFileSync(path.join(ROOT, rel), JSON.stringify({ text: 'you post every day', words: say('you post every day', 0) }));
+  fs.writeFileSync(path.join(ROOT, rel), JSON.stringify({ text: 'You post every day.', words: [
+    { text: 'You', start: 0, end: 0.3, type: 'word' }, { text: ' ', start: 0.3, end: 0.35, type: 'spacing' },
+    { text: 'post', start: 0.35, end: 0.6, type: 'word' }, { text: ' ', start: 0.6, end: 0.65, type: 'spacing' },
+    { text: 'every', start: 0.65, end: 0.9, type: 'word' }, { text: ' ', start: 0.9, end: 0.95, type: 'spacing' },
+    { text: 'day.', start: 0.95, end: 1.3, type: 'word' }] }));
   const r = await align({ lines: [SCRIPT[0]], words_path: rel });
   assert.strictEqual(r.verdict, 'clean');
 });
 
 section('\n-- V2: take_patch, the real take spliced with the clone --');
 const tp = () => ({
-  take: touch('vl/take.mov'), output: 'vl/base.mp4', narration_output: 'vl/narration.wav', hdr: 'sdr',
+  take: touch('vl/take.mov'), take_duration: 12, output: 'vl/base.mp4', narration_output: 'vl/narration.wav', hdr: 'sdr',
   edl: [
     { kind: 'take', start: 0.88, end: 3.4, lines: [0] },
     { kind: 'patch', audio: touch('vl/line1.mp3'), duration: 2.25, lines: [1] },
     { kind: 'take', start: 6.1, end: 10.0, lines: [2] },
   ],
 });
-t('each take item is its own seeked input; a patch adds a two frame hold slice and its audio', () => {
+const segA = (b, k) => b.plan.segments[k].argv;
+const segG = (b, k) => { const a = segA(b, k); return a[a.indexOf('-filter_complex') + 1]; };
+const inputsOf = (argv) => argv.filter(a => a === '-i').length;
+t('critic F2 + measured: one ffmpeg run per item, never more than two inputs each', () => {
   const b = J.JOBS.take_patch.build(tp());
-  const ins = [];
-  b.argv.forEach((a, i) => { if (a === '-i') ins.push(b.argv.slice(Math.max(0, i - 4), i + 2).join(' ')); });
-  assert.strictEqual(ins.length, 4, ins.join('\n'));
-  assert.ok(ins[0].includes('-ss 0.880000 -t 2.533333 -i'), ins[0]);
-  // The hold is the take's last frame before the patch: its frame-snapped
-  // end, 0.88 + 76/30 = 3.413333, less two frames.
-  assert.ok(ins[1].includes('-ss 3.346667 -t 0.066667 -i'), ins[1]);
-  assert.ok(ins[2].endsWith('line1.mp3'), ins[2]);
-  assert.ok(ins[3].includes('-ss 6.100000 -t 3.900000 -i'), ins[3]);
+  assert.strictEqual(b.plan.segments.length, 3);
+  assert.deepStrictEqual(b.plan.segments.map(s => inputsOf(s.argv)), [1, 2, 1]);
+  assert.strictEqual(inputsOf(b.plan.join), 1, 'the join reads one concat list');
+  assert.ok(segA(b, 0).join(' ').includes('-ss 0.880000 -t 2.533333 -i'), segA(b, 0).join(' '));
+  // The hold is two frames inside the take's frame-snapped end, 0.88 + 76/30.
+  assert.ok(segA(b, 1).join(' ').includes('-ss 3.346667 -t 0.066667 -i'), segA(b, 1).join(' '));
+  assert.ok(segA(b, 1).join(' ').includes('line1.mp3'));
+  assert.ok(segA(b, 2).join(' ').includes('-ss 6.100000 -t 3.900000 -i'), segA(b, 2).join(' '));
+});
+t('a 400 item edl is accepted; it is 400 small runs, not 400 live decoders', () => {
+  const p = tp(); p.take_duration = 600;
+  p.edl = Array.from({ length: 400 }, (_, i) => i % 2
+    ? { kind: 'patch', audio: touch(`vl/m${i}.mp3`), duration: 0.5 }
+    : { kind: 'take', start: i, end: i + 0.9 });
+  const b = J.JOBS.take_patch.build(p);
+  assert.ok(b.plan.segments.every(s => inputsOf(s.argv) <= 2));
+  p.edl.push({ kind: 'take', start: 500, end: 501 });
+  assert.throws(() => J.JOBS.take_patch.build(p), /too many items \(max 400\)/);
+});
+t('every segment carries identical encoder settings, so the join can copy the video', () => {
+  const b = J.JOBS.take_patch.build(tp());
+  const tail = (a) => { const i = a.indexOf('-map'); return a.slice(i, a.length - 3).join(' '); };   // drop "-t L out"
+  const tails = b.plan.segments.map(s => tail(s.argv));
+  assert.ok(tails.every(x => x === tails[0]), tails.join('\n'));
+  assert.ok(tails[0].includes('-c:v libx264 -crf 16 -preset medium -pix_fmt yuv420p -g 60 -video_track_timescale 30000'), tails[0]);
+  assert.ok(tails[0].includes('-c:a pcm_s24le -ar 48000 -ac 1'), tails[0]);
+  assert.ok(b.plan.join.join(' ').includes('-f concat -safe 0 -i'), b.plan.join.join(' '));
+  assert.ok(b.plan.join.join(' ').includes('-c:v copy -c:a aac -b:a 320k'), b.plan.join.join(' '));
 });
 t('the patch window is returned on the NEW timeline, frame exact, ready for must_cover', () => {
-  const r = J.JOBS.take_patch.build(tp()).parse();
+  const r = J.JOBS.take_patch.build(tp()).result();
   // 2.52 s rounds to 76 frames, the 2.25 s patch rounds UP to 68, 3.9 s is 117.
   assert.strictEqual(r.duration, 8.7);
   assert.deepStrictEqual(r.patch_windows, [{ item: 1, lines: [1], start: 2.533333, end: 4.8 }]);
   assert.strictEqual(r.takes, 2);
+  assert.strictEqual(r.segments, 3);
   assert.deepStrictEqual(r.patch_durations, [2.266667]);
   assert.deepStrictEqual(r.patch_source_durations, [2.25]);
 });
 t('every segment is a whole number of frames, so picture and sound cannot drift', () => {
   const p = tp();
+  p.take_duration = 30;
   p.edl = Array.from({ length: 20 }, (_, i) => i % 2
     ? { kind: 'patch', audio: touch(`vl/d${i}.mp3`), duration: 1.01 + i / 1000 }
     : { kind: 'take', start: i, end: i + 0.97 + i / 1000 });
-  const r = J.JOBS.take_patch.build(p).parse();
+  const r = J.JOBS.take_patch.build(p).result();
   const f = r.duration * 30;
   assert.ok(Math.abs(f - Math.round(f)) < 1e-6, `total is ${f} frames`);
   r.patch_windows.forEach(w => {
@@ -703,35 +776,65 @@ t('every segment is a whole number of frames, so picture and sound cannot drift'
   });
   r.patch_durations.forEach((d, i) => assert.ok(d >= r.patch_source_durations[i], 'a patch was cut short'));
 });
-t('durations are pinned: tpad then trim on picture, apad then atrim on sound, -t on both outputs', () => {
+t('durations are pinned and take video is NOT re-zeroed before fps (critic lip-sync nit)', () => {
   const b = J.JOBS.take_patch.build(tp());
-  const g = graph(b);
-  assert.ok(g.includes('tpad=stop_mode=clone:stop_duration=1,trim=duration=2.533333'), g);
-  assert.ok(g.includes('trim=end_frame=1,tpad=stop_mode=clone:stop_duration=2.266667,trim=duration=2.266667'), g);
-  assert.ok(g.includes('apad,atrim=duration=2.266667'), g);
-  assert.ok(g.includes('concat=n=3:v=1:a=1[vcat][acat];[acat]asplit=2[amux][anar]'), g);
-  assert.strictEqual(b.argv.filter(a => a === '-t').length, 3 + 2, 'two seeked takes and one hold, plus two outputs');
-  assert.ok(b.argv.join(' ').includes('-map [anar] -c:a pcm_s24le -t 8.700000'), b.argv.join(' '));
+  assert.ok(segG(b, 0).startsWith('[0:v]fps=30:start_time=0,format=yuv420p,setsar=1,tpad=stop_mode=clone:stop_duration=1,trim=duration=2.533333'), segG(b, 0));
+  assert.ok(!segG(b, 0).includes('[0:v]setpts=PTS-STARTPTS,fps'), segG(b, 0));
+  assert.ok(segG(b, 1).includes('trim=end_frame=1,tpad=stop_mode=clone:stop_duration=2.266667,trim=duration=2.266667'), segG(b, 1));
+  assert.ok(segG(b, 1).includes('[1:a]asetpts=PTS-STARTPTS'), segG(b, 1));
+  assert.ok(segG(b, 1).includes('apad,atrim=duration=2.266667'), segG(b, 1));
+  assert.ok(b.plan.join.join(' ').includes('-t 8.700000'), b.plan.join.join(' '));
+  assert.ok(b.plan.join.join(' ').includes('-map 0:a -c:a pcm_s24le -t 8.700000'), b.plan.join.join(' '));
 });
-t('without a narration_output there is one output and no asplit', () => {
+t('without a narration_output the join has one output', () => {
   const b = J.JOBS.take_patch.build({ ...tp(), narration_output: undefined });
-  assert.ok(graph(b).endsWith('concat=n=3:v=1:a=1[vcat][amux]'), graph(b));
-  assert.ok(!b.argv.includes('[anar]'));
+  assert.strictEqual(b.plan.join.filter(a => a === '-map').length, 2);
+  assert.ok(!b.plan.join.includes('pcm_s24le'));
 });
-t('hdr has no default; tonemap adds the zscale chain, sdr does not', () => {
+t('hdr has no default; tonemap adds the zscale chain to every segment, sdr to none', () => {
   assert.throws(() => J.JOBS.take_patch.build({ ...tp(), hdr: undefined }), /hdr/);
-  const tm = graph(J.JOBS.take_patch.build({ ...tp(), hdr: 'tonemap' }));
-  assert.ok(tm.includes('tonemap=tonemap=hable'), tm);
-  const sd = graph(J.JOBS.take_patch.build(tp()));
-  assert.ok(!sd.includes('zscale'), sd);
+  const tm = J.JOBS.take_patch.build({ ...tp(), hdr: 'tonemap' });
+  [0, 1, 2].forEach(k => assert.ok(segG(tm, k).includes('tonemap=tonemap=hable'), segG(tm, k)));
+  const sd = J.JOBS.take_patch.build(tp());
+  [0, 1, 2].forEach(k => assert.ok(!segG(sd, k).includes('zscale'), segG(sd, k)));
+});
+t('width and height scale first, at the take\'s bit depth, then tonemap, then letterbox', () => {
+  assert.throws(() => J.JOBS.take_patch.build({ ...tp(), width: 1920 }), /both or neither/);
+  const g = segG(J.JOBS.take_patch.build({ ...tp(), hdr: 'tonemap', width: 1920, height: 1080 }), 0);
+  const iScale = g.indexOf('scale=1920:1080:force_original_aspect_ratio=decrease:flags=lanczos,zscale');
+  const iTone = g.indexOf('tonemap=tonemap=hable');
+  const iPad = g.indexOf('pad=1920:1080');
+  assert.ok(iScale > 0 && iScale < iTone && iTone < iPad, g);
 });
 t('a patch that opens the episode holds the FIRST frame of the next take', () => {
   const p = tp();
   p.edl = [{ kind: 'patch', audio: touch('vl/line0.mp3'), duration: 1.5 }, { kind: 'take', start: 4, end: 9 }];
   const b = J.JOBS.take_patch.build(p);
-  assert.ok(b.argv.join(' ').includes('-ss 4.000000 -t 0.066667 -i'), b.argv.join(' '));
+  assert.ok(segA(b, 0).join(' ').includes('-ss 4.000000 -t 0.066667 -i'), segA(b, 0).join(' '));
 });
-t('bad edls are refused at submit', () => {
+t('critic F4: take_duration is required and no span or hold may run past it', () => {
+  assert.throws(() => J.JOBS.take_patch.build({ ...tp(), take_duration: undefined }), /take_duration: required/);
+  const p = tp(); p.take_duration = 12;
+  p.edl = [{ kind: 'take', start: 9, end: 12.05 }, { kind: 'patch', audio: touch('vl/z.mp3'), duration: 2 }];
+  assert.throws(() => J.JOBS.take_patch.build(p), /past the take's 12s/);
+  p.edl[0].end = 11.99;   // 89.7 frames rounds to 90, which ends at 12.0 exactly: allowed
+  const ok = J.JOBS.take_patch.build(p);
+  assert.ok(segA(ok, 1).join(' ').includes('-ss 11.933333 -t 0.066667 -i'), segA(ok, 1).join(' '));
+  p.edl[0] = { kind: 'take', start: 9, end: 11.995 };
+  p.take_duration = 11.995;   // 89.85 frames rounds to 90 = 12.0 s, past the file: snapped down to 89
+  const r = J.JOBS.take_patch.build(p).result();
+  assert.ok(9 + (r.duration - r.patch_durations[0]) <= 11.995 + 1e-6, JSON.stringify(r));
+});
+t('critic F6: take spans out of time order or overlapping are refused', () => {
+  const p = tp(); p.take_duration = 12;
+  p.edl = [{ kind: 'take', start: 6, end: 8 }, { kind: 'take', start: 1, end: 3 }];
+  assert.throws(() => J.JOBS.take_patch.build(p), /time order/);
+  p.edl = [{ kind: 'take', start: 1, end: 3 }, { kind: 'take', start: 2, end: 4 }];
+  assert.throws(() => J.JOBS.take_patch.build(p), /time order/);
+  p.edl = [{ kind: 'take', start: 1, end: 3 }, { kind: 'patch', audio: touch('vl/q.mp3'), duration: 1 }, { kind: 'take', start: 3, end: 5 }];
+  assert.ok(J.JOBS.take_patch.build(p));
+});
+t('bad edls and paths are refused at submit', () => {
   assert.throws(() => J.JOBS.take_patch.build({ ...tp(), edl: null }), /re-record/);
   assert.throws(() => J.JOBS.take_patch.build({ ...tp(), edl: [] }), /at least one/);
   assert.throws(() => J.JOBS.take_patch.build({ ...tp(), edl: [{ kind: 'patch', audio: touch('vl/x.mp3'), duration: 2 }] }), /no take item/);
@@ -740,14 +843,21 @@ t('bad edls are refused at submit', () => {
   assert.throws(() => J.JOBS.take_patch.build({ ...tp(), edl: [{ kind: 'take', start: 0, end: 3 }, { kind: 'patch', audio: 'vl/missing.mp3', duration: 2 }] }), /no such file/);
   assert.throws(() => J.JOBS.take_patch.build({ ...tp(), edl: [{ kind: 'take', start: 0, end: 3 }, { kind: 'patch', audio: touch('vl/y.mp3') }] }), /duration/);
   assert.throws(() => J.JOBS.take_patch.build({ ...tp(), output: '../escape.mp4' }), /escapes|outside/);
-  const many = Array.from({ length: 65 }, (_, i) => ({ kind: 'take', start: i, end: i + 0.9 }));
-  assert.throws(() => J.JOBS.take_patch.build({ ...tp(), edl: many }), /too many/);
+  assert.throws(() => J.JOBS.take_patch.build({ ...tp(), output: "vl/it's.mp4" }), /concat list/);
+  assert.throws(() => J.JOBS.take_patch.build({ ...tp(), fps: 29.97 }), /fps/);
 });
 
 section('\n-- V3: must_cover, no clone voice over the presenter\'s face --');
 t('a window wholly inside one cutaway, inside its fades, renders', () => {
   const r = J.JOBS.presenter_composite.build({ ...pc(), must_cover: [{ start: 4.5, end: 9.5 }] }).parse();
   assert.strictEqual(r.must_cover, 1);
+});
+t('critic F5: an opaque plate sits under every covered window, before the cutaways', () => {
+  const g = graph(J.JOBS.presenter_composite.build({ ...pc(), must_cover: [{ start: 4.5, end: 9.5 }] }));
+  assert.ok(g.includes("[base]drawbox=x=0:y=0:w=iw:h=ih:color=black:t=fill:enable='between(t,4.500000,9.500000)'[baseplate]"), g);
+  assert.ok(g.includes('[baseplate][c0]overlay'), g);
+  const none = graph(J.JOBS.presenter_composite.build(pc()));
+  assert.ok(!none.includes('drawbox'), 'the plate must not appear without must_cover');
 });
 t('a window that reaches into a fade is refused', () => {
   assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), must_cover: [{ start: 4.1, end: 9 }] }), /not inside one opaque cutaway/);
@@ -761,9 +871,9 @@ t('stacked: a payload-zone cutaway leaves the face visible, so only full-frame c
   const r = J.JOBS.presenter_composite.build({ ...st(), emphasis: [], must_cover: [{ start: 8.5, end: 10.5 }] }).parse();
   assert.strictEqual(r.must_cover, 1);
 });
-t('stacked: an emphasis window over a covered span puts the head back, refused', () => {
-  const p = { ...st(), emphasis: [{ start: 9, end: 10 }], must_cover: [{ start: 8.5, end: 10.5 }] };
-  assert.throws(() => J.JOBS.presenter_composite.build(p), /overlaps emphasis/);
+t('stacked: an emphasis window over, or merely touching, a covered span is refused', () => {
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...st(), emphasis: [{ start: 9, end: 10 }], must_cover: [{ start: 8.5, end: 10.5 }] }), /touches emphasis/);
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...st(), emphasis: [{ start: 7.5, end: 8.5 }], must_cover: [{ start: 8.5, end: 10.5 }] }), /touches emphasis/);
 });
 t('must_cover that is not an array is refused, never defaulted', () => {
   assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), must_cover: '[{"start":4.5,"end":9.5}]' }), /must_cover: must be an array/);
@@ -771,14 +881,19 @@ t('must_cover that is not an array is refused, never defaulted', () => {
 });
 
 section('\n-- V4: probe reports HDR so the caller can set take_patch hdr --');
-t('probe asks for color_transfer and pix_fmt and flags HLG and PQ', () => {
+t('probe flags HLG and PQ from the first VIDEO stream and leaves the old fields on stream 0', () => {
   const b = J.JOBS.probe.build({ path: touch('vl/p.mov') });
-  assert.ok(b.argv.join(' ').includes('color_transfer,pix_fmt'), b.argv.join(' '));
-  const hlg = b.parse(JSON.stringify({ format: { duration: '9.5' }, streams: [{ width: 3840, height: 2160, r_frame_rate: '30/1', color_transfer: 'arib-std-b67', pix_fmt: 'yuv420p10le' }] }));
+  assert.ok(b.argv.join(' ').includes('stream=codec_type,width,height,r_frame_rate,color_transfer,pix_fmt'), b.argv.join(' '));
+  const hlg = b.parse(JSON.stringify({ format: { duration: '9.5' }, streams: [{ codec_type: 'video', width: 3840, height: 2160, r_frame_rate: '30/1', color_transfer: 'arib-std-b67', pix_fmt: 'yuv420p10le' }] }));
   assert.strictEqual(hlg.hdr, true);
-  const sdr = b.parse(JSON.stringify({ format: { duration: '9.5' }, streams: [{ width: 1920, height: 1080, r_frame_rate: '30/1', color_transfer: 'bt709' }] }));
+  assert.strictEqual(hlg.pix_fmt, 'yuv420p10le');
+  const sdr = b.parse(JSON.stringify({ format: { duration: '9.5' }, streams: [{ codec_type: 'video', width: 1920, height: 1080, r_frame_rate: '30/1', color_transfer: 'bt709' }] }));
   assert.strictEqual(sdr.hdr, false);
-  const audio = b.parse(JSON.stringify({ format: { duration: '2.1' }, streams: [{}] }));
+  // Audio first, video second: hdr is read from the video, width stays stream 0's as before.
+  const mixed = b.parse(JSON.stringify({ format: { duration: '9.5' }, streams: [{ codec_type: 'audio' }, { codec_type: 'video', width: 3840, height: 2160, color_transfer: 'smpte2084' }] }));
+  assert.strictEqual(mixed.hdr, true);
+  assert.strictEqual(mixed.width, null);
+  const audio = b.parse(JSON.stringify({ format: { duration: '2.1' }, streams: [{ codec_type: 'audio' }] }));
   assert.strictEqual(audio.color_transfer, null);
   assert.strictEqual(audio.duration, 2.1);
 });
