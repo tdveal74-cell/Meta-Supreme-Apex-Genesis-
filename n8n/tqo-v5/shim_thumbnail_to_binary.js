@@ -71,9 +71,8 @@ result[0].json.jevThumbChecked = jevChecked;
 result[0].json.jevHeadlineBox = jevBox;
 result[0].json.jevApplied = JEV_APPLY;
 if (JEV_APPLY && jevNote) {
-  // Two of Jev's notes already open with the word Jev, so the prefix is added
-  // only to a note that does not, which keeps the word once in the line.
-  const jev = /^Jev\b/.test(jevNote) ? jevNote : 'Jev: ' + jevNote;
+  // No verdict note names Jev, so this prefix names it once for the line.
+  const jev = 'Jev: ' + jevNote;
   const was = result[0].json.thumb_warning;
   result[0].json.thumb_warning = was ? was + '; ' + jev : jev;
 }

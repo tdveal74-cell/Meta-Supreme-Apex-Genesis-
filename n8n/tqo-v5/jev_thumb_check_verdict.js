@@ -1,12 +1,14 @@
 // Jev's check of the finished thumbnail, ruled by Tee 2026-10-16 and shipped in
 // shadow. This is the body of Jev: Thumb Verdict, the Code node after the
 // TypeSafe call that Jev: Thumb Check Body built. It turns Jev's three answers
-// into one note for the Shim to append to thumb_warning. Every rule is
+// into one note. The Shim records it, and adds it to thumb_warning only when
+// its JEV_APPLY is true. No note names Jev, because the Shim's "Jev: " prefix
+// does that once for the whole line. Every rule is
 // computed here from the numbers, none is left to Jev's own wording, so the
 // same answers always give the same note.
 //
 // The rules, in order:
-//   headline_present below 0.5   "Jev did not find the headline text on the
+//   headline_present below 0.5   "the headline text was not found on the
 //                                thumbnail". The box answer is not looked at,
 //                                not even to check its shape: TypeSafe's Box
 //                                always returns four edges and has no not
@@ -14,21 +16,22 @@
 //                                box is a guess, and its docs say to ignore it
 //                                when the Noul is low. A reversed or zero area
 //                                box beside an absent headline therefore still
-//                                gives this note.
+//                                gives this note. headline_readable is not read
+//                                either.
 //   otherwise, box right edge above 0.594
 //                                the headline runs off the dark panel. The
 //                                panel covers x 0 to 760 of 1280 px, which is
 //                                0.594 of the width.
 //   box bottom above 0.95, or top or left below 0.02
 //                                the headline touches the edge of the frame.
-//   headline_readable below 0.5  Jev reads the headline as hard to read.
+//   headline_readable below 0.5  the headline is hard to read at phone size.
 // Several notes join with "; ", in that order.
 //
 // jevThumbChecked says the answers were usable. A response that is not from a
-// jev- model, or has headline_present or headline_readable missing, of the
-// wrong type, not finite or out of range, is ignored whole: checked false, no
-// note, no box. The same holds for the box answer, but only once the headline
-// is found (present 0.5 or more), because only then is the box read. A silent
+// jev- model, or has headline_present missing, of the wrong type, not finite
+// or out of range, is ignored whole: checked false, no note, no box. The same
+// holds for headline_readable and the box answer, but only once the headline
+// is found (present 0.5 or more), because only then are they read. A silent
 // note is then not mistaken for a clean frame. A box must also have top above
 // bottom and left above right, or it is out of range too.
 const SCRIM_RIGHT = 0.594;
@@ -52,17 +55,17 @@ try {
   if (answers && typeof answers === 'object') {
     const present = noulOf(answers.headline_present);
     const readable = noulOf(answers.headline_readable);
-    if (present !== null && readable !== null) {
+    if (present !== null) {
       if (present < HALF) {
-        // The box answer is never read on this branch.
-        verdict = { jevThumbNote: 'Jev did not find the headline text on the thumbnail', jevThumbChecked: true, jevHeadlineBox: null };
+        // Neither the box nor readable is read on this branch.
+        verdict = { jevThumbNote: 'the headline text was not found on the thumbnail', jevThumbChecked: true, jevHeadlineBox: null };
       } else {
         const box = boxOf(answers.headline_box);
-        if (box !== null) {
+        if (box !== null && readable !== null) {
           const notes = [];
           if (box.right > SCRIM_RIGHT) notes.push('the headline runs off the dark panel onto the photograph');
           if (box.bottom > EDGE_BOTTOM || box.top < EDGE_LOW || box.left < EDGE_LOW) notes.push('the headline touches the edge of the frame');
-          if (readable < HALF) notes.push('Jev reads the headline as hard to read at phone size');
+          if (readable < HALF) notes.push('the headline is hard to read at phone size');
           verdict = {
             jevThumbNote: notes.length ? notes.join('; ') : null,
             jevThumbChecked: true,

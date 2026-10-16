@@ -9,8 +9,9 @@
  * request builder (jev_thumb_check_body.js), the verdict
  * (jev_thumb_check_verdict.js) and the Shim (shim_thumbnail_to_binary.js). The
  * Shim is also run beside the UNMODIFIED code read out of the live export,
- * exports/qEkGOUsNyVaRAmm6_active.json, and every case where no Jev node ran
- * must give the same output as the export code, field for field. `$('X')`
+ * exports/qEkGOUsNyVaRAmm6_active.json. Set the four Jev keys aside and every
+ * case gives the export code's output while JEV_APPLY is false; the paths that
+ * make no thumbnail match it field for field with nothing set aside. `$('X')`
  * throws when node X did not run, as it does in n8n, and the stub does too.
  *
  * Nothing here touches the network. The answers are written by hand from the
@@ -179,10 +180,10 @@ const verdict = (json) => {
   return r[0].json;
 };
 const NOTE = {
-  absent: "Jev did not find the headline text on the thumbnail",
+  absent: "the headline text was not found on the thumbnail",
   runsOff: "the headline runs off the dark panel onto the photograph",
   edge: "the headline touches the edge of the frame",
-  hard: "Jev reads the headline as hard to read at phone size",
+  hard: "the headline is hard to read at phone size",
 };
 const UNCHECKED = { jevThumbNote: null, jevThumbChecked: false, jevHeadlineBox: null };
 const ABSENT = { jevThumbNote: NOTE.absent, jevThumbChecked: true, jevHeadlineBox: null };
@@ -244,10 +245,13 @@ for (const [what, box] of BAD_BOXES) {
   delete found.headline_box;
   assert.deepEqual(verdict({ model: "jev-preview", answers: found }), UNCHECKED, "no box answer, headline found");
 }
-// Only the box moved. The other two answers are still read when the headline is
-// absent, so a bad readable or a bad present still ignores the whole response.
-assert.deepEqual(verdict(response({ present: 0.1, readable: NaN })), UNCHECKED);
-assert.deepEqual(verdict(response({ present: 0.1, readable: undefined })), UNCHECKED);
+// readable is read only once the headline is found, like the box, so a bad
+// readable beside an absent headline changes nothing. Beside a found headline
+// it ignores the whole response, and a bad present always does.
+assert.deepEqual(verdict(response({ present: 0.1, readable: NaN })), ABSENT);
+assert.deepEqual(verdict(response({ present: 0.1, readable: undefined })), ABSENT);
+assert.deepEqual(verdict(response({ present: 0.9, readable: NaN })), UNCHECKED);
+assert.deepEqual(verdict(response({ present: 0.9, readable: undefined })), UNCHECKED);
 assert.deepEqual(verdict(response({ present: NaN, box: BAD_BOXES[0][1] })), UNCHECKED);
 assert.deepEqual(verdict(response({ present: undefined, box: BAD_BOXES[0][1] })), UNCHECKED);
 // A model that is not a jev- model is ignored first, whatever the answers hold.
@@ -503,14 +507,13 @@ for (const label of RENDERED) {
     assert.equal(got.length, 1);
   }
 }
-// Pinned strings. A note that does not name Jev gets "Jev: " in front; the two
-// notes that already open with the word keep it as their own and get no prefix,
-// so the word Jev appears once in the line.
+// Pinned strings. No verdict note names Jev and the Shim puts "Jev: " in front
+// of the line, so the word appears once, joined notes included.
 assert.equal(runOn({ binary: BIG }, "runsOff")[0].json.thumb_warning, "Jev: the headline runs off the dark panel onto the photograph");
 assert.equal(runOn({ binary: BIG }, "edge")[0].json.thumb_warning, "Jev: the headline touches the edge of the frame");
-assert.equal(runOn({ binary: BIG }, "hard")[0].json.thumb_warning, "Jev reads the headline as hard to read at phone size");
-assert.equal(runOn({ binary: BIG }, "absent")[0].json.thumb_warning, "Jev did not find the headline text on the thumbnail");
-assert.notEqual(runOn({ binary: BIG }, "absent")[0].json.thumb_warning, "Jev: " + NOTE.absent, "no doubled prefix");
+assert.equal(runOn({ binary: BIG }, "hard")[0].json.thumb_warning, "Jev: the headline is hard to read at phone size");
+assert.equal(runOn({ binary: BIG }, "absent")[0].json.thumb_warning, "Jev: the headline text was not found on the thumbnail");
+for (const text of Object.values(NOTE)) assert.ok(!/Jev/.test(text), "no verdict note names Jev: " + text);
 for (const name of ["runsOff", "edge", "hard", "absent"]) {
   assert.equal((runOn({ binary: BIG }, name)[0].json.thumb_warning.match(/Jev/g) || []).length, 1, name + ": the word Jev appears once");
 }
@@ -520,15 +523,14 @@ assert.equal(runOn({ binary: BIG }, "unchecked")[0].json.thumb_warning, null);
 assert.equal(runOn({ binary: SMALL }, "clean")[0].json.thumb_warning, SIZE_WARNING);
 // It comes after the size warning rather than replacing it, joined with "; ".
 assert.equal(runOn({ binary: SMALL }, "edge")[0].json.thumb_warning, SIZE_WARNING + "; Jev: the headline touches the edge of the frame");
-assert.equal(runOn({ binary: SMALL }, "absent")[0].json.thumb_warning, SIZE_WARNING + "; Jev did not find the headline text on the thumbnail");
-assert.equal(runOn({ binary: SMALL }, "hard")[0].json.thumb_warning, SIZE_WARNING + "; Jev reads the headline as hard to read at phone size");
-// Several notes joined by the verdict go in as one line. The prefix test looks
-// only at how the whole line starts, and every note keeps its own words, so a
-// joined line that carries the hard to read note names Jev in that note too.
-assert.equal(
-  runShim(shimOn, { binary: BIG, verdictItems: note(NOTE.runsOff + "; " + NOTE.hard) })[0].json.thumb_warning,
-  "Jev: " + NOTE.runsOff + "; " + NOTE.hard,
-);
+assert.equal(runOn({ binary: SMALL }, "absent")[0].json.thumb_warning, SIZE_WARNING + "; Jev: the headline text was not found on the thumbnail");
+assert.equal(runOn({ binary: SMALL }, "hard")[0].json.thumb_warning, SIZE_WARNING + "; Jev: the headline is hard to read at phone size");
+// Several notes joined by the verdict go in as one line under one prefix.
+{
+  const joined = runShim(shimOn, { binary: BIG, verdictItems: note(NOTE.runsOff + "; " + NOTE.hard) })[0].json.thumb_warning;
+  assert.equal(joined, "Jev: " + NOTE.runsOff + "; " + NOTE.hard);
+  assert.equal(joined.match(/Jev/g).length, 1, "a joined line names Jev once");
+}
 // The note is trimmed, and only the first verdict item is read.
 assert.equal(runShim(shimOn, { binary: BIG, verdictItems: note("  " + NOTE.edge + " ") })[0].json.thumb_warning, "Jev: " + NOTE.edge);
 assert.equal(

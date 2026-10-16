@@ -13,8 +13,9 @@
  * still_b64, as n8n does with onError continueRegularOutput.
  *
  * What it pins is what no single-node test can see:
- *   - a score for a picture lands on the clip or photo that picture came from,
- *     even when an earlier picture was dropped and the numbering shifted;
+ *   - a score for a picture lands on the clip or photo that picture came from;
+ *     on the b-roll side an earlier picture is dropped so the numbering shifts,
+ *     and on the photo side the same case is left to jev_thumb_rank.test.mjs;
  *   - every request body meets the request rules in the TypeSafe images page
  *     (docs.typesafe.ai/images): each asset is referenced from state,
  *     instructions or criteria, its format is png, jpg or jpeg, its data is
@@ -126,7 +127,8 @@ const checkRequest = (b, { types }) => {
     assert.equal(typeof q.instructions, "string");
     assert.ok(q.instructions.length > 0);
     if (q.type === "score") assert.ok(Array.isArray(q.criteria) && q.criteria.length >= 2 && q.criteria.every((c) => typeof c === "string" && c), name + " has score criteria");
-    if (q.type === "noul") assert.deepEqual(Object.keys(q.criteria).sort(), ["false", "true"], name);
+    // Noul criteria are optional in the docs; when they are sent they are true and false.
+    if (q.type === "noul" && q.criteria !== undefined) assert.deepEqual(Object.keys(q.criteria).sort(), ["false", "true"], name);
     if (q.type === "box") assert.equal(q.criteria, undefined, name + ": box takes no criteria");
     // A name in backticks has to be a field of the state.
     for (const m of q.instructions.matchAll(/`([A-Za-z_][A-Za-z0-9_]*)`/g)) assert.ok(Object.hasOwn(b.state, m[1]), name + " names `" + m[1] + "`");
@@ -283,7 +285,7 @@ assert.deepEqual(clips(shadow), clips(old));
 sameAsExport(shadow, old, "shadow");
 assert.equal(shadow.jevApplied, false);
 assert.equal(shadow.jevRanked, 5, "jevRanked counts segments (20 candidates were scored, one segment had none)");
-assert.equal(shadow.jevWouldChange, 2, "Jev would pick differently on segments 0 and 2, where today's memory still holds the clips Jev wants");
+assert.equal(shadow.jevWouldChange, 2, "Jev would pick differently on segments 0 and 2: on 0 it prefers a later clip to Pexels' first, and on 2 its best clip is already used");
 
 // Applied: every score landed on its own clip. Best first, then the clip nobody
 // scored, then the clip scored under 1, and nothing is dropped.

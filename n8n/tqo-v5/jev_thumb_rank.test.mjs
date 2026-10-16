@@ -223,6 +223,10 @@ out = bodyOf([HALF, HALF], { stillItems: STILLS.slice(0, 2) });
 assert.deepEqual(Object.keys(out[0].json.body.questions), ["p1", "p2"]);
 assert.equal(Object.values(out[0].json.body.assets).reduce((n, a) => n + a.data_base64.length, 0), 20000000);
 assert.deepEqual(out[0].json.urls, [U1, U2]);
+// One character over the cap is refused: 10,000,001 and 10,000,000 total
+// 20,000,001, so the second still goes and only the first is asked about.
+out = bodyOf([HALF + "A", HALF], { stillItems: STILLS.slice(0, 2) });
+assert.deepEqual(Object.keys(out[0].json.body.questions), ["p1"]);
 for (const third of ["/9j/", JPEG, PNG, HALF]) {
   out = bodyOf([HALF, HALF, third]);
   assert.deepEqual(Object.keys(out[0].json.body.questions), ["p1", "p2"], "third of length " + third.length);
@@ -337,7 +341,8 @@ assert.equal(pickWith(SHIPPED, URLS, reply({ p1: score(2.4), p2: score(1.1), p3:
 assert.equal(pickWith(SHIPPED, URLS, reply({ p1: score(0.99), p2: score(1) })).jevPick, U2);
 // The rule is a highest score of 1 or more: a lone score under 1 is not a pick,
 // and a lone score of exactly 1 is. Before this, nothing pinned the floor on its
-// own, because a 0.99 beside a 1 still gave the right photo by the tie rule.
+// own, because a 0.99 beside a 1 still gave the right photo: the 1 is strictly
+// higher, so it wins with or without the floor.
 assert.equal(pickWith(SHIPPED, URLS, reply({ p1: score(0.5) })).jevPick, null);
 assert.equal(pickWith(SHIPPED, URLS, reply({ p1: score(1) })).jevPick, U1);
 assert.equal(pickWith(SHIPPED, URLS, reply({ p1: score(0.99) })).jevPick, null);

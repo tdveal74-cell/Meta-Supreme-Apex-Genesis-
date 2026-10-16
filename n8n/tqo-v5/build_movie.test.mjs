@@ -170,11 +170,13 @@ assert.equal(refusal(NEW_SRC), refusal(ORIGINAL));
 
 // pickFrom is the export's rule moved into a function: the first clip not used
 // anywhere in the episode, else the first not among the last three, else the
-// first that is not the previous source, else the first. Every case above is
-// settled by the first tier or by the last, so deleting either middle tier left
-// this file green. Each fixture below runs with no Jev node, is compared with the
-// export's own output the way PLAIN is, and pins the clips it expects, so a
-// fixture that stops reaching its tier fails on the pin and not by accident.
+// first that is not the previous source, else the first. No case above needs
+// either middle tier to get its answer, so deleting either one left this file
+// green. Each fixture below runs with no Jev node, is compared with the export's
+// own output the way PLAIN is, and pins the clips it expects. The pins prove the
+// two outputs agree; the scratch mutation runs that delete each tier are what
+// proved these fixtures reach it, so an edit to a fixture here should repeat
+// them.
 const sameAsExport = (fx, expected, label) => {
   assert.deepEqual(srcs(runOld(fx)), expected, label + ": the export's own picks");
   for (const apply of [false, true]) {
@@ -411,9 +413,9 @@ assert.deepEqual(strip(out), oneOld);
 
 // Jev: Rank B-Roll is an HTTP Request node fed one item per segment, so it hands
 // back one item per segment, and one segment's request can fail or come back
-// malformed while its neighbours are fine. Every case above has a single segment,
-// where a guard that lets the bad item throw and a guard that skips it look the
-// same: readJev's outer catch returns an empty map and the answer is "no data"
+// malformed while its neighbours are fine. Every case above feeds its damaged
+// rank data as a single item, where a guard that lets the bad item throw and a
+// guard that skips it look the same: readJev's outer catch returns an empty map and the answer is "no data"
 // either way. With three segments they differ, because a throw also takes the
 // two good segments' scores with it. Segment 1 is the damaged one below. Segment
 // 0 prefers B (A scores 1, B scores 3) and segment 2 prefers F (E 1, F 3), and
