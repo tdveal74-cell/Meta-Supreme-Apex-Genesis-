@@ -28,6 +28,8 @@ const A = "https://videos.pexels.example/a.mp4";
 const B = "https://videos.pexels.example/b.mp4";
 const C = "https://videos.pexels.example/c.mp4";
 const D = "https://videos.pexels.example/d.mp4";
+const E = "https://videos.pexels.example/e.mp4";
+const F = "https://videos.pexels.example/f.mp4";
 
 const seg = (i, narration = "Sentence " + i + " of the script.") =>
   ({ json: { segIndex: i, start: i * 8, duration: 8, query: "q" + i, narration, uploadId: "upload1", videoTitle: "The Quiet Operator" } });
@@ -163,6 +165,42 @@ const unverified = { presenterClips: [{ segmentIndex: 2, file: "p.mp4", publicUr
 const refusal = (code) => { try { run(code, PLAIN, unverified); } catch (e) { return e.message; } return null; };
 assert.match(refusal(ORIGINAL), /^PRESENTER REFUSAL/);
 assert.equal(refusal(NEW_SRC), refusal(ORIGINAL));
+
+// ---- the two middle tiers of the selection rule, against the export -----------
+
+// pickFrom is the export's rule moved into a function: the first clip not used
+// anywhere in the episode, else the first not among the last three, else the
+// first that is not the previous source, else the first. Every case above is
+// settled by the first tier or by the last, so deleting either middle tier left
+// this file green. Each fixture below runs with no Jev node, is compared with the
+// export's own output the way PLAIN is, and pins the clips it expects, so a
+// fixture that stops reaching its tier fails on the pin and not by accident.
+const sameAsExport = (fx, expected, label) => {
+  assert.deepEqual(srcs(runOld(fx)), expected, label + ": the export's own picks");
+  for (const apply of [false, true]) {
+    const out = runNew(fx, { apply });
+    assert.deepEqual(srcs(out), expected, label);
+    assert.deepEqual(strip(out), runOld(fx), label);
+    assert.equal(out.jevRanked, 0, label);
+    assert.equal(out.jevWouldChange, 0, label);
+  }
+};
+
+// Not-recent tier. Segments 0 to 3 take A, B, C, D, so the memory of the last
+// three is [B, C, D]. Segment 4 offers [B, A]: both were used, B is recent and A
+// is not, so A. Without the tier, the not-the-previous-source tier would give B.
+// Memory is then [C, D, A]. Segment 5 offers [D, C, B]: all used, D and C are
+// recent and B is not, so B. Without the tier it would give D.
+sameAsExport({ segs: [0, 1, 2, 3, 4, 5].map((i) => seg(i)), px: [pex(A), pex(B), pex(C), pex(D), pex(B, A), pex(D, C, B)] },
+  [A, B, C, D, A, B], "not-recent tier");
+
+// Not-the-previous-source tier. Segments 0 to 2 take A, B, C, so the memory is
+// [A, B, C] and the previous source is C. Segment 3 offers [C, B]: both were
+// used and both are recent, so only the previous-source test is left, and it
+// passes over C for B. Without the tier the first clip, C, would play twice in a
+// row, which is the repeat this tier exists to stop.
+sameAsExport({ segs: [0, 1, 2, 3].map((i) => seg(i)), px: [pex(A), pex(B), pex(C), pex(C, B)] },
+  [A, B, C, B], "not-the-previous-source tier");
 
 // ---- scored cases, shadow on (JEV_APPLY false): today's clips, Jev reported --
 
@@ -368,5 +406,108 @@ fx = { ...ONE, jevNodes: jevNodes([[q("https://elsewhere.example/z.mp4", 1, 3), 
 out = runNew(fx, { apply: true });
 assert.equal(out.jevRanked, 0);
 assert.deepEqual(strip(out), oneOld);
+
+// ---- one bad item among good ones: the shape production has ------------------
+
+// Jev: Rank B-Roll is an HTTP Request node fed one item per segment, so it hands
+// back one item per segment, and one segment's request can fail or come back
+// malformed while its neighbours are fine. Every case above has a single segment,
+// where a guard that lets the bad item throw and a guard that skips it look the
+// same: readJev's outer catch returns an empty map and the answer is "no data"
+// either way. With three segments they differ, because a throw also takes the
+// two good segments' scores with it. Segment 1 is the damaged one below. Segment
+// 0 prefers B (A scores 1, B scores 3) and segment 2 prefers F (E 1, F 3), and
+// both must keep that whatever happens to segment 1.
+const THREE = {
+  segs: [seg(0), seg(1), seg(2)],
+  px: [pex(A, B), pex(C, D), pex(E, F)],
+  plan: [[q(A, 1, 1), q(B, 2, 3)], [q(C, 1, 1), q(D, 2, 1)], [q(E, 1, 1), q(F, 2, 3)]],
+};
+const damaged = (damage) => {
+  const jn = jevNodes(THREE.plan);
+  damage(jn);
+  return { segs: THREE.segs, px: THREE.px, jevNodes: jn };
+};
+const GOOD3 = { type: "score", score: 3, confidence: 0.9, legend: {}, probabilities: {} };
+const rankOf1 = (item) => (jn) => { jn["Jev: Rank B-Roll"][1] = item; };
+const answersOf1 = (answers, model = "jev-1.14") => rankOf1({ json: { model, answers, usage: {} } });
+
+// What every damaged case must show. Today's clips are A, C, E and shadow keeps
+// them. Applied, segments 0 and 2 take B and F, and segment 1 takes `mid`.
+// `ranked` counts the segments Jev scored, and each of those would change a pick.
+const keepsNeighbours = (fx, label, mid = C, ranked = 2) => {
+  const shadow = runNew(fx);
+  assert.deepEqual(strip(shadow), runOld(fx), label);
+  assert.deepEqual(srcs(shadow), [A, C, E], label);
+  assert.equal(shadow.jevRanked, ranked, label);
+  assert.equal(shadow.jevWouldChange, ranked, label);
+  const applied = runNew(fx, { apply: true });
+  assert.deepEqual(srcs(applied), [B, mid, F], label);
+  assert.equal(applied.jevRanked, ranked, label);
+  assert.equal(applied.jevWouldChange, ranked, label);
+};
+
+// The control: nothing damaged. All three segments are scored, and segment 1
+// scores C and D alike, so it keeps C and only segments 0 and 2 would change.
+let three = damaged(() => {});
+assert.equal(three.jevNodes["Jev: Rank B-Roll"].length, 3, "one rank item per segment");
+assert.deepEqual(srcs(runNew(three, { apply: true })), [B, C, F]);
+assert.equal(runNew(three).jevRanked, 3);
+assert.equal(runNew(three).jevWouldChange, 2);
+
+// (a) Segment 1's request failed or answered with something that is not a Jev
+// response: an HTTP error item with no model and an error field, a model that is
+// not a string, a model from another family, an item with nothing in it. Where
+// the item carries answers at all, they would put D ahead if they were believed.
+const lure = { s1c2: GOOD3 };
+for (const [label, item] of Object.entries({
+  "HTTP error item": { json: { error: { message: "The service is unavailable", code: 503 } } },
+  "no model": { json: { answers: lure, usage: {} } },
+  "null model": { json: { model: null, answers: lure } },
+  "numeric model": { json: { model: 14, answers: lure } },
+  "object model": { json: { model: { name: "jev-1.14" }, answers: lure } },
+  "other model": { json: { model: "gpt-5", answers: lure } },
+  "item with no json": {},
+  "null item": null,
+})) keepsNeighbours(damaged(rankOf1(item)), "bad item: " + label);
+
+// (b) A valid model whose answer for one question is not an answer. null is the
+// one that throws if it is read (null.type); the others must simply not count.
+// With nothing else answered, segment 1 is not scored and keeps C.
+for (const [label, answer] of Object.entries(bad))
+  keepsNeighbours(damaged(answersOf1({ s1c1: answer })), "bad answer: " + label);
+// With a good answer beside it the good one counts, whichever comes first: D
+// scores 3 and C has no score, so segment 1 would take D and is ranked.
+keepsNeighbours(damaged(answersOf1({ s1c1: null, s1c2: GOOD3 })), "null answer, then a good one", D, 3);
+keepsNeighbours(damaged(answersOf1({ s1c2: GOOD3, s1c1: null })), "a good answer, then null", D, 3);
+
+// (c) A valid model whose answers are not an object. null and a missing field are
+// the shapes that throw if read (Object.keys of either). A number or true yields
+// no keys, and a string or an array yields index numbers, which are no name of
+// ours, so those four are kept as controls: they read as no data with the guard
+// or without it.
+for (const [label, answers] of Object.entries({
+  "null": null, "undefined": undefined, "number": 5, "string": "s1c2", "true": true, "empty array": [], "array of answers": [GOOD3],
+})) keepsNeighbours(damaged(answersOf1(answers)), "answers is " + label);
+keepsNeighbours(damaged(rankOf1({ json: { model: "jev-1.14", usage: {} } })), "answers field missing");
+
+// (d) A question whose name is not s{n}c{k}. The bodies node never writes one, so
+// this is a guard against a damaged bodies item, and it has to be one that still
+// pairs the name with a link or the link test would skip it first. Segment 1 asks
+// two questions, the odd one and s1c2, and both are answered with a 3. The odd
+// one is ignored and D, behind s1c2, is what Jev picks for segment 1.
+const renamed = (name) => (jn) => {
+  const ask = { type: "score", instructions: "How well does it work?", criteria: ["0", "1", "2", "3"] };
+  jn["Jev: B-Roll Bodies"][1] = { json: { segIndex: 1, links: [C, D], body: { model: "jev-latest", state: { sentence: "x" }, questions: { [name]: ask, s1c2: ask }, assets: {} } } };
+  jn["Jev: Rank B-Roll"][1] = { json: { model: "jev-1.14", answers: { [name]: GOOD3, s1c2: GOOD3 }, usage: {} } };
+};
+for (const name of ["bogus", "s1c", "sc2", "s1c2x", "xs1c2", " s1c2", "S1C2", "s1-c2", "s1c2\n", "s1c2 ", "", "s", "1"])
+  keepsNeighbours(damaged(renamed(name)), "question named " + JSON.stringify(name), D, 3);
+// The same through the path with no body: a bodies item that has no segIndex names
+// its questions "sundefinedc1" and "sundefinedc2", and links them all the same.
+keepsNeighbours(damaged((jn) => {
+  jn["Jev: B-Roll Bodies"][1] = { json: { links: [C, D] } };
+  jn["Jev: Rank B-Roll"][1] = { json: { model: "jev-1.14", answers: { sundefinedc1: GOOD3, sundefinedc2: GOOD3 }, usage: {} } };
+}), "bodies item with no segIndex");
 
 console.log("Build Movie: shadow output matches the export, Jev ranking behaves");
