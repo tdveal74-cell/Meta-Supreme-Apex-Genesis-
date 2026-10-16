@@ -1,4 +1,9 @@
 {
+  "model": "opus",
+  "ultracode": true,
+  "worktree": {
+    "baseRef": "head"
+  },
   "enabledPlugins": {
     "agentic-guardrails@meta-supreme-pinned": true,
     "backend-security-skills@meta-supreme-pinned": true,

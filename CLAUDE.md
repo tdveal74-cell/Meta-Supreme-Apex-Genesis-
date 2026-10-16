@@ -850,6 +850,70 @@ value points at the main checkout, so pytest imports the parent's code while
 the run appears to be testing the worktree. Same shape as the wrong base
 commit above: a green that means nothing. Set it to absolute worktree paths.
 
+## Workflow stages
+
+Ruled by Tee 2026-10-16. Every workflow script splits its agents by what they
+are allowed to touch, and each kind has its own agent type in `.claude/agents/`,
+so the tier and the tool limits live in one file each instead of in every
+script.
+
+| stage | `agentType` | edits files | isolation |
+|---|---|---|---|
+| scan | `scanner` | never | none |
+| edit | `editor` | yes, one fix | own worktree |
+| verify | `verifier` | never in the main checkout | own worktree |
+
+Pass `agentType` on every `agent()` call and leave `model` unset, so the
+definition decides the tier: a model named in the script outranks the one in
+the definition. Pass `isolation: 'worktree'` on every editor and verifier call
+too. Both definitions set it, but no page says a workflow honours that field,
+so the script does not rely on it.
+
+The main session writes the script and reads only what survived verification.
+A workflow returns its confirmed findings and its unverified ones, each
+unverified one with the reason it could not be settled. Refuted findings are
+dropped, and the script logs how many.
+
+`.claude/settings.json` sets `worktree.baseRef` to `head`, so a worktree should
+start on the parent's HEAD rather than on `origin/main`. Every editor still
+echoes `git rev-parse --short HEAD` first, because that echo is the proof. The
+other two traps under "Running a critic" still apply: put `PYTHONPATH` on each
+command line, since shell state does not carry between commands, and never let
+two agents run against the shared `meta_supreme_test`. Editors run only checks
+that need no database. Anything that does runs one agent at a time, in a plain
+loop in the script, never inside `parallel()` or `pipeline()`.
+
+An editor commits its one fix on a branch named for its finding and returns the
+sha. Worktrees share one object store, so the main session can cherry-pick that
+sha directly. It takes only the edits whose finding survived verification, one
+at a time, and after each one a fresh verifier re-runs the failing check before
+the fix is reported as done.
+
+## Findings and fix loops
+
+Ruled by Tee 2026-10-16.
+
+**Every finding gets an independent verifier before it is reported.** A
+finding is a claim that something is wrong: broken, missing, miscounted or out
+of date. Before it reaches Tee, a chat reply, a PR or a status doc, a separate
+agent checks it in a fresh context. It is handed the claim and the evidence
+cited for it, never the finder's reasoning, and it is told to refute the claim
+by re-running the check itself. A refuted finding is dropped. One the verifier
+cannot settle is reported as unverified, with the reason. The finder rereading
+its own work does not count, because a finder agrees with itself. A verifier's
+verdict is not a new finding and needs no verifier of its own.
+
+**A fix loop stops after two consecutive rounds with no progress.** A round is
+one change plus one re-run of the check that failed. It made progress if the
+measured failure shrank: fewer failing tests, fewer open findings, or the first
+failure moving later in the run. After two rounds in a row without that, stop
+guessing. Report what each round changed and what it measured, give the next
+hypothesis, and put the decision to Tee on a card. On a pull request this
+session owns, stopping still means one comment on the PR naming the failing
+check and why it is not fixed yet, never silence. The cap of three revision
+cycles in the `agent-output-gauntlet` skill still holds beside this rule, and
+whichever is reached first ends the loop.
+
 ## Skills in this repository
 
 `.claude/skills/` carries twelve. Ten are ours: `steward` (CI and PR
