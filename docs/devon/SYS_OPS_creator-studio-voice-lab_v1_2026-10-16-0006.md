@@ -146,7 +146,43 @@ The first staged the merged files in `/tmp` and ran every suite on the box's own
 
 The second checked `/status` and found nothing running or queued. It kept the three old files as `.bak-20261016`, swapped in the new ones and restarted the service. The service read active, `/health` read 21 job types on the bridge address n8n uses, and the live files read back byte identical to the merge commit.
 
-Nothing calls the new jobs yet. The n8n Voice Lab workflow does not exist.
+Nothing calls the new jobs in production yet. The n8n Voice Lab workflow exists only as the unpublished draft below.
+
+## The n8n draft
+
+Tee ruled on a card on 2026-10-16 to build it now. `TQO Voice Lab (DRAFT, not published)` was created on the live instance as `jKrUIEQSUcGzr4tK` at 2026-10-16T03:24:31Z, 36 nodes, in Tee's personal project. Read back after creation it shows `active: false`, `activeVersionId: null` and version `1da529a4`. Its error workflow is `GbeNilHQzjmoWDz3`, and success and error execution data are both saved, so a run always leaves something to read.
+
+The chain runs from an n8n form to Plan Run, then shares the take by link, has TSWS 00 run `http_download`, and removes the share. The worker probes the take, then measures and normalises its loudness into a 16 kHz FLAC for speech to text. That FLAC is the only file the loudness jobs touch. The workflow fetches it and sends it to ElevenLabs `scribe_v2` for word timings, then calls `align_script`. A re-record verdict emails the missed lines and clones nothing. Otherwise each missed line is read by the clone voice, uploaded to Drive, shared while the worker downloads it, unshared, and probed for its length. Then `take_patch` runs and an email report names each clone window.
+
+The clone call uses V5's voice `ypnKDQtIhp4N3yn4UnqO`, its model `eleven_multilingual_v2`, and its stability 0.5, similarity 0.75, style 0.1 and speaker boost. It does not send V5's speed of 0.99, which `Show Context: Render` in the committed V5 export sets explicitly so it cannot drift. A clone line here therefore reads at the ElevenLabs default speed. Live V5 was not read for this.
+
+It differs from the card in three places:
+
+- Intake is an n8n form behind n8n login, not a Drive inbox trigger. The script has to arrive beside the take, and a public form could spend ElevenLabs credit and share any Drive file the account can reach.
+- It ends in an email report, not an Approval Queue item.
+- The card listed loudness after `take_patch`. Here loudness is applied to the speech to text FLAC only. Neither `take_patch` nor `presenter_composite` normalises loudness, so `base.mp4` and `narration.wav` leave at the take's own level. Loudness for the finished master belongs after `presenter_composite`.
+
+It also stops at the base track. Cutaways and `presenter_composite` were never on the card and are not in it.
+
+What is proven: `validate_workflow` returned valid, and all 14 code nodes parse. A contract run in this container fed fixture data through the real `align_script`, Patch Lines, Prep Fetch Clone, Build Splice, the `take_patch` builder and Compose Report. The builder accepted the parameters and planned 3 segments with one clone window from 2.133333 s to 4.366667 s. That patch path ran with `max_patch_share` raised to 0.5, because the three line fixture patches one line in three and the default ceiling of 0.3 turns that into a re-record. The workflow never sends the parameter. The same fixture at the default returned `rerecord`, which is the re-record path.
+
+What is not proven: the workflow has never executed. It has made no call to ElevenLabs, so the speech to text response shape is proven only against the fixture, and no real take has been through it. The expressions in the non-code nodes have not run either, the Unshare Clone Line URL among them. Unpublished, the form's production URL should not answer; that is n8n's trigger behaviour, not measured here. A run can still start from the editor's test listener, or through the n8n MCP `execute_workflow` tool, because the workflow carries `availableInMCP: true`. The second is a gated write under the outward gate. Neither was tried.
+
+Residuals, graded:
+
+- No node throw leaves the take shared. Only Prep Fetch Take and Fetch Take sit between Share Take and Unshare Take, and Fetch Take continues on error, so a failed download still reaches Unshare Take before Check Fetch throws. The clone side has the same shape. A file does stay shared by link in four cases, and each share then has to be removed by hand:
+  - Unshare Take throws, which leaves the take shared.
+  - Share Clone Line fails on one line, which leaves every earlier clone line shared.
+  - Unshare Clone Line fails on one item, which leaves that item and every later one shared.
+  - The run is stopped, crashes or meets an instance restart while a download is in progress, with no unshare and no error email. TSWS 00 waits up to six hours on a job, and N8N-HOST has a pending restart, noted above.
+- On a published run the error email names the failing node. On an editor test run no error workflow fires: the n8n MCP tool description says failure handling runs for production executions only. Every run before publishing therefore reports a fault only in the editor and in its saved execution.
+- Unshare Take deletes the `anyoneWithLink` permission, so it also revokes a link share Tee set on the take before the run. That permission id has not been exercised against what Share Take creates. A mismatch throws, which is the first case above.
+- Clone mp3s are never deleted. After the unshare they stay, owner only, in Drive folder `1lLEo3sHfXRdie-EXrXMQJ0L6AAQhHGDO`, the folder V5's `Upload MP3` writes to. Its name, read on 2026-10-16, is `TQO_RETIRED_root-legacy-folder_2026-06_unmerged-Tee-to-triage`.
+- The ElevenLabs credential `IRr81VQl9EiLIf03` is V5's, so Voice Lab spends from the same account V5 narrates with.
+- An ElevenLabs refusal throws rather than being swallowed. The provider watchdog opens the newest 25 errored executions whatever host they called, classifies each by HTTP code and then by message, and alarms inside a 6 hour window. So a refusal here alarms once the lane runs, unless 25 newer failures crowd it out; the critic found none since 2026-10-15T21:00Z. Whether that error listing includes editor test runs is unverified. `api.elevenlabs.io` is not in `PROVIDER_HOSTS`, which matters only for a node that swallows a refusal, and no node here does.
+- Two email nodes use SMTP `AgSGuaA2pnZsrZcJ`, and five nodes use Drive `NW3vR6nNcMoUkJyJ`, all of them throwing. CLAUDE.md counts those credentials across active workflows, so its numbers move when this is published and not before.
+
+Publishing is Tee's. So is the first run with a real take, because it shares a Drive file by link and spends ElevenLabs credit.
 
 ## Approvals in this session
 
@@ -166,7 +202,7 @@ A private artifact, the studio map, holds the module ledger, the lane, the measu
 
 ## Open
 
-- The `TQO Voice Lab` n8n workflow, as an unpublished draft. Creating it is a write to the live instance and goes on a card.
+- Publishing the `TQO Voice Lab` draft `jKrUIEQSUcGzr4tK`, and its first run with a real take. Both are Tee's.
 - One real episode end to end, watched by Tee.
 - The MuseTalk proof in `deploy/lipsync/README.md`, step two. A GPU pod was provisioned on 2026-10-16: one NVIDIA L40S on RunPod Secure Cloud, US-TX-3, with a 60 GB network volume at `/workspace`. Tee ruled on a card to stop it until take A is recorded and keep the volume. He confirmed it stopped the same night. This session cannot reach the pod, because the network policy blocks the RunPod API and outside DNS, so the proof runs from the pod's web terminal. If it passes, clone lines could be lip-synced onto his own face instead of covered by a cutaway.
 - The consent record for the clone, and the YouTube altered content label rule.
@@ -178,8 +214,8 @@ AREA: TQO, Systems
 TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_creator-studio-voice-lab_v1_2026-10-16-0006.md
 DATE: 2026-10-16
-DECISIONS: Tee ruled on cards on 2026-10-15 to incorporate the one-person creator studio from the @restructureai Short as a layer on the shared engine rather than a separate studio, and to build the Voice Lab ship lane first. He added drive.google.com and drive.usercontent.google.com to the environment's allowed domains so the recording could be read. On 2026-10-16 he ruled to link N8N-HOST to Desktop Commander so a session can deploy the worker, to strip the clone window tag from the finished master, and to keep the outward gate's 30 minute window.
-FINDINGS: The video's eight modules map onto the estate with Voice Lab, dubbing and the AI sales line missing. A single-run take_patch peaked at 13.6 GiB on 64 items of 4K HEVC against a 7.8 GiB VPS; segmented, it peaked at 1,068 MiB with 736 of 736 frames. The first acceptance run found a 13 ms per-splice A/V drift that every builder test missed. A fresh critic quarantined d535cf3 because align_script kept off-script readings at 0.9 similarity; a637d8f keeps verbatim readings only. A second critic gave a637d8f PASS-WITH-CONDITIONS and measured eight silent failures, all fixed after it, each with a test and the face-frame one with a negative control. A third gave b6789e1 PASS-WITH-CONDITIONS with six more gaps, among them a copied base track losing its windows; all six were fixed, the windows now ride in the file's metadata, and the copy case is in the acceptance run. A fourth gave 45673c6 PASS-WITH-CONDITIONS with 0 face frames in 15,819 and one deploy blocker, a ligature transcript that held the loop 20.2 s at 3.3 GiB; that and five should-fixes were fixed, each with a test that fails against 45673c6. On the box, Node 18.19.1 and ffmpeg 6.1.1 passed 115, 47 and 19 with the negative control failing 110 of 115, and /health read 21 after the swap.
-OPEN: the n8n Voice Lab draft on a card; why Auto mode still prompts for Desktop Commander start_process; one real episode watched end to end; clone consent record and the YouTube label rule; later phases on their own cards.
-STATUS: Merged as d75114d and deployed to N8N-HOST on 2026-10-16, with every suite and the acceptance run passing on the box and /health reading 21; no workflow calls the new jobs yet; nothing publishes.
+DECISIONS: Tee ruled on cards on 2026-10-15 to incorporate the one-person creator studio from the @restructureai Short as a layer on the shared engine rather than a separate studio, and to build the Voice Lab ship lane first. He added drive.google.com and drive.usercontent.google.com to the environment's allowed domains so the recording could be read. On 2026-10-16 he ruled to link N8N-HOST to Desktop Commander so a session can deploy the worker, to strip the clone window tag from the finished master, to keep the outward gate's 30 minute window, and to build the n8n Voice Lab draft now.
+FINDINGS: The video's eight modules map onto the estate with Voice Lab, dubbing and the AI sales line missing. A single-run take_patch peaked at 13.6 GiB on 64 items of 4K HEVC against a 7.8 GiB VPS; segmented, it peaked at 1,068 MiB with 736 of 736 frames. The first acceptance run found a 13 ms per-splice A/V drift that every builder test missed. A fresh critic quarantined d535cf3 because align_script kept off-script readings at 0.9 similarity; a637d8f keeps verbatim readings only. A second critic gave a637d8f PASS-WITH-CONDITIONS and measured eight silent failures, all fixed after it, each with a test and the face-frame one with a negative control. A third gave b6789e1 PASS-WITH-CONDITIONS with six more gaps, among them a copied base track losing its windows; all six were fixed, the windows now ride in the file's metadata, and the copy case is in the acceptance run. A fourth gave 45673c6 PASS-WITH-CONDITIONS with 0 face frames in 15,819 and one deploy blocker, a ligature transcript that held the loop 20.2 s at 3.3 GiB; that and five should-fixes were fixed, each with a test that fails against 45673c6. On the box, Node 18.19.1 and ffmpeg 6.1.1 passed 115, 47 and 19 with the negative control failing 110 of 115, and /health read 21 after the swap. The n8n draft jKrUIEQSUcGzr4tK read back inactive with activeVersionId null; its fixture contract run passed and it has never executed. A fifth critic gave that record PASS-WITH-CONDITIONS: the clone call omits V5's speed of 0.99, loudness reaches only the speech to text file, clone lines land in a folder named as retired, and four share paths were named.
+OPEN: publishing the Voice Lab draft and its first run with a real take, both Tee's; the clone speed and the clone line folder on the draft, on a card; why Auto mode still prompts for Desktop Commander start_process; one real episode watched end to end; clone consent record and the YouTube label rule; later phases on their own cards.
+STATUS: Merged as d75114d and deployed to N8N-HOST on 2026-10-16, with every suite and the acceptance run passing on the box and /health reading 21; the n8n Voice Lab workflow exists as an unpublished draft, jKrUIEQSUcGzr4tK; nothing publishes.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
