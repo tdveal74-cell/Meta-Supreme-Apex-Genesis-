@@ -27,7 +27,17 @@ const DASHES = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
 const make = (file) => new Function("$", "$input", read(file));
 const bodyNode = make("jev_thumb_check_body.js");
 const verdictNode = make("jev_thumb_check_verdict.js");
-const shimNew = make("shim_thumbnail_to_binary.js");
+// The Shim as shipped (JEV_APPLY false), and a scratch copy with the constant
+// flipped to true, the way jev_thumb_rank.test.mjs flips its own. The file on
+// disk is never written.
+const SHIM_SHIPPED = read("shim_thumbnail_to_binary.js");
+const SHIM_FLIPPED = SHIM_SHIPPED.replace("const JEV_APPLY = false;", "const JEV_APPLY = true;");
+assert.notEqual(SHIM_FLIPPED, SHIM_SHIPPED, "the shipped Shim declares JEV_APPLY = false");
+assert.match(SHIM_SHIPPED, /^const JEV_APPLY = false;$/m);
+assert.equal(SHIM_SHIPPED.match(/JEV_APPLY = /g).length, 1, "one declaration");
+assert.match(SHIM_FLIPPED, /^const JEV_APPLY = true;$/m);
+const shimNew = new Function("$", "$input", SHIM_SHIPPED);
+const shimOn = new Function("$", "$input", SHIM_FLIPPED);
 
 // The unmodified Shim, straight from the live export's node.
 const EXPORT = JSON.parse(read("exports/qEkGOUsNyVaRAmm6_active.json"));
@@ -175,6 +185,25 @@ const NOTE = {
   hard: "Jev reads the headline as hard to read at phone size",
 };
 const UNCHECKED = { jevThumbNote: null, jevThumbChecked: false, jevHeadlineBox: null };
+const ABSENT = { jevThumbNote: NOTE.absent, jevThumbChecked: true, jevHeadlineBox: null };
+// Every box TypeSafe's contract rules out: not four edges in 0..1 with top above
+// bottom and left above right. The first entry is the zero area box.
+const BAD_BOXES = [
+  ["a zero area box", { top: 0, bottom: 0, left: 0, right: 0 }],
+  ["null", null],
+  ["undefined", undefined],
+  ["an array", [0.1, 0.2, 0.3, 0.4]],
+  ["a missing edge", { top: 0.3, bottom: 0.6, left: 0.05 }],
+  ["NaN", { ...CLEAN_BOX, top: NaN }],
+  ["Infinity", { ...CLEAN_BOX, right: Infinity }],
+  ["a string edge", { ...CLEAN_BOX, left: "0.05" }],
+  ["above 1", { ...CLEAN_BOX, bottom: 1.01 }],
+  ["below 0", { ...CLEAN_BOX, top: -0.01 }],
+  ["top below bottom reversed", { ...CLEAN_BOX, top: 0.7, bottom: 0.3 }],
+  ["no height", { ...CLEAN_BOX, top: 0.4, bottom: 0.4 }],
+  ["left right reversed", { ...CLEAN_BOX, left: 0.5, right: 0.1 }],
+  ["no width", { ...CLEAN_BOX, left: 0.3, right: 0.3 }],
+];
 
 // A clean frame: checked, no note, and the box comes back.
 assert.deepEqual(verdict(response()), { jevThumbNote: null, jevThumbChecked: true, jevHeadlineBox: CLEAN_BOX });
@@ -191,6 +220,38 @@ assert.equal(verdict(response({ present: 0.499 })).jevThumbNote, NOTE.absent);
 // 0.5 is found: the rest of the rules run.
 assert.deepEqual(verdict(response({ present: 0.5 })), { jevThumbNote: null, jevThumbChecked: true, jevHeadlineBox: CLEAN_BOX });
 assert.equal(verdict(response({ present: 1 })).jevThumbNote, null);
+
+// The check order: with the headline absent the box answer is not validated or
+// used at all. TypeSafe's Box has no not-found answer and its docs say to ignore
+// the box when the Noul is low, so a box that fails the shape rules beside an
+// absent headline still gives the did-not-find note, checked, with no box.
+assert.deepEqual(verdict(response({ present: 0.1, box: { top: 0, bottom: 0, left: 0, right: 0 } })), ABSENT);
+for (const [what, box] of BAD_BOXES) {
+  assert.deepEqual(verdict(response({ present: 0.1, box })), ABSENT, "absent headline beside a box that is " + what);
+  assert.deepEqual(verdict(response({ present: 0.499, box })), ABSENT, "0.499 beside a box that is " + what);
+  // The same box with the headline found is ignored whole, as before.
+  assert.deepEqual(verdict(response({ present: 0.5, box })), UNCHECKED, "0.5 beside a box that is " + what);
+  assert.deepEqual(verdict(response({ present: 0.97, box })), UNCHECKED, "0.97 beside a box that is " + what);
+}
+// A box answer that is missing or of the wrong type is not read either.
+{
+  const { headline_box: _box, ...noBox } = answers({ present: 0.1 });
+  assert.deepEqual(verdict({ model: "jev-preview", answers: noBox }), ABSENT, "no box answer, headline absent");
+  assert.deepEqual(verdict({ model: "jev-preview", answers: { ...noBox, headline_box: { type: "noul", noul: 0.5 } } }), ABSENT, "box answered as a noul, headline absent");
+  assert.deepEqual(verdict({ model: "jev-preview", answers: { ...noBox, headline_box: null } }), ABSENT, "box answer null, headline absent");
+  assert.deepEqual(verdict({ model: "jev-preview", answers: { ...noBox, headline_box: { type: "box", box: CLEAN_BOX } } }), ABSENT, "a good box is dropped too");
+  const found = answers({ present: 0.9 });
+  delete found.headline_box;
+  assert.deepEqual(verdict({ model: "jev-preview", answers: found }), UNCHECKED, "no box answer, headline found");
+}
+// Only the box moved. The other two answers are still read when the headline is
+// absent, so a bad readable or a bad present still ignores the whole response.
+assert.deepEqual(verdict(response({ present: 0.1, readable: NaN })), UNCHECKED);
+assert.deepEqual(verdict(response({ present: 0.1, readable: undefined })), UNCHECKED);
+assert.deepEqual(verdict(response({ present: NaN, box: BAD_BOXES[0][1] })), UNCHECKED);
+assert.deepEqual(verdict(response({ present: undefined, box: BAD_BOXES[0][1] })), UNCHECKED);
+// A model that is not a jev- model is ignored first, whatever the answers hold.
+assert.deepEqual(verdict(response({ present: 0.1, box: BAD_BOXES[0][1] }, "gpt-4o")), UNCHECKED);
 
 // Each threshold, one step either side.
 const withBox = (edit) => verdict(response({ box: { ...CLEAN_BOX, ...edit } }));
@@ -253,21 +314,8 @@ for (const [what, value] of [
   bad("present " + what + " beside a rule that would fire", response({ present: value, readable: 0.1 }));
   bad("readable " + what + " beside a rule that would fire", response({ readable: value, box: { ...CLEAN_BOX, right: 0.9 } }));
 }
-for (const [what, box] of [
-  ["null", null],
-  ["undefined", undefined],
-  ["an array", [0.1, 0.2, 0.3, 0.4]],
-  ["a missing edge", { top: 0.3, bottom: 0.6, left: 0.05 }],
-  ["NaN", { ...CLEAN_BOX, top: NaN }],
-  ["Infinity", { ...CLEAN_BOX, right: Infinity }],
-  ["a string edge", { ...CLEAN_BOX, left: "0.05" }],
-  ["above 1", { ...CLEAN_BOX, bottom: 1.01 }],
-  ["below 0", { ...CLEAN_BOX, top: -0.01 }],
-  ["top below bottom reversed", { ...CLEAN_BOX, top: 0.7, bottom: 0.3 }],
-  ["no height", { ...CLEAN_BOX, top: 0.4, bottom: 0.4 }],
-  ["left right reversed", { ...CLEAN_BOX, left: 0.5, right: 0.1 }],
-  ["no width", { ...CLEAN_BOX, left: 0.3, right: 0.3 }],
-]) bad("box " + what, response({ box }));
+// A bad box beside a found headline ignores the whole response.
+for (const [what, box] of BAD_BOXES) bad("box " + what, response({ box }));
 // The wrong answer type under the right name.
 bad("present given as a score", { ...response(), answers: { ...answers(), headline_present: { type: "score", score: 2, confidence: 0.9 } } });
 bad("present given as a box", { ...response(), answers: { ...answers(), headline_present: { type: "box", box: CLEAN_BOX } } });
@@ -327,59 +375,173 @@ assert.equal(runShim(shimOld, CASES["rendered, small file"])[0].json.thumb_warni
 assert.match(runShim(shimOld, CASES["no still matched"])[0].json.thumb_error, /^no Pexels still matched "workflow dashboard"/);
 assert.match(runShim(shimOld, CASES["still downloaded, compositor returned no image"])[0].json.thumb_error, /^the still downloaded but the compositor returned no image\./);
 
-// No Jev node ran, or it ran and left nothing usable: the same output as the
-// export code, every field.
-for (const [label, c] of Object.entries(CASES)) {
+// The Jev keys the Shim adds to a rendered thumbnail, in the order it adds them.
+// Nothing else in the output may move, so each comparison below strips these
+// four keys from the Shim and compares what is left with the export code.
+const JEV_KEYS = ["jevThumbNote", "jevThumbChecked", "jevHeadlineBox", "jevApplied"];
+const withoutWarning = ({ thumb_warning, ...rest }) => rest;
+const stripJev = (items) => items.map(({ json, ...rest }) => {
+  const kept = { ...json };
+  for (const key of JEV_KEYS) delete kept[key];
+  return { ...rest, json: kept };
+});
+const jevOf = (items) => Object.fromEntries(JEV_KEYS.map((key) => [key, items[0].json[key]]));
+const NOTHING = { jevThumbNote: null, jevThumbChecked: false, jevHeadlineBox: null };
+const RENDERED = ["rendered, large file", "rendered, small file", "rendered, no byte count"];
+const NOT_MADE = ["no still matched", "no still matched, no image", "still downloaded, compositor returned no image"];
+
+// A thumbnail that was never made is the export code's output to the byte, with
+// no Jev key and no Jev line, whichever way JEV_APPLY is set and whatever a
+// verdict says. Jev cannot have checked a frame that does not exist.
+for (const label of NOT_MADE) {
+  const want = runShim(shimOld, CASES[label]);
+  for (const fn of [shimNew, shimOn]) {
+    assert.deepEqual(runShim(fn, CASES[label]), want, label + ", no Jev node ran");
+    assert.deepEqual(runShim(fn, { ...CASES[label], verdictItems: note(NOTE.absent) }), want, label + ", with a verdict");
+  }
+}
+
+// No Jev node ran, or it ran and left nothing usable: thumb_warning and every
+// other field are the export code's, and the Jev keys read "nothing found",
+// with JEV_APPLY off and on. Only jevApplied tells the two apart.
+for (const label of RENDERED) {
+  const c = CASES[label];
   const want = runShim(shimOld, c);
-  assert.deepEqual(runShim(shimNew, c), want, label + ", no Jev node ran");
-  for (const [what, verdictItems] of [
-    ["no items", []],
-    ["a null note", note(null)],
-    ["an empty note", note("")],
-    ["a blank note", note("   ")],
-    ["a note that is a number", note(42)],
-    ["a note that is an array", note(["the headline touches the edge of the frame"])],
-    ["a note that is an object", note({ text: "x" })],
-    ["no note key", [{ json: { jevThumbChecked: false } }]],
-    ["an item with no json", [{}]],
-  ]) assert.deepEqual(runShim(shimNew, { ...c, verdictItems }), want, label + ", verdict with " + what);
+  for (const [fn, applied] of [[shimNew, false], [shimOn, true]]) {
+    const tag = label + ", JEV_APPLY " + applied;
+    assert.deepEqual(stripJev(runShim(fn, c)), want, tag + ", no Jev node ran");
+    assert.deepEqual(jevOf(runShim(fn, c)), { ...NOTHING, jevApplied: applied }, tag + ", no Jev node ran");
+    assert.deepEqual(Object.keys(runShim(fn, c)[0].json).slice(-4), JEV_KEYS, tag + ", the four keys come last, in order");
+    for (const [what, verdictItems] of [
+      ["no items", []],
+      ["a null note", note(null)],
+      ["an empty note", note("")],
+      ["a blank note", note("   ")],
+      ["a note that is a number", note(42)],
+      ["a note that is an array", note(["the headline touches the edge of the frame"])],
+      ["a note that is an object", note({ text: "x" })],
+      ["no note key", [{ json: { jevThumbChecked: false } }]],
+      ["an item with no json", [{}]],
+    ]) {
+      const got = runShim(fn, { ...c, verdictItems });
+      assert.deepEqual(stripJev(got), want, tag + ", verdict with " + what);
+      assert.equal(got[0].json.jevThumbNote, null, tag + ", verdict with " + what);
+      assert.equal(got[0].json.jevApplied, applied, tag + ", verdict with " + what);
+    }
+  }
 }
 // The image is carried through untouched.
 assert.equal(runShim(shimNew, { binary: BIG })[0].binary, BIG);
+assert.equal(runShim(shimOn, { binary: BIG })[0].binary, BIG);
 
-// A note lands in thumb_warning behind "Jev: ", and nothing else moves.
-const withoutWarning = ({ thumb_warning, ...rest }) => rest;
-let got = runShim(shimNew, { binary: BIG, verdictItems: note(NOTE.runsOff) });
-assert.equal(got[0].json.thumb_warning, "Jev: " + NOTE.runsOff);
-assert.deepEqual(withoutWarning(got[0].json), withoutWarning(runShim(shimOld, { binary: BIG })[0].json));
-assert.equal(got[0].binary, BIG);
-assert.equal(got.length, 1);
-// Joined notes go in as one line.
+// What the verdict node really returns, fed to the Shim, for each kind of answer.
+const fromVerdict = (json) => [{ json: verdictNode(verdictThrows, { first: () => ({ json }) })[0].json }];
+const VERDICTS = {
+  clean: fromVerdict(response()),
+  runsOff: fromVerdict(response({ box: { ...CLEAN_BOX, right: 0.8 } })),
+  edge: fromVerdict(response({ box: { ...CLEAN_BOX, bottom: 0.99 } })),
+  hard: fromVerdict(response({ readable: 0.2 })),
+  absent: fromVerdict(response({ present: 0.1, box: { top: 0, bottom: 0, left: 0, right: 0 } })),
+  unchecked: fromVerdict({ error: { message: "Request failed with status code 402" } }),
+};
+assert.equal(VERDICTS.runsOff[0].json.jevThumbNote, NOTE.runsOff);
+assert.equal(VERDICTS.edge[0].json.jevThumbNote, NOTE.edge);
+assert.equal(VERDICTS.hard[0].json.jevThumbNote, NOTE.hard);
+assert.equal(VERDICTS.absent[0].json.jevThumbNote, NOTE.absent);
+
+// SHADOW (JEV_APPLY false, as shipped): Jev's findings are recorded, and
+// thumb_warning is exactly what the export code makes, with or without a note.
+for (const label of RENDERED) {
+  const want = runShim(shimOld, CASES[label]);
+  for (const [name, verdictItems] of Object.entries(VERDICTS)) {
+    const got = runShim(shimNew, { ...CASES[label], verdictItems });
+    assert.deepEqual(stripJev(got), want, label + ", shadow, " + name + ": nothing but the Jev keys moves");
+    assert.equal(got[0].json.thumb_warning, want[0].json.thumb_warning, label + ", shadow, " + name);
+    assert.deepEqual(jevOf(got), { ...verdictItems[0].json, jevApplied: false }, label + ", shadow, " + name + ": recorded as found");
+    assert.equal(got[0].binary, CASES[label].binary);
+    assert.equal(got.length, 1);
+  }
+}
+assert.deepEqual(jevOf(runShim(shimNew, { binary: BIG, verdictItems: VERDICTS.runsOff })), {
+  jevThumbNote: NOTE.runsOff, jevThumbChecked: true, jevHeadlineBox: { ...CLEAN_BOX, right: 0.8 }, jevApplied: false,
+});
+assert.deepEqual(jevOf(runShim(shimNew, { binary: BIG, verdictItems: VERDICTS.absent })), {
+  jevThumbNote: NOTE.absent, jevThumbChecked: true, jevHeadlineBox: null, jevApplied: false,
+});
+assert.deepEqual(jevOf(runShim(shimNew, { binary: SMALL, verdictItems: VERDICTS.clean })), {
+  jevThumbNote: null, jevThumbChecked: true, jevHeadlineBox: CLEAN_BOX, jevApplied: false,
+});
+// The recorded note is trimmed, only the first verdict item is read, the box is a
+// copy of its four edges, and a box that is not four finite numbers is dropped.
+assert.equal(runShim(shimNew, { binary: BIG, verdictItems: note("  " + NOTE.edge + " ") })[0].json.jevThumbNote, NOTE.edge);
+assert.equal(runShim(shimNew, { binary: BIG, verdictItems: [...note(NOTE.edge), ...note(NOTE.hard)] })[0].json.jevThumbNote, NOTE.edge);
+const boxed = (jevHeadlineBox) => [{ json: { jevThumbNote: null, jevThumbChecked: true, jevHeadlineBox } }];
+const copied = runShim(shimNew, { binary: BIG, verdictItems: boxed({ ...CLEAN_BOX, extra: 1 }) })[0].json.jevHeadlineBox;
+assert.deepEqual(copied, CLEAN_BOX);
+assert.deepEqual(Object.keys(copied), ["top", "bottom", "left", "right"]);
+for (const bad of [null, undefined, "box", 7, [], { ...CLEAN_BOX, top: NaN }, { ...CLEAN_BOX, left: "0.05" }, { top: 0.1, bottom: 0.2, left: 0.3 }]) {
+  assert.equal(runShim(shimNew, { binary: BIG, verdictItems: boxed(bad) })[0].json.jevHeadlineBox, null, JSON.stringify(bad));
+}
+// Checked is true only for the boolean true.
+for (const checked of [false, "true", 1, null, undefined]) {
+  const items = [{ json: { jevThumbNote: null, jevThumbChecked: checked, jevHeadlineBox: null } }];
+  assert.equal(runShim(shimNew, { binary: BIG, verdictItems: items })[0].json.jevThumbChecked, false, String(checked));
+}
+
+// APPLIED (JEV_APPLY true, in a scratch copy): jevApplied is true, the same
+// findings are recorded, and the note is appended to thumb_warning.
+const runOn = (c, name) => runShim(shimOn, { ...c, verdictItems: VERDICTS[name] });
+for (const label of RENDERED) {
+  for (const name of Object.keys(VERDICTS)) {
+    const got = runOn(CASES[label], name);
+    const want = runShim(shimOld, CASES[label]);
+    assert.equal(got[0].json.jevApplied, true, label + ", applied, " + name);
+    assert.deepEqual(jevOf(got), { ...VERDICTS[name][0].json, jevApplied: true }, label + ", applied, " + name);
+    // Whatever the warning says, no other field of the export moves.
+    assert.deepEqual(stripJev(got).map(({ json }) => withoutWarning(json)), want.map(({ json }) => withoutWarning(json)), label + ", applied, " + name);
+    assert.equal(got[0].binary, CASES[label].binary);
+    assert.equal(got.length, 1);
+  }
+}
+// Pinned strings. A note that does not name Jev gets "Jev: " in front; the two
+// notes that already open with the word keep it as their own and get no prefix,
+// so the word Jev appears once in the line.
+assert.equal(runOn({ binary: BIG }, "runsOff")[0].json.thumb_warning, "Jev: the headline runs off the dark panel onto the photograph");
+assert.equal(runOn({ binary: BIG }, "edge")[0].json.thumb_warning, "Jev: the headline touches the edge of the frame");
+assert.equal(runOn({ binary: BIG }, "hard")[0].json.thumb_warning, "Jev reads the headline as hard to read at phone size");
+assert.equal(runOn({ binary: BIG }, "absent")[0].json.thumb_warning, "Jev did not find the headline text on the thumbnail");
+assert.notEqual(runOn({ binary: BIG }, "absent")[0].json.thumb_warning, "Jev: " + NOTE.absent, "no doubled prefix");
+for (const name of ["runsOff", "edge", "hard", "absent"]) {
+  assert.equal((runOn({ binary: BIG }, name)[0].json.thumb_warning.match(/Jev/g) || []).length, 1, name + ": the word Jev appears once");
+}
+// A clean frame and an unchecked one add nothing.
+assert.equal(runOn({ binary: BIG }, "clean")[0].json.thumb_warning, null);
+assert.equal(runOn({ binary: BIG }, "unchecked")[0].json.thumb_warning, null);
+assert.equal(runOn({ binary: SMALL }, "clean")[0].json.thumb_warning, SIZE_WARNING);
+// It comes after the size warning rather than replacing it, joined with "; ".
+assert.equal(runOn({ binary: SMALL }, "edge")[0].json.thumb_warning, SIZE_WARNING + "; Jev: the headline touches the edge of the frame");
+assert.equal(runOn({ binary: SMALL }, "absent")[0].json.thumb_warning, SIZE_WARNING + "; Jev did not find the headline text on the thumbnail");
+assert.equal(runOn({ binary: SMALL }, "hard")[0].json.thumb_warning, SIZE_WARNING + "; Jev reads the headline as hard to read at phone size");
+// Several notes joined by the verdict go in as one line. The prefix test looks
+// only at how the whole line starts, and every note keeps its own words, so a
+// joined line that carries the hard to read note names Jev in that note too.
 assert.equal(
-  runShim(shimNew, { binary: BIG, verdictItems: note(NOTE.runsOff + "; " + NOTE.hard) })[0].json.thumb_warning,
+  runShim(shimOn, { binary: BIG, verdictItems: note(NOTE.runsOff + "; " + NOTE.hard) })[0].json.thumb_warning,
   "Jev: " + NOTE.runsOff + "; " + NOTE.hard,
 );
-// It comes after the size warning rather than replacing it.
-got = runShim(shimNew, { binary: SMALL, verdictItems: note(NOTE.edge) });
-assert.equal(got[0].json.thumb_warning, SIZE_WARNING + "; Jev: " + NOTE.edge);
-assert.deepEqual(withoutWarning(got[0].json), withoutWarning(runShim(shimOld, { binary: SMALL })[0].json));
 // The note is trimmed, and only the first verdict item is read.
-assert.equal(runShim(shimNew, { binary: BIG, verdictItems: note("  " + NOTE.edge + " ") })[0].json.thumb_warning, "Jev: " + NOTE.edge);
+assert.equal(runShim(shimOn, { binary: BIG, verdictItems: note("  " + NOTE.edge + " ") })[0].json.thumb_warning, "Jev: " + NOTE.edge);
 assert.equal(
-  runShim(shimNew, { binary: BIG, verdictItems: [...note(NOTE.edge), ...note(NOTE.hard)] })[0].json.thumb_warning,
+  runShim(shimOn, { binary: BIG, verdictItems: [...note(NOTE.edge), ...note(NOTE.hard)] })[0].json.thumb_warning,
   "Jev: " + NOTE.edge,
 );
-// A thumbnail that was never made gets no Jev line, whatever a verdict says.
-for (const key of ["no still matched", "no still matched, no image", "still downloaded, compositor returned no image"]) {
-  assert.deepEqual(runShim(shimNew, { ...CASES[key], verdictItems: note(NOTE.absent) }), runShim(shimOld, CASES[key]), key);
-}
 
 // The shim is the export code plus the Jev block: every line of the export
 // appears in the shim in order, and the one line it rewrites is the final
 // `return [{`, which now fills `result` so the Jev block can read it.
 const exportLines = SHIM_EXPORT.split("\n");
 assert.equal(exportLines.filter((l) => l === "return [{").length, 1);
-const shimLines = read("shim_thumbnail_to_binary.js").split("\n");
+const shimLines = SHIM_SHIPPED.split("\n");
 let at = 0;
 for (const line of exportLines.map((l) => (l === "return [{" ? "const result = [{" : l))) {
   at = shimLines.indexOf(line, at);
@@ -387,5 +549,15 @@ for (const line of exportLines.map((l) => (l === "return [{" ? "const result = [
   at += 1;
 }
 assert.ok(shimLines.slice(at).some((l) => l.includes("$('Jev: Thumb Verdict')")), "the Jev block follows the export code");
+// JEV_APPLY is declared after the export code, beside a comment that says
+// flipping it is a ruling for Tee.
+const applyAt = shimLines.indexOf("const JEV_APPLY = false;");
+assert.ok(applyAt >= at, "JEV_APPLY sits in the Jev block, after the export code");
+assert.match(shimLines.slice(Math.max(0, applyAt - 12), applyAt).join("\n"), /flipping that is a ruling for Tee/);
+
+// Plain ASCII in every file this check touches.
+for (const file of ["jev_thumb_check_verdict.js", "shim_thumbnail_to_binary.js", "jev_thumb_check.test.mjs"]) {
+  assert.doesNotMatch(read(file), /[^\x00-\x7f]/, file + " is plain ASCII");
+}
 
 console.log("Jev thumbnail check: every case behaves");

@@ -42,20 +42,39 @@ const result = [{
   binary: bin
 }];
 
-// Jev's check of the composed frame, ruled by Tee 2026-10-16 and shipped in
-// shadow: if the side branch off Thumb: Compose ran and found something wrong
-// with the headline, say so in thumb_warning and change nothing else. The
-// warning never blocks (OS 30 gate 8 still decides), so a wrong note costs a
-// line of text and not a thumbnail. Any missing node, empty note or error
-// leaves thumb_warning exactly as the size check above set it.
+// Jev's check of the composed frame, ruled by Tee 2026-10-16 and SHIPPED IN
+// SHADOW. If the side branch off Thumb: Compose ran, this node always records
+// what Jev found on the output json: jevThumbNote, jevThumbChecked and
+// jevHeadlineBox. It puts the note into thumb_warning only when JEV_APPLY is
+// true, and flipping that is a ruling for Tee, so it ships false. With it false
+// thumb_warning is exactly what the size check above set. The warning never
+// blocks (OS 30 gate 8 still decides), so a wrong note costs a line of text and
+// not a thumbnail. Any missing node, empty note or error records nothing found
+// (null, false, null) and leaves thumb_warning as the size check set it.
+const JEV_APPLY = false;
+let jevNote = null;
+let jevChecked = false;
+let jevBox = null;
 try {
-  const note = $('Jev: Thumb Verdict').first().json.jevThumbNote;
-  if (typeof note === 'string' && note.trim()) {
-    const jev = 'Jev: ' + note.trim();
-    const was = result[0].json.thumb_warning;
-    result[0].json.thumb_warning = was ? was + '; ' + jev : jev;
+  const v = $('Jev: Thumb Verdict').first().json;
+  if (typeof v.jevThumbNote === 'string' && v.jevThumbNote.trim()) jevNote = v.jevThumbNote.trim();
+  jevChecked = v.jevThumbChecked === true;
+  const b = v.jevHeadlineBox;
+  if (b && [b.top, b.bottom, b.left, b.right].every(Number.isFinite)) {
+    jevBox = { top: b.top, bottom: b.bottom, left: b.left, right: b.right };
   }
 } catch (e) {
   // The Jev nodes did not run, which is today's behaviour.
+}
+result[0].json.jevThumbNote = jevNote;
+result[0].json.jevThumbChecked = jevChecked;
+result[0].json.jevHeadlineBox = jevBox;
+result[0].json.jevApplied = JEV_APPLY;
+if (JEV_APPLY && jevNote) {
+  // Two of Jev's notes already open with the word Jev, so the prefix is added
+  // only to a note that does not, which keeps the word once in the line.
+  const jev = /^Jev\b/.test(jevNote) ? jevNote : 'Jev: ' + jevNote;
+  const was = result[0].json.thumb_warning;
+  result[0].json.thumb_warning = was ? was + '; ' + jev : jev;
 }
 return result;

@@ -7,9 +7,14 @@
 //
 // The rules, in order:
 //   headline_present below 0.5   "Jev did not find the headline text on the
-//                                thumbnail". Nothing else is read: the box
-//                                has no absent answer, so it is a guess when
-//                                the headline is not there.
+//                                thumbnail". The box answer is not looked at,
+//                                not even to check its shape: TypeSafe's Box
+//                                always returns four edges and has no not
+//                                found answer, so with the headline absent the
+//                                box is a guess, and its docs say to ignore it
+//                                when the Noul is low. A reversed or zero area
+//                                box beside an absent headline therefore still
+//                                gives this note.
 //   otherwise, box right edge above 0.594
 //                                the headline runs off the dark panel. The
 //                                panel covers x 0 to 760 of 1280 px, which is
@@ -20,10 +25,12 @@
 // Several notes join with "; ", in that order.
 //
 // jevThumbChecked says the answers were usable. A response that is not from a
-// jev- model, or has any of the three answers missing, of the wrong type, not
-// finite or out of range, is ignored whole: checked false, no note, no box.
-// A silent note is then not mistaken for a clean frame. The box must also have
-// top above bottom and left above right, or it is out of range too.
+// jev- model, or has headline_present or headline_readable missing, of the
+// wrong type, not finite or out of range, is ignored whole: checked false, no
+// note, no box. The same holds for the box answer, but only once the headline
+// is found (present 0.5 or more), because only then is the box read. A silent
+// note is then not mistaken for a clean frame. A box must also have top above
+// bottom and left above right, or it is out of range too.
 const SCRIM_RIGHT = 0.594;
 const EDGE_LOW = 0.02;
 const EDGE_BOTTOM = 0.95;
@@ -44,24 +51,25 @@ try {
   const answers = r && typeof r.model === 'string' && r.model.startsWith('jev-') ? r.answers : null;
   if (answers && typeof answers === 'object') {
     const present = noulOf(answers.headline_present);
-    const box = boxOf(answers.headline_box);
     const readable = noulOf(answers.headline_readable);
-    if (present !== null && box !== null && readable !== null) {
-      const notes = [];
-      let usedBox = null;
+    if (present !== null && readable !== null) {
       if (present < HALF) {
-        notes.push('Jev did not find the headline text on the thumbnail');
+        // The box answer is never read on this branch.
+        verdict = { jevThumbNote: 'Jev did not find the headline text on the thumbnail', jevThumbChecked: true, jevHeadlineBox: null };
       } else {
-        usedBox = box;
-        if (box.right > SCRIM_RIGHT) notes.push('the headline runs off the dark panel onto the photograph');
-        if (box.bottom > EDGE_BOTTOM || box.top < EDGE_LOW || box.left < EDGE_LOW) notes.push('the headline touches the edge of the frame');
-        if (readable < HALF) notes.push('Jev reads the headline as hard to read at phone size');
+        const box = boxOf(answers.headline_box);
+        if (box !== null) {
+          const notes = [];
+          if (box.right > SCRIM_RIGHT) notes.push('the headline runs off the dark panel onto the photograph');
+          if (box.bottom > EDGE_BOTTOM || box.top < EDGE_LOW || box.left < EDGE_LOW) notes.push('the headline touches the edge of the frame');
+          if (readable < HALF) notes.push('Jev reads the headline as hard to read at phone size');
+          verdict = {
+            jevThumbNote: notes.length ? notes.join('; ') : null,
+            jevThumbChecked: true,
+            jevHeadlineBox: box,
+          };
+        }
       }
-      verdict = {
-        jevThumbNote: notes.length ? notes.join('; ') : null,
-        jevThumbChecked: true,
-        jevHeadlineBox: usedBox,
-      };
     }
   }
 } catch (e) {
