@@ -181,3 +181,28 @@ def test_sign_in_failure_is_a_refusal_without_the_password():
     with pytest.raises(imp.ImportRefusal, match="HTTP 401") as e:
         imp.sign_in(lambda *a: (401, {"detail": "Incorrect email or password"}), "a@b.c", "pw-secret")
     assert "pw-secret" not in str(e.value)
+
+
+def test_a_failed_approval_is_not_reported_as_verified(article):
+    s = FakeServer([drafted(article)])
+    orig = s.__call__
+
+    def refuses(method, path, payload, token):
+        if path.endswith("/approve"):
+            return 500, "boom"
+        return orig(method, path, payload, token)
+
+    rc, out = go(refuses, article, approve=True, confirm=lambda _p: AID)
+    assert rc == 1 and "NOT APPROVED" in out and "VERIFIED" not in out
+
+
+def test_an_unreachable_host_is_a_refusal_not_a_traceback():
+    call = imp.http("https://127.0.0.1:9")
+    with pytest.raises(imp.ImportRefusal, match="could not reach"):
+        call("GET", "/x", None, None)
+
+
+def test_a_plain_http_base_is_refused_before_the_password_is_asked(monkeypatch, capsys):
+    monkeypatch.setattr("getpass.getpass", lambda *_a: pytest.fail("password asked"))
+    rc = imp.main([AID, "--email", "a@b.c", "--base", "http://example.com/api/v1"])
+    assert rc == 1 and "must be https" in capsys.readouterr().out

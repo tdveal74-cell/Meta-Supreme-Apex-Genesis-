@@ -86,6 +86,8 @@ def http(base: str) -> Transport:
                 return exc.code, json.loads(raw)
             except ValueError:
                 return exc.code, raw
+        except (urllib.error.URLError, OSError) as exc:
+            raise ImportRefusal("could not reach %s: %s" % (base, type(exc).__name__)) from None
     return call
 
 
@@ -148,6 +150,9 @@ def run(call: Transport, article: Dict[str, str], token: str, *, create: bool,
         if row is None or not same_text(row, article):
             out("READBACK failed after the approval. Check the account before relying on it.")
             return 1
+        if row.get("status") != "approved":
+            out("NOT APPROVED: the account reads status=%s after the request." % row.get("status"))
+            return 1
     else:
         out("Drafted, not citable. Re-run with --approve to record your decision.")
     out("VERIFIED id=%s title_ok=True body_sha256=%s status=%s decided_by=%s note=%s" % (
@@ -167,6 +172,9 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     try:
         article = load_article(args.article_id)
+        if not (args.base.startswith("https://") or args.base.startswith("http://127.0.0.1")
+                or args.base.startswith("http://localhost")):
+            raise ImportRefusal("the base URL must be https, because the password travels in it")
         email = args.email or input("Account email: ").strip()
         password = getpass.getpass("Password (hidden): ")
         call = http(args.base)
