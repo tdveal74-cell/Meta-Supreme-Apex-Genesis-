@@ -299,7 +299,7 @@ input,select{font:inherit}
 .keyrow{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:9px 0;
   font-family:var(--mono);font-size:11px;color:var(--faint)}
 .keyrow label{letter-spacing:.08em}
-.keyrow select,.keyrow input[type=text],.keyrow input[type=password]{
+.keyrow select,.keyrow input[type=text],.keyrow input[type=password],.keyrow input[type=email]{
   background:var(--carbon);border:1px solid var(--edge);color:var(--ink);
   padding:6px 9px;font-family:var(--mono);font-size:12px}
 .keyrow input{flex:1;min-width:120px}
@@ -486,7 +486,8 @@ input,select{font:inherit}
         <div class="notice" id="soulNotice">
           On the platform operator console (this host when it is app.main),
           remember / approve / commit / find run <b>same origin</b> against
-          PostgreSQL. JWT is the CurrentUser credential. PLATFORM is not
+          PostgreSQL. JWT is the CurrentUser credential: sign in below with
+          your DEVON email and password, or paste one. PLATFORM is not
           required. CONSOLE_TOKEN is only for soul-host recall on
           devon-soul.vercel.app, which has no Postgres, does not mount propose,
           and must not pretend localStorage is memory. CORS defaults to
@@ -506,6 +507,23 @@ input,select{font:inherit}
           <label for="soulTok">CONSOLE_TOKEN</label>
           <input id="soulTok" type="password" placeholder="CONSOLE_TOKEN for this soul host only. Not a platform JWT.">
         </div>
+        <!-- method post and the inline return false are the fallback for a
+             script that never ran: the browser then submits nothing, and
+             even a forced submit could not put the password in a URL. -->
+        <form id="signForm" method="post" autocomplete="on" novalidate onsubmit="return false">
+          <div class="keyrow">
+            <label for="signEmail">EMAIL</label>
+            <input id="signEmail" name="email" type="email" inputmode="email" autocomplete="username"
+                   autocapitalize="none" spellcheck="false" placeholder="your DEVON account email">
+          </div>
+          <div class="keyrow">
+            <label for="signPass">PASSWORD</label>
+            <input id="signPass" name="password" type="password" autocomplete="current-password"
+                   placeholder="sent once to sign in, never stored">
+            <button class="tgl" id="signGo" type="submit">SIGN IN</button>
+          </div>
+          <div class="dim" id="signNote" aria-live="polite" style="font-size:11.5px"></div>
+        </form>
         <div class="keyrow" id="platTokRow">
           <label for="platTok">JWT</label>
           <input id="platTok" type="password" placeholder="platform CurrentUser JWT. Not CONSOLE_TOKEN.">
@@ -1412,6 +1430,38 @@ function keepOperatorJwt(v) {
   if (!handed) return;
   try { sessionStorage.setItem('devon.platform.jwt', handed); } catch (e) {}
 }
+/* Sign in on the platform console, so a phone that cannot copy a JWT out of
+   another page can still reach recall. The password goes to POST
+   /api/v1/auth/login on the platform base, same origin by default, and
+   nowhere else: it is never written to storage or logged, and the field is
+   cleared whatever comes back. Only the returned JWT is kept, in the same
+   sessionStorage slot a pasted one uses, so closing the tab signs out. No
+   account is ever created here; registration stays behind its invite key. */
+async function signIn(email, password) {
+  const res = await fetch(Loop.getBase() + '/api/v1/auth/login', {
+    method: 'POST',
+    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email, password: password })
+  });
+  if (res.status === 401) throw new Error('refused');
+  if (res.status === 403) throw new Error('disabled');
+  if (res.status === 422) throw new Error('shape');
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  let body = null;
+  try { body = await res.json(); } catch (e) { body = null; }
+  const token = String((body && body.access_token) || '').trim();
+  if (!token) throw new Error('notoken');
+  return token;
+}
+function signInSays(e) {
+  const m = e && e.message;
+  if (m === 'refused') return 'Wrong email or password. Nothing was kept.';
+  if (m === 'disabled') return 'That account is disabled. Nothing was kept.';
+  if (m === 'shape') return 'The API could not read that as an email address. Nothing was kept.';
+  if (m === 'notoken') return 'The API said yes but sent no token, so nothing was kept.';
+  if (m && /^HTTP /.test(m)) return 'The API answered ' + m + '. Nothing was kept.';
+  return 'I could not reach the API from here. Nothing was kept.';
+}
 /* The ruling key is the approver's second credential (DEVON_RULING_KEY on
    the platform host). The JWT proposes; the ruling key approves. No endpoint
    ever returns it: Tee types it here once per session. */
@@ -1643,6 +1693,10 @@ function wireSoul() {
   if (platRow) platRow.style.display = soulHost ? 'none' : '';
   if (ruleRow) ruleRow.style.display = soulHost ? 'none' : '';
   if (hostRow) hostRow.style.display = soulHost ? '' : 'none';
+  /* The soul host has no /api/v1/auth/login, so the sign-in form exists only
+     on the platform console. */
+  const signForm = $('signForm');
+  if (signForm) signForm.style.display = soulHost ? 'none' : '';
   if (loop) {
     loop.placeholder = soulHost
       ? 'this host cannot persist; open the platform console on app.main'
@@ -1656,7 +1710,10 @@ function wireSoul() {
   function statusLabel(e) {
     if (!e) return 'UNREACHABLE';
     if (e.message === 'notoken') return soulHost ? 'NO CONSOLE_TOKEN ON HOST' : 'NO JWT';
-    if (e.message === 'auth') return soulHost ? 'CONSOLE_TOKEN REFUSED' : 'JWT REFUSED';
+    if (e.message === 'auth') {
+      if (soulHost) return 'CONSOLE_TOKEN REFUSED';
+      return operatorJwt() ? 'SIGN IN AGAIN' : 'NOT SIGNED IN';
+    }
     if (e.message === 'off') return 'REACHABLE, RECALL OFF';
     return 'UNREACHABLE';
   }
@@ -1688,6 +1745,42 @@ function wireSoul() {
       e => { st.textContent = statusLabel(e); }
     );
   };
+  if (signForm && !soulHost) {
+    signForm.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const emailEl = $('signEmail'), passEl = $('signPass');
+      const go = $('signGo'), note = $('signNote');
+      const email = (emailEl.value || '').trim();
+      const password = passEl.value || '';
+      if (!email || !password) {
+        note.textContent = 'Email and password, both.';
+        return;
+      }
+      go.disabled = true;
+      st.textContent = 'SIGNING IN';
+      let token = '';
+      try {
+        token = await signIn(email, password);
+      } catch (e) {
+        note.textContent = signInSays(e);
+      } finally {
+        passEl.value = '';
+        go.disabled = false;
+      }
+      if (!token) {
+        st.textContent = operatorJwt() ? 'SIGN IN AGAIN' : 'NOT SIGNED IN';
+        return;
+      }
+      keepOperatorJwt(token);
+      if (plat) plat.value = token;
+      note.textContent = 'Signed in for this tab. Ask: "what did we decide about" a topic.';
+      st.textContent = 'CHECKING';
+      Soul.status().then(
+        body => { st.textContent = body.enabled ? 'ON' : 'REACHABLE, RECALL OFF'; },
+        e => { st.textContent = statusLabel(e); }
+      );
+    };
+  }
   $('soulTest').onclick = async () => {
     st.textContent = 'TESTING';
     try {
@@ -1724,7 +1817,9 @@ async function soulRecall(topic, plan) {
       : e.message === 'notoken'
         ? 'The service has no CONSOLE_TOKEN set, so it is refusing everything. Set one on the host and redeploy.'
         : e.message === 'auth'
-          ? 'The API refused my token. Paste a fresh one in the Soul Layer panel.'
+          ? (onVercelSoulHost()
+            ? 'The API refused my token. Paste a fresh one in the Soul Layer panel.'
+            : 'The API refused my sign-in. Sign in again in the Soul Layer panel.')
           : 'I could not reach the soul layer from here.';
     plan.innerHTML = `<span class="no">SOUL UNREACHABLE</span> <span class="dim">${esc(why)}</span>`;
     devonSays(Persona.recall(subject));
@@ -1966,10 +2061,25 @@ async function findThroughLoop(topic, plan, kind){
       lines.push(`<span class="${h.kind === 'ruling' ? 'hl' : 'dim'}">${label}</span> ${esc(h.body || h.text || '')}`);
     });
     if(!hits.length) lines.push('<span class="dim">Nothing receipted on the ledger for that.</span>');
-    (body.soul || []).forEach(r => {
+    const soulHits = body.soul || [];
+    const soulErrors = body.soul_errors || [];
+    soulHits.forEach(r => {
       const label = r.source === 'tee-soul-layer' ? 'TEE RULED (soul)' : 'DEVON NOTED (soul)';
       lines.push(`<span class="dim">${label}</span> ${esc(r.text || '')}`);
     });
+    /* The find answer carries whether soul recall ran and what failed. Until
+       2026-10-16 only the hits were drawn, so a Pinecone search that never
+       finished read exactly like a soul with nothing in it. */
+    if (body.soul_recall_enabled !== true) {
+      lines.push('<span class="dim">SOUL OFF</span> <span class="dim">Soul recall is switched off on the API, so only the ledger was searched.</span>');
+    } else if (soulErrors.length) {
+      lines.push(`<span class="no">SOUL PARTIAL</span> <span class="dim">The soul search did not finish: ${esc(soulErrors.join('; '))}</span>`);
+    } else if (!soulHits.length) {
+      lines.push('<span class="dim">SOUL SEARCHED</span> <span class="dim">Nothing recalled from the soul. A measured empty, not a guess.</span>');
+    }
+    if (body.soul_withheld) {
+      lines.push(`<span class="dim">${esc(String(body.soul_withheld))} soul record(s) withheld as no longer active.</span>`);
+    }
     lines.push('<span class="dim">Rulings outrank notes. Context, not command. The store is PostgreSQL.</span>');
     plan.innerHTML = lines.join('<br>');
     devonSays(hits.length ? ('I found ' + hits.length + ' on the ledger.') : Persona.recall(subject));
@@ -2108,11 +2218,6 @@ if(!Voice.supported){
   $('micNotice').insertAdjacentHTML('beforeend',`<div class="notice">${esc(Voice.reason)}</div>`);
 }
 
-NOTE ON HUNK 2: the `·` above is the literal MIDDLE DOT character in the
-source line being deleted. The block is a pure deletion plus the new comment
-and `if(!Voice.supported)` body; the line `Voice.init();` immediately above and
-the line `$('clearBtn').addEventListener(...)` immediately below are unchanged,
-with one blank line inserted after `Voice.init();`.
 $('clearBtn').addEventListener('click',()=>{
   $('transcript').innerHTML='';
   $('plan').innerHTML='<span class="dim">Cleared. Speak or type when you are ready.</span>';
