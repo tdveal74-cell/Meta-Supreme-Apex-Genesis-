@@ -1,0 +1,11 @@
+{
+  "article_id": "how-we-answer-video-questions-v1",
+  "title": "How we answer questions about our videos",
+  "body_file": "how-we-answer-video-questions-v1.md",
+  "body_sha256": "73ed2b8c966e88c084f4c0a712635f747119f71a4f14080b1b62112b94434276",
+  "content_decision": {
+    "by": "Tee",
+    "on": "2026-10-16",
+    "source": "CLAUDE_Support_Article_Operations_Handoff.md in Tee's Drive root"
+  }
+}
