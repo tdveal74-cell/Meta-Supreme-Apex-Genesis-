@@ -13,7 +13,7 @@ Drive: `TSWS_EDITABLE_REPAIR_WORKFLOWS_v01_DRAFT`, folder id `1SgR8-w-hzFEPuigh2
 
 ## The one fact that governs every claim
 
-The Episode 1 media never reached the build environment. Every test ran on synthetic fixtures that reproduce the Episode 1 failure modes. The methods are real and run end to end; the Episode 1 applications (SH020, SH070, SH100, SH150 for the composer, one bounded cleanup defect, SH160 for the scene builder) are not done, and the SH045 rig is not built. Do not describe any Episode 1 shot as repaired on the strength of this package.
+The package was built and tested on synthetic fixtures only. Episode 1 media first reached a build container on 2026-10-16 (`docs/devon/SYS_OPS_tsws-ep01-repair-attempts_v1_2026-10-16-2007.md`), and every real-footage run so far refused, correctly: no Episode 1 shot is repaired, and the SH045 rig is not built. Do not describe any Episode 1 shot as repaired on the strength of this package.
 
 ## Running a method
 
@@ -75,7 +75,16 @@ The pattern across all of them: a check that cannot fail on the fixture is not a
 
 ## Episode 1, what unblocks each shot
 
-Media reaching the machine that runs the scripts is the first blocker for everything. After that: the composer needs rotoscoped mattes per actor (the workflow assembles layers from supplied mattes; it does not separate people from the plate), head start points, a static plate or a camera override with a reason, and the face-shaped shell mesh. The cleanup needs the native master, a mask on the defect frames and a mask of the passing regions to protect. SH160 needs the exit aperture and the other named facts in `templates/SH160_SCENE_SPEC_TEMPLATE_UNRESOLVED.json`. SH045 is not built because the brief's conditions (Auren's likeness, fitted mask, anchored thread, verified window-directed turn) cannot be met from synthetic geometry.
+Read the 2026-10-16 status doc first. What it measured:
+
+- Getting media in: the container reaches `drive.usercontent.google.com`, so a link shared file downloads; a private one returns the Google sign in page, which is the check for "shared". The Drive connector cannot set link sharing (its share tool takes an email only), so Tee switches it on and off by hand. Verify every download against the sha256 in the editor's `EDITOR_SEVEN_PARENT_ACCEPTANCE_LIST_DRAFT.csv` (Drive `1NcsO_ydV3LpXA5XToUYbKNZ7GtXewWbx`, readable through the connector). The four source archives do not hold the street native masters; those are in `CLAUDE_EP01_RESCUE_v01_DRAFT`.
+- The editor's list scopes the work: SH070 and SH100 fail on performance and need new footage, which is a paid generation and Tee's budget call. SH020 is parked for regeneration on Tee's ruling after two refused repair attempts.
+- The cleanup method fits defects fixed to the lens or the scene. On a defect attached to a moving, turning subject (SH020's shell edge) it inpainted 92.3% of the region and refused. Do not retry it on that class of defect.
+- A 2D head locked transplant was built and judged DO-NOT-SHIP: it could only touch frames that were already clean, because a head turning in depth defeats a 2D fit. The next attempt on that class of defect needs a 3D head fit or new footage.
+- SH150's editor note (-25,+3 at f95) is a smooth accelerating pan from f0, not a cut; translation only stabilisation still fails the composer's 0.5 px camera stage. It needs a per frame camera solve.
+- Five package defects are listed in the status doc (a mislabelled plate, a frame numbering mismatch, the SH160 template's shared landmark facts and rooftop placement, no mesh path for a face shell, and `__pycache__` written without `python3 -B`).
+
+Beyond the media: the composer needs rotoscoped mattes per actor (the workflow assembles layers from supplied mattes; it does not separate people from the plate), head start points, a static plate or a camera override with a reason, and the face-shaped shell mesh. The cleanup needs the native master, a mask on the defect frames and a mask of the passing regions to protect. SH160 needs the exit aperture and the other named facts in `templates/SH160_SCENE_SPEC_TEMPLATE_UNRESOLVED.json`. SH045 is not built because the brief's conditions (Auren's likeness, fitted mask, anchored thread, verified window-directed turn) cannot be met from synthetic geometry.
 
 ## n8n
 
