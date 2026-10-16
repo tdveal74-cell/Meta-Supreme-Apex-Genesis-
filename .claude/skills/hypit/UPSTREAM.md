@@ -1,7 +1,8 @@
 # Upstream provenance
 
 `hypit` is third-party work vendored into this repository. Nothing under this
-directory is ours, and nothing here is edited in place. Fixes go upstream.
+directory is ours except this file and `MANIFEST.sha256`, and nothing else
+here is edited in place. Fixes go upstream.
 `test_vendored_skills.py` enforces that: every file below is hashed into
 `MANIFEST.sha256`, and a local edit fails the suite rather than surviving as a
 silent fork.
@@ -41,7 +42,8 @@ beside this one.
 It is not MIT. It is Apache 2.0 with three added conditions. Using it for our
 own work, commercial work included, is permitted without a commercial licence,
 and the producer claims no rights in the output: videos, audio and images made
-with it are ours. What needs a commercial licence from Hypit.AI:
+with it are ours. Clause 3 adds that output made through a third-party model or
+service may also fall under that provider's terms. What needs a commercial licence from Hypit.AI:
 
 - running it as a multi-tenant or hosted service for other parties, where one
   tenant is one workspace
@@ -90,7 +92,8 @@ anything with it means the skill will steer the agent to:
 
 - install the `@hypit/hypit` runtime from npm, globally or as a devDependency
 - connect a model provider. It names TokenDance, HiAPI, Pollo, BeatAPI and
-  Monid as npm provider packages, plus an OAuth flow against `hypit.ai`.
+  Monid as npm provider packages, plus `@hypit/provider-hypihub` with an OAuth
+  flow against `hypit.ai`.
   Generation through any of them spends real money, and credential setup and
   spending are Tee's to approve
 - prepare local programs such as WhisperX, which download models
@@ -99,8 +102,8 @@ None of that is wired into CI or any workflow here.
 
 ## Corrections to the vendored text, which is never edited to fix them
 
-- `agents/openai.yaml` is metadata for other agent hosts. Claude Code ignores
-  it.
+- `agents/openai.yaml` is display metadata for other agent hosts. Whether
+  Claude Code reads it is unverified; nothing in it is an instruction.
 - The skill's production default is to generate people, voices and
   performances. For TQO and NCO Forge the presenter is Tee's own likeness and
   cloned voice, and for The Shadow We Share the voices are Tee's and his wife's
