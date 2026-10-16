@@ -127,10 +127,41 @@ await check('no click at a join: the largest sample step is no bigger than the 1
 
 console.log('\n-- presenter_composite with must_cover, measured --');
 ff(['-f', 'lavfi', '-i', `color=c=black:s=320x568:r=${FPS}:d=4,format=yuv420p,geq=lum=120:cb=128:cr=240`, '-c:v', 'libx264', '-crf', '10', '-pix_fmt', 'yuv420p', 'cut.mp4']);
-const pcBase = { avatar: 'base.mp4', width: 320, height: 568, fps: FPS, duration: r.duration, must_cover: [{ start: w.start, end: w.end }] };
-await check('a cutaway whose 0.3 s fade would show the face under the clone is refused at submit', () => {
-  assert.throws(() => J.JOBS.presenter_composite.build({ ...pcBase, output: 'x.mp4', cutaways: [{ path: 'cut.mp4', start: 2.4, end: 5.0 }] }),
-    /not inside one opaque cutaway/);
+// No must_cover is sent anywhere below: take_patch wrote base.mp4.must_cover.json
+// beside the base track, and presenter_composite enforces that on its own.
+const pcBase = { avatar: 'base.mp4', width: 320, height: 568, fps: FPS, duration: r.duration };
+// A frame is the held face when it reads Y 117 and V 128 (source frame 101).
+const isFace = (y, v) => Math.abs(y - 117) < 4 && Math.abs(v - 128) < 4;
+const faceFramesIn = (f) => {
+  const y = frames(f, 'YAVG'), v = frames(f, 'VAVG');
+  const a = Math.round(w.start * FPS), b = Math.round(w.end * FPS);
+  return { n: b - a, face: y.slice(a, b).filter((yy, i) => isFace(yy, v[a + i])).length };
+};
+await check('the sidecar alone enforces the window: a cutaway that misses it is refused with no must_cover sent', () => {
+  assert.ok(fs.existsSync(path.join(ROOT, 'base.mp4.must_cover.json')), 'take_patch wrote no sidecar');
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...pcBase, output: 'x.mp4', cutaways: [{ path: 'cut.mp4', start: 5.0, end: 7.0 }] }),
+    /not inside one scheduled cutaway/);
+});
+await check('a cutaway whose 0.3 s fade overlaps the clone shows the plate through the fade, never the face', () => {
+  run(J.JOBS.presenter_composite.build({ ...pcBase, output: 'fade.mp4', cutaways: [{ path: 'cut.mp4', start: 2.4, end: 5.0 }] }));
+  const m = faceFramesIn('fade.mp4');
+  assert.strictEqual(m.face, 0, `${m.face} of ${m.n} frames in the window show the held face`);
+});
+await check('a hard cut (fade 0) laid exactly on a window whose edge rounds UP leaves no frame of face', async () => {
+  // The window above starts at 76/30 s, which six decimals round DOWN, so it
+  // could never show the defect. 173/30 s rounds UP to 5.766667, past the frame
+  // it belongs to: before the fix the composite showed that frame, the held
+  // face, under the clone (critic N2). The hold is source frame 171, Y = 187.
+  const e2 = await runNative(J.JOBS.take_patch.build({ take: 'take.mov', take_duration: dur('take.mov'), output: 'base2.mp4', hdr: 'sdr',
+    edl: [{ kind: 'take', start: 0, end: 5.766667 }, { kind: 'patch', audio: 'line1.mp3', duration: cloneLen }, { kind: 'take', start: 8, end: 10 }] }));
+  const w2 = e2.patch_windows[0];
+  run(J.JOBS.presenter_composite.build({ avatar: 'base2.mp4', width: 320, height: 568, fps: FPS, duration: e2.duration,
+    output: 'hard.mp4', fade: 0, cutaways: [{ path: 'cut.mp4', start: w2.start, end: w2.end }] }));
+  const y = frames('hard.mp4', 'YAVG'), v = frames('hard.mp4', 'VAVG');
+  const a2 = Math.round(w2.start * FPS), b2 = Math.round(w2.end * FPS);
+  const face = [];
+  for (let i = a2; i < b2; i++) if (Math.abs(y[i] - 187.5) < 4 && Math.abs(v[i] - 128) < 4) face.push(i);
+  assert.strictEqual(face.length, 0, `frames ${face.join(',')} of the window ${a2}..${b2 - 1} show the held face`);
 });
 await check('with a covering cutaway, no frame of the take shows anywhere in the patch window', () => {
   run(J.JOBS.presenter_composite.build({ ...pcBase, output: 'master.mp4', cutaways: [{ path: 'cut.mp4', start: 2.2, end: 5.2 }] }));
@@ -145,6 +176,23 @@ await check('a cutaway with no frames to show (in past its end) shows the black 
   const y = frames('empty.mp4', 'YAVG').slice(Math.round(w.start * FPS), Math.round(w.end * FPS));
   // The held take frame is source 101, Y = 117. The plate is black, Y = 16.
   assert.ok(y.every(v => v < 20), `max Y inside the window ${Math.max(...y)}; the held face frame reads 117`);
+});
+
+console.log('\n-- take_patch refuses rather than return a short episode --');
+// Sound that runs 0.3 s past the picture, as an iPhone file can: the container
+// says 12.3 s, the picture ends at 12.0 s.
+ff(['-f', 'lavfi', '-i', `color=c=gray:s=320x568:r=${FPS}:d=12`, '-f', 'lavfi', '-i', 'sine=f=440:r=48000:d=12.3',
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', 'long_audio.mov']);
+await check('a span ending past the last frame of picture is refused, not rendered without its clone line', async () => {
+  const b = J.JOBS.take_patch.build({ take: 'long_audio.mov', take_duration: dur('long_audio.mov'), output: 'la.mp4', hdr: 'sdr',
+    edl: [{ kind: 'take', start: 9, end: dur('long_audio.mov') }, { kind: 'patch', audio: 'line1.mp3', duration: cloneLen }] });
+  await assert.rejects(b.native(), /picture ends at 12\.0/);
+  assert.ok(!fs.existsSync(path.join(ROOT, 'la.mp4')), 'a refused run left an output behind');
+});
+await check('a clone file longer than its stated duration is refused before the line is cut', async () => {
+  const b = J.JOBS.take_patch.build({ take: 'take.mov', take_duration: dur('take.mov'), output: 'short.mp4', hdr: 'sdr',
+    edl: [{ kind: 'take', start: 0.88, end: 3.4 }, { kind: 'patch', audio: 'line1.mp3', duration: 1.0 }, { kind: 'take', start: 6.1, end: 10.0 }] });
+  await assert.rejects(b.native(), /the end of the line would be cut/);
 });
 
 console.log('\n-- an iPhone HDR take --');

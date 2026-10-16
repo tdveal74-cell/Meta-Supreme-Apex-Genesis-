@@ -78,15 +78,32 @@ Every number here was measured in the session container, with ffmpeg 6.1.1.
 - greedy placement;
 - a lip-sync lag of +28.4 ms after a seek.
 
-All of these were fixed in a637d8f. The lag now lands within half a frame: -5.0, +9.4 and -10.6 ms against a -4.0 ms source. Left as a documented caller contract: an understated patch `duration` is honoured. The n8n lane must take it from `probe`.
+All of these were fixed in a637d8f. The lag now lands within half a frame: -5.0, +9.4 and -10.6 ms against a -4.0 ms source. **A second fresh critic gave a637d8f PASS-WITH-CONDITIONS.** It confirmed the eight earlier findings fixed. The placement program matched an exhaustive search on 60,000 random cases with 0 mismatches. It then measured new silent failures:
+- a take whose sound outlasts its picture rendered a clone line into nothing and returned ok;
+- a window edge that six decimals round up showed one frame of the held face under the clone;
+- must_cover was opt-in;
+- a first or last patched line could never pass;
+- a timed-out job kept its ffmpeg running;
+- an output equal to the take destroyed the take;
+- "rose 30%" was kept for a script saying "rose 30";
+- a reading could end inside a hyphenated word.
 
-**Digits never match number words.** ElevenLabs speech to text writes numbers as words, so a script line written with digits always goes to the clone. TQO scripts should write numbers as words for lines the take should keep.
+All of these were fixed in the next commit:
+- take_patch probes its own inputs and checks its output against the plan, and removes the output on a mismatch.
+- It writes a must_cover sidecar that presenter_composite enforces.
+- The black plate reaches one frame past each window edge.
+- The server kills an abandoned job's ffmpeg.
+- Symbols never match, and readings start and end on whole words.
 
-The suites at a637d8f:
-- `jobs.test.js`: 90 passed.
-- `server.test.js`: 46 passed.
-- The negative control holds.
-- `voice-lab-acceptance.js`: 11 passed, with real ffmpeg.
+The hard-cut check fails against a copy without the plate widening, at frame 173. The understated patch duration that was left as a caller contract is now probed and refused too.
+
+**Digits never match number words.** Whether ElevenLabs speech to text writes a spoken number as digits or words is unverified here. Either way a mismatch sends the line to the clone, which is the safe direction.
+
+The suites after the second round:
+- `jobs.test.js`: 99 passed.
+- `server.test.js`: 47 passed.
+- The negative control fails 94 of 99 against the Drive original.
+- `voice-lab-acceptance.js`: 15 passed, with real ffmpeg.
 
 None of it has run on the VPS.
 
@@ -96,7 +113,6 @@ A private artifact, the studio map, holds the module ledger, the lane, the measu
 
 ## Open
 
-- A second fresh critic on a637d8f.
 - Deploying the worker to the VPS, then running `voice-lab-acceptance.js` there and checking that `/health` reads 21 jobs.
 - The `TQO Voice Lab` n8n workflow, as an unpublished draft. Creating it is a write to the live instance and goes on a card.
 - One real episode end to end, watched by Tee.
@@ -110,7 +126,7 @@ TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_creator-studio-voice-lab_v1_2026-10-16-0006.md
 DATE: 2026-10-16
 DECISIONS: Tee ruled on cards on 2026-10-15 to incorporate the one-person creator studio from the @restructureai Short as a layer on the shared engine rather than a separate studio, and to build the Voice Lab ship lane first. He added drive.google.com and drive.usercontent.google.com to the environment's allowed domains so the recording could be read.
-FINDINGS: The video's eight modules map onto the estate with Voice Lab, dubbing and the AI sales line missing. A single-run take_patch peaked at 13.6 GiB on 64 items of 4K HEVC against a 7.8 GiB VPS; segmented, it peaked at 1,068 MiB with 736 of 736 frames. The first acceptance run found a 13 ms per-splice A/V drift that every builder test missed. A fresh critic quarantined d535cf3 because align_script kept off-script readings at 0.9 similarity; a637d8f keeps verbatim readings only. Digits never match number words.
-OPEN: Second critic on a637d8f; VPS deploy and on-box acceptance; the n8n Voice Lab draft on a card; one real episode watched end to end; clone consent record and the YouTube label rule; later phases on their own cards.
+FINDINGS: The video's eight modules map onto the estate with Voice Lab, dubbing and the AI sales line missing. A single-run take_patch peaked at 13.6 GiB on 64 items of 4K HEVC against a 7.8 GiB VPS; segmented, it peaked at 1,068 MiB with 736 of 736 frames. The first acceptance run found a 13 ms per-splice A/V drift that every builder test missed. A fresh critic quarantined d535cf3 because align_script kept off-script readings at 0.9 similarity; a637d8f keeps verbatim readings only. A second critic gave a637d8f PASS-WITH-CONDITIONS and measured eight silent failures, all fixed after it, each with a test and the face-frame one with a negative control.
+OPEN: VPS deploy and on-box acceptance; the n8n Voice Lab draft on a card; one real episode watched end to end; clone consent record and the YouTube label rule; later phases on their own cards.
 STATUS: Render worker jobs built and measured in the container on branch claude/creator-studio-voice-lab; not deployed; nothing publishes.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f

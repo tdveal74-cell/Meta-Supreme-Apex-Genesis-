@@ -180,7 +180,10 @@ against a real manifest before the first full episode.
 
 Proved, by execution, in this repository:
 
-`npm test` runs all three. 62 tests, all passing.
+`npm test` runs all three. The counts in this section are from the first
+build and are kept as its record; as of 2026-10-16, after the Voice Lab work,
+jobs.test.js reads 99 passed, server.test.js 47 passed, and the negative control
+fails 94 of 99 against the Drive original, all in the session container.
 
 - `node jobs.test.js` pins what the builders emit: **27 tests**. Includes a
   numeric comparison of the new gain envelope against the EP01 reference
@@ -547,36 +550,68 @@ Things to know before wiring it:
   scored 0.9 on a word overlap ratio, and a fresh critic got "forty percent"
   kept for a script that says thirty. The old `threshold` parameter is now
   refused rather than ignored.
-* **Readings are chosen by a dynamic program.** It keeps the most script
-  words in order, and on a tie the later reading wins.
-* **Over 30 percent of lines patched is a re-record.** `align_script` returns
-  `verdict: rerecord` with `edl: null`, and `take_patch` refuses a null edl.
-* **Digits and number words do not match each other.** ElevenLabs speech to
-  text writes numbers as words, so a script line written with digits always
-  goes to the clone. Write numbers as words in the script if the take should
-  keep them.
+* **A reading starts and ends on a whole spoken word.** "this is our year" no
+  longer matches the front half of a spoken "year-end".
+* **Symbols never match.** A script line carrying % $ euro pound + & degree #
+  @ = or a minus sign before a digit always goes to the clone, and a transcript
+  word carrying one breaks any match across it. A second critic had "rose 30"
+  kept against a spoken "rose 30%".
+* **Digits and number words do not match each other.** Whether ElevenLabs
+  speech to text writes a spoken number as digits or as words is unverified
+  here. Either way the safe direction holds: a mismatch sends the line to the
+  clone.
+* **Readings are chosen by a dynamic program.** It keeps the most script words
+  in order, and on a tie the later reading wins. A critic checked it against an
+  exhaustive search on 60,000 random cases: 0 mismatches.
+* **Over 30 percent of lines patched, or more than 64 patches, is a
+  re-record.** `align_script` returns `verdict: rerecord` with `edl: null`, and
+  `take_patch` refuses a null edl. 64 is the most cutaways one
+  `presenter_composite` lays.
 * **`take_patch` has no default for `hdr`.** An iPhone 15 Pro records HLG by
   default. Call `probe` on the take and pass `tonemap` when it reports
   `hdr: true`. A file tagged with an HLG transfer but no primaries or matrix is
   refused by zscale ("no path between colorspaces"), loudly; a real iPhone file
   carries all three tags.
-* **`take_duration` is required, from `probe`.** Take spans past it are
-  refused. A span that frame snapping would push past the end is snapped
-  down instead.
-* **Take spans must run in time order and must not overlap.**
-* **Pass `width` and `height`, the presenter canvas.** Segments are then cut
-  at that size, scaled BEFORE the tonemap so the float maths runs on a
-  quarter of the pixels. Carrying 4K through cost 214 s for 24.5 s of picture
-  at preset ultrafast.
-* **A patch's `duration` must be the clone file's real length, from `probe`.**
-  The job rounds it UP to a whole frame, so a correct length is never cut
-  short, but an understated one is honoured. The result echoes both lengths.
+* **`take_patch` reads its own inputs before it renders.**
+  * It probes the take's picture and refuses a span that ends past the last
+    frame. An iPhone file's sound can outlast its picture, and a critic
+    rendered a clone line into nothing that way, with the job returning ok.
+  * It probes every clone file and refuses one longer than its stated
+    `duration`, so a line is never cut short.
+  * `take_duration` is still required, and spans must run in time order without
+    overlapping.
+* **It checks its own output against the plan, and removes it on a mismatch.**
+  The check covers the frame count and the length of the sound and of the
+  narration.
+* **It deletes the previous run's output, narration and sidecar first**, so a
+  failed run never leaves stale files that look current.
+* **An output that is also an input is refused.** That covers the take, a
+  clone file, and the narration landing on the output or inside its working
+  directory.
+* **When the server abandons the job at `JOB_TIMEOUT`, it calls the job's
+  `abort()`**, which kills the ffmpeg that job started.
+* **It writes `<output>.must_cover.json` beside the base track.**
+  `presenter_composite` enforces those windows whether or not the caller sends
+  `must_cover`.
+* **`must_cover` asks for each window to sit inside one scheduled cutaway.**
+  Under every window it lays a black plate that reaches one output frame past
+  each edge. A fade, an empty cutaway or a window edge between two frames
+  therefore shows black, never the face, and a first or last line can be
+  patched at the default fade.
+* **Pass `width` and `height`, the presenter canvas.** Segments are then cut at
+  that size, scaled BEFORE the tonemap so the float maths runs on a quarter of
+  the pixels. Carrying 4K through cost 214 s for 24.5 s of picture at preset
+  ultrafast.
+* **`fps` must be 24, 25, 30, 48, 50 or 60.** Those rates divide 48 kHz, so
+  every segment's sound is a whole number of samples. This line said "a whole
+  number" until a critic pointed out that 29 is one and does not divide.
+* **A portrait take on a landscape canvas is pillarboxed.** The result reports
+  it as `letterboxed`, with the source and canvas sizes.
 * **The held frame under a patch sits two frames inside the take's end.** With
-  the picture on the audio's clock, that is usually the last frame shown, so the
-  still can begin one frame before the window. The cutaway and the plate hide
-  it either way.
-* **`fps` must be a whole number**, so that every segment's audio is a whole
-  number of samples.
+  the picture on the audio's clock, that is usually the last frame shown, so
+  the still can begin one frame before the window.
+* **Each join is a 20 ms fade out and a 20 ms fade in**, a short dip and not
+  a crossfade.
 
 ### Memory, measured, and why take_patch is native
 
@@ -586,8 +621,10 @@ and died**, and this box has 7.8 GiB. Each input is a live decoder.
 
 The job now runs one ffmpeg per item, one or two inputs each, and joins the
 segments with the concat demuxer as a stream copy, so the picture is encoded
-once. The same 64 items peaked at **1,068 MiB**, and the output measured 736
-frames against 736 planned. 256 items peaked at **1,427 MiB**, measured 2,944
+once. The same 64 items peaked at **1,068 MiB** in the session container, and the
+output measured 736 frames against 736 planned. A critic's run in another
+container saw a single 4K HLG segment peak at 1,637 MiB, so the figure depends
+on the host. Either way it is bounded per segment, not summed over the edl. 256 items peaked at **1,427 MiB**, measured 2,944
 frames against 2,944 planned, and took 890 s at preset ultrafast with 4K carried
 through. The cap is now 400 items.
 
@@ -614,7 +651,17 @@ pixels, a 440 Hz "voice", and a 1000 Hz mp3 "clone". Then it measures:
   canvas.
 
 Measured in the session container on 2026-10-16 with ffmpeg 6.1.1:
-**11 passed, exit 0**. It has not been run on the box yet.
+**15 passed, exit 0**. It has not been run on the box yet. The additions after the
+second critic check five things:
+
+* the sidecar alone enforces the window;
+* a fade over the clone shows the plate;
+* a hard cut on a window edge that rounds up shows no face;
+* a span past the last frame of picture is refused;
+* a clone file longer than its stated duration is refused.
+
+The hard cut check fails against a copy without the plate widening ("frames 173
+of the window 173..241 show the held face").
 
 Its first run found a defect that every builder test missed. Video segments
 rounded to the frame while audio did not, so each splice drifted 13 ms. The

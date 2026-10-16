@@ -28,6 +28,9 @@ process.env.PORT = '0';
 // turns it on around the assertions that need it, which also exercises the
 // switch in both directions.
 process.env.LOG_REQUESTS = '0';
+// Short enough for the abandon test below to run in seconds. Every other job in
+// this file finishes in milliseconds, so none of them comes near it.
+process.env.JOB_TIMEOUT_MS = '1500';
 
 const { server, authFailureReason, logLine } = require('./server.js');
 
@@ -321,6 +324,25 @@ t('a full queue is refused with 503, not grown without limit', async () => {
   // and it accepts again once there is room
   const ok = await req('POST', '/jobs', { body: { type: 'exists', params: { path: '.' } } });
   assert.strictEqual(ok.status, 202, 'a drained queue must accept again, got ' + ok.status);
+});
+
+t('a native job abandoned at JOB_TIMEOUT has its abort() called, so its children die with it', async () => {
+  const { queue, jobs } = require('./server.js');
+  let aborted = 0;
+  const hung = { id: 'hung-native', type: 'take_patch', status: 'queued',
+                 spec: { native: () => new Promise(() => {}), abort: () => { aborted++; } },
+                 started: null, ended: null };
+  jobs.set(hung.id, hung);
+  queue.unshift(hung);
+  // Any submission runs the dispatcher; the hung job is first in line.
+  const r = await req('POST', '/jobs', { body: { type: 'exists', params: { path: '.' } } });
+  assert.strictEqual(r.status, 202);
+  const t0 = Date.now();
+  while (hung.status !== 'error' && Date.now() - t0 < 6000) await new Promise(res => setTimeout(res, 100));
+  assert.strictEqual(hung.status, 'error', 'the hung job was never abandoned');
+  assert.ok(/abandoned/.test(hung.error), hung.error);
+  assert.strictEqual(aborted, 1, 'abort() was not called on abandon');
+  jobs.delete(hung.id);
 });
 
 section('\n-- lifecycle --');

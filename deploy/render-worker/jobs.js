@@ -827,23 +827,41 @@ const JOBS = {
 
       // must_cover (added 2026-10-15 with Voice Lab): windows where the voice is
       // the clone and the base track is a held frame. Each must sit wholly
-      // inside ONE cutaway, inside its fades, where the cutaway is opaque. In
+      // inside ONE scheduled cutaway, and an opaque black plate is laid under
+      // every window, so wherever the cutaway is still fading in or out, or has
+      // no frames at all, what shows through is black, never the presenter. In
       // the stacked layout only a full-frame cutaway hides the presenter, and
       // an emphasis window would put the head back on top, so both are checked.
       // Refused at submit: a clone line over Tee's own face is the failure this
       // exists to make impossible, and it would otherwise pass every other gate.
+      //
+      // A base track made by take_patch carries a sidecar of its windows, and
+      // those are enforced whether or not the caller sends must_cover. A
+      // critic omitted it, misspelled it and passed the wrong field, and each
+      // rendered the held face under the clone (N3).
       if (p.must_cover !== undefined && !Array.isArray(p.must_cover)) throw new BadJob('must_cover: must be an array of {start, end}');
-      const mustCover = Array.isArray(p.must_cover) ? p.must_cover : [];
+      const mustCover = Array.isArray(p.must_cover) ? p.must_cover.slice() : [];
+      const sidecarPath = `${avatar}.must_cover.json`;
+      if (fs.existsSync(sidecarPath)) {
+        let sc;
+        try { sc = JSON.parse(fs.readFileSync(sidecarPath, 'utf8')); }
+        catch (e) { throw new BadJob(`must_cover: the base track's sidecar is unreadable (${e.message}); re-run take_patch`); }
+        if (!sc || !Array.isArray(sc.windows)) throw new BadJob("must_cover: the base track's sidecar has no windows; re-run take_patch");
+        sc.windows.forEach(w => mustCover.push({ start: w && w.start, end: w && w.end }));
+      }
       if (mustCover.length > 64) throw new BadJob('must_cover: too many (max 64)');
       const covered = mustCover.map((m, k) => {
         if (!m || typeof m !== 'object') throw new BadJob(`must_cover[${k}]: not an object`);
         const s = num(m.start, `must_cover[${k}].start`, { min: 0, max: 86400 });
         const e = num(m.end,   `must_cover[${k}].end`,   { min: 0, max: 86400 });
         if (e <= s) throw new BadJob(`must_cover[${k}]: end must exceed start`);
-        const hides = windows.some(w => w.full && w.s + xf <= s && e <= w.e - xf);
+        // Inside the cutaway's SCHEDULE, fades included: the plate makes a
+        // fade read as black. The first cut required the opaque middle, and so
+        // refused every episode whose first or last line was patched (N4).
+        const hides = windows.some(w => w.full && w.s <= s && e <= w.e);
         if (!hides) {
-          throw new BadJob(`must_cover[${k}]: ${s}s to ${e}s is not inside one opaque` +
-                           (stacked ? ' full-frame' : '') + ' cutaway; the presenter would show under the clone voice');
+          throw new BadJob(`must_cover[${k}]: ${s}s to ${e}s is not inside one scheduled` +
+                           (stacked ? ' full-frame' : '') + ' cutaway; the clone voice would play over a black plate with nothing on it');
         }
         // Closed on both ends: between() in the overlay is inclusive, so an
         // emphasis window that merely touches a covered one still shows a frame
@@ -878,10 +896,13 @@ const JOBS = {
       // The window check above proves a cutaway is SCHEDULED there; it cannot
       // prove the clip has frames to show (a cutaway with `in` past its own end
       // rendered 58 frames of the presenter in the critic's run). With the
-      // plate, an empty cutaway shows black, never the face.
+      // plate, an empty cutaway shows black, never the face. It reaches one
+      // output frame past each edge: the base track and this render rarely
+      // share a frame grid, and a window edge between two frames left one frame
+      // of held face showing (critic N2, up to 33 ms).
       let baseLbl = 'base';
       if (covered.length) {
-        const en = covered.map(c => `between(t,${c.s.toFixed(6)},${c.e.toFixed(6)})`).join('+');
+        const en = covered.map(c => `between(t,${Math.max(0, c.s - 1 / fps).toFixed(6)},${(c.e + 1 / fps).toFixed(6)})`).join('+');
         parts.push(`[base]drawbox=x=0:y=0:w=iw:h=ih:color=black:t=fill:enable='${en}'[baseplate]`);
         baseLbl = 'baseplate';
       }
@@ -1065,7 +1086,9 @@ const JOBS = {
       const hdr  = oneOf(p.hdr, 'hdr', ['sdr', 'tonemap']);
       if (p.take_duration === undefined) throw new BadJob('take_duration: required, from the probe job');
       const takeDur = num(p.take_duration, 'take_duration', { min: 0.001, max: 86400 });
-      const fps  = num(p.fps ?? 30, 'fps', { min: 1, max: 120, int: true });
+      // A rate that divides 48 kHz, so every segment's sound is a whole number
+      // of samples and the join cannot drift. 29.97 and 29 do not.
+      const fps  = Number(oneOf(String(p.fps ?? 30), 'fps', ['24', '25', '30', '48', '50', '60']));
       const xf   = num(p.xfade ?? 0.02, 'xfade', { min: 0, max: 0.5 });
       const crf  = num(p.crf ?? 16, 'crf', { min: 0, max: 51, int: true });
       const preset = oneOf(p.preset ?? 'medium', 'preset', PRESETS);
@@ -1079,6 +1102,14 @@ const JOBS = {
       if (!Array.isArray(p.edl)) throw new BadJob('edl: must be an array (align_script returns null on a re-record)');
       if (p.edl.length < 1) throw new BadJob('edl: need at least one item');
       if (p.edl.length > 400) throw new BadJob('edl: too many items (max 400)');
+      // An output that is also an input is overwritten while it is read. The
+      // single-run version had ffmpeg's own same-file guard; the join reads
+      // only the concat list, so a critic pointed `output` at the take and the
+      // take shrank from 107,343 bytes to 21,476 with the job returning ok.
+      const partsDirAbs = `${out}.parts`;
+      if (out === take) throw new BadJob('output: is the take itself, which the job would overwrite');
+      if (narOut !== null && (narOut === take || narOut === out)) throw new BadJob('narration_output: collides with the take or the output');
+      if (narOut !== null && narOut.startsWith(partsDirAbs + path.sep)) throw new BadJob('narration_output: inside the working directory the job deletes');
 
       // Every segment is a whole number of frames, on BOTH tracks. The first
       // cut trimmed audio to the second and video to the frame, so each splice
@@ -1108,11 +1139,25 @@ const JOBS = {
           return { kind, s, e: s + len, len, lines: it.lines };
         }
         const audio = existingPath(it.audio, `edl[${k}].audio`);
+        if (audio === out || audio === narOut) throw new BadJob(`edl[${k}].audio: is also an output, which the job would overwrite`);
         const d = num(it.duration, `edl[${k}].duration`, { min: minLen, max: 600 });
         return { kind, audio, len: frames(d, true) / fps, source_len: d, lines: it.lines };
       });
       if (!items.some(it => it.kind === 'take')) {
         throw new BadJob('edl: no take item, so there is no frame of the presenter to hold');
+      }
+      // Rounding to the nearest frame can stretch a take up to half a frame
+      // into the next one, which replays that sliver (13.3 ms, critic N11).
+      // Where it would, round that take down instead.
+      const takesOnly = items.filter(it => it.kind === 'take');
+      for (let i = 0; i + 1 < takesOnly.length; i++) {
+        const a = takesOnly[i], b = takesOnly[i + 1];
+        if (a.s + a.len > b.s + 1e-9) {
+          const n = Math.floor((b.s - a.s) * fps + 1e-6);
+          if (n < 1) throw new BadJob(`edl: the take at ${a.s}s is under a frame long once snapped`);
+          a.len = n / fps;
+          a.e = a.s + a.len;
+        }
       }
 
       // The frame a patch holds: two frames inside the end of the take before
@@ -1146,7 +1191,7 @@ const JOBS = {
         '-g', String(2 * fps), '-video_track_timescale', String(fps * 1000),
         '-c:a', 'pcm_s24le', '-ar', '48000', '-ac', '1', '-t', L];
 
-      const partsDir = `${out}.parts`;
+      const partsDir = partsDirAbs;
       const segments = [];
       const windows = [];
       let t = 0;
@@ -1174,11 +1219,14 @@ const JOBS = {
             `tpad=stop_mode=clone:stop_duration=${L},trim=duration=${L},setpts=PTS-STARTPTS[v];` +
             `[1:a]asetpts=PTS-STARTPTS,${mono},apad,atrim=duration=${L}${fades(it.len)}[a]`,
             ...encode(L), seg];
+          // Rounded OUTWARD. toFixed alone put a window edge a hair past the
+          // frame it belongs to, and the composite then showed that one frame
+          // of held face under the clone (critic N2, 9 windows in 26).
           windows.push({
             item: k,
             lines: Array.isArray(it.lines) ? it.lines : null,
-            start: +t.toFixed(6),
-            end: +(t + it.len).toFixed(6),
+            start: Math.floor(t * 1e6 + 1e-6) / 1e6,
+            end: Math.ceil((t + it.len) * 1e6 - 1e-6) / 1e6,
           });
         }
         segments.push({ bin: FF, argv, output: seg });
@@ -1203,33 +1251,108 @@ const JOBS = {
         patch_durations: items.filter(it => it.kind === 'patch').map(it => +it.len.toFixed(6)),
         patch_source_durations: items.filter(it => it.kind === 'patch').map(it => it.source_len),
         segments: segments.length,
+        must_cover_sidecar: path.relative(WORK_ROOT, sidecar),
+        letterboxed,
         hdr,
         fps,
       });
 
+      // The sidecar presenter_composite reads next to its base track, so a
+      // caller who forgets must_cover, misspells it or passes the wrong field
+      // still gets every clone window enforced (critic N3).
+      const sidecar = `${out}.must_cover.json`;
+      let letterboxed = null;
+
       const { execFile } = require('child_process');
-      const run = (argv) => new Promise((resolve, reject) => {
-        execFile(FF, argv, { cwd: WORK_ROOT, env: { PATH: process.env.PATH, LANG: 'C' },
-                             maxBuffer: 32 * 1024 * 1024,
-                             timeout: Number(process.env.JOB_TIMEOUT_MS || 6 * 3600 * 1000) },
-          (err, _o, errOut) => err
+      // Set when the job STARTS, not when it is submitted, so time spent
+      // waiting in the queue is never charged against its run.
+      let deadline = Infinity;
+      let child = null;
+      let aborted = false;
+      const exec = (bin, argv) => new Promise((resolve, reject) => {
+        if (aborted) return reject(new Error('aborted'));
+        child = execFile(bin, argv, { cwd: WORK_ROOT, env: { PATH: process.env.PATH, LANG: 'C' },
+                                      maxBuffer: 32 * 1024 * 1024,
+                                      timeout: Math.max(1000, deadline - Date.now()), killSignal: 'SIGKILL' },
+          (err, o, errOut) => { child = null; return err
             ? reject(new Error(String(errOut || err.message).trim().split('\n').slice(-8).join('\n')))
-            : resolve());
+            : resolve(String(o)); });
       });
+      const probeJson = async (f, entries) => JSON.parse(await exec(FP, ['-v', 'error', ...entries, '-of', 'json', f]));
 
       return {
         // Exposed so the builder tests can pin every argv without running ffmpeg.
-        plan: { segments, join, list },
+        plan: { segments, join, list, sidecar },
         result,
+        // Called by server.js when JOB_TIMEOUT abandons this job. Without it the
+        // abandoned job kept its ffmpeg running and the freed slot started the
+        // next job beside it, the very memory risk segmenting exists to avoid
+        // (critic N5).
+        abort: () => { aborted = true; if (child) { try { child.kill('SIGKILL'); } catch (_) { /* gone */ } } },
         native: async () => {
+          deadline = Date.now() + Number(process.env.JOB_TIMEOUT_MS || 6 * 3600 * 1000);
+          // A failed run must not leave the last good run's files looking
+          // current (critic N15), so they go first.
+          for (const f of [out, narOut, sidecar]) if (f) fs.rmSync(f, { force: true });
           fs.rmSync(partsDir, { recursive: true, force: true });
+
+          // What the take and the clone files really are, read here rather than
+          // trusted. take_duration is the container's length, and an iPhone's
+          // sound can outlast its picture: a hold seeked past the last frame
+          // rendered no picture at all, the join dropped the clone line, and the
+          // job returned ok (critic N1).
+          const tp = await probeJson(take, ['-select_streams', 'v:0', '-show_entries', 'stream=duration,width,height:format=duration']);
+          const vs = (tp.streams || [])[0] || {};
+          const vidEnd = Number(vs.duration ?? tp.format?.duration);
+          if (!(vidEnd > 0)) throw new Error('take: no video stream with a duration');
+          for (const it of items) {
+            if (it.kind === 'take' && it.e > vidEnd + 0.5 / fps) {
+              throw new Error(`take: a span ends at ${it.e.toFixed(3)}s but the picture ends at ${vidEnd.toFixed(3)}s`);
+            }
+          }
+          for (const sg of segments) {
+            const ss = Number(sg.argv[sg.argv.indexOf('-ss') + 1]);
+            if (ss > vidEnd - 1 / fps + 1e-6) throw new Error(`take: a held frame at ${ss.toFixed(3)}s is past the last frame at ${vidEnd.toFixed(3)}s`);
+          }
+          for (const it of items) {
+            if (it.kind !== 'patch') continue;
+            const ap = await probeJson(it.audio, ['-show_entries', 'format=duration']);
+            const real = Number(ap.format?.duration);
+            if (real > it.source_len + 1 / fps) {
+              throw new Error(`patch: ${path.relative(WORK_ROOT, it.audio)} is ${real.toFixed(3)}s but its duration says ${it.source_len}s; the end of the line would be cut`);
+            }
+          }
+          if (size && vs.width && vs.height) {
+            letterboxed = Math.abs(vs.width / vs.height - size.W / size.H) > 0.01
+              ? { source: `${vs.width}x${vs.height}`, canvas: `${size.W}x${size.H}` } : false;
+          }
+
           fs.mkdirSync(partsDir, { recursive: true });
           ensureDir(out);
           if (narOut) ensureDir(narOut);
-          for (const s of segments) await run(s.argv);
+          for (const sg of segments) await exec(FF, sg.argv);
           fs.writeFileSync(list, 'ffconcat version 1.0\n' +
-            segments.map(s => `file '${s.output}'\nduration ${(+s.argv[s.argv.length - 2]).toFixed(6)}\n`).join(''));
-          await run(join);
+            segments.map(sg => `file '${sg.output}'\nduration ${(+sg.argv[sg.argv.length - 2]).toFixed(6)}\n`).join(''));
+          await exec(FF, join);
+
+          // The output against the plan, every time. A short picture or a short
+          // sound is a failure, never a result.
+          const op = await probeJson(out, ['-show_entries', 'stream=codec_type,nb_frames,duration']);
+          const ov = (op.streams || []).find(x => x.codec_type === 'video') || {};
+          const oa = (op.streams || []).find(x => x.codec_type === 'audio') || {};
+          const want = Math.round(total * fps);
+          const bad = [];
+          if (Number(ov.nb_frames) !== want) bad.push(`picture has ${ov.nb_frames} frames, planned ${want}`);
+          if (!(Math.abs(Number(oa.duration) - total) < 1 / fps)) bad.push(`sound is ${oa.duration}s, planned ${total.toFixed(6)}s`);
+          if (narOut) {
+            const np = await probeJson(narOut, ['-show_entries', 'format=duration']);
+            if (!(Math.abs(Number(np.format?.duration) - total) < 0.002)) bad.push(`narration is ${np.format?.duration}s, planned ${total.toFixed(6)}s`);
+          }
+          if (bad.length) {
+            for (const f of [out, narOut]) if (f) fs.rmSync(f, { force: true });
+            throw new Error(`the joined output does not match the plan, so it was removed: ${bad.join('; ')}`);
+          }
+          fs.writeFileSync(sidecar, JSON.stringify({ job: 'take_patch', duration: +total.toFixed(6), fps, windows }, null, 2));
           // Kept on failure, for diagnosis; removed once the join has landed.
           fs.rmSync(partsDir, { recursive: true, force: true });
           return result();
@@ -1801,7 +1924,7 @@ const JOBS = {
       const lines = p.lines.map((l, i) => {
         if (typeof l !== 'string') throw new BadJob(`lines[${i}]: not a string`);
         if (l.length > 4000) throw new BadJob(`lines[${i}]: over 4000 characters`);
-        const toks = alignTokens(l);
+        const toks = alignTokens(l, 'script');
         if (toks.length === 0) throw new BadJob(`lines[${i}]: has no words`);
         return { text: l, toks };
       });
@@ -1834,8 +1957,12 @@ const JOBS = {
           const e = num(w.end,   `words[${i}].end`,   { min: 0, max: 86400 });
           if (e < s) throw new BadJob(`words[${i}]: end before start`);
           // One transcript word can fold to two tokens ("twenty-six") or to
-          // none (a lone dash). Each token keeps the word's own timing.
-          alignTokens(w.text).forEach(tk => words.push({ tok: tk, s, e }));
+          // none (a lone dash). Each token keeps the word's own timing and
+          // remembers whether it opens or closes its word, because a reading
+          // may only start and end on a word boundary: "this is our year"
+          // matched the front half of a spoken "year-end" and cut it mid word.
+          const tk = alignTokens(w.text, 'transcript');
+          tk.forEach((t, j) => words.push({ tok: t, s, e, opens: j === 0, closes: j === tk.length - 1 }));
         });
         for (let i = 1; i < words.length; i++) {
           if (words[i].s < words[i - 1].s) throw new BadJob('words: not in time order');
@@ -1844,16 +1971,20 @@ const JOBS = {
         const byTok = new Map();
         W.forEach((t, i) => { if (!byTok.has(t)) byTok.set(t, []); byTok.get(t).push(i); });
 
-        // Every verbatim occurrence of every line. The scan is bounded so a
-        // pathological script (a hundred one word lines of "the") is refused
-        // rather than allowed to hold the event loop: this is a native job, and
-        // server.js cannot time one out.
-        let budget = 2000000;
+        // Every verbatim occurrence of every line. The scan is bounded by
+        // token COMPARISONS, so a pathological script is refused rather than
+        // allowed to hold the event loop: this is a native job, and server.js
+        // cannot interrupt one. The first bound counted starting positions,
+        // and a critic held the loop 8.3 s inside it with 41 lines of 1,999
+        // words; 20 million comparisons is a fraction of a second here.
+        let budget = 20000000;
         const occ = lines.map(({ toks }) => {
           const out = [];
           for (const s of byTok.get(toks[0]) || []) {
-            if (--budget < 0) throw new BadJob('lines: too many candidate readings to search (over 2,000,000); split the take');
             if (s + toks.length > W.length) break;
+            budget -= toks.length;
+            if (budget < 0) throw new BadJob('lines: too many comparisons to search (over 20,000,000); split the take');
+            if (!words[s].opens || !words[s + toks.length - 1].closes) continue;
             let ok = true;
             for (let j = 1; j < toks.length; j++) if (W[s + j] !== toks[j]) { ok = false; break; }
             if (ok) out.push({ s, e: s + toks.length - 1 });
@@ -1891,12 +2022,16 @@ const JOBS = {
         const taken = lines.length - patched;
         const share = patched / lines.length;
 
-        if (share > maxShare || taken === 0) {
+        // presenter_composite lays at most 64 cutaways, one per clone window,
+        // so more patches than that cannot be covered and are a re-record too.
+        if (share > maxShare || taken === 0 || patched > 64) {
           return {
             verdict: 'rerecord',
             reason: taken === 0
               ? 'no line of the script was said verbatim in the take'
-              : `${patched} of ${lines.length} lines were not said verbatim (${(share * 100).toFixed(1)}%), over the ${(maxShare * 100).toFixed(1)}% ceiling`,
+              : patched > 64
+                ? `${patched} lines need the clone, over the 64 cutaways one composite can lay`
+                : `${patched} of ${lines.length} lines were not said verbatim (${(share * 100).toFixed(1)}%), over the ${(maxShare * 100).toFixed(1)}% ceiling`,
             lines: lines.length, patched, patch_share: +share.toFixed(4),
             edl: null, report,
           };
@@ -1924,11 +2059,14 @@ const JOBS = {
             edl.push({ kind: 'take', lines: [r.line], from_word: r.from_word, to_word: r.to_word });
           }
         });
+        // Rounded INWARD to the millisecond, so a rounded end can never land
+        // past take_duration and get the edl refused by take_patch (12.3456
+        // rounded to 12.346 did, in the critic's run).
         edl.forEach((it) => {
           if (it.kind !== 'take') return;
           const { start, end } = edges(it.from_word, it.to_word);
-          it.start = +start.toFixed(3);
-          it.end = +end.toFixed(3);
+          it.start = Math.ceil(start * 1000 - 1e-6) / 1000;
+          it.end = Math.floor(end * 1000 + 1e-6) / 1000;
         });
 
         return {
@@ -1954,16 +2092,26 @@ const JOBS = {
 };
 
 /**
- * Lowercase, curly quotes folded to straight, every other mark dropped, split on
+ * Lowercase, curly quotes folded to straight, punctuation dropped, split on
  * whitespace and on hyphens. Digits stay digits: "3" and "three" do not match,
  * and that is the safe direction, because a miss sends the line to the clone
  * reading the script, never a guess at what was said.
+ *
+ * Symbols that carry meaning are NOT punctuation. The first cut dropped them,
+ * and a critic got "rose 30% this year" kept for a script that says "rose 30",
+ * and "$5 million" kept for "5 million". A % $ euro pound + & degree # @ or =,
+ * or a minus sign in front of a digit, now becomes a token that matches
+ * nothing on the other side: a script line carrying one always goes to the
+ * clone, and a transcript word carrying one breaks any match across it.
  */
-function alignTokens(s) {
+function alignTokens(s, side) {
+  const MARK = side === 'script' ? ' \u0001s ' : ' \u0001t ';
   return String(s)
     .toLowerCase()
-    .replace(/[‘’ʼ]/g, "'")
-    .replace(/[^a-z0-9'\s-]/g, ' ')
+    .replace(/[\u2018\u2019\u02bc]/g, "'")
+    .replace(/(^|[\s(])[-\u2212](?=\d)/g, `$1${MARK}`)
+    .replace(/[%$\u20ac\u00a3+&\u00b0#@=]/g, MARK)
+    .replace(/[^a-z0-9'\s\u0001-]/g, ' ')
     .split(/[\s-]+/)
     .map(t => t.replace(/^'+|'+$/g, ''))
     .filter(Boolean);

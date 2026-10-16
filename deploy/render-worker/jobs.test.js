@@ -684,8 +684,45 @@ t('critic F3: a 150 line, 20,000 word alignment finishes fast and a repetitive o
   const ms = Date.now() - t1;
   assert.ok(ms < 3000, `took ${ms} ms`);
   assert.strictEqual(r.patched, 0);
-  const many = Array(2000).fill('the');
-  await assert.rejects(align({ lines: many, words: Array.from({ length: 2000 }, (_, i) => ({ text: 'the', start: i, end: i + 0.5 })) }), /too many candidate readings/);
+  // Critic N9: the bound counts comparisons, so a pathological script is
+  // refused in well under a second rather than holding the loop for 8 s.
+  const many = Array(2000).fill(Array(30).fill('the').join(' '));
+  const t2 = Date.now();
+  await assert.rejects(align({ lines: many, words: Array.from({ length: 20000 }, (_, i) => ({ text: 'the', start: i, end: i + 0.5 })) }), /too many comparisons/);
+  assert.ok(Date.now() - t2 < 2000, `refusal took ${Date.now() - t2} ms`);
+});
+t('critic N7: a symbol on either side means the line is never kept', async () => {
+  const cases = [
+    ['Our revenue rose 30 this year.', 'our revenue rose 30% this year'],
+    ['Our revenue rose 30% this year.', 'our revenue rose 30% this year'],
+    ['It is 5 million.', 'it is $5 million'],
+    ['It was 5 degrees.', 'it was -5 degrees'],
+    ['Plan A & plan B.', 'plan a and plan b'],
+  ];
+  for (const [line, spoken] of cases) {
+    const r = await align({ lines: [line], words: say(spoken, 0), max_patch_share: 1 });
+    assert.strictEqual(r.report[0].kind, 'patch', `kept "${spoken}" for "${line}"`);
+  }
+  const ok = await align({ lines: ['It was minus 5 degrees, a twenty-six year low.'], words: say('it was minus 5 degrees a twenty-six year low', 0) });
+  assert.strictEqual(ok.verdict, 'clean');
+});
+t('critic N8: a reading may not start or end inside a hyphenated spoken word', async () => {
+  const r = await align({ lines: ['This is our year.'], words: say('this is our year-end', 0), max_patch_share: 1 });
+  assert.strictEqual(r.report[0].kind, 'patch');
+});
+t('critic N10: edges round inward, so align_script output always fits take_duration', async () => {
+  const a = say('you post every day', 0);
+  const r = await align({ lines: [SCRIPT[0]], words: a, take_duration: 1.8456 });
+  assert.ok(r.edl[0].end <= 1.8456, `end ${r.edl[0].end}`);
+  assert.strictEqual(r.edl[0].end, 1.845);
+});
+t('critic N12: more than 64 patches is a re-record, since one composite lays at most 64 cutaways', async () => {
+  const lines = Array.from({ length: 300 }, (_, i) => `line number ${i} is here`);
+  const spoken = []; let t0 = 0;
+  lines.slice(0, 230).forEach(l => { say(l.toLowerCase(), t0).forEach(w => spoken.push(w)); t0 = spoken[spoken.length - 1].end + 0.5; });
+  const r = await align({ lines, words: spoken, max_patch_share: 0.5 });
+  assert.strictEqual(r.verdict, 'rerecord');
+  assert.ok(/70 lines need the clone, over the 64/.test(r.reason), r.reason);
 });
 t('bad input is refused, not defaulted', async () => {
   assert.throws(() => J.JOBS.align_script.build({ lines: 'one line', words: [] }), /lines: must be an array/);
@@ -845,6 +882,35 @@ t('bad edls and paths are refused at submit', () => {
   assert.throws(() => J.JOBS.take_patch.build({ ...tp(), output: '../escape.mp4' }), /escapes|outside/);
   assert.throws(() => J.JOBS.take_patch.build({ ...tp(), output: "vl/it's.mp4" }), /concat list/);
   assert.throws(() => J.JOBS.take_patch.build({ ...tp(), fps: 29.97 }), /fps/);
+  assert.throws(() => J.JOBS.take_patch.build({ ...tp(), fps: 29 }), /fps/);
+  assert.ok(J.JOBS.take_patch.build({ ...tp(), fps: 25 }));
+});
+t('critic N6: an output that is also an input is refused before anything is overwritten', () => {
+  assert.throws(() => J.JOBS.take_patch.build({ ...tp(), output: 'vl/take.mov' }), /is the take itself/);
+  assert.throws(() => J.JOBS.take_patch.build({ ...tp(), narration_output: 'vl/take.mov' }), /collides/);
+  assert.throws(() => J.JOBS.take_patch.build({ ...tp(), narration_output: 'vl/base.mp4' }), /collides/);
+  assert.throws(() => J.JOBS.take_patch.build({ ...tp(), narration_output: 'vl/base.mp4.parts/n.wav' }), /deletes/);
+  assert.throws(() => J.JOBS.take_patch.build({ ...tp(), output: 'vl/line1.mp3', narration_output: undefined }), /also an output/);
+});
+t('critic N11: a take that would round into the next one rounds down instead, no replay', () => {
+  const p = tp(); p.take_duration = 12;
+  p.edl = [{ kind: 'take', start: 1.0, end: 2.02 }, { kind: 'take', start: 2.02, end: 3.0 }];
+  const b = J.JOBS.take_patch.build(p);
+  // 1.02 s is 30.6 frames, which rounds to 31 and would end at 2.0333; it is held to 30.
+  assert.ok(segA(b, 0).join(' ').includes('-ss 1.000000 -t 1.000000 -i'), segA(b, 0).join(' '));
+});
+t('critic N2: patch windows are rounded outward so an edge never cuts inside a frame', () => {
+  const p = tp(); p.take_duration = 12;
+  p.edl = [{ kind: 'take', start: 0, end: 6.766667 }, { kind: 'patch', audio: touch('vl/w.mp3'), duration: 1 }, { kind: 'take', start: 7, end: 9 }];
+  const r = J.JOBS.take_patch.build(p).result();
+  const w = r.patch_windows[0];
+  assert.ok(w.start <= 203 / 30 + 1e-12 && w.end >= (203 + 30) / 30 - 1e-12, JSON.stringify(w));
+});
+t('critic N5: take_patch exposes abort so a timed-out job can kill what it started', () => {
+  const b = J.JOBS.take_patch.build(tp());
+  assert.strictEqual(typeof b.abort, 'function');
+  b.abort();   // with nothing running it is a no-op
+  assert.strictEqual(b.plan.sidecar.endsWith('vl/base.mp4.must_cover.json'), true);
 });
 
 section('\n-- V3: must_cover, no clone voice over the presenter\'s face --');
@@ -854,17 +920,33 @@ t('a window wholly inside one cutaway, inside its fades, renders', () => {
 });
 t('critic F5: an opaque plate sits under every covered window, before the cutaways', () => {
   const g = graph(J.JOBS.presenter_composite.build({ ...pc(), must_cover: [{ start: 4.5, end: 9.5 }] }));
-  assert.ok(g.includes("[base]drawbox=x=0:y=0:w=iw:h=ih:color=black:t=fill:enable='between(t,4.500000,9.500000)'[baseplate]"), g);
+  // One output frame (1/25 s) wider on each side than the window (critic N2).
+  assert.ok(g.includes("[base]drawbox=x=0:y=0:w=iw:h=ih:color=black:t=fill:enable='between(t,4.460000,9.540000)'[baseplate]"), g);
   assert.ok(g.includes('[baseplate][c0]overlay'), g);
   const none = graph(J.JOBS.presenter_composite.build(pc()));
   assert.ok(!none.includes('drawbox'), 'the plate must not appear without must_cover');
 });
-t('a window that reaches into a fade is refused', () => {
-  assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), must_cover: [{ start: 4.1, end: 9 }] }), /not inside one opaque cutaway/);
+t('critic N4: a window inside a fade, or at the very start, renders, because the plate is under it', () => {
+  assert.strictEqual(J.JOBS.presenter_composite.build({ ...pc(), must_cover: [{ start: 4.0, end: 10 }] }).parse().must_cover, 1);
+  const first = { ...pc(), cutaways: [{ path: touch('p/cut-0.mp4'), start: 0, end: 3 }] };
+  assert.strictEqual(J.JOBS.presenter_composite.build({ ...first, must_cover: [{ start: 0, end: 0.666667 }] }).parse().must_cover, 1);
 });
-t('a window spanning two cutaways, or none, is refused', () => {
-  assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), must_cover: [{ start: 9, end: 21 }] }), /not inside one opaque/);
-  assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), must_cover: [{ start: 12, end: 14 }] }), /presenter would show/);
+t('a window outside every cutaway, or spanning two, is refused', () => {
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), must_cover: [{ start: 9, end: 21 }] }), /not inside one scheduled cutaway/);
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), must_cover: [{ start: 12, end: 14 }] }), /black plate with nothing on it/);
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...pc(), must_cover: [{ start: 3.9, end: 9 }] }), /not inside one scheduled/);
+});
+t('critic N3: a take_patch sidecar beside the base track is enforced with no must_cover sent', () => {
+  const base = touch('p/sc/base.mp4');
+  fs.writeFileSync(path.join(ROOT, 'p/sc/base.mp4.must_cover.json'), JSON.stringify({ job: 'take_patch', windows: [{ start: 12, end: 14 }] }));
+  const p = { ...pc(), avatar: base };
+  assert.throws(() => J.JOBS.presenter_composite.build(p), /must_cover\[0\]: 12s to 14s/);
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...p, mustCover: [] }), /must_cover\[0\]/);
+  fs.writeFileSync(path.join(ROOT, 'p/sc/base.mp4.must_cover.json'), JSON.stringify({ job: 'take_patch', windows: [{ start: 5, end: 9 }] }));
+  const g = graph(J.JOBS.presenter_composite.build(p));
+  assert.ok(g.includes('drawbox'), 'the sidecar window was not plated');
+  fs.writeFileSync(path.join(ROOT, 'p/sc/base.mp4.must_cover.json'), '{not json');
+  assert.throws(() => J.JOBS.presenter_composite.build(p), /sidecar is unreadable/);
 });
 t('stacked: a payload-zone cutaway leaves the face visible, so only full-frame counts', () => {
   assert.throws(() => J.JOBS.presenter_composite.build({ ...st(), emphasis: [], must_cover: [{ start: 3, end: 5 }] }), /full-frame cutaway/);
