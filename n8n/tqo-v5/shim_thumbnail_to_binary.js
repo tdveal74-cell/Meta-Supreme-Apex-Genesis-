@@ -50,18 +50,27 @@ const result = [{
 // thumb_warning is exactly what the size check above set. The warning never
 // blocks (OS 30 gate 8 still decides), so a wrong note costs a line of text and
 // not a thumbnail. Any missing node, empty note or error records nothing found
-// (null, false, null) and leaves thumb_warning as the size check set it.
+// (null, false, null) and leaves thumb_warning as the size check set it. So does
+// a verdict that is not this row's: see the guard in the try below.
 const JEV_APPLY = false;
 let jevNote = null;
 let jevChecked = false;
 let jevBox = null;
 try {
   const v = $('Jev: Thumb Verdict').first().json;
-  if (typeof v.jevThumbNote === 'string' && v.jevThumbNote.trim()) jevNote = v.jevThumbNote.trim();
-  jevChecked = v.jevThumbChecked === true;
-  const b = v.jevHeadlineBox;
-  if (b && [b.top, b.bottom, b.left, b.right].every(Number.isFinite)) {
-    jevBox = { top: b.top, bottom: b.bottom, left: b.left, right: b.right };
+  // Stale run guard. One Row at a Time is a Split In Batches loop, so when a
+  // later row's Jev branch stops early this lookup may return an earlier row's
+  // verdict (unverified n8n behaviour, guarded either way). The verdict carries
+  // forHeadline, the headline its request was built for. It counts only when
+  // that is a string equal to the trimmed headline of this row's Pick Still;
+  // any other verdict is treated as absent.
+  if (typeof v.forHeadline === 'string' && v.forHeadline === String(pick.headline || '').trim()) {
+    if (typeof v.jevThumbNote === 'string' && v.jevThumbNote.trim()) jevNote = v.jevThumbNote.trim();
+    jevChecked = v.jevThumbChecked === true;
+    const b = v.jevHeadlineBox;
+    if (b && [b.top, b.bottom, b.left, b.right].every(Number.isFinite)) {
+      jevBox = { top: b.top, bottom: b.bottom, left: b.left, right: b.right };
+    }
   }
 } catch (e) {
   // The Jev nodes did not run, which is today's behaviour.

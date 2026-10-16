@@ -7,11 +7,23 @@
 // It asks three things about the 1280x720 frame Thumb: Compose made, and the
 // verdict node turns the answers into a note:
 //   headline_present   is the headline on the image as text at all
-//   headline_box       where that text sits (jev-preview is the only model that
-//                      answers a box question, so the whole request uses it)
-//   headline_readable  is every word readable at phone size, none cut off
+//   headline_box       where that text sits. A Box question needs Jev 1.14, which
+//                      is jev-preview or jev-1.14.0 (box.md), so the whole request
+//                      uses one of them. It names the moving alias jev-preview on
+//                      purpose: nothing is tuned against a version yet, and the
+//                      response's own model field logs which version answered.
+//                      Pin jev-1.14.0 once thresholds are tuned on shadow data.
+//   headline_readable  is every word of the headline easy to read at phone size.
+//                      One condition, as noul.md asks for one per Noul. A headline
+//                      touching the edge is the box rules' job in the verdict.
 // A box question has no absent answer, so it is always paired with
 // headline_present, and the verdict ignores the box when the headline is not found.
+//
+// The composed frame is sent once, in state, as images.md says for an image that
+// several questions share (an image in a question's instructions is sent again for
+// every question that holds it). The state is { thumb: "<thumb>", headline } and
+// the three questions name `thumb` in backticks. None of them holds the reference
+// string itself, so the image goes out once.
 //
 // Only a PNG or JPEG goes out, told apart by the base64 prefix. A request body
 // is held to 20,000,000 characters of base64. An image that is missing, in
@@ -31,11 +43,11 @@ try {
   if (format && headline) {
     out = [{ json: { body: {
       model: 'jev-preview',
-      state: { headline },
+      state: { thumb: '<thumb>', headline },
       questions: {
         headline_present: {
           type: 'noul',
-          instructions: 'Does <thumb> show the words in `headline` as text on the image?',
+          instructions: 'Does `thumb` show the words in `headline` as text on the image?',
           criteria: {
             true: 'The words in headline appear on the image as text',
             false: 'The words in headline do not appear on the image as text',
@@ -43,14 +55,14 @@ try {
         },
         headline_box: {
           type: 'box',
-          instructions: 'The headline text on <thumb>, the words in `headline`',
+          instructions: 'the headline text in `thumb`, the words in `headline`',
         },
         headline_readable: {
           type: 'noul',
-          instructions: 'Is every word of the headline on <thumb> fully readable at phone size, with no letter cut off by the edge of the image?',
+          instructions: 'Is every word of the headline in `thumb` easy to read at phone size?',
           criteria: {
-            true: 'Every word of the headline is fully readable at phone size and no letter is cut off by the edge of the image',
-            false: 'A word of the headline is hard to read at phone size, or a letter is cut off by the edge of the image',
+            true: 'Every word of the headline is easy to read at phone size',
+            false: 'A word of the headline is hard to read at phone size',
           },
         },
       },
