@@ -7,6 +7,7 @@ against. Streamers are scripted mocks and the audio clock is a
 seconds. The only real waits are the router's 20 ms first token threshold.
 """
 
+import asyncio
 import base64
 import contextlib
 import importlib
@@ -340,6 +341,65 @@ def test_interrupt_mid_turn_acks_flushes_and_returns_to_listening():
         ws.send_json({"t": "ping", "at_ms": 42})
         pong = ws.receive_json()
         assert pong["t"] == "pong" and pong["at_ms"] == 42 and pong["server_ms"] > 0
+
+
+@pytest.mark.parametrize("cancel_on_frame", [1, 3, 5, 8])
+async def test_an_interrupt_mid_batch_counts_only_the_frames_that_left(cancel_on_frame):
+    """The frame accounting fix of 2026-10-16, pinned without CPU load.
+
+    `drain` hands `_speak` a whole batch and counts it sent; an interrupt that
+    cancels the turn part way through emitting that batch used to leave the
+    rest counted as sent and never delivered, so the metrics said 16 to a
+    client that had 8. The test above only caught it under load. Here the
+    socket's send yields once before it records the message, which is where
+    both real stacks yield (anyio's checkpoint in the TestClient, uvicorn's
+    `writable.wait()`), and the interrupt is scheduled on a chosen frame, so
+    the cancel lands mid batch every time.
+    """
+    from apps.presence.breaker import InferenceRouter
+    from apps.presence.session import PresenceSession
+
+    delivered: List[Dict[str, Any]] = []
+    seen = {"frames": 0}
+    box: Dict[str, Any] = {}
+
+    async def send(message: Dict[str, Any]) -> None:
+        if message["t"] == "frame":
+            seen["frames"] += 1
+            if seen["frames"] == cancel_on_frame and "interrupt" not in box:
+                box["interrupt"] = asyncio.ensure_future(box["session"].interrupt("turn-1", 0.0))
+        await asyncio.sleep(0)
+        delivered.append(message)
+
+    session = PresenceSession(
+        session_id="s1",
+        user_id="u1",
+        router=InferenceRouter(
+            MockTokenStreamer("Hello there. How are you today?", name="mock"),
+            None,
+            ttft_threshold_ms=2000,
+        ),
+        speech=MockSpeech(),
+        send=send,
+        pacer=VirtualPacer(auto_advance=False),
+    )
+    box["session"] = session
+    await session.open()
+    await session.begin_turn("turn-1", "hi")
+    for _ in range(2000):
+        await asyncio.sleep(0)
+        if "interrupt" in box and box["interrupt"].done():
+            break
+    assert "interrupt" in box and box["interrupt"].done(), "the interrupt never ran"
+    ack = box["interrupt"].result()
+    await session.close()
+
+    frames = sum(1 for m in delivered if m["t"] == "frame")
+    metrics = [m for m in delivered if m["t"] == "metrics" and m["turn_id"] == "turn-1"]
+    assert len(metrics) == 1, metrics
+    assert metrics[0]["frames_sent"] == frames
+    assert metrics[0]["frames_dropped"] == ack["flushed_frames"]
+    assert session.turns_interrupted == 1 and session.turns_completed == 0
 
 
 def test_interrupt_for_another_turn_acks_without_cancelling():

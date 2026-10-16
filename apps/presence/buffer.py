@@ -143,6 +143,12 @@ class SlidingWindowBuffer:
         drained batch is still being emitted gives the unsent rest back here,
         so ``sent`` is what actually left and a following ``flush`` counts the
         rest as dropped.
+
+        The frame whose send was cancelled is counted as not sent. That holds
+        on a transport that yields before it writes, as uvicorn's default
+        websockets-sansio protocol and the test client both do. A transport
+        that writes and then awaits flow control would deliver that one frame
+        and count it dropped, which is one short rather than a batch long.
         """
         for frame in frames:
             insort(self._frames, frame, key=lambda item: item.at_ms)
