@@ -177,10 +177,10 @@ const runBodies = (stillItems, extracted, segs = segments) =>
   bodies(dollar({ "Jev: B-Roll Stills": stillItems, "Plan B-Roll Segments": segs }), { all: () => extracted, first: () => extracted[0] });
 
 const CRITERIA = [
-  "Unusable as b-roll: mostly black or blank, blurred, carrying a watermark, a logo or large text, or showing something unrelated to the sentence",
-  "A clean, usable shot that does not relate to the sentence",
-  "Fits the general topic of the sentence",
-  "Clearly shows what the sentence describes",
+  "Unusable as b-roll: mostly black or blank, blurred, or carrying a watermark, a logo or large text",
+  "A clean, usable shot about something other than the sentence",
+  "A clean shot that fits the general topic of the sentence",
+  "A clean shot that clearly shows what the sentence describes",
 ];
 const ask = (name) => "How well does <" + name + "> work as b-roll on screen while a narrator says the sentence in `sentence`?";
 
@@ -207,6 +207,19 @@ assert.deepEqual(first.body.assets, {
   "<s0c2>": { type: "image", format: "png", data_base64: PNG },
 });
 assert.deepEqual(Object.keys(first.body), ["model", "state", "questions", "assets"]);
+
+// The four levels are told apart, one dimension each beyond the unusable one
+// (score.md: each level is judged on its own, so describe them distinctly). Level
+// 0 is about the picture alone and no longer says "unrelated", which level 1
+// covers; the three above it climb from off topic to on topic to clearly shown.
+const levels = first.body.questions.s0c1.criteria;
+assert.equal(levels.length, 4);
+assert.equal(new Set(levels).size, 4, "no two levels read alike");
+assert.ok(!/unrelated|sentence|relate/i.test(levels[0]), "level 0 is about the picture alone: " + levels[0]);
+assert.match(levels[1], /other than the sentence/);
+assert.match(levels[2], /fits the general topic of the sentence/);
+assert.match(levels[3], /clearly shows what the sentence describes/);
+assert.ok(levels.slice(1).every((l) => l.startsWith("A clean")), "levels 1 to 3 all start from a clean shot");
 
 // Segment 2 carries its own sentence and its own numbering from 1.
 const last = out[1].json;
@@ -295,6 +308,150 @@ assert.deepEqual(out[0].json.links, ["https://videos.pexels.com/s0c1.mp4"], "onl
 assert.deepEqual(Object.keys(out[0].json.body.questions), ["s0c1"]);
 assert.deepEqual(Object.keys(out[0].json.body.assets), ["<s0c1>"]);
 
+// A bad segment skips only itself. Both guards that leave a segment out, a blank
+// sentence and no still left under the cap, are a continue, so a bad segment in
+// the MIDDLE must not take the good one after it down with it (a break there
+// would). The good segment after it gets its own request, with its own sentence.
+const trio = [still(0, 1), still(1, 1), still(2, 1)];
+const trioPics = [fetched(JPEG), fetched(PNG), fetched(JPEG2)];
+for (const blank of [item({ segIndex: 1, narration: "   " }), item({ segIndex: 1, narration: "" }), item({ segIndex: 1 }), item({ segIndex: 1, narration: 7 })]) {
+  out = runBodies(trio, trioPics, [segments[0], blank, segments[2]]);
+  assert.deepEqual(out.map((i) => i.json.segIndex), [0, 2], "a blank sentence in the middle: " + JSON.stringify(blank.json));
+  assert.deepEqual(out[1].json.links, ["https://videos.pexels.com/s2c1.mp4"]);
+  assert.deepEqual(out[1].json.body.state, { sentence: "Last we send the report." });
+}
+out = runBodies(trio, trioPics, [item({ segIndex: 0, narration: " " }), segments[1], segments[2]]);
+assert.deepEqual(out.map((i) => i.json.segIndex), [1, 2], "a blank sentence first");
+// No still left under the cap: the middle segment's only still is over it on its own.
+out = runBodies(trio, [fetched(JPEG), fetched(big("/9j/", 20000001)), fetched(JPEG2)]);
+assert.deepEqual(out.map((i) => i.json.segIndex), [0, 2], "an over-cap segment in the middle");
+assert.deepEqual(out[1].json.links, ["https://videos.pexels.com/s2c1.mp4"]);
+assert.deepEqual(out[1].json.body.state, { sentence: "Last we send the report." });
+assert.deepEqual(Object.keys(out[1].json.body.assets), ["<s2c1>"]);
+out = runBodies(trio, [fetched(big("/9j/", 20000001)), fetched(PNG), fetched(JPEG2)]);
+assert.deepEqual(out.map((i) => i.json.segIndex), [1, 2], "an over-cap segment first");
+
+// Each question holds its own criteria array. A body that shared one array would
+// let a change to one question's levels reach every other question in the same
+// request and in the other requests.
+out = runBodies(inputs, extracted);
+const levelsA = out[0].json.body.questions.s0c1.criteria;
+const levelsB = out[0].json.body.questions.s0c2.criteria;
+const levelsC = out[1].json.body.questions.s2c1.criteria;
+assert.notEqual(levelsA, levelsB, "two questions in one request do not share an array");
+assert.notEqual(levelsA, levelsC, "two requests do not share an array");
+levelsA[0] = "changed in place";
+levelsA.push("an extra level");
+assert.deepEqual(levelsB, CRITERIA, "changing s0c1 leaves s0c2 as it was");
+assert.deepEqual(levelsC, CRITERIA, "changing s0c1 leaves the other request as it was");
+assert.deepEqual(runBodies(inputs, extracted)[0].json.body.questions.s0c1.criteria, CRITERIA, "and the next run starts from the original");
+
+// Image size. TypeSafe rejects a PNG or JPEG under 280 or over 1568 pixels on a
+// side (images.md, Limits; both ends are in), never resizes it, and one rejected
+// image fails the whole request. The node reads width and height from the first
+// bytes: a PNG IHDR, or the first JPEG frame header. Headers are built here, not
+// typed, so the numbers a case claims are the numbers in its bytes.
+const be16 = (n) => [(n >>> 8) & 255, n & 255];
+const be32 = (n) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+const toB64 = (bytes, tail = 0) => Buffer.concat([Buffer.from(bytes), Buffer.alloc(tail, 7)]).toString("base64");
+const PNG_SIG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const IHDR = [0x49, 0x48, 0x44, 0x52];
+// Signature, IHDR (length 13, name, width, height, depth 8, colour type 2, three zero bytes), its CRC, then the start of the next chunk.
+const pngBytes = (w, h) => [...PNG_SIG, 0, 0, 0, 13, ...IHDR, ...be32(w), ...be32(h), 8, 2, 0, 0, 0, 1, 2, 3, 4, 0, 0, 0, 0, 0x49, 0x44, 0x41, 0x54];
+const pngOf = (w, h, tail) => toB64(pngBytes(w, h), tail);
+const JFIF = [0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00];
+// A frame header: marker, length 17, depth 8, height, width, three components.
+const sof = (code, w, h) => [0xff, code, 0x00, 0x11, 0x08, ...be16(h), ...be16(w), 0x03, 0x01, 0x22, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01];
+// A segment of 16 bytes that is not a frame header, filled with one value, so a reader that took it for one would read that value as a size.
+const table = (code, fill) => [0xff, code, 0x00, 0x12, ...new Array(16).fill(fill)];
+const SOS = [0xff, 0xda, 0x00, 0x0c, 0x03, 0x01, 0x00, 0x02, 0x11, 0x03, 0x11, 0x00, 0x3f, 0x00];
+const jpegBytes = (w, h, { code = 0xc0, before = [] } = {}) => [0xff, 0xd8, ...JFIF, ...before, ...sof(code, w, h), ...SOS, 1, 2, 3, 4];
+const jpegOf = (w, h, opts, tail) => toB64(jpegBytes(w, h, opts), tail);
+assert.ok(jpegOf(640, 480).startsWith("/9j/") && pngOf(640, 480).startsWith("iVBORw0KGgo"), "the headers are read as a JPEG and a PNG");
+
+// The cand numbers of the stills the node keeps, out of the given stills in one segment.
+const keeps = (...pics) => {
+  const r = runBodies(pics.map((_, n) => still(0, n + 1)), pics.map((p) => fetched(p)));
+  return r.length ? r[0].json.links.map((l) => Number(/c(\d+)\.mp4$/.exec(l)[1])) : [];
+};
+
+// In limits are kept: the real b-roll size, and both ends of both ranges.
+for (const [w, h] of [[1200, 630], [640, 480], [280, 280], [1568, 1568], [280, 1568], [1568, 280]]) {
+  assert.deepEqual(keeps(pngOf(w, h)), [1], "png " + w + "x" + h + " is in limits");
+  assert.deepEqual(keeps(jpegOf(w, h)), [1], "jpeg " + w + "x" + h + " is in limits");
+}
+// Under 280 or over 1568 on either side is skipped, in either format.
+for (const [w, h] of [[279, 400], [400, 279], [100, 100], [1, 1], [1569, 400], [400, 1569], [1569, 1569], [4000, 3000]]) {
+  assert.deepEqual(keeps(pngOf(w, h)), [], "png " + w + "x" + h + " is out of limits");
+  assert.deepEqual(keeps(jpegOf(w, h)), [], "jpeg " + w + "x" + h + " is out of limits");
+}
+// Every JPEG frame header marker is read: baseline, extended, progressive, lossless, differential and arithmetic.
+for (const code of [0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]) {
+  assert.deepEqual(keeps(jpegOf(640, 480, { code })), [1], "SOF 0x" + code.toString(16) + " in limits");
+  assert.deepEqual(keeps(jpegOf(100, 100, { code })), [], "SOF 0x" + code.toString(16) + " out of limits");
+}
+// 0xC4, 0xCC and 0xC8 are tables and a reserved code, not frame headers. Filled with 1 a table reads as 257 by 257, which would
+// skip a good picture; filled with 2 it reads as 514 by 514, which would keep a bad one. Neither may happen.
+for (const code of [0xc4, 0xcc, 0xc8]) {
+  assert.deepEqual(keeps(jpegOf(640, 480, { before: table(code, 1) })), [1], "0x" + code.toString(16) + " is not a frame header (small fill)");
+  assert.deepEqual(keeps(jpegOf(100, 100, { before: table(code, 2) })), [], "0x" + code.toString(16) + " is not a frame header (large fill)");
+}
+assert.deepEqual(keeps(jpegOf(100, 100, { before: [...table(0xc4, 2), ...table(0xcc, 2), ...table(0xc8, 2)] })), [], "all three, then the real header");
+// Fill bytes before a marker and a marker with no length are stepped over.
+assert.deepEqual(keeps(jpegOf(100, 100, { before: [0xff, 0x01, 0xff, 0xff] })), [], "fill and a no length marker, then a header out of limits");
+assert.deepEqual(keeps(jpegOf(640, 480, { before: [0xff, 0x01, 0xff, 0xff] })), [1], "fill and a no length marker, then a header in limits");
+// A big still is read from its head only: the tail is never needed.
+assert.deepEqual(keeps(pngOf(100, 100, 3000000)), [], "a 4 MB png out of limits");
+assert.deepEqual(keeps(jpegOf(640, 480, {}, 3000000)), [1], "a 4 MB jpeg in limits");
+
+// A size that cannot be read is kept, whatever it might have been: the check fails
+// open to today. Each of these carries a header that WOULD be out of limits if it
+// were read, so a kept still here is a size that was not read, not a size that fit.
+const unreadable = {
+  "a jpeg with magic bytes and no header": JPEG,
+  "a png with magic bytes and no header": PNG,
+  "a png whose first chunk is not IHDR": toB64([...PNG_SIG, 0, 0, 0, 13, 0x49, 0x44, 0x41, 0x54, ...be32(100), ...be32(100), 8, 2, 0, 0, 0]),
+  "a png cut off inside IHDR": toB64(pngBytes(100, 100).slice(0, 20)),
+  "a png cut off after the name": toB64(pngBytes(100, 100).slice(0, 16)),
+  "a jpeg cut off after the first segment": toB64([0xff, 0xd8, ...JFIF]),
+  "a jpeg cut off inside the frame header": toB64([0xff, 0xd8, ...JFIF, ...sof(0xc0, 100, 100).slice(0, 8)]),
+  "a jpeg that reaches the scan before any frame header": toB64([0xff, 0xd8, ...JFIF, ...SOS, ...sof(0xc0, 100, 100)]),
+  "a jpeg with a stuffed zero where a marker should be": toB64([0xff, 0xd8, ...JFIF, 0xff, 0x00, ...sof(0xc0, 100, 100)]),
+  "a jpeg whose next segment has length 0": toB64([0xff, 0xd8, ...JFIF, 0xff, 0xe1, 0x00, 0x00, ...sof(0xc0, 100, 100)]),
+  "a jpeg whose next segment has no marker byte": toB64([0xff, 0xd8, ...JFIF, 0x07, ...sof(0xc0, 100, 100)]),
+  "a jpeg that ends at the end marker": toB64([0xff, 0xd8, ...JFIF, 0xff, 0xd9, ...sof(0xc0, 100, 100)]),
+  "a png with a zero width": pngOf(0, 100),
+  "a png with a zero height": pngOf(100, 0),
+  "a jpeg with a zero height (defined later)": jpegOf(100, 0),
+  "a jpeg with a zero width": jpegOf(0, 100),
+  "a png that is not base64 after the magic": "iVBORw0KGgo@@@@@@@@",
+  "a jpeg that is not base64 after the magic": "/9j/@@@@@@@@",
+};
+for (const [what, pic] of Object.entries(unreadable)) assert.deepEqual(keeps(pic), [1], what + " is kept");
+// Only the first 65,536 base64 characters are decoded, which is 49,152 bytes. A
+// frame header that needs bytes past that is not found and the still is kept; one
+// that ends on the last byte decoded is found. The header here is 100 by 100, so
+// kept means not read and skipped means read. It needs nine bytes from its marker.
+const withHeaderAt = (offset) => toB64([0xff, 0xd8, ...JFIF, 0xff, 0xe1, ...be16(offset - 20 - 2), ...new Array(offset - 24).fill(0), ...sof(0xc0, 100, 100), ...SOS], 1000);
+assert.deepEqual(keeps(withHeaderAt(49143)), [], "a header that ends on byte 49,152 is read");
+assert.deepEqual(keeps(withHeaderAt(49144)), [1], "a header that needs byte 49,153 is not read, so the still is kept");
+assert.ok(withHeaderAt(49143).length > 65536 && withHeaderAt(49144).length > 65536, "both stills are longer than the head that is read");
+
+// A skipped still is not asked about and does not use a number: Build Movie scores
+// links[k-1] from s{seg}c{k}, so k counts what is left. Here the first and the
+// last are out of limits, the second is read and in, the third cannot be read.
+out = runBodies([still(0, 1), still(0, 2), still(0, 3), still(0, 4)], [pngOf(100, 100), jpegOf(640, 480), JPEG, pngOf(2000, 2000)].map((p) => fetched(p)));
+assert.equal(out.length, 1);
+assert.deepEqual(out[0].json.links, ["https://videos.pexels.com/s0c2.mp4", "https://videos.pexels.com/s0c3.mp4"]);
+assert.deepEqual(Object.keys(out[0].json.body.questions), ["s0c1", "s0c2"]);
+assert.deepEqual(Object.keys(out[0].json.body.assets), ["<s0c1>", "<s0c2>"]);
+assert.equal(out[0].json.body.assets["<s0c1>"].data_base64, jpegOf(640, 480));
+assert.equal(out[0].json.body.assets["<s0c2>"].data_base64, JPEG);
+// A segment whose stills are all out of limits asks nothing, and the next one is untouched.
+out = runBodies([still(0, 1), still(0, 2), still(1, 1)], [pngOf(100, 100), jpegOf(5000, 100), JPEG].map((p) => fetched(p)));
+assert.deepEqual(out.map((i) => i.json.segIndex), [1]);
+assert.deepEqual(out[0].json.links, ["https://videos.pexels.com/s1c1.mp4"]);
+
 // The two nodes chained on the real fixture: whatever the stills node keeps is
 // what the bodies node asks about, and each link keeps its place.
 const kept = runStills([item(fixture.segment)], [item(fixture.pexels)]);
@@ -314,6 +471,10 @@ const DASH = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
 const BANNED = new RegExp("\\b(?:" + ["leverag", "robust", "seamless", "enhanc", "foster", "highlight", "underscor", "showcas", "pivotal", "delv"].join("|") + ")", "i");
 for (const f of ["./jev_broll_stills.js", "./jev_broll_bodies.js", "./jev_broll_bodies.test.mjs"]) {
   assert.ok(!DASH.test(read(f)), f + " carries an em or en dash");
+}
+// The bodies node and this file are plain ASCII, so the check above cannot be dodged by a look alike.
+for (const f of ["./jev_broll_bodies.js", "./jev_broll_bodies.test.mjs"]) {
+  assert.ok(readFileSync(new URL(f, import.meta.url)).every((b) => b < 128), f + " is plain ASCII");
 }
 for (const f of ["./jev_broll_stills.js", "./jev_broll_bodies.js"]) {
   assert.ok(!BANNED.test(read(f)), f + " carries a banned word");
