@@ -116,6 +116,7 @@ A private artifact, the studio map, holds the module ledger, the lane, the measu
 - Deploying the worker to the VPS, then running `voice-lab-acceptance.js` there and checking that `/health` reads 21 jobs.
 - The `TQO Voice Lab` n8n workflow, as an unpublished draft. Creating it is a write to the live instance and goes on a card.
 - One real episode end to end, watched by Tee.
+- The MuseTalk proof in `deploy/lipsync/README.md`, step two. A GPU pod was provisioned on 2026-10-16: one NVIDIA L40S on RunPod Secure Cloud, US-TX-3, with a 60 GB network volume at `/workspace`. Tee ruled on a card to stop it until take A is recorded and keep the volume. This session cannot reach the pod, because the network policy blocks the RunPod API and outside DNS, so the proof runs from the pod's web terminal. If it passes, clone lines could be lip-synced onto his own face instead of covered by a cutaway.
 - The consent record for the clone, and the YouTube altered content label rule.
 - Later phases, each on its own card: wiring into V5, dubbing, local-time posting, the sales line, the 7:00 brief.
 
