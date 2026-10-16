@@ -507,18 +507,20 @@ input,select{font:inherit}
           <label for="soulTok">CONSOLE_TOKEN</label>
           <input id="soulTok" type="password" placeholder="CONSOLE_TOKEN for this soul host only. Not a platform JWT.">
         </div>
-        <!-- method post and the inline return false are the fallback for a
-             script that never ran: the browser then submits nothing, and
-             even a forced submit could not put the password in a URL. -->
-        <form id="signForm" method="post" autocomplete="on" novalidate onsubmit="return false">
+        <!-- The form ships hidden and only wireSoul shows it, on the platform
+             host. A browser that never ran the script, or runs none at all,
+             therefore never offers it. method post, the inline return false
+             and inputs with no name are the second layer: if it were ever
+             submitted natively, no password could reach a URL or a body. -->
+        <form id="signForm" method="post" autocomplete="on" novalidate onsubmit="return false" hidden>
           <div class="keyrow">
             <label for="signEmail">EMAIL</label>
-            <input id="signEmail" name="email" type="email" inputmode="email" autocomplete="username"
+            <input id="signEmail" type="email" inputmode="email" autocomplete="username"
                    autocapitalize="none" spellcheck="false" placeholder="your DEVON account email">
           </div>
           <div class="keyrow">
             <label for="signPass">PASSWORD</label>
-            <input id="signPass" name="password" type="password" autocomplete="current-password"
+            <input id="signPass" type="password" autocomplete="current-password"
                    placeholder="sent once to sign in, never stored">
             <button class="tgl" id="signGo" type="submit">SIGN IN</button>
           </div>
@@ -1432,14 +1434,19 @@ function keepOperatorJwt(v) {
 }
 /* Sign in on the platform console, so a phone that cannot copy a JWT out of
    another page can still reach recall. The password goes to POST
-   /api/v1/auth/login on the platform base, same origin by default, and
-   nowhere else: it is never written to storage or logged, and the field is
-   cleared whatever comes back. Only the returned JWT is kept, in the same
-   sessionStorage slot a pasted one uses, so closing the tab signs out. No
-   account is ever created here; registration stays behind its invite key. */
+   /api/v1/auth/login on THIS origin and nowhere else. Not Loop.getBase():
+   that follows the PLATFORM field, and a base saved there would carry every
+   later password to whatever origin it names. A redirect is refused rather
+   than followed, so a 307 cannot re-post it either. It is never written to
+   storage or logged, and the field is cleared whatever comes back. Only the
+   returned JWT is kept, in the same sessionStorage slot a pasted one uses,
+   so closing the tab signs out. No account is ever created here;
+   registration stays behind its invite key. */
 async function signIn(email, password) {
-  const res = await fetch(Loop.getBase() + '/api/v1/auth/login', {
+  const res = await fetch('/api/v1/auth/login', {
     method: 'POST',
+    credentials: 'same-origin',
+    redirect: 'error',
     headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: email, password: password })
   });
@@ -1674,7 +1681,11 @@ const Loop = {
     const res = await fetch(url, {
       headers: this.headers()
     });
-    if (!res.ok) throw new Error(await this.err(res));
+    if (!res.ok) {
+      const failure = new Error(await this.err(res));
+      failure.status = res.status;
+      throw failure;
+    }
     return res.json();
   }
 };
@@ -1693,10 +1704,11 @@ function wireSoul() {
   if (platRow) platRow.style.display = soulHost ? 'none' : '';
   if (ruleRow) ruleRow.style.display = soulHost ? 'none' : '';
   if (hostRow) hostRow.style.display = soulHost ? '' : 'none';
-  /* The soul host has no /api/v1/auth/login, so the sign-in form exists only
-     on the platform console. */
+  /* The soul host has no /api/v1/auth/login, so the sign-in form is shown
+     only on the platform console. It ships hidden; this is the one place
+     that reveals it. */
   const signForm = $('signForm');
-  if (signForm) signForm.style.display = soulHost ? 'none' : '';
+  if (signForm) signForm.hidden = soulHost;
   if (loop) {
     loop.placeholder = soulHost
       ? 'this host cannot persist; open the platform console on app.main'
@@ -1768,7 +1780,15 @@ function wireSoul() {
         go.disabled = false;
       }
       if (!token) {
-        st.textContent = operatorJwt() ? 'SIGN IN AGAIN' : 'NOT SIGNED IN';
+        /* A refused retry says nothing about a sign-in that is already kept:
+           ask the API about that one rather than assuming it is dead. */
+        if (!operatorJwt()) { st.textContent = 'NOT SIGNED IN'; return; }
+        note.textContent += ' Your earlier sign-in is still kept for this tab.';
+        st.textContent = 'CHECKING';
+        Soul.status().then(
+          body => { st.textContent = body.enabled ? 'ON' : 'REACHABLE, RECALL OFF'; },
+          e => { st.textContent = statusLabel(e); }
+        );
         return;
       }
       keepOperatorJwt(token);
@@ -1817,9 +1837,7 @@ async function soulRecall(topic, plan) {
       : e.message === 'notoken'
         ? 'The service has no CONSOLE_TOKEN set, so it is refusing everything. Set one on the host and redeploy.'
         : e.message === 'auth'
-          ? (onVercelSoulHost()
-            ? 'The API refused my token. Paste a fresh one in the Soul Layer panel.'
-            : 'The API refused my sign-in. Sign in again in the Soul Layer panel.')
+          ? 'The API refused my token. Paste a fresh one in the Soul Layer panel.'
           : 'I could not reach the soul layer from here.';
     plan.innerHTML = `<span class="no">SOUL UNREACHABLE</span> <span class="dim">${esc(why)}</span>`;
     devonSays(Persona.recall(subject));
@@ -2004,6 +2022,9 @@ function rule(id,token,decision){
 }
 setInterval(()=>{
   document.querySelectorAll('.cd').forEach(n=>{
+    /* A platform loop card carries no deadline of its own, and counting
+       down NaN overwrote its explanation with NaN:NaN:NaN left. */
+    if(!n.dataset.exp) return;
     const exp=+n.dataset.exp;
     n.textContent=n.textContent.replace(/^[^·]*/,fmtLeft(exp-Date.now())+' ');
   });
@@ -2070,21 +2091,32 @@ async function findThroughLoop(topic, plan, kind){
     /* The find answer carries whether soul recall ran and what failed. Until
        2026-10-16 only the hits were drawn, so a Pinecone search that never
        finished read exactly like a soul with nothing in it. */
+    const withheld = Number(body.soul_withheld) || 0;
     if (body.soul_recall_enabled !== true) {
       lines.push('<span class="dim">SOUL OFF</span> <span class="dim">Soul recall is switched off on the API, so only the ledger was searched.</span>');
     } else if (soulErrors.length) {
       lines.push(`<span class="no">SOUL PARTIAL</span> <span class="dim">The soul search did not finish: ${esc(soulErrors.join('; '))}</span>`);
-    } else if (!soulHits.length) {
+    } else if (!soulHits.length && !withheld) {
       lines.push('<span class="dim">SOUL SEARCHED</span> <span class="dim">Nothing recalled from the soul. A measured empty, not a guess.</span>');
     }
-    if (body.soul_withheld) {
-      lines.push(`<span class="dim">${esc(String(body.soul_withheld))} soul record(s) withheld as no longer active.</span>`);
+    if (body.soul_recall_enabled === true && withheld) {
+      /* Each withheld record spent a slot in the search window, so an active
+         one may have ranked below them and never been fetched. That is not
+         a measured empty, and services/intelligence/soul.py says so too. */
+      lines.push(`<span class="gate">SOUL WINDOW</span> <span class="dim">${esc(String(withheld))} soul record(s) withheld as no longer active. They used slots in the search, so an active record may not have been fetched.</span>`);
     }
     lines.push('<span class="dim">Rulings outrank notes. Context, not command. The store is PostgreSQL.</span>');
     plan.innerHTML = lines.join('<br>');
     devonSays(hits.length ? ('I found ' + hits.length + ' on the ledger.') : Persona.recall(subject));
   } catch (e) {
-    plan.innerHTML = `<span class="no">FIND FAILED</span> <span class="dim">${esc(e.message)}</span>`;
+    /* A 401 here means nobody is signed in on this tab, or the sign-in ran
+       out. Say where to fix it rather than echoing "Not authenticated". */
+    const why = e.status === 401
+      ? (operatorJwt()
+        ? 'The API refused this sign-in, so it has probably run out. Sign in again in the Soul Layer panel, then ask again.'
+        : 'Not signed in. Sign in with your email and password in the Soul Layer panel, then ask again.')
+      : e.message;
+    plan.innerHTML = `<span class="no">FIND FAILED</span> <span class="dim">${esc(why)}</span>`;
     devonSays(Persona.recall(subject));
   }
 }
@@ -2238,7 +2270,10 @@ const EXAMPLES=[
 EXAMPLES.forEach(x=>{
   const b=el('button','chip',esc(x.length>40?x.slice(0,38)+'…':x));
   b.type='button';
-  b.addEventListener('click',()=>handle(x));
+  /* A chip fills the command line and does not send it. Three of these are
+     remembers, and on a signed in phone one stray tap used to write a
+     proposal into the production ledger. */
+  b.addEventListener('click',()=>{ const cmd=$('cmd'); cmd.value=x; cmd.focus(); });
   $('chips').appendChild(b);
 });
 

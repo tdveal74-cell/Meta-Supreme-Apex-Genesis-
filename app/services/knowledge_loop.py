@@ -318,8 +318,9 @@ def _model_gloss(enrichment: Optional[Any]) -> Optional[str]:
     capture and nothing read it. It reached a DEBUG log and a ledger blob, and
     the ledger comment beside it said so in as many words: a paid for field
     dropped on the floor is waste. This gives it the one destination where it
-    earns its cost, `what_happens` on the approval card, which
-    `deploy/soul/console.html:1855` renders.
+    earns its cost, `what_happens` on the approval card, which the console's
+    `renderGate` draws into the loop card's `.wh` element
+    (deploy/soul/console.html).
 
     Three rules, none of them negotiable.
 

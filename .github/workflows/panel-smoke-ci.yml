@@ -83,6 +83,17 @@ name: Panel smoke CI
 # all until a 2026-09-16 audit went looking for one. The three contexts are the
 # load bearing part: a card hardwired to a green word passes a single signed in
 # pass and fails all three.
+#
+# THE DEVON CONSOLE RIDES IT TOO, since 2026-10-16. scripts/console-smoke.mjs
+# opens GET /console on this job's API, the page app.main serves and Tee runs
+# from his phone, and drives its sign in, a recall question and four canned
+# /soul/find answers, then the same bytes in soul host mode and with scripting
+# off. Its main script did not run at all from 2026-09-10 to 2026-10-16: a
+# patch note left inside it as bare text made it a SyntaxError on both hosts,
+# and every console test stayed green for five weeks because each one read the
+# HTML as text. It also pins the sign in's credential contract by behaviour,
+# because a critic beat the static contracts with edits that kept every
+# pinned string. The console needs only the API, not the Next server.
 
 on:
   pull_request:
@@ -142,10 +153,18 @@ on:
       - "apps/web/postcss.config.mjs"
       - "apps/web/next.config.mjs"
       - "packages/ui/**"
+      # The DEVON console: both byte identical copies of the page, the route
+      # that serves it on this API (app/main.py), and the find service whose
+      # answer its recall draws. auth.py and soul.py are already listed above.
+      - "deploy/soul/console.html"
+      - "docs/devon/assets/SYS_OPS_devon-console_v*.html"
+      - "app/main.py"
+      - "app/services/knowledge_loop.py"
       # The checks, and this file.
       - "apps/web/scripts/panel-smoke.mjs"
       - "apps/web/scripts/dock-smoke.mjs"
       - "apps/web/scripts/command-smoke.mjs"
+      - "apps/web/scripts/console-smoke.mjs"
       - ".github/workflows/panel-smoke-ci.yml"
   workflow_dispatch:
 
@@ -293,6 +312,13 @@ jobs:
         if: ${{ !cancelled() }}
         working-directory: apps/web
         run: node --experimental-strip-types scripts/command-smoke.mjs
+
+      # Same posture as the two steps above. The console is served by the API
+      # itself, so this step needs the API and Chromium but not the Next server.
+      - name: Drive the DEVON console in real Chromium
+        if: ${{ !cancelled() }}
+        working-directory: apps/web
+        run: node --experimental-strip-types scripts/console-smoke.mjs
 
       - name: What the servers said, when it went red
         if: failure()
