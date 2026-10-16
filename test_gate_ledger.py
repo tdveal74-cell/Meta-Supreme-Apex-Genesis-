@@ -769,6 +769,42 @@ def test_the_local_desktop_commander_plugin_is_not_the_vps():
     assert gate.classify(tool, {}) == (None, False)
 
 
+# Runpod, ruled by Tee 2026-10-16 on a card. Its tools start, stop and delete
+# paid GPU pods. The verbs below are MCP tool names listed in the runpod@runpod
+# plugin 1.7.4 concept files (pod-action is how pods start and stop), plus
+# report_feedback from Runpod's agent setup guide, under the server names the
+# plugin can arrive as.
+RUNPOD_SERVERS = ("plugin_runpod_runpod", "runpod", "claude_ai_Runpod")
+
+
+@pytest.mark.parametrize("server", RUNPOD_SERVERS)
+@pytest.mark.parametrize("verb", [
+    "create-pod", "delete-pod", "update-pod", "pod-action",
+    "create-delegation", "revoke-delegation", "retry-job", "runsync-endpoint",
+    "delete-endpoint",
+    "run-endpoint", "cancel-job", "purge-endpoint-queue", "deploy-hub-repo",
+    "set-endpoint-gpus", "create-endpoint", "update-endpoint",
+    "create-network-volume", "delete-network-volume", "create-template",
+    "create-secret", "update-secret", "delete-secret", "update-ssh-keys",
+    "create-cluster", "delete-cluster", "report_feedback",
+])
+def test_runpod_writes_are_gated(server, verb):
+    tool = f"mcp__{server}__{verb}"
+    cls, gated = gate.classify(tool, {})
+    assert cls and gated, tool
+
+
+@pytest.mark.parametrize("server", RUNPOD_SERVERS)
+@pytest.mark.parametrize("verb", [
+    "list-pods", "get-pod", "get-capacity", "list-gpu-types", "get-job-status",
+    "list-endpoints", "list-network-volumes", "list-cluster-billing",
+    "read-guide", "list-guides", "lookup-concept", "search-concepts",
+])
+def test_runpod_reads_pass_without_a_signal(server, verb):
+    tool = f"mcp__{server}__{verb}"
+    assert gate.classify(tool, {}) == (None, False), tool
+
+
 def test_one_huge_token_does_not_blow_the_hook_timeout():
     import time
     start = time.time()
