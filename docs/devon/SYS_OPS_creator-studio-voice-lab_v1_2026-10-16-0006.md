@@ -138,7 +138,21 @@ The suites after round four:
 - The negative control fails 110 of 115 against the Drive original.
 - `voice-lab-acceptance.js`: 19 passed, with real ffmpeg. Its three new checks each fail against 45673c6.
 
-None of it has run on the VPS yet.
+## Deployed
+
+PR #347 merged as d75114d under the standing grant, with all seven checks green on 18b63b1. The worker was then deployed to N8N-HOST through Desktop Commander in two steps.
+
+The first staged the merged files in `/tmp` and ran every suite on the box's own Node 18.19.1 and ffmpeg 6.1.1. The four file hashes matched the merge commit. jobs.test.js passed 115, server.test.js 47, the negative control failed 110 of 115 against the original, and `voice-lab-acceptance.js` passed 19, each with exit 0.
+
+The second checked `/status` and found nothing running or queued. It kept the three old files as `.bak-20261016`, swapped in the new ones and restarted the service. The service read active, `/health` read 21 job types on the bridge address n8n uses, and the live files read back byte identical to the merge commit.
+
+Nothing calls the new jobs yet. The n8n Voice Lab workflow does not exist.
+
+## Approvals in this session
+
+Tee asked that he not have to approve every command. The session record shows ten tool calls stopped for him: seven cards, one plan, and three Desktop Commander `start_process` calls, each a root shell command on a VPS. Every other Desktop Commander call ran on the repository's allow rule from PR #344, with the session in Auto mode. So Auto mode still stopped on root shell commands despite the server-wide rule. Why it did, and whether a rule naming `start_process` would change it, is unverified. The outward gate prompts for nothing; it only refuses.
+
+Tee ruled on a card to keep the gate's 30 minute window rather than lengthen it to four hours or exempt Desktop Commander. The deploy was folded into two `start_process` calls, so it cost two approvals.
 
 ## Reaching the worker
 
@@ -152,7 +166,6 @@ A private artifact, the studio map, holds the module ledger, the lane, the measu
 
 ## Open
 
-- Deploying the worker to N8N-HOST through Desktop Commander, then running the suites and `voice-lab-acceptance.js` there on its Node 18 and checking that `/health` reads 21 jobs.
 - The `TQO Voice Lab` n8n workflow, as an unpublished draft. Creating it is a write to the live instance and goes on a card.
 - One real episode end to end, watched by Tee.
 - The MuseTalk proof in `deploy/lipsync/README.md`, step two. A GPU pod was provisioned on 2026-10-16: one NVIDIA L40S on RunPod Secure Cloud, US-TX-3, with a 60 GB network volume at `/workspace`. Tee ruled on a card to stop it until take A is recorded and keep the volume. He confirmed it stopped the same night. This session cannot reach the pod, because the network policy blocks the RunPod API and outside DNS, so the proof runs from the pod's web terminal. If it passes, clone lines could be lip-synced onto his own face instead of covered by a cutaway.
@@ -165,8 +178,8 @@ AREA: TQO, Systems
 TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_creator-studio-voice-lab_v1_2026-10-16-0006.md
 DATE: 2026-10-16
-DECISIONS: Tee ruled on cards on 2026-10-15 to incorporate the one-person creator studio from the @restructureai Short as a layer on the shared engine rather than a separate studio, and to build the Voice Lab ship lane first. He added drive.google.com and drive.usercontent.google.com to the environment's allowed domains so the recording could be read. On 2026-10-16 he ruled to link N8N-HOST to Desktop Commander so a session can deploy the worker, and to strip the clone window tag from the finished master.
-FINDINGS: The video's eight modules map onto the estate with Voice Lab, dubbing and the AI sales line missing. A single-run take_patch peaked at 13.6 GiB on 64 items of 4K HEVC against a 7.8 GiB VPS; segmented, it peaked at 1,068 MiB with 736 of 736 frames. The first acceptance run found a 13 ms per-splice A/V drift that every builder test missed. A fresh critic quarantined d535cf3 because align_script kept off-script readings at 0.9 similarity; a637d8f keeps verbatim readings only. A second critic gave a637d8f PASS-WITH-CONDITIONS and measured eight silent failures, all fixed after it, each with a test and the face-frame one with a negative control. A third gave b6789e1 PASS-WITH-CONDITIONS with six more gaps, among them a copied base track losing its windows; all six were fixed, the windows now ride in the file's metadata, and the copy case is in the acceptance run. A fourth gave 45673c6 PASS-WITH-CONDITIONS with 0 face frames in 15,819 and one deploy blocker, a ligature transcript that held the loop 20.2 s at 3.3 GiB; that and five should-fixes were fixed, each with a test that fails against 45673c6.
-OPEN: VPS deploy and on-box acceptance; the n8n Voice Lab draft on a card; one real episode watched end to end; clone consent record and the YouTube label rule; later phases on their own cards.
-STATUS: Render worker jobs built and measured in the container on branch claude/creator-studio-voice-lab; not deployed; nothing publishes.
+DECISIONS: Tee ruled on cards on 2026-10-15 to incorporate the one-person creator studio from the @restructureai Short as a layer on the shared engine rather than a separate studio, and to build the Voice Lab ship lane first. He added drive.google.com and drive.usercontent.google.com to the environment's allowed domains so the recording could be read. On 2026-10-16 he ruled to link N8N-HOST to Desktop Commander so a session can deploy the worker, to strip the clone window tag from the finished master, and to keep the outward gate's 30 minute window.
+FINDINGS: The video's eight modules map onto the estate with Voice Lab, dubbing and the AI sales line missing. A single-run take_patch peaked at 13.6 GiB on 64 items of 4K HEVC against a 7.8 GiB VPS; segmented, it peaked at 1,068 MiB with 736 of 736 frames. The first acceptance run found a 13 ms per-splice A/V drift that every builder test missed. A fresh critic quarantined d535cf3 because align_script kept off-script readings at 0.9 similarity; a637d8f keeps verbatim readings only. A second critic gave a637d8f PASS-WITH-CONDITIONS and measured eight silent failures, all fixed after it, each with a test and the face-frame one with a negative control. A third gave b6789e1 PASS-WITH-CONDITIONS with six more gaps, among them a copied base track losing its windows; all six were fixed, the windows now ride in the file's metadata, and the copy case is in the acceptance run. A fourth gave 45673c6 PASS-WITH-CONDITIONS with 0 face frames in 15,819 and one deploy blocker, a ligature transcript that held the loop 20.2 s at 3.3 GiB; that and five should-fixes were fixed, each with a test that fails against 45673c6. On the box, Node 18.19.1 and ffmpeg 6.1.1 passed 115, 47 and 19 with the negative control failing 110 of 115, and /health read 21 after the swap.
+OPEN: the n8n Voice Lab draft on a card; why Auto mode still prompts for Desktop Commander start_process; one real episode watched end to end; clone consent record and the YouTube label rule; later phases on their own cards.
+STATUS: Merged as d75114d and deployed to N8N-HOST on 2026-10-16, with every suite and the acceptance run passing on the box and /health reading 21; no workflow calls the new jobs yet; nothing publishes.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
