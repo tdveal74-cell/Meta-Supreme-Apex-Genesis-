@@ -26,6 +26,14 @@ running anything below.
 
 Proved on that box, by execution:
 
+* The Voice Lab build, deployed 2026-10-16 from merge commit d75114d through
+  Desktop Commander. Staged in `/tmp` first and run there on the box's own
+  Node 18.19.1 and ffmpeg 6.1.1: jobs.test.js 115, server.test.js 47, the
+  negative control failing 110 of 115, and `voice-lab-acceptance.js` 19, each
+  exit 0. The swap ran only with nothing running or queued on `/status`, kept
+  the old files as `jobs.js.bak-20261016`, `server.js.bak-20261016` and
+  `package.json.bak-20261016`, and the live files read back byte identical to
+  the merge commit. Rolling back is copying those three over and restarting.
 * All three suites: 27, 19, and the negative control failing 22 of 27 against
   the committed Drive original. After the 2026-09-15 presenter work, in the
   container and not yet on the box: jobs.test.js 51, server.test.js 46, both
@@ -34,8 +42,9 @@ Proved on that box, by execution:
   has not been re-run since; that denominator is stale until someone runs it
   against the Drive original again. Exit code 0 on each, checked individually
   rather than inferred from a chain.
-* `/health` reports 18 job types (19 once the 2026-09-15 build is deployed, 21
-  once the 2026-10-15 Voice Lab build is).
+* `/health` reports 21 job types, read on the bridge address after the
+  2026-10-16 restart, with the service active. It read 18 before the
+  2026-09-15 build and 19 after it.
 * Public IPv4 and IPv6 both refuse. The n8n container reaches the worker on the
   bridge address. Between those two facts the bind is proved by behaviour: it
   cannot be loopback, because the container reached it, and it cannot be
