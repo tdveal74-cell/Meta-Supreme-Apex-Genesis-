@@ -68,9 +68,6 @@
     "allow": [
       "mcp__Remote_Desktop_Commander",
       "mcp__claude_ai_Remote_Desktop_Commander",
-      "Bash(git status:*)",
-      "Bash(git rev-parse:*)",
-      "Bash(git ls-files:*)",
       "Bash(ls:*)",
       "Bash(cat:*)",
       "Bash(head:*)",
