@@ -225,11 +225,17 @@ function runNext() {
     // async) and this is the backstop rather than the guard.
     let settled = false;
     const done = (patch) => { if (!settled) { settled = true; clearTimeout(timer); finish(patch); } };
-    const timer = setTimeout(() => done({
-      status: 'error',
-      error: `job exceeded JOB_TIMEOUT of ${JOB_TIMEOUT} ms and was abandoned`,
-      killed: true,
-    }), JOB_TIMEOUT);
+    // A native job that spawns its own ffmpeg (take_patch) exposes abort(), so
+    // abandoning it also kills what it started. Without that, the slot was
+    // freed while its ffmpeg ran on beside the next job (critic, 2026-10-16).
+    const timer = setTimeout(() => {
+      try { if (typeof j.spec.abort === 'function') j.spec.abort(); } catch (_) { /* best effort */ }
+      done({
+        status: 'error',
+        error: `job exceeded JOB_TIMEOUT of ${JOB_TIMEOUT} ms and was abandoned`,
+        killed: true,
+      });
+    }, JOB_TIMEOUT);
     timer.unref();
     Promise.resolve()
       .then(() => j.spec.native())

@@ -34,7 +34,8 @@ Proved on that box, by execution:
   has not been re-run since; that denominator is stale until someone runs it
   against the Drive original again. Exit code 0 on each, checked individually
   rather than inferred from a chain.
-* `/health` reports 18 job types (19 once the 2026-09-15 build is deployed).
+* `/health` reports 18 job types (19 once the 2026-09-15 build is deployed, 21
+  once the 2026-10-15 Voice Lab build is).
 * Public IPv4 and IPv6 both refuse. The n8n container reaches the worker on the
   bridge address. Between those two facts the bind is proved by behaviour: it
   cannot be loopback, because the container reached it, and it cannot be
@@ -179,7 +180,10 @@ against a real manifest before the first full episode.
 
 Proved, by execution, in this repository:
 
-`npm test` runs all three. 62 tests, all passing.
+`npm test` runs all three. The counts in this section are from the first
+build and are kept as its record; as of 2026-10-16, after the Voice Lab work,
+jobs.test.js reads 99 passed, server.test.js 47 passed, and the negative control
+fails 94 of 99 against the Drive original, all in the session container.
 
 - `node jobs.test.js` pins what the builders emit: **27 tests**. Includes a
   numeric comparison of the new gain envelope against the EP01 reference
@@ -349,7 +353,8 @@ nothing else. Operational detail (`work_root`, queue depth, concurrency) is on
 `/status`, behind the token, because the first version put a filesystem path and
 a load signal in front of anyone who could reach the TLS terminator.
 
-`job_count` must read **19** from the 2026-09-15 build onward (18 before it).
+`job_count` must read **21** from the 2026-10-15 Voice Lab build onward, 19
+from the 2026-09-15 build, 18 before it.
 Fewer means an older `jobs.js` is loaded, and the sticky note's warning applies:
 a still plate renders as one frame, not a held one.
 
@@ -514,6 +519,223 @@ window 6 to 7.5 s, a blue full cutaway 8 to 11 s, one caption over 0.5 to 3 s:
 Refused rather than defaulted: `cutaways` or `emphasis` present and not an
 array, `full` as anything but a boolean, `emphasis` on the full layout, and a
 window past the planned duration when one is given.
+
+## Voice Lab (added 2026-10-15)
+
+This is the TQO ship lane that does not need an avatar.
+
+1. Tee records the approved script on his iPhone.
+2. A speech-to-text pass times every word.
+3. `align_script` keeps the readings that say a line **verbatim** and marks the
+   rest.
+4. The voice clone re-reads ONLY the marked lines, from the script, word for
+   word.
+5. `take_patch` splices the real take and the clone audio into one base track.
+6. `presenter_composite` lays a cutaway over every clone window. Through
+   `must_cover` it refuses to render if one is bare, and it puts an opaque
+   plate under each window so that an empty cutaway shows black, never his face.
+
+| job | kind | what it returns |
+|---|---|---|
+| `align_script` | native | `verdict` clean, patch or rerecord; the edl; a line by line report |
+| `take_patch` | native, one ffmpeg per segment, then a stream copy join | base video, optional narration wav, `patch_windows` on the new timeline |
+| `presenter_composite` `must_cover` | param | refusal at submit when a window is not inside one opaque cutaway, plus a black plate under it |
+| `probe` | ffprobe | now also `pix_fmt`, `color_transfer` and `hdr`, read from the first video stream |
+
+Things to know before wiring it:
+
+* **A take is kept only when it says the line exactly.** Case and punctuation
+  are folded away; nothing else is. A filler inside a line, a changed number or
+  a dropped word sends the line to the clone. The first cut kept anything that
+  scored 0.9 on a word overlap ratio, and a fresh critic got "forty percent"
+  kept for a script that says thirty. The old `threshold` parameter is now
+  refused rather than ignored.
+* **A reading starts and ends on a whole spoken word.** "this is our year" no
+  longer matches the front half of a spoken "year-end".
+* **Only a fixed set of punctuation is dropped.** That set is . , ; : ! ?
+  quotes, brackets, the em dash and the ellipsis. Case, accents and curly
+  quotes fold. Every other character becomes a token that matches only itself:
+  % $ euro yen the plus-minus sign, the times sign, kanji, emoji and the rest.
+  So "rose 30%" read as "rose 30%" is kept, while "rose 30" never matches a
+  spoken "rose 30%".
+  * A minus or an en dash before a digit is a token, and a hyphen minus equals
+    a true minus.
+  * A comma drops only as a thousands separator: one to three digits, then
+    groups of exactly three. "1,000" is "1000". Anywhere else a comma before a
+    digit is a token, so a decimal "1,5" is not "15" and "3,4" is not "34".
+  * A point before a digit is a token, so "3.5" never equals "3 5", ".5" is
+    not "5" and "$.99" is not "$99".
+  * A character that folds to a digit without being one, such as a superscript,
+    a fraction, or a circled or full width digit, is a token of its own. So
+    "10²" is not "102".
+
+  The first cut dropped symbols, the second blocked a list of them, and the
+  third critic walked "¥500" and whole Japanese words through that list. The
+  fourth had all five of the number cases above kept as clean readings of a
+  different number.
+* **The work is bounded by what the text folds to, not by its length.** One
+  ligature character folds to eighteen, and a fourth critic held the worker's
+  loop 20.2 s and grew it to 3.3 GiB with a transcript of them sent through
+  the worker's own `fs_ops`. A transcript word is now refused over 64
+  characters or over 16 tokens, the transcript over 100,000 tokens, and the
+  script over 100,000 tokens. The same file is refused in 155 ms at 71 MiB.
+* **A kept word is never trimmed.** When the vendor's timestamps overlap, the
+  edge stops at the word instead of the midpoint, which cut 50 ms off "done".
+* **Digits and number words do not match each other.** Whether ElevenLabs
+  speech to text writes a spoken number as digits or as words is unverified
+  here. Either way the safe direction holds: a mismatch sends the line to the
+  clone.
+* **Readings are chosen by a dynamic program.** It keeps the most script words
+  in order, and on a tie the later reading wins. A critic checked it against an
+  exhaustive search on 60,000 random cases: 0 mismatches.
+* **Over 30 percent of lines patched, or more than 64 patches, is a
+  re-record.** `align_script` returns `verdict: rerecord` with `edl: null`, and
+  `take_patch` refuses a null edl. 64 is the most cutaways one
+  `presenter_composite` lays.
+* **`take_patch` has no default for `hdr`.** An iPhone 15 Pro records HLG by
+  default. Call `probe` on the take and pass `tonemap` when it reports
+  `hdr: true`. A file tagged with an HLG transfer but no primaries or matrix is
+  refused by zscale ("no path between colorspaces"), loudly; a real iPhone file
+  carries all three tags.
+* **`take_patch` reads its own inputs before it renders.**
+  * It probes the take's picture and refuses a span that ends past the last
+    frame. An iPhone file's sound can outlast its picture, and a critic
+    rendered a clone line into nothing that way, with the job returning ok.
+  * It probes every clone file and refuses one longer than its stated
+    `duration`, so a line is never cut short.
+  * `take_duration` is still required, and spans must run in time order without
+    overlapping.
+* **It checks its own output against the plan, and removes it on a mismatch.**
+  The check covers the frame count and the length of the sound and of the
+  narration.
+* **It deletes the previous run's output and narration first**, so a failed
+  run never leaves stale files that look current.
+* **An output that is also an input is refused.** That covers the take, a
+  clone file, and the narration landing on the output or inside its working
+  directory.
+* **When the server abandons the job at `JOB_TIMEOUT`, it calls the job's
+  `abort()`**, which kills the ffmpeg that job started.
+* **Outputs must be `.mp4` or `.mov`, and the take must record the picture's
+  own length.** An mkv records neither the frame count nor a per-stream
+  length, so both are refused rather than half checked.
+* **Collisions are judged by real path**, so a symlinked take cannot be
+  overwritten through its link.
+* **A failed join removes its partial output.**
+* **Stacked emphasis must stay one output frame clear of a covered window.**
+* **The clone windows ride inside the base track's own metadata.** They sit
+  in the container's `comment` tag as `voicelab-must-cover:` plus JSON, and the
+  job reads the tag back before it reports success. `presenter_composite` reads
+  it with ffprobe at submit and enforces those windows whether or not the
+  caller sends `must_cover`.
+  * A window sent as `must_cover` and also carried in the file counts once.
+  * A base track whose tags cannot be read is refused.
+  * The first fix used a sidecar file instead, and a third critic copied the
+    base with `fs_ops` and rendered 46 frames of face under the clone. A copy
+    or a symlink keeps the tag.
+  * The base must be `.mp4`, `.mov`, `.m4v`, `.mkv` or `.webm`, and must read
+    as one of those containers. A `.ts` drops the tag, and an mkv keeps it
+    under the key `COMMENT`, which the first reader never looked for; both
+    composited 37 face frames under the clone in the fourth critic's run. The
+    tag is now read under any key case.
+  * The tag records the length it was written for, and a base whose picture is
+    more than 1.5 frames off that length is refused. A job that re-times the
+    file copies the tag unchanged, and a critic cut one second from a base
+    and got 30 face frames from the stale windows.
+  * A window that rounds up past the end of the file is clamped to it, so a
+    patched last line is not refused against the duration pin.
+  * The finished master does not carry the tag. Tee ruled on 2026-10-16 that
+    the list of where his clone speaks does not travel inside the delivered
+    file. It stays in the job result.
+  * Stripping the tag on purpose, with `-map_metadata -1` or an outside tool,
+    still removes the protection: a file with no tag reads as a file that never
+    had one. Only send `take_patch` output, or a copy of it, as the base.
+* **`must_cover` asks for each window to sit inside one scheduled cutaway.**
+  Under every window it lays a black plate that reaches one output frame past
+  each edge. A fade, an empty cutaway or a window edge between two frames
+  therefore shows black, never the face, and a first or last line can be
+  patched at the default fade.
+* **Pass `width` and `height`, the presenter canvas.** Segments are then cut at
+  that size, scaled BEFORE the tonemap so the float maths runs on a quarter of
+  the pixels. Carrying 4K through cost 214 s for 24.5 s of picture at preset
+  ultrafast.
+* **`fps` must be 24, 25, 30, 48, 50 or 60.** Those rates divide 48 kHz, so
+  every segment's sound is a whole number of samples. This line said "a whole
+  number" until a critic pointed out that 29 is one and does not divide.
+* **A portrait take on a landscape canvas is pillarboxed.** The result reports
+  it as `letterboxed`, with the source and canvas sizes after the iPhone's
+  rotation flag is applied.
+* **Lay cutaways at least one frame wider than the window on each side.** A
+  hard cut laid exactly on `patch_windows` starts on the frame grid's floor,
+  so two or three frames at its edges show the black plate. That is safe, but
+  it is a visible flash.
+* **The held frame under a patch sits two frames inside the take's end.** With
+  the picture on the audio's clock, that is usually the last frame shown, so
+  the still can begin one frame before the window.
+* **Each join is a 20 ms fade out and a 20 ms fade in**, a short dip and not
+  a crossfade.
+
+### Memory, measured, and why take_patch is native
+
+The first `take_patch` made every edl item its own seeked input in one ffmpeg
+run. On a 40 s 4K HEVC HLG take, 64 items (96 inputs) **peaked at 13.6 GiB
+and died**, and this box has 7.8 GiB. Each input is a live decoder.
+
+The job now runs one ffmpeg per item, one or two inputs each, and joins the
+segments with the concat demuxer as a stream copy, so the picture is encoded
+once. The same 64 items peaked at **1,068 MiB** in the session container, and the
+output measured 736 frames against 736 planned. A critic's run in another
+container saw a single 4K HLG segment peak at 1,637 MiB, so the figure depends
+on the host. Either way it is bounded per segment, not summed over the edl. 256 items peaked at **1,427 MiB**, measured 2,944
+frames against 2,944 planned, and took 890 s at preset ultrafast with 4K carried
+through. The cap is now 400 items.
+
+### Acceptance, real ffmpeg
+
+`npm test` runs no ffmpeg and neither does render-worker-ci.yml. This does:
+
+```bash
+node voice-lab-acceptance.js            # exits non-zero on any failure
+```
+
+It builds a synthetic take whose every frame carries its own index in its
+pixels, a 440 Hz "voice", and a 1000 Hz mp3 "clone". Then it measures:
+
+* every output frame against the source frame it should be;
+* picture against sound length, to the frame;
+* where the held frames land;
+* that the clone is heard only inside its window, more than 30 dB clear;
+* that no join clicks;
+* that `must_cover` refuses a cutaway whose fade would show the face;
+* that no take pixel shows in the window with a real cutaway, or with an
+  empty one;
+* that an HLG take tonemaps to BT.709 8 bit, at full size and at the presenter
+  canvas.
+
+Measured in the session container on 2026-10-16 with ffmpeg 6.1.1:
+**19 passed, exit 0**. Round four added three checks, each of which fails
+against the round three commit: the finished master carries no clone windows,
+a base re-timed after `take_patch` is refused, and an mkv copy keeps its
+windows while a `.ts` copy is refused. Round three added one: a copy and a
+symlink of the base track still carry the windows. The additions after the
+second critic check five things:
+
+* the in-file windows alone enforce the window;
+* a fade over the clone shows the plate;
+* a hard cut on a window edge that rounds up shows no face;
+* a span past the last frame of picture is refused;
+* a clone file longer than its stated duration is refused.
+
+The hard cut check fails against a copy without the plate widening ("frames 173
+of the window 173..241 show the held face").
+
+Its first run found a defect that every builder test missed. Video segments
+rounded to the frame while audio did not, so each splice drifted 13 ms. The
+same script against a copy with frame snapping removed fails at frame 76 and
+exits 1. That is its negative control, run by hand, not wired.
+
+The critic's A/V measurement found the picture up to a frame ahead of the
+voice after a seek: +28.4 ms against a -4.0 ms source. It now lands within half
+a frame: -5.0, +9.4 and -10.6 ms at 30 fps.
 
 ## Wiring TSWS 00
 
