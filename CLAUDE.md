@@ -852,7 +852,7 @@ commit above: a green that means nothing. Set it to absolute worktree paths.
 
 ## Skills in this repository
 
-`.claude/skills/` carries eleven. Ten are ours: `steward` (CI and PR
+`.claude/skills/` carries twelve. Ten are ours: `steward` (CI and PR
 conventions, load it for anything touching either), `deploy-readback` (what the
 production surfaces are actually serving), `estate-reconcile` (checking records
 against the live estate), `devon-learning-lane` (the Build 12 learning lane and
@@ -887,6 +887,17 @@ marketplace, which would double load the same skill name. Its scripts want
 Node 18+, a full ffmpeg, and `playwright-core` plus Chrome;
 `node .claude/skills/scroll-craft/scripts/doctor.mjs` says which are present.
 None of them are pinned or installed by this repository.
+
+The twelfth, `hypit`, is vendored too: Hypit.AI's video direction and
+production skill, copied from `hypit-ai/hypit` on 2026-10-16. Same rules and
+the same test, one manifest per skill. Its licence is NOT MIT: it is Apache 2.0
+plus conditions, free for our own work and our own output, and a commercial
+licence is needed before it runs as a hosted service for other parties or ships
+inside anything sold. `.claude/skills/hypit/UPSTREAM.md` carries the full
+reading. The folder runs nothing itself, but following it means installing the
+`@hypit/hypit` runtime and connecting paid model providers, and both of those
+are Tee's to approve. Do not also install it with `npx skills add -g`, which
+would load a second copy under the same name.
 
 A pinned plugin is not a substitute here. `.claude/settings.json` enabling a
 plugin does not install it, and in a Claude Code on the web session

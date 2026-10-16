@@ -1031,14 +1031,15 @@ def test_the_skill_inventory_is_counted_from_the_directory():
     )
 
 
-def test_only_scroll_craft_is_vendored():
+def test_the_vendored_skills_are_the_ones_claude_md_names():
     """The ours/vendored split in CLAUDE.md is load bearing: vendored skills
-    are never edited in place. UPSTREAM.md is what marks one, so a second
-    vendored skill arriving must move the prose, not sit silently."""
+    are never edited in place. UPSTREAM.md is what marks one, so another
+    vendored skill arriving must move the prose, not sit silently. This said
+    scroll-craft alone until hypit was vendored on 2026-10-16."""
     vendored = sorted(d.name for d in SKILLS.iterdir() if (d / "UPSTREAM.md").is_file())
-    assert vendored == ["scroll-craft"], (
+    assert vendored == ["hypit", "scroll-craft"], (
         f"vendored skills are now {vendored}; CLAUDE.md and the "
-        "ours/vendored counts above both assume scroll-craft is the only one"
+        "ours/vendored counts above both assume hypit and scroll-craft"
     )
 
 
