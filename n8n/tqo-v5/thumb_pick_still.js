@@ -22,6 +22,11 @@ let src = pick ? (pick.src.landscape || pick.src.large2x || pick.src.large) : nu
 // model, a malformed or out of range answer leaves no score for that photo, and
 // with no score at all the choice above stands untouched.
 const JEV_APPLY = false;
+// The lowest score Jev may prefer or pick a photo at: 2, the level that reads
+// "fits the subject". A Jev score is a probability weighted mean of the level
+// numbers, so it falls between levels, and a picture Jev is sure is only "usable,
+// but about something other than the subject" scores 1, below this floor.
+const JEV_FLOOR = 2;
 let jevPhoto = null;
 let jevPick = null;
 try {
@@ -43,13 +48,14 @@ try {
       if (ok && !scoreByUrl.has(u)) scoreByUrl.set(u, a.score);
     });
   }
-  // Highest score of 1 or more wins. A tie keeps the earlier photo, which is
-  // Pexels order. A photo scored 0 or not scored at all is never chosen.
+  // Highest score of JEV_FLOOR or more wins. A tie keeps the earlier photo, which
+  // is Pexels order. A photo scored under JEV_FLOOR or not scored at all is never
+  // chosen.
   let best = 0;
   for (const x of photos) {
     const u = x && x.src ? (x.src.landscape || x.src.large2x || x.src.large) : null;
     const s = u ? scoreByUrl.get(u) : undefined;
-    if (s !== undefined && s >= 1 && s > best) { best = s; jevPhoto = x; jevPick = u; }
+    if (s !== undefined && s >= JEV_FLOOR && s > best) { best = s; jevPhoto = x; jevPick = u; }
   }
 } catch (e) { jevPhoto = null; jevPick = null; }
 if (JEV_APPLY && jevPhoto) { pick = jevPhoto; src = jevPick; }
