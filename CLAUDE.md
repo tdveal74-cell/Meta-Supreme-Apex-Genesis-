@@ -523,7 +523,8 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_devon_vision_fixture.py test_pulse_watchdog.py \
   test_devon_rule_ledger.py test_devon_wager.py test_devon_tqo_canon.py \
   test_provider_watchdog.py test_devon_show_registry.py test_show_registry_seed.py \
-  test_devon_lesson_registry.py test_gate_ledger.py test_ledger_receipt.py
+  test_devon_lesson_registry.py test_gate_ledger.py test_jev_route.py \
+  test_ledger_receipt.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .
@@ -738,6 +739,51 @@ unverified: a subagent's hook input. The script reads the session file when
 `transcript_path` is under `/subagents/`, which a fixture and a critic's
 synthetic run pin and no live subagent call has confirmed. Settings reload at session start, so the first
 session after this merges is where the live behaviour is measured.
+
+## The Jev router
+
+Ruled by Tee 2026-10-16, over a recommendation to hold it, and again after
+auto mode's classifier refused to wire it as data exfiltration.
+`.claude/hooks/jev_route.py`, wired on PreToolUse for exactly Bash, Edit,
+Write, NotebookEdit and every MCP tool, sends each of those calls to Jev,
+TypeSafe's typed decision model, before it runs. It asks two independent
+yes/no questions in one request: would a dedicated tool (Read, Grep, Glob,
+Edit, Write) do this step better, and does the step change something outside
+the repository or something that cannot be undone. At or above a probability
+of 0.8 the second asks Tee and, failing that, the first denies the call with a
+reason. Every other answer prints nothing, and the hook never prints allow, so
+it can narrow what runs and never widen it. Read, Grep and Glob are not sent.
+
+It ships in shadow mode, `ENFORCE = False`: it asks, records the answer and
+prints nothing. Turning it on is a ruling and a one line commit, and
+`test_jev_route.py` pins the shipped value so a fixture cannot flip it quietly.
+
+It cannot pick a tool, choose a path or retry. Jev answers typed questions and
+writes no text, and no hook can swap one tool for another.
+
+It fails open, inside a 2.5 second deadline that covers the whole call, DNS
+included. With no `TYPESAFE_API_KEY`, a refused host, a redirect, the deadline
+passing or a malformed answer, the call runs exactly as it would without the
+hook, so a quiet hook proves nothing. `.claude/ledger/jev-route.jsonl` records
+the outcome of every call it sees (`no_key`, `error`, `answered`,
+`repeat_pass`) with both probabilities and the latency, and that file is the
+only evidence that Jev decided anything. A deny prints only after its ledger
+row is written, because that row is what lets the identical call through the
+second time, so a wrong answer costs at most one detour per session.
+
+Every call it sees leaves the container: the tool name and up to 2,000
+characters of its input. Every string in the input is scrubbed on its own, as
+raw text, before anything is joined or encoded: the gate ledger's `scrub`,
+then outbound rules for private keys, GitHub tokens and long key shaped runs.
+If the scrubber cannot load, nothing is sent. A redirect is refused, so the
+key never follows one. The ledger keeps a hash of the input, never the input.
+
+The request and answer shapes were checked against TypeSafe's live spec,
+`api.typesafe.ai/openapi.json` version 0.2.0, and the official `typesafe-sdk`
+0.7.5 on 2026-10-16. No authenticated call had been made, because the key had
+not reached a session. The 0.8 threshold is a starting guess, to be set from
+the ledger once real answers exist. `test_jev_route.py` proves the hook's own
+logic against a loopback stub and proves nothing about Jev's judgment.
 
 ## The receipt on a status doc
 
