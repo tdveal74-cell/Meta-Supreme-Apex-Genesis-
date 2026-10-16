@@ -177,8 +177,17 @@ const registered = await api("/auth/register", {
 });
 assert.equal(registered.status, 201, `POST /auth/register answered ${registered.status}: ${registered.text.slice(0, 300)}`);
 
-const direct = await api("/auth/login", { method: "POST", body: { email: EMAIL, password: PASSWORD } });
-assert.equal(direct.status, 200, `POST /auth/login answered ${direct.status}`);
+// The registration's commit can land after its response, so a login straight
+// after it can still read no such user and answer 401. CI did exactly that on
+// 2026-10-16; dock-smoke.mjs retries the same way for the same reason. The
+// browser sign-ins below run only once this has succeeded.
+let direct = null;
+for (let attempt = 1; attempt <= 8; attempt += 1) {
+  direct = await api("/auth/login", { method: "POST", body: { email: EMAIL, password: PASSWORD } });
+  if (direct.status === 200) break;
+  await new Promise((resolve) => setTimeout(resolve, 250));
+}
+assert.equal(direct.status, 200, `POST /auth/login answered ${direct.status} after 8 attempts`);
 const statusRead = await api("/soul/status", { token: direct.json.access_token });
 assert.equal(statusRead.status, 200, `GET /soul/status answered ${statusRead.status}`);
 const RECALL_ON = statusRead.json.enabled === true;
