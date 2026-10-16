@@ -61,6 +61,20 @@ jobs:
         run: node n8n/tqo-v5/sources_gate.test.mjs
       - name: The length check after the doctor adds words and nothing else
         run: node n8n/tqo-v5/length_after_doctor.test.mjs
+      # The Jev image lanes, ruled by Tee 2026-10-16, ship in shadow and are not
+      # wired yet. Each harness drives the real node bodies against stubs and
+      # against the unmodified export code; none of them calls TypeSafe, so a
+      # pass says nothing about Jev's judgment or the live API.
+      - name: The Jev b-roll stills follow Build Movie's candidate rule
+        run: node n8n/tqo-v5/jev_broll_bodies.test.mjs
+      - name: Build Movie keeps today's clips while Jev only reports
+        run: node n8n/tqo-v5/build_movie.test.mjs
+      - name: Pick Still keeps today's photo while Jev only reports
+        run: node n8n/tqo-v5/jev_thumb_rank.test.mjs
+      - name: The thumbnail check adds no note while Jev only reports
+        run: node n8n/tqo-v5/jev_thumb_check.test.mjs
+      - name: The Jev lanes hold together from Pexels to the consumer
+        run: node n8n/tqo-v5/jev_lanes_chain.test.mjs
       # The carousel rules, ruled by Tee 2026-10-07. No browser here: the drawing
       # runs in carousel-render.yml.
       - name: The carousel rules behave
