@@ -38,13 +38,24 @@ marketplace nor the plugin.
 ## What the skill points at, and what it can reach from here
 
 Its first rule is to read the live documentation at `docs.typesafe.ai` before
-building. On 2026-10-16 the cloud environment's network policy refused that
-host with 403 and only `api.typesafe.ai` was allowed. What stood in for the
-docs, and was enough to check every request and answer shape the estate uses:
+building. That documentation is remote and changes without a commit here, so
+`MANIFEST.sha256` covers this copy of the skill and nothing it points at.
 
-- the live spec at `https://api.typesafe.ai/openapi.json`, version 0.2.0
-- the official SDKs, `typesafe-sdk` 0.7.5 on PyPI and `@typesafe-ai/sdk` 0.7.0
-  on npm, both published by TypeSafe AI
+Two reads on 2026-10-16, both from the cloud environment:
+
+- Early in the day the network policy refused `docs.typesafe.ai` with 403 and
+  only `api.typesafe.ai` was allowed. What stood in for the docs then: the live
+  spec at `https://api.typesafe.ai/openapi.json`, and the official SDKs,
+  `typesafe-sdk` on PyPI and `@typesafe-ai/sdk` on npm.
+- Later the same day, after Tee updated the environment, `docs.typesafe.ai`
+  answered 200 (its root redirects to `/introduction`), and so did the spec,
+  PyPI and npm. `typesafe.ai` itself, where the blog lives, was still refused.
+  Read then: `openapi.json` reports `info.version` 0.2.0, PyPI's latest
+  `typesafe-sdk` is 0.7.5 with author TypeSafe AI, npm's latest
+  `@typesafe-ai/sdk` is 0.7.0, and upstream `HEAD` of `typesafe-ai/skills` is
+  still `65a39f3`, the commit vendored here.
+
+Those are dated reads of outside state. Re-read them before relying on them.
 
 Calling the API needs `TYPESAFE_API_KEY`, which is an environment secret and
 Tee's to set. A new session picks it up; a running one does not.

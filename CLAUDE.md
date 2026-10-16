@@ -969,9 +969,10 @@ building with its System One models, Jev among them, copied from
 nothing. Same rules and the same test. Tee asked for it installed and used on
 this project, and the plugin install lands in the ephemeral `$HOME`, so this
 copy is what loads. Do not also install `typesafe@typesafe-ai`, which carries
-the same skill. Its first rule is to read `docs.typesafe.ai`, which the cloud
-network policy refused on 2026-10-16; `.claude/skills/typesafe-ai/UPSTREAM.md`
-names what stood in for it.
+the same skill. Its first rule is to read `docs.typesafe.ai`. The cloud network
+policy refused that host early on 2026-10-16 and answered it later the same
+day, after Tee updated the environment; `.claude/skills/typesafe-ai/UPSTREAM.md`
+records both reads and what was checked on each.
 
 A pinned plugin is not a substitute here. `.claude/settings.json` enabling a
 plugin does not install it, and in a Claude Code on the web session
