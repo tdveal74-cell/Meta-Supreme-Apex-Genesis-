@@ -916,7 +916,7 @@ whichever is reached first ends the loop.
 
 ## Skills in this repository
 
-`.claude/skills/` carries twelve. Ten are ours: `steward` (CI and PR
+`.claude/skills/` carries thirteen. Ten are ours: `steward` (CI and PR
 conventions, load it for anything touching either), `deploy-readback` (what the
 production surfaces are actually serving), `estate-reconcile` (checking records
 against the live estate), `devon-learning-lane` (the Build 12 learning lane and
@@ -962,6 +962,16 @@ reading. The folder runs nothing itself, but following it means installing the
 `@hypit/hypit` runtime and connecting paid model providers, and both of those
 are Tee's to approve. Do not also install it with `npx skills add -g`, which
 would load a second copy under the same name.
+
+The thirteenth, `typesafe-ai`, is vendored too: TypeSafe AI's skill for
+building with its System One models, Jev among them, copied from
+`typesafe-ai/skills` at `65a39f3` on 2026-10-16. MIT, one Markdown file, runs
+nothing. Same rules and the same test. Tee asked for it installed and used on
+this project, and the plugin install lands in the ephemeral `$HOME`, so this
+copy is what loads. Do not also install `typesafe@typesafe-ai`, which carries
+the same skill. Its first rule is to read `docs.typesafe.ai`, which the cloud
+network policy refused on 2026-10-16; `.claude/skills/typesafe-ai/UPSTREAM.md`
+names what stood in for it.
 
 A pinned plugin is not a substitute here. `.claude/settings.json` enabling a
 plugin does not install it, and in a Claude Code on the web session
