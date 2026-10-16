@@ -9,11 +9,14 @@ Soul Layer status check. It passed every gate the estate had for five weeks,
 because the console tests read the HTML as text and none of them ever handed
 the script to a JavaScript parser.
 
-This hands each inline script to `node --check`, and then the page's inline
-scripts joined in document order, because classic scripts share one global
-lexical scope in the browser: a `const` declared in both is a SyntaxError
-that kills the later script while each one parses alone. A critic proved that
-gap on the first version of this file.
+This compiles each inline script, and then the page's inline scripts joined
+in document order, with Node's `vm.Script`, which uses the classic script
+grammar a browser applies to a plain <script>. Two critics shaped that. The
+first version checked scripts one by one, but classic scripts share one global
+lexical scope, so a `const` declared in both killed the later script while
+each parsed alone. It also used `node --check`, which wraps a file as a
+CommonJS module and detects ES modules, so a top level `return`, `await`,
+`import` or `export` passed here and killed the script in Chromium.
 
 What it cannot see is a runtime throw at load, a missing element or a null
 dereference. apps/web/scripts/console-smoke.mjs loads the console in Chromium
@@ -43,7 +46,7 @@ CONSOLES = sorted(
         if not p.name.startswith("SUPERSEDED_")
     ]
 )
-SCRIPT = re.compile(r"<script(?P<attrs>[^>]*)>(?P<body>.*?)</script>", re.S)
+SCRIPT = re.compile(r"<script(?P<attrs>[^>]*)>(?P<body>.*?)</script>", re.S | re.I)
 # A browser executes any script whose type it recognises as JavaScript, so the
 # filter names what it skips, the data and template types, rather than
 # allowlisting two JavaScript spellings.
@@ -77,9 +80,17 @@ def _node() -> str:
     return node
 
 
+# Classic script grammar, the one a browser uses for <script> without
+# type="module": no CommonJS wrapper, no module detection.
+COMPILE = (
+    "new (require('vm').Script)("
+    "require('fs').readFileSync(process.argv[1], 'utf8'), {filename: process.argv[1]})"
+)
+
+
 def _check(node: str, probe: Path) -> subprocess.CompletedProcess:
     return subprocess.run(
-        [node, "--check", str(probe)], capture_output=True, text=True, timeout=60
+        [node, "-e", COMPILE, str(probe)], capture_output=True, text=True, timeout=60
     )
 
 
@@ -119,9 +130,25 @@ def test_the_inline_scripts_parse_together_as_the_page_runs_them(page: Path, tmp
     )
 
 
-def test_a_redeclared_name_across_scripts_is_caught(tmp_path: Path):
-    """The joined check is the one that sees this; prove it still does."""
+@pytest.mark.parametrize(
+    "body",
+    [
+        "const STATE = 1;\n;\nconst STATE = 2;\n",
+        "if (!window.x) return;\n",
+        "await Promise.resolve();\n",
+        "import x from './x.js';\n",
+        "export const y = 1;\n",
+        "NOTE ON HUNK 2: the line above\n",
+    ],
+    ids=["redeclared-const", "top-level-return", "top-level-await", "import", "export", "bare-note"],
+)
+def test_the_compiler_rejects_what_a_browser_rejects(body: str, tmp_path: Path):
+    """Each of these killed a console script in Chromium; prove the check sees it."""
     node = _node()
-    probe = tmp_path / "redeclared.js"
-    probe.write_text("const STATE = 1;\n;\nconst STATE = 2;\n")
+    probe = tmp_path / "rejected.js"
+    probe.write_text(body)
     assert _check(node, probe).returncode != 0
+
+
+def test_an_uppercase_script_tag_is_still_read():
+    assert SCRIPT.findall("<SCRIPT>const a = 1;</SCRIPT>")

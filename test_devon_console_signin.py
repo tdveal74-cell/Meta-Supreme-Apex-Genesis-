@@ -186,11 +186,14 @@ def test_a_refused_sign_in_keeps_nothing_and_does_not_call_a_kept_one_dead():
         # Both refusal paths, signed out and still signed in, return before
         # the keep.
         assert refusal.count("return;") == 2, name
-        # With an earlier sign-in still kept, the API is asked rather than the
-        # badge being flipped to SIGN IN AGAIN over a live token.
-        assert "Your earlier sign-in is still kept for this tab." in refusal, name
+        # With a token already kept, the API is asked rather than the badge
+        # being flipped to SIGN IN AGAIN over a live one, and the note says
+        # what the API answered only once it has answered.
         assert "Soul.status()" in refusal, name
         assert "SIGN IN AGAIN" not in refusal, name
+        status_call = refusal.index("Soul.status()")
+        assert refusal.index("The token already in this tab still works.") > status_call, name
+        assert refusal.index("The token already in this tab has run out too.") > status_call, name
 
 
 def test_the_form_is_revealed_in_one_place_and_only_on_the_platform():
@@ -262,7 +265,12 @@ def test_a_chip_fills_the_command_line_and_never_sends_it():
         block = src[src.index("EXAMPLES.forEach(") :]
         block = block[: block.index("});") + 3]
         assert "handle(" not in block, name
-        assert "cmd.value=x;" in block, name
+        assert "$('cmd').value=x;" in block, name
+        # Focus stays on the chip, so a held Enter cannot reach the command line.
+        assert ".focus()" not in block, name
+        keydown = src[src.index("$('cmd').addEventListener('keydown'") :]
+        keydown = keydown[: keydown.index("});")]
+        assert keydown.index("if(e.repeat||e.isComposing) return;") < keydown.index("handle("), name
 
 
 def test_the_gate_countdown_leaves_cards_without_a_deadline_alone():
@@ -272,3 +280,18 @@ def test_the_gate_countdown_leaves_cards_without_a_deadline_alone():
         loop = loop[: loop.index("});")]
         assert "if(!n.dataset.exp) return;" in loop, name
         assert loop.index("if(!n.dataset.exp) return;") < loop.index("fmtLeft("), name
+
+
+def test_the_platform_console_talks_to_its_own_origin_only():
+    """A saved PLATFORM or soul base used to receive the JWT and the ruling key."""
+    for name in CONSOLES:
+        src = _read(name)
+        get_base = src[src.index("  getBase() {") :]
+        get_base = get_base[: get_base.index("\n  },")]
+        assert "if (onVercelSoulHost()) return this.storedBase();" in get_base, name
+        assert get_base.rstrip().endswith("return '';"), name
+        assert get_base.count("return") == 2, name
+        soul_base = src[src.index("  base() {") :]
+        soul_base = soul_base[: soul_base.index("\n  },")]
+        assert soul_base.index("if (!onVercelSoulHost()) return '';") < soul_base.index("this.get('base'"), name
+        assert "if (loopRow) loopRow.style.display = soulHost ? '' : 'none';" in src, name

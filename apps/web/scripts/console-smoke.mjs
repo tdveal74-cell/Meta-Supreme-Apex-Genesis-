@@ -33,12 +33,19 @@
  *       or request body but this origin's POST /api/v1/auth/login
  *     a recall question reaches GET /soul/find with the bearer, and the page
  *       says what this run's API said about soul recall
- *     a find answer that failed, came back empty, withheld records or carried
- *       markup reads as exactly that, and markup is never injected
+ *     the kept JWT is never at rest in localStorage or a cookie
+ *     a find answer that failed, came back empty, withheld records, mixed
+ *       hits with a failure or a withheld count, or carried markup reads as
+ *       exactly that, and markup is never injected
  *     an unsigned recall points at the sign in
- *     a tap on an example chip sends nothing
+ *     a tap on any example chip, signed out or in, and a held Enter on a
+ *       focused chip, send nothing
+ *     saved PLATFORM and soul bases pull no password, JWT or ruling key off
+ *       this origin through sign in, find, propose or approve
+ *     a redirect from the login route is refused rather than followed
  *   soul host, the same bytes with the soul role cookie:
- *     loads with no page error, and the sign in form is never shown
+ *     loads with no page error, and the sign in form is never shown, even
+ *     with a CONSOLE_TOKEN kept and SAVE and TEST tapped
  *   no script at all:
  *     the sign in form is never shown
  *
@@ -195,7 +202,14 @@ async function open({ role = null, javaScriptEnabled = true } = {}) {
   const page = await context.newPage();
   const seen = { errors: [], logs: [], requests: [], navigations: [] };
   page.on("pageerror", (error) => seen.errors.push(String(error)));
-  page.on("console", (message) => seen.logs.push(message.text()));
+  page.on("console", async (message) => {
+    seen.logs.push(message.text());
+    // text() prints a nested object as "Object"; read every argument's value.
+    const values = await Promise.all(
+      message.args().map((arg) => arg.jsonValue().then((value) => JSON.stringify(value)).catch(() => "")),
+    );
+    seen.logs.push(...values);
+  });
   page.on("framenavigated", (frame) => seen.navigations.push(frame.url()));
   page.on("request", (request) =>
     seen.requests.push({
@@ -203,6 +217,7 @@ async function open({ role = null, javaScriptEnabled = true } = {}) {
       url: request.url(),
       body: request.postData() || "",
       auth: request.headers().authorization || "",
+      headers: JSON.stringify(request.headers()),
     }),
   );
   if (role) {
@@ -215,6 +230,16 @@ async function open({ role = null, javaScriptEnabled = true } = {}) {
   }
   await page.goto(CONSOLE_URL);
   return { context, page, seen };
+}
+
+async function atRest(page, context) {
+  const local = await page.evaluate(() => {
+    const values = [];
+    for (let index = 0; index < localStorage.length; index += 1) values.push(localStorage.getItem(localStorage.key(index)) || "");
+    return values;
+  });
+  const cookies = (await context.cookies()).map((cookie) => cookie.value);
+  return [...local, ...cookies];
 }
 
 async function settle(page, selector, predicate, what) {
@@ -302,6 +327,11 @@ const signedTile = await settle(page, "#soulState", (t) => t !== "SIGNING IN" &&
 const kept = await page.evaluate(() => sessionStorage.getItem("devon.platform.jwt") || "");
 const keptStatus = await api("/soul/status", { token: kept });
 const rightField = await page.inputValue("#signPass");
+const restAfterSignIn = await atRest(page, platform.context);
+check("the kept JWT is in no localStorage value and no cookie, so closing the tab signs out", () => {
+  assert.ok(kept.length > 20, "no token was kept to look for");
+  assert.ok(!restAfterSignIn.some((value) => value.includes(kept)), "the JWT is at rest in localStorage or a cookie");
+});
 check("the right password keeps a JWT the API accepts, clears the field, and the tile agrees with this run's API", () => {
   assert.match(rightNote, /^Signed in for this tab\./);
   assert.equal(keptStatus.status, 200, "the kept token was refused by GET /soul/status");
@@ -310,14 +340,32 @@ check("the right password keeps a JWT the API accepts, clears the field, and the
 });
 
 await signIn(page, WRONG);
-const retryNote = flat(await page.textContent("#signNote"));
 const retryTile = await settle(page, "#soulState", (t) => t !== "SIGNING IN" && t !== "CHECKING", "tile after retry");
+const retryNote = await settle(page, "#signNote", (t) => /tab (still works|has run out|could not)/.test(t) || /I could not check/.test(t), "the note after a refused retry");
 const retryKept = await page.evaluate(() => sessionStorage.getItem("devon.platform.jwt"));
 check("a refused retry leaves the kept sign in alone and says it is still kept", () => {
-  assert.equal(retryNote, "Wrong email or password. Nothing was kept. Your earlier sign-in is still kept for this tab.");
+  assert.equal(retryNote, "Wrong email or password. Nothing was kept. The token already in this tab still works.");
   assert.equal(retryTile, EXPECTED_TILE);
   assert.equal(retryKept, kept, "a refused retry changed the kept token");
 });
+
+const requestsBeforeSignedChips = seen.requests.length;
+for (let index = 0; index < chipCount; index += 1) {
+  await page.locator("#chips button").nth(index).tap();
+}
+const lastChip = await page.inputValue("#cmd");
+await page.locator("#chips button").first().focus();
+await page.keyboard.down("Enter");
+await page.keyboard.down("Enter");
+await page.keyboard.down("Enter");
+await page.keyboard.up("Enter");
+await page.waitForTimeout(800);
+check("signed in, a tap on every chip and a held Enter on a focused chip still send nothing", () => {
+  const sent = seen.requests.slice(requestsBeforeSignedChips).filter((r) => r.url.startsWith(ORIGIN + "/api/"));
+  assert.deepEqual(sent.map((r) => r.method + " " + r.url), [], "a chip reached the API while signed in");
+  assert.ok(lastChip.length > 0, "the last chip did not fill the command line");
+});
+await page.fill("#cmd", "");
 
 const realAnswer = await ask(page, `what did we decide about ${RUN}`);
 check("a recall question reaches GET /soul/find with the bearer and says what this API said about soul recall", () => {
@@ -344,6 +392,16 @@ const FIXTURES = {
   withheld: {
     body: { query: "x", ledger: [], soul: [], soul_errors: [], soul_withheld: 3, soul_recall_enabled: true },
     expect: /SOUL WINDOW 3 soul record\(s\) withheld as no longer active\. They used slots in the search, so an active record may not have been fetched\./,
+    refuse: /measured empty/,
+  },
+  hitsAndErrors: {
+    body: { query: "x", ledger: [], soul: [{ source: "devon-soul", text: "A note that did come back." }], soul_errors: ["tee-soul-layer: timed out"], soul_withheld: 0, soul_recall_enabled: true },
+    expect: /DEVON NOTED \(soul\) A note that did come back\..*SOUL PARTIAL The soul search did not finish: tee-soul-layer: timed out/,
+    refuse: /measured empty/,
+  },
+  hitsAndWithheld: {
+    body: { query: "x", ledger: [], soul: [{ source: "tee-soul-layer", text: "A ruling that did come back." }], soul_errors: [], soul_withheld: 2, soul_recall_enabled: true },
+    expect: /TEE RULED \(soul\) A ruling that did come back\..*SOUL WINDOW 2 soul record\(s\) withheld/,
     refuse: /measured empty/,
   },
   markup: {
@@ -408,19 +466,71 @@ check("the password left the page only in this origin's POST /api/v1/auth/login,
     }
   }
 });
+const restAtEnd = await atRest(page, platform.context);
+check("the kept JWT is still at rest nowhere at the end of the platform pass", () => {
+  assert.ok(!restAtEnd.some((value) => value.includes(kept)), "the JWT is at rest in localStorage or a cookie");
+});
 check("the platform console threw no page error across everything above", () => {
   assert.deepEqual(seen.errors, [], `page errors: ${seen.errors.join(" | ")}`);
 });
 await platform.context.close();
 
-// A PLATFORM base saved in the panel must not carry a password away.
+// Bases saved in localStorage, the PLATFORM field's and the soul host's, must
+// not pull the password, the JWT or the ruling key off this origin.
+const RULING_KEY = `ruling-${nonce()}`;
+const based = await open();
+await based.page.evaluate(() => {
+  localStorage.setItem("devon.soul.platform", "http://127.0.0.1:9");
+  localStorage.setItem("devon.soul.base", "http://127.0.0.1:9");
+});
+await based.page.reload();
+await based.page.evaluate((key) => sessionStorage.setItem("devon.ruling.key", key), RULING_KEY);
+await signIn(based.page, PASSWORD);
+const basedJwt = await based.page.evaluate(() => sessionStorage.getItem("devon.platform.jwt") || "");
+await settle(based.page, "#soulState", (t) => t !== "SIGNING IN" && t !== "CHECKING", "tile with saved bases");
+await ask(based.page, `what did we decide about saved bases ${RUN}`);
+await based.page.fill("#cmd", `Devon, remember the saved base probe ${RUN}`);
+await based.page.press("#cmd", "Enter");
+await based.page.waitForTimeout(1500);
+const approve = based.page.locator(".abtn.yes").first();
+if (await approve.count()) await approve.click();
+await based.page.waitForTimeout(1200);
+const platformRowShown = await based.page.isVisible("#loopBaseRow");
+check("saved bases pull no password, JWT or ruling key off this origin, and the PLATFORM row is not offered", () => {
+  const off = based.seen.requests.filter((r) => !r.url.startsWith(ORIGIN + "/") && !r.url.startsWith("data:"));
+  const leaked = off.filter(
+    (r) => r.body.includes(PASSWORD) || r.auth.includes(basedJwt) || JSON.stringify(r).includes(RULING_KEY),
+  );
+  assert.ok(basedJwt.length > 20, "the sign in with saved bases kept no token");
+  assert.deepEqual(leaked.map((r) => r.method + " " + r.url), []);
+  assert.deepEqual(off.filter((r) => r.url.startsWith("http://127.0.0.1:9")).map((r) => r.url), [], "a request went to the saved base");
+  assert.equal(platformRowShown, false, "the PLATFORM row is offered on the platform console");
+  // Not vacuous: the probe did reach find, propose and approve on this origin,
+  // and approve carried the ruling key there.
+  const here = (path) => based.seen.requests.filter((r) => r.url.startsWith(`${ORIGIN}/api/v1/soul/${path}`));
+  assert.ok(here("find").length > 0, "the probe never reached /soul/find");
+  assert.ok(here("propose").length > 0, "the probe never reached /soul/propose");
+  assert.ok(here("approve").some((r) => r.headers.includes(RULING_KEY)), "approve never carried the ruling key on this origin");
+});
+await based.context.close();
+
+// A login that answers with a redirect must not carry the password onward.
 const redirected = await open();
-await redirected.page.evaluate(() => localStorage.setItem("devon.soul.platform", "http://127.0.0.1:9"));
-await redirected.page.reload();
-await signIn(redirected.page, PASSWORD);
-check("a saved PLATFORM base does not carry the password to the origin it names", () => {
-  const away = redirected.seen.requests.filter((r) => r.body.includes(PASSWORD) && !r.url.startsWith(ORIGIN + "/"));
-  assert.deepEqual(away.map((r) => r.url), []);
+await redirected.page.route(`${ORIGIN}/api/v1/auth/login`, (route) =>
+  route.fulfill({ status: 307, headers: { location: `${ORIGIN}/__followed_login` }, body: "" }),
+);
+// fetch refuses the redirect before any response event fires, so this waits
+// on the note, which starts empty in a fresh context.
+await redirected.page.fill("#signEmail", EMAIL);
+await redirected.page.fill("#signPass", PASSWORD);
+await redirected.page.click("#signGo");
+const redirectNote = await settle(redirected.page, "#signNote", (text) => text.length > 0, "the redirected sign in never answered");
+const redirectKept = await redirected.page.evaluate(() => sessionStorage.getItem("devon.platform.jwt"));
+check("a redirect from the login route is refused, not followed, and nothing is kept", () => {
+  const followed = redirected.seen.requests.filter((r) => r.url.includes("__followed_login"));
+  assert.deepEqual(followed.map((r) => r.method + " " + r.url), [], "the redirect was followed");
+  assert.equal(redirectNote, "I could not reach the API from here. Nothing was kept.");
+  assert.equal(redirectKept, null, "a redirected sign in kept a token");
 });
 await redirected.context.close();
 
@@ -429,10 +539,16 @@ await redirected.context.close();
 /* ------------------------------------------------------------------ */
 
 const soul = await open({ role: "soul" });
-await soul.page.waitForTimeout(1500);
+await soul.page.waitForTimeout(1000);
+await soul.page.evaluate(() => sessionStorage.setItem("devon.soul.token", "dst_" + "0".repeat(32)));
+await soul.page.reload();
+await soul.page.waitForTimeout(800);
+await soul.page.click("#soulSave");
+await soul.page.click("#soulTest");
+await soul.page.waitForTimeout(1200);
 const soulFormShown = await soul.page.isVisible("#signForm");
 const soulTokenRowShown = await soul.page.isVisible("#soulTokRow");
-check("on the soul host the page loads with no error, never shows the sign in form and shows the CONSOLE_TOKEN row", () => {
+check("on the soul host, with a CONSOLE_TOKEN kept and SAVE and TEST tapped, no page error and the sign in form is never shown", () => {
   assert.deepEqual(soul.seen.errors, [], `soul host page errors: ${soul.seen.errors.join(" | ")}`);
   assert.equal(soulFormShown, false, "the sign in form is visible on the soul host");
   assert.equal(soulTokenRowShown, true, "the CONSOLE_TOKEN row is not visible on the soul host");

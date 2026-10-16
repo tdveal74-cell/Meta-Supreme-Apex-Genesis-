@@ -1484,7 +1484,12 @@ function keepRulingKey(v) {
 const Soul = {
   get(k, d) { try { return localStorage.getItem('devon.soul.' + k) || d; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('devon.soul.' + k, v); } catch (e) {} },
-  base() { return (this.get('base', '') || '').replace(/\/+$/, ''); },
+  base() {
+    /* The platform console talks to its own origin only. A base saved here
+       would receive the operator JWT on every recall and status call. */
+    if (!onVercelSoulHost()) return '';
+    return (this.get('base', '') || '').replace(/\/+$/, '');
+  },
   /* The gate accepts a header or a cookie only. Query param t is never
      auth. The cookie is what a home screen launch actually carries. Reading
      only local storage meant a launch that the service had already let in
@@ -1577,7 +1582,7 @@ const Soul = {
 };
 
 /* Knowledge loop client. On the platform operator console (app.main) the
-   base URL defaults to same origin. PLATFORM is not required. JWT is the
+   base URL is always same origin, so PLATFORM is not used there. JWT is the
    CurrentUser credential. devon-soul.vercel.app does not mount propose and
    has no Postgres; remember fail-closes there. localStorage is not memory.
    Pending approval cards live in sessionStorage devon.loop.pending so a
@@ -1595,8 +1600,10 @@ const Loop = {
   },
   getBase() {
     if (onVercelSoulHost()) return this.storedBase();
-    const stored = this.storedBase();
-    if (stored && !this.isVercelSoul(stored)) return stored;
+    /* On the platform console every call is same origin. Until 2026-10-16 a
+       base saved in the PLATFORM field was honoured here, so it received the
+       operator JWT on find, propose and commit, and the ruling key on
+       approve. Sign in mints that JWT on this origin, so it stays here. */
     return '';
   },
   setBase(v) {
@@ -1704,6 +1711,10 @@ function wireSoul() {
   if (platRow) platRow.style.display = soulHost ? 'none' : '';
   if (ruleRow) ruleRow.style.display = soulHost ? 'none' : '';
   if (hostRow) hostRow.style.display = soulHost ? '' : 'none';
+  /* The platform console ignores a saved PLATFORM base (Loop.getBase), so
+     the field is not offered there. */
+  const loopRow = $('loopBaseRow');
+  if (loopRow) loopRow.style.display = soulHost ? '' : 'none';
   /* The soul host has no /api/v1/auth/login, so the sign-in form is shown
      only on the platform console. It ships hidden; this is the one place
      that reveals it. */
@@ -1783,11 +1794,19 @@ function wireSoul() {
         /* A refused retry says nothing about a sign-in that is already kept:
            ask the API about that one rather than assuming it is dead. */
         if (!operatorJwt()) { st.textContent = 'NOT SIGNED IN'; return; }
-        note.textContent += ' Your earlier sign-in is still kept for this tab.';
+        const refusal = note.textContent;
         st.textContent = 'CHECKING';
         Soul.status().then(
-          body => { st.textContent = body.enabled ? 'ON' : 'REACHABLE, RECALL OFF'; },
-          e => { st.textContent = statusLabel(e); }
+          body => {
+            st.textContent = body.enabled ? 'ON' : 'REACHABLE, RECALL OFF';
+            note.textContent = refusal + ' The token already in this tab still works.';
+          },
+          e => {
+            st.textContent = statusLabel(e);
+            note.textContent = refusal + (e && e.message === 'auth'
+              ? ' The token already in this tab has run out too.'
+              : ' I could not check the token already in this tab.');
+          }
         );
         return;
       }
@@ -2256,6 +2275,8 @@ $('clearBtn').addEventListener('click',()=>{
 });
 
 $('cmd').addEventListener('keydown',e=>{
+  /* A held key repeats, and an IME is still composing: neither is a send. */
+  if(e.repeat||e.isComposing) return;
   if(e.key==='Enter'&&e.target.value.trim()){ handle(e.target.value.trim()); e.target.value=''; }
 });
 
@@ -2272,8 +2293,9 @@ EXAMPLES.forEach(x=>{
   b.type='button';
   /* A chip fills the command line and does not send it. Three of these are
      remembers, and on a signed in phone one stray tap used to write a
-     proposal into the production ledger. */
-  b.addEventListener('click',()=>{ const cmd=$('cmd'); cmd.value=x; cmd.focus(); });
+     proposal into the production ledger. Focus stays on the chip, so a held
+     Enter cannot carry on into the command line and send it. */
+  b.addEventListener('click',()=>{ $('cmd').value=x; });
   $('chips').appendChild(b);
 });
 
