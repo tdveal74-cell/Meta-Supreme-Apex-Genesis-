@@ -43,13 +43,16 @@ building. That documentation is remote and changes without a commit here, so
 
 Two reads on 2026-10-16, both from the cloud environment:
 
-- Early in the day the network policy refused `docs.typesafe.ai` with 403 and
-  only `api.typesafe.ai` was allowed. What stood in for the docs then: the live
+- Early in the day the network policy refused `docs.typesafe.ai` with 403,
+  and of the TypeSafe hosts this session needed, only `api.typesafe.ai` was
+  reachable. What stood in for the docs then: the live
   spec at `https://api.typesafe.ai/openapi.json`, and the official SDKs,
   `typesafe-sdk` on PyPI and `@typesafe-ai/sdk` on npm.
 - Later the same day, after Tee updated the environment, `docs.typesafe.ai`
-  answered 200 (its root redirects to `/introduction`), and so did the spec,
-  PyPI and npm. `typesafe.ai` itself, where the blog lives, was still refused.
+  answered: its root returned a 308 redirect to `/introduction`, and the pages
+  read under it returned 200. The spec, PyPI and npm returned 200 too. At that
+  read the proxy refused a tunnel to `typesafe.ai` itself, where the blog
+  lives; a later session may find it open.
   Read then: `openapi.json` reports `info.version` 0.2.0, PyPI's latest
   `typesafe-sdk` is 0.7.5 with author TypeSafe AI, npm's latest
   `@typesafe-ai/sdk` is 0.7.0, and upstream `HEAD` of `typesafe-ai/skills` is
