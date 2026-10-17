@@ -73,7 +73,7 @@ jobs:
         run: node n8n/tqo-v5/jev_thumb_rank.test.mjs
       - name: The thumbnail check adds no note while Jev only reports
         run: node n8n/tqo-v5/jev_thumb_check.test.mjs
-      - name: The Jev lanes hold together from Pexels to the consumer
+      - name: The Jev lanes hold together across their nodes
         run: node n8n/tqo-v5/jev_lanes_chain.test.mjs
       # The carousel rules, ruled by Tee 2026-10-07. No browser here: the drawing
       # runs in carousel-render.yml.

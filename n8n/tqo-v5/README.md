@@ -395,14 +395,15 @@ writes it fresh.
 Ruled by Tee 2026-10-16. Three side branches ask Jev, TypeSafe's typed
 decision model, to look at images: the Pexels stills behind each b-roll
 segment, the photos behind the thumbnail, and the composed thumbnail itself.
-Every one records what Jev would choose and keeps today's choice, behind a
-`JEV_APPLY` constant that only a ruling flips. Nothing is wired into the live
-workflow and no TypeSafe request has been made, because no key was funded on
-that day.
+Every one keeps today's choice behind a `JEV_APPLY` constant that only a
+ruling flips, and reports what Jev made of the pictures: counts for the
+b-roll, the photo Jev would pick, and a note on the finished thumbnail.
+Nothing is wired into the live workflow and no TypeSafe request has been made,
+because no key was funded on that day.
 
 `JEV_WIRING.md` lists the nine files, the nodes they become, the settings
 each node needs, what the TypeSafe image docs required when they were read,
-and how to prove the wiring. Four harnesses drive the real node bodies, one
-per lane and one across all of them, and CI runs each. They prove the nodes
-keep today's output and read answers in the documented shape. They prove
-nothing about Jev's judgment.
+and how to prove the wiring. Five harnesses drive the real node bodies: two
+for the b-roll lane, one for each thumbnail lane, and one across all three,
+and CI runs each. They prove the nodes keep today's output and read answers in
+the documented shape. They prove nothing about Jev's judgment.

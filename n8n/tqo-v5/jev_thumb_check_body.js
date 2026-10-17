@@ -10,8 +10,10 @@
 //   headline_box       where that text sits. A Box question needs Jev 1.14, which
 //                      is jev-preview or jev-1.14.0 (box.md), so the whole request
 //                      uses one of them. It names the moving alias jev-preview on
-//                      purpose: nothing is tuned against a version yet, and the
-//                      response's own model field logs which version answered.
+//                      purpose: nothing is tuned against a version yet. The
+//                      response's model field names the version that answered;
+//                      the HTTP node's saved execution keeps it, and nothing
+//                      downstream records it.
 //                      Pin jev-1.14.0 once thresholds are tuned on shadow data.
 //   headline_readable  is every word of the headline easy to read at phone size.
 //                      One condition, as noul.md asks for one per Noul. A headline

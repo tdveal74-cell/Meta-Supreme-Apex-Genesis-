@@ -336,6 +336,9 @@ assert.equal(runNew(vs(undefined, 2)).jevWouldChange, 1);
 assert.equal(runNew(vs(undefined, 1.999)).jevWouldChange, 0);
 assert.equal(runNew(vs(2, undefined)).jevWouldChange, 0);
 assert.equal(runNew(vs(1.999, undefined)).jevWouldChange, 1);
+// Both at the floor or above: the better score goes first whatever the Pexels order.
+assert.deepEqual(picked(vs(2, 3)), [B], "best first inside the top tier");
+assert.deepEqual(picked(vs(3, 2)), [A]);
 // Both scored, either side: a score at the floor beats one just under it, in either Pexels order.
 assert.deepEqual(picked(vs(1.999, 2)), [B]);
 assert.deepEqual(picked(vs(2, 1.999)), [A]);

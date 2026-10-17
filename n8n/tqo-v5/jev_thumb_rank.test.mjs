@@ -321,9 +321,10 @@ for (const [w, h] of [[1569, 600], [600, 1569], [1569, 1569], [1569, 280], [280,
   assert.ok(!kept(pngOf(w, h)), "png " + w + "x" + h);
   assert.ok(!kept(jpegOf(w, h)), "jpeg " + w + "x" + h);
 }
-// A PNG side is 32 bits. 70000 needs the third byte and 16777516 needs the first,
-// which is 300 when only the low three bytes are read.
-for (const [w, h] of [[70000, 400], [400, 70000], [16777516, 400], [400, 16777516]]) assert.ok(!kept(pngOf(w, h)), "png " + w + "x" + h);
+// A PNG side is 32 bits. 65836 reads as 300 without its third byte and 16777516
+// reads as 300 without its first, so each is out of limits only when all four
+// bytes are read.
+for (const [w, h] of [[65836, 400], [400, 65836], [70000, 400], [400, 70000], [16777516, 400], [400, 16777516]]) assert.ok(!kept(pngOf(w, h)), "png " + w + "x" + h);
 
 // Every JPEG SOF marker reads, 0xC0 to 0xCF except 0xC4, 0xC8 and 0xCC.
 const SOF_MARKERS = [0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf];
@@ -402,6 +403,9 @@ assert.ok(!kept(pngOf(100, 100) + "A".repeat(100000)));
 const SKIPPED_BIG = b64of(noPad(jpegBytes(100, 100)));
 assert.ok(!SKIPPED_BIG.includes("="));
 assert.deepEqual(askedFor([SKIPPED_BIG + "A".repeat(11000000 - SKIPPED_BIG.length), BIG, JPEG]), ["p2", "p3"]);
+// The size check runs before the cap: a skipped still over the whole cap on its
+// own must not stop the photos after it.
+assert.deepEqual(askedFor([SKIPPED_BIG + "A".repeat(20000001 - SKIPPED_BIG.length), JPEG, JPEG]), ["p2", "p3"]);
 // Nothing here throws on a string that is not base64 at all.
 assert.ok(kept("/9j/" + "!".repeat(100)) && kept("iVBORw0KGgo" + "!".repeat(100)));
 

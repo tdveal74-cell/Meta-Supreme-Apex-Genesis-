@@ -266,8 +266,9 @@ chain.bodies.forEach((b) => {
 
 // ---- scores into Build Movie ----
 
-// Video 0 is scored 0.4 (under 1: demoted), video 1 is the best at 2.9, video 3
-// is next, video 2 is 1.2, and video 4 sits past K_BROLL so nothing scored it.
+// Video 0 is scored 0.4 and video 2 is 1.2, both under the floor of 2 and so
+// demoted; video 1 is the best at 2.9, video 3 is next at 2.2, and video 4 sits
+// past K_BROLL so nothing scored it.
 const SCORES = [0.4, 2.9, 1.2, 2.2, undefined];
 const ranks = answerBroll(chain.bodies, (idx) => SCORES[idx]);
 assert.equal(ranks.length, 5);
@@ -287,10 +288,11 @@ assert.equal(shadow.jevApplied, false);
 assert.equal(shadow.jevRanked, 5, "jevRanked counts segments (20 candidates were scored, one segment had none)");
 assert.equal(shadow.jevWouldChange, 2, "Jev would pick differently on segments 0 and 2: on 0 it prefers a later clip to Pexels' first, and on 2 its best clip is already used");
 
-// Applied: every score landed on its own clip. Best first, then the clip nobody
-// scored, then the clip scored under 1, and nothing is dropped.
+// Applied: every score landed on its own clip. The two at the floor or above,
+// best first, then the clip nobody scored, then the two under the floor, best
+// first, and nothing is dropped.
 const applied = runMovie(MOVIE_ON, { ...FX, jev: JEV });
-assert.deepEqual(clips(applied), link(1, 3, 2, 4, 0, 0));
+assert.deepEqual(clips(applied), link(1, 3, 4, 2, 0, 0));
 assert.equal(applied.jevApplied, true);
 assert.equal(applied.jevRanked, 5);
 assert.equal(applied.heldClips, 1);
@@ -444,7 +446,7 @@ const verdictOf = (response) => {
   return out[0].json;
 };
 
-// The headline sits inside the dark panel (right edge under 0.594) and is clear of the edges.
+// The headline ends before the designed right edge of the text (0.603) and is clear of the edges.
 const INSIDE = { top: 0.3, bottom: 0.62, left: 0.06, right: 0.55 };
 let v = verdictOf(answerCheck(INSIDE));
 assert.equal(v.jevThumbChecked, true);
@@ -467,5 +469,28 @@ v = verdictOf({ json: { error: { message: "402 Payment Required" } } });
 assert.equal(v.jevThumbChecked, false);
 assert.equal(v.jevThumbNote, null);
 assert.equal(v.jevHeadlineBox, null);
+
+// ---- the Shim, fed by the real check body and verdict ----
+
+// The verdict names the headline it checked, read from Jev: Thumb Check Body,
+// and the Shim records a verdict only for the headline of the row in hand.
+const shimShipped = body("shim_thumbnail_to_binary.js", "$", "$input");
+const shimOn = new Function("$", "$input", flip(read("./shim_thumbnail_to_binary.js")));
+const composedItem = { json: {}, binary: { thumbData: { bytes: 90000 } } };
+const shimNodes = (verdict) => dollar({ "Thumb: Plan": [{ json: PLAN }], "Thumb: Pick Still": [{ json: pickShadow }], "Jev: Thumb Verdict": verdict });
+const wideVerdict = checkVerdict(dollar({ "Jev: Thumb Check Body": checkOut }), inputOf([answerCheck(WIDE)]));
+assert.equal(wideVerdict[0].json.forHeadline, pickShadow.headline);
+let shimmed = shimShipped(shimNodes(wideVerdict), inputOf([composedItem]))[0].json;
+assert.equal(shimmed.jevThumbNote, wideVerdict[0].json.jevThumbNote);
+assert.equal(shimmed.jevThumbChecked, true);
+assert.equal(shimmed.thumb_warning, null, "shadow: the note never reaches thumb_warning");
+shimmed = shimOn(shimNodes(wideVerdict), inputOf([composedItem]))[0].json;
+assert.equal(shimmed.thumb_warning, "Jev: " + wideVerdict[0].json.jevThumbNote);
+// A verdict left over from a row with another headline is not this row's.
+const otherRow = [{ json: { body: { ...cb, state: { ...cb.state, headline: "Another row's headline" } } } }];
+const staleVerdict = checkVerdict(dollar({ "Jev: Thumb Check Body": otherRow }), inputOf([answerCheck(WIDE)]));
+shimmed = shimOn(shimNodes(staleVerdict), inputOf([composedItem]))[0].json;
+assert.equal(shimmed.jevThumbNote, null);
+assert.equal(shimmed.thumb_warning, null);
 
 console.log("Jev image lanes: the chains run end to end, scores land on their own pictures, shadow keeps today's choice");
