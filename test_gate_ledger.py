@@ -925,9 +925,6 @@ def test_a_padded_gated_command_is_denied_quickly(tmp_path):
     assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-# A long run of reserved words or assignments before a gated call. _unwrap used
-# to drop them one copy of the list at a time, so these took 10 to 19 s each on
-# the hook before 2026-10-17, against its 15 s timeout.
 # One long bundled flag token. The rm -r, git push -f and bash -c checks used
 # -[a-zA-Z]*x[a-zA-Z]* fullmatches, which backtracked quadratically on it: 3.5
 # to 3.9 s at 40 KB each, and 13.4 s for fifteen 19 KB tokens, before 2026-10-17.
@@ -948,6 +945,7 @@ def test_a_long_flag_token_is_denied_quickly(tmp_path, command):
 @pytest.mark.parametrize("token,letters,expected", [
     ("-c", "c", True), ("-lc", "c", True), ("-C", "c", False), ("--c", "c", False), ("-c1", "c", False),
     ("-rf", "rR", True), ("-fR", "rR", True), ("-R", "rR", True), ("-x", "rR", False), ("-", "rR", False),
+    ("xr", "rR", False), ("xf", "f", False), ("xc", "c", False),
     ("", "rR", False), ("-f", "f", True), ("--force", "f", False), ("-K", "f", False), ("-ré", "rR", False),
 ])
 def test_short_flags_with_means_what_the_old_pattern_meant(token, letters, expected):
@@ -956,6 +954,25 @@ def test_short_flags_with_means_what_the_old_pattern_meant(token, letters, expec
     assert bool(re.fullmatch(old, token)) is expected
 
 
+# Each call site passes its own letters, so the helper's own test cannot pin
+# them. These go through classify, where a wrong letter or a dropped dash shows.
+@pytest.mark.parametrize("command,expected", [
+    ("rm -R build", ("rm_recursive", False)),
+    ("rm -r build", ("rm_recursive", False)),
+    ("rm -x build", (None, False)),
+    ("rm origin", (None, False)),
+    ("git push -f origin x", ("git_force_push:plain", True)),
+    ("git push origin xf", ("git_push", False)),
+    ("bash -lc 'gh workflow run d.yml'", ("gh_workflow_run", True)),
+    ("bash xc 'gh workflow run d.yml'", (None, False)),
+])
+def test_each_flag_site_reads_its_own_letters(command, expected):
+    assert gate.classify("Bash", {"command": command}) == expected
+
+
+# A long run of reserved words or assignments before a gated call. _unwrap used
+# to drop them one copy of the list at a time, so these took 10 to 19 s each on
+# the hook before 2026-10-17, against its 15 s timeout.
 @pytest.mark.parametrize("pad", ["{ " * 150000, "do " * 100000, "! " * 150000, "A=1 " * 75000])
 def test_a_long_run_of_reserved_words_is_denied_quickly(tmp_path, pad):
     import time
