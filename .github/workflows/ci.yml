@@ -117,6 +117,7 @@ jobs:
             test_devon_provider_billing.py \
             test_devon_spoken_input.py \
             test_devon_hermes_surface.py \
+            test_devon_graphify_bridge.py \
             test_devon_receipts.py \
             test_devon_capture_enrichment.py \
             test_presence_cartesia.py \
