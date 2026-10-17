@@ -975,7 +975,8 @@ def test_the_score_is_reported_and_recorded_on_a_failing_run(tmp_path, capsys):
 
 _NUMBER_WORDS = {
     "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
-    "eleven": 11, "twelve": 12,
+    "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
+    "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
 }
 
 
@@ -1035,11 +1036,12 @@ def test_the_vendored_skills_are_the_ones_claude_md_names():
     """The ours/vendored split in CLAUDE.md is load bearing: vendored skills
     are never edited in place. UPSTREAM.md is what marks one, so another
     vendored skill arriving must move the prose, not sit silently. This said
-    scroll-craft alone until hypit was vendored on 2026-10-16."""
+    scroll-craft alone until hypit was vendored on 2026-10-16, and typesafe-ai
+    followed the same day."""
     vendored = sorted(d.name for d in SKILLS.iterdir() if (d / "UPSTREAM.md").is_file())
-    assert vendored == ["hypit", "scroll-craft"], (
+    assert vendored == ["hypit", "scroll-craft", "typesafe-ai"], (
         f"vendored skills are now {vendored}; CLAUDE.md and the "
-        "ours/vendored counts above both assume hypit and scroll-craft"
+        "ours/vendored counts above assume hypit, scroll-craft and typesafe-ai"
     )
 
 
