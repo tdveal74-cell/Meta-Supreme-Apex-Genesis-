@@ -269,6 +269,7 @@ def _statements(command, depth=0):
 
 
 RESERVED = {"then", "do", "else", "elif", "if", "while", "until", "!", "{", "}", "time", "coproc"}
+ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 REDIRECT_BARE = re.compile(r"^(\d*>{1,2}|\d*<|&>{1,2})$")
 REDIRECT_ATTACHED = re.compile(r"^(\d*>{1,2}|\d*<|&>{1,2})\S")
 # wrapper -> flags that consume a value
@@ -298,8 +299,15 @@ def _unwrap(argv):
         out.append(t)
     argv = out
     for _ in range(8):
-        while argv and (argv[0] in RESERVED or re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", argv[0])):
-            argv = argv[1:]
+        # Walk an index and slice once. Dropping one word at a time with
+        # argv[1:] copied the list on every step, so a statement made of a long
+        # run of reserved words took quadratic time: 13 s for a 300 KB run of
+        # "{ " before a gated call, close to the 15 s hook timeout (found
+        # 2026-10-17 by an independent verifier).
+        k = 0
+        while k < len(argv) and (argv[k] in RESERVED or ASSIGNMENT.match(argv[k])):
+            k += 1
+        argv = argv[k:]
         if not argv:
             return argv
         prog = os.path.basename(argv[0])
