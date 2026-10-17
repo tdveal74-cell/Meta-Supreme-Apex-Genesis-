@@ -907,3 +907,51 @@ def test_gh_repo_sync_is_a_local_fast_forward_and_is_not_gated():
 ])
 def test_wget_scheme_less_targets_are_read(command, gated):
     assert (gate.classify("Bash", {"command": command})[1]) is gated, command
+
+
+# ---------------------------------------------------- a padded command, timed
+# Found 2026-10-17: the NAME=value rule backtracked cubically on a long name
+# followed by a long run of spaces, so one padded 2.5 KB gated command took 25 s
+# in summarize and outran the 15 s hook timeout before the deny was printed.
+
+PADDED = "gh workflow run deploy.yml # " + "a" * 400 + "key" + " " * 2109
+
+
+def test_a_padded_gated_command_is_denied_quickly(tmp_path):
+    import time
+    started = time.monotonic()
+    out = gate.run("pre", payload(tmp_path, [], tool="Bash", tool_input={"command": PADDED}), now=NOW)
+    assert time.monotonic() - started < 1.0
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+@pytest.mark.parametrize("text", [
+    "x " + "b" * 300 + "secret" + " " * 1500,
+    "a" * 250 + "key" + " " * 1247,
+    "c" * 1000 + "token" + "\n" * 7000,
+])
+def test_the_scrub_is_fast_on_long_names_and_long_spaces(text):
+    import time
+    started = time.monotonic()
+    gate.scrub(text)
+    assert time.monotonic() - started < 0.5
+
+
+@pytest.mark.parametrize("text,secret", [
+    ("export SMTP_PASS='abcdefgh1'", "abcdefgh1"),
+    ("STRIPE_SECRET=sk_live_abcdefghijkl", "sk_live_abcdefghijkl"),
+    ("password:\n  hunter2hunter2", "hunter2hunter2"),
+    ('{"api_key": "abcdefgh12345678"}', "abcdefgh12345678"),
+    ("curl -H 'Authorization: Bearer abcdefgh12345678'", "abcdefgh12345678"),
+    ("x-devon-key:            abcdefgh12345678", "abcdefgh12345678"),
+])
+def test_the_bounded_rule_still_redacts_what_it_did(text, secret):
+    assert secret not in gate.scrub(text)
+
+
+
+def test_the_summary_cut_leaves_no_fragment_of_a_split_token():
+    """A token the 2400 character cut splits is dropped whole, not left short."""
+    token = "%048x" % (0x9F3B << 170)
+    out = gate._clip("w " * 1190 + token, 2400)
+    assert token[:4] not in out and out.endswith(" ")
