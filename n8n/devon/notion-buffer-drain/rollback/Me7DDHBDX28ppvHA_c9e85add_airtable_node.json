@@ -1,0 +1,57 @@
+{
+ "node": {
+  "credentials": {
+   "airtableTokenApi": {
+    "id": "Avhx7u29TskBaR67",
+    "name": "Airtable Personal Access Token account"
+   }
+  },
+  "id": "15564461-5611-4a5f-85e7-35d9ddb3be6b",
+  "name": "File to Thread Receipts",
+  "parameters": {
+   "base": {
+    "__rl": true,
+    "mode": "id",
+    "value": "app28z7XnKzjfTXwc"
+   },
+   "columns": {
+    "mappingMode": "defineBelow",
+    "matchingColumns": [],
+    "schema": [],
+    "value": {
+     "Area": "={{ $json.area }}",
+     "Built": "={{ $json.built }}",
+     "Canon": "={{ $json.canon }}",
+     "Date": "={{ $json.date }}",
+     "Decided": "={{ $json.decided }}",
+     "Next": "={{ $json.next }}",
+     "Open": "={{ $json.open }}",
+     "Platform": "={{ $json.platform }}",
+     "Raw": "={{ $json.raw }}",
+     "Summary": "={{ $json.summary }}",
+     "Title": "={{ $json.title }}",
+     "Verify": "={{ $json.verify }}"
+    }
+   },
+   "operation": "create",
+   "options": {
+    "typecast": true
+   },
+   "resource": "record",
+   "table": {
+    "__rl": true,
+    "mode": "id",
+    "value": "tblEhgEZoNr2ztbB3"
+   }
+  },
+  "position": [
+   896,
+   0
+  ],
+  "type": "n8n-nodes-base.airtable",
+  "typeVersion": 2.1
+ },
+ "note": "The one node that differed from the live version 78b22003. Every other node and both connections were unchanged.",
+ "versionId": "c9e85add-737d-4c02-9d6a-7f9de358f0c1",
+ "workflow": "Me7DDHBDX28ppvHA"
+}

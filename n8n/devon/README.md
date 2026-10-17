@@ -19,6 +19,14 @@ and the node bodies are the part worth reviewing like code.
 | `zapier-executor/` | DEVON Zapier Executor (Build 19) | `MIELNCkP9IyHWVlr` |
 | `learning-gate/` | DEVON Build 12 Upstream Test, the Learning Gate | `VzJsSlDswkIJ9wok` |
 | `soul-committer/` | DEVON Soul Committer (Build 12) | `drP96ernQvbrvzIZ` |
+| `notion-buffer-drain/` | DEVON Notion Buffer Drain | `ptAmD28msYTvobgq` |
+
+`notion-buffer-drain/rollback/` is the one place here that holds more than a
+Code node body. On 2026-10-16 the drain and the capture webhook moved from
+Airtable to the n8n data table `at_tqo_thread_receipts`, and the instance's
+workflow history kept no earlier version, so the Airtable versions are saved
+there as JSON for a rebuild. See
+`docs/devon/SYS_OPS_devon-receipts-to-data-table_v1_2026-10-16-2108.md`.
 
 File names are the node names in snake case. `job-driver/decide.js` is the
 Decide node.

@@ -1,0 +1,398 @@
+{
+ "connections": {
+  "Already Filed?": {
+   "main": [
+    [
+     {
+      "index": 0,
+      "node": "Create Notion Page",
+      "type": "main"
+     }
+    ],
+    [
+     {
+      "index": 0,
+      "node": "Tick Synced to Notion",
+      "type": "main"
+     }
+    ]
+   ]
+  },
+  "Create Notion Page": {
+   "main": [
+    [
+     {
+      "index": 0,
+      "node": "Tick Synced to Notion",
+      "type": "main"
+     }
+    ],
+    [
+     {
+      "index": 0,
+      "node": "Log Sync Failure",
+      "type": "main"
+     }
+    ]
+   ]
+  },
+  "Daily 7am": {
+   "main": [
+    [
+     {
+      "index": 0,
+      "node": "Read Thread Receipts",
+      "type": "main"
+     }
+    ]
+   ]
+  },
+  "Drain Now": {
+   "main": [
+    [
+     {
+      "index": 0,
+      "node": "Read Thread Receipts",
+      "type": "main"
+     }
+    ]
+   ]
+  },
+  "Find Existing Page": {
+   "main": [
+    [
+     {
+      "index": 0,
+      "node": "Already Filed?",
+      "type": "main"
+     }
+    ],
+    [
+     {
+      "index": 0,
+      "node": "Log Sync Failure",
+      "type": "main"
+     }
+    ]
+   ]
+  },
+  "Read Thread Receipts": {
+   "main": [
+    [
+     {
+      "index": 0,
+      "node": "Shape for Notion",
+      "type": "main"
+     }
+    ]
+   ]
+  },
+  "Shape for Notion": {
+   "main": [
+    [
+     {
+      "index": 0,
+      "node": "Find Existing Page",
+      "type": "main"
+     }
+    ]
+   ]
+  }
+ },
+ "id": "ptAmD28msYTvobgq",
+ "name": "DEVON \u2014 Notion Buffer Drain",
+ "nodes": [
+  {
+   "id": "892a60cf-0519-4242-8ab3-1fffadef4666",
+   "name": "Daily 7am",
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "days",
+       "triggerAtHour": 7
+      }
+     ]
+    }
+   },
+   "position": [
+    0,
+    0
+   ],
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.3
+  },
+  {
+   "credentials": {
+    "airtableTokenApi": {
+     "id": "Avhx7u29TskBaR67",
+     "name": "Airtable Personal Access Token account"
+    }
+   },
+   "id": "4d292618-d106-45cf-b3ea-11d77ae561c6",
+   "name": "Read Thread Receipts",
+   "parameters": {
+    "base": {
+     "__rl": true,
+     "mode": "id",
+     "value": "app28z7XnKzjfTXwc"
+    },
+    "operation": "search",
+    "options": {},
+    "resource": "record",
+    "returnAll": true,
+    "table": {
+     "__rl": true,
+     "mode": "id",
+     "value": "tblEhgEZoNr2ztbB3"
+    }
+   },
+   "position": [
+    224,
+    96
+   ],
+   "type": "n8n-nodes-base.airtable",
+   "typeVersion": 2.1
+  },
+  {
+   "id": "fe2c9ee7-a1fb-4594-b913-5f4ec039826c",
+   "name": "Shape for Notion",
+   "parameters": {
+    "jsCode": "// Drains unsynced Thread Receipts into the Notion Thread Log.\n// Airtable is the buffer; Notion is the memory. Only rows with Synced to\n// Notion unticked are shipped, so a rerun does not re-ship a ticked row. A\n// row whose page was created and whose tick then failed is re-shipped, and\n// since 2026-09-06 (ruled by Tee) that no longer duplicates the page: every\n// page carries the Airtable row id in its Source row property, Find Existing\n// Page queries the Thread Log for it before anything is created, and a row\n// that already has its page goes straight to the tick.\n//\n// 6 Aug 2026: DB was originally set to the DATA SOURCE id (a5bcfbf5-...),\n// which is what the Notion MCP connector uses. The public REST API wants the\n// DATABASE id and returns a misleading 404 'make sure it is shared with your\n// integration' when given a data source id - the sharing is fine, the id is\n// simply the wrong kind of object.\n//\n// 6 Sep 2026, ruled by Tee after the operational report found this node lossy:\n// nine Areas (ACX was ruled the ninth on 2026-08-20 and this list still had\n// eight, so an ACX receipt landed with no Area); properties and the title are\n// chunked into 2000 character text objects instead of truncated; Canon and\n// Verify move to the page body, where the thread log skill files them; Raw\n// rides into the body verbatim so a parse error is always recoverable; and\n// an Area outside the nine is named in the body instead of dropped silently.\n// Nothing here invents a word: every field is the receipt as it was posted.\nconst AREAS = ['TQO', 'Podcast', 'NCO', 'ACX', 'Health', 'Money', 'Family', 'Learning', 'Systems'];\nconst DB = 'e91b0a7b-42c0-405e-bf5b-39975e0d4e38';\n// Notion caps one text object at 2000 characters, one rich_text array at 100\n// objects and one create call at 100 children. A property can never exceed\n// its cap, because an Airtable long text field stops at 100,000 characters,\n// which is 50 objects. A body can: Raw, Canon and Verify together can need\n// more than 100 blocks, so the body is cut at the cap with a block that says\n// so and names the Airtable row, and the rest of the batch still drains.\nconst CHUNK = 2000;\nconst MAX_OBJECTS = 100;\nconst MAX_CHILDREN = 100;\nconst NL = String.fromCharCode(10);\n\nfunction txt(v) {\n  return String(v === undefined || v === null ? '' : v).trim();\n}\n\nfunction chunks(s) {\n  const out = [];\n  for (let i = 0; i < s.length; i += CHUNK) { out.push(s.slice(i, i + CHUNK)); }\n  return out;\n}\n\nfunction text(s) {\n  return { type: 'text', text: { content: s } };\n}\n\nfunction objects(v) {\n  const s = txt(v);\n  if (!s) { return []; }\n  const parts = chunks(s);\n  if (parts.length > MAX_OBJECTS) {\n    throw new Error('A receipt field exceeds ' + (CHUNK * MAX_OBJECTS) + ' characters, more than one Notion property holds. Nothing was filed.');\n  }\n  return parts.map(text);\n}\n\nfunction rich(v) {\n  return { rich_text: objects(v) };\n}\n\nfunction paragraph(s) {\n  return { object: 'block', type: 'paragraph', paragraph: { rich_text: [text(s)] } };\n}\n\nfunction heading(s) {\n  return { object: 'block', type: 'heading_2', heading_2: { rich_text: [text(s)] } };\n}\n\nfunction section(children, title, body) {\n  const s = txt(body);\n  if (!s || s.toLowerCase() === 'none') { return false; }\n  children.push(heading(title));\n  chunks(s).forEach(function (c) { children.push(paragraph(c)); });\n  return true;\n}\n\nfunction joinParts(pairs) {\n  const out = [];\n  for (const p of pairs) {\n    const v = txt(p[1]);\n    if (!v || v.toLowerCase() === 'none') { continue; }\n    out.push(p[0] ? p[0] + ': ' + v : v);\n  }\n  return out.join(NL);\n}\n\nconst out = [];\nfor (const it of $input.all()) {\n  const j = it.json || {};\n  const f = j.fields ? j.fields : j;\n  if (f['Synced to Notion'] === true) { continue; }\n\n  const title = txt(f.Title);\n  if (!title) { continue; }\n\n  const rowId = String(j.id || f.id || '');\n  if (!rowId) { continue; }\n\n  const props = {};\n  props.Title = { title: objects(title) };\n\n  const d = txt(f.Date).slice(0, 10);\n  if (d.length === 10) { props.Date = { date: { start: d } }; }\n\n  const raw = f.Area;\n  const list = Array.isArray(raw) ? raw : (raw ? String(raw).split(',') : []);\n  const picked = [];\n  const dropped = [];\n  for (const a of list) {\n    const clean = String(a).trim();\n    if (!clean) { continue; }\n    if (AREAS.indexOf(clean) === -1) { dropped.push(clean); continue; }\n    if (picked.indexOf(clean) === -1) { picked.push(clean); }\n  }\n  if (picked.length) {\n    props.Area = { multi_select: picked.map(function (n) { return { name: n }; }) };\n  }\n\n  props.Summary = rich(f.Summary);\n  props.Decisions = rich(f.Decided);\n  props['Open threads'] = rich(joinParts([['', f.Open], ['Next', f.Next]]));\n  props.Artifacts = rich(f.Built);\n  // The dedupe key. Find Existing Page queries this before any create.\n  props['Source row'] = rich(rowId);\n\n  // The body: provenance first, then Canon and Verify where the thread log\n  // skill files them, then the receipt exactly as it was posted.\n  const plat = txt(f.Platform) || 'unknown';\n  const children = [];\n  children.push(paragraph('Platform: ' + plat + '. Filed from Airtable Thread Receipts row ' + rowId +\n    ' by the Notion Buffer Drain. Nothing below is enriched; it is the receipt as posted.'));\n  if (dropped.length) {\n    children.push(paragraph('Area not in the nine, so not tagged: ' + dropped.join(', ') +\n      '. The Area vocabulary is ruled, not inferred; fix the receipt or rule a new Area.'));\n  }\n  if (section(children, 'Canon', f.Canon)) {\n    children.push(paragraph('Canon present: this also belongs in Strategic Decisions, and only a human files it there.'));\n  }\n  section(children, 'Verify', f.Verify);\n  section(children, 'Raw receipt, verbatim', f.Raw);\n  if (children.length > MAX_CHILDREN) {\n    const cut = children.length - (MAX_CHILDREN - 1);\n    children.length = MAX_CHILDREN - 1;\n    children.push(paragraph('Body cut here: ' + cut + ' more block(s) of this receipt did not fit the Notion create limit of ' +\n      MAX_CHILDREN + ' blocks. Every property above is complete; the full raw receipt is on Airtable Thread Receipts row ' + rowId + '.'));\n  }\n\n  out.push({ json: {\n    rowId: rowId,\n    title: title,\n    notionBody: { parent: { database_id: DB }, properties: props, children: children }\n  } });\n}\nreturn out;\n"
+   },
+   "position": [
+    448,
+    96
+   ],
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2
+  },
+  {
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "bQZHyw6TfiBHmFmE",
+     "name": "Notion Integration Token"
+    }
+   },
+   "id": "0f433ed9-8e14-4631-ab7c-a511782d695a",
+   "name": "Create Notion Page",
+   "onError": "continueErrorOutput",
+   "parameters": {
+    "authentication": "genericCredentialType",
+    "contentType": "json",
+    "genericAuthType": "httpHeaderAuth",
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Notion-Version",
+       "value": "2022-06-28"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      }
+     ]
+    },
+    "jsonBody": "={{ JSON.stringify($('Shape for Notion').item.json.notionBody) }}",
+    "method": "POST",
+    "options": {},
+    "sendBody": true,
+    "sendHeaders": true,
+    "specifyBody": "json",
+    "url": "https://api.notion.com/v1/pages"
+   },
+   "position": [
+    1120,
+    0
+   ],
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2
+  },
+  {
+   "credentials": {
+    "airtableTokenApi": {
+     "id": "Avhx7u29TskBaR67",
+     "name": "Airtable Personal Access Token account"
+    }
+   },
+   "id": "0cf70888-6816-4fd4-afde-e2cbb7bfda0d",
+   "name": "Log Sync Failure",
+   "onError": "continueRegularOutput",
+   "parameters": {
+    "base": {
+     "__rl": true,
+     "mode": "id",
+     "value": "app28z7XnKzjfTXwc"
+    },
+    "columns": {
+     "mappingMode": "defineBelow",
+     "matchingColumns": [],
+     "schema": [],
+     "value": {
+      "Detected": "={{ $now.toFormat('yyyy-MM-dd') }}",
+      "Evidence": "={{ 'The receipt stayed in the Airtable buffer because Notion refused the page. Synced to Notion was NOT ticked, so the next run retries it. HTTP status: ' + ($json.error?.status ?? $json.statusCode ?? 'unknown') + '. Notion said: ' + String($json.error?.error ?? $json.error?.message ?? 'no message').slice(0, 600) + '  ||  The full error object is deliberately NOT logged here - it contains the Authorization header in plaintext. Never widen this field to JSON.stringify the raw error.' }}",
+      "Status": "Open",
+      "Type": "Sync failure",
+      "What": "={{ 'Notion sync failed: ' + $('Shape for Notion').item.json.title }}",
+      "Where": "Airtable Thread Receipts to Notion Thread Log"
+     }
+    },
+    "operation": "create",
+    "options": {
+     "typecast": true
+    },
+    "resource": "record",
+    "table": {
+     "__rl": true,
+     "mode": "id",
+     "value": "tblbenoy1QF9KAftn"
+    }
+   },
+   "position": [
+    1344,
+    288
+   ],
+   "type": "n8n-nodes-base.airtable",
+   "typeVersion": 2.1
+  },
+  {
+   "credentials": {
+    "airtableTokenApi": {
+     "id": "Avhx7u29TskBaR67",
+     "name": "Airtable Personal Access Token account"
+    }
+   },
+   "id": "c28b3272-0805-4de9-9714-2a165afb0f6c",
+   "name": "Tick Synced to Notion",
+   "onError": "continueRegularOutput",
+   "parameters": {
+    "base": {
+     "__rl": true,
+     "mode": "id",
+     "value": "app28z7XnKzjfTXwc"
+    },
+    "columns": {
+     "mappingMode": "defineBelow",
+     "matchingColumns": [
+      "id"
+     ],
+     "schema": [],
+     "value": {
+      "Synced to Notion": true,
+      "id": "={{ $('Shape for Notion').item.json.rowId }}"
+     }
+    },
+    "operation": "update",
+    "options": {
+     "typecast": true
+    },
+    "resource": "record",
+    "table": {
+     "__rl": true,
+     "mode": "id",
+     "value": "tblEhgEZoNr2ztbB3"
+    }
+   },
+   "position": [
+    1344,
+    96
+   ],
+   "type": "n8n-nodes-base.airtable",
+   "typeVersion": 2.1
+  },
+  {
+   "id": "b051f472-cf43-4872-9690-38bdcf07be32",
+   "name": "Drain Now",
+   "parameters": {},
+   "position": [
+    0,
+    192
+   ],
+   "type": "n8n-nodes-base.manualTrigger",
+   "typeVersion": 1
+  },
+  {
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "bQZHyw6TfiBHmFmE",
+     "name": "Notion Integration Token"
+    }
+   },
+   "id": "4569430a-7485-4834-8015-38d4a92cd6bf",
+   "name": "Find Existing Page",
+   "notes": "Queries the Thread Log for a page whose Source row equals this Airtable row id. Empty results mean create; a hit means the page exists and only the tick is owed. A query failure goes to the Conflicts logger and nothing is created on a blind read.",
+   "onError": "continueErrorOutput",
+   "parameters": {
+    "authentication": "genericCredentialType",
+    "contentType": "json",
+    "genericAuthType": "httpHeaderAuth",
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Notion-Version",
+       "value": "2022-06-28"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      }
+     ]
+    },
+    "jsonBody": "={{ JSON.stringify({ filter: { property: 'Source row', rich_text: { equals: $json.rowId } }, page_size: 1 }) }}",
+    "method": "POST",
+    "options": {},
+    "sendBody": true,
+    "sendHeaders": true,
+    "specifyBody": "json",
+    "url": "https://api.notion.com/v1/databases/e91b0a7b-42c0-405e-bf5b-39975e0d4e38/query"
+   },
+   "position": [
+    672,
+    96
+   ],
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2
+  },
+  {
+   "id": "3b16aced-910f-4726-83f1-8d552b52dedc",
+   "name": "Already Filed?",
+   "notes": "True (no results): the page does not exist yet, create it. False (a result): the page exists from an earlier run whose tick failed, so only tick the row.",
+   "parameters": {
+    "conditions": {
+     "combinator": "and",
+     "conditions": [
+      {
+       "id": "not-yet-filed",
+       "leftValue": "={{ $json.results.length }}",
+       "operator": {
+        "operation": "equals",
+        "type": "number"
+       },
+       "rightValue": 0
+      }
+     ],
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 2
+     }
+    },
+    "options": {}
+   },
+   "position": [
+    896,
+    96
+   ],
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2
+  }
+ ],
+ "settings": {
+  "availableInMCP": true,
+  "errorWorkflow": "GbeNilHQzjmoWDz3",
+  "executionOrder": "v1",
+  "timezone": "America/New_York"
+ },
+ "versionId": "6328edae-92d8-4635-8e94-0f8ebe521a68"
+}
