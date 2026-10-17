@@ -106,6 +106,11 @@ NAMED_SERVERS = (
     # server (plugin_runpod_runpod), a direct "runpod" registration and a
     # claude.ai connector name. Reads such as list-pods and get-pod still pass.
     "runpod",
+    # Graphify, the code graph server registered in .mcp.json. Ruled by Tee
+    # 2026-10-17, the day it was added. Its tool list is unread because the
+    # server answers 401 until someone signs in, so every tool that is not a
+    # read is gated from the first call rather than after one is found to write.
+    "graphify",
 )
 # On a named server every tool is gated EXCEPT a read. Listing the reads is the
 # safer direction: a write verb nobody thought of is caught, and the cost of a

@@ -689,7 +689,7 @@ Do not rephrase the call to get past it.
 - Gated: every n8n write (publish, unpublish, archive, execute, update,
   restore, data table writes, folder moves); every tool on a server named
   Railway, Airtable, Vercel, Supabase, Hostinger, Rakazo, Blotato, Docusign,
-  Zapier, Remote Desktop Commander or Runpod except a read (get, list, search, describe, query and the like, listed
+  Zapier, Remote Desktop Commander, Runpod or Graphify except a read (get, list, search, describe, query and the like, listed
   in `READ_VERB`); GitHub Actions triggers; Drive trash; a curl that writes to a
   non-local host; a wget that posts to one; `gh workflow run`, `gh api` writes
   and GraphQL mutations, `gh release`, `gh repo`, `gh secret` and `gh variable`
