@@ -928,6 +928,34 @@ def test_a_padded_gated_command_is_denied_quickly(tmp_path):
 # A long run of reserved words or assignments before a gated call. _unwrap used
 # to drop them one copy of the list at a time, so these took 10 to 19 s each on
 # the hook before 2026-10-17, against its 15 s timeout.
+# One long bundled flag token. The rm -r, git push -f and bash -c checks used
+# -[a-zA-Z]*x[a-zA-Z]* fullmatches, which backtracked quadratically on it: 3.5
+# to 3.9 s at 40 KB each, and 13.4 s for fifteen 19 KB tokens, before 2026-10-17.
+@pytest.mark.parametrize("command", [
+    "rm -" + "r" * 40000 + "1 x; gh workflow run deploy.yml",
+    "git push -" + "f" * 40000 + "1 origin; gh workflow run deploy.yml",
+    "bash -" + "c" * 40000 + "1 x; gh workflow run deploy.yml",
+    "; ".join("rm -" + "r" * 19000 + "1 x" for _ in range(15)) + "; gh workflow run deploy.yml",
+])
+def test_a_long_flag_token_is_denied_quickly(tmp_path, command):
+    import time
+    started = time.monotonic()
+    out = gate.run("pre", payload(tmp_path, [], tool="Bash", tool_input={"command": command}), now=NOW)
+    assert time.monotonic() - started < 1.0
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+@pytest.mark.parametrize("token,letters,expected", [
+    ("-c", "c", True), ("-lc", "c", True), ("-C", "c", False), ("--c", "c", False), ("-c1", "c", False),
+    ("-rf", "rR", True), ("-fR", "rR", True), ("-R", "rR", True), ("-x", "rR", False), ("-", "rR", False),
+    ("", "rR", False), ("-f", "f", True), ("--force", "f", False), ("-K", "f", False), ("-ré", "rR", False),
+])
+def test_short_flags_with_means_what_the_old_pattern_meant(token, letters, expected):
+    old = {"c": r"-[a-zA-Z]*c[a-zA-Z]*", "f": r"-[a-zA-Z]*f[a-zA-Z]*", "rR": r"-[a-zA-Z]*[rR][a-zA-Z]*"}[letters]
+    assert gate._short_flags_with(token, letters) is expected
+    assert bool(re.fullmatch(old, token)) is expected
+
+
 @pytest.mark.parametrize("pad", ["{ " * 150000, "do " * 100000, "! " * 150000, "A=1 " * 75000])
 def test_a_long_run_of_reserved_words_is_denied_quickly(tmp_path, pad):
     import time
