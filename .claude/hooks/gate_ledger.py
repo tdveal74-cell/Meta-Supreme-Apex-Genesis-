@@ -148,10 +148,17 @@ TOKEN_SHAPES = [
     (re.compile(r"(://[^/\s:@]+:)([^/\s@]{3,})(@)"), 3),
     (re.compile(r"(\s-u\s+[^\s:]+:)(\S{3,})"), 2),
     # NAME=value where the name ends in a secret word, including SMTP_PASS and
-    # STRIPE_SECRET, which a leading word boundary would miss.
+    # STRIPE_SECRET, which a leading word boundary would miss. A match starts
+    # only where a name starts, and the whitespace on each side of the separator
+    # is capped at 64 characters, so a long name followed by a long run of spaces
+    # costs linear time. Uncapped, one padded 2.5 KB command took 25 s here and
+    # outran the hook's 15 s timeout before its deny was printed (found
+    # 2026-10-17). The cap is the one thing this changes in what is redacted: a
+    # value more than 64 whitespace characters from its name is no longer caught.
+    # A first cap of 16 missed values an independent verifier placed 17 away.
     (re.compile(
-        r"(?i)([A-Za-z0-9_.-]*(?:authorization|bearer|api[_-]?key|secret[_-]?access[_-]?key|"
-        r"key|token|secret|passwd|password|pass)['\"]?\s*[:= ]\s*['\"]?)([^\s'\",}&]{8,})"
+        r"(?i)(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]*(?:authorization|bearer|api[_-]?key|secret[_-]?access[_-]?key|"
+        r"key|token|secret|passwd|password|pass)['\"]?\s{0,64}[:= ]\s{0,64}['\"]?)([^\s'\",}&]{8,})"
     ), 2),
     # a long mixed case token with no hyphen or slash, which a branch name or a
     # path never is
@@ -801,16 +808,32 @@ def decide(cls, gated, payload, now):
 PRIORITY_KEYS = re.compile(r"(^|_)(id|ids|name|workflowid|pullnumber|number|repo|owner|branch|url|path)$", re.I)
 
 
+SUMMARY_SLICE = 2400
+
+
+def _clip(text, limit=SUMMARY_SLICE):
+    """The first limit characters, less any word the cut split, so the scrub
+    sees a bounded text and no fragment of a token is left too short for the
+    rules to know it."""
+    text = str(text)
+    if len(text) <= limit:
+        return text
+    end = limit
+    while end and not text[end - 1].isspace():
+        end -= 1
+    return text[:end]
+
+
 def summarize(tool_name, tool_input):
     if tool_name.lower() == "bash":
-        return scrub(str((tool_input or {}).get("command", "")))[:600]
+        return scrub(_clip((tool_input or {}).get("command", "")))[:600]
     try:
         if isinstance(tool_input, dict):
             keys = sorted(tool_input, key=lambda k: (0 if PRIORITY_KEYS.search(str(k)) else 1, str(k)))
             ordered = {k: tool_input[k] for k in keys}
         else:
             ordered = tool_input
-        return scrub(json.dumps(ordered, default=str))[:600]
+        return scrub(_clip(json.dumps(ordered, default=str)))[:600]
     except Exception:
         return ""
 
@@ -877,7 +900,7 @@ def run(mode, payload, now=None):
     event = "executed" if mode == "post" else "failed"
     extra = {}
     if mode == "fail":
-        extra["error"] = scrub(str(payload.get("error", "")))[:300]
+        extra["error"] = scrub(_clip(payload.get("error", ""), 1200))[:300]
     _try_ledger(_row(event, payload, cls, gated, now, **extra))
     return None
 
