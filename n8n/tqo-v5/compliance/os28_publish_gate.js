@@ -98,8 +98,8 @@ if (missingTags.length) blocking.push('monetization: required brand tags missing
 
 // -- gate 5: disclosure, and QUALITY LAW rev2 check 13. ----------------------
 // Ruled 2026-09-30, Tee, 'Make it law' and 'Lanes are presenter led with my
-// avatar': every presenter-led asset carries the exact C4 line in the first
-// three lines of its description. Both lanes of this workflow are presenter
+// avatar': every presenter-led asset carries the exact C4 line, on a line of
+// its own, in the first three lines of its description. Both lanes of this workflow are presenter
 // led, so 'Not required' is never a valid answer here. Until 2026-10-17 the
 // first-three-lines rule sat in a nested copy n8n never runs, and 'Not
 // required' passed with no line at all. Metadata enum alone cannot demonstrate
@@ -108,9 +108,9 @@ if (missingTags.length) blocking.push('monetization: required brand tags missing
 const C4_LINE = 'Presented with a synthetic voice and synthetic likeness of Terrance Veal, used with his consent.';
 const disc = str(f['AI Disclosure']);
 const descText = str(f['Description']);
-const descHead = descText.split('\n').slice(0, 3).join('\n');
+const descHead = descText.split('\n').slice(0, 3);
 const PLACED = ['Disclosed in description', 'Disclosed on-screen + description'];
-gates.c4_disclosure = descHead.includes(C4_LINE);
+gates.c4_disclosure = descHead.some(l => l.trim() === C4_LINE);
 gates.disclosure = PLACED.includes(disc) && gates.c4_disclosure;
 if (disc === 'Not required') {
   blocking.push('disclosure: AI Disclosure is "Not required", but every episode of this workflow is presenter led with a synthetic voice and likeness (ruled 2026-09-30), so the C4 line is always required.');
@@ -119,7 +119,7 @@ if (disc === 'Not required') {
 }
 if (!gates.c4_disclosure) {
   blocking.push(descText.includes(C4_LINE)
-    ? 'disclosure: the C4 line is in the Description but not in its first three lines (quality law 13). Fill Run Fields puts it first; re-run the fill step rather than moving it by hand.'
+    ? 'disclosure: the C4 line is in the Description but not on a line of its own in its first three lines (quality law 13). Fill Run Fields puts it first; re-run the fill step rather than moving it by hand.'
     : 'disclosure: the Description does not contain the exact C4 line (quality law 13). Fill Run Fields adds it automatically; if it is missing, re-run the fill step rather than pasting a variant.');
 }
 

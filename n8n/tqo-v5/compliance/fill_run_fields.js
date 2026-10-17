@@ -39,11 +39,9 @@ let desc     = String(sc.description || f.Description || '');
 // (ruled 2026-09-30): the exact line sits in the first three lines of the
 // description. Until 2026-10-17 a looser phrase such as "AI-assisted" anywhere
 // stopped the line being added, and the line was never moved up when it sat
-// lower down. Now any copy below the top is removed and the line goes first.
+// lower down. Now every copy is removed and the line goes first, once.
 const DISCLOSURE = 'Presented with a synthetic voice and synthetic likeness of Terrance Veal, used with his consent.';
-if (!desc.split('\n').slice(0, 3).join('\n').includes(DISCLOSURE)) {
-  desc = DISCLOSURE + '\n\n' + desc.split(DISCLOSURE).join('').trim();
-}
+desc = (DISCLOSURE + '\n\n' + desc.split(DISCLOSURE).join('').trim()).trim();
 
 // 2. Claim validity. Anything anchored to a named model, a year or a headline
 // goes stale fast. A principle about judgment does not.

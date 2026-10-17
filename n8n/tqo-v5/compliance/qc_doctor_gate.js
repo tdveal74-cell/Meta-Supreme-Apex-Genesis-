@@ -28,17 +28,22 @@ function gate(x) {
 const row = $('One Row at a Time').first().json;
 const qc = $('Parse QC + Set Verdict').first().json;
 const f = row.fields || row;
-const verdict = String(qc.qc_verdict || qc.verdict || f.qc_verdict || '').toUpperCase();
-const score = Number(qc.total || f.qc_score || 0);
+// The QC result. Parse QC + Set Verdict returns qcVerdict and qcScore. Until
+// 2026-10-17 this node read only qc_verdict and total, so on a real row the
+// verdict was always empty and every row was held. The older names stay as
+// fallbacks.
+const verdict = String(qc.qcVerdict || qc.qc_verdict || qc.verdict || f.qc_verdict || '').toUpperCase();
+const score = Number(qc.qcScore || qc.total || f.qc_score || 0);
 const show = (String(f.brand || '').toUpperCase() === 'NCO') ? 'NCO_FORGE' : (String(f.show || '').toUpperCase() === 'TSWS' ? 'TSWS' : 'TQO');
 // The script scope. Until 2026-10-17 the gate required a 'script' report and
-// this node never built one, so every row stopped at EVIDENCE_REQUIRED and
-// nothing could clear. The evidence is the script doctor's verdict, which Save
-// Doctor Verdict writes onto the row in score_history as
-// "| doctor <score>/100 <VERDICT> |". The floor is Script Gate: Quality's 70.
-// No such line, and the row still stops at EVIDENCE_REQUIRED.
+// this node never built one, so no row could clear. The evidence is the script
+// doctor's verdict, which Save Doctor Verdict writes into the score_history
+// column as "| doctor <score>/100 <VERDICT> |". DT Shim: Ready Rows hands that
+// column to this node as fields['Score History']. The floor is Script Gate:
+// Quality's 70. No such line, and the row is held.
 const DOCTOR_FLOOR = 70;
-const doctorLine = /\|\s*doctor\s+(\d+(?:\.\d+)?)\/100\s+([A-Z_]+)/.exec(String(f.score_history || ''));
+const history = String(f['Score History'] || f.score_history || row.score_history || '');
+const doctorLine = /\|\s*doctor\s+(\d+(?:\.\d+)?)\/100\s+([A-Z_]+)(?=\s|\||$)/.exec(history);
 const doctorScore = doctorLine ? Number(doctorLine[1]) : NaN;
 const doctorVerdict = doctorLine ? doctorLine[2] : 'UNCHECKED';
 const scriptClear = ['PASS', 'REPAIRED'].includes(doctorVerdict) && doctorScore >= DOCTOR_FLOOR;

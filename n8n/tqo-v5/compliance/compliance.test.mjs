@@ -8,9 +8,13 @@
  * first three lines of the description, for every episode, with no "Not
  * required" escape) and quality laws 6 and 7 on the title. Both had been
  * written on 2026-09-30 into a nested parameters.jsCode copy that n8n never
- * runs. Script: Fill Run Fields now always puts the exact line first. QC
- * Doctor Gate now builds the script report it required and never built, so a
- * row with a passing script doctor verdict can reach human review.
+ * runs. Script: Fill Run Fields now always puts the exact line first, once. QC
+ * Doctor Gate now builds the script report it required and never built, and
+ * reads the QC result and the score history under the names the live lane
+ * gives them, so a row with a passing script doctor verdict can reach human
+ * review. That last claim is proved on the real shapes: a data table row is
+ * passed through the export's own DT Shim: Ready Rows and Parse QC + Set
+ * Verdict before it reaches the gate.
  *
  * Each file is pinned to the live export: applying replacements.json to the
  * export code must give the file exactly, so any other change fails here.
@@ -93,7 +97,13 @@ const lowLine = cleanRow({ Description: "one\ntwo\nthree\n" + C4 + "\n" + DESC_B
 assert.equal(runGate(OS28_OLD, lowLine).os28_allowed, true, "the old gate accepted the line anywhere");
 out = runGate(OS28_NEW, lowLine);
 assert.equal(out.os28_allowed, false);
-assert.equal(blocked(out, "disclosure: the C4 line is in the Description but not in its first three lines").length, 1);
+assert.equal(blocked(out, "disclosure: the C4 line is in the Description but not on a line of its own in its first three lines").length, 1);
+// The line must be a line of its own: inside a longer line, or at the end of a
+// one-line description, it is not the line.
+for (const d of ["Disclaimer: " + C4 + "\n" + DESC_BODY, DESC_BODY + " " + C4, C4 + " (not really)\n" + DESC_BODY]) {
+  assert.equal(runGate(OS28_NEW, cleanRow({ Description: d })).os28_allowed, false, JSON.stringify(d.slice(0, 40)));
+}
+assert.equal(runGate(OS28_NEW, cleanRow({ Description: C4 + "\r\n" + DESC_BODY })).os28_allowed, true, "a CRLF line ending is still the line");
 // Line three is still inside; a variant of the line is not the line.
 assert.equal(runGate(OS28_NEW, cleanRow({ Description: "one\ntwo\n" + C4 + "\n" + DESC_BODY })).os28_allowed, true);
 assert.equal(runGate(OS28_NEW, cleanRow({ Description: C4.replace("consent.", "consent") + "\n\n" + DESC_BODY })).os28_allowed, false);
@@ -131,6 +141,13 @@ assert.ok(head3(runFill(FILL_NEW, loose)).includes(C4));
 const low = runFill(FILL_NEW, "one\ntwo\nthree\nfour\n" + C4 + "\n" + DESC_BODY);
 assert.ok(low.startsWith(C4 + "\n\n"));
 assert.equal(low.split(C4).length, 2, "the line appears once");
+// A line on line two or three is moved to the top too, and a second copy goes.
+for (const d of ["intro\n" + C4 + "\n" + DESC_BODY, C4 + "\n" + C4 + "\n" + DESC_BODY, C4 + "\n\n" + DESC_BODY + "\n" + C4]) {
+  const filled = runFill(FILL_NEW, d);
+  assert.ok(filled.startsWith(C4 + "\n\n"), JSON.stringify(d.slice(0, 30)));
+  assert.equal(filled.split(C4).length, 2, "once: " + JSON.stringify(d.slice(0, 30)));
+  assert.equal(runFill(FILL_NEW, filled), filled, "a second fill changes nothing");
+}
 // A description that already opens with the line is left alone.
 assert.equal(runFill(FILL_NEW, C4 + "\n\n" + DESC_BODY), C4 + "\n\n" + DESC_BODY);
 // Every filled description clears the new OS 28 disclosure rules.
@@ -168,7 +185,49 @@ const stops = [
   [{ history: line(84, "PASS"), verdict: "SHIP", total: 84 }, "REVISE", "a QC score under 85"],
 ];
 for (const [input, state, why] of stops) assert.equal(runDoctor(GATE_NEW, input).doctorGate, state, why);
+// The doctor verdict must be a whole word: PASS-ISH is not PASS.
+assert.equal(runDoctor(GATE_NEW, { history: line(84, "PASS-ISH") }).doctorGate, "HOLD");
 // The verdict comes from the doctor line, not from the QC verdict any more.
 assert.equal(runDoctor(GATE_NEW, { history: line(84, "UNCHECKED"), verdict: "SHIP" }).doctorGateReason, "Presenter script unchecked");
+
+// ---- the Doctor Gate on the shapes the live lane produces -----------------
+// A raw data table row goes through the export's own DT Shim: Ready Rows (which
+// is what feeds One Row at a Time) and the export's own Parse QC + Set Verdict,
+// fed a model answer. Hand made inputs passed while the real lane still held
+// every row, so this chain is the proof the gate can clear.
+const SHIM = new Function("$", "$input", exportCode("DT Shim: Ready Rows"));
+const PARSE_QC = new Function("$", "$input", "$json", exportCode("Parse QC + Set Verdict"));
+const realDoctor = (code, { history, total = 91, blockers = [] } = {}) => {
+  const raw = { id: 7, createdAt: "2026-10-16T10:00:00Z", updatedAt: "2026-10-17T10:00:00Z", status: "Ready", system_status: "",
+    brand: "TQO", show: "TQO", ai_disclosure: "Disclosed in description", ...(history === undefined ? {} : { score_history: history }) };
+  const shimmed = SHIM(dollar({}), { all: () => [{ json: raw }] });
+  assert.equal(shimmed.length, 1, "the shim keeps the row");
+  const answer = { choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ scores: { hook: 20 }, total, blockers, findings: [] }) } }] };
+  const nodes = {
+    "Show Context: Publish": [{ json: { channel: "The Quiet Operator" } }],
+    "One Row at a Time": [shimmed[0]],
+    "Build QC Prompt": [{ json: { airtableId: 7 } }],
+  };
+  const qc = PARSE_QC(dollar(nodes), undefined, answer)[0].json;
+  return code(dollar({ ...nodes, "Parse QC + Set Verdict": [{ json: qc }] }), undefined)[0].json;
+};
+// The live gate held every real row at the presenter check, a clean one included.
+assert.equal(realDoctor(GATE_OLD, { history: line(84, "PASS") }).doctorGate, "HOLD");
+assert.equal(realDoctor(GATE_OLD, { history: line(84, "PASS") }).doctorGateReason, "Presenter script unchecked");
+// The new gate reads the real keys and clears a clean row to human review.
+let real = realDoctor(GATE_NEW, { history: line(84, "PASS") });
+assert.equal(real.doctorGate, "READY_FOR_HUMAN_REVIEW", JSON.stringify(real));
+assert.equal(real.qc_verdict, "SHIP");
+assert.equal(real.qc_score, 91);
+// A later QC line appended under the doctor line does not hide it.
+assert.equal(realDoctor(GATE_NEW, { history: line(84, "PASS") + "\n2026-10-17T11:00:00Z | 91/100 SHIP | batch 8.0/10" }).doctorGate, "READY_FOR_HUMAN_REVIEW");
+// And on the real shapes everything else still stops it.
+for (const [input, state, why] of [
+  [{}, "HOLD", "no score history"],
+  [{ history: line(84, "FAIL") }, "HOLD", "a failing doctor verdict"],
+  [{ history: line(69, "PASS") }, "REVISE", "a doctor score under the floor"],
+  [{ history: line(84, "PASS"), total: 75 }, "REVISE", "a QC total under the ship line"],
+  [{ history: line(84, "PASS"), blockers: ["claim unsourced"] }, "REVISE", "a QC hard blocker"],
+]) assert.equal(realDoctor(GATE_NEW, input).doctorGate, state, why);
 
 console.log("Compliance fixes: OS 28 holds what the law says, Fill puts the line first, the Doctor Gate can clear");
