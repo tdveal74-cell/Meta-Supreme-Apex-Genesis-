@@ -149,14 +149,16 @@ TOKEN_SHAPES = [
     (re.compile(r"(\s-u\s+[^\s:]+:)(\S{3,})"), 2),
     # NAME=value where the name ends in a secret word, including SMTP_PASS and
     # STRIPE_SECRET, which a leading word boundary would miss. A match starts
-    # only where a name starts, and the spaces around the separator are capped
-    # at 16, so a long name followed by a long run of spaces costs linear time.
-    # Uncapped, one padded 2.5 KB command took 25 s here and outran the hook's
-    # 15 s timeout before its deny was printed (found 2026-10-17). Neither change
-    # alters what is redacted: a match always began at the start of the name.
+    # only where a name starts, and the whitespace on each side of the separator
+    # is capped at 64 characters, so a long name followed by a long run of spaces
+    # costs linear time. Uncapped, one padded 2.5 KB command took 25 s here and
+    # outran the hook's 15 s timeout before its deny was printed (found
+    # 2026-10-17). The cap is the one thing this changes in what is redacted: a
+    # value more than 64 whitespace characters from its name is no longer caught.
+    # A first cap of 16 missed values an independent verifier placed 17 away.
     (re.compile(
         r"(?i)(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]*(?:authorization|bearer|api[_-]?key|secret[_-]?access[_-]?key|"
-        r"key|token|secret|passwd|password|pass)['\"]?\s{0,16}[:= ]\s{0,16}['\"]?)([^\s'\",}&]{8,})"
+        r"key|token|secret|passwd|password|pass)['\"]?\s{0,64}[:= ]\s{0,64}['\"]?)([^\s'\",}&]{8,})"
     ), 2),
     # a long mixed case token with no hyphen or slash, which a branch name or a
     # path never is

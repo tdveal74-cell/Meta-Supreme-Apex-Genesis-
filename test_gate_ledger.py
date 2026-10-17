@@ -928,7 +928,8 @@ def test_a_padded_gated_command_is_denied_quickly(tmp_path):
 @pytest.mark.parametrize("text", [
     "x " + "b" * 300 + "secret" + " " * 1500,
     "a" * 250 + "key" + " " * 1247,
-    "c" * 1000 + "token" + "\n" * 7000,
+    "c" * 400 + "token" + " " * 2000,
+    ("key" + " " * 129 + "x") * 18,
 ])
 def test_the_scrub_is_fast_on_long_names_and_long_spaces(text):
     import time
@@ -941,6 +942,10 @@ def test_the_scrub_is_fast_on_long_names_and_long_spaces(text):
     ("export SMTP_PASS='abcdefgh1'", "abcdefgh1"),
     ("STRIPE_SECRET=sk_live_abcdefghijkl", "sk_live_abcdefghijkl"),
     ("password:\n  hunter2hunter2", "hunter2hunter2"),
+    ("password:" + " " * 17 + "hunter2hunter2", "hunter2hunter2"),
+    ("password" + " " * 34 + "hunter2hunter2", "hunter2hunter2"),
+    ("password:" + "\n" * 17 + "hunter2hunter2", "hunter2hunter2"),
+    ("export X_TOKEN=" + " " * 64 + "hunter2hunter2", "hunter2hunter2"),
     ('{"api_key": "abcdefgh12345678"}', "abcdefgh12345678"),
     ("curl -H 'Authorization: Bearer abcdefgh12345678'", "abcdefgh12345678"),
     ("x-devon-key:            abcdefgh12345678", "abcdefgh12345678"),
