@@ -37,6 +37,7 @@ the Build 12 banded conflict policy; PR 45 finished the ops polish.
 | Browser allowlisted fetch + approved navigate | CI-proven (live fetch opt-in). Not operator-live. |
 | Skill proposals + human promote | CI-proven, deduped by goal slug. Not operator-live. |
 | Soul conflict-search (Build 12 banded policy) | CI-proven. Not operator-live. |
+| Graphify code graph (read-only Second Brain bridge) | Proposed on 2026-10-17 branch; CI and live auth unverified. Credential absent means tool refuses. |
 
 Honest label: schema and CI green are not the same as a person running Hermes as the live operator. This stack is CI-proven / not operator-live.
 
@@ -63,7 +64,7 @@ on its own, because the test reads this block and checks it against the code,
 so a surface change has to move this document too:
 
 ```hermes-surface-counts
-tools 21
+tools 22
 routes 24
 columns 126
 states 9
