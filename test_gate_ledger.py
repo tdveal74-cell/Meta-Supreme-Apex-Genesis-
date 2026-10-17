@@ -806,6 +806,31 @@ def test_runpod_reads_pass_without_a_signal(server, verb):
     assert gate.classify(tool, {}) == (None, False), tool
 
 
+# Graphify, ruled by Tee 2026-10-17. Its real tool names are unread because the
+# server answers 401 until someone signs in, so these verbs are stand-ins that
+# pin the rule, not the catalogue: a write-shaped name is gated, a read is not.
+GRAPHIFY_SERVERS = ("graphify", "claude_ai_Graphify")
+
+
+@pytest.mark.parametrize("server", GRAPHIFY_SERVERS)
+@pytest.mark.parametrize("verb", [
+    "reindex_repository", "delete_index", "update_graph", "create_project",
+])
+def test_graphify_writes_are_gated(server, verb):
+    tool = f"mcp__{server}__{verb}"
+    cls, gated = gate.classify(tool, {})
+    assert cls and gated, tool
+
+
+@pytest.mark.parametrize("server", GRAPHIFY_SERVERS)
+@pytest.mark.parametrize("verb", [
+    "search_symbols", "find_callers", "get_dependencies", "list_tests",
+])
+def test_graphify_reads_pass_without_a_signal(server, verb):
+    tool = f"mcp__{server}__{verb}"
+    assert gate.classify(tool, {}) == (None, False), tool
+
+
 def test_one_huge_token_does_not_blow_the_hook_timeout():
     import time
     start = time.time()

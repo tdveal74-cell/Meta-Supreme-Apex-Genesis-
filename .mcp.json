@@ -3,6 +3,10 @@
     "blotato-help": {
       "type": "http",
       "url": "https://help.blotato.com/~gitbook/mcp"
+    },
+    "graphify": {
+      "type": "http",
+      "url": "https://api.graphify.com/mcp"
     }
   }
 }
