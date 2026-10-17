@@ -61,6 +61,10 @@ jobs:
         run: node n8n/tqo-v5/sources_gate.test.mjs
       - name: The length check after the doctor adds words and nothing else
         run: node n8n/tqo-v5/length_after_doctor.test.mjs
+      # Ruled by Tee 2026-10-17: the disclosure and title laws OS 28 never ran,
+      # and the Doctor Gate that held every row. Pinned to the live export.
+      - name: OS 28 enforces the disclosure and title laws, and the Doctor Gate can clear
+        run: node n8n/tqo-v5/compliance/compliance.test.mjs
       # The carousel rules, ruled by Tee 2026-10-07. No browser here: the drawing
       # runs in carousel-render.yml.
       - name: The carousel rules behave

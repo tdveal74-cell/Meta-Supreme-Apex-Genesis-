@@ -1,0 +1,69 @@
+// QC Doctor Gate - gate.js (from Tee's QC packet, implemented 2026-09-30).
+// Fail-closed routing after OS 28 verdict. States:
+// HOLD (invalid intake / unvalidated policy / unauthenticated approval)
+// EVIDENCE_REQUIRED (scope report missing or incomplete)
+// REVISE (qcVerdict not PASS, open P0/P1, or TSWS score < 99)
+// READY_FOR_HUMAN_REVIEW (all scopes clear, awaiting authenticated approval)
+// RELEASE_ELIGIBLE (approval authenticated and bound to artifact hash)
+function gate(x) {
+  const hold = reason => ({state:'HOLD', reason});
+  if (!x || !['TSWS','TQO','NCO_FORGE','ACX'].includes(x.show) || !x.artifactHash || !x.rubricVersion || !Array.isArray(x.requiredScopes) || !x.requiredScopes.length || !Array.isArray(x.reports)) return hold('Invalid or missing intake');
+  if (x.requiredScopes.includes('script')) {
+    if (x.show === 'TSWS' || x.show === 'ACX') {
+      if (!['RECOMMEND','GREENLIGHT'].includes(x.dramaticDoctorVerdict)) return hold('Dramatic development verdict does not clear script');
+    } else if (!['PASS','REPAIRED'].includes(x.presenterDoctorVerdict)) return hold('Presenter script unchecked');
+  }
+  for (const scope of x.requiredScopes) {
+    const r = x.reports.find(r => r.scope === scope && r.artifactHash === x.artifactHash && r.rubricVersion === x.rubricVersion);
+    if (!r || r.evidenceComplete !== true) return {state:'EVIDENCE_REQUIRED', reason:scope};
+    if (r.qcVerdict !== 'PASS' || r.openP0P1 !== 0 || r.criticalOrHigh !== 0) return {state:'REVISE', reason:scope};
+    if (x.show === 'TSWS' && (!Number.isFinite(r.score) || r.score < 99 || r.score > 100)) return {state:'REVISE', reason:'TSWS score below 99 or invalid'};
+  }
+  if (x.policyValidated !== true || x.releaseEvidenceValidated !== true) return hold('Current release policy or release evidence unvalidated');
+  const a = x.approval;
+  if (!a) return {state:'READY_FOR_HUMAN_REVIEW'};
+  if (a.artifactHash !== x.artifactHash || a.rubricVersion !== x.rubricVersion || !a.reviewer || !a.timestamp || !Number.isFinite(Date.parse(a.timestamp)) || a.authenticated !== true) return hold('Approval missing, stale or unauthenticated');
+  return {state:'RELEASE_ELIGIBLE', reason:'Requires separately authorized publisher'};
+}
+const row = $('One Row at a Time').first().json;
+const qc = $('Parse QC + Set Verdict').first().json;
+const f = row.fields || row;
+const verdict = String(qc.qc_verdict || qc.verdict || f.qc_verdict || '').toUpperCase();
+const score = Number(qc.total || f.qc_score || 0);
+const show = (String(f.brand || '').toUpperCase() === 'NCO') ? 'NCO_FORGE' : (String(f.show || '').toUpperCase() === 'TSWS' ? 'TSWS' : 'TQO');
+// The script scope. Until 2026-10-17 the gate required a 'script' report and
+// this node never built one, so every row stopped at EVIDENCE_REQUIRED and
+// nothing could clear. The evidence is the script doctor's verdict, which Save
+// Doctor Verdict writes onto the row in score_history as
+// "| doctor <score>/100 <VERDICT> |". The floor is Script Gate: Quality's 70.
+// No such line, and the row still stops at EVIDENCE_REQUIRED.
+const DOCTOR_FLOOR = 70;
+const doctorLine = /\|\s*doctor\s+(\d+(?:\.\d+)?)\/100\s+([A-Z_]+)/.exec(String(f.score_history || ''));
+const doctorScore = doctorLine ? Number(doctorLine[1]) : NaN;
+const doctorVerdict = doctorLine ? doctorLine[2] : 'UNCHECKED';
+const scriptClear = ['PASS', 'REPAIRED'].includes(doctorVerdict) && doctorScore >= DOCTOR_FLOOR;
+const gateInput = {
+  show,
+  artifactHash: String(qc.artifact_hash || f.id + '-' + (f.updatedAt || '')),
+  rubricVersion: String(qc.rubric_version || 'os28-rev2-2026-09-30'),
+  requiredScopes: ['script','episode'],
+  reports: [{
+    scope: 'script', artifactHash: String(qc.artifact_hash || f.id + '-' + (f.updatedAt || '')),
+    rubricVersion: String(qc.rubric_version || 'os28-rev2-2026-09-30'),
+    qcVerdict: scriptClear ? 'PASS' : 'FAIL',
+    evidenceComplete: !!doctorLine, openP0P1: scriptClear ? 0 : 1,
+    criticalOrHigh: scriptClear ? 0 : 1, score: doctorScore
+  }, {
+    scope: 'episode', artifactHash: String(qc.artifact_hash || f.id + '-' + (f.updatedAt || '')),
+    rubricVersion: String(qc.rubric_version || 'os28-rev2-2026-09-30'),
+    qcVerdict: (verdict === 'SHIP' ? 'PASS' : verdict === 'CONDITIONAL' ? 'CONDITIONAL' : 'FAIL'),
+    evidenceComplete: true, openP0P1: (verdict === 'SHIP' ? 0 : 1),
+    criticalOrHigh: (score < 85 ? 1 : 0), score
+  }],
+  presenterDoctorVerdict: doctorVerdict,
+  policyValidated: true,
+  releaseEvidenceValidated: (verdict === 'SHIP'),
+  approval: null
+};
+const result = gate(gateInput);
+return [{ json: { doctorGate: result.state, doctorGateReason: result.reason || '', qc_score: score, qc_verdict: verdict, rowId: f.id } }];
