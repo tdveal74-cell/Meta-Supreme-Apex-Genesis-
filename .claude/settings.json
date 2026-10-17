@@ -67,7 +67,8 @@
     ]
   },
   "enabledMcpjsonServers": [
-    "blotato-help"
+    "blotato-help",
+    "graphify"
   ],
   "permissions": {
     "allow": [
