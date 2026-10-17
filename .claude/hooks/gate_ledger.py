@@ -272,6 +272,16 @@ RESERVED = {"then", "do", "else", "elif", "if", "while", "until", "!", "{", "}",
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 REDIRECT_BARE = re.compile(r"^(\d*>{1,2}|\d*<|&>{1,2})$")
 REDIRECT_ATTACHED = re.compile(r"^(\d*>{1,2}|\d*<|&>{1,2})\S")
+
+
+def _short_flags_with(token, letters):
+    """True for a bundled short flag, a dash and then ASCII letters only, that
+    carries any of `letters`: -c, -lc, -rf, -fR. It means exactly what the
+    fullmatch -[a-zA-Z]*x[a-zA-Z]* meant, without the backtracking that made one
+    long flag token quadratic: an 80 KB "-rrr...r1" took 15 s, the hook's whole
+    timeout (found 2026-10-17 by an independent verifier)."""
+    body = token[1:]
+    return token[:1] == "-" and body.isascii() and body.isalpha() and any(c in body for c in letters)
 # wrapper -> flags that consume a value
 WRAPPER_VALUE_FLAGS = {
     "sudo": {"-u", "-g", "-h", "-p", "-C", "-D", "-R", "-T"},
@@ -345,7 +355,7 @@ def _expand(statement, depth=0):
     prog = os.path.basename(argv[0])
     if depth < 4 and prog in SHELLS:
         for i, a in enumerate(argv[1:], 1):
-            if re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", a) and i + 1 < len(argv):
+            if _short_flags_with(a, "c") and i + 1 < len(argv):
                 for s in _statements(argv[i + 1]):
                     yield from _expand(s, depth + 1)
                 return
@@ -412,7 +422,7 @@ def _git_push(argv, cwd):
             continue
         if a in PUSH_ARG_FLAGS:
             skip = True
-        elif a == "--force" or re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", a):
+        elif a == "--force" or _short_flags_with(a, "f"):
             force = True
         elif a.startswith("--force-with-lease") or a == "--force-if-includes":
             lease = True
@@ -662,7 +672,7 @@ def classify(tool_name, tool_input, cwd=""):
                 elif prog == "git" and "branch" in argv and ("-d" in argv or "-D" in argv):
                     classes.append("git_branch_delete")
                 elif prog == "rm" and any(
-                    a == "--recursive" or re.fullmatch(r"-[a-zA-Z]*[rR][a-zA-Z]*", a) for a in argv[1:]
+                    a == "--recursive" or _short_flags_with(a, "rR") for a in argv[1:]
                 ):
                     classes.append("rm_recursive")
         if not classes:

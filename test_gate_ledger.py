@@ -18,6 +18,7 @@ import io
 import json
 import pathlib
 import re
+import string
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
@@ -923,6 +924,73 @@ def test_a_padded_gated_command_is_denied_quickly(tmp_path):
     out = gate.run("pre", payload(tmp_path, [], tool="Bash", tool_input={"command": PADDED}), now=NOW)
     assert time.monotonic() - started < 1.0
     assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+# One long bundled flag token. The rm -r, git push -f and bash -c checks used
+# -[a-zA-Z]*x[a-zA-Z]* fullmatches, which backtracked quadratically on it: 3.5
+# to 3.9 s at 40 KB each, and 13.4 s for fifteen 19 KB tokens, before 2026-10-17.
+@pytest.mark.parametrize("command", [
+    "rm -" + "r" * 40000 + "1 x; gh workflow run deploy.yml",
+    "git push -" + "f" * 40000 + "1 origin; gh workflow run deploy.yml",
+    "bash -" + "c" * 40000 + "1 x; gh workflow run deploy.yml",
+    "; ".join("rm -" + "r" * 19000 + "1 x" for _ in range(15)) + "; gh workflow run deploy.yml",
+])
+def test_a_long_flag_token_is_denied_quickly(tmp_path, command):
+    import time
+    started = time.monotonic()
+    out = gate.run("pre", payload(tmp_path, [], tool="Bash", tool_input={"command": command}), now=NOW)
+    assert time.monotonic() - started < 1.0
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+@pytest.mark.parametrize("token,letters,expected", [
+    ("-c", "c", True), ("-lc", "c", True), ("-C", "c", False), ("--c", "c", False), ("-c1", "c", False),
+    ("-rf", "rR", True), ("-fR", "rR", True), ("-R", "rR", True), ("-x", "rR", False), ("-", "rR", False),
+    ("xr", "rR", False), ("xf", "f", False), ("xc", "c", False),
+    ("", "rR", False), ("-f", "f", True), ("--force", "f", False), ("-K", "f", False), ("-ré", "rR", False),
+])
+def test_short_flags_with_means_what_the_old_pattern_meant(token, letters, expected):
+    old = {"c": r"-[a-zA-Z]*c[a-zA-Z]*", "f": r"-[a-zA-Z]*f[a-zA-Z]*", "rR": r"-[a-zA-Z]*[rR][a-zA-Z]*"}[letters]
+    assert gate._short_flags_with(token, letters) is expected
+    assert bool(re.fullmatch(old, token)) is expected
+
+
+# Each call site passes its own letters, so the helper's own test cannot pin
+# them. These go through classify instead: the cases below catch a dropped dash
+# or a missing clause, and the sweep after them catches a letter added, lost or
+# swapped at any of the three sites.
+@pytest.mark.parametrize("command,expected", [
+    ("rm -R build", ("rm_recursive", False)),
+    ("rm -r build", ("rm_recursive", False)),
+    ("rm --recursive build", ("rm_recursive", False)),
+    ("rm -x build", (None, False)),
+    ("rm origin", (None, False)),
+    ("git push -f origin x", ("git_force_push:plain", True)),
+    ("git push origin xf", ("git_push", False)),
+    ("bash -lc 'gh workflow run d.yml'", ("gh_workflow_run", True)),
+    ("bash xc 'gh workflow run d.yml'", (None, False)),
+    ("bash -c", (None, False)),
+    ("bash -lc", (None, False)),
+])
+def test_each_flag_site_reads_its_own_letters(command, expected):
+    assert gate.classify("Bash", {"command": command}) == expected
+
+
+@pytest.mark.parametrize("template,hits,hit,miss", [
+    ("bash -{} 'gh workflow run d.yml'", "c", ("gh_workflow_run", True), (None, False)),
+    ("rm -{} build", "rR", ("rm_recursive", False), (None, False)),
+    ("git push -{} origin x", "f", ("git_force_push:plain", True), ("git_push", False)),
+])
+def test_every_single_letter_flag_at_each_site(template, hits, hit, miss):
+    for letter in string.ascii_letters:
+        command = template.format(letter)
+        if letter in hits:
+            expected = hit
+        elif template.startswith("git push") and letter == "d":
+            expected = ("git_force_push:delete", True)
+        else:
+            expected = miss
+        assert gate.classify("Bash", {"command": command}) == expected, command
 
 
 # A long run of reserved words or assignments before a gated call. _unwrap used
