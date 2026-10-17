@@ -18,6 +18,7 @@ import io
 import json
 import pathlib
 import re
+import string
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
@@ -955,19 +956,41 @@ def test_short_flags_with_means_what_the_old_pattern_meant(token, letters, expec
 
 
 # Each call site passes its own letters, so the helper's own test cannot pin
-# them. These go through classify, where a wrong letter or a dropped dash shows.
+# them. These go through classify instead: the cases below catch a dropped dash
+# or a missing clause, and the sweep after them catches a letter added, lost or
+# swapped at any of the three sites.
 @pytest.mark.parametrize("command,expected", [
     ("rm -R build", ("rm_recursive", False)),
     ("rm -r build", ("rm_recursive", False)),
+    ("rm --recursive build", ("rm_recursive", False)),
     ("rm -x build", (None, False)),
     ("rm origin", (None, False)),
     ("git push -f origin x", ("git_force_push:plain", True)),
     ("git push origin xf", ("git_push", False)),
     ("bash -lc 'gh workflow run d.yml'", ("gh_workflow_run", True)),
     ("bash xc 'gh workflow run d.yml'", (None, False)),
+    ("bash -c", (None, False)),
+    ("bash -lc", (None, False)),
 ])
 def test_each_flag_site_reads_its_own_letters(command, expected):
     assert gate.classify("Bash", {"command": command}) == expected
+
+
+@pytest.mark.parametrize("template,hits,hit,miss", [
+    ("bash -{} 'gh workflow run d.yml'", "c", ("gh_workflow_run", True), (None, False)),
+    ("rm -{} build", "rR", ("rm_recursive", False), (None, False)),
+    ("git push -{} origin x", "f", ("git_force_push:plain", True), ("git_push", False)),
+])
+def test_every_single_letter_flag_at_each_site(template, hits, hit, miss):
+    for letter in string.ascii_letters:
+        command = template.format(letter)
+        if letter in hits:
+            expected = hit
+        elif template.startswith("git push") and letter == "d":
+            expected = ("git_force_push:delete", True)
+        else:
+            expected = miss
+        assert gate.classify("Bash", {"command": command}) == expected, command
 
 
 # A long run of reserved words or assignments before a gated call. _unwrap used
