@@ -925,6 +925,18 @@ def test_a_padded_gated_command_is_denied_quickly(tmp_path):
     assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+# A long run of reserved words or assignments before a gated call. _unwrap used
+# to drop them one copy of the list at a time, so these took 10 to 19 s each on
+# the hook before 2026-10-17, against its 15 s timeout.
+@pytest.mark.parametrize("pad", ["{ " * 150000, "do " * 100000, "! " * 150000, "A=1 " * 75000])
+def test_a_long_run_of_reserved_words_is_denied_quickly(tmp_path, pad):
+    import time
+    started = time.monotonic()
+    out = gate.run("pre", payload(tmp_path, [], tool="Bash", tool_input={"command": pad + "gh workflow run deploy.yml"}), now=NOW)
+    assert time.monotonic() - started < 1.5
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 @pytest.mark.parametrize("text", [
     "x " + "b" * 300 + "secret" + " " * 1500,
     "a" * 250 + "key" + " " * 1247,
