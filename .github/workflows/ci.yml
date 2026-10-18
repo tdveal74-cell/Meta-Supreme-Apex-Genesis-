@@ -102,6 +102,7 @@ jobs:
       - name: Offline suite (no database, no keys)
         run: |
           python -m pytest -q --tb=short \
+            test_agent_evaluation.py \
             test_billing.py \
             test_definition.py \
             test_providers.py \
