@@ -10,7 +10,7 @@ from typing import Any, Callable, Dict
 
 from services.agent_runtime.contracts import ToolRisk
 from services.agent_runtime.tools import ToolRegistry, ToolResult, ToolSpec
-from services.graphify.client import GraphifyMCPClient, GraphifyUnavailable, REPOSITORY
+from services.graphify.client import REPOSITORY, GraphifyMCPClient, GraphifyUnavailable
 
 
 class GraphifyCapabilityAdapter:

@@ -53,8 +53,8 @@ from services.browser.agent_adapter import BrowserCapabilityAdapter
 from services.browser.http_fetcher import maybe_live_fetcher
 from services.editforge.agent_adapter import EditForgeCapabilityAdapter
 from services.github.agent_adapter import GitHubCapabilityAdapter
-from services.graphify.agent_adapter import GraphifyCapabilityAdapter
 from services.github.client import GitHubRESTClient
+from services.graphify.agent_adapter import GraphifyCapabilityAdapter
 from services.intelligence.council_adapter import CouncilCapabilityAdapter
 from services.operator.agent_adapter import OperatorCapabilityAdapter
 from services.vision.agent_adapter import VisionAdapter

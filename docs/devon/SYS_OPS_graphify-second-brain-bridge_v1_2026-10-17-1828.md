@@ -8,7 +8,7 @@ status: draft-not-deployed
 repo: tdveal74-cell/Meta-Supreme-Apex-Genesis-
 ---
 
-# DEVON Graphify Second Brain — Read-Only Bridge
+# DEVON Graphify Second Brain Read-Only Bridge
 
 ## Scope and evidence
 
@@ -26,7 +26,8 @@ Graphify's external evidence enters a tool observation as a JSON object
 labelled `untrusted_external_code_evidence`. It is scoped to
 `tdveal74-cell/Meta-Supreme-Apex-Genesis-` in the code. Only the remote MCP
 method `query_graph` is reachable. The remote `remember`, workspace selection
-and all mutations are deliberately unavailable. This scope is not a blanket
+and explicit write tools are deliberately unavailable. The query itself requires
+remote no-capture assurances, as explained in the review correction below. This scope is not a blanket
 claim that arbitrary retrieved source instructions cannot confuse a model.
 
 ## Authentication and deployment
@@ -68,3 +69,26 @@ tokens in the goal, tool arguments, tasks, logs, status documents, or PR.
 
 No tests are claimed to have run on the real DEVON deployment, and no
 production service or memory store has been modified in this draft.
+
+## Review correction on 2026-10-18
+
+Renamed with 1828 from the original PR creation timestamp (2026-10-17T18:28:11Z).
+The original exact document writing minute was not recorded; 1828 is the earliest
+verified publication time, not a claim about when the author typed it.
+
+The remote query is conditional: Graphify documents that trail capture can
+persist query intent. The corrected client discovers tools in the same session
+and refuses unless query_graph explicitly advertises readOnlyHint=true. This
+advisory declaration alone is not a security boundary. Before any live read,
+verify capture is disabled and the service grant cannot write memory.
+
+## DEVON RECEIPT
+AREA: Systems
+TYPE: draft-implementation
+ARTIFACT: PR #372 Graphify runtime bridge
+DATE: 2026-10-17
+DECISIONS: No merge, deployment, enablement or credential reuse authorized by this record.
+FINDINGS: Original implementation requires protocol and side-effect validation.
+OPEN: Service-owned OAuth renewal, capture-disabled assurance, independent review and DEVON readback.
+STATUS: draft-not-deployed
+TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
