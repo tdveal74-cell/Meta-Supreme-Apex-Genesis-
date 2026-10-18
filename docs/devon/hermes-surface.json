@@ -28,6 +28,7 @@
     "github.read_file | risk=read | reversible=True | blast=read-only GitHub contents request in one allowlisted repository",
     "github.repo_status | risk=read | reversible=True | blast=read-only GitHub API request in one allowlisted repository",
     "github.write_file | risk=high_impact | reversible=False | blast=one commit affecting one file in one allowlisted repository",
+    "graphify.query_graph | risk=read | reversible=True | blast=one read-only Graphify query against the pinned Meta Supreme repository",
     "operator.command | risk=high_impact | reversible=False | blast=local operator host and resources reachable by the API process user",
     "operator.read | risk=read | reversible=True | blast=read-only process on the configured operator host",
     "runtime.propose_skill | risk=write | reversible=True | blast=one SkillProposal row awaiting human decision",
