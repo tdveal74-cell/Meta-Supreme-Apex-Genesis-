@@ -65,6 +65,8 @@ jobs:
       # Holds at 89, requires the final text hash, and never alters TSWS or NCO.
       - name: TQO Slop Curator holds on stale evidence and scores under 90
         run: node --test n8n/tqo-v5/slop-curator/tqo_curator_gate.test.mjs
+      - name: TQO 90-point V5 candidate preserves NCO and pinned export
+        run: node --test n8n/tqo-v5/slop-curator/tqo90_workflow_candidate.test.mjs
       # The Jev image lanes, ruled by Tee 2026-10-16, ship in shadow and are not
       # wired yet. Each harness drives the real node bodies against stubs and
       # against the unmodified export code; none of them calls TypeSafe, so a
