@@ -23,6 +23,15 @@ export function buildTqo90Candidate(pinnedExport, complianceQcCode) {
     scriptAnchor,
     "const DOCTOR_FLOOR = $('Show Context: Script').first().json.show === 'NCO' ? 70 : 90; // TQO only, 2026-10-19"
   );
+  // Explicit fail-closed staging boundary. A score of 90 is not equivalent to
+  // a trusted signed handoff; until an authenticated adapter is wired, no TQO
+  // script may advance even if the old Script Doctor score was high enough.
+  const pendingAnchor = "const failures = [];";
+  if (nextScriptCode.split(pendingAnchor).length !== 2) throw new Error("Script Gate failures anchor drifted");
+  const stageScriptCode = nextScriptCode.replace(
+    pendingAnchor,
+    pendingAnchor + "\\nif ($('Show Context: Script').first().json.show !== 'NCO') failures.push('TQO signed final-text review adapter not yet wired');"
+  );
   const qcAnchor = "const DOCTOR_FLOOR = 70;";
   if (complianceQcCode.split(qcAnchor).length !== 2) throw new Error("QC Doctor floor anchor drifted");
   const nextQcCode = complianceQcCode.replace(
@@ -30,8 +39,14 @@ export function buildTqo90Candidate(pinnedExport, complianceQcCode) {
     "const DOCTOR_FLOOR = show === 'TQO' ? 90 : 70; // preserve NCO floor, 2026-10-19"
   );
 
+  const qcResultAnchor = "const result = gate(gateInput);";
+  if (nextQcCode.split(qcResultAnchor).length !== 2) throw new Error("QC Gate final result anchor drifted");
+  const stageQcCode = nextQcCode.replace(
+    qcResultAnchor,
+    qcResultAnchor + "\\nif (show === 'TQO' && result.state === 'READY_FOR_HUMAN_REVIEW') return [{ json: { doctorGate: 'HOLD', doctorGateReason: 'TQO signed final-text review adapter not yet wired', qc_score: score, qc_verdict: verdict, rowId: f.id } }];"
+  );
   const candidate = structuredClone(pinnedExport);
-  candidate.nodes.find(n => n.name === "Script Gate: Quality").parameters.jsCode = nextScriptCode;
-  candidate.nodes.find(n => n.name === "QC Doctor Gate").parameters.jsCode = nextQcCode;
-  return { candidate, scriptCode: nextScriptCode, qcCode: nextQcCode };
+  candidate.nodes.find(n => n.name === "Script Gate: Quality").parameters.jsCode = stageScriptCode;
+  candidate.nodes.find(n => n.name === "QC Doctor Gate").parameters.jsCode = stageQcCode;
+  return { candidate, scriptCode: stageScriptCode, qcCode: stageQcCode };
 }
