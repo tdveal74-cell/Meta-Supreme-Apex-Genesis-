@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 // Staging-only, deterministic reviewer for The Quiet Operator.
 // This is not an n8n deployment or a substitute for Sources Gate, QC or human approval.
 export const TQO_SLOP_POLICY = Object.freeze({ version: "tqo-slop-v1", minScore: 90 });
@@ -37,7 +38,17 @@ export function assessTqoDraft(input) {
   }
   const script = String(input.script || "");
   if (!script.trim()) failures.push("final script missing");
-  if (!SHA256.test(String(input.draftSha256 || ""))) failures.push("trusted final-draft SHA-256 missing or invalid");
+  const suppliedHash = String(input.draftSha256 || "");
+  if (!SHA256.test(suppliedHash)) {
+    failures.push("trusted final-draft SHA-256 missing or invalid");
+  } else {
+    // Recompute against the exact final text, including whitespace. A valid-looking
+    // hash supplied by a model or a stale upstream node is not trusted on its own.
+    const computedHash = createHash("sha256").update(script, "utf8").digest("hex");
+    if (computedHash !== suppliedHash.toLowerCase()) {
+      failures.push("trusted final-draft SHA-256 does not match script text");
+    }
+  }
   const lint = lintTqoText(script);
   failures.push(...lint.hardFailures);
 
