@@ -1,9 +1,10 @@
 import test from "node:test";
+import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { assessTqoDraft, lintTqoText, TQO_SLOP_POLICY } from "./tqo_curator_gate.mjs";
 
-const SHA = "a".repeat(64);
 const SCRIPT = "I tested the output, checked the sources, and recorded what the model left out. The next step is to test those gaps.";
+const SHA = createHash("sha256").update(SCRIPT, "utf8").digest("hex");
 const clean = () => ({
   brand: "TQO",
   draftSha256: SHA,
@@ -28,6 +29,24 @@ test("89 fails at either score and no automatic release is possible", () => {
     const input = clean(); input[field].score = 89;
     assert.equal(assessTqoDraft(input).state, "HOLD", field);
   }
+});
+test("tampered script with unchanged report hashes fails even when scores are 100", () => {
+  const input = clean();
+  input.script = SCRIPT + " One extra word.";
+  input.editorial.score = 100;
+  input.scriptDoctor.score = 100;
+  const result = assessTqoDraft(input);
+  assert.equal(result.state, "HOLD");
+  assert.ok(result.failures.includes("trusted final-draft SHA-256 does not match script text"));
+});
+test("valid-looking invented or stale SHA-256 fails", () => {
+  const input = clean();
+  const fakeHash = "a".repeat(64);
+  input.draftSha256 = fakeHash;
+  input.editorial.draftSha256 = fakeHash;
+  input.scriptDoctor.draftSha256 = fakeHash;
+  input.evidenceReceipt.draftSha256 = fakeHash;
+  assert.equal(assessTqoDraft(input).state, "HOLD");
 });
 test("unscored, out-of-range and string scores cannot pass", () => {
   for (const value of ["99", NaN, 101, -1, undefined]) {
