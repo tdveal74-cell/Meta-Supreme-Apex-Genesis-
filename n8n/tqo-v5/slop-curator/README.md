@@ -1,6 +1,6 @@
 # TQO Slop Curator preflight (staged, not deployed)
 
-**Ruling, 2026-10-19:** The Quiet Operator acceptance threshold is **90/100**, replacing the earlier 99/100 ambition for TQO scripts. This ruling does **not** change The Shadow We Share's separate, locked 99/100 gate or NCO Forge's existing thresholds.
+**Superseding ruling, 2026-10-19:** Tee requires **90/100 acceptance across the entire ecosystem**, including TQO, NCO Forge, TSWS, ACX, EditForge, WhatBroke and DEVON. Previous 99/100 TSWS and 70/80/99 numerical acceptance floors are superseded for new quality assessments. See `docs/devon/SYS_POLICY_ecosystem-quality-90_2026-10-19.md`. Canon, provenance, hard blockers and authenticated approval are unchanged.
 
 ## Objective
 
@@ -8,15 +8,15 @@ Review The Quiet Operator's script for generic AI-writing patterns *without* del
 
 The installed Slop Curator Skill route for this request is:
 `slop-audit -> voice-preserving-edit -> slop-pattern-repair -> strict-human-output (TQO rules only) -> slop-quality-gate`.
-Default Slop Curator quality guidance is not the controlling number: TQO has explicitly requested 90.
+Default Slop Curator quality guidance is not the controlling number: the ecosystem-wide acceptance floor is 90.
 
 ## Current repository mismatch
 
-The Oct 19 read of `n8n/tqo-v5/exports/qEkGOUsNyVaRAmm6_active.json` found `Script Gate: Quality` with `DOCTOR_FLOOR = 70`. The existing patched `n8n/tqo-v5/compliance/qc_doctor_gate.js` also has `DOCTOR_FLOOR = 70`. **Both** must use TQO-specific 90 when actually wired. Do not change the NCO floor inadvertently and do not touch TSWS's 99 gate.
+The Oct 19 pinned V5 export contained **70** in Script Gate, **80** in Parse QC, and TSWS-specific **99** in the historical QC gate. The staged candidate sets **90** in all three quality checks for all brands and uses the updated compliance QC mirror. Its signed-review hold remains active until independently verified evidence is wired.
 
 Important: `Script: Short After Doctor?` can trigger `Expand After Doctor`, producing a final script that differs from the text the Doctor scored. A final-script 90/100 receipt must be tied to the actual output of `Script: Final Text`. Rerun the Doctor when expansion changes the text; never bind an earlier score to new wording.
 
-Existing mirror/export consistency is covered by `n8n/tqo-v5/compliance/compliance.test.mjs` and `replacements.json`. Patch both mechanisms together, add 89/90 boundary tests, and verify mirror equality before any live workflow deployment. This staging branch intentionally leaves the active export and the pinned compliance mirror unchanged.
+Mirror/export consistency is covered by `n8n/tqo-v5/compliance/compliance.test.mjs` and `replacements.json`. The pinned original export is unchanged; the compliance mirror and corresponding replacement ledger **are updated together** in this staging PR. Verify equality, test 89/90 across brands, and read back live state before any deployment.
 
 ## Testable preflight
 
@@ -47,8 +47,8 @@ The editorial fields are *reported judgments*, not deterministic proof of author
 2. Run Slop Curator audit, minimal edit, and final gate; keep original text and diff
 3. Compute the final SHA-256 in trusted code; ensure all reports are explicitly bound to that hash
 4. Re-score the **final** text with Script Doctor, especially after any length-expansion node
-5. Apply the TQO-only 90 point floor in both script and downstream QC nodes, without weakening the existing Sources Gate, originality gate or human approval
-6. Run held-out tests: 89 fails, 90 passes only when other criteria pass, stale hashes fail, missing sources fail, NCO and TSWS remain unchanged
+5. Apply the universal 90 point floor in Script Doctor, Parse QC and downstream QC nodes, without weakening the existing Sources Gate, originality gate or human approval
+6. Run held-out tests: 89 fails for every brand, 90 meets only the score floor, stale hashes and missing sources fail; NCO and TSWS retain canon and human approval requirements
 7. Compare proposed workflow against the pinned export, deploy only after review, run a no-spend smoke check and read back the active version
 
 **Not yet done:** The Slop Curator Plugin is available to ChatGPT, but this file does not give n8n permission or an API to call it. The automatic evaluator/adapter and actual n8n wiring require their own implemented transport and verified receipt generation. No changes to live n8n, publication, credit spend, human approval, or existing scripts have been made by this staged addition.
@@ -57,11 +57,12 @@ The editorial fields are *reported judgments*, not deterministic proof of author
 
 ### 90-point n8n candidate (NOT ACTIVE)
 
-`tqo90_workflow_candidate.mjs` transforms a clone of the **pinned** 274-node V5 workflow in memory. It intentionally does not mutate the pinned live export, call the n8n API, or modify the active workflow.
+`tqo90_workflow_candidate.mjs` (legacy filename, now `buildUniversal90Candidate`) transforms a clone of the **pinned** 274-node V5 workflow in memory. It intentionally does not mutate the pinned live export, call the n8n API, or modify the active workflow.
 
-- `Script Gate: Quality` reads Show Context: Script; **TQO 90**, NCO **70**.
-- `QC Doctor Gate` is based on the previously tested compliance mirror; **TQO 90**, NCO **70**.
-- The candidate tests execute both actual patched node bodies with synthetic rows: 89 fails the TQO score floor, and even a score of 90 or 100 **stays on HOLD** until the signed review adapter is wired; NCO's existing 69/70 boundary remains unchanged. They verify that only those two node bodies change.
+- `Script Gate: Quality`: **90** for TQO and NCO; both remain **HOLD** pending trusted final-script review.
+- `Parse QC + Set Verdict`: **90** for the episode QC score.
+- `QC Doctor Gate`: **90** for every scored scope, including NCO, TQO, TSWS and ACX. All remain **HOLD** pending signed-review wiring.
+- Candidate tests execute all **three** patched node bodies with synthetic rows. **89 fails**; **90 meets the numerical floor**, but even 100 remains **HOLD** until signed-review verification is wired. The pinned original export is untouched.
 - These checks cover the score boundary and the provisional fail-closed hold **only**. The current QC code reads a text score-history line, not an authenticated final-draft hash. Do not deploy this candidate without the additional signed review intake and a final-text Doctor score. A manually changed Airtable status can bypass today's script gate and must not bypass the downstream receipt requirement.
 
 ### Review handoff (NO PAID MODEL CALL FROM n8n)
@@ -79,7 +80,7 @@ The editorial fields are *reported judgments*, not deterministic proof of author
 2. Install the handoff as an explicit **manual review** task with a durable pending state, not a hidden model-to-model call.
 3. Implement a trusted verifier/signing boundary and a zero-spend intake that checks packet hash, independent evidence, Script Doctor and curator receipts. Bind accepted receipts to the final stored script SHA-256, not row ID or timestamp.
 4. Put that trusted receipt check in BOTH the script lane and the downstream QC lane, before any status promotion. Validate manual status changes cannot evade this check.
-5. Generate a candidate export from the readback version, prove the 89/90 and 69/70 cases, compare original and candidate node IDs/connections/credentials, and run compliance and source-gate suites.
+5. Generate a candidate export from the readback version, prove 89/90 boundaries for all brands, compare original and candidate node IDs/connections/credentials, and run compliance and source-gate suites.
 6. Separately approve any live deployment after the new signed handoff is complete. Run read-only/no-spend test traffic, read back the deployed workflow, and keep a rollback export.
 7. Human approval remains mandatory. This PR does not authorize narration, rendering, thumbnails, distribution, payments or publication.
 
@@ -95,3 +96,5 @@ node n8n/tqo-v5/slop-curator/review_handoff_cli.mjs verify private-review-packet
 ```
 
 The second command **does not pass** unless an authorized signer has already returned a valid attestation and the signing key is securely injected. Never run `verify` from an untrusted workflow that can control the HMAC key, and never treat an unsigned ChatGPT reply as an approved receipt. Do not copy private review packets into public logs or issues.
+
+**Universal applicability:** The TQO Slop Curator reviewer packet and banned-word lint stay TQO-specific. The score is universally 90, but other brands need their own approved voice, canon, source and verifier adapters before live use. Do not apply TQO-specific vocabulary bans to TSWS, NCO or ACX.
