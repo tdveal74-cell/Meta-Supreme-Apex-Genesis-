@@ -151,9 +151,9 @@ if (thumb.thumb_warning) notes.push('thumbnail warning: ' + thumb.thumb_warning)
 
 // -- gate 8: QC verdict. -----------------------------------------------------
 const verdict = str(f['QC Verdict']) || str(qc.qcVerdict);
-gates.qc = verdict === 'SHIP' || verdict === 'WAIVED';
+gates.qc = verdict === 'SHIP' && Number.isFinite(Number(qc.qcScore)) && Number(qc.qcScore) >= 90; // universal quality minimum
 if (!gates.qc) blocking.push(verdict ? 'qc: QC Verdict is "' + verdict + '" (score ' + (qc.qcScore ?? '?') + '/100). See QC Findings' : 'qc: QC Verdict is unset');
-if (verdict === 'WAIVED') notes.push('qc: publishing on WAIVED override. Creative call, on the record');
+if (verdict === 'WAIVED') notes.push('qc: WAIVED cannot bypass the universal 90 quality floor');
 
 // -- gate 9: content identity. -----------------------------------------------
 const identity = [];
