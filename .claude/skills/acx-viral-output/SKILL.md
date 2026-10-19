@@ -14,10 +14,11 @@ line visible.
 Whoever fronts ACX on screen is Tee, his wife, or a character the two of them
 voice under recorded consent. Never a rented or stock persona.
 
-DEVON's Area registry, `services/devon/areas.py`, still defines ACX as the
-Ascension Caudex micro drama IP. This skill covers the direct address awakening
-content Tee sent as the ACX skill on 2026-10-19. How the two fit together, and
-whether the registry line changes, is his ruling and has not been made.
+ACX is one IP with two lanes, ruled by Tee on 2026-10-19: the Ascension Caudex
+micro drama, and the direct address awakening content this skill drafts. Keep
+each lane's canon, characters and assets with the IP. DEVON's Area registry,
+`services/devon/areas.py`, names the micro drama lane and is being updated to
+name both.
 
 ## Niche
 
@@ -66,7 +67,7 @@ Patterns that tend to fail:
 - No health claims. A body sensation is never named as a sign of awakening when it could be a symptom: ringing ears, dizziness, chest pressure, sleep loss, heart racing, numbness. If a draft touches a physical symptom, the line points the viewer to a doctor, and the sign moves to perception or emotion.
 - No mental health substitution. Nothing tells a viewer to read distress, dissociation or panic as activation, and nothing discourages professional care.
 - No fear. Timing language stays a reading. No deadlines, no "before it is too late", no events presented as coming on a date.
-- No conspiracy or political content. "Great Awakening" is also the name of a political conspiracy movement, so ACX scripts do not use that phrase on screen or in titles until Tee rules on it, and never touch elections, governments, vaccines or named public figures.
+- No conspiracy or political content. "Great Awakening" is also the name of a political conspiracy movement, so Tee ruled on 2026-10-19 that the phrase stays out of scripts, on-screen text and titles. Use awakening, consciousness and shift language instead. Never touch elections, governments, vaccines or named public figures.
 - Never invent a frequency, a code, a timeline, a protocol or an outcome.
 
 ## Short format (Short or Reel, 45 to 75 seconds)
