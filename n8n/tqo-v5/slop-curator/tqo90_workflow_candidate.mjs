@@ -21,7 +21,7 @@ export function buildTqo90Candidate(pinnedExport, complianceQcCode) {
   // In this shared workflow Show Context: Script uses NCO for the military lane.
   const nextScriptCode = originalScriptCode.replace(
     scriptAnchor,
-    "const DOCTOR_FLOOR = $('Show Context: Script').first().json.show === 'NCO' ? 70 : 90; // TQO only, 2026-10-19"
+    "const DOCTOR_FLOOR = ['NCO', 'NCO_FORGE'].includes(String($('Show Context: Script').first().json.show || '').toUpperCase()) ? 70 : 90; // TQO only, 2026-10-19"
   );
   // Explicit fail-closed staging boundary. A score of 90 is not equivalent to
   // a trusted signed handoff; until an authenticated adapter is wired, no TQO
@@ -30,11 +30,17 @@ export function buildTqo90Candidate(pinnedExport, complianceQcCode) {
   if (nextScriptCode.split(pendingAnchor).length !== 2) throw new Error("Script Gate failures anchor drifted");
   const stageScriptCode = nextScriptCode.replace(
     pendingAnchor,
-    pendingAnchor + "\nif ($('Show Context: Script').first().json.show !== 'NCO') failures.push('TQO signed final-text review adapter not yet wired');"
+    pendingAnchor + "\nif (!['NCO','NCO_FORGE'].includes(String($('Show Context: Script').first().json.show || '').toUpperCase())) failures.push('TQO signed final-text review adapter not yet wired');"
+  );
+  const showAnchor = "const show = (String(f.brand || '').toUpperCase() === 'NCO') ? 'NCO_FORGE' : (String(f.show || '').toUpperCase() === 'TSWS' ? 'TSWS' : 'TQO');";
+  if (complianceQcCode.split(showAnchor).length !== 2) throw new Error("QC show/brand anchor drifted");
+  const aliasSafeQcCode = complianceQcCode.replace(
+    showAnchor,
+    "const brandTag = String(f.brand || f.show || '').toUpperCase();\\nconst show = ['NCO','NCO_FORGE'].includes(brandTag) ? 'NCO_FORGE' : (brandTag === 'TSWS' ? 'TSWS' : 'TQO');"
   );
   const qcAnchor = "const DOCTOR_FLOOR = 70;";
-  if (complianceQcCode.split(qcAnchor).length !== 2) throw new Error("QC Doctor floor anchor drifted");
-  const nextQcCode = complianceQcCode.replace(
+  if (aliasSafeQcCode.split(qcAnchor).length !== 2) throw new Error("QC Doctor floor anchor drifted");
+  const nextQcCode = aliasSafeQcCode.replace(
     qcAnchor,
     "const DOCTOR_FLOOR = show === 'TQO' ? 90 : 70; // preserve NCO floor, 2026-10-19"
   );
