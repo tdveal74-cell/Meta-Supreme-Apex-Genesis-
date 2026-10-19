@@ -69,6 +69,8 @@ jobs:
         run: node --test n8n/tqo-v5/slop-curator/tqo90_workflow_candidate.test.mjs
       - name: TQO ChatGPT review handoff validates signatures and final-text binding
         run: node --test n8n/tqo-v5/slop-curator/chatgpt_review_handoff.test.mjs
+      - name: TQO private review CLI never logs script or secrets
+        run: node --test n8n/tqo-v5/slop-curator/review_handoff_cli.test.mjs
       # The Jev image lanes, ruled by Tee 2026-10-16, ship in shadow and are not
       # wired yet. Each harness drives the real node bodies against stubs and
       # against the unmodified export code; none of them calls TypeSafe, so a
