@@ -233,7 +233,12 @@ for (const [input, state, why] of [
 
 // Universal acceptance contract: same numerical floor across all four brands,
 // no waiver of hard findings, no automatic release at 90.
-const underlyingGate = new Function(read("./qc_doctor_gate.js") + "\nreturn gate;")();
+const underlyingGate = new Function("$", read("./qc_doctor_gate.js") + "\nreturn gate;")(
+  dollar({
+    "One Row at a Time": [{ json: { fields: { id: 7, brand: "TQO", score_history: "| doctor 90/100 PASS |" } } }],
+    "Parse QC + Set Verdict": [{ json: { qcVerdict: "SHIP", qcScore: 92 } }],
+  })
+);
 for (const brand of ["TQO", "NCO_FORGE", "TSWS", "ACX"]) {
   const make = score => ({
     show: brand,
