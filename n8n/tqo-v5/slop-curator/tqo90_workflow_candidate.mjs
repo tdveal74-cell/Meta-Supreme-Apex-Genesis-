@@ -52,12 +52,10 @@ export function buildUniversal90Candidate(pinnedExport, complianceQcCode, compli
   if (typeof compliancePublishCode !== "string" || !compliancePublishCode.includes("gates.qc")) {
     throw new Error("publish compliance mirror missing or invalid");
   }
-  const publishQcCode = replaceOnce(
-    compliancePublishCode,
-    "gates.qc = verdict === 'SHIP' || verdict === 'WAIVED';",
-    "gates.qc = verdict === 'SHIP' && Number.isFinite(Number(qc.qcScore)) && Number(qc.qcScore) >= 90; // universal 90, WAIVED cannot bypass",
-    "OS 28 quality score and waiver"
-  );
+  if (!compliancePublishCode.includes("gates.qc = verdict === 'SHIP' && Number.isFinite(Number(qc.qcScore)) && Number(qc.qcScore) >= 90;")) {
+    throw new Error("OS 28 universal 90 score and waiver rule missing");
+  }
+  const publishQcCode = compliancePublishCode;
   const publishCode = replaceOnce(
     publishQcCode,
     "const blocking = [];",
