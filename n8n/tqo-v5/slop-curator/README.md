@@ -52,3 +52,35 @@ The editorial fields are *reported judgments*, not deterministic proof of author
 7. Compare proposed workflow against the pinned export, deploy only after review, run a no-spend smoke check and read back the active version
 
 **Not yet done:** The Slop Curator Plugin is available to ChatGPT, but this file does not give n8n permission or an API to call it. The automatic evaluator/adapter and actual n8n wiring require their own implemented transport and verified receipt generation. No changes to live n8n, publication, credit spend, human approval, or existing scripts have been made by this staged addition.
+
+## October 19 continuation: tested candidate and ChatGPT handoff
+
+### 90-point n8n candidate (NOT ACTIVE)
+
+`tqo90_workflow_candidate.mjs` transforms a clone of the **pinned** 274-node V5 workflow in memory. It intentionally does not mutate the pinned live export, call the n8n API, or modify the active workflow.
+
+- `Script Gate: Quality` reads Show Context: Script; **TQO 90**, NCO **70**.
+- `QC Doctor Gate` is based on the previously tested compliance mirror; **TQO 90**, NCO **70**.
+- The candidate tests execute both actual patched node bodies with synthetic rows: 89 vs 90 for TQO, 69 vs 70 for NCO, and verify that only those two nodes change.
+- These checks cover the threshold behavior **only**. The current QC code reads a text score-history line, not an authenticated final-draft hash. Do not deploy this candidate without the additional signed review intake and a final-text Doctor score. A manually changed Airtable status can bypass today's script gate and must not bypass the downstream receipt requirement.
+
+### Review handoff (NO PAID MODEL CALL FROM n8n)
+
+`chatgpt_review_handoff.mjs` provides two pure functions:
+
+1. `prepareChatgptReviewHandoff`: freezes a TQO script together with its SHA-256, versioned voice card, Script Doctor rubric, and approved-source references; returns `AWAITING_CHATGPT_REVIEW`.
+2. `verifySignedChatgptReview`: requires an HMAC-SHA256-signed independent verifier return for the **same exact script and packet**; then invokes the staged curator 90-point gate. Invalid/missing secrets or signatures, changed drafts, absent evidence and below-90 reviews stay `HOLD`. Passing can reach only `READY_FOR_EXISTING_GATES`, never `RELEASE_ELIGIBLE`.
+
+**Critical:** The signer is not implemented here. Only an authorized trusted host can sign after independently reading the actual ChatGPT Slop Curator findings, re-running Script Doctor on the final text, and validating source provenance. Never sign directly from the model output, never accept a signature supplied by a draft writer, never store the signing secret in GitHub, ChatGPT, a prompt, or an Airtable record. The test secret is a synthetic fixture. This code does not supply access to installed ChatGPT Skills from n8n.
+
+### Safe activation plan
+
+1. Pin and read back the current n8n V5 export. Confirm existing source provenance and quality reporting; abort on any live drift.
+2. Install the handoff as an explicit **manual review** task with a durable pending state, not a hidden model-to-model call.
+3. Implement a trusted verifier/signing boundary and a zero-spend intake that checks packet hash, independent evidence, Script Doctor and curator receipts. Bind accepted receipts to the final stored script SHA-256, not row ID or timestamp.
+4. Put that trusted receipt check in BOTH the script lane and the downstream QC lane, before any status promotion. Validate manual status changes cannot evade this check.
+5. Generate a candidate export from the readback version, prove the 89/90 and 69/70 cases, compare original and candidate node IDs/connections/credentials, and run compliance and source-gate suites.
+6. Separately approve any live deployment after the new signed handoff is complete. Run read-only/no-spend test traffic, read back the deployed workflow, and keep a rollback export.
+7. Human approval remains mandatory. This PR does not authorize narration, rendering, thumbnails, distribution, payments or publication.
+
+**No automatic deployment or publication should occur while the signer and final-text wiring are absent.**
