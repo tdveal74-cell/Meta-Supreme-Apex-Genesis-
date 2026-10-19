@@ -6,8 +6,9 @@ import { buildUniversal90Candidate } from "./tqo90_workflow_candidate.mjs";
 const read = relative => readFileSync(new URL(relative, import.meta.url), "utf8");
 const pinned = JSON.parse(read("../exports/qEkGOUsNyVaRAmm6_active.json"));
 const qcMirror = read("../compliance/qc_doctor_gate.js");
+const publishMirror = read("../compliance/os28_publish_gate.js");
 const before = JSON.stringify(pinned);
-const { candidate, scriptCode, parseCode, qcCode } = buildUniversal90Candidate(pinned, qcMirror);
+const { candidate, scriptCode, parseCode, qcCode, publishCode } = buildUniversal90Candidate(pinned, qcMirror, publishMirror);
 const originalNodes = Object.fromEntries(pinned.nodes.map(n => [n.name, n]));
 const execute = code => new Function("$", "$json", "$input", code);
 const dollar = entries => name => {
@@ -53,13 +54,13 @@ function parseQc(total, blockers = []) {
   }, undefined)[0].json;
 }
 
-test("offline universal-90 candidate changes exactly three node bodies, never pinned export", () => {
+test("offline universal-90 candidate changes exactly four score and publish node bodies, never pinned export", () => {
   assert.equal(JSON.stringify(pinned), before);
   const changed = candidate.nodes.filter(n => {
     const old = originalNodes[n.name];
     return JSON.stringify(n) !== JSON.stringify(old);
   }).map(n => n.name).sort();
-  assert.deepEqual(changed, ["Parse QC + Set Verdict", "QC Doctor Gate", "Script Gate: Quality"]);
+  assert.deepEqual(changed, ["OS 28: Publish Gate", "Parse QC + Set Verdict", "QC Doctor Gate", "Script Gate: Quality"]);
   assert.match(originalNodes["Script Gate: Quality"].parameters.jsCode, /DOCTOR_FLOOR = 70/);
   assert.match(originalNodes["Parse QC + Set Verdict"].parameters.jsCode, /SHIP_AT = 80/);
   assert.match(qcMirror, /DOCTOR_FLOOR = 90/);
@@ -93,12 +94,44 @@ test("downstream QC Doctor 90 boundary applies equally to TQO and NCO", () => {
     }
   }
 });
+
+function publishGate(qcVerdict, qcScore) {
+  const disclosure = "Presented with a synthetic voice and synthetic likeness of Terrance Veal, used with his consent.";
+  const fields = {
+    Channel: "The Quiet Operator", "Human Review": "true",
+    "Video Title": "The Quiet Mistake Managers Make With Copilot",
+    Description: disclosure + "\\n\\n" + "A calm sourced explanation of the stakes and the next practical action. ".repeat(3),
+    Tags: "ai, career, the quiet operator", "AI Disclosure": "Disclosed in description",
+    "QC Verdict": qcVerdict, Show: "TQO", Season: 1, Episode: 3, "Asset Type": "Flagship",
+  };
+  const labels = ["YOUTUBE TAGS", "PINNED COMMENT", "TIKTOK", "INSTAGRAM", "FACEBOOK", "LINKEDIN 1", "X THREAD 1", "X VALUE POST", "SHORT SCRIPT 1", "THUMBNAIL TEXT"];
+  const block = labels.join("\\n\\nbody\\n\\n");
+  const nodes = {
+    "Show Context: Publish": { channel: "The Quiet Operator", requiredTags: ["the quiet operator"] },
+    "One Row at a Time": { fields },
+    "Parse Packaging": { airtableId: "rec1", packagingBlock: block, youtubeTags: "", linkedinCount: 3, xThreadCount: 5, shortScriptCount: 2 },
+    "Parse Manifest": {},
+    "Parse QC + Set Verdict": { qcScore, qcVerdict, packagingGrade: 8.2, packagingGradeReport: "" },
+    "Shim: Thumbnail To Binary": { thumb_rendered: true },
+    "Upload Thumbnail": { webViewLink: "https://example.invalid/test-thumb" },
+  };
+  return execute(publishCode)(dollar(nodes), undefined, undefined)[0].json;
+}
+test("publishing stays held even at 100 and WAIVED cannot bypass score 90", () => {
+  for (const [verdict, score] of [["SHIP",89],["SHIP",90],["SHIP",100],["WAIVED",100]]) {
+    const result = publishGate(verdict, score);
+    assert.equal(result.os28_allowed, false, verdict + " " + score);
+    assert.ok(result.os28_blocking.some(r => r.includes("signed final-text review adapter")), JSON.stringify(result.os28_blocking));
+  }
+  const waived = publishGate("WAIVED",100);
+  assert.ok(waived.os28_blocking.some(r => r.includes("QC Verdict") || r.includes("qc:")), JSON.stringify(waived.os28_blocking));
+});
 test("candidate fails on drift, duplicate nodes, or stale compliance mirror", () => {
   const broken = structuredClone(pinned);
   broken.nodes.find(n => n.name === "Script Gate: Quality").parameters.jsCode = "other";
-  assert.throws(() => buildUniversal90Candidate(broken, qcMirror), /anchor drifted/);
+  assert.throws(() => buildUniversal90Candidate(broken, qcMirror, publishMirror), /anchor drifted/);
   const duplicate = structuredClone(pinned);
   duplicate.nodes.push(structuredClone(duplicate.nodes.find(n => n.name === "QC Doctor Gate")));
-  assert.throws(() => buildUniversal90Candidate(duplicate, qcMirror), /exactly one/);
-  assert.throws(() => buildUniversal90Candidate(pinned, qcMirror.replace("const DOCTOR_FLOOR = 90;", "const DOCTOR_FLOOR = 70;")), /mirror missing or invalid/);
+  assert.throws(() => buildUniversal90Candidate(duplicate, qcMirror, publishMirror), /exactly one/);
+  assert.throws(() => buildUniversal90Candidate(pinned, qcMirror.replace("const DOCTOR_FLOOR = 90;", "const DOCTOR_FLOOR = 70;"), publishMirror), /mirror missing or invalid/);
 });
