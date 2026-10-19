@@ -61,7 +61,7 @@ POLICY_VERSION = "devon.operating-layer.v1"
 HANDOFF_VERSION = "devon.handoff.v1"
 AUDIT_VERSION = "devon.cross-model-audit.v1"
 RETURN_VERSION = "devon.artifact-return.v1"
-QUALITY_THRESHOLD = 99
+QUALITY_THRESHOLD = 90  # Tee's ecosystem-wide score ruling, 2026-10-19
 CANONICAL_REPOSITORY = "tdveal74-cell/Meta-Supreme-Apex-Genesis-"
 CANONICAL_REF = "main"
 
