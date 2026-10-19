@@ -57,11 +57,13 @@ test("offline candidate changes only two node code bodies, preserving pinned liv
   assert.doesNotMatch(originalNodes["QC Doctor Gate"].parameters.jsCode, /DOCTOR_FLOOR/);
   assert.match(qcMirror, /DOCTOR_FLOOR = 70/);
 });
-test("TQO script gate refuses 89 and accepts 90 for existing downstream gates", () => {
+test("TQO uses the 89/90 boundary but stays held without trusted handoff", () => {
   const low = scriptGate("TQO", 89), exact = scriptGate("TQO", 90);
   assert.equal(low.status, "Error", JSON.stringify(low.gateFailures));
   assert.ok(low.gateFailures.some(f => f.includes("under the floor of 90")));
-  assert.equal(exact.status, "Scripted", JSON.stringify(exact.gateFailures));
+  assert.equal(exact.status, "Error", JSON.stringify(exact.gateFailures));
+  assert.ok(exact.gateFailures.some(f => f.includes("signed final-text review adapter not yet wired")));
+  assert.ok(!exact.gateFailures.some(f => f.includes("under the floor of 90")));
 });
 test("NCO script gate still accepts 70 and rejects 69", () => {
   assert.equal(scriptGate("NCO", 70).status, "Scripted");
@@ -69,9 +71,12 @@ test("NCO script gate still accepts 70 and rejects 69", () => {
   assert.equal(low.status, "Error");
   assert.ok(low.gateFailures.some(f => f.includes("under the floor of 70")));
 });
-test("QC Doctor gate uses 90 for TQO while preserving 70 for NCO", () => {
+test("QC uses TQO 90 boundary, holds even a 100 without adapter, preserves NCO 70", () => {
   assert.equal(qcGate("TQO", 89).doctorGate, "REVISE");
-  assert.equal(qcGate("TQO", 90).doctorGate, "READY_FOR_HUMAN_REVIEW");
+  const exact = qcGate("TQO", 90), perfect = qcGate("TQO", 100);
+  assert.equal(exact.doctorGate, "HOLD");
+  assert.match(exact.doctorGateReason, /signed final-text review adapter/);
+  assert.equal(perfect.doctorGate, "HOLD");
   assert.equal(qcGate("NCO", 69).doctorGate, "REVISE");
   assert.equal(qcGate("NCO", 70).doctorGate, "READY_FOR_HUMAN_REVIEW");
 });
