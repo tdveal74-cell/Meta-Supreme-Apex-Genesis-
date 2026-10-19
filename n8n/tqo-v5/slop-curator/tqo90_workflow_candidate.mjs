@@ -36,7 +36,7 @@ export function buildTqo90Candidate(pinnedExport, complianceQcCode) {
   if (complianceQcCode.split(showAnchor).length !== 2) throw new Error("QC show/brand anchor drifted");
   const aliasSafeQcCode = complianceQcCode.replace(
     showAnchor,
-    "const brandTag = String(f.brand || f.show || '').toUpperCase();\\nconst show = ['NCO','NCO_FORGE'].includes(brandTag) ? 'NCO_FORGE' : (brandTag === 'TSWS' ? 'TSWS' : 'TQO');"
+    "const brandTag = String(f.brand || f.show || '').toUpperCase();\nconst show = ['NCO','NCO_FORGE'].includes(brandTag) ? 'NCO_FORGE' : (brandTag === 'TSWS' ? 'TSWS' : 'TQO');"
   );
   const qcAnchor = "const DOCTOR_FLOOR = 70;";
   if (aliasSafeQcCode.split(qcAnchor).length !== 2) throw new Error("QC Doctor floor anchor drifted");
