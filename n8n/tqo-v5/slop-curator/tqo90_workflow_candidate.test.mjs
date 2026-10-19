@@ -53,7 +53,9 @@ test("offline candidate changes only two node code bodies, preserving pinned liv
   }).map(n => n.name).sort();
   assert.deepEqual(changed, ["QC Doctor Gate", "Script Gate: Quality"]);
   assert.match(originalNodes["Script Gate: Quality"].parameters.jsCode, /DOCTOR_FLOOR = 70/);
-  assert.match(originalNodes["QC Doctor Gate"].parameters.jsCode, /DOCTOR_FLOOR = 70/);
+  // Pinned raw export still predates the compliance fix and contains no Doctor floor at all.
+  assert.doesNotMatch(originalNodes["QC Doctor Gate"].parameters.jsCode, /DOCTOR_FLOOR/);
+  assert.match(qcMirror, /DOCTOR_FLOOR = 70/);
 });
 test("TQO script gate refuses 89 and accepts 90 for existing downstream gates", () => {
   const low = scriptGate("TQO", 89), exact = scriptGate("TQO", 90);
