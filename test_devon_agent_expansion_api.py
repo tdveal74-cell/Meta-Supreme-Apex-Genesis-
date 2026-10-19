@@ -44,7 +44,7 @@ async def test_schedule_create_due_and_materialize(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_skill_propose_approve_and_promote(client, auth_headers):
+async def test_skill_approve_without_unevaluated_promotion(client, auth_headers):
     proposed = await client.post(
         "/api/v1/agent-expansion/skill-proposals",
         headers=auth_headers,
@@ -61,20 +61,11 @@ async def test_skill_propose_approve_and_promote(client, auth_headers):
     decided = await client.post(
         f"/api/v1/agent-expansion/skill-proposals/{proposal_id}/decide",
         headers=auth_headers,
-        json={"approve": True, "promote": True},
+        json={"approve": True, "promote": False},
     )
     assert decided.status_code == 200, decided.text
     assert decided.json()["proposal"]["state"] == "approved"
-    assert decided.json()["skill"] is not None
-    assert decided.json()["skill"]["name"]
-
-    skills = await client.get(
-        "/api/v1/agent-tasks/learning/skills", headers=auth_headers
-    )
-    assert skills.status_code == 200
-    assert any(
-        item["name"] == decided.json()["skill"]["name"] for item in skills.json()
-    )
+    assert decided.json()["skill"] is None
 
 
 @pytest.mark.asyncio

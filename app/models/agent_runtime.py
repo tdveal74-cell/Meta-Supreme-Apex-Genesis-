@@ -301,3 +301,11 @@ class AgentSubagentLinkRecord(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+# Compatibility imports keep the runtime persistence model surface centralized.
+from app.models.agent_evidence import (  # noqa: E402,F401
+    AgentSkillEvaluationRecord,
+    AgentSkillRevisionRecord,
+    AgentToolResultRecord,
+    AgentVerificationRecord,
+)

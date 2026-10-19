@@ -34,6 +34,8 @@ class SkillProposeBody(BaseModel):
 class SkillDecideBody(BaseModel):
     approve: bool
     promote: bool = True
+    evaluation_id: Optional[str] = None
+    expected_version: Optional[int] = None
 
 
 class SubagentSpawnBody(BaseModel):
@@ -177,6 +179,23 @@ async def decide_skill_proposal(
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
+    # Hold promotion and active-version checks in one serialized transaction.
+    from app.services.skill_revisions import lock_skill, require_evaluation
+    if body.approve and body.promote:
+        proposals = await _repo.list_skill_proposals(db, owner_id=current_user.id)
+        candidate = next((p for p in proposals if p.proposal_id == proposal_id), None)
+        if candidate is None:
+            raise HTTPException(status_code=404, detail="Skill proposal not found")
+        await lock_skill(db, current_user.id, candidate.name)
+        active = await agent_tasks_service.learning.get_skill(db, owner_id=current_user.id, name=candidate.name)
+        if body.expected_version != (active.version if active else 0):
+            raise HTTPException(status_code=409, detail="expected active skill version required or changed")
+        try:
+            promotion_evidence = await require_evaluation(db, owner_id=current_user.id, evaluation_id=body.evaluation_id,
+                name=candidate.name, description=candidate.description, instructions=candidate.instructions,
+                source_task_id=candidate.source_task_id)
+        except ValueError as err:
+            raise HTTPException(status_code=409, detail=str(err)) from err
     try:
         decided = await _repo.decide_skill_proposal(
             db,
@@ -198,6 +217,7 @@ async def decide_skill_proposal(
             description=decided.description,
             instructions=decided.instructions,
             provenance=f"proposal:{decided.proposal_id}:{decided.source_task_id}",
+            revision_evidence=promotion_evidence,
         )
         result["skill"] = skill.to_dict()
 

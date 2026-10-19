@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     agent_expansion,
+    agent_skill_revisions,
     agent_tasks,
     agents,
     auth,
@@ -59,6 +60,7 @@ api_router.include_router(devon_editforge.router)
 api_router.include_router(operator.router)
 api_router.include_router(operator_shell.router)
 api_router.include_router(agent_tasks.router)
+api_router.include_router(agent_skill_revisions.router)
 api_router.include_router(agent_expansion.router)
 api_router.include_router(soul.router)
 api_router.include_router(ledger.router)
