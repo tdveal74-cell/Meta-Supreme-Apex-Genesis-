@@ -12,7 +12,7 @@ Default Slop Curator quality guidance is not the controlling number: the ecosyst
 
 ## Current repository mismatch
 
-The Oct 19 pinned V5 export contained **70** in Script Gate, **80** in Parse QC, and TSWS-specific **99** in the historical QC gate. The staged candidate sets **90** in all three quality checks for all brands and uses the updated compliance QC mirror. Its signed-review hold remains active until independently verified evidence is wired.
+The Oct 19 pinned V5 export contained **70** in Script Gate, **80** in Parse QC, and TSWS-specific **99** in the historical QC gate. The staged candidate sets **90** in all three quality checks for all brands, and blocks the OS 28 publishing gate until signed final-text review. It uses the updated compliance QC and publish mirrors. Its signed-review hold remains active until independently verified evidence is wired.
 
 Important: `Script: Short After Doctor?` can trigger `Expand After Doctor`, producing a final script that differs from the text the Doctor scored. A final-script 90/100 receipt must be tied to the actual output of `Script: Final Text`. Rerun the Doctor when expansion changes the text; never bind an earlier score to new wording.
 
@@ -62,7 +62,8 @@ The editorial fields are *reported judgments*, not deterministic proof of author
 - `Script Gate: Quality`: **90** for TQO and NCO; both remain **HOLD** pending trusted final-script review.
 - `Parse QC + Set Verdict`: **90** for the episode QC score.
 - `QC Doctor Gate`: **90** for every scored scope, including NCO, TQO, TSWS and ACX. All remain **HOLD** pending signed-review wiring.
-- Candidate tests execute all **three** patched node bodies with synthetic rows. **89 fails**; **90 meets the numerical floor**, but even 100 remains **HOLD** until signed-review verification is wired. The pinned original export is untouched.
+- `OS 28: Publish Gate`: manual QC `WAIVED` cannot bypass the new 90 score requirement; all brands remain **HELD** pending independently authenticated final-text review.
+- Candidate tests execute all **four** patched node bodies, including the publishing gate, with synthetic rows. **89 fails**; **90 meets the numerical floor**, but even 100 remains **HOLD** until signed-review verification is wired. The pinned original export is untouched.
 - These checks cover the score boundary and the provisional fail-closed hold **only**. The current QC code reads a text score-history line, not an authenticated final-draft hash. Do not deploy this candidate without the additional signed review intake and a final-text Doctor score. A manually changed Airtable status can bypass today's script gate and must not bypass the downstream receipt requirement.
 
 ### Review handoff (NO PAID MODEL CALL FROM n8n)
