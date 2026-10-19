@@ -61,8 +61,8 @@ The editorial fields are *reported judgments*, not deterministic proof of author
 
 - `Script Gate: Quality` reads Show Context: Script; **TQO 90**, NCO **70**.
 - `QC Doctor Gate` is based on the previously tested compliance mirror; **TQO 90**, NCO **70**.
-- The candidate tests execute both actual patched node bodies with synthetic rows: 89 vs 90 for TQO, 69 vs 70 for NCO, and verify that only those two nodes change.
-- These checks cover the threshold behavior **only**. The current QC code reads a text score-history line, not an authenticated final-draft hash. Do not deploy this candidate without the additional signed review intake and a final-text Doctor score. A manually changed Airtable status can bypass today's script gate and must not bypass the downstream receipt requirement.
+- The candidate tests execute both actual patched node bodies with synthetic rows: 89 fails the TQO score floor, and even a score of 90 or 100 **stays on HOLD** until the signed review adapter is wired; NCO's existing 69/70 boundary remains unchanged. They verify that only those two node bodies change.
+- These checks cover the score boundary and the provisional fail-closed hold **only**. The current QC code reads a text score-history line, not an authenticated final-draft hash. Do not deploy this candidate without the additional signed review intake and a final-text Doctor score. A manually changed Airtable status can bypass today's script gate and must not bypass the downstream receipt requirement.
 
 ### Review handoff (NO PAID MODEL CALL FROM n8n)
 
