@@ -11,9 +11,9 @@ const replaceOnce = (code, oldText, newText, label) => {
   return code.replace(oldText, newText);
 };
 
-export function buildUniversal90Candidate(pinnedExport, complianceQcCode) {
+export function buildUniversal90Candidate(pinnedExport, complianceQcCode, compliancePublishCode) {
   if (!pinnedExport || !Array.isArray(pinnedExport.nodes)) throw new Error("pinned export missing nodes");
-  const names = ["Script Gate: Quality", "Parse QC + Set Verdict", "QC Doctor Gate"];
+  const names = ["Script Gate: Quality", "Parse QC + Set Verdict", "QC Doctor Gate", "OS 28: Publish Gate"];
   for (const name of names) {
     if (pinnedExport.nodes.filter(n => n.name === name).length !== 1) {
       throw new Error("expected exactly one " + name);
@@ -49,12 +49,28 @@ export function buildUniversal90Candidate(pinnedExport, complianceQcCode) {
     "const result = gate(gateInput);\nif (result.state === 'READY_FOR_HUMAN_REVIEW') return [{ json: { doctorGate: 'HOLD', doctorGateReason: 'Universal 90 signed final-text review adapter not yet wired', qc_score: score, qc_verdict: verdict, rowId: f.id } }];",
     "QC final signed handoff"
   );
+  if (typeof compliancePublishCode !== "string" || !compliancePublishCode.includes("gates.qc")) {
+    throw new Error("publish compliance mirror missing or invalid");
+  }
+  const publishQcCode = replaceOnce(
+    compliancePublishCode,
+    "gates.qc = verdict === 'SHIP' || verdict === 'WAIVED';",
+    "gates.qc = verdict === 'SHIP' && Number.isFinite(Number(qc.qcScore)) && Number(qc.qcScore) >= 90; // universal 90, WAIVED cannot bypass",
+    "OS 28 quality score and waiver"
+  );
+  const publishCode = replaceOnce(
+    publishQcCode,
+    "const blocking = [];",
+    "const blocking = [];\nblocking.push('Universal 90 signed final-text review adapter not yet wired');",
+    "OS 28 trusted review hold"
+  );
   const candidate = structuredClone(pinnedExport);
   const setCode = (name, code) => {candidate.nodes.find(n => n.name === name).parameters.jsCode = code;};
   setCode("Script Gate: Quality", safeScriptCode);
   setCode("Parse QC + Set Verdict", parseCode);
   setCode("QC Doctor Gate", gateCode);
-  return { candidate, scriptCode: safeScriptCode, parseCode, qcCode: gateCode };
+  setCode("OS 28: Publish Gate", publishCode);
+  return { candidate, scriptCode: safeScriptCode, parseCode, qcCode: gateCode, publishCode };
 }
 // Legacy export preserved for callers created while TQO alone had a 90 target.
 export const buildTqo90Candidate = buildUniversal90Candidate;
