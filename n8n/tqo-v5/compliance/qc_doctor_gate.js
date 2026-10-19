@@ -2,7 +2,7 @@
 // Fail-closed routing after OS 28 verdict. States:
 // HOLD (invalid intake / unvalidated policy / unauthenticated approval)
 // EVIDENCE_REQUIRED (scope report missing or incomplete)
-// REVISE (qcVerdict not PASS, open P0/P1, or TSWS score < 99)
+// REVISE (qcVerdict not PASS, open P0/P1, or any score < 90)
 // READY_FOR_HUMAN_REVIEW (all scopes clear, awaiting authenticated approval)
 // RELEASE_ELIGIBLE (approval authenticated and bound to artifact hash)
 function gate(x) {
@@ -17,7 +17,7 @@ function gate(x) {
     const r = x.reports.find(r => r.scope === scope && r.artifactHash === x.artifactHash && r.rubricVersion === x.rubricVersion);
     if (!r || r.evidenceComplete !== true) return {state:'EVIDENCE_REQUIRED', reason:scope};
     if (r.qcVerdict !== 'PASS' || r.openP0P1 !== 0 || r.criticalOrHigh !== 0) return {state:'REVISE', reason:scope};
-    if (x.show === 'TSWS' && (!Number.isFinite(r.score) || r.score < 99 || r.score > 100)) return {state:'REVISE', reason:'TSWS score below 99 or invalid'};
+    if (!Number.isFinite(r.score) || r.score < 90 || r.score > 100) return {state:'REVISE', reason:'quality score below 90 or invalid'};
   }
   if (x.policyValidated !== true || x.releaseEvidenceValidated !== true) return hold('Current release policy or release evidence unvalidated');
   const a = x.approval;
@@ -34,14 +34,15 @@ const f = row.fields || row;
 // fallbacks.
 const verdict = String(qc.qcVerdict || qc.qc_verdict || qc.verdict || f.qc_verdict || '').toUpperCase();
 const score = Number(qc.qcScore || qc.total || f.qc_score || 0);
-const show = (String(f.brand || '').toUpperCase() === 'NCO') ? 'NCO_FORGE' : (String(f.show || '').toUpperCase() === 'TSWS' ? 'TSWS' : 'TQO');
+const brandTag = String(f.brand || f.show || '').toUpperCase();
+const show = ['NCO', 'NCO_FORGE'].includes(brandTag) ? 'NCO_FORGE' : (['TSWS', 'ACX'].includes(brandTag) ? brandTag : 'TQO');
 // The script scope. Until 2026-10-17 the gate required a 'script' report and
 // this node never built one, so no row could clear. The evidence is the script
 // doctor's verdict, which Save Doctor Verdict writes into the score_history
 // column as "| doctor <score>/100 <VERDICT> |". DT Shim: Ready Rows hands that
 // column to this node as fields['Score History']. The floor is Script Gate:
-// Quality's 70. No such line, and the row is held.
-const DOCTOR_FLOOR = 70;
+// Quality's universal 90. No such line, and the row is held.
+const DOCTOR_FLOOR = 90;
 const history = String(f['Score History'] || f.score_history || row.score_history || '');
 const doctorLine = /\|\s*doctor\s+(\d+(?:\.\d+)?)\/100\s+([A-Z_]+)(?=\s|\||$)/.exec(history);
 const doctorScore = doctorLine ? Number(doctorLine[1]) : NaN;
@@ -63,7 +64,7 @@ const gateInput = {
     rubricVersion: String(qc.rubric_version || 'os28-rev2-2026-09-30'),
     qcVerdict: (verdict === 'SHIP' ? 'PASS' : verdict === 'CONDITIONAL' ? 'CONDITIONAL' : 'FAIL'),
     evidenceComplete: true, openP0P1: (verdict === 'SHIP' ? 0 : 1),
-    criticalOrHigh: (score < 85 ? 1 : 0), score
+    criticalOrHigh: (score < 90 ? 1 : 0), score
   }],
   presenterDoctorVerdict: doctorVerdict,
   policyValidated: true,
