@@ -35,6 +35,10 @@ It requires:
 
 Repetitive binary reframes are **review flags**, not automatically forbidden occurrences. The validator never edits the script. It returns only `HOLD` or `READY_FOR_EXISTING_GATES`, never release approval.
 
+**Trust boundary:** The helper now recomputes SHA-256 against the exact script bytes it receives; a syntactically valid but incorrect hash is a HOLD. The `editorial`, `scriptDoctor`, and `evidenceReceipt` objects are still supplied inputs, **not authenticated assertions**. In particular, `evidenceReceipt.verified: true` must be populated only by a trusted provenance-verifier adapter, never from an LLM response or a publisher-supplied flag. Do not connect this module to live release routing without implementing that trust boundary.
+
+**Observed offline test:** 2026-10-19, on `srv1936199`, the branch copies of the gate and tests passed 8/8 using `node --test`. CI now runs the same test as a required `standalone` step on this PR. This is isolated preflight evidence only, not proof of live n8n wiring or of model evaluation quality.
+
 The editorial fields are *reported judgments*, not deterministic proof of authorship or factual correctness. The source receipt and existing mechanical checks are independent. A model-assigned score can be wrong: run a second judge or human inspection for disputed findings; retain the evidence rather than silently overriding hard failures.
 
 ## Integration order, not yet executed
