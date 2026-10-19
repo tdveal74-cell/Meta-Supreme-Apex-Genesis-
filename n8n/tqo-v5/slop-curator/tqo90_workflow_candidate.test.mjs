@@ -67,6 +67,7 @@ test("TQO uses the 89/90 boundary but stays held without trusted handoff", () =>
 });
 test("NCO script gate still accepts 70 and rejects 69", () => {
   assert.equal(scriptGate("NCO", 70).status, "Scripted");
+  assert.equal(scriptGate("NCO_FORGE", 70).status, "Scripted");
   const low = scriptGate("NCO", 69);
   assert.equal(low.status, "Error");
   assert.ok(low.gateFailures.some(f => f.includes("under the floor of 70")));
@@ -79,6 +80,7 @@ test("QC uses TQO 90 boundary, holds even a 100 without adapter, preserves NCO 7
   assert.equal(perfect.doctorGate, "HOLD");
   assert.equal(qcGate("NCO", 69).doctorGate, "REVISE");
   assert.equal(qcGate("NCO", 70).doctorGate, "READY_FOR_HUMAN_REVIEW");
+  assert.equal(qcGate("NCO_FORGE", 70).doctorGate, "READY_FOR_HUMAN_REVIEW");
 });
 test("candidate refuses drifted or ambiguous source exports", () => {
   const corrupted = structuredClone(pinned);
