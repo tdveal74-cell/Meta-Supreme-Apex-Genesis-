@@ -32,8 +32,8 @@ For a **0-100 quality or acceptance score**: **89 = FAIL/REVISE/HOLD**; **90 = m
 |---|---:|---:|---|
 | DEVON cross-model audit (root and soul source mirrors) | 99 | **90** | source changed, not deployed |
 | TQO Slop Curator gate | 90 | **90** | staged fail-closed, no live adapter |
-| Shared n8n V5 Script Gate: Quality (TQO/NCO) | 70 | **90** | three-node offline candidate only |
-| Shared n8n V5 Parse QC + Set Verdict (TQO/NCO) | 80 | **90** | three-node offline candidate only |
+| Shared n8n V5 Script Gate: Quality (TQO/NCO) | 70 | **90** | four-node offline candidate only |
+| Shared n8n V5 Parse QC + Set Verdict (TQO/NCO) | 80 | **90** | four-node offline candidate only |
 | Shared V5 QC Doctor Gate | 70 doctor / 85 episode / 99 TSWS special | **90 for every scored scope** | compliance mirror and replacement ledger updated; candidate holds pending trusted final-text review |
 | TSWS editorial/visual/manual QC not in the shared V5 runtime | 99 historically | **90** | policy ruling, must be propagated to each separate runtime/rubric after inventory |
 | ACX, EditForge, WhatBroke and other independent workflows | various/unknown | **90** | policy ruling, runtime changes not assumed |
@@ -41,7 +41,7 @@ For a **0-100 quality or acceptance score**: **89 = FAIL/REVISE/HOLD**; **90 = m
 ## Verification and activation
 
 - The pinned, previously exported V5 workflow is deliberately unchanged in Git history.
-- The updated offline candidate patches the **three** production-facing score bodies in a clone and **blocks all brands** from advancing through these paths until a trusted exact-final-script review/verifier is implemented.
+- The updated offline candidate patches **four** V5 nodes (Script Gate, Parse QC, QC Doctor, OS 28 Publish) in a clone. It blocks all brands from advancing until trusted exact-final-script review is implemented; QC `WAIVED` is not a score bypass.
 - The compliance mirror is reconstructed with pinned `replacements.json` and verified by `compliance.test.mjs` including brand-specific 89/90 checks.
 - DEVON source and deploy mirrors remain byte-identical; independent verification evidence and hashes are still necessary.
 - The ChatGPT packet/handoff CLI is currently TQO-specific. Its **90 number** is universal, but **other brand-specific reviewer adapters are not yet implemented**. Do not counterfeit or auto-sign a receipt to bypass this gap.
