@@ -65,3 +65,19 @@ def test_malformed_checker_fields_are_validation_errors(field, value):
     item[field] = value
     with pytest.raises(ValueError):
         validate_requirements([item], {'s'})
+
+
+@pytest.mark.parametrize('output,schema', [
+    ('{"ok":true,"nested":{"score":Infinity}}', {'type': 'object'}),
+    ('{"value":NaN}', {'type': 'object'}),
+    ('[-Infinity]', {'type': 'array'}),
+    ('[1e999]', {'type': 'array'}),
+    ('{"nested":{"value":-1e999}}', {'type': 'object'}),
+])
+def test_nonfinite_json_cannot_hide_in_unchecked_values(output, schema):
+    assert check('json_schema', schema, output).verdict == 'FAILED'
+
+
+@pytest.mark.parametrize('ok', ['false', 'true', 1, None, []])
+def test_adapter_success_requires_literal_boolean_true(ok):
+    assert check('tool_succeeded', {}, '', ok=ok).verdict == 'FAILED'

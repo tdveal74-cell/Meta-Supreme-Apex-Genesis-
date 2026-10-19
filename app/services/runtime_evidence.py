@@ -4,7 +4,8 @@ import secrets
 from dataclasses import asdict
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import cast, func, select
+from sqlalchemy.dialects.postgresql import JSONB
 
 from app.models.agent_runtime import AgentTaskRecord, AgentToolResultRecord, AgentVerificationRecord
 from app.services.agent_effect_receipts import EffectFenceRefused, arguments_hash
@@ -123,13 +124,30 @@ class RuntimeEvidenceRepository:
         return values
 
     async def route_profiles(self, db, *, owner_id, limit=100):
-        receipts = await self.list_verifications(db, owner_id=owner_id, limit=limit)
-        # Each generation is a separate run. Aggregate only the newest receipt for
-        # each task so pauses/resumes cannot inflate independent task denominators.
+        # Filter non-runtime receipts and select one latest run per owned task
+        # before limiting the sample. Calibration rows and repeat generations
+        # must never consume the distinct-task sampling budget.
+        ranked = select(
+            AgentVerificationRecord.id.label('receipt_id'),
+            func.row_number().over(
+                partition_by=AgentVerificationRecord.task_id,
+                order_by=(AgentVerificationRecord.created_at.desc(), AgentVerificationRecord.id.desc()),
+            ).label('task_rank'),
+        ).where(
+            AgentVerificationRecord.owner_id == owner_id,
+            func.jsonb_typeof(cast(AgentVerificationRecord.body, JSONB)['trace']) == 'object',
+        ).subquery()
+        query = select(AgentVerificationRecord).join(
+            ranked, AgentVerificationRecord.id == ranked.c.receipt_id,
+        ).where(ranked.c.task_rank == 1).order_by(
+            AgentVerificationRecord.created_at.desc(), AgentVerificationRecord.id.desc(),
+        ).limit(limit)
+        rows = (await db.scalars(query)).all()
         latest = {}
-        for r in receipts:
-            if 'trace' in r:
-                latest.setdefault(r['task_id'], r)
+        for row in rows:
+            if digest(row.body) != row.content_hash:
+                raise ValueError('verification receipt integrity check failed')
+            latest[row.task_id] = json.loads(row.body)
         traces, seen = [], set()
         for r in latest.values():
             t = RouteTrace(**{**r['trace'], 'receipt_refs': tuple(r['trace']['receipt_refs'])})

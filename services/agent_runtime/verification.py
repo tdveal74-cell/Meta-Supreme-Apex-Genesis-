@@ -117,20 +117,32 @@ def schema_matches(value: Any, schema: dict) -> bool:
     return True
 
 
+def _reject_json_constant(value):
+    raise ValueError('non-finite JSON constant: ' + value)
+
+
+def _strict_json(output):
+    value = json.loads(output, parse_constant=_reject_json_constant)
+    # JSON numbers such as 1e999 overflow the float parser without invoking
+    # parse_constant. Check every value, including undeclared schema fields.
+    canonical(value)
+    return value
+
+
 def check_captured(requirement, captured, evidence_ref):
     """Captured values must come from the trusted recorder, never request data."""
     if captured is None:
         return CheckResult(requirement['id'], 'UNVERIFIED', '')
-    passed = bool(captured['ok'])
+    passed = captured['ok'] is True
     try:
         kind, expected, output = requirement['kind'], requirement['expected'], captured['output']
         if kind == 'output_sha256':
             passed = passed and digest(output) == expected['sha256']
         elif kind == 'json_schema':
-            passed = passed and schema_matches(json.loads(output), expected)
+            passed = passed and schema_matches(_strict_json(output), expected)
         elif kind == 'artifact_properties':
             # Inspect captured bytes only. No user-specified filesystem paths or URLs.
-            obj = json.loads(output)
+            obj = _strict_json(output)
             data = base64.b64decode(obj['artifact_base64'], validate=True)
             actual = {'byte_length': len(data), 'sha256': hashlib.sha256(data).hexdigest()}
             if 'png_width' in expected or 'png_height' in expected:

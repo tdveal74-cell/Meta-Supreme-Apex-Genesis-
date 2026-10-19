@@ -49,8 +49,9 @@ does not retry ambiguous effects or grant execution authority.
 GET `/api/v1/agent-tasks/evaluation/routes` aggregates recent owned receipts.
 Versions, frozen input hashes, requirements, tool evidence, stop reasons and
 latency are recorded by the coordinator. Cost remains null when unmeasured.
-It reports the receipt limit, excludes repeated task content within a stratum,
-and selects the newest receipt per task. This is a bounded recent sample, not
+The `receipt_limit` bounds distinct runtime tasks: calibration rows are
+filtered and the newest receipt per task is selected before applying the limit.
+Repeated task content within a stratum is excluded. This is a bounded recent sample, not
 a population census. Input context is hashed at creation before execution.
 
 Runtime labels use declared checks and observed read/inspect/search/query tool
