@@ -65,12 +65,12 @@ const cleanRow = (edit = {}) => ({
   Description: C4 + "\n\n" + DESC_BODY, Tags: "ai, career, the quiet operator", "AI Disclosure": "Disclosed in description",
   "QC Verdict": "SHIP", Show: "TQO", Season: 1, Episode: 3, "Asset Type": "Flagship", ...edit,
 });
-const runGate = (code, fields) => code(dollar({
+const runGate = (code, fields, qcScore = 91) => code(dollar({
   "Show Context: Publish": [{ json: { channel: "The Quiet Operator", requiredTags: ["the quiet operator"] } }],
   "One Row at a Time": [{ json: { fields } }],
   "Parse Packaging": [{ json: { airtableId: "rec1", packagingBlock: BLOCK, youtubeTags: "", linkedinCount: 3, xThreadCount: 5, shortScriptCount: 2 } }],
   "Parse Manifest": [{ json: {} }],
-  "Parse QC + Set Verdict": [{ json: { qcScore: 91, qcVerdict: "SHIP", packagingGrade: 8.2, packagingGradeReport: "" } }],
+  "Parse QC + Set Verdict": [{ json: { qcScore, qcVerdict: "SHIP", packagingGrade: 8.2, packagingGradeReport: "" } }],
   "Shim: Thumbnail To Binary": [{ json: { thumb_rendered: true } }],
   "Upload Thumbnail": [{ json: { webViewLink: "https://drive.example/thumb" } }],
 }), undefined)[0].json;
@@ -81,6 +81,12 @@ let out = runGate(OS28_NEW, cleanRow());
 assert.deepEqual(out.os28_blocking, [], "the clean row clears the new gate");
 assert.equal(out.os28_allowed, true);
 assert.equal(runGate(OS28_OLD, cleanRow()).os28_allowed, true);
+assert.equal(runGate(OS28_NEW, cleanRow(), 89).os28_allowed, false, "89 can never clear publish QC");
+assert.equal(runGate(OS28_NEW, cleanRow(), 90).os28_allowed, true, "90 meets QC numeric minimum with other checks");
+const manualWaiver = cleanRow({ "QC Verdict": "WAIVED" });
+assert.equal(runGate(OS28_OLD, manualWaiver, 100).os28_allowed, true, "historical waiver bypass existed");
+assert.equal(runGate(OS28_NEW, manualWaiver, 100).os28_allowed, false, "WAIVED no longer bypasses the 90 floor");
+
 
 // "Not required" with no line at all passed the old gate. It is held now.
 const notRequired = cleanRow({ "AI Disclosure": "Not required", Description: DESC_BODY });
