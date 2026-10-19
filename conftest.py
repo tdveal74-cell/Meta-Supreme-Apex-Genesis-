@@ -86,6 +86,7 @@ _INCREMENTAL_SCHEMAS = (
     "026_company_proposals.sql",
     "027_lead_disclosure_optional.sql",
     "028_support_articles.sql",
+    "029_runtime_evidence.sql",
 )
 
 _DSN = TEST_DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
@@ -95,6 +96,10 @@ _TEST_DB_NAME = _DSN.rsplit("/", 1)[1]
 # Tables wiped between tests (order respects FKs; agents and executors stay
 # seeded, the latter by 012_live_state_ledger.sql).
 _DATA_TABLES = (
+    "agent_tool_results",
+    "agent_verifications",
+    "agent_skill_revisions",
+    "skill_evaluation_runs",
     "company_proposals",
     "company_findings",
     "company_comment_drafts",

@@ -683,16 +683,22 @@ class AgentLearningRepository:
         description: str,
         instructions: str,
         provenance: str = "operator",
+        revision_evidence: Optional[Dict[str, Any]] = None,
     ) -> SkillRecord:
-        clean_name = (name or "").strip().lower().replace(" ", "-")
-        clean_description = (description or "").strip()
-        clean_instructions = (instructions or "").strip()
-        if not clean_name:
-            raise ValueError("skill name is empty")
-        if not clean_description:
-            raise ValueError("skill description is empty")
-        if not clean_instructions:
-            raise ValueError("skill instructions are empty")
+        from app.services.skill_revisions import (
+            append_revision,
+            lock_skill,
+            normalized_name,
+            preserve_current,
+        )
+        clean_name = normalized_name(name or "")
+        clean_description = description or ""
+        clean_instructions = instructions or ""
+        if not clean_name or len(clean_name) > 200:
+            raise ValueError("skill name empty or too long")
+        if not clean_description.strip() or not clean_instructions.strip():
+            raise ValueError("skill description and instructions required")
+        await lock_skill(db, owner_id, clean_name)
 
         result = await db.execute(
             select(AgentRuntimeSkill).where(
@@ -716,12 +722,15 @@ class AgentLearningRepository:
             )
             db.add(row)
         else:
+            await preserve_current(db, row)
             row.description = clean_description
             row.instructions = clean_instructions
             row.version += 1
             row.provenance = (provenance or row.provenance).strip() or row.provenance
             row.updated_at = now
         await db.flush()
+        await append_revision(db, row=row, parent_version=row.version - 1 if row.version > 1 else None,
+                              evidence=revision_evidence or {"operation": "human_edit"})
         return self._skill_record(row)
 
     async def get_skill(

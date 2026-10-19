@@ -1,4 +1,9 @@
-# Agent evaluation baseline (draft)
+# Agent evaluation baseline
+
+Historical first-slice record. The runtime follow-up is documented in
+[AGENT_RUNTIME_EVIDENCE.md](AGENT_RUNTIME_EVIDENCE.md); its implementation
+supersedes the remaining-implementation list below. Historical validation
+entries retain their original scope and timestamps.
 
 This first slice is offline and opt-in. It changes no runtime completion state,
 approval policy, database schema, tool execution, or active skill.

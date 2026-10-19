@@ -25,6 +25,12 @@ the Build 12 banded conflict policy; PR 45 finished the ops polish.
 | Build 12 banded conflict policy for soul conflict-search | 44 | Merged |
 | Auto skill-propose dedupe by goal slug | 45 | Merged |
 
+Update 2026-10-19: durable runtime results, declared-check receipts, route
+profiles, evaluator calibration and immutable skill revision/evaluation routes
+are implemented for the authenticated coordinator. Evolved promotion requires
+an exact owned passing evaluation and explicit human approval. See
+`docs/AGENT_RUNTIME_EVIDENCE.md` for verification scope and live sampling limits.
+
 ## On main
 
 | Capability | Status |
@@ -64,10 +70,10 @@ so a surface change has to move this document too:
 
 ```hermes-surface-counts
 tools 21
-routes 24
-columns 126
+routes 32
+columns 152
 states 9
-migrations 7
+migrations 8
 ```
 
 What it does not cover, stated plainly so nobody reads more into a green run.

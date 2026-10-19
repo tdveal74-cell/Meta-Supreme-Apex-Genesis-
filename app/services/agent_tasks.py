@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import os
 import secrets
 import socket
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -30,8 +32,10 @@ from app.services.editforge_client import (
 from app.services.hermes_expansion_persistence import HermesExpansionRepository
 from app.services.intelligence import get_provider, get_vision_provider
 from app.services.leased_effect_recorder import LeasedEffectRecorder
+from app.services.runtime_evidence import RuntimeEvidenceRepository
 from app.services.soul import get_soul_layer
 from app.services.subagent_links import SubagentLinkRepository
+from services.agent_benchmarks import fingerprint
 from services.agent_runtime.contracts import (
     COUNCIL_TOOL_NAME,
     AgentTask,
@@ -48,6 +52,7 @@ from services.agent_runtime.planner import LLMPlanner, StaticPlanner
 from services.agent_runtime.runtime import AgentRuntime, soul_recall_payload
 from services.agent_runtime.store import InMemoryAgentTaskStore
 from services.agent_runtime.tools import ToolRegistry
+from services.agent_runtime.verification import validate_requirements
 from services.agents.registry import list_agent_slugs
 from services.browser.agent_adapter import BrowserCapabilityAdapter
 from services.browser.http_fetcher import maybe_live_fetcher
@@ -262,6 +267,7 @@ class DurableAgentTaskService:
         self.tasks = AgentTaskRepository()
         self.learning = AgentLearningRepository()
         self.effects = EffectReceiptRepository()
+        self.evidence = RuntimeEvidenceRepository()
         self.expansion = expansion_repo
         self.subagent_links = subagent_links
         self.worker_id = (
@@ -277,6 +283,8 @@ class DurableAgentTaskService:
         context: Optional[Dict[str, Any]] = None,
         project_id: Optional[str] = None,
         planned_steps: Optional[Sequence[Dict[str, Any]]] = None,
+        verification_requirements: Optional[List[Dict[str, Any]]] = None,
+        task_family: str = "unspecified",
     ) -> AgentTask:
         clean_goal = (goal or "").strip()
         if not clean_goal:
@@ -312,11 +320,24 @@ class DurableAgentTaskService:
             planner = LLMPlanner(get_provider())
 
         plan = await planner.plan(clean_goal, merged_context, tools)
+        requirements = validate_requirements(verification_requirements or [], {s.step_id for s in plan.steps})
+        provider = None if planned_steps is not None else get_provider()
+        skills = merged_context.get("devon_learning", {}).get("skills", [])
+        merged_context["_runtime_profile"] = {
+            "route_version": "explicit-plan-v1" if provider is None else "planner:" + str(provider.name),
+            "model_version": "none" if provider is None else "configured:" + str(provider.default_model),
+            "prompt_version": fingerprint({"source": inspect.getsource(LLMPlanner)}),
+            "skill_version": fingerprint({"skills": skills}),
+            "config_fingerprint": fingerprint({"tools": tools.describe(), "requirements": requirements}),
+            "task_family": task_family,
+            "input_context_hash": fingerprint({k: v for k, v in merged_context.items() if k != "_runtime_profile"}),
+        }
         task = AgentTask(
             task_id=f"TASK-{secrets.token_hex(6).upper()}",
             goal=clean_goal,
             context=merged_context,
             plan=plan,
+            verification_requirements=requirements,
         )
         await self.tasks.save(
             db,
@@ -538,10 +559,17 @@ class DurableAgentTaskService:
                 repository=self.effects,
                 session_factory=AsyncSessionLocal,
             )
+            async def record_result(**kwargs):
+                return await self.evidence.record_result(
+                    db, owner_id=owner_id, lease_token=claim.lease_token,
+                    generation=claim.execution_generation, **kwargs)
+
+            started = time.perf_counter()
             runtime = self._runtime_for(
                 claim.task,
                 effect_recorder=recorder,
                 effect_idempotency_key=key,
+                result_recorder=record_result,
             )
             result = await runtime.run_until_blocked(
                 claim.task.task_id,
@@ -552,6 +580,10 @@ class DurableAgentTaskService:
                 raise TaskExecutionLeaseLost(
                     "agent task lease renewal failed; stale result was not committed"
                 )
+            await self.evidence.verify(
+                db, owner_id=owner_id, lease_token=claim.lease_token,
+                generation=claim.execution_generation, task=result.task, max_steps=max_steps,
+                latency_ms=(time.perf_counter() - started) * 1000)
             payload = result.to_dict()
             # The drafted proposal must enter the payload before the run ledger
             # stores it, or an idempotent replay would differ from the original
@@ -918,6 +950,7 @@ class DurableAgentTaskService:
         *,
         effect_recorder: Optional[EffectRecorder] = None,
         effect_idempotency_key: str = "",
+        result_recorder=None,
     ) -> AgentRuntime:
         store = InMemoryAgentTaskStore()
         store.put(task)
@@ -932,6 +965,7 @@ class DurableAgentTaskService:
             store=store,
             effect_recorder=effect_recorder,
             effect_idempotency_key=effect_idempotency_key,
+            result_recorder=result_recorder,
         )
 
     @staticmethod

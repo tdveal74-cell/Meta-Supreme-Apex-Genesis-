@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import secrets
-from typing import TYPE_CHECKING, Any, Dict, Optional
+import time
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Optional
 
 from services.agent_runtime.contracts import (
     COUNCIL_TOOL_NAME,
@@ -29,7 +30,20 @@ from services.agent_runtime.learning_context import unavailable_learning
 from services.agent_runtime.planner import Planner
 from services.agent_runtime.store import AgentTaskStore, InMemoryAgentTaskStore
 from services.agent_runtime.tools import ToolRegistry
+from services.agent_runtime.verification import canonical
 from services.devon.approval import ApprovalQueue, ApprovalState
+
+
+def _evidence_metadata(metadata, evidence):
+    raw = dict(metadata or {})
+    if len(canonical(raw)) > 2048:
+        confidence = raw.get("confidence")
+        raw = {"metadata_truncated": True}
+        if type(confidence) in (int, float):
+            raw["confidence"] = confidence
+    raw["durable_result"] = evidence
+    return raw
+
 
 if TYPE_CHECKING:
     from services.intelligence.soul import SoulLayer
@@ -116,6 +130,7 @@ class AgentRuntime:
         effect_recorder: Optional[EffectRecorder] = None,
         effect_idempotency_key: str = "",
         soul: Optional["SoulLayer"] = None,
+        result_recorder: Optional[Callable[..., Awaitable[Dict[str, Any]]]] = None,
     ) -> None:
         self.planner = planner
         self.tools = tools
@@ -125,6 +140,7 @@ class AgentRuntime:
         self.effect_recorder = effect_recorder
         self.effect_idempotency_key = (effect_idempotency_key or "").strip()
         self.soul = soul
+        self.result_recorder = result_recorder
 
     async def create_task(
         self,
@@ -292,7 +308,9 @@ class AgentRuntime:
                 idempotency_key=self.effect_idempotency_key or task.task_id,
             )
 
+        started = time.perf_counter()
         result = await self.tools.execute(spec.name, execution_arguments)
+        elapsed_ms = (time.perf_counter() - started) * 1000
 
         if intent is not None and self.effect_recorder is not None:
             status = EffectStatus.SUCCEEDED if result.ok else EffectStatus.FAILED
@@ -315,12 +333,17 @@ class AgentRuntime:
                 },
             )
 
+        evidence = {}
+        if self.result_recorder is not None:
+            evidence = await self.result_recorder(task=task, step=step, result=result, elapsed_ms=elapsed_ms)
+
         observation = Observation(
             step_id=step.step_id,
             ok=result.ok,
-            output=result.output,
-            error=result.error,
-            metadata=dict(result.metadata or {}),
+            output=result.output[:2048] if evidence else result.output,
+            error=result.error[:2048] if evidence else result.error,
+            metadata=({**_evidence_metadata(result.metadata, evidence), "output_truncated": len(result.output) > 2048}
+                      if evidence else dict(result.metadata or {})),
         )
         task.observations.append(observation)
 
@@ -391,6 +414,7 @@ class AgentRuntime:
         task.state = TaskState.PLANNED if task.current_step == 0 else TaskState.RUNNING
         task.failure_reason = ""
         task.final_summary = ""
+        task.verification = {"verdict": "UNVERIFIED", "scope": "declared_checks_only", "reason": "task rewound"}
         task.touch()
         self.store.put(task)
         return task
@@ -457,6 +481,8 @@ class AgentRuntime:
     def _complete(self, task: AgentTask) -> None:
         task.state = TaskState.COMPLETED
         task.final_summary = self._summary(task)
+        task.verification = {"verdict": "UNVERIFIED", "scope": "declared_checks_only",
+                             "reason": "awaiting application evidence checks"}
         task.touch()
         self.store.put(task)
 

@@ -154,6 +154,8 @@ class AgentTask:
     current_step: int = 0
     observations: List[Observation] = field(default_factory=list)
     checkpoints: List[TaskCheckpoint] = field(default_factory=list)
+    verification_requirements: List[Dict[str, Any]] = field(default_factory=list)
+    verification: Dict[str, Any] = field(default_factory=lambda: {"verdict": "UNVERIFIED", "scope": "declared_checks_only"})
     final_summary: str = ""
     failure_reason: str = ""
     created_at: datetime = field(default_factory=utcnow)
@@ -186,6 +188,8 @@ class AgentTask:
             "current_step": self.current_step,
             "observations": [item.to_dict() for item in self.observations],
             "checkpoints": [item.to_dict() for item in self.checkpoints],
+            "verification_requirements": list(self.verification_requirements),
+            "verification": dict(self.verification),
             "final_summary": self.final_summary,
             "failure_reason": self.failure_reason,
             "created_at": self.created_at.isoformat(),

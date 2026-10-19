@@ -93,6 +93,8 @@ def task_from_dict(payload: Dict[str, Any]) -> AgentTask:
         current_step=int(payload.get("current_step", 0)),
         observations=observations,
         checkpoints=checkpoints,
+        verification_requirements=list(payload.get("verification_requirements") or []),
+        verification=dict(payload.get("verification") or {"verdict": "UNVERIFIED", "scope": "declared_checks_only"}),
         final_summary=str(payload.get("final_summary") or ""),
         failure_reason=str(payload.get("failure_reason") or ""),
         created_at=_dt(payload["created_at"]),

@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,10 +39,13 @@ class PlannedStepBody(BaseModel):
 
 
 class TaskCreateBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     goal: str = Field(..., min_length=1, max_length=20_000)
     context: Dict[str, Any] = Field(default_factory=dict)
     project_id: Optional[str] = None
     steps: Optional[List[PlannedStepBody]] = Field(default=None, max_length=12)
+    verification_requirements: List[Dict[str, Any]] = Field(default_factory=list, max_length=50)
+    task_family: str = Field(default="unspecified", min_length=1, max_length=100)
 
 
 class TaskRunBody(BaseModel):
@@ -125,6 +128,8 @@ async def create_task(
             goal=body.goal,
             context=body.context,
             project_id=body.project_id,
+            verification_requirements=body.verification_requirements,
+            task_family=body.task_family,
             planned_steps=[step.model_dump() for step in body.steps]
             if body.steps is not None
             else None,
@@ -132,6 +137,45 @@ async def create_task(
     except (ValueError, KeyError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return _task_view(task)
+
+
+
+
+class CalibrationBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    receipt_ids: List[str] = Field(min_length=1, max_length=100)
+    votes: Dict[str, Dict[str, str]]
+    training_hashes: List[str] = Field(default_factory=list, max_length=1000)
+
+
+@router.post("/evaluation/calibrate")
+async def calibrate_evaluators(body: CalibrationBody, current_user: CurrentUser, db: AsyncSession = Depends(get_db)):
+    try:
+        value = await agent_tasks_service.evidence.calibrate_receipts(db, owner_id=current_user.id, **body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await db.commit()
+    return value
+
+
+@router.get("/evaluation/routes")
+async def route_profiles(current_user: CurrentUser, limit: int = Query(100, ge=1, le=1000), db: AsyncSession = Depends(get_db)):
+    return await agent_tasks_service.evidence.route_profiles(db, owner_id=current_user.id, limit=limit)
+
+
+@router.get("/{task_id}/results/{result_id}")
+async def durable_result(task_id: str, result_id: str, current_user: CurrentUser, db: AsyncSession = Depends(get_db)):
+    item = await agent_tasks_service.evidence.get_result(db, owner_id=current_user.id, task_id=task_id, result_id=result_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Result not found")
+    return item
+
+
+@router.get("/{task_id}/verification-receipts")
+async def verification_receipts(task_id: str, current_user: CurrentUser, db: AsyncSession = Depends(get_db)):
+    if await agent_tasks_service.get_task(db, owner_id=current_user.id, task_id=task_id) is None:
+        raise HTTPException(status_code=404, detail="Agent task not found")
+    return await agent_tasks_service.evidence.list_verifications(db, owner_id=current_user.id, task_id=task_id)
 
 
 @router.get("/{task_id}")
