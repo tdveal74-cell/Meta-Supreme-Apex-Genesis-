@@ -30,7 +30,7 @@ export function buildTqo90Candidate(pinnedExport, complianceQcCode) {
   if (nextScriptCode.split(pendingAnchor).length !== 2) throw new Error("Script Gate failures anchor drifted");
   const stageScriptCode = nextScriptCode.replace(
     pendingAnchor,
-    pendingAnchor + "\\nif ($('Show Context: Script').first().json.show !== 'NCO') failures.push('TQO signed final-text review adapter not yet wired');"
+    pendingAnchor + "\nif ($('Show Context: Script').first().json.show !== 'NCO') failures.push('TQO signed final-text review adapter not yet wired');"
   );
   const qcAnchor = "const DOCTOR_FLOOR = 70;";
   if (complianceQcCode.split(qcAnchor).length !== 2) throw new Error("QC Doctor floor anchor drifted");
@@ -43,7 +43,7 @@ export function buildTqo90Candidate(pinnedExport, complianceQcCode) {
   if (nextQcCode.split(qcResultAnchor).length !== 2) throw new Error("QC Gate final result anchor drifted");
   const stageQcCode = nextQcCode.replace(
     qcResultAnchor,
-    qcResultAnchor + "\\nif (show === 'TQO' && result.state === 'READY_FOR_HUMAN_REVIEW') return [{ json: { doctorGate: 'HOLD', doctorGateReason: 'TQO signed final-text review adapter not yet wired', qc_score: score, qc_verdict: verdict, rowId: f.id } }];"
+    qcResultAnchor + "\nif (show === 'TQO' && result.state === 'READY_FOR_HUMAN_REVIEW') return [{ json: { doctorGate: 'HOLD', doctorGateReason: 'TQO signed final-text review adapter not yet wired', qc_score: score, qc_verdict: verdict, rowId: f.id } }];"
   );
   const candidate = structuredClone(pinnedExport);
   candidate.nodes.find(n => n.name === "Script Gate: Quality").parameters.jsCode = stageScriptCode;
