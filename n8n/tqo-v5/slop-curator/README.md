@@ -84,3 +84,14 @@ The editorial fields are *reported judgments*, not deterministic proof of author
 7. Human approval remains mandatory. This PR does not authorize narration, rendering, thumbnails, distribution, payments or publication.
 
 **No automatic deployment or publication should occur while the signer and final-text wiring are absent.**
+
+### Offline operator command (staged)
+
+The new `review_handoff_cli.mjs` can create a private, non-overwriting review packet file from a JSON input containing the final script, voice/rubric IDs and source references. It prints **only** the packet ID and SHA-256, never script text. `verify` needs `TQO_REVIEW_SIGNING_SECRET` supplied by an authorized host at runtime and prints a safe HOLD/READY result without any script text. No `sign` operation exists in this CLI.
+
+```sh
+node n8n/tqo-v5/slop-curator/review_handoff_cli.mjs prepare final-input.json private-review-packet.json
+node n8n/tqo-v5/slop-curator/review_handoff_cli.mjs verify private-review-packet.json trusted-signed-return.json
+```
+
+The second command **does not pass** unless an authorized signer has already returned a valid attestation and the signing key is securely injected. Never run `verify` from an untrusted workflow that can control the HMAC key, and never treat an unsigned ChatGPT reply as an approved receipt. Do not copy private review packets into public logs or issues.
