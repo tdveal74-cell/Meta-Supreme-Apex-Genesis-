@@ -3,7 +3,7 @@
 export const TQO_SLOP_POLICY = Object.freeze({ version: "tqo-slop-v1", minScore: 90 });
 
 const BLOCKED_WORDS = /\b(?:actually|leverage|probably|maybe|really)\b/gi;
-const BLOCKED_PHRASE = /\bfree audit linked below\b/gi;
+const BLOCKED_PHRASE = /\bfree audit linked below\b/i;
 const SHA256 = /^[a-f0-9]{64}$/i;
 
 function validScore(score) {
@@ -33,7 +33,7 @@ export function lintTqoText(text) {
 export function assessTqoDraft(input) {
   const failures = [];
   if (!input || input.brand !== "TQO") {
-    return { state: "HOLD", threshold: TQO_SLOP_POLICY.minScore, failures: ["missing or incorrect TQO brand"] };
+    return { state: "HOLD", threshold: TQO_SLOP_POLICY.minScore, failures: ["missing or incorrect TQO brand"], humanApprovalRequired: true };
   }
   const script = String(input.script || "");
   if (!script.trim()) failures.push("final script missing");
