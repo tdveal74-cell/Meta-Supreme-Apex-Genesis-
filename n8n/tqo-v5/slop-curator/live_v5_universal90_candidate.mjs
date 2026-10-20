@@ -115,6 +115,12 @@ export function buildLiveUniversal90Candidate(rawExport) {
   for (const n of workflowCopy.nodes) if (Object.hasOwn(patch, n.name)) {
     n.parameters.jsCode = patch[n.name];
   }
+  // Refuse to emit an import-ready replacement for the live workflow. A
+  // separate reviewed deploy tool must bind a target ID and activate after
+  // receiving authenticated authorization and a trusted final-draft adapter.
+  workflowCopy.active = false;
+  workflowCopy.name = "DRAFT Universal 90 Gates - NOT FOR ACTIVATION";
+  delete workflowCopy.id;
   return {
     candidate,
     report: {
