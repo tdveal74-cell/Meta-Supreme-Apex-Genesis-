@@ -73,6 +73,8 @@ jobs:
         run: node --test n8n/tqo-v5/slop-curator/review_handoff_cli.test.mjs
       - name: Universal 90 quality gate covers every brand, evidence and canon
         run: node --test n8n/tqo-v5/slop-curator/ecosystem_review_gate.test.mjs
+      - name: Universal 90 live-export drift guard refuses stale source
+        run: node --test n8n/tqo-v5/slop-curator/live_v5_universal90_candidate.test.mjs
       # The Jev image lanes, ruled by Tee 2026-10-16, ship in shadow and are not
       # wired yet. Each harness drives the real node bodies against stubs and
       # against the unmodified export code; none of them calls TypeSafe, so a
