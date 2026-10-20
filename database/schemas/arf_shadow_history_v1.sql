@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS arf_shadow_history (
     recorded_sequence BIGINT GENERATED ALWAYS AS IDENTITY UNIQUE,
     owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     root_task_id VARCHAR(64) NOT NULL,
-    task_id VARCHAR(64) NOT NULL REFERENCES agent_tasks(id) ON DELETE CASCADE,
+    task_id VARCHAR(64) NOT NULL,
     parent_event_id VARCHAR(80) NULL REFERENCES arf_shadow_history(event_id),
     delegated_from_event_id VARCHAR(80) NULL REFERENCES arf_shadow_history(event_id),
     failure_fingerprint CHAR(64) NOT NULL,

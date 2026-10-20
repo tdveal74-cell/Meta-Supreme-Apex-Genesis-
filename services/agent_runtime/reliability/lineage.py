@@ -96,9 +96,10 @@ def advise_retry(events: Sequence[HistoryEvent], *, owner_id: str,
     if not related:
         return RetryAdvice("CONTINUE_DIAGNOSIS", "evidence_gate", "first occurrence", 0, ids)
     last = related[-1]
+    if len(related) >= 3:
+        return RetryAdvice("REVIEW_REQUIRED", "blocker_validator",
+                           "attempt bound reached for this failure fingerprint", len(related), ids)
     if last.outcome_digest != outcome_digest or last.evidence_revision != evidence_revision:
         return RetryAdvice("CONTINUE_DIAGNOSIS", "evidence_gate", "meaningfully changed evidence/outcome", len(related), ids)
-    if len(related) >= 3:
-        return RetryAdvice("REVIEW_REQUIRED", "blocker_validator", "three equivalent unchanged attempts", len(related), ids)
     return RetryAdvice("CHANGE_STRATEGY", "strategy_laundering_detector",
                        "repeated outcome without new evidence", len(related), ids)

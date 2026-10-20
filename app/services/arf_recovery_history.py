@@ -7,11 +7,14 @@ call site without explicit security/owner review, migration, RLS and grants.
 from __future__ import annotations
 
 import re
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.agent_runtime.reliability.lineage import (
-    HistoryConflict, HistoryEvent, review_history,
+    HistoryConflict,
+    HistoryEvent,
+    review_history,
 )
 
 _SAFE_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
@@ -59,8 +62,14 @@ async def append_history(db: AsyncSession, *, owner_id: str,
     """
     if not shadow_audit_write_authorized:
         raise PermissionError("ARF audit history write requires trusted app authorization")
-    if owner_id != event.owner_id or not _SAFE_ID.fullmatch(event.event_id):
+    if owner_id != event.owner_id or not isinstance(event.event_id, str) or not _SAFE_ID.fullmatch(event.event_id) or len(event.event_id) > 80:
         raise HistoryConflict("invalid owner or event id")
+    for value, limit in ((event.root_task_id, 64), (event.task_id, 64), (event.control, 80)):
+        if not isinstance(value, str) or not _SAFE_ID.fullmatch(value) or len(value) > limit:
+            raise HistoryConflict("invalid task, root, or control identifier")
+    for value in (event.parent_event_id, event.delegated_from_event_id):
+        if not isinstance(value, str) or (value and (len(value) > 80 or not _SAFE_ID.fullmatch(value))):
+            raise HistoryConflict("invalid ancestor identifier")
     if not (isinstance(policy_digest, str) and len(policy_digest) == 64 and
             all(ch in "0123456789abcdef" for ch in policy_digest)):
         raise HistoryConflict("invalid source policy digest")

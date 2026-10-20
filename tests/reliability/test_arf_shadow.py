@@ -8,7 +8,13 @@ import unittest
 from dataclasses import dataclass
 from pathlib import Path
 
-from services.agent_runtime.reliability import EvidenceSnapshot, ReliabilityPolicy, PolicyError, assess, observe_runtime_result
+from services.agent_runtime.reliability import (
+    EvidenceSnapshot,
+    PolicyError,
+    ReliabilityPolicy,
+    assess,
+    observe_runtime_result,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 POLICY_PATH = ROOT / "policies" / "reliability" / "profiles.v1.json"

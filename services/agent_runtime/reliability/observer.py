@@ -12,7 +12,6 @@ from typing import Any
 from .contracts import EvidenceSnapshot, EvidenceSource, ShadowDecision
 from .policy import ReliabilityPolicy
 
-
 _CONTROL = {
     "scope": "rule_conflict",
     "tool": "permission_and_scope_guard",

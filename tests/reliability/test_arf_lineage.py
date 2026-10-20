@@ -1,6 +1,6 @@
 """Portable ARF retry genealogy and strategy-change tests."""
 import unittest
-from dataclasses import replace
+
 from services.agent_runtime.reliability.lineage import (
     HistoryConflict, HistoryEvent, advise_retry, fingerprint, review_history,
 )
@@ -37,6 +37,15 @@ class LineageTests(unittest.TestCase):
         result = advise_retry(e, owner_id="owner1", root_task_id="ROOT1",
                               failure_fingerprint=F, outcome_digest=DIGEST, evidence_revision="r0")
         self.assertEqual(result.verdict, "CHANGE_STRATEGY")
+
+    def test_three_attempts_escalate_even_with_revision_churn(self):
+        prior = [event(1, rev="r1"), event(2, parent="EV1", rev="r2"),
+                 event(3, parent="EV2", rev="r3")]
+        result = advise_retry(prior, owner_id="owner1", root_task_id="ROOT1",
+                              failure_fingerprint=F, outcome_digest="b" * 64,
+                              evidence_revision="r4")
+        self.assertEqual(result.verdict, "REVIEW_REQUIRED")
+        self.assertEqual(result.matching_attempts, 3)
 
     def test_three_unchanged_attempts_escalate(self):
         e = [event(1), event(2, parent="EV1"), event(3, parent="EV2")]
@@ -78,4 +87,5 @@ class LineageTests(unittest.TestCase):
                          evidence_revision="r0").matching_attempts, 2)
 
 
-if __name__ == "__main__": unittest.main()
+if __name__ == "__main__":
+    unittest.main()

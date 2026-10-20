@@ -1,6 +1,6 @@
 """Stage 2 history audit persistence contract tests (no real database)."""
 import unittest
-from types import SimpleNamespace
+
 from app.services.arf_recovery_history import append_history, read_history
 from services.agent_runtime.reliability.lineage import HistoryConflict, HistoryEvent
 
@@ -11,7 +11,9 @@ class FakeRows:
     def all(self): return self.rows
 
 class SpySession:
-    def __init__(self, rows=()): self.rows=list(rows);self.queries=[]
+    def __init__(self, rows=()):
+        self.rows = list(rows)
+        self.queries = []
     async def execute(self, statement, params=None):
         self.queries.append((str(statement), params))
         return FakeRows(self.rows)
@@ -45,6 +47,20 @@ class StoreTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('INSERT INTO arf_shadow_history',s.queries[-1][0])
         self.assertNotIn('approval_token',str(s.queries[-1][1]))
 
+    async def test_oversized_ids_refused_before_db_query(self):
+        from dataclasses import replace
+        for field, n in (("event_id", 81), ("root_task_id", 65),
+                         ("task_id", 65), ("control", 81),
+                         ("parent_event_id", 81), ("delegated_from_event_id", 81)):
+            with self.subTest(field=field):
+                s = SpySession()
+                with self.assertRaises(HistoryConflict):
+                    await append_history(s, owner_id="owner-one",
+                                         event=replace(e(), **{field: "x" * n}),
+                                         policy_digest="c" * 64,
+                                         shadow_audit_write_authorized=True)
+                self.assertFalse(s.queries)
+
     async def test_cross_owner_write_denied(self):
         s=SpySession()
         with self.assertRaisesRegex(HistoryConflict,'owner'):
@@ -60,4 +76,5 @@ class StoreTests(unittest.IsolatedAsyncioTestCase):
                                  policy_digest='c'*64,shadow_audit_write_authorized=True)
         self.assertEqual(len(s.queries),1)
 
-if __name__=='__main__': unittest.main()
+if __name__ == "__main__":
+    unittest.main()

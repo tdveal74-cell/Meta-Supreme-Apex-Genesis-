@@ -20,11 +20,15 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent_runtime import (
-    AgentEffectIntentRecord, AgentEffectReceiptRecord, AgentTaskRecord,
+    AgentEffectIntentRecord,
+    AgentEffectReceiptRecord,
+    AgentTaskRecord,
 )
 from app.services.agent_effect_receipts import arguments_hash
 from services.agent_runtime.governance import (
-    APPROVAL_MARKER_PREFIX, RUNTIME_REQUESTED_BY, approval_binding,
+    APPROVAL_MARKER_PREFIX,
+    RUNTIME_REQUESTED_BY,
+    approval_binding,
 )
 from services.agent_runtime.reliability.contracts import EvidenceSnapshot
 

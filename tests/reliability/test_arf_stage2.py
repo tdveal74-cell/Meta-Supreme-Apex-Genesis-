@@ -8,12 +8,17 @@ from datetime import datetime, timezone
 from types import SimpleNamespace as NS
 
 from app.services.arf_evidence_source import (
-    BoundEvidenceSource, EvidenceReadRefused, GateAttestations,
-    collect_evidence, reconcile_records,
+    BoundEvidenceSource,
+    EvidenceReadRefused,
+    GateAttestations,
+    collect_evidence,
+    reconcile_records,
 )
 from app.services.agent_effect_receipts import arguments_hash
 from services.agent_runtime.governance import (
-    APPROVAL_MARKER_PREFIX, RUNTIME_REQUESTED_BY, approval_binding,
+    APPROVAL_MARKER_PREFIX,
+    RUNTIME_REQUESTED_BY,
+    approval_binding,
 )
 
 TENANT = "owner-01"
@@ -230,14 +235,12 @@ class AsyncCollectionTests(unittest.IsolatedAsyncioTestCase):
                                    workflow_stage="review", policy_digest=POLICY)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 class EndToEndShadowTests(unittest.IsolatedAsyncioTestCase):
     async def test_persisted_task_with_partial_qc_would_hold(self):
+        from pathlib import Path
+
         from app.services.arf_evidence_source import observe_persisted_task
         from services.agent_runtime.reliability import ReliabilityPolicy
-        from pathlib import Path
         p = ReliabilityPolicy.from_json(Path(__file__).resolve().parents[2] / 'policies/reliability/profiles.v1.json')
         row, intents, receipts, approvals, gates = setup()
         gates = replace(gates, policy_digest=p.digest)
@@ -251,9 +254,10 @@ class EndToEndShadowTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('missing_verified_gates:', result.blocking_reasons[0])
 
     async def test_no_qc_adapter_never_signs_off_completion(self):
+        from pathlib import Path
+
         from app.services.arf_evidence_source import observe_persisted_task
         from services.agent_runtime.reliability import ReliabilityPolicy
-        from pathlib import Path
         p = ReliabilityPolicy.from_json(Path(__file__).resolve().parents[2] / 'policies/reliability/profiles.v1.json')
         row, intents, receipts, approvals, gates = setup()
         db = FakeSession([FakeResult(row=row), FakeResult(rows=intents), FakeResult(rows=receipts)])
@@ -268,3 +272,7 @@ class EndToEndShadowTests(unittest.IsolatedAsyncioTestCase):
 class RegistryWrite:
     def get(self, name):
         return NS(risk='write') if name == 'repo.write' else None
+
+
+if __name__ == "__main__":
+    unittest.main()
