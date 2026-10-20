@@ -3,7 +3,8 @@
 This slice introduces `RuntimeDeclaredChecksGateReader`, an owner-scoped,
 read-only adapter for the existing `agent_verifications` and
 `agent_tool_results` stores. It does not create any new database table,
-migration, HTTP route, background job, automation, or production config.
+migration, background job, automation, or production config. The only new
+HTTP route is the default-disabled shadow readback described below.
 
 The adapter attests **only `requirement_evidence`**, and only when a
 current, completed task has nonempty declared checks, its exact current
