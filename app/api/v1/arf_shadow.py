@@ -1,7 +1,8 @@
 """Opt-in, authenticated, read-only DEVON ARF shadow diagnostic surface.
 
 This endpoint never runs a task, grants an approval, mutates task state,
-claims human review or activates ARF. Disabled by default until the operator
+claims human review or activates ARF. It updates only rate-limit accounting.
+Disabled by default until the operator
 approves real evidence-source and access-boundary verification.
 """
 
@@ -18,6 +19,11 @@ from app.security.deps import CurrentUser
 from app.services.agent_tasks import agent_tasks_service, build_tool_registry
 from app.services.arf_declared_gate import RuntimeDeclaredChecksGateReader
 from app.services.arf_evidence_source import EvidenceReadRefused, observe_persisted_task
+from app.services.arf_shadow_rate_limit import (
+    ShadowRateLimitExceeded,
+    ShadowRateLimitUnavailable,
+    consume_shadow_budget,
+)
 from services.agent_runtime.reliability.policy import ReliabilityPolicy
 
 router = APIRouter(prefix="/agent-tasks", tags=["ARF Shadow (read-only)"])
@@ -38,6 +44,20 @@ async def reliability_shadow(
     """Read DEVON build diagnostics only; no route to release authorization."""
     if not shadow_read_enabled():
         raise HTTPException(status_code=404, detail="Not found")
+    # Charge by authenticated account before task/evidence queries. Unknown
+    # task IDs and rejected evidence cannot bypass or refund the same budget.
+    try:
+        await consume_shadow_budget(current_user.id)
+    except ShadowRateLimitExceeded as exc:
+        raise HTTPException(
+            status_code=429, detail="ARF diagnostic request limit reached",
+            headers={"Retry-After": str(exc.retry_after), "Cache-Control": "no-store"},
+        ) from exc
+    except ShadowRateLimitUnavailable as exc:
+        raise HTTPException(
+            status_code=503, detail="ARF diagnostic protection unavailable",
+            headers={"Retry-After": "2", "Cache-Control": "no-store"},
+        ) from exc
     task = await agent_tasks_service.get_task(db, owner_id=current_user.id, task_id=task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
