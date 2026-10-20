@@ -6,9 +6,9 @@ import json
 import unittest
 from types import SimpleNamespace as NS
 
+from app.services.agent_effect_receipts import arguments_hash
 from app.services.arf_declared_gate import RuntimeDeclaredChecksGateReader, verify_declared_gate
 from app.services.arf_evidence_source import EvidenceReadRefused
-from app.services.agent_effect_receipts import arguments_hash
 from services.agent_runtime.verification import canonical, digest
 
 OWNER = "owner-A"
