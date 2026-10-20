@@ -34,3 +34,17 @@ authentication and cross-tenant refusal, and output redaction. Obtain
 operator permission before changing the feature flag or deploying the
 candidate. This PR does not activate the shadow endpoint or enforce
 domain acceptance across TSWS, TQO, NCO Forge, EditForge or WhatBroke.
+
+## DEVON RECEIPT
+
+```text
+AREA: Systems
+TYPE: SYS_OPS
+ARTIFACT: docs/devon/SYS_OPS_arf-stage3a-receipt-readback-review_2026-10-20-1148.md
+DATE: 2026-10-20
+DECISIONS: Keep Stage 3a as a default-disabled, authenticated, read-only build-stage diagnostic; do not bypass CI or operator authorization for activation.
+FINDINGS: Stage 3a candidate passed standalone, dependency, engine, container and Chromium smoke checks; the initial PostgreSQL suite failed five status-document receipt and timestamp governance assertions, repaired in this revision.
+OPEN: Fresh exact-head PostgreSQL and Ruff CI; deployment readback; authenticated cross-tenant denial before enabling ARF_SHADOW_READ_ENABLED.
+STATUS: Corrected draft, not merged or activated at document creation.
+TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
+```
