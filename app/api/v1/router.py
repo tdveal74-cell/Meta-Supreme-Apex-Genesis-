@@ -9,6 +9,7 @@ from app.api.v1 import (
     agent_skill_revisions,
     agent_tasks,
     agents,
+    arf_shadow,
     auth,
     company,
     conversations,
@@ -59,6 +60,7 @@ api_router.include_router(devon.router)
 api_router.include_router(devon_editforge.router)
 api_router.include_router(operator.router)
 api_router.include_router(operator_shell.router)
+api_router.include_router(arf_shadow.router)
 api_router.include_router(agent_tasks.router)
 api_router.include_router(agent_skill_revisions.router)
 api_router.include_router(agent_expansion.router)

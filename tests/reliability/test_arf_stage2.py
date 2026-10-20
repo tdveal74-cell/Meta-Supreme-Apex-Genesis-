@@ -214,6 +214,9 @@ class AsyncCollectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("owner_id", db.calls[2][0])
         self.assertIn("FROM devon_approvals", approval_db.calls[0][0])
         self.assertEqual(approval_db.calls[0][1]["owner"], TENANT)
+        self.assertIn("what_happens LIKE :marker_0", approval_db.calls[0][0])
+        self.assertEqual(approval_db.calls[0][1]["marker_0"],
+                         "%" + APPROVAL_MARKER_PREFIX + approvals[0]["what_happens"].split(APPROVAL_MARKER_PREFIX)[-1])
         self.assertEqual(snapshot.approved_step_ids, {"step-1"})
 
     async def test_missing_approval_database_fails_closed_for_approval(self):

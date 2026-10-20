@@ -250,14 +250,35 @@ async def collect_evidence(*, db: AsyncSession, approval_db: AsyncSession | None
 
     approval_rows: list[Any] = []
     if approval_db is not None:
-        # The query is read-only. `devon_approvals` is the authoritative queue
-        # store's existing table, possibly hosted in another DB.
+        # Restrict reads to this task's bounded, exact runtime bindings.
+        # No caller-supplied SQL fragments. `endswith(marker)` in reconcile_records
+        # remains the final independent proof after this filtered lookup.
+        plan = task.payload.get("plan") if isinstance(task.payload, dict) else None
+        steps = plan.get("steps") if isinstance(plan, dict) else None
+        if not isinstance(steps, list) or not 1 <= len(steps) <= 12:
+            raise EvidenceReadRefused("invalid plan for approval readback")
+        markers = set()
+        for step in steps:
+            if not isinstance(step, dict) or not isinstance(step.get("tool_call"), dict):
+                raise EvidenceReadRefused("invalid plan step for approval readback")
+            call = step["tool_call"]
+            if not isinstance(step.get("step_id"), str) or not isinstance(call.get("name"), str) or not isinstance(call.get("arguments"), dict):
+                raise EvidenceReadRefused("invalid approval binding inputs")
+            markers.add(APPROVAL_MARKER_PREFIX + approval_binding(
+                task_id=task_id, step_id=step["step_id"],
+                tool_name=call["name"], arguments=call["arguments"],
+            ))
+        bindings = sorted(markers)
+        params = {"owner": owner_id, "requested": RUNTIME_REQUESTED_BY}
+        predicates = []
+        for i, marker in enumerate(bindings):
+            name = f"marker_{i}"
+            params[name] = "%" + marker
+            predicates.append("what_happens LIKE :" + name)
         ar = await approval_db.execute(text("""
             SELECT request_id, owner_id, requested_by, state, decided_by, what_happens
             FROM devon_approvals WHERE owner_id = :owner AND requested_by = :requested
-              AND what_happens LIKE :prefix
-        """), {"owner": owner_id, "requested": RUNTIME_REQUESTED_BY,
-               "prefix": "%" + APPROVAL_MARKER_PREFIX + "%"})
+              AND (""" + " OR ".join(predicates) + ")"), params)
         approval_rows = list(ar.mappings().all())
     gates = (await gate_reader.load_gates(task_id=task_id, tenant_id=owner_id,
                                          domain=domain, workflow_stage=workflow_stage,

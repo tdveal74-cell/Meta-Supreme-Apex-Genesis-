@@ -43,6 +43,7 @@ an exact owned passing evaluation and explicit human approval. See
 | Browser allowlisted fetch + approved navigate | CI-proven (live fetch opt-in). Not operator-live. |
 | Skill proposals + human promote | CI-proven, deduped by goal slug. Not operator-live. |
 | Soul conflict-search (Build 12 banded policy) | CI-proven. Not operator-live. |
+| ARF Stage 3a declared-check readback | CI candidate, read-only; endpoint flag defaults off. No live enforcement or creative/domain gate promotion. |
 
 Honest label: schema and CI green are not the same as a person running Hermes as the live operator. This stack is CI-proven / not operator-live.
 
@@ -70,7 +71,7 @@ so a surface change has to move this document too:
 
 ```hermes-surface-counts
 tools 21
-routes 32
+routes 33
 columns 152
 states 9
 migrations 8

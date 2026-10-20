@@ -171,7 +171,9 @@ on:
 jobs:
   panels:
     name: Six panels, the capability dock and the status cards in real Chromium
-    runs-on: ubuntu-latest
+    # Playwright 1.56.1 rejects Chromium dependencies on ubuntu26.04.
+    # Pin a supported host instead of allowing ubuntu-latest to drift.
+    runs-on: ubuntu-24.04
 
     # The same image ci.yml's api job uses, so the database this runs against is
     # the one the Python suite runs against.
