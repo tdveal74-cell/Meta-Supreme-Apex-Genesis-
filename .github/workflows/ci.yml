@@ -73,6 +73,8 @@ jobs:
         run: node --test n8n/tqo-v5/slop-curator/review_handoff_cli.test.mjs
       - name: Universal 90 quality gate covers every brand, evidence and canon
         run: node --test n8n/tqo-v5/slop-curator/ecosystem_review_gate.test.mjs
+      - name: External public-key receipt verification remains independent
+        run: node --test n8n/tqo-v5/slop-curator/public_key_review_verifier.test.mjs
       - name: Universal 90 live-export drift guard refuses stale source
         run: node --test n8n/tqo-v5/slop-curator/live_v5_universal90_candidate.test.mjs
       - name: Live-capture 89/90 no-spend smoke harness parses
