@@ -75,6 +75,8 @@ jobs:
         run: node --test n8n/tqo-v5/slop-curator/ecosystem_review_gate.test.mjs
       - name: Universal 90 live-export drift guard refuses stale source
         run: node --test n8n/tqo-v5/slop-curator/live_v5_universal90_candidate.test.mjs
+      - name: Live-capture 89/90 no-spend smoke harness parses
+        run: node --check n8n/tqo-v5/slop-curator/live_v5_offline_smoke.mjs
       # The Jev image lanes, ruled by Tee 2026-10-16, ship in shadow and are not
       # wired yet. Each harness drives the real node bodies against stubs and
       # against the unmodified export code; none of them calls TypeSafe, so a
