@@ -79,6 +79,10 @@ jobs:
         run: node --test n8n/tqo-v5/slop-curator/live_v5_universal90_candidate.test.mjs
       - name: Live-capture 89/90 no-spend smoke harness parses
         run: node --check n8n/tqo-v5/slop-curator/live_v5_offline_smoke.mjs
+      - name: DEVON live bot QC 90 capture refuses source drift
+        run: node --test n8n/tqo-v5/slop-curator/live_devon_bot_universal90_candidate.test.mjs
+      - name: DEVON bot 90 no-spend host smoke harness parses
+        run: node --check n8n/tqo-v5/slop-curator/live_devon_bot_universal90_smoke.mjs
       # The Jev image lanes, ruled by Tee 2026-10-16, ship in shadow and are not
       # wired yet. Each harness drives the real node bodies against stubs and
       # against the unmodified export code; none of them calls TypeSafe, so a
