@@ -67,6 +67,8 @@ jobs:
         run: node --test n8n/tqo-v5/slop-curator/tqo_curator_gate.test.mjs
       - name: Universal 90 quality threshold scales without rounding up
         run: node --test n8n/tqo-v5/slop-curator/scaled_acceptance_floor.test.mjs
+      - name: DEVON isolated universal 90 verifier holds without independent proof
+        run: node --test n8n/tqo-v5/slop-curator/devon_isolated_verifier.test.mjs
       - name: TQO 90-point V5 candidate preserves NCO and pinned export
         run: node --test n8n/tqo-v5/slop-curator/tqo90_workflow_candidate.test.mjs
       - name: TQO ChatGPT review handoff validates signatures and final-text binding
