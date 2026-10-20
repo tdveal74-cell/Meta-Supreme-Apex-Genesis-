@@ -24,7 +24,7 @@ export function checkScaledAcceptance({ earned, maximum, scorePurpose }) {
   }
   // Exact integer arithmetic avoids the 89/90 boundary rounding upward.
   // Example: 18 total -> ceil(16.2) = 17.
-  const required = Math.floor((90 * maximum + 99) / 100);
+  const required = Number((90n * BigInt(maximum) + 99n) / 100n);
   const meetsNumericFloor = earned >= required;
   return {
     ...base,
