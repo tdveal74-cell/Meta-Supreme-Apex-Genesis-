@@ -103,8 +103,9 @@ test("unregistered brands and fabricated self-signed roles fail closed", () => {
 test("invalid score types, missing approval fields and empty evidence hold", () => {
   const p = prepare("DEVON");
   for (const score of ["90", NaN, 89.9, -1, 101, undefined]) {
-    const a = signed(p, score);
-    assert.equal(check(p, a).state, "HOLD", String(score));
+    const a = signed(p);
+    a.payload.qualityReview.score = score;
+    assert.equal(check(p, resign(a)).state, "HOLD", String(score));
   }
   const absent = signed(p);
   delete absent.payload.qualityReview.voiceVerified;
