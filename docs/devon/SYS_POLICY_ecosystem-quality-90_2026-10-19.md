@@ -38,6 +38,14 @@ For a **0-100 quality or acceptance score**: **89 = FAIL/REVISE/HOLD**; **90 = m
 | TSWS editorial/visual/manual QC not in the shared V5 runtime | 99 historically | **90** | policy ruling, must be propagated to each separate runtime/rubric after inventory |
 | ACX, EditForge, WhatBroke and other independent workflows | various/unknown | **90** | policy ruling, runtime changes not assumed |
 
+## Portable review contract added (offline, not connected)
+
+`n8n/tqo-v5/slop-curator/ecosystem_review_gate.mjs` now stages the same **90/100** evaluation contract for TQO, NCO Forge, TSWS, ACX, EditForge, WhatBroke, DEVON and Meta Supreme X, with explicit brand aliases. It creates a packet tied to the exact final artifact SHA-256, rubric, brand rules, and evidence references. TSWS and ACX additionally require the exact locked-canon reference and a verified canon receipt. It rejects 89, model-only self-attestation, stale hashes, unsupported scores, unverified evidence, hard failures, or unresolved critical/high findings, even when the reported score is 100.
+
+A signed return can reach `READY_FOR_EXISTING_GATES` **only**. This pure validator is not an independent reviewer or a signing service; the HMAC is a trust boundary solely when the secret and signer are controlled outside the model/writer and the signer actually authenticates evidence. Only synthetic signatures are used in tests. The new portable module is not yet wired into any live TSWS, EditForge, WhatBroke, ACX or DEVON runtime.
+
+New and unregistered brands fail closed until their profiles and rubric versions are registered. Missing brand/rubric/canon provenance is not silently inferred.
+
 ## Verification and activation
 
 - The pinned, previously exported V5 workflow is deliberately unchanged in Git history.
