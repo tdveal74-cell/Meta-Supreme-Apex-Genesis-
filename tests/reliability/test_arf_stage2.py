@@ -7,6 +7,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from types import SimpleNamespace as NS
 
+from app.services.agent_effect_receipts import arguments_hash
 from app.services.arf_evidence_source import (
     BoundEvidenceSource,
     EvidenceReadRefused,
@@ -14,7 +15,6 @@ from app.services.arf_evidence_source import (
     collect_evidence,
     reconcile_records,
 )
-from app.services.agent_effect_receipts import arguments_hash
 from services.agent_runtime.governance import (
     APPROVAL_MARKER_PREFIX,
     RUNTIME_REQUESTED_BY,

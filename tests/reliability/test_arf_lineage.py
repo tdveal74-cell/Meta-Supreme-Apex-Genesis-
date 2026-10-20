@@ -2,7 +2,11 @@
 import unittest
 
 from services.agent_runtime.reliability.lineage import (
-    HistoryConflict, HistoryEvent, advise_retry, fingerprint, review_history,
+    HistoryConflict,
+    HistoryEvent,
+    advise_retry,
+    fingerprint,
+    review_history,
 )
 
 F = fingerprint(hypothesis="Network timeout", expected_evidence="provider receipt",
