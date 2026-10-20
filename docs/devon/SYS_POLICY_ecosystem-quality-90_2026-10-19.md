@@ -56,3 +56,12 @@ New and unregistered brands fail closed until their profiles and rubric versions
 - Promotion requires CI success on the **latest head**, an authorized live workflow readback, migration/rollback snapshot, no-spend test, and explicit human approval for deployment. A passing score alone never releases content.
 
 This document supersedes prior numeric threshold rulings only. All other canon and operational rulings remain intact.
+
+## Detached public-key receipt verification (additional staged contract)
+
+`n8n/tqo-v5/slop-curator/public_key_review_verifier.mjs` verifies a detached **Ed25519** receipt over exact UTF-8 payload bytes against a configured public-key allowlist. Only **public** verification keys belong near the n8n consumer; a signing private key must remain exclusively in an independently authorized issuer outside the content-generation path.
+
+The receipt is bound to brand, final-artifact SHA-256, packet ID, policy and rubric versions, brand rules, exact evidence-reference list, and the required canon reference for TSWS/ACX. An independent issuer, producer and editorial reviewer must have distinct identities. A 90/100 passing receipt still returns only `READY_FOR_EXISTING_GATES`, never publication permission.
+
+**Limit:** Ed25519 establishes provenance and integrity of the issuer's assertion, not truth of the sources. Real source/claim verification and canon inspection must be completed before signing. The current unit tests generate synthetic private keys inside a disposable test process; there is **no deployed signer, trusted-key distribution, or live n8n review integration**. Never use fixture signatures as production receipts.
+
