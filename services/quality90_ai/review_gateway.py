@@ -1,20 +1,17 @@
 """Host-controlled profile binding and local AI receipt lookup.
-
-No write-capable HTTP service is exposed. The model
-has no tools. Private receipt keys stay on this host. The API never publishes.
+No write-capable HTTP service is exposed. Model tools and publication stay off.
 """
 from __future__ import annotations
-import argparse,datetime as dt,hmac,json,os,pathlib,threading,time
-from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
+import json
+import pathlib
 from cryptography.hazmat.primitives import serialization
-from review_core import ALIASES,BRANDS,canonical,digest,hold,prepare_packet,verify_receipt,route_reviewer
-from claude_runner import review_request,safe_dir
+from review_core import ALIASES,hold,prepare_packet,verify_receipt,route_reviewer
 
 SLUGS={'TQO':'tqo','NCO_FORGE':'nco-forge','TSWS':'tsws','ACX':'acx','EDITFORGE':'editforge','WHATBROKE':'whatbroke','DEVON':'devon','META_SUPREME_X':'meta-supreme-x'}
 SCOPES={'script':'Final presenter script. Apply its actual brand/voice/evidence rules. Do not invent sources or personal experience.',
  'story':'Final dramatic story/script. Require applicable canon and no locked-rule violation.',
  'technical_output':'Technical or operating artifact. Require reproducible evidence and clear limits.',
- 'policy_brief':'Short internal operating-policy brief, not a video script. No video-duration or promotional-CTA requirement.'}
+ 'policy_brief':'Short internal operating-policy brief, not a video script. No video-duration or promotional-CTA requirement. Assess whether the brief accurately describes supplied policy. Release prerequisites quoted below apply to releasing a production artifact, not to documenting that those prerequisites exist. Do not require a prior review receipt for this review: this review generates the assessment. Do not certify an idiolect card, media consent or actual publication readiness unless the brief claims those are established. Any unsupported claim of completed approval, testing or compliance remains HOLD.'}
 
 def rules_for(brand,scope,brands):
     if brand not in SLUGS or scope not in SCOPES:raise ValueError('unknown brand or review scope')
@@ -32,7 +29,6 @@ def bound_request(request,brands):
     brand=str(request.get('brand','')).upper().strip();brand=ALIASES.get(brand,brand)
     route_reviewer(request.get('producerProvider',''))
     scope=request.get('scope','script')
-    # Host rules override all caller-authored rule/rubric fields.
     result={'brand':brand,'producerProvider':request.get('producerProvider'),
        'artifact':request.get('artifact'),'sources':request.get('sources'),
        'rubricVersion':f'{brand.lower()}-{scope}-ai-v2',
@@ -48,7 +44,6 @@ def verify_latest(request,root,brands):
         if not isinstance(artifact,str) or not artifact.strip():return hold('final artifact missing')
         rubric=f'{brand.lower()}-{scope}-ai-v2';current_rules=rules_for(brand,scope,brands)
         pub=serialization.load_pem_public_key((root/'issuer/receipt-ed25519.pub.pem').read_bytes())
-        # Newer verdicts supersede older results for the same exact artifact.
         for folder in sorted((root/'runs').glob('*'),reverse=True):
             if not folder.is_dir() or folder.is_symlink():continue
             try:
