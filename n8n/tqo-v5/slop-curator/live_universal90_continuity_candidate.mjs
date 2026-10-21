@@ -12,7 +12,7 @@ export function once(code,oldText,newText,label) {
     throw Error("HOLD: "+label+" candidate drift");
   return code.replace(oldText,newText);
 }
-const decode=raw=>{const v=JSON.parse(raw);return Array.isArray(v)?v[0]:v;};
+const decode=raw=>{const v=typeof raw==="string"?JSON.parse(raw):raw;return Array.isArray(v)?v[0]:v;};
 const encode=work=>[work];
 const nameNode=(work,name)=>{
   const found=work.nodes.filter(n=>n.name===name);
