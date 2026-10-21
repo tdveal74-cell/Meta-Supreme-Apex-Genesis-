@@ -1,0 +1,18 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),crypto=require('node:crypto');
+const {verifyAIReview}=require('./verify_ai_summary.cjs');
+const key=crypto.generateKeyPairSync('ed25519'),other=crypto.generateKeyPairSync('ed25519');
+const pub=key.publicKey.export({type:'spki',format:'pem'}),now=Date.parse('2026-10-21T12:00:00Z');
+const artifact='A verified source supports this final script. Tee approves publication.';
+const hash=s=>crypto.createHash('sha256').update(s,'utf8').digest('hex');
+const expected={brand:'TQO',scope:'script',artifact,artifactSha256:hash(artifact)};
+const payload=(score=90)=>({schemaVersion:'devon-ai-review-summary-v1',reviewKind:'AI_REVIEW',issuer:'DEVON-AI-review-orchestrator',policyVersion:'ecosystem-quality90-ai-v2',brand:'TQO',scope:'script',producerProvider:'openai',reviewer:'claude',artifactSha256:hash(artifact),packetId:'a'.repeat(64),rulesSha256:'b'.repeat(64),reportSha256:'c'.repeat(64),rubricVersion:'tqo-script-ai-v2',reviewId:'20261021T110000Z-fixture',state:'READY_FOR_TEE_REVIEW',score,observation:{provider:'anthropic',model:'claude-test',sessionId:'fixture-session',source:'observed_cli_run',authMethod:'claude.ai'},issuedAt:'2026-10-21T11:00:00Z',expiresAt:'2026-10-22T11:00:00Z',humanApprovalRequired:true,humanApproval:null,publicationAuthorized:false,spendAuthorized:false});
+function sign(p,privateKey=key.privateKey){const text=JSON.stringify(p);return{payload:text,signature:crypto.sign(null,Buffer.from(text),privateKey).toString('base64')};}
+const check=(p,ctx=expected)=>verifyAIReview(sign(p),ctx,pub,now);
+test('90 is verified AI review, never publication permission',()=>{const out=check(payload());assert.equal(out.aiReviewPassed,true);assert.equal(out.state,'READY_FOR_TEE_REVIEW');assert.equal(out.publicationAuthorized,false);assert.equal(out.humanApprovalRequired,true);});
+test('89 and coerced scores hold',()=>{for(const n of [89,'90',null,true,100.1,101])assert.equal(check(payload(n)).aiReviewPassed,false);});
+test('forged, modified and malformed envelopes hold',()=>{const env=sign(payload());env.payload=env.payload.replace('"score":90','"score":100');for(const e of [null,{},env,sign(payload(),other.privateKey),{payload:'{}',signature:'x'}])assert.equal(verifyAIReview(e,expected,pub,now).aiReviewPassed,false);});
+test('final-byte changes, scope or brand mismatches hold',()=>{for(const ctx of [{...expected,artifact:artifact+' '},{...expected,scope:'policy_brief'},{...expected,brand:'NCO_FORGE'}])assert.equal(check(payload(),ctx).aiReviewPassed,false);});
+test('expiry, future timestamp and excessive lifetime hold',()=>{for(const edit of [p=>p.expiresAt='2026-10-21T12:00:00Z',p=>p.issuedAt='2026-10-22T11:00:00Z',p=>p.expiresAt='2026-10-24T11:00:00Z']){const p=payload();edit(p);assert.equal(check(p).aiReviewPassed,false);}});
+test('AI cannot pretend to be a person or reviewer of its own provider',()=>{for(const edit of [p=>p.reviewKind='HUMAN_REVIEW',p=>p.producerProvider='anthropic',p=>p.observation.provider='openai',p=>p.observation.source='self_reported',p=>p.observation.sessionId='',p=>p.humanApproval={approved:true},p=>p.publicationAuthorized=true,p=>p.spendAuthorized=true,p=>p.humanApprovalRequired=false,p=>p.state='HOLD']){const p=payload();edit(p);assert.equal(check(p).aiReviewPassed,false);}});
+test('bad schema/policy/key and insufficient identity never pass',()=>{for(const edit of [p=>p.policyVersion='other',p=>p.rubricVersion='tqo-policy_brief-ai-v2',p=>p.packetId='not-hash',p=>p.reviewId='../issuer']){const p=payload();edit(p);assert.equal(check(p).aiReviewPassed,false);}assert.equal(verifyAIReview(sign(payload()),expected,'bad public key',now).aiReviewPassed,false);});
