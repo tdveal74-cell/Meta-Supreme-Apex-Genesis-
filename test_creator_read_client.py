@@ -347,6 +347,43 @@ class ClientTests(unittest.TestCase):
             handler.redirect_request(None, None, 302, "redirect", {}, "https://other.example")
         )
 
+    def test_inventory_cli_exposes_limit_and_offset(self):
+        from contextlib import redirect_stderr, redirect_stdout
+        from io import StringIO
+        from unittest.mock import patch
+
+        config = Path(self.tmp.name) / "client.json"
+        config.write_text(json.dumps(self.cfg))
+        with patch.object(self.mod, "Reader") as reader_class:
+            reader_class.return_value.inventory.return_value = {"has_more": True}
+            with patch.object(
+                sys,
+                "argv",
+                ["reader", "--config", str(config), "inventory", "--limit", "5", "--offset", "20"],
+            ):
+                with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                    try:
+                        result = self.mod.main()
+                    except SystemExit as exc:
+                        result = exc.code
+            self.assertEqual(result, 0)
+            reader_class.return_value.inventory.assert_called_once_with(limit=5, offset=20)
+
+    def test_inventory_cli_defaults_are_explicit(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from unittest.mock import patch
+
+        config = Path(self.tmp.name) / "client.json"
+        config.write_text(json.dumps(self.cfg))
+        with patch.object(self.mod, "Reader") as reader_class:
+            reader_class.return_value.inventory.return_value = {"has_more": False}
+            with patch.object(sys, "argv", ["reader", "--config", str(config), "inventory"]):
+                with redirect_stdout(StringIO()):
+                    result = self.mod.main()
+            self.assertEqual(result, 0)
+            reader_class.return_value.inventory.assert_called_once_with(limit=20, offset=0)
+
     def test_transport_error_is_generic(self):
         def bad(*args):
             raise RuntimeError("Credential " + TOKEN)

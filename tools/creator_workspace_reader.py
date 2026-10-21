@@ -363,7 +363,9 @@ def main():
     parser.add_argument("--config", type=Path, default=CONFIG_FILE)
     sub = parser.add_subparsers(dest="action", required=True)
     sub.add_parser("status")
-    sub.add_parser("inventory")
+    inventory = sub.add_parser("inventory")
+    inventory.add_argument("--limit", type=int, default=20)
+    inventory.add_argument("--offset", type=int, default=0)
     p = sub.add_parser("metadata")
     p.add_argument("--brand", choices=sorted(BRANDS), required=True)
     p.add_argument("--project-id", required=True)
@@ -378,7 +380,7 @@ def main():
         if args.action == "status":
             result = reader.status()
         elif args.action == "inventory":
-            result = reader.inventory()
+            result = reader.inventory(limit=args.limit, offset=args.offset)
         else:
             result = reader.metadata(
                 brand=args.brand, project_id=args.project_id, limit=args.limit, offset=args.offset
