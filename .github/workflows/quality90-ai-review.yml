@@ -21,7 +21,7 @@ jobs:
       - run: python -m pip install 'cryptography>=41,<47'
       - name: AI review exact-byte and source-binding tests (no model calls)
         run: python -m unittest discover -s services/quality90_ai -p 'test_*.py' -v
-      - name: n8n public-key AI review rejects 89, stale artifacts and forged human authority
-        run: node --test n8n/quality90-ai/verify_ai_summary.test.cjs
+      - name: n8n signatures and exact human-review binding (no model calls or writes)
+        run: node --test n8n/quality90-ai/*.test.cjs
       - name: Integration transformer parses without touching a workflow
         run: python -m py_compile n8n/quality90-ai/build_review_integration.py
