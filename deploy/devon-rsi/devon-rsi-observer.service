@@ -1,0 +1,17 @@
+[Unit]
+Description=Devon RSI fixture observer and review outbox
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=simple
+# This root-owned file contains only operator-pinned paths and hashes.
+EnvironmentFile=/etc/devon-rsi-observer.conf
+ExecStart=/bin/bash ${RSI_RELEASE}/deploy/devon-rsi/observe-isolated.sh ${RSI_RELEASE} ${RSI_TRUST} ${RSI_IMAGE} /opt/devon/rsi/operator-state /opt/devon/rsi/runs
+ExecStop=/usr/bin/docker stop -t 10 devon-rsi-observer
+Restart=no
+TimeoutStopSec=20
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target
