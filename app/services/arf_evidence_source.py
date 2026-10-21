@@ -234,6 +234,16 @@ async def collect_evidence(*, db: AsyncSession, approval_db: AsyncSession | None
     """
     if not task_id or not owner_id or not domain or not policy_digest or workflow_stage not in {"build", "review", "release"}:
         raise EvidenceReadRefused("invalid authenticated read scope")
+    # PostgreSQL READ COMMITTED takes a new snapshot for every SELECT. The
+    # task, effect rows and declared-check reader must instead share one
+    # repeatable, read-only snapshot, begun before any other query on this
+    # session. Reusing an authenticated session that already queried the DB
+    # cannot safely upgrade its isolation level, so refuse that caller.
+    if getattr(db, "in_transaction", lambda: False)():
+        raise EvidenceReadRefused("ARF evidence requires a fresh transaction")
+    await db.execute(text(
+        "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+    ))
     result = await db.execute(select(AgentTaskRecord).where(
         AgentTaskRecord.owner_id == owner_id, AgentTaskRecord.id == task_id))
     task = result.scalar_one_or_none()

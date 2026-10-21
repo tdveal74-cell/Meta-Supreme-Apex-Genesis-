@@ -75,6 +75,13 @@ async def append_history(db: AsyncSession, *, owner_id: str,
         raise HistoryConflict("invalid source policy digest")
     if not event.evidence_revision or len(event.evidence_revision) > 128 or not _SAFE_ID.fullmatch(event.evidence_revision):
         raise HistoryConflict("invalid evidence revision")
+    # Serialize writers for this tenant/root in the caller's transaction.
+    # The advisory transaction lock is held until commit/rollback, including
+    # through the lineage read and INSERT below. A collision merely serializes
+    # unrelated roots; it never weakens ownership verification.
+    await db.execute(text(
+        "SELECT pg_advisory_xact_lock(hashtextextended(:lineage_scope, 0))"
+    ), {"lineage_scope": owner_id + ":" + event.root_task_id})
     history = await read_history(db, owner_id=owner_id,
                                  root_task_id=event.root_task_id)
     review_history([*history, event], owner_id=owner_id,

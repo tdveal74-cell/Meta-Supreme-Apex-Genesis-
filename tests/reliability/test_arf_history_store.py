@@ -43,7 +43,9 @@ class StoreTests(unittest.IsolatedAsyncioTestCase):
         s=SpySession()
         await append_history(s,owner_id='owner-one',event=e(),policy_digest='c'*64,
                              shadow_audit_write_authorized=True)
-        self.assertEqual(len(s.queries),2)
+        self.assertEqual(len(s.queries),3)
+        self.assertIn('pg_advisory_xact_lock', s.queries[0][0])
+        self.assertIn('SELECT event_id', s.queries[1][0])
         self.assertIn('INSERT INTO arf_shadow_history',s.queries[-1][0])
         self.assertNotIn('approval_token',str(s.queries[-1][1]))
 
@@ -74,7 +76,17 @@ class StoreTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(HistoryConflict,'ancestor'):
             await append_history(s,owner_id='owner-one',event=replace(e(),parent_event_id='MISSING'),
                                  policy_digest='c'*64,shadow_audit_write_authorized=True)
-        self.assertEqual(len(s.queries),1)
+        self.assertEqual(len(s.queries),2)
+
+    async def test_same_root_lock_is_held_before_lineage_read(self):
+        from dataclasses import replace
+        a, b = SpySession(), SpySession()
+        await append_history(a,owner_id='owner-one',event=e(),policy_digest='c'*64,
+                             shadow_audit_write_authorized=True)
+        await append_history(b,owner_id='owner-one',event=replace(e(), event_id='EVENT-2'),
+                             policy_digest='c'*64, shadow_audit_write_authorized=True)
+        self.assertIn('pg_advisory_xact_lock', a.queries[0][0])
+        self.assertEqual(a.queries[0][1], b.queries[0][1])
 
 if __name__ == "__main__":
     unittest.main()
