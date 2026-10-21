@@ -69,6 +69,8 @@ jobs:
         run: node --test n8n/tqo-v5/slop-curator/scaled_acceptance_floor.test.mjs
       - name: DEVON isolated universal 90 verifier holds without independent proof
         run: node --test n8n/tqo-v5/slop-curator/devon_isolated_verifier.test.mjs
+      - name: Universal 90 continuity transformer rejects drift and unsafe replacements
+        run: node --test n8n/tqo-v5/slop-curator/live_universal90_continuity_candidate.test.mjs
       - name: DEVON isolated stage installer parses without running production changes
         run: bash -n deploy/quality90/install-isolated-stage.sh
       - name: TQO 90-point V5 candidate preserves NCO and pinned export
