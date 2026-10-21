@@ -200,6 +200,33 @@ def test_cross_model_audit_is_independent_and_evidence_gated():
     assert any("unresolved" in reason for reason in failed.reasons)
 
 
+def test_ecosystem_wide_90_boundary_still_requires_independent_evidence():
+    from services.devon.operating_layer import QUALITY_THRESHOLD
+
+    assert QUALITY_THRESHOLD == 90
+    for score, accepted in ((89, False), (90, True), (100, True)):
+        verdict = evaluate_audit(
+            producer=Surface.CODEX,
+            verifier=Surface.CLAUDE,
+            score=score,
+            findings=(),
+            verification_evidence=("Synthetic offline check: exit 0",),
+            final_artifact_sha256=HASH_A,
+        )
+        assert verdict.accepted is accepted, score
+
+    missing_evidence = evaluate_audit(
+        producer=Surface.CODEX, verifier=Surface.CLAUDE, score=100,
+        findings=(), verification_evidence=(),
+        final_artifact_sha256=HASH_A,
+    )
+    assert not missing_evidence.accepted
+
+    source = (ROOT / "services/devon/operating_layer.py").read_text()
+    deployed_mirror = (ROOT / "deploy/soul/services/devon/operating_layer.py").read_text()
+    assert source == deployed_mirror
+
+
 def test_audit_severities_normalize_and_unknown_spellings_fail_closed():
     messy_high = evaluate_audit(
         producer=Surface.CODEX,
