@@ -100,3 +100,20 @@ def test_acx_keywords_are_canon_and_the_rest_are_derived():
     """Only ACX had its keyword hints ruled into live workflows."""
     canon = [a.label for a in areas.AREAS if a.keywords_are_canon]
     assert canon == ["ACX"]
+
+
+def test_the_console_carries_the_same_area_covers_as_this_module():
+    """deploy/soul/console.html embeds the Areas in a STATE literal and its
+    renderer shows covers verbatim, so a change here that skips the console
+    leaves the deployed page stale. Found by review on PR #376, when the ACX
+    covers moved and the console still said micro drama only."""
+    import json
+    import pathlib
+
+    page = (pathlib.Path(__file__).parent / "deploy" / "soul" / "console.html").read_text(
+        encoding="utf-8"
+    )
+    marker = "const STATE = "
+    state, _ = json.JSONDecoder().raw_decode(page[page.index(marker) + len(marker):])
+    shown = {area["code"]: area["covers"] for area in state["areas"]}
+    assert shown == {area.code: area.covers for area in areas.AREAS}
