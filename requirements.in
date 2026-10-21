@@ -1,5 +1,6 @@
-# Direct dependencies, pinned on 2026-09-02 to the versions the full suite
-# passed against (audit section 9 item 15). This file is the source
+# Original direct-dependency baseline pinned on 2026-09-02 to versions the
+# full suite passed against (audit section 9 item 15); later security pin
+# exceptions are identified by their advisory comments below. This is the source
 # pip-compile reads; it is not installed directly and it never ships.
 # requirements.txt is the generated artifact: the full dependency closure,
 # direct and transitive, pinned to exact versions with hashes (audit
@@ -24,6 +25,8 @@ alembic==1.19.1
 pgvector==0.5.0
 
 # Auth & Security
+# Security advisory PYSEC-2026-4320: use the corrected CA bundle.
+certifi==2026.10.19
 PyJWT==2.15.1
 bcrypt==5.0.0
 python-multipart==0.0.32
