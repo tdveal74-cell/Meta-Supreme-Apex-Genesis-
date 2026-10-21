@@ -23,44 +23,51 @@ class ShadowSurfaceTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict("os.environ", {"ARF_SHADOW_READ_ENABLED": "release"}):
             self.assertFalse(shadow_read_enabled())
 
-    async def test_evidence_reads_have_separate_fresh_session(self):
-        class Context:
-            async def __aenter__(self):
-                return snapshot
+    async def test_auth_connection_released_before_rate_limit_and_snapshot(self):
+        # An authenticated GET already has a DB transaction. Keeping that
+        # checkout open while a second session opens can exhaust the pool.
+        order = []
+        original = SimpleNamespace(rollback=AsyncMock(side_effect=lambda: order.append("release")))
 
-            async def __aexit__(self, *args):
-                return False
+        def budget_call(owner):
+            order.append("budget")
 
-        original, snapshot = object(), object()
+        def task_call(db, *, owner_id, task_id):
+            self.assertIs(db, original)
+            order.append("lookup")
+            return SimpleNamespace(id=task_id)
+
+        def observe_call(**kwargs):
+            self.assertIs(kwargs["db"], original)
+            self.assertIs(kwargs["gate_reader"]._db, original)
+            order.append("observe")
+            return SimpleNamespace(to_dict=lambda: {"verdict": "WOULD_HOLD"})
+
         with patch.dict("os.environ", {"ARF_SHADOW_READ_ENABLED": "true"}):
-            # This test exercises session isolation, not quota accounting.
-            # The limiter is checked separately and must still be called.
             with patch("app.api.v1.arf_shadow.consume_shadow_budget",
-                       new_callable=AsyncMock) as budget:
+                       new_callable=AsyncMock, side_effect=budget_call):
                 with patch("app.api.v1.arf_shadow.agent_tasks_service.get_task",
-                           new_callable=AsyncMock,
-                           return_value=SimpleNamespace(id="TASK")):
-                    with patch("app.api.v1.arf_shadow.AsyncSessionLocal",
-                               return_value=Context()):
+                           new_callable=AsyncMock, side_effect=task_call):
+                    with patch("app.api.v1.arf_shadow.AsyncSessionLocal", create=True,
+                               side_effect=AssertionError("route allocated a second session")):
                         with patch("app.api.v1.arf_shadow.observe_persisted_task",
-                                   new_callable=AsyncMock,
-                                   return_value=SimpleNamespace(to_dict=lambda: {"verdict": "WOULD_HOLD"})) as observe:
+                                   new_callable=AsyncMock, side_effect=observe_call):
                             result = await reliability_shadow("TASK", SimpleNamespace(id="owner-a"), db=original)
-                            self.assertEqual(result["verdict"], "WOULD_HOLD")
-                            budget.assert_awaited_once_with("owner-a")
-                            self.assertIs(observe.await_args.kwargs["db"], snapshot)
-                            self.assertIs(observe.await_args.kwargs["gate_reader"]._db, snapshot)
+        self.assertEqual(result["verdict"], "WOULD_HOLD")
+        self.assertEqual(order, ["release", "budget", "lookup", "release", "observe"])
+        self.assertEqual(original.rollback.await_count, 2)
 
     async def test_wrong_owner_returns_not_found_without_shadow_call(self):
         with patch.dict("os.environ", {"ARF_SHADOW_READ_ENABLED": "true"}):
             with patch("app.api.v1.arf_shadow.consume_shadow_budget", new_callable=AsyncMock) as budget:
                 with patch("app.api.v1.arf_shadow.agent_tasks_service.get_task", new_callable=AsyncMock, return_value=None) as get:
                     with patch("app.api.v1.arf_shadow.observe_persisted_task", new_callable=AsyncMock) as observe:
+                        db = SimpleNamespace(rollback=AsyncMock())
                         with self.assertRaises(HTTPException) as failure:
-                            await reliability_shadow("TASK", SimpleNamespace(id="owner-a"), db=None)
+                            await reliability_shadow("TASK", SimpleNamespace(id="owner-a"), db=db)
                         self.assertEqual(failure.exception.status_code, 404)
                         budget.assert_awaited_once_with("owner-a")
-                        get.assert_awaited_once_with(None, owner_id="owner-a", task_id="TASK")
+                        get.assert_awaited_once_with(db, owner_id="owner-a", task_id="TASK")
                         observe.assert_not_awaited()
 
 
