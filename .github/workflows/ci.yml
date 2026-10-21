@@ -133,6 +133,8 @@ jobs:
         run: |
           python -m pytest -q --tb=short \
             test_devon_rsi.py \
+            test_devon_rsi_ops.py \
+            test_devon_rsi_experiments.py \
             test_agent_evaluation.py \
             test_agent_benchmarks.py \
             test_runtime_verification.py \
