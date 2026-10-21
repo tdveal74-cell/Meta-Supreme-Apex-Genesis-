@@ -54,9 +54,15 @@ production enforcement or any creative-project-specific validator.
 ### Consistent database evidence (2026-10-21 repair candidate)
 
 A PostgreSQL READ COMMITTED transaction can see one task version and later
-intent or receipt rows from a newer version. The shadow reader now opens a
-**fresh, dedicated** AsyncSession rather than reusing the session that read
-the authenticated task. collect_evidence requires a session with no active
+intent or receipt rows from a newer version. The route captures the
+**authenticated owner ID**, rolls back the authentication-only SELECT to
+release its connection before independent rate accounting, and uses the same
+FastAPI dependency session for a preliminary owner lookup. It rolls back
+that preliminary read before starting the actual shadow snapshot, so no
+second snapshot session contends for a checked-out connection. In particular
+this prevents concurrent calls from exhausting the 10+20 bounded pool by
+each holding an idle authentication connection while waiting for a second.
+collect_evidence requires this now-fresh session to have no active
 transaction and issues SET TRANSACTION ISOLATION LEVEL REPEATABLE READ,
 READ ONLY before its first row query. Its task, intent, receipt and declared
 gate reads share the resulting database snapshot. Reused transactions fail

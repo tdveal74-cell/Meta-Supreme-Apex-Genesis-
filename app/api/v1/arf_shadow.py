@@ -14,7 +14,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import AsyncSessionLocal, get_db
+from app.db.session import get_db
 from app.security.deps import CurrentUser
 from app.services.agent_tasks import agent_tasks_service, build_tool_registry
 from app.services.arf_declared_gate import RuntimeDeclaredChecksGateReader
@@ -44,10 +44,16 @@ async def reliability_shadow(
     """Read DEVON build diagnostics only; no route to release authorization."""
     if not shadow_read_enabled():
         raise HTTPException(status_code=404, detail="Not found")
+    # Authentication's SELECT already opened a transaction on the FastAPI
+    # dependency session. Save the trusted owner before rollback expires ORM
+    # attributes, then release its checked-out connection before the limiter
+    # acquires a separate accounting connection. Never overlap checkouts.
+    owner_id = current_user.id
+    await db.rollback()
     # Charge by authenticated account before task/evidence queries. Unknown
     # task IDs and rejected evidence cannot bypass or refund the same budget.
     try:
-        await consume_shadow_budget(current_user.id)
+        await consume_shadow_budget(owner_id)
     except ShadowRateLimitExceeded as exc:
         raise HTTPException(
             status_code=429, detail="ARF diagnostic request limit reached",
@@ -58,26 +64,27 @@ async def reliability_shadow(
             status_code=503, detail="ARF diagnostic protection unavailable",
             headers={"Retry-After": "2", "Cache-Control": "no-store"},
         ) from exc
-    task = await agent_tasks_service.get_task(db, owner_id=current_user.id, task_id=task_id)
+    task = await agent_tasks_service.get_task(db, owner_id=owner_id, task_id=task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
+    # End the preliminary owner lookup before beginning a new read-only,
+    # repeatable-read snapshot on the SAME dependency session. This releases
+    # the checkout rather than holding one connection idle while requesting
+    # a second connection from the bounded pool.
+    await db.rollback()
     try:
         policy = ReliabilityPolicy.from_json(_POLICY_PATH)
-        # Do not reuse the authentication/readback session: it has already
-        # executed a query, so its transaction cannot select a new isolation
-        # level. This session starts fresh and contains only snapshot reads.
-        async with AsyncSessionLocal() as snapshot_db:
-            result = await observe_persisted_task(
-                db=snapshot_db,
-                approval_db=None,  # No verified cross-database approval snapshot.
-                owner_id=current_user.id,
-                task_id=task_id,
-                domain="devon",
-                workflow_stage="build",
-                policy=policy,
-                tool_registry=build_tool_registry(),
-                gate_reader=RuntimeDeclaredChecksGateReader(snapshot_db),
-            )
+        result = await observe_persisted_task(
+            db=db,
+            approval_db=None,  # No verified cross-database approval snapshot.
+            owner_id=owner_id,
+            task_id=task_id,
+            domain="devon",
+            workflow_stage="build",
+            policy=policy,
+            tool_registry=build_tool_registry(),
+            gate_reader=RuntimeDeclaredChecksGateReader(db),
+        )
     except EvidenceReadRefused as exc:
         # Never leak another tenant's task IDs or underlying DB details.
         raise HTTPException(status_code=409, detail="ARF evidence reconciliation refused") from exc
