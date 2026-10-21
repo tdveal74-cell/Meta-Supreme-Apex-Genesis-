@@ -27,6 +27,13 @@ Never add an Area without Tee's ruling. The cost of an extra Area is not the
 label, it is the four place update (Notion, Airtable, the thread log skill,
 Drive) and the permanent risk that one surface gets missed and the index
 quietly fractures.
+
+ACX covers changed on 2026-10-19, when Tee ruled on a card that ACX is one IP
+with two lanes: the micro drama and the direct address awakening content the
+`acx-viral-output` skill drafts. No Area was added and the ACX keywords did not
+change. The Covers column of AREAS.md on Drive still reads micro drama only
+until it is edited by hand, so this file now leads the Drive copy on that one
+line.
 """
 
 from __future__ import annotations
@@ -100,7 +107,10 @@ AREAS: Tuple[Area, ...] = (
     Area(
         label="ACX",
         code="ACX",
-        covers="Ascension Caudex: the micro drama IP, its canon, assets, pipeline",
+        covers=(
+            "Ascension Caudex: one IP with two lanes, the micro drama and the direct "
+            "address awakening content, their canon, assets, pipeline"
+        ),
         keywords=("acx", "ascension", "caudex", "archivist", "orchestrator", "folio"),
         keywords_are_canon=True,
         ruled="2026-08-20",
