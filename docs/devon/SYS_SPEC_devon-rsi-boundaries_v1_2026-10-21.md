@@ -122,8 +122,21 @@ establish any of those conditions in Tee's live vault.
 ## Operating and rollback
 
 Run tests: `python -m pytest -q test_devon_rsi.py`.
-Local fixture run: `python -m tools.devon_rsi.runner --output <new-directory>
---trust-sha256 <operator-pinned-manifest-hash>`.
+Local fixture run (substitute the report path and operator-pinned hash):
+
+```sh
+(
+  RSI_CACHE="$(mktemp -d)" || exit 1
+  trap 'rmdir "$RSI_CACHE"' EXIT
+  python -B -X "pycache_prefix=$RSI_CACHE" -m tools.devon_rsi.runner \
+    --output <new-directory> \
+    --trust-sha256 <operator-pinned-manifest-hash>
+)
+```
+
+The fresh bytecode prefix is required for local runs too: source hashes cannot
+authenticate a stale cache loaded before the evaluator starts. This local
+command is a fixture convenience; use the isolated launcher on a host.
 Production-host isolation uses deploy/devon-rsi/run-isolated.sh with a pinned
 local Python image ID, a versioned release directory and a fresh run directory.
 The local maker helper lives beside it and cannot launch an evaluator or merge.
