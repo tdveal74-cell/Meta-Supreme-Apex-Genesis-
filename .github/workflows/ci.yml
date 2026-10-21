@@ -132,6 +132,7 @@ jobs:
       - name: Offline suite (no database, no keys)
         run: |
           python -m pytest -q --tb=short \
+            test_devon_rsi.py \
             test_agent_evaluation.py \
             test_agent_benchmarks.py \
             test_runtime_verification.py \
