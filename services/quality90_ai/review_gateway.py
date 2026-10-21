@@ -1,6 +1,6 @@
-"""Authenticated loopback API for AI review and no-cost receipt verification.
+"""Host-controlled profile binding and local AI receipt lookup.
 
-Expose ONLY through a TLS proxy restricted to the user's n8n host. The model
+No write-capable HTTP service is exposed. The model
 has no tools. Private receipt keys stay on this host. The API never publishes.
 """
 from __future__ import annotations
@@ -71,55 +71,3 @@ def verify_latest(request,root,brands):
                 return hold('newest matching review is incomplete or corrupt')
         return hold('no AI review matches the exact final artifact and scope')
     except Exception:return hold('AI review registry or current rules unavailable')
-
-class ReviewServer(ThreadingHTTPServer):
-    daemon_threads=True
-    def __init__(self,address,root,brands,token):
-        self.root=pathlib.Path(root);self.brands=pathlib.Path(brands);self.token=token
-        self.review_lock=threading.Lock();self.recent=[]
-        super().__init__(address,Handler)
-
-class Handler(BaseHTTPRequestHandler):
-    server_version='DEVON-AIReview/1'
-    def log_message(self,*args):pass # Never log request text or Authorization.
-    def answer(self,code,obj):
-        data=canonical(obj);self.send_response(code);self.send_header('Content-Type','application/json');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(data)));self.end_headers();self.wfile.write(data)
-    def do_GET(self):
-        if self.path=='/healthz':return self.answer(200,{'status':'ok','reviewKind':'AI_REVIEW','publicationAuthorized':False})
-        self.answer(404,hold('route unavailable'))
-    def do_POST(self):
-        if self.path not in ('/review','/verify'):return self.answer(404,hold('route unavailable'))
-        supplied=self.headers.get('Authorization','')
-        if not hmac.compare_digest(supplied,'Bearer '+self.server.token):return self.answer(401,hold('request authentication failed'))
-        try:
-            size=int(self.headers.get('Content-Length','0'))
-            if not 0<size<=100000 or self.headers.get('Transfer-Encoding'):raise ValueError('invalid body')
-            req=json.loads(self.rfile.read(size))
-            if not isinstance(req,dict):raise ValueError('object required')
-        except Exception:return self.answer(400,hold('invalid review request'))
-        if self.path=='/verify':return self.answer(200,verify_latest(req,self.server.root,self.server.brands))
-        if req.get('reviewAuthorized') is not True:return self.answer(403,hold('explicit per-request review authorization required'))
-        if not self.server.review_lock.acquire(blocking=False):return self.answer(409,hold('another review is in progress'))
-        try:
-            cutoff=time.time()-86400
-            self.server.recent=[x for x in self.server.recent if x>cutoff]
-            # Tight rollout cap; no perpetual unbounded subscription consumer.
-            if len(self.server.recent)>=8:return self.answer(429,hold('daily review limit reached'))
-            bound=bound_request(req,self.server.brands)
-            self.server.recent.append(time.time())
-            result=review_request(bound,self.server.root)
-            result.pop('receiptPath',None)
-            return self.answer(200,result)
-        except Exception:return self.answer(400,hold('review could not be validated'))
-        finally:self.server.review_lock.release()
-
-def main():
-    ap=argparse.ArgumentParser();ap.add_argument('--root',default='/opt/devon/quality90-ai-review')
-    ap.add_argument('--brands',default='/opt/creator-workspace/brands');ap.add_argument('--port',type=int,default=7321)
-    args=ap.parse_args();root=safe_dir(args.root);tokenfile=root/'transport.token'
-    st=tokenfile.lstat()
-    if tokenfile.is_symlink() or st.st_uid!=os.getuid() or st.st_mode&0o077:raise SystemExit('unsafe transport authentication file')
-    token=tokenfile.read_text().strip()
-    if len(token)<43:raise SystemExit('transport authentication not configured')
-    ReviewServer(('127.0.0.1',args.port),root,args.brands,token).serve_forever()
-if __name__=='__main__':main()
