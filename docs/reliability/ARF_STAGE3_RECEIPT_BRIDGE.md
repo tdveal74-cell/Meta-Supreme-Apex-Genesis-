@@ -2,9 +2,11 @@
 
 This slice introduces `RuntimeDeclaredChecksGateReader`, an owner-scoped,
 read-only adapter for the existing `agent_verifications` and
-`agent_tool_results` stores. It does not create any new database table,
-migration, background job, automation, or production config. The only new
-HTTP route is the default-disabled shadow readback described below.
+`agent_tool_results` stores. The request-protection follow-up adds one
+security-accounting table and migration, documented in
+[ARF_SHADOW_RATE_LIMIT.md](ARF_SHADOW_RATE_LIMIT.md). It adds no background
+job, automation or production configuration. The only new HTTP route remains
+the default-disabled shadow readback described below.
 
 The adapter attests **only `requirement_evidence`**, and only when a
 current, completed task has nonempty declared checks, its exact current
@@ -33,7 +35,8 @@ readback and human authorization under the repository's existing rules.
 existing v1 router. The handler requires the existing authenticated user,
 looks up only the user's owned task, fixes `domain=devon` and
 `workflow_stage=build`, and returns a recommendation rather than changing
-task state. `ARF_SHADOW_READ_ENABLED` defaults to off, and no environment
+task state. Authenticated requests update only the shared request-budget
+accounting before evidence lookup. `ARF_SHADOW_READ_ENABLED` defaults to off, and no environment
 variable is changed by this patch. No route may accept caller-supplied review
 or approval credentials. The `approval_db=None` posture deliberately does
 not attest any WRITE or HIGH_IMPACT approval, even when the runtime performed
