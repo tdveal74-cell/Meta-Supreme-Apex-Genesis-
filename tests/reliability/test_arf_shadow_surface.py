@@ -23,6 +23,34 @@ class ShadowSurfaceTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict("os.environ", {"ARF_SHADOW_READ_ENABLED": "release"}):
             self.assertFalse(shadow_read_enabled())
 
+    async def test_evidence_reads_have_separate_fresh_session(self):
+        class Context:
+            async def __aenter__(self):
+                return snapshot
+
+            async def __aexit__(self, *args):
+                return False
+
+        original, snapshot = object(), object()
+        with patch.dict("os.environ", {"ARF_SHADOW_READ_ENABLED": "true"}):
+            # This test exercises session isolation, not quota accounting.
+            # The limiter is checked separately and must still be called.
+            with patch("app.api.v1.arf_shadow.consume_shadow_budget",
+                       new_callable=AsyncMock) as budget:
+                with patch("app.api.v1.arf_shadow.agent_tasks_service.get_task",
+                           new_callable=AsyncMock,
+                           return_value=SimpleNamespace(id="TASK")):
+                    with patch("app.api.v1.arf_shadow.AsyncSessionLocal",
+                               return_value=Context()):
+                        with patch("app.api.v1.arf_shadow.observe_persisted_task",
+                                   new_callable=AsyncMock,
+                                   return_value=SimpleNamespace(to_dict=lambda: {"verdict": "WOULD_HOLD"})) as observe:
+                            result = await reliability_shadow("TASK", SimpleNamespace(id="owner-a"), db=original)
+                            self.assertEqual(result["verdict"], "WOULD_HOLD")
+                            budget.assert_awaited_once_with("owner-a")
+                            self.assertIs(observe.await_args.kwargs["db"], snapshot)
+                            self.assertIs(observe.await_args.kwargs["gate_reader"]._db, snapshot)
+
     async def test_wrong_owner_returns_not_found_without_shadow_call(self):
         with patch.dict("os.environ", {"ARF_SHADOW_READ_ENABLED": "true"}):
             with patch("app.api.v1.arf_shadow.consume_shadow_budget", new_callable=AsyncMock) as budget:

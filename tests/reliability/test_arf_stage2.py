@@ -189,6 +189,8 @@ class FakeSession:
         self.calls = []
     async def execute(self, statement, params=None):
         self.calls.append((str(statement), params))
+        if str(statement).strip().startswith("SET TRANSACTION"):
+            return FakeResult()
         return self.results.pop(0)
 
 
@@ -209,9 +211,10 @@ class AsyncCollectionTests(unittest.IsolatedAsyncioTestCase):
                                                    workflow_stage="review", policy_digest=POLICY,
                                                    gate_reader=StaticGateReader(gates))
         self.assertEqual(saved, row.payload)
-        self.assertIn("owner_id", db.calls[0][0])
+        self.assertIn("REPEATABLE READ, READ ONLY", db.calls[0][0])
         self.assertIn("owner_id", db.calls[1][0])
         self.assertIn("owner_id", db.calls[2][0])
+        self.assertIn("owner_id", db.calls[3][0])
         self.assertIn("FROM devon_approvals", approval_db.calls[0][0])
         self.assertEqual(approval_db.calls[0][1]["owner"], TENANT)
         self.assertIn("what_happens LIKE :marker_0", approval_db.calls[0][0])
@@ -236,6 +239,30 @@ class AsyncCollectionTests(unittest.IsolatedAsyncioTestCase):
             await collect_evidence(db=BrokenDb(), approval_db=None, task_id=TASK,
                                    owner_id=TENANT, domain=DOMAIN,
                                    workflow_stage="review", policy_digest=POLICY)
+
+
+class SnapshotBoundaryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_collect_refuses_to_reuse_an_open_transaction(self):
+        class ReusedSession:
+            def in_transaction(self):
+                return True
+            async def execute(self, *args, **kwargs):
+                raise AssertionError("must fail before performing reads")
+        with self.assertRaisesRegex(EvidenceReadRefused, "fresh"):
+            await collect_evidence(db=ReusedSession(), approval_db=None,
+                                   task_id=TASK, owner_id=TENANT, domain=DOMAIN,
+                                   workflow_stage="build", policy_digest=POLICY)
+
+    async def test_collect_sets_repeatable_read_before_any_row_read(self):
+        row, intents, receipts, _, _ = setup()
+        db = FakeSession([FakeResult(row=row),
+                          FakeResult(rows=intents), FakeResult(rows=receipts)])
+        result, snapshot = await collect_evidence(
+            db=db, approval_db=None, task_id=TASK, owner_id=TENANT,
+            domain=DOMAIN, workflow_stage="build", policy_digest=POLICY)
+        self.assertIn("REPEATABLE READ, READ ONLY", db.calls[0][0])
+        self.assertIn("agent_tasks", db.calls[1][0])
+        self.assertEqual(snapshot.task_id, TASK)
 
 
 class EndToEndShadowTests(unittest.IsolatedAsyncioTestCase):

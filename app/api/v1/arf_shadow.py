@@ -14,7 +14,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
+from app.db.session import AsyncSessionLocal, get_db
 from app.security.deps import CurrentUser
 from app.services.agent_tasks import agent_tasks_service, build_tool_registry
 from app.services.arf_declared_gate import RuntimeDeclaredChecksGateReader
@@ -63,17 +63,21 @@ async def reliability_shadow(
         raise HTTPException(status_code=404, detail="Task not found")
     try:
         policy = ReliabilityPolicy.from_json(_POLICY_PATH)
-        result = await observe_persisted_task(
-            db=db,
-            approval_db=None,  # No configured trusted approval DB reader yet: fail closed.
-            owner_id=current_user.id,
-            task_id=task_id,
-            domain="devon",
-            workflow_stage="build",
-            policy=policy,
-            tool_registry=build_tool_registry(),
-            gate_reader=RuntimeDeclaredChecksGateReader(db),
-        )
+        # Do not reuse the authentication/readback session: it has already
+        # executed a query, so its transaction cannot select a new isolation
+        # level. This session starts fresh and contains only snapshot reads.
+        async with AsyncSessionLocal() as snapshot_db:
+            result = await observe_persisted_task(
+                db=snapshot_db,
+                approval_db=None,  # No verified cross-database approval snapshot.
+                owner_id=current_user.id,
+                task_id=task_id,
+                domain="devon",
+                workflow_stage="build",
+                policy=policy,
+                tool_registry=build_tool_registry(),
+                gate_reader=RuntimeDeclaredChecksGateReader(snapshot_db),
+            )
     except EvidenceReadRefused as exc:
         # Never leak another tenant's task IDs or underlying DB details.
         raise HTTPException(status_code=409, detail="ARF evidence reconciliation refused") from exc

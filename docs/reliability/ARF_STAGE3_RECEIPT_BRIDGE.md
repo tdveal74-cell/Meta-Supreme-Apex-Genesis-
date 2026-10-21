@@ -50,3 +50,32 @@ is exposed, and run the production-equivalent PostgreSQL and CI suites.
 Do not activate via configuration until the operator approves this read-only
 exposure and live source isolation is demonstrated. It does not implement
 production enforcement or any creative-project-specific validator.
+
+### Consistent database evidence (2026-10-21 repair candidate)
+
+A PostgreSQL READ COMMITTED transaction can see one task version and later
+intent or receipt rows from a newer version. The shadow reader now opens a
+**fresh, dedicated** AsyncSession rather than reusing the session that read
+the authenticated task. collect_evidence requires a session with no active
+transaction and issues SET TRANSACTION ISOLATION LEVEL REPEATABLE READ,
+READ ONLY before its first row query. Its task, intent, receipt and declared
+gate reads share the resulting database snapshot. Reused transactions fail
+closed. The route continues to set approval_db=None; independently hosted
+DEVON approval records still lack an atomic cross-database snapshot and must
+not be represented as verified approvals by this route.
+
+Separately, the optional, unactivated recovery-history writer obtains a
+transaction-scoped PostgreSQL advisory lock keyed by authenticated owner and
+root task **before** validating lineage. It holds that lock across the insert
+until the caller commits or rolls back. The caller must use transactionally
+consistent READ COMMITTED history reads and must not commit or release the
+transaction between validation and insertion. No history migration was
+registered, and no writer was connected to production.
+
+The regression suite includes local PostgreSQL interleavings with separate
+connections, asserting a typed conflict for a competing lineage writer and
+consistent evidence when a second connection commits a new effect during a
+shadow read. Those integration cases run **only** with an explicitly supplied
+disposable ARF_ISOLATED_TEST_DATABASE_URL and never use production credentials.
+They do not certify separate approval backends, human review, publication or
+the protected domain-specific gates.
