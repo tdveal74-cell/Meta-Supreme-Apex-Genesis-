@@ -8,7 +8,7 @@ import json
 import pathlib
 
 from cryptography.hazmat.primitives import serialization
-from review_core import ALIASES, hold, prepare_packet, route_reviewer, verify_receipt
+from review_core import ALIASES, PROVIDERS, hold, prepare_packet, route_reviewer, verify_receipt
 
 SLUGS = {
     "TQO": "tqo",
@@ -70,6 +70,9 @@ def bound_request(request, brands):
 def verify_latest(request, root, brands):
     root = pathlib.Path(root)
     try:
+        provider = request.get("producerProvider", "")
+        route_reviewer(provider)
+        producer = PROVIDERS[provider.lower().strip()]
         brand = str(request.get("brand", "")).upper().strip()
         brand = ALIASES.get(brand, brand)
         scope = request.get("scope", "script")
@@ -92,6 +95,8 @@ def verify_latest(request, root, brands):
                     or packet.get("rubricVersion") != rubric
                 ):
                     continue
+                if packet.get("producerProvider") != producer:
+                    return hold("declared producer differs from the reviewed artifact provenance")
                 if packet.get("brandRules") != current_rules:
                     return hold("brand rules changed since the review")
                 if request.get("packetId") and request["packetId"] != packet["packetId"]:
