@@ -65,12 +65,12 @@ const cleanRow = (edit = {}) => ({
   Description: C4 + "\n\n" + DESC_BODY, Tags: "ai, career, the quiet operator", "AI Disclosure": "Disclosed in description",
   "QC Verdict": "SHIP", Show: "TQO", Season: 1, Episode: 3, "Asset Type": "Flagship", ...edit,
 });
-const runGate = (code, fields) => code(dollar({
+const runGate = (code, fields, qcScore = 91) => code(dollar({
   "Show Context: Publish": [{ json: { channel: "The Quiet Operator", requiredTags: ["the quiet operator"] } }],
   "One Row at a Time": [{ json: { fields } }],
   "Parse Packaging": [{ json: { airtableId: "rec1", packagingBlock: BLOCK, youtubeTags: "", linkedinCount: 3, xThreadCount: 5, shortScriptCount: 2 } }],
   "Parse Manifest": [{ json: {} }],
-  "Parse QC + Set Verdict": [{ json: { qcScore: 91, qcVerdict: "SHIP", packagingGrade: 8.2, packagingGradeReport: "" } }],
+  "Parse QC + Set Verdict": [{ json: { qcScore, qcVerdict: "SHIP", packagingGrade: 8.2, packagingGradeReport: "" } }],
   "Shim: Thumbnail To Binary": [{ json: { thumb_rendered: true } }],
   "Upload Thumbnail": [{ json: { webViewLink: "https://drive.example/thumb" } }],
 }), undefined)[0].json;
@@ -81,6 +81,12 @@ let out = runGate(OS28_NEW, cleanRow());
 assert.deepEqual(out.os28_blocking, [], "the clean row clears the new gate");
 assert.equal(out.os28_allowed, true);
 assert.equal(runGate(OS28_OLD, cleanRow()).os28_allowed, true);
+assert.equal(runGate(OS28_NEW, cleanRow(), 89).os28_allowed, false, "89 can never clear publish QC");
+assert.equal(runGate(OS28_NEW, cleanRow(), 90).os28_allowed, true, "90 meets QC numeric minimum with other checks");
+const manualWaiver = cleanRow({ "QC Verdict": "WAIVED" });
+assert.equal(runGate(OS28_OLD, manualWaiver, 100).os28_allowed, true, "historical waiver bypass existed");
+assert.equal(runGate(OS28_NEW, manualWaiver, 100).os28_allowed, false, "WAIVED no longer bypasses the 90 floor");
+
 
 // "Not required" with no line at all passed the old gate. It is held now.
 const notRequired = cleanRow({ "AI Disclosure": "Not required", Description: DESC_BODY });
@@ -170,8 +176,8 @@ const line = (score, v) => "2026-10-17T10:00:00Z | doctor " + score + "/100 " + 
 assert.equal(runDoctor(GATE_OLD, { history: line(84, "PASS") }).doctorGate, "EVIDENCE_REQUIRED");
 assert.equal(runDoctor(GATE_OLD, { history: line(84, "PASS") }).doctorGateReason, "script");
 // With a passing script doctor line and a SHIP QC verdict a row reaches human review.
-assert.equal(runDoctor(GATE_NEW, { history: line(84, "PASS") }).doctorGate, "READY_FOR_HUMAN_REVIEW");
-assert.equal(runDoctor(GATE_NEW, { history: line(70, "REPAIRED") }).doctorGate, "READY_FOR_HUMAN_REVIEW");
+assert.equal(runDoctor(GATE_NEW, { history: line(90, "PASS") }).doctorGate, "READY_FOR_HUMAN_REVIEW");
+assert.equal(runDoctor(GATE_NEW, { history: line(90, "REPAIRED") }).doctorGate, "READY_FOR_HUMAN_REVIEW");
 // It never reaches release on its own: no approval is ever built here.
 assert.notEqual(runDoctor(GATE_NEW, { history: line(99, "PASS") }).doctorGate, "RELEASE_ELIGIBLE");
 // Everything else still stops it.
@@ -180,9 +186,9 @@ const stops = [
   [{ history: "" }, "HOLD", "an empty history"],
   [{ history: line(84, "UNCHECKED") }, "HOLD", "the doctor did not run"],
   [{ history: line(84, "FAIL") }, "HOLD", "a failing doctor verdict"],
-  [{ history: line(69, "PASS") }, "REVISE", "a doctor score under the floor"],
-  [{ history: line(84, "PASS"), verdict: "CONDITIONAL" }, "REVISE", "a CONDITIONAL QC verdict"],
-  [{ history: line(84, "PASS"), verdict: "SHIP", total: 84 }, "REVISE", "a QC score under 85"],
+  [{ history: line(89, "PASS") }, "REVISE", "a doctor score under the floor"],
+  [{ history: line(90, "PASS"), verdict: "CONDITIONAL" }, "REVISE", "a CONDITIONAL QC verdict"],
+  [{ history: line(90, "PASS"), verdict: "SHIP", total: 89 }, "REVISE", "a QC score under 90"],
 ];
 for (const [input, state, why] of stops) assert.equal(runDoctor(GATE_NEW, input).doctorGate, state, why);
 // The doctor verdict must be a whole word: PASS-ISH is not PASS.
@@ -215,19 +221,48 @@ const realDoctor = (code, { history, total = 91, blockers = [] } = {}) => {
 assert.equal(realDoctor(GATE_OLD, { history: line(84, "PASS") }).doctorGate, "HOLD");
 assert.equal(realDoctor(GATE_OLD, { history: line(84, "PASS") }).doctorGateReason, "Presenter script unchecked");
 // The new gate reads the real keys and clears a clean row to human review.
-let real = realDoctor(GATE_NEW, { history: line(84, "PASS") });
+let real = realDoctor(GATE_NEW, { history: line(90, "PASS") });
 assert.equal(real.doctorGate, "READY_FOR_HUMAN_REVIEW", JSON.stringify(real));
 assert.equal(real.qc_verdict, "SHIP");
 assert.equal(real.qc_score, 91);
 // A later QC line appended under the doctor line does not hide it.
-assert.equal(realDoctor(GATE_NEW, { history: line(84, "PASS") + "\n2026-10-17T11:00:00Z | 91/100 SHIP | batch 8.0/10" }).doctorGate, "READY_FOR_HUMAN_REVIEW");
+assert.equal(realDoctor(GATE_NEW, { history: line(90, "PASS") + "\n2026-10-17T11:00:00Z | 91/100 SHIP | batch 8.0/10" }).doctorGate, "READY_FOR_HUMAN_REVIEW");
 // And on the real shapes everything else still stops it.
 for (const [input, state, why] of [
   [{}, "HOLD", "no score history"],
   [{ history: line(84, "FAIL") }, "HOLD", "a failing doctor verdict"],
-  [{ history: line(69, "PASS") }, "REVISE", "a doctor score under the floor"],
-  [{ history: line(84, "PASS"), total: 75 }, "REVISE", "a QC total under the ship line"],
-  [{ history: line(84, "PASS"), blockers: ["claim unsourced"] }, "REVISE", "a QC hard blocker"],
+  [{ history: line(89, "PASS") }, "REVISE", "a doctor score under the floor"],
+  [{ history: line(90, "PASS"), total: 75 }, "REVISE", "a QC total under the ship line"],
+  [{ history: line(90, "PASS"), blockers: ["claim unsourced"] }, "REVISE", "a QC hard blocker"],
 ]) assert.equal(realDoctor(GATE_NEW, input).doctorGate, state, why);
 
+
+// Universal acceptance contract: same numerical floor across all four brands,
+// no waiver of hard findings, no automatic release at 90.
+const gatePrefix = read("./qc_doctor_gate.js").split("const row = $('One Row at a Time').first().json;")[0];
+assert.ok(gatePrefix.includes("function gate(x)"), "QC gate core function found");
+const underlyingGate = new Function(gatePrefix + "\nreturn gate;")();
+for (const brand of ["TQO", "NCO_FORGE", "TSWS", "ACX"]) {
+  const make = score => ({
+    show: brand,
+    artifactHash: "fixture-sha", rubricVersion: "universal-90-v1",
+    requiredScopes: ["script","episode"],
+    reports: ["script","episode"].map(scope => ({
+      scope, artifactHash: "fixture-sha", rubricVersion: "universal-90-v1",
+      evidenceComplete: true, qcVerdict: "PASS",
+      openP0P1: 0, criticalOrHigh: 0, score
+    })),
+    presenterDoctorVerdict: "PASS", dramaticDoctorVerdict: "RECOMMEND",
+    policyValidated: true, releaseEvidenceValidated: true, approval: null,
+  });
+  assert.equal(underlyingGate(make(89)).state, "REVISE", brand + " 89");
+  assert.equal(underlyingGate(make(90)).state, "READY_FOR_HUMAN_REVIEW", brand + " 90");
+  assert.equal(underlyingGate(make(100)).state, "READY_FOR_HUMAN_REVIEW", brand + " 100");
+  const missing = make(100);
+  missing.reports[0].evidenceComplete = false;
+  assert.equal(underlyingGate(missing).state, "EVIDENCE_REQUIRED", brand + " missing evidence");
+  const hard = make(100);
+  hard.reports[1].criticalOrHigh = 1;
+  assert.equal(underlyingGate(hard).state, "REVISE", brand + " high finding");
+}
 console.log("Compliance fixes: OS 28 holds what the law says, Fill puts the line first, the Doctor Gate can clear");

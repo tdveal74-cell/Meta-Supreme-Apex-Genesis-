@@ -87,6 +87,7 @@ _INCREMENTAL_SCHEMAS = (
     "027_lead_disclosure_optional.sql",
     "028_support_articles.sql",
     "029_runtime_evidence.sql",
+    "030_arf_shadow_rate_limit.sql",
 )
 
 _DSN = TEST_DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
@@ -96,6 +97,7 @@ _TEST_DB_NAME = _DSN.rsplit("/", 1)[1]
 # Tables wiped between tests (order respects FKs; agents and executors stay
 # seeded, the latter by 012_live_state_ledger.sql).
 _DATA_TABLES = (
+    "arf_shadow_rate_limits",
     "agent_tool_results",
     "agent_verifications",
     "agent_skill_revisions",

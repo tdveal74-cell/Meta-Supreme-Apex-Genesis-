@@ -1,0 +1,159 @@
+{
+  "policy_id": "arf-shared-reliability",
+  "version": "1.1.0-draft",
+  "activation": "shadow_only",
+  "global": {
+    "approval_required_for": [
+      "write",
+      "high_impact"
+    ],
+    "always_denied": [
+      "blocked"
+    ],
+    "base_gates": [
+      "objective_defined",
+      "finite_dod",
+      "source_provenance",
+      "requirement_evidence"
+    ],
+    "trust": "evidence_attestations_from_authoritative_read_only_adapter_only",
+    "closure": "no_automatic_closure_or_user_effects"
+  },
+  "profiles": {
+    "devon": {
+      "required_gates": [
+        "effect_free_devon_core",
+        "runtime_policy_alignment",
+        "trusted_effect_receipts",
+        "independent_readback"
+      ],
+      "human_review_gates": [],
+      "rules": [
+        "existing_approval_queue_only",
+        "no_automatic_orphan_intent_replay",
+        "no_new_executor"
+      ],
+      "release_required_gates": [],
+      "release_review_gates": []
+    },
+    "meta_supreme_x": {
+      "required_gates": [
+        "evidence_provenance",
+        "council_role_coverage",
+        "dissent_and_risk_record",
+        "decision_traceability"
+      ],
+      "human_review_gates": [
+        "operator_decision_approval"
+      ],
+      "rules": [
+        "no_council_override_of_operator_authority",
+        "no_unverified_consensus"
+      ],
+      "release_required_gates": [],
+      "release_review_gates": []
+    },
+    "tsws": {
+      "required_gates": [
+        "locked_canon_hash",
+        "scene_continuity",
+        "identity_continuity",
+        "protected_silence",
+        "gold_thread_anahata",
+        "decoded_media_qc",
+        "quality_threshold_99"
+      ],
+      "human_review_gates": [
+        "visual_producer_acceptance"
+      ],
+      "rules": [
+        "ep01_closeups_allowed_by_override",
+        "do_not_change_sh135_approved_still",
+        "new_gpu_spend_requires_approval"
+      ],
+      "release_required_gates": [],
+      "release_review_gates": [
+        "publication_approval"
+      ]
+    },
+    "tqo": {
+      "required_gates": [
+        "real_firsthand_evidence",
+        "claim_provenance",
+        "idiolect_compliance",
+        "script_doctor_threshold_90"
+      ],
+      "human_review_gates": [
+        "editorial_approval"
+      ],
+      "rules": [
+        "tqo_script_doctor_90_of_100_as_of_2026_10_19",
+        "no_invented_operator_tests"
+      ],
+      "release_required_gates": [
+        "synthetic_media_disclosure",
+        "active_version_readback"
+      ],
+      "release_review_gates": [
+        "publication_approval"
+      ]
+    },
+    "nco_forge": {
+      "required_gates": [
+        "military_claim_sources",
+        "civilian_translation_accuracy",
+        "branding_review",
+        "lip_sync_audio_qc"
+      ],
+      "human_review_gates": [
+        "editorial_approval"
+      ],
+      "rules": [
+        "do_not_invent_service_history",
+        "no_unverified_benefits_or_policy_claims"
+      ],
+      "release_required_gates": [
+        "synthetic_media_disclosure"
+      ],
+      "release_review_gates": [
+        "publication_approval"
+      ]
+    },
+    "editforge": {
+      "required_gates": [
+        "shot_manifest_provenance",
+        "decoded_media_qc",
+        "version_and_hash_readback",
+        "cost_and_retry_tracking",
+        "output_delivery_readback"
+      ],
+      "human_review_gates": [
+        "deliverable_acceptance"
+      ],
+      "rules": [
+        "paid_render_requires_explicit_spend_approval",
+        "ambiguous_render_must_not_auto_retry"
+      ],
+      "release_required_gates": [],
+      "release_review_gates": []
+    },
+    "whatbroke": {
+      "required_gates": [
+        "symptom_reproduction",
+        "environment_version",
+        "root_cause_evidence",
+        "fix_retest",
+        "limitations_and_prevention"
+      ],
+      "human_review_gates": [],
+      "rules": [
+        "no_invented_error_logs",
+        "scope_claims_to_tested_environment"
+      ],
+      "release_required_gates": [],
+      "release_review_gates": [
+        "publication_approval"
+      ]
+    }
+  }
+}

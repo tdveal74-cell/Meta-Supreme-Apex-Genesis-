@@ -50,6 +50,7 @@
     "GET /agent-tasks/learning/skills/{name}/revisions",
     "GET /agent-tasks/tools",
     "GET /agent-tasks/{task_id}",
+    "GET /agent-tasks/{task_id}/reliability-shadow",
     "GET /agent-tasks/{task_id}/results/{result_id}",
     "GET /agent-tasks/{task_id}/verification-receipts",
     "GET /agents",
