@@ -1,8 +1,11 @@
 """Real contention, crash boundaries and forged-input controls for RSI ops."""
 
+import copy
 import hashlib
 import json
 import sqlite3
+import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
@@ -340,3 +343,56 @@ def test_added_trial_key_cannot_upgrade_hold_or_bypass_registration(tmp_path):
     assert store.snapshot()["experiments"][0]["result"] == first
     assert store.db.execute("SELECT count(*) FROM trial_runs").fetchone()[0] == 0
     store.close()
+
+
+@pytest.mark.parametrize("outcome", ["tie", "critical_failure"])
+def test_complete_verified_hold_and_reject_consume_run_ids(tmp_path, outcome):
+    from test_devon_rsi_experiments import NOW, Evidence
+    from tools.devon_rsi_ops import registry
+    evidence = Evidence()
+    favorable = copy.deepcopy(evidence.trial_bodies)
+    for body in evidence.trial_bodies:
+        if outcome == "tie":
+            body["candidate"] = copy.deepcopy(body["baseline"])
+        else:
+            body["candidate"][0]["passed"] = False
+    store = Store(tmp_path / "db")
+    registered = datetime(2026, 10, 21, 0, 30, tzinfo=timezone.utc)
+    registry.register(store, evidence.protocol, evidence.freeze(), evidence.keys, registered)
+    result = registry.assess(store, evidence.protocol, evidence.freeze(), evidence.trials(), evidence.keys, NOW)
+    assert result["state"] == ("HOLD" if outcome == "tie" else "REJECT")
+    assert store.db.execute("SELECT count(*) FROM trial_runs").fetchone()[0] == 40
+    evidence.protocol["experiment_id"] = "second_experiment"
+    evidence.protocol["candidate_sha256"] = digest("different_candidate")
+    evidence.trial_bodies = favorable
+    evidence.rebind()
+    registry.register(store, evidence.protocol, evidence.freeze(), evidence.keys, registered)
+    with pytest.raises(Refused, match="CROSS_PROTOCOL_RUN_REPLAY"):
+        registry.assess(store, evidence.protocol, evidence.freeze(), evidence.trials(), evidence.keys, NOW)
+    assert store.db.execute("SELECT count(*) FROM trial_runs").fetchone()[0] == 40
+    for body in evidence.trial_bodies:
+        body["control_run_id"] += "_replacement"
+        body["candidate_run_id"] += "_replacement"
+    with pytest.raises(Refused, match="REGISTERED_TRIAL_DRIFT"):
+        registry.assess(store, evidence.protocol, evidence.freeze(), evidence.trials(), evidence.keys, NOW)
+    store.close()
+
+
+@pytest.mark.parametrize("value", [1, True, [], {}, "", "bad-date"])
+def test_bad_health_timestamp_sanitizes_cli_failure_and_replaces_stale_status(tmp_path, trust, value):
+    inbox, state = tmp_path / "inbox", tmp_path / "state"
+    inbox.mkdir()
+    state.mkdir()
+    (state / "status.json").write_text('{"status":"OBSERVING_FIXTURES"}')
+    health = {"reflection_count": 37, "latest_reflection_at": value,
+              "canon_count_previous": None, "canon_count_current": None, "disagreements": None,
+              "blind_test_distinguishable": None, "monthly_review_at": None, "source_sha256": digest("fixture")}
+    (inbox / "health.json").write_text(json.dumps(health))
+    result = subprocess.run([sys.executable, "-B", "-X", "pycache_prefix=" + str(tmp_path / "fresh-cache"),
+                             "-m", "tools.devon_rsi_ops.service", "--state", str(state),
+                             "--inbox", str(inbox), "--trust-sha256", trust], capture_output=True, text=True)
+    assert result.returncode == 1
+    assert result.stderr == ""
+    assert json.loads(result.stdout)["status"] == "HOLD"
+    assert json.loads((state / "status.json").read_text())["status"] == "HOLD"
+    assert not (state / "operator.sqlite3").exists()

@@ -7,7 +7,6 @@ bound to their journal and recomputed against the unchanged public suite.
 import argparse
 import hashlib
 import os
-import sqlite3
 import time
 import uuid
 
@@ -113,6 +112,10 @@ def tick(state, inbox, trust, execute=True):
     if state == inbox or inbox in state.parents or state in inbox.parents:
         raise Refused("STATE_INBOX_OVERLAP")
     verify_seal(ROOT, trust)
+    health_path = inbox / "health.json"
+    health = summarize(read_json(safe_path(health_path))) if health_path.exists() else {
+        "status": "REVIEW_REQUIRED", "reason": "HEALTH_EVIDENCE_MISSING",
+        "monthly_review_recorded": False, "gain_claim": False, "promoted": False}
     store = Store(state / "operator.sqlite3")
     try:
         for path in discover(inbox):
@@ -130,19 +133,21 @@ def tick(state, inbox, trust, execute=True):
         snapshot.update({"status": "OBSERVING_FIXTURES", "private_trial_status": "HOLD",
                          "reason": "EXTERNAL_PROVENANCE_AND_INDEPENDENT_REVIEW_REQUIRED",
                          "production_effects": [], "paid_model_calls": 0})
-        health_path = inbox / "health.json"
-        snapshot["health"] = summarize(read_json(safe_path(health_path))) if health_path.exists() else {
-            "status": "REVIEW_REQUIRED", "reason": "HEALTH_EVIDENCE_MISSING",
-            "monthly_review_recorded": False, "gain_claim": False, "promoted": False}
-        target = state / (".snapshot-" + uuid.uuid4().hex)
-        with target.open("xb") as stream:
-            stream.write(canonical(snapshot) + b"\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        target.replace(state / "status.json")
+        snapshot["health"] = health
+        write_status(state, snapshot)
         return snapshot
     finally:
         store.close()
+
+
+def write_status(state, snapshot):
+    state = safe_path(state)
+    target = state / (".snapshot-" + uuid.uuid4().hex)
+    with target.open("xb") as stream:
+        stream.write(canonical(snapshot) + b"\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    target.replace(state / "status.json")
 
 
 def main():
@@ -159,9 +164,15 @@ def main():
                              "observations": result["observation_count"],
                              "review_count": len(result["review_queue"]),
                              "status_sha256": hashlib.sha256(canonical(result)).hexdigest()}).decode(), flush=True)
-        except (OSError, ValueError, TypeError, KeyError, RuntimeError, sqlite3.Error):
+        except Exception:
             # No raw source, token, exception text or stack in the service log.
-            print('{"status":"HOLD","reason":"FAIL_CLOSED"}', flush=True)
+            failure = {"status": "HOLD", "reason": "FAIL_CLOSED", "gain_claim": False,
+                       "promoted": False, "production_effects": []}
+            print(canonical(failure).decode(), flush=True)
+            try:
+                write_status(args.state, failure)
+            except Exception:
+                pass
             raise SystemExit(1) from None
         if not args.watch:
             break

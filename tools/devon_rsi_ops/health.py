@@ -7,7 +7,7 @@ from tools.devon_rsi.kernel import Refused, digest
 
 def summarize(evidence, now=None):
     now = now or datetime.now(timezone.utc)
-    if now.tzinfo is None or not isinstance(evidence, dict) or set(evidence) != {
+    if not isinstance(now, datetime) or now.tzinfo is None or not isinstance(evidence, dict) or set(evidence) != {
         "reflection_count", "latest_reflection_at", "canon_count_previous", "canon_count_current",
         "disagreements", "blind_test_distinguishable", "monthly_review_at", "source_sha256"
     }:
@@ -22,7 +22,12 @@ def summarize(evidence, now=None):
     times = {}
     for key in ("latest_reflection_at", "monthly_review_at"):
         value = evidence[key]
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
+        if value is not None and (type(value) is not str or not value):
+            raise Refused("HEALTH_TIME")
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00")) if value is not None else None
+        except ValueError:
+            raise Refused("HEALTH_TIME") from None
         if parsed and (parsed.tzinfo is None or parsed > now):
             raise Refused("HEALTH_TIME")
         times[key] = parsed

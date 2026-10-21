@@ -85,7 +85,7 @@ An experiment ID cannot be replaced. The same baseline/candidate/suite/scorer
 family cannot be re-registered under another ID to retry significance. The
 first submitted outcome set consumes the experiment, including a failed or
 incomplete set. Different replacements refuse. Run IDs cannot be recycled
-across accepted experiments. Registry expiry/revocation is checked on replay.
+across complete authenticated submissions, including HOLD or REJECT outcomes. Registry expiry/revocation is checked on replay.
 A new replication policy would require independent upstream review, not a
 candidate edit or database reset.
 

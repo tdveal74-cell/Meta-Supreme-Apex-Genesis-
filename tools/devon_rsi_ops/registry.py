@@ -39,6 +39,18 @@ def assess(store, protocol, freeze, trials, keys, now=None):
     if not isinstance(trials, list) or len(trials) > 256:
         raise Refused("TRIAL_COUNT")
     submission = digest(trials)
+    # Bind the first submitted bytes before evaluating or reserving runs.
+    # A later validation failure or crash cannot reopen outcome replacement.
+    with store.transaction():
+        row = store.db.execute("SELECT * FROM protocols WHERE id=?", (identity,)).fetchone()
+        if not row or row["freeze_hash"] != digest(freeze):
+            raise Refused("PREREGISTRATION_REQUIRED")
+        if row["submission_hash"] is not None and row["submission_hash"] != submission:
+            raise Refused("REGISTERED_TRIAL_DRIFT")
+        if row["submission_hash"] is None:
+            store.db.execute("UPDATE protocols SET submission_hash=? WHERE id=?", (submission, identity))
+            store.append({"kind": "trial_submission", "protocol_sha256": identity,
+                          "submission_sha256": submission})
     result = assess_trials(protocol, freeze, trials, keys, now=now)
     with store.transaction():
         row = store.db.execute("SELECT * FROM protocols WHERE id=?", (identity,)).fetchone()
@@ -53,7 +65,7 @@ def assess(store, protocol, freeze, trials, keys, now=None):
                 raise Refused("REGISTERED_DECISION_DRIFT")
             return result
         registered = datetime.fromisoformat(row["registered_at"])
-        for trial in trials if result["state"] == "ACCEPT_FOR_HUMAN_REVIEW" else []:
+        for trial in trials if "verified_run_ids" in result else []:
             body = strict_load(trial["payload"].encode())
             if datetime.fromisoformat(body["started_at"].replace("Z", "+00:00")) <= registered:
                 raise Refused("TRIAL_PRECEDES_REGISTRATION")

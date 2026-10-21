@@ -216,6 +216,8 @@ def assess_trials(protocol, signed_freeze, signed_trials, trusted_keys, *, now=N
         _need(isinstance(signed_trials, list) and len(signed_trials) == len(p["blocks"]), "INCOMPLETE_BLOCKS")
         expected = {b["id"]: b["sample_sha256"] for b in p["blocks"]}
         blocks, runs, receipts, pairs = set(), set(), set(), []
+        first_veto = None
+        first_started = None
         for envelope in signed_trials:
             trial = _signed(envelope, "trial", p, trusted_keys, current)
             fingerprint = digest(envelope)
@@ -234,15 +236,25 @@ def assess_trials(protocol, signed_freeze, signed_trials, trusted_keys, *, now=N
             _need(trial["session_id"] != freeze["session_id"], "TRIAL_SESSION_INDEPENDENCE")
             _need(_time(p["frozen_at"]) < _time(trial["started_at"]) <= _time(trial["finished_at"])
                   <= _time(trial["issued_at"]), "TRIAL_PRECEDES_FREEZE")
+            started = _time(trial["started_at"])
+            first_started = min(first_started, started) if first_started else started
             baseline = _rows(trial["baseline"], p["cases"])
             candidate = _rows(trial["candidate"], p["cases"])
             verdict, reason = decide(baseline, candidate)
-            if verdict == "REJECT":
-                return _result("REJECT", reason, protocol_sha256=digest(p), block_id=block)
+            if verdict == "REJECT" and first_veto is None:
+                first_veto = (reason, block)
             pairs.append({"block_id": block,
                           "control": sum(r["passed"] for r in baseline) / len(baseline),
                           "candidate": sum(r["passed"] for r in candidate) / len(candidate)})
         pairs.sort(key=lambda row: row["block_id"])
+        # Only fully authenticated complete sets expose reservation metadata.
+        # Statistical HOLD and policy REJECT must still consume physical runs.
+        verified = {"verified_run_ids": sorted(runs),
+                    "first_trial_started_at": first_started.isoformat(),
+                    "trial_set_sha256": digest(sorted(receipts))}
+        if first_veto:
+            return _result("REJECT", first_veto[0], protocol_sha256=digest(p),
+                           block_id=first_veto[1], **verified)
         signal = gain_evidence(pairs, fixture=False, comparisons=p["comparisons"])
         eligible = signal.get("statistical_signal") is True
         reason = "NO_SIGNIFICANT_GAIN" if signal.get("statistical_signal") is False else signal["reason"]
@@ -250,7 +262,7 @@ def assess_trials(protocol, signed_freeze, signed_trials, trusted_keys, *, now=N
                        "ADMISSIBLE_GAIN_EVIDENCE" if eligible else reason,
                        protocol_sha256=digest(p), candidate_sha256=p["candidate_sha256"],
                        admissible_gain_evidence=eligible, statistics=signal, blocks=len(pairs),
-                       trial_set_sha256=digest(sorted(receipts)))
+                       **verified)
     except (Refused, ValueError, TypeError, KeyError, OverflowError, UnicodeError) as exc:
         return _result("HOLD", str(exc) if isinstance(exc, Refused) else "INPUT_SCHEMA")
 
