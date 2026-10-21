@@ -24,6 +24,8 @@ alembic==1.19.1
 pgvector==0.5.0
 
 # Auth & Security
+# Security advisory PYSEC-2026-4320: use the corrected CA bundle.
+certifi==2026.10.19
 PyJWT==2.15.1
 bcrypt==5.0.0
 python-multipart==0.0.32
