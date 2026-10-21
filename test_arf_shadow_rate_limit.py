@@ -220,8 +220,10 @@ async def main():
         await engine.dispose()
 asyncio.run(main())
 """
+    from app.db.session import engine
+
     env = dict(os.environ)
-    env["DATABASE_URL"] = os.environ["TEST_DATABASE_URL"]
+    env["DATABASE_URL"] = engine.url.render_as_string(hide_password=False)
     for _ in range(2):
         proc = await asyncio.create_subprocess_exec(sys.executable, "-c", code, owner,
             env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
