@@ -1,0 +1,65 @@
+{
+  "date": "2026-10-21",
+  "status": "LOCAL_CANDIDATE_VALIDATED_NOT_PRODUCTION_ACTIVATION",
+  "base_commit": "9fbc37e35acc38880e6f0b5a5978a58a6fcb9418",
+  "full_repository_suite": {
+    "passed": 5281,
+    "skipped": 3,
+    "warnings": 52,
+    "subtests_passed": 11,
+    "exit_code": 0,
+    "elapsed_seconds": 342.99,
+    "source_unchanged_during_run": true,
+    "database": "Disposable PostgreSQL 16 with pgvector, synthetic fixtures only",
+    "providers": "mock"
+  },
+  "focused_suite": {
+    "grant_tests": 22,
+    "actual_postgresql_api_tests": 11,
+    "offline_client_tests": 31,
+    "total_passed": 64,
+    "exit_code": 0
+  },
+  "negative_controls": {
+    "separate_checkout_and_process": true,
+    "removed_digest_guard": "Wrong-key test failed as expected",
+    "removed_brand_guard": "Cross-brand test observed 200 instead of 404 and failed",
+    "removed_owner_predicates": "Foreign-project test observed 200 instead of 404 and failed",
+    "writable_transaction": "Transaction read-only assertion failed as expected",
+    "restored_source": "64 focused tests passed; original candidate unchanged"
+  },
+  "release_checks": {
+    "standalone_import": "PASS",
+    "api_import_contract": "PASS",
+    "root_ruff": "PASS",
+    "migration_upgrade_downgrade_upgrade": "PASS on a separate disposable database",
+    "root_python_dependency_audit": "PASS, no known vulnerabilities reported",
+    "soul_python_dependency_audit": "PASS, no known vulnerabilities reported",
+    "pnpm_audit": "PASS using existing CI major 10 and unchanged repository exception",
+    "preexisting_ignored_high_advisory": "GHSA-vfj7-8cjw-p6xm",
+    "audit_policy_modified": false
+  },
+  "environment_corrections": [
+    "Included the existing virtualenv bin directory in the isolated PATH so the repository's subprocess-effect tests could find python. No guard or test was weakened.",
+    "Re-ran the JavaScript audit with pnpm major 10, matching CI. An unpinned corepack run had selected major 12 and did not honor the same existing policy. No exception was added."
+  ],
+  "files_sha256": {
+    "app/security/creator_read.py": "6fb077e6ed12c4bc92861bbc6f6f948c4b33ea6b2c762eb676df2d8dc2672909",
+    "app/api/v1/creator_workspace.py": "f24b63b3509de7650a0c30748c71300da7fd832349b687c7f310ff7601d8b359",
+    "app/api/v1/router.py": "913185c899d24c0346d3a3a61bb25855ff48299bf78dcdc1534555073c933ac2",
+    "tools/creator_workspace_reader.py": "260418f21e400d2a8f3af72ecd21b047e9735c32594d5eb8ddc0e83d7621d641",
+    "test_creator_read_grants.py": "8c264545e61c32c2f14215c4216dd1731b5b99ab7a5e86a3c87b62d576e11d22",
+    "test_creator_read_api.py": "4e2214c684967afc59ef26ff4272a6673c3e2c744380fecd19349261a39e12b2",
+    "test_creator_read_client.py": "9da90b7b39ca03c4b74bec380202294bcd766e172bd92ecfb747c1f0a48a5269"
+  },
+  "limits": {
+    "github_head_ci": "Must be verified separately on the published head",
+    "production_deployment": "Not established by this local receipt",
+    "production_grant": "Not provisioned by source commit",
+    "human_security_certification": false,
+    "graphify_autonomy_enabled": false,
+    "publishing_authorized": false,
+    "paid_provider_calls": false,
+    "second_brain_created": false
+  }
+}
