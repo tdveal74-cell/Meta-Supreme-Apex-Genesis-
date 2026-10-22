@@ -938,18 +938,29 @@ def _session_files(path):
     return files
 
 
-def last_reflection_write(path, now):
+def last_reflection_write(path, now, since=None):
     """Returns the time of the newest completed write to the reflection table
     anywhere in the session, or None. A write counts when its tool_result came
     back without is_error, which a refusal and a failure both carry. Any write
     to the table counts, whatever its shape. Raises when a file cannot be read,
-    so the caller fails closed."""
+    so the caller fails closed.
+
+    Speed matters because the hook has 15 s and a session's files grow without
+    bound: this one held 167 MB across 106 files on 2026-10-22, and parsing it
+    all took 5.4 s. A file last modified before since cannot hold a result
+    inside the window, so it is skipped unread, and a line is parsed only when
+    it names the tool or the id of a write already seen in that file."""
     newest = None
     horizon = now + timedelta(minutes=SKEW_MIN)
+    floor = since.timestamp() if since is not None else None
     for name in _session_files(path):
+        if floor is not None and name != main_transcript(path) and os.path.getmtime(name) < floor:
+            continue
         writes = set()
         with open(name, encoding="utf-8", errors="replace") as fh:
             for line in fh:
+                if "add_data_table_rows" not in line and not (writes and any(w in line for w in writes)):
+                    continue
                 try:
                     entry = json.loads(line, strict=False)
                 except Exception:
@@ -966,8 +977,10 @@ def last_reflection_write(path, now):
                         and str(b.get("name", "")).endswith("__add_data_table_rows")
                         and isinstance(b.get("input"), dict)
                         and b["input"].get("dataTableId") == REFLECTION_TABLE
+                        and isinstance(b.get("id"), str)
+                        and b["id"]
                     ):
-                        writes.add(b.get("id"))
+                        writes.add(b["id"])
                     elif (
                         entry.get("type") == "user"
                         and b.get("type") == "tool_result"
@@ -985,7 +998,8 @@ def reflection_capped(payload, now):
     when it may pass: one completed inside REFLECTION_EVERY_H, or a session that
     cannot be read."""
     try:
-        last = last_reflection_write(payload.get("transcript_path") or "", now)
+        last = last_reflection_write(
+            payload.get("transcript_path") or "", now, since=now - timedelta(hours=REFLECTION_EVERY_H))
     except Exception as exc:
         return "the session could not be read to count earlier reflection rows (%s: %s)" % (
             type(exc).__name__, exc)

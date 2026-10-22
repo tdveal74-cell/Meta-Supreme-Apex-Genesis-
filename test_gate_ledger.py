@@ -1429,3 +1429,46 @@ def test_main_fails_closed_on_a_reflection_row_when_the_decision_code_raises(tmp
     assert gate.main(["gate_ledger.py", "pre"]) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_a_subagent_file_untouched_for_twelve_hours_is_not_read(tmp_path):
+    """A write completed inside the window touched its file inside the window,
+    so an older file is skipped unread, which keeps the hook inside 15 s."""
+    import os as _os
+    p = payload(tmp_path, [], tool=REFLECTION_TOOL, tool_input=reflection_input())
+    sub = tmp_path / "session" / "subagents"
+    sub.mkdir(parents=True)
+    old = sub / "agent-old.jsonl"
+    old.write_text("\n".join(json.dumps(e) for e in wrote_reflection(30)) + "\n")
+    stamp = (NOW - timedelta(hours=13)).timestamp()
+    _os.utime(old, (stamp, stamp))
+    assert gate.run("pre", p, now=NOW) is None
+    # last touched an hour ago, inside the window, so it is read
+    inside = (NOW - timedelta(hours=1)).timestamp()
+    _os.utime(old, (inside, inside))
+    assert gate.run("pre", p, now=NOW)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_a_write_with_no_id_neither_counts_nor_crashes(tmp_path):
+    earlier = wrote_reflection(30)
+    earlier[0]["message"]["content"][0]["id"] = None
+    earlier[1]["message"]["content"][0]["tool_use_id"] = None
+    p = payload(tmp_path, earlier, tool=REFLECTION_TOOL, tool_input=reflection_input())
+    assert gate.run("pre", p, now=NOW) is None
+
+
+def test_the_cap_reads_a_large_session_well_inside_the_hook_timeout(tmp_path):
+    import time
+    filler = json.dumps(human(600, "x" * 400))
+    entries_path = tmp_path / "session.jsonl"
+    with open(entries_path, "w", encoding="utf-8") as fh:
+        for _ in range(150000):
+            fh.write(filler + "\n")
+        for e in wrote_reflection(30):
+            fh.write(json.dumps(e) + "\n")
+    p = {"session_id": "s1", "tool_name": REFLECTION_TOOL, "tool_input": reflection_input(),
+         "transcript_path": str(entries_path), "cwd": str(tmp_path)}
+    started = time.monotonic()
+    reason = gate.reflection_capped(p, NOW)
+    assert time.monotonic() - started < 3.0
+    assert reason and "already written" in reason
