@@ -658,6 +658,19 @@ loosens nothing above it. His authorization to merge is still explicit and
 still arrives from him; the card is how it is asked for, never a substitute for
 having it.
 
+Ruled again by Tee 2026-10-22, in chat: "All rulings on inline cards multiple
+choice." It followed a run of reports that ended with the decisions written as
+prose lists, "Your rulings: either exempt this one table write from the gate,
+or stand the routine down" and "Three things waiting on you", which is the
+2026-09-16 failure in a shorter form. A ruling is never a sentence in a report.
+It is a multiple choice question on an `AskUserQuestion` card, two to four
+options, the recommended one first, each option's cost in its own description.
+A scheduled or webhook wake has nobody to answer a card and is often barred
+from messaging him at all, so it holds the decision and asks it on a card the
+next time he is present; it does not write the choice into its closing line.
+An instruction for him to carry out, such as a test only his phone can run, is
+not a ruling and can stay in prose.
+
 **Merge approval is standing.** Ruled by Tee 2026-10-11, in chat, after a
 session asked him to merge PR #325, a records-only correction, on a card: "You
 have my approval to merge at all times." So a session no longer asks for a
