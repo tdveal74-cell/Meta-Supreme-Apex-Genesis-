@@ -44,7 +44,7 @@ preserves surrogate pairs and reconstructs the exact source string.
 
 1. The existing authenticated graph route identifies the configured embedding
    provider. An unavailable, simulated or unknown provider stops before source
-   writes. This importer currently supports the existing real OpenAI provider.
+   writes. This importer supports real OpenAI and OpenRouter embeddings.
 2. The complete owner-scoped corpus is read. A failed or malformed read never
    becomes an empty corpus.
 3. A content-addressed source URI identifies a notebook/source/hash/part. A
@@ -77,3 +77,22 @@ POST/read/search receipts, duplicate replay, unknown write outcome and failure
 stops. The web workflow runs it before the production build. Live completion
 requires actual persistence and retrieval receipts; passing fixtures or deploying
 the page alone does not mean any notebook has been imported.
+
+## OpenRouter configuration
+
+Set `EMBEDDING_PROVIDER=openrouter` and use the existing `OPENROUTER_API_KEY`
+on the API service. Leave `EMBEDDING_MODEL` unset or set it to
+`openai/text-embedding-3-small`. This adapter accepts only that model and
+1536 finite, nonzero dimensions, with complete, unique batch indices.
+No separate OpenAI key is needed. OpenRouter account credit and key limits
+still apply. Missing credentials, funding refusals and malformed responses
+fail explicitly, without switching to mock or another model. The chat provider
+is independent and is not changed.
+
+Do not mix existing mock vectors with real vectors. Start from an empty corpus
+or perform an explicit rebuild of existing items. Import receipts are required
+before claiming success. OpenRouter is not automatically added to the separate
+hybrid retrieval or episode-coverage trust allowlists; those require their own
+quality measurement. The importer verifies the existing semantic search route.
+
+API contract: https://openrouter.ai/docs/api/api-reference/embeddings/submit-an-embedding-request

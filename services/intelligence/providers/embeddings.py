@@ -249,7 +249,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 # Factory
 # ---------------------------------------------------------------------------
 
-SUPPORTED_EMBEDDING_PROVIDERS = ("mock", "openai")
+SUPPORTED_EMBEDDING_PROVIDERS = ("mock", "openai", "openrouter")
 
 #: Providers whose DISTANCES may decide whether a document was found at all.
 #:
@@ -339,6 +339,7 @@ def create_embedding_provider(
     provider_name: str,
     *,
     openai_api_key: Optional[str] = None,
+    openrouter_api_key: Optional[str] = None,
     model: Optional[str] = None,
     timeout_seconds: float = 60.0,
     max_retries: int = 2,
@@ -351,6 +352,15 @@ def create_embedding_provider(
         return OpenAIEmbeddingProvider(
             api_key=openai_api_key or "",
             default_model=model or "text-embedding-3-small",
+            timeout_seconds=timeout_seconds,
+            max_retries=max_retries,
+        )
+    if name == "openrouter":
+        from .openrouter_embeddings import MODEL, OpenRouterEmbeddingProvider
+
+        return OpenRouterEmbeddingProvider(
+            api_key=openrouter_api_key or "",
+            default_model=model or MODEL,
             timeout_seconds=timeout_seconds,
             max_retries=max_retries,
         )
