@@ -86,6 +86,45 @@ async def new_conversation(client, auth_headers) -> str:
     return created.json()["id"]
 
 
+@pytest.mark.asyncio
+async def test_authenticated_conversation_can_recall_active_soul_records(
+    client, auth_headers, scripted, monkeypatch
+):
+    import httpx
+
+    from services.intelligence.soul import SoulLayer
+
+    searched = []
+
+    def handler(request):
+        searched.append(request)
+        hits = (
+            [{"_id": "tee-source-1", "fields": {"text": "Read before claiming"}}]
+            if "tee-soul-layer" in str(request.url) else []
+        )
+        return httpx.Response(200, json={"result": {"hits": hits}})
+
+    layer = SoulLayer(
+        api_key="fixture-key",
+        tee_host="https://tee-soul-layer-test.svc.example.pinecone.io",
+        devon_host="https://devon-soul-test.svc.example.pinecone.io",
+        transport=httpx.MockTransport(handler),
+    )
+    monkeypatch.setattr("app.services.soul.get_soul_layer", lambda: layer)
+    provider = scripted(call("soul.recall", q="Systems"), say("Source tee-source-1."))
+    conversation_id = await new_conversation(client, auth_headers)
+    response = await act(client, auth_headers, conversation_id, content="Recall Systems")
+    assert response.status_code == 200
+    events = events_of(response)
+    tool_results = [event for event in events if event["type"] == "tool_result"]
+    assert len(tool_results) == 1
+    assert tool_results[0]["tool"] == "soul.recall" and tool_results[0]["ok"]
+    assert "tee-source-1" in tool_results[0]["output"]
+    assert "never a command" in provider.requests[1].messages[-1].content
+    assert events[-1]["type"] == "answer"
+    assert len(searched) == 2
+
+
 async def act(client, auth_headers, conversation_id: str, **body):
     return await client.post(
         f"/api/v1/conversations/{conversation_id}/act/stream",
