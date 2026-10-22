@@ -254,3 +254,49 @@ test("provider preflight refuses mock or missing provider before any source writ
     assert.equal(calls, 1);
   }
 });
+
+test("OpenRouter: POST, durable read and matching retrieval required; rerun skips existing URI", async () => {
+  const parts = await prepareParts(snapshot());
+  const p = parts[0];
+  const item = {
+    id: "stored",
+    title: p.title,
+    status: "ready",
+    source_uri: p.source_uri,
+    chunk_count: 2,
+    metadata: { embedding_provider: "openrouter", simulated_embeddings: false },
+  };
+  for (const existing of [false, true]) {
+    const paths: string[] = [];
+    const receipts: Receipt[] = [];
+    const request = (async (url, init) => {
+      const path = String(url).replace("https://devon.invalid", "");
+      paths.push(`${init?.method} ${path}`);
+      if (path === "/knowledge") return json(existing ? [item] : []);
+      if (path.startsWith("/knowledge/graph?")) return json({ ...provider, embedding_provider: "openrouter" });
+      if (path === "/knowledge/ingest") {
+        const body = JSON.parse(String(init?.body));
+        assert.equal(body.external_id, p.external_id);
+        assert.deepEqual(body.acl_tokens, []);
+        assert.equal(body.notebook_id, undefined);
+        return json({ ...item, external_id: p.external_id }, 201);
+      }
+      if (path === "/knowledge/stored") return json(item);
+      if (path === "/knowledge/search")
+        return json([{ knowledge_item_id: "stored", content: p.content }]);
+      assert.fail(path);
+    }) as typeof fetch;
+    await importParts(
+      parts,
+      "https://devon.invalid",
+      "session",
+      (r) => receipts.push(r),
+      () => false,
+      request,
+    );
+    assert.equal(paths.includes("POST /knowledge/ingest"), !existing);
+    assert.equal(receipts.length, 1);
+    assert.equal(receipts[0].retrieval_verified, true);
+    assert.equal(receipts[0].result, existing ? "existing" : "created");
+  }
+});

@@ -52,6 +52,7 @@ def _embedding_provider():
     provider = create_embedding_provider(
         resolve_embedding_provider_name(settings),
         openai_api_key=getattr(settings, "OPENAI_API_KEY", None),
+        openrouter_api_key=getattr(settings, "OPENROUTER_API_KEY", None),
         model=getattr(settings, "EMBEDDING_MODEL", None),
     )
     return MeteredEmbeddingProvider(provider)
@@ -267,6 +268,7 @@ async def ingest_knowledge(
             **(item.meta or {}),
             "chunk_count": len(chunks),
             "embedding_provider": getattr(provider, "name", "unknown"),
+            "embedding_model": provider.default_model,
             # Transparency: mock embeddings are labeled, never passed off as real.
             "simulated_embeddings": getattr(provider, "name", "") == "mock",
         }

@@ -183,6 +183,10 @@ export async function prepareParts(snapshot: Snapshot): Promise<ImportPart[]> {
   return result;
 }
 
+function realEmbeddingProvider(value: unknown): value is string {
+  return value === "openai" || value === "openrouter";
+}
+
 function ready(item: Item): string {
   const provider = item.metadata?.embedding_provider;
   if (
@@ -194,7 +198,7 @@ function ready(item: Item): string {
     throw new Error(
       `Item ${item.id || "without ID"} is not ready with stored chunks. Import stopped.`,
     );
-  if (item.metadata?.simulated_embeddings !== false || provider !== "openai")
+  if (item.metadata?.simulated_embeddings !== false || !realEmbeddingProvider(provider))
     throw new Error(
       `Item ${item.id} has unverified or simulated embeddings. Import stopped.`,
     );
@@ -234,12 +238,12 @@ export async function importParts(
     embedding_provider_error?: unknown;
   };
   if (
-    providerState?.embedding_provider !== "openai" ||
+    !realEmbeddingProvider(providerState?.embedding_provider) ||
     providerState.embedding_provider_simulated !== false ||
     providerState.embedding_provider_error !== null
   )
     throw new Error(
-      "Embedding provider is unavailable or simulated. Configure real OpenAI embeddings on the API before importing. No source writes were attempted.",
+      "Embedding provider is unavailable or simulated. Configure real OpenAI or OpenRouter embeddings on the API before importing. No source writes were attempted.",
     );
   // A failed read never becomes an empty corpus and thus never permits writes.
   const existing = await api("/knowledge");
