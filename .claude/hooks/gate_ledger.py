@@ -107,11 +107,41 @@ NAMED_SERVERS = (
     # claude.ai connector name. Reads such as list-pods and get-pod still pass.
     "runpod",
     # Graphify, the code graph server registered in .mcp.json. Ruled by Tee
-    # 2026-10-17, the day it was added. Its tool list is unread because the
-    # server answers 401 until someone signs in, so every tool that is not a
-    # read is gated from the first call rather than after one is found to write.
+    # 2026-10-17, the day it was added: only its non-read tools need a human
+    # signal. Its reads are listed by name in GRAPHIFY_READS below.
     "graphify",
 )
+# Graphify's read tools, by exact name, read from the live connector on
+# 2026-10-22. Most of them start "graphify_" or name a noun (graph_stats,
+# shortest_path, recall), so READ_VERB, anchored on the first word, missed 21 of
+# 26 and refused them whenever Tee had been quiet for 30 minutes. They are
+# listed here for this server only, so no other server gains a read verb. The
+# two writes, remember and set_workspace, and any tool added later stay gated.
+GRAPHIFY_READS = frozenset({
+    "graphify_find", "graphify_rank_files", "graphify_trace", "graphify_callers",
+    "graphify_callees", "graphify_node", "graphify_expand", "graphify_file_neighbors",
+    "graphify_find_seeds", "graphify_impact", "graphify_imports_exports",
+    "graphify_references", "graphify_render_subgraph", "graphify_tests_for",
+    "impact_and_risk", "graph_stats", "shortest_path", "memories_about", "recall",
+    "list_workspaces", "list_repositories", "query_graph", "search", "fetch",
+})
+# Reads named per server, for tools READ_VERB cannot see. Ruled by Tee
+# 2026-10-22 on a card: Graphify's list above, and blotato-help askQuestion,
+# which answers a question from Blotato's docs. Unlike NAMED_SERVERS, which
+# tightens on a substring, this loosens, so it matches only the exact name, its
+# claude_ai_ connector form and a plugin_<plugin>_<name> form. A server merely
+# containing the name, graphify-evil or blotato-help-x, gains nothing.
+SERVER_READS = {
+    "graphify": GRAPHIFY_READS,
+    "blotato-help": frozenset({"askQuestion"}),
+}
+# Connectors that arrive under a UUID instead of a name, mapped to the name the
+# rules above use. Ruled by Tee 2026-10-22 on a card, after this cloud session
+# found Graphify registered as 89245824-... and its writes ungated, because no
+# rule matched the UUID. A new connector UUID is covered only once it is listed.
+SERVER_ALIASES = {
+    "89245824-e0dd-4d6f-94dc-d0712a46ef78": "graphify",
+}
 # On a named server every tool is gated EXCEPT a read. Listing the reads is the
 # safer direction: a write verb nobody thought of is caught, and the cost of a
 # read nobody listed is one refusal while no human signal is fresh.
@@ -763,6 +793,15 @@ def _is_reflection_row(server, tool_input, now):
     return now is None or abs((beat - now).total_seconds()) <= REFLECTION_SKEW_MIN * 60
 
 
+def _is_server(server, name):
+    """True when server is name itself, its claude.ai connector or a plugin's."""
+    return (
+        server == name
+        or server == "claude_ai_" + name
+        or (server.startswith("plugin_") and server.endswith("_" + name))
+    )
+
+
 def classify(tool_name, tool_input, cwd="", now=None, shape_only=False):
     """Returns (cls, gated). cls is None for a call that is not tracked.
     shape_only skips the clock in the reflection row check, for post and fail."""
@@ -805,6 +844,7 @@ def classify(tool_name, tool_input, cwd="", now=None, shape_only=False):
     parts = tool_name.split("__")
     suffix = parts[-1]
     server = parts[1].lower() if len(parts) > 2 else ""
+    server = SERVER_ALIASES.get(server, server)
     if suffix in LEDGER_ONLY_SUFFIXES:
         return suffix, False
     if suffix == "add_data_table_rows" and _is_reflection_row(
@@ -817,6 +857,9 @@ def classify(tool_name, tool_input, cwd="", now=None, shape_only=False):
         return suffix, True
     if HOSTINGER_WRITE.match(suffix):
         return suffix, True
+    if any(_is_server(server, name) and suffix in reads
+           for name, reads in SERVER_READS.items()):
+        return None, False
     verb = re.sub(r"^(blotato|zapier|VPS|DNS|domains|hosting|billing|reach)_", "", suffix)
     if any(name in server for name in NAMED_SERVERS) and not READ_VERB.match(verb):
         return suffix, True
