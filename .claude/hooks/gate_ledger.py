@@ -424,6 +424,12 @@ PUSH_LONG = {
     "no-verify": "", "verify": "", "follow-tags": "", "signed": "", "atomic": "",
     "ipv4": "", "ipv6": "",
 }
+# Every prefix of every option, built once, so a command of many long options
+# costs one lookup per word rather than a scan of the whole list.
+PUSH_PREFIXES = {}
+for _option in PUSH_LONG:
+    for _end in range(1, len(_option) + 1):
+        PUSH_PREFIXES.setdefault(_option[:_end], []).append(_option)
 
 
 def _push_long(name):
@@ -434,7 +440,7 @@ def _push_long(name):
     A --no- form turns an option off and matches nothing that gates here."""
     if name in PUSH_LONG:
         return [name]
-    return [o for o in PUSH_LONG if o.startswith(name)] if name else []
+    return PUSH_PREFIXES.get(name, [])
 
 
 def _git_push(argv, cwd):
@@ -467,7 +473,10 @@ def _git_push(argv, cwd):
             hits = _push_long(name)
             effects = {PUSH_LONG[o] for o in hits}
             force = force or "force" in effects
-            lease = lease or "lease" in effects
+            # Kept from the check this replaced, which gated any word starting
+            # --force-with-lease. Git refuses one with junk after the name, but
+            # nothing main gates is let through here.
+            lease = lease or "lease" in effects or a.startswith("--force-with-lease")
             delete = delete or "delete" in effects
             mirror = mirror or "mirror" in effects
             every = every or "every" in effects

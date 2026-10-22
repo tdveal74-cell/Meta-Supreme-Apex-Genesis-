@@ -1094,6 +1094,35 @@ def test_the_push_check_gates_what_git_actually_does(tmp_path, flags, refspec):
     destructive = "side" not in refs or refs.get("main") == local
     command = " ".join(["git push", flags, "origin", refspec]).replace("  ", " ").strip()
     assert gate.classify("Bash", {"command": command})[1] is destructive, (command, pushed.stderr)
+
+
+# A later harmless option must not clear a force, delete or mirror read
+# earlier, and every gating long option keeps its effect on its own.
+@pytest.mark.parametrize("command,expected", [
+    ("git push -f --no-verify origin main", ("git_force_push:plain", True)),
+    ("git push -f -u origin main", ("git_force_push:plain", True)),
+    ("git push -d -u origin side", ("git_force_push:delete", True)),
+    ("git push -d --verbose origin side", ("git_force_push:delete", True)),
+    ("git push --mirror --verbose origin", ("git_force_push:mirror", True)),
+    ("git push --force-if-includes origin main", ("git_force_push:lease", True)),
+    ("git push --force-with-leasex origin main", ("git_force_push:lease", True)),
+])
+def test_a_push_option_keeps_its_effect(command, expected):
+    assert gate.classify("Bash", {"command": command}) == expected
+
+
+@pytest.mark.parametrize("every", ["--all", "--branches", "--tags"])
+def test_a_lease_that_pushes_every_ref_is_gated(tmp_path, every):
+    # A lease to the session's own branch is open; one that also pushes every
+    # branch or tag reaches past it.
+    _git(tmp_path, "init", "-q", "-b", "claude/x", str(tmp_path / "w"))
+    _git(tmp_path / "w", "commit", "-q", "--allow-empty", "-m", "a")
+    base = f"git -C {tmp_path / 'w'} push --force-with-lease"
+    assert gate.classify("Bash", {"command": f"{base} origin"})[1] is False
+    assert gate.classify("Bash", {"command": f"{base} {every} --verbose origin"})[1] is True
+
+
+# A long run of reserved words or assignments before a gated call. _unwrap used
 # to drop them one copy of the list at a time, so these took 10 to 19 s each on
 # the hook before 2026-10-17, against its 15 s timeout.
 @pytest.mark.parametrize("pad", ["{ " * 150000, "do " * 100000, "! " * 150000, "A=1 " * 75000])
