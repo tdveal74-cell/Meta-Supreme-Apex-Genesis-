@@ -310,7 +310,7 @@ check("the panel's asRead maps a failed read to failed, never to a count", () =>
 check("the learning panel is mounted where a person can reach it", () => {
   // /control/learning is its own route, and it is also folded into Tier 2. Both
   // are reachable surfaces and neither is asserted anywhere else.
-  const page = readFileSync(join(HERE, "..", "app/control/page.tsx"), "utf8");
+  const page = readFileSync(join(HERE, "..", "components/control/ControlPanels.tsx"), "utf8");
   assert.match(
     page,
     /learning=\{<LearningPanel \/>\}/,

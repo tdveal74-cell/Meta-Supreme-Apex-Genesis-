@@ -220,7 +220,7 @@ export function ControlPlane({
               title="Presence"
               purpose="The avatar driven by blendshape frames over the presence socket, with client side barge-in."
               sourcing="partial"
-              sourceNote="Frames, the sliding window buffer and the interrupt path are real against the presence service. Cartesia is reached and proven: Tee heard his own cloned voice on 2026-09-09, 113 frames sent and received with none dropped, ten audio chunks scheduled and none late or undecodable. LiveKit is still not configured and this build publishes no audio into a room, so the socket carries the voice. The face is a procedural placeholder until an owned rig exists."
+              sourceNote="Frames, the sliding window buffer and the interrupt path are real against the presence service. The stage reads its current transport from the presence service. LiveKit can carry room audio when configured; otherwise audio uses the socket. Configuration and a successful token request do not prove that sound reached the listener. The face is a procedural placeholder until an owned rig exists."
             >
               {presence ?? (
                 <p className="text-xs text-white/50">

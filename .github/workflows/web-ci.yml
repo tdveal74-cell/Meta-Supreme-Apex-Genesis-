@@ -60,5 +60,7 @@ jobs:
         run: pnpm --filter @meta-supreme/web check:n8n
       - name: Notebook source import behavior
         run: pnpm --filter @meta-supreme/web check:notebook-import
+      - name: Agent dispatch contracts
+        run: pnpm --filter @meta-supreme/web check:dispatch
       - name: Production build
         run: pnpm --filter @meta-supreme/web build
