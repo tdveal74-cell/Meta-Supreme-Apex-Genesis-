@@ -127,8 +127,10 @@ GRAPHIFY_READS = frozenset({
 })
 # Reads named per server, for tools READ_VERB cannot see. Ruled by Tee
 # 2026-10-22 on a card: Graphify's list above, and blotato-help askQuestion,
-# which answers a question from Blotato's docs. Matched as a substring of the
-# server name like NAMED_SERVERS, and loosens no other server.
+# which answers a question from Blotato's docs. Unlike NAMED_SERVERS, which
+# tightens on a substring, this loosens, so it matches only the exact name, its
+# claude_ai_ connector form and a plugin_<plugin>_<name> form. A server merely
+# containing the name, graphify-evil or blotato-help-x, gains nothing.
 SERVER_READS = {
     "graphify": GRAPHIFY_READS,
     "blotato-help": frozenset({"askQuestion"}),
@@ -723,6 +725,15 @@ def _gh_class(argv):
 # ---------------------------------------------------------------- classification
 
 
+def _is_server(server, name):
+    """True when server is name itself, its claude.ai connector or a plugin's."""
+    return (
+        server == name
+        or server == "claude_ai_" + name
+        or (server.startswith("plugin_") and server.endswith("_" + name))
+    )
+
+
 def classify(tool_name, tool_input, cwd=""):
     """Returns (cls, gated). cls is None for a call that is not tracked."""
     tool_input = tool_input if isinstance(tool_input, dict) else {}
@@ -773,7 +784,8 @@ def classify(tool_name, tool_input, cwd=""):
         return suffix, True
     if HOSTINGER_WRITE.match(suffix):
         return suffix, True
-    if any(name in server and suffix in reads for name, reads in SERVER_READS.items()):
+    if any(_is_server(server, name) and suffix in reads
+           for name, reads in SERVER_READS.items()):
         return None, False
     verb = re.sub(r"^(blotato|zapier|VPS|DNS|domains|hosting|billing|reach)_", "", suffix)
     if any(name in server for name in NAMED_SERVERS) and not READ_VERB.match(verb):

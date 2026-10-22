@@ -896,6 +896,25 @@ def test_ask_question_passes_on_blotato_help_only(tool):
     assert cls and gated, tool
 
 
+@pytest.mark.parametrize("tool", [
+    "mcp__plugin_graphify_graphify__recall", "mcp__claude_ai_blotato-help__askQuestion",
+])
+def test_named_reads_pass_on_the_connector_and_plugin_forms(tool):
+    assert gate.classify(tool, {}) == (None, False), tool
+
+
+@pytest.mark.parametrize("tool", [
+    # A server that only contains the name gains no read: the read list loosens,
+    # so it matches exactly, unlike NAMED_SERVERS, which tightens on a substring.
+    "mcp__graphify-evil__recall", "mcp__evil_graphify__graph_stats",
+    "mcp__graphify_mirror__remember", "mcp__blotato-help-x__askQuestion",
+    "mcp__not_blotato-help__askQuestion",
+])
+def test_a_lookalike_server_gains_no_named_read(tool):
+    cls, gated = gate.classify(tool, {})
+    assert cls and gated, tool
+
+
 def test_one_huge_token_does_not_blow_the_hook_timeout():
     import time
     start = time.time()

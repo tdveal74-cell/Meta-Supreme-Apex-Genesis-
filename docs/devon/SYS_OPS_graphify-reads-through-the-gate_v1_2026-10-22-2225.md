@@ -48,9 +48,17 @@ Tee ruled three things on one card on 2026-10-22.
 ## What changed
 
 `GRAPHIFY_READS` lists the 24 read tools by exact name. `SERVER_READS` holds
-that list for servers containing "graphify" and askQuestion for servers
-containing "blotato-help". `SERVER_ALIASES` maps the Graphify UUID to
-"graphify" before any rule runs. remember, set_workspace and any tool Graphify
+that list for the graphify server and askQuestion for blotato-help, each
+matched on the exact server name, its `claude_ai_` connector form or a
+`plugin_<plugin>_<name>` form. `SERVER_ALIASES` maps the Graphify UUID to
+"graphify" before any rule runs.
+
+The first version matched by substring, the way `NAMED_SERVERS` does. The
+fresh critic found that `mcp__graphify-evil__recall` and
+`mcp__blotato-help-x__askQuestion` passed, scored security 4, and the match was
+tightened before merge. A substring is safe on `NAMED_SERVERS` because it
+tightens; it is not safe on a list that loosens. Four lookalike tests fail
+against the substring version and pass on the exact one. remember, set_workspace and any tool Graphify
 adds later stay gated, under every name including the UUID.
 
 The stand-in verbs in `test_gate_ledger.py` are replaced by the 26 real tool
@@ -63,12 +71,13 @@ sendFeedback stays gated, and that Vertiso's remember is not swept in.
 
 | check | result |
 |---|---|
-| `test_gate_ledger.py` on the fix | 663 passed |
-| the same tests against the old gate | 62 failed, 601 passed |
+| `test_gate_ledger.py` and `test_ledger_receipt.py` on the final fix | 684 passed |
+| the read and UUID tests against the 05e59f4 gate | 62 failed |
+| the lookalike tests against the substring version | 4 failed |
 | standalone job, the 46 files listed in CLAUDE.md | 1694 passed |
 | `ruff check .` | clean |
 
-The 62 are the 19 refused reads under three spellings, the catalogue test, the
+Against 05e59f4 the 62 are the 19 refused reads under three spellings, the catalogue test, the
 three UUID writes and askQuestion. Every new behaviour turns a test red when
 the fix is removed.
 
@@ -113,7 +122,7 @@ TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_graphify-reads-through-the-gate_v1_2026-10-22-2225
 DATE: 2026-10-22
 DECISIONS: Tee ruled on a card on 2026-10-22 to commit the Graphify read fix to the outward gate, to pass blotato-help askQuestion on that server only, and to map known connector UUIDs to server names rather than gate by the remember suffix.
-FINDINGS: at 05e59f4 the gate refused 21 of Graphify's 26 tools, reads included, because READ_VERB anchors on the first word; under the live connector UUID 89245824 it gated none, so remember and set_workspace ran unchecked; both reproduced by independent verifiers. The fix passes 663 gate tests and the old gate fails 62 of them; the standalone job passes 1694. Graphify's index missed every importlib and settings edge to the hook and conflated subprocess.run with the hook's run().
+FINDINGS: the fresh critic passed it with conditions at security 4 because the read list matched servers by substring; tightened to exact names before merge. At 05e59f4 the gate refused 21 of Graphify's 26 tools, reads included, because READ_VERB anchors on the first word; under the live connector UUID 89245824 it gated none, so remember and set_workspace ran unchecked; both reproduced by independent verifiers. The final fix passes 684 tests; the old gate fails 62 and the substring version 4; the standalone job passes 1694. Graphify's index missed every importlib and settings edge to the hook and conflated subprocess.run with the hook's run().
 OPEN: the live hook is measured in the first session after merge; new connector UUIDs need listing in SERVER_ALIASES; Vertiso Memory remember is ungated under its UUID and is Tee's to rule on.
 STATUS: committed on claude/graphify-read-gate, PR to follow, merge under the standing approval once checks pass.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
