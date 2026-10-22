@@ -1172,6 +1172,44 @@ def test_the_long_statement_splitter_matches_shlex(text):
     assert gate._split_words(text) == shlex.split(text)
 
 
+# Found 2026-10-22 by #403's verifier: bash reads $'it\'s' as one word, while
+# the hook reads its third quote as opening one that runs to the end. Below
+# 20,000 characters shlex raises on that and the statement falls back to a
+# plain split, which still sees the push. Above it the splitter ran the quote
+# to the end and swallowed the push, so it has to raise and fall back too.
+@pytest.mark.parametrize("pad", [19000, 20100])
+@pytest.mark.parametrize("shape", [
+    "git commit -m $'it\\'s done' && git push --force origin main {}",
+    "git -c user.name=$'x\\'y' push -f origin main {}",
+])
+def test_an_unbalanced_quote_falls_back_the_same_at_any_length(shape, pad):
+    cls, gated = gate.classify("Bash", {"command": shape.format("a" * pad)})
+    assert gated and cls == "git_force_push:plain"
+
+
+@pytest.mark.parametrize("text", ["a 'b c", 'a "b c', "a b\\", '"a\\', "x $'it\\'s done'"])
+def test_the_long_statement_splitter_raises_where_shlex_raises(text):
+    with pytest.raises(ValueError):
+        shlex.split(text)
+    with pytest.raises(ValueError):
+        gate._split_words(text)
+
+
+def test_the_long_statement_splitter_agrees_with_shlex_on_every_short_string():
+    import itertools
+
+    def outcome(split, text):
+        try:
+            return split(text)
+        except ValueError:
+            return "raises"
+
+    for length in range(6):
+        for chars in itertools.product("a '\"\\$\t\n", repeat=length):
+            text = "".join(chars)
+            assert outcome(gate._split_words, text) == outcome(shlex.split, text), repr(text)
+
+
 def test_a_one_megabyte_quoted_payload_is_denied_quickly(tmp_path):
     import time
     command = "bash -c 'git push -f origin main; : " + "a" * 1_000_000 + "'"

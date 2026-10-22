@@ -346,15 +346,19 @@ def _split_words(text):
     huge token. One pass, and it keeps quotes: until 2026-10-22 a plain
     str.split here broke a quoted bash -c payload into pieces, so a force push
     or a workflow run inside one padded past 20,000 characters went ungated.
-    It matches shlex.split wherever shlex returns; an unclosed quote runs to the
-    end of the text instead of raising."""
+    It returns what shlex.split returns and raises ValueError where shlex.split
+    raises, on an unclosed quote or a trailing backslash, so _argv falls back
+    the same way on both sides of the length line. Running an unclosed quote to
+    the end instead swallowed whatever followed it: $'it\\'s' && git push -f
+    went ungated past 20,000 characters and gated below."""
     words, buf, in_word = [], [], False
     i, n = 0, len(text)
     while i < n:
         ch = text[i]
         if ch == "'":
             j = text.find("'", i + 1)
-            j = n if j < 0 else j
+            if j < 0:
+                raise ValueError("No closing quotation")
             buf.append(text[i + 1:j])
             in_word, i = True, j + 1
         elif ch == '"':
@@ -364,8 +368,12 @@ def _split_words(text):
                     i += 1
                 buf.append(text[i])
                 i += 1
+            if i >= n:
+                raise ValueError("No closing quotation")
             i += 1
-        elif ch == "\\" and i + 1 < n:
+        elif ch == "\\":
+            if i + 1 >= n:
+                raise ValueError("No escaped character")
             buf.append(text[i + 1])
             in_word, i = True, i + 2
         elif ch in " \t\r\n":
@@ -382,13 +390,11 @@ def _split_words(text):
 
 
 def _argv(statement):
-    if len(statement) > 20000:
-        argv = _split_words(statement)
-    else:
-        try:
-            argv = shlex.split(statement)
-        except ValueError:
-            argv = statement.split()
+    split = _split_words if len(statement) > 20000 else shlex.split
+    try:
+        argv = split(statement)
+    except ValueError:
+        argv = statement.split()
     return _unwrap(argv)
 
 
