@@ -22,7 +22,8 @@
     "check:dock": "node --experimental-strip-types scripts/dock-smoke.mjs",
     "check:command": "node --experimental-strip-types scripts/command-smoke.mjs",
     "check:audio": "node --experimental-strip-types scripts/audio-check.mjs",
-    "check:capture": "node --experimental-strip-types scripts/capture-check.mjs"
+    "check:capture": "node --experimental-strip-types scripts/capture-check.mjs",
+    "check:notebook-import": "node --experimental-strip-types --test scripts/notebook-import.test.ts"
   },
   "dependencies": {
     "@meta-supreme/ui": "workspace:*",
