@@ -341,9 +341,49 @@ def _unwrap(argv):
     return argv
 
 
+def _split_words(text):
+    """shlex.split for a statement too long for shlex, which is quadratic on one
+    huge token. One pass, and it keeps quotes: until 2026-10-22 a plain
+    str.split here broke a quoted bash -c payload into pieces, so a force push
+    or a workflow run inside one padded past 20,000 characters went ungated.
+    It matches shlex.split wherever shlex returns; an unclosed quote runs to the
+    end of the text instead of raising."""
+    words, buf, in_word = [], [], False
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch == "'":
+            j = text.find("'", i + 1)
+            j = n if j < 0 else j
+            buf.append(text[i + 1:j])
+            in_word, i = True, j + 1
+        elif ch == '"':
+            in_word, i = True, i + 1
+            while i < n and text[i] != '"':
+                if text[i] == "\\" and i + 1 < n and text[i + 1] in '"\\':
+                    i += 1
+                buf.append(text[i])
+                i += 1
+            i += 1
+        elif ch == "\\" and i + 1 < n:
+            buf.append(text[i + 1])
+            in_word, i = True, i + 2
+        elif ch in " \t\r\n":
+            if in_word:
+                words.append("".join(buf))
+                buf, in_word = [], False
+            i += 1
+        else:
+            buf.append(ch)
+            in_word, i = True, i + 1
+    if in_word:
+        words.append("".join(buf))
+    return words
+
+
 def _argv(statement):
     if len(statement) > 20000:
-        argv = statement.split()  # shlex is quadratic on one huge token
+        argv = _split_words(statement)
     else:
         try:
             argv = shlex.split(statement)

@@ -18,6 +18,7 @@ import io
 import json
 import pathlib
 import re
+import shlex
 import string
 import subprocess
 import sys
@@ -1026,6 +1027,38 @@ def test_a_long_run_of_reserved_words_is_denied_quickly(tmp_path, pad):
     import time
     started = time.monotonic()
     out = gate.run("pre", payload(tmp_path, [], tool="Bash", tool_input={"command": pad + "gh workflow run deploy.yml"}), now=NOW)
+    assert time.monotonic() - started < 1.5
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+# Found 2026-10-22: above 20,000 characters a statement was split on whitespace
+# with no regard for quotes, so a gated command inside a quoted bash -c or eval
+# payload padded past that length was never seen.
+@pytest.mark.parametrize("pad", [19900, 20100, 60000])
+@pytest.mark.parametrize("shape,expected", [
+    ("bash -c 'git push -f origin main; : {}'", "git_force_push:plain"),
+    ("bash -c 'gh workflow run d.yml; : {}'", "gh_workflow_run"),
+    ('sh -c "curl -X POST https://e.example/x; : {}"', "curl_mutating"),
+    ("eval 'gh workflow run d.yml; : {}'", "gh_workflow_run"),
+])
+def test_a_gated_command_in_a_long_quoted_payload_is_gated(shape, expected, pad):
+    cls, gated = gate.classify("Bash", {"command": shape.format("a" * pad)})
+    assert gated and expected in cls
+
+
+@pytest.mark.parametrize("text", [
+    "a 'b c' \"d e\" f\\ g", "x'y'z", "'' \"\"", 'a"b\\"c\\\\d\\e"f', "a\\'b",
+    "  lead\ttab\r\nnew  ", "a\u00a0b\x0bc", "#;$(x) `y` &&", "'\\' \"'\" '\"'",
+])
+def test_the_long_statement_splitter_matches_shlex(text):
+    assert gate._split_words(text) == shlex.split(text)
+
+
+def test_a_one_megabyte_quoted_payload_is_denied_quickly(tmp_path):
+    import time
+    command = "bash -c 'git push -f origin main; : " + "a" * 1_000_000 + "'"
+    started = time.monotonic()
+    out = gate.run("pre", payload(tmp_path, [], tool="Bash", tool_input={"command": command}), now=NOW)
     assert time.monotonic() - started < 1.5
     assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
 
