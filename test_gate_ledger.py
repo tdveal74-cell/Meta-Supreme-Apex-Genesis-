@@ -806,29 +806,94 @@ def test_runpod_reads_pass_without_a_signal(server, verb):
     assert gate.classify(tool, {}) == (None, False), tool
 
 
-# Graphify, ruled by Tee 2026-10-17. Its real tool names are unread because the
-# server answers 401 until someone signs in, so these verbs are stand-ins that
-# pin the rule, not the catalogue: a write-shaped name is gated, a read is not.
-GRAPHIFY_SERVERS = ("graphify", "claude_ai_Graphify")
+# Graphify, ruled by Tee 2026-10-17: only its non-read tools need a signal.
+# These are the 26 real tool names read from the live connector on 2026-10-22,
+# each pinned as a read or a write. The stand-in verbs this replaced
+# (search_symbols, find_callers) all began with a read verb, so they passed
+# while 21 of the real reads, which begin "graphify_" or with a noun, were
+# refused.
+GRAPHIFY_SERVERS = ("graphify", "Graphify", "claude_ai_Graphify")
+GRAPHIFY_READ_TOOLS = (
+    "graphify_find", "graphify_rank_files", "graphify_trace", "graphify_callers",
+    "graphify_callees", "graphify_node", "graphify_expand", "graphify_file_neighbors",
+    "graphify_find_seeds", "graphify_impact", "graphify_imports_exports",
+    "graphify_references", "graphify_render_subgraph", "graphify_tests_for",
+    "impact_and_risk", "graph_stats", "shortest_path", "memories_about", "recall",
+    "list_workspaces", "list_repositories", "query_graph", "search", "fetch",
+)
+GRAPHIFY_WRITE_TOOLS = ("remember", "set_workspace")
+
+
+def test_the_graphify_catalogue_is_twenty_six_tools():
+    assert len(set(GRAPHIFY_READ_TOOLS) | set(GRAPHIFY_WRITE_TOOLS)) == 26
+    assert set(GRAPHIFY_READ_TOOLS) == set(gate.GRAPHIFY_READS)
 
 
 @pytest.mark.parametrize("server", GRAPHIFY_SERVERS)
-@pytest.mark.parametrize("verb", [
-    "reindex_repository", "delete_index", "update_graph", "create_project",
-])
+@pytest.mark.parametrize("verb", GRAPHIFY_READ_TOOLS)
+def test_graphify_reads_pass_without_a_signal(server, verb):
+    tool = f"mcp__{server}__{verb}"
+    assert gate.classify(tool, {}) == (None, False), tool
+
+
+@pytest.mark.parametrize("server", GRAPHIFY_SERVERS)
+@pytest.mark.parametrize("verb", GRAPHIFY_WRITE_TOOLS + (
+    # Not in the catalogue: a tool added later is gated until it is listed.
+    "reindex_repository", "delete_index",
+))
 def test_graphify_writes_are_gated(server, verb):
     tool = f"mcp__{server}__{verb}"
     cls, gated = gate.classify(tool, {})
     assert cls and gated, tool
 
 
-@pytest.mark.parametrize("server", GRAPHIFY_SERVERS)
-@pytest.mark.parametrize("verb", [
-    "search_symbols", "find_callers", "get_dependencies", "list_tests",
+@pytest.mark.parametrize("tool", [
+    # The Graphify read list is scoped to that server and loosens no other one.
+    "mcp__n8n__graphify_trace", "mcp__airtable__recall", "mcp__runpod__graph_stats",
+    "mcp__railway__shortest_path", "mcp__zapier__graphify_node",
 ])
-def test_graphify_reads_pass_without_a_signal(server, verb):
-    tool = f"mcp__{server}__{verb}"
+def test_graphify_reads_do_not_pass_on_other_named_servers(tool):
+    cls, gated = gate.classify(tool, {})
+    assert cls and gated, tool
+
+
+GRAPHIFY_UUID = "89245824-e0dd-4d6f-94dc-d0712a46ef78"
+
+
+@pytest.mark.parametrize("verb", GRAPHIFY_READ_TOOLS)
+def test_graphify_reads_pass_under_its_connector_uuid(verb):
+    tool = f"mcp__{GRAPHIFY_UUID}__{verb}"
     assert gate.classify(tool, {}) == (None, False), tool
+
+
+@pytest.mark.parametrize("verb", GRAPHIFY_WRITE_TOOLS + ("reindex_repository",))
+def test_graphify_writes_are_gated_under_its_connector_uuid(verb):
+    # Ruled by Tee 2026-10-22. Before the alias these returned (None, False):
+    # the UUID matched no rule, so remember and set_workspace ran unchecked.
+    tool = f"mcp__{GRAPHIFY_UUID}__{verb}"
+    cls, gated = gate.classify(tool, {})
+    assert cls and gated, tool
+
+
+def test_an_unmapped_uuid_memory_tool_is_not_swept_in():
+    # Vertiso Memory also exposes remember. The alias is exact, so it is not
+    # gated by Graphify's rule; widening to it would be a separate ruling.
+    assert gate.classify(
+        "mcp__43100b80-6895-4cb3-a61c-bf7192990eda__remember", {}) == (None, False)
+
+
+def test_blotato_help_ask_question_passes():
+    # Ruled by Tee 2026-10-22: a docs question, not an outward write.
+    assert gate.classify("mcp__blotato-help__askQuestion", {}) == (None, False)
+
+
+@pytest.mark.parametrize("tool", [
+    "mcp__blotato-help__sendFeedback", "mcp__Blotato__askQuestion",
+    "mcp__n8n__askQuestion", "mcp__Blotato__blotato_create_post",
+])
+def test_ask_question_passes_on_blotato_help_only(tool):
+    cls, gated = gate.classify(tool, {})
+    assert cls and gated, tool
 
 
 def test_one_huge_token_does_not_blow_the_hook_timeout():
