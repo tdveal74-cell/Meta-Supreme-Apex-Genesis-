@@ -1106,6 +1106,10 @@ def test_the_push_check_gates_what_git_actually_does(tmp_path, flags, refspec):
     ("git push --mirror --verbose origin", ("git_force_push:mirror", True)),
     ("git push --force-if-includes origin main", ("git_force_push:lease", True)),
     ("git push --force-with-leasex origin main", ("git_force_push:lease", True)),
+    ("git push --force-with-lease=main:abc123 origin main", ("git_force_push:lease", True)),
+    ("git push -fo ci.skip origin main", ("git_force_push:plain", True)),
+    ("git push -of origin main", ("git_force_push:plain", True)),
+    ("git push -f origin push", ("git_force_push:plain", True)),
 ])
 def test_a_push_option_keeps_its_effect(command, expected):
     assert gate.classify("Bash", {"command": command}) == expected
@@ -1120,6 +1124,16 @@ def test_a_lease_that_pushes_every_ref_is_gated(tmp_path, every):
     base = f"git -C {tmp_path / 'w'} push --force-with-lease"
     assert gate.classify("Bash", {"command": f"{base} origin"})[1] is False
     assert gate.classify("Bash", {"command": f"{base} {every} --verbose origin"})[1] is True
+
+
+@pytest.mark.parametrize("remote", ["git@e.example:r.git", "https://e.example/r.git"])
+def test_a_lease_to_a_url_remote_is_gated(tmp_path, remote):
+    # The lease to the session's own branch is open only through a named
+    # remote; an scp-style or https URL is somewhere else.
+    _git(tmp_path, "init", "-q", "-b", "claude/x", str(tmp_path / "w"))
+    _git(tmp_path / "w", "commit", "-q", "--allow-empty", "-m", "a")
+    command = f"git -C {tmp_path / 'w'} push --force-with-lease {remote} claude/x"
+    assert gate.classify("Bash", {"command": command}) == ("git_force_push:lease", True)
 
 
 # A long run of reserved words or assignments before a gated call. _unwrap used
