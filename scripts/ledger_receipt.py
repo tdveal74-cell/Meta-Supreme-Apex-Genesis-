@@ -105,7 +105,10 @@ def build_receipt(rows, corrupt, ledger_path, today=None):
     if executed:
         summary += " Executed: %s." % _line(executed)
     if n_logged:
-        summary += " Also recorded without a gate (merges, local deletes and resets): %s." % _line(logged_only)
+        summary += (
+            " Also recorded without a gate (merges, the daily reflection row, local deletes and resets): %s."
+            % _line(logged_only)
+        )
 
     open_threads = []
     if denied:

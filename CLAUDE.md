@@ -704,6 +704,19 @@ Do not rephrase the call to get past it.
 - Ledger only: merges (the MCP tool and `gh pr merge`), because the standing
   approval of 2026-10-11 covers them, and `test_workflow`. The gated list is `GATED_SUFFIXES` in the file; moving a
   tool in or out is a commit, and a ruling.
+- Ledger only, by argument rather than by tool: the daily reflection's own row.
+  Ruled by Tee 2026-10-22 on a card, "Exempt that one row", after the gate
+  refused the scheduled reflection on 2026-10-16 and 2026-10-17, as it would
+  any scheduled run, and the Pulse raised `reflection_missing` on every beat
+  from 233 to 258. The runs from 10-18 to 10-22 also found the n8n connector
+  signed out, which is a separate cause this does not touch. `add_data_table_rows`
+  passes with nobody present only when it is exactly that row: an n8n server,
+  table `RuPMZKXkqcbuHRKa` in project `qbrcjkbIoorbwot6`, one row, kind
+  `reflection`, empty `vitals` and `findings`, `emailed` "no", a non-empty text
+  of at most 900 characters, and a `beat_at` within 10 minutes of now. Any
+  other table, row shape or n8n write is gated as before. The freshness bound
+  matters: the Pulse anchors its reflection watch on a reflection up to 1h
+  ahead, so a forward-dated row could otherwise silence the alarm.
 - A webhook turn, a scheduled check-in, a task notification, a peer agent
   report and a context summary are all user turns in the transcript and none of
   them is a signal. The test is `origin.kind == "human"` on the entry. An

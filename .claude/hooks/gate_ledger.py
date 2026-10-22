@@ -139,6 +139,27 @@ RAKAZO = "rakazo"
 # Ledger only: recorded, never refused.
 LEDGER_ONLY_SUFFIXES = {"merge_pull_request", "test_workflow"}
 
+# The daily reflection's own row is ledger only too, and nothing else on that
+# table or any other. Ruled by Tee 2026-10-22 on a card: "Exempt that one row".
+# The routine (trig_01XCKFGEbojhkPRnNbMd8yCP) fires with nobody in the session,
+# so the gate refused its one write on 2026-10-16 and 2026-10-17, as it would on
+# any scheduled run, and the Pulse raised reflection_missing on every beat from
+# 233 to 258 (the runs from 10-18 to 10-22 also found the n8n connector signed
+# out, which no change here touches). The call passes only
+# when it is exactly the row the routine's prompt names: one row, kind
+# reflection, the empty vitals and findings, emailed "no", a non-empty text of
+# at most 900 characters, and a beat_at within REFLECTION_SKEW_MIN of now. The
+# Pulse anchors its reflection watch on any reflection whose beat_at is up to
+# 1h ahead, so a forward-dated row could silence reflection_missing; the
+# freshness bound is what stops that. Any other shape falls through to the
+# ordinary gate below.
+REFLECTION_TABLE = "RuPMZKXkqcbuHRKa"
+REFLECTION_PROJECT = "qbrcjkbIoorbwot6"
+REFLECTION_KEYS = {"beat_at", "kind", "vitals", "findings", "reflection", "emailed"}
+REFLECTION_MAX = 900
+REFLECTION_SKEW_MIN = 10
+REFLECTION_BEAT = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z", re.ASCII)
+
 SHELL_WRAPPERS = {"sudo", "command", "env", "time", "nohup", "exec", "nice", "builtin"}
 SHELLS = {"bash", "sh", "zsh", "dash"}
 
@@ -695,7 +716,31 @@ def _gh_class(argv):
 # ---------------------------------------------------------------- classification
 
 
-def classify(tool_name, tool_input, cwd=""):
+def _is_reflection_row(server, tool_input, now):
+    """True only for the daily reflection's own row, exactly as its routine
+    writes it. Every check compares exact types and values, so a near miss is
+    an ordinary gated call rather than a guess."""
+    if "n8n" not in server or set(tool_input) != {"dataTableId", "projectId", "rows"}:
+        return False
+    if tool_input["dataTableId"] != REFLECTION_TABLE or tool_input["projectId"] != REFLECTION_PROJECT:
+        return False
+    rows = tool_input["rows"]
+    if type(rows) is not list or len(rows) != 1 or type(rows[0]) is not dict:
+        return False
+    row = rows[0]
+    if set(row) != REFLECTION_KEYS or any(type(row[k]) is not str for k in REFLECTION_KEYS):
+        return False
+    if row["kind"] != "reflection" or row["vitals"] != "" or row["findings"] != "" or row["emailed"] != "no":
+        return False
+    if not row["reflection"].strip() or len(row["reflection"]) > REFLECTION_MAX:
+        return False
+    if not REFLECTION_BEAT.fullmatch(row["beat_at"]):
+        return False
+    beat = _parse_ts(row["beat_at"])
+    return beat is not None and abs((beat - now).total_seconds()) <= REFLECTION_SKEW_MIN * 60
+
+
+def classify(tool_name, tool_input, cwd="", now=None):
     """Returns (cls, gated). cls is None for a call that is not tracked."""
     tool_input = tool_input if isinstance(tool_input, dict) else {}
 
@@ -738,6 +783,10 @@ def classify(tool_name, tool_input, cwd=""):
     server = parts[1].lower() if len(parts) > 2 else ""
     if suffix in LEDGER_ONLY_SUFFIXES:
         return suffix, False
+    if suffix == "add_data_table_rows" and _is_reflection_row(
+        server, tool_input, now or datetime.now(timezone.utc)
+    ):
+        return "reflection_row", False
     if suffix in GATED_SUFFIXES:
         return suffix, True
     if suffix == "send_message" and RAKAZO in server:
@@ -943,7 +992,7 @@ def run(mode, payload, now=None):
     """Returns the JSON object to print on stdout, or None to print nothing."""
     now = now or datetime.now(timezone.utc)
     name = payload.get("tool_name", "")
-    cls, gated = classify(name, payload.get("tool_input"), payload.get("cwd", ""))
+    cls, gated = classify(name, payload.get("tool_input"), payload.get("cwd", ""), now)
     if cls is None:
         return None
 

@@ -1183,3 +1183,147 @@ def test_the_summary_cut_leaves_no_fragment_of_a_split_token():
     token = "%048x" % (0x9F3B << 170)
     out = gate._clip("w " * 1190 + token, 2400)
     assert token[:4] not in out and out.endswith(" ")
+
+
+# ------------------------------------- the daily reflection row (Tee, 2026-10-22)
+
+
+REFLECTION_TOOL = "mcp__n8n_vps__add_data_table_rows"
+_GONE = object()
+
+
+def reflection_input(row=None, **top):
+    """The call the daily reflection routine makes, exactly as its prompt names
+    it, with any field replaced or removed (a value of the _GONE sentinel)."""
+    base_row = {
+        "beat_at": ts(0), "kind": "reflection", "vitals": "", "findings": "",
+        "reflection": "The work did not move.", "emailed": "no",
+    }
+    for key, value in (row or {}).items():
+        if value is _GONE:
+            base_row.pop(key)
+        else:
+            base_row[key] = value
+    base = {"dataTableId": "RuPMZKXkqcbuHRKa", "projectId": "qbrcjkbIoorbwot6", "rows": [base_row]}
+    for key, value in top.items():
+        if value is _GONE:
+            base.pop(key)
+        else:
+            base[key] = value
+    return base
+
+
+def test_the_reflection_row_is_ledger_only():
+    assert gate.classify(REFLECTION_TOOL, reflection_input(), now=NOW) == ("reflection_row", False)
+
+
+@pytest.mark.parametrize("row", [
+    {"reflection": "x" * 900},
+    {"beat_at": ts(10)},
+    {"beat_at": ts(-10)},
+    {"beat_at": (NOW - timedelta(minutes=3)).strftime("%Y-%m-%dT%H:%M:%SZ")},
+])
+def test_the_reflection_row_holds_at_its_edges(row):
+    assert gate.classify(REFLECTION_TOOL, reflection_input(row), now=NOW) == ("reflection_row", False)
+
+
+@pytest.mark.parametrize("call", [
+    # another table, or this table in another project
+    reflection_input(dataTableId="QZvdxllOjWevb3Vo"),
+    reflection_input(dataTableId="AomDw2Oa9XCUluRX"),
+    reflection_input(projectId="someotherproject"),
+    # more or fewer rows, or rows of the wrong type
+    reflection_input(rows=[]),
+    reflection_input(rows=[reflection_input()["rows"][0]] * 2),
+    reflection_input(rows=reflection_input()["rows"][0]),
+    reflection_input(rows=["kind=reflection"]),
+    # a key added or removed, on the call or on the row
+    reflection_input(filter={"x": 1}),
+    reflection_input(projectId=_GONE),
+    reflection_input({"id": 1}),
+    reflection_input({"emailed": _GONE}),
+    # the routine's fixed values changed
+    reflection_input({"kind": "pulse"}),
+    reflection_input({"vitals": '{"jobs":{}}'}),
+    reflection_input({"findings": "reflection_missing | quiet"}),
+    reflection_input({"emailed": "yes"}),
+    # the text empty, too long or not text
+    reflection_input({"reflection": ""}),
+    reflection_input({"reflection": "   \n"}),
+    reflection_input({"reflection": "x" * 901}),
+    reflection_input({"reflection": 900}),
+    reflection_input({"reflection": None}),
+    reflection_input({"kind": None}),
+    # a beat_at that is stale, forward dated, unparseable or another form
+    reflection_input({"beat_at": ts(11)}),
+    reflection_input({"beat_at": ts(-11)}),
+    reflection_input({"beat_at": ts(-59)}),
+    reflection_input({"beat_at": ts(60 * 24)}),
+    reflection_input({"beat_at": "now"}),
+    reflection_input({"beat_at": ""}),
+    reflection_input({"beat_at": NOW.strftime("%Y-%m-%dT%H:%M:%S+00:00")}),
+    reflection_input({"beat_at": NOW.strftime("%Y-%m-%d %H:%M:%SZ")}),
+    reflection_input({"beat_at": ts(0) + "\n"}),
+    reflection_input({"beat_at": NOW.timestamp()}),
+    # the same instant in Arabic-Indic digits, which a Unicode \d would accept
+    reflection_input({"beat_at": ts(0).translate({ord(c): 0x0660 + int(c) for c in "0123456789"})}),
+])
+def test_anything_but_the_exact_reflection_row_stays_gated(call):
+    assert gate.classify(REFLECTION_TOOL, call, now=NOW) == ("add_data_table_rows", True)
+
+
+@pytest.mark.parametrize("tool", [
+    "mcp__da7c3988-4eb2-4596-b314-2bf80b15710e__add_data_table_rows",
+    "mcp__Airtable__add_data_table_rows",
+])
+def test_the_reflection_row_passes_only_on_an_n8n_server(tool):
+    cls, gated = gate.classify(tool, reflection_input(), now=NOW)
+    assert gated, tool
+
+
+@pytest.mark.parametrize("suffix", [
+    "update_workflow", "publish_workflow", "execute_workflow", "rename_data_table",
+    "add_data_table_column", "delete_data_table_column",
+])
+def test_the_reflection_shape_opens_no_other_n8n_write(suffix):
+    cls, gated = gate.classify("mcp__n8n_vps__" + suffix, reflection_input(), now=NOW)
+    assert cls == suffix and gated
+
+
+def test_a_scheduled_reflection_with_nobody_present_writes_its_row(tmp_path, project):
+    """The case the exemption exists for: the routine's wake is a task
+    notification, Tee spoke a day ago, and the row still goes in."""
+    p = payload(tmp_path, [human(60 * 24), task_note(1)], tool=REFLECTION_TOOL, tool_input=reflection_input())
+    assert gate.run("pre", p, now=NOW) is None
+    assert gate.run("post", p, now=NOW) is None
+    rows = ledger(project)
+    assert [(r["event"], r["class"], r["gated"]) for r in rows] == [
+        ("gate-allow", "reflection_row", False), ("executed", "reflection_row", False),
+    ]
+
+
+def test_a_near_miss_with_nobody_present_is_refused(tmp_path, project):
+    p = payload(tmp_path, [human(60 * 24), task_note(1)], tool=REFLECTION_TOOL,
+                tool_input=reflection_input({"kind": "pulse"}))
+    out = gate.run("pre", p, now=NOW)
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert [(r["event"], r["class"]) for r in ledger(project)] == [("gate-deny", "add_data_table_rows")]
+
+
+def test_the_reflection_row_passes_through_the_real_process(tmp_path):
+    """Exercised as the hook runs, with the real clock, so the freshness bound
+    is measured against now rather than a fixture time."""
+    row = reflection_input({"beat_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")})
+    p = payload(tmp_path, [], tool=REFLECTION_TOOL, tool_input=row)
+    done = subprocess.run(
+        [sys.executable, str(HOOK), "pre"], input=json.dumps(p), capture_output=True, text=True,
+        env={"CLAUDE_PROJECT_DIR": str(tmp_path / "proj"), "PATH": "/usr/bin:/bin"}, timeout=15,
+    )
+    assert done.returncode == 0 and done.stdout == "", done.stdout + done.stderr
+    stale = reflection_input({"beat_at": "2026-01-01T00:00:00.000Z"})
+    p = payload(tmp_path, [], tool=REFLECTION_TOOL, tool_input=stale)
+    done = subprocess.run(
+        [sys.executable, str(HOOK), "pre"], input=json.dumps(p), capture_output=True, text=True,
+        env={"CLAUDE_PROJECT_DIR": str(tmp_path / "proj"), "PATH": "/usr/bin:/bin"}, timeout=15,
+    )
+    assert json.loads(done.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"

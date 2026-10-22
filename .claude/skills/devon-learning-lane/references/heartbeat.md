@@ -55,8 +55,10 @@ still log; the heartbeat log, not the inbox, is the proof of life.
 
 ## The Reflection (claude.ai Routine `trig_01XCKFGEbojhkPRnNbMd8yCP`, daily 11:30 UTC)
 
-A mind, allowed to fail. A scheduled Claude session wakes, reads the whole
-estate through the read-only Table Reader (`VGwrZPdZ5se2pr03`), and writes ONE
+A mind, allowed to fail. A scheduled Claude session wakes, reads four VPS
+tables with the n8n connector's `get_data_table_rows` (the heartbeat log, the
+state ledger, the feed log and the soul commit log, per the routine's prompt
+as of 2026-10-22), and writes ONE
 first-person reflection row (kind `reflection`) into devon_heartbeat_log: what
 changed, what is stuck, at most two recommendations for Tee to decide, one
 honest uncertainty, 900 characters max. The next pulse email carries the
@@ -66,6 +68,16 @@ Hard limits baked into its prompt: its only write is its own reflection row.
 No workflow edits, no Pinecone, no approval posts, no Drive, no Notion, no
 canon, no emails, and it never reads approval_queue. It recommends; it never
 executes. If its tools fail it ends quietly and the pulse flags the silence.
+
+The outward gate (`.claude/hooks/gate_ledger.py`) refuses n8n writes unless Tee
+spoke in the last 30 minutes, and the routine always fires with nobody present,
+so its row was refused on 2026-10-16 and 2026-10-17 (the runs after that also
+found the n8n connector signed out), and `reflection_missing` fired on every
+beat from 233 to 258. Tee ruled on 2026-10-22, on a card, to exempt that one row and nothing
+else: the call passes only in the exact shape above, with `beat_at` within 10
+minutes of the hook's clock, which also stops a forward-dated row from
+anchoring the Pulse's reflection watch. Change the routine's row shape and the
+gate refuses it again; the shape lives in `_is_reflection_row`.
 
 The Routine is currently bound to the Build 13 build session (a self-bind
 trigger). A cleaner standalone Routine can be created from the claude.ai
