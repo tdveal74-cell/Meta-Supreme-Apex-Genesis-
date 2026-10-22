@@ -24,6 +24,15 @@ retains record IDs and provider errors. Missing configuration, empty recall,
 partial recall, and provider failure remain distinguishable. Authentication
 and conversation ownership checks remain in place.
 
+Conversation observations have a 1000 character success budget and a 500
+character failure budget. The recall adapter must fit the serialized result
+inside those limits, retain complete selected citations and provider warnings
+before text excerpts, and disclose omitted records and shortened text. The
+actual inactive-record withholding count remains distinct from measured empty
+recall. Task planning keeps its full payload; this compact presentation belongs
+only to conversation turns. The PR review identified this boundary after the
+initial source reviews, so an actual next-model-message regression covers it.
+
 The configured production memory provider was directly read with the query
 Systems. It returned 12 active records and no provider errors. No record text
 or credentials are copied here. This proves the configured provider read path,

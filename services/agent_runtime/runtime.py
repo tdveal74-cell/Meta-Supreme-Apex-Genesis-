@@ -63,7 +63,9 @@ NO_COUNCIL_NOTE = "No council consultation is on record for this task."
 _COUNCIL_NOTE_MAX_CHARS = 400
 
 
-async def soul_recall_payload(soul: "SoulLayer", goal: str) -> Dict[str, Any]:
+async def soul_recall_payload(
+    soul: "SoulLayer", goal: str, *, include_coverage: bool = False,
+) -> Dict[str, Any]:
     """Recall both souls into one inert planner payload.
 
     The CONTEXT-NOT-COMMAND framing and the Tee-before-DEVON ordering come
@@ -82,6 +84,9 @@ async def soul_recall_payload(soul: "SoulLayer", goal: str) -> Dict[str, Any]:
     by this route (SPI-6). Numbers and the record order are unchanged. The
     shaping runs inside the same fallback as the recall, so a record that
     cannot be shaped degrades to a named error like an outage does.
+    Conversational observations can opt into a structured withheld count, so
+    bounded rendering need not parse untrusted recalled text. The task-planning
+    payload keeps its existing shape by default.
     """
     from services.intelligence.soul import one_line, one_line_all
     try:
@@ -89,17 +94,23 @@ async def soul_recall_payload(soul: "SoulLayer", goal: str) -> Dict[str, Any]:
         # withheld count rides in the context text, so the planner is told the
         # recall was not a measured empty.
         recall = (await soul.recall(goal)).active_only()
-        return {
+        payload = {
             "context": recall.as_context(),
             "records": one_line_all(recall.to_dicts()),
             "errors": one_line_all(list(recall.errors)),
         }
+        if include_coverage:
+            payload["withheld_records"] = recall.withheld
+        return payload
     except Exception as exc:
-        return {
+        payload = {
             "context": "",
             "records": [],
             "errors": [one_line(f"soul recall unavailable: {exc}")],
         }
+        if include_coverage:
+            payload["withheld_records"] = 0
+        return payload
 
 
 class AgentRuntime:
