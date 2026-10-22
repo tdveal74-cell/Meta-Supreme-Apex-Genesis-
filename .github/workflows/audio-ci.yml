@@ -71,7 +71,9 @@ on:
 jobs:
   audio:
     name: Playback and capture in real Chromium
-    runs-on: ubuntu-latest
+    # Playwright 1.56.1 cannot install Chromium dependencies on Ubuntu 26.04.
+    # Match the supported runner already pinned by panel-smoke-ci.yml.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

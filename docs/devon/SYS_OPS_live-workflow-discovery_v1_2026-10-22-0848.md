@@ -16,6 +16,10 @@ Independent exact-source review passed59 focused tests. Removing the owner guard
 
 A second independent review confirmed the stage still claimed LiveKit had never published audio. Current server code starts a room publisher before ready when configured and selects room PCM instead of raw WebSocket PCM. The stage now describes both paths and refuses to equate connection or track state with audible playback. The19 publisher/configured-room checks passed with doubles; no production voice was generated. Client player comments were updated without changing transport logic.
 
+## CI host compatibility
+
+Audio CI run39750972507 stopped before playback/capture tests because its pinned Playwright1.56.1 refuses Chromium dependencies on the Ubuntu26.04 runner selected by ubuntu-latest. The audio job now pins Ubuntu24.04, matching the existing panel smoke job, without changing the browser version or skipping tests. Exact-head hosted checks must pass before merge.
+
 ## Activation and rollback
 
 Verify the actual account UUID and set N8N_INVENTORY_OWNER_ID only for that account. Verify the self-hosted URL/key pairing and least-privilege list/read permission. After deployment, request inventory as the bound account and a second account: only the first may reach n8n. Compare IDs, observed time and completeness with the credential-visible upstream list. New workflows remain informational and cannot run because they were discovered.
