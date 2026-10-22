@@ -724,12 +724,22 @@ Do not rephrase the call to get past it.
   from 233 to 258. The runs from 10-18 to 10-22 also found the n8n connector
   signed out, which is a separate cause this does not touch. `add_data_table_rows`
   passes with nobody present only when it is exactly that row: an n8n server,
-  table `RuPMZKXkqcbuHRKa` in project `qbrcjkbIoorbwot6`, one row, kind
+  table `RuPMZKXkqcbuHRKa` in project `qbrcjkbIoorbwot6`, exactly the three call
+  keys and one row of exactly the six row keys, every value a string, kind
   `reflection`, empty `vitals` and `findings`, `emailed` "no", a non-empty text
-  of at most 900 characters, and a `beat_at` within 10 minutes of now. Any
-  other table, row shape or n8n write is gated as before. The freshness bound
-  matters: the Pulse anchors its reflection watch on a reflection up to 1h
-  ahead, so a forward-dated row could otherwise silence the alarm.
+  of at most 900 characters, and a `beat_at` such as `2026-10-23T11:42:03.000Z`
+  (a `Z` or `+00:00` suffix, at most six fractional digits, ASCII digits)
+  within 10 minutes of the hook's clock. Any other table, row shape or n8n
+  write is gated as before. The freshness bound matters: the Pulse anchors its
+  reflection watch on a reflection up to 1h ahead, so a forward-dated row could
+  otherwise silence the alarm. And at most one per 12 hours in a session, ruled
+  by Tee on a second card the same day, "One per 12 hours", after a critic
+  showed a looping session could write the row without end, each one replacing
+  the reflection in his Pulse email. The hook reads the session's transcripts,
+  subagent files included, for a completed write to that table; one inside 12
+  hours, or a transcript it cannot read, sends the call to the ordinary gate.
+  The shortest real gap between two reflection writes is 14.9 hours, so the
+  cap has refused none of them.
 - A webhook turn, a scheduled check-in, a task notification, a peer agent
   report and a context summary are all user turns in the transcript and none of
   them is a signal. The test is `origin.kind == "human"` on the entry. An

@@ -1222,6 +1222,9 @@ def test_the_reflection_row_is_ledger_only():
     {"beat_at": ts(10)},
     {"beat_at": ts(-10)},
     {"beat_at": (NOW - timedelta(minutes=3)).strftime("%Y-%m-%dT%H:%M:%SZ")},
+    # the routine's prompt asks for "current UTC ISO 8601", which +00:00 is too
+    {"beat_at": NOW.strftime("%Y-%m-%dT%H:%M:%S+00:00")},
+    {"beat_at": NOW.strftime("%Y-%m-%dT%H:%M:%S.123456+00:00")},
 ])
 def test_the_reflection_row_holds_at_its_edges(row):
     assert gate.classify(REFLECTION_TOOL, reflection_input(row), now=NOW) == ("reflection_row", False)
@@ -1261,12 +1264,22 @@ def test_the_reflection_row_holds_at_its_edges(row):
     reflection_input({"beat_at": ts(60 * 24)}),
     reflection_input({"beat_at": "now"}),
     reflection_input({"beat_at": ""}),
-    reflection_input({"beat_at": NOW.strftime("%Y-%m-%dT%H:%M:%S+00:00")}),
     reflection_input({"beat_at": NOW.strftime("%Y-%m-%d %H:%M:%SZ")}),
     reflection_input({"beat_at": ts(0) + "\n"}),
     reflection_input({"beat_at": NOW.timestamp()}),
     # the same instant in Arabic-Indic digits, which a Unicode \d would accept
     reflection_input({"beat_at": ts(0).translate({ord(c): 0x0660 + int(c) for c in "0123456789"})}),
+    # forms the parser would accept, so only the pattern refuses them
+    reflection_input({"beat_at": NOW.strftime("%Y-%m-%dT%H:%M:%SZ:00")}),
+    reflection_input({"beat_at": NOW.strftime("%Y-%m-%dT%H:%M:%S.1234567Z")}),
+    reflection_input({"beat_at": NOW.strftime("%Y-%m-%dT%H:%M:%S")}),
+    reflection_input({"beat_at": NOW.strftime("%Y-%m-%dT%H:%M:%S-00:00")}),
+    reflection_input({"beat_at": NOW.strftime("%Y-%m-%dT%H:%M:%S+01:00")}),
+    # shapes that only a type check stands between and a crash
+    reflection_input(rows={"0": {}}),
+    reflection_input(rows=5),
+    reflection_input(rows=[sorted(gate.REFLECTION_KEYS)]),
+    reflection_input({"beat_at": "2026-02-30T12:00:00Z"}),
 ])
 def test_anything_but_the_exact_reflection_row_stays_gated(call):
     assert gate.classify(REFLECTION_TOOL, call, now=NOW) == ("add_data_table_rows", True)
@@ -1327,3 +1340,92 @@ def test_the_reflection_row_passes_through_the_real_process(tmp_path):
         env={"CLAUDE_PROJECT_DIR": str(tmp_path / "proj"), "PATH": "/usr/bin:/bin"}, timeout=15,
     )
     assert json.loads(done.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_the_beat_pattern_takes_ascii_digits_only():
+    """The parser already refuses these digits, so this holds the pattern on its own."""
+    arabic = ts(0).translate({ord(c): 0x0660 + int(c) for c in "0123456789"})
+    assert gate.REFLECTION_BEAT.fullmatch(ts(0))
+    assert not gate.REFLECTION_BEAT.fullmatch(arabic)
+
+
+def wrote_reflection(minutes_ago, tool_use_id="toolu_refl", is_error=False, table="RuPMZKXkqcbuHRKa"):
+    """A reflection write the session made earlier, and its result."""
+    return [
+        {"type": "assistant", "timestamp": ts(minutes_ago + 0.01), "message": {"role": "assistant", "content": [
+            {"type": "tool_use", "id": tool_use_id, "name": REFLECTION_TOOL,
+             "input": {"dataTableId": table, "projectId": "qbrcjkbIoorbwot6", "rows": []}}]}},
+        {"type": "user", "timestamp": ts(minutes_ago), "message": {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": tool_use_id,
+             "content": "refused" if is_error else '{"success":true}', "is_error": is_error}]}},
+    ]
+
+
+def test_a_second_reflection_inside_twelve_hours_needs_tee(tmp_path, project):
+    """Tee's card 2026-10-22: at most one per 12 hours in a session."""
+    p = payload(tmp_path, [human(60 * 24)] + wrote_reflection(60 * 3), tool=REFLECTION_TOOL,
+                tool_input=reflection_input())
+    out = gate.run("pre", p, now=NOW)
+    reason = out["hookSpecificOutput"]["permissionDecisionReason"]
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "already written in this session at 2026-10-14T09:00:00Z, inside 12 hours" in reason
+    assert [(r["event"], r["class"], r["gated"]) for r in ledger(project)] == [
+        ("gate-deny", "add_data_table_rows", True)]
+
+
+def test_a_second_reflection_passes_when_tee_is_present(tmp_path, project):
+    p = payload(tmp_path, wrote_reflection(60 * 3) + [human(1)], tool=REFLECTION_TOOL,
+                tool_input=reflection_input())
+    assert gate.run("pre", p, now=NOW) is None
+
+
+@pytest.mark.parametrize("earlier", [
+    wrote_reflection(60 * 12),
+    wrote_reflection(60 * 15),
+    wrote_reflection(60, is_error=True),
+    wrote_reflection(60, table="QZvdxllOjWevb3Vo"),
+    [wrote_reflection(60)[0]],
+])
+def test_only_a_completed_write_inside_the_window_counts(tmp_path, earlier):
+    """Twelve hours or more ago, a refused or failed attempt, a write to another
+    table and a call with no result yet all leave the daily row free."""
+    p = payload(tmp_path, earlier, tool=REFLECTION_TOOL, tool_input=reflection_input())
+    assert gate.run("pre", p, now=NOW) is None
+
+
+def test_a_write_by_a_subagent_counts_too(tmp_path):
+    p = payload(tmp_path, [], tool=REFLECTION_TOOL, tool_input=reflection_input())
+    sub = tmp_path / "session" / "subagents" / "workflows" / "wf_x"
+    sub.mkdir(parents=True)
+    (sub / "agent-y.jsonl").write_text("\n".join(json.dumps(e) for e in wrote_reflection(30)) + "\n")
+    out = gate.run("pre", p, now=NOW)
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_an_unreadable_session_refuses_the_row(tmp_path):
+    p = payload(tmp_path, [], tool=REFLECTION_TOOL, tool_input=reflection_input())
+    p["transcript_path"] = str(tmp_path / "missing.jsonl")
+    out = gate.run("pre", p, now=NOW)
+    reason = out["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "could not be read to count earlier reflection rows" in reason
+
+
+def test_post_records_the_row_by_its_shape_after_the_edge(tmp_path, project):
+    """Allowed at 9m58s, recorded 3s later: both rows name the reflection row,
+    so the receipt does not report a gated write that no decision allowed."""
+    row = reflection_input({"beat_at": (NOW - timedelta(minutes=9, seconds=58)).strftime("%Y-%m-%dT%H:%M:%S.000Z")})
+    p = payload(tmp_path, [], tool=REFLECTION_TOOL, tool_input=row)
+    assert gate.run("pre", p, now=NOW) is None
+    assert gate.run("post", p, now=NOW + timedelta(seconds=3)) is None
+    assert [(r["event"], r["class"], r["gated"]) for r in ledger(project)] == [
+        ("gate-allow", "reflection_row", False), ("executed", "reflection_row", False)]
+
+
+def test_main_fails_closed_on_a_reflection_row_when_the_decision_code_raises(tmp_path, monkeypatch, capsys):
+    p = payload(tmp_path, [], tool=REFLECTION_TOOL,
+                tool_input=reflection_input({"beat_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")}))
+    monkeypatch.setattr(gate, "reflection_capped", lambda *a: 1 / 0)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(p)))
+    assert gate.main(["gate_ledger.py", "pre"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"

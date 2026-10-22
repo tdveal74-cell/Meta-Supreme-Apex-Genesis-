@@ -37,7 +37,7 @@ Findings it computes, each with a stable key:
 | soul_overdue | yes | PROPOSED soul rows open past 76h; the text names both readings - the committer may legitimately hold a row inside its 96h close-by-absence window (or be retrying a failing commit), or the resolve lane is stalled |
 | missed_beat | yes | previous pulse older than 7.5h; the heartbeat monitoring itself |
 | cards_expiring | no | approval cards within 24h of expiry, still undecided |
-| reflection_missing | no | no reflection row within 26h, or the newest reflection timestamp is unreadable (fails closed); the body noticing the mind went quiet |
+| reflection_missing | yes | no reflection row within 26h, or the newest reflection timestamp is unreadable (fails closed); the body noticing the mind went quiet |
 
 EMAIL CADENCE: a beat emails when an alerting finding key appears that the
 last SUCCESSFULLY EMAILED pulse did not carry, or when ~22h have passed since
@@ -73,11 +73,19 @@ The outward gate (`.claude/hooks/gate_ledger.py`) refuses n8n writes unless Tee
 spoke in the last 30 minutes, and the routine always fires with nobody present,
 so its row was refused on 2026-10-16 and 2026-10-17 (the runs after that also
 found the n8n connector signed out), and `reflection_missing` fired on every
-beat from 233 to 258. Tee ruled on 2026-10-22, on a card, to exempt that one row and nothing
-else: the call passes only in the exact shape above, with `beat_at` within 10
-minutes of the hook's clock, which also stops a forward-dated row from
-anchoring the Pulse's reflection watch. Change the routine's row shape and the
-gate refuses it again; the shape lives in `_is_reflection_row`.
+beat from 233 to 258. Tee ruled on 2026-10-22, on a card, to exempt that one
+row and nothing else. The call passes with nobody present only when it is one
+row of exactly `beat_at`, `kind` "reflection", `vitals` "", `findings` "", a
+non-empty `reflection` of at most 900 characters and `emailed` "no", into this
+table in project `qbrcjkbIoorbwot6`, with `beat_at` in UTC such as
+`2026-10-23T11:42:03.000Z` (a `+00:00` suffix also passes, other offsets do
+not) and within 10 minutes of the hook's clock. That bound also stops a
+forward-dated row from anchoring the Pulse's reflection watch. On a second card
+the same day he capped it at one per 12 hours in a session: a second completed
+write inside that window needs him present, so a session stuck in a loop cannot
+keep replacing the reflection his email shows. Change the routine's row shape
+and the gate refuses it again; the shape lives in `_is_reflection_row` and the
+cap in `reflection_capped`.
 
 The Routine is currently bound to the Build 13 build session (a self-bind
 trigger). A cleaner standalone Routine can be created from the claude.ai

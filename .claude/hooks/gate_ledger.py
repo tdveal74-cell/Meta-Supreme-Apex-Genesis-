@@ -145,20 +145,40 @@ LEDGER_ONLY_SUFFIXES = {"merge_pull_request", "test_workflow"}
 # so the gate refused its one write on 2026-10-16 and 2026-10-17, as it would on
 # any scheduled run, and the Pulse raised reflection_missing on every beat from
 # 233 to 258 (the runs from 10-18 to 10-22 also found the n8n connector signed
-# out, which no change here touches). The call passes only
-# when it is exactly the row the routine's prompt names: one row, kind
-# reflection, the empty vitals and findings, emailed "no", a non-empty text of
-# at most 900 characters, and a beat_at within REFLECTION_SKEW_MIN of now. The
-# Pulse anchors its reflection watch on any reflection whose beat_at is up to
-# 1h ahead, so a forward-dated row could silence reflection_missing; the
-# freshness bound is what stops that. Any other shape falls through to the
-# ordinary gate below.
+# out, which no change here touches).
+#
+# The call passes only in the shape the routine's prompt names, narrowed where
+# the prompt is loose: an n8n server, this table in this project, exactly the
+# three call keys and one row of exactly the six row keys, every value a
+# string, kind "reflection", vitals and findings "", emailed "no", a non-empty
+# text of at most 900 characters, and a beat_at in UTC (a Z or +00:00 suffix,
+# at most six fractional digits, ASCII digits only) within REFLECTION_SKEW_MIN
+# of the hook's clock. The Pulse anchors its reflection watch on any reflection
+# whose beat_at is up to 1h ahead, so a forward-dated row could silence
+# reflection_missing; the freshness bound is what stops that.
+#
+# And at most one per REFLECTION_EVERY_H in a session. Ruled by Tee on a second
+# card the same day, after a critic showed that a session stuck in a loop could
+# write the row without end: each one replaces the reflection the Pulse email
+# shows, twenty hide every pulse from the routine's own read, and fifty turn the
+# GitHub pulse watchdog red. Before the row passes, the session's transcripts
+# (the main file and every subagent file under it) are read for a completed
+# write to this table, and one inside the window sends the call to the ordinary
+# gate. A refused or failed write carries is_error and does not count. The
+# shortest gap between two real reflection writes in this session's history is
+# 14.9h (2026-10-14T20:52Z to 2026-10-15T11:44Z), so the cap has refused none.
+# A transcript that cannot be read refuses too.
+#
+# PostToolUse and PostToolUseFailure record the call by its shape alone. The
+# decision was taken at PreToolUse; reclassifying on the clock afterwards
+# recorded a call allowed at the 10 minute edge as an executed gated write.
 REFLECTION_TABLE = "RuPMZKXkqcbuHRKa"
 REFLECTION_PROJECT = "qbrcjkbIoorbwot6"
 REFLECTION_KEYS = {"beat_at", "kind", "vitals", "findings", "reflection", "emailed"}
 REFLECTION_MAX = 900
 REFLECTION_SKEW_MIN = 10
-REFLECTION_BEAT = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z", re.ASCII)
+REFLECTION_EVERY_H = 12
+REFLECTION_BEAT = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|\+00:00)", re.ASCII)
 
 SHELL_WRAPPERS = {"sudo", "command", "env", "time", "nohup", "exec", "nice", "builtin"}
 SHELLS = {"bash", "sh", "zsh", "dash"}
@@ -719,7 +739,8 @@ def _gh_class(argv):
 def _is_reflection_row(server, tool_input, now):
     """True only for the daily reflection's own row, exactly as its routine
     writes it. Every check compares exact types and values, so a near miss is
-    an ordinary gated call rather than a guess."""
+    an ordinary gated call rather than a guess. A now of None checks the shape
+    alone, for recording a call after its decision was taken."""
     if "n8n" not in server or set(tool_input) != {"dataTableId", "projectId", "rows"}:
         return False
     if tool_input["dataTableId"] != REFLECTION_TABLE or tool_input["projectId"] != REFLECTION_PROJECT:
@@ -737,11 +758,14 @@ def _is_reflection_row(server, tool_input, now):
     if not REFLECTION_BEAT.fullmatch(row["beat_at"]):
         return False
     beat = _parse_ts(row["beat_at"])
-    return beat is not None and abs((beat - now).total_seconds()) <= REFLECTION_SKEW_MIN * 60
+    if beat is None:
+        return False
+    return now is None or abs((beat - now).total_seconds()) <= REFLECTION_SKEW_MIN * 60
 
 
-def classify(tool_name, tool_input, cwd="", now=None):
-    """Returns (cls, gated). cls is None for a call that is not tracked."""
+def classify(tool_name, tool_input, cwd="", now=None, shape_only=False):
+    """Returns (cls, gated). cls is None for a call that is not tracked.
+    shape_only skips the clock in the reflection row check, for post and fail."""
     tool_input = tool_input if isinstance(tool_input, dict) else {}
 
     if tool_name.lower() == "bash":
@@ -784,7 +808,7 @@ def classify(tool_name, tool_input, cwd="", now=None):
     if suffix in LEDGER_ONLY_SUFFIXES:
         return suffix, False
     if suffix == "add_data_table_rows" and _is_reflection_row(
-        server, tool_input, now or datetime.now(timezone.utc)
+        server, tool_input, None if shape_only else (now or datetime.now(timezone.utc))
     ):
         return "reflection_row", False
     if suffix in GATED_SUFFIXES:
@@ -902,6 +926,75 @@ def latest_signal(path, now):
     return newest[0], max(0.0, (now - newest[1]).total_seconds() / 60.0)
 
 
+def _session_files(path):
+    """The session's main transcript and every subagent transcript under it,
+    so a write a subagent made counts the same as one the session made."""
+    main = main_transcript(path)
+    files = [main]
+    if main.endswith(".jsonl"):
+        for dirpath, dirs, names in os.walk(os.path.join(main[: -len(".jsonl")], "subagents")):
+            dirs.sort()
+            files += [os.path.join(dirpath, n) for n in sorted(names) if n.endswith(".jsonl")]
+    return files
+
+
+def last_reflection_write(path, now):
+    """Returns the time of the newest completed write to the reflection table
+    anywhere in the session, or None. A write counts when its tool_result came
+    back without is_error, which a refusal and a failure both carry. Any write
+    to the table counts, whatever its shape. Raises when a file cannot be read,
+    so the caller fails closed."""
+    newest = None
+    horizon = now + timedelta(minutes=SKEW_MIN)
+    for name in _session_files(path):
+        writes = set()
+        with open(name, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                try:
+                    entry = json.loads(line, strict=False)
+                except Exception:
+                    continue
+                blocks = (entry.get("message") or {}).get("content") if isinstance(entry, dict) else None
+                if not isinstance(blocks, list):
+                    continue
+                for b in blocks:
+                    if not isinstance(b, dict):
+                        continue
+                    if (
+                        entry.get("type") == "assistant"
+                        and b.get("type") == "tool_use"
+                        and str(b.get("name", "")).endswith("__add_data_table_rows")
+                        and isinstance(b.get("input"), dict)
+                        and b["input"].get("dataTableId") == REFLECTION_TABLE
+                    ):
+                        writes.add(b.get("id"))
+                    elif (
+                        entry.get("type") == "user"
+                        and b.get("type") == "tool_result"
+                        and b.get("tool_use_id") in writes
+                        and not b.get("is_error")
+                    ):
+                        ts = _parse_ts(entry.get("timestamp"))
+                        if ts is not None and ts <= horizon and (newest is None or ts > newest):
+                            newest = ts
+    return newest
+
+
+def reflection_capped(payload, now):
+    """Returns the reason a reflection row must take the ordinary gate, or None
+    when it may pass: one completed inside REFLECTION_EVERY_H, or a session that
+    cannot be read."""
+    try:
+        last = last_reflection_write(payload.get("transcript_path") or "", now)
+    except Exception as exc:
+        return "the session could not be read to count earlier reflection rows (%s: %s)" % (
+            type(exc).__name__, exc)
+    if last is not None and now - last < timedelta(hours=REFLECTION_EVERY_H):
+        return "a reflection row was already written in this session at %s, inside %d hours" % (
+            last.strftime("%Y-%m-%dT%H:%M:%SZ"), REFLECTION_EVERY_H)
+    return None
+
+
 def decide(cls, gated, payload, now):
     """Returns (allow, reason, signal). Pure apart from reading the transcript."""
     if not gated:
@@ -992,12 +1085,17 @@ def run(mode, payload, now=None):
     """Returns the JSON object to print on stdout, or None to print nothing."""
     now = now or datetime.now(timezone.utc)
     name = payload.get("tool_name", "")
-    cls, gated = classify(name, payload.get("tool_input"), payload.get("cwd", ""), now)
+    cls, gated = classify(name, payload.get("tool_input"), payload.get("cwd", ""), now, shape_only=mode != "pre")
     if cls is None:
         return None
 
     if mode == "pre":
+        capped = reflection_capped(payload, now) if cls == "reflection_row" else None
+        if capped:
+            cls, gated = "add_data_table_rows", True
         allow, reason, _sig = decide(cls, gated, payload, now)
+        if capped:
+            reason = capped + ", so this one needs a human signal and " + reason
         _try_ledger(_row("gate-allow" if allow else "gate-deny", payload, cls, gated, now, reason=reason))
         if allow:
             return None
@@ -1042,7 +1140,9 @@ def main(argv):
                 tracked = classify(name, payload.get("tool_input"), payload.get("cwd", ""))
             except Exception:
                 tracked = ("unknown", True)
-            if tracked[1]:
+            # A reflection row passes only after its cap is checked, which the
+            # failure skipped, so it fails closed with the gated calls.
+            if tracked[1] or tracked[0] == "reflection_row":
                 out = {
                     "hookSpecificOutput": {
                         "hookEventName": "PreToolUse",
