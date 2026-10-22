@@ -220,11 +220,8 @@ export function usePresenceSocket(token: string, options: PresenceSocketOptions 
           });
           return;
         case "audio": {
-          // Raw PCM arrives only when LiveKit is not configured, which is every
-          // deployment so far: the presence service mints join tokens and has
-          // never published audio into a room. Until this handler existed the
-          // chunk was counted and dropped, so nothing in the estate could be
-          // heard whether or not the synthesiser worked.
+          // Raw PCM arrives over this socket when LiveKit is not configured.
+          // Configured room audio is handled by the separate LiveKit client.
           if (!turnIsCurrent(message.turn_id)) {
             // A chunk from a turn that was interrupted. Playing it would talk
             // over whatever replaced it.
