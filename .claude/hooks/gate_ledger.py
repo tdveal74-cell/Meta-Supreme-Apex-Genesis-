@@ -411,37 +411,75 @@ def _lookup_branch(cwd):
 
 PUSH_ARG_FLAGS = {"-o", "--push-option", "--repo", "--receive-pack", "--exec"}
 
+# Every long option `git push -h` lists (git 2.43), with what it does to the
+# gate. The full list is needed so that a prefix is matched against all of
+# them, the way git matches it.
+PUSH_LONG = {
+    "force": "force", "force-with-lease": "lease", "force-if-includes": "lease",
+    "delete": "delete", "prune": "delete", "mirror": "mirror",
+    "all": "every", "branches": "every", "tags": "every",
+    "repo": "", "push-option": "", "receive-pack": "", "exec": "",
+    "recurse-submodules": "", "verbose": "", "quiet": "", "dry-run": "",
+    "porcelain": "", "thin": "", "set-upstream": "", "progress": "",
+    "no-verify": "", "verify": "", "follow-tags": "", "signed": "", "atomic": "",
+    "ipv4": "", "ipv6": "",
+}
+
+
+def _push_long(name):
+    """The options git push reads `--name` as. Git takes the exact name, or any
+    unambiguous prefix of one, so --del is --delete and --mir is --mirror (both
+    measured against git 2.43 on 2026-10-17). A prefix of two or more options
+    makes git refuse the push, so returning all of them only ever over-gates.
+    A --no- form turns an option off and matches nothing that gates here."""
+    if name in PUSH_LONG:
+        return [name]
+    return [o for o in PUSH_LONG if o.startswith(name)] if name else []
+
 
 def _git_push(argv, cwd):
-    """Returns (cls, gated) for a git argv, or None when it is not a push."""
+    """Returns (cls, gated) for a git argv, or None when it is not a push.
+
+    Git reads a short bundle one letter at a time, so -4f, -uf and -f6 all
+    force and -ud deletes; until 2026-10-17 a digit in the bundle let a force
+    or a delete through ungated. Any f or d in a bundle counts here, even one
+    git would read as the value of -o, which only over-gates. Only the exact
+    value flags skip the next word: skipping after a bundle that ends in o
+    would hide a following -f, so that word is read as if it were its own."""
     if os.path.basename(argv[0]) != "git" or "push" not in argv:
         return None
     pi = argv.index("push")
     cwd = _git_cwd(argv[:pi], cwd)
     force = lease = delete = mirror = every = False
     positional = []
-    skip = False
-    for a in argv[pi + 1:]:
-        if skip:
-            skip = False
-            continue
+    repo = ""
+    rest = argv[pi + 1:]
+    i = 0
+    while i < len(rest):
+        a = rest[i]
+        i += 1
         if a in PUSH_ARG_FLAGS:
-            skip = True
-        elif a == "--force" or _short_flags_with(a, "f"):
-            force = True
-        elif a.startswith("--force-with-lease") or a == "--force-if-includes":
-            lease = True
-        elif a in ("--delete", "-d", "--prune"):
-            delete = True
-        elif a == "--mirror":
-            mirror = True
-        elif a in ("--all", "--tags"):
-            every = True
+            if a == "--repo" and i < len(rest):
+                repo = rest[i]
+            i += 1
+        elif a.startswith("--"):
+            name, eq, value = a[2:].partition("=")
+            hits = _push_long(name)
+            effects = {PUSH_LONG[o] for o in hits}
+            force = force or "force" in effects
+            lease = lease or "lease" in effects
+            delete = delete or "delete" in effects
+            mirror = mirror or "mirror" in effects
+            every = every or "every" in effects
+            if eq and hits == ["repo"]:
+                repo = value
         elif a.startswith("-"):
-            continue
+            bundle = a[1:]
+            force = force or "f" in bundle
+            delete = delete or "d" in bundle
         else:
             positional.append(a)
-    remote = positional[0] if positional else ""
+    remote = positional[0] if positional else repo
     refspecs = positional[1:]
     plus = any(s.startswith("+") for s in refspecs)
     delete = delete or any(s.startswith(":") for s in refspecs)

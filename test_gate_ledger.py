@@ -958,6 +958,7 @@ def test_a_padded_gated_command_is_denied_quickly(tmp_path):
     "rm -" + "r" * 40000 + "1 x; gh workflow run deploy.yml",
     "git push -" + "f" * 40000 + "1 origin; gh workflow run deploy.yml",
     "bash -" + "c" * 40000 + "1 x; gh workflow run deploy.yml",
+    "git push -" + "4" * 40000 + "f origin main",
     "; ".join("rm -" + "r" * 19000 + "1 x" for _ in range(15)) + "; gh workflow run deploy.yml",
 ])
 def test_a_long_flag_token_is_denied_quickly(tmp_path, command):
@@ -1018,7 +1019,81 @@ def test_every_single_letter_flag_at_each_site(template, hits, hit, miss):
         assert gate.classify("Bash", {"command": command}) == expected, command
 
 
-# A long run of reserved words or assignments before a gated call. _unwrap used
+# Found 2026-10-17: git reads a short bundle one letter at a time and takes any
+# unambiguous prefix of a long option, so git push -4f forced, -ud deleted and
+# --mir mirrored with no card while the check matched exact spellings only.
+@pytest.mark.parametrize("command,expected", [
+    ("git push -4f origin main", ("git_force_push:plain", True)),
+    ("git push -6f origin main", ("git_force_push:plain", True)),
+    ("git push -f4 origin main", ("git_force_push:plain", True)),
+    ("git push -uf origin main", ("git_force_push:plain", True)),
+    ("git push -uo -f origin main", ("git_force_push:plain", True)),
+    ("git push -ud origin side", ("git_force_push:delete", True)),
+    ("git push -4d origin side", ("git_force_push:delete", True)),
+    ("git push --del origin side", ("git_force_push:delete", True)),
+    ("git push --dele origin side", ("git_force_push:delete", True)),
+    ("git push --pru origin", ("git_force_push:delete", True)),
+    ("git push --mir origin", ("git_force_push:mirror", True)),
+    ("git push --m origin", ("git_force_push:mirror", True)),
+    ("git push --force-w origin main", ("git_force_push:lease", True)),
+    ("git push -o -f origin claude/x", ("git_push", False)),
+    ("git push -u origin claude/x", ("git_push", False)),
+    ("git push -o ci.skip origin claude/x", ("git_push", False)),
+    ("git push --set-upstream origin claude/x", ("git_push", False)),
+    ("git push --no-delete origin main", ("git_push", False)),
+    ("git push --force-with-lease origin claude/x", ("git_force_push:lease", False)),
+    ("bash -l -c 'gh workflow run d.yml'", ("gh_workflow_run", True)),
+    ("bash -c 'gh workflow run d.yml' _ x", ("gh_workflow_run", True)),
+])
+def test_push_options_are_read_the_way_git_reads_them(command, expected):
+    assert gate.classify("Bash", {"command": command}) == expected
+
+
+@pytest.mark.parametrize("repo,gated", [
+    ("--repo=https://e.example/r", True),
+    ("--repo https://e.example/r", True),
+    ("origin", False),
+])
+def test_a_repo_option_is_the_remote_it_names(tmp_path, repo, gated):
+    # With no positional remote, --repo names it. A lease to the session's own
+    # branch is open, but not to a URL, which --repo used to hide.
+    _git(tmp_path, "init", "-q", "-b", "claude/x", str(tmp_path / "w"))
+    _git(tmp_path / "w", "commit", "-q", "--allow-empty", "-m", "a")
+    command = f"git -C {tmp_path / 'w'} push --force-with-lease {repo}"
+    assert gate.classify("Bash", {"command": command}) == ("git_force_push:lease", gated)
+
+
+def _git(cwd, *args):
+    return subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
+        cwd=cwd, capture_output=True, text=True,
+    )
+
+
+# The cases above are what the check believes git does. This asks git: each
+# push runs against a throwaway bare repository, and the gate must be closed
+# exactly when the push forced a branch, deleted one or mirrored.
+@pytest.mark.parametrize("flags,refspec", [
+    ("-4f", "main"), ("-f6", "main"), ("-uf", "main"), ("-f", "main"),
+    ("-ud", "side"), ("-4d", "side"), ("--del", "side"), ("--mir", ""),
+    ("-u", "main"), ("-4", "main"), ("", "main"),
+])
+def test_the_push_check_gates_what_git_actually_does(tmp_path, flags, refspec):
+    bare, work = tmp_path / "r.git", tmp_path / "w"
+    assert _git(tmp_path, "init", "-q", "--bare", str(bare)).returncode == 0
+    assert _git(tmp_path, "init", "-q", "-b", "main", str(work)).returncode == 0
+    (work / "f").write_text("a")
+    _git(work, "add", "f")
+    _git(work, "commit", "-qm", "a")
+    _git(work, "push", "-q", str(bare), "HEAD:refs/heads/main", "HEAD:refs/heads/side")
+    _git(work, "commit", "-q", "--amend", "-m", "b")
+    pushed = _git(work, "push", *flags.split(), str(bare), *([refspec] if refspec else []))
+    remote = _git(work, "--git-dir", str(bare), "for-each-ref", "--format=%(refname:short) %(objectname)")
+    refs = dict(line.split() for line in remote.stdout.splitlines())
+    local = _git(work, "rev-parse", "HEAD").stdout.strip()
+    destructive = "side" not in refs or refs.get("main") == local
+    command = " ".join(["git push", flags, "origin", refspec]).replace("  ", " ").strip()
+    assert gate.classify("Bash", {"command": command})[1] is destructive, (command, pushed.stderr)
 # to drop them one copy of the list at a time, so these took 10 to 19 s each on
 # the hook before 2026-10-17, against its 15 s timeout.
 @pytest.mark.parametrize("pad", ["{ " * 150000, "do " * 100000, "! " * 150000, "A=1 " * 75000])
