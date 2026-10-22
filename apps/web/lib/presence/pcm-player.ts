@@ -3,13 +3,9 @@
  *
  * WHY THIS EXISTS
  *
- * Until now `usePresenceSocket` counted every audio message and threw it away:
- * "this build does not decode or play it". The presence service, meanwhile,
- * mints LiveKit join tokens but has never published audio into a room
- * (`apps/presence/__init__.py:45`). So there was no path, with LiveKit or
- * without it, by which anyone could hear DEVON speak. Building a real Cartesia
- * adapter and stopping there would have produced perfect audio that nothing
- * ever played.
+ * This player decodes PCM messages from the presence WebSocket. When
+ * LiveKit is configured, the presence service publishes PCM into the session's
+ * room instead; this player does not handle that remote audio track.
  *
  * WHAT IS PURE AND WHY
  *

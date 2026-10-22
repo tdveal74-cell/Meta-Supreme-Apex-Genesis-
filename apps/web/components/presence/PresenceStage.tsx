@@ -107,9 +107,8 @@ export function PresenceStage() {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  // Raw PCM playback. The presence service has never published audio into a
-  // LiveKit room, so this is the only path by which anything is heard, and
-  // before it existed every chunk was counted and dropped.
+  // Raw PCM playback handles audio received over the presence WebSocket
+  // when LiveKit is not configured. The room path is handled separately.
   const playback = useAudioPlayback();
   const socket = usePresenceSocket(token, { onAudio: playback.play });
   const { buffer, connection, ready, presence, caption, metrics, lastAck, transcript, rttMs, say, interrupt, beginListening, sendClient, sendRender, diagnostics } = socket;
@@ -496,9 +495,9 @@ export function PresenceStage() {
           ) : null}
           {livekit.detail ? <p className="mt-2 text-[11px] leading-5 text-red-200/90">{livekit.detail}</p> : null}
           <p className="mt-2 text-[11px] leading-4 text-[#718898]">
-            LiveKit is a transport this service can mint tokens for and has never published into, so
-            the raw audio path above is the one that carries the voice. This panel stays because a
-            configured LiveKit would silence that path, and a reader needs to see which is live.
+            When LiveKit is configured, this stage receives voice through the session's LiveKit room.
+            Otherwise, audio arrives over the presence WebSocket. Connection and track status do not
+            prove audible playback.
           </p>
         </Panel>
 

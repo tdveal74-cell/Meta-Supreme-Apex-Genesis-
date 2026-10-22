@@ -152,16 +152,32 @@ try {
       osc.connect(ctx.destination);
 
       const chunks = [];
+      // MessagePort delivery is asynchronous even for offline rendering. Wait
+      // for the processor to apply each control message, rather than racing
+      // the entire render against start or guessing when the tail has arrived.
+      const waitFor = (type) => new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error(`capture ${type} acknowledgement timed out`)), 5000);
+        const listener = (event) => {
+          if (event.data?.t !== type) return;
+          clearTimeout(timeout);
+          node.port.removeEventListener("message", listener);
+          resolve();
+        };
+        node.port.addEventListener("message", listener);
+      });
       node.port.onmessage = (event) => {
         if (event.data && event.data.t === "chunk") chunks.push(Array.from(event.data.samples));
       };
+      const started = waitFor("started");
       node.port.postMessage({ t: "start" });
+      await started;
       osc.start(0);
       await ctx.startRendering();
       // The tail the processor is still holding. Without this flush the last
       // chunk of every clip is lost, which cuts the end off every sentence.
+      const stopped = waitFor("stopped");
       node.port.postMessage({ t: "stop" });
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await stopped;
 
       const lengths = chunks.map((chunk) => chunk.length);
       const samples = [];

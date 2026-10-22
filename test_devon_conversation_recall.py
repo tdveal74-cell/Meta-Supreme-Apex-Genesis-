@@ -35,7 +35,7 @@ def test_soul_read_is_scoped_to_conversation_not_the_pinned_task_catalog():
         tool["name"] for tool in build_conversation_tool_registry().describe()
     }
     assert "soul.recall" not in task_names
-    assert conversation_names - task_names == {"soul.recall"}
+    assert conversation_names - task_names == {"soul.recall", "n8n.workflow_inventory"}
 
 
 @pytest.mark.asyncio
