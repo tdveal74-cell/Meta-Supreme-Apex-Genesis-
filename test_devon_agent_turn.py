@@ -667,6 +667,41 @@ async def test_unparseable_json_fails_visibly_and_does_not_burn_another_call() -
     events = await collect(turn, "hi", caller=TEE, halt=HaltSignal())
 
     assert types_of(events)[-1] == "error"
+    assert events[-1]["code"] == "invalid_response_shape"
+    assert len(provider.requests) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("finish_reason", ["length", "max_tokens"])
+@pytest.mark.parametrize(
+    "text",
+    ["", '{"tool": "ledger.read", "arguments": {}}',
+     '{"tool": "ledger.read", "arguments": {'],
+)
+async def test_truncated_completion_is_never_parsed_or_executed(
+    finish_reason: str, text: str,
+) -> None:
+    class Truncated(Scripted):
+        async def _complete_once(self, request):
+            response = await super()._complete_once(request)
+            response.finish_reason = finish_reason
+            response.usage = TokenUsage(output_tokens=request.max_tokens)
+            return response
+
+    reg, ran = default_tools()
+    provider = Truncated(text)
+    turn = AgentTurn(
+        provider=provider, tools=reg,
+        executor=PresenceExecutor(reg, turn_id=TURN),
+    )
+    events = await collect(turn, "read the ledger", caller=TEE, halt=HaltSignal())
+
+    assert types_of(events) == ["turn_started", "error"]
+    assert events[-1]["code"] == "completion_truncated"
+    assert events[-1]["max_completion_tokens"] == TURN_MAX_COMPLETION_TOKENS
+    assert events[-1]["output_tokens"] == TURN_MAX_COMPLETION_TOKENS
+    assert "token limit" in events[-1]["message"]
+    assert ran == []
     assert len(provider.requests) == 1
 
 
@@ -691,14 +726,20 @@ async def test_an_empty_message_is_refused_before_any_provider_call() -> None:
     assert provider.requests == []
 
 @pytest.mark.asyncio
-async def test_every_paid_turn_completion_uses_the_compact_budget() -> None:
+async def test_every_paid_turn_completion_has_room_for_reasoning_and_a_bounded_answer() -> None:
     reg, _ = default_tools()
     turn, provider = build(say("Done."), tools=reg)
 
     await collect(turn, "answer briefly", caller=TEE, halt=HaltSignal())
 
     assert provider.requests[0].max_tokens == TURN_MAX_COMPLETION_TOKENS
-    assert TURN_MAX_COMPLETION_TOKENS < 1500
+    assert TURN_MAX_COMPLETION_TOKENS == 8192
+
+
+def test_deployed_default_matches_the_reasoning_turn_budget() -> None:
+    from app.core.config import Settings
+
+    assert Settings.model_fields["AI_MAX_TOKENS_AGENT_TURN"].default == 8192
 
 
 @pytest.mark.asyncio

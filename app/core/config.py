@@ -232,9 +232,10 @@ class Settings(BaseSettings):
     AI_MAX_TOKENS_PER_AGENT: int = 1200
     AI_MAX_TOKENS_SYNTHESIS: int = 2000
     # Live AgentTurn is an iterative loop, so these limits apply on every tool
-    # step rather than once per Council request. Keep the newest context and a
-    # compact completion budget; deployments can raise them with measurements.
-    AI_MAX_TOKENS_AGENT_TURN: int = 600
+    # step rather than once per Council request. The bounded completion budget
+    # includes reasoning tokens before final JSON. Live gpt-oss-120b exhausted
+    # 600 and 2,048-token caps; the 8,192-token diagnostic returned valid JSON.
+    AI_MAX_TOKENS_AGENT_TURN: int = 8192
     AI_TURN_HISTORY_MAX_MESSAGES: int = 12
     AI_TURN_HISTORY_MAX_CHARS: int = 12_000
     AI_TURN_OBSERVATIONS_MAX_CHARS: int = 6_000

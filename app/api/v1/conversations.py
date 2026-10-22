@@ -31,7 +31,7 @@ from app.models.agent import Agent, AgentRun
 from app.models.conversation import Conversation, Message
 from app.models.project import Project
 from app.security.deps import CurrentUser
-from app.services.agent_tasks import build_tool_registry
+from app.services.conversation_tools import build_conversation_tool_registry
 from app.services.devon_halt import get_halt_registry
 from app.services.devon_pending_confirmations import get_pending_confirmations
 from app.services.intelligence import get_provider, run_council_for_message
@@ -731,7 +731,7 @@ async def act_stream(
     if resume is not None:
         loop_message = _resume_prompt(resume)
 
-    tools = build_tool_registry()
+    tools = build_conversation_tool_registry()
     turn = AgentTurn(
         provider=get_provider(),
         tools=tools,

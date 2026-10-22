@@ -69,11 +69,11 @@ Eight is chosen to be generous for real work (read four tables, compare, act)
 and still bounded, because each step is a paid provider round trip.
 """
 
-# A turn returns either one compact tool call or one conversational answer. It
-# never needs the 1,500-token completion previously reserved for every loop
-# iteration. These defaults keep both sides of each paid request bounded while
-# leaving constructor overrides for deployments that have measured a real need.
-TURN_MAX_COMPLETION_TOKENS = 600
+# The completion allowance includes a reasoning model's internal tokens. A
+# live gpt-oss-120b diagnostic exhausted both 600 and 2,048 tokens without final
+# text. The same diagnostic with an 8,192-token allowance finished with valid
+# tool JSON. This is a per-call ceiling, not a target or permission to retry.
+TURN_MAX_COMPLETION_TOKENS = 8192
 TURN_HISTORY_MAX_MESSAGES = 12
 TURN_HISTORY_MAX_CHARS = 12_000
 TURN_OBSERVATIONS_MAX_CHARS = 6_000
@@ -111,6 +111,14 @@ class TurnEvent:
 
     def to_dict(self) -> Dict[str, Any]:
         return {"type": self.type, **self.data}
+
+
+class TurnCompletionTruncated(ValueError):
+    """The provider hit its token limit, so no part of its reply may run."""
+
+    def __init__(self, output_tokens: int) -> None:
+        super().__init__("agent turn completion reached its token limit")
+        self.output_tokens = output_tokens
 
 
 # How much of a tool result the model reads. A success gets more room than a
@@ -423,6 +431,20 @@ class AgentTurn:
 
             try:
                 reply = await self._ask(system, history or [], clean, observations)
+            except TurnCompletionTruncated as exc:
+                yield TurnEvent(
+                    "error",
+                    {
+                        "code": "completion_truncated",
+                        "message": (
+                            "DEVON's response reached its token limit; the "
+                            "incomplete response was discarded."
+                        ),
+                        "max_completion_tokens": self.max_completion_tokens,
+                        "output_tokens": exc.output_tokens,
+                    },
+                )
+                return
             except ProviderError as exc:
                 logger.error("agent turn provider failure: %s", type(exc).__name__)
                 yield TurnEvent(
@@ -436,7 +458,10 @@ class AgentTurn:
                 # burning another call.
                 yield TurnEvent(
                     "error",
-                    {"message": "DEVON did not reply in a usable shape; ask again"},
+                    {
+                        "code": "invalid_response_shape",
+                        "message": "DEVON did not reply in a usable shape; ask again",
+                    },
                 )
                 return
 
@@ -624,4 +649,9 @@ class AgentTurn:
                 metadata={"component": "devon-agent-turn"},
             )
         )
+        # A length-stopped reply can contain an apparently valid JSON object
+        # before its unfinished tail. Never extract or execute that prefix,
+        # and never spend another provider call automatically to repair it.
+        if response.finish_reason in {"length", "max_tokens"}:
+            raise TurnCompletionTruncated(response.usage.output_tokens)
         return extract_json(response.text)
