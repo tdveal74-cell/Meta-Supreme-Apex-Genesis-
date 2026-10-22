@@ -194,10 +194,12 @@ LEDGER_ONLY_SUFFIXES = {"merge_pull_request", "test_workflow"}
 # GitHub pulse watchdog red. Before the row passes, the session's transcripts
 # (the main file and every subagent file under it) are read for a completed
 # write to this table, and one inside the window sends the call to the ordinary
-# gate. A refused or failed write carries is_error and does not count. The
-# shortest gap between two real reflection writes in this session's history is
-# 14.9h (2026-10-14T20:52Z to 2026-10-15T11:44Z), so the cap has refused none.
-# A transcript that cannot be read refuses too.
+# gate. A refused or failed write carries is_error and does not count. Across
+# the 16 completed reflection writes this session's transcript still holds
+# (from 2026-09-23) the shortest gap is 14.9h, 2026-10-14T20:52Z to
+# 2026-10-15T11:44Z, so the cap would have refused none of them. A transcript
+# that cannot be read refuses too, and so does one that restarts at a compact
+# boundary inside the window, which a session rebuilt on a fresh disk does.
 #
 # PostToolUse and PostToolUseFailure record the call by its shape alone. The
 # decision was taken at PreToolUse; reclassifying on the clock afterwards
@@ -974,11 +976,24 @@ def _session_files(path):
     so a write a subagent made counts the same as one the session made."""
     main = main_transcript(path)
     files = [main]
-    if main.endswith(".jsonl"):
-        for dirpath, dirs, names in os.walk(os.path.join(main[: -len(".jsonl")], "subagents")):
+    sub = os.path.join(main[: -len(".jsonl")], "subagents") if main.endswith(".jsonl") else ""
+    if sub and os.path.isdir(sub):
+        # A directory that cannot be listed raises rather than being skipped,
+        # so a write inside it cannot go uncounted.
+        for dirpath, dirs, names in os.walk(sub, onerror=_raise):
             dirs.sort()
             files += [os.path.join(dirpath, n) for n in sorted(names) if n.endswith(".jsonl")]
     return files
+
+
+def _raise(err):
+    raise err
+
+
+# The id in a tool_result line, read once per line so the lookup is a set
+# membership test. Searching every line for every tracked id grew with lines
+# times ids: 3,000 refused attempts took 20.6 s, past the hook's 15 s.
+RESULT_ID = re.compile(r'"tool_use_id"\s*:\s*"([^"\\]+)"')
 
 
 def last_reflection_write(path, now, since=None):
@@ -992,7 +1007,15 @@ def last_reflection_write(path, now, since=None):
     bound: this one held 167 MB across 106 files on 2026-10-22, and parsing it
     all took 5.4 s. A file last modified before since cannot hold a result
     inside the window, so it is skipped unread, and a line is parsed only when
-    it names the tool or the id of a write already seen in that file."""
+    it names the tool or carries the id of a write already seen in that file.
+
+    A file whose first entry is a compact boundary dated inside the window
+    cannot prove the window is clean, and raises. Compaction during a session
+    only appends a boundary after the history it summarises, but a session
+    rebuilt on a fresh disk restarts its file at the newest boundary: this one's
+    main file was born 2026-09-24T11:41:33Z with a first entry dated
+    2026-09-22T23:26:39Z. A write made before such a boundary is no longer on
+    disk to count."""
     newest = None
     horizon = now + timedelta(minutes=SKEW_MIN)
     floor = since.timestamp() if since is not None else None
@@ -1001,8 +1024,14 @@ def last_reflection_write(path, now, since=None):
             continue
         writes = set()
         with open(name, encoding="utf-8", errors="replace") as fh:
+            first = True
             for line in fh:
-                if "add_data_table_rows" not in line and not (writes and any(w in line for w in writes)):
+                if first:
+                    first = False
+                    _refuse_a_restarted_window(line, since)
+                if "add_data_table_rows" not in line and not (
+                    writes and any(m in writes for m in RESULT_ID.findall(line))
+                ):
                     continue
                 try:
                     entry = json.loads(line, strict=False)
@@ -1034,6 +1063,24 @@ def last_reflection_write(path, now, since=None):
                         if ts is not None and ts <= horizon and (newest is None or ts > newest):
                             newest = ts
     return newest
+
+
+def _refuse_a_restarted_window(line, since):
+    """Raises when the file's first entry is a compact boundary inside the
+    window, because the history before it is not in the file."""
+    if since is None or "compact_boundary" not in line:
+        return
+    try:
+        entry = json.loads(line, strict=False)
+    except Exception:
+        return
+    if not (isinstance(entry, dict) and entry.get("type") == "system" and entry.get("subtype") == "compact_boundary"):
+        return
+    ts = _parse_ts(entry.get("timestamp"))
+    if ts is None or ts > since:
+        raise ValueError(
+            "the transcript starts at a compact boundary dated %s, inside the window, so a write "
+            "before it cannot be counted" % (entry.get("timestamp"),))
 
 
 def reflection_capped(payload, now):

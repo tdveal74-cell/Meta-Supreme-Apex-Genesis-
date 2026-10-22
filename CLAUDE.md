@@ -737,9 +737,12 @@ Do not rephrase the call to get past it.
   showed a looping session could write the row without end, each one replacing
   the reflection in his Pulse email. The hook reads the session's transcripts,
   subagent files included, for a completed write to that table; one inside 12
-  hours, or a transcript it cannot read, sends the call to the ordinary gate.
-  The shortest real gap between two reflection writes is 14.9 hours, so the
-  cap has refused none of them.
+  hours, a transcript it cannot read, or one that restarts at a compact
+  boundary inside the window (as a session rebuilt on a fresh disk does, so
+  the history before it is gone) sends the call to the ordinary gate. Across
+  the 16 completed writes this session's transcript still holds, from
+  2026-09-23, the shortest gap is 14.9 hours, so the cap would have refused
+  none of them.
 - A webhook turn, a scheduled check-in, a task notification, a peer agent
   report and a context summary are all user turns in the transcript and none of
   them is a signal. The test is `origin.kind == "human"` on the entry. An

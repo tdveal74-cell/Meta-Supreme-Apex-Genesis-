@@ -1556,3 +1556,100 @@ def test_the_cap_reads_a_large_session_well_inside_the_hook_timeout(tmp_path):
     reason = gate.reflection_capped(p, NOW)
     assert time.monotonic() - started < 3.0
     assert reason and "already written" in reason
+
+
+# ------------------------------------------- round 2 critics on the cap (2026-10-22)
+
+
+def boundary(minutes_ago):
+    return {"type": "system", "subtype": "compact_boundary", "content": "Conversation compacted",
+            "timestamp": ts(minutes_ago), "parentUuid": None, "logicalParentUuid": "gone"}
+
+
+def test_a_transcript_restarted_at_a_boundary_inside_the_window_refuses(tmp_path):
+    """A session rebuilt on a fresh disk restarts its file at the newest
+    compact boundary, so a write made before it is gone from the file."""
+    p = payload(tmp_path, [boundary(60 * 4), human(60 * 4)], tool=REFLECTION_TOOL, tool_input=reflection_input())
+    out = gate.run("pre", p, now=NOW)
+    reason = out["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "starts at a compact boundary" in reason
+
+
+@pytest.mark.parametrize("entries", [
+    [boundary(60 * 13), human(60 * 13)],
+    [human(60 * 20), boundary(60 * 2), human(60 * 2)],
+])
+def test_a_boundary_older_than_the_window_or_mid_file_changes_nothing(tmp_path, entries):
+    """Compaction during a session appends its boundary after the history it
+    summarises, so only a first entry inside the window is a restart."""
+    p = payload(tmp_path, entries, tool=REFLECTION_TOOL, tool_input=reflection_input())
+    assert gate.run("pre", p, now=NOW) is None
+
+
+def test_the_newest_of_several_writes_is_the_one_that_counts(tmp_path):
+    earlier = wrote_reflection(60 * 72, tool_use_id="toolu_a") + wrote_reflection(60, tool_use_id="toolu_b")
+    p = payload(tmp_path, earlier, tool=REFLECTION_TOOL, tool_input=reflection_input())
+    assert gate.run("pre", p, now=NOW)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_a_write_one_minute_inside_the_window_still_counts(tmp_path):
+    p = payload(tmp_path, wrote_reflection(60 * 12 - 1), tool=REFLECTION_TOOL, tool_input=reflection_input())
+    assert gate.run("pre", p, now=NOW)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_a_subagent_file_eight_hours_old_is_still_read(tmp_path):
+    import os as _os
+    p = payload(tmp_path, [], tool=REFLECTION_TOOL, tool_input=reflection_input())
+    sub = tmp_path / "session" / "subagents"
+    sub.mkdir(parents=True)
+    f = sub / "agent-z.jsonl"
+    f.write_text("\n".join(json.dumps(e) for e in wrote_reflection(60 * 8)) + "\n")
+    stamp = (NOW - timedelta(hours=8)).timestamp()
+    _os.utime(f, (stamp, stamp))
+    assert gate.run("pre", p, now=NOW)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_a_tool_result_that_only_mentions_the_tool_is_not_a_write(tmp_path):
+    """A grep of this file's own source names the tool and is not a write."""
+    grep = [
+        {"type": "assistant", "timestamp": ts(31), "message": {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "toolu_grep", "name": "Bash", "input": {"command": "grep add_data_table_rows x"}}]}},
+        {"type": "user", "timestamp": ts(30), "message": {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "toolu_grep", "content": "mcp__n8n_vps__add_data_table_rows RuPMZKXkqcbuHRKa"}]}},
+    ]
+    p = payload(tmp_path, grep, tool=REFLECTION_TOOL, tool_input=reflection_input())
+    assert gate.run("pre", p, now=NOW) is None
+
+
+def test_thousands_of_refused_attempts_stay_well_inside_the_timeout(tmp_path):
+    """Searching every line for every tracked id took 20.6 s at 3,000 refused
+    attempts. A set lookup of the line's own id keeps it flat."""
+    import time
+    path = tmp_path / "session.jsonl"
+    filler = json.dumps(human(600, "y" * 3000))
+    with open(path, "w", encoding="utf-8") as fh:
+        for i in range(3000):
+            for e in wrote_reflection(60 * 30, tool_use_id="toolu_r%d" % i, is_error=True):
+                fh.write(json.dumps(e) + "\n")
+            for _ in range(4):
+                fh.write(filler + "\n")
+    p = {"session_id": "s1", "tool_name": REFLECTION_TOOL, "tool_input": reflection_input(),
+         "transcript_path": str(path), "cwd": str(tmp_path)}
+    started = time.monotonic()
+    assert gate.reflection_capped(p, NOW) is None
+    assert time.monotonic() - started < 3.0
+
+
+def test_a_subagent_directory_that_cannot_be_listed_refuses(tmp_path, monkeypatch):
+    p = payload(tmp_path, [], tool=REFLECTION_TOOL, tool_input=reflection_input())
+    (tmp_path / "session" / "subagents").mkdir(parents=True)
+
+    def walk(top, onerror=None, **kw):
+        # as the real os.walk: a listing error goes to onerror, or nowhere
+        if onerror is not None:
+            onerror(PermissionError(13, "Permission denied", top))
+        return iter(())
+
+    monkeypatch.setattr(gate.os, "walk", walk)
+    reason = gate.run("pre", p, now=NOW)["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "could not be read to count earlier reflection rows" in reason
