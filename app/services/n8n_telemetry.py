@@ -184,6 +184,8 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, NamedTuple, Optional, Set, Tuple
 from urllib.parse import urlparse
 
+from services.devon.vault import N8N_HOST
+
 # One page of the executions list. `_paged_workflows` in scripts/n8n_migrate.py
 # asks for 100 at a time and this matches it.
 PAGE_SIZE = 100
@@ -418,7 +420,7 @@ async def _httpx_get(url: str, headers: Dict[str, str]) -> Fetched:
     import httpx
 
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS, follow_redirects=False, trust_env=False) as client:
             response = await client.get(url, headers=headers)
     except Exception as exc:
         # Deliberately broad. Every way httpx can fail to arrive is the same
@@ -1516,3 +1518,52 @@ async def read_all(
             "speaks no verb but GET."
         ),
     }
+
+
+async def read_selfhosted(
+    limit: int = DEFAULT_LIMIT,
+    fetch: Optional[Fetcher] = None,
+    environ: Optional[Dict[str, str]] = None,
+    read_at: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Read the migrated estate using exactly one configured URL/key pair.
+
+    The authenticated execution route uses this policy. The generic readers
+    above remain available for offline telemetry analysis. Configuration may
+    put the canonical host in either slot; its key and cap stay in that slot.
+    Never probe the retired Cloud host or fall back to it after a refusal.
+    The route retains its existing authenticated, estate-wide visibility.
+    """
+    canonical = N8N_HOST
+    env = dict(os.environ if environ is None else environ)
+    matches = [
+        config for config in INSTANCES
+        if _env(config.url_var, env).rstrip("/") in {canonical, canonical + "/api/v1"}
+    ]
+    moment = read_at or datetime.now(timezone.utc)
+    # Reuse the response envelope and measurement logic, with no credentials
+    # available until a single complete canonical pair has been selected.
+    selected_env: Dict[str, str] = {}
+    if len(matches) == 1 and _env(matches[0].key_var, env):
+        selected = matches[0]
+        selected_env = dict(env)
+        for config in INSTANCES:
+            if config != selected:
+                selected_env.pop(config.url_var, None)
+                selected_env.pop(config.key_var, None)
+        # Accept both configured API-base forms without doubling /api/v1.
+        selected_env[selected.url_var] = canonical
+        result = await read_all(limit=limit, fetch=fetch, environ=selected_env, read_at=moment)
+        result["instances"] = [i for i in result["instances"] if i["role"] == selected.role]
+        return result
+
+    result = await read_all(limit=limit, fetch=fetch, environ=selected_env, read_at=moment)
+    configured = any(_env(c.url_var, env) or _env(c.key_var, env) for c in INSTANCES)
+    result["instances"] = [_blank(
+        PRIMARY,
+        "misconfigured" if configured else "unconfigured",
+        "Exactly one complete URL/key pair for the canonical self-hosted estate is required. "
+        "No execution request was made; Cloud fallback is disabled.",
+    )]
+    result["configured"] = int(configured)
+    return result

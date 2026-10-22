@@ -34,7 +34,7 @@ from app.services import n8n_telemetry
 router = APIRouter(prefix="/n8n", tags=["n8n Executions"])
 
 
-@router.get("/executions", summary="Read only execution telemetry for the configured instances")
+@router.get("/executions", summary="Read only execution telemetry for the self-hosted estate")
 async def n8n_executions(
     # The gate, and only the gate. The payload is not scoped per account: the
     # instances are the estate's, not the caller's, so nothing below reads this
@@ -52,17 +52,12 @@ async def n8n_executions(
         ),
     ),
 ) -> Dict[str, Any]:
-    """Execution telemetry for the configured instance or instances.
+    """Read the canonical self-hosted estate using its configured URL/key pair.
 
-    Each instance is reported on its own, labelled by the host actually
-    reached, and never merged with the other. There is no fallback from one to
-    the other: a cutover question is always about a named instance, and an
-    answer that quietly came from the wrong one is the failure this route is
-    shaped to make visible.
-
-    An unconfigured instance says so. An unreachable one is its own state,
-    separate from one that answered with nothing saved. A cap is reported only
-    when configuration states it, and is labelled as stated rather than
-    measured every time it appears.
+    The host may be configured in either slot. Only that slot is read and
+    reported; missing or ambiguous pairs refuse without probing another host.
+    An unreachable instance stays distinct from an answered empty history.
+    This retains the existing authenticated, estate-wide visibility: it does
+    not introduce a per-owner filter or any execution capability.
     """
-    return await n8n_telemetry.read_all(limit=limit)
+    return await n8n_telemetry.read_selfhosted(limit=limit)
