@@ -201,3 +201,78 @@ test('unproven close remains unknown and duplicate never attempts cleanup again'
     assert.ok(f.worker.sessions.has(session), 'failed cleanup remains quarantined');
   } finally { await f.worker.shutdown(); f.cleanup(); }
 });
+
+test('CDP parser preserves multilingual text across every split UTF-8 byte', { skip: !process.env.DEVON_TEST_CHROMIUM }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'devon-utf8-'));
+  const browser = new ChromePipe(process.env.DEVON_TEST_CHROMIUM, root);
+  try {
+    await browser.open();
+    const expected = 'Tee: café, 日本語, العربية, e\u0301, 😀';
+    const id = 900001;
+    const result = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('fixture parser timed out')), 1000);
+      browser.pending.set(id, { resolve, reject, timer });
+    });
+    const encoded = Buffer.from(JSON.stringify({ id, result: { value: expected } }) + '\0');
+    // Exercise the production data listener. Each emitted chunk is one byte,
+    // so every multibyte codepoint crosses actual parser callback boundaries.
+    for (const byte of encoded) browser.process.stdio[4].emit('data', Buffer.from([byte]));
+    assert.deepEqual(await result, { value: expected });
+  } finally { await browser.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('one action budget spans sequential CDP commands and expires before dispatch', { skip: !process.env.DEVON_TEST_CHROMIUM }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'devon-budget-'));
+  const browser = new ChromePipe(process.env.DEVON_TEST_CHROMIUM, root, { proxy: 'http://10.0.0.2:3128', allowedHosts: ['example.org'] });
+  let clock = 0; browser.now = () => clock; browser.beginAction();
+  const command = browser.command.bind(browser); let completed = 0;
+  browser.command = async (...args) => { const result = await command(...args); completed++; clock += 6000; return result; };
+  try {
+    await assert.rejects(browser.open(), /deadline/);
+    assert.equal(completed, 5, 'five6s commands spend the shared30s budget; the next never dispatches');
+    await browser.close(); assert.equal(browser.groupAlive(), false);
+  } finally { await browser.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('fresh action budget allows snapshot after a long idle session', { skip: !process.env.DEVON_TEST_CHROMIUM }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'devon-idle-'));
+  const browser = new ChromePipe(process.env.DEVON_TEST_CHROMIUM, root);
+  let clock = 0; browser.now = () => clock; browser.beginAction();
+  try {
+    await browser.open(); clock = 600000;
+    browser.beginAction();
+    const png = await browser.snapshot();
+    assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  } finally { await browser.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('expired action stays busy until cleanup, then persists unknown without replay', async () => {
+  const f = setup(); let release; let cleaned = false; let settled = false;
+  f.worker.factory = () => ({
+    beginAction() {}, async open() {},
+    assertActionDeadline() { throw new Error('deadline exceeded'); },
+    close() { return new Promise(resolve => { release = () => { cleaned = true; resolve(); }; }); },
+  });
+  const request = payload('open');
+  try {
+    const action = f.worker.action(request).then(value => { settled = true; return value; });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(settled, false); assert.equal(f.worker.busy, true); assert.equal(cleaned, false);
+    assert.equal((await f.worker.action(request)).state, 'unknown');
+    release(); const result = await action;
+    assert.equal(result.state, 'unknown'); assert.equal(cleaned, true); assert.equal(f.worker.busy, false);
+    assert.deepEqual(await f.worker.action(request), result);
+  } finally { await f.worker.shutdown(); f.cleanup(); }
+});
+
+test('worker begins a fresh budget for each supported action including idle snapshot', async () => {
+  const f = setup(); let starts = 0; let checks = 0;
+  f.worker.factory = () => ({ beginAction() { starts++; }, assertActionDeadline() { checks++; },
+    async open() {}, async snapshot() { return Buffer.from('fixture-png'); }, async close() {} });
+  try {
+    assert.equal((await f.worker.action(payload('open'))).state, 'completed');
+    assert.equal((await f.worker.action(payload('snapshot'))).state, 'completed');
+    assert.equal((await f.worker.action(payload('close'))).state, 'completed');
+    assert.equal(starts, 3); assert.equal(checks, 3);
+  } finally { await f.worker.shutdown(); f.cleanup(); }
+});

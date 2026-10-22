@@ -228,3 +228,136 @@ def test_real_registry_registers_only_under_explicit_owner_configuration(monkeyp
         t for t in build_tool_registry().describe() if t["name"].startswith("browser.session.")
     ]
     assert len(tools) == 4 and all(t["approval_required"] for t in tools)
+
+
+async def test_valid_multicommand_receipt_can_outlast_old_read_deadline(monkeypatch, tmp_path):
+    """Real HTTPX UDS read: the former15s timeout loses a valid16s receipt."""
+    import asyncio
+
+    socket = str(tmp_path / "browser.sock")
+    completed = asyncio.Event()
+    calls = []
+
+    async def handle(reader, writer):
+        try:
+            headers = await reader.readuntil(b"\r\n\r\n")
+            length = next(
+                int(line.split(b":", 1)[1])
+                for line in headers.split(b"\r\n")
+                if line.lower().startswith(b"content-length:")
+            )
+            body = json.loads(await reader.readexactly(length))
+            calls.append(body)
+            await asyncio.sleep(16.05)
+            receipt = {
+                key: body[key]
+                for key in ("protocol", "owner_id", "request_id", "session_id", "action")
+            }
+            receipt.update(
+                state="completed",
+                receipt_id=str(uuid4()),
+                isolation="dedicated-owner-context",
+                network_policy="deny-all-v1",
+            )
+            raw = json.dumps(receipt).encode()
+            completed.set()
+            writer.write(
+                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "
+                + str(len(raw)).encode()
+                + b"\r\nConnection: close\r\n\r\n"
+                + raw
+            )
+            await writer.drain()
+        except (ConnectionError, asyncio.IncompleteReadError):
+            pass
+        finally:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except ConnectionError:
+                pass
+
+    server = await asyncio.start_unix_server(handle, path=socket)
+    original = httpx.AsyncHTTPTransport
+    monkeypatch.setattr(
+        httpx, "AsyncHTTPTransport", lambda **kwargs: original(uds=socket, retries=0)
+    )
+    a = adapter()
+    args, record = approve(a)
+    try:
+        result = await a.execute("open", args)
+        await asyncio.wait_for(completed.wait(), timeout=3)
+        assert result.ok, "adapter timed out while the valid worker action completed"
+        assert a.approvals.get(record.request_id).state is ApprovalState.CONSUMED
+        assert len(calls) == 1
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_total_deadline_bounds_trickle_response_without_retry(monkeypatch, tmp_path):
+    import asyncio
+
+    import app.services.devon_browser as module
+
+    socket = str(tmp_path / "trickle.sock")
+    calls = []
+    finished = asyncio.Event()
+
+    async def handle(reader, writer):
+        try:
+            headers = await reader.readuntil(b"\r\n\r\n")
+            length = next(
+                int(line.split(b":", 1)[1])
+                for line in headers.split(b"\r\n")
+                if line.lower().startswith(b"content-length:")
+            )
+            body = json.loads(await reader.readexactly(length))
+            calls.append(body)
+            receipt = {
+                key: body[key]
+                for key in ("protocol", "owner_id", "request_id", "session_id", "action")
+            }
+            receipt.update(
+                state="completed",
+                receipt_id=str(uuid4()),
+                isolation="dedicated-owner-context",
+                network_policy="deny-all-v1",
+            )
+            raw = json.dumps(receipt).encode()
+            writer.write(
+                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "
+                + str(len(raw)).encode()
+                + b"\r\nConnection: close\r\n\r\n"
+            )
+            for offset in range(0, len(raw), 40):
+                writer.write(raw[offset : offset + 40])
+                await writer.drain()
+                await asyncio.sleep(0.03)
+        except ConnectionError:
+            pass
+        finally:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except ConnectionError:
+                pass
+            finished.set()
+
+    server = await asyncio.start_unix_server(handle, path=socket)
+    original = httpx.AsyncHTTPTransport
+    monkeypatch.setattr(
+        httpx, "AsyncHTTPTransport", lambda **kwargs: original(uds=socket, retries=0)
+    )
+    monkeypatch.setattr(module, "ADAPTER_TOTAL_TIMEOUT_SECONDS", 0.07)
+    a = adapter()
+    args, record = approve(a)
+    try:
+        result = await a.execute("open", args)
+        assert not result.ok and result.metadata["outcome"] == "unknown"
+        assert len(calls) == 1
+        assert a.approvals.get(record.request_id).state is ApprovalState.CONSUMED
+        await asyncio.wait_for(finished.wait(), timeout=1)
+    finally:
+        server.close()
+        await server.wait_closed()

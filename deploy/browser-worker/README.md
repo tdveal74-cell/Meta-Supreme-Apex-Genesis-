@@ -50,7 +50,7 @@ restart. With the worker stopped, an operator must verify exact socket type,
 UID10001 and absence of a live peer before removing only that owned stale socket.
 Never automatically unlink files, symlinks or live sockets.
 
-`validate.sh` builds the pinned image and runs all13 real nonroot Chromium
+`validate.sh` builds the pinned image and runs all18 real nonroot Chromium
 sandbox tests with zero skips, plus proxy policy tests in pinned Python3.12.
 The path-filtered CI job runs that same command and fails if the hosted sandbox
 is unsupported. A green contract suite alone proves no production activation.
@@ -63,3 +63,18 @@ It used fixture-only approvals, keys and temporary networks/volumes, all removed
 The API production host currently has no private route/mount to this VPS socket.
 A reviewed private transport topology, production initializer, host acceptance,
 receipt/artifact viewer, retention and explicit activation remain open.
+
+
+## Review corrections
+
+Each browser action starts a fresh30-second monotonic budget shared by all its
+CDP commands and event waits. It does not reset per command or persist across
+idle sessions. Expiry prevents a completed receipt and triggers separately
+bounded2-second process cleanup before the worker becomes available. Unproven
+cleanup remains quarantined. The adapter allows35seconds for the receipt and
+bounds its whole streaming operation at40seconds, with no retries. Existing
+runtime lease renewal and fenced commits remain unchanged.
+
+CDP output uses a streaming UTF-8 decoder, preserving multilingual page text
+when characters cross pipe chunks. The regression emits every response byte
+through the actual production parser callback in real sandboxed Chromium.

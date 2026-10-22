@@ -1,5 +1,9 @@
 import { spawn } from 'node:child_process';
 import { isIP } from 'node:net';
+import { StringDecoder } from 'node:string_decoder';
+export const ACTION_TIMEOUT_MS = 30_000;
+const COMMAND_TIMEOUT_MS = 8_000;
+const CLEANUP_TIMEOUT_MS = 2_000;
 export function privateProxy(value) {
   try { const url = new URL(value); const ip = url.hostname; const parts = ip.split('.').map(Number);
     return url.protocol === 'http:' && url.port === '3128' && !url.username && !url.password && url.pathname === '/' && !url.search && !url.hash
@@ -9,9 +13,10 @@ export function privateProxy(value) {
 
 export class ChromePipe {
   constructor(executable, profile, { proxy = null, allowedHosts = [] } = {}) {
+    this.now = () => performance.now(); this.beginAction();
     this.allowedHosts = allowedHosts; this.events = new Map(); this.proxy = proxy;
     if (proxy && !privateProxy(proxy)) throw new Error('fixed private proxy required');
-    this.sequence = 0; this.pending = new Map(); this.buffer = ''; this.closed = false;
+    this.sequence = 0; this.pending = new Map(); this.buffer = ''; this.decoder = new StringDecoder('utf8'); this.closed = false;
     this.process = spawn(executable, ['--headless=new', '--remote-debugging-pipe',
       '--no-first-run', '--no-default-browser-check', '--disable-background-networking',
       '--disable-component-update', '--disable-sync', '--disable-extensions',
@@ -22,7 +27,7 @@ export class ChromePipe {
       `--user-data-dir=${profile}`, 'about:blank'],
       { detached: true, stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'], env: { PATH: '/usr/bin:/bin', HOME: profile, LANG: 'C.UTF-8' } });
     this.process.stdio[4].on('data', data => {
-      this.buffer += data.toString();
+      this.buffer += this.decoder.write(data);
       if (this.buffer.length > 12_000_000) return void this.close().catch(() => {});
       let end;
       while ((end = this.buffer.indexOf('\0')) !== -1) {
@@ -40,7 +45,8 @@ export class ChromePipe {
           }
           const pending = this.pending.get(response.id);
           if (pending) { this.pending.delete(response.id); clearTimeout(pending.timer);
-            response.error ? pending.reject(new Error('browser command refused')) : pending.resolve(response.result); }
+            if (this.remainingActionMs() <= 0) { void this.close().catch(() => {}); pending.reject(new Error('browser action deadline exceeded')); }
+            else response.error ? pending.reject(new Error('browser command refused')) : pending.resolve(response.result); }
         } catch { void this.close().catch(() => {}); }
       }
     });
@@ -48,11 +54,16 @@ export class ChromePipe {
     this.process.stdio[3].on('error', stopped); this.process.stdio[4].on('error', stopped);
     this.process.on('exit', stopped); this.process.on('error', stopped);
   }
+  beginAction() { this.actionDeadline = this.now() + ACTION_TIMEOUT_MS; }
+  remainingActionMs() { return Math.max(0, this.actionDeadline - this.now()); }
+  assertActionDeadline() { if (this.remainingActionMs() <= 0) throw new Error('browser action deadline exceeded'); }
   command(method, params = {}, sessionId) {
     if (this.closed) return Promise.reject(new Error('browser stopped'));
+    const timeout = Math.min(COMMAND_TIMEOUT_MS, this.remainingActionMs());
+    if (timeout <= 0) { void this.close().catch(() => {}); return Promise.reject(new Error('browser action deadline exceeded')); }
     const id = ++this.sequence;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(id); void this.close().catch(() => {}); reject(new Error('browser timeout')); }, 8000);
+      const timer = setTimeout(() => { this.pending.delete(id); void this.close().catch(() => {}); reject(new Error('browser timeout')); }, timeout);
       this.pending.set(id, { resolve, reject, timer });
       this.process.stdio[3].write(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }) + '\0');
     });
@@ -79,9 +90,11 @@ export class ChromePipe {
   }
   waitEvent(method) {
     const key = this.sessionId + ':' + method;
+    const timeout = Math.min(COMMAND_TIMEOUT_MS, this.remainingActionMs());
+    if (timeout <= 0) return Promise.reject(new Error('browser action deadline exceeded'));
     return new Promise((resolve, reject) => {
       const listener = value => { clearTimeout(timer); this.events.delete(key); resolve(value); };
-      const timer = setTimeout(() => { this.events.delete(key); reject(new Error('browser navigation unproven')); }, 8000);
+      const timer = setTimeout(() => { this.events.delete(key); reject(new Error('browser navigation unproven')); }, timeout);
       this.events.set(key, [listener]);
     });
   }
@@ -125,8 +138,8 @@ export class ChromePipe {
       try { process.kill(-this.process.pid, 'SIGKILL'); }
       catch (error) { if (error.code !== 'ESRCH') throw error; }
     }
-    const deadline = Date.now() + 2000;
-    while (Date.now() < deadline) {
+    const deadline = performance.now() + CLEANUP_TIMEOUT_MS;
+    while (performance.now() < deadline) {
       const mainExited = this.process.exitCode !== null || this.process.signalCode !== null || !this.process.pid;
       if (mainExited && !this.groupAlive()) { this.closed = true; return; }
       await new Promise(resolve => setTimeout(resolve, 25));

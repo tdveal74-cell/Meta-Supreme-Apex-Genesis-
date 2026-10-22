@@ -21,7 +21,7 @@ import re
 import sys
 from pathlib import Path
 text = Path(sys.argv[1]).read_text()
-for key, test in (("tests", lambda n: n >= 13), ("fail", lambda n: n == 0), ("skipped", lambda n: n == 0)):
+for key, test in (("tests", lambda n: n >= 18), ("fail", lambda n: n == 0), ("skipped", lambda n: n == 0)):
     value = re.search(rf"^# {key} (\d+)$", text, re.M)
     if value is None or not test(int(value.group(1))):
         raise SystemExit("Real browser validation missing, failed or skipped: " + key)

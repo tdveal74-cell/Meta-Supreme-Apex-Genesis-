@@ -9,6 +9,7 @@ Page text is untrusted observation data. Registering does not launch a worker.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import re
@@ -27,6 +28,10 @@ from services.agent_runtime.tools import ToolRegistry, ToolResult, ToolSpec
 from services.devon.approval import ApprovalQueue
 
 SOCKET = "/run/devon-browser/worker.sock"
+# Worker CDP shares30s per action, then at most2s for process cleanup.
+# Read waits35s for its receipt; total40s also bounds a trickling response.
+ADAPTER_READ_TIMEOUT_SECONDS = 35
+ADAPTER_TOTAL_TIMEOUT_SECONDS = 40
 HOST = re.compile(
     r"(?=.{1,253}\Z)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?\Z"
 )
@@ -151,13 +156,18 @@ class DevonBrowserAdapter:
         try:
             # No retries or redirect following. A lost response consumes approval
             # and leaves the leased effect intent for explicit reconciliation.
-            async with httpx.AsyncClient(
-                transport=httpx.AsyncHTTPTransport(uds=SOCKET, retries=0),
-                base_url="http://devon-browser",
-                timeout=15,
-                follow_redirects=False,
-                trust_env=False,
-            ) as client:
+            async with (
+                asyncio.timeout(ADAPTER_TOTAL_TIMEOUT_SECONDS),
+                httpx.AsyncClient(
+                    transport=httpx.AsyncHTTPTransport(uds=SOCKET, retries=0),
+                    base_url="http://devon-browser",
+                    timeout=httpx.Timeout(
+                        connect=3, write=3, pool=3, read=ADAPTER_READ_TIMEOUT_SECONDS
+                    ),
+                    follow_redirects=False,
+                    trust_env=False,
+                ) as client,
+            ):
                 async with client.stream(
                     "POST",
                     "/v1/action",
@@ -233,7 +243,7 @@ class DevonBrowserAdapter:
                 error="" if ok else "worker action " + receipt["state"],
                 metadata={"provider_receipt_id": receipt["receipt_id"], "browser_receipt": receipt},
             )
-        except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError):
+        except (httpx.HTTPError, TimeoutError, ValueError, TypeError, KeyError, AttributeError):
             return ToolResult(
                 False,
                 error="browser outcome unverified; approval spent, reconcile before any new attempt",

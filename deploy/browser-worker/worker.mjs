@@ -56,7 +56,7 @@ export class BrowserWorker {
       if (payload.action === 'navigate') {
         const browser = this.sessions.get(payload.session_id);
         if (!this.proxy || !browser || JSON.stringify(payload.allowed_hosts) !== JSON.stringify(this.allowedHosts)) state = 'refused';
-        else { const url = await browser.navigate(payload.url); page = { url, scripts_disabled: true }; state = 'completed'; }
+        else { browser.beginAction?.(); const url = await browser.navigate(payload.url); browser.assertActionDeadline?.(); page = { url, scripts_disabled: true }; state = 'completed'; }
       } else if (payload.action === 'open') {
         if ((this.proxy && JSON.stringify(payload.allowed_hosts) !== JSON.stringify(this.allowedHosts)) || this.db.prepare('SELECT count(*) AS n FROM sessions').get().n >= this.maxSessions || this.db.prepare('SELECT id FROM sessions WHERE id=?').get(payload.session_id)) state = 'refused';
         else {
@@ -64,13 +64,14 @@ export class BrowserWorker {
           const profile = join(this.root, this.owner, payload.session_id, 'profile');
           mkdirSync(profile, { recursive: true, mode: 0o700 });
           const browser = this.factory(profile); this.sessions.set(payload.session_id, browser);
-          await browser.open(); state = 'completed';
+          browser.beginAction?.(); await browser.open(); browser.assertActionDeadline?.(); state = 'completed';
           this.db.prepare('UPDATE sessions SET state=? WHERE id=?').run('open', payload.session_id);
         }
       } else {
         const browser = this.sessions.get(payload.session_id);
         if (!browser) state = 'refused';
         else if (payload.action === 'snapshot') {
+          browser.beginAction?.();
           const directory = join(this.root, this.owner, payload.session_id, 'snapshots');
           if (existsSync(directory) && readdirSync(directory).length >= 20) throw new Error('snapshot capacity reached');
           const png = await browser.snapshot();
@@ -78,9 +79,9 @@ export class BrowserWorker {
           const receipt = randomUUID(); snapshotReceipt = receipt;
           mkdirSync(directory, { recursive: true, mode: 0o700 });
           writeFileSync(join(directory, receipt + '.png'), png, { flag: 'wx', mode: 0o600 });
-          state = 'completed';
+          browser.assertActionDeadline?.(); state = 'completed';
         } else {
-          await browser.close(); this.sessions.delete(payload.session_id); state = 'completed';
+          browser.beginAction?.(); await browser.close(); browser.assertActionDeadline?.(); this.sessions.delete(payload.session_id); state = 'completed';
           this.db.prepare('UPDATE sessions SET state=? WHERE id=?').run('closed', payload.session_id);
         }
       }

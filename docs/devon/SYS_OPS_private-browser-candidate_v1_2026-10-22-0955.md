@@ -151,3 +151,23 @@ DECISIONS: Keep private browser default off; preserve exact approvals, owner iso
 FINDINGS: Independent source review and isolated real-browser acceptance pass within the stated candidate scope; no production computer is established.
 OPEN: Full backend and hosted CI, private production topology and initializer, deployment and activation, click/type/files/shell, artifact viewing, retention and sustained-session design.
 STATUS: independently reviewed disabled source candidate; isolated browser acceptance verified; production unverified
+
+## PR review corrections
+
+Both hosted P2 findings were reproduced before correction. A valid UDS receipt
+arriving after16seconds was lost under the original15-second adapter read bound.
+The actual CDP parser corrupted Japanese, Arabic and emoji when UTF-8 characters
+crossed pipe chunks.
+
+Each action now has a fresh shared30-second monotonic CDP budget, followed by
+at most2seconds for process cleanup. The adapter allows35seconds for receipt
+reads and40seconds for the entire streaming operation. Timeout outcomes remain
+unverified and never retry. Independent negative controls covered the old read
+bound, absent total timeout, absent shared budget and absent final expiry check.
+Late events cannot produce completed receipts; idle sessions start a new budget.
+
+The production parser now uses a streaming UTF-8 decoder. Independent checks
+covered every split position, multiple frames and incomplete-tail shutdown.
+The frozen review delta passes27 adapter tests and18 mandatory real sandboxed
+Chromium tests with zero skips, plus8 proxy tests. Activation remains disabled;
+all production prerequisites and limits above still apply.
