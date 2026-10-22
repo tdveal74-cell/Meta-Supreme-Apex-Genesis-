@@ -664,6 +664,7 @@ _NETWORK_CAPABLE_MODULES = (
 _ALLOWED_PACKAGE_MEMBERS = {
     "app.services": {"n8n_telemetry"},
     "app.security.deps": {"CurrentUser"},
+    "services.devon.vault": {"N8N_HOST"},
 }
 
 #: The only function permitted to import httpx, and the one the transport check
@@ -1960,7 +1961,7 @@ def test_the_route_answers_a_get_with_nothing_configured(monkeypatch: pytest.Mon
     assert response.status_code == 200
     body = response.json()
     assert body["read_only"] is True
-    assert [i["state"] for i in body["instances"]] == ["unconfigured", "unconfigured"]
+    assert [i["state"] for i in body["instances"]] == ["unconfigured"]
 
 
 def test_the_route_reads_the_process_environment_and_its_own_fetcher(
@@ -1975,14 +1976,14 @@ def test_the_route_reads_the_process_environment_and_its_own_fetcher(
     the network or the resolver.
     """
     _clear(monkeypatch)
-    monkeypatch.setenv("N8N_API_URL", f"https://{PRIMARY_HOST}")
+    monkeypatch.setenv("N8N_API_URL", "https://n8n.editforge.online")
     monkeypatch.setenv("N8N_API_KEY", PRIMARY_KEY)
-    monkeypatch.setattr(tel, "_httpx_get", Fake(primary_invalid=[_page(WINDOW_ROWS)]))
+    monkeypatch.setattr(tel, "_httpx_get", Fake(n8n_editforge_online=[_page(WINDOW_ROWS)]))
 
     body = _client().get("/api/v1/n8n/executions", params={"limit": 5}).json()
     primary = _only(body, "primary")
     assert primary["state"] == "ok"
-    assert primary["host"] == PRIMARY_HOST
+    assert primary["host"] == "n8n.editforge.online"
     assert primary["window"]["executions_read"] == 5
     assert body["limit"] == 5
     assert PRIMARY_KEY not in json.dumps(body)
@@ -2457,7 +2458,7 @@ def test_no_configuration_or_row_shape_can_turn_the_route_into_a_500(
     handler rather than the service in isolation.
     """
     _clear(monkeypatch)
-    monkeypatch.setenv("N8N_API_URL", f"https://{PRIMARY_HOST}")
+    monkeypatch.setenv("N8N_API_URL", "https://n8n.editforge.online")
     monkeypatch.setenv("N8N_API_KEY", PRIMARY_KEY)
     client = _client()
     cases: List[Any] = [
@@ -2505,7 +2506,7 @@ def test_no_configuration_or_row_shape_can_turn_the_route_into_a_500(
             monkeypatch.delenv(variable, raising=False)
         for variable, value in env_over.items():
             monkeypatch.setenv(variable, value)
-        monkeypatch.setattr(tel, "_httpx_get", Fake(primary_invalid=[_page(rows)]))
+        monkeypatch.setattr(tel, "_httpx_get", Fake(n8n_editforge_online=[_page(rows)]))
         response = client.get("/api/v1/n8n/executions")
         assert response.status_code == 200, f"{label} answered {response.status_code}"
         body = response.json()
@@ -3311,11 +3312,11 @@ async def test_the_exact_nf3_future_basis_produces_no_wall_to_be_wrong_about(
     appears anywhere in the serialised payload the route actually returns.
     """
     _clear(monkeypatch)
-    monkeypatch.setenv("N8N_API_URL", f"https://{PRIMARY_HOST}")
+    monkeypatch.setenv("N8N_API_URL", "https://n8n.editforge.online")
     monkeypatch.setenv("N8N_API_KEY", PRIMARY_KEY)
     for name, value in NF3_FUTURE_ENV.items():
         monkeypatch.setenv(name, value)
-    monkeypatch.setattr(tel, "_httpx_get", Fake(primary_invalid=[_page(NF3_FUTURE_ROWS)]))
+    monkeypatch.setattr(tel, "_httpx_get", Fake(n8n_editforge_online=[_page(NF3_FUTURE_ROWS)]))
 
     response = _client().get("/api/v1/n8n/executions")
     assert response.status_code == 200
@@ -3634,3 +3635,114 @@ def test_the_id_key_guard_is_not_vacuous() -> None:
                 and inner.func.id == "id_delta_refusal"
                 for inner in ast.walk(node)
             )
+
+
+# Migration policy: the live route reads only the canonical self-hosted pair.
+@pytest.mark.parametrize("prefix", ["N8N_", "N8N_SECONDARY_"])
+@pytest.mark.parametrize("suffix", ["", "/", "/api/v1", "/api/v1/"])
+async def test_selfhosted_telemetry_preserves_the_selected_key_and_cap(prefix, suffix):
+    other = "N8N_SECONDARY_" if prefix == "N8N_" else "N8N_"
+    env = {
+        prefix + "API_URL": "https://n8n.editforge.online" + suffix,
+        prefix + "API_KEY": "selfhost-key",
+        prefix + "EXECUTION_CAP": "2500",
+        other + "API_URL": "https://thequietoperator.app.n8n.cloud",
+        other + "API_KEY": "cloud-key",
+        other + "EXECUTION_CAP": "99",
+    }
+    fake = Fake(n8n_editforge_online=[_page(WINDOW_ROWS)])
+    result = await tel.read_selfhosted(fetch=fake, environ=env)
+    assert len(result["instances"]) == 1
+    instance = result["instances"][0]
+    assert instance["state"] == "ok"
+    assert instance["host"] == "n8n.editforge.online"
+    assert instance["variables"]["key"] == prefix + "API_KEY"
+    assert instance["cap"]["cap"] == 2500
+    assert result["configured"] == result["reachable"] == 1
+    assert len(fake.calls) == 1
+    assert fake.calls[0]["headers"]["X-N8N-API-KEY"] == "selfhost-key"
+    assert urlparse(fake.calls[0]["url"]).path == "/api/v1/executions"
+    assert "cloud-key" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("url", [
+    "https://thequietoperator.app.n8n.cloud",
+    "http://n8n.editforge.online", "https://n8n.editforge.online.evil.invalid",
+    "https://n8n.editforge.online@evil.invalid", "https://user@n8n.editforge.online",
+    "https://n8n.editforge.online/api/v1/executions", "https://n8n.editforge.online?x=1",
+    "https://n8n.editforge.online#fragment", "https://n8n.editforge.online:444",
+])
+async def test_selfhosted_telemetry_refuses_noncanonical_configuration(url):
+    fake = Refuse()
+    result = await tel.read_selfhosted(fetch=fake, environ={"N8N_API_URL": url, "N8N_API_KEY": "key"})
+    assert result["instances"][0]["state"] == "misconfigured"
+    assert result["reachable"] == 0
+    assert fake.calls == []
+
+
+@pytest.mark.parametrize("env", [
+    {"N8N_API_URL": "https://n8n.editforge.online", "N8N_SECONDARY_API_KEY": "wrong-slot-key"},
+    {"N8N_API_URL": "https://n8n.editforge.online", "N8N_API_KEY": " "},
+    {"N8N_API_URL": "https://n8n.editforge.online", "N8N_API_KEY": "key",
+     "N8N_SECONDARY_API_URL": "https://n8n.editforge.online/api/v1", "N8N_SECONDARY_API_KEY": "other-key"},
+])
+async def test_selfhosted_telemetry_refuses_incomplete_or_ambiguous_pairs(env):
+    fake = Refuse()
+    result = await tel.read_selfhosted(fetch=fake, environ=env)
+    assert result["instances"][0]["state"] == "misconfigured"
+    assert fake.calls == []
+
+
+def test_execution_route_uses_only_selfhosted_secondary(monkeypatch):
+    _clear(monkeypatch)
+    monkeypatch.setenv("N8N_API_URL", "https://thequietoperator.app.n8n.cloud")
+    monkeypatch.setenv("N8N_API_KEY", "cloud-key")
+    monkeypatch.setenv("N8N_SECONDARY_API_URL", "https://n8n.editforge.online")
+    monkeypatch.setenv("N8N_SECONDARY_API_KEY", "selfhost-key")
+    fake = Fake(n8n_editforge_online=[_page(WINDOW_ROWS)])
+    monkeypatch.setattr(tel, "_httpx_get", fake)
+    response = _client().get("/api/v1/n8n/executions")
+    assert response.status_code == 200
+    assert response.json()["instances"][0]["role"] == "secondary"
+    assert len(fake.calls) == 1
+    assert fake.calls[0]["headers"]["X-N8N-API-KEY"] == "selfhost-key"
+
+
+async def test_selfhosted_telemetry_never_follows_redirect_to_cloud(monkeypatch):
+    import httpx
+
+    calls = []
+    original = httpx.AsyncClient
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(302, headers={"location": "https://thequietoperator.app.n8n.cloud/api/v1/executions"})
+
+    def client(**kwargs):
+        assert kwargs["follow_redirects"] is False
+        assert kwargs["trust_env"] is False
+        return original(**kwargs, transport=httpx.MockTransport(handler))
+
+    monkeypatch.setattr(httpx, "AsyncClient", client)
+    result = await tel.read_selfhosted(environ={
+        "N8N_API_URL": "https://thequietoperator.app.n8n.cloud", "N8N_API_KEY": "cloud-key",
+        "N8N_SECONDARY_API_URL": "https://n8n.editforge.online", "N8N_SECONDARY_API_KEY": "selfhost-key",
+    })
+    assert result["instances"][0]["state"] == "refused"
+    assert result["instances"][0]["status_code"] == 302
+    assert len(calls) == 1
+    assert calls[0].url.host == "n8n.editforge.online"
+    assert calls[0].headers["X-N8N-API-KEY"] == "selfhost-key"
+
+
+@pytest.mark.parametrize("status", [401, 404, 500])
+async def test_selfhosted_refusal_never_falls_back_to_retired_primary(status):
+    fake = Fake(n8n_editforge_online=tel.Fetched(status, {}, "https://n8n.editforge.online/api/v1/executions"))
+    result = await tel.read_selfhosted(fetch=fake, environ={
+        "N8N_API_URL": "https://thequietoperator.app.n8n.cloud", "N8N_API_KEY": "cloud-key",
+        "N8N_SECONDARY_API_URL": "https://n8n.editforge.online", "N8N_SECONDARY_API_KEY": "selfhost-key",
+    })
+    assert result["instances"][0]["state"] == "refused"
+    assert result["instances"][0]["status_code"] == status
+    assert result["reachable"] == 0
+    assert len(fake.calls) == 1
