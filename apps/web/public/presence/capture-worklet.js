@@ -40,12 +40,16 @@ class CaptureProcessor extends AudioWorkletProcessor {
         this.pending = [];
         this.pendingLength = 0;
         this.capturing = true;
+        // Offline callers must know start was applied before rendering.
+        this.port.postMessage({ t: "started" });
       } else if (data.t === "stop") {
         // Flush whatever is held so the tail of the sentence is not lost.
         // A clip that drops its last quarter second ends mid word, and a
         // transcriber completes it into a word nobody said.
         this.capturing = false;
         this.flush();
+        // Port messages are ordered: the flushed tail precedes this receipt.
+        this.port.postMessage({ t: "stopped" });
       }
     };
   }

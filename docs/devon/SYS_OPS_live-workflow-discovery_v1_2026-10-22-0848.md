@@ -18,7 +18,7 @@ A second independent review confirmed the stage still claimed LiveKit had never 
 
 ## CI host compatibility
 
-Audio CI run39750972507 stopped before playback/capture tests because its pinned Playwright1.56.1 refuses Chromium dependencies on the Ubuntu26.04 runner selected by ubuntu-latest. The audio job now pins Ubuntu24.04, matching the existing panel smoke job, without changing the browser version or skipping tests. Exact-head hosted checks must pass before merge.
+Audio CI run39750972507 stopped before playback/capture tests because its pinned Playwright1.56.1 refuses Chromium dependencies on the Ubuntu26.04 runner selected by ubuntu-latest. The audio job now pins Ubuntu24.04, matching the existing panel smoke job, without changing the browser version or skipping tests. The next hosted run installed Chromium and passed8 playback checks, then the capture fixture observed0 of48000 samples. A delayed-start probe reproduced that signature without proving the original CI thread schedule. The worklet now acknowledges start/stop control messages and the fixture waits for those receipts instead of relying on a fixed200ms delay. A fresh reviewer independently measured48000 samples and all5 capture checks passing in real Chromium1194. Disabling capture still failed at0 and dropping the tail still failed at36096; both mutations were restored. The existing hook ignores these additional non-chunk messages. No microphone or production voice was used. Exact-head hosted checks must pass before merge.
 
 ## Activation and rollback
 
