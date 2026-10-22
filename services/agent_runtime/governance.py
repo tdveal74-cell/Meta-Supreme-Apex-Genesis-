@@ -81,7 +81,12 @@ def require_approved_runtime_binding(
         raise ValueError(f"approval state is {record.state.value}, not approved")
     if record.requested_by != RUNTIME_REQUESTED_BY:
         raise ValueError("approval request was not raised by DEVON Agent Runtime")
-    if approval_marker(expected_binding) not in record.what_happens:
+    # Both runtime and conversation append the authoritative marker as the
+    # final whitespace-delimited token. Earlier card prose contains untrusted
+    # goals/arguments and can itself contain a forged marker (including in a
+    # URL path). Membership anywhere in that prose is not authority.
+    final_marker = record.what_happens.rsplit(maxsplit=1)[-1] if record.what_happens else ""
+    if not hmac.compare_digest(approval_marker(expected_binding), final_marker):
         raise ValueError("runtime approval binding does not match this effect")
 
     # Last, and only once everything else has passed. Until this line an
