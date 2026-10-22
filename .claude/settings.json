@@ -7,7 +7,8 @@
   "enabledPlugins": {
     "agentic-guardrails@meta-supreme-pinned": true,
     "backend-security-skills@meta-supreme-pinned": true,
-    "test-generator@meta-supreme-pinned": true
+    "test-generator@meta-supreme-pinned": true,
+    "agent-archive@synced": false
   },
   "extraKnownMarketplaces": {
     "meta-supreme-pinned": {
