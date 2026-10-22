@@ -410,6 +410,7 @@ def _lookup_branch(cwd):
 
 
 PUSH_ARG_FLAGS = {"-o", "--push-option", "--repo", "--receive-pack", "--exec"}
+PUSH_VALUE_LONG = {"repo", "push-option", "receive-pack", "exec"}
 
 # Every long option `git push -h` lists (git 2.43), with what it does to the
 # gate. The full list is needed so that a prefix is matched against all of
@@ -451,12 +452,19 @@ def _git_push(argv, cwd):
     or a delete through ungated. Any f or d in a bundle counts here, even one
     git would read as the value of -o, which only over-gates. Only the exact
     value flags skip the next word: skipping after a bundle that ends in o
-    would hide a following -f, so that word is read as if it were its own."""
+    would hide a following -f, so that word is read as if it were its own.
+
+    That word may still be a value to git, so the word taken for the remote
+    may be one and the real remote may sit where a refspec is read. Until
+    2026-10-22 a lease to the session's own branch went open through -uo v
+    followed by a URL, and through a host:path remote with no @. The lease is
+    open only when nothing can have shifted the remote, no word is URL shaped,
+    and the remote holds no colon, which a named remote never does."""
     if os.path.basename(argv[0]) != "git" or "push" not in argv:
         return None
     pi = argv.index("push")
     cwd = _git_cwd(argv[:pi], cwd)
-    force = lease = delete = mirror = every = False
+    force = lease = delete = mirror = every = shifted = False
     positional = []
     repo = ""
     rest = argv[pi + 1:]
@@ -482,10 +490,12 @@ def _git_push(argv, cwd):
             every = every or "every" in effects
             if eq and hits == ["repo"]:
                 repo = value
+            shifted = shifted or (not eq and any(o in PUSH_VALUE_LONG for o in hits))
         elif a.startswith("-"):
             bundle = a[1:]
             force = force or "f" in bundle
             delete = delete or "d" in bundle
+            shifted = shifted or bundle.endswith("o")
         else:
             positional.append(a)
     remote = positional[0] if positional else repo
@@ -508,8 +518,8 @@ def _git_push(argv, cwd):
         ("plain", force), ("plus", plus), ("lease", lease), ("delete", delete), ("mirror", mirror)
     ) if on]
     own = bool(targets) and all(t.startswith("claude/") for t in targets)
-    url_remote = "://" in remote or "@" in remote
-    gated = force or plus or delete or mirror or every or not own or url_remote
+    url_remote = ":" in remote or any("://" in w or "@" in w for w in positional + [repo])
+    gated = force or plus or delete or mirror or every or not own or url_remote or shifted
     return "git_force_push:" + "+".join(parts), gated
 
 

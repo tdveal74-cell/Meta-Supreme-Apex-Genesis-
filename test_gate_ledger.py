@@ -1110,6 +1110,7 @@ def test_the_push_check_gates_what_git_actually_does(tmp_path, flags, refspec):
     ("git push -fo ci.skip origin main", ("git_force_push:plain", True)),
     ("git push -of origin main", ("git_force_push:plain", True)),
     ("git push -f origin push", ("git_force_push:plain", True)),
+    ("git push --force origin main", ("git_force_push:plain", True)),
 ])
 def test_a_push_option_keeps_its_effect(command, expected):
     assert gate.classify("Bash", {"command": command}) == expected
@@ -1134,6 +1135,53 @@ def test_a_lease_to_a_url_remote_is_gated(tmp_path, remote):
     _git(tmp_path / "w", "commit", "-q", "--allow-empty", "-m", "a")
     command = f"git -C {tmp_path / 'w'} push --force-with-lease {remote} claude/x"
     assert gate.classify("Bash", {"command": command}) == ("git_force_push:lease", True)
+
+
+# Found 2026-10-22 by #401's verifier, and open on main before it. A value
+# option can make the next word its value, so the word read as the remote may
+# be one and the real URL may sit where a refspec is read. Each gated row below
+# is closed by one rule alone: a shifted word, a URL shaped word, or a remote
+# holding a colon. The open rows are leases the session makes every day.
+@pytest.mark.parametrize("words,gated", [
+    ("-uo v e.example:claude/x claude/x", True),
+    ("--rep v e.example:claude/x claude/x", True),
+    ("--push-o v e.example:claude/x claude/x", True),
+    ("--exe v e.example:claude/x claude/x", True),
+    ("--receive v e.example:claude/x claude/x", True),
+    ("origin git@e.example:claude/x", True),
+    ("origin https://e.example/r:claude/x", True),
+    ("e.example:r claude/x", True),
+    ("--repo=e.example:r", True),
+    ("origin claude/x", False),
+    ("-u origin claude/x", False),
+    ("-o ci.skip origin claude/x", False),
+    ("--push-option=ci.skip origin claude/x", False),
+    ("origin HEAD:claude/x", False),
+    ("origin", False),
+])
+def test_a_lease_open_only_through_a_named_remote(tmp_path, words, gated):
+    _git(tmp_path, "init", "-q", "-b", "claude/x", str(tmp_path / "w"))
+    _git(tmp_path / "w", "commit", "-q", "--allow-empty", "-m", "a")
+    command = f"git -C {tmp_path / 'w'} push --force-with-lease {words}"
+    assert gate.classify("Bash", {"command": command}) == ("git_force_push:lease", gated)
+
+
+def test_a_lease_behind_a_value_option_reaches_the_url_git_pushes_to(tmp_path):
+    # Asks git: -uo v takes v as a push option, so the next word is the remote.
+    bare, work = tmp_path / "r.git", tmp_path / "w"
+    _git(tmp_path, "init", "-q", "--bare", str(bare))
+    _git(bare, "config", "receive.advertisePushOptions", "true")
+    _git(tmp_path, "init", "-q", "-b", "claude/x", str(work))
+    _git(work, "commit", "-q", "--allow-empty", "-m", "a")
+    _git(work, "config", f"url.{bare}.insteadOf", "e.example:claude/x")
+    _git(work, "push", "-q", "e.example:claude/x", "claude/x")
+    old = _git(work, "rev-parse", "HEAD").stdout.strip()
+    _git(work, "commit", "-q", "--amend", "--allow-empty", "-m", "b")
+    words = f"--force-with-lease=claude/x:{old} -uo v e.example:claude/x claude/x"
+    pushed = _git(work, "push", *words.split())
+    forced = _git(work, "--git-dir", str(bare), "rev-parse", "claude/x").stdout.strip()
+    assert forced == _git(work, "rev-parse", "HEAD").stdout.strip() != old, pushed.stderr
+    assert gate.classify("Bash", {"command": f"git -C {work} push {words}"}) == ("git_force_push:lease", True)
 
 
 # A long run of reserved words or assignments before a gated call. _unwrap used
