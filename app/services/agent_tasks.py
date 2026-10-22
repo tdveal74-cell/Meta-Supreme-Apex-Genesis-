@@ -24,6 +24,7 @@ from app.services.agent_runtime_persistence import (
     AmbiguousEffectRefusal,
     TaskExecutionLeaseLost,
 )
+from app.services.devon_browser import DevonBrowserAdapter
 from app.services.editforge_client import (
     EditForgeClient,
     EditForgeConfig,
@@ -241,6 +242,15 @@ def build_tool_registry() -> ToolRegistry:
     expansion_adapter.register(registry)
     council_adapter.register(registry)
     VisionAdapter(approvals, provider_factory=get_vision_provider).register(registry)
+    if os.getenv("DEVON_PRIVATE_BROWSER_ENABLED", "0") == "1":
+        DevonBrowserAdapter(
+            approvals=approvals,
+            owner_id=os.getenv("DEVON_BROWSER_SESSION_OWNER_ID", ""),
+            key=os.getenv("DEVON_BROWSER_SESSION_KEY", ""),
+            allowed_hosts=tuple(filter(None, os.getenv("DEVON_BROWSER_ALLOWED_HOSTS", "").split(","))),
+            network_policy=os.getenv("DEVON_BROWSER_NETWORK_POLICY", "deny-all-v1"),
+            enabled=True,
+        ).register(registry)
     return registry
 
 

@@ -1,0 +1,35 @@
+name: Private browser candidate CI
+
+# All real sandbox tests must execute. Missing Chromium, unsupported sandbox or
+# any skipped test is red. This does not activate a worker, test Railway/VPS
+# transport, run external browsing or claim a production computer is delivered.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'deploy/browser-worker/**'
+      - 'app/services/devon_browser.py'
+      - 'app/services/agent_tasks.py'
+      - 'test_devon_browser.py'
+      - '.github/workflows/browser-worker-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/browser-worker/**'
+      - 'app/services/devon_browser.py'
+      - 'app/services/agent_tasks.py'
+      - 'test_devon_browser.py'
+      - '.github/workflows/browser-worker-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  browser-worker:
+    name: Private Chromium sandbox and proxy policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image and execute every real sandbox test
+        run: bash deploy/browser-worker/validate.sh
