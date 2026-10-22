@@ -58,5 +58,7 @@ jobs:
         run: pnpm --filter @meta-supreme/web check:roster
       - name: n8n telemetry honesty checks
         run: pnpm --filter @meta-supreme/web check:n8n
+      - name: Notebook source import behavior
+        run: pnpm --filter @meta-supreme/web check:notebook-import
       - name: Production build
         run: pnpm --filter @meta-supreme/web build

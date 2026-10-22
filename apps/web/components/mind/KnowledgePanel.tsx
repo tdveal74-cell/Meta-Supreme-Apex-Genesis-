@@ -144,6 +144,7 @@ export function KnowledgePanel() {
 
   return (
     <div className="space-y-4">
+      <a href="/knowledge/import" className="inline-block rounded-lg border border-white/15 px-3 py-2 text-xs text-amber-200">Import NotebookLM source snapshot</a>
       {corpus.state === "loading" ? (
         <p className="text-xs text-white/50">Reading the corpus.</p>
       ) : null}

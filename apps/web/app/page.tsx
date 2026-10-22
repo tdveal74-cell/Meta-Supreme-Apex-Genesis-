@@ -69,7 +69,7 @@ const pillars = [
   {
     title: "Knowledge retrieval",
     description:
-      "Read the ingested corpus and search it by meaning from the control plane, and read, edit, pause or destroy long-term memory in the same place. Ingestion is API side and has no page here yet.",
+      "Read the ingested corpus and search it by meaning from the control plane, and read, edit, pause or destroy long-term memory in the same place. NotebookLM source snapshots can be reviewed and imported through the knowledge import page.",
   },
   {
     title: "Decision Intelligence",
