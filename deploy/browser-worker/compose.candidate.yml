@@ -1,0 +1,32 @@
+# NOT a live deployment. Dedicated volumes only; never host paths/profiles.
+services:
+  devon-browser:
+    profiles: [reviewed-browser]
+    build: .
+    user: '10001:10001'
+    init: true
+    read_only: true
+    network_mode: none
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+      - seccomp:./seccomp-browser.json
+    pids_limit: 128
+    mem_limit: 768m
+    cpus: '1.0'
+    shm_size: 128m
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m,uid=10001,gid=10001,mode=700
+    volumes:
+      - devon_browser_ipc:/run/devon-browser
+      - devon_browser_data:/var/lib/devon-browser
+    environment:
+      DEVON_BROWSER_WORKER_ENABLED: '0'
+      DEVON_BROWSER_NETWORK_MODE: deny-all
+      # Owner and service secret deliberately absent. Reviewed secret injection required.
+    # Crash can leave a socket: manual reconciliation required, never auto-unlink.
+    restart: 'no'
+    stop_grace_period: 10s
+volumes:
+  devon_browser_ipc: {}
+  devon_browser_data: {}
