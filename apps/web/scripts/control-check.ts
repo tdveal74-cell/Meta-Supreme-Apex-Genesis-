@@ -1993,7 +1993,7 @@ check("the knowledge graph panel is mounted where a person can reach it", () => 
   // Same shape as the skill gate's mount check, and for the same reason: an
   // imported but unrendered panel is a route nobody can open, and a panel behind
   // an environment flag is worse, because the flag reads as a feature.
-  const page = parse("app/control/page.tsx");
+  const page = parse("components/control/ControlPanels.tsx");
   const COMPONENT = "KnowledgeGraphPanel";
 
   const imported = collect(page, (n) => ts.isImportSpecifier(n) && n.name.text === COMPONENT);

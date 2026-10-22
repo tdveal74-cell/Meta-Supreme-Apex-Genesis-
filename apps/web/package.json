@@ -23,7 +23,8 @@
     "check:command": "node --experimental-strip-types scripts/command-smoke.mjs",
     "check:audio": "node --experimental-strip-types scripts/audio-check.mjs",
     "check:capture": "node --experimental-strip-types scripts/capture-check.mjs",
-    "check:notebook-import": "node --experimental-strip-types --test scripts/notebook-import.test.ts"
+    "check:notebook-import": "node --experimental-strip-types --test scripts/notebook-import.test.ts",
+    "check:dispatch": "node --experimental-strip-types --test scripts/agent-dispatch.test.ts scripts/agent-dispatch-component.test.ts"
   },
   "dependencies": {
     "@meta-supreme/ui": "workspace:*",

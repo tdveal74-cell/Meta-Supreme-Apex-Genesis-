@@ -53,7 +53,7 @@ def test_an_episode_idea_is_pinned_to_the_podcast_area(devon):
     response = devon.ask("Devon, new episode idea about grief and inheritance", on_date=TODAY)
     assert response.plan.area == "Podcast"
     assert response.plan.area_provenance == "fixed by intent"
-    assert "Airtable Podcast HQ" in response.plan.destination
+    assert "self-hosted n8n Data Tables" in response.plan.destination
 
 
 def test_a_capture_with_no_payload_asks_rather_than_filing_nothing(devon):
@@ -319,3 +319,12 @@ def test_the_suggestion_survives_the_json_a_surface_would_render(devon):
     assert payload["suggestion"] is None
     assert "suggestion_phrase" in payload
     assert "suggestion_score" in payload
+
+
+def test_current_source_requests_name_self_hosted_data_tables():
+    devon = Devon()
+    for prompt in ("Devon, brief me", "show me untriaged captures"):
+        response = devon.ask(prompt, on_date=TODAY)
+        assert "self-hosted n8n Data Table" in response.reply
+        assert "Airtable" not in response.reply
+        assert response.executed is False

@@ -383,12 +383,12 @@ class Devon:
             command,
             "your briefing: overdue and due today, projects, inbox count, "
             "podcast pipeline, and one suggested priority",
-            "the Live State Ledger (Postgres). Notion, plus the Airtable podcast pipeline, are missing",
+            "the Live State Ledger (Postgres). Notion and the self-hosted n8n Data Tables podcast read are not wired to this handler",
         )
 
     def _do_triage(self, command: ParsedCommand, on_date: date_cls) -> DevonResponse:
         return self._needs_live(
-            command, "the untriaged captures", "Airtable Inbox Captures, tbl4ziFRbl5mnUcKc"
+            command, "the untriaged captures", "self-hosted n8n Data Table at_tqo_inbox_captures (0tmm2baLwVWFdZAR)"
         )
 
     def _do_get_weather(self, command: ParsedCommand, on_date: date_cls) -> DevonResponse:
@@ -582,7 +582,7 @@ class Devon:
         return self._plan_capture(
             command,
             on_date,
-            destination="Live State Ledger (Postgres). Airtable Podcast HQ, Idea stage is missing",
+            destination="Live State Ledger (Postgres). Podcast filing to self-hosted n8n Data Tables is not wired to this handler",
             type_code="DOC",
             force_area="Podcast",
         )
