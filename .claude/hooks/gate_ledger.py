@@ -50,7 +50,6 @@ scrubbed of anything shaped like a token before they are written.
 import json
 import os
 import re
-import shlex
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
@@ -342,15 +341,14 @@ def _unwrap(argv):
 
 
 def _split_words(text):
-    """shlex.split for a statement too long for shlex, which is quadratic on one
-    huge token. One pass, and it keeps quotes: until 2026-10-22 a plain
-    str.split here broke a quoted bash -c payload into pieces, so a force push
-    or a workflow run inside one padded past 20,000 characters went ungated.
+    """shlex.split in one pass. shlex is quadratic on one huge token, so past
+    20,000 characters the hook used a plain str.split until 2026-10-22, which
+    broke a quoted bash -c payload into pieces: a force push or a workflow run
+    inside one padded past that length went ungated. This keeps quotes.
     It returns what shlex.split returns and raises ValueError where shlex.split
     raises, on an unclosed quote or a trailing backslash, so _argv falls back
-    the same way on both sides of the length line. Running an unclosed quote to
-    the end instead swallowed whatever followed it: $'it\\'s' && git push -f
-    went ungated past 20,000 characters and gated below."""
+    the same way. Running an unclosed quote to the end instead swallowed
+    whatever followed it: $'it\\'s' && git push -f went ungated."""
     words, buf, in_word = [], [], False
     i, n = 0, len(text)
     while i < n:
@@ -389,8 +387,13 @@ def _split_words(text):
     return words
 
 
-def _argv(statement):
-    split = _split_words if len(statement) > 20000 else shlex.split
+def _argv(statement, plain=False):
+    """_split_words returns what shlex.split returns at every length, about ten
+    times faster on a short statement, which is what a long run of them costs.
+    plain reads a long statement the way the hook did before 2026-10-22, split
+    on whitespace alone, which classify keeps beside the quote aware reading
+    so nothing that reading caught is opened."""
+    split = str.split if plain and len(statement) > 20000 else _split_words
     try:
         argv = split(statement)
     except ValueError:
@@ -398,9 +401,9 @@ def _argv(statement):
     return _unwrap(argv)
 
 
-def _expand(statement, depth=0):
+def _expand(statement, depth=0, plain=False, argv=None):
     """Yields argv lists, recursing into bash -c and eval."""
-    argv = _argv(statement)
+    argv = _argv(statement, plain) if argv is None else argv
     if not argv:
         return
     prog = os.path.basename(argv[0])
@@ -408,7 +411,7 @@ def _expand(statement, depth=0):
         for i, a in enumerate(argv[1:], 1):
             if _short_flags_with(a, "c") and i + 1 < len(argv):
                 for s in _statements(argv[i + 1]):
-                    yield from _expand(s, depth + 1)
+                    yield from _expand(s, depth + 1, plain)
                 return
     if depth < 4 and prog == "find" and ("-exec" in argv or "-execdir" in argv):
         k = next(i for i, a in enumerate(argv) if a in ("-exec", "-execdir"))
@@ -422,7 +425,7 @@ def _expand(statement, depth=0):
             yield sub
     if depth < 4 and prog == "eval":
         for s in _statements(" ".join(argv[1:])):
-            yield from _expand(s, depth + 1)
+            yield from _expand(s, depth + 1, plain)
         return
     yield argv
 
@@ -749,7 +752,17 @@ def classify(tool_name, tool_input, cwd=""):
         command = str(tool_input.get("command", ""))
         classes, gated = [], False
         for stmt in _statements(command):
-            for argv in _expand(stmt):
+            quoted = _argv(stmt)
+            argvs = list(_expand(stmt, argv=quoted))
+            # Neither shlex nor the splitter reads $'it\'s' the way bash does.
+            # The plain split this replaced still caught a push after one, so
+            # where the two readings of a long statement differ, both count.
+            if len(stmt) > 20000:
+                plain = _argv(stmt, plain=True)
+                if plain != quoted:
+                    seen = {tuple(a) for a in argvs}
+                    argvs += [a for a in _expand(stmt, plain=True, argv=plain) if tuple(a) not in seen]
+            for argv in argvs:
                 prog = os.path.basename(argv[0])
                 push = _git_push(argv, cwd)
                 if push:

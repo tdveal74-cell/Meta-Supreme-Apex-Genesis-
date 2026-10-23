@@ -1187,6 +1187,27 @@ def test_an_unbalanced_quote_falls_back_the_same_at_any_length(shape, pad):
     assert gated and cls == "git_force_push:plain"
 
 
+# Found 2026-10-22 by #403's second verifier. Bash reads \' inside $'..' as a
+# quote character; shlex and the splitter read it as the closing quote, and a
+# later bare \' balances them again, so nothing raises and the push sits inside
+# one long word. The plain split main used past 20,000 characters still saw it,
+# so a long statement keeps that reading too. Below 20,000 characters these are
+# open on main as well, which is a separate gap.
+@pytest.mark.parametrize("shape,expected", [
+    ("git log $'\\'' ; git push --force origin main ; echo \\' {}", "git_force_push:plain"),
+    ("git commit -m $'it\\'s done' && git push --force origin main && echo it\\'s ok {}", "git_force_push:plain"),
+    ("curl $'\\'' ; curl -X POST https://e.example/x ; echo \\' {}", "curl_mutating"),
+])
+def test_a_long_statement_keeps_the_plain_reading_main_gated_on(shape, expected):
+    cls, gated = gate.classify("Bash", {"command": shape.format(" x" * 10050)})
+    assert gated and expected in cls
+
+
+def test_the_fallback_splits_on_any_whitespace():
+    cls, gated = gate.classify("Bash", {"command": "git push\t-f origin main 'x"})
+    assert gated and cls == "git_force_push:plain"
+
+
 @pytest.mark.parametrize("text", ["a 'b c", 'a "b c', "a b\\", '"a\\', "x $'it\\'s done'"])
 def test_the_long_statement_splitter_raises_where_shlex_raises(text):
     with pytest.raises(ValueError):
