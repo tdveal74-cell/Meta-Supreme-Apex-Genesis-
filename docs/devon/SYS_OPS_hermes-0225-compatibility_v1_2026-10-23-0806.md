@@ -86,10 +86,47 @@ under that directory's sibling `logs/`.
 
 Browser validation image ID is
 `65697e4288b865ed6a277f0742fc762f594ff2cbe8ca68efa2e7a9be7b2c3985`.
+That first validation reused the existing Docker package layer. A later clean
+GitHub build in run `39962141277` failed because all three pinned Chromium
+`155.0.8059.79-1~deb12u1` packages were absent from fresh Debian APT metadata.
+This did not invalidate the executed sandbox tests, but it did expose an
+unproven clean-build claim. The follow-up repairs the three exact package pins
+in `deploy/browser-worker/Dockerfile` to `156.0.8078.47-1~deb12u1`, the candidate
+from the signed bookworm-security amd64 index. The live
+[Debian security tracker](https://security-tracker.debian.org/tracker/source-package/chromium)
+independently confirms that version; cached package pages still named 155.
+The Node base digest, sandbox flags, seccomp policy and network restrictions
+are unchanged. At independent editor commit
+`d3b462f4abab2f96925984d93824f795f92b3f9c`, a no-cache build installed all three
+156 packages and produced image
+`7c27b521037d44416cb03951f9652bda7d8f393b7c0b86b6f965ba7aa241557e`.
+Its actual worker tests passed 20 with zero failures or skips, and its full
+validation passed all 8 proxy tests. A fresh independent critic read the
+committed diff, APT install and dpkg logs, and actual-image test receipts;
+no material findings. The original failed clean build is the negative control.
+The required full parity rerun on that candidate passed its strict standalone
+2221 with 1 skip, engine 25 with 2 deselections, and API 5892 with 3 skips and
+56 passing subtests. The API run took 572.33 seconds. Migration round trip to
+head 030 and the 884-line SQL/Alembic schema equivalence passed again.
+Imports, full Ruff, all CI Node fixtures, the 49 Alembic-ledger tests, root and
+Soul pip-audit, and pnpm audit passed again. The same existing ignored high
+pnpm advisory remains. Actual image validation again passed 20 worker and
+8 proxy tests with zero skips. Logs are retained at
+`/opt/devon/chromium-pin-parity-20261023/logs`; the independent no-cache build
+log is `/opt/devon/chromium-pin-clean-20261023-build.log`. The fresh disposable
+database container and anonymous volume were removed and both validation
+worktrees were clean. Record-only documentation updates were checked locally
+after these receipts were added.
 Local validation used Python 3.12.3; CI's Python 3.11 jobs remain a separate
 exact-head release gate. No skipped test is represented as executed.
 Record-only documentation checks passed 959 receipt-shape and integrity tests;
 the prepared thread receipt parsed and validated with no violations.
+Main advanced to `e48fd6be8f4cc2a11e1bf1f05238777c648e1897` while this record
+was prepared. Its difference from baseline is confined to the outward hook
+and its tests. A separate integration worktree merged that main with the PR
+candidate without conflicts; gate, ledger, fetch and expansion checks passed
+877 with 1 explicit skip, under its own absolute PYTHONPATH.
+The exact integration tree was `bdee6cd6d7ca3cb45c956b4f35b9e0f247d21395`.
 
 ## Deployment and rollback
 
@@ -100,9 +137,12 @@ this candidate is live. Exact-head CI and a post-merge deployment read-back
 are required before claiming the update is deployed; those receipts belong in
 the PR. No private browser is activated by this work.
 
-Rollback is a revert of this compatibility PR through the same validation and
-merge gates. There is no migration, stored-data conversion or configuration
-change to undo. Reverting restores generic HTTP failure reporting; existing
+Rollback can restore the prior successful API deployment artifact, or revert
+the Python compatibility change through the same validation and merge gates.
+Retain the independently validated Chromium pin repair in a source rollback:
+restoring the unavailable 155 pin would break clean browser builds again.
+There is no migration, stored-data conversion or configuration change to undo.
+Reverting the Python change restores generic HTTP failure reporting; existing
 approval and failed-browser behavior is unchanged.
 
 ## DEVON RECEIPT
@@ -113,7 +153,7 @@ TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_hermes-0225-compatibility_v1_2026-10-23-0806
 DATE: 2026-10-23
 DECISIONS: Tee requested DEVON be updated; adapt applicable Hermes v0.22.5 behavior to the custom runtime while preserving approvals, tenant isolation and canon.
-FINDINGS: HTTP 429 lost structured evidence; the new typed failed read preserves status and bounded retry advisory without replay. Unavailable durable writers and failed browser launches already refuse safely and now have broader regression coverage. Independent real-source negative controls caught each guarded failure.
+FINDINGS: HTTP 429 lost structured evidence; the new typed failed read preserves status and bounded retry advisory without replay. Unavailable durable writers and failed browser launches already refuse safely and now have broader regression coverage. Independent real-source negative controls caught each guarded failure. A clean GitHub build exposed withdrawn Chromium 155 packages hidden by local Docker caching; all three pins move together to Debian security version 156 with sandbox policy unchanged.
 OPEN: Exact-head CI and post-merge deployment read-back must be recorded in the PR; external thread-log capture is unverified because its authenticated capture door was not used.
 STATUS: Compatibility candidate prepared; release remains subject to validation and deployment receipts.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
