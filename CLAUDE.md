@@ -658,6 +658,19 @@ loosens nothing above it. His authorization to merge is still explicit and
 still arrives from him; the card is how it is asked for, never a substitute for
 having it.
 
+Ruled again by Tee 2026-10-22, in chat: "All rulings on inline cards multiple
+choice." It followed a run of reports that ended with the decisions written as
+prose lists, "Your rulings: either exempt this one table write from the gate,
+or stand the routine down" and "Three things waiting on you", which is the
+2026-09-16 failure in a shorter form. A ruling is never a sentence in a report.
+It is a multiple choice question on an `AskUserQuestion` card, two to four
+options, the recommended one first, each option's cost in its own description.
+A scheduled or webhook wake has nobody to answer a card and is often barred
+from messaging him at all, so it holds the decision and asks it on a card the
+next time he is present; it does not write the choice into its closing line.
+An instruction for him to carry out, such as a test only his phone can run, is
+not a ruling and can stay in prose.
+
 **Merge approval is standing.** Ruled by Tee 2026-10-11, in chat, after a
 session asked him to merge PR #325, a records-only correction, on a card: "You
 have my approval to merge at all times." So a session no longer asks for a
@@ -704,6 +717,32 @@ Do not rephrase the call to get past it.
 - Ledger only: merges (the MCP tool and `gh pr merge`), because the standing
   approval of 2026-10-11 covers them, and `test_workflow`. The gated list is `GATED_SUFFIXES` in the file; moving a
   tool in or out is a commit, and a ruling.
+- Ledger only, by argument rather than by tool: the daily reflection's own row.
+  Ruled by Tee 2026-10-22 on a card, "Exempt that one row", after the gate
+  refused the scheduled reflection on 2026-10-16 and 2026-10-17, as it would
+  any scheduled run, and the Pulse raised `reflection_missing` on every beat
+  from 233 to 258. The runs from 10-18 to 10-22 also found the n8n connector
+  signed out, which is a separate cause this does not touch. `add_data_table_rows`
+  passes with nobody present only when it is exactly that row: an n8n server,
+  table `RuPMZKXkqcbuHRKa` in project `qbrcjkbIoorbwot6`, exactly the three call
+  keys and one row of exactly the six row keys, every value a string, kind
+  `reflection`, empty `vitals` and `findings`, `emailed` "no", a non-empty text
+  of at most 900 characters, and a `beat_at` such as `2026-10-23T11:42:03.000Z`
+  (a `Z` or `+00:00` suffix, at most six fractional digits, ASCII digits)
+  within 10 minutes of the hook's clock. Any other table, row shape or n8n
+  write is gated as before. The freshness bound matters: the Pulse anchors its
+  reflection watch on a reflection up to 1h ahead, so a forward-dated row could
+  otherwise silence the alarm. And at most one per 12 hours in a session, ruled
+  by Tee on a second card the same day, "One per 12 hours", after a critic
+  showed a looping session could write the row without end, each one replacing
+  the reflection in his Pulse email. The hook reads the session's transcripts,
+  subagent files included, for a completed write to that table; one inside 12
+  hours, a transcript it cannot read, or one that restarts at a compact
+  boundary inside the window (as a session rebuilt on a fresh disk does, so
+  the history before it is gone) sends the call to the ordinary gate. Across
+  the 16 completed writes this session's transcript still holds, from
+  2026-09-23, the shortest gap is 14.9 hours, so the cap would have refused
+  none of them.
 - A webhook turn, a scheduled check-in, a task notification, a peer agent
   report and a context summary are all user turns in the transcript and none of
   them is a signal. The test is `origin.kind == "human"` on the entry. An

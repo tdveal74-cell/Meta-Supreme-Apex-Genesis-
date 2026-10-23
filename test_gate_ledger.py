@@ -807,29 +807,113 @@ def test_runpod_reads_pass_without_a_signal(server, verb):
     assert gate.classify(tool, {}) == (None, False), tool
 
 
-# Graphify, ruled by Tee 2026-10-17. Its real tool names are unread because the
-# server answers 401 until someone signs in, so these verbs are stand-ins that
-# pin the rule, not the catalogue: a write-shaped name is gated, a read is not.
-GRAPHIFY_SERVERS = ("graphify", "claude_ai_Graphify")
+# Graphify, ruled by Tee 2026-10-17: only its non-read tools need a signal.
+# These are the 26 real tool names read from the live connector on 2026-10-22,
+# each pinned as a read or a write. The stand-in verbs this replaced
+# (search_symbols, find_callers) all began with a read verb, so they passed
+# while 21 of the real reads, which begin "graphify_" or with a noun, were
+# refused.
+GRAPHIFY_SERVERS = ("graphify", "Graphify", "claude_ai_Graphify")
+GRAPHIFY_READ_TOOLS = (
+    "graphify_find", "graphify_rank_files", "graphify_trace", "graphify_callers",
+    "graphify_callees", "graphify_node", "graphify_expand", "graphify_file_neighbors",
+    "graphify_find_seeds", "graphify_impact", "graphify_imports_exports",
+    "graphify_references", "graphify_render_subgraph", "graphify_tests_for",
+    "impact_and_risk", "graph_stats", "shortest_path", "memories_about", "recall",
+    "list_workspaces", "list_repositories", "query_graph", "search", "fetch",
+)
+GRAPHIFY_WRITE_TOOLS = ("remember", "set_workspace")
+
+
+def test_the_graphify_catalogue_is_twenty_six_tools():
+    assert len(set(GRAPHIFY_READ_TOOLS) | set(GRAPHIFY_WRITE_TOOLS)) == 26
+    assert set(GRAPHIFY_READ_TOOLS) == set(gate.GRAPHIFY_READS)
 
 
 @pytest.mark.parametrize("server", GRAPHIFY_SERVERS)
-@pytest.mark.parametrize("verb", [
-    "reindex_repository", "delete_index", "update_graph", "create_project",
-])
+@pytest.mark.parametrize("verb", GRAPHIFY_READ_TOOLS)
+def test_graphify_reads_pass_without_a_signal(server, verb):
+    tool = f"mcp__{server}__{verb}"
+    assert gate.classify(tool, {}) == (None, False), tool
+
+
+@pytest.mark.parametrize("server", GRAPHIFY_SERVERS)
+@pytest.mark.parametrize("verb", GRAPHIFY_WRITE_TOOLS + (
+    # Not in the catalogue: a tool added later is gated until it is listed.
+    "reindex_repository", "delete_index",
+))
 def test_graphify_writes_are_gated(server, verb):
     tool = f"mcp__{server}__{verb}"
     cls, gated = gate.classify(tool, {})
     assert cls and gated, tool
 
 
-@pytest.mark.parametrize("server", GRAPHIFY_SERVERS)
-@pytest.mark.parametrize("verb", [
-    "search_symbols", "find_callers", "get_dependencies", "list_tests",
+@pytest.mark.parametrize("tool", [
+    # The Graphify read list is scoped to that server and loosens no other one.
+    "mcp__n8n__graphify_trace", "mcp__airtable__recall", "mcp__runpod__graph_stats",
+    "mcp__railway__shortest_path", "mcp__zapier__graphify_node",
 ])
-def test_graphify_reads_pass_without_a_signal(server, verb):
-    tool = f"mcp__{server}__{verb}"
+def test_graphify_reads_do_not_pass_on_other_named_servers(tool):
+    cls, gated = gate.classify(tool, {})
+    assert cls and gated, tool
+
+
+GRAPHIFY_UUID = "89245824-e0dd-4d6f-94dc-d0712a46ef78"
+
+
+@pytest.mark.parametrize("verb", GRAPHIFY_READ_TOOLS)
+def test_graphify_reads_pass_under_its_connector_uuid(verb):
+    tool = f"mcp__{GRAPHIFY_UUID}__{verb}"
     assert gate.classify(tool, {}) == (None, False), tool
+
+
+@pytest.mark.parametrize("verb", GRAPHIFY_WRITE_TOOLS + ("reindex_repository",))
+def test_graphify_writes_are_gated_under_its_connector_uuid(verb):
+    # Ruled by Tee 2026-10-22. Before the alias these returned (None, False):
+    # the UUID matched no rule, so remember and set_workspace ran unchecked.
+    tool = f"mcp__{GRAPHIFY_UUID}__{verb}"
+    cls, gated = gate.classify(tool, {})
+    assert cls and gated, tool
+
+
+def test_an_unmapped_uuid_memory_tool_is_not_swept_in():
+    # Vertiso Memory also exposes remember. The alias is exact, so it is not
+    # gated by Graphify's rule; widening to it would be a separate ruling.
+    assert gate.classify(
+        "mcp__43100b80-6895-4cb3-a61c-bf7192990eda__remember", {}) == (None, False)
+
+
+def test_blotato_help_ask_question_passes():
+    # Ruled by Tee 2026-10-22: a docs question, not an outward write.
+    assert gate.classify("mcp__blotato-help__askQuestion", {}) == (None, False)
+
+
+@pytest.mark.parametrize("tool", [
+    "mcp__blotato-help__sendFeedback", "mcp__Blotato__askQuestion",
+    "mcp__n8n__askQuestion", "mcp__Blotato__blotato_create_post",
+])
+def test_ask_question_passes_on_blotato_help_only(tool):
+    cls, gated = gate.classify(tool, {})
+    assert cls and gated, tool
+
+
+@pytest.mark.parametrize("tool", [
+    "mcp__plugin_graphify_graphify__recall", "mcp__claude_ai_blotato-help__askQuestion",
+])
+def test_named_reads_pass_on_the_connector_and_plugin_forms(tool):
+    assert gate.classify(tool, {}) == (None, False), tool
+
+
+@pytest.mark.parametrize("tool", [
+    # A server that only contains the name gains no read: the read list loosens,
+    # so it matches exactly, unlike NAMED_SERVERS, which tightens on a substring.
+    "mcp__graphify-evil__recall", "mcp__evil_graphify__graph_stats",
+    "mcp__graphify_mirror__remember", "mcp__blotato-help-x__askQuestion",
+    "mcp__not_blotato-help__askQuestion",
+])
+def test_a_lookalike_server_gains_no_named_read(tool):
+    cls, gated = gate.classify(tool, {})
+    assert cls and gated, tool
 
 
 def test_one_huge_token_does_not_blow_the_hook_timeout():
@@ -1275,3 +1359,389 @@ def test_the_summary_cut_leaves_no_fragment_of_a_split_token():
     token = "%048x" % (0x9F3B << 170)
     out = gate._clip("w " * 1190 + token, 2400)
     assert token[:4] not in out and out.endswith(" ")
+
+
+# ------------------------------------- the daily reflection row (Tee, 2026-10-22)
+
+
+REFLECTION_TOOL = "mcp__n8n_vps__add_data_table_rows"
+_GONE = object()
+
+
+def reflection_input(row=None, **top):
+    """The call the daily reflection routine makes, exactly as its prompt names
+    it, with any field replaced or removed (a value of the _GONE sentinel)."""
+    base_row = {
+        "beat_at": ts(0), "kind": "reflection", "vitals": "", "findings": "",
+        "reflection": "The work did not move.", "emailed": "no",
+    }
+    for key, value in (row or {}).items():
+        if value is _GONE:
+            base_row.pop(key)
+        else:
+            base_row[key] = value
+    base = {"dataTableId": "RuPMZKXkqcbuHRKa", "projectId": "qbrcjkbIoorbwot6", "rows": [base_row]}
+    for key, value in top.items():
+        if value is _GONE:
+            base.pop(key)
+        else:
+            base[key] = value
+    return base
+
+
+def test_the_reflection_row_is_ledger_only():
+    assert gate.classify(REFLECTION_TOOL, reflection_input(), now=NOW) == ("reflection_row", False)
+
+
+@pytest.mark.parametrize("row", [
+    {"reflection": "x" * 900},
+    {"beat_at": ts(10)},
+    {"beat_at": ts(-10)},
+    {"beat_at": (NOW - timedelta(minutes=3)).strftime("%Y-%m-%dT%H:%M:%SZ")},
+    # the routine's prompt asks for "current UTC ISO 8601", which +00:00 is too
+    {"beat_at": NOW.strftime("%Y-%m-%dT%H:%M:%S+00:00")},
+    {"beat_at": NOW.strftime("%Y-%m-%dT%H:%M:%S.123456+00:00")},
+])
+def test_the_reflection_row_holds_at_its_edges(row):
+    assert gate.classify(REFLECTION_TOOL, reflection_input(row), now=NOW) == ("reflection_row", False)
+
+
+@pytest.mark.parametrize("call", [
+    # another table, or this table in another project
+    reflection_input(dataTableId="QZvdxllOjWevb3Vo"),
+    reflection_input(dataTableId="AomDw2Oa9XCUluRX"),
+    reflection_input(projectId="someotherproject"),
+    # more or fewer rows, or rows of the wrong type
+    reflection_input(rows=[]),
+    reflection_input(rows=[reflection_input()["rows"][0]] * 2),
+    reflection_input(rows=reflection_input()["rows"][0]),
+    reflection_input(rows=["kind=reflection"]),
+    # a key added or removed, on the call or on the row
+    reflection_input(filter={"x": 1}),
+    reflection_input(projectId=_GONE),
+    reflection_input({"id": 1}),
+    reflection_input({"emailed": _GONE}),
+    # the routine's fixed values changed
+    reflection_input({"kind": "pulse"}),
+    reflection_input({"vitals": '{"jobs":{}}'}),
+    reflection_input({"findings": "reflection_missing | quiet"}),
+    reflection_input({"emailed": "yes"}),
+    # the text empty, too long or not text
+    reflection_input({"reflection": ""}),
+    reflection_input({"reflection": "   \n"}),
+    reflection_input({"reflection": "x" * 901}),
+    reflection_input({"reflection": 900}),
+    reflection_input({"reflection": None}),
+    reflection_input({"kind": None}),
+    # a beat_at that is stale, forward dated, unparseable or another form
+    reflection_input({"beat_at": ts(11)}),
+    reflection_input({"beat_at": ts(-11)}),
+    reflection_input({"beat_at": ts(-59)}),
+    reflection_input({"beat_at": ts(60 * 24)}),
+    reflection_input({"beat_at": "now"}),
+    reflection_input({"beat_at": ""}),
+    reflection_input({"beat_at": NOW.strftime("%Y-%m-%d %H:%M:%SZ")}),
+    reflection_input({"beat_at": ts(0) + "\n"}),
+    reflection_input({"beat_at": NOW.timestamp()}),
+    # the same instant in Arabic-Indic digits, which a Unicode \d would accept
+    reflection_input({"beat_at": ts(0).translate({ord(c): 0x0660 + int(c) for c in "0123456789"})}),
+    # forms the parser would accept, so only the pattern refuses them
+    reflection_input({"beat_at": NOW.strftime("%Y-%m-%dT%H:%M:%SZ:00")}),
+    reflection_input({"beat_at": NOW.strftime("%Y-%m-%dT%H:%M:%S.1234567Z")}),
+    reflection_input({"beat_at": NOW.strftime("%Y-%m-%dT%H:%M:%S")}),
+    reflection_input({"beat_at": NOW.strftime("%Y-%m-%dT%H:%M:%S-00:00")}),
+    reflection_input({"beat_at": NOW.strftime("%Y-%m-%dT%H:%M:%S+01:00")}),
+    # shapes that only a type check stands between and a crash
+    reflection_input(rows={"0": {}}),
+    reflection_input(rows=5),
+    reflection_input(rows=[sorted(gate.REFLECTION_KEYS)]),
+    reflection_input({"beat_at": "2026-02-30T12:00:00Z"}),
+])
+def test_anything_but_the_exact_reflection_row_stays_gated(call):
+    assert gate.classify(REFLECTION_TOOL, call, now=NOW) == ("add_data_table_rows", True)
+
+
+@pytest.mark.parametrize("tool", [
+    "mcp__da7c3988-4eb2-4596-b314-2bf80b15710e__add_data_table_rows",
+    "mcp__Airtable__add_data_table_rows",
+])
+def test_the_reflection_row_passes_only_on_an_n8n_server(tool):
+    cls, gated = gate.classify(tool, reflection_input(), now=NOW)
+    assert gated, tool
+
+
+@pytest.mark.parametrize("suffix", [
+    "update_workflow", "publish_workflow", "execute_workflow", "rename_data_table",
+    "add_data_table_column", "delete_data_table_column",
+])
+def test_the_reflection_shape_opens_no_other_n8n_write(suffix):
+    cls, gated = gate.classify("mcp__n8n_vps__" + suffix, reflection_input(), now=NOW)
+    assert cls == suffix and gated
+
+
+def test_a_scheduled_reflection_with_nobody_present_writes_its_row(tmp_path, project):
+    """The case the exemption exists for: the routine's wake is a task
+    notification, Tee spoke a day ago, and the row still goes in."""
+    p = payload(tmp_path, [human(60 * 24), task_note(1)], tool=REFLECTION_TOOL, tool_input=reflection_input())
+    assert gate.run("pre", p, now=NOW) is None
+    assert gate.run("post", p, now=NOW) is None
+    rows = ledger(project)
+    assert [(r["event"], r["class"], r["gated"]) for r in rows] == [
+        ("gate-allow", "reflection_row", False), ("executed", "reflection_row", False),
+    ]
+
+
+def test_a_near_miss_with_nobody_present_is_refused(tmp_path, project):
+    p = payload(tmp_path, [human(60 * 24), task_note(1)], tool=REFLECTION_TOOL,
+                tool_input=reflection_input({"kind": "pulse"}))
+    out = gate.run("pre", p, now=NOW)
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert [(r["event"], r["class"]) for r in ledger(project)] == [("gate-deny", "add_data_table_rows")]
+
+
+def test_the_reflection_row_passes_through_the_real_process(tmp_path):
+    """Exercised as the hook runs, with the real clock, so the freshness bound
+    is measured against now rather than a fixture time."""
+    row = reflection_input({"beat_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")})
+    p = payload(tmp_path, [], tool=REFLECTION_TOOL, tool_input=row)
+    done = subprocess.run(
+        [sys.executable, str(HOOK), "pre"], input=json.dumps(p), capture_output=True, text=True,
+        env={"CLAUDE_PROJECT_DIR": str(tmp_path / "proj"), "PATH": "/usr/bin:/bin"}, timeout=15,
+    )
+    assert done.returncode == 0 and done.stdout == "", done.stdout + done.stderr
+    stale = reflection_input({"beat_at": "2026-01-01T00:00:00.000Z"})
+    p = payload(tmp_path, [], tool=REFLECTION_TOOL, tool_input=stale)
+    done = subprocess.run(
+        [sys.executable, str(HOOK), "pre"], input=json.dumps(p), capture_output=True, text=True,
+        env={"CLAUDE_PROJECT_DIR": str(tmp_path / "proj"), "PATH": "/usr/bin:/bin"}, timeout=15,
+    )
+    assert json.loads(done.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_the_beat_pattern_takes_ascii_digits_only():
+    """The parser already refuses these digits, so this holds the pattern on its own."""
+    arabic = ts(0).translate({ord(c): 0x0660 + int(c) for c in "0123456789"})
+    assert gate.REFLECTION_BEAT.fullmatch(ts(0))
+    assert not gate.REFLECTION_BEAT.fullmatch(arabic)
+
+
+def wrote_reflection(minutes_ago, tool_use_id="toolu_refl", is_error=False, table="RuPMZKXkqcbuHRKa"):
+    """A reflection write the session made earlier, and its result."""
+    return [
+        {"type": "assistant", "timestamp": ts(minutes_ago + 0.01), "message": {"role": "assistant", "content": [
+            {"type": "tool_use", "id": tool_use_id, "name": REFLECTION_TOOL,
+             "input": {"dataTableId": table, "projectId": "qbrcjkbIoorbwot6", "rows": []}}]}},
+        {"type": "user", "timestamp": ts(minutes_ago), "message": {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": tool_use_id,
+             "content": "refused" if is_error else '{"success":true}', "is_error": is_error}]}},
+    ]
+
+
+def test_a_second_reflection_inside_twelve_hours_needs_tee(tmp_path, project):
+    """Tee's card 2026-10-22: at most one per 12 hours in a session."""
+    p = payload(tmp_path, [human(60 * 24)] + wrote_reflection(60 * 3), tool=REFLECTION_TOOL,
+                tool_input=reflection_input())
+    out = gate.run("pre", p, now=NOW)
+    reason = out["hookSpecificOutput"]["permissionDecisionReason"]
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "already written in this session at 2026-10-14T09:00:00Z, inside 12 hours" in reason
+    assert [(r["event"], r["class"], r["gated"]) for r in ledger(project)] == [
+        ("gate-deny", "add_data_table_rows", True)]
+
+
+def test_a_second_reflection_passes_when_tee_is_present(tmp_path, project):
+    p = payload(tmp_path, wrote_reflection(60 * 3) + [human(1)], tool=REFLECTION_TOOL,
+                tool_input=reflection_input())
+    assert gate.run("pre", p, now=NOW) is None
+
+
+@pytest.mark.parametrize("earlier", [
+    wrote_reflection(60 * 12),
+    wrote_reflection(60 * 15),
+    wrote_reflection(60, is_error=True),
+    wrote_reflection(60, table="QZvdxllOjWevb3Vo"),
+    [wrote_reflection(60)[0]],
+])
+def test_only_a_completed_write_inside_the_window_counts(tmp_path, earlier):
+    """Twelve hours or more ago, a refused or failed attempt, a write to another
+    table and a call with no result yet all leave the daily row free."""
+    p = payload(tmp_path, earlier, tool=REFLECTION_TOOL, tool_input=reflection_input())
+    assert gate.run("pre", p, now=NOW) is None
+
+
+def test_a_write_by_a_subagent_counts_too(tmp_path):
+    p = payload(tmp_path, [], tool=REFLECTION_TOOL, tool_input=reflection_input())
+    sub = tmp_path / "session" / "subagents" / "workflows" / "wf_x"
+    sub.mkdir(parents=True)
+    (sub / "agent-y.jsonl").write_text("\n".join(json.dumps(e) for e in wrote_reflection(30)) + "\n")
+    out = gate.run("pre", p, now=NOW)
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_an_unreadable_session_refuses_the_row(tmp_path):
+    p = payload(tmp_path, [], tool=REFLECTION_TOOL, tool_input=reflection_input())
+    p["transcript_path"] = str(tmp_path / "missing.jsonl")
+    out = gate.run("pre", p, now=NOW)
+    reason = out["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "could not be read to count earlier reflection rows" in reason
+
+
+def test_post_records_the_row_by_its_shape_after_the_edge(tmp_path, project):
+    """Allowed at 9m58s, recorded 3s later: both rows name the reflection row,
+    so the receipt does not report a gated write that no decision allowed."""
+    row = reflection_input({"beat_at": (NOW - timedelta(minutes=9, seconds=58)).strftime("%Y-%m-%dT%H:%M:%S.000Z")})
+    p = payload(tmp_path, [], tool=REFLECTION_TOOL, tool_input=row)
+    assert gate.run("pre", p, now=NOW) is None
+    assert gate.run("post", p, now=NOW + timedelta(seconds=3)) is None
+    assert [(r["event"], r["class"], r["gated"]) for r in ledger(project)] == [
+        ("gate-allow", "reflection_row", False), ("executed", "reflection_row", False)]
+
+
+def test_main_fails_closed_on_a_reflection_row_when_the_decision_code_raises(tmp_path, monkeypatch, capsys):
+    p = payload(tmp_path, [], tool=REFLECTION_TOOL,
+                tool_input=reflection_input({"beat_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")}))
+    monkeypatch.setattr(gate, "reflection_capped", lambda *a: 1 / 0)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(p)))
+    assert gate.main(["gate_ledger.py", "pre"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_a_subagent_file_untouched_for_twelve_hours_is_not_read(tmp_path):
+    """A write completed inside the window touched its file inside the window,
+    so an older file is skipped unread, which keeps the hook inside 15 s."""
+    import os as _os
+    p = payload(tmp_path, [], tool=REFLECTION_TOOL, tool_input=reflection_input())
+    sub = tmp_path / "session" / "subagents"
+    sub.mkdir(parents=True)
+    old = sub / "agent-old.jsonl"
+    old.write_text("\n".join(json.dumps(e) for e in wrote_reflection(30)) + "\n")
+    stamp = (NOW - timedelta(hours=13)).timestamp()
+    _os.utime(old, (stamp, stamp))
+    assert gate.run("pre", p, now=NOW) is None
+    # last touched an hour ago, inside the window, so it is read
+    inside = (NOW - timedelta(hours=1)).timestamp()
+    _os.utime(old, (inside, inside))
+    assert gate.run("pre", p, now=NOW)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_a_write_with_no_id_neither_counts_nor_crashes(tmp_path):
+    earlier = wrote_reflection(30)
+    earlier[0]["message"]["content"][0]["id"] = None
+    earlier[1]["message"]["content"][0]["tool_use_id"] = None
+    p = payload(tmp_path, earlier, tool=REFLECTION_TOOL, tool_input=reflection_input())
+    assert gate.run("pre", p, now=NOW) is None
+
+
+def test_the_cap_reads_a_large_session_well_inside_the_hook_timeout(tmp_path):
+    import time
+    filler = json.dumps(human(600, "x" * 400))
+    entries_path = tmp_path / "session.jsonl"
+    with open(entries_path, "w", encoding="utf-8") as fh:
+        for _ in range(150000):
+            fh.write(filler + "\n")
+        for e in wrote_reflection(30):
+            fh.write(json.dumps(e) + "\n")
+    p = {"session_id": "s1", "tool_name": REFLECTION_TOOL, "tool_input": reflection_input(),
+         "transcript_path": str(entries_path), "cwd": str(tmp_path)}
+    started = time.monotonic()
+    reason = gate.reflection_capped(p, NOW)
+    assert time.monotonic() - started < 3.0
+    assert reason and "already written" in reason
+
+
+# ------------------------------------------- round 2 critics on the cap (2026-10-22)
+
+
+def boundary(minutes_ago):
+    return {"type": "system", "subtype": "compact_boundary", "content": "Conversation compacted",
+            "timestamp": ts(minutes_ago), "parentUuid": None, "logicalParentUuid": "gone"}
+
+
+def test_a_transcript_restarted_at_a_boundary_inside_the_window_refuses(tmp_path):
+    """A session rebuilt on a fresh disk restarts its file at the newest
+    compact boundary, so a write made before it is gone from the file."""
+    p = payload(tmp_path, [boundary(60 * 4), human(60 * 4)], tool=REFLECTION_TOOL, tool_input=reflection_input())
+    out = gate.run("pre", p, now=NOW)
+    reason = out["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "starts at a compact boundary" in reason
+
+
+@pytest.mark.parametrize("entries", [
+    [boundary(60 * 13), human(60 * 13)],
+    [human(60 * 20), boundary(60 * 2), human(60 * 2)],
+])
+def test_a_boundary_older_than_the_window_or_mid_file_changes_nothing(tmp_path, entries):
+    """Compaction during a session appends its boundary after the history it
+    summarises, so only a first entry inside the window is a restart."""
+    p = payload(tmp_path, entries, tool=REFLECTION_TOOL, tool_input=reflection_input())
+    assert gate.run("pre", p, now=NOW) is None
+
+
+def test_the_newest_of_several_writes_is_the_one_that_counts(tmp_path):
+    earlier = wrote_reflection(60 * 72, tool_use_id="toolu_a") + wrote_reflection(60, tool_use_id="toolu_b")
+    p = payload(tmp_path, earlier, tool=REFLECTION_TOOL, tool_input=reflection_input())
+    assert gate.run("pre", p, now=NOW)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_a_write_one_minute_inside_the_window_still_counts(tmp_path):
+    p = payload(tmp_path, wrote_reflection(60 * 12 - 1), tool=REFLECTION_TOOL, tool_input=reflection_input())
+    assert gate.run("pre", p, now=NOW)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_a_subagent_file_eight_hours_old_is_still_read(tmp_path):
+    import os as _os
+    p = payload(tmp_path, [], tool=REFLECTION_TOOL, tool_input=reflection_input())
+    sub = tmp_path / "session" / "subagents"
+    sub.mkdir(parents=True)
+    f = sub / "agent-z.jsonl"
+    f.write_text("\n".join(json.dumps(e) for e in wrote_reflection(60 * 8)) + "\n")
+    stamp = (NOW - timedelta(hours=8)).timestamp()
+    _os.utime(f, (stamp, stamp))
+    assert gate.run("pre", p, now=NOW)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_a_tool_result_that_only_mentions_the_tool_is_not_a_write(tmp_path):
+    """A grep of this file's own source names the tool and is not a write."""
+    grep = [
+        {"type": "assistant", "timestamp": ts(31), "message": {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "toolu_grep", "name": "Bash", "input": {"command": "grep add_data_table_rows x"}}]}},
+        {"type": "user", "timestamp": ts(30), "message": {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "toolu_grep", "content": "mcp__n8n_vps__add_data_table_rows RuPMZKXkqcbuHRKa"}]}},
+    ]
+    p = payload(tmp_path, grep, tool=REFLECTION_TOOL, tool_input=reflection_input())
+    assert gate.run("pre", p, now=NOW) is None
+
+
+def test_thousands_of_refused_attempts_stay_well_inside_the_timeout(tmp_path):
+    """Searching every line for every tracked id took 20.6 s at 3,000 refused
+    attempts. A set lookup of the line's own id keeps it flat."""
+    import time
+    path = tmp_path / "session.jsonl"
+    filler = json.dumps(human(600, "y" * 3000))
+    with open(path, "w", encoding="utf-8") as fh:
+        for i in range(3000):
+            for e in wrote_reflection(60 * 30, tool_use_id="toolu_r%d" % i, is_error=True):
+                fh.write(json.dumps(e) + "\n")
+            for _ in range(4):
+                fh.write(filler + "\n")
+    p = {"session_id": "s1", "tool_name": REFLECTION_TOOL, "tool_input": reflection_input(),
+         "transcript_path": str(path), "cwd": str(tmp_path)}
+    started = time.monotonic()
+    assert gate.reflection_capped(p, NOW) is None
+    assert time.monotonic() - started < 3.0
+
+
+def test_a_subagent_directory_that_cannot_be_listed_refuses(tmp_path, monkeypatch):
+    p = payload(tmp_path, [], tool=REFLECTION_TOOL, tool_input=reflection_input())
+    (tmp_path / "session" / "subagents").mkdir(parents=True)
+
+    def walk(top, onerror=None, **kw):
+        # as the real os.walk: a listing error goes to onerror, or nowhere
+        if onerror is not None:
+            onerror(PermissionError(13, "Permission denied", top))
+        return iter(())
+
+    monkeypatch.setattr(gate.os, "walk", walk)
+    reason = gate.run("pre", p, now=NOW)["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "could not be read to count earlier reflection rows" in reason
