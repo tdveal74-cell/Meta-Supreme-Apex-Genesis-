@@ -474,9 +474,9 @@ def _argv(statement, plain=False):
     return _unwrap(argv)
 
 
-def _expand(statement, depth=0, plain=False, argv=None):
+def _expand(statement, depth=0, plain=False):
     """Yields argv lists, recursing into bash -c and eval."""
-    argv = _argv(statement, plain) if argv is None else argv
+    argv = _argv(statement, plain)
     if not argv:
         return
     prog = os.path.basename(argv[0])
@@ -853,6 +853,9 @@ def _is_server(server, name):
     )
 
 
+OVERSIZE = 1_000_000  # characters; a longer Bash command is gated unread
+
+
 def classify(tool_name, tool_input, cwd="", now=None, shape_only=False):
     """Returns (cls, gated). cls is None for a call that is not tracked.
     shape_only skips the clock in the reflection row check, for post and fail."""
@@ -860,18 +863,24 @@ def classify(tool_name, tool_input, cwd="", now=None, shape_only=False):
 
     if tool_name.lower() == "bash":
         command = str(tool_input.get("command", ""))
+        # Ruled by Tee 2026-10-23 on a card. Reading a command costs time in
+        # proportion to its length and its nesting, and four nested evals at
+        # 5 MB took 21.6 s against the hook's 15 s timeout. A command this long
+        # is gated unread, which ends that for every shape.
+        if len(command) > OVERSIZE:
+            return "bash_oversize", True
         classes, gated = [], False
         for stmt in _statements(command):
-            quoted = _argv(stmt)
-            argvs = list(_expand(stmt, argv=quoted))
+            argvs = list(_expand(stmt))
             # Neither shlex nor the splitter reads $'it\'s' the way bash does.
-            # The plain split this replaced still caught a push after one, so
-            # where the two readings of a long statement differ, both count.
+            # The plain split this replaced still caught a push after one, so a
+            # long statement is read both ways and both count. Comparing the
+            # two top level readings first is not enough: an unclosed quote
+            # makes both fall back to the same split while a nested eval body
+            # still reads differently.
             if len(stmt) > 20000:
-                plain = _argv(stmt, plain=True)
-                if plain != quoted:
-                    seen = {tuple(a) for a in argvs}
-                    argvs += [a for a in _expand(stmt, plain=True, argv=plain) if tuple(a) not in seen]
+                seen = {tuple(a) for a in argvs}
+                argvs += [a for a in _expand(stmt, plain=True) if tuple(a) not in seen]
             for argv in argvs:
                 prog = os.path.basename(argv[0])
                 push = _git_push(argv, cwd)

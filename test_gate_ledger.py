@@ -1292,6 +1292,49 @@ def test_the_fallback_splits_on_any_whitespace():
     assert gated and cls == "git_force_push:plain"
 
 
+# Found 2026-10-23 by #403's third verifier. A trailing unclosed quote made both
+# readings of the top statement fall back to the same split, so a check that
+# compared them skipped main's reading while the eval body still read
+# differently. The second case needs main's reading carried down into eval.
+@pytest.mark.parametrize("command,expected", [
+    ("eval git log $'\\'' ; git push --force origin main ; echo \\' " + "a" * 19946 + " >'x",
+     "git_force_push:plain"),
+    (">'x time eval git log $'it\\'s' \n git push origin +main || ' " + "a" * 40000 + " $(:)",
+     "git_force_push:plus"),
+])
+def test_main_reading_of_a_long_statement_is_kept_at_every_level(command, expected):
+    assert gate.classify("Bash", {"command": command}) == (expected, True)
+
+
+def test_the_plain_reading_is_the_reading_main_used_at_every_level():
+    # Main read a short statement with shlex and a long one on whitespace, and
+    # read a bash -c body the same way, so the plain reading has to as well.
+    assert gate._argv('"git" push', plain=True) == ["git", "push"]
+    assert gate._argv('"git" push ' + "a" * 20000, plain=True)[:2] == ['"git"', "push"]
+    body = "a'b'" + "c" * 20000
+    assert list(gate._expand("bash -c " + body, plain=True)) == [[body]]
+
+
+# Ruled by Tee 2026-10-23 on a card: a Bash command over 1,000,000 characters
+# is gated unread. Reading costs time with length and nesting, and four nested
+# evals at 5 MB took 21.6 s against the hook's 15 s timeout.
+@pytest.mark.parametrize("length,expected", [
+    (1_000_000, (None, False)),
+    (1_000_001, ("bash_oversize", True)),
+])
+def test_a_command_past_the_size_limit_is_gated_unread(length, expected):
+    assert gate.classify("Bash", {"command": "echo " + "a" * (length - 5)}) == expected
+
+
+def test_the_slowest_shape_under_the_limit_is_denied_inside_the_timeout(tmp_path):
+    import time
+    command = "eval eval eval eval git push -f origin main 'q' " + "x " * 499_000
+    started = time.monotonic()
+    out = gate.run("pre", payload(tmp_path, [], tool="Bash", tool_input={"command": command}), now=NOW)
+    assert time.monotonic() - started < 12
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 @pytest.mark.parametrize("text", ["a 'b c", 'a "b c', "a b\\", '"a\\', "x $'it\\'s done'"])
 def test_the_long_statement_splitter_raises_where_shlex_raises(text):
     with pytest.raises(ValueError):
@@ -1317,7 +1360,7 @@ def test_the_long_statement_splitter_agrees_with_shlex_on_every_short_string():
 
 def test_a_one_megabyte_quoted_payload_is_denied_quickly(tmp_path):
     import time
-    command = "bash -c 'git push -f origin main; : " + "a" * 1_000_000 + "'"
+    command = "bash -c 'git push -f origin main; : " + "a" * 990_000 + "'"
     started = time.monotonic()
     out = gate.run("pre", payload(tmp_path, [], tool="Bash", tool_input={"command": command}), now=NOW)
     assert time.monotonic() - started < 1.5
