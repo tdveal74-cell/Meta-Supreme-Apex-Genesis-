@@ -511,27 +511,63 @@ def _git_cwd(argv, cwd):
     return cwd
 
 
-_BRANCH = {}
+# Each git lookup starts a process, a few milliseconds, and a padded command can
+# name thousands of directories with -C. Past this many lookups in one classify
+# a lookup reads as failed, so the branch is unknown and the remote unnamed,
+# both of which gate. Found 2026-10-23 while fixing #405.
+GIT_LOOKUPS = 16
+_BRANCH, _REMOTES, _DEFAULT = {}, {}, {}
+_SPENT = [0]
+
+
+def _fresh_lookups():
+    _BRANCH.clear()
+    _REMOTES.clear()
+    _DEFAULT.clear()
+    _SPENT[0] = 0
+
+
+def _git_out(cwd, *args):
+    """git's output, "" when git answers with an error, None when this call's
+    lookups are spent or git cannot run."""
+    if _SPENT[0] >= GIT_LOOKUPS:
+        return None
+    _SPENT[0] += 1
+    try:
+        out = subprocess.run(["git", *args], cwd=cwd or None, capture_output=True, text=True, timeout=5)
+    except Exception:
+        return None
+    return out.stdout.strip() if out.returncode == 0 else ""
 
 
 def _current_branch(cwd):
     if cwd not in _BRANCH:
-        _BRANCH[cwd] = _lookup_branch(cwd)
+        _BRANCH[cwd] = _git_out(cwd, "rev-parse", "--abbrev-ref", "HEAD") or ""
     return _BRANCH[cwd]
 
 
-def _lookup_branch(cwd):
-    try:
-        out = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=cwd or None, capture_output=True, text=True, timeout=5,
-        )
-        return out.stdout.strip() if out.returncode == 0 else ""
-    except Exception:
-        return ""
+def _named_remote(remote, cwd):
+    """True when the push goes to a remote configured in the repository by
+    name. With no remote given, git picks one in this order. A lookup that
+    fails reads as not named, which gates."""
+    if cwd not in _REMOTES:
+        names = _git_out(cwd, "remote")
+        _REMOTES[cwd] = None if names is None else set(names.split())
+    if not remote:
+        if cwd not in _DEFAULT:
+            branch = _current_branch(cwd)
+            _DEFAULT[cwd] = "origin"
+            for key in (f"branch.{branch}.pushRemote", "remote.pushDefault", f"branch.{branch}.remote"):
+                value = _git_out(cwd, "config", "--get", key)
+                if value is None or value:
+                    _DEFAULT[cwd] = value
+                    break
+        remote = _DEFAULT[cwd]
+    return _REMOTES[cwd] is not None and remote in _REMOTES[cwd]
 
 
 PUSH_ARG_FLAGS = {"-o", "--push-option", "--repo", "--receive-pack", "--exec"}
+PUSH_VALUE_LONG = {"repo", "push-option", "receive-pack", "exec", "recurse-submodules"}
 
 # Every long option `git push -h` lists (git 2.43), with what it does to the
 # gate. The full list is needed so that a prefix is matched against all of
@@ -573,12 +609,20 @@ def _git_push(argv, cwd):
     or a delete through ungated. Any f or d in a bundle counts here, even one
     git would read as the value of -o, which only over-gates. Only the exact
     value flags skip the next word: skipping after a bundle that ends in o
-    would hide a following -f, so that word is read as if it were its own."""
+    would hide a following -f, so that word is read as if it were its own.
+
+    That word may still be a value to git, so the word taken for the remote
+    may be one and the real remote may sit where a refspec is read. Until
+    2026-10-22 a lease to the session's own branch went open through -uo v
+    followed by a URL, through a host:path remote with no @, and through a
+    path such as /tmp/r.git. The lease is open only when nothing can have
+    shifted the remote, no word is URL shaped, and the remote is one the
+    repository has configured by name."""
     if os.path.basename(argv[0]) != "git" or "push" not in argv:
         return None
     pi = argv.index("push")
     cwd = _git_cwd(argv[:pi], cwd)
-    force = lease = delete = mirror = every = False
+    force = lease = delete = mirror = every = shifted = False
     positional = []
     repo = ""
     rest = argv[pi + 1:]
@@ -604,10 +648,12 @@ def _git_push(argv, cwd):
             every = every or "every" in effects
             if eq and hits == ["repo"]:
                 repo = value
+            shifted = shifted or (not eq and any(o in PUSH_VALUE_LONG for o in hits))
         elif a.startswith("-"):
             bundle = a[1:]
             force = force or "f" in bundle
             delete = delete or "d" in bundle
+            shifted = shifted or bundle.endswith("o")
         else:
             positional.append(a)
     remote = positional[0] if positional else repo
@@ -630,8 +676,13 @@ def _git_push(argv, cwd):
         ("plain", force), ("plus", plus), ("lease", lease), ("delete", delete), ("mirror", mirror)
     ) if on]
     own = bool(targets) and all(t.startswith("claude/") for t in targets)
-    url_remote = "://" in remote or "@" in remote
-    gated = force or plus or delete or mirror or every or not own or url_remote
+    url_remote = any("://" in w or "@" in w for w in positional + [repo])
+    gated = force or plus or delete or mirror or every or not own or url_remote or shifted
+    # Only a lease to the session's own branch is left. Found 2026-10-23 by
+    # Codex on #405: a path such as /tmp/r.git carries no URL punctuation, and
+    # git force-pushed to it while this read the lease as open. Checked last so
+    # git runs only for a lease that would otherwise be open.
+    gated = gated or not _named_remote(remote, cwd)
     return "git_force_push:" + "+".join(parts), gated
 
 
@@ -869,6 +920,7 @@ def classify(tool_name, tool_input, cwd="", now=None, shape_only=False):
         # is gated unread, which ends that for every shape.
         if len(command) > OVERSIZE:
             return "bash_oversize", True
+        _fresh_lookups()
         classes, gated = [], False
         for stmt in _statements(command):
             argvs = list(_expand(stmt))

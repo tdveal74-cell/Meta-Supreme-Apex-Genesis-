@@ -157,10 +157,10 @@ def test_reads_and_sibling_session_messages_are_untracked(tool):
     ("git push --force-with-lease origin main", True),
     ("git push origin +main", True),
     ("git push --force-with-lease origin some-other-branch", True),
-    ("git push --force-with-lease", True),   # branch unknown in a bare tmp dir
+    ("git push --force-with-lease", True),   # the current branch is main
 ])
 def test_force_pushes_are_gated_unless_lease_on_own_branch(command, gated, tmp_path):
-    cls, got = gate.classify("Bash", {"command": command}, cwd=str(tmp_path))
+    cls, got = gate.classify("Bash", {"command": command}, cwd=str(_lease_repo(tmp_path / "w", "main")))
     assert cls is not None
     assert got is gated, (command, cls)
 
@@ -528,7 +528,7 @@ def test_force_push_shapes_the_first_classifier_missed(command, tmp_path):
     "git push --force-with-lease origin claude/audit-gate",
 ])
 def test_words_inside_data_do_not_gate(command, tmp_path):
-    cls, gated = gate.classify("Bash", {"command": command}, cwd=str(tmp_path))
+    cls, gated = gate.classify("Bash", {"command": command}, cwd=str(_lease_repo(tmp_path / "w", "main")))
     assert not gated, (command, cls)
 
 
@@ -698,7 +698,7 @@ def test_the_one_line_loop_comment_and_wrapper_shapes_are_caught(command, tmp_pa
     "cat <<< word\ncurl -s https://api.example.com/health",
 ])
 def test_ordinary_work_the_first_fix_would_have_refused(command, tmp_path):
-    cls, gated = gate.classify("Bash", {"command": command}, cwd=str(tmp_path))
+    cls, gated = gate.classify("Bash", {"command": command}, cwd=str(_lease_repo(tmp_path / "w", "main")))
     assert not gated, (command, cls)
 
 
@@ -1142,8 +1142,7 @@ def test_push_options_are_read_the_way_git_reads_them(command, expected):
 def test_a_repo_option_is_the_remote_it_names(tmp_path, repo, gated):
     # With no positional remote, --repo names it. A lease to the session's own
     # branch is open, but not to a URL, which --repo used to hide.
-    _git(tmp_path, "init", "-q", "-b", "claude/x", str(tmp_path / "w"))
-    _git(tmp_path / "w", "commit", "-q", "--allow-empty", "-m", "a")
+    _lease_repo(tmp_path / "w")
     command = f"git -C {tmp_path / 'w'} push --force-with-lease {repo}"
     assert gate.classify("Bash", {"command": command}) == ("git_force_push:lease", gated)
 
@@ -1153,6 +1152,15 @@ def _git(cwd, *args):
         ["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
         cwd=cwd, capture_output=True, text=True,
     )
+
+
+def _lease_repo(path, branch="claude/x"):
+    # A repository on `branch` with one commit and an origin remote, the shape
+    # a session pushes from. A lease is open only through a configured name.
+    _git(path.parent, "init", "-q", "-b", branch, str(path))
+    _git(path, "commit", "-q", "--allow-empty", "-m", "a")
+    _git(path, "remote", "add", "origin", "https://e.example/r.git")
+    return path
 
 
 # The cases above are what the check believes git does. This asks git: each
@@ -1195,6 +1203,7 @@ def test_the_push_check_gates_what_git_actually_does(tmp_path, flags, refspec):
     ("git push -fo ci.skip origin main", ("git_force_push:plain", True)),
     ("git push -of origin main", ("git_force_push:plain", True)),
     ("git push -f origin push", ("git_force_push:plain", True)),
+    ("git push --force origin main", ("git_force_push:plain", True)),
 ])
 def test_a_push_option_keeps_its_effect(command, expected):
     assert gate.classify("Bash", {"command": command}) == expected
@@ -1204,8 +1213,7 @@ def test_a_push_option_keeps_its_effect(command, expected):
 def test_a_lease_that_pushes_every_ref_is_gated(tmp_path, every):
     # A lease to the session's own branch is open; one that also pushes every
     # branch or tag reaches past it.
-    _git(tmp_path, "init", "-q", "-b", "claude/x", str(tmp_path / "w"))
-    _git(tmp_path / "w", "commit", "-q", "--allow-empty", "-m", "a")
+    _lease_repo(tmp_path / "w")
     base = f"git -C {tmp_path / 'w'} push --force-with-lease"
     assert gate.classify("Bash", {"command": f"{base} origin"})[1] is False
     assert gate.classify("Bash", {"command": f"{base} {every} --verbose origin"})[1] is True
@@ -1215,10 +1223,115 @@ def test_a_lease_that_pushes_every_ref_is_gated(tmp_path, every):
 def test_a_lease_to_a_url_remote_is_gated(tmp_path, remote):
     # The lease to the session's own branch is open only through a named
     # remote; an scp-style or https URL is somewhere else.
-    _git(tmp_path, "init", "-q", "-b", "claude/x", str(tmp_path / "w"))
-    _git(tmp_path / "w", "commit", "-q", "--allow-empty", "-m", "a")
+    _lease_repo(tmp_path / "w")
     command = f"git -C {tmp_path / 'w'} push --force-with-lease {remote} claude/x"
     assert gate.classify("Bash", {"command": command}) == ("git_force_push:lease", True)
+
+
+# Found 2026-10-22 by #401's verifier, and open on main before it. A value
+# option can make the next word its value, so the word read as the remote may
+# be one and the real URL may sit where a refspec is read. Each gated row below
+# is closed by one rule alone: a shifted word, a URL shaped word, or a remote
+# the repository has not configured by name. The open rows are leases the
+# session makes every day.
+@pytest.mark.parametrize("words,gated", [
+    ("-uo v e.example:claude/x claude/x", True),
+    ("--rep v e.example:claude/x claude/x", True),
+    ("--push-o v e.example:claude/x claude/x", True),
+    ("--exe v e.example:claude/x claude/x", True),
+    ("--receive v e.example:claude/x claude/x", True),
+    ("--recurse-submodules no e.example:claude/x claude/x", True),
+    ("--recu no e.example:claude/x claude/x", True),
+    ("--recurse-submodules no --verbose e.example:claude/x claude/x", True),
+    ("-uo v -v e.example:claude/x claude/x", True),
+    ("origin git@e.example:claude/x", True),
+    ("origin https://e.example/r:claude/x", True),
+    ("u@h claude/x", True),
+    ("--repo=u@h", True),
+    ("e.example:r claude/x", True),
+    ("--repo=e.example:r", True),
+    (":claude/x", True),
+    ("/tmp/r.git claude/x", True),
+    ("../r claude/x", True),
+    ("upstream claude/x", True),
+    ("origin claude/x", False),
+    ("-ov origin claude/x", False),
+    ("--recurse-submodules=no origin claude/x", False),
+    ("-u origin claude/x", False),
+    ("-o ci.skip origin claude/x", False),
+    ("--push-option=ci.skip origin claude/x", False),
+    ("origin HEAD:claude/x", False),
+    ("origin", False),
+])
+def test_a_lease_open_only_through_a_named_remote(tmp_path, words, gated):
+    _lease_repo(tmp_path / "w")
+    command = f"git -C {tmp_path / 'w'} push --force-with-lease {words}"
+    assert gate.classify("Bash", {"command": command}) == ("git_force_push:lease", gated)
+
+
+def test_a_lease_to_a_path_remote_reaches_the_repository_git_pushes_to(tmp_path):
+    # Found 2026-10-23 by Codex on #405. Asks git: a path is a remote too.
+    bare, work = tmp_path / "r.git", _lease_repo(tmp_path / "w")
+    _git(tmp_path, "init", "-q", "--bare", str(bare))
+    _git(work, "push", "-q", str(bare), "claude/x")
+    old = _git(work, "rev-parse", "HEAD").stdout.strip()
+    _git(work, "commit", "-q", "--amend", "--allow-empty", "-m", "b")
+    words = f"--force-with-lease=claude/x:{old} {bare} claude/x"
+    pushed = _git(work, "push", *words.split())
+    forced = _git(work, "--git-dir", str(bare), "rev-parse", "claude/x").stdout.strip()
+    assert forced == _git(work, "rev-parse", "HEAD").stdout.strip() != old, pushed.stderr
+    assert gate.classify("Bash", {"command": f"git -C {work} push {words}"}) == ("git_force_push:lease", True)
+
+
+def test_a_lease_outside_a_repository_is_gated(tmp_path):
+    # Nothing names the remote, so nothing opens the lease.
+    command = "git push --force-with-lease origin claude/x"
+    assert gate.classify("Bash", {"command": command}, cwd=str(tmp_path)) == ("git_force_push:lease", True)
+
+
+def test_git_lookups_are_bounded_and_fail_closed(tmp_path):
+    # Every spelling of the repository is another git process. Past the bound
+    # a lookup reads as failed, which gates, and the hook stays fast.
+    work = _lease_repo(tmp_path / "w")
+    for i in range(1000):
+        (work / f"d{i}").mkdir()
+    lease = "git -C {}/d{} push --force-with-lease origin claude/x"
+    within = "; ".join(lease.format(work, i) for i in range(gate.GIT_LOOKUPS))
+    assert gate.classify("Bash", {"command": within}) == (",".join(["git_force_push:lease"] * gate.GIT_LOOKUPS), False)
+    import time
+    past = "; ".join(lease.format(work, i) for i in range(1000))
+    started = time.monotonic()
+    assert gate.classify("Bash", {"command": past})[1] is True
+    assert time.monotonic() - started < 2
+
+
+@pytest.mark.parametrize("key", ["branch.claude/x.pushRemote", "remote.pushDefault", "branch.claude/x.remote"])
+def test_a_lease_with_no_remote_is_judged_by_the_remote_git_picks(tmp_path, key):
+    work = _lease_repo(tmp_path / "w")
+    command = f"git -C {work} push --force-with-lease"
+    assert gate.classify("Bash", {"command": command}) == ("git_force_push:lease", False)
+    _git(work, "config", key, "https://e.example/other.git")
+    assert gate.classify("Bash", {"command": command}) == ("git_force_push:lease", True)
+
+
+@pytest.mark.parametrize("option", ["-uo v", "--recurse-submodules no"])
+def test_a_lease_behind_a_value_option_reaches_the_url_git_pushes_to(tmp_path, option):
+    # Asks git: the option takes the next word as its value, so the word after
+    # that is the remote.
+    bare, work = tmp_path / "r.git", tmp_path / "w"
+    _git(tmp_path, "init", "-q", "--bare", str(bare))
+    _git(bare, "config", "receive.advertisePushOptions", "true")
+    _git(tmp_path, "init", "-q", "-b", "claude/x", str(work))
+    _git(work, "commit", "-q", "--allow-empty", "-m", "a")
+    _git(work, "config", f"url.{bare}.insteadOf", "e.example:claude/x")
+    _git(work, "push", "-q", "e.example:claude/x", "claude/x")
+    old = _git(work, "rev-parse", "HEAD").stdout.strip()
+    _git(work, "commit", "-q", "--amend", "--allow-empty", "-m", "b")
+    words = f"--force-with-lease=claude/x:{old} {option} e.example:claude/x claude/x"
+    pushed = _git(work, "push", *words.split())
+    forced = _git(work, "--git-dir", str(bare), "rev-parse", "claude/x").stdout.strip()
+    assert forced == _git(work, "rev-parse", "HEAD").stdout.strip() != old, pushed.stderr
+    assert gate.classify("Bash", {"command": f"git -C {work} push {words}"}) == ("git_force_push:lease", True)
 
 
 # A long run of reserved words or assignments before a gated call. _unwrap used
