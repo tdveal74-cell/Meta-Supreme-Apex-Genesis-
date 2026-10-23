@@ -141,6 +141,13 @@ SERVER_READS = {
 SERVER_ALIASES = {
     "89245824-e0dd-4d6f-94dc-d0712a46ef78": "graphify",
 }
+# A connector under a UUID that SERVER_ALIASES does not map matches no named
+# server, so its writes pass unseen. Ruled by Tee 2026-10-23 on a card: record
+# every non-read call on one in the ledger, never refuse it. The class carries
+# the UUID's first eight characters and the tool, so the receipt names the
+# connector to map.
+UUID_SERVER = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+UNMAPPED_UUID = "unmapped_uuid"
 # On a named server every tool is gated EXCEPT a read. Listing the reads is the
 # safer direction: a write verb nobody thought of is caught, and the cost of a
 # read nobody listed is one refusal while no human signal is fresh.
@@ -985,6 +992,8 @@ def classify(tool_name, tool_input, cwd="", now=None, shape_only=False):
     verb = re.sub(r"^(blotato|zapier|VPS|DNS|domains|hosting|billing|reach)_", "", suffix)
     if any(name in server for name in NAMED_SERVERS) and not READ_VERB.match(verb):
         return suffix, True
+    if UUID_SERVER.match(server) and not READ_VERB.match(verb):
+        return "%s:%s:%s" % (UNMAPPED_UUID, server[:8], suffix), False
     return None, False
 
 

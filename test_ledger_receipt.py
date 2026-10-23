@@ -168,3 +168,26 @@ def test_one_corrupt_line_reads_correctly(tmp_path):
     path = write(tmp_path, [row("executed")], extra_lines=["{bad"])
     rows, corrupt = lr.read_rows(path)
     assert any("1 ledger line could not be read and was skipped" in u for u in lr.build_receipt(rows, corrupt, path).unverified)
+
+
+def test_unmapped_uuid_calls_become_an_open_thread_that_names_them(tmp_path):
+    """Ruled by Tee 2026-10-23: unmapped UUID connector writes are ledgered, and
+    the receipt says which connector to map."""
+    cls = "unmapped_uuid:43100b80:remember"
+    path = write(tmp_path, [
+        row("gate-allow", cls=cls, gated=False, reason="not gated"),
+        row("executed", cls=cls, gated=False),
+        row("executed", cls=cls, gated=False),
+    ])
+    rows, corrupt = lr.read_rows(path)
+    receipt = lr.build_receipt(rows, corrupt, path)
+    thread = [t for t in receipt.open_threads if "UUID" in t]
+    assert thread and "2 calls" in thread[0] and "unmapped_uuid:43100b80:remember 2" in thread[0]
+    assert "SERVER_ALIASES" in thread[0]
+    assert not [p for p in validate(receipt) if p.severity == "error"]
+
+
+def test_no_unmapped_uuid_thread_without_unmapped_calls(tmp_path):
+    path = write(tmp_path, [row("executed", cls="merge_pull_request", gated=False)])
+    rows, corrupt = lr.read_rows(path)
+    assert not [t for t in lr.build_receipt(rows, corrupt, path).open_threads if "UUID" in t]
