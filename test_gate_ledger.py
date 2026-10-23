@@ -1326,6 +1326,18 @@ def test_a_command_past_the_size_limit_is_gated_unread(length, expected):
     assert gate.classify("Bash", {"command": "echo " + "a" * (length - 5)}) == expected
 
 
+def test_the_size_limit_counts_characters_not_bytes():
+    # 400,000 three-byte characters is 1.2 MB of UTF-8 and well under the limit.
+    assert gate.classify("Bash", {"command": "echo " + chr(0x4E00) * 400_000}) == (None, False)
+
+
+def test_a_statement_one_past_the_line_gets_both_readings():
+    base = "git log $'\\'' ; git push --force origin main ; echo \\' "
+    command = base + "x" * (20001 - len(base))
+    assert len(command) == 20001
+    assert gate.classify("Bash", {"command": command}) == ("git_force_push:plain", True)
+
+
 def test_the_slowest_shape_under_the_limit_is_denied_inside_the_timeout(tmp_path):
     import time
     command = "eval eval eval eval git push -f origin main 'q' " + "x " * 499_000
