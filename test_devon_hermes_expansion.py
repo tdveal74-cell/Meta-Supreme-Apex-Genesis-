@@ -161,16 +161,29 @@ async def test_expansion_tools_refuse_without_approval_metadata() -> None:
     assert not result.ok
     assert "approval authority" in (result.error or "").lower()
 
-    # Writers missing and no test opt-in: the in-memory store is refused, and
-    # the refusal comes before the binding so no approval could be spent.
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tool,handler_name,arguments", [
+    ("runtime.spawn_subagent", "_spawn_subagent", {"goal": "child"}),
+    ("runtime.schedule_goal", "_schedule_goal", {"goal": "later"}),
+    ("runtime.propose_skill", "_propose_skill", {"goal": "skill"}),
+])
+async def test_missing_expansion_writer_refuses_before_spending_approval(
+    tool, handler_name, arguments,
+) -> None:
     queue = ApprovalQueue()
     strict = ExpansionToolAdapter(approvals=queue)
-    call = _approved_call(queue, tool="runtime.schedule_goal", arguments={"goal": "x"})
-    result = await strict._schedule_goal(call)
+    call = _approved_call(queue, tool=tool, arguments=arguments)
+    result = await getattr(strict, handler_name)(call)
     assert not result.ok
     assert "durable writer" in (result.error or "")
     assert queue.get(call[APPROVAL_METADATA_KEY]["request_id"]).state is ApprovalState.APPROVED
     assert strict.durable is False
+    assert strict._spawned == []
+    assert strict.schedules.due() == []
+    assert strict.skill_proposals.list_proposed() == []
+    assert "provider_receipt_id" not in (result.metadata or {})
 
 
 @pytest.mark.asyncio

@@ -18,6 +18,7 @@ from services.agent_runtime.governance import (
     require_approved_runtime_binding,
 )
 from services.agent_runtime.tools import ToolRegistry, ToolResult, ToolSpec
+from services.browser.http_fetcher import ReadRateLimited
 from services.devon.approval import ApprovalQueue
 
 _SAFE_SCHEME = {"http", "https"}
@@ -88,6 +89,11 @@ class BrowserCapabilityAdapter:
         if self._fetcher is not None:
             try:
                 body = self._fetcher(url)
+            except ReadRateLimited as exc:
+                metadata = {"http_status": 429, "rate_limited": True}
+                if exc.retry_after_seconds is not None:
+                    metadata["retry_after_seconds"] = exc.retry_after_seconds
+                return ToolResult(False, error=str(exc), metadata=metadata)
             except Exception as exc:
                 return ToolResult(False, error=f"fetch failed: {exc}")
         else:

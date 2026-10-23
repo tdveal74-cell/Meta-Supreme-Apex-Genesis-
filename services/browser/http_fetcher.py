@@ -11,6 +11,19 @@ from typing import Optional
 import httpx
 
 
+class ReadRateLimited(RuntimeError):
+    """A read was throttled; this observation does not authorize a retry."""
+
+    def __init__(self, retry_after: Optional[str] = None) -> None:
+        self.retry_after_seconds: Optional[int] = None
+        # Accept only bounded delta-seconds. Do not pass arbitrary header text
+        # into tool output, or turn an advisory into permission to replay.
+        if retry_after and retry_after.isascii() and retry_after.isdecimal():
+            if len(retry_after) <= 5 and int(retry_after) <= 86400:
+                self.retry_after_seconds = int(retry_after)
+        super().__init__("HTTP 429: read rate limited; no automatic retry was performed")
+
+
 class RedirectRefused(RuntimeError):
     """The allowlisted host answered with a redirect; the hop is not followed."""
 
@@ -43,6 +56,8 @@ def http_get_text(
                 f"{location or 'an unstated location'}; redirects are not followed. "
                 "Fetch the destination explicitly if its host is allowlisted."
             )
+        if response.status_code == 429:
+            raise ReadRateLimited(response.headers.get("retry-after"))
         response.raise_for_status()
         return response.text[:50_000]
 
