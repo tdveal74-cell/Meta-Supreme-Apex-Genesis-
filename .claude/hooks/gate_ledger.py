@@ -50,7 +50,6 @@ scrubbed of anything shaped like a token before they are written.
 import json
 import os
 import re
-import shlex
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
@@ -414,20 +413,70 @@ def _unwrap(argv):
     return argv
 
 
-def _argv(statement):
-    if len(statement) > 20000:
-        argv = statement.split()  # shlex is quadratic on one huge token
-    else:
-        try:
-            argv = shlex.split(statement)
-        except ValueError:
-            argv = statement.split()
+def _split_words(text):
+    """shlex.split in one pass. shlex is quadratic on one huge token, so past
+    20,000 characters the hook used a plain str.split until 2026-10-22, which
+    broke a quoted bash -c payload into pieces: a force push or a workflow run
+    inside one padded past that length went ungated. This keeps quotes.
+    It returns what shlex.split returns and raises ValueError where shlex.split
+    raises, on an unclosed quote or a trailing backslash, so _argv falls back
+    the same way. Running an unclosed quote to the end instead swallowed
+    whatever followed it: $'it\\'s' && git push -f went ungated."""
+    words, buf, in_word = [], [], False
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch == "'":
+            j = text.find("'", i + 1)
+            if j < 0:
+                raise ValueError("No closing quotation")
+            buf.append(text[i + 1:j])
+            in_word, i = True, j + 1
+        elif ch == '"':
+            in_word, i = True, i + 1
+            while i < n and text[i] != '"':
+                if text[i] == "\\" and i + 1 < n and text[i + 1] in '"\\':
+                    i += 1
+                buf.append(text[i])
+                i += 1
+            if i >= n:
+                raise ValueError("No closing quotation")
+            i += 1
+        elif ch == "\\":
+            if i + 1 >= n:
+                raise ValueError("No escaped character")
+            buf.append(text[i + 1])
+            in_word, i = True, i + 2
+        elif ch in " \t\r\n":
+            if in_word:
+                words.append("".join(buf))
+                buf, in_word = [], False
+            i += 1
+        else:
+            buf.append(ch)
+            in_word, i = True, i + 1
+    if in_word:
+        words.append("".join(buf))
+    return words
+
+
+def _argv(statement, plain=False):
+    """_split_words returns what shlex.split returns at every length, about ten
+    times faster on a short statement, which is what a long run of them costs.
+    plain reads a long statement the way the hook did before 2026-10-22, split
+    on whitespace alone, which classify keeps beside the quote aware reading
+    so nothing that reading caught is opened."""
+    split = str.split if plain and len(statement) > 20000 else _split_words
+    try:
+        argv = split(statement)
+    except ValueError:
+        argv = statement.split()
     return _unwrap(argv)
 
 
-def _expand(statement, depth=0):
+def _expand(statement, depth=0, plain=False):
     """Yields argv lists, recursing into bash -c and eval."""
-    argv = _argv(statement)
+    argv = _argv(statement, plain)
     if not argv:
         return
     prog = os.path.basename(argv[0])
@@ -435,7 +484,7 @@ def _expand(statement, depth=0):
         for i, a in enumerate(argv[1:], 1):
             if _short_flags_with(a, "c") and i + 1 < len(argv):
                 for s in _statements(argv[i + 1]):
-                    yield from _expand(s, depth + 1)
+                    yield from _expand(s, depth + 1, plain)
                 return
     if depth < 4 and prog == "find" and ("-exec" in argv or "-execdir" in argv):
         k = next(i for i, a in enumerate(argv) if a in ("-exec", "-execdir"))
@@ -449,7 +498,7 @@ def _expand(statement, depth=0):
             yield sub
     if depth < 4 and prog == "eval":
         for s in _statements(" ".join(argv[1:])):
-            yield from _expand(s, depth + 1)
+            yield from _expand(s, depth + 1, plain)
         return
     yield argv
 
@@ -855,6 +904,9 @@ def _is_server(server, name):
     )
 
 
+OVERSIZE = 1_000_000  # characters; a longer Bash command is gated unread
+
+
 def classify(tool_name, tool_input, cwd="", now=None, shape_only=False):
     """Returns (cls, gated). cls is None for a call that is not tracked.
     shape_only skips the clock in the reflection row check, for post and fail."""
@@ -862,10 +914,26 @@ def classify(tool_name, tool_input, cwd="", now=None, shape_only=False):
 
     if tool_name.lower() == "bash":
         command = str(tool_input.get("command", ""))
+        # Ruled by Tee 2026-10-23 on a card. Reading a command costs time in
+        # proportion to its length and its nesting, and four nested evals at
+        # 5 MB took 21.6 s against the hook's 15 s timeout. A command this long
+        # is gated unread, which ends that for every shape.
+        if len(command) > OVERSIZE:
+            return "bash_oversize", True
         _fresh_lookups()
         classes, gated = [], False
         for stmt in _statements(command):
-            for argv in _expand(stmt):
+            argvs = list(_expand(stmt))
+            # Neither shlex nor the splitter reads $'it\'s' the way bash does.
+            # The plain split this replaced still caught a push after one, so a
+            # long statement is read both ways and both count. Comparing the
+            # two top level readings first is not enough: an unclosed quote
+            # makes both fall back to the same split while a nested eval body
+            # still reads differently.
+            if len(stmt) > 20000:
+                seen = {tuple(a) for a in argvs}
+                argvs += [a for a in _expand(stmt, plain=True) if tuple(a) not in seen]
+            for argv in argvs:
                 prog = os.path.basename(argv[0])
                 push = _git_push(argv, cwd)
                 if push:
