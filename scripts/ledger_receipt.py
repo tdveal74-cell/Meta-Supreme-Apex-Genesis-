@@ -117,6 +117,14 @@ def build_receipt(rows, corrupt, ledger_path, today=None):
         )
     if failed:
         open_threads.append("%d call%s failed (%s)." % (n_fail, "" if n_fail == 1 else "s", _line(failed)))
+    unmapped = Counter({k: v for k, v in logged_only.items() if k.startswith("unmapped_uuid:")})
+    if unmapped:
+        n_unmapped = sum(unmapped.values())
+        open_threads.append(
+            "%d call%s ran on a connector under a UUID the gate does not map (%s). Name each in "
+            "SERVER_ALIASES so its server rules apply."
+            % (n_unmapped, "" if n_unmapped == 1 else "s", _line(unmapped))
+        )
     if not open_threads:
         open_threads.append("none: no refused or failed calls in this ledger")
 

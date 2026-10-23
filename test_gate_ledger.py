@@ -876,11 +876,64 @@ def test_graphify_writes_are_gated_under_its_connector_uuid(verb):
     assert cls and gated, tool
 
 
-def test_an_unmapped_uuid_memory_tool_is_not_swept_in():
-    # Vertiso Memory also exposes remember. The alias is exact, so it is not
-    # gated by Graphify's rule; widening to it would be a separate ruling.
-    assert gate.classify(
-        "mcp__43100b80-6895-4cb3-a61c-bf7192990eda__remember", {}) == (None, False)
+VERTISO_UUID = "43100b80-6895-4cb3-a61c-bf7192990eda"
+
+
+def test_an_unmapped_uuid_memory_tool_is_ledgered_not_refused():
+    # Vertiso Memory also exposes remember. The Graphify alias is exact, so
+    # Vertiso is not gated by Graphify's rule; ruled by Tee 2026-10-23 it stays
+    # ungated, and a write on its unmapped UUID is recorded so it can be named.
+    cls, gated = gate.classify(f"mcp__{VERTISO_UUID}__remember", {})
+    assert cls == "unmapped_uuid:43100b80:remember" and gated is False
+
+
+@pytest.mark.parametrize("verb", [
+    "remember", "update_memory", "forget", "archive_memory", "send_message", "create_issue",
+])
+def test_a_non_read_on_an_unmapped_uuid_is_ledgered_never_refused(verb):
+    # Ruled by Tee 2026-10-23: record, never refuse.
+    cls, gated = gate.classify(f"mcp__{VERTISO_UUID}__{verb}", {})
+    assert cls == f"unmapped_uuid:43100b80:{verb}" and gated is False
+
+
+@pytest.mark.parametrize("verb", ["search", "list_recent", "get_memory", "whoami"])
+def test_a_read_on_an_unmapped_uuid_is_not_ledgered(verb):
+    assert gate.classify(f"mcp__{VERTISO_UUID}__{verb}", {}) == (None, False)
+
+
+@pytest.mark.parametrize("tool", [
+    # Rules ahead of the UUID check still win: a listed write is gated whatever
+    # the server is called, and the mapped Graphify UUID keeps its own rules.
+    "mcp__43100b80-6895-4cb3-a61c-bf7192990eda__publish_workflow",
+    "mcp__89245824-e0dd-4d6f-94dc-d0712a46ef78__remember",
+])
+def test_a_uuid_server_still_gets_the_rules_ahead_of_the_ledger(tool):
+    cls, gated = gate.classify(tool, {})
+    assert gated is True and not cls.startswith("unmapped_uuid"), tool
+
+
+def test_the_mapped_graphify_uuid_is_not_reported_as_unmapped():
+    assert gate.classify(f"mcp__{GRAPHIFY_UUID}__graph_stats", {}) == (None, False)
+
+
+@pytest.mark.parametrize("server", [
+    # Not a UUID: a named connector or a malformed id is not swept in.
+    "Vertiso_Memory", "43100b80-6895-4cb3-a61c", "43100B80-6895-4CB3-A61C-BF7192990EDAX",
+])
+def test_only_a_full_uuid_server_is_ledgered(server):
+    assert gate.classify(f"mcp__{server}__remember", {}) == (None, False)
+
+
+def test_the_unmapped_uuid_rule_runs_through_the_hook(tmp_path, monkeypatch):
+    # The real run() path: a pre call is allowed and two ledger rows land.
+    rows = []
+    monkeypatch.setattr(gate, "_try_ledger", rows.append)
+    payload = {"tool_name": f"mcp__{VERTISO_UUID}__remember", "tool_input": {"text": "x"},
+               "session_id": "s", "transcript_path": ""}
+    assert gate.run("pre", payload) is None
+    assert gate.run("post", payload) is None
+    assert [r["event"] for r in rows] == ["gate-allow", "executed"]
+    assert all(r["class"] == "unmapped_uuid:43100b80:remember" and r["gated"] is False for r in rows)
 
 
 def test_blotato_help_ask_question_passes():

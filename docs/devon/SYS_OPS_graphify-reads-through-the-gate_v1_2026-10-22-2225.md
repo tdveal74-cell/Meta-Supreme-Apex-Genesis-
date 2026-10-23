@@ -107,12 +107,29 @@ cannot answer "what breaks if I change this" for a file reached by importlib
 or a settings string, and a caller list from it needs reading before it is
 trusted.
 
-## Open
+## Open, and what became of it on 2026-10-23
 
-- A new connector UUID is covered only once it is added to `SERVER_ALIASES`.
-  Graphify's is the only one listed.
-- Vertiso Memory's remember is ungated under its UUID. That is a separate
-  ruling and was not taken here.
+Tee asked for the open items to be worked the next day, and ruled the two
+that were his on one card.
+
+- A new connector UUID was covered only once added to `SERVER_ALIASES`. Ruled:
+  record, never refuse. A non-read call on a server named by a full UUID that
+  `SERVER_ALIASES` does not map is now ledgered as
+  `unmapped_uuid:<first eight characters>:<tool>`, ungated, and the ledger
+  receipt raises an open thread naming each one to map. A read is not
+  ledgered. Rules ahead of it still win, so a listed write such as
+  `publish_workflow` is gated under a UUID as before. Nine of the new tests
+  fail against 76e1358.
+- Vertiso Memory's writes pass the gate under any name. Ruled: leave them
+  ungated and close the item. They write to Tee's own memory store, which is
+  outside the outward set of 2026-10-14. Under a UUID they are now ledgered by
+  the rule above, never refused.
+- The Codex review of PR #406 still read "Running" on 9ffe612 more than
+  twelve hours after it started, with no findings. It was re-requested with
+  an `@codex review` comment on the merged PR.
+- The live hook is measured in a quiet window: no message from Tee for 30
+  minutes, then a Graphify read and a Graphify `remember`. The read should
+  pass and the write should be refused, which also means nothing is written.
 
 ## DEVON RECEIPT
 
