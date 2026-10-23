@@ -127,9 +127,22 @@ that were his on one card.
 - The Codex review of PR #406 still read "Running" on 9ffe612 more than
   twelve hours after it started, with no findings. It was re-requested with
   an `@codex review` comment on the merged PR.
-- The live hook is measured in a quiet window: no message from Tee for 30
-  minutes, then a Graphify read and a Graphify `remember`. The read should
-  pass and the write should be refused, which also means nothing is written.
+- The live hook, measured 2026-10-23 at 14:14Z by a scheduled check in this
+  session. The gate's own `latest_signal` read the newest human signal as a
+  card 50.4 minutes old, so the window was quiet. `mcp__Graphify__graph_stats`
+  passed and returned the index of this repository at 6113ea2, 14549 nodes,
+  with no ledger row, which is right for an untracked read. Under 05e59f4 the
+  same call was refused. `mcp__Graphify__remember` was refused by the
+  PreToolUse hook with "the newest human signal is a card 50 min old, outside
+  the 30 min window", and the ledger recorded it as row 19, `gate-deny`, class
+  `remember`, at 14:14:29Z. Nothing was written to Graphify. The connector
+  arrived as `mcp__Graphify__*` in this session, so the alias was not the path
+  exercised; it is held by the tests alone.
+- The fresh critic on PR #409 passed it and raised one low item: `recall` and
+  `hello` are not in `READ_VERB`, so on an unmapped UUID they are ledgered as
+  if they wrote. Nothing is refused. Adding them to `READ_VERB` would also let
+  them pass on every named server, which loosens the gate, so it is held for a
+  ruling on a card rather than changed here.
 
 ## DEVON RECEIPT
 
