@@ -74,3 +74,31 @@ def test_fetch_metadata_names_the_page_actually_read():
     result = adapter._fetch({"url": "https://github.com/tdveal74-cell"})
     assert result.ok
     assert result.metadata["final_url"] == result.metadata["url"] == "https://github.com/tdveal74-cell"
+
+
+@pytest.mark.parametrize("retry_after, expected", [
+    ("15", 15), ("0", 0), ("86400", 86400), ("86401", None),
+    ("-1", None), ("NaN", None), ("1.5", None), ("9" * 10000, None),
+    ("Wed, 21 Oct 2026 07:28:00 GMT", None), ("", None),
+])
+def test_rate_limited_read_is_structured_without_automatic_replay(retry_after, expected):
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(429, headers={"retry-after": retry_after}, text="private provider body")
+
+    transport = httpx.MockTransport(handler)
+    adapter = BrowserCapabilityAdapter(
+        ApprovalQueue(), fetcher=lambda url: http_get_text(url, transport=transport),
+    )
+    result = adapter._fetch({"url": "https://github.com/tdveal74-cell"})
+    assert not result.ok
+    assert result.metadata == {
+        "http_status": 429, "rate_limited": True,
+        **({"retry_after_seconds": expected} if expected is not None else {}),
+    }
+    assert "no automatic retry" in result.error
+    assert "private provider body" not in result.error
+    assert "provider_receipt_id" not in result.metadata
+    assert len(seen) == 1

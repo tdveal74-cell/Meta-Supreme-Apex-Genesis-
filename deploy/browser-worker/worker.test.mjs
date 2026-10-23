@@ -73,6 +73,26 @@ test('browser failure records unknown once and redacts exceptions', async () => 
   } finally { await f.worker.shutdown(); f.cleanup(); }
 });
 
+// Launch failure is not a running session, even when it happens before CDP.
+for (const mode of ['factory throws', 'executable missing']) {
+  test(`failed browser launch stays unknown: ${mode}`, async () => {
+    const f = setup();
+    if (mode === 'factory throws') f.worker.factory = () => { throw new Error('PRIVATE launch detail'); };
+    else f.worker.factory = profile => new ChromePipe(join(f.root, 'missing-chromium'), profile);
+    try {
+      const open = payload('open');
+      const result = await f.worker.action(open);
+      assert.equal(result.state, 'unknown');
+      assert.ok(!JSON.stringify(result).includes('PRIVATE'));
+      assert.equal(f.worker.sessions.has(session), false);
+      assert.equal(f.worker.db.prepare('SELECT state FROM sessions WHERE id=?').get(session).state, 'opening');
+      assert.deepEqual(await f.worker.action(open), result, 'ambiguous launch is never retried');
+      assert.equal((await f.worker.action(payload('open'))).state, 'refused', 'failed UUID stays quarantined');
+      assert.equal((await f.worker.action(payload('snapshot'))).state, 'refused');
+    } finally { await f.worker.shutdown(); f.cleanup(); }
+  });
+}
+
 test('real sandboxed Chromium opens blank and captures PNG through CDP pipe', { skip: !process.env.DEVON_TEST_CHROMIUM }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'devon-chrome-'));
   const browser = new ChromePipe(process.env.DEVON_TEST_CHROMIUM, root);
