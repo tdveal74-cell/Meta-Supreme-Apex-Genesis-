@@ -1148,11 +1148,18 @@ def test_a_lease_to_a_url_remote_is_gated(tmp_path, remote):
     ("--push-o v e.example:claude/x claude/x", True),
     ("--exe v e.example:claude/x claude/x", True),
     ("--receive v e.example:claude/x claude/x", True),
+    ("--recurse-submodules no e.example:claude/x claude/x", True),
+    ("--recu no e.example:claude/x claude/x", True),
     ("origin git@e.example:claude/x", True),
     ("origin https://e.example/r:claude/x", True),
+    ("u@h claude/x", True),
+    ("--repo=u@h", True),
     ("e.example:r claude/x", True),
     ("--repo=e.example:r", True),
+    (":claude/x", True),
     ("origin claude/x", False),
+    ("-ov origin claude/x", False),
+    ("--recurse-submodules=no origin claude/x", False),
     ("-u origin claude/x", False),
     ("-o ci.skip origin claude/x", False),
     ("--push-option=ci.skip origin claude/x", False),
@@ -1166,8 +1173,10 @@ def test_a_lease_open_only_through_a_named_remote(tmp_path, words, gated):
     assert gate.classify("Bash", {"command": command}) == ("git_force_push:lease", gated)
 
 
-def test_a_lease_behind_a_value_option_reaches_the_url_git_pushes_to(tmp_path):
-    # Asks git: -uo v takes v as a push option, so the next word is the remote.
+@pytest.mark.parametrize("option", ["-uo v", "--recurse-submodules no"])
+def test_a_lease_behind_a_value_option_reaches_the_url_git_pushes_to(tmp_path, option):
+    # Asks git: the option takes the next word as its value, so the word after
+    # that is the remote.
     bare, work = tmp_path / "r.git", tmp_path / "w"
     _git(tmp_path, "init", "-q", "--bare", str(bare))
     _git(bare, "config", "receive.advertisePushOptions", "true")
@@ -1177,7 +1186,7 @@ def test_a_lease_behind_a_value_option_reaches_the_url_git_pushes_to(tmp_path):
     _git(work, "push", "-q", "e.example:claude/x", "claude/x")
     old = _git(work, "rev-parse", "HEAD").stdout.strip()
     _git(work, "commit", "-q", "--amend", "--allow-empty", "-m", "b")
-    words = f"--force-with-lease=claude/x:{old} -uo v e.example:claude/x claude/x"
+    words = f"--force-with-lease=claude/x:{old} {option} e.example:claude/x claude/x"
     pushed = _git(work, "push", *words.split())
     forced = _git(work, "--git-dir", str(bare), "rev-parse", "claude/x").stdout.strip()
     assert forced == _git(work, "rev-parse", "HEAD").stdout.strip() != old, pushed.stderr

@@ -410,7 +410,7 @@ def _lookup_branch(cwd):
 
 
 PUSH_ARG_FLAGS = {"-o", "--push-option", "--repo", "--receive-pack", "--exec"}
-PUSH_VALUE_LONG = {"repo", "push-option", "receive-pack", "exec"}
+PUSH_VALUE_LONG = {"repo", "push-option", "receive-pack", "exec", "recurse-submodules"}
 
 # Every long option `git push -h` lists (git 2.43), with what it does to the
 # gate. The full list is needed so that a prefix is matched against all of
