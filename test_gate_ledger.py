@@ -1234,6 +1234,8 @@ def test_a_lease_to_a_url_remote_is_gated(tmp_path, remote):
     ("--receive v e.example:claude/x claude/x", True),
     ("--recurse-submodules no e.example:claude/x claude/x", True),
     ("--recu no e.example:claude/x claude/x", True),
+    ("--recurse-submodules no --verbose e.example:claude/x claude/x", True),
+    ("-uo v -v e.example:claude/x claude/x", True),
     ("origin git@e.example:claude/x", True),
     ("origin https://e.example/r:claude/x", True),
     ("u@h claude/x", True),
