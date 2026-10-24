@@ -543,6 +543,26 @@ input,select{font:inherit}
           about X". Unconfigured or unreachable, Devon says so rather than guessing.</span>
         </div>
       </div>
+      <div class="pane" id="arfPanel">
+        <div class="pane-h"><h2>ARF Diagnostics</h2><span class="ph-meta">READ ONLY</span></div>
+        <div class="notice">Inspect DEVON build evidence using this tab's sign-in. A diagnostic recommends; it never runs or approves a task. Requests use your shared diagnostic budget.</div>
+        <div class="keyrow">
+          <button class="tgl" id="arfLoad" type="button">LOAD MY TASKS</button>
+          <label for="arfTasks">TASK</label>
+          <select id="arfTasks"><option value="">Load your latest 50 tasks</option></select>
+        </div>
+        <div class="keyrow">
+          <label for="arfTaskId">TASK ID</label>
+          <input id="arfTaskId" type="text" maxlength="100" autocomplete="off" placeholder="Select or enter an authorized test task ID">
+          <button class="tgl" id="arfRead" type="button">READ DIAGNOSTIC</button>
+        </div>
+        <details>
+          <summary>Acceptance checks</summary>
+          <div class="notice">A 404 means disabled, unknown or not owned; it alone does not prove cross-account isolation. The burst sends exactly six concurrent diagnostic reads once, with no retry. It consumes your budget. A 429 demonstrates throttling for this burst only.</div>
+          <button class="tgl" id="arfBurst" type="button">CHECK SIX-REQUEST BURST</button>
+        </details>
+        <pre id="arfOutput" role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit">No diagnostic requested.</pre>
+      </div>
       <div class="pane">
         <div class="pane-h"><h2>The Council</h2><span class="ph-meta">9 SEATS</span></div>
         <div class="seats" id="council"></div>
@@ -1581,6 +1601,109 @@ const Soul = {
   }
 };
 
+/* ARF_PANEL_START: fixed same-origin diagnostic client; no execution surface. */
+const ArfPanel = {
+  busy: false,
+  async request(taskId) {
+    if (onVercelSoulHost()) throw new Error('host');
+    if (!operatorJwt()) throw new Error('auth');
+    let path = '/api/v1/agent-tasks?limit=50';
+    if (taskId !== null) {
+      if (typeof taskId !== 'string' || !taskId.trim() || ['.', '..'].includes(taskId.trim()) || taskId.length > 100 || /[\u0000-\u001f\u007f]/.test(taskId)) throw new Error('id');
+      path = '/api/v1/agent-tasks/' + encodeURIComponent(taskId.trim()) + '/reliability-shadow';
+    }
+    const response = await fetch(path, {
+      method: 'GET', headers: Soul.headers(), credentials: 'same-origin',
+      redirect: 'error', cache: 'no-store'
+    });
+    const retry = response.headers.get('Retry-After');
+    const result = { status: response.status, retry: /^\d{1,6}$/.test(retry || '') ? retry : null, body: null };
+    if (response.ok) {
+      try { result.body = await response.json(); } catch (e) { throw new Error('shape'); }
+    }
+    return result;
+  },
+  status(result) {
+    const messages = {
+      401: 'Sign-in expired or refused. Sign in again.',
+      404: 'Disabled, unknown task, or task not owned. This is not proof of cross-account isolation.',
+      409: 'Evidence reconciliation refused.',
+      429: 'Diagnostic request limit reached.',
+      503: 'Diagnostic protection unavailable; access refused.'
+    };
+    return 'HTTP ' + result.status + (messages[result.status] ? ': ' + messages[result.status] : '') +
+      (result.retry ? ' Retry-After: ' + result.retry + ' seconds.' : '');
+  },
+  failure(error) {
+    return ({ host: 'Use the platform console for ARF diagnostics.', auth: 'Sign in in the Soul Layer panel first.',
+      id: 'Enter a task ID of 1 to 100 characters.', shape: 'The response was not a valid diagnostic.' })[error && error.message] ||
+      'Request did not complete. No diagnostic result was established.';
+  },
+  summary(result) {
+    if (result.status !== 200) return this.status(result);
+    const body = result.body;
+    const verdicts = ['WOULD_HOLD', 'IN_PROGRESS', 'WOULD_BE_ELIGIBLE_FOR_CLOSURE'];
+    if (!body || body.domain !== 'devon' || body.workflow_stage !== 'build' ||
+        body.scope !== 'read_only_shadow_observation_not_execution_authority' || !verdicts.includes(body.verdict)) {
+      throw new Error('shape');
+    }
+    // Display only this fixed summary, never tool output, arbitrary errors or evidence payloads.
+    const blockers = Array.isArray(body.blocking_reasons) ? body.blocking_reasons.length : 0;
+    const refs = Array.isArray(body.evidence_refs) ? body.evidence_refs.length : 0;
+    return 'HTTP 200: ' + body.verdict + '\nDEVON / build / shadow recommendation only' +
+      '\nBlocking reasons: ' + blockers + '\nEvidence references: ' + refs;
+  },
+  async act(kind) {
+    if (this.busy) return;
+    this.busy = true;
+    const buttons = ['arfLoad', 'arfRead', 'arfBurst'].map(id => $(id));
+    buttons.forEach(button => { button.disabled = true; });
+    const output = $('arfOutput');
+    output.textContent = 'Reading...';
+    try {
+      if (kind === 'load') {
+        const select = $('arfTasks');
+        select.replaceChildren();
+        $('arfTaskId').value = '';
+        const result = await this.request(null);
+        if (result.status !== 200) { output.textContent = this.status(result); return; }
+        if (!Array.isArray(result.body)) throw new Error('shape');
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = 'Select a task';
+        select.appendChild(placeholder);
+        let count = 0;
+        for (const task of result.body.slice(0, 50)) {
+          if (!task || typeof task.task_id !== 'string' || !task.task_id || task.task_id.length > 100) continue;
+          const option = document.createElement('option');
+          option.value = task.task_id;
+          option.textContent = task.task_id;
+          select.appendChild(option);
+          count++;
+        }
+        output.textContent = 'Loaded ' + count + ' owned tasks (latest 50 maximum). Select one to read its diagnostic.';
+      } else if (kind === 'read') {
+        output.textContent = this.summary(await this.request($('arfTaskId').value));
+      } else if (kind === 'burst') {
+        const id = $('arfTaskId').value;
+        const started = performance.now();
+        const results = await Promise.allSettled(Array.from({ length: 6 }, () => this.request(id)));
+        output.textContent = results.map((result, index) => String(index + 1) + '. ' +
+          (result.status === 'fulfilled' ? this.status(result.value) : this.failure(result.reason))).join('\n') +
+          '\nElapsed: ' + Math.round(performance.now() - started) + ' ms. Six reads requested; no automatic retry.';
+      }
+    } catch (error) { output.textContent = this.failure(error); }
+    finally { this.busy = false; buttons.forEach(button => { button.disabled = false; }); }
+  }
+};
+function wireArfPanel() {
+  $('arfLoad').onclick = () => ArfPanel.act('load');
+  $('arfRead').onclick = () => ArfPanel.act('read');
+  $('arfBurst').onclick = () => ArfPanel.act('burst');
+  $('arfTasks').onchange = () => { $('arfTaskId').value = $('arfTasks').value; };
+}
+/* ARF_PANEL_END */
+
 /* Knowledge loop client. On the platform operator console (app.main) the
    base URL is always same origin, so PLATFORM is not used there. JWT is the
    CurrentUser credential. devon-soul.vercel.app does not mount propose and
@@ -2320,6 +2443,7 @@ Learn.load();
 renderLearned();
 wireKeys();
 wireSoul();
+wireArfPanel();
 
 $('learnForget').addEventListener('click',()=>{
   const n=Learn.entries().length;
