@@ -109,6 +109,10 @@ jobs:
       # and the Doctor Gate that held every row. Pinned to the live export.
       - name: OS 28 enforces the disclosure and title laws, and the Doctor Gate can clear
         run: node n8n/tqo-v5/compliance/compliance.test.mjs
+      # Ruled by Tee 2026-10-24: #367 rebuilt on the live version dd734ea2,
+      # which was re-imported without it, keeping the Quality90 layer.
+      - name: The #367 laws rebuilt on the live workflow, Quality90 untouched
+        run: node n8n/tqo-v5/compliance/rebuild/rebuild.test.mjs
       # The carousel rules, ruled by Tee 2026-10-07. No browser here: the drawing
       # runs in carousel-render.yml.
       - name: The carousel rules behave
