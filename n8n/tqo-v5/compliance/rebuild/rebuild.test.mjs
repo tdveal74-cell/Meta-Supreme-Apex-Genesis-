@@ -17,7 +17,10 @@
  *   QC Doctor Gate            #367's script doctor check, on top of the
  *                             Quality90 AI review; "PASS WITH NOTES" holds;
  *                             the doctor floor is the live 90.
- *   Preflight: Can This Clear "Not required" never passes, as in OS 28.
+ *   Preflight: Can This Clear "Not required" never passes, as in OS 28; and
+ *                             it refuses to pay for a row OS 28 gates 3c and
+ *                             5 or the QC Doctor Gate will hold, through byte
+ *                             copies of their rules (ruled 2026-10-24).
  *
  * The fourth gap ruled with these, Parse QC shipping under the gate's floor,
  * is already closed live: Parse QC ships at 90 (SHIP_AT, 2026-10-19).
@@ -175,6 +178,9 @@ for (const title of [
   "The Mistakes Managers Make With Copilot", "Why Copilot Stopped Saving You Time", "What Copilot Costs A Manager",
   "Quietly Replaced By Copilot", "The Truth About Copilot", "No One Told Managers About Copilot",
   "Copilot Lied About Your Calendar", "Before Copilot Takes Your Desk",
+  // The live pattern passed these on a substring; the whole-word one must too.
+  "The Quieter Way Copilot Replaces You", "Mistaken About Copilot", "The Wrongful Copilot Rollout",
+  "The Truthful Copilot Review",
 ]) {
   assert.deepEqual(blocked(runGate(OS28_NEW, cleanRow({ "Video Title": title })), "quality law titles:"), [], title);
 }
@@ -245,6 +251,11 @@ assert.equal(real.qc_verdict, "SHIP");
 assert.equal(real.qc_score, 92);
 assert.equal(realDoctor(GATE_NEW, { history: line(96, "REPAIRED") }).doctorGate, "READY_FOR_HUMAN_REVIEW");
 assert.equal(realDoctor(GATE_NEW, { history: line(90, "pass") }).doctorGate, "READY_FOR_HUMAN_REVIEW", "case does not matter");
+assert.equal(realDoctor(GATE_NEW, { history: line(90.5, "PASS") }).doctorGate, "READY_FOR_HUMAN_REVIEW", "a decimal score at the floor");
+assert.equal(realDoctor(GATE_NEW, { history: line(89.9, "PASS") }).doctorGate, "HOLD", "a decimal score under the floor");
+// Only a doctor entry counts: the words "doctor 95/100 PASS" inside other
+// text, with no bar in front, are not the doctor's verdict.
+assert.equal(realDoctor(GATE_NEW, { history: "2026-10-24T10:00:00Z note: asked the doctor 95/100 PASS" }).doctorGate, "HOLD", "no bar, no doctor entry");
 assert.notEqual(realDoctor(GATE_NEW, { history: line(100, "PASS") }).doctorGate, "RELEASE_ELIGIBLE", "never releases on its own");
 // A QC line appended under the doctor line does not hide it.
 assert.equal(realDoctor(GATE_NEW, { history: line(90, "PASS") + "\n2026-10-24T11:00:00Z | 92/100 SHIP | batch 8.0/10" }).doctorGate, "READY_FOR_HUMAN_REVIEW");
@@ -272,6 +283,7 @@ const PRE_OLD = liveNode("Preflight: Can This Clear?");
 const preRow = (edit = {}) => ({
   Show: "TQO", Season: 1, Episode: 3, "Asset Type": "Flagship", "Video Title": "The Quiet Mistake Managers Make With Copilot",
   Description: C4 + "\n\n" + DESC_BODY, Script: SCRIPT, "AI Disclosure": "Disclosed in description",
+  "Score History": line(95, "PASS"),
   "Human Review": "approved:" + sha(SCRIPT), aiReview: passedReview(), ...edit,
 });
 const runPre = (code, fields) => code(dollar({ "Show Context: Publish": [{ json: { channel: "The Quiet Operator" } }] }), undefined, fields, require)[0].json;
@@ -287,5 +299,55 @@ assert.equal(runPre(PRE_NEW, preRow({ "AI Disclosure": "Maybe" }))._preflightBlo
 // Quality90 still holds in the draft preflight.
 assert.equal(runPre(PRE_NEW, preRow({ aiReview: {} }))._preflightOk, false);
 assert.equal(runPre(PRE_NEW, preRow({ "Human Review": "yes" }))._preflightOk, false);
+
+// The mirrors, ruled 2026-10-24: Preflight refuses to pay for a run that OS 28
+// or the QC Doctor Gate will hold. Each mirrored rule is a byte copy of its
+// source line, so the two cannot drift apart.
+const lineOf = (code, start) => {
+  const found = code.split("\n").filter((l) => l.startsWith(start));
+  assert.equal(found.length, 1, "one line starts with " + start);
+  return found[0];
+};
+const preCode = read("./draft/" + DRAFT["Preflight: Can This Clear?"]);
+const os28Code = read("./draft/" + DRAFT["OS 28: Publish Gate"]);
+const doctorCode = read("./draft/" + DRAFT["QC Doctor Gate"]);
+for (const start of ["const C4_LINE = ", "const DASH = ", "const tensionWord = ", "const properNoun = "]) {
+  assert.equal(lineOf(preCode, start), lineOf(os28Code, start), "Preflight copies OS 28: " + start);
+}
+for (const start of ["const DOCTOR_FLOOR = ", "const doctorLines = ", "const doctorLine = ", "const doctorScore = ", "const doctorVerdict = "]) {
+  assert.equal(lineOf(preCode, start), lineOf(doctorCode, start), "Preflight copies the QC Doctor Gate: " + start);
+}
+// And they agree in behaviour: Preflight holds exactly the rows the two gates
+// hold for these reasons, and lets through the rows they let through.
+const titles = [
+  "The Quiet Mistake Managers Make With Copilot", "Copilot Settings Explained Simply", "Costume Ideas For Copilot Managers",
+  "Accost The Copilot Rollout Plan", "the quiet mistake managers make", "The Quiet Mistake " + String.fromCharCode(0x2014) + " Copilot",
+  "The Mistakes Managers Make With Copilot", "Mistaken About Copilot", "Three Leadership Failures Every NCO Should Audit",
+];
+const descriptions = [C4 + "\n\n" + DESC_BODY, "one\ntwo\n" + C4 + "\n" + DESC_BODY, "one\ntwo\nthree\n" + C4 + "\n" + DESC_BODY, DESC_BODY + " " + C4, DESC_BODY];
+const histories = [line(95, "PASS"), line(90, "REPAIRED"), line(89.9, "PASS"), line(95, "PASS WITH NOTES"), line(95, "PASS") + "\n" + line(95, "FAIL"), "", "note: asked the doctor 95/100 PASS"];
+const mirrored = (b) => /^(the C4 line|title |script doctor:)/.test(b);
+let compared = 0;
+for (const title of titles) for (const description of descriptions) {
+  const preBlocks = runPre(PRE_NEW, preRow({ "Video Title": title, Description: description }))._preflightBlockers.filter((b) => /^(the C4 line|title )/.test(b));
+  const gate = runGate(OS28_NEW, cleanRow({ "Video Title": title, Description: description }));
+  const gateBlocks = gate.os28_blocking.filter((b) => b.startsWith("quality law titles:") || b.startsWith("disclosure: the C4 line") || b.startsWith("disclosure: the Description does not contain"));
+  assert.equal(preBlocks.length > 0, gateBlocks.length > 0, "Preflight and OS 28 agree on " + JSON.stringify([title, description.slice(0, 20)]));
+  compared++;
+}
+for (const history of histories) {
+  const pre = runPre(PRE_NEW, preRow({ "Score History": history }))._preflightBlockers.filter((b) => b.startsWith("script doctor:"));
+  const doctor = realDoctor(GATE_NEW, { history });
+  assert.equal(pre.length > 0, doctor.doctorGateReason === "Presenter script unchecked", "Preflight and the Doctor Gate agree on " + JSON.stringify(history.slice(-40)));
+  compared++;
+}
+assert.equal(compared, titles.length * descriptions.length + histories.length);
+// A row that clears Preflight carries none of the mirrored blockers.
+assert.deepEqual(runPre(PRE_NEW, preRow())._preflightBlockers.filter(mirrored), []);
+// The live Preflight paid for every one of these.
+for (const edit of [{ "Video Title": "Copilot Settings Explained Simply" }, { Description: "one\ntwo\nthree\n" + C4 + "\n" + DESC_BODY }, { "Score History": "" }]) {
+  assert.equal(runPre(PRE_OLD, preRow(edit))._preflightOk, true, "live preflight pays for " + JSON.stringify(edit));
+  assert.equal(runPre(PRE_NEW, preRow(edit))._preflightOk, false, "draft preflight refuses " + JSON.stringify(edit));
+}
 
 console.log("#367 rebuilt on live dd734ea2: disclosure, title and doctor laws hold, Quality90 untouched, the four gaps closed");

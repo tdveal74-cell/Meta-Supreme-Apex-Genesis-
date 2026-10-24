@@ -85,8 +85,8 @@ if (DASH.test(title)) lawTitle.push('title carries an em or en dash. Restructure
 // Whole words only, ruled 2026-10-24. Without boundaries a word that merely
 // contains one of these passed: 'Costume' carried 'cost', 'Lostwithiel'
 // carried 'lost'. A plain inflection still counts ('mistakes', 'quietly',
-// 'stopped').
-const tensionWord = /\b(?:stop|never|no one|wrong|truth|lie|lost|cost|failed|mistake|quiet|hidden|invisible|exposed|before|instead)(?:s|es|d|ed|ped|ping|ing|ly)?\b/i;
+// 'stopped', 'quieter', 'mistaken', 'wrongful').
+const tensionWord = /\b(?:stop|never|no one|wrong|truth|lie|lost|cost|failed|mistaken|mistake|quiet|hidden|invisible|exposed|before|instead)(?:s|es|d|ed|ped|ping|ing|ly|er|est|en|ful)?\b/i;
 const properNoun = /\b[A-Z][a-z]+\b/;
 if (title && !tensionWord.test(title)) lawTitle.push('no tension word: outcome/stakes not stated (quality law 6)');
 if (title && !properNoun.test(title)) lawTitle.push('no proper noun or concrete object in the title (quality law 7)');

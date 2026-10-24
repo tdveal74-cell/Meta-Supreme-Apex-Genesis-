@@ -65,6 +65,27 @@ else if (desc.length < 120) blockers.push('description is only ' + desc.length +
 
 if (!s(f.Script)) blockers.push('no Script');
 
+// Mirrors, ruled 2026-10-24: a row that OS 28 gates 3c and 5 or the QC Doctor
+// Gate will hold is not paid for. Each rule below is a copy of its source
+// line; rebuild.test.mjs fails if a copy drifts from the line it copies.
+const C4_LINE = 'Presented with a synthetic voice and synthetic likeness of Terrance Veal, used with his consent.';
+if (!desc.split('\n').slice(0, 3).some(l => l.trim() === C4_LINE)) blockers.push('the C4 line is not on a line of its own in the first three lines of the Description (quality law 13)');
+const DASH = new RegExp('[' + String.fromCharCode(0x2014, 0x2013) + ']');
+const tensionWord = /\b(?:stop|never|no one|wrong|truth|lie|lost|cost|failed|mistaken|mistake|quiet|hidden|invisible|exposed|before|instead)(?:s|es|d|ed|ped|ping|ing|ly|er|est|en|ful)?\b/i;
+const properNoun = /\b[A-Z][a-z]+\b/;
+if (DASH.test(title)) blockers.push('title carries an em or en dash');
+if (title && !tensionWord.test(title)) blockers.push('title has no tension word (quality law 6)');
+if (title && !properNoun.test(title)) blockers.push('title has no proper noun or concrete object (quality law 7)');
+const DOCTOR_FLOOR = 90;
+const history = s(f['Score History'] || f.score_history);
+const doctorLines = [...history.matchAll(/\|\s*doctor\s+(\d+(?:\.\d+)?)\/100\s+([^|\n]*?)\s*(?=\||\n|$)/g)];
+const doctorLine = doctorLines.length ? doctorLines[doctorLines.length - 1] : null;
+const doctorScore = doctorLine ? Number(doctorLine[1]) : NaN;
+const doctorVerdict = doctorLine ? doctorLine[2].trim().toUpperCase() : 'UNCHECKED';
+if (!(['PASS', 'REPAIRED'].includes(doctorVerdict) && doctorScore >= DOCTOR_FLOOR)) {
+  blockers.push('script doctor: ' + (doctorLine ? doctorVerdict + ' at ' + doctorScore + '/100' : 'no doctor line in Score History') + ', and the QC Doctor Gate needs PASS or REPAIRED at ' + DOCTOR_FLOOR);
+}
+
 const ok = blockers.length === 0;
 const stamp = new Date().toISOString();
 const report = ok
