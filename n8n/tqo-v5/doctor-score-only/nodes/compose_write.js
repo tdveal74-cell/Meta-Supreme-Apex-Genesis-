@@ -11,6 +11,11 @@ const p = $('Parse Score Only').first().json;
 const DOCTOR = /\|\s*doctor\s+(\d+(?:\.\d+)?)\/100\s+([^|\n]*?)\s*(?=\||\n|$)/;
 const skip = (reason) => [{ json: { ...p, ok: false, verdict: 'UNCHECKED', write: false, reason } }];
 if (!p.ok) return [{ json: { ...p, write: false } }];
+// A measurement run scores and writes nothing, and keeps the verdict and score
+// for the run report.
+if ($('Run Config').first().json.WRITE === false) {
+  return [{ json: { ...p, write: false, measured: true, reason: 'a measurement run: Run Config WRITE is false, so nothing was written' } }];
+}
 const fresh = $input.all().map(i => i.json).filter(j => j && String(j.id) === String(p.rowId));
 if (fresh.length !== 1) return skip('the row read back ' + fresh.length + ' time(s) before writing, and exactly 1 is required');
 const r = fresh[0];

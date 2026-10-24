@@ -11,6 +11,9 @@ const whole = (n) => Number.isInteger(n) && n > 0;
 if (!whole(cfg.FIRST_RUN_LIMIT) || !whole(cfg.ROW_LIMIT)) {
   throw new Error('Run Config FIRST_RUN_LIMIT and ROW_LIMIT must be whole numbers above 0, and they read ' + JSON.stringify(cfg.FIRST_RUN_LIMIT) + ' and ' + JSON.stringify(cfg.ROW_LIMIT) + '.');
 }
+if (typeof cfg.WRITE !== 'boolean') {
+  throw new Error('Run Config WRITE must be true or false, and it reads ' + JSON.stringify(cfg.WRITE === undefined ? null : cfg.WRITE) + '.');
+}
 const only = Array.isArray(cfg.ONLY_ROWS) ? cfg.ONLY_ROWS.map(String) : [];
 const DOCTOR = /\|\s*doctor\s+(\d+(?:\.\d+)?)\/100\s+([^|\n]*?)\s*(?=\||\n|$)/;
 const SCORE_ONLY = /\|\s*doctor\s+\d+(?:\.\d+)?\/100\s+(?:PASS|NEEDS_REVISION)\s*\|\s*score only, no rewrite\b/;

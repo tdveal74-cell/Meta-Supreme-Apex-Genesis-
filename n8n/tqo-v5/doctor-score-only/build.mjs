@@ -11,10 +11,17 @@
 // from Row, the fields line, replaced by SCORE_ONLY_HYDRATE_FIELDS so the
 // doctor is shown the learning objective and b-roll the row holds. Two
 // nodes of this workflow's own run between live ones: Recall Required after
-// DEVON Recall: Merge, and Score Only: Final Word after Token Budget: Doctor. Run `node build.mjs` to regenerate, `node build.mjs --check` to fail on
-// a stale workflow.json. score_only.test.mjs runs the check. workflow.json is
-// the exact body to create on the instance, so the read back after creating it
-// is compared against this file and not against a translation of it.
+// DEVON Recall: Merge, and Score Only: Final Word after Token Budget: Doctor.
+// Final Word also tells the doctor where the learning objective is spoken, by
+// the Script Gate's rule, and which lines are the brief rather than the script,
+// so the user message the doctor reads is no longer the live one.
+// Two bodies are built: workflow.json, the real run, and workflow.measure.json,
+// identical but for Run Config, which scores TQO 49 and writes nothing (ruled by
+// Tee 2026-10-24 to measure how far a score moves between runs). Run
+// `node build.mjs` to regenerate both, `node build.mjs --check` to fail on a
+// stale one. score_only.test.mjs runs the check. Each is the exact body to put
+// on the instance, so a read back is compared against the file and not against
+// a translation of it.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
@@ -101,6 +108,17 @@ export function scoreOnlyPrompt() {
   return HEADER + body.slice(0, at) + SCORE_ONLY_CONTRACT + body.slice(at + LIVE_CONTRACT.length);
 }
 
+// The measurement run, ruled by Tee 2026-10-24: score TQO 49 and write nothing.
+export const RUN_CONFIG_REAL = "return [{ json: { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [], WRITE: true } }];";
+export const RUN_CONFIG_MEASURE = "return [{ json: { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: ['TQO:49'], WRITE: false } }];";
+export function runConfig(measure = false) {
+  const body = own('run_config.js');
+  if (body.split(RUN_CONFIG_REAL).length !== 2) {
+    throw new Error('The Run Config return line was not found exactly once in nodes/run_config.js. Review this build.');
+  }
+  return measure ? body.replace(RUN_CONFIG_REAL, () => RUN_CONFIG_MEASURE) : body;
+}
+
 const code = (name, js, pos, extra = {}) => ({ kind: 'node', name, type: 'n8n-nodes-base.code', version: 2, position: pos,
   parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: js }, extra });
 const rowById = (table, rowId) => ({ resource: 'row', operation: 'get',
@@ -118,7 +136,7 @@ const pinnedHttp = (name, file, pos) => {
 
 export const NODES = {
   start: { kind: 'trigger', name: 'Start Score-Only Run', type: 'n8n-nodes-base.manualTrigger', version: 1, position: [0, 300], parameters: {} },
-  config: code('Run Config', own('run_config.js'), [220, 300]),
+  config: code('Run Config', runConfig(), [220, 300]),
   getTqo: { kind: 'node', name: 'Get TQO Scripted Rows', type: 'n8n-nodes-base.dataTable', version: 1.1, position: [440, 300],
     parameters: scripted('2GtmrFcTNqVMbddh'), extra: { alwaysOutputData: true } },
   getNco: { kind: 'node', name: 'Get NCO Scripted Rows', type: 'n8n-nodes-base.dataTable', version: 1.1, position: [660, 300],
@@ -189,9 +207,10 @@ const uuid = (name) => {
   return [h.slice(0, 8), h.slice(8, 12), '4' + h.slice(13, 16), '8' + h.slice(17, 20), h.slice(20, 32)].join('-');
 };
 
-export function buildWorkflow() {
+export function buildWorkflow({ measure = false } = {}) {
   const nodes = Object.values(NODES).map(n => {
-    const out = { id: uuid(n.name), name: n.name, type: n.type, typeVersion: n.version, position: n.position, parameters: n.parameters };
+    const parameters = measure && n === NODES.config ? { ...n.parameters, jsCode: runConfig(true) } : n.parameters;
+    const out = { id: uuid(n.name), name: n.name, type: n.type, typeVersion: n.version, position: n.position, parameters };
     if (n.credentials) out.credentials = n.credentials;
     return { ...out, ...(n.extra || {}) };
   });
@@ -206,15 +225,17 @@ export function buildWorkflow() {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const src = JSON.stringify(buildWorkflow(), null, 1) + '\n';
-  const target = join(HERE, 'workflow.json');
-  if (process.argv.includes('--check')) {
-    let have = '';
-    try { have = readFileSync(target, 'utf8'); } catch (e) { have = ''; }
-    if (have !== src) { console.error('workflow.json is stale. Run node n8n/tqo-v5/doctor-score-only/build.mjs'); process.exit(1); }
-    console.log('workflow.json is current');
-  } else {
-    writeFileSync(target, src);
-    console.log('wrote ' + target + ' (' + src.length + ' bytes)');
+  for (const [file, measure] of [['workflow.json', false], ['workflow.measure.json', true]]) {
+    const src = JSON.stringify(buildWorkflow({ measure }), null, 1) + '\n';
+    const target = join(HERE, file);
+    if (process.argv.includes('--check')) {
+      let have = '';
+      try { have = readFileSync(target, 'utf8'); } catch (e) { have = ''; }
+      if (have !== src) { console.error(file + ' is stale. Run node n8n/tqo-v5/doctor-score-only/build.mjs'); process.exit(1); }
+      console.log(file + ' is current');
+    } else {
+      writeFileSync(target, src);
+      console.log('wrote ' + target + ' (' + src.length + ' bytes)');
+    }
   }
 }

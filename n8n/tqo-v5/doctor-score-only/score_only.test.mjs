@@ -20,7 +20,11 @@
  *     Preflight patterns, and only PASS at 90 or above clears them;
  *   - every reply that is not PASS or NEEDS_REVISION with a score from 0 to 100
  *     writes nothing, REPAIRED included;
- *   - Save Score Line is the only write, to two columns, by row id.
+ *   - Save Score Line is the only write, to two columns, by row id;
+ *   - Score Only: Final Word tells the doctor where the learning objective is
+ *     spoken, by the Script Gate's own rule, and which lines are the brief;
+ *   - workflow.measure.json differs from workflow.json in Run Config alone,
+ *     and a run built from it writes nothing.
  * What it cannot prove: that Cerebras answers, that the recall credential is
  * accepted, or how the data table node behaves. The first run, on one row, is
  * the proof of those. Rows here are synthetic.
@@ -31,7 +35,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { buildWorkflow, LIVE_CHECKLIST_EMPTY, LIVE_CONTRACT, LIVE_HYDRATE_FIELDS, SCORE_ONLY_CHECKLIST_EMPTY, SCORE_ONLY_CONTRACT, SCORE_ONLY_HYDRATE_FIELDS, scoreOnlyHydrate, scoreOnlyPrompt } from "./build.mjs";
+import { buildWorkflow, LIVE_CHECKLIST_EMPTY, LIVE_CONTRACT, LIVE_HYDRATE_FIELDS, RUN_CONFIG_MEASURE, RUN_CONFIG_REAL, runConfig, SCORE_ONLY_CHECKLIST_EMPTY, SCORE_ONLY_CONTRACT, SCORE_ONLY_HYDRATE_FIELDS, scoreOnlyHydrate, scoreOnlyPrompt } from "./build.mjs";
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const sha = (s) => createHash("sha256").update(s, "utf8").digest("hex");
@@ -68,6 +72,7 @@ for (const [name, entry] of Object.entries(MANIFEST.nodes)) {
 
 // ---- workflow.json is current with build.mjs ---------------------------------
 eq(JSON.stringify(buildWorkflow(), null, 1) + "\n", read("./workflow.json"), "workflow.json is what build.mjs builds");
+eq(JSON.stringify(buildWorkflow({ measure: true }), null, 1) + "\n", read("./workflow.measure.json"), "workflow.measure.json is what build.mjs builds");
 execFileSync(process.execPath, [fileURLToPath(new URL("./build.mjs", import.meta.url)), "--check"], { stdio: "pipe" });
 checks++;
 
@@ -96,6 +101,7 @@ eq(WORKFLOW.connections["Write It?"].main[1][0].node, "One Idea at a Time", "fal
 eq(WORKFLOW.settings.saveDataSuccessExecution, "all", "a clean run leaves an execution to read");
 eq(WORKFLOW.settings.availableInMCP, true, "a session can start it through the n8n tools, as it can TQO FINAL V5");
 ok(!DASHES.test(read("./workflow.json")), "no em or en dash anywhere in the workflow");
+ok(!DASHES.test(read("./workflow.measure.json")), "nor in the measurement body");
 for (const f of ["build.mjs", "README.md", "nodes/run_config.js", "nodes/select_rows.js", "nodes/recall_required.js", "nodes/final_word.js", "nodes/parse_score_only.js", "nodes/compose_write.js", "nodes/confirm_write.js", "nodes/run_report.js"]) {
   const body = read("./" + f);
   ok(!DASHES.test(body), f + ": no em or en dash");
@@ -171,7 +177,8 @@ eq(WORKFLOW.connections["Score Only: Final Word"].main[0][0].node, "Run Script D
 const prompted = run("Build Doctor Prompt", { "Show Context: Script": [{ show: "TQO", channel: "The Quiet Operator" }], "One Idea at a Time": [shimmed], "DEVON Recall: Merge": [{ devonRecall: "" }] }, [fixed])[0].json;
 const sourced = run("Doctor Sources", { "One Idea at a Time": [shimmed] }, [prompted])[0].json;
 const budgeted = run("Token Budget: Doctor", {}, [sourced])[0].json;
-const finalReq = run("Score Only: Final Word", {}, [budgeted])[0].json.claudeBody;
+const FW_NODES = (show, prompt) => ({ "Build Doctor Prompt": [prompt], "Show Context: Script": [{ show, channel: show === "NCO" ? "NCO Forge" : "The Quiet Operator" }] });
+const finalReq = run("Score Only: Final Word", FW_NODES("TQO", prompted), [budgeted])[0].json.claudeBody;
 eq(Object.keys(finalReq).sort(), ["max_completion_tokens", "messages", "model", "reasoning_effort", "response_format"], "the request carries the live Cerebras fields and no others");
 eq([finalReq.model, finalReq.max_completion_tokens, finalReq.response_format], ["gpt-oss-120b", 12000, { type: "json_object" }], "the live model, ceiling and JSON mode");
 eq(finalReq.messages.map((m) => m.role), ["system", "user"], "one system message and one user message");
@@ -182,6 +189,59 @@ ok(finalReq.messages[1].content.includes("LEARNING OBJECTIVE (keep word for word
 ok(finalReq.messages[1].content.includes("BROLL: desk, notebook"), "and its b-roll");
 ok(finalReq.messages[1].content.includes("APPROVED SOURCES: none."), "and the sources block the live doctor sees");
 assert.throws(() => run("Score Only: Final Word", {}, [{ claudeBody: { messages: [{ role: "user", content: "x" }] } }]), /expected the request to open with a system message/); checks++;
+
+// ---- the measured facts ------------------------------------------------------------
+// Found by execution 4300: the doctor guessed the learning objective's position
+// ("Probably not before 30 seconds") when it starts at word 31, and took the
+// LEARNING OBJECTIVE field line for a second copy of it. Ruled by Tee 2026-10-24:
+// measure it the Script Gate's way and give the doctor the fact.
+const EXPORT = JSON.parse(read("../exports/qEkGOUsNyVaRAmm6_active.json"));
+const gateCode = (EXPORT.nodes || EXPORT.activeVersion.nodes).find((n) => n.name === "Script Gate: Quality").parameters.jsCode;
+const fwCode = byName["Score Only: Final Word"].parameters.jsCode;
+const NORM_LINE = "const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9\\s]/g, ' ').split(/\\s+/).filter(Boolean).join(' ');";
+ok(gateCode.includes("const LO_WINDOW = 70;") && fwCode.includes("const LO_WINDOW = 70;"), "the same 70 word window as the Script Gate");
+ok(gateCode.includes(NORM_LINE) && fwCode.includes(NORM_LINE), "and the same normaliser, character for character");
+ok(gateCode.includes("const loOk = !!lo && (' ' + norm(opening) + ' ').includes(' ' + lo + ' ');") && fwCode.includes("(' ' + norm(tokens.slice(0, LO_WINDOW).join(' ')) + ' ').includes(' ' + lo + ' ')"), "and the same test for inside the window");
+const LO49 = "By the end, you will have a one-page work sample that shows your judgment and separates measured results from proposed improvements.";
+const words = (n, w = "word") => Array.from({ length: n }, (_, i) => w + i).join(" ");
+const measureFor = (script, lo, show = "TQO") => {
+  const raw = { ...RAW, script, learning_objective: lo };
+  const sh = run("DT Shim: Idea Rows", {}, [raw])[0].json;
+  const hy = new Function("$", "$input", "$json", byName["Script: Hydrate from Row"].parameters.jsCode)(dollar({ "One Idea at a Time": [sh] }), { first: () => ({ json: sh }), all: () => [{ json: sh }] }, sh)[0].json;
+  const ctx = [{ show, channel: show === "NCO" ? "NCO Forge" : "The Quiet Operator" }];
+  const pr = run("Build Doctor Prompt", { "Show Context: Script": ctx, "One Idea at a Time": [sh], "DEVON Recall: Merge": [{ devonRecall: "" }] }, [hy])[0].json;
+  const so = run("Doctor Sources", { "One Idea at a Time": [sh] }, [pr])[0].json;
+  const bu = run("Token Budget: Doctor", {}, [so])[0].json;
+  const out = run("Score Only: Final Word", FW_NODES(show, pr), [bu])[0].json.claudeBody;
+  return { before: bu.claudeBody, after: out, user: out.messages[1].content, script: hy.script };
+};
+{
+  // Row 49's shape: three sentences, 30 words, then the objective.
+  const s49 = "Years of experience can be hard to inspect when somebody sees only a job title. Show the decisions that made the work dependable. That gives them evidence they can question. " + LO49 + " " + words(100);
+  const m = measureFor(s49, LO49);
+  ok(m.user.includes("the learning objective is spoken word for word from word 31 to word 51 of 151, inside the first 70 words. Its position meets the brief; do not mark it down for where it sits. The script speaks it once."), "row 49's shape is measured at word 31, inside, once");
+  ok(m.user.endsWith("\n\nSCRIPT:\n" + m.script) && m.user.indexOf("MEASURED BEFORE THIS PASS") < m.user.indexOf("\n\nSCRIPT:\n"), "the facts sit just above SCRIPT: and the script after it is untouched");
+  ok(m.user.includes("Every line above SCRIPT: is the brief") && m.user.includes("the LEARNING OBJECTIVE and CHECKLIST lines") && m.user.includes("none is a second copy of a script sentence"), "the brief's lines are named as not script");
+  eq(m.after.messages[0].content, m.before.messages[0].content + m.after.messages[0].content.slice(m.before.messages[0].content.length), "the system message only gains the final word at its end");
+  eq(m.user.replace(/\n\nMEASURED BEFORE THIS PASS[^\n]*\nEvery line above SCRIPT:[^\n]*(?=\n\nSCRIPT:\n)/, ""), m.before.messages[1].content, "and the user message gains the two lines and nothing else");
+  const late = measureFor(words(80) + " " + LO49 + " " + words(10, "tail"), LO49);
+  ok(late.user.includes("from word 81 to word 101 of 111, which is past the first 70 words, so its position does not meet the brief. The script speaks it once."), "an objective past 70 words is measured as outside");
+  const edge = measureFor(words(49) + " " + LO49 + " " + words(10, "tail"), LO49);
+  ok(edge.user.includes("from word 50 to word 70 of 80, inside the first 70 words"), "ending on word 70 is inside, as the gate counts it");
+  const over = measureFor(words(50) + " " + LO49 + " " + words(10, "tail"), LO49);
+  ok(over.user.includes("from word 51 to word 71 of 81, which is past the first 70 words"), "ending on word 71 is outside");
+  const twice = measureFor("Open here. " + LO49 + " " + words(20) + " " + LO49.toUpperCase().replace(/,/g, ""), LO49);
+  ok(twice.user.includes("The script speaks it 2 times."), "case and punctuation do not hide a second copy");
+  const absent = measureFor(words(40), LO49);
+  ok(absent.user.includes("the learning objective is not spoken word for word anywhere in the script."), "an objective the script never speaks is measured as missing");
+  const none = measureFor(words(40), "");
+  ok(none.user.includes("MEASURED BEFORE THIS PASS: no learning objective is stored for this row."), "no stored objective is said so");
+  const nco = measureFor(s49, LO49, "NCO");
+  ok(!nco.user.includes("MEASURED BEFORE THIS PASS") && nco.user.includes("Every line above SCRIPT: is the brief") && !nco.user.includes("LEARNING OBJECTIVE and CHECKLIST"), "NCO gets the brief line and no objective measure");
+  const bad = { claudeBody: { ...m.before, messages: [m.before.messages[0], { role: "user", content: m.before.messages[1].content + " extra" }] } };
+  assert.throws(() => run("Score Only: Final Word", FW_NODES("TQO", { original: { script: m.script, learningObjective: LO49 } }), [bad]), /could not find the script after SCRIPT:/, "a message whose script is not the row's stops before the call"); checks++;
+  assert.throws(() => run("Score Only: Final Word", FW_NODES("TQO", { original: { script: m.script } }), [{ claudeBody: { ...m.before, messages: [...m.before.messages, { role: "assistant", content: "x" }] } }]), /one system message and one user message/, "a third message stops before the call"); checks++;
+}
 
 // ---- Recall Required ---------------------------------------------------------------
 // Found by the review on 805060d: a failed recall left TEE'S RECORD empty, the doctor
@@ -294,7 +354,7 @@ for (const [out, why] of refused) {
 // ---- Compose Write -------------------------------------------------------------
 const ROW49 = { id: 49, status: "Scripted", score_history: "", last_feedback: "", script: "  The script.  ", video_title: "Title 49", topic: "Topic 49", description: "Description 49", learning_objective: "By the end, you will have one thing.", broll_keywords: "desk, notebook", checklist: null, show: "TQO", season: 1, episode: 9, idea: "Idea 49", sources: '[{"url":"https://example.org","quote":"q"}]' };
 const SNAPSHOT = run("DT Shim: Idea Rows", {}, [{ ...ROW49, __key: "TQO:49" }])[0].json;
-const compose = (p, fresh) => run("Compose Write", { "Parse Score Only": [p], "One Idea at a Time": [SNAPSHOT] }, fresh)[0].json;
+const compose = (p, fresh, cfg = { WRITE: true }) => run("Compose Write", { "Parse Score Only": [p], "One Idea at a Time": [SNAPSHOT], "Run Config": [cfg] }, fresh)[0].json;
 const c1 = compose(good, [ROW49]);
 ok(c1.write === true && c1.scoreHistory === good.line && c1.lastFeedback === good.feedback, "an empty row takes the line and the note");
 const c2 = compose(good, [{ ...ROW49, score_history: "2026-10-01T00:00:00Z | 88/100 CONDITIONAL", last_feedback: "older note" }]);
@@ -326,6 +386,8 @@ const skips = [
 for (const [r, why] of skips) ok(r.write === false && r.written === false && r.ok === false && !("scoreHistory" in r), why + " writes nothing: " + r.reason);
 ok(compose(good, [{ ...ROW49, last_feedback: "a note QC wrote", score_history: "t | 88/100 CONDITIONAL" }]).write === true, "a column the doctor was not shown may change and the line is still written");
 ok(compose(good, [{ ...ROW49, script: "A script edited by hand during the run." }]).reason.startsWith("script changed on the row during the run"), "the reason names the column that changed");
+const cm = compose(good, [ROW49], { WRITE: false });
+ok(cm.write === false && cm.written === false && cm.measured === true && cm.ok === true && cm.verdict === "PASS" && cm.score === 92 && !("scoreHistory" in cm), "a measurement run keeps the score and writes nothing: " + cm.reason);
 
 // ---- Confirm Write -------------------------------------------------------------
 const confirm = (back) => run("Confirm Write", { "Compose Write": [c1] }, back)[0].json;
@@ -336,10 +398,17 @@ eq(confirm([{}]).written, false, "nothing read back is not written");
 // ---- the shipped Run Config -------------------------------------------------------
 // Found by the verifier on 805060d: the tests used their own config and never read
 // the shipped one, so FIRST_RUN_LIMIT could be raised without a failure.
-eq(run("Run Config", {}, [{}]).map((i) => i.json), [{ FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [] }], "the first run scores one row, later runs up to 20, no row named");
+eq(run("Run Config", {}, [{}]).map((i) => i.json), [{ FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [], WRITE: true }], "the first run scores one row, later runs up to 20, no row named, and it writes");
+// The measurement body, ruled by Tee 2026-10-24: TQO 49, nothing written.
+const MEASURE = JSON.parse(read("./workflow.measure.json"));
+const mByName = Object.fromEntries(MEASURE.nodes.map((n) => [n.name, n]));
+eq(new Function("$", "$input", "$json", mByName["Run Config"].parameters.jsCode)(() => null, null, null).map((i) => i.json), [{ FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: ["TQO:49"], WRITE: false }], "the measurement body scores TQO 49 and writes nothing");
+eq(MEASURE.nodes.filter((n) => JSON.stringify(n) !== JSON.stringify(byName[n.name])).map((n) => n.name), ["Run Config"], "and differs from the real body in Run Config alone");
+eq([JSON.stringify(MEASURE.connections), JSON.stringify(MEASURE.settings), MEASURE.name, MEASURE.nodes.length], [JSON.stringify(WORKFLOW.connections), JSON.stringify(WORKFLOW.settings), WORKFLOW.name, WORKFLOW.nodes.length], "same wiring, settings, name and node count");
+eq(runConfig(true), runConfig().replace(RUN_CONFIG_REAL, RUN_CONFIG_MEASURE), "the swap is the one return line");
 
 // ---- Select Rows ---------------------------------------------------------------
-const CONFIG = { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [] };
+const CONFIG = { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [], WRITE: true };
 const tqoRow = (id, extra = {}) => ({ id, status: "Scripted", script: "A script.", score_history: "", ...extra });
 const select = (tqo, nco, cfg = CONFIG) => run("Select Rows", { "Run Config": [cfg], "Get TQO Scripted Rows": tqo, "Get NCO Scripted Rows": nco }, [{}]).map((i) => i.json.__key);
 const TQO = [tqoRow(51), tqoRow(49), tqoRow(50, { script: " " }), tqoRow(48, { score_history: "t | doctor 93/100 PASS | x" }), tqoRow(47, { status: "Idea" })];
@@ -355,15 +424,21 @@ throws(() => select(TQO, NCO, { ...CONFIG, ONLY_ROWS: ["TQO:48"] }), /ONLY_ROWS 
 throws(() => select([tqoRow(48, { score_history: "t | doctor 93/100 PASS | x" })], [{}]), /No row to score/, "nothing to score stops the run");
 throws(() => select(TQO, NCO, { ...CONFIG, FIRST_RUN_LIMIT: 0 }), /whole numbers above 0/, "a zero limit stops the run");
 throws(() => select(TQO, NCO, { ...CONFIG, ROW_LIMIT: "20" }), /whole numbers above 0/, "a limit that is not a number stops the run");
+throws(() => select(TQO, NCO, { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [] }), /WRITE must be true or false, and it reads null/, "a config with no WRITE stops the run");
+throws(() => select(TQO, NCO, { ...CONFIG, WRITE: "false" }), /WRITE must be true or false/, "a WRITE that is a string stops the run");
 const picked = run("Select Rows", { "Run Config": [CONFIG], "Get TQO Scripted Rows": TQO, "Get NCO Scripted Rows": NCO }, [{}])[0].json;
 eq([picked.nco, picked.__tableRef, picked.__show], [false, "2GtmrFcTNqVMbddh", "TQO"], "the row carries its show for Show Context: Script");
 
 // ---- Run Report ----------------------------------------------------------------
-const report = (results) => run("Run Report", { "Select Rows": [{ __selectNote: "select: test" }] }, results);
+const report = (results, cfg = { WRITE: true }) => run("Run Report", { "Select Rows": [{ __selectNote: "select: test" }], "Run Config": [cfg] }, results);
 const r1 = report([{ show: "TQO", rowId: 49, title: "T", written: true, verdict: "PASS", score: 92 }, { show: "NCO", rowId: 30, title: "N", written: true, verdict: "NEEDS_REVISION", score: 74 }])[0].json;
 ok(r1.summary.startsWith("Score-only doctor run: 2 row(s), 2 written, 1 clear the doctor check at 90, 0 not written."), r1.summary);
 ok(r1.summary.includes('NCO row 30 "N": NEEDS_REVISION 74/100, the doctor line holds the row'), "a held row says so");
 throws(() => report([{ show: "TQO", rowId: 49, title: "T", written: false, verdict: "UNCHECKED", score: null, reason: "the Cerebras call failed: 402" }]), /1 not written[\s\S]*NOT WRITTEN, the Cerebras call failed: 402/, "a row not written ends the run in error");
 throws(() => report([{ id: 49, status: "Scripted" }]), /could not read the loop results/, "rows instead of results end the run in error");
+const rm = report([{ ...cm, title: "T" }], { WRITE: false })[0].json;
+ok(rm.summary.startsWith("MEASUREMENT RUN, Run Config WRITE is false: 1 row(s) scored and nothing written.") && rm.summary.includes('TQO row 49 "T": MEASURED, NOT WRITTEN: PASS 92/100. DIAGNOSIS: none broken'), "a measurement run reports the score and does not fail: " + rm.summary.split("\n")[2]);
+throws(() => report([{ ...cm, title: "T" }]), /1 not written/, "the same result in a real run is a failure");
+throws(() => report([{ show: "TQO", rowId: 49, title: "T", written: false, ok: false, verdict: "UNCHECKED", score: null, reason: "the Cerebras call failed: 402" }], { WRITE: false }), /NOT WRITTEN, the Cerebras call failed: 402/, "a failed call in a measurement run still ends it in error");
 
 console.log("score-only doctor: " + checks + " checks passed");

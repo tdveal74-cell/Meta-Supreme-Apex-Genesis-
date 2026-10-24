@@ -9,4 +9,7 @@
 // hand.
 // ONLY_ROWS, when it is not empty, limits the run to the rows it names, written
 // as 'TQO:49' or 'NCO:30'. A name that is not an eligible row stops the run.
-return [{ json: { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [] } }];
+// WRITE false makes a measurement run, ruled by Tee 2026-10-24 to see how far
+// one row's score moves between runs: every step runs and the doctor is paid,
+// and nothing is written to either table. The run report lists each score.
+return [{ json: { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [], WRITE: true } }];

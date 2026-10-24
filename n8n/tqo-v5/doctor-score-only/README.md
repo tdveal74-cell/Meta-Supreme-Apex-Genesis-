@@ -23,6 +23,14 @@ A person starts it by hand. It has no schedule and no webhook.
    returns a score and PASS or NEEDS_REVISION, and never a rewritten script.
    When a row stores no checklist, the doctor is told to judge the spoken steps
    in the script itself rather than told none was returned.
+   Just above the script, the doctor is also told where the learning objective
+   is spoken, measured by the Script Gate's own rule in TQO FINAL V5: word for
+   word, ignoring case and punctuation, inside the first 70 words. It is told
+   which lines are the brief and which are the script. Both were added after
+   execution 4300, in which the doctor guessed the objective's position wrong
+   and took the LEARNING OBJECTIVE field line for a second copy of it. So the
+   message the doctor reads is no longer exactly the live doctor's. NCO rows
+   get the second line only, because their brief has no learning objective.
 5. It reads the row again. If any column the doctor was shown changed during
    the run (script, title, topic, description, learning objective, b-roll,
    checklist, show, season, episode, idea or sources), or a doctor line landed
@@ -56,15 +64,28 @@ too, so read the cell before clearing it. The next run then picks the row up.
 
 ## Settings
 
-`Run Config` holds three values: `FIRST_RUN_LIMIT` (1), `ROW_LIMIT` (20) and
-`ONLY_ROWS`, which limits a run to named rows such as `TQO:49`. Changing one is
-an edit to the workflow on the instance.
+`Run Config` holds four values: `FIRST_RUN_LIMIT` (1), `ROW_LIMIT` (20),
+`ONLY_ROWS`, which limits a run to named rows such as `TQO:49`, and `WRITE`
+(true). Changing one is an edit to the workflow on the instance.
+
+`WRITE` false makes a measurement run. Every step runs and the doctor is paid,
+but nothing is written to either table, and the run report lists each row's
+score and diagnosis as MEASURED, NOT WRITTEN. A row that cannot be scored still
+ends the run in error. `workflow.measure.json` is the measurement body: the
+same workflow with `ONLY_ROWS` set to TQO 49 and `WRITE` false. Tee ruled on
+2026-10-24 to score row 49 three times this way before the other 19, to see how
+far one script's score moves between runs.
 
 ## Files
 
 `live/` holds the doctor lane bodies of TQO FINAL V5 at the version
 `live/manifest.json` names, read back from the instance. `nodes/` holds the
 code of the Code nodes this workflow adds; the other added nodes are defined in
-`build.mjs`. `build.mjs` builds `workflow.json` from those, makes three
-replacements in live bodies and puts a comment header on Build Doctor Prompt.
-`score_only.test.mjs` proves the build and runs in CI.
+`build.mjs`. `build.mjs` builds `workflow.json` and `workflow.measure.json`
+from those, makes three replacements in live bodies and puts a comment header
+on Build Doctor Prompt. `score_only.test.mjs` proves the build and runs in CI.
+
+Since 2026-10-24 the live Build Doctor Prompt carries the same checklist
+wording as this copy, published as fd873714. The pin in `live/` is still the
+earlier body. Re-pinning from the instance would make the checklist replacement
+fail to match, so a re-pin has to drop that replacement as well.
