@@ -21,6 +21,8 @@ A person starts it by hand. It has no schedule and no webhook.
    writes nothing for that row.
 4. It runs the live doctor prompt with the output contract replaced. The doctor
    returns a score and PASS or NEEDS_REVISION, and never a rewritten script.
+   When a row stores no checklist, the doctor is told to judge the spoken steps
+   in the script itself rather than told none was returned.
 5. It reads the row again. If any column the doctor was shown changed during
    the run (script, title, topic, description, learning objective, b-roll,
    checklist, show, season, episode, idea or sources), or a doctor line landed
@@ -63,6 +65,6 @@ an edit to the workflow on the instance.
 `live/` holds the doctor lane bodies of TQO FINAL V5 at the version
 `live/manifest.json` names, read back from the instance. `nodes/` holds the
 code of the Code nodes this workflow adds; the other added nodes are defined in
-`build.mjs`. `build.mjs` builds `workflow.json` from those, makes two
+`build.mjs`. `build.mjs` builds `workflow.json` from those, makes three
 replacements in live bodies and puts a comment header on Build Doctor Prompt.
 `score_only.test.mjs` proves the build and runs in CI.

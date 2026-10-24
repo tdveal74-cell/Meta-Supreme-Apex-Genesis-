@@ -4,11 +4,12 @@
 //           live/manifest.json names, copied byte for byte;
 //   nodes/  the code of the Code nodes this workflow adds; the trigger, the
 //           data table nodes, the IF and the loop are defined below.
-// Two live bodies are changed, each by one replacement that must match exactly
-// once or the build fails: the output contract of Build Doctor Prompt, replaced
-// by SCORE_ONLY_CONTRACT so the doctor scores and never rewrites, and the
-// fields line of Script: Hydrate from Row, replaced by SCORE_ONLY_HYDRATE_FIELDS
-// so the doctor is shown the learning objective and b-roll the row holds. Two
+// Two live bodies are changed, each replacement required to match exactly once
+// or the build fails: in Build Doctor Prompt, the output contract, replaced by
+// SCORE_ONLY_CONTRACT so the doctor scores and never rewrites, and the empty
+// checklist text, replaced by SCORE_ONLY_CHECKLIST_EMPTY; in Script: Hydrate
+// from Row, the fields line, replaced by SCORE_ONLY_HYDRATE_FIELDS so the
+// doctor is shown the learning objective and b-roll the row holds. Two
 // nodes of this workflow's own run between live ones: Recall Required after
 // DEVON Recall: Merge, and Score Only: Final Word after Token Budget: Doctor. Run `node build.mjs` to regenerate, `node build.mjs --check` to fail on
 // a stale workflow.json. score_only.test.mjs runs the check. workflow.json is
@@ -56,7 +57,8 @@ const HEADER = [
   '// n8n/tqo-v5/doctor-score-only/build.mjs from the live node of TQO FINAL V5 at',
   '// the version live/manifest.json names. Every line is the live text except the',
   '// output contract at the end of the system prompt, which asks for a score and',
-  '// a verdict of PASS or NEEDS_REVISION and no rewritten script.',
+  '// a verdict of PASS or NEEDS_REVISION and no rewritten script, and the text',
+  '// shown when the row stores no checklist.',
   ''
 ].join('\n');
 
@@ -78,8 +80,20 @@ export function scoreOnlyHydrate() {
   return body.replace(LIVE_HYDRATE_FIELDS, () => SCORE_ONLY_HYDRATE_FIELDS);
 }
 
+// Ruled by Tee 2026-10-24 after the first run: the hand-loaded rows store no
+// checklist, so the live line told the doctor the checklist was "(none
+// returned)" and row 49 was held on a checklist its script speaks. With none
+// stored, the doctor is now told to judge the spoken steps in the script. The
+// same wording went live in TQO FINAL V5 the same day.
+export const LIVE_CHECKLIST_EMPTY = ".join(' ') : '(none returned)')";
+export const SCORE_ONLY_CHECKLIST_EMPTY = ".join(' ') : '(not stored on this row; judge the spoken steps in the script itself)')";
+
 export function scoreOnlyPrompt() {
-  const body = live('build_doctor_prompt.js');
+  const live0 = live('build_doctor_prompt.js');
+  if (live0.split(LIVE_CHECKLIST_EMPTY).length !== 2) {
+    throw new Error('The live empty checklist text was not found exactly once in live/build_doctor_prompt.js. Re-pin it and review this build.');
+  }
+  const body = live0.replace(LIVE_CHECKLIST_EMPTY, () => SCORE_ONLY_CHECKLIST_EMPTY);
   const at = body.indexOf(LIVE_CONTRACT);
   if (at === -1 || body.indexOf(LIVE_CONTRACT, at + 1) !== -1) {
     throw new Error('The live output contract was not found exactly once in live/build_doctor_prompt.js. The live prompt has changed; re-pin it and review this build.');

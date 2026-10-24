@@ -128,6 +128,10 @@ jobs:
       # row's own columns, published as bdb59b09.
       - name: The live Hydrate fix is the one line it says it is
         run: node n8n/tqo-v5/live-hydrate-fix/hydrate_fix.test.mjs
+      # Ruled by Tee 2026-10-24, "Same wording, draft and publish": with no
+      # checklist stored, the live doctor judges the spoken steps.
+      - name: The live doctor checklist fix is the one text it says it is
+        run: node n8n/tqo-v5/live-doctor-checklist-fix/checklist_fix.test.mjs
       # The carousel rules, ruled by Tee 2026-10-07. No browser here: the drawing
       # runs in carousel-render.yml.
       - name: The carousel rules behave

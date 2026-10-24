@@ -31,7 +31,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { buildWorkflow, LIVE_CONTRACT, LIVE_HYDRATE_FIELDS, SCORE_ONLY_CONTRACT, SCORE_ONLY_HYDRATE_FIELDS, scoreOnlyHydrate, scoreOnlyPrompt } from "./build.mjs";
+import { buildWorkflow, LIVE_CHECKLIST_EMPTY, LIVE_CONTRACT, LIVE_HYDRATE_FIELDS, SCORE_ONLY_CHECKLIST_EMPTY, SCORE_ONLY_CONTRACT, SCORE_ONLY_HYDRATE_FIELDS, scoreOnlyHydrate, scoreOnlyPrompt } from "./build.mjs";
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const sha = (s) => createHash("sha256").update(s, "utf8").digest("hex");
@@ -139,6 +139,7 @@ for (const show of ["TQO", "NCO"]) {
   ok(cut > 20, show + ": the live contract is found in the evaluated prompt");
   eq(mine.slice(0, cut), live.slice(0, cut), show + ": every line before the contract is the live line");
   eq(mine.slice(cut), contractLines(SCORE_ONLY_CONTRACT), show + ": after it, the score-only contract and nothing else");
+  // D carries a checklist, so the empty checklist text is not in play here.
   eq(b.claudeBody.messages, a.claudeBody.messages, show + ": the user message is the live one");
   eq(b.original, a.original, show + ": the draft handed on is the live one");
   ok(!/"script"|"title"|"description"|"broll"/.test(mine.slice(cut).join("\n")), show + ": the contract asks for no rewritten field");
@@ -201,6 +202,22 @@ assert.throws(() => run("Recall Required", recallNodes({ statusCode: 200, body: 
 eq(run("Recall Required", recallNodes({ statusCode: 200, body: { records: [{ text: "x" }], errors: ["devon-soul was not searched: no host is configured"] } }), [merged]).length, 1, "a recall missing only DEVON's index goes on");
 eq(WORKFLOW.connections["DEVON Recall: Merge"].main[0][0].node, "Recall Required", "the recall is checked right after it is merged");
 eq(WORKFLOW.connections["Recall Required"].main[0][0].node, "Show Context: Script", "and before anything else runs");
+
+// ---- a row that stores no checklist --------------------------------------------
+// Found by the first run (execution 4292): row 49 stores no checklist, the live line
+// said "(none returned)", and the doctor held the row on a checklist its script
+// speaks. Ruled by Tee 2026-10-24: tell the doctor to judge the spoken steps.
+eq(scoreOnlyPrompt().split(SCORE_ONLY_CHECKLIST_EMPTY).length, 2, "the empty checklist text is replaced once");
+ok(!scoreOnlyPrompt().includes(LIVE_CHECKLIST_EMPTY), "and the live text is gone");
+{
+  const noList = { ...D, checklist: [] };
+  const runPrompt = (code) => new Function("$", "$input", "$json", code)(dollar({ "Show Context: Script": [{ show: "TQO", channel: "The Quiet Operator" }], "One Idea at a Time": [ROW], "DEVON Recall: Merge": [{ devonRecall: "" }] }), { first: () => ({ json: noList }), all: () => [{ json: noList }] }, noList)[0].json;
+  const liveUser = runPrompt(read("./live/build_doctor_prompt.js")).claudeBody.messages[0].content;
+  const mineUser = runPrompt(byName["Build Doctor Prompt"].parameters.jsCode).claudeBody.messages[0].content;
+  ok(liveUser.includes("CHECKLIST (keep these steps as spoken, in order): (none returned)"), "live says none returned when the row stores none");
+  eq(mineUser, liveUser.replace("CHECKLIST (keep these steps as spoken, in order): (none returned)", "CHECKLIST (keep these steps as spoken, in order): (not stored on this row; judge the spoken steps in the script itself)"), "the score-only message differs from live in that line and nowhere else");
+  ok(mineUser.includes("LEARNING OBJECTIVE (keep word for word, inside the first 30 seconds): You will learn one thing."), "the learning objective line is untouched");
+}
 
 // ---- the doctor line, read the way the published gates read it ----------------
 const gateSource = read("../compliance/rebuild/draft/qc_doctor_gate.js");

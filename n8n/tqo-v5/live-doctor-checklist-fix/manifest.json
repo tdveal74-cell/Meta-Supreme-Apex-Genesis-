@@ -1,0 +1,16 @@
+{
+ "workflow": "TQO FINAL V5",
+ "workflowId": "qEkGOUsNyVaRAmm6",
+ "node": "Build Doctor Prompt",
+ "before": {
+  "versionId": "bdb59b09-9b38-47ec-8243-89c6dc78ea24",
+  "file": "before.js",
+  "sha256": "f69b8acbd5bb501ae59a8bbbb660bdb92a9c510d33d78821f30ed50cdc5f721d"
+ },
+ "after": {
+  "versionId": null,
+  "file": "after.js",
+  "sha256": "3b0eebdabece7d37f8d5ad8b7d05d6ad3862c2210902404701e7803c289e4efb"
+ },
+ "rollback": "publish bdb59b09-9b38-47ec-8243-89c6dc78ea24"
+}
