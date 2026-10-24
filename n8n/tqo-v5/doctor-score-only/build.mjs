@@ -3,10 +3,13 @@
 //   live/   the doctor lane bodies read from TQO FINAL V5 at the version that
 //           live/manifest.json names, copied byte for byte;
 //   nodes/  the six nodes this workflow adds.
-// The one change made to a live body is the output contract of Build Doctor
-// Prompt, replaced by SCORE_ONLY_CONTRACT below, so the doctor scores and never
-// rewrites. The build fails if the live text it replaces is not found exactly
-// once. Run `node build.mjs` to regenerate, `node build.mjs --check` to fail on
+// Two live bodies are changed, each by one replacement that must match exactly
+// once or the build fails: the output contract of Build Doctor Prompt, replaced
+// by SCORE_ONLY_CONTRACT so the doctor scores and never rewrites, and the
+// fields line of Script: Hydrate from Row, replaced by SCORE_ONLY_HYDRATE_FIELDS
+// so the doctor is shown the learning objective and b-roll the row holds. Two
+// nodes of this workflow's own run between live ones: Recall Required after
+// DEVON Recall: Merge, and Score Only: Final Word after Token Budget: Doctor. Run `node build.mjs` to regenerate, `node build.mjs --check` to fail on
 // a stale workflow.json. score_only.test.mjs runs the check. workflow.json is
 // the exact body to create on the instance, so the read back after creating it
 // is compared against this file and not against a translation of it.
@@ -56,6 +59,24 @@ const HEADER = [
   ''
 ].join('\n');
 
+export const LIVE_HYDRATE_FIELDS = 'const f = row.fields || row;';
+export const SCORE_ONLY_HYDRATE_FIELDS = [
+  '// Score-only copy. The DT shim builds fields from its MAP only, which has no',
+  '// learning_objective and spells the b-roll column Broll Keywords, so the live',
+  '// line, const f = row.fields || row, read neither and the doctor was told the',
+  "// learning objective was none returned. The row's own columns are read too,",
+  "// and the shim's names win where both exist.",
+  'const f = { ...row, ...(row.fields || {}) };'
+].join('\n');
+
+export function scoreOnlyHydrate() {
+  const body = live('script_hydrate_from_row.js');
+  if (body.split(LIVE_HYDRATE_FIELDS).length !== 2) {
+    throw new Error('The live fields line was not found exactly once in live/script_hydrate_from_row.js. Re-pin it and review this build.');
+  }
+  return body.replace(LIVE_HYDRATE_FIELDS, () => SCORE_ONLY_HYDRATE_FIELDS);
+}
+
 export function scoreOnlyPrompt() {
   const body = live('build_doctor_prompt.js');
   const at = body.indexOf(LIVE_CONTRACT);
@@ -95,10 +116,12 @@ export const NODES = {
   recallAsk: pinnedHttp('DEVON Recall: Ask', 'devon_recall_ask.json', [1540, 480]),
   recallMerge: code('DEVON Recall: Merge', live('devon_recall_merge.js'), [1760, 480]),
   context: code('Show Context: Script', live('show_context_script.js'), [1980, 480]),
-  hydrate: code('Script: Hydrate from Row', live('script_hydrate_from_row.js'), [2200, 480]),
+  recallRequired: code('Recall Required', own('recall_required.js'), [1980, 680]),
+  hydrate: code('Script: Hydrate from Row', scoreOnlyHydrate(), [2200, 480]),
   prompt: code('Build Doctor Prompt', scoreOnlyPrompt(), [2420, 480]),
   sources: code('Doctor Sources', live('doctor_sources.js'), [2640, 480]),
   budget: code('Token Budget: Doctor', live('token_budget_doctor.js'), [2860, 480]),
+  finalWord: code('Score Only: Final Word', own('final_word.js'), [2860, 680]),
   cerebras: pinnedHttp('Run Script Doctor (Cerebras)', 'run_script_doctor_cerebras.json', [3080, 480]),
   parse: code('Parse Score Only', own('parse_score_only.js'), [3300, 480]),
   reread: { kind: 'node', name: 'Re-read Row', type: 'n8n-nodes-base.dataTable', version: 1.1, position: [3520, 480],
@@ -127,8 +150,8 @@ export const NODES = {
 const EDGES = [
   ['start', 'config'], ['config', 'getTqo'], ['getTqo', 'getNco'], ['getNco', 'select'], ['select', 'shim'], ['shim', 'loop'],
   ['loop', 'report', 0], ['loop', 'recallAsk', 1],
-  ['recallAsk', 'recallMerge'], ['recallMerge', 'context'], ['context', 'hydrate'], ['hydrate', 'prompt'], ['prompt', 'sources'],
-  ['sources', 'budget'], ['budget', 'cerebras'], ['cerebras', 'parse'], ['parse', 'reread'], ['reread', 'compose'], ['compose', 'writeIt'],
+  ['recallAsk', 'recallMerge'], ['recallMerge', 'recallRequired'], ['recallRequired', 'context'], ['context', 'hydrate'], ['hydrate', 'prompt'], ['prompt', 'sources'],
+  ['sources', 'budget'], ['budget', 'finalWord'], ['finalWord', 'cerebras'], ['cerebras', 'parse'], ['parse', 'reread'], ['reread', 'compose'], ['compose', 'writeIt'],
   ['writeIt', 'save', 0], ['writeIt', 'loop', 1],
   ['save', 'readBack'], ['readBack', 'confirm'], ['confirm', 'loop']
 ];

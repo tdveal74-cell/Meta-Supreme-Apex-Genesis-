@@ -24,7 +24,7 @@
    "parameters": {
     "mode": "runOnceForAllItems",
     "language": "javaScript",
-    "jsCode": "// Run Config for the score-only script doctor. Ruled by Tee 2026-10-24: score\n// the hand-loaded Scripted rows, never rewrite them. This workflow runs only\n// when a person starts it; it has no schedule and no webhook.\n// FIRST_RUN_LIMIT applies until one score-only doctor line has been written to\n// either table, so the first run scores a single row and proves the provider\n// and the recall before the rest are spent. ROW_LIMIT applies to every run\n// after that one. Each run is still started by hand.\n// ONLY_ROWS, when it is not empty, limits the run to the rows it names, written\n// as 'TQO:49' or 'NCO:30'. A name that is not an eligible row stops the run.\nreturn [{ json: { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [] } }];\n"
+    "jsCode": "// Run Config for the score-only script doctor. Ruled by Tee 2026-10-24: score\n// the hand-loaded Scripted rows, never rewrite them. This workflow runs only\n// when a person starts it; it has no schedule and no webhook.\n// FIRST_RUN_LIMIT applies until one score-only doctor line has been written to\n// either table, so the first run scores a single row and proves the provider\n// and the recall before the rest are spent. A run with no recall stops at\n// Recall Required and writes nothing, so a written line always had the recall.\n// ROW_LIMIT applies to every run after that one. Each run is still started by\n// hand.\n// ONLY_ROWS, when it is not empty, limits the run to the rows it names, written\n// as 'TQO:49' or 'NCO:30'. A name that is not an eligible row stops the run.\nreturn [{ json: { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [] } }];\n"
    }
   },
   {
@@ -228,6 +228,21 @@
    }
   },
   {
+   "id": "07cc93fd-21f9-446d-89ba-090e9ffb4957",
+   "name": "Recall Required",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1980,
+    680
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// Recall Required. The doctor treats any first person claim that is not in\n// TEE'S RECORD as invented, so a score taken without the DEVON recall is not a\n// score of the script as Tee wrote it. When the recall does not answer, the\n// run stops here, before the provider is paid, and says why. Rows written\n// earlier in the run stay written, and running again picks up the rest. The\n// test is the one DEVON Recall: Merge applies: HTTP 200 with a records array,\n// which may be empty.\nconst res = $('DEVON Recall: Ask').first().json || {};\nconst code = Number(res.statusCode);\nlet body = res.body;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = null; } }\nif (!(code === 200 && body && Array.isArray(body.records))) {\n  const row = $('One Idea at a Time').first().json;\n  const merged = $input.first() ? $input.first().json : {};\n  throw new Error('The DEVON recall did not answer for ' + String(row.__key || row.id) + ', so it was not scored and the run stopped before calling the provider. '\n    + String(merged.devonRecallNote || 'No recall note.') + ' Rows written earlier in this run stay written; run it again once the recall answers.');\n}\nreturn $input.all();\n"
+   }
+  },
+  {
    "id": "57cce27e-2b94-4242-84ea-979fd0c16f59",
    "name": "Script: Hydrate from Row",
    "type": "n8n-nodes-base.code",
@@ -239,7 +254,7 @@
    "parameters": {
     "mode": "runOnceForAllItems",
     "language": "javaScript",
-    "jsCode": "// Script: Hydrate from Row. Tee ruling 2026-10-01: the pipeline must USE a\n// script that already exists on the row instead of rewriting it. This node\n// shapes the row's stored script into the same d-shape Build Doctor Prompt\n// expects from Parse Script JSON, so an existing script enters the chain at\n// the doctor, not at the writer. Nothing here invents content: the title,\n// description, b-roll, learning objective and checklist come from the row\n// where they exist, empty where they do not.\nconst row = $('One Idea at a Time').first().json;\nconst f = row.fields || row;\nconst script = String(f.Script ?? f.script ?? '').trim();\nif (!script) {\n  throw new Error('Script: Hydrate from Row reached with an empty script. This node only runs for rows that already carry one.');\n}\nconst list = (v) => Array.isArray(v) ? v.map(s => String(s).trim()).filter(Boolean) : [];\nconst tags = String(f.Tags ?? f.tags ?? '').trim();\nconst broll = String(f['B-Roll Keywords'] ?? f.broll_keywords ?? '').trim();\nreturn [{\n  json: {\n    recordId: row.id,\n    title: String(f['Video Title'] ?? f.video_title ?? f.Topic ?? '').trim(),\n    script,\n    description: String(f.Description ?? f.description ?? '').trim(),\n    tags,\n    broll,\n    learningObjective: String(f.learning_objective ?? '').trim(),\n    checklist: list(f.checklist),\n    __source: 'existing-row-script',\n  }\n}];"
+    "jsCode": "// Script: Hydrate from Row. Tee ruling 2026-10-01: the pipeline must USE a\n// script that already exists on the row instead of rewriting it. This node\n// shapes the row's stored script into the same d-shape Build Doctor Prompt\n// expects from Parse Script JSON, so an existing script enters the chain at\n// the doctor, not at the writer. Nothing here invents content: the title,\n// description, b-roll, learning objective and checklist come from the row\n// where they exist, empty where they do not.\nconst row = $('One Idea at a Time').first().json;\n// Score-only copy. The DT shim builds fields from its MAP only, which has no\n// learning_objective and spells the b-roll column Broll Keywords, so the live\n// line, const f = row.fields || row, read neither and the doctor was told the\n// learning objective was none returned. The row's own columns are read too,\n// and the shim's names win where both exist.\nconst f = { ...row, ...(row.fields || {}) };\nconst script = String(f.Script ?? f.script ?? '').trim();\nif (!script) {\n  throw new Error('Script: Hydrate from Row reached with an empty script. This node only runs for rows that already carry one.');\n}\nconst list = (v) => Array.isArray(v) ? v.map(s => String(s).trim()).filter(Boolean) : [];\nconst tags = String(f.Tags ?? f.tags ?? '').trim();\nconst broll = String(f['B-Roll Keywords'] ?? f.broll_keywords ?? '').trim();\nreturn [{\n  json: {\n    recordId: row.id,\n    title: String(f['Video Title'] ?? f.video_title ?? f.Topic ?? '').trim(),\n    script,\n    description: String(f.Description ?? f.description ?? '').trim(),\n    tags,\n    broll,\n    learningObjective: String(f.learning_objective ?? '').trim(),\n    checklist: list(f.checklist),\n    __source: 'existing-row-script',\n  }\n}];"
    }
   },
   {
@@ -285,6 +300,21 @@
     "mode": "runOnceForAllItems",
     "language": "javaScript",
     "jsCode": "// Output ceiling for the script doctor.\n// This is the largest output in the script lane: on a REPAIRED verdict it\n// returns the whole script again, plus the preservation list, the diagnosis and\n// the notes. Truncation here does not throw. Parse Doctor Verdict passes the\n// original draft through unedited and marks it UNCHECKED, which means you lose\n// the audit silently rather than loudly.\nconst MAX_TOKENS = 12000;\n\nconst j = { ...$json };\nif (j.body) j.body = { ...j.body, max_tokens: MAX_TOKENS };\nif (j.claudeBody) j.claudeBody = { ...j.claudeBody, max_tokens: MAX_TOKENS };\n// Cerebras gpt-oss-120b carries this call from 15 Sep 2026, on Tee's ruling that\n// every model call in this workflow moves off Anthropic. The prompt builder still\n// emits the Anthropic shape, so the whole swap is this conversion here and one\n// extraction line in the parser downstream. max_completion_tokens on Cerebras\n// INCLUDES the model's reasoning tokens, which is why the ceiling above stays\n// generous rather than trimmed to the prose.\nconst SUFFIX = '\\n\\nOutput rules that override anything above: never use an em dash or an en dash anywhere in any field, use a comma, a full stop or the word to instead; write the full length the brief asks for, never shorter.';\nconst toCerebras = (b) => {\n  if (!b || !Array.isArray(b.messages)) return b;\n  const sys = (typeof b.system === 'string' && b.system) ? [{ role: 'system', content: b.system + SUFFIX }] : [];\n  return { model: 'gpt-oss-120b', messages: [...sys, ...b.messages], max_completion_tokens: MAX_TOKENS, reasoning_effort: 'medium', response_format: { type: 'json_object' } };\n};\nif (j.body) j.body = toCerebras(j.body);\nif (j.claudeBody) j.claudeBody = toCerebras(j.claudeBody);\nreturn [{ json: j }];"
+   }
+  },
+  {
+   "id": "fd9d1842-6358-465f-81fb-0626e0b68b35",
+   "name": "Score Only: Final Word",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2860,
+    680
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// Score Only: Final Word. Token Budget: Doctor, copied from the live lane, ends\n// the system message with output rules written for the full pass, and one of\n// them, \"write the full length the brief asks for, never shorter\", says it\n// overrides anything above. In a score-only pass that reads as a request for a\n// rewrite. This line comes last and says which of those rules still stands.\nconst FINAL = '\\n\\nScore only, and this overrides the full-length rule above: return only the JSON object the score-only contract names, with no script, title, description or b-roll field. Keep each note to a few sentences that describe a repair without writing it out. The rule against em and en dashes still stands.';\nconst j = { ...$json };\nconst b = j.claudeBody;\nif (!b || !Array.isArray(b.messages) || !b.messages.length || b.messages[0].role !== 'system') {\n  throw new Error('Score Only: Final Word expected the request to open with a system message, and it does not.');\n}\nj.claudeBody = { ...b, messages: [{ ...b.messages[0], content: String(b.messages[0].content) + FINAL }, ...b.messages.slice(1)] };\nreturn [{ json: j }];\n"
    }
   },
   {
@@ -341,7 +371,7 @@
    "parameters": {
     "mode": "runOnceForAllItems",
     "language": "javaScript",
-    "jsCode": "// Parse Score Only. The doctor was told to score and never repair, so the only\n// results are PASS or NEEDS_REVISION with a score from 0 to 100. Anything else\n// is UNCHECKED and nothing is written: a refused or failed call, a truncation,\n// an empty or unreadable reply, a verdict outside those two, and REPAIRED most\n// of all, because no repair was made and the QC Doctor Gate would clear it.\n// Unlike Parse Doctor Output in TQO FINAL V5, a missing verdict is never PASS,\n// and only a completion that finished on its own (finish_reason stop) is read.\nconst row = $('One Idea at a Time').first().json;\nconst ctx = $('Show Context: Script').first().json;\nconst stamp = new Date().toISOString();\nconst base = {\n  show: ctx.show, tableRef: ctx.tableRef, rowId: row.id,\n  title: String(row.video_title || row.topic || ''), stamp, written: false\n};\nconst fail = (reason) => [{ json: { ...base, ok: false, verdict: 'UNCHECKED', score: null, reason } }];\n\nconst out = $json || {};\nif (out.error) return fail('the Cerebras call failed: ' + String(out.error.message || JSON.stringify(out.error)).slice(0, 300));\nconst choice = Array.isArray(out.choices) ? out.choices[0] : null;\nif (!choice || !choice.message) return fail('the Cerebras response carried no completion');\nif (choice.finish_reason === 'length') return fail('the completion was truncated at max_completion_tokens');\nif (choice.finish_reason !== 'stop') return fail('the completion ended on ' + JSON.stringify(choice.finish_reason === undefined ? null : choice.finish_reason) + ' rather than stop');\nconst raw = String(choice.message.content ?? '').trim().replace(/^```(json)?/i, '').replace(/```$/, '').trim();\nif (!raw) return fail('the completion was empty');\n\nlet v;\ntry { v = JSON.parse(raw); }\ncatch (e) {\n  const s = raw.indexOf('{'), en = raw.lastIndexOf('}');\n  if (s === -1 || en <= s) return fail('the completion was not JSON');\n  try { v = JSON.parse(raw.slice(s, en + 1)); } catch (e2) { return fail('the completion JSON did not parse'); }\n}\nif (!v || typeof v !== 'object' || Array.isArray(v)) return fail('the completion was not a JSON object');\n\n// The verdict is matched as ASCII before it is upper-cased, so no other letter\n// folds into PASS.\nconst verdict = typeof v.verdict === 'string' && /^\\s*(?:PASS|NEEDS_REVISION)\\s*$/i.test(v.verdict) ? v.verdict.trim().toUpperCase() : '';\nif (!['PASS', 'NEEDS_REVISION'].includes(verdict)) {\n  return fail('the verdict was ' + JSON.stringify(v.verdict === undefined ? null : v.verdict) + ', and a score-only pass returns only PASS or NEEDS_REVISION');\n}\nlet score = v.score;\nif (typeof score === 'string' && /^\\s*\\d{1,3}(?:\\.\\d+)?\\s*$/.test(score)) score = Number(score);\nif (typeof score !== 'number' || !Number.isFinite(score) || score < 0 || score > 100) {\n  return fail('the score was ' + JSON.stringify(v.score === undefined ? null : v.score) + ', and only a number from 0 to 100 is a result');\n}\n// One decimal, always rounded down, so a score under the gate's 90 can never be\n// written as 90 (89.95 is 89.9, never 90).\nscore = Math.floor(score * 10) / 10;\n\nconst model = String(out.model || 'unknown model');\nconst line = stamp + ' | doctor ' + score + '/100 ' + verdict + ' | score only, no rewrite, ' + model;\nconst list = (x) => Array.isArray(x) ? x.map(String).filter(s => s.trim()) : [];\nconst preserved = list(v.preserved);\nconst notes = list(v.notes);\nconst feedback = [\n  'SCRIPT DOCTOR, SCORE ONLY: ' + verdict + ' at ' + score + '/100 at ' + stamp + '. The script was not changed.',\n  '',\n  'DIAGNOSIS: ' + String(v.diagnosis || ''),\n  '',\n  ...(preserved.length ? ['PRESERVED:', ...preserved.map(p => '  - ' + p), ''] : []),\n  ...(notes.length ? ['NOTES:', ...notes.map(n => '  - ' + n)] : [])\n].join('\\n').trim();\n\nreturn [{ json: { ...base, ok: true, verdict, score, line, feedback, model, reason: '' } }];\n"
+    "jsCode": "// Parse Score Only. The doctor was told to score and never repair, so the only\n// results are PASS or NEEDS_REVISION with a score from 0 to 100. Anything else\n// is UNCHECKED and nothing is written: a refused or failed call, a truncation,\n// an empty or unreadable reply, a verdict outside those two, and REPAIRED most\n// of all, because no repair was made and the QC Doctor Gate would clear it.\n// Unlike Parse Doctor Output in TQO FINAL V5, a missing verdict is never PASS,\n// and only a completion that finished on its own (finish_reason stop) is read.\nconst row = $('One Idea at a Time').first().json;\nconst ctx = $('Show Context: Script').first().json;\nconst stamp = new Date().toISOString();\nlet recall = '';\ntry { recall = String($('DEVON Recall: Merge').first().json.devonRecallNote || ''); } catch (e) { recall = ''; }\nconst base = {\n  show: ctx.show, tableRef: ctx.tableRef, rowId: row.id,\n  title: String(row.video_title || row.topic || ''), stamp, recall, written: false\n};\nconst fail = (reason) => [{ json: { ...base, ok: false, verdict: 'UNCHECKED', score: null, reason } }];\n\nconst out = $json || {};\nif (out.error) return fail('the Cerebras call failed: ' + String(out.error.message || JSON.stringify(out.error)).slice(0, 300));\nconst choice = Array.isArray(out.choices) ? out.choices[0] : null;\nif (!choice || !choice.message) return fail('the Cerebras response carried no completion');\nif (choice.finish_reason === 'length') return fail('the completion was truncated at max_completion_tokens');\nif (choice.finish_reason !== 'stop') return fail('the completion ended on ' + JSON.stringify(choice.finish_reason === undefined ? null : choice.finish_reason) + ' rather than stop');\nconst raw = String(choice.message.content ?? '').trim().replace(/^```(json)?/i, '').replace(/```$/, '').trim();\nif (!raw) return fail('the completion was empty');\n\nlet v;\ntry { v = JSON.parse(raw); }\ncatch (e) {\n  const s = raw.indexOf('{'), en = raw.lastIndexOf('}');\n  if (s === -1 || en <= s) return fail('the completion was not JSON');\n  try { v = JSON.parse(raw.slice(s, en + 1)); } catch (e2) { return fail('the completion JSON did not parse'); }\n}\nif (!v || typeof v !== 'object' || Array.isArray(v)) return fail('the completion was not a JSON object');\n\n// The verdict is matched as ASCII before it is upper-cased, so no other letter\n// folds into PASS.\nconst verdict = typeof v.verdict === 'string' && /^\\s*(?:PASS|NEEDS_REVISION)\\s*$/i.test(v.verdict) ? v.verdict.trim().toUpperCase() : '';\nif (!['PASS', 'NEEDS_REVISION'].includes(verdict)) {\n  return fail('the verdict was ' + JSON.stringify(v.verdict === undefined ? null : v.verdict) + ', and a score-only pass returns only PASS or NEEDS_REVISION');\n}\nlet score = v.score;\nif (typeof score === 'string' && /^\\s*\\d{1,3}(?:\\.\\d+)?\\s*$/.test(score)) score = Number(score);\nif (typeof score !== 'number' || !Number.isFinite(score) || score < 0 || score > 100) {\n  return fail('the score was ' + JSON.stringify(v.score === undefined ? null : v.score) + ', and only a number from 0 to 100 is a result');\n}\n// One decimal, always rounded down, so a score under the gate's 90 can never be\n// written as 90 (89.95 is 89.9, never 90).\nscore = Math.floor(score * 10) / 10;\n\nconst model = String(out.model || 'unknown model');\nconst line = stamp + ' | doctor ' + score + '/100 ' + verdict + ' | score only, no rewrite, ' + model;\nconst list = (x) => Array.isArray(x) ? x.map(String).filter(s => s.trim()) : [];\nconst preserved = list(v.preserved);\nconst notes = list(v.notes);\nconst feedback = [\n  'SCRIPT DOCTOR, SCORE ONLY: ' + verdict + ' at ' + score + '/100 at ' + stamp + '. The script was not changed.',\n  ...(recall ? ['TEE\\'S RECORD: ' + recall + '.'] : []),\n  '',\n  'DIAGNOSIS: ' + String(v.diagnosis || ''),\n  '',\n  ...(preserved.length ? ['PRESERVED:', ...preserved.map(p => '  - ' + p), ''] : []),\n  ...(notes.length ? ['NOTES:', ...notes.map(n => '  - ' + n)] : [])\n].join('\\n').trim();\n\nreturn [{ json: { ...base, ok: true, verdict, score, line, feedback, model, reason: '' } }];\n"
    }
   },
   {
@@ -388,7 +418,7 @@
    "parameters": {
     "mode": "runOnceForAllItems",
     "language": "javaScript",
-    "jsCode": "// Compose Write. Builds the two values Save Score Line writes from the row as it\n// reads now, after the doctor call, and never from the copy read at the start\n// of the run, so a line another lane appended in the meantime is kept. Score\n// History and Last Feedback are appended to, the way Parse QC + Set Verdict\n// appends. Nothing is written when the parse failed, when the row cannot be\n// read back, when it left Scripted, or when a doctor line landed during the run.\nconst p = $('Parse Score Only').first().json;\nconst DOCTOR = /\\|\\s*doctor\\s+(\\d+(?:\\.\\d+)?)\\/100\\s+([^|\\n]*?)\\s*(?=\\||\\n|$)/;\nconst skip = (reason) => [{ json: { ...p, ok: false, verdict: 'UNCHECKED', write: false, reason } }];\nif (!p.ok) return [{ json: { ...p, write: false } }];\nconst fresh = $input.all().map(i => i.json).filter(j => j && String(j.id) === String(p.rowId));\nif (fresh.length !== 1) return skip('the row read back ' + fresh.length + ' time(s) before writing, and exactly 1 is required');\nconst r = fresh[0];\nif (String(r.status) !== 'Scripted') return skip('the row moved to ' + JSON.stringify(r.status) + ' during the run');\nif (DOCTOR.test(String(r.score_history || ''))) return skip('a doctor line landed on the row during the run');\nconst priorHistory = String(r.score_history || '');\nconst priorFeedback = String(r.last_feedback || '');\nreturn [{ json: {\n  ...p,\n  write: true,\n  scoreHistory: (priorHistory ? priorHistory + '\\n' : '') + p.line,\n  lastFeedback: (priorFeedback ? priorFeedback + '\\n\\n' : '') + p.feedback\n} }];\n"
+    "jsCode": "// Compose Write. Builds the two values Save Score Line writes from the row as it\n// reads now, after the doctor call, and never from the copy read at the start\n// of the run, so a line another lane appended in the meantime is kept. Score\n// History and Last Feedback are appended to, the way Parse QC + Set Verdict\n// appends. Nothing is written when the parse failed, when the row cannot be\n// read back, when it left Scripted, when a doctor line landed during the run,\n// or when its script, title or description is no longer the text the doctor\n// scored.\nconst p = $('Parse Score Only').first().json;\nconst DOCTOR = /\\|\\s*doctor\\s+(\\d+(?:\\.\\d+)?)\\/100\\s+([^|\\n]*?)\\s*(?=\\||\\n|$)/;\nconst skip = (reason) => [{ json: { ...p, ok: false, verdict: 'UNCHECKED', write: false, reason } }];\nif (!p.ok) return [{ json: { ...p, write: false } }];\nconst fresh = $input.all().map(i => i.json).filter(j => j && String(j.id) === String(p.rowId));\nif (fresh.length !== 1) return skip('the row read back ' + fresh.length + ' time(s) before writing, and exactly 1 is required');\nconst r = fresh[0];\nif (String(r.status) !== 'Scripted') return skip('the row moved to ' + JSON.stringify(r.status) + ' during the run');\nif (DOCTOR.test(String(r.score_history || ''))) return skip('a doctor line landed on the row during the run');\nconst scored = $('Build Doctor Prompt').first().json.original || {};\nconst same = (x, y) => String(x ?? '').trim() === String(y ?? '').trim();\nif (!same(r.script, scored.script) || !same(r.video_title ?? r.topic, scored.title) || !same(r.description, scored.description)) {\n  return skip('the script, title or description on the row changed during the run, so the score is for text the row no longer holds');\n}\nconst priorHistory = String(r.score_history || '');\nconst priorFeedback = String(r.last_feedback || '');\nreturn [{ json: {\n  ...p,\n  write: true,\n  scoreHistory: (priorHistory ? priorHistory + '\\n' : '') + p.line,\n  lastFeedback: (priorFeedback ? priorFeedback + '\\n\\n' : '') + p.feedback\n} }];\n"
    }
   },
   {
@@ -608,6 +638,17 @@
    "main": [
     [
      {
+      "node": "Recall Required",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Recall Required": {
+   "main": [
+    [
+     {
       "node": "Show Context: Script",
       "type": "main",
       "index": 0
@@ -660,6 +701,17 @@
    ]
   },
   "Token Budget: Doctor": {
+   "main": [
+    [
+     {
+      "node": "Score Only: Final Word",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Score Only: Final Word": {
    "main": [
     [
      {

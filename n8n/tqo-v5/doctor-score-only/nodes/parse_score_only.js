@@ -8,9 +8,11 @@
 const row = $('One Idea at a Time').first().json;
 const ctx = $('Show Context: Script').first().json;
 const stamp = new Date().toISOString();
+let recall = '';
+try { recall = String($('DEVON Recall: Merge').first().json.devonRecallNote || ''); } catch (e) { recall = ''; }
 const base = {
   show: ctx.show, tableRef: ctx.tableRef, rowId: row.id,
-  title: String(row.video_title || row.topic || ''), stamp, written: false
+  title: String(row.video_title || row.topic || ''), stamp, recall, written: false
 };
 const fail = (reason) => [{ json: { ...base, ok: false, verdict: 'UNCHECKED', score: null, reason } }];
 
@@ -54,6 +56,7 @@ const preserved = list(v.preserved);
 const notes = list(v.notes);
 const feedback = [
   'SCRIPT DOCTOR, SCORE ONLY: ' + verdict + ' at ' + score + '/100 at ' + stamp + '. The script was not changed.',
+  ...(recall ? ['TEE\'S RECORD: ' + recall + '.'] : []),
   '',
   'DIAGNOSIS: ' + String(v.diagnosis || ''),
   '',
