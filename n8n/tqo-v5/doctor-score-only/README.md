@@ -36,9 +36,10 @@ written as 89.9 and held.
 Any reply other than PASS or NEEDS_REVISION with a score from 0 to 100 writes
 nothing. That covers REPAIRED, a refused or truncated call and unreadable
 JSON. A run in which any row was not written ends in error. When it reaches
-Run Report, the error lists every row; when it stops earlier, at Recall
-Required or at a failed write, the error names the row it stopped on, and the
-rows written before it stay written.
+Run Report, the error lists every row, including one whose write did not read
+back. A run that stops at Recall Required names the row it stopped on. If a
+data table step itself fails, n8n's own error stops the run without naming the
+row. Either way, the rows written before it stay written.
 
 ## Undoing a line, or scoring a row again
 
