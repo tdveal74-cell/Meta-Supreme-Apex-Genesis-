@@ -1,7 +1,7 @@
 # DEVON code worker: deploy and prove
 
 Ruled by Tee 2026-10-24: DEVON writes code through the Claude Agent SDK hosted
-on the VPS. This directory is that worker. The Agent Runtime reaches it through
+on a box of his own, separate from the n8n VPS. This directory is that worker. The Agent Runtime reaches it through
 `code.task` and `code.status` (`services/code_worker`).
 
 ## What it does, in order
@@ -22,7 +22,7 @@ on the VPS. This directory is that worker. The Agent Runtime reaches it through
 
 These are settings on a box and on a deployment, so they are his.
 
-On the VPS, as a user that is not root:
+On DEVON's box, as a user that is not root:
 
 ```bash
 sudo mkdir -p /opt/devon-code-worker && sudo chown "$USER" /opt/devon-code-worker
@@ -40,8 +40,8 @@ DEVON_CODE_WORKER_REPOS=tdveal74-cell/Meta-Supreme-Apex-Genesis-
 ANTHROPIC_API_KEY=<a key with a spend limit set in the Console>
 ```
 
-Then install `devon-code-worker.service`, put it behind the same reverse proxy
-as n8n with TLS, and set on the API deployment:
+Then install `devon-code-worker.service`, put it behind a reverse proxy with TLS
+on that box (`devon.editforge.online`), and set on the API deployment:
 
 ```
 DEVON_CODE_WORKER_URL=https://<the proxied host>
@@ -66,9 +66,14 @@ Close that draft without merging. The receipt is the pull request URL.
 
 ## Residual risk, stated
 
-The agent needs `ANTHROPIC_API_KEY` to run, so the key is in its environment
-and a prompt injected through repository content could reach it. The GitHub
-token is not: it is blanked in the agent's environment and handed to git per
-command, never written to `.git/config`. What bounds the API key is the spend
-limit set on it in the Console and `max_budget_usd` on every job. Allowlist
-only repositories whose content you trust.
+The agent runs as the same Unix user as the worker. Its shell can therefore read
+the worker's process environment through /proc, which holds the GitHub token
+and `ANTHROPIC_API_KEY`, however carefully the agent's own environment is
+blanked. What the worker does enforce: the token is never written to any config,
+and the push and pull request are made from a second clone the agent never
+touched, with hooks and local config disabled, so a planted hook or a rewritten
+remote in the agent's tree gains nothing. What bounds the rest is yours: a fine
+grained GitHub token with contents and pull request rights on the allowlisted
+repositories only, a Console spend limit on the API key, `max_budget_usd` on
+each job, and an allowlist of repositories whose content you trust. Running the
+agent as a separate user is stage two of this box.

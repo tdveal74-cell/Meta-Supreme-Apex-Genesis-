@@ -150,7 +150,15 @@ class NotionRESTClient:
                 "Notion answered the create without a page id, so nothing can be "
                 "confirmed. Do not assume the page exists."
             )
-        readback = await self._request("GET", f"/v1/pages/{page_id}")
+        try:
+            readback = await self._request("GET", f"/v1/pages/{page_id}")
+        except NotionRESTError as exc:
+            # The page exists and the approval is spent, so the error has to
+            # carry the id or the caller is left with a page it cannot find.
+            raise NotionRESTError(
+                f"page {page_id} was created in {database} but could not be read back "
+                f"({exc}). It exists; check it by hand before creating another."
+            ) from exc
         parent = readback.get("parent") if isinstance(readback.get("parent"), dict) else {}
         if _bare(str(parent.get("database_id") or "")) != _bare(spec["database_id"]):
             raise NotionRESTError(

@@ -19,12 +19,19 @@ whose tests fail still opens its draft pull request, labelled failing in the
 title, so the work is reviewable rather than lost; nothing about a draft can
 reach the base branch without a human.
 
-The GitHub token never enters the agent's environment and is never written to
-`.git/config`: git receives it per command as an extra header, and the agent's
-environment has it blanked. The agent's own key (`ANTHROPIC_API_KEY`) cannot be
-withheld, because the agent needs it to run, and the dollar limit is what bounds
-a prompt injected through repository content. That is the residual risk and it
-is stated here rather than left for a reader to find.
+The GitHub token is kept away from the agent as far as one Unix user allows,
+and no further. It is blanked in the agent's environment, handed to git per
+command as a header rather than written to any config, and the push and the pull
+request are made from a SECOND, pristine clone the agent never touched, with
+hooks and local config disabled, so an agent that edited `.git/hooks` or
+`.git/config` in its own tree gains nothing at push time (a critic reproduced
+that route on 2026-10-24 and it is closed). What stays open: the agent's shell
+runs as the same user as this worker, so it can read this process's environment
+through /proc. The binding limits are therefore the token's own scope (a fine
+grained token with contents and pull request rights on the allowlisted
+repositories only), the per job dollar limit, and allowlisting only repositories
+whose content is trusted. Running the agent as a separate user is stage two of
+the box build.
 
 Everything that touches the outside world is injected (`query`, `run`, `http`),
 so the whole flow runs in tests against a local bare repository and a mock
@@ -33,6 +40,7 @@ GitHub with no network and no model.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -50,10 +58,14 @@ REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$")
 MAX_TASK_CHARS = 20_000
 MAX_TEST_OUTPUT_CHARS = 6_000
+TEST_TIMEOUT_SECONDS = 1_800
+GIT_TIMEOUT_SECONDS = 600
+_EMPTY_HOOKS = tempfile.mkdtemp(prefix="devon-no-hooks-")
 DEFAULT_MAX_TURNS = 60
 DEFAULT_MAX_BUDGET_USD = 5.0
 CEILING_MAX_BUDGET_USD = 50.0
 BRANCH_PREFIX = "devon/code-"
+IN_FLIGHT_STATES = ("cloning", "coding", "testing", "pushing")
 
 AGENT_TOOLS = ["Read", "Edit", "Write", "Glob", "Grep", "Bash", "Task"]
 # The worker pushes; the agent never does. These are refused even though the
@@ -109,7 +121,7 @@ class Job:
 
     @property
     def branch(self) -> str:
-        return BRANCH_PREFIX + self.job_id.lower()
+        return BRANCH_PREFIX + self.job_id
 
 
 @dataclass
@@ -123,6 +135,7 @@ class JobRecord:
     tests: Dict[str, Any] = field(default_factory=dict)
     agent: Dict[str, Any] = field(default_factory=dict)
     pull_request: Dict[str, Any] = field(default_factory=dict)
+    pushed: bool = False
     error: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
@@ -226,6 +239,25 @@ class CodeWorker:
         tmp.write_text(json.dumps(record.to_dict(), indent=1, sort_keys=True), encoding="utf-8")
         tmp.replace(path)
 
+    def reconcile_on_start(self) -> List[str]:
+        """Close every job a previous process left mid-flight.
+
+        A worker that died between states left a record that no re-POST would
+        ever move, because accept returns the existing record and execute runs
+        only from queued. Those jobs are marked failed with the reason, so the
+        caller can read it and submit a fresh job id. Nothing is retried on its
+        own: a half finished clone or push is not safe to resume blind.
+        """
+        closed: List[str] = []
+        for path in sorted(self.jobs_dir.glob("*.json")):
+            record = JobRecord(**json.loads(path.read_text(encoding="utf-8")))
+            if record.state in IN_FLIGHT_STATES:
+                record.error = f"the worker restarted while this job was {record.state}; submit a new job"
+                record.state = "failed"
+                self._save(record)
+                closed.append(record.job["job_id"])
+        return closed
+
     def accept(self, raw: Dict[str, Any]) -> JobRecord:
         """Validate and record a job. The same job_id twice returns the first record."""
         job = validate_job(raw, allowed_repos=self.allowed_repos)
@@ -251,11 +283,11 @@ class CodeWorker:
         try:
             record.state = "cloning"
             self._save(record)
-            self._git(["clone", "--quiet", "--branch", job.base_ref, self._clone_url(job.repository), str(workdir)], cwd=None)
-            self._git(["checkout", "--quiet", "-b", job.branch], cwd=workdir)
-            self._git(["config", "user.name", "DEVON code worker"], cwd=workdir)
-            self._git(["config", "user.email", "devon-code-worker@users.noreply.github.com"], cwd=workdir)
-            base_sha = self._git(["rev-parse", "HEAD"], cwd=workdir).stdout.strip()
+            await self._git(["clone", "--quiet", "--branch", job.base_ref, self._clone_url(job.repository), str(workdir)], cwd=None)
+            await self._git(["checkout", "--quiet", "-b", job.branch], cwd=workdir)
+            await self._git(["config", "user.name", "DEVON code worker"], cwd=workdir)
+            await self._git(["config", "user.email", "devon-code-worker@users.noreply.github.com"], cwd=workdir)
+            base_sha = (await self._git(["rev-parse", "HEAD"], cwd=workdir)).stdout.strip()
 
             record.state = "coding"
             self._save(record)
@@ -264,11 +296,11 @@ class CodeWorker:
 
             # Anything the agent left uncommitted is the worker's to commit, so
             # the pull request carries exactly what is on disk.
-            if self._git(["status", "--porcelain"], cwd=workdir).stdout.strip():
-                self._git(["add", "-A"], cwd=workdir)
-                self._git(["commit", "--quiet", "-m", f"DEVON code job {job.job_id}: uncommitted work"], cwd=workdir)
+            if (await self._git(["status", "--porcelain"], cwd=workdir)).stdout.strip():
+                await self._git(["add", "-A"], cwd=workdir)
+                await self._git(["commit", "--quiet", "-m", f"DEVON code job {job.job_id}: uncommitted work"], cwd=workdir)
             record.commits = int(
-                self._git(["rev-list", "--count", f"{base_sha}..HEAD"], cwd=workdir).stdout.strip() or 0
+                (await self._git(["rev-list", "--count", f"{base_sha}..HEAD"], cwd=workdir)).stdout.strip() or 0
             )
             if record.commits == 0:
                 record.state = "no_change"
@@ -278,14 +310,24 @@ class CodeWorker:
 
             record.state = "testing"
             self._save(record)
-            record.tests = self._run_tests(job, workdir)
+            record.tests = await self._run_tests(job, workdir)
             self._save(record)
 
             record.state = "pushing"
             self._save(record)
-            self._git(["push", "--quiet", self._clone_url(job.repository), f"HEAD:refs/heads/{job.branch}"], cwd=workdir, authed=True)
-            record.pull_request = await self._open_draft(job, record)
-            record.state = "done" if record.tests.get("passed") is not False else "done_tests_failing"
+            await self._push_from_pristine_clone(job, workdir)
+            record.pushed = True
+            self._save(record)
+            try:
+                record.pull_request = await self._open_draft(job, record)
+            except Exception as exc:
+                # The branch is on the remote and nothing here can undo that, so
+                # the record says so instead of reading as a job that did nothing.
+                record.state = "pushed_pr_failed"
+                record.error = _scrub(f"branch {job.branch} was pushed but the pull request was not opened: {exc}", self.github_token)[:2_000]
+                self._save(record)
+                return record
+            record.state = _final_state(record)
             self._save(record)
             return record
         except Exception as exc:  # the record is the answer; nothing is re-raised to the caller
@@ -296,9 +338,34 @@ class CodeWorker:
         finally:
             shutil.rmtree(workdir, ignore_errors=True)
 
+    async def _push_from_pristine_clone(self, job: Job, workdir: Path) -> None:
+        """Push the agent's commits from a clone the agent never touched.
+
+        The agent had Write and Bash in `workdir`, so its `.git/hooks` and
+        `.git/config` are agent controlled: a pre-push hook sees the token in
+        GIT_CONFIG_PARAMETERS and an `insteadOf` rewrite sends the authed push
+        elsewhere. A fresh local clone copies the objects and refs only, and the
+        push runs there with hooks pointed at an empty directory, system and
+        global config ignored, and the destination given as a literal URL.
+        """
+        pushdir = Path(tempfile.mkdtemp(prefix=f"devon-push-{job.job_id}-"))
+        try:
+            await self._git(["clone", "--quiet", "--no-hardlinks", "--branch", job.branch, str(workdir), str(pushdir)], cwd=None)
+            await self._git(
+                ["push", "--quiet", self._clone_url(job.repository), f"HEAD:refs/heads/{job.branch}"],
+                cwd=pushdir,
+                authed=True,
+            )
+        finally:
+            shutil.rmtree(pushdir, ignore_errors=True)
+
     async def _run_agent(self, job: Job, workdir: Path) -> Dict[str, Any]:
         if self._query is None:
             raise RuntimeError("no agent is configured: install claude-agent-sdk")
+        # Secrets the agent must not carry. os.environ is the server process
+        # environment; the agent's Bash runs as the same user and could read
+        # /proc for the parent's original block, which is why this is a
+        # reduction and not a wall. The docstring says so.
         prompt = (
             f"Task from DEVON, approved by Tee (approval {job.approval_id or 'unstated'}):\n\n"
             f"{job.task}\n\n"
@@ -338,17 +405,31 @@ class CodeWorker:
             raise RuntimeError("the agent ended without a result message")
         return last
 
-    def _run_tests(self, job: Job, workdir: Path) -> Dict[str, Any]:
+    async def _run_tests(self, job: Job, workdir: Path) -> Dict[str, Any]:
         if not job.test_command:
             return {"ran": False, "passed": None, "note": "no test_command was given, so the worker ran no tests"}
-        proc = self._run(
-            ["bash", "-lc", job.test_command],
-            cwd=str(workdir),
-            capture_output=True,
-            text=True,
-            timeout=1_800,
-            env=_child_env(),
-        )
+        try:
+            proc = await asyncio.to_thread(
+                self._run,
+                ["bash", "-lc", job.test_command],
+                cwd=str(workdir),
+                capture_output=True,
+                text=True,
+                timeout=TEST_TIMEOUT_SECONDS,
+                env=_child_env(),
+            )
+        except subprocess.TimeoutExpired as exc:
+            # A hung test run is a test result, not a worker fault: the work is
+            # still pushed and the draft says the tests never finished.
+            partial = _scrub(_text(exc.stdout) + _text(exc.stderr), self.github_token)
+            return {
+                "ran": True,
+                "command": job.test_command,
+                "exit_code": None,
+                "passed": False,
+                "timed_out": True,
+                "tail": (partial + f"\n[the worker stopped the tests after {TEST_TIMEOUT_SECONDS}s]")[-MAX_TEST_OUTPUT_CHARS:],
+            }
         output = _scrub((proc.stdout or "") + (proc.stderr or ""), self.github_token)
         return {
             "ran": True,
@@ -362,12 +443,16 @@ class CodeWorker:
         if self._http is None:
             raise RuntimeError("no GitHub client is configured")
         tests = record.tests
-        if tests.get("passed") is False:
+        if tests.get("timed_out"):
+            status = "TESTS TIMED OUT"
+        elif tests.get("passed") is False:
             status = "TESTS FAILING"
         elif tests.get("ran"):
             status = "tests passed"
         else:
             status = "tests not run"
+        if record.agent.get("is_error") or record.agent.get("subtype") != "success":
+            status += f", AGENT ENDED {record.agent.get('subtype') or 'without a result'}"
         title = f"DEVON: {job.task.splitlines()[0][:80]} [{status}]"
         body = "\n".join(
             [
@@ -403,28 +488,53 @@ class CodeWorker:
             raise RuntimeError("GitHub answered the pull request create without a number or url")
         return {"number": data["number"], "url": data["html_url"], "draft": data.get("draft", True)}
 
-    def _git(self, args: List[str], *, cwd: Optional[Path], authed: bool = False) -> subprocess.CompletedProcess:
+    async def _git(self, args: List[str], *, cwd: Optional[Path], authed: bool = False) -> subprocess.CompletedProcess:
         prefix = ["git"]
-        if authed and self.github_token:
+        remote_clone = not authed and args and args[0] == "clone" and not args[-2].startswith("/")
+        if self.github_token and (authed or remote_clone):
+            # The token rides on the one command that needs it, as a header,
+            # never into any config file.
             header = base64.b64encode(f"x-access-token:{self.github_token}".encode()).decode()
             prefix += ["-c", f"http.extraheader=AUTHORIZATION: basic {header}"]
-        elif not authed and self.github_token and args and args[0] == "clone":
-            # Cloning a private repository needs the token too, still per command.
-            header = base64.b64encode(f"x-access-token:{self.github_token}".encode()).decode()
-            prefix += ["-c", f"http.extraheader=AUTHORIZATION: basic {header}"]
-        proc = self._run(
+        if authed:
+            # Hooks and local config in the pushing clone are inert: hooksPath
+            # points at an empty directory, and system and global config are not
+            # read, so no insteadOf rewrite can redirect the authed push.
+            prefix += ["-c", f"core.hooksPath={_EMPTY_HOOKS}"]
+        env = _child_env()
+        if authed:
+            env["GIT_CONFIG_NOSYSTEM"] = "1"
+            env["GIT_CONFIG_GLOBAL"] = os.devnull
+        proc = await asyncio.to_thread(
+            self._run,
             prefix + args,
             cwd=str(cwd) if cwd else None,
             capture_output=True,
             text=True,
-            timeout=600,
-            env=_child_env(),
+            timeout=GIT_TIMEOUT_SECONDS,
+            env=env,
         )
         if proc.returncode != 0:
             raise RuntimeError(
                 f"git {args[0]} failed: " + _scrub((proc.stderr or proc.stdout or "")[-1_000:], self.github_token)
             )
         return proc
+
+
+def _final_state(record: JobRecord) -> str:
+    """Only a clean agent run with passing or unrun tests is plain done."""
+    agent_ok = record.agent.get("subtype") == "success" and not record.agent.get("is_error")
+    if not agent_ok:
+        return "done_agent_error"
+    if record.tests.get("passed") is False:
+        return "done_tests_failing"
+    return "done"
+
+
+def _text(value: Any) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return str(value or "")
 
 
 def _child_env() -> Dict[str, str]:

@@ -73,6 +73,9 @@ def build_app(worker: Optional[CodeWorker] = None, *, key: Optional[str] = None,
         )
     slots = asyncio.Semaphore(max(1, int(concurrency or os.getenv("DEVON_CODE_WORKER_CONCURRENCY", "2"))))
     running: Dict[str, asyncio.Task] = {}
+    # A job left mid-flight by the last process is closed now, as failed with
+    # the reason, so its record never reads as still running.
+    reconciled = worker.reconcile_on_start()
     app = FastAPI(title="DEVON code worker")
 
     def authorise(supplied: Optional[str]) -> None:
@@ -92,6 +95,8 @@ def build_app(worker: Optional[CodeWorker] = None, *, key: Optional[str] = None,
             "github_token_set": bool(worker.github_token),
             "agent_installed": worker._query is not None,
             "repositories": worker.allowed_repos,
+            "reconciled_on_start": reconciled,
+            "running": sorted(running),
         }
 
     @app.post("/jobs", status_code=202)
@@ -107,7 +112,9 @@ def build_app(worker: Optional[CodeWorker] = None, *, key: Optional[str] = None,
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         job_id = record.job["job_id"]
         if record.state == "queued" and job_id not in running:
-            running[job_id] = asyncio.create_task(run(job_id))
+            task = asyncio.create_task(run(job_id))
+            running[job_id] = task
+            task.add_done_callback(lambda _t, job_id=job_id: running.pop(job_id, None))
         return record.to_dict()
 
     @app.get("/jobs/{job_id}")

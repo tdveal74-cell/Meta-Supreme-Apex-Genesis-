@@ -26,7 +26,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Mapping, Optional
 
@@ -57,16 +56,21 @@ class N8NActionError(ValueError):
 
 
 def ulid_from(seed: str, *, millis: Optional[int] = None) -> str:
-    """A ULID whose time part is now and whose random part is fixed by the seed.
+    """A ULID derived wholly from the seed, so the same binding gives the same id.
 
-    Deterministic randomness means a retried dispatch of the same approved
-    binding carries the same 80 bits, so the executors' search by intent id and
-    idempotency key has something stable to find.
+    Both halves come from the seed: the 48 bit time part as well as the 80 bit
+    random part. The executors look an earlier write up by intent id AND
+    idempotency key together, so a retried dispatch of the same approved binding
+    must present the same intent id or it would never find the row it already
+    wrote. A caller may pin `millis` for a readable time part; the production
+    client does not, and a clock-stamped id was the first version of this
+    function, caught by a critic on 2026-10-24.
     """
-    ms = int(time.time() * 1000) if millis is None else int(millis)
+    digest = hashlib.sha256(seed.encode("utf-8")).digest()
+    ms = int.from_bytes(digest[10:16], "big") if millis is None else int(millis)
     if not 0 <= ms < 2**48:
         raise N8NActionError("ULID time is out of range")
-    entropy = int.from_bytes(hashlib.sha256(seed.encode("utf-8")).digest()[:10], "big")
+    entropy = int.from_bytes(digest[:10], "big")
     value = (ms << 80) | entropy
     chars = []
     for _ in range(26):

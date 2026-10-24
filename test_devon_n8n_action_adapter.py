@@ -66,12 +66,15 @@ def test_the_envelope_passes_every_router_gate_it_can_be_checked_against():
     assert 8 <= len(key) <= 128 and not re.search(r"[\s'\"\\{}]", key)
 
 
-def test_the_same_binding_gives_the_same_ulid_entropy_and_key():
-    a = _envelope(millis=1_793_000_000_000)
-    b = _envelope(millis=1_793_000_000_000)
+def test_the_same_binding_gives_the_same_ulid_and_key_with_no_clock_in_it():
+    from services.n8n_actions.client import ulid_from
+
+    a = _envelope(millis=None)
+    b = _envelope(millis=None)
     assert a["intent_id"] == b["intent_id"]
     assert a["idempotency_key"] == b["idempotency_key"]
     assert _envelope(binding="c" * 64)["intent_id"] != a["intent_id"]
+    assert ulid_from("same") == ulid_from("same") and ULID_RE.fullmatch(ulid_from("same"))
 
 
 @pytest.mark.parametrize(

@@ -70,6 +70,8 @@ from services.notion.client import NotionRESTClient
 from services.operator.agent_adapter import OperatorCapabilityAdapter
 from services.vision.agent_adapter import VisionAdapter
 
+RESERVED_CHILD_CONTEXT_KEYS = frozenset({"parent_task_id", "subagent_id", "max_steps", "owner_id"})
+
 github_client = GitHubRESTClient()
 notion_client = NotionRESTClient()
 n8n_action_client = N8NActionClient()
@@ -441,6 +443,11 @@ class DurableAgentTaskService:
             "max_steps": spec.max_steps,
         }
         for key in spec.inherit_context_keys:
+            # The link keys are the child's own. A model that inherited
+            # parent_task_id from the parent would record the grandparent as its
+            # parent and skip a level of the depth count (critic, 2026-10-24).
+            if key in RESERVED_CHILD_CONTEXT_KEYS:
+                continue
             if key in parent.context:
                 child_context[key] = parent.context[key]
         project_id = self._project_id(parent)

@@ -182,3 +182,26 @@ async def test_without_a_runner_the_tool_refuses_and_keeps_the_approval():
     )
     assert result.ok is False and "approval was not spent" in result.error
     assert approvals.get(record.request_id).state is ApprovalState.APPROVED
+
+
+@pytest.mark.asyncio
+async def test_a_child_cannot_inherit_its_parent_link_and_skip_a_depth_level(client, auth_headers):
+    """The critic's finding: inherit_context_keys=["parent_task_id"] rewrote the link.
+
+    Driven through the same spawn_subagent_task that runtime.call_subagent uses,
+    at depth one, where the parent's context carries a parent_task_id to steal.
+    """
+    root = await client.post("/api/v1/agent-tasks", headers=auth_headers,
+                             json={"goal": "Root", "steps": [{"title": "Ask", "tool": "council.consult", "arguments": {"question": "Anything?"}}]})
+    root_id = root.json()["task_id"]
+    child = await client.post("/api/v1/agent-expansion/subagents", headers=auth_headers,
+                              json={"parent_task_id": root_id, "goal": "Child", "max_steps": 3})
+    child_id = child.json()["task_id"]
+    grandchild = await client.post("/api/v1/agent-expansion/subagents", headers=auth_headers,
+                                   json={"parent_task_id": child_id, "goal": "Grandchild that tries to climb", "max_steps": 2,
+                                         "inherit_context_keys": ["parent_task_id", "subagent_id", "max_steps", "owner_id"]})
+    assert grandchild.status_code == 201, grandchild.text
+    ctx = grandchild.json()["context"]
+    assert ctx["parent_task_id"] == child_id, ctx
+    assert ctx["max_steps"] == 2
+    assert ctx["subagent_id"] != child.json()["context"]["subagent_id"]

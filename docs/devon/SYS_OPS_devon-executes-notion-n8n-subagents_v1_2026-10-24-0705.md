@@ -5,7 +5,7 @@ DEVON direct access", first action "N8N & Notion". Second card, after the
 session corrected its own first card: "Both and he needs to be able code and do
 everything", and "Create Inbox and Tasks". Then, in chat, "He needs to be able
 to write code" and "He needs to be able to call subagents too", and a third
-card: code through the Claude Agent SDK on the VPS, and subagents "Both", run
+card: code through the Claude Agent SDK on a VPS of DEVON's own, and subagents "Both", run
 and return in the runtime plus worker subagents inside code jobs.
 
 ## What the first card got wrong, and what changed the build
@@ -15,10 +15,11 @@ true of one route, `POST /devon/approvals/decide` at `app/api/v1/devon.py:478`,
 and false of DEVON as a whole. Reading further found two execution lanes that
 already existed:
 
-- The n8n lane. 48 DEVON workflows on the VPS, the Face to the Action Router
+- The n8n lane. 48 DEVON workflows on the n8n VPS, the Face to the Action Router
   (`NYcEp03Oqlvq86Mb`, webhook `devon-action`) to executors for `drive.draft`,
   `airtable.row` and `zapier.mcp`. The Face last ran at 2026-10-24T01:05:28Z,
-  execution 4210, read through the n8n API.
+  execution 4210. Both figures were read live through the n8n API by this
+  session and are reproducible only with n8n access, not from this repository.
 - The Python Agent Runtime. `app/services/agent_tasks.py::build_tool_registry`
   registers GitHub (read, branch, write file, open and merge a pull request),
   operator commands, browser, EditForge, vision and the Council, each behind
@@ -94,15 +95,36 @@ the depth check, and treating every child state as success.
 `devon/code-<job>`, the Claude Agent SDK with a test writer and a reviewer as
 subagents under a turn and dollar limit, then the worker runs the job's test
 command itself and opens a DRAFT pull request carrying the result and the cost.
-It never merges and never pushes to the base ref. The GitHub token is blanked
-in the agent's environment and handed to git per command, never written to
-`.git/config`. `ANTHROPIC_API_KEY` cannot be withheld from the agent and is
-bounded by its Console spend limit and the per job `max_budget_usd`.
+It never merges and never pushes to the base ref. It runs on DEVON's own box,
+ruled the same day, not on the n8n VPS.
 
-Its 15 tests drive real git against a local bare remote with a fake agent and a
-recorded GitHub. Three guards were broken on purpose and each was caught:
-pushing to main instead of the job branch, removing the token scrub, and
-trusting the agent's word instead of running the tests.
+The GitHub token: blanked in the agent's environment, handed to git per command
+as a header and never written to any config, and the push is made from a second
+pristine clone with hooks and local config disabled. The last part exists
+because the critic reproduced the hole it closes: an agent with Write in its
+clone could plant a `pre-push` hook that reads the token out of
+`GIT_CONFIG_PARAMETERS`, or an `insteadOf` rewrite that sends the authed push to
+another host. What stays open, stated plainly: the agent's shell runs as the
+same Unix user as the worker and can read the worker's environment through
+/proc. The limits are the token's own scope, the per job `max_budget_usd`, the
+Console spend limit on `ANTHROPIC_API_KEY`, and allowlisting only trusted
+repositories. A separate user for the agent is stage two of the box.
+
+Other critic findings fixed the same day: a job left mid-flight by a crashed
+worker is closed as failed on the next start instead of reading as running
+forever; a test command that hangs is a test result and still gets its draft,
+titled `TESTS TIMED OUT`; an agent that ended in error or at its limit lands as
+`done_agent_error` with the subtype in the title; a push whose pull request then
+fails to open is recorded as `pushed_pr_failed` naming the branch; git and test
+subprocesses no longer block the server's event loop; the branch carries the
+job id verbatim; and `runtime.call_subagent` no longer lets a model inherit
+`parent_task_id` and shorten the depth count.
+
+The worker tests drive real git against a local bare remote with a fake agent
+and a recorded GitHub. Guards broken on purpose and caught by a test: pushing to
+main instead of the job branch, removing the token scrub, trusting the agent's
+word instead of running the tests, and a planted pre-push hook in the agent's
+clone.
 
 ## Not proven
 
@@ -145,7 +167,7 @@ AREA: Systems
 TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_devon-executes-notion-n8n-subagents_v1_2026-10-24-0705.md
 DATE: 2026-10-24
-DECISIONS: DEVON executes directly; both lanes; Notion and n8n first; existing Inbox, Tasks and Projects databases used rather than duplicated; code through the Agent SDK on the VPS; subagents both in the runtime and inside code jobs.
+DECISIONS: DEVON executes directly; both lanes; Notion and n8n first; existing Inbox, Tasks and Projects databases used rather than duplicated; code through the Agent SDK on DEVON's own box; subagents both in the runtime and inside code jobs.
 FINDINGS: The runtime already executed GitHub, operator and browser effects; the stale missing labels on the Notion databases; the first card understated what existed.
 OPEN: DEVON_NOTION_TOKEN, database sharing, DEVON_N8N_ACTION_KEY, DEVON's own box and the code worker on it, the desktop stage, first live receipts, n8n Notion executor.
 STATUS: built and tested against mock transports; live proof waits on the settings above and the worker box.
