@@ -1,0 +1,10 @@
+DEVON RECEIPT
+platform: ChatGPT
+date: 2026-10-24
+area: Systems
+files_opened: CLAUDE.md; .claude/skills/steward/SKILL.md; .claude/skills/deploy-readback/SKILL.md; app/api/v1/arf_shadow.py; docs/reliability/ARF_SHADOW_RATE_LIMIT.md; docs/reliability/ARF_STAGE3_RECEIPT_BRIDGE.md; services/devon/receipts.py.
+summary: ARF DEVON/build shadow diagnostics verified in production after PR417 merged and deployed. Owned reads returned 200 WOULD_HOLD; a bounded burst returned five 200s and one 429; refill recovered.
+decisions: Keep ARF as owner-scoped read-only recommendations with shared request accounting and existing approval boundaries.
+open threads: Creative-domain enforcement and separate approval-backend attestation remain outside this slice.
+artifacts: PR417 authenticated diagnostic console; dated activation status and this separate receipt.
+unverified: Production cross-account measurement was not performed; real two-account tests passed in disposable PostgreSQL. Soul rendered content behind authentication was not inspected. External thread-log delivery was not attempted.
