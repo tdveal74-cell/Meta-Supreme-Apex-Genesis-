@@ -61,10 +61,16 @@ from services.editforge.agent_adapter import EditForgeCapabilityAdapter
 from services.github.agent_adapter import GitHubCapabilityAdapter
 from services.github.client import GitHubRESTClient
 from services.intelligence.council_adapter import CouncilCapabilityAdapter
+from services.n8n_actions.agent_adapter import N8NActionCapabilityAdapter
+from services.n8n_actions.client import N8NActionClient
+from services.notion.agent_adapter import NotionCapabilityAdapter
+from services.notion.client import NotionRESTClient
 from services.operator.agent_adapter import OperatorCapabilityAdapter
 from services.vision.agent_adapter import VisionAdapter
 
 github_client = GitHubRESTClient()
+notion_client = NotionRESTClient()
+n8n_action_client = N8NActionClient()
 expansion_repo = HermesExpansionRepository()
 subagent_links = SubagentLinkRepository()
 
@@ -234,6 +240,8 @@ def build_tool_registry() -> ToolRegistry:
     registry = ToolRegistry()
     OperatorCapabilityAdapter(operator_bridge, approvals).register(registry)
     GitHubCapabilityAdapter(github_client, approvals).register(registry)
+    NotionCapabilityAdapter(notion_client, approvals).register(registry)
+    N8NActionCapabilityAdapter(n8n_action_client, approvals).register(registry)
     BrowserCapabilityAdapter(
         approvals,
         fetcher=maybe_live_fetcher(_browser_live_fetch_enabled()),
