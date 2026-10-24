@@ -1,0 +1,38 @@
+{
+ "credentials": {
+  "httpHeaderAuth": {
+   "id": "ENoUSqySnkK0NVsl",
+   "name": "Cerebras Cloud"
+  }
+ },
+ "parameters": {
+  "authentication": "genericCredentialType",
+  "genericAuthType": "httpHeaderAuth",
+  "headerParameters": {
+   "parameters": [
+    {
+     "name": "content-type",
+     "value": "application/json"
+    }
+   ]
+  },
+  "jsonBody": "={{ JSON.stringify($json.claudeBody) }}",
+  "method": "POST",
+  "options": {
+   "timeout": 300000
+  },
+  "sendBody": true,
+  "sendHeaders": true,
+  "specifyBody": "json",
+  "url": "https://api.cerebras.ai/v1/chat/completions"
+ },
+ "settings": {
+  "alwaysOutputData": true,
+  "maxTries": 2,
+  "onError": "continueRegularOutput",
+  "retryOnFail": true,
+  "waitBetweenTries": 3000
+ },
+ "type": "n8n-nodes-base.httpRequest",
+ "typeVersion": 4.2
+}
