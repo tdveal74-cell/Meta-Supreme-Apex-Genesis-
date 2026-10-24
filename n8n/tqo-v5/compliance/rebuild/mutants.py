@@ -1,8 +1,11 @@
 """Mutants for rebuild.test.mjs.
 
 Each mutant undoes one fix in BOTH the draft body and replacements.json, so
-the ledger check cannot be what kills it; a behaviour test has to. It works on
-a temporary copy of this folder and never edits the real files.
+the ledger check cannot be what kills it; a behaviour test has to. Preflight
+carries byte copies of some OS 28 and Doctor Gate lines, so a mutant of a
+copied line is applied to the Preflight copy too; otherwise the drift check
+alone would kill it and prove nothing about behaviour. It works on a temporary
+copy of this folder and never edits the real files.
 
     python3 n8n/tqo-v5/compliance/rebuild/mutants.py
 
@@ -17,6 +20,7 @@ import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+MIRROR = "Preflight: Can This Clear?"
 FILES = {
     "OS 28: Publish Gate": "os28_publish_gate.js",
     "Script: Fill Run Fields": "fill_run_fields.js",
@@ -29,7 +33,9 @@ MUTANTS = [
     ("tension word without the leading boundary", "OS 28: Publish Gate",
      [(r"/\b(?:stop|", r"/(?:stop|")]),
     ("tension word without inflections", "OS 28: Publish Gate",
-     [("(?:s|es|d|ed|ped|ping|ing|ly|er|est|en|ful)?\\b/i", "\\b/i")]),
+     [("(?:s|es|d|ed|ped|ping|ing|ly|en|ful)?\\b/i", "\\b/i")]),
+    ("a general er ending lets Coster pass", "OS 28: Publish Gate",
+     [("(?:s|es|d|ed|ped|ping|ing|ly|en|ful)?\\b/i", "(?:s|es|d|ed|ped|ping|ing|ly|er|en|ful)?\\b/i")]),
     ("mistaken no longer a tension word", "OS 28: Publish Gate",
      [("|mistaken|", "|")]),
     ("OS 28 lets Not required pass", "OS 28: Publish Gate",
@@ -69,6 +75,12 @@ MUTANTS = [
     ("preflight mirror skips the doctor rule", "Preflight: Can This Clear?",
      [("if (!(['PASS', 'REPAIRED'].includes(doctorVerdict) && doctorScore >= DOCTOR_FLOOR)) {",
        "if (false) {")]),
+    ("preflight C4 compare without trim", "Preflight: Can This Clear?",
+     [("slice(0, 3).some(l => l.trim() === C4_LINE)) blockers.push", "slice(0, 3).some(l => l === C4_LINE)) blockers.push")]),
+    ("preflight C4 check on the untrimmed description", "Preflight: Can This Clear?",
+     [("if (!desc.split('\\n').slice(0, 3)", "if (!String(f.Description ?? '').split('\\n').slice(0, 3)")]),
+    ("preflight C4 line may carry trailing text", "Preflight: Can This Clear?",
+     [("some(l => l.trim() === C4_LINE)) blockers.push", "some(l => l.trim().startsWith(C4_LINE))) blockers.push")]),
     ("preflight copy drifts from the Doctor Gate", "Preflight: Can This Clear?",
      [("const DOCTOR_FLOOR = 90;", "const DOCTOR_FLOOR = 85;")]),
     ("preflight accepts Not required", "Preflight: Can This Clear?",
@@ -96,26 +108,31 @@ def main():
             shutil.rmtree(work, ignore_errors=True)
             shutil.copytree(HERE, work)
             ledger = json.loads((work / "replacements.json").read_text())
-            draft = work / "draft" / FILES[node]
-            code = draft.read_text()
+            codes = {n: (work / "draft" / f).read_text() for n, f in FILES.items()}
             applied = True
             for old, new in steps:
                 hits = sum(pair[1].count(old) for pair in ledger[node])
-                if hits != 1 or code.count(old) != 1:
-                    print("BAD MUTANT", name, "ledger hits", hits, "draft hits", code.count(old))
+                if hits != 1 or codes[node].count(old) != 1:
+                    print("BAD MUTANT", name, "ledger hits", hits, "draft hits", codes[node].count(old))
                     applied = False
                     break
-                for pair in ledger[node]:
-                    pair[1] = pair[1].replace(old, new)
-                code = code.replace(old, new)
+                targets = [node]
+                if node != MIRROR and codes[MIRROR].count(old) == 1:
+                    targets.append(MIRROR)
+                for target in targets:
+                    for pair in ledger[target]:
+                        pair[1] = pair[1].replace(old, new)
+                    codes[target] = codes[target].replace(old, new)
             if not applied:
                 ok = False
                 continue
             (work / "replacements.json").write_text(json.dumps(ledger, indent=2))
-            draft.write_text(code)
+            for n, f in FILES.items():
+                (work / "draft" / f).write_text(codes[n])
             result = run(work)
             by_ledger = "listed replacements" in result.stderr or "occurs once" in result.stderr
-            killed = result.returncode != 0 and not by_ledger
+            by_drift = "Preflight copies" in result.stderr
+            killed = result.returncode != 0 and not by_ledger and (node == MIRROR or not by_drift)
             ok = ok and killed
             first = next((line.strip() for line in result.stderr.splitlines() if "AssertionError" in line), "")
             print(("KILLED   " if killed else "SURVIVED ") + name + " | " + first[:140])

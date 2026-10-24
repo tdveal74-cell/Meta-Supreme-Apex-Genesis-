@@ -66,12 +66,13 @@ else if (desc.length < 120) blockers.push('description is only ' + desc.length +
 if (!s(f.Script)) blockers.push('no Script');
 
 // Mirrors, ruled 2026-10-24: a row that OS 28 gates 3c and 5 or the QC Doctor
-// Gate will hold is not paid for. Each rule below is a copy of its source
-// line; rebuild.test.mjs fails if a copy drifts from the line it copies.
+// Gate will hold is not paid for. Each constant and pattern below is a byte
+// copy of its source line, and rebuild.test.mjs fails if one drifts or if
+// Preflight and the gates disagree on a row.
 const C4_LINE = 'Presented with a synthetic voice and synthetic likeness of Terrance Veal, used with his consent.';
 if (!desc.split('\n').slice(0, 3).some(l => l.trim() === C4_LINE)) blockers.push('the C4 line is not on a line of its own in the first three lines of the Description (quality law 13)');
 const DASH = new RegExp('[' + String.fromCharCode(0x2014, 0x2013) + ']');
-const tensionWord = /\b(?:stop|never|no one|wrong|truth|lie|lost|cost|failed|mistaken|mistake|quiet|hidden|invisible|exposed|before|instead)(?:s|es|d|ed|ped|ping|ing|ly|er|est|en|ful)?\b/i;
+const tensionWord = /\b(?:stop|never|no one|wrong|truth|lie|lost|cost|failed|mistaken|mistake|quieter|quietest|quiet|hidden|invisible|exposed|before|instead)(?:s|es|d|ed|ped|ping|ing|ly|en|ful)?\b/i;
 const properNoun = /\b[A-Z][a-z]+\b/;
 if (DASH.test(title)) blockers.push('title carries an em or en dash');
 if (title && !tensionWord.test(title)) blockers.push('title has no tension word (quality law 6)');

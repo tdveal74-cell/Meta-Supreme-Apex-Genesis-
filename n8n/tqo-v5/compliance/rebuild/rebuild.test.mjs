@@ -164,6 +164,7 @@ for (const [title, why] of [
   ["Accost The Copilot Rollout Plan", "no tension word"],
   ["Copilot As A Backstop For Managers", "no tension word"],
   ["Nonstop Copilot Meetings For Managers", "no tension word"],
+  ["Why Coster Diamonds Chose Copilot", "no tension word"],
   ["the quiet mistake managers make", "no proper noun"],
   ["The Quiet Mistake " + String.fromCharCode(0x2014) + " Copilot", "em or en dash"],
   ["The Quiet Mistake " + String.fromCharCode(0x2013) + " Copilot", "em or en dash"],
@@ -301,8 +302,9 @@ assert.equal(runPre(PRE_NEW, preRow({ aiReview: {} }))._preflightOk, false);
 assert.equal(runPre(PRE_NEW, preRow({ "Human Review": "yes" }))._preflightOk, false);
 
 // The mirrors, ruled 2026-10-24: Preflight refuses to pay for a run that OS 28
-// or the QC Doctor Gate will hold. Each mirrored rule is a byte copy of its
-// source line, so the two cannot drift apart.
+// or the QC Doctor Gate will hold. Each constant and pattern is a byte copy of
+// its source line; the rule lines that use them are held to the gates by the
+// behaviour comparison below.
 const lineOf = (code, start) => {
   const found = code.split("\n").filter((l) => l.startsWith(start));
   assert.equal(found.length, 1, "one line starts with " + start);
@@ -324,12 +326,17 @@ const titles = [
   "Accost The Copilot Rollout Plan", "the quiet mistake managers make", "The Quiet Mistake " + String.fromCharCode(0x2014) + " Copilot",
   "The Mistakes Managers Make With Copilot", "Mistaken About Copilot", "Three Leadership Failures Every NCO Should Audit",
 ];
-const descriptions = [C4 + "\n\n" + DESC_BODY, "one\ntwo\n" + C4 + "\n" + DESC_BODY, "one\ntwo\nthree\n" + C4 + "\n" + DESC_BODY, DESC_BODY + " " + C4, DESC_BODY];
+const descriptions = [
+  C4 + "\n\n" + DESC_BODY, "one\ntwo\n" + C4 + "\n" + DESC_BODY, "one\ntwo\nthree\n" + C4 + "\n" + DESC_BODY, DESC_BODY + " " + C4, DESC_BODY,
+  // Whitespace both sides trim the same way, and text both sides refuse.
+  C4 + "\r\n" + DESC_BODY, "   " + C4 + "   \n" + DESC_BODY, "\n\n\n" + C4 + "\n" + DESC_BODY, "\n\n\n\n" + C4 + "\n" + DESC_BODY,
+  "one\n\n\n" + C4 + "\n" + DESC_BODY, C4 + " And more.\n" + DESC_BODY, "one\r\ntwo\r\n" + C4 + "\r\n" + DESC_BODY,
+];
 const histories = [line(95, "PASS"), line(90, "REPAIRED"), line(89.9, "PASS"), line(95, "PASS WITH NOTES"), line(95, "PASS") + "\n" + line(95, "FAIL"), "", "note: asked the doctor 95/100 PASS"];
-const mirrored = (b) => /^(the C4 line|title |script doctor:)/.test(b);
+const mirrored = (b) => /^(the C4 line|title carries|title has no|script doctor:)/.test(b);
 let compared = 0;
 for (const title of titles) for (const description of descriptions) {
-  const preBlocks = runPre(PRE_NEW, preRow({ "Video Title": title, Description: description }))._preflightBlockers.filter((b) => /^(the C4 line|title )/.test(b));
+  const preBlocks = runPre(PRE_NEW, preRow({ "Video Title": title, Description: description }))._preflightBlockers.filter((b) => /^(the C4 line|title carries|title has no)/.test(b));
   const gate = runGate(OS28_NEW, cleanRow({ "Video Title": title, Description: description }));
   const gateBlocks = gate.os28_blocking.filter((b) => b.startsWith("quality law titles:") || b.startsWith("disclosure: the C4 line") || b.startsWith("disclosure: the Description does not contain"));
   assert.equal(preBlocks.length > 0, gateBlocks.length > 0, "Preflight and OS 28 agree on " + JSON.stringify([title, description.slice(0, 20)]));
