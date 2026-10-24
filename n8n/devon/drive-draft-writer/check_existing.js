@@ -46,5 +46,8 @@ return [{ json: Object.assign({}, v, {
   existing_name: found ? String(found.name || '') : '',
   existing_link: found ? String(found.webViewLink || '') : '',
   existing_created: found ? String(found.createdTime || '') : '',
-  existing_matched_by: found ? (byProps ? 'idempotency_properties' : 'deterministic_name') : ''
+  existing_matched_by: found ? (byProps ? 'idempotency_properties' : 'deterministic_name') : '',
+  // Carried so Check Existing Content can refuse a file that is not a Google Doc
+  // before asking Drive to export it, which only works on Google Workspace files.
+  existing_mime: found ? String(found.mimeType || '') : ''
 }) }];
