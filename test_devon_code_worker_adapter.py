@@ -94,7 +94,12 @@ async def test_code_task_waits_for_a_high_impact_card_then_submits_once(client, 
 
 @pytest.mark.asyncio
 async def test_a_repository_off_the_allowlist_is_refused_before_the_approval_is_spent():
-    from services.agent_runtime.governance import APPROVAL_METADATA_KEY, RUNTIME_REQUESTED_BY, approval_binding, approval_marker
+    from services.agent_runtime.governance import (
+        APPROVAL_METADATA_KEY,
+        RUNTIME_REQUESTED_BY,
+        approval_binding,
+        approval_marker,
+    )
     from services.agent_runtime.tools import ToolRegistry
     from services.code_worker.agent_adapter import CodeWorkerCapabilityAdapter
     from services.code_worker.client import CodeWorkerClient
@@ -122,9 +127,9 @@ async def test_a_repository_off_the_allowlist_is_refused_before_the_approval_is_
 
 @pytest.mark.asyncio
 async def test_a_failed_job_reads_back_as_a_failure():
+    from services.agent_runtime.tools import ToolRegistry
     from services.code_worker.agent_adapter import CodeWorkerCapabilityAdapter
     from services.code_worker.client import CodeWorkerClient
-    from services.agent_runtime.tools import ToolRegistry
     from services.devon.approval import ApprovalQueue
 
     registry = ToolRegistry()

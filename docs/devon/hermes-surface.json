@@ -15,6 +15,8 @@
   "tools": [
     "browser.fetch | risk=read | reversible=True | blast=read-only HTTP GET to one allowlisted host",
     "browser.navigate | risk=write | reversible=True | blast=one approved navigation record to an allowlisted host",
+    "code.status | risk=read | reversible=True | blast=read-only code worker job record",
+    "code.task | risk=high_impact | reversible=False | blast=one new branch and one draft pull request in one allowlisted repository, and shell commands on the code worker box",
     "council.consult | risk=read | reversible=True | blast=provider tokens only; no external effect",
     "editforge.control | risk=high_impact | reversible=False | blast=one retry or cancellation for one EditForge command",
     "editforge.execution | risk=read | reversible=True | blast=one authenticated EditForge execution read",

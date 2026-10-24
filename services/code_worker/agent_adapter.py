@@ -57,7 +57,7 @@ class CodeWorkerCapabilityAdapter:
                 ),
                 risk=ToolRisk.HIGH_IMPACT,
                 handler=self._task,
-                reversible=True,
+                reversible=False,
                 blast_radius=(
                     "one new branch and one draft pull request in one allowlisted repository, "
                     "and shell commands on the code worker box"

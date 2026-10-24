@@ -50,8 +50,11 @@ them as fact. A second Inbox would have split captures across two databases.
 | `stop_before_approval` on the run loop | `services/agent_runtime/runtime.py`, `app/services/agent_tasks.py` |
 | Registry wiring | `app/services/agent_tasks.py` |
 | Capture and read replies no longer call the three databases missing | `services/devon/commands.py`, `services/devon/assistant.py`, soul copies byte identical |
-| Hermes record, 21 tools to 25 | `docs/devon/hermes-surface.json`, `SYS_OPS_devon-hermes-stack-status_v2_2026-08-25.md` |
-| Tests, 33 | `test_devon_notion_agent_adapter.py`, `test_devon_n8n_action_adapter.py`, `test_devon_call_subagent.py` |
+| Code worker for the VPS, Claude Agent SDK, draft pull request out | `deploy/code-worker` (`worker.py`, `app.py`, `DEPLOY.md`, service unit) |
+| Tools `code.task` (HIGH_IMPACT), `code.status` (READ) | `services/code_worker` |
+| Worker tests added to the standalone CI job | `.github/workflows/ci.yml`, `CLAUDE.md` |
+| Hermes record, 21 tools to 27 | `docs/devon/hermes-surface.json`, `SYS_OPS_devon-hermes-stack-status_v2_2026-08-25.md` |
+| Tests, 52 | `test_devon_notion_agent_adapter.py`, `test_devon_n8n_action_adapter.py`, `test_devon_call_subagent.py`, `test_code_worker.py`, `test_devon_code_worker_adapter.py` |
 
 Properties of both adapters:
 
@@ -85,11 +88,27 @@ Three of the four tests were checked by breaking the guard they cover and
 watching them fail: running the child without `stop_before_approval`, removing
 the depth check, and treating every child state as success.
 
+## The code worker
+
+`deploy/code-worker` runs one approved job: a fresh clone, a new branch
+`devon/code-<job>`, the Claude Agent SDK with a test writer and a reviewer as
+subagents under a turn and dollar limit, then the worker runs the job's test
+command itself and opens a DRAFT pull request carrying the result and the cost.
+It never merges and never pushes to the base ref. The GitHub token is blanked
+in the agent's environment and handed to git per command, never written to
+`.git/config`. `ANTHROPIC_API_KEY` cannot be withheld from the agent and is
+bounded by its Console spend limit and the per job `max_budget_usd`.
+
+Its 15 tests drive real git against a local bare remote with a fake agent and a
+recorded GitHub. Three guards were broken on purpose and each was caught:
+pushing to main instead of the job branch, removing the token scrub, and
+trusting the agent's word instead of running the tests.
+
 ## Not proven
 
 No call has reached the live Notion API or the live Action Router from this
-code. Every test uses a mock transport. Three things stand between this and a
-live receipt, and all three are Tee's:
+code. Every test uses a mock transport. Four things stand between this and a
+live receipt, and all four are Tee's:
 
 1. Set `DEVON_NOTION_TOKEN` on the API deployment, from a Notion internal
    integration.
@@ -98,6 +117,9 @@ live receipt, and all three are Tee's:
    `vault.NOTION["known_trap"]` records.
 3. Set `DEVON_N8N_ACTION_KEY` to the router's `x-devon-key` value. That key is
    approval equivalent for a write, so it belongs only on the deployment.
+4. Stand up the code worker on DEVON's own box per `deploy/code-worker/DEPLOY.md`
+   and set `DEVON_CODE_WORKER_URL`, `DEVON_CODE_WORKER_KEY` and
+   `DEVON_CODE_WORKER_REPOS` on the API deployment.
 
 The proof after that is one approved `notion.create_page` into the Inbox with
 the page id in the receipt, and one approved `n8n.dispatch` of `spine.echo`,
@@ -109,11 +131,10 @@ Envelope` before dispatch and that node's body is not in this repository.
 
 ## Next arcs
 
-- The code worker, ruled 2026-10-24: the Claude Agent SDK hosted on the VPS. A
-  runtime tool `code.task` posts an approved job; the worker clones the repo,
-  edits, runs the tests, uses the SDK's own subagents for workers, and opens a
-  draft pull request whose link is the receipt. Deploying it to the VPS, its
-  API key and its GitHub token are Tee's.
+- DEVON's own computer, ruled 2026-10-24: its own box, separate from the n8n
+  VPS, in two stages. First a persistent workspace with a shell and files,
+  which is where the code worker above and the existing Operator Bridge run.
+  Then a desktop driven by Claude computer use on the same box.
 - A Notion executor behind the Action Router, so the n8n lane reaches Notion
   too. Needs a Notion credential in n8n and a publish.
 
@@ -126,5 +147,5 @@ ARTIFACT: docs/devon/SYS_OPS_devon-executes-notion-n8n-subagents_v1_2026-10-24-0
 DATE: 2026-10-24
 DECISIONS: DEVON executes directly; both lanes; Notion and n8n first; existing Inbox, Tasks and Projects databases used rather than duplicated; code through the Agent SDK on the VPS; subagents both in the runtime and inside code jobs.
 FINDINGS: The runtime already executed GitHub, operator and browser effects; the stale missing labels on the Notion databases; the first card understated what existed.
-OPEN: DEVON_NOTION_TOKEN, database sharing, DEVON_N8N_ACTION_KEY, first live receipts, the code worker, n8n Notion executor.
-STATUS: built and tested against mock transports; live proof waits on three settings.
+OPEN: DEVON_NOTION_TOKEN, database sharing, DEVON_N8N_ACTION_KEY, DEVON's own box and the code worker on it, the desktop stage, first live receipts, n8n Notion executor.
+STATUS: built and tested against mock transports; live proof waits on the settings above and the worker box.

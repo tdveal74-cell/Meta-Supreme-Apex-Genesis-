@@ -57,6 +57,8 @@ from services.agent_runtime.verification import validate_requirements
 from services.agents.registry import list_agent_slugs
 from services.browser.agent_adapter import BrowserCapabilityAdapter
 from services.browser.http_fetcher import maybe_live_fetcher
+from services.code_worker.agent_adapter import CodeWorkerCapabilityAdapter
+from services.code_worker.client import CodeWorkerClient
 from services.editforge.agent_adapter import EditForgeCapabilityAdapter
 from services.github.agent_adapter import GitHubCapabilityAdapter
 from services.github.client import GitHubRESTClient
@@ -71,6 +73,7 @@ from services.vision.agent_adapter import VisionAdapter
 github_client = GitHubRESTClient()
 notion_client = NotionRESTClient()
 n8n_action_client = N8NActionClient()
+code_worker_client = CodeWorkerClient()
 expansion_repo = HermesExpansionRepository()
 subagent_links = SubagentLinkRepository()
 
@@ -288,6 +291,7 @@ def build_tool_registry() -> ToolRegistry:
     GitHubCapabilityAdapter(github_client, approvals).register(registry)
     NotionCapabilityAdapter(notion_client, approvals).register(registry)
     N8NActionCapabilityAdapter(n8n_action_client, approvals).register(registry)
+    CodeWorkerCapabilityAdapter(code_worker_client, approvals).register(registry)
     BrowserCapabilityAdapter(
         approvals,
         fetcher=maybe_live_fetcher(_browser_live_fetch_enabled()),
