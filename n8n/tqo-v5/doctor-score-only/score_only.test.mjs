@@ -94,6 +94,7 @@ eq(WORKFLOW.connections["One Idea at a Time"].main[1][0].node, "DEVON Recall: As
 eq(WORKFLOW.connections["Write It?"].main[0][0].node, "Save Score Line", "true writes");
 eq(WORKFLOW.connections["Write It?"].main[1][0].node, "One Idea at a Time", "false writes nothing and moves on");
 eq(WORKFLOW.settings.saveDataSuccessExecution, "all", "a clean run leaves an execution to read");
+eq(WORKFLOW.settings.availableInMCP, true, "a session can start it through the n8n tools, as it can TQO FINAL V5");
 ok(!DASHES.test(read("./workflow.json")), "no em or en dash anywhere in the workflow");
 for (const f of ["build.mjs", "README.md", "nodes/run_config.js", "nodes/select_rows.js", "nodes/recall_required.js", "nodes/final_word.js", "nodes/parse_score_only.js", "nodes/compose_write.js", "nodes/confirm_write.js", "nodes/run_report.js"]) {
   const body = read("./" + f);

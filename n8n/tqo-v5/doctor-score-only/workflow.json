@@ -825,6 +825,7 @@
   "saveDataErrorExecution": "all",
   "saveExecutionProgress": true,
   "timezone": "America/New_York",
-  "callerPolicy": "workflowsFromSameOwner"
+  "callerPolicy": "workflowsFromSameOwner",
+  "availableInMCP": true
  }
 }

@@ -164,7 +164,10 @@ export const SETTINGS = {
   saveDataErrorExecution: 'all',
   saveExecutionProgress: true,
   timezone: 'America/New_York',
-  callerPolicy: 'workflowsFromSameOwner'
+  callerPolicy: 'workflowsFromSameOwner',
+  // So a session can start it on Tee's word through the n8n tools, as it can
+  // TQO FINAL V5, which carries the same setting.
+  availableInMCP: true
 };
 
 const uuid = (name) => {
