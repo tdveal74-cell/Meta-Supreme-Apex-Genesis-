@@ -8,9 +8,10 @@
   "sha256": "f69b8acbd5bb501ae59a8bbbb660bdb92a9c510d33d78821f30ed50cdc5f721d"
  },
  "after": {
-  "versionId": null,
+  "versionId": "fd873714-7acf-482b-8ab1-e101e1afb5ac",
   "file": "after.js",
-  "sha256": "3b0eebdabece7d37f8d5ad8b7d05d6ad3862c2210902404701e7803c289e4efb"
+  "sha256": "3b0eebdabece7d37f8d5ad8b7d05d6ad3862c2210902404701e7803c289e4efb",
+  "publishedReadBack": "2026-10-24, activeVersionId equals versionId, every active node equals the draft, only this node differs from bdb59b09"
  },
  "rollback": "publish bdb59b09-9b38-47ec-8243-89c6dc78ea24"
 }
