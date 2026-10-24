@@ -26,7 +26,7 @@ On the VPS, as a user that is not root:
 
 ```bash
 sudo mkdir -p /opt/devon-code-worker && sudo chown "$USER" /opt/devon-code-worker
-cp deploy/code-worker/worker.py deploy/code-worker/app.py deploy/code-worker/requirements.txt /opt/devon-code-worker/
+cp deploy/code-worker/worker.py deploy/code-worker/server.py deploy/code-worker/requirements.txt /opt/devon-code-worker/
 cd /opt/devon-code-worker
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ```

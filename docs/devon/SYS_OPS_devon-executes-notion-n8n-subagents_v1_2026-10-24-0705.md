@@ -50,7 +50,7 @@ them as fact. A second Inbox would have split captures across two databases.
 | `stop_before_approval` on the run loop | `services/agent_runtime/runtime.py`, `app/services/agent_tasks.py` |
 | Registry wiring | `app/services/agent_tasks.py` |
 | Capture and read replies no longer call the three databases missing | `services/devon/commands.py`, `services/devon/assistant.py`, soul copies byte identical |
-| Code worker for the VPS, Claude Agent SDK, draft pull request out | `deploy/code-worker` (`worker.py`, `app.py`, `DEPLOY.md`, service unit) |
+| Code worker for the VPS, Claude Agent SDK, draft pull request out | `deploy/code-worker` (`worker.py`, `server.py`, `DEPLOY.md`, service unit) |
 | Tools `code.task` (HIGH_IMPACT), `code.status` (READ) | `services/code_worker` |
 | Worker tests added to the standalone CI job | `.github/workflows/ci.yml`, `CLAUDE.md` |
 | Hermes record, 21 tools to 27 | `docs/devon/hermes-surface.json`, `SYS_OPS_devon-hermes-stack-status_v2_2026-08-25.md` |

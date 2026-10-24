@@ -7,7 +7,7 @@ User=devon
 WorkingDirectory=/opt/devon-code-worker
 EnvironmentFile=/etc/devon-code-worker.env
 Environment=DEVON_CODE_WORKER_JOBS_DIR=/opt/devon-code-worker/jobs
-ExecStart=/opt/devon-code-worker/.venv/bin/uvicorn app:build_app --factory --host 127.0.0.1 --port 8711
+ExecStart=/opt/devon-code-worker/.venv/bin/uvicorn server:build_app --factory --host 127.0.0.1 --port 8711
 Restart=on-failure
 NoNewPrivileges=true
 PrivateTmp=true

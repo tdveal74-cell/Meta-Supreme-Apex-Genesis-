@@ -197,7 +197,7 @@ def test_the_same_job_id_for_a_different_job_is_refused(tmp_path, remote):
 def test_the_http_surface_refuses_without_the_key(tmp_path, remote):
     from fastapi.testclient import TestClient
 
-    import app as worker_app
+    import server as worker_app
 
     w = _worker(tmp_path, remote, query=_agent(_fix), prs=[])
     client = TestClient(worker_app.build_app(w, key="k"))
