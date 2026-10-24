@@ -6,7 +6,7 @@ The script doctor in TQO FINAL V5 runs only for rows at status Idea. Twenty
 rows were loaded by hand straight to Scripted, TQO 49 to 60 and NCO 30 to 37,
 so none of them carries a doctor line, and the QC Doctor Gate and Preflight
 hold all twenty. This workflow gives each of those rows one doctor line and
-changes nothing else on it.
+one note, and changes nothing else on it.
 
 ## What a run does
 
@@ -21,9 +21,10 @@ A person starts it by hand. It has no schedule and no webhook.
    writes nothing for that row.
 4. It runs the live doctor prompt with the output contract replaced. The doctor
    returns a score and PASS or NEEDS_REVISION, and never a rewritten script.
-5. It reads the row again. If the script, title, description, learning
-   objective or b-roll changed during the run, or a doctor line landed on it,
-   nothing is written.
+5. It reads the row again. If any column the doctor was shown changed during
+   the run (script, title, topic, description, learning objective, b-roll,
+   checklist, show, season, episode, idea or sources), or a doctor line landed
+   on it, nothing is written.
 6. It appends one line to `score_history` and one note to `last_feedback`, then
    reads the row back to confirm both. Those two columns are the only writes.
 
@@ -34,7 +35,10 @@ written as 89.9 and held.
 
 Any reply other than PASS or NEEDS_REVISION with a score from 0 to 100 writes
 nothing. That covers REPAIRED, a refused or truncated call and unreadable
-JSON. A run in which any row was not written ends in error and lists every row.
+JSON. A run in which any row was not written ends in error. When it reaches
+Run Report, the error lists every row; when it stops earlier, at Recall
+Required or at a failed write, the error names the row it stopped on, and the
+rows written before it stay written.
 
 ## Undoing a line, or scoring a row again
 

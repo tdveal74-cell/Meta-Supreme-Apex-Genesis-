@@ -274,9 +274,9 @@ for (const [out, why] of refused) {
 }
 
 // ---- Compose Write -------------------------------------------------------------
-const SCORED = { script: "The script.", title: "Title 49", description: "Description 49", learningObjective: "By the end, you will have one thing.", broll: "desk, notebook" };
-const compose = (p, fresh) => run("Compose Write", { "Parse Score Only": [p], "Build Doctor Prompt": [{ original: SCORED }] }, fresh)[0].json;
-const ROW49 = { id: 49, status: "Scripted", score_history: "", last_feedback: "", script: "  The script.  ", video_title: "Title 49", topic: "Topic 49", description: "Description 49", learning_objective: "By the end, you will have one thing.", broll_keywords: "desk, notebook" };
+const ROW49 = { id: 49, status: "Scripted", score_history: "", last_feedback: "", script: "  The script.  ", video_title: "Title 49", topic: "Topic 49", description: "Description 49", learning_objective: "By the end, you will have one thing.", broll_keywords: "desk, notebook", checklist: null, show: "TQO", season: 1, episode: 9, idea: "Idea 49", sources: '[{"url":"https://example.org","quote":"q"}]' };
+const SNAPSHOT = run("DT Shim: Idea Rows", {}, [{ ...ROW49, __key: "TQO:49" }])[0].json;
+const compose = (p, fresh) => run("Compose Write", { "Parse Score Only": [p], "One Idea at a Time": [SNAPSHOT] }, fresh)[0].json;
 const c1 = compose(good, [ROW49]);
 ok(c1.write === true && c1.scoreHistory === good.line && c1.lastFeedback === good.feedback, "an empty row takes the line and the note");
 const c2 = compose(good, [{ ...ROW49, score_history: "2026-10-01T00:00:00Z | 88/100 CONDITIONAL", last_feedback: "older note" }]);
@@ -296,9 +296,18 @@ const skips = [
   [compose(good, [{ ...ROW49, video_title: "A new title" }]), "a title edited during the run"],
   [compose(good, [{ ...ROW49, description: "A new description" }]), "a description edited during the run"],
   [compose(good, [{ ...ROW49, learning_objective: "A new objective." }]), "a learning objective edited during the run"],
-  [compose(good, [{ ...ROW49, broll_keywords: "" }]), "b-roll cleared during the run"]
+  [compose(good, [{ ...ROW49, broll_keywords: "" }]), "b-roll cleared during the run"],
+  // Found by the residual verifier on b38bdb2: sources, idea, checklist and the
+  // episode fields reach the doctor too.
+  [compose(good, [{ ...ROW49, sources: "" }]), "sources cleared during the run"],
+  [compose(good, [{ ...ROW49, idea: "A new idea" }]), "the idea edited during the run"],
+  [compose(good, [{ ...ROW49, checklist: '["one"]' }]), "a checklist added during the run"],
+  [compose(good, [{ ...ROW49, episode: 10 }]), "the episode number changed during the run"],
+  [compose(good, [{ ...ROW49, topic: "A new topic" }]), "the topic edited during the run"]
 ];
 for (const [r, why] of skips) ok(r.write === false && r.written === false && r.ok === false && !("scoreHistory" in r), why + " writes nothing: " + r.reason);
+ok(compose(good, [{ ...ROW49, last_feedback: "a note QC wrote", score_history: "t | 88/100 CONDITIONAL" }]).write === true, "a column the doctor was not shown may change and the line is still written");
+ok(compose(good, [{ ...ROW49, script: "A script edited by hand during the run." }]).reason.startsWith("script changed on the row during the run"), "the reason names the column that changed");
 
 // ---- Confirm Write -------------------------------------------------------------
 const confirm = (back) => run("Confirm Write", { "Compose Write": [c1] }, back)[0].json;

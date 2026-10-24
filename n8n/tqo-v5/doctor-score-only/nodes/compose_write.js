@@ -4,8 +4,9 @@
 // History and Last Feedback are appended to, the way Parse QC + Set Verdict
 // appends. Nothing is written when the parse failed, when the row cannot be
 // read back, when it left Scripted, when a doctor line landed during the run,
-// or when its script, title, description, learning objective or b-roll is no
-// longer what the doctor was shown.
+// or when any column the doctor's request was built from changed during the
+// run. Those columns are compared as the row read at the start of the run and
+// as it reads now, so a score always describes the row it lands on.
 const p = $('Parse Score Only').first().json;
 const DOCTOR = /\|\s*doctor\s+(\d+(?:\.\d+)?)\/100\s+([^|\n]*?)\s*(?=\||\n|$)/;
 const skip = (reason) => [{ json: { ...p, ok: false, verdict: 'UNCHECKED', write: false, reason } }];
@@ -15,11 +16,13 @@ if (fresh.length !== 1) return skip('the row read back ' + fresh.length + ' time
 const r = fresh[0];
 if (String(r.status) !== 'Scripted') return skip('the row moved to ' + JSON.stringify(r.status) + ' during the run');
 if (DOCTOR.test(String(r.score_history || ''))) return skip('a doctor line landed on the row during the run');
-const scored = $('Build Doctor Prompt').first().json.original || {};
-const same = (x, y) => String(x ?? '').trim() === String(y ?? '').trim();
-if (!same(r.script, scored.script) || !same(r.video_title ?? r.topic, scored.title) || !same(r.description, scored.description)
-  || !same(r.learning_objective, scored.learningObjective) || !same(r.broll_keywords, scored.broll)) {
-  return skip('the script, title, description, learning objective or b-roll on the row changed during the run, so the score is for text the row no longer holds');
+// Every column Hydrate, Build Doctor Prompt, Doctor Sources and DEVON Recall:
+// Ask read from the row.
+const SHOWN = ['script', 'video_title', 'topic', 'description', 'learning_objective', 'broll_keywords', 'checklist', 'show', 'season', 'episode', 'idea', 'sources'];
+const snap = $('One Idea at a Time').first().json;
+const changed = SHOWN.filter(c => JSON.stringify(snap[c] ?? null) !== JSON.stringify(r[c] ?? null));
+if (changed.length) {
+  return skip(changed.join(', ') + ' changed on the row during the run, so the score is for a row it no longer describes');
 }
 const priorHistory = String(r.score_history || '');
 const priorFeedback = String(r.last_feedback || '');
