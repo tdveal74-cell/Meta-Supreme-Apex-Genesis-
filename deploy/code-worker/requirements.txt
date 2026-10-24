@@ -1,0 +1,7 @@
+# Installed on the VPS only. Not part of the API image or the pinned closure.
+# Unpinned on purpose until the first live install records the versions it got;
+# pin them in the commit that records that install.
+claude-agent-sdk
+fastapi
+uvicorn
+httpx

@@ -14,6 +14,7 @@ every result ``durable: False``, and is fit for offline tests only.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
@@ -35,6 +36,7 @@ from services.agent_runtime.tools import ToolRegistry, ToolResult, ToolSpec
 from services.devon.approval import ApprovalQueue
 
 SPAWN_TOOL = "runtime.spawn_subagent"
+CALL_TOOL = "runtime.call_subagent"
 SCHEDULE_TOOL = "runtime.schedule_goal"
 PROPOSE_TOOL = "runtime.propose_skill"
 
@@ -46,12 +48,19 @@ MAX_OBSERVATIONS = 50
 MAX_INHERIT_KEYS = 20
 MAX_TASK_ID_CHARS = 64
 MAX_STEPS = 12
+#: How deep a chain of call_subagent may go. Each level costs a card, so this
+#: is a backstop against a runaway plan, not the only brake.
+MAX_SUBAGENT_DEPTH = 3
+#: How much of a child's answer comes back to the parent.
+MAX_CHILD_OUTPUT_CHARS = 4_000
+MAX_CHILD_OBSERVATIONS = 6
 
 #: Durable writers, injected by the application layer. Each runs in its own
 #: committed transaction and returns what the HTTP routes would return.
 ScheduleWriter = Callable[..., Awaitable[ScheduledGoal]]
 ProposalWriter = Callable[..., Awaitable[SkillProposal]]
 SubagentWriter = Callable[..., Awaitable[Dict[str, Any]]]
+SubagentCaller = Callable[..., Awaitable[Dict[str, Any]]]
 
 
 @dataclass(frozen=True)
@@ -88,6 +97,7 @@ class ExpansionToolAdapter:
         schedule_writer: Optional[ScheduleWriter] = None,
         proposal_writer: Optional[ProposalWriter] = None,
         subagent_writer: Optional[SubagentWriter] = None,
+        subagent_caller: Optional[SubagentCaller] = None,
         process_local_ok: bool = False,
     ) -> None:
         self.approvals = approvals
@@ -97,6 +107,7 @@ class ExpansionToolAdapter:
         self.schedule_writer = schedule_writer
         self.proposal_writer = proposal_writer
         self.subagent_writer = subagent_writer
+        self.subagent_caller = subagent_caller
         # A tool whose writer is missing refuses rather than succeeding into a
         # process-local store, unless a test says the in-memory path is what
         # it wants. A succeeded receipt for a row that exists nowhere is the
@@ -127,6 +138,26 @@ class ExpansionToolAdapter:
                 handler=self._spawn_subagent,
                 reversible=True,
                 blast_radius="one child AgentTask row and one parent-child link",
+            )
+        )
+        registry.register(
+            ToolSpec(
+                name=CALL_TOOL,
+                parameters=("goal", "max_steps", "inherit_context_keys"),
+                description=(
+                    "Hand a sub-goal to a child agent and get its answer back in "
+                    "this step. The child is planned and run now, under the running "
+                    "task. It runs its read steps itself and stops before any step "
+                    "that needs a human ruling; it never writes on its own. If it "
+                    f"stops there, the answer names the child task for Tee to run. "
+                    f"Chains go at most {MAX_SUBAGENT_DEPTH} deep."
+                ),
+                risk=ToolRisk.WRITE,
+                handler=self._call_subagent,
+                reversible=True,
+                blast_radius=(
+                    "one child AgentTask row, its parent-child link and its read-only steps"
+                ),
             )
         )
         registry.register(
@@ -368,6 +399,55 @@ class ExpansionToolAdapter:
             metadata={**payload, "provider_receipt_id": spec.subagent_id},
         )
 
+    async def _call_subagent(self, arguments: Dict[str, Any]) -> ToolResult:
+        raw = {k: v for k, v in arguments.items() if k != APPROVAL_METADATA_KEY}
+        goal = self._bounded_goal(raw)
+        if isinstance(goal, ToolResult):
+            return goal
+        max_steps = self._bounded_int(raw, "max_steps", default=8, low=1, high=MAX_STEPS)
+        if isinstance(max_steps, ToolResult):
+            return max_steps
+        raw_keys = raw.get("inherit_context_keys") or ()
+        if not isinstance(raw_keys, (list, tuple)):
+            return ToolResult(False, error="inherit_context_keys must be a list")
+        if len(raw_keys) > MAX_INHERIT_KEYS:
+            return ToolResult(
+                False, error=f"inherit_context_keys holds more than {MAX_INHERIT_KEYS} keys"
+            )
+        keys = [str(k)[:MAX_TASK_ID_CHARS] for k in raw_keys if k]
+        if self.subagent_caller is None:
+            return ToolResult(
+                False,
+                error=(
+                    f"no subagent runner is injected for {CALL_TOOL}, so nothing "
+                    "ran and the approval was not spent"
+                ),
+            )
+        not_ready = self._ready(self.subagent_caller, tool_name=CALL_TOOL)
+        if not_ready is not None:
+            return not_ready
+
+        approved = self._approved(arguments, tool_name=CALL_TOOL)
+        if isinstance(approved, ToolResult):
+            return approved
+        if not approved.task_id:
+            return ToolResult(False, error="the approval names no running task")
+        owner = self._owner_for(approved, stated="", durable=True)
+        if isinstance(owner, ToolResult):
+            return owner
+        try:
+            child = await self.subagent_caller(
+                owner_id=owner,
+                parent_task_id=approved.task_id,
+                goal=goal,
+                max_steps=max_steps,
+                inherit_context_keys=keys,
+                max_depth=MAX_SUBAGENT_DEPTH,
+            )
+        except (KeyError, ValueError) as exc:
+            return ToolResult(False, error=str(exc))
+        return _child_result(child, parent=approved.task_id)
+
     async def _schedule_goal(self, arguments: Dict[str, Any]) -> ToolResult:
         raw = {k: v for k, v in arguments.items() if k != APPROVAL_METADATA_KEY}
         goal = self._bounded_goal(raw)
@@ -490,3 +570,52 @@ class ExpansionToolAdapter:
             ),
             metadata={**payload, "provider_receipt_id": proposal.proposal_id},
         )
+
+
+def _child_result(child: Dict[str, Any], *, parent: str) -> ToolResult:
+    """Turn a child's run into the parent's observation.
+
+    Only a completed child is a success. A child that stopped before a ruling,
+    failed or ran out of steps comes back as a failure that says why, so the
+    parent never plans on an answer that does not exist.
+    """
+    task = child.get("task") if isinstance(child.get("task"), dict) else {}
+    task_id = str(task.get("task_id") or child.get("task_id") or "")
+    state = str(task.get("state") or "")
+    observations = [o for o in (task.get("observations") or []) if isinstance(o, dict)]
+    answers = []
+    for item in observations[-MAX_CHILD_OBSERVATIONS:]:
+        text = str(item.get("output") or item.get("error") or "")
+        answers.append(
+            {
+                "step_id": item.get("step_id"),
+                "ok": item.get("ok"),
+                "output": text[:MAX_CHILD_OUTPUT_CHARS],
+            }
+        )
+    payload = {
+        "child_task_id": task_id,
+        "parent_task_id": parent,
+        "state": state,
+        "goal": task.get("goal"),
+        "answers": answers,
+        "failure_reason": task.get("failure_reason") or "",
+        "message": child.get("message") or "",
+    }
+    rendered = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+    metadata = {
+        "child_task_id": task_id,
+        "state": state,
+        "provider_receipt_id": task_id,
+    }
+    if state == "completed":
+        return ToolResult(True, output=rendered, metadata=metadata)
+    if "stopped before a step" in str(child.get("message") or ""):
+        reason = (
+            f"Child {task_id} did its read steps and stopped before a step that "
+            f"needs a ruling. Run {task_id} directly to raise that card: "
+            f"POST /api/v1/agent-tasks/{task_id}/run."
+        )
+    else:
+        reason = f"Child {task_id} ended {state or 'without a state'}: {payload['failure_reason'] or payload['message']}"
+    return ToolResult(False, output=rendered, error=reason, metadata=metadata)

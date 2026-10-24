@@ -202,10 +202,26 @@ class AgentRuntime:
         task_id: str,
         *,
         max_steps: int = 20,
+        stop_before_approval: bool = False,
     ) -> RuntimeResult:
+        """Run steps until the task ends, blocks on a ruling, or runs out of steps.
+
+        ``stop_before_approval`` halts BEFORE a step that would raise a card,
+        leaving no card raised. A subagent run from inside another task's step
+        uses it, because a card's single-use token is returned only to whoever
+        ran the step that raised it, and from inside a tool call that is the
+        parent's observation log, where a token must never land. The child is
+        left for its owner to run directly, which raises the card the normal way.
+        """
         result = RuntimeResult(task=self.get(task_id), message="task loaded")
         for _ in range(max(1, int(max_steps))):
             if result.task.done:
+                break
+            if stop_before_approval and self._next_step_raises_a_card(result.task):
+                result = RuntimeResult(
+                    task=result.task,
+                    message="stopped before a step that needs a human ruling",
+                )
                 break
             result = await self.run_next(task_id)
             if (
@@ -215,6 +231,13 @@ class AgentRuntime:
             ):
                 break
         return result
+
+    def _next_step_raises_a_card(self, task: AgentTask) -> bool:
+        step = task.active_step
+        if step is None or step.approval_request_id is not None:
+            return False
+        spec = self.tools.get(step.tool_call.name)
+        return spec is not None and spec.approval_required
 
     async def run_next(self, task_id: str) -> RuntimeResult:
         task = self.get(task_id)

@@ -190,7 +190,8 @@ jobs:
             test_show_registry_seed.py \
             test_devon_lesson_registry.py \
             test_gate_ledger.py \
-            test_ledger_receipt.py
+            test_ledger_receipt.py \
+            test_code_worker.py
 
   dependency-audit:
     name: Dependency audit (pip-audit + pnpm audit)

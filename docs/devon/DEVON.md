@@ -58,10 +58,10 @@ than eating the name out of it.
 
 | Say this | What happens | Lands in |
 |---|---|---|
-| `Devon, remember...` | captures, tagged and filed | Notion Inbox, Notes and Ideas |
-| `Devon, add a task...` | creates a task | Notion Tasks |
+| `Devon, remember...` | plans the capture; it lands only through an approved `notion.create_page` | Notion Inbox, Notes and Ideas |
+| `Devon, add a task...` | plans the task; it lands only through an approved `notion.create_page` | Notion Tasks |
 | `Devon, what's on my plate?` | reads back tasks, deadlines, status | reads |
-| `Devon, start a project called...` | creates a project record | Notion Projects and Goals |
+| `Devon, start a project called...` | plans the record; it lands only through an approved `notion.create_page` | Notion Projects and Goals |
 | `Devon, status report` | project rollup | reads |
 | `Devon, new episode idea...` | files into the pipeline | Airtable Podcast HQ, Idea stage |
 | `Devon, brief me` | on demand briefing | reads |
@@ -213,14 +213,33 @@ rather than discovered later. Swap in a shared store through the
 
 Stated plainly so nobody assumes otherwise.
 
-- **No live reads.** DEVON does not open Drive, Notion, Airtable or n8n. Asked
+- **No live reads from this package.** Nothing in `services/devon` opens Drive,
+  Notion, Airtable or n8n. The Agent Runtime's `notion.read_page` does read one
+  Notion page, without a card, and that lives outside this package. Asked
   for a briefing he names the lane that owns the data and says he has not read
   it, rather than inventing your own numbers back at you.
 - **No voice loop.** The upstream speech recognition, text to speech, face auth
   and hotword detection were not carried over. They need a microphone, a camera
   and a desktop session, and none of them survived the audit unchanged. See
   `FLAGSHIP_AUDIT.md`.
-- **No writes.** Every capture is a plan. The caller executes.
+- **No writes from this package.** Every capture is a plan. The caller executes.
+
+## Where DEVON executes
+
+Ruled by Tee 2026-10-24: DEVON executes. The package above still never does;
+the doing happens in two lanes beside it, both behind the same approval gate.
+
+- The Agent Runtime (`services/agent_runtime`, `app/services/agent_tasks.py`).
+  Its tools write GitHub (branch, file, pull request, merge), run operator
+  commands, create pages in the Notion Inbox, Tasks and Projects databases
+  (`notion.create_page`), hand approved jobs to the n8n Action Router
+  (`n8n.dispatch`), and call subagents that run now and answer back
+  (`runtime.call_subagent`). Every WRITE and HIGH_IMPACT tool runs only on an
+  approved card bound to its exact arguments.
+- The n8n lane on the VPS: the Face to the Action Router to the executors for
+  Drive drafts, Airtable rows and Zapier.
+
+The record is `docs/devon/SYS_OPS_devon-executes-notion-n8n-subagents_v1_2026-10-24-0705.md`.
 
 ## The ruled word list, and an objection logged once
 

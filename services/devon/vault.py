@@ -261,6 +261,66 @@ NOTION = {
     ),
 }
 
+# Where the Agent Runtime's Notion adapter may create a page, by name. Read from
+# the live workspace on 2026-10-24 through the Notion connector: all three sit
+# under the DEVON Second Brain page above, and the property names, types and
+# options are copied from each data source's schema as it stood that day. The
+# adapter writes only the properties listed here and only the options listed
+# for a select, so a typo in a model's arguments is refused rather than minted
+# as a new option. Adding a database or a property is a deliberate act: read
+# the schema first, then change this map.
+NOTION_DATABASES = {
+    "inbox": {
+        "title": "Inbox, Notes and Ideas",
+        "database_id": "4deffb01-5662-4422-bdcd-b3e6f6a64d22",
+        "data_source_id": "af3d0cb8-97d1-46db-b74c-6a996ffb167d",
+        "title_property": "Name",
+        "properties": {
+            "Type": ("select", ("Note", "Idea", "Link", "Voice dump")),
+            "Tags": (
+                "multi_select",
+                ("TQO", "Podcast", "NCO", "Health", "Money", "Family", "Learning",
+                 "Systems", "ACX", "Someday"),
+            ),
+            "Status": ("select", ("New", "Filed", "Archived")),
+        },
+    },
+    "tasks": {
+        "title": "Tasks",
+        "database_id": "ab006f1a-81c2-445e-bde1-1a3e0ab45fb3",
+        "data_source_id": "763b3d3b-0d06-48ea-8351-a641f67903e8",
+        "title_property": "Name",
+        "properties": {
+            "Area": (
+                "select",
+                ("TQO", "Podcast", "NCO", "Health", "Money", "Family", "Learning",
+                 "Systems", "ACX"),
+            ),
+            "Due": ("date", ()),
+            "Notes": ("rich_text", ()),
+            "Priority": ("select", ("High", "Medium", "Low")),
+            "Status": ("select", ("Inbox", "Next", "In progress", "Waiting", "Done")),
+        },
+    },
+    "projects": {
+        "title": "Projects and Goals",
+        "database_id": "78a7c25c-c67d-4c42-93cf-cf0c59cf3f2f",
+        "data_source_id": "0d7d1d3a-14fb-45c1-84c1-864844563850",
+        "title_property": "Name",
+        "properties": {
+            "Area": (
+                "select",
+                ("TQO", "Podcast", "NCO", "Health", "Money", "Family", "Learning",
+                 "Systems", "ACX"),
+            ),
+            "Goal": ("rich_text", ()),
+            "Next action": ("rich_text", ()),
+            "Status": ("select", ("Active", "On hold", "Someday", "Done")),
+            "Target date": ("date", ()),
+        },
+    },
+}
+
 
 # ---------------------------------------------------------------------------
 # Airtable

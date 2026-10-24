@@ -34,7 +34,7 @@ from services.devon import naming, persona
 from services.devon.approval import ApprovalQueue, ApprovalRequest
 from services.devon.commands import Kind, ParsedCommand, parse
 from services.devon.receipts import Receipt, ReceiptFormat, render_standing
-from services.devon.vault import AREA_FOLDERS, NOTION, VERIFY_BEFORE_AUTOMATION
+from services.devon.vault import AREA_FOLDERS, NOTION, NOTION_DATABASES, VERIFY_BEFORE_AUTOMATION
 
 # Capture intents that name their own Area, so nothing a model could infer would
 # ever reach resolve_area for them. `_do_episode_idea` passes force_area="Podcast"
@@ -367,15 +367,15 @@ class Devon:
         return self._needs_live(
             command,
             "your tasks, deadlines and project status from the Live State Ledger",
-            ("the Live State Ledger (Postgres). Notion Tasks is missing, "
-                f"including database {NOTION['thread_log_database']}"),
+            ("the Live State Ledger (Postgres). Notion Tasks exists, "
+                f"database {NOTION_DATABASES['tasks']['database_id']}, and is not read by this handler"),
         )
 
     def _do_status_report(self, command: ParsedCommand, on_date: date_cls) -> DevonResponse:
         return self._needs_live(
             command,
             "the project rollup from the Live State Ledger",
-            "the Live State Ledger (Postgres). Notion Projects and Goals is missing",
+            "the Live State Ledger (Postgres). Notion Projects and Goals exists and is not read by this handler",
         )
 
     def _do_brief(self, command: ParsedCommand, on_date: date_cls) -> DevonResponse:
@@ -406,7 +406,7 @@ class Devon:
             command,
             f"what we already settled about {topic}",
             "the Live State Ledger (ILIKE, not recall-at-plan-time) or the soul "
-            "layer when SOUL_RECALL_ENABLED. Notion Thread Log is missing, "
+            "layer when SOUL_RECALL_ENABLED. The Notion Thread Log is not read by this handler, "
             "data source " + NOTION["thread_log_data_source"],
         )
 
@@ -546,7 +546,7 @@ class Devon:
         return self._plan_capture(
             command,
             on_date,
-            destination="Live State Ledger (Postgres). Notion Inbox, Notes and Ideas is missing",
+            destination="Live State Ledger (Postgres). Notion Inbox, Notes and Ideas only through an approved notion.create_page",
             type_code="DOC",
             suggested_area=suggested_area,
         )
@@ -557,7 +557,7 @@ class Devon:
         return self._plan_capture(
             command,
             on_date,
-            destination="Live State Ledger (Postgres). Notion Tasks is missing",
+            destination="Live State Ledger (Postgres). Notion Tasks only through an approved notion.create_page",
             type_code="DOC",
             suggested_area=suggested_area,
         )
@@ -568,7 +568,7 @@ class Devon:
         return self._plan_capture(
             command,
             on_date,
-            destination="Live State Ledger (Postgres). Notion Projects and Goals is missing",
+            destination="Live State Ledger (Postgres). Notion Projects and Goals only through an approved notion.create_page",
             type_code="DOC",
             suggested_area=suggested_area,
         )
@@ -593,7 +593,7 @@ class Devon:
         return self._plan_capture(
             command,
             on_date,
-            destination="Live State Ledger (Postgres). Notion Thread Log is missing",
+            destination="Live State Ledger (Postgres). The Notion Thread Log is filled by the daily Notion Buffer Drain, not by this handler",
             type_code="DOC",
             suggested_area=suggested_area,
         )
