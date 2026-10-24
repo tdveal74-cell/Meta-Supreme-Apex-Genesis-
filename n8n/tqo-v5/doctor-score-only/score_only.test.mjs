@@ -193,6 +193,11 @@ for (const [ask, why] of [[{ statusCode: 401, body: { detail: "Invalid token" } 
     /DEVON recall did not answer for TQO:49, so it was not scored and the run stopped before calling the provider\. DEVON recall unavailable/, why + " stops the run before the provider is paid");
   checks++;
 }
+// Found by the fix verifier on 8f311fb: the soul service answers 200 with an errors
+// entry when Tee's own index is down, which is a recall without Tee's record.
+ok(read("../../../deploy/soul/services/intelligence/soul.py").includes('errors.append(f"tee-soul-layer unavailable: {exc}")'), "the soul service still names Tee's index this way");
+assert.throws(() => run("Recall Required", recallNodes({ statusCode: 200, body: { records: [], errors: ["tee-soul-layer unavailable: 503"] } }), [merged]), /did not answer for TQO:49/, "a 200 without Tee's index stops the run"); checks++;
+eq(run("Recall Required", recallNodes({ statusCode: 200, body: { records: [{ text: "x" }], errors: ["devon-soul was not searched: no host is configured"] } }), [merged]).length, 1, "a recall missing only DEVON's index goes on");
 eq(WORKFLOW.connections["DEVON Recall: Merge"].main[0][0].node, "Recall Required", "the recall is checked right after it is merged");
 eq(WORKFLOW.connections["Recall Required"].main[0][0].node, "Show Context: Script", "and before anything else runs");
 
@@ -269,9 +274,9 @@ for (const [out, why] of refused) {
 }
 
 // ---- Compose Write -------------------------------------------------------------
-const SCORED = { script: "The script.", title: "Title 49", description: "Description 49" };
+const SCORED = { script: "The script.", title: "Title 49", description: "Description 49", learningObjective: "By the end, you will have one thing.", broll: "desk, notebook" };
 const compose = (p, fresh) => run("Compose Write", { "Parse Score Only": [p], "Build Doctor Prompt": [{ original: SCORED }] }, fresh)[0].json;
-const ROW49 = { id: 49, status: "Scripted", score_history: "", last_feedback: "", script: "  The script.  ", video_title: "Title 49", topic: "Topic 49", description: "Description 49" };
+const ROW49 = { id: 49, status: "Scripted", score_history: "", last_feedback: "", script: "  The script.  ", video_title: "Title 49", topic: "Topic 49", description: "Description 49", learning_objective: "By the end, you will have one thing.", broll_keywords: "desk, notebook" };
 const c1 = compose(good, [ROW49]);
 ok(c1.write === true && c1.scoreHistory === good.line && c1.lastFeedback === good.feedback, "an empty row takes the line and the note");
 const c2 = compose(good, [{ ...ROW49, score_history: "2026-10-01T00:00:00Z | 88/100 CONDITIONAL", last_feedback: "older note" }]);
@@ -289,7 +294,9 @@ const skips = [
   [compose(good, [{ ...ROW49, script: "A script edited by hand during the run." }]), "a script edited during the run"],
   [compose(good, [{ ...ROW49, script: "" }]), "a script blanked during the run"],
   [compose(good, [{ ...ROW49, video_title: "A new title" }]), "a title edited during the run"],
-  [compose(good, [{ ...ROW49, description: "A new description" }]), "a description edited during the run"]
+  [compose(good, [{ ...ROW49, description: "A new description" }]), "a description edited during the run"],
+  [compose(good, [{ ...ROW49, learning_objective: "A new objective." }]), "a learning objective edited during the run"],
+  [compose(good, [{ ...ROW49, broll_keywords: "" }]), "b-roll cleared during the run"]
 ];
 for (const [r, why] of skips) ok(r.write === false && r.written === false && r.ok === false && !("scoreHistory" in r), why + " writes nothing: " + r.reason);
 

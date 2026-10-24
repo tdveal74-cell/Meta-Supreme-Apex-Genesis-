@@ -2,7 +2,8 @@
 // from two inputs and nothing else:
 //   live/   the doctor lane bodies read from TQO FINAL V5 at the version that
 //           live/manifest.json names, copied byte for byte;
-//   nodes/  the six nodes this workflow adds.
+//   nodes/  the code of the Code nodes this workflow adds; the trigger, the
+//           data table nodes, the IF and the loop are defined below.
 // Two live bodies are changed, each by one replacement that must match exactly
 // once or the build fails: the output contract of Build Doctor Prompt, replaced
 // by SCORE_ONLY_CONTRACT so the doctor scores and never rewrites, and the

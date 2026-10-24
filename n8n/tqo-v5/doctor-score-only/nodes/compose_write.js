@@ -4,8 +4,8 @@
 // History and Last Feedback are appended to, the way Parse QC + Set Verdict
 // appends. Nothing is written when the parse failed, when the row cannot be
 // read back, when it left Scripted, when a doctor line landed during the run,
-// or when its script, title or description is no longer the text the doctor
-// scored.
+// or when its script, title, description, learning objective or b-roll is no
+// longer what the doctor was shown.
 const p = $('Parse Score Only').first().json;
 const DOCTOR = /\|\s*doctor\s+(\d+(?:\.\d+)?)\/100\s+([^|\n]*?)\s*(?=\||\n|$)/;
 const skip = (reason) => [{ json: { ...p, ok: false, verdict: 'UNCHECKED', write: false, reason } }];
@@ -17,8 +17,9 @@ if (String(r.status) !== 'Scripted') return skip('the row moved to ' + JSON.stri
 if (DOCTOR.test(String(r.score_history || ''))) return skip('a doctor line landed on the row during the run');
 const scored = $('Build Doctor Prompt').first().json.original || {};
 const same = (x, y) => String(x ?? '').trim() === String(y ?? '').trim();
-if (!same(r.script, scored.script) || !same(r.video_title ?? r.topic, scored.title) || !same(r.description, scored.description)) {
-  return skip('the script, title or description on the row changed during the run, so the score is for text the row no longer holds');
+if (!same(r.script, scored.script) || !same(r.video_title ?? r.topic, scored.title) || !same(r.description, scored.description)
+  || !same(r.learning_objective, scored.learningObjective) || !same(r.broll_keywords, scored.broll)) {
+  return skip('the script, title, description, learning objective or b-roll on the row changed during the run, so the score is for text the row no longer holds');
 }
 const priorHistory = String(r.score_history || '');
 const priorFeedback = String(r.last_feedback || '');
