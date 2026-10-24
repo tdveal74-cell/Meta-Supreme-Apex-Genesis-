@@ -175,7 +175,12 @@ eq(held({ score: 96, verdict: "NEEDS_REVISION" }).clear, false, "NEEDS_REVISION 
 eq(held({ score: 85, verdict: "PASS" }).clear, false, "PASS under 90 holds");
 eq(held({ score: 90, verdict: "PASS" }).clear, true, "PASS at exactly 90 clears");
 eq(held({ score: "92", verdict: "pass" }), { verdict: "PASS", score: 92, clear: true }, "a numeric string and a lowercase verdict are read");
-eq(parse(reply({ score: 92.46, verdict: "PASS" })).score, 92.5, "one decimal");
+eq(parse(reply({ score: 92.46, verdict: "PASS" })).score, 92.4, "one decimal, rounded down");
+// Found by the verifier on 805060d: rounding to nearest wrote 89.95 as 90 and cleared the gate.
+for (const s of [89.95, 89.99, "89.95"]) {
+  const r = parse(reply({ score: s, verdict: "PASS" }));
+  eq([r.score, gateClears(r.line).clear], [89.9, false], JSON.stringify(s) + " is written as 89.9 and held, never 90");
+}
 eq(parse(reply("```json\n" + JSON.stringify({ score: 91, verdict: "PASS" }) + "\n```")).verdict, "PASS", "a fenced reply is read");
 eq(parse(reply("Here it is: " + JSON.stringify({ score: 91, verdict: "PASS" }) + " done")).verdict, "PASS", "a reply wrapped in prose is read");
 const refused = [
@@ -184,6 +189,10 @@ const refused = [
   [reply({ score: 95 }), "no verdict, which the live parser would call PASS"],
   [reply({ score: 95, verdict: "" }), "an empty verdict"],
   [reply({ score: 95, verdict: ["PASS"] }), "a verdict that is not a string"],
+  [reply({ score: 95, verdict: "pa\u00df" }), "a verdict whose letters only upper-case into PASS"],
+  [reply({ score: 95, verdict: "PAS\u017f" }), "a long s that upper-cases into PASS"],
+  [reply({ score: 92, verdict: "PASS" }, { choices: [{ message: { content: '{"score":92,"verdict":"PASS"}' } }] }), "a completion with no finish_reason"],
+  [reply({ score: 92, verdict: "PASS" }, { choices: [{ finish_reason: "content_filter", message: { content: '{"score":92,"verdict":"PASS"}' } }] }), "a completion stopped by a content filter"],
   [reply({ verdict: "PASS" }), "no score"],
   [reply({ score: "92%", verdict: "PASS" }), "a score with a unit"],
   [reply({ score: 101, verdict: "PASS" }), "a score above 100"],
@@ -228,6 +237,11 @@ const confirm = (back) => run("Confirm Write", { "Compose Write": [c1] }, back)[
 eq(confirm([{ id: 49, score_history: c1.scoreHistory, last_feedback: c1.lastFeedback }]).written, true, "written only when both columns read back as sent");
 eq(confirm([{ id: 49, score_history: c1.scoreHistory, last_feedback: "" }]).written, false, "a column that did not land is not written");
 eq(confirm([{}]).written, false, "nothing read back is not written");
+
+// ---- the shipped Run Config -------------------------------------------------------
+// Found by the verifier on 805060d: the tests used their own config and never read
+// the shipped one, so FIRST_RUN_LIMIT could be raised without a failure.
+eq(run("Run Config", {}, [{}]).map((i) => i.json), [{ FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [] }], "the first run scores one row, later runs up to 20, no row named");
 
 // ---- Select Rows ---------------------------------------------------------------
 const CONFIG = { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [] };
