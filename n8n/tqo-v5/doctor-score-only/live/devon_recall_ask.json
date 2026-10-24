@@ -1,0 +1,48 @@
+{
+ "credentials": {
+  "httpHeaderAuth": {
+   "id": "JSBvIdHJ9UUQRXwH",
+   "name": "Devon Console Token"
+  }
+ },
+ "parameters": {
+  "authentication": "genericCredentialType",
+  "genericAuthType": "httpHeaderAuth",
+  "options": {
+   "response": {
+    "response": {
+     "fullResponse": true,
+     "neverError": true
+    }
+   },
+   "timeout": 15000
+  },
+  "queryParameters": {
+   "parameters": [
+    {
+     "name": "q",
+     "value": "={{ (String($json.Topic || '') + '. ' + String($json.Idea || '')).slice(0, 900) }}"
+    },
+    {
+     "name": "top_k_tee",
+     "value": "4"
+    },
+    {
+     "name": "top_k_devon",
+     "value": "3"
+    }
+   ]
+  },
+  "sendQuery": true,
+  "url": "https://devon-soul.vercel.app/api/v1/soul/recall"
+ },
+ "settings": {
+  "alwaysOutputData": null,
+  "maxTries": null,
+  "onError": "continueRegularOutput",
+  "retryOnFail": null,
+  "waitBetweenTries": null
+ },
+ "type": "n8n-nodes-base.httpRequest",
+ "typeVersion": 4.2
+}

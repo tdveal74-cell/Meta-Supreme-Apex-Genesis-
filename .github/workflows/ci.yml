@@ -120,6 +120,10 @@ jobs:
       # which was re-imported without it, keeping the Quality90 layer.
       - name: The #367 laws rebuilt on the live workflow, Quality90 untouched
         run: node n8n/tqo-v5/compliance/rebuild/rebuild.test.mjs
+      # Ruled by Tee 2026-10-24, "Score only, never rewrite": the hand-run
+      # doctor for the Scripted rows the live doctor never reached.
+      - name: The score-only script doctor writes a line and nothing else
+        run: node n8n/tqo-v5/doctor-score-only/score_only.test.mjs
       # The carousel rules, ruled by Tee 2026-10-07. No browser here: the drawing
       # runs in carousel-render.yml.
       - name: The carousel rules behave
