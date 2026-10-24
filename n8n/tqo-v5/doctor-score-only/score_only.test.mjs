@@ -222,7 +222,11 @@ const measureFor = (script, lo, show = "TQO") => {
   ok(m.user.includes("the learning objective is spoken word for word from word 31 to word 51 of 151, inside the first 70 words. Its position meets the brief; do not mark it down for where it sits. The script speaks it once."), "row 49's shape is measured at word 31, inside, once");
   ok(m.user.endsWith("\n\nSCRIPT:\n" + m.script) && m.user.indexOf("MEASURED BEFORE THIS PASS") < m.user.indexOf("\n\nSCRIPT:\n"), "the facts sit just above SCRIPT: and the script after it is untouched");
   ok(m.user.includes("Every line above SCRIPT: is the brief") && m.user.includes("the LEARNING OBJECTIVE and CHECKLIST lines") && m.user.includes("none is a second copy of a script sentence"), "the brief's lines are named as not script");
-  eq(m.after.messages[0].content, m.before.messages[0].content + m.after.messages[0].content.slice(m.before.messages[0].content.length), "the system message only gains the final word at its end");
+  // Found by the verifier on 7d57ca6: the first version of this check compared the
+  // message with itself. The final word is read out of the node's own code.
+  const FINAL_TEXT = JSON.parse(fwCode.match(/^const FINAL = ('[^\n]*');$/m)[1].replace(/^'|'$/g, '"'));
+  ok(FINAL_TEXT.startsWith("\n\nScore only, and this overrides the full-length rule above") && FINAL_TEXT.endsWith("The rule against em and en dashes still stands."), "the final word is read from the node");
+  eq(m.after.messages[0].content, m.before.messages[0].content + FINAL_TEXT, "the system message only gains the final word at its end");
   eq(m.user.replace(/\n\nMEASURED BEFORE THIS PASS[^\n]*\nEvery line above SCRIPT:[^\n]*(?=\n\nSCRIPT:\n)/, ""), m.before.messages[1].content, "and the user message gains the two lines and nothing else");
   const late = measureFor(words(80) + " " + LO49 + " " + words(10, "tail"), LO49);
   ok(late.user.includes("from word 81 to word 101 of 111, which is past the first 70 words, so its position does not meet the brief. The script speaks it once."), "an objective past 70 words is measured as outside");
@@ -234,6 +238,14 @@ const measureFor = (script, lo, show = "TQO") => {
   ok(twice.user.includes("The script speaks it 2 times."), "case and punctuation do not hide a second copy");
   const absent = measureFor(words(40), LO49);
   ok(absent.user.includes("the learning objective is not spoken word for word anywhere in the script."), "an objective the script never speaks is measured as missing");
+  // Found by the verifier on 7d57ca6: no fixture had a digit or a hyphen spelled
+  // differently in the script, so only the text check guarded the normaliser.
+  const digits = measureFor("Start. In 3 steps, the one page plan for Q4 2026 is ready. " + words(10), "In 3 steps the one-page plan for Q4 2026 is ready");
+  ok(digits.user.includes("from word 2 to word 13 of 23, inside the first 70 words"), "digits count and a hyphen matches a space, as the gate reads them");
+  const otherDigit = measureFor("Start. Step 4 comes first here. " + words(10), "Step 3 comes first here");
+  ok(otherDigit.user.includes("is not spoken word for word anywhere in the script."), "a different digit is a different objective");
+  const glued = measureFor("Start. The onepage plan is ready. " + words(10), "The one-page plan is ready");
+  ok(glued.user.includes("is not spoken word for word anywhere in the script."), "but a hyphen never matches a word run together, as the gate reads it");
   const none = measureFor(words(40), "");
   ok(none.user.includes("MEASURED BEFORE THIS PASS: no learning objective is stored for this row."), "no stored objective is said so");
   const nco = measureFor(s49, LO49, "NCO");
