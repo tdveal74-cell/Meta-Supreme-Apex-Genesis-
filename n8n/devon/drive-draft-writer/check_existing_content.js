@@ -18,8 +18,13 @@ function refuse(reason) {
   return [{ json: { refused: true, outcome: 'refused', action: 'drive.draft', intent_id: c.intent_id, state: 'AUTHORIZED', reason: reason } }];
 }
 const where = String(c.existing_file_id) + (c.existing_link ? ', ' + String(c.existing_link) : '');
+// Refusal reasons lead with what a person must do, because the router keeps
+// only the first 360 characters of a reason on the ledger trace.
+if (String(c.existing_mime || '') !== 'application/vnd.google-apps.document') {
+  return refuse('REFUSED, needs a person: trash file ' + where + ' in Drive and the next pass writes a fresh draft. A file under this job\'s key already exists but it is ' + String(c.existing_mime || 'of an unstated type') + ', not a Google Doc, so it cannot be read back or adopted. Nothing was written and nothing was deleted.');
+}
 if (r.error) {
-  const msg = String((r.error && r.error.message) || r.error).slice(0, 120);
+  const msg = String((r.error && (r.error.description || r.error.message)) || r.error).slice(0, 160);
   return refuse('REFUSED: a file under this job\'s key already exists (' + where + ') but this pass could not read its text back (' + msg + '), so it is not adopted as the draft. Nothing was written. The next pass retries.');
 }
 const txt = (typeof r.data === 'string') ? r.data.replace(BOM, '') : null;
@@ -28,6 +33,6 @@ if (txt === null) {
 }
 const words = txt.split(/\s+/).filter(Boolean).length;
 if (words < FLOOR) {
-  return refuse('REFUSED: a file under this job\'s key already exists (' + where + ') but it holds ' + words + ' words, under the ' + FLOOR + ' word floor, so it is not adopted as the draft. It is most likely a half made Doc from an earlier pass. Nothing was written and nothing was deleted. Trash that file in Drive and the next pass writes a fresh draft.');
+  return refuse('REFUSED, needs a person: trash file ' + where + ' in Drive and the next pass writes a fresh draft. It is already under this job\'s key but holds ' + words + ' words, under the ' + FLOOR + ' word floor, so it is not adopted as the draft; it is most likely a half made Doc from an earlier pass. Nothing was written and nothing was deleted.');
 }
 return [{ json: Object.assign({}, c, { draft_words: words }) }];

@@ -13,7 +13,8 @@ function refuse(reason) {
   return [{ json: { refused: true, outcome: 'refused', action: 'drive.draft', intent_id: p.intent_id, state: 'AUTHORIZED', reason: reason } }];
 }
 if (r.error || !r.id) {
-  const msg = String((r.error && r.error.message) || r.error || 'no file id returned').slice(0, 120);
+  // n8n's message for a 403 is generic; Google's own reason rides in description.
+  const msg = String((r.error && (r.error.description || r.error.message)) || r.error || 'no file id returned').slice(0, 160);
   return refuse('REFUSED: Drive did not create the document, or did not answer with a file id (' + msg + '). The create is one call, so a refused create leaves no document; if it timed out instead, the next pass finds any file it left by the idempotency properties or by the name and reads its text before adopting it.');
 }
 if (String(r.mimeType || '') !== DOC) {
@@ -23,7 +24,7 @@ const confirm = $('Confirm Properties').all().map(function (i) { return i.json |
 const verified = confirm.some(function (c) { return c && String(c.id || '') === String(r.id); });
 const back = $input.first().json || {};
 if (back.error || typeof back.data !== 'string') {
-  const why = back.error ? String((back.error && back.error.message) || back.error).slice(0, 120) : 'no text came back';
+  const why = back.error ? String((back.error && (back.error.description || back.error.message)) || back.error).slice(0, 160) : 'no text came back';
   return refuse('REFUSED: Drive created file ' + String(r.id) + ' but this pass could not read its text back (' + why + '), so it is not recorded as written. The next pass finds it by the idempotency properties and reads its text before adopting it.');
 }
 const words = back.data.replace(BOM, '').split(/\s+/).filter(Boolean).length;

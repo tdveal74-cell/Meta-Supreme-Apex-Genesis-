@@ -27,6 +27,7 @@ import { readFileSync } from "node:fs";
 const load = (f) => new Function("$", "$input", readFileSync(new URL(`./${f}`, import.meta.url), "utf8"));
 const buildUpload = load("build_upload.js");
 const checkContent = load("check_existing_content.js");
+const checkExisting = load("check_existing.js");
 const docResult = load("doc_result.js");
 
 const BOM = String.fromCharCode(0xfeff);
@@ -43,6 +44,7 @@ const CHECK_EXISTING = {
   existing_file_id: SHELL_ID, existing_name: NAME,
   existing_link: `https://docs.google.com/document/d/${SHELL_ID}/edit`,
   existing_created: "2026-10-22T23:00:44.878Z", existing_matched_by: "idempotency_properties",
+  existing_mime: "application/vnd.google-apps.document",
 };
 
 const words = (n) => Array.from({ length: n }, (_, i) => `word${i}`).join(" ");
@@ -95,6 +97,34 @@ t("an export that errors is refused, not adopted", () => {
   assert.match(out.reason, /could not read its text back \(Forbidden/);
 });
 
+t("the refusal leads with the instruction, inside the router's 360 character cut", () => {
+  const out = run(checkContent, { "Check Existing": [CHECK_EXISTING] }, { data: SHELL_EXPORT });
+  assert.match(out.reason.slice(0, 360), /trash file .* in Drive and the next pass writes a fresh draft/);
+});
+
+t("a found file that is not a Google Doc is refused for a person, never promised a retry", () => {
+  const out = run(checkContent, { "Check Existing": [{ ...CHECK_EXISTING, existing_mime: "application/pdf" }] }, { error: { message: "Export only supports Docs Editors files." } });
+  assert.equal(out.refused, true);
+  assert.match(out.reason, /needs a person: trash file/);
+  assert.match(out.reason, /application\/pdf, not a Google Doc/);
+  assert.doesNotMatch(out.reason, /next pass retries/);
+});
+
+t("a found file with no type on record is refused the same way", () => {
+  const out = run(checkContent, { "Check Existing": [{ ...CHECK_EXISTING, existing_mime: "" }] }, { data: words(400) });
+  assert.equal(out.refused, true);
+  assert.match(out.reason, /of an unstated type, not a Google Doc/);
+});
+
+t("Check Existing carries the found file's type forward", () => {
+  const v = { intent_id: INTENT, idem: IDEM, doc_name: NAME };
+  const bus = { data: JSON.stringify({ persisted: true, envelope: { intent_id: INTENT } }) };
+  const file = { id: SHELL_ID, name: NAME, mimeType: "application/vnd.google-apps.document", appProperties: { devon_intent_id: INTENT, devon_idempotency_key: IDEM } };
+  const out = run(checkExisting, { "Validate and Plan": [v], "Report Entry to Bus": [bus] }, file);
+  assert.equal(out.existing_file_id, SHELL_ID);
+  assert.equal(out.existing_mime, "application/vnd.google-apps.document");
+});
+
 t("an export with no text field is refused, not adopted", () => {
   const out = run(checkContent, { "Check Existing": [CHECK_EXISTING] }, {});
   assert.equal(out.refused, true);
@@ -133,6 +163,15 @@ t("a draft containing the boundary gets a longer boundary, never a cut text", ()
   assert.equal(text.body, sneaky.draft_text);
 });
 
+t("a draft containing the boundary and its first fallback gets a boundary in neither", () => {
+  const b = "devon_draft_" + INTENT;
+  const sneaky = { ...PARSE_DRAFT, draft_text: DRAFT + "\n--" + b + "\n--" + b + "_1\n" };
+  const out = run(buildUpload, {}, sneaky);
+  assert.equal(out.upload_boundary, b + "_2");
+  const [, text] = parts(out.upload_body, out.upload_boundary);
+  assert.equal(text.body, sneaky.draft_text);
+});
+
 // ---- the result after create --------------------------------------------
 
 const CREATED = { id: "1NEWDOCidXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", name: NAME, mimeType: "application/vnd.google-apps.document", createdTime: "2026-10-24T01:00:00.000Z" };
@@ -156,6 +195,12 @@ t("a create Forbidden is refused and says no document was left", () => {
   const out = run(docResult, nodes({ error: { message: "Forbidden - perhaps check your credentials?" } }, []), { error: { message: "no id" } });
   assert.equal(out.refused, true);
   assert.match(out.reason, /one call, so a refused create leaves no document/);
+});
+
+t("a refused create carries Google's own reason, not only n8n's generic text", () => {
+  const err = { error: { message: "Forbidden - perhaps check your credentials?", description: "Google Drive API has not been used in project 123 before or it is disabled." } };
+  const out = run(docResult, nodes(err, []), {});
+  assert.match(out.reason, /has not been used in project 123/);
 });
 
 t("a create that made a plain text file, not a Doc, is refused", () => {

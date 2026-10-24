@@ -52,8 +52,9 @@ jobs:
       # asserted.
       - name: The Pulse's feeder findings behave
         run: node n8n/devon/heartbeat/compose_pulse.test.mjs
-      # The Drive Draft Writer recorded an empty Google Doc as a written draft on
-      # 2026-10-22, job 01M5JVGEDWVYFKWQ28T3N71QW2. The harness drives the real
+      # The Drive Draft Writer left an empty Google Doc on 2026-10-22 and recorded
+      # it as the draft on the 2026-10-23T00:00Z retry, job
+      # 01M5JVGEDWVYFKWQ28T3N71QW2. The harness drives the real
       # node bodies over that job's real second pass and asserts the retired
       # adoption rule took the blank file where the new one refuses it.
       - name: The draft writer never records a blank Doc as a draft
