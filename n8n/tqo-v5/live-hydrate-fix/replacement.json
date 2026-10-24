@@ -1,0 +1,4 @@
+{
+ "old": "const f = row.fields || row;",
+ "new": "// The DT shim builds fields from its MAP only, which has no learning_objective\n// and spells the b-roll column Broll Keywords, so the line const f =\n// row.fields || row read neither, and the doctor was told the learning\n// objective was none returned. Fixed 2026-10-24 on Tee's ruling: the row's own\n// columns are read too, and the shim's names win where both exist.\nconst f = { ...row, ...(row.fields || {}) };"
+}
