@@ -220,7 +220,24 @@ Stated plainly so nobody assumes otherwise.
   and hotword detection were not carried over. They need a microphone, a camera
   and a desktop session, and none of them survived the audit unchanged. See
   `FLAGSHIP_AUDIT.md`.
-- **No writes.** Every capture is a plan. The caller executes.
+- **No writes from this package.** Every capture is a plan. The caller executes.
+
+## Where DEVON executes
+
+Ruled by Tee 2026-10-24: DEVON executes. The package above still never does;
+the doing happens in two lanes beside it, both behind the same approval gate.
+
+- The Agent Runtime (`services/agent_runtime`, `app/services/agent_tasks.py`).
+  Its tools write GitHub (branch, file, pull request, merge), run operator
+  commands, create pages in the Notion Inbox, Tasks and Projects databases
+  (`notion.create_page`), hand approved jobs to the n8n Action Router
+  (`n8n.dispatch`), and call subagents that run now and answer back
+  (`runtime.call_subagent`). Every WRITE and HIGH_IMPACT tool runs only on an
+  approved card bound to its exact arguments.
+- The n8n lane on the VPS: the Face to the Action Router to the executors for
+  Drive drafts, Airtable rows and Zapier.
+
+The record is `docs/devon/SYS_OPS_devon-executes-notion-n8n-subagents_v1_2026-10-24-0705.md`.
 
 ## The ruled word list, and an objection logged once
 

@@ -117,6 +117,51 @@ async def _write_subagent(*, owner_id, parent_task_id, goal, max_steps, inherit_
         return child.to_dict()
 
 
+async def _call_subagent(
+    *, owner_id, parent_task_id, goal, max_steps, inherit_context_keys, max_depth
+):
+    """Spawn a durable child, run it now until it would need a ruling, return it.
+
+    The child is the same row runtime.spawn_subagent writes, so it shows in
+    GET /agent-expansion/subagents. It runs with stop_before_approval, so it
+    takes no write and raises no card from inside the parent's step.
+    """
+    async with AsyncSessionLocal() as session:
+        depth = 0
+        cursor = parent_task_id
+        while cursor:
+            node = await agent_tasks_service.get_task(
+                session, owner_id=owner_id, task_id=cursor
+            )
+            if node is None:
+                break
+            cursor = str(node.context.get("parent_task_id") or "")
+            if cursor:
+                depth += 1
+        if depth + 1 > max_depth:
+            raise ValueError(
+                f"subagent chain would be {depth + 1} deep; the limit is {max_depth}"
+            )
+    child = await _write_subagent(
+        owner_id=owner_id,
+        parent_task_id=parent_task_id,
+        goal=goal,
+        max_steps=max_steps,
+        inherit_context_keys=inherit_context_keys,
+    )
+    async with AsyncSessionLocal() as session:
+        outcome = await agent_tasks_service.run_until_blocked(
+            session,
+            owner_id=owner_id,
+            task_id=str(child["task_id"]),
+            max_steps=max_steps,
+            stop_before_approval=True,
+        )
+    result = dict(outcome.result)
+    result.pop("approval_token", None)
+    return result
+
+
 # Each handler spends its runtime approval binding, then writes through the
 # repositories above in its own committed transaction, the way
 # LeasedEffectRecorder commits an intent: a worker crash after the write
@@ -126,6 +171,7 @@ expansion_adapter = ExpansionToolAdapter(
     schedule_writer=_write_schedule,
     proposal_writer=_write_skill_proposal,
     subagent_writer=_write_subagent,
+    subagent_caller=_call_subagent,
 )
 # The provider resolves at call time, so the mock provider serves CI and the
 # live provider serves production through the same adapter instance.
@@ -511,6 +557,7 @@ class DurableAgentTaskService:
         task_id: str,
         max_steps: int = 20,
         idempotency_key: Optional[str] = None,
+        stop_before_approval: bool = False,
     ) -> TaskRunOutcome:
         key = self._normalize_idempotency_key(idempotency_key)
 
@@ -592,6 +639,7 @@ class DurableAgentTaskService:
             result = await runtime.run_until_blocked(
                 claim.task.task_id,
                 max_steps=max_steps,
+                stop_before_approval=stop_before_approval,
             )
             await self._stop_heartbeat(stop_heartbeat, heartbeat)
             if lease_lost.is_set():

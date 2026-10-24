@@ -49,6 +49,15 @@ Honest label: schema and CI green are not the same as a person running Hermes as
 
 Update 2026-09-02 (fix PR 3 of the DEVON and Hermes audit): the three runtime tools, runtime.spawn_subagent, runtime.schedule_goal and runtime.propose_skill, now spend their approval binding and write the same tables the HTTP routes read. Before that date the subagent, scheduler and skill-proposal rows above were true for the HTTP routes only; the runtime tool path was process-local (audit finding H6).
 
+Update 2026-10-24: four tools joined the registry on Tee's ruling that DEVON
+executes. `notion.create_page` (write) and `notion.read_page` (read) reach the
+Inbox, Tasks and Projects databases; `n8n.dispatch` (write) hands an approved
+job to the n8n Action Router; `runtime.call_subagent` (write) runs a child task
+now and returns its answer, stopping the child before any step that needs a
+ruling. 21 tools became 25. All four are CI-proven against mock transports and
+not operator-live. See
+`docs/devon/SYS_OPS_devon-executes-notion-n8n-subagents_v1_2026-10-24-0705.md`.
+
 Update 2026-09-09: the Hermes agent surface is machine checked against this
 record. `docs/devon/hermes-surface.json` pins it, and
 `test_devon_hermes_surface.py` re-derives it from the code on every run,
@@ -70,7 +79,7 @@ on its own, because the test reads this block and checks it against the code,
 so a surface change has to move this document too:
 
 ```hermes-surface-counts
-tools 21
+tools 25
 routes 33
 columns 152
 states 9
