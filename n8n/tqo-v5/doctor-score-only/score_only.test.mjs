@@ -37,7 +37,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { buildWorkflow, LIVE_CHECKLIST_EMPTY, LIVE_CONTRACT, LIVE_HYDRATE_FIELDS, RUN_CONFIG_MEASURE, RUN_CONFIG_REAL, runConfig, SCORE_ONLY_CHECKLIST_EMPTY, SCORE_ONLY_CONTRACT, SCORE_ONLY_HYDRATE_FIELDS, scoreOnlyHydrate, scoreOnlyPrompt } from "./build.mjs";
+import { buildWorkflow, LIVE_CHECKLIST_EMPTY, LIVE_CONTRACT, LIVE_HYDRATE_FIELDS, NCO_CLOSE, RUN_CONFIG_MEASURE, RUN_CONFIG_REAL, runConfig, SCORE_ONLY_CHECKLIST_EMPTY, SCORE_ONLY_CONTRACT, SCORE_ONLY_HYDRATE_FIELDS, scoreOnlyHydrate, scoreOnlyPrompt } from "./build.mjs";
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const sha = (s) => createHash("sha256").update(s, "utf8").digest("hex");
@@ -139,8 +139,13 @@ const promptFor = (code, show) => {
 };
 const liveLines = (s) => s.split("\n");
 const contractLines = (src) => src.split("\n").map((l) => l.trim().replace(/,$/, "")).map((l) => JSON.parse('"' + l.slice(1, -1).replace(/\\'/g, "'").replace(/"/g, '\\"') + '"'));
+// Ruled by Tee 2026-10-25, "Allow a comments question": the NCO branch of the
+// preservation rules carries the sentence in NCO_CLOSE, the same replacement the
+// live doctor gets, so the live line it is compared with is the pinned one with
+// that replacement made.
+eq(read("./live/build_doctor_prompt.js").split(NCO_CLOSE.old).length, 2, "the NCO branch the replacement fills occurs once in the pinned live body");
 for (const show of ["TQO", "NCO"]) {
-  const a = promptFor(read("./live/build_doctor_prompt.js"), show);
+  const a = promptFor(read("./live/build_doctor_prompt.js").replace(NCO_CLOSE.old, () => NCO_CLOSE.new), show);
   const b = promptFor(byName["Build Doctor Prompt"].parameters.jsCode, show);
   const live = liveLines(a.claudeBody.system), mine = liveLines(b.claudeBody.system);
   const cut = live.indexOf("Return ONLY valid JSON, no fences:");
@@ -151,7 +156,12 @@ for (const show of ["TQO", "NCO"]) {
   eq(b.claudeBody.messages, a.claudeBody.messages, show + ": the user message is the live one");
   eq(b.original, a.original, show + ": the draft handed on is the live one");
   ok(!/"script"|"title"|"description"|"broll"/.test(mine.slice(cut).join("\n")), show + ": the contract asks for no rewritten field");
+  const said = mine.filter((l) => l === NCO_CLOSE.sentence).length;
+  eq(said, show === "NCO" ? 1 : 0, show + (show === "NCO" ? ": the NCO close sentence is said once" : ": TQO is not given the NCO close sentence"));
+  ok(mine.some((l) => l.includes("a specific question for the comments is not a solicitation or engagement bait")) === (show === "TQO"), show + ": the TQO sentence stays TQO's own");
 }
+ok(NCO_CLOSE.sentence.includes("an NCO episode may end on one or on a quiet action") && NCO_CLOSE.new.includes(NCO_CLOSE.sentence) && !NCO_CLOSE.old.includes(NCO_CLOSE.sentence), "the NCO sentence allows a comments question and does not require one");
+eq(new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]").test(NCO_CLOSE.new), false, "and carries no em or en dash");
 
 // ---- Hydrate shows the doctor what the row holds -------------------------------
 // Found by the review on 805060d: the live Hydrate reads the shim's fields, which

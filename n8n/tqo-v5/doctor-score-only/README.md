@@ -37,7 +37,15 @@ A person starts it by hand. It has no schedule and no webhook.
    The rule against invented experience still covers everything else. Both
    shows get it. Tee sharpened it on 2026-10-25, after one read of three in
    execution 4364 took the person in that line for Terrance: it now says the
-   person who has spent years is the viewer being addressed.
+   person who has spent years is the viewer being addressed. On 2026-10-25 Tee
+   ruled it covers both shows and goes to the live doctor too, which
+   `../live-doctor-grounding/` carries.
+   NCO rows are also told that a specific question for the comments is not
+   engagement bait, and that an NCO episode may end on one or on a quiet
+   action. Tee ruled this on 2026-10-25, after all three reads held NCO 30's
+   closing question as bait. The sentence is the one replacement in
+   `../live-doctor-grounding/replacement.json`, so this lane and the live
+   doctor carry the same words in the same place.
    The request is sent `READS` times (3). Tee ruled this on 2026-10-24, after
    the same request scored 85, 100 and 90 in three runs. The score written is
    the lowest of the reads. The verdict is PASS only when every read is PASS

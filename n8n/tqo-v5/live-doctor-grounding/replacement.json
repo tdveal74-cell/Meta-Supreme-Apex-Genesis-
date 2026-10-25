@@ -1,0 +1,6 @@
+{
+ "ruled": "Tee 2026-10-25, card: Allow a comments question",
+ "old": "  'If you cannot say concretely what breaks, it stays.',\n  ...(isNCO ? [] : [\n",
+ "new": "  'If you cannot say concretely what breaks, it stays.',\n  ...(isNCO ? [\n    'A specific question for the comments is not a solicitation or engagement bait, and an NCO episode may end on one or on a quiet action. A request to like, to subscribe, or to visit a link or an audit is a solicitation; remove it.'\n  ] : [\n",
+ "sentence": "A specific question for the comments is not a solicitation or engagement bait, and an NCO episode may end on one or on a quiet action. A request to like, to subscribe, or to visit a link or an audit is a solicitation; remove it."
+}

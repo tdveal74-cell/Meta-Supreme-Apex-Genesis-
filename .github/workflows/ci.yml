@@ -132,6 +132,11 @@ jobs:
       # checklist stored, the live doctor judges the spoken steps.
       - name: The live doctor checklist fix is the one text it says it is
         run: node n8n/tqo-v5/live-doctor-checklist-fix/checklist_fix.test.mjs
+      # Ruled by Tee 2026-10-25, "Both shows, live too" and "Allow a comments
+      # question": the live doctor gets the score-only grounding and NCO's
+      # comments question sentence.
+      - name: The live doctor grounding is the score-only grounding
+        run: node n8n/tqo-v5/live-doctor-grounding/grounding.test.mjs
       # The carousel rules, ruled by Tee 2026-10-07. No browser here: the drawing
       # runs in carousel-render.yml.
       - name: The carousel rules behave

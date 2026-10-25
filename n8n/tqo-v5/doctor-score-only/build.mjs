@@ -6,8 +6,9 @@
 //           data table nodes, the IF and the loop are defined below.
 // Two live bodies are changed, each replacement required to match exactly once
 // or the build fails: in Build Doctor Prompt, the output contract, replaced by
-// SCORE_ONLY_CONTRACT so the doctor scores and never rewrites, and the empty
-// checklist text, replaced by SCORE_ONLY_CHECKLIST_EMPTY; in Script: Hydrate
+// SCORE_ONLY_CONTRACT so the doctor scores and never rewrites, the empty
+// checklist text, replaced by SCORE_ONLY_CHECKLIST_EMPTY, and the empty NCO
+// branch of the preservation rules, given the sentence in NCO_CLOSE; in Script: Hydrate
 // from Row, the fields line, replaced by SCORE_ONLY_HYDRATE_FIELDS so the
 // doctor is shown the learning objective and b-roll the row holds. Two
 // nodes of this workflow's own run between live ones: Recall Required after
@@ -98,12 +99,22 @@ export function scoreOnlyHydrate() {
 export const LIVE_CHECKLIST_EMPTY = ".join(' ') : '(none returned)')";
 export const SCORE_ONLY_CHECKLIST_EMPTY = ".join(' ') : '(not stored on this row; judge the spoken steps in the script itself)')";
 
+// Ruled by Tee 2026-10-25 on a card, "Allow a comments question": an NCO episode
+// may end on one specific question for the comments or on a quiet action, and
+// the NCO brief gets TQO's sentence that such a question is not engagement bait.
+// The text is the one replacement in ../live-doctor-grounding/replacement.json,
+// so this lane and the live doctor carry the same words in the same place.
+export const NCO_CLOSE = JSON.parse(readFileSync(join(HERE, '..', 'live-doctor-grounding', 'replacement.json'), 'utf8'));
+
 export function scoreOnlyPrompt() {
   const live0 = live('build_doctor_prompt.js');
   if (live0.split(LIVE_CHECKLIST_EMPTY).length !== 2) {
     throw new Error('The live empty checklist text was not found exactly once in live/build_doctor_prompt.js. Re-pin it and review this build.');
   }
-  const body = live0.replace(LIVE_CHECKLIST_EMPTY, () => SCORE_ONLY_CHECKLIST_EMPTY);
+  if (live0.split(NCO_CLOSE.old).length !== 2) {
+    throw new Error('The NCO branch of the preservation rules was not found exactly once in live/build_doctor_prompt.js. Re-pin it and review this build.');
+  }
+  const body = live0.replace(LIVE_CHECKLIST_EMPTY, () => SCORE_ONLY_CHECKLIST_EMPTY).replace(NCO_CLOSE.old, () => NCO_CLOSE.new);
   const at = body.indexOf(LIVE_CONTRACT);
   if (at === -1 || body.indexOf(LIVE_CONTRACT, at + 1) !== -1) {
     throw new Error('The live output contract was not found exactly once in live/build_doctor_prompt.js. The live prompt has changed; re-pin it and review this build.');
