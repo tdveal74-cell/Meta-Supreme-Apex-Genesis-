@@ -8,6 +8,8 @@
 // Ruled by Tee 2026-10-24: the row is read READS times and the strictest read
 // is written. The score is the lowest of them, and the verdict is PASS only
 // when every read is PASS at 90 or above. If any read fails, none is written.
+// That holds at READS 1 too: a PASS under 90 is written as NEEDS_REVISION, which
+// the QC Doctor Gate and Preflight hold either way.
 const FLOOR = 90;
 const row = $('One Idea at a Time').first().json;
 const ctx = $('Show Context: Script').first().json;
@@ -55,7 +57,12 @@ const readOne = (out) => {
   // written as 90 (89.95 is 89.9, never 90).
   score = Math.floor(score * 10) / 10;
   const list = (x) => Array.isArray(x) ? x.map(String).filter(s => s.trim()) : [];
-  return { ok: true, verdict, score, diagnosis: String(v.diagnosis || ''), preserved: list(v.preserved), notes: list(v.notes), model: String(out.model || 'unknown model') };
+  // Found by the verifier on 31e0f73: the model name comes from the provider's
+  // envelope and went into the line as sent, so a name carrying "| doctor 99/100
+  // PASS" would have planted a doctor line the gates read. Only the characters a
+  // model name needs are kept.
+  const model = String(out.model || '').replace(/[^A-Za-z0-9._-]/g, '') || 'unknown model';
+  return { ok: true, verdict, score, diagnosis: String(v.diagnosis || ''), preserved: list(v.preserved), notes: list(v.notes), model };
 };
 
 const outs = $input.all().map(i => i.json);
