@@ -33,12 +33,20 @@ run only TQO row 4 had one.
 
 ## The two looks
 
-TQO follows `sites/tqohq/DESIGN.md`, the show's recorded design system: an
-interoffice memo in navy ink on white bond, labels beside values, no shadow or
-card, one face (Atkinson Hyperlegible Next, embedded from the site's own
-licensed copy), and pen blue only on the hand drawn tick of the Quiet Move.
+TQO follows its brand package v2 (`TQO_Brand_Package_v2`, revision
+2026-09-30), which Tee handed over and ruled in on a card on 2026-10-11: deep
+navy `#0A1628` as the ground, Amber Gold `#D4A017` for the wordmark, labels and
+mark, the package's proposed warm off-white `#F4F0E8` for text, and Inter Bold.
+The mark is "The Denominator", a fraction bar over one dot, drawn as vector in
+`templates.mjs` so the gold is the exact hex rather than a generated pixel. It
+sits on the cover and on the closing slide, where it replaced the hand drawn
+tick. The memo layout from `sites/tqohq/DESIGN.md` (labels beside values, flat,
+no card) is kept. The package's own PNGs are raster concepts it marks as not
+production masters, so none of them is used.
 
-NCO Forge follows its brand package v1 on Tee's Drive
+NCO Forge stays on its brand package v1 by the same ruling, because its v2
+package marks its gold and olive as proposals and its anvil and chevron emblem
+is not the mark Tee ruled in. It follows v1 on Tee's Drive
 (`NCO_BRAND_brand-package_v1`, 2026-08-03, read through its 2026-09-24 text
 extract): Deep Navy `#0A1628` as the ground, Gold `#C5A46E` for the wordmark,
 labels, Olive `#3D4F2F` for the rule under the wordmark, and Inter, one of
@@ -48,10 +56,9 @@ star in the package's gold and olive, is `brand/nco-mark.png`, cropped to 480
 px. Tee generated it from a prompt and ruled it in on 2026-10-07; it sits on
 the cover and on the closing slide in place of the gold Forge Rule block. The
 generator's background removal had punched four holes through its olive
-field, and they were filled with the field's own colour before it went in. Tee
-ruled 2026-10-07 to use v1 now; `NCO_Forge_Brand_Package_v2.zip` (9 MB) and
-`TQO_Brand_Package_v2.zip` were too large for the connector and are unread, and
-both templates move to v2 when he supplies its style guide in a readable size.
+field, and they were filled with the field's own colour before it went in. Both v2
+packages were too large for the Drive connector until Tee uploaded them to the
+session on 2026-10-11, which is when they were read.
 The sample in `fixtures/rows.json` is labelled as a sample and is not an
 episode.
 
