@@ -46,8 +46,9 @@ A person starts it by hand. It has no schedule and no webhook.
    closing question as bait. The same day he ruled "Keep NCO's subscribe
    close": the one line the NCO writer ends on, asking the viewer to
    subscribe, is NCO's call to action and stands, so the NCO sentence carries
-   none of TQO's instruction to remove a subscribe request. The sentence is
-   the one replacement in
+   none of TQO's instruction to remove a subscribe request, and says the line
+   is not a solicitation under the close score and is never marked down. The
+   sentence is the one replacement in
    `../live-doctor-grounding/replacement.json`, so this lane and the live
    doctor carry the same words in the same place.
    The request is sent `READS` times (3). Tee ruled this on 2026-10-24, after

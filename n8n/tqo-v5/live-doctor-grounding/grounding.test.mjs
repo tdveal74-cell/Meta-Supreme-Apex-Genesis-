@@ -138,9 +138,12 @@ for (const show of ["TQO", "NCO"]) {
 }
 ok(R.sentence.includes("an NCO episode may end on one or on a quiet action"), "the sentence allows a closing question and does not require one");
 // Ruled by Tee 2026-10-25, "Keep NCO's subscribe close": the live NCO writer ends
-// on one line asking the viewer to subscribe, NCO's one call to action, so the
-// NCO sentence says that line stands and carries none of TQO's "remove it".
-ok(R.sentence.endsWith("The one closing line the writer adds asking the viewer to subscribe is the NCO call to action, and it stands."), "and says the writer's subscribe line stands");
-ok(!/remove it|is a solicitation;/.test(R.sentence), "and tells the doctor to remove nothing");
+// on one line asking the viewer to subscribe, NCO's one call to action, and the
+// doctor leaves that line alone. The rubric's "close 15: ... Never a
+// solicitation." would otherwise dock it, so the sentence says it is not one.
+// Pinned word for word: the verifier on f5f8826 added a "cut it" instruction
+// inside the sentence and a looser check let it through.
+eq(R.sentence, "A specific question for the comments is not a solicitation or engagement bait, and an NCO episode may end on one or on a quiet action. The one closing line the writer adds asking the viewer to subscribe is the NCO call to action, and it stands. It is not a solicitation under the close score and is never marked down.", "the NCO sentence is the ruled wording, word for word");
+eq(R.new, R.old.replace("  ...(isNCO ? [] : [\n", () => "  ...(isNCO ? [\n    '" + R.sentence + "'\n  ] : [\n"), "and the replacement inserts that one line into the NCO branch and nothing else");
 
 console.log("live doctor grounding: " + checks + " checks passed");
