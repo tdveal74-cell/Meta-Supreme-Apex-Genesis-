@@ -39,7 +39,10 @@ concurrency:
 jobs:
   render:
     name: Draw every episode's carousel
-    runs-on: ubuntu-latest
+    # Playwright 1.56.1 cannot install Chromium dependencies on Ubuntu 26.04,
+    # which ubuntu-latest became on 2026-10-20; every run from then to 10-25
+    # died at the install. Match the pin in audio-ci.yml and panel-smoke-ci.yml.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
