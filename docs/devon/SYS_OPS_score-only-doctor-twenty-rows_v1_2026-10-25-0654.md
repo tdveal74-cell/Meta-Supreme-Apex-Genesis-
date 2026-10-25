@@ -227,15 +227,21 @@ twenty rows as they stood before any doctor line, fails eight:
 | TQO 50 | figure "A third" | "Another is a request for more information. A third is an escalation." |
 | TQO 54 | figure "2025" | "In May 2025 the International Labour Organization and NASK published" |
 | TQO 59 | figure "twice" | "What happens if the request arrives twice?" |
-| NCO 30 | attributed to "Soldier" | "A newer Soldier may not know which materials" |
+| NCO 30 | attributed to "Soldier" | "A Soldier reports that a required item is unavailable." |
 | NCO 31 | figure "sixty" | "We are using sixty seconds as a rehearsal exercise." |
-| NCO 33 | figures "A third", "A fourth"; attributed to "Soldier" | "ask whether the Soldier with a problem knows how to report it" |
+| NCO 33 | figures "A third", "A fourth"; attributed to "Soldier" | "A third habit is reporting a concern upward", "A fourth habit is allowing a report to disappear", "A Soldier reports that a required resource is missing." |
 | NCO 37 | attributed to "Someone", "Somebody" | "Someone says it is probably complete." |
 
-TQO 54 is the one real flag, the named study with no approved source. The
-other seven are an ordinal, a count, a frequency or a character in the story.
-The gate was not changed. Which of these rows will pass through it in TQO FINAL
-V5 is not measured here.
+NCO 30 was run as it stood before its 12:03Z hand edit; the same sentence
+trips the gate on the edited script that was scored.
+
+TQO 54's flag is the one with a real problem behind it, though the gate caught
+the year "2025" rather than the attribution: the International Labour
+Organization and NASK passed its attribution checks. Under the row's brief,
+which approves no source, the named study cannot stand. The other seven are an
+ordinal, a count, a frequency or a character in the story. The gate was not
+changed. Which of these rows will pass through it in TQO FINAL V5 is not
+measured here.
 
 ## Gaps found and not fixed
 
@@ -249,14 +255,24 @@ V5 is not measured here.
   measured in a throwaway worktree at `d2183ec`.
 - `n8n/tqo-v5/exports/qEkGOUsNyVaRAmm6_active.json` is stale on
   `DOCTOR_FLOOR`: it carries 70 where the live gate carries 90. The grounding
-  test reads only its Script Gate window and normaliser, which match.
+  test reads three lines of its Script Gate, the 70 word window, the
+  normaliser and the in-window test, and all three match the live gate.
 
 ## Verification
 
 Each build behind these runs went through independent verifiers before it ran
 on the instance: `7d57ca6` (grounding), `31e0f73` and `6305cda` (three reads
 and the voice ruling), `e0351e1` and `d2183ec` (the sharpened ruling and the
-dash count). Their findings are fixed in the commits that follow each one.
+dash count). The findings on `7d57ca6`, `31e0f73` and `e0351e1` are fixed in
+`c292c57`, `6305cda` and `d2183ec`; `6305cda`'s verifier raised none. The
+verifier on `d2183ec` raised two that are not fixed: the blank-entry filter
+mutant and the `list()` drops, the first and third items under Gaps above.
+
+A fresh critic then checked every factual sentence of this doc against the
+same files, in four sections. It found no wrong id, version or score. It
+found two wrong quotes in the Sources Gate table, a checklist count that took
+in an NCO reply, and a set of overclaims on the gate, the voice ruling's
+scope and NCO 30's history. All of its corrections are applied here.
 
 Two refuting verifiers checked the run itself, each in its own worktree at
 `d2183ec`, from the saved execution files and table snapshots, with no network
@@ -286,29 +302,32 @@ actually sent:
   the three failures did you find in your own last week, and what is the one
   repair you will make?", as engagement bait. The TQO sentence saying a
   specific comments question is not a solicitation is in all 12 TQO requests
-  and in none of the 8 NCO requests. NCO's brief instead says "close 15: a
-  clean implication or a real action. Never a solicitation." The other seven
+  and in none of the 8 NCO requests. Both shows' requests carry the same
+  shared rubric line, "close 15: a clean implication or a real action. Never
+  a solicitation.", and only TQO's add the comments clause. The other seven
   NCO scripts close that way, and NCO 30 is the only one that ends on a
   comments question. That question is new: it was added in the 12:03Z hand
   edit on 2026-10-24, after an offline gate pass that held NCO 30 for having
   no comments question, "the same rule V5 failed TQO 46 on". Before the edit
   the script ended "Then return to the work. Let the next action support what
-  you said." So the doctor read the NCO brief as written, and two lanes now
+  you said." So the doctor read the NCO request as written, and two lanes now
   disagree on how an NCO episode should close.
 - NCO 31. Its lowest read, 45, cites "Tee's cold-open rule". The rule is in
   the request, in the TEE'S RECORD block from the DEVON recall: a ruling dated
   2026-09-08, "adopted 2026-09-08 from the Sisinty benchmark refresh (Claude
-  derived, Tee to overrule)", that a long form cold open stacks three or four teased items
-  each with a named entity and a number. Of the 19 requests in 4383 it reached
+  derived, Tee to overrule)", that a long form cold open stacks three or four
+  teased items each with a named entity and a number. Of the 19 requests in 4383 it reached
   only NCO 31's. The block is headed as the only first person material that
   may stand, and the read applied it as a script rule. So one row was judged
   on a rule the other nineteen were never shown.
 - The checklist. This doc's draft expected many holds to blame the required
-  checklist for reading as a list. Measured, it is 3 of the 23
-  NEEDS_REVISION replies: TQO 49 read 1 (81) and TQO 58 read 1 (86), each the
-  read that holds its row, and NCO 37 read 2 (68), where NCO has no checklist
-  rule. All 12 TQO requests carry "REQUIRED BY THE BRIEF, NEVER CUT OR REWORD:
-  ... the spoken checklist of 3 to 5 steps". Separately, a note on TQO 55 read
+  checklist for reading as a list. Measured, 2 of the 23 NEEDS_REVISION
+  replies name the required checklist passage as the problem: TQO 49 read 1
+  (81) and TQO 58 read 1 (86), each the read that holds its row. All 12 TQO
+  requests carry "REQUIRED BY THE BRIEF, NEVER CUT OR REWORD: ... the spoken
+  checklist of 3 to 5 steps". Three NCO replies call a script a list of
+  instructions or a checklist of separate items, NCO 37 read 2 (68), NCO 31
+  read 1 and NCO 33 read 2 (91), where NCO has no checklist rule. Separately, a note on TQO 55 read
   3 asks to drop "Use four steps" because it "hints at a named framework",
   against the brief's "The checklist is not a named framework".
 
@@ -324,7 +343,8 @@ actually sent:
   read.
 - How an NCO episode closes: with a comments question, as the 2026-10-24 hand
   edit of NCO 30 assumed, or with "a clean implication or a real action", as
-  the NCO doctor brief says. That decides NCO 30's ending.
+  the shared rubric line says when no comments clause is added. That decides
+  NCO 30's ending.
 - Whether the viewer address ruling covers NCO. The card named row 49's line
   and the score-only brief; the build applied it to both tables.
 - Whether the 2026-09-08 cold-open record stands. If it does, every row's
@@ -341,7 +361,7 @@ TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_score-only-doctor-twenty-rows_v1_2026-10-25-0654.md
 DATE: 2026-10-25
 DECISIONS: Tee ruled on cards: score only, never rewrite; create the score-only workflow inactive and run it by hand; ground the doctor with the learning objective's measured position and the brief's lines; three reads per row, the strictest holds; row 49's viewer address line is allowed and the score-only brief gains a line saying so; quote the doctor's dashes as written and count them; publish the Hydrate and checklist single node fixes to TQO FINAL V5; record the Sources Gate finding only.
-FINDINGS: All 20 rows written, appends only, nothing else changed but the table's own updatedAt stamp; two refuting verifiers confirmed the run. TQO 50, 51 and 59 meet the gate's doctor line condition at PASS 100; the rest of the gate was not run. 17 are held from 45 to 91. NCO 30's comments question, added by a 2026-10-24 hand edit, is held under NCO's own close rule, which lacks TQO's comments clause. NCO 31 was judged on a 2026-09-08 cold-open record that the recall served to that row alone. The required checklist is marked down in 3 of 23 NEEDS_REVISION replies, holding TQO 49 and 58. One read of the same request moved from 85 to 100 to 90, which is why three reads hold. The live doctor's TQO 5 repair kept the three promises and cut more than any rule asked. The Sources Gate fails 8 of 20 offline, one real. TQO 54's named study exists and is unapproved for the row.
+FINDINGS: All 20 rows written, appends only, nothing else changed but the table's own updatedAt stamp; two refuting verifiers and a fresh critic confirmed the run. TQO 50, 51 and 59 meet the gate's doctor line condition at PASS 100; the rest of the gate was not run. 17 are held from 45 to 91. NCO 30's comments question, added by a 2026-10-24 hand edit, is held under the shared close rule without TQO's comments clause. NCO 31 was judged on a 2026-09-08 cold-open record that the recall served to that row alone. The required checklist is marked down in 2 of 23 NEEDS_REVISION replies, holding TQO 49 and 58. One request scored 85, 100 and 90 on three single reads, which is why three reads hold. The live doctor's TQO 5 repair kept the three promises and cut more than any rule asked. The Sources Gate fails 8 of 20 offline, one with a real problem behind it. TQO 54's named study exists and is unapproved for the row.
 OPEN: Voice ruling and grounding for the live doctor; the 17 held rows; TQO 54's source; the live doctor's over-cutting; how an NCO episode closes; whether the viewer address ruling covers NCO; the cold-open record; the checklist mark-downs on TQO 49 and 58; seven Sources Gate false positives; three parser gaps; the stale export.
 STATUS: Scoring complete and read back. TQO FINAL V5 live on fd873714. The score-only workflow inactive on 6cfffabd. PR #416 carries the build and this doc.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
