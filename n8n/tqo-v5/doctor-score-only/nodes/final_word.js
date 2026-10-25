@@ -25,7 +25,10 @@
 // first person claim in three of five runs and passed in two, and the Script
 // Gate's first person patterns pass it. VOICE says so in the system message,
 // for both shows, just before FINAL. Nothing else in the request changes.
-const VOICE = '\n\nRuled by Tee: first person that only addresses the viewer and claims no deed, sight, hearing or advice, as in "I am talking to the person who has spent years handling problems other people never even saw.", is his voice and stands. It is not a first person claim and is never marked down. The rule against invented experience still applies to everything Terrance is said to have done, seen, heard or advised.';
+// Sharpened by Tee the next day, after execution 4364: one read of three still
+// marked the line down, reading "the person who has spent years" as Terrance.
+// VOICE now says that person is the viewer.
+const VOICE = '\n\nRuled by Tee: first person that only addresses the viewer and claims no deed, sight, hearing or advice, as in "I am talking to the person who has spent years handling problems other people never even saw.", is his voice and stands. In that line, the person who has spent years handling problems other people never even saw is the viewer being addressed, not Terrance, so the line says nothing about what he has done. It is not a first person claim and is never marked down. The rule against invented experience still applies to everything Terrance is said to have done, seen, heard or advised.';
 const FINAL = '\n\nScore only, and this overrides the full-length rule above: return only the JSON object the score-only contract names, with no script, title, description or b-roll field. Keep each note to a few sentences that describe a repair without writing it out. The rule against em and en dashes still stands.';
 // The Script Gate's window and its normaliser, copied from Script Gate: Quality.
 // Keep the two equal; score_only.test.mjs checks them against the export.

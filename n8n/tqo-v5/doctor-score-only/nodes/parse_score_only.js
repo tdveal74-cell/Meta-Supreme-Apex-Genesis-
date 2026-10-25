@@ -81,7 +81,7 @@ const models = [...new Set(reads.map(r => r.model))];
 const model = models.join(' and ');
 const tally = reads.map(r => r.score).join(', ');
 const line = stamp + ' | doctor ' + score + '/100 ' + verdict + ' | score only, no rewrite, ' + (READS === 1 ? '' : READS + ' reads (' + tally + '), ') + model;
-const feedback = [
+const body = [
   'SCRIPT DOCTOR, SCORE ONLY' + (READS === 1 ? '' : ', STRICTEST OF ' + READS + ' READS') + ': ' + verdict + ' at ' + score + '/100 at ' + stamp + '. The script was not changed.',
   ...(recall ? ['TEE\'S RECORD: ' + recall + '.'] : []),
   ...(READS === 1 ? [] : ['READS: ' + reads.map((r, i) => (i + 1) + ' ' + r.verdict + ' ' + r.score).join(', ') + '. The lowest score is written, and PASS needs every read to pass at ' + FLOOR + ' or above.']),
@@ -92,5 +92,12 @@ const feedback = [
   ...(pick.notes.length ? ['NOTES:', ...pick.notes.map(n => '  - ' + n), ''] : []),
   ...(READS === 1 ? [] : ['OTHER READS:', ...reads.filter(r => r !== pick).map(r => '  - ' + r.verdict + ' ' + r.score + ': ' + (r.diagnosis || 'no diagnosis given'))])
 ].join('\n').trim();
+// Ruled by Tee 2026-10-25, after execution 4364's note carried an en dash the
+// doctor wrote: the doctor's words are quoted as written, never edited, and the
+// note says how many em or en dashes they carry. Only the doctor's text can
+// carry one; nothing this node writes does.
+const DASH = new RegExp('[' + String.fromCharCode(0x2013, 0x2014) + ']', 'g');
+const dashes = (body.match(DASH) || []).length;
+const feedback = body + (dashes ? '\n\nThe doctor\'s text above carries ' + dashes + ' dash' + (dashes === 1 ? '' : 'es') + ', quoted as it wrote ' + (dashes === 1 ? 'it' : 'them') + '.' : '');
 
 return [{ json: { ...base, ok: true, verdict, score, line, feedback, model, reason: '' } }];

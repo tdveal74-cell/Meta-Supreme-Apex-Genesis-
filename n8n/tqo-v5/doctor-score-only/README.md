@@ -35,7 +35,9 @@ A person starts it by hand. It has no schedule and no webhook.
    that only addresses the viewer and claims no deed, sight, hearing or
    advice, as in "I am talking to the person who...", is his voice and stands.
    The rule against invented experience still covers everything else. Both
-   shows get it.
+   shows get it. Tee sharpened it on 2026-10-25, after one read of three in
+   execution 4364 took the person in that line for Terrance: it now says the
+   person who has spent years is the viewer being addressed.
    The request is sent `READS` times (3). Tee ruled this on 2026-10-24, after
    the same request scored 85, 100 and 90 in three runs. The score written is
    the lowest of the reads. The verdict is PASS only when every read is PASS
@@ -49,7 +51,10 @@ A person starts it by hand. It has no schedule and no webhook.
 
 The line reads `<time> | doctor 85/100 NEEDS_REVISION | score only, no rewrite, 3 reads (85, 100, 90), <model>`.
 The note lists every read, shows the lowest read's diagnosis, preserved list
-and notes in full, and gives the diagnosis of each other read.
+and notes in full, and gives the diagnosis of each other read. The doctor's
+words are quoted as it wrote them. When they carry an em or en dash, which the
+doctor is told not to write, the note ends by saying how many, as Tee ruled on
+2026-10-25. Nothing this workflow writes adds a dash.
 This workflow never writes REPAIRED, so of its lines the QC Doctor Gate and
 Preflight clear only PASS at 90 or above. A score is rounded down, so 89.95 is
 written as 89.9 and held.
