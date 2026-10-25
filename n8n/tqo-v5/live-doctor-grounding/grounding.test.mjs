@@ -90,7 +90,15 @@ const cases = [
   ["TQO, objective spoken twice", "TQO", "Open here. " + LO + " " + words(20) + " " + LO.toUpperCase().replace(/,/g, ""), LO],
   ["TQO, objective never spoken", "TQO", words(40), LO],
   ["TQO, no objective stored", "TQO", words(40), ""],
-  ["NCO", "NCO", "Walk into the room. " + words(60), LO]
+  ["NCO", "NCO", "Walk into the room. " + words(60), LO],
+  // Found by the verifier on db5fc1b: with no case for these, a live node that
+  // dropped digits or joined hyphens in its normaliser, or moved the window by
+  // one word, passed every check but the hash pin.
+  ["TQO, objective ending on word 70", "TQO", words(49) + " " + LO + " " + words(10, "tail"), LO],
+  ["TQO, objective ending on word 71", "TQO", words(50) + " " + LO + " " + words(10, "tail"), LO],
+  ["TQO, objective with digits and a hyphen", "TQO", "Start. In 3 steps, the one page plan for Q4 2026 is ready. " + words(10), "In 3 steps the one-page plan for Q4 2026 is ready"],
+  ["TQO, a different digit", "TQO", "Start. Step 4 comes first here. " + words(10), "Step 3 comes first here"],
+  ["TQO, a hyphen against a word run together", "TQO", "Start. The onepage plan is ready. " + words(10), "The one-page plan is ready"]
 ];
 for (const [label, show, script, lo] of cases) {
   const { bu, nodes } = chain(show, script, lo);
