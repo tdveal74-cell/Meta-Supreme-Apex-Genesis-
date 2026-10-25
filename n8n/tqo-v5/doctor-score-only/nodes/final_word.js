@@ -16,7 +16,16 @@
 // words, which the gate counts as the first 30 seconds. The doctor is told the
 // fact instead of being left to guess it. The second says which lines are the
 // brief and which are the script. NCO has no learning objective line, so it
-// gets the second only. Nothing else in the request changes.
+// gets the second only.
+//
+// Ruled by Tee 2026-10-24 on a card: first person that only addresses the
+// viewer and claims no deed, sight or advice is allowed in his voice. Row 49's
+// only first person sentence, "I am talking to the person who has spent years
+// handling problems other people never even saw.", was flagged as an invented
+// first person claim in three of five runs and passed in two, and the Script
+// Gate's first person patterns pass it. VOICE says so in the system message,
+// for both shows, just before FINAL. Nothing else in the request changes.
+const VOICE = '\n\nRuled by Tee: first person that only addresses the viewer and claims no deed, sight, hearing or advice, as in "I am talking to the person who has spent years handling problems other people never even saw.", is his voice and stands. It is not a first person claim and is never marked down. The rule against invented experience still applies to everything Terrance is said to have done, seen, heard or advised.';
 const FINAL = '\n\nScore only, and this overrides the full-length rule above: return only the JSON object the score-only contract names, with no script, title, description or b-roll field. Keep each note to a few sentences that describe a repair without writing it out. The rule against em and en dashes still stands.';
 // The Script Gate's window and its normaliser, copied from Script Gate: Quality.
 // Keep the two equal; score_only.test.mjs checks them against the export.
@@ -78,7 +87,7 @@ facts.push('Every line above SCRIPT: is the brief: the channel, show and editori
   + 'the APPROVED SOURCES and TEE\'S RECORD. None of those lines is part of the script, and none is a second copy of a script sentence. Only the text after SCRIPT: is the script.');
 
 j.claudeBody = { ...b, messages: [
-  { ...b.messages[0], content: String(b.messages[0].content) + FINAL },
+  { ...b.messages[0], content: String(b.messages[0].content) + VOICE + FINAL },
   { ...b.messages[1], content: content.slice(0, at) + '\n\n' + facts.join('\n') + MARK + script }
 ] };
 return [{ json: j }];

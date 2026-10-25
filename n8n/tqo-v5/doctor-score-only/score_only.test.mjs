@@ -24,7 +24,9 @@
  *   - Score Only: Final Word tells the doctor where the learning objective is
  *     spoken, by the Script Gate's own rule, and which lines are the brief;
  *   - workflow.measure.json differs from workflow.json in Run Config alone,
- *     and a run built from it writes nothing.
+ *     and a run built from it writes nothing;
+ *   - each row is read READS times and only the strictest read is written, and
+ *     the doctor is told first person that only addresses the viewer stands.
  * What it cannot prove: that Cerebras answers, that the recall credential is
  * accepted, or how the data table node behaves. The first run, on one row, is
  * the proof of those. Rows here are synthetic.
@@ -102,7 +104,7 @@ eq(WORKFLOW.settings.saveDataSuccessExecution, "all", "a clean run leaves an exe
 eq(WORKFLOW.settings.availableInMCP, true, "a session can start it through the n8n tools, as it can TQO FINAL V5");
 ok(!DASHES.test(read("./workflow.json")), "no em or en dash anywhere in the workflow");
 ok(!DASHES.test(read("./workflow.measure.json")), "nor in the measurement body");
-for (const f of ["build.mjs", "README.md", "nodes/run_config.js", "nodes/select_rows.js", "nodes/recall_required.js", "nodes/final_word.js", "nodes/parse_score_only.js", "nodes/compose_write.js", "nodes/confirm_write.js", "nodes/run_report.js"]) {
+for (const f of ["build.mjs", "README.md", "nodes/run_config.js", "nodes/select_rows.js", "nodes/recall_required.js", "nodes/final_word.js", "nodes/reads.js", "nodes/parse_score_only.js", "nodes/compose_write.js", "nodes/confirm_write.js", "nodes/run_report.js"]) {
   const body = read("./" + f);
   ok(!DASHES.test(body), f + ": no em or en dash");
   ok(!/\\u[0-9a-fA-F]{4}/.test(body), f + ": no \\u escape for n8n to decode on the way in");
@@ -173,7 +175,9 @@ eq(new Function("$", "$input", "$json", byName["Script: Hydrate from Row"].param
 // with "write the full length the brief asks for, never shorter", which says it
 // overrides anything above. Score Only: Final Word comes after it.
 eq(WORKFLOW.connections["Token Budget: Doctor"].main[0][0].node, "Score Only: Final Word", "the final word runs after the budget");
-eq(WORKFLOW.connections["Score Only: Final Word"].main[0][0].node, "Run Script Doctor (Cerebras)", "and right before the call");
+eq(WORKFLOW.connections["Score Only: Final Word"].main[0][0].node, "Score Only: Reads", "then the reads");
+eq(WORKFLOW.connections["Score Only: Reads"].main[0][0].node, "Run Script Doctor (Cerebras)", "and right before the call");
+eq(WORKFLOW.connections["Run Script Doctor (Cerebras)"].main[0][0].node, "Parse Score Only", "every reply goes to the parse");
 const prompted = run("Build Doctor Prompt", { "Show Context: Script": [{ show: "TQO", channel: "The Quiet Operator" }], "One Idea at a Time": [shimmed], "DEVON Recall: Merge": [{ devonRecall: "" }] }, [fixed])[0].json;
 const sourced = run("Doctor Sources", { "One Idea at a Time": [shimmed] }, [prompted])[0].json;
 const budgeted = run("Token Budget: Doctor", {}, [sourced])[0].json;
@@ -224,9 +228,11 @@ const measureFor = (script, lo, show = "TQO") => {
   ok(m.user.includes("Every line above SCRIPT: is the brief") && m.user.includes("the LEARNING OBJECTIVE and CHECKLIST lines") && m.user.includes("none is a second copy of a script sentence"), "the brief's lines are named as not script");
   // Found by the verifier on 7d57ca6: the first version of this check compared the
   // message with itself. The final word is read out of the node's own code.
-  const FINAL_TEXT = JSON.parse(fwCode.match(/^const FINAL = ('[^\n]*');$/m)[1].replace(/^'|'$/g, '"'));
+  const constant = (name) => new Function("return " + fwCode.match(new RegExp("^const " + name + " = ('[^\\n]*');$", "m"))[1])();
+  const FINAL_TEXT = constant("FINAL"), VOICE_TEXT = constant("VOICE");
   ok(FINAL_TEXT.startsWith("\n\nScore only, and this overrides the full-length rule above") && FINAL_TEXT.endsWith("The rule against em and en dashes still stands."), "the final word is read from the node");
-  eq(m.after.messages[0].content, m.before.messages[0].content + FINAL_TEXT, "the system message only gains the final word at its end");
+  ok(VOICE_TEXT.includes('"I am talking to the person who has spent years handling problems other people never even saw."') && VOICE_TEXT.includes("never marked down") && VOICE_TEXT.includes("The rule against invented experience still applies"), "the voice ruling names its example and keeps the invented experience rule");
+  eq(m.after.messages[0].content, m.before.messages[0].content + VOICE_TEXT + FINAL_TEXT, "the system message only gains the voice ruling and the final word at its end");
   eq(m.user.replace(/\n\nMEASURED BEFORE THIS PASS[^\n]*\nEvery line above SCRIPT:[^\n]*(?=\n\nSCRIPT:\n)/, ""), m.before.messages[1].content, "and the user message gains the two lines and nothing else");
   const late = measureFor(words(80) + " " + LO49 + " " + words(10, "tail"), LO49);
   ok(late.user.includes("from word 81 to word 101 of 111, which is past the first 70 words, so its position does not meet the brief. The script speaks it once."), "an objective past 70 words is measured as outside");
@@ -250,10 +256,17 @@ const measureFor = (script, lo, show = "TQO") => {
   ok(none.user.includes("MEASURED BEFORE THIS PASS: no learning objective is stored for this row."), "no stored objective is said so");
   const nco = measureFor(s49, LO49, "NCO");
   ok(!nco.user.includes("MEASURED BEFORE THIS PASS") && nco.user.includes("Every line above SCRIPT: is the brief") && !nco.user.includes("LEARNING OBJECTIVE and CHECKLIST"), "NCO gets the brief line and no objective measure");
+  eq(nco.after.messages[0].content, nco.before.messages[0].content + VOICE_TEXT + FINAL_TEXT, "and the same voice ruling, which is Tee's for both shows");
   const bad = { claudeBody: { ...m.before, messages: [m.before.messages[0], { role: "user", content: m.before.messages[1].content + " extra" }] } };
   assert.throws(() => run("Score Only: Final Word", FW_NODES("TQO", { original: { script: m.script, learningObjective: LO49 } }), [bad]), /could not find the script after SCRIPT:/, "a message whose script is not the row's stops before the call"); checks++;
   assert.throws(() => run("Score Only: Final Word", FW_NODES("TQO", { original: { script: m.script } }), [{ claudeBody: { ...m.before, messages: [...m.before.messages, { role: "assistant", content: "x" }] } }]), /one system message and one user message/, "a third message stops before the call"); checks++;
 }
+
+// ---- Score Only: Reads ---------------------------------------------------------------
+// Ruled by Tee 2026-10-24 after executions 4354 to 4356 scored one request 85, 100 and 90.
+const readsOut = run("Score Only: Reads", { "Run Config": [{ READS: 3 }] }, [{ claudeBody: { x: 1 } }]).map((i) => i.json);
+eq(readsOut, [1, 2, 3].map((read) => ({ claudeBody: { x: 1 }, read })), "three reads of the same request");
+assert.throws(() => run("Score Only: Reads", { "Run Config": [{ READS: 3 }] }, [{}, {}]), /expected one request and received 2/, "two requests in is refused"); checks++;
 
 // ---- Recall Required ---------------------------------------------------------------
 // Found by the review on 805060d: a failed recall left TEE'S RECORD empty, the doctor
@@ -311,7 +324,8 @@ const gateClears = (history) => {
 // ---- Parse Score Only ----------------------------------------------------------
 const PARSE_NODES = { "One Idea at a Time": [{ id: 49, video_title: "Row 49 title" }], "Show Context: Script": [{ show: "TQO", tableRef: "2GtmrFcTNqVMbddh" }], "DEVON Recall: Merge": [{ devonRecallNote: "DEVON recall: 3 record(s), 2 from Tee and 1 from DEVON" }] };
 const reply = (content, extra = {}) => ({ model: "gpt-oss-120b", choices: [{ finish_reason: "stop", message: { content: typeof content === "string" ? content : JSON.stringify(content) } }], ...extra });
-const parse = (out) => run("Parse Score Only", PARSE_NODES, [out])[0].json;
+const parse = (out) => run("Parse Score Only", { ...PARSE_NODES, "Run Config": [{ READS: 1 }] }, [out])[0].json;
+const parse3 = (outs, reads = 3) => run("Parse Score Only", { ...PARSE_NODES, "Run Config": [{ READS: reads }] }, outs)[0].json;
 const good = parse(reply({ score: 92, verdict: "PASS", preserved: ["the cold open"], diagnosis: "none broken", notes: ["tighten line 4"] }));
 ok(good.ok && good.verdict === "PASS" && good.score === 92, "PASS 92 is a result");
 ok(/^\d{4}-\d\d-\d\dT[\d:.]+Z \| doctor 92\/100 PASS \| score only, no rewrite, gpt-oss-120b$/.test(good.line), "the line: " + good.line);
@@ -363,6 +377,30 @@ for (const [out, why] of refused) {
   ok(r.ok === false && r.verdict === "UNCHECKED" && r.written === false && !("line" in r), why + " writes nothing: " + r.reason);
 }
 
+// ---- the strictest of three reads ----------------------------------------------
+{
+  const r3 = parse3([reply({ score: 85, verdict: "NEEDS_REVISION", diagnosis: "the first person line", notes: ["rephrase it"] }), reply({ score: 100, verdict: "PASS", diagnosis: "None" }), reply({ score: 90, verdict: "NEEDS_REVISION", diagnosis: "the same line" })]);
+  ok(r3.ok && r3.verdict === "NEEDS_REVISION" && r3.score === 85, "row 49's three reads write NEEDS_REVISION 85");
+  ok(/^\d{4}-\d\d-\d\dT[\d:.]+Z \| doctor 85\/100 NEEDS_REVISION \| score only, no rewrite, 3 reads \(85, 100, 90\), gpt-oss-120b$/.test(r3.line), "the line names the three reads: " + r3.line);
+  eq(gateClears(r3.line), { verdict: "NEEDS_REVISION", score: 85, clear: false }, "the gates read the strictest read and hold");
+  ok(r3.feedback.startsWith("SCRIPT DOCTOR, SCORE ONLY, STRICTEST OF 3 READS: NEEDS_REVISION at 85/100") && r3.feedback.includes("READS: 1 NEEDS_REVISION 85, 2 PASS 100, 3 NEEDS_REVISION 90."), "the note lists every read");
+  ok(r3.feedback.includes("DIAGNOSIS: the first person line") && r3.feedback.includes("NOTES:\n  - rephrase it") && r3.feedback.includes("OTHER READS:\n  - PASS 100: None\n  - NEEDS_REVISION 90: the same line"), "the lowest read is shown in full and the others by diagnosis");
+  const allPass = parse3([reply({ score: 92, verdict: "PASS" }), reply({ score: 95, verdict: "PASS" }), reply({ score: 90, verdict: "PASS" })]);
+  eq([allPass.verdict, allPass.score, gateClears(allPass.line).clear], ["PASS", 90, true], "three passes at 90 or above write PASS at the lowest and clear");
+  const lowPass = parse3([reply({ score: 92, verdict: "PASS" }), reply({ score: 89.9, verdict: "PASS" }), reply({ score: 99, verdict: "PASS" })]);
+  eq([lowPass.verdict, lowPass.score, gateClears(lowPass.line).clear], ["NEEDS_REVISION", 89.9, false], "a pass under 90 among passes holds the row");
+  const tie = parse3([reply({ score: 88, verdict: "PASS", diagnosis: "a pass" }), reply({ score: 88, verdict: "NEEDS_REVISION", diagnosis: "a revision" }), reply({ score: 95, verdict: "PASS" })]);
+  ok(tie.feedback.includes("DIAGNOSIS: a revision"), "on a tie for lowest the NEEDS_REVISION read is the one shown");
+  const oneBad = parse3([reply({ score: 95, verdict: "PASS" }), { error: { message: "429 - Too Many Requests" } }, reply({ score: 96, verdict: "PASS" })]);
+  ok(oneBad.ok === false && oneBad.verdict === "UNCHECKED" && !("line" in oneBad) && oneBad.reason.startsWith("1 of 3 reads were not results, so none is written (read 2: the Cerebras call failed: 429"), "one failed read writes nothing: " + oneBad.reason);
+  const repaired = parse3([reply({ score: 95, verdict: "PASS" }), reply({ score: 96, verdict: "PASS" }), reply({ score: 97, verdict: "REPAIRED" })]);
+  ok(repaired.ok === false && /read 3: the verdict was "REPAIRED"/.test(repaired.reason), "a REPAIRED read among passes writes nothing");
+  const short = parse3([reply({ score: 95, verdict: "PASS" }), reply({ score: 96, verdict: "PASS" })]);
+  ok(short.ok === false && short.reason === "3 read(s) were asked for and 2 came back", "fewer replies than reads writes nothing");
+  const noReads = run("Parse Score Only", { ...PARSE_NODES, "Run Config": [{}] }, [reply({ score: 95, verdict: "PASS" })])[0].json;
+  ok(noReads.ok === false && /READS is undefined/.test(noReads.reason), "a missing READS writes nothing");
+}
+
 // ---- Compose Write -------------------------------------------------------------
 const ROW49 = { id: 49, status: "Scripted", score_history: "", last_feedback: "", script: "  The script.  ", video_title: "Title 49", topic: "Topic 49", description: "Description 49", learning_objective: "By the end, you will have one thing.", broll_keywords: "desk, notebook", checklist: null, show: "TQO", season: 1, episode: 9, idea: "Idea 49", sources: '[{"url":"https://example.org","quote":"q"}]' };
 const SNAPSHOT = run("DT Shim: Idea Rows", {}, [{ ...ROW49, __key: "TQO:49" }])[0].json;
@@ -410,17 +448,17 @@ eq(confirm([{}]).written, false, "nothing read back is not written");
 // ---- the shipped Run Config -------------------------------------------------------
 // Found by the verifier on 805060d: the tests used their own config and never read
 // the shipped one, so FIRST_RUN_LIMIT could be raised without a failure.
-eq(run("Run Config", {}, [{}]).map((i) => i.json), [{ FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [], WRITE: true }], "the first run scores one row, later runs up to 20, no row named, and it writes");
+eq(run("Run Config", {}, [{}]).map((i) => i.json), [{ FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [], WRITE: true, READS: 3 }], "the first run scores one row, later runs up to 20, no row named, it writes, and each row is read three times");
 // The measurement body, ruled by Tee 2026-10-24: TQO 49, nothing written.
 const MEASURE = JSON.parse(read("./workflow.measure.json"));
 const mByName = Object.fromEntries(MEASURE.nodes.map((n) => [n.name, n]));
-eq(new Function("$", "$input", "$json", mByName["Run Config"].parameters.jsCode)(() => null, null, null).map((i) => i.json), [{ FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: ["TQO:49"], WRITE: false }], "the measurement body scores TQO 49 and writes nothing");
+eq(new Function("$", "$input", "$json", mByName["Run Config"].parameters.jsCode)(() => null, null, null).map((i) => i.json), [{ FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: ["TQO:49"], WRITE: false, READS: 3 }], "the measurement body reads TQO 49 three times and writes nothing");
 eq(MEASURE.nodes.filter((n) => JSON.stringify(n) !== JSON.stringify(byName[n.name])).map((n) => n.name), ["Run Config"], "and differs from the real body in Run Config alone");
 eq([JSON.stringify(MEASURE.connections), JSON.stringify(MEASURE.settings), MEASURE.name, MEASURE.nodes.length], [JSON.stringify(WORKFLOW.connections), JSON.stringify(WORKFLOW.settings), WORKFLOW.name, WORKFLOW.nodes.length], "same wiring, settings, name and node count");
 eq(runConfig(true), runConfig().replace(RUN_CONFIG_REAL, RUN_CONFIG_MEASURE), "the swap is the one return line");
 
 // ---- Select Rows ---------------------------------------------------------------
-const CONFIG = { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [], WRITE: true };
+const CONFIG = { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [], WRITE: true, READS: 3 };
 const tqoRow = (id, extra = {}) => ({ id, status: "Scripted", script: "A script.", score_history: "", ...extra });
 const select = (tqo, nco, cfg = CONFIG) => run("Select Rows", { "Run Config": [cfg], "Get TQO Scripted Rows": tqo, "Get NCO Scripted Rows": nco }, [{}]).map((i) => i.json.__key);
 const TQO = [tqoRow(51), tqoRow(49), tqoRow(50, { script: " " }), tqoRow(48, { score_history: "t | doctor 93/100 PASS | x" }), tqoRow(47, { status: "Idea" })];
@@ -436,7 +474,10 @@ throws(() => select(TQO, NCO, { ...CONFIG, ONLY_ROWS: ["TQO:48"] }), /ONLY_ROWS 
 throws(() => select([tqoRow(48, { score_history: "t | doctor 93/100 PASS | x" })], [{}]), /No row to score/, "nothing to score stops the run");
 throws(() => select(TQO, NCO, { ...CONFIG, FIRST_RUN_LIMIT: 0 }), /whole numbers above 0/, "a zero limit stops the run");
 throws(() => select(TQO, NCO, { ...CONFIG, ROW_LIMIT: "20" }), /whole numbers above 0/, "a limit that is not a number stops the run");
-throws(() => select(TQO, NCO, { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [] }), /WRITE must be true or false, and it reads null/, "a config with no WRITE stops the run");
+throws(() => select(TQO, NCO, { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [], READS: 3 }), /WRITE must be true or false, and it reads null/, "a config with no WRITE stops the run");
+throws(() => select(TQO, NCO, { ...CONFIG, READS: undefined }), /READS must be a whole number from 1 to 5, and it reads null/, "a config with no READS stops the run");
+throws(() => select(TQO, NCO, { ...CONFIG, READS: 6 }), /READS must be a whole number from 1 to 5/, "more than five reads stops the run");
+throws(() => select(TQO, NCO, { ...CONFIG, READS: "3" }), /READS must be a whole number from 1 to 5/, "READS as a string stops the run");
 throws(() => select(TQO, NCO, { ...CONFIG, WRITE: "false" }), /WRITE must be true or false/, "a WRITE that is a string stops the run");
 const picked = run("Select Rows", { "Run Config": [CONFIG], "Get TQO Scripted Rows": TQO, "Get NCO Scripted Rows": NCO }, [{}])[0].json;
 eq([picked.nco, picked.__tableRef, picked.__show], [false, "2GtmrFcTNqVMbddh", "TQO"], "the row carries its show for Show Context: Script");

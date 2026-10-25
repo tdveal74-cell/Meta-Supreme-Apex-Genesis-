@@ -12,4 +12,6 @@
 // WRITE false makes a measurement run, ruled by Tee 2026-10-24 to see how far
 // one row's score moves between runs: every step runs and the doctor is paid,
 // and nothing is written to either table. The run report lists each score.
-return [{ json: { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [], WRITE: true } }];
+// READS is how many times each row is read, ruled by Tee 2026-10-24 after the
+// same request scored 85, 100 and 90: the strictest read is what is written.
+return [{ json: { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [], WRITE: true, READS: 3 } }];

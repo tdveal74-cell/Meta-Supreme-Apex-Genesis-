@@ -11,6 +11,9 @@ const whole = (n) => Number.isInteger(n) && n > 0;
 if (!whole(cfg.FIRST_RUN_LIMIT) || !whole(cfg.ROW_LIMIT)) {
   throw new Error('Run Config FIRST_RUN_LIMIT and ROW_LIMIT must be whole numbers above 0, and they read ' + JSON.stringify(cfg.FIRST_RUN_LIMIT) + ' and ' + JSON.stringify(cfg.ROW_LIMIT) + '.');
 }
+if (!Number.isInteger(cfg.READS) || cfg.READS < 1 || cfg.READS > 5) {
+  throw new Error('Run Config READS must be a whole number from 1 to 5, and it reads ' + JSON.stringify(cfg.READS === undefined ? null : cfg.READS) + '.');
+}
 if (typeof cfg.WRITE !== 'boolean') {
   throw new Error('Run Config WRITE must be true or false, and it reads ' + JSON.stringify(cfg.WRITE === undefined ? null : cfg.WRITE) + '.');
 }

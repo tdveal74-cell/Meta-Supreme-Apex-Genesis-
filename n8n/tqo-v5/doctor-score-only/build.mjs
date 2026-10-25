@@ -14,7 +14,10 @@
 // DEVON Recall: Merge, and Score Only: Final Word after Token Budget: Doctor.
 // Final Word also tells the doctor where the learning objective is spoken, by
 // the Script Gate's rule, and which lines are the brief rather than the script,
-// so the user message the doctor reads is no longer the live one.
+// so the user message the doctor reads is no longer the live one; and it adds
+// Tee's ruling on first person that only addresses the viewer. Score Only:
+// Reads, after it, sends the request READS times and Parse Score Only writes
+// the strictest read.
 // Two bodies are built: workflow.json, the real run, and workflow.measure.json,
 // identical but for Run Config, which scores TQO 49 and writes nothing (ruled by
 // Tee 2026-10-24 to measure how far a score moves between runs). Run
@@ -109,8 +112,8 @@ export function scoreOnlyPrompt() {
 }
 
 // The measurement run, ruled by Tee 2026-10-24: score TQO 49 and write nothing.
-export const RUN_CONFIG_REAL = "return [{ json: { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [], WRITE: true } }];";
-export const RUN_CONFIG_MEASURE = "return [{ json: { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: ['TQO:49'], WRITE: false } }];";
+export const RUN_CONFIG_REAL = "return [{ json: { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [], WRITE: true, READS: 3 } }];";
+export const RUN_CONFIG_MEASURE = "return [{ json: { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: ['TQO:49'], WRITE: false, READS: 3 } }];";
 export function runConfig(measure = false) {
   const body = own('run_config.js');
   if (body.split(RUN_CONFIG_REAL).length !== 2) {
@@ -155,6 +158,7 @@ export const NODES = {
   sources: code('Doctor Sources', live('doctor_sources.js'), [2640, 480]),
   budget: code('Token Budget: Doctor', live('token_budget_doctor.js'), [2860, 480]),
   finalWord: code('Score Only: Final Word', own('final_word.js'), [2860, 680]),
+  reads: code('Score Only: Reads', own('reads.js'), [3080, 680]),
   cerebras: pinnedHttp('Run Script Doctor (Cerebras)', 'run_script_doctor_cerebras.json', [3080, 480]),
   parse: code('Parse Score Only', own('parse_score_only.js'), [3300, 480]),
   reread: { kind: 'node', name: 'Re-read Row', type: 'n8n-nodes-base.dataTable', version: 1.1, position: [3520, 480],
@@ -184,7 +188,7 @@ const EDGES = [
   ['start', 'config'], ['config', 'getTqo'], ['getTqo', 'getNco'], ['getNco', 'select'], ['select', 'shim'], ['shim', 'loop'],
   ['loop', 'report', 0], ['loop', 'recallAsk', 1],
   ['recallAsk', 'recallMerge'], ['recallMerge', 'recallRequired'], ['recallRequired', 'context'], ['context', 'hydrate'], ['hydrate', 'prompt'], ['prompt', 'sources'],
-  ['sources', 'budget'], ['budget', 'finalWord'], ['finalWord', 'cerebras'], ['cerebras', 'parse'], ['parse', 'reread'], ['reread', 'compose'], ['compose', 'writeIt'],
+  ['sources', 'budget'], ['budget', 'finalWord'], ['finalWord', 'reads'], ['reads', 'cerebras'], ['cerebras', 'parse'], ['parse', 'reread'], ['reread', 'compose'], ['compose', 'writeIt'],
   ['writeIt', 'save', 0], ['writeIt', 'loop', 1],
   ['save', 'readBack'], ['readBack', 'confirm'], ['confirm', 'loop']
 ];

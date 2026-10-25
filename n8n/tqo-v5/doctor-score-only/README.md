@@ -31,6 +31,15 @@ A person starts it by hand. It has no schedule and no webhook.
    and took the LEARNING OBJECTIVE field line for a second copy of it. So the
    message the doctor reads is no longer exactly the live doctor's. NCO rows
    get the second line only, because their brief has no learning objective.
+   The system message also carries Tee's ruling of 2026-10-24: first person
+   that only addresses the viewer and claims no deed, sight, hearing or
+   advice, as in "I am talking to the person who...", is his voice and stands.
+   The rule against invented experience still covers everything else. Both
+   shows get it.
+   The request is sent `READS` times (3). Tee ruled this on 2026-10-24, after
+   the same request scored 85, 100 and 90 in three runs. The score written is
+   the lowest of the reads. The verdict is PASS only when every read is PASS
+   at 90 or above. If any read fails, nothing is written for the row.
 5. It reads the row again. If any column the doctor was shown changed during
    the run (script, title, topic, description, learning objective, b-roll,
    checklist, show, season, episode, idea or sources), or a doctor line landed
@@ -38,7 +47,9 @@ A person starts it by hand. It has no schedule and no webhook.
 6. It appends one line to `score_history` and one note to `last_feedback`, then
    reads the row back to confirm both. Those two columns are the only writes.
 
-The line reads `<time> | doctor 92/100 PASS | score only, no rewrite, <model>`.
+The line reads `<time> | doctor 85/100 NEEDS_REVISION | score only, no rewrite, 3 reads (85, 100, 90), <model>`.
+The note lists every read, shows the lowest read's diagnosis, preserved list
+and notes in full, and gives the diagnosis of each other read.
 This workflow never writes REPAIRED, so of its lines the QC Doctor Gate and
 Preflight clear only PASS at 90 or above. A score is rounded down, so 89.95 is
 written as 89.9 and held.
@@ -64,9 +75,10 @@ too, so read the cell before clearing it. The next run then picks the row up.
 
 ## Settings
 
-`Run Config` holds four values: `FIRST_RUN_LIMIT` (1), `ROW_LIMIT` (20),
-`ONLY_ROWS`, which limits a run to named rows such as `TQO:49`, and `WRITE`
-(true). Changing one is an edit to the workflow on the instance.
+`Run Config` holds five values: `FIRST_RUN_LIMIT` (1), `ROW_LIMIT` (20),
+`ONLY_ROWS`, which limits a run to named rows such as `TQO:49`, `WRITE`
+(true) and `READS` (3, from 1 to 5). Changing one is an edit to the workflow
+on the instance.
 
 `WRITE` false makes a measurement run. Every step runs and the doctor is paid,
 but nothing is written to either table, and the run report lists each row's
@@ -74,7 +86,8 @@ score and diagnosis as MEASURED, NOT WRITTEN. A row that cannot be scored still
 ends the run in error. `workflow.measure.json` is the measurement body: the
 same workflow with `ONLY_ROWS` set to TQO 49 and `WRITE` false. Tee ruled on
 2026-10-24 to score row 49 three times this way before the other 19, to see how
-far one script's score moves between runs.
+far one script's score moves between runs. Those three runs, executions 4354 to
+4356, read one request at 85, 100 and 90, which is why `READS` exists.
 
 ## Files
 
