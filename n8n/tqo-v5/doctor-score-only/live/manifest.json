@@ -1,0 +1,47 @@
+{
+ "workflow": "TQO FINAL V5",
+ "workflowId": "qEkGOUsNyVaRAmm6",
+ "versionId": "9f80c967-a649-488a-91ac-3f354178dfa8",
+ "activeVersionId": "9f80c967-a649-488a-91ac-3f354178dfa8",
+ "readAt": "2026-10-24T08:45Z, GET /api/v1/workflows/qEkGOUsNyVaRAmm6, the active version",
+ "nodes": {
+  "Build Doctor Prompt": {
+   "file": "build_doctor_prompt.js",
+   "sha256": "f69b8acbd5bb501ae59a8bbbb660bdb92a9c510d33d78821f30ed50cdc5f721d"
+  },
+  "Doctor Sources": {
+   "file": "doctor_sources.js",
+   "sha256": "827ac04b7a918dd38a189ba29defae834b3b3eb4895257e8f78860e1fc9cc4c1"
+  },
+  "Token Budget: Doctor": {
+   "file": "token_budget_doctor.js",
+   "sha256": "74a9409bc56c296946fb329771a43548aebda31bdc8467daf8b7a203d24ece0b"
+  },
+  "Script: Hydrate from Row": {
+   "file": "script_hydrate_from_row.js",
+   "sha256": "d200b85faad1aedadf8c7ea28861b70d7e14335a1167e8b823e5d5cc74649be6"
+  },
+  "DEVON Recall: Merge": {
+   "file": "devon_recall_merge.js",
+   "sha256": "2528262422fba5bf1530b2c61fd48df54eaf483d040bb780e736e6698bb9de7b"
+  },
+  "DT Shim: Idea Rows": {
+   "file": "dt_shim_idea_rows.js",
+   "sha256": "b0605329616cd3f471cf6ce4bc213c4e07754b126bba7bf5f398aca5bc38e9ff"
+  },
+  "Show Context: Script": {
+   "file": "show_context_script.js",
+   "sha256": "e449c0051402a18f568cd8c1988986e8966c07030fae5af9f3ca78382ddd8ebe"
+  },
+  "Run Script Doctor (Cerebras)": {
+   "file": "run_script_doctor_cerebras.json",
+   "sha256": "da2dd618a14672f13a4688c8f4a8bf9292d000ebbf7f465d61be5d123b4e3d59",
+   "sha256Of": "the live parameters as compact JSON with sorted keys"
+  },
+  "DEVON Recall: Ask": {
+   "file": "devon_recall_ask.json",
+   "sha256": "3442a0543e5a2a4f9c7c2b90ef1d203ba6ea177e7ed8b29cc3ed4aed3ab9af39",
+   "sha256Of": "the live parameters as compact JSON with sorted keys"
+  }
+ }
+}

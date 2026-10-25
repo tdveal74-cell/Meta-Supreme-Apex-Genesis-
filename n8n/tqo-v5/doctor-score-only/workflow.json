@@ -1,0 +1,857 @@
+{
+ "name": "TQO Doctor: Score Only (hand run)",
+ "nodes": [
+  {
+   "id": "e6cf4290-937a-4e6f-8411-b929b541ff8c",
+   "name": "Start Score-Only Run",
+   "type": "n8n-nodes-base.manualTrigger",
+   "typeVersion": 1,
+   "position": [
+    0,
+    300
+   ],
+   "parameters": {}
+  },
+  {
+   "id": "25af79ac-cb2e-44e1-8a48-228964a66583",
+   "name": "Run Config",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    300
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// Run Config for the score-only script doctor. Ruled by Tee 2026-10-24: score\n// the hand-loaded Scripted rows, never rewrite them. This workflow runs only\n// when a person starts it; it has no schedule and no webhook.\n// FIRST_RUN_LIMIT applies until one score-only doctor line has been written to\n// either table, so the first run scores a single row and proves the provider\n// and the recall before the rest are spent. A run with no recall stops at\n// Recall Required and writes nothing, so a written line always had the recall.\n// ROW_LIMIT applies to every run after that one. Each run is still started by\n// hand.\n// ONLY_ROWS, when it is not empty, limits the run to the rows it names, written\n// as 'TQO:49' or 'NCO:30'. A name that is not an eligible row stops the run.\n// WRITE false makes a measurement run, ruled by Tee 2026-10-24 to see how far\n// one row's score moves between runs: every step runs and the doctor is paid,\n// and nothing is written to either table. The run report lists each score.\n// READS is how many times each row is read, ruled by Tee 2026-10-24 after the\n// same request scored 85, 100 and 90: the strictest read is what is written.\nreturn [{ json: { FIRST_RUN_LIMIT: 1, ROW_LIMIT: 20, ONLY_ROWS: [], WRITE: true, READS: 3 } }];\n"
+   }
+  },
+  {
+   "id": "09eaccdb-1f28-4eb5-81f2-c94656ffe0ab",
+   "name": "Get TQO Scripted Rows",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    440,
+    300
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "get",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "2GtmrFcTNqVMbddh"
+    },
+    "matchType": "allConditions",
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "status",
+       "condition": "eq",
+       "keyValue": "Scripted"
+      }
+     ]
+    },
+    "returnAll": true
+   },
+   "alwaysOutputData": true
+  },
+  {
+   "id": "2fb08f51-f1c1-4b9b-8bae-9ee6d45c548a",
+   "name": "Get NCO Scripted Rows",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    660,
+    300
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "get",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "DSH1tn4TZjzAEKxp"
+    },
+    "matchType": "allConditions",
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "status",
+       "condition": "eq",
+       "keyValue": "Scripted"
+      }
+     ]
+    },
+    "returnAll": true
+   },
+   "alwaysOutputData": true,
+   "executeOnce": true
+  },
+  {
+   "id": "6e9c3776-be07-4596-89cd-faa5a388c41f",
+   "name": "Select Rows",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    300
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// Select Rows. Picks the Scripted rows that carry a script and no doctor line,\n// TQO first and then NCO, each in row order. A row that already carries a\n// doctor line is never scored again, so a run that stops halfway is finished\n// by running it again. The doctor line is read with the same pattern as the QC\n// Doctor Gate and Preflight: Can This Clear? in TQO FINAL V5.\n// Until a score-only line exists on a Scripted row in either table, a run takes\n// FIRST_RUN_LIMIT rows. Once one does, it takes ROW_LIMIT. Only Scripted rows\n// are read, so if every scored row has moved on, the next run is one row again.\nconst cfg = $('Run Config').first().json;\nconst whole = (n) => Number.isInteger(n) && n > 0;\nif (!whole(cfg.FIRST_RUN_LIMIT) || !whole(cfg.ROW_LIMIT)) {\n  throw new Error('Run Config FIRST_RUN_LIMIT and ROW_LIMIT must be whole numbers above 0, and they read ' + JSON.stringify(cfg.FIRST_RUN_LIMIT) + ' and ' + JSON.stringify(cfg.ROW_LIMIT) + '.');\n}\nif (!Number.isInteger(cfg.READS) || cfg.READS < 1 || cfg.READS > 5) {\n  throw new Error('Run Config READS must be a whole number from 1 to 5, and it reads ' + JSON.stringify(cfg.READS === undefined ? null : cfg.READS) + '.');\n}\nif (typeof cfg.WRITE !== 'boolean') {\n  throw new Error('Run Config WRITE must be true or false, and it reads ' + JSON.stringify(cfg.WRITE === undefined ? null : cfg.WRITE) + '.');\n}\nconst only = Array.isArray(cfg.ONLY_ROWS) ? cfg.ONLY_ROWS.map(String) : [];\nconst DOCTOR = /\\|\\s*doctor\\s+(\\d+(?:\\.\\d+)?)\\/100\\s+([^|\\n]*?)\\s*(?=\\||\\n|$)/;\nconst SCORE_ONLY = /\\|\\s*doctor\\s+\\d+(?:\\.\\d+)?\\/100\\s+(?:PASS|NEEDS_REVISION)\\s*\\|\\s*score only, no rewrite\\b/;\nconst SHOWS = [\n  { show: 'TQO', tableRef: '2GtmrFcTNqVMbddh', node: 'Get TQO Scripted Rows' },\n  { show: 'NCO', tableRef: 'DSH1tn4TZjzAEKxp', node: 'Get NCO Scripted Rows' }\n];\nconst eligible = [];\nconst counts = [];\nlet proven = false;\nfor (const s of SHOWS) {\n  const rows = $(s.node).all().map(i => i.json).filter(j => j && j.id !== undefined && j.id !== null)\n    .sort((a, b) => Number(a.id) - Number(b.id));\n  let scored = 0, empty = 0, other = 0;\n  for (const r of rows) {\n    const history = String(r.score_history || '');\n    if (SCORE_ONLY.test(history)) proven = true;\n    if (String(r.status) !== 'Scripted') { other++; continue; }\n    if (!String(r.script || '').trim()) { empty++; continue; }\n    if (DOCTOR.test(history)) { scored++; continue; }\n    eligible.push({ ...r, nco: s.show === 'NCO', __show: s.show, __tableRef: s.tableRef, __key: s.show + ':' + r.id });\n  }\n  counts.push(s.show + ' ' + rows.length + ' Scripted read, ' + scored + ' already carry a doctor line, ' + empty + ' have no script' + (other ? ', ' + other + ' not Scripted' : ''));\n}\nconst unknown = only.filter(k => !eligible.some(r => r.__key === k));\nif (unknown.length) throw new Error('ONLY_ROWS names ' + unknown.join(', ') + ', which is not a Scripted row with a script and no doctor line. ' + counts.join('; ') + '.');\nconst limit = proven ? cfg.ROW_LIMIT : cfg.FIRST_RUN_LIMIT;\nconst pool = only.length ? eligible.filter(r => only.includes(r.__key)) : eligible;\nconst picked = pool.slice(0, limit);\nconst note = 'select: ' + counts.join('; ') + '; ' + eligible.length + ' eligible; '\n  + (proven ? 'a score-only line exists, so the limit is ROW_LIMIT ' : 'no score-only line yet, so the limit is FIRST_RUN_LIMIT ') + limit\n  + '; ' + picked.length + ' scored this run (' + picked.map(r => r.__key).join(', ') + ')';\nif (!picked.length) throw new Error('No row to score. ' + note + '.');\nreturn picked.map(r => ({ json: { ...r, __selectNote: note } }));\n"
+   }
+  },
+  {
+   "id": "847c5858-5656-4a30-86ff-3c0e0f8a6e02",
+   "name": "DT Shim: Idea Rows",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1100,
+    300
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// DT alias shim (TQO migration): expose Airtable-style names + fields{} view.\nconst MAP={status:'Status',system_status:'System Status',brand:'Brand',show:'Show',content_id:'Content ID',video_title:'Video Title',body:'Body',script:'Script',description:'Description',tags:'Tags',broll_keywords:'Broll Keywords',angle:'Angle',function:'Function',notes:'Notes',episode_row:'Episode Row',last_feedback:'Last Feedback',video_url:'Video URL',published_url:'Published URL',platform_packaging:'Platform Packaging',os_28_status:'OS 28 Status',cold_open:'COLD OPEN',hook_type:'Hook Type',ai_disclosure:'AI Disclosure',claim_validity:'Claim Validity',recheck_by:'Recheck By',primary_subject:'Primary Subject',thumbnail_headline:'Thumbnail Headline',est_seconds:'Est Seconds',rubric_average:'Rubric Average',correction_attempts:'Correction Attempts',render_attempts:'Render Attempts',human_review:'Human Review',qc_verdict:'QC Verdict',qc_score:'QC Score',qc_findings:'QC Findings',score_history:'Score History',manifest:'Manifest',topic:'Topic',idea:'Idea',idea_score:'Idea Score',idea_score_breakdown:'Idea Score Breakdown',routing:'Routing',channel:'Channel',asset_type:'Asset Type',parent_record:'Parent Record',aspect_ratio:'Aspect Ratio',season:'Season',episode:'Episode',attached_offer:'Attached Offer',canonical_rule_id:'Canonical Rule ID',atomized_at:'Atomized At',live_links:'Live Links',virality_score:'Virality Score'};\nreturn $input.all().map(it=>{const j=it.json||{};if(j.id===undefined)return it;const out={...j};const fields={};for(const[s,o]of Object.entries(MAP)){if(s in j){out[o]=j[s];if(j[s]!==null)fields[o]=j[s];}}out.fields=fields;out.createdTime=j.createdAt;return {json:out};});"
+   }
+  },
+  {
+   "id": "2e4efd36-9892-4936-84f2-6c1eec8d6527",
+   "name": "One Idea at a Time",
+   "type": "n8n-nodes-base.splitInBatches",
+   "typeVersion": 3,
+   "position": [
+    1320,
+    300
+   ],
+   "parameters": {
+    "batchSize": 1,
+    "options": {}
+   }
+  },
+  {
+   "id": "99883157-4bd8-4640-80e6-257fe9933f35",
+   "name": "Run Report",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1540,
+    100
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// Run Report. One line per row scored. The run ends in error when any row was\n// not written, so a partial run never reads as a clean one; the rows that were\n// written stay written, and running again picks up only the rest. A PASS at 90\n// or above is what the QC Doctor Gate and Preflight read as a clear doctor\n// line. It clears that one check and nothing else on the row.\n// In a measurement run (Run Config WRITE false) nothing is written on purpose:\n// a row the doctor scored is listed as measured, and only a row that could not\n// be scored ends the run in error.\nconst FLOOR = 90;\nconst results = $input.all().map(i => i.json);\nif (!results.length || results.some(r => !r || r.rowId === undefined || typeof r.written !== 'boolean')) {\n  throw new Error('Run Report could not read the loop results: ' + JSON.stringify(results).slice(0, 600));\n}\nconst measure = $('Run Config').first().json.WRITE === false;\nconst written = results.filter(r => r.written);\nconst cleared = written.filter(r => r.verdict === 'PASS' && Number(r.score) >= FLOOR);\nconst measured = results.filter(r => !r.written && measure && r.ok === true);\nconst failed = results.filter(r => !r.written && !(measure && r.ok === true));\nconst lines = results.map(r => r.show + ' row ' + r.rowId + (r.title ? ' \"' + r.title + '\"' : '') + ': '\n  + (r.written\n    ? r.verdict + ' ' + r.score + '/100, ' + (r.verdict === 'PASS' && Number(r.score) >= FLOOR ? 'the doctor line clears at ' + FLOOR : 'the doctor line holds the row')\n    : measured.includes(r)\n      ? 'MEASURED, NOT WRITTEN: ' + r.verdict + ' ' + r.score + '/100. DIAGNOSIS: ' + ((String(r.feedback || '').match(/\\nDIAGNOSIS: ([^\\n]*)/) || [])[1] || 'none given')\n      : 'NOT WRITTEN, ' + r.reason));\nlet note = '';\ntry { note = String($('Select Rows').first().json.__selectNote || ''); } catch (e) { note = ''; }\nconst summary = (measure ? 'MEASUREMENT RUN, Run Config WRITE is false: ' + measured.length + ' row(s) scored and nothing written.\\n' : '')\n  + 'Score-only doctor run: ' + results.length + ' row(s), ' + written.length + ' written, '\n  + cleared.length + ' clear the doctor check at ' + FLOOR + ', ' + failed.length + ' not written.\\n'\n  + lines.join('\\n') + (note ? '\\n' + note : '');\nif (failed.length) throw new Error(summary);\nreturn [{ json: { summary, results } }];\n"
+   }
+  },
+  {
+   "id": "d586b1f5-5e7b-4998-8750-6e0db2c91d23",
+   "name": "DEVON Recall: Ask",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1540,
+    480
+   ],
+   "parameters": {
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "options": {
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     },
+     "timeout": 15000
+    },
+    "queryParameters": {
+     "parameters": [
+      {
+       "name": "q",
+       "value": "={{ (String($json.Topic || '') + '. ' + String($json.Idea || '')).slice(0, 900) }}"
+      },
+      {
+       "name": "top_k_tee",
+       "value": "4"
+      },
+      {
+       "name": "top_k_devon",
+       "value": "3"
+      }
+     ]
+    },
+    "sendQuery": true,
+    "url": "https://devon-soul.vercel.app/api/v1/soul/recall"
+   },
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "JSBvIdHJ9UUQRXwH",
+     "name": "Devon Console Token"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "id": "8f84628c-4fba-4adb-8f20-13d5ca5bd070",
+   "name": "DEVON Recall: Merge",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1760,
+    480
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// DEVON Recall: Merge (added 15 Sep 2026). Ruled by Tee on an inline card:\n// the writer is grounded by retrieval from his own record plus capture of his\n// edits. This node folds two things onto the idea row before Build Script\n// Prompt reads it: the devon-soul recall for this topic, and the newest\n// exemplars of how Tee rewrote earlier machine drafts. Both are optional. A\n// recall that fails (probe execution 86 on 15 Sep 2026 returned 401 because\n// the stored credential does not match the service) is named in\n// devonRecallNote and the script is still written; nothing here blocks.\nconst row = $('One Idea at a Time').first().json;\nlet recallText = '';\nlet recallNote = '';\ntry {\n  const res = $('DEVON Recall: Ask').first().json || {};\n  const code = Number(res.statusCode);\n  let body = res.body;\n  if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = null; } }\n  if (code === 200 && body && Array.isArray(body.records)) {\n    const recs = body.records.filter(r => r && String(r.text || '').trim()).slice(0, 7);\n    recallText = recs.map(r => '- [' + String(r.source || 'soul') + ', score ' + (Number(r.score) || 0).toFixed(2) + '] ' + String(r.text).replace(/\\s+/g, ' ').trim().slice(0, 600)).join('\\n');\n    recallNote = 'DEVON recall: ' + recs.length + ' record(s), ' + (body.tee_count ?? '?') + ' from Tee and ' + (body.devon_count ?? '?') + ' from DEVON' + (Array.isArray(body.errors) && body.errors.length ? '; partial: ' + body.errors.join('; ') : '');\n  } else {\n    const detail = body && body.detail ? String(body.detail) : (res.error ? String(res.error.message || res.error) : '');\n    recallNote = 'DEVON recall unavailable (HTTP ' + (code || 'none') + (detail ? ', ' + detail.slice(0, 120) : '') + '); the script was written without it';\n  }\n} catch (e) {\n  recallNote = 'DEVON recall did not run: ' + e.message;\n}\nconst exemplars = $input.all().map(i => i.json || {}).filter(j => String(j.tee_script || '').trim());\nconst squeeze = (s, n) => String(s || '').replace(/\\s+/g, ' ').trim().slice(0, n);\nconst exemplarText = exemplars.map((j, i) => [\n  'Exemplar ' + (i + 1) + ' (' + String(j.topic || 'untitled') + ', captured ' + String(j.captured_at || '').slice(0, 10) + ', ' + (j.machine_words || '?') + ' machine words to ' + (j.tee_words || '?') + ' after Tee):',\n  'MACHINE DRAFT OPENED: ' + squeeze(j.machine_script, 400),\n  'TEE REWROTE IT AS: ' + squeeze(j.tee_script, 900)\n].join('\\n')).join('\\n\\n');\nreturn [{ json: { ...row, devonRecall: recallText, devonRecallNote: recallNote, devonExemplars: exemplarText, devonExemplarCount: exemplars.length } }];\n"
+   }
+  },
+  {
+   "id": "3422ca7c-122f-49b3-826e-c70e47f68261",
+   "name": "Show Context: Script",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1980,
+    480
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "const nco = $json.nco === true;\nreturn [{ json: nco ? {\n  show: 'NCO', channel: 'NCO Forge', tableId: 'nco_content', tableRef: 'DSH1tn4TZjzAEKxp',\n  brand: 'nco', kicker: 'NCO FORGE',\n  // Brand hierarchy from the Aug 2026 audit: brand, then emotion, then position.\n  tagline: \"Leaders aren't born. They're forged.\",\n  positioning: 'Where doctrine ends and leadership begins.',\n  tagline2: 'Built by Discipline. Living on Purpose.',\n  thesis: 'NCO Forge is where military experience becomes leadership judgment. The situations nobody can teach you from a slide.',\n  requiredTags: ['NCO Forge'],\n  scriptLimit: 2, promoteLimit: 1, packageLimit: 3,\n} : {\n  show: 'TQO', channel: 'The Quiet Operator', tableId: 'tqo_content', tableRef: '2GtmrFcTNqVMbddh',\n  brand: 'tqo', kicker: 'THE QUIET OPERATOR',\n  tagline: 'AI Strategy for the Next Economy.',\n  positioning: 'Leverage for the people the AI economy is quietly repricing.',\n  tagline2: 'Quiet Leverage. Real Results.',\n  thesis: 'The Quiet Operator is where professional judgment survives automation. Receipts, not predictions.',\n  requiredTags: [],\n  scriptLimit: 2, promoteLimit: 1, packageLimit: 3,\n} }];"
+   }
+  },
+  {
+   "id": "07cc93fd-21f9-446d-89ba-090e9ffb4957",
+   "name": "Recall Required",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1980,
+    680
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// Recall Required. The doctor treats any first person claim that is not in\n// TEE'S RECORD as invented, so a score taken without the DEVON recall is not a\n// score of the script as Tee wrote it. When the recall does not answer, the\n// run stops here, before the provider is paid, and says why. Rows written\n// earlier in the run stay written, and running again picks up the rest. The\n// test is the one DEVON Recall: Merge applies, HTTP 200 with a records array,\n// which may be empty, plus one more: the soul service answers 200 with an\n// errors entry beginning \"tee-soul-layer unavailable\" when Tee's own index did\n// not answer, and that is a recall without Tee's record. An entry about DEVON's\n// index alone does not stop the run.\nconst res = $('DEVON Recall: Ask').first().json || {};\nconst code = Number(res.statusCode);\nlet body = res.body;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = null; } }\nconst teeDown = body && Array.isArray(body.errors) && body.errors.some(e => String(e).startsWith('tee-soul-layer unavailable'));\nif (!(code === 200 && body && Array.isArray(body.records)) || teeDown) {\n  const row = $('One Idea at a Time').first().json;\n  const merged = $input.first() ? $input.first().json : {};\n  throw new Error('The DEVON recall did not answer for ' + String(row.__key || row.id) + ', so it was not scored and the run stopped before calling the provider. '\n    + String(merged.devonRecallNote || 'No recall note.') + ' Rows written earlier in this run stay written; run it again once the recall answers.');\n}\nreturn $input.all();\n"
+   }
+  },
+  {
+   "id": "57cce27e-2b94-4242-84ea-979fd0c16f59",
+   "name": "Script: Hydrate from Row",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2200,
+    480
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// Script: Hydrate from Row. Tee ruling 2026-10-01: the pipeline must USE a\n// script that already exists on the row instead of rewriting it. This node\n// shapes the row's stored script into the same d-shape Build Doctor Prompt\n// expects from Parse Script JSON, so an existing script enters the chain at\n// the doctor, not at the writer. Nothing here invents content: the title,\n// description, b-roll, learning objective and checklist come from the row\n// where they exist, empty where they do not.\nconst row = $('One Idea at a Time').first().json;\n// Score-only copy. The DT shim builds fields from its MAP only, which has no\n// learning_objective and spells the b-roll column Broll Keywords, so the live\n// line, const f = row.fields || row, read neither and the doctor was told the\n// learning objective was none returned. The row's own columns are read too,\n// and the shim's names win where both exist.\nconst f = { ...row, ...(row.fields || {}) };\nconst script = String(f.Script ?? f.script ?? '').trim();\nif (!script) {\n  throw new Error('Script: Hydrate from Row reached with an empty script. This node only runs for rows that already carry one.');\n}\nconst list = (v) => Array.isArray(v) ? v.map(s => String(s).trim()).filter(Boolean) : [];\nconst tags = String(f.Tags ?? f.tags ?? '').trim();\nconst broll = String(f['B-Roll Keywords'] ?? f.broll_keywords ?? '').trim();\nreturn [{\n  json: {\n    recordId: row.id,\n    title: String(f['Video Title'] ?? f.video_title ?? f.Topic ?? '').trim(),\n    script,\n    description: String(f.Description ?? f.description ?? '').trim(),\n    tags,\n    broll,\n    learningObjective: String(f.learning_objective ?? '').trim(),\n    checklist: list(f.checklist),\n    __source: 'existing-row-script',\n  }\n}];"
+   }
+  },
+  {
+   "id": "d6478539-fd86-4aba-8f7a-e429fbab7b7d",
+   "name": "Build Doctor Prompt",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2420,
+    480
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// Build Doctor Prompt, score-only copy. Generated by\n// n8n/tqo-v5/doctor-score-only/build.mjs from the live node of TQO FINAL V5 at\n// the version live/manifest.json names. Every line is the live text except the\n// output contract at the end of the system prompt, which asks for a score and\n// a verdict of PASS or NEEDS_REVISION and no rewritten script, and the text\n// shown when the row stores no checklist.\nconst ctx = $('Show Context: Script').first().json;\nconst row = $('One Idea at a Time').first().json;\nconst f = row.fields || row;\nconst d = $json;\nconst isNCO = ctx.show === 'NCO';\n\nconst system = [\n  'You are the script doctor for ' + ctx.channel + '. You have one job: diagnose this draft on its own terms, then repair only what is objectively broken.',\n  '',\n  'THE PRIME DIRECTIVE',\n  'Never ask how this becomes a better script. Ask what this script is trying to become.',\n  'A note that would improve any script equally is not a note about this one. Cut it.',\n  'Optimise in this order: artistic integrity, then execution, then convention. Never invert it.',\n  '',\n  'PRESERVATION FIRST',\n  'Before forming any critique, list what is immune: signature phrasing, a rhythm only this writer produces, recurring motifs, deliberate ambiguity, anything strange on purpose.',\n  'Everything on that list survives unless it is objectively broken. Not unfamiliar. Not risky. Broken.',\n  'If you cannot say concretely what breaks, it stays.',\n  ...(isNCO ? [] : [\n    'REQUIRED BY THE BRIEF, NEVER CUT OR REWORD: the learning objective sentence inside the first 30 seconds, the spoken checklist of 3 to 5 steps, and the one question for the comments at the very end.',\n    'The checklist is not a named framework, and a specific question for the comments is not a solicitation or engagement bait. A request to like, to subscribe, or to visit a link or an audit is a solicitation; remove it.'\n  ]),\n  '',\n  'WHAT TO DIAGNOSE',\n  'Dramatic question. Surface conflict versus deep conflict; if they are the same thing, that is the diagnosis and you say so.',\n  'Where tension flatlines. Give a location in the script, not a feeling. \"The middle sags\" is not a note.',\n  'Any passage that is an exchange of information rather than an argument.',\n  'Whether the piece could have been written by someone who had not done the thing it describes.',\n  '',\n  'REPAIR ORDER, HARD SEQUENCE',\n  'behaviour, then conflict, then structure, then clarity, then line polish. Never style first.',\n  'Most weak writing is a thinking problem wearing a style costume. Polishing it makes the symptom prettier and the diagnosis harder to see.',\n  '',\n  '=== VOICE: TERRANCE VEAL ===',\n  'Everything you produce is published under his name.',\n  '',\n  'Calm, methodical teacher who thinks philosophically. Reflective, precise, grounded, intellectually humble, quietly ambitious.',\n  'Teacher to student: the reader is capable and is being shown something, not sold something and not talked down to.',\n  'He explains. He does not perform.',\n  '',\n  'THE STANDARD: a listener finishing this should think \"this person has actually thought about this. He is not performing. He is teaching me something real.\"',\n  'When any rule below conflicts with that sentence, the sentence wins.',\n  '',\n  'CALIBRATED CONFIDENCE. The strength of the language must match the strength of the grounding.',\n  'Strong evidence permits strong language; hedging everything is its own dishonesty.',\n  'Weak evidence requires a narrower claim, not a softer verb.',\n  'When uncertain, say so inside the sentence making the claim, never in a disclaimer afterwards.',\n  '',\n  'ABSOLUTE RULES',\n  'No em dashes. No en dashes. Ever. Restructure, or use a comma, colon, semicolon or full stop.',\n  'No invented statistics, metrics, studies or quotes. If a number is missing, say it is missing. Never estimate one into place.',\n  'No invented experience. Terrance did, saw, heard or advised something only if TEE\\'S RECORD below says so. Cut any other first person claim, and any unnamed firm, study, report or case study, or turn it into a plainly labelled picture with no name, employer or number.',\n  'No hype vocabulary: game changer, secret, hack, crush it, unlock, supercharge, this changes everything, 10x, masterclass.',\n  'No empty intensifiers: truly, deeply, incredibly, absolutely, profound, transformative.',\n  'No LLM connectives: moreover, furthermore, delve, navigate or landscape used metaphorically, realm, tapestry, testament, it is worth noting that.',\n  'No manufactured vulnerability. Real admissions are specific and uncomfortable; engineered ones are tidy.',\n  'No engagement bait. No Agree? No Thoughts? No What would you add?',\n  'No negative parallelism as a habit.',\n  'No turning one observation into a named five step framework.',\n  'If a sentence could have been written by an AI trying to sound thoughtful, rewrite it.',\n  '',\n  'RHYTHM. Human writing is asymmetric. Vary sentence and paragraph length. Perfect symmetry is a tell.',\n  isNCO\n    ? 'NCO FORGE ADJUSTMENT: same honesty, harder edge. Direct, practical, respectful of service. Doctrine, then reality, then judgment. Second person wherever possible.'\n    : 'TQO holds the profile exactly as written above.',\n  '',\n  'SCORING, 0 to 100',\n  'thesis 25: one argument, not a list wearing an argument as a costume.',\n  'opening 20: does the first 30 seconds earn the next 30? Grounded observation, precise question, quiet tension or simple principle. No welcome back, no channel bio.',\n  'evidence 20: specific and checkable. Deduct hard for anything invented.',\n  'voice 20: the profile above, obeyed. Any em dash is an automatic deduction of 10.',\n  'close 15: a clean implication or a real action. Never a solicitation.',\n  '',\n  'SCORE ONLY PASS. This pass scores the draft and never repairs it. Nothing you return replaces a word of the title, the script, the description or the b-roll.',\n  'Diagnose and score exactly as the full pass would. Where the full pass would have returned REPAIRED, return NEEDS_REVISION and put the repair you would have made in notes.',\n  '',\n  'Return ONLY valid JSON, no fences:',\n  '{\"score\":0,\"verdict\":\"PASS or NEEDS_REVISION\",',\n  '\"preserved\":[\"what you would refuse to touch and why\"],',\n  '\"diagnosis\":\"the single highest-leverage problem, with the line that shows it\",',\n  '\"notes\":[\"specific, actionable, at most four\"]}',\n  '',\n  'PASS only when the draft is already sound as written. A high score never makes a broken draft PASS, and an unusual draft is not a broken one.'\n].join('\\n');\n\nconst user = [\n  'Channel: ' + ctx.channel,\n  'Show: ' + String(f.Show || 'unassigned') + ' | Season ' + (f.Season ?? '?') + ' Episode ' + (f.Episode ?? '?'),\n  'Editorial direction: ' + String(f.Idea || 'none given'),\n  '',\n  'TITLE: ' + String(d.title || ''),\n  '',\n  'DESCRIPTION: ' + String(d.description || ''),\n  '',\n  'BROLL: ' + String(d.broll || ''),\n  '',\n  ...(isNCO ? [] : [\n    'LEARNING OBJECTIVE (keep word for word, inside the first 30 seconds): ' + String(d.learningObjective || '(none returned)'),\n    '',\n    'CHECKLIST (keep these steps as spoken, in order): ' + (Array.isArray(d.checklist) && d.checklist.length ? d.checklist.map((s, i) => (i + 1) + '. ' + s).join(' ') : '(not stored on this row; judge the spoken steps in the script itself)'),\n    ''\n  ]),\n  'TEE\\'S RECORD (the only first person material that may stand): ' + (() => { try { return String($('DEVON Recall: Merge').first().json.devonRecall || '(none retrieved)'); } catch (e) { return '(none retrieved)'; } })(),\n  '',\n  'SCRIPT:',\n  String(d.script || '')\n].join('\\n');\n\nreturn [{ json: { recordId: d.recordId, original: d, claudeBody: {\n  model: 'claude-sonnet-5', max_tokens: 8000, system, messages: [{ role: 'user', content: user }]\n} } }];"
+   }
+  },
+  {
+   "id": "432335ab-48c3-459d-8552-d4dd7cd5720f",
+   "name": "Doctor Sources",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2640,
+    480
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// Doctor Sources, ruled by Tee 2026-10-07 with the Sources Rule: the doctor sees\n// the approved sources, so it keeps a sourced figure and cuts any other. Both\n// shows, NCO from the same day's second ruling.\nconst row = $('One Idea at a Time').first().json;\nconst j = $input.first().json;\nif (!j.claudeBody) return [{ json: j }];\nlet list = [];\ntry { const l = JSON.parse(String(row.sources || '')); if (Array.isArray(l)) list = l.filter(x => x && x.url && x.quote); } catch (e) { list = []; }\nconst block = list.length\n  ? 'APPROVED SOURCES (the only figures and named sources that may stand):\\n' + list.map((s, i) => '[S' + (i + 1) + '] ' + (s.origin || s.publisher) + ', reported by ' + s.publisher + ': \"' + (s.quote_text || s.quote) + '\"').join('\\n')\n  : 'APPROVED SOURCES: none. No figure, percentage, dollar amount or named study may stand.';\nconst rule = 'SOURCES: a figure, percentage, dollar amount or named study that is not in APPROVED SOURCES is invented. Cut it or make the point without it. Never change a sourced figure or the year it belongs to.';\nconst cb = j.claudeBody;\nconst msgs = (cb.messages || []).slice();\nif (msgs.length) msgs[0] = { ...msgs[0], content: block + '\\n\\n' + String(msgs[0].content || '') };\nreturn [{ json: { ...j, claudeBody: { ...cb, system: String(cb.system || '') + '\\n' + rule, messages: msgs } } }];\n"
+   }
+  },
+  {
+   "id": "68bf7eb5-4589-49ad-88dc-638140520af9",
+   "name": "Token Budget: Doctor",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2860,
+    480
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// Output ceiling for the script doctor.\n// This is the largest output in the script lane: on a REPAIRED verdict it\n// returns the whole script again, plus the preservation list, the diagnosis and\n// the notes. Truncation here does not throw. Parse Doctor Verdict passes the\n// original draft through unedited and marks it UNCHECKED, which means you lose\n// the audit silently rather than loudly.\nconst MAX_TOKENS = 12000;\n\nconst j = { ...$json };\nif (j.body) j.body = { ...j.body, max_tokens: MAX_TOKENS };\nif (j.claudeBody) j.claudeBody = { ...j.claudeBody, max_tokens: MAX_TOKENS };\n// Cerebras gpt-oss-120b carries this call from 15 Sep 2026, on Tee's ruling that\n// every model call in this workflow moves off Anthropic. The prompt builder still\n// emits the Anthropic shape, so the whole swap is this conversion here and one\n// extraction line in the parser downstream. max_completion_tokens on Cerebras\n// INCLUDES the model's reasoning tokens, which is why the ceiling above stays\n// generous rather than trimmed to the prose.\nconst SUFFIX = '\\n\\nOutput rules that override anything above: never use an em dash or an en dash anywhere in any field, use a comma, a full stop or the word to instead; write the full length the brief asks for, never shorter.';\nconst toCerebras = (b) => {\n  if (!b || !Array.isArray(b.messages)) return b;\n  const sys = (typeof b.system === 'string' && b.system) ? [{ role: 'system', content: b.system + SUFFIX }] : [];\n  return { model: 'gpt-oss-120b', messages: [...sys, ...b.messages], max_completion_tokens: MAX_TOKENS, reasoning_effort: 'medium', response_format: { type: 'json_object' } };\n};\nif (j.body) j.body = toCerebras(j.body);\nif (j.claudeBody) j.claudeBody = toCerebras(j.claudeBody);\nreturn [{ json: j }];"
+   }
+  },
+  {
+   "id": "fd9d1842-6358-465f-81fb-0626e0b68b35",
+   "name": "Score Only: Final Word",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2860,
+    680
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// Score Only: Final Word. Token Budget: Doctor, copied from the live lane, ends\n// the system message with output rules written for the full pass, and one of\n// them, \"write the full length the brief asks for, never shorter\", says it\n// overrides anything above. In a score-only pass that reads as a request for a\n// rewrite. This line comes last and says which of those rules still stands.\n//\n// Ruled by Tee 2026-10-24 after execution 4300. The doctor held row 49 for a\n// learning objective that \"appears after several sentences instead of within\n// the first 30 seconds\", when it starts at word 31, and asked for \"the second\n// occurrence\" of it to be removed, when the script speaks it once: it had read\n// the LEARNING OBJECTIVE field line as script. Its reasoning guessed the\n// position (\"Probably not before 30 seconds\") rather than counting it. So two\n// things go into the user message, just above SCRIPT:. The first is where the\n// learning objective is spoken, measured by the Script Gate's own rule in TQO\n// FINAL V5: word for word, ignoring case and punctuation, inside the first 70\n// words, which the gate counts as the first 30 seconds. The doctor is told the\n// fact instead of being left to guess it. The second says which lines are the\n// brief and which are the script. NCO has no learning objective line, so it\n// gets the second only.\n//\n// Ruled by Tee 2026-10-24 on a card: first person that only addresses the\n// viewer and claims no deed, sight or advice is allowed in his voice. Row 49's\n// only first person sentence, \"I am talking to the person who has spent years\n// handling problems other people never even saw.\", was flagged as an invented\n// first person claim in three of five runs and passed in two, and the Script\n// Gate's first person patterns pass it. VOICE says so in the system message,\n// for both shows, just before FINAL. Nothing else in the request changes.\n// Sharpened by Tee the next day, after execution 4364: one read of three still\n// marked the line down, reading \"the person who has spent years\" as Terrance.\n// VOICE now says that person is the viewer.\nconst VOICE = '\\n\\nRuled by Tee: first person that only addresses the viewer and claims no deed, sight, hearing or advice, as in \"I am talking to the person who has spent years handling problems other people never even saw.\", is his voice and stands. In that line, the person who has spent years handling problems other people never even saw is the viewer being addressed, not Terrance, so the line says nothing about what he has done. It is not a first person claim and is never marked down. The rule against invented experience still applies to everything Terrance is said to have done, seen, heard or advised.';\nconst FINAL = '\\n\\nScore only, and this overrides the full-length rule above: return only the JSON object the score-only contract names, with no script, title, description or b-roll field. Keep each note to a few sentences that describe a repair without writing it out. The rule against em and en dashes still stands.';\n// The Script Gate's window and its normaliser, copied from Script Gate: Quality.\n// Keep the two equal; score_only.test.mjs checks them against the export.\nconst LO_WINDOW = 70;\nconst norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9\\s]/g, ' ').split(/\\s+/).filter(Boolean).join(' ');\nconst MARK = '\\n\\nSCRIPT:\\n';\n\nconst j = { ...$json };\nconst b = j.claudeBody;\nif (!b || !Array.isArray(b.messages) || !b.messages.length || b.messages[0].role !== 'system') {\n  throw new Error('Score Only: Final Word expected the request to open with a system message, and it does not.');\n}\nif (b.messages.length !== 2 || b.messages[1].role !== 'user') {\n  throw new Error('Score Only: Final Word expected one system message and one user message, and the request carries ' + b.messages.map((m) => m && m.role).join(', ') + '.');\n}\nconst d = $('Build Doctor Prompt').first().json.original || {};\nconst script = String(d.script || '');\nconst content = String(b.messages[1].content);\nconst at = content.indexOf(MARK);\nif (at === -1 || content.slice(at + MARK.length) !== script) {\n  throw new Error('Score Only: Final Word could not find the script after SCRIPT: in the user message, so the measured facts were not added and the doctor was not called.');\n}\nconst nco = $('Show Context: Script').first().json.show === 'NCO';\n\nconst facts = [];\nif (!nco) {\n  const tokens = script.split(/\\s+/).filter(Boolean);\n  const lo = norm(d.learningObjective);\n  if (!lo) {\n    facts.push('MEASURED BEFORE THIS PASS: no learning objective is stored for this row.');\n  } else {\n    // The gate's own test, character for character.\n    const inside = (' ' + norm(tokens.slice(0, LO_WINDOW).join(' ')) + ' ').includes(' ' + lo + ' ');\n    // Where it is spoken: the normalised words of the script, each carrying the\n    // number of the script word it came from.\n    const flat = [];\n    tokens.forEach((t, i) => { for (const w of norm(t).split(' ').filter(Boolean)) flat.push({ w, i }); });\n    const want = lo.split(' ');\n    const hits = [];\n    for (let k = 0; k + want.length <= flat.length; k++) {\n      if (want.every((w, x) => flat[k + x].w === w)) hits.push({ from: flat[k].i + 1, to: flat[k + want.length - 1].i + 1 });\n    }\n    const first = hits[0];\n    if (inside !== Boolean(first && first.to <= LO_WINDOW)) {\n      throw new Error('Score Only: Final Word measured the learning objective two ways and they disagree, so the doctor was not called.');\n    }\n    const rule = 'by the rule the Script Gate in TQO FINAL V5 applies (word for word, ignoring case and punctuation, inside the first ' + LO_WINDOW + ' words, which the gate counts as the first 30 seconds)';\n    if (!first) {\n      facts.push('MEASURED BEFORE THIS PASS, ' + rule + ': the learning objective is not spoken word for word anywhere in the script.');\n    } else {\n      facts.push('MEASURED BEFORE THIS PASS, ' + rule + ': the learning objective is spoken word for word from word ' + first.from + ' to word ' + first.to + ' of ' + tokens.length + ', '\n        + (inside ? 'inside the first ' + LO_WINDOW + ' words. Its position meets the brief; do not mark it down for where it sits.' : 'which is past the first ' + LO_WINDOW + ' words, so its position does not meet the brief.')\n        + ' The script speaks it ' + (hits.length === 1 ? 'once' : hits.length + ' times') + '.');\n    }\n  }\n}\nfacts.push('Every line above SCRIPT: is the brief: the channel, show and editorial direction, the TITLE, DESCRIPTION and BROLL fields, '\n  + (nco ? '' : 'the LEARNING OBJECTIVE and CHECKLIST lines, ')\n  + 'the APPROVED SOURCES and TEE\\'S RECORD. None of those lines is part of the script, and none is a second copy of a script sentence. Only the text after SCRIPT: is the script.');\n\nj.claudeBody = { ...b, messages: [\n  { ...b.messages[0], content: String(b.messages[0].content) + VOICE + FINAL },\n  { ...b.messages[1], content: content.slice(0, at) + '\\n\\n' + facts.join('\\n') + MARK + script }\n] };\nreturn [{ json: j }];\n"
+   }
+  },
+  {
+   "id": "c0a0d750-b7b5-40e2-81fd-3a849cb51a70",
+   "name": "Score Only: Reads",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    3080,
+    680
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// Score Only: Reads. Ruled by Tee 2026-10-24, after the same request to the\n// doctor scored 85, 100 and 90 in three runs (executions 4354 to 4356): every\n// row is read READS times and Parse Score Only writes the strictest of them, so\n// a lucky single read can never clear a row. Each copy of the request is its\n// own call to Run Script Doctor (Cerebras), which runs once per item.\nconst n = $('Run Config').first().json.READS;\nconst items = $input.all();\nif (items.length !== 1) throw new Error('Score Only: Reads expected one request and received ' + items.length + '.');\nreturn Array.from({ length: n }, (_, i) => ({ json: { ...items[0].json, read: i + 1 } }));\n"
+   }
+  },
+  {
+   "id": "be8f433a-7292-439a-8ad5-a2c4cbfe6a2c",
+   "name": "Run Script Doctor (Cerebras)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    3080,
+    480
+   ],
+   "parameters": {
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "content-type",
+       "value": "application/json"
+      }
+     ]
+    },
+    "jsonBody": "={{ JSON.stringify($json.claudeBody) }}",
+    "method": "POST",
+    "options": {
+     "timeout": 300000
+    },
+    "sendBody": true,
+    "sendHeaders": true,
+    "specifyBody": "json",
+    "url": "https://api.cerebras.ai/v1/chat/completions"
+   },
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "ENoUSqySnkK0NVsl",
+     "name": "Cerebras Cloud"
+    }
+   },
+   "alwaysOutputData": true,
+   "maxTries": 2,
+   "onError": "continueRegularOutput",
+   "retryOnFail": true,
+   "waitBetweenTries": 3000
+  },
+  {
+   "id": "d2581b83-5427-4934-8b0f-aa9679b88fbe",
+   "name": "Parse Score Only",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    3300,
+    480
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// Parse Score Only. The doctor was told to score and never repair, so the only\n// results are PASS or NEEDS_REVISION with a score from 0 to 100. Anything else\n// is UNCHECKED and nothing is written: a refused or failed call, a truncation,\n// an empty or unreadable reply, a verdict outside those two, and REPAIRED most\n// of all, because no repair was made and the QC Doctor Gate would clear it.\n// Unlike Parse Doctor Output in TQO FINAL V5, a missing verdict is never PASS,\n// and only a completion that finished on its own (finish_reason stop) is read.\n// Ruled by Tee 2026-10-24: the row is read READS times and the strictest read\n// is written. The score is the lowest of them, and the verdict is PASS only\n// when every read is PASS at 90 or above. If any read fails, none is written.\n// That holds at READS 1 too: a PASS under 90 is written as NEEDS_REVISION, which\n// the QC Doctor Gate and Preflight hold either way.\nconst FLOOR = 90;\nconst row = $('One Idea at a Time').first().json;\nconst ctx = $('Show Context: Script').first().json;\nconst READS = $('Run Config').first().json.READS;\nconst stamp = new Date().toISOString();\nlet recall = '';\ntry { recall = String($('DEVON Recall: Merge').first().json.devonRecallNote || ''); } catch (e) { recall = ''; }\nconst base = {\n  show: ctx.show, tableRef: ctx.tableRef, rowId: row.id,\n  title: String(row.video_title || row.topic || ''), stamp, recall, written: false\n};\nconst fail = (reason) => [{ json: { ...base, ok: false, verdict: 'UNCHECKED', score: null, reason } }];\n\n// One read: a verdict and a score, or the reason it is not a result.\nconst readOne = (out) => {\n  out = out || {};\n  const no = (reason) => ({ ok: false, reason });\n  if (out.error) return no('the Cerebras call failed: ' + String(out.error.message || JSON.stringify(out.error)).slice(0, 300));\n  const choice = Array.isArray(out.choices) ? out.choices[0] : null;\n  if (!choice || !choice.message) return no('the Cerebras response carried no completion');\n  if (choice.finish_reason === 'length') return no('the completion was truncated at max_completion_tokens');\n  if (choice.finish_reason !== 'stop') return no('the completion ended on ' + JSON.stringify(choice.finish_reason === undefined ? null : choice.finish_reason) + ' rather than stop');\n  const raw = String(choice.message.content ?? '').trim().replace(/^```(json)?/i, '').replace(/```$/, '').trim();\n  if (!raw) return no('the completion was empty');\n  let v;\n  try { v = JSON.parse(raw); }\n  catch (e) {\n    const s = raw.indexOf('{'), en = raw.lastIndexOf('}');\n    if (s === -1 || en <= s) return no('the completion was not JSON');\n    try { v = JSON.parse(raw.slice(s, en + 1)); } catch (e2) { return no('the completion JSON did not parse'); }\n  }\n  if (!v || typeof v !== 'object' || Array.isArray(v)) return no('the completion was not a JSON object');\n  // The verdict is matched as ASCII before it is upper-cased, so no other letter\n  // folds into PASS.\n  const verdict = typeof v.verdict === 'string' && /^\\s*(?:PASS|NEEDS_REVISION)\\s*$/i.test(v.verdict) ? v.verdict.trim().toUpperCase() : '';\n  if (!['PASS', 'NEEDS_REVISION'].includes(verdict)) {\n    return no('the verdict was ' + JSON.stringify(v.verdict === undefined ? null : v.verdict) + ', and a score-only pass returns only PASS or NEEDS_REVISION');\n  }\n  let score = v.score;\n  if (typeof score === 'string' && /^\\s*\\d{1,3}(?:\\.\\d+)?\\s*$/.test(score)) score = Number(score);\n  if (typeof score !== 'number' || !Number.isFinite(score) || score < 0 || score > 100) {\n    return no('the score was ' + JSON.stringify(v.score === undefined ? null : v.score) + ', and only a number from 0 to 100 is a result');\n  }\n  // One decimal, always rounded down, so a score under the gate's 90 can never be\n  // written as 90 (89.95 is 89.9, never 90).\n  score = Math.floor(score * 10) / 10;\n  // A field that is not text is quoted as JSON, so the doctor's words in it are\n  // kept rather than written as [object Object] (found by the verifier on e0351e1).\n  const text = (x) => typeof x === 'string' ? x : JSON.stringify(x);\n  const list = (x) => Array.isArray(x) ? x.map(text).filter(s => s.trim()) : [];\n  // Found by the verifier on 31e0f73: the model name comes from the provider's\n  // envelope and went into the line as sent, so a name carrying \"| doctor 99/100\n  // PASS\" would have planted a doctor line the gates read. Only the characters a\n  // model name needs are kept.\n  const model = String(out.model || '').replace(/[^A-Za-z0-9._-]/g, '') || 'unknown model';\n  return { ok: true, verdict, score, diagnosis: v.diagnosis === undefined || v.diagnosis === null || v.diagnosis === '' ? '' : text(v.diagnosis), preserved: list(v.preserved), notes: list(v.notes), model };\n};\n\nconst outs = $input.all().map(i => i.json);\nif (!Number.isInteger(READS) || READS < 1) return fail('Run Config READS is ' + JSON.stringify(READS) + ', and it must be a whole number of 1 or more');\nif (outs.length !== READS) return fail(READS + ' read(s) were asked for and ' + outs.length + ' came back');\nconst reads = outs.map(readOne);\nconst bad = reads.map((r, i) => r.ok ? '' : 'read ' + (i + 1) + ': ' + r.reason).filter(Boolean);\nif (bad.length) return fail(READS === 1 ? reads[0].reason : bad.length + ' of ' + READS + ' reads were not results, so none is written (' + bad.join('; ') + ')');\n\nconst score = Math.min(...reads.map(r => r.score));\nconst verdict = reads.every(r => r.verdict === 'PASS' && r.score >= FLOOR) ? 'PASS' : 'NEEDS_REVISION';\n// The read shown in full is the lowest, a NEEDS_REVISION one first on a tie.\nconst at = reads.findIndex(r => r.score === score && r.verdict === 'NEEDS_REVISION');\nconst pick = reads[at === -1 ? reads.findIndex(r => r.score === score) : at];\nconst models = [...new Set(reads.map(r => r.model))];\nconst model = models.join(' and ');\nconst tally = reads.map(r => r.score).join(', ');\nconst line = stamp + ' | doctor ' + score + '/100 ' + verdict + ' | score only, no rewrite, ' + (READS === 1 ? '' : READS + ' reads (' + tally + '), ') + model;\nconst body = [\n  'SCRIPT DOCTOR, SCORE ONLY' + (READS === 1 ? '' : ', STRICTEST OF ' + READS + ' READS') + ': ' + verdict + ' at ' + score + '/100 at ' + stamp + '. The script was not changed.',\n  ...(recall ? ['TEE\\'S RECORD: ' + recall + '.'] : []),\n  ...(READS === 1 ? [] : ['READS: ' + reads.map((r, i) => (i + 1) + ' ' + r.verdict + ' ' + r.score).join(', ') + '. The lowest score is written, and PASS needs every read to pass at ' + FLOOR + ' or above.']),\n  '',\n  'DIAGNOSIS: ' + pick.diagnosis,\n  '',\n  ...(pick.preserved.length ? ['PRESERVED:', ...pick.preserved.map(p => '  - ' + p), ''] : []),\n  ...(pick.notes.length ? ['NOTES:', ...pick.notes.map(n => '  - ' + n), ''] : []),\n  ...(READS === 1 ? [] : ['OTHER READS:', ...reads.filter(r => r !== pick).map(r => '  - ' + r.verdict + ' ' + r.score + ': ' + (r.diagnosis || 'no diagnosis given'))])\n].join('\\n').trim();\n// Ruled by Tee 2026-10-25, after execution 4364's note carried an en dash the\n// doctor wrote: the doctor's words are quoted as written, never edited, and the\n// note says how many em or en dashes they carry. Only the doctor's words shown\n// in the note are counted: the lowest read's diagnosis, preserved list and\n// notes, and the other reads' diagnoses. The TEE'S RECORD line comes from the\n// recall and is not the doctor's (found by the verifier on e0351e1).\nconst DASH = new RegExp('[' + String.fromCharCode(0x2013, 0x2014) + ']', 'g');\nconst doctorWords = [pick.diagnosis, ...pick.preserved, ...pick.notes, ...(READS === 1 ? [] : reads.filter(r => r !== pick).map(r => r.diagnosis))].join('\\n');\nconst dashes = (doctorWords.match(DASH) || []).length;\nconst feedback = body + (dashes ? '\\n\\nThe doctor\\'s text above carries ' + dashes + ' dash' + (dashes === 1 ? '' : 'es') + ', quoted as it wrote ' + (dashes === 1 ? 'it' : 'them') + '.' : '');\n\nreturn [{ json: { ...base, ok: true, verdict, score, line, feedback, model, reason: '' } }];\n"
+   }
+  },
+  {
+   "id": "085ecf1b-bdd6-48e5-88d4-54b4a0c761c1",
+   "name": "Re-read Row",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    3520,
+    480
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "get",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "={{ $('Show Context: Script').first().json.tableRef }}"
+    },
+    "matchType": "allConditions",
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "id",
+       "condition": "eq",
+       "keyValue": "={{ $('Parse Score Only').first().json.rowId }}"
+      }
+     ]
+    },
+    "returnAll": true
+   },
+   "alwaysOutputData": true,
+   "executeOnce": true
+  },
+  {
+   "id": "5b3dab66-4c24-4038-86b6-dcfba34cbae7",
+   "name": "Compose Write",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    3740,
+    480
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// Compose Write. Builds the two values Save Score Line writes from the row as it\n// reads now, after the doctor call, and never from the copy read at the start\n// of the run, so a line another lane appended in the meantime is kept. Score\n// History and Last Feedback are appended to, the way Parse QC + Set Verdict\n// appends. Nothing is written when the parse failed, when the row cannot be\n// read back, when it left Scripted, when a doctor line landed during the run,\n// or when any column the doctor's request was built from changed during the\n// run. Those columns are compared as the row read at the start of the run and\n// as it reads now, so a score always describes the row it lands on.\nconst p = $('Parse Score Only').first().json;\nconst DOCTOR = /\\|\\s*doctor\\s+(\\d+(?:\\.\\d+)?)\\/100\\s+([^|\\n]*?)\\s*(?=\\||\\n|$)/;\nconst skip = (reason) => [{ json: { ...p, ok: false, verdict: 'UNCHECKED', write: false, reason } }];\nif (!p.ok) return [{ json: { ...p, write: false } }];\n// A measurement run scores and writes nothing, and keeps the verdict and score\n// for the run report.\nif ($('Run Config').first().json.WRITE === false) {\n  return [{ json: { ...p, write: false, measured: true, reason: 'a measurement run: Run Config WRITE is false, so nothing was written' } }];\n}\nconst fresh = $input.all().map(i => i.json).filter(j => j && String(j.id) === String(p.rowId));\nif (fresh.length !== 1) return skip('the row read back ' + fresh.length + ' time(s) before writing, and exactly 1 is required');\nconst r = fresh[0];\nif (String(r.status) !== 'Scripted') return skip('the row moved to ' + JSON.stringify(r.status) + ' during the run');\nif (DOCTOR.test(String(r.score_history || ''))) return skip('a doctor line landed on the row during the run');\n// Every column Hydrate, Build Doctor Prompt, Doctor Sources and DEVON Recall:\n// Ask read from the row.\nconst SHOWN = ['script', 'video_title', 'topic', 'description', 'learning_objective', 'broll_keywords', 'checklist', 'show', 'season', 'episode', 'idea', 'sources'];\nconst snap = $('One Idea at a Time').first().json;\nconst changed = SHOWN.filter(c => JSON.stringify(snap[c] ?? null) !== JSON.stringify(r[c] ?? null));\nif (changed.length) {\n  return skip(changed.join(', ') + ' changed on the row during the run, so the score is for a row it no longer describes');\n}\nconst priorHistory = String(r.score_history || '');\nconst priorFeedback = String(r.last_feedback || '');\nreturn [{ json: {\n  ...p,\n  write: true,\n  scoreHistory: (priorHistory ? priorHistory + '\\n' : '') + p.line,\n  lastFeedback: (priorFeedback ? priorFeedback + '\\n\\n' : '') + p.feedback\n} }];\n"
+   }
+  },
+  {
+   "id": "69bfdfa8-d65c-4051-83e4-4272c5ad01c4",
+   "name": "Write It?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    3960,
+    480
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict"
+     },
+     "conditions": [
+      {
+       "leftValue": "={{ $json.write === true }}",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "46dc8146-4c2a-4516-8e22-1dbe521c29fd",
+   "name": "Save Score Line",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    4180,
+    380
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "update",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "={{ $json.tableRef }}"
+    },
+    "matchType": "allConditions",
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "id",
+       "condition": "eq",
+       "keyValue": "={{ $json.rowId }}"
+      }
+     ]
+    },
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "score_history": "={{ $json.scoreHistory }}",
+      "last_feedback": "={{ $json.lastFeedback }}"
+     }
+    },
+    "options": {}
+   },
+   "alwaysOutputData": true
+  },
+  {
+   "id": "79fd4708-6558-4021-87a3-61a3db83eda3",
+   "name": "Read Back Row",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    4400,
+    380
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "get",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "={{ $('Compose Write').first().json.tableRef }}"
+    },
+    "matchType": "allConditions",
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "id",
+       "condition": "eq",
+       "keyValue": "={{ $('Compose Write').first().json.rowId }}"
+      }
+     ]
+    },
+    "returnAll": true
+   },
+   "alwaysOutputData": true,
+   "executeOnce": true
+  },
+  {
+   "id": "2041b801-36c8-45a1-8e73-bfc73cd8c37a",
+   "name": "Confirm Write",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    4620,
+    380
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// Confirm Write. Reads the row back after Save Score Line and checks both\n// columns hold exactly what Compose Write sent. The run report counts a row as\n// written only from this read, never from the update call returning success.\nconst c = $('Compose Write').first().json;\nconst back = $input.all().map(i => i.json).filter(j => j && String(j.id) === String(c.rowId));\nconst held = back.length === 1\n  && String(back[0].score_history ?? '') === c.scoreHistory\n  && String(back[0].last_feedback ?? '') === c.lastFeedback;\nreturn [{ json: {\n  show: c.show, rowId: c.rowId, title: c.title, ok: c.ok, verdict: c.verdict, score: c.score, line: c.line,\n  written: held,\n  reason: held ? '' : 'the write did not read back as sent (' + back.length + ' row(s) read back)'\n} }];\n"
+   }
+  }
+ ],
+ "connections": {
+  "Start Score-Only Run": {
+   "main": [
+    [
+     {
+      "node": "Run Config",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Run Config": {
+   "main": [
+    [
+     {
+      "node": "Get TQO Scripted Rows",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Get TQO Scripted Rows": {
+   "main": [
+    [
+     {
+      "node": "Get NCO Scripted Rows",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Get NCO Scripted Rows": {
+   "main": [
+    [
+     {
+      "node": "Select Rows",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Select Rows": {
+   "main": [
+    [
+     {
+      "node": "DT Shim: Idea Rows",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "DT Shim: Idea Rows": {
+   "main": [
+    [
+     {
+      "node": "One Idea at a Time",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "One Idea at a Time": {
+   "main": [
+    [
+     {
+      "node": "Run Report",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "DEVON Recall: Ask",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "DEVON Recall: Ask": {
+   "main": [
+    [
+     {
+      "node": "DEVON Recall: Merge",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "DEVON Recall: Merge": {
+   "main": [
+    [
+     {
+      "node": "Recall Required",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Recall Required": {
+   "main": [
+    [
+     {
+      "node": "Show Context: Script",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Show Context: Script": {
+   "main": [
+    [
+     {
+      "node": "Script: Hydrate from Row",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Script: Hydrate from Row": {
+   "main": [
+    [
+     {
+      "node": "Build Doctor Prompt",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build Doctor Prompt": {
+   "main": [
+    [
+     {
+      "node": "Doctor Sources",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Doctor Sources": {
+   "main": [
+    [
+     {
+      "node": "Token Budget: Doctor",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Token Budget: Doctor": {
+   "main": [
+    [
+     {
+      "node": "Score Only: Final Word",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Score Only: Final Word": {
+   "main": [
+    [
+     {
+      "node": "Score Only: Reads",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Score Only: Reads": {
+   "main": [
+    [
+     {
+      "node": "Run Script Doctor (Cerebras)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Run Script Doctor (Cerebras)": {
+   "main": [
+    [
+     {
+      "node": "Parse Score Only",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Parse Score Only": {
+   "main": [
+    [
+     {
+      "node": "Re-read Row",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Re-read Row": {
+   "main": [
+    [
+     {
+      "node": "Compose Write",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Compose Write": {
+   "main": [
+    [
+     {
+      "node": "Write It?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Write It?": {
+   "main": [
+    [
+     {
+      "node": "Save Score Line",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "One Idea at a Time",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Save Score Line": {
+   "main": [
+    [
+     {
+      "node": "Read Back Row",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read Back Row": {
+   "main": [
+    [
+     {
+      "node": "Confirm Write",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Confirm Write": {
+   "main": [
+    [
+     {
+      "node": "One Idea at a Time",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "saveManualExecutions": true,
+  "saveDataSuccessExecution": "all",
+  "saveDataErrorExecution": "all",
+  "saveExecutionProgress": true,
+  "timezone": "America/New_York",
+  "callerPolicy": "workflowsFromSameOwner",
+  "availableInMCP": true
+ }
+}
