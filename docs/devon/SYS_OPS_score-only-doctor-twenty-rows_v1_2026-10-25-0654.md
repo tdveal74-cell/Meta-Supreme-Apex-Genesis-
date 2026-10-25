@@ -15,7 +15,8 @@ line. Each row now carries one.
 
 All 20 rows are scored and written. Three clear the gate: TQO 50, 51 and 59,
 each PASS 100 on all three reads. The other 17 are held, at scores from 45 to
-91. Nothing else in either table changed.
+91. Nothing else in either table changed, apart from the table's own
+`updatedAt` stamp on those same 20 rows.
 
 The workflow is `TQO Doctor: Score Only (hand run)`, `wwjYsar6zRS6ZeD0`, manual
 trigger only. Read back at 2026-10-25T06:52Z: inactive, `versionId`
@@ -112,7 +113,9 @@ single PASS under 90 holds the row, as on TQO 55, TQO 60 and NCO 36.
 | NCO 37 | Leadership Shortcuts That Can Put Soldiers at Risk | PASS 100, NR 68, PASS 100 | NR 68 | held |
 
 The table diff of the snapshots taken before 4382 and after 4383 reads "rows
-changed vs pre-run snapshot: 20 | anything else changed: []".
+changed vs pre-run snapshot: 20 | anything else changed: []". That diff
+skipped `updatedAt`; the verifier below compared every column and found the
+stamp moved on the same 20 rows and nowhere else.
 
 TQO 54 is the one hold with a source question in it. The script says the
 International Labour Organization and NASK published a global index of
@@ -210,14 +213,55 @@ on the instance: `7d57ca6` (grounding), `31e0f73` and `6305cda` (three reads
 and the voice ruling), `e0351e1` and `d2183ec` (the sharpened ruling and the
 dash count). Their findings are fixed in the commits that follow each one.
 
-Two refuting verifiers were started at 2026-10-25T06:48Z on the run itself:
-one on run integrity (the 20 appends, the lines against Compose Write, the
-minimum and the strict verdict recomputed from the raw replies, the gate
-clearing exactly TQO 50, 51 and 59, the dash counts) and one on three content
-patterns in the replies. When this doc was first committed neither had
-reported, so everything above rests on the saved execution files and the
-table diff read in this session. Their verdicts are added to this section
-when they report.
+Two refuting verifiers checked the run itself, each in its own worktree at
+`d2183ec`, from the saved execution files and table snapshots, with no network
+and no database. Both reported CONFIRMED.
+
+Run integrity:
+
+- Exactly 20 rows differ between the snapshots, TQO 49 to 60 and NCO 30 to
+  37. Each differs in `score_history`, `last_feedback` and `updatedAt` only,
+  both written cells were null before, and both tables keep their row counts.
+  The verifier noted that `updatedAt` is the one column the claim left out.
+- Every written line and note is byte for byte what that row's Compose Write
+  produced.
+- Recomputed from the 60 raw Cerebras replies, all ending on `stop`: every
+  written score is the lowest of three, and only TQO 50, 51 and 59 are PASS.
+- The QC Doctor Gate's own regex, taken from `qc_doctor_gate.js`, clears
+  exactly TQO 50, 51 and 59 on the post-run history. That tests the doctor
+  line rule, not the whole gate.
+- The 12 notes that end with a dash count are right, and the other 8 carry no
+  em or en dash. The notes also carry 31 non-breaking hyphens, which are
+  neither and are not counted.
+
+Three patterns in the replies, each graded against the request the doctor was
+actually sent:
+
+- NCO 30. All three reads held its closing line, "In the comments, which of
+  the three failures did you find in your own last week, and what is the one
+  repair you will make?", as engagement bait. The TQO sentence saying a
+  specific comments question is not a solicitation is in all 12 TQO requests
+  and in none of the 8 NCO requests. NCO's brief instead says "close 15: a
+  clean implication or a real action. Never a solicitation." The other seven
+  NCO scripts close that way, and NCO 30 is the only one that ends on a
+  comments question. So the doctor read the NCO brief as written; the
+  question is whether NCO should carry the TQO sentence.
+- NCO 31. Its lowest read, 45, cites "Tee's cold-open rule". The rule is in
+  the request, in the TEE'S RECORD block from the DEVON recall: a ruling dated
+  2026-09-08, "adopted 2026-09-08 from the Sisinty benchmark refresh (Claude
+  derived, Tee to overrule)", that a long form cold open stacks three or four teased items
+  each with a named entity and a number. Of the 19 requests in 4383 it reached
+  only NCO 31's. The block is headed as the only first person material that
+  may stand, and the read applied it as a script rule. So one row was judged
+  on a rule the other nineteen were never shown.
+- The checklist. This doc's draft expected many holds to blame the required
+  checklist for reading as a list. Measured, it is 3 of the 23
+  NEEDS_REVISION replies: TQO 49 read 1 (81) and TQO 58 read 1 (86), each the
+  read that holds its row, and NCO 37 read 2 (68), where NCO has no checklist
+  rule. All 12 TQO requests carry "REQUIRED BY THE BRIEF, NEVER CUT OR REWORD:
+  ... the spoken checklist of 3 to 5 steps". Separately, a note on TQO 55 read
+  3 asks to drop "Use four steps" because it "hints at a named framework",
+  against the brief's "The checklist is not a named framework".
 
 ## Open
 
@@ -229,6 +273,12 @@ when they report.
   sentence.
 - The live doctor over-cut on TQO 5, and its two other repairs left no data to
   read.
+- Whether NCO carries the TQO sentence that a specific comments question is
+  not a solicitation, which decides NCO 30's ending.
+- Whether the 2026-09-08 cold-open record stands. If it does, every row's
+  brief should carry it; if not, the recall should stop serving it.
+- TQO 49 and TQO 58 are each held by one read that marks down the required
+  checklist.
 - The seven Sources Gate false positives.
 - The three parser gaps and the stale export above.
 
@@ -239,7 +289,7 @@ TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_score-only-doctor-twenty-rows_v1_2026-10-25-0654.md
 DATE: 2026-10-25
 DECISIONS: Tee ruled on cards: score only, never rewrite; create the score-only workflow inactive and run it by hand; ground the doctor with the learning objective's measured position and the brief's lines; three reads per row, the strictest holds; first person that only addresses the viewer stands, both shows; quote the doctor's dashes as written and count them; publish the Hydrate and checklist one-line fixes to TQO FINAL V5; record the Sources Gate finding only.
-FINDINGS: All 20 rows written, appends only, nothing else changed; TQO 50, 51 and 59 clear at PASS 100, 17 held from 45 to 91. One read of the same request moved from 85 to 100 to 90, which is why three reads hold. The live doctor's TQO 5 repair kept the three promises and cut more than any rule asked. The Sources Gate fails 8 of 20 offline, one real. TQO 54's named study exists and is unapproved for the row.
-OPEN: Voice ruling and grounding for the live doctor; the 17 held rows; TQO 54's source; the live doctor's over-cutting; seven Sources Gate false positives; three parser gaps; the stale export.
+FINDINGS: All 20 rows written, appends only, nothing else changed but the table's own updatedAt stamp; two refuting verifiers confirmed the run. TQO 50, 51 and 59 clear at PASS 100, 17 held from 45 to 91. NCO 30's comments question is held under NCO's own close rule, which lacks TQO's comments clause. NCO 31 was judged on a 2026-09-08 cold-open record that the recall served to that row alone. The required checklist is marked down in 3 of 23 NEEDS_REVISION replies, holding TQO 49 and 58. One read of the same request moved from 85 to 100 to 90, which is why three reads hold. The live doctor's TQO 5 repair kept the three promises and cut more than any rule asked. The Sources Gate fails 8 of 20 offline, one real. TQO 54's named study exists and is unapproved for the row.
+OPEN: Voice ruling and grounding for the live doctor; the 17 held rows; TQO 54's source; the live doctor's over-cutting; NCO's comments clause; the cold-open record; the checklist mark-downs on TQO 49 and 58; seven Sources Gate false positives; three parser gaps; the stale export.
 STATUS: Scoring complete and read back. TQO FINAL V5 live on fd873714. PR #416 open at d2183ec.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
