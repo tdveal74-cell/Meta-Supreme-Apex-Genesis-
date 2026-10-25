@@ -161,6 +161,7 @@ for (const show of ["TQO", "NCO"]) {
   ok(mine.some((l) => l.includes("a specific question for the comments is not a solicitation or engagement bait")) === (show === "TQO"), show + ": the TQO sentence stays TQO's own");
 }
 ok(NCO_CLOSE.sentence.includes("an NCO episode may end on one or on a quiet action") && NCO_CLOSE.new.includes(NCO_CLOSE.sentence) && !NCO_CLOSE.old.includes(NCO_CLOSE.sentence), "the NCO sentence allows a comments question and does not require one");
+ok(NCO_CLOSE.sentence.includes("asking the viewer to subscribe is the NCO call to action, and it stands") && !/remove it/.test(NCO_CLOSE.sentence), "and leaves the NCO writer's subscribe line alone, as Tee ruled");
 eq(new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]").test(NCO_CLOSE.new), false, "and carries no em or en dash");
 
 // ---- Hydrate shows the doctor what the row holds -------------------------------

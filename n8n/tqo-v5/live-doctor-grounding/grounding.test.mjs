@@ -137,6 +137,10 @@ for (const show of ["TQO", "NCO"]) {
   eq(pr.messages, was.messages, show + ": and the user message is unchanged");
 }
 ok(R.sentence.includes("an NCO episode may end on one or on a quiet action"), "the sentence allows a closing question and does not require one");
-ok(R.sentence.endsWith("A request to like, to subscribe, or to visit a link or an audit is a solicitation; remove it."), "and keeps TQO's line on solicitations");
+// Ruled by Tee 2026-10-25, "Keep NCO's subscribe close": the live NCO writer ends
+// on one line asking the viewer to subscribe, NCO's one call to action, so the
+// NCO sentence says that line stands and carries none of TQO's "remove it".
+ok(R.sentence.endsWith("The one closing line the writer adds asking the viewer to subscribe is the NCO call to action, and it stands."), "and says the writer's subscribe line stands");
+ok(!/remove it|is a solicitation;/.test(R.sentence), "and tells the doctor to remove nothing");
 
 console.log("live doctor grounding: " + checks + " checks passed");

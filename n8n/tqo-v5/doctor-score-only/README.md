@@ -43,7 +43,11 @@ A person starts it by hand. It has no schedule and no webhook.
    NCO rows are also told that a specific question for the comments is not
    engagement bait, and that an NCO episode may end on one or on a quiet
    action. Tee ruled this on 2026-10-25, after all three reads held NCO 30's
-   closing question as bait. The sentence is the one replacement in
+   closing question as bait. The same day he ruled "Keep NCO's subscribe
+   close": the one line the NCO writer ends on, asking the viewer to
+   subscribe, is NCO's call to action and stands, so the NCO sentence carries
+   none of TQO's instruction to remove a subscribe request. The sentence is
+   the one replacement in
    `../live-doctor-grounding/replacement.json`, so this lane and the live
    doctor carry the same words in the same place.
    The request is sent `READS` times (3). Tee ruled this on 2026-10-24, after

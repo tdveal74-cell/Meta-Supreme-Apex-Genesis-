@@ -1,7 +1,7 @@
 {
  "workflow": "TQO FINAL V5",
  "workflowId": "qEkGOUsNyVaRAmm6",
- "ruled": "Tee 2026-10-25 on a card: Both shows, live too; and Allow a comments question",
+ "ruled": "Tee 2026-10-25 on cards: Both shows, live too; Allow a comments question; Keep NCO's subscribe close",
  "before": {
   "versionId": "fd873714-7acf-482b-8ab1-e101e1afb5ac",
   "node": "Build Doctor Prompt",
@@ -14,7 +14,7 @@
    "node": "Build Doctor Prompt",
    "file": "replacement.json",
    "result": "after.js",
-   "sha256": "e823b4d81170eae163ee54021ea535b65273d77accc247cd348734e73850c295"
+   "sha256": "eadb4a15ec12203308ff72c4ead30b4a3e6736878b3da8ed0b604c719bfd1903"
   },
   {
    "op": "add node",

@@ -17,7 +17,7 @@ const system = [
   'Everything on that list survives unless it is objectively broken. Not unfamiliar. Not risky. Broken.',
   'If you cannot say concretely what breaks, it stays.',
   ...(isNCO ? [
-    'A specific question for the comments is not a solicitation or engagement bait, and an NCO episode may end on one or on a quiet action. A request to like, to subscribe, or to visit a link or an audit is a solicitation; remove it.'
+    'A specific question for the comments is not a solicitation or engagement bait, and an NCO episode may end on one or on a quiet action. The one closing line the writer adds asking the viewer to subscribe is the NCO call to action, and it stands.'
   ] : [
     'REQUIRED BY THE BRIEF, NEVER CUT OR REWORD: the learning objective sentence inside the first 30 seconds, the spoken checklist of 3 to 5 steps, and the one question for the comments at the very end.',
     'The checklist is not a named framework, and a specific question for the comments is not a solicitation or engagement bait. A request to like, to subscribe, or to visit a link or an audit is a solicitation; remove it.'
