@@ -233,7 +233,7 @@ const measureFor = (script, lo, show = "TQO") => {
   ok(FINAL_TEXT.startsWith("\n\nScore only, and this overrides the full-length rule above") && FINAL_TEXT.endsWith("The rule against em and en dashes still stands."), "the final word is read from the node");
   ok(VOICE_TEXT.includes('"I am talking to the person who has spent years handling problems other people never even saw."') && VOICE_TEXT.includes("never marked down") && VOICE_TEXT.includes("The rule against invented experience still applies"), "the voice ruling names its example and keeps the invented experience rule");
   // Sharpened by Tee 2026-10-25 after execution 4364, where one read took that person for Terrance.
-  ok(VOICE_TEXT.includes("the person who has spent years handling problems other people never even saw is the viewer being addressed, not Terrance"), "and says the person in that line is the viewer");
+  ok(VOICE_TEXT.includes("In that line, the person who has spent years handling problems other people never even saw is the viewer being addressed, not Terrance, so the line says nothing about what he has done."), "and says the person in that line is the viewer");
   eq(m.after.messages[0].content, m.before.messages[0].content + VOICE_TEXT + FINAL_TEXT, "the system message only gains the voice ruling and the final word at its end");
   eq(m.user.replace(/\n\nMEASURED BEFORE THIS PASS[^\n]*\nEvery line above SCRIPT:[^\n]*(?=\n\nSCRIPT:\n)/, ""), m.before.messages[1].content, "and the user message gains the two lines and nothing else");
   const late = measureFor(words(80) + " " + LO49 + " " + words(10, "tail"), LO49);
@@ -418,6 +418,20 @@ for (const [out, why] of refused) {
   ok(!/dash/.test(parse3([reply({ score: 85, verdict: "NEEDS_REVISION", diagnosis: "plain" }), reply({ score: 96, verdict: "PASS" }), reply({ score: 100, verdict: "PASS" })]).feedback), "no dash, no flag line");
   ok(!new RegExp("[" + EN + EM + "]").test(dashed.feedback.replace(/Opening observation . a framing device/, "").replace(/fine . sound/, "")), "the node's own words carry no dash");
   eq([dashed.verdict, dashed.score], ["NEEDS_REVISION", 85], "and the flag changes neither the verdict nor the score");
+  // Found by the verifier on e0351e1: the fixtures above could not show a dash
+  // flipping a PASS, breaking the line, or being edited in the fields doctors use most.
+  const unstamp = (r) => ({ ...r, stamp: "", line: r.line.replace(/^\S+/, ""), feedback: r.feedback.replace(/at \S+Z\./, "at T.") });
+  const passes = (d) => [reply({ score: 96.5, verdict: "PASS", diagnosis: "sound" + d + "tight", notes: ["keep it" + d + "as is", "a" + d + "b" + d + "c"] }), reply({ score: 97, verdict: "PASS" }), reply({ score: 98, verdict: "PASS" })];
+  const plainPass = unstamp(parse3(passes(" ")));
+  const dashPass = unstamp(parse3(passes(EN)));
+  eq([dashPass.ok, dashPass.verdict, dashPass.score, dashPass.line, gateClears("t" + dashPass.line).clear], [true, "PASS", 96.5, plainPass.line, true], "a dash leaves a passing row PASS, its line unchanged and clear");
+  ok(dashPass.feedback.includes("DIAGNOSIS: sound" + EN + "tight") && dashPass.feedback.includes("  - keep it" + EN + "as is") && dashPass.feedback.includes("  - a" + EN + "b" + EN + "c"), "dashes in the diagnosis and the notes are kept as written");
+  ok(dashPass.feedback.endsWith("The doctor's text above carries 4 dashes, quoted as it wrote them."), "and every one is counted, two in one note included");
+  eq(dashPass.feedback.replace(/\n\nThe doctor's text above carries 4 dashes, quoted as it wrote them\.$/, "").split(EN).join(" "), plainPass.feedback, "and that line is all the flag adds");
+  const recallDash = run("Parse Score Only", { ...PARSE_NODES, "Run Config": [{ READS: 3 }], "DEVON Recall: Merge": [{ devonRecallNote: "DEVON recall partial: devon-soul unavailable " + EN + " boom" }] }, [reply({ score: 96, verdict: "PASS", diagnosis: "plain" }), reply({ score: 97, verdict: "PASS" }), reply({ score: 98, verdict: "PASS" })])[0].json;
+  ok(recallDash.feedback.includes("unavailable " + EN + " boom") && !/carries \d+ dash/.test(recallDash.feedback), "a dash in the recall line is not counted as the doctor's");
+  const objNote = parse(reply({ score: 85, verdict: "NEEDS_REVISION", diagnosis: { where: "line 3" }, notes: [{ issue: "cut the " + EN + " range" }] }));
+  ok(objNote.feedback.includes('DIAGNOSIS: {"where":"line 3"}') && objNote.feedback.includes('  - {"issue":"cut the ' + EN + ' range"}') && objNote.feedback.endsWith("carries 1 dash, quoted as it wrote it."), "a field that is not text is quoted as JSON and its dash counted");
   const noReads = run("Parse Score Only", { ...PARSE_NODES, "Run Config": [{}] }, [reply({ score: 95, verdict: "PASS" })])[0].json;
   ok(noReads.ok === false && /READS is undefined/.test(noReads.reason), "a missing READS writes nothing");
 }

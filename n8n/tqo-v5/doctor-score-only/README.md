@@ -54,7 +54,10 @@ The note lists every read, shows the lowest read's diagnosis, preserved list
 and notes in full, and gives the diagnosis of each other read. The doctor's
 words are quoted as it wrote them. When they carry an em or en dash, which the
 doctor is told not to write, the note ends by saying how many, as Tee ruled on
-2026-10-25. Nothing this workflow writes adds a dash.
+2026-10-25. Only the doctor's words are counted, never the TEE'S RECORD line
+from the recall, and nothing this workflow writes adds a dash. A field the
+doctor sends as something other than text is quoted as JSON. The one edit the
+note makes is trimming whitespace at its very end.
 This workflow never writes REPAIRED, so of its lines the QC Doctor Gate and
 Preflight clear only PASS at 90 or above. A score is rounded down, so 89.95 is
 written as 89.9 and held.

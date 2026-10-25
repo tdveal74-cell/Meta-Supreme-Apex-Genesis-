@@ -56,13 +56,16 @@ const readOne = (out) => {
   // One decimal, always rounded down, so a score under the gate's 90 can never be
   // written as 90 (89.95 is 89.9, never 90).
   score = Math.floor(score * 10) / 10;
-  const list = (x) => Array.isArray(x) ? x.map(String).filter(s => s.trim()) : [];
+  // A field that is not text is quoted as JSON, so the doctor's words in it are
+  // kept rather than written as [object Object] (found by the verifier on e0351e1).
+  const text = (x) => typeof x === 'string' ? x : JSON.stringify(x);
+  const list = (x) => Array.isArray(x) ? x.map(text).filter(s => s.trim()) : [];
   // Found by the verifier on 31e0f73: the model name comes from the provider's
   // envelope and went into the line as sent, so a name carrying "| doctor 99/100
   // PASS" would have planted a doctor line the gates read. Only the characters a
   // model name needs are kept.
   const model = String(out.model || '').replace(/[^A-Za-z0-9._-]/g, '') || 'unknown model';
-  return { ok: true, verdict, score, diagnosis: String(v.diagnosis || ''), preserved: list(v.preserved), notes: list(v.notes), model };
+  return { ok: true, verdict, score, diagnosis: v.diagnosis === undefined || v.diagnosis === null || v.diagnosis === '' ? '' : text(v.diagnosis), preserved: list(v.preserved), notes: list(v.notes), model };
 };
 
 const outs = $input.all().map(i => i.json);
@@ -94,10 +97,13 @@ const body = [
 ].join('\n').trim();
 // Ruled by Tee 2026-10-25, after execution 4364's note carried an en dash the
 // doctor wrote: the doctor's words are quoted as written, never edited, and the
-// note says how many em or en dashes they carry. Only the doctor's text can
-// carry one; nothing this node writes does.
+// note says how many em or en dashes they carry. Only the doctor's words shown
+// in the note are counted: the lowest read's diagnosis, preserved list and
+// notes, and the other reads' diagnoses. The TEE'S RECORD line comes from the
+// recall and is not the doctor's (found by the verifier on e0351e1).
 const DASH = new RegExp('[' + String.fromCharCode(0x2013, 0x2014) + ']', 'g');
-const dashes = (body.match(DASH) || []).length;
+const doctorWords = [pick.diagnosis, ...pick.preserved, ...pick.notes, ...(READS === 1 ? [] : reads.filter(r => r !== pick).map(r => r.diagnosis))].join('\n');
+const dashes = (doctorWords.match(DASH) || []).length;
 const feedback = body + (dashes ? '\n\nThe doctor\'s text above carries ' + dashes + ' dash' + (dashes === 1 ? '' : 'es') + ', quoted as it wrote ' + (dashes === 1 ? 'it' : 'them') + '.' : '');
 
 return [{ json: { ...base, ok: true, verdict, score, line, feedback, model, reason: '' } }];
