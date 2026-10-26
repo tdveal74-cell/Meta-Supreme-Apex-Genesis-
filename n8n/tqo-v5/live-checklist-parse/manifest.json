@@ -9,9 +9,10 @@
   "sha256": "4db8944a4036f7b9e3404fc5d1cd538721b3dac7f6a3aa303a5f442af69a3962"
  },
  "after": {
-  "versionId": null,
+  "versionId": "dcc44552-a7bc-4a4a-89b8-5b119e7d9470",
   "file": "after.js",
-  "sha256": "5c988d0f966a7804399ca13f46e554a1f13764299a91f49dd4297110ab1b3fb1"
+  "sha256": "5c988d0f966a7804399ca13f46e554a1f13764299a91f49dd4297110ab1b3fb1",
+  "publishedReadBack": "2026-10-26T09:04Z, on Tee's card 'Publish now': activeVersionId equals versionId dcc44552, the published nodes equal the read-back draft, and they differ from fd873714 only in Build Doctor Prompt, Doctor: Ground the Request, Script: Hydrate from Row and Script: Fill Run Fields, each at its repo sha256. One publish carried all four; publishing fd873714 rolls back all four."
  },
  "rollback": "publish fd873714-7acf-482b-8ab1-e101e1afb5ac"
 }
