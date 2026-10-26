@@ -143,7 +143,7 @@ ok(R.sentence.includes("an NCO episode may end on one or on a quiet action"), "t
 // solicitation." would otherwise dock it, so the sentence says it is not one.
 // Pinned word for word: the verifier on f5f8826 added a "cut it" instruction
 // inside the sentence and a looser check let it through.
-eq(R.sentence, "A specific question for the comments is not a solicitation or engagement bait, and an NCO episode may end on one or on a quiet action. The one closing line the writer adds asking the viewer to subscribe is the NCO call to action, and it stands. It is not a solicitation under the close score and is never marked down.", "the NCO sentence is the ruled wording, word for word");
+eq(R.sentence, "A specific question for the comments is not a solicitation or engagement bait, and an NCO episode may end on one or on a quiet action. The one closing line the writer adds asking the viewer to subscribe is the NCO call to action, and it stands. It is not a solicitation under the close score.", "the NCO sentence is the ruled wording, word for word");
 eq(R.new, R.old.replace("  ...(isNCO ? [] : [\n", () => "  ...(isNCO ? [\n    '" + R.sentence + "'\n  ] : [\n"), "and the replacement inserts that one line into the NCO branch and nothing else");
 
 console.log("live doctor grounding: " + checks + " checks passed");

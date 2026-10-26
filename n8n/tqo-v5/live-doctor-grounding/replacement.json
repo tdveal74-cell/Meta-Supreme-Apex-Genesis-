@@ -1,6 +1,6 @@
 {
  "ruled": "Tee 2026-10-25, cards: Allow a comments question; Keep NCO's subscribe close",
  "old": "  'If you cannot say concretely what breaks, it stays.',\n  ...(isNCO ? [] : [\n",
- "new": "  'If you cannot say concretely what breaks, it stays.',\n  ...(isNCO ? [\n    'A specific question for the comments is not a solicitation or engagement bait, and an NCO episode may end on one or on a quiet action. The one closing line the writer adds asking the viewer to subscribe is the NCO call to action, and it stands. It is not a solicitation under the close score and is never marked down.'\n  ] : [\n",
- "sentence": "A specific question for the comments is not a solicitation or engagement bait, and an NCO episode may end on one or on a quiet action. The one closing line the writer adds asking the viewer to subscribe is the NCO call to action, and it stands. It is not a solicitation under the close score and is never marked down."
+ "new": "  'If you cannot say concretely what breaks, it stays.',\n  ...(isNCO ? [\n    'A specific question for the comments is not a solicitation or engagement bait, and an NCO episode may end on one or on a quiet action. The one closing line the writer adds asking the viewer to subscribe is the NCO call to action, and it stands. It is not a solicitation under the close score.'\n  ] : [\n",
+ "sentence": "A specific question for the comments is not a solicitation or engagement bait, and an NCO episode may end on one or on a quiet action. The one closing line the writer adds asking the viewer to subscribe is the NCO call to action, and it stands. It is not a solicitation under the close score."
 }

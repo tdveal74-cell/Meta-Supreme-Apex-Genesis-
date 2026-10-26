@@ -14,7 +14,7 @@
    "node": "Build Doctor Prompt",
    "file": "replacement.json",
    "result": "after.js",
-   "sha256": "02f03aa9cbc5bb538c324787ad3bdb34cf17937ef192d183da3a4eafd593fe72"
+   "sha256": "bf4df3e442b0a25095623724ca98f2908f4ce179a5926453e6e43666ae174187"
   },
   {
    "op": "add node",
