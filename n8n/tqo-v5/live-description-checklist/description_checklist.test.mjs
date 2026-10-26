@@ -79,4 +79,14 @@ for (const [label, checklist] of [["no checklist", []], ["a missing checklist", 
 eq(fieldsOf(fill(after, { show: "NCO" })).Description, fieldsOf(fill(before, { show: "NCO" })).Description, "NCO: the description is what it was, because only the TQO writer is promised this");
 eq(fieldsOf(fill(after, { description: "" })).Description, DISCLOSURE + BLOCK, "with no writer sentences, the steps follow the disclosure");
 
+// Found by the verifier on 27f3d32: the first version cut an earlier block on
+// every pass, so a description already carrying one lost it when no steps came
+// with the pass, and NCO lost it too. A block is now replaced only when new
+// steps are written; otherwise the description is what the live body makes.
+const CARRIED = "Sentence one.\n\nThe checklist from this episode:\n1. Old step.\n2. Older step.";
+for (const [label, opts] of [["TQO with no steps", { checklist: [] }], ["TQO with a null checklist", { checklist: null }], ["TQO with text in place of a list", { checklist: JSON.stringify(STEPS) }], ["NCO with steps", { show: "NCO" }], ["NCO with no steps", { show: "NCO", checklist: [] }]]) {
+  eq(fieldsOf(fill(after, { ...opts, description: CARRIED })).Description, fieldsOf(fill(before, { ...opts, description: CARRIED })).Description, label + ": a block already in the description is left as the live body leaves it");
+}
+eq(fieldsOf(fill(after, { description: CARRIED })).Description, DISCLOSURE + "\n\nSentence one." + BLOCK, "TQO with new steps: the old block is replaced by the new one, once");
+
 console.log("description checklist: " + checks + " checks passed");

@@ -60,6 +60,10 @@ eq(hydrate(after, JSON.stringify([" a ", "", "b"])).checklist, ["a", "b"], "step
 for (const [label, v] of [["null", null], ["empty text", ""], ["text that is not JSON", "Choose one recurring problem."], ["a JSON string", "\"one step\""], ["a JSON object", "{\"a\":1}"], ["a JSON number", "4"]]) {
   eq(hydrate(after, v).checklist, [], label + " reads as no checklist, as before");
 }
+// Pinned after the verifier on 27f3d32 found three mutants no test killed.
+eq(hydrate(after, "  \n" + JSON.stringify(STEPS) + "\n ").checklist, STEPS, "JSON text with whitespace around it still reads as the list");
+eq(hydrate(after, "[1,{\"a\":1},true]").checklist, ["1", "[object Object]", "true"], "elements that are not text are turned into text, as an array's always were");
+eq(hydrate(after, JSON.stringify(JSON.stringify(STEPS))).checklist, [], "JSON encoded twice is one string, not a list, and reads as none");
 for (const v of [null, JSON.stringify(STEPS), "not json"]) {
   const a = hydrate(after, v), b = hydrate(before, v);
   for (const k of ["recordId", "title", "script", "description", "tags", "broll", "learningObjective", "__source"]) eq(a[k], b[k], k + " is unchanged by the parse");
