@@ -56,6 +56,13 @@ A person starts it by hand. It has no schedule and no webhook.
    replacement in
    `../live-doctor-grounding/replacement.json`, so this lane and the live
    doctor carry the same words in the same place.
+   In execution 4512 two of three reads still held NCO 30's question as bait,
+   citing the later "No engagement bait" and "close 15" lines. Tee ruled
+   "Move it next to the rules" on 2026-10-26: for NCO each of those two lines
+   now ends with a clause saying one specific question for the comments is
+   allowed. Both lanes take the two pairs from
+   `../live-nco-close-rubric/replacement.json`. In execution 4531 no read
+   held NCO 30 for its question.
    The request is sent `READS` times (3). Tee ruled this on 2026-10-24, after
    the same request scored 85, 100 and 90 in three runs. The score written is
    the lowest of the reads. The verdict is PASS only when every read is PASS

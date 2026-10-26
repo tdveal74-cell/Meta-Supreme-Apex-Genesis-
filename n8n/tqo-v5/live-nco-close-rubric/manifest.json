@@ -9,10 +9,10 @@
   "sha256": "bf4df3e442b0a25095623724ca98f2908f4ce179a5926453e6e43666ae174187"
  },
  "after": {
-  "versionId": null,
+  "versionId": "fc75f7a6-7947-402c-9bf2-2396bd866b12",
   "file": "after.js",
   "sha256": "e467b74a0bdae000f860e2db8e1b5da2c271f51da6500e57ca4a8c93207cc9fb",
-  "publishedReadBack": null
+  "publishedReadBack": "2026-10-26T10:39Z, on Tee's card 'Publish now': activeVersionId equals versionId fc75f7a6, the published Build Doctor Prompt equals after.js at its repo sha256, the published nodes equal the read-back draft, and they differ from dcc44552 only in Build Doctor Prompt."
  },
  "rollback": "publish dcc44552-a7bc-4a4a-89b8-5b119e7d9470"
 }
