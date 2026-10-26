@@ -141,8 +141,9 @@ that were his on one card.
 - The fresh critic on PR #409 passed it and raised one low item: `recall` and
   `hello` are not in `READ_VERB`, so on an unmapped UUID they are ledgered as
   if they wrote. Nothing is refused. Adding them to `READ_VERB` would also let
-  them pass on every named server, which loosens the gate, so it is held for a
-  ruling on a card rather than changed here.
+  them pass on every named server, which loosens the gate. Ruled by Tee
+  2026-10-26 on a card: leave it as is. The extra rows are reads, and each
+  still names the connector to map.
 
 ## DEVON RECEIPT
 
