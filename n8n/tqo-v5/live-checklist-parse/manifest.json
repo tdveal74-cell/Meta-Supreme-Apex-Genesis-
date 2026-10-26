@@ -1,0 +1,17 @@
+{
+ "workflow": "TQO FINAL V5",
+ "workflowId": "qEkGOUsNyVaRAmm6",
+ "node": "Script: Hydrate from Row",
+ "ruled": "Tee 2026-10-26 on a card: Fill and parse",
+ "before": {
+  "versionId": "fd873714-7acf-482b-8ab1-e101e1afb5ac",
+  "file": "before.js",
+  "sha256": "4db8944a4036f7b9e3404fc5d1cd538721b3dac7f6a3aa303a5f442af69a3962"
+ },
+ "after": {
+  "versionId": null,
+  "file": "after.js",
+  "sha256": "5c988d0f966a7804399ca13f46e554a1f13764299a91f49dd4297110ab1b3fb1"
+ },
+ "rollback": "publish fd873714-7acf-482b-8ab1-e101e1afb5ac"
+}

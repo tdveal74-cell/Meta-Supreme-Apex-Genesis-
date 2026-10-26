@@ -1,0 +1,5 @@
+{
+ "ruled": "Tee 2026-10-26, card: Fill and parse",
+ "old": "const list = (v) => Array.isArray(v) ? v.map(s => String(s).trim()).filter(Boolean) : [];",
+ "new": "// The checklist column in the content tables is text, so a list stored there\n// arrives as a JSON string. Until 2026-10-26 this function kept arrays only,\n// so a stored checklist reached the doctor as none. Ruled by Tee on a card,\n// \"Fill and parse\": an array, or text that parses to one, is the list; any\n// other value reads as none, as before.\nconst list = (v) => {\n  if (typeof v === 'string') { try { v = JSON.parse(v); } catch (e) { return []; } }\n  return Array.isArray(v) ? v.map(s => String(s).trim()).filter(Boolean) : [];\n};"
+}

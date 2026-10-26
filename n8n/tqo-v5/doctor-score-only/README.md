@@ -23,6 +23,11 @@ A person starts it by hand. It has no schedule and no webhook.
    returns a score and PASS or NEEDS_REVISION, and never a rewritten script.
    When a row stores no checklist, the doctor is told to judge the spoken steps
    in the script itself rather than told none was returned.
+   The checklist column is text, so a list stored there is a JSON string; since
+   Tee ruled "Fill and parse" on 2026-10-26, Hydrate reads it as the list, by
+   the one replacement in `../live-checklist-parse/replacement.json` that the
+   live Hydrate is given too. TQO 49 to 60 hold the four steps their scripts
+   speak, written the same day.
    Just above the script, the doctor is also told where the learning objective
    is spoken, measured by the Script Gate's own rule in TQO FINAL V5: word for
    word, ignoring case and punctuation, inside the first 70 words. It is told

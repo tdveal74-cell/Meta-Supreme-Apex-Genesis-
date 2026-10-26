@@ -138,6 +138,14 @@ jobs:
       # sentence.
       - name: The live doctor grounding is the score-only grounding
         run: node n8n/tqo-v5/live-doctor-grounding/grounding.test.mjs
+      # Ruled by Tee 2026-10-26, "Fill and parse": Hydrate reads a checklist
+      # stored as JSON text, in the live lane and the score-only lane alike.
+      - name: The live Hydrate reads a stored checklist
+        run: node n8n/tqo-v5/live-checklist-parse/checklist_parse.test.mjs
+      # Ruled by Tee 2026-10-26, "Add it in Fill Run Fields": the TQO
+      # description carries the episode's steps, as the writer is told.
+      - name: The TQO description carries the checklist
+        run: node n8n/tqo-v5/live-description-checklist/description_checklist.test.mjs
       # The carousel rules, ruled by Tee 2026-10-07. No browser here: the drawing
       # runs in carousel-render.yml.
       - name: The carousel rules behave

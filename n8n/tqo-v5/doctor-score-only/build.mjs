@@ -10,7 +10,8 @@
 // checklist text, replaced by SCORE_ONLY_CHECKLIST_EMPTY, and the empty NCO
 // branch of the preservation rules, given the sentence in NCO_CLOSE; in Script: Hydrate
 // from Row, the fields line, replaced by SCORE_ONLY_HYDRATE_FIELDS so the
-// doctor is shown the learning objective and b-roll the row holds. Two
+// doctor is shown the learning objective and b-roll the row holds, and the list
+// line, replaced by CHECKLIST_PARSE so a checklist stored as text is read. Two
 // nodes of this workflow's own run between live ones: Recall Required after
 // DEVON Recall: Merge, and Score Only: Final Word after Token Budget: Doctor.
 // Final Word also tells the doctor where the learning objective is spoken, by
@@ -83,12 +84,22 @@ export const SCORE_ONLY_HYDRATE_FIELDS = [
   'const f = { ...row, ...(row.fields || {}) };'
 ].join('\n');
 
+// Ruled by Tee 2026-10-26 on a card, "Fill and parse": the checklist column is
+// text, so a list stored there arrives as a JSON string, and the live list line
+// kept arrays only. The text is the one replacement in
+// ../live-checklist-parse/replacement.json, so this lane and the live Hydrate
+// read a stored checklist the same way.
+export const CHECKLIST_PARSE = JSON.parse(readFileSync(join(HERE, '..', 'live-checklist-parse', 'replacement.json'), 'utf8'));
+
 export function scoreOnlyHydrate() {
   const body = live('script_hydrate_from_row.js');
   if (body.split(LIVE_HYDRATE_FIELDS).length !== 2) {
     throw new Error('The live fields line was not found exactly once in live/script_hydrate_from_row.js. Re-pin it and review this build.');
   }
-  return body.replace(LIVE_HYDRATE_FIELDS, () => SCORE_ONLY_HYDRATE_FIELDS);
+  if (body.split(CHECKLIST_PARSE.old).length !== 2) {
+    throw new Error('The live list line was not found exactly once in live/script_hydrate_from_row.js. Re-pin it and review this build.');
+  }
+  return body.replace(LIVE_HYDRATE_FIELDS, () => SCORE_ONLY_HYDRATE_FIELDS).replace(CHECKLIST_PARSE.old, () => CHECKLIST_PARSE.new);
 }
 
 // Ruled by Tee 2026-10-24 after the first run: the hand-loaded rows store no
