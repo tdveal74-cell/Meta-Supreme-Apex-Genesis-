@@ -171,7 +171,7 @@ for (const show of ["TQO", "NCO"]) {
   const sys = promptFor(byName["Build Doctor Prompt"].parameters.jsCode, show).claudeBody.system.split("\n");
   const bait = sys.find((l) => l.startsWith("No engagement bait.")), close = sys.find((l) => l.startsWith("close 15:"));
   eq([bait, close], show === "NCO"
-    ? ["No engagement bait. No Agree? No Thoughts? No What would you add? For NCO, one specific question for the comments is allowed and is not bait.", "close 15: a clean implication or a real action. Never a solicitation. For NCO, one specific question for the comments is allowed and counts as a real action."]
+    ? ["No engagement bait. No Agree? No Thoughts? No What would you add? For NCO, one specific question for the comments is allowed and is not bait.", "close 15: a clean implication or a real action. Never a solicitation. For NCO, one specific question for the comments is allowed."]
     : ["No engagement bait. No Agree? No Thoughts? No What would you add?", "close 15: a clean implication or a real action. Never a solicitation."],
     show + (show === "NCO" ? ": both rubric lines allow one specific comments question" : ": both rubric lines are as they were"));
 }

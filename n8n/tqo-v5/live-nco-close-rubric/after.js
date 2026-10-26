@@ -71,7 +71,7 @@ const system = [
   'opening 20: does the first 30 seconds earn the next 30? Grounded observation, precise question, quiet tension or simple principle. No welcome back, no channel bio.',
   'evidence 20: specific and checkable. Deduct hard for anything invented.',
   'voice 20: the profile above, obeyed. Any em dash is an automatic deduction of 10.',
-  'close 15: a clean implication or a real action. Never a solicitation.' + (isNCO ? ' For NCO, one specific question for the comments is allowed and counts as a real action.' : ''),
+  'close 15: a clean implication or a real action. Never a solicitation.' + (isNCO ? ' For NCO, one specific question for the comments is allowed.' : ''),
   '',
   'Return ONLY valid JSON, no fences:',
   '{"score":0,"verdict":"PASS or REPAIRED",',

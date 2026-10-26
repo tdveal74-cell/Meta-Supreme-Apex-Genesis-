@@ -57,7 +57,7 @@ for (const show of ["TQO", "NCO"]) {
   const changed = as.map((l, i) => (l === bs[i] ? null : i)).filter((i) => i !== null);
   if (show === "NCO") {
     eq(changed.map((i) => bs[i]), [BAIT, CLOSE], "NCO: only the bait line and the close 15 line change");
-    eq(changed.map((i) => as[i]), [BAIT + " For NCO, one specific question for the comments is allowed and is not bait.", CLOSE + " For NCO, one specific question for the comments is allowed and counts as a real action."], "NCO: each says one specific comments question is allowed");
+    eq(changed.map((i) => as[i]), [BAIT + " For NCO, one specific question for the comments is allowed and is not bait.", CLOSE + " For NCO, one specific question for the comments is allowed."], "NCO: each says one specific comments question is allowed");
   } else {
     eq(changed, [], "TQO: the system text is unchanged");
   }
