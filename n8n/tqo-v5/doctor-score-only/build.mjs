@@ -8,7 +8,8 @@
 // or the build fails: in Build Doctor Prompt, the output contract, replaced by
 // SCORE_ONLY_CONTRACT so the doctor scores and never rewrites, the empty
 // checklist text, replaced by SCORE_ONLY_CHECKLIST_EMPTY, and the empty NCO
-// branch of the preservation rules, given the sentence in NCO_CLOSE; in Script: Hydrate
+// branch of the preservation rules, given the sentence in NCO_CLOSE, and the two
+// rubric lines in NCO_RUBRIC, given their NCO clauses; in Script: Hydrate
 // from Row, the fields line, replaced by SCORE_ONLY_HYDRATE_FIELDS so the
 // doctor is shown the learning objective and b-roll the row holds, and the list
 // line, replaced by CHECKLIST_PARSE so a checklist stored as text is read. Two
@@ -117,6 +118,14 @@ export const SCORE_ONLY_CHECKLIST_EMPTY = ".join(' ') : '(not stored on this row
 // so this lane and the live doctor carry the same words in the same place.
 export const NCO_CLOSE = JSON.parse(readFileSync(join(HERE, '..', 'live-doctor-grounding', 'replacement.json'), 'utf8'));
 
+// Ruled by Tee 2026-10-26 on a card, "Move it next to the rules": the rubric's
+// "No engagement bait" and "close 15" lines each say, for NCO, that one specific
+// question for the comments is allowed. Execution 4512 showed the reads that
+// held NCO 30 citing those two lines and never the sentence above. The pairs
+// are the ones in ../live-nco-close-rubric/replacement.json, so this lane and
+// the live doctor carry the same words.
+export const NCO_RUBRIC = JSON.parse(readFileSync(join(HERE, '..', 'live-nco-close-rubric', 'replacement.json'), 'utf8'));
+
 export function scoreOnlyPrompt() {
   const live0 = live('build_doctor_prompt.js');
   if (live0.split(LIVE_CHECKLIST_EMPTY).length !== 2) {
@@ -125,7 +134,13 @@ export function scoreOnlyPrompt() {
   if (live0.split(NCO_CLOSE.old).length !== 2) {
     throw new Error('The NCO branch of the preservation rules was not found exactly once in live/build_doctor_prompt.js. Re-pin it and review this build.');
   }
-  const body = live0.replace(LIVE_CHECKLIST_EMPTY, () => SCORE_ONLY_CHECKLIST_EMPTY).replace(NCO_CLOSE.old, () => NCO_CLOSE.new);
+  let body = live0.replace(LIVE_CHECKLIST_EMPTY, () => SCORE_ONLY_CHECKLIST_EMPTY).replace(NCO_CLOSE.old, () => NCO_CLOSE.new);
+  for (const p of NCO_RUBRIC.pairs) {
+    if (body.split(p.old).length !== 2) {
+      throw new Error('An NCO rubric line was not found exactly once in live/build_doctor_prompt.js. Re-pin it and review this build.');
+    }
+    body = body.replace(p.old, () => p.new);
+  }
   const at = body.indexOf(LIVE_CONTRACT);
   if (at === -1 || body.indexOf(LIVE_CONTRACT, at + 1) !== -1) {
     throw new Error('The live output contract was not found exactly once in live/build_doctor_prompt.js. The live prompt has changed; re-pin it and review this build.');

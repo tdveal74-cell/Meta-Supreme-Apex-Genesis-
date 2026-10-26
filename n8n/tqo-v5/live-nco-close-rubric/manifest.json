@@ -1,0 +1,18 @@
+{
+ "workflow": "TQO FINAL V5",
+ "workflowId": "qEkGOUsNyVaRAmm6",
+ "node": "Build Doctor Prompt",
+ "ruled": "Tee 2026-10-26 on a card: Move it next to the rules",
+ "before": {
+  "versionId": "dcc44552-a7bc-4a4a-89b8-5b119e7d9470",
+  "file": "before.js",
+  "sha256": "bf4df3e442b0a25095623724ca98f2908f4ce179a5926453e6e43666ae174187"
+ },
+ "after": {
+  "versionId": null,
+  "file": "after.js",
+  "sha256": "b2099d5f054bf3daf2b8be94f41dd6b125a082fb6595d2f046d03d971a9d06f7",
+  "publishedReadBack": null
+ },
+ "rollback": "publish dcc44552-a7bc-4a4a-89b8-5b119e7d9470"
+}

@@ -146,6 +146,10 @@ jobs:
       # description carries the episode's steps, as the writer is told.
       - name: The TQO description carries the checklist
         run: node n8n/tqo-v5/live-description-checklist/description_checklist.test.mjs
+      # Ruled by Tee 2026-10-26, "Move it next to the rules": the NCO bait and
+      # close 15 rubric lines each allow one specific comments question.
+      - name: The NCO rubric lines allow a comments question
+        run: node n8n/tqo-v5/live-nco-close-rubric/nco_rubric.test.mjs
       # The carousel rules, ruled by Tee 2026-10-07. No browser here: the drawing
       # runs in carousel-render.yml.
       - name: The carousel rules behave

@@ -37,7 +37,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { buildWorkflow, CHECKLIST_PARSE, LIVE_CHECKLIST_EMPTY, LIVE_CONTRACT, LIVE_HYDRATE_FIELDS, NCO_CLOSE, RUN_CONFIG_MEASURE, RUN_CONFIG_REAL, runConfig, SCORE_ONLY_CHECKLIST_EMPTY, SCORE_ONLY_CONTRACT, SCORE_ONLY_HYDRATE_FIELDS, scoreOnlyHydrate, scoreOnlyPrompt } from "./build.mjs";
+import { buildWorkflow, CHECKLIST_PARSE, LIVE_CHECKLIST_EMPTY, LIVE_CONTRACT, LIVE_HYDRATE_FIELDS, NCO_CLOSE, NCO_RUBRIC, RUN_CONFIG_MEASURE, RUN_CONFIG_REAL, runConfig, SCORE_ONLY_CHECKLIST_EMPTY, SCORE_ONLY_CONTRACT, SCORE_ONLY_HYDRATE_FIELDS, scoreOnlyHydrate, scoreOnlyPrompt } from "./build.mjs";
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const sha = (s) => createHash("sha256").update(s, "utf8").digest("hex");
@@ -145,7 +145,7 @@ const contractLines = (src) => src.split("\n").map((l) => l.trim().replace(/,$/,
 // that replacement made.
 eq(read("./live/build_doctor_prompt.js").split(NCO_CLOSE.old).length, 2, "the NCO branch the replacement fills occurs once in the pinned live body");
 for (const show of ["TQO", "NCO"]) {
-  const a = promptFor(read("./live/build_doctor_prompt.js").replace(NCO_CLOSE.old, () => NCO_CLOSE.new), show);
+  const a = promptFor(NCO_RUBRIC.pairs.reduce((s, p) => s.replace(p.old, () => p.new), read("./live/build_doctor_prompt.js").replace(NCO_CLOSE.old, () => NCO_CLOSE.new)), show);
   const b = promptFor(byName["Build Doctor Prompt"].parameters.jsCode, show);
   const live = liveLines(a.claudeBody.system), mine = liveLines(b.claudeBody.system);
   const cut = live.indexOf("Return ONLY valid JSON, no fences:");
@@ -163,6 +163,18 @@ for (const show of ["TQO", "NCO"]) {
 ok(NCO_CLOSE.sentence.includes("an NCO episode may end on one or on a quiet action") && NCO_CLOSE.new.includes(NCO_CLOSE.sentence) && !NCO_CLOSE.old.includes(NCO_CLOSE.sentence), "the NCO sentence allows a comments question and does not require one");
 ok(NCO_CLOSE.sentence.includes("asking the viewer to subscribe is the NCO call to action, and it stands. It is not a solicitation under the close score.") && !/remove it|cut it/.test(NCO_CLOSE.sentence), "and leaves the NCO writer's subscribe line alone, as Tee ruled");
 eq(new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]").test(NCO_CLOSE.new), false, "and carries no em or en dash");
+// Ruled by Tee 2026-10-26, "Move it next to the rules": the two rubric lines
+// the holding reads cited each carry, for NCO, that one specific question for
+// the comments is allowed. TQO's lines are untouched.
+eq(NCO_RUBRIC, JSON.parse(read("../live-nco-close-rubric/replacement.json")), "the rubric pairs are the live doctor's");
+for (const show of ["TQO", "NCO"]) {
+  const sys = promptFor(byName["Build Doctor Prompt"].parameters.jsCode, show).claudeBody.system.split("\n");
+  const bait = sys.find((l) => l.startsWith("No engagement bait.")), close = sys.find((l) => l.startsWith("close 15:"));
+  eq([bait, close], show === "NCO"
+    ? ["No engagement bait. No Agree? No Thoughts? No What would you add? For NCO, one specific question for the comments is allowed and is not bait.", "close 15: a clean implication or a real action. Never a solicitation. For NCO, one specific question for the comments is allowed and counts as a real action."]
+    : ["No engagement bait. No Agree? No Thoughts? No What would you add?", "close 15: a clean implication or a real action. Never a solicitation."],
+    show + (show === "NCO" ? ": both rubric lines allow one specific comments question" : ": both rubric lines are as they were"));
+}
 
 // ---- Hydrate shows the doctor what the row holds -------------------------------
 // Found by the review on 805060d: the live Hydrate reads the shim's fields, which
