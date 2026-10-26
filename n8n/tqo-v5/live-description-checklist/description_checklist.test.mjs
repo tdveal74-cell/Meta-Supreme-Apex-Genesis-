@@ -88,5 +88,11 @@ for (const [label, opts] of [["TQO with no steps", { checklist: [] }], ["TQO wit
   eq(fieldsOf(fill(after, { ...opts, description: CARRIED })).Description, fieldsOf(fill(before, { ...opts, description: CARRIED })).Description, label + ": a block already in the description is left as the live body leaves it");
 }
 eq(fieldsOf(fill(after, { description: CARRIED })).Description, DISCLOSURE + "\n\nSentence one." + BLOCK, "TQO with new steps: the old block is replaced by the new one, once");
+// Found by the verifier on 65556e6: replacing cut everything after the old
+// heading, so a paragraph below the block was lost. The block alone is now
+// replaced where it stands, up to the next blank line.
+const TRAILED = CARRIED + "\n\nA paragraph someone added below the block.";
+eq(fieldsOf(fill(after, { description: TRAILED })).Description, DISCLOSURE + "\n\nSentence one." + BLOCK + "\n\nA paragraph someone added below the block.", "a paragraph after the old block is kept, and the new block takes the old one's place");
+eq(fieldsOf(fill(after, { description: TRAILED, checklist: [] })).Description, fieldsOf(fill(before, { description: TRAILED, checklist: [] })).Description, "with no steps, the same description is left as the live body leaves it");
 
 console.log("description checklist: " + checks + " checks passed");

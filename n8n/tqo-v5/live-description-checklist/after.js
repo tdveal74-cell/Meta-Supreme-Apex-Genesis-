@@ -48,13 +48,21 @@ desc = (DISCLOSURE + '\n\n' + desc.split(DISCLOSURE).join('').trim()).trim();
 // of the description because the pipeline writes it there from the checklist
 // field, and until this block nothing did. The steps follow the writer's
 // sentences, numbered in the order the script speaks them. TQO only, because
-// only the TQO writer is told this. When steps are written, a copy left by
-// an earlier pass is cut first, so the block appears once; with no steps, or
-// for NCO, the description is left exactly as the lines above make it.
+// only the TQO writer is told this. When steps are written and an earlier
+// pass left a block, that block alone is replaced where it stands, up to the
+// next blank line, so the block appears once and nothing after it is lost;
+// with no steps, or for NCO, the description is left as the lines above make it.
 const STEPS_HEAD = 'The checklist from this episode:';
 const steps = Array.isArray(sc.checklist) ? sc.checklist.map(s => String(s).trim()).filter(Boolean) : [];
 if (!isNCO && steps.length) {
-  desc = desc.split('\n\n' + STEPS_HEAD)[0].trim() + '\n\n' + STEPS_HEAD + '\n' + steps.map((s, i) => (i + 1) + '. ' + s).join('\n');
+  const block = STEPS_HEAD + '\n' + steps.map((s, i) => (i + 1) + '. ' + s).join('\n');
+  const at = desc.indexOf('\n\n' + STEPS_HEAD);
+  if (at === -1) {
+    desc = desc + '\n\n' + block;
+  } else {
+    const end = desc.indexOf('\n\n', at + 2);
+    desc = desc.slice(0, at) + '\n\n' + block + (end === -1 ? '' : desc.slice(end));
+  }
 }
 
 // 2. Claim validity. Anything anchored to a named model, a year or a headline
