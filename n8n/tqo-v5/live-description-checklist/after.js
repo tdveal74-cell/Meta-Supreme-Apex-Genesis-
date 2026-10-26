@@ -49,8 +49,9 @@ desc = (DISCLOSURE + '\n\n' + desc.split(DISCLOSURE).join('').trim()).trim();
 // field, and until this block nothing did. The steps follow the writer's
 // sentences, numbered in the order the script speaks them. TQO only, because
 // only the TQO writer is told this. When steps are written and an earlier
-// pass left a block, that block alone is replaced where it stands, up to the
-// next blank line, so the block appears once and nothing after it is lost;
+// pass left a block, the first such block alone is replaced where it stands,
+// up to the next blank line, so a pass over its own output never adds a second
+// block and nothing after the block is lost;
 // with no steps, or for NCO, the description is left as the lines above make it.
 const STEPS_HEAD = 'The checklist from this episode:';
 const steps = Array.isArray(sc.checklist) ? sc.checklist.map(s => String(s).trim()).filter(Boolean) : [];

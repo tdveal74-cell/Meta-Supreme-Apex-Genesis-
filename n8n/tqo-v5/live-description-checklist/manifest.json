@@ -11,7 +11,7 @@
  "after": {
   "versionId": null,
   "file": "after.js",
-  "sha256": "9a840ab2954c37a4b24a97f7ab08d02f7de7c9d61765ce781b952be12576ece7"
+  "sha256": "16df7ae4d1c40ecc2fb0ad10a272e1398c48fdded9c30d05cdf75e5da95e90b8"
  },
  "note": "Only jsCode changes. The node also carries a stale parameters.parameters.jsCode, an older copy n8n does not run; it is left as it is.",
  "rollback": "publish fd873714-7acf-482b-8ab1-e101e1afb5ac"

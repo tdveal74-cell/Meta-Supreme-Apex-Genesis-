@@ -94,5 +94,9 @@ eq(fieldsOf(fill(after, { description: CARRIED })).Description, DISCLOSURE + "\n
 const TRAILED = CARRIED + "\n\nA paragraph someone added below the block.";
 eq(fieldsOf(fill(after, { description: TRAILED })).Description, DISCLOSURE + "\n\nSentence one." + BLOCK + "\n\nA paragraph someone added below the block.", "a paragraph after the old block is kept, and the new block takes the old one's place");
 eq(fieldsOf(fill(after, { description: TRAILED, checklist: [] })).Description, fieldsOf(fill(before, { description: TRAILED, checklist: [] })).Description, "with no steps, the same description is left as the live body leaves it");
+// Pinned after the verifier on 766d867: with two old blocks, the first is the
+// one replaced and the second is left as it stands.
+const TWO = "S1.\n\nThe checklist from this episode:\n1. First old.\n\nMiddle.\n\nThe checklist from this episode:\n1. Second old.";
+eq(fieldsOf(fill(after, { description: TWO })).Description, DISCLOSURE + "\n\nS1." + BLOCK + "\n\nMiddle.\n\nThe checklist from this episode:\n1. Second old.", "with two old blocks, the first is replaced and the second stays");
 
 console.log("description checklist: " + checks + " checks passed");
