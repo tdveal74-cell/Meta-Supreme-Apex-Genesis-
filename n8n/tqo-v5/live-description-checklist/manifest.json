@@ -1,0 +1,19 @@
+{
+ "workflow": "TQO FINAL V5",
+ "workflowId": "qEkGOUsNyVaRAmm6",
+ "node": "Script: Fill Run Fields",
+ "ruled": "Tee 2026-10-26 on a card: Add it in Fill Run Fields",
+ "before": {
+  "versionId": "fd873714-7acf-482b-8ab1-e101e1afb5ac",
+  "file": "before.js",
+  "sha256": "d707c3c34239e033c387691fff94f15a1aad25174be32cfe3e193c61768e4fa6"
+ },
+ "after": {
+  "versionId": "dcc44552-a7bc-4a4a-89b8-5b119e7d9470",
+  "file": "after.js",
+  "sha256": "16df7ae4d1c40ecc2fb0ad10a272e1398c48fdded9c30d05cdf75e5da95e90b8",
+  "publishedReadBack": "2026-10-26T09:04Z, on Tee's card 'Publish now': activeVersionId equals versionId dcc44552, the published nodes equal the read-back draft, and they differ from fd873714 only in Build Doctor Prompt, Doctor: Ground the Request, Script: Hydrate from Row and Script: Fill Run Fields, each at its repo sha256. One publish carried all four; publishing fd873714 rolls back all four."
+ },
+ "note": "Only jsCode changes. The node also carries a stale parameters.parameters.jsCode, an older copy n8n does not run; it is left as it is.",
+ "rollback": "publish fd873714-7acf-482b-8ab1-e101e1afb5ac"
+}

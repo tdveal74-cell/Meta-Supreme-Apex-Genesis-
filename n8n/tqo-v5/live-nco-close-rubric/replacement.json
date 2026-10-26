@@ -1,0 +1,13 @@
+{
+ "ruled": "Tee 2026-10-26, card: Move it next to the rules",
+ "pairs": [
+  {
+   "old": "  'No engagement bait. No Agree? No Thoughts? No What would you add?',\n",
+   "new": "  'No engagement bait. No Agree? No Thoughts? No What would you add?' + (isNCO ? ' For NCO, one specific question for the comments is allowed and is not bait.' : ''),\n"
+  },
+  {
+   "old": "  'close 15: a clean implication or a real action. Never a solicitation.',\n",
+   "new": "  'close 15: a clean implication or a real action. Never a solicitation.' + (isNCO ? ' For NCO, one specific question for the comments is allowed.' : ''),\n"
+  }
+ ]
+}

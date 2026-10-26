@@ -1,0 +1,202 @@
+{
+ "name": "Ops: overrule soul record 3d568ff5 d2 (one-off 2026-10-25)",
+ "nodes": [
+  {
+   "id": "a1",
+   "name": "Run By Hand",
+   "type": "n8n-nodes-base.manualTrigger",
+   "typeVersion": 1,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {}
+  },
+  {
+   "id": "a2",
+   "name": "Build Overruled Record",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// The one record Tee overruled on 2026-10-25, re-written whole with status overruled.\n// Recall withholds any record whose status is not active. Text and fields are the\n// record as the recall returned it on 2026-10-25; only the three status keys are new.\nconst record = {\"_id\":\"3d568ff5-0db6-81ac-b2e4-f817cc57a833-d2\",\"text\":\"RULING (2026-09-08): 2. TQO and NCO content rule, adopted 2026-09-08 from the Sisinty benchmark refresh (Claude derived, Tee to overrule): long form cold open stacks three or four teased items, each carrying a named entity and a number, names the count, then states the Learning Objective as a numbered deliverable list, all inside the first 30 seconds. The benchmark lands its promise at roughly 40 to 90 seconds in; Tee's 30-second rule stands and is the tighter one.\",\"kind\":\"ruling\",\"heading\":\"TQO and NCO content rule, adopted 2026-09-08 from the Sisinty benchmark refresh (Claude derived, Tee to overrule): long\",\"ruled_on\":\"2026-09-08\",\"area\":\"TQO, NCO, Systems\",\"source_title\":\"Sisinty benchmark refresh: his top videos and Shorts read as the model for TQO and NCO, twelve rulings filed for the soul layer\",\"source_url\":\"https://app.notion.com/p/Sisinty-benchmark-refresh-his-top-videos-and-Shorts-read-as-the-model-for-TQO-and-NCO-twelve-rulin-3d568ff50db681acb2e4f817cc57a833\",\"source_page_id\":\"3d568ff5-0db6-81ac-b2e4-f817cc57a833\",\"truncated\":false,\"status\":\"overruled\",\"overruled_on\":\"2026-10-25\",\"overruled_by\":\"Tee, card 2026-10-25: Overrule it\"};\nreturn [{ json: { ndjson: JSON.stringify(record), id: record._id, text: record.text } }];"
+   }
+  },
+  {
+   "id": "a3",
+   "name": "Upsert Overruled Record",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    440,
+    0
+   ],
+   "credentials": {
+    "pineconeApi": {
+     "id": "5vCUF12UaOsgSqMF",
+     "name": "Pinecone account"
+    }
+   },
+   "parameters": {
+    "method": "POST",
+    "url": "https://tee-soul-layer-jw37oa2.svc.aped-4627-b74a.pinecone.io/records/namespaces/rulings/upsert",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "pineconeApi",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/x-ndjson"
+      },
+      {
+       "name": "X-Pinecone-API-Version",
+       "value": "2025-04"
+      }
+     ]
+    },
+    "sendBody": true,
+    "contentType": "raw",
+    "rawContentType": "application/x-ndjson",
+    "body": "={{ $json.ndjson }}",
+    "options": {
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "a4",
+   "name": "Check Upsert",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    660,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// The upsert must answer 2xx, or nothing below is trusted.\nconst res = $json; const code = Number(res.statusCode);\nif (!(code >= 200 && code < 300)) throw new Error(\"Pinecone upsert answered HTTP \" + (code || \"none\") + \": \" + JSON.stringify(res.body || res.error || \"\").slice(0, 300));\nreturn [{ json: { upsertStatus: code } }];"
+   }
+  },
+  {
+   "id": "a5",
+   "name": "Fetch Record Back",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    880,
+    0
+   ],
+   "credentials": {
+    "pineconeApi": {
+     "id": "5vCUF12UaOsgSqMF",
+     "name": "Pinecone account"
+    }
+   },
+   "parameters": {
+    "method": "GET",
+    "url": "={{ \"https://tee-soul-layer-jw37oa2.svc.aped-4627-b74a.pinecone.io/vectors/fetch?namespace=rulings&ids=\" + encodeURIComponent($(\"Build Overruled Record\").first().json.id) }}",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "pineconeApi",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "X-Pinecone-API-Version",
+       "value": "2025-04"
+      }
+     ]
+    },
+    "options": {
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "a6",
+   "name": "Confirm Status",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1100,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// Read back: the record exists, carries status overruled, and its text is unchanged.\nconst want = $(\"Build Overruled Record\").first().json;\nconst res = $json; const code = Number(res.statusCode);\nlet body = res.body; if (typeof body === \"string\") { try { body = JSON.parse(body); } catch (e) { body = null; } }\nif (code !== 200 || !body) throw new Error(\"Fetch answered HTTP \" + (code || \"none\"));\nconst v = (body.vectors || {})[want.id];\nif (!v) throw new Error(\"The record \" + want.id + \" was not found on read back.\");\nconst md = v.metadata || {};\nif (md.status !== \"overruled\") throw new Error(\"Read back status is \" + JSON.stringify(md.status) + \", not overruled.\");\nif (md.text !== undefined && md.text !== want.text) throw new Error(\"Read back text differs from the record written.\");\nreturn [{ json: { id: want.id, status: md.status, overruled_on: md.overruled_on, overruled_by: md.overruled_by, ruled_on: md.ruled_on, metadataKeys: Object.keys(md).sort() } }];"
+   }
+  }
+ ],
+ "connections": {
+  "Run By Hand": {
+   "main": [
+    [
+     {
+      "node": "Build Overruled Record",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build Overruled Record": {
+   "main": [
+    [
+     {
+      "node": "Upsert Overruled Record",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Upsert Overruled Record": {
+   "main": [
+    [
+     {
+      "node": "Check Upsert",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Check Upsert": {
+   "main": [
+    [
+     {
+      "node": "Fetch Record Back",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Fetch Record Back": {
+   "main": [
+    [
+     {
+      "node": "Confirm Status",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "availableInMCP": true
+ }
+}

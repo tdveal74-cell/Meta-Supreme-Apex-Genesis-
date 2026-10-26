@@ -37,7 +37,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { buildWorkflow, LIVE_CHECKLIST_EMPTY, LIVE_CONTRACT, LIVE_HYDRATE_FIELDS, RUN_CONFIG_MEASURE, RUN_CONFIG_REAL, runConfig, SCORE_ONLY_CHECKLIST_EMPTY, SCORE_ONLY_CONTRACT, SCORE_ONLY_HYDRATE_FIELDS, scoreOnlyHydrate, scoreOnlyPrompt } from "./build.mjs";
+import { buildWorkflow, CHECKLIST_PARSE, LIVE_CHECKLIST_EMPTY, LIVE_CONTRACT, LIVE_HYDRATE_FIELDS, NCO_CLOSE, NCO_RUBRIC, RUN_CONFIG_MEASURE, RUN_CONFIG_REAL, runConfig, SCORE_ONLY_CHECKLIST_EMPTY, SCORE_ONLY_CONTRACT, SCORE_ONLY_HYDRATE_FIELDS, scoreOnlyHydrate, scoreOnlyPrompt } from "./build.mjs";
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const sha = (s) => createHash("sha256").update(s, "utf8").digest("hex");
@@ -139,8 +139,13 @@ const promptFor = (code, show) => {
 };
 const liveLines = (s) => s.split("\n");
 const contractLines = (src) => src.split("\n").map((l) => l.trim().replace(/,$/, "")).map((l) => JSON.parse('"' + l.slice(1, -1).replace(/\\'/g, "'").replace(/"/g, '\\"') + '"'));
+// Ruled by Tee 2026-10-25, "Allow a comments question": the NCO branch of the
+// preservation rules carries the sentence in NCO_CLOSE, the same replacement the
+// live doctor gets, so the live line it is compared with is the pinned one with
+// that replacement made.
+eq(read("./live/build_doctor_prompt.js").split(NCO_CLOSE.old).length, 2, "the NCO branch the replacement fills occurs once in the pinned live body");
 for (const show of ["TQO", "NCO"]) {
-  const a = promptFor(read("./live/build_doctor_prompt.js"), show);
+  const a = promptFor(NCO_RUBRIC.pairs.reduce((s, p) => s.replace(p.old, () => p.new), read("./live/build_doctor_prompt.js").replace(NCO_CLOSE.old, () => NCO_CLOSE.new)), show);
   const b = promptFor(byName["Build Doctor Prompt"].parameters.jsCode, show);
   const live = liveLines(a.claudeBody.system), mine = liveLines(b.claudeBody.system);
   const cut = live.indexOf("Return ONLY valid JSON, no fences:");
@@ -151,6 +156,24 @@ for (const show of ["TQO", "NCO"]) {
   eq(b.claudeBody.messages, a.claudeBody.messages, show + ": the user message is the live one");
   eq(b.original, a.original, show + ": the draft handed on is the live one");
   ok(!/"script"|"title"|"description"|"broll"/.test(mine.slice(cut).join("\n")), show + ": the contract asks for no rewritten field");
+  const said = mine.filter((l) => l === NCO_CLOSE.sentence).length;
+  eq(said, show === "NCO" ? 1 : 0, show + (show === "NCO" ? ": the NCO close sentence is said once" : ": TQO is not given the NCO close sentence"));
+  ok(mine.some((l) => l.includes("a specific question for the comments is not a solicitation or engagement bait")) === (show === "TQO"), show + ": the TQO sentence stays TQO's own");
+}
+ok(NCO_CLOSE.sentence.includes("an NCO episode may end on one or on a quiet action") && NCO_CLOSE.new.includes(NCO_CLOSE.sentence) && !NCO_CLOSE.old.includes(NCO_CLOSE.sentence), "the NCO sentence allows a comments question and does not require one");
+ok(NCO_CLOSE.sentence.includes("asking the viewer to subscribe is the NCO call to action, and it stands. It is not a solicitation under the close score.") && !/remove it|cut it/.test(NCO_CLOSE.sentence), "and leaves the NCO writer's subscribe line alone, as Tee ruled");
+eq(new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]").test(NCO_CLOSE.new), false, "and carries no em or en dash");
+// Ruled by Tee 2026-10-26, "Move it next to the rules": the two rubric lines
+// the holding reads cited each carry, for NCO, that one specific question for
+// the comments is allowed. TQO's lines are untouched.
+eq(NCO_RUBRIC, JSON.parse(read("../live-nco-close-rubric/replacement.json")), "the rubric pairs are the live doctor's");
+for (const show of ["TQO", "NCO"]) {
+  const sys = promptFor(byName["Build Doctor Prompt"].parameters.jsCode, show).claudeBody.system.split("\n");
+  const bait = sys.find((l) => l.startsWith("No engagement bait.")), close = sys.find((l) => l.startsWith("close 15:"));
+  eq([bait, close], show === "NCO"
+    ? ["No engagement bait. No Agree? No Thoughts? No What would you add? For NCO, one specific question for the comments is allowed and is not bait.", "close 15: a clean implication or a real action. Never a solicitation. For NCO, one specific question for the comments is allowed."]
+    : ["No engagement bait. No Agree? No Thoughts? No What would you add?", "close 15: a clean implication or a real action. Never a solicitation."],
+    show + (show === "NCO" ? ": both rubric lines allow one specific comments question" : ": both rubric lines are as they were"));
 }
 
 // ---- Hydrate shows the doctor what the row holds -------------------------------
@@ -158,7 +181,9 @@ for (const show of ["TQO", "NCO"]) {
 // carry no learning_objective and spell the b-roll Broll Keywords, so the doctor
 // was told the learning objective was none returned for every TQO row.
 eq(scoreOnlyHydrate().split(SCORE_ONLY_HYDRATE_FIELDS).length, 2, "the fields line is replaced once");
-eq(read("./live/script_hydrate_from_row.js").replace(LIVE_HYDRATE_FIELDS, () => SCORE_ONLY_HYDRATE_FIELDS), byName["Script: Hydrate from Row"].parameters.jsCode, "and nothing else in Hydrate changes");
+eq(scoreOnlyHydrate().split(CHECKLIST_PARSE.new).length, 2, "the list line is replaced once");
+eq(CHECKLIST_PARSE, JSON.parse(read("../live-checklist-parse/replacement.json")), "and by the same text the live Hydrate is given");
+eq(read("./live/script_hydrate_from_row.js").replace(LIVE_HYDRATE_FIELDS, () => SCORE_ONLY_HYDRATE_FIELDS).replace(CHECKLIST_PARSE.old, () => CHECKLIST_PARSE.new), byName["Script: Hydrate from Row"].parameters.jsCode, "and nothing else in Hydrate changes");
 const RAW = { id: 49, status: "Scripted", show: "TQO", season: 1, episode: 9, topic: "Topic 49", idea: "Idea 49", video_title: "Title 49", description: "Description 49", tags: "a, b", broll_keywords: "desk, notebook", learning_objective: "By the end, you will have one thing.", checklist: null, script: "  The script.  ", score_history: null, sources: null };
 const shimmed = run("DT Shim: Idea Rows", {}, [RAW])[0].json;
 const hydrateWith = (code) => new Function("$", "$input", "$json", code)(dollar({ "One Idea at a Time": [shimmed] }), { first: () => ({ json: shimmed }), all: () => [{ json: shimmed }] }, shimmed)[0].json;
@@ -169,6 +194,22 @@ const liveHydrated = hydrateWith(read("./live/script_hydrate_from_row.js"));
 eq([liveHydrated.learningObjective, liveHydrated.broll], ["", ""], "the live copy drops both, which is the defect the replacement fixes");
 const noTitle = run("DT Shim: Idea Rows", {}, [{ ...RAW, video_title: null }])[0].json;
 eq(new Function("$", "$input", "$json", byName["Script: Hydrate from Row"].parameters.jsCode)(dollar({ "One Idea at a Time": [noTitle] }), null, noTitle)[0].json.title, "Topic 49", "with no title the topic stands in, as live");
+// Ruled by Tee 2026-10-26, "Fill and parse": the checklist column is text, so a
+// list stored there is a JSON string, and the doctor now reads it as the list.
+const STEPS = ["Choose one recurring problem.", "Show the decision you made.", "Separate evidence from proposals.", "Prepare a shareable sample."];
+const withList = (checklist) => {
+  const sh = run("DT Shim: Idea Rows", {}, [{ ...RAW, checklist }])[0].json;
+  return new Function("$", "$input", "$json", byName["Script: Hydrate from Row"].parameters.jsCode)(dollar({ "One Idea at a Time": [sh] }), null, sh)[0].json.checklist;
+};
+eq(withList(JSON.stringify(STEPS)), STEPS, "a checklist stored as JSON text reaches the doctor as the list");
+eq(withList(JSON.stringify([" Choose one recurring problem. ", "", "Show the decision you made."])), ["Choose one recurring problem.", "Show the decision you made."], "trimmed, with empty steps dropped, as an array always was");
+for (const [label, v] of [["null", null], ["empty text", ""], ["text that is not JSON", "Choose one recurring problem."], ["JSON that is not a list", "\"one step\""], ["a JSON object", "{\"a\":1}"]]) {
+  eq(withList(v), [], label + " reads as no checklist");
+}
+{
+  const sh = run("DT Shim: Idea Rows", {}, [{ ...RAW, checklist: JSON.stringify(STEPS) }])[0].json;
+  eq(new Function("$", "$input", "$json", read("./live/script_hydrate_from_row.js"))(dollar({ "One Idea at a Time": [sh] }), null, sh)[0].json.checklist, [], "the pinned live list line read a stored checklist as none, which is the defect");
+}
 
 // ---- the request the provider receives ---------------------------------------------
 // Found by the review on 805060d: Token Budget: Doctor ends the live system message

@@ -23,6 +23,11 @@ A person starts it by hand. It has no schedule and no webhook.
    returns a score and PASS or NEEDS_REVISION, and never a rewritten script.
    When a row stores no checklist, the doctor is told to judge the spoken steps
    in the script itself rather than told none was returned.
+   The checklist column is text, so a list stored there is a JSON string; since
+   Tee ruled "Fill and parse" on 2026-10-26, Hydrate reads it as the list, by
+   the one replacement in `../live-checklist-parse/replacement.json` that the
+   live Hydrate is given too. TQO 49 to 60 hold the four steps their scripts
+   speak, written the same day.
    Just above the script, the doctor is also told where the learning objective
    is spoken, measured by the Script Gate's own rule in TQO FINAL V5: word for
    word, ignoring case and punctuation, inside the first 70 words. It is told
@@ -37,7 +42,27 @@ A person starts it by hand. It has no schedule and no webhook.
    The rule against invented experience still covers everything else. Both
    shows get it. Tee sharpened it on 2026-10-25, after one read of three in
    execution 4364 took the person in that line for Terrance: it now says the
-   person who has spent years is the viewer being addressed.
+   person who has spent years is the viewer being addressed. On 2026-10-25 Tee
+   ruled it covers both shows and goes to the live doctor too, which
+   `../live-doctor-grounding/` carries.
+   NCO rows are also told that a specific question for the comments is not
+   engagement bait, and that an NCO episode may end on one or on a quiet
+   action. Tee ruled this on 2026-10-25, after all three reads held NCO 30's
+   closing question as bait. The same day he ruled "Keep NCO's subscribe
+   close": the one line the NCO writer ends on, asking the viewer to
+   subscribe, is NCO's call to action and stands, so the NCO sentence carries
+   none of TQO's instruction to remove a subscribe request, and says the line
+   is not a solicitation under the close score. The sentence is the one
+   replacement in
+   `../live-doctor-grounding/replacement.json`, so this lane and the live
+   doctor carry the same words in the same place.
+   In execution 4512 two of three reads still held NCO 30's question as bait,
+   citing the later "No engagement bait" and "close 15" lines. Tee ruled
+   "Move it next to the rules" on 2026-10-26: for NCO each of those two lines
+   now ends with a clause saying one specific question for the comments is
+   allowed. Both lanes take the two pairs from
+   `../live-nco-close-rubric/replacement.json`. In execution 4531 no read
+   held NCO 30 for its question.
    The request is sent `READS` times (3). Tee ruled this on 2026-10-24, after
    the same request scored 85, 100 and 90 in three runs. The score written is
    the lowest of the reads. The verdict is PASS only when every read is PASS

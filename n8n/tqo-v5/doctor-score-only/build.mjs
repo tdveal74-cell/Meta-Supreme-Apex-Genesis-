@@ -6,10 +6,13 @@
 //           data table nodes, the IF and the loop are defined below.
 // Two live bodies are changed, each replacement required to match exactly once
 // or the build fails: in Build Doctor Prompt, the output contract, replaced by
-// SCORE_ONLY_CONTRACT so the doctor scores and never rewrites, and the empty
-// checklist text, replaced by SCORE_ONLY_CHECKLIST_EMPTY; in Script: Hydrate
+// SCORE_ONLY_CONTRACT so the doctor scores and never rewrites, the empty
+// checklist text, replaced by SCORE_ONLY_CHECKLIST_EMPTY, and the empty NCO
+// branch of the preservation rules, given the sentence in NCO_CLOSE, and the two
+// rubric lines in NCO_RUBRIC, given their NCO clauses; in Script: Hydrate
 // from Row, the fields line, replaced by SCORE_ONLY_HYDRATE_FIELDS so the
-// doctor is shown the learning objective and b-roll the row holds. Two
+// doctor is shown the learning objective and b-roll the row holds, and the list
+// line, replaced by CHECKLIST_PARSE so a checklist stored as text is read. Two
 // nodes of this workflow's own run between live ones: Recall Required after
 // DEVON Recall: Merge, and Score Only: Final Word after Token Budget: Doctor.
 // Final Word also tells the doctor where the learning objective is spoken, by
@@ -82,12 +85,22 @@ export const SCORE_ONLY_HYDRATE_FIELDS = [
   'const f = { ...row, ...(row.fields || {}) };'
 ].join('\n');
 
+// Ruled by Tee 2026-10-26 on a card, "Fill and parse": the checklist column is
+// text, so a list stored there arrives as a JSON string, and the live list line
+// kept arrays only. The text is the one replacement in
+// ../live-checklist-parse/replacement.json, so this lane and the live Hydrate
+// read a stored checklist the same way.
+export const CHECKLIST_PARSE = JSON.parse(readFileSync(join(HERE, '..', 'live-checklist-parse', 'replacement.json'), 'utf8'));
+
 export function scoreOnlyHydrate() {
   const body = live('script_hydrate_from_row.js');
   if (body.split(LIVE_HYDRATE_FIELDS).length !== 2) {
     throw new Error('The live fields line was not found exactly once in live/script_hydrate_from_row.js. Re-pin it and review this build.');
   }
-  return body.replace(LIVE_HYDRATE_FIELDS, () => SCORE_ONLY_HYDRATE_FIELDS);
+  if (body.split(CHECKLIST_PARSE.old).length !== 2) {
+    throw new Error('The live list line was not found exactly once in live/script_hydrate_from_row.js. Re-pin it and review this build.');
+  }
+  return body.replace(LIVE_HYDRATE_FIELDS, () => SCORE_ONLY_HYDRATE_FIELDS).replace(CHECKLIST_PARSE.old, () => CHECKLIST_PARSE.new);
 }
 
 // Ruled by Tee 2026-10-24 after the first run: the hand-loaded rows store no
@@ -98,12 +111,36 @@ export function scoreOnlyHydrate() {
 export const LIVE_CHECKLIST_EMPTY = ".join(' ') : '(none returned)')";
 export const SCORE_ONLY_CHECKLIST_EMPTY = ".join(' ') : '(not stored on this row; judge the spoken steps in the script itself)')";
 
+// Ruled by Tee 2026-10-25 on a card, "Allow a comments question": an NCO episode
+// may end on one specific question for the comments or on a quiet action, and
+// the NCO brief gets TQO's sentence that such a question is not engagement bait.
+// The text is the one replacement in ../live-doctor-grounding/replacement.json,
+// so this lane and the live doctor carry the same words in the same place.
+export const NCO_CLOSE = JSON.parse(readFileSync(join(HERE, '..', 'live-doctor-grounding', 'replacement.json'), 'utf8'));
+
+// Ruled by Tee 2026-10-26 on a card, "Move it next to the rules": the rubric's
+// "No engagement bait" and "close 15" lines each say, for NCO, that one specific
+// question for the comments is allowed. Execution 4512 showed the reads that
+// held NCO 30 citing those two lines and never the sentence above. The pairs
+// are the ones in ../live-nco-close-rubric/replacement.json, so this lane and
+// the live doctor carry the same words.
+export const NCO_RUBRIC = JSON.parse(readFileSync(join(HERE, '..', 'live-nco-close-rubric', 'replacement.json'), 'utf8'));
+
 export function scoreOnlyPrompt() {
   const live0 = live('build_doctor_prompt.js');
   if (live0.split(LIVE_CHECKLIST_EMPTY).length !== 2) {
     throw new Error('The live empty checklist text was not found exactly once in live/build_doctor_prompt.js. Re-pin it and review this build.');
   }
-  const body = live0.replace(LIVE_CHECKLIST_EMPTY, () => SCORE_ONLY_CHECKLIST_EMPTY);
+  if (live0.split(NCO_CLOSE.old).length !== 2) {
+    throw new Error('The NCO branch of the preservation rules was not found exactly once in live/build_doctor_prompt.js. Re-pin it and review this build.');
+  }
+  let body = live0.replace(LIVE_CHECKLIST_EMPTY, () => SCORE_ONLY_CHECKLIST_EMPTY).replace(NCO_CLOSE.old, () => NCO_CLOSE.new);
+  for (const p of NCO_RUBRIC.pairs) {
+    if (body.split(p.old).length !== 2) {
+      throw new Error('An NCO rubric line was not found exactly once in live/build_doctor_prompt.js. Re-pin it and review this build.');
+    }
+    body = body.replace(p.old, () => p.new);
+  }
   const at = body.indexOf(LIVE_CONTRACT);
   if (at === -1 || body.indexOf(LIVE_CONTRACT, at + 1) !== -1) {
     throw new Error('The live output contract was not found exactly once in live/build_doctor_prompt.js. The live prompt has changed; re-pin it and review this build.');

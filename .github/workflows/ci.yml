@@ -132,6 +132,24 @@ jobs:
       # checklist stored, the live doctor judges the spoken steps.
       - name: The live doctor checklist fix is the one text it says it is
         run: node n8n/tqo-v5/live-doctor-checklist-fix/checklist_fix.test.mjs
+      # Ruled by Tee 2026-10-25, "Both shows, live too", "Allow a comments
+      # question" and "Keep NCO's subscribe close": the live doctor gets the
+      # score-only grounding and NCO's comments question and subscribe close
+      # sentence.
+      - name: The live doctor grounding is the score-only grounding
+        run: node n8n/tqo-v5/live-doctor-grounding/grounding.test.mjs
+      # Ruled by Tee 2026-10-26, "Fill and parse": Hydrate reads a checklist
+      # stored as JSON text, in the live lane and the score-only lane alike.
+      - name: The live Hydrate reads a stored checklist
+        run: node n8n/tqo-v5/live-checklist-parse/checklist_parse.test.mjs
+      # Ruled by Tee 2026-10-26, "Add it in Fill Run Fields": the TQO
+      # description carries the episode's steps, as the writer is told.
+      - name: The TQO description carries the checklist
+        run: node n8n/tqo-v5/live-description-checklist/description_checklist.test.mjs
+      # Ruled by Tee 2026-10-26, "Move it next to the rules": the NCO bait and
+      # close 15 rubric lines each allow one specific comments question.
+      - name: The NCO rubric lines allow a comments question
+        run: node n8n/tqo-v5/live-nco-close-rubric/nco_rubric.test.mjs
       # The carousel rules, ruled by Tee 2026-10-07. No browser here: the drawing
       # runs in carousel-render.yml.
       - name: The carousel rules behave
