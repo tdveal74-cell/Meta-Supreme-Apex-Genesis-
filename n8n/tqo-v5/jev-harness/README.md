@@ -30,16 +30,23 @@ All 25 nodes ran with no node error in 5.07 seconds.
 | thumbnail photo | 1 | 3 | 6,659 | jev-1.14.0. Jev's pick equals today's pick |
 | composed check | 1 | 1 | 2,822 | jev-1.14.0. Headline present 0.99, readable 0.85, box right edge 0.68 |
 
-26,795 input tokens in all, about $0.001 at $0.042 per million. The b-roll calls
-took 678 ms together. At the 45 segments `Plan B-Roll Segments` allows, that scales
-to about 390,000 tokens and about 15 seconds a render. That is a scaling of two
-calls, not a measurement of a full episode.
+26,795 input tokens in all, about $0.001 at $0.042 per million. The five b-roll
+nodes took 1,255 ms of node time and 1,505 ms of wall time for 2 segments, of
+which the two TypeSafe calls were 678 ms. At the 45 segments `Plan B-Roll
+Segments` allows, that scales to about 390,000 tokens, about $0.02, and 28 to 34
+seconds a render, plus about 1.3 seconds for the two thumbnail lanes. That is a
+scaling of two segments, not a measurement of a full episode. The worst case,
+every call running to its timeout, is about 54 minutes; `../JEV_WIRING.md` works
+it out under Lane 1.
 
 The check's note, "the headline runs off the dark panel onto the photograph",
-came from a box right edge of 0.68 against the designed 0.603. It is Jev's
-reading of one composed frame. The composed image stays on the instance and was
-not looked at, so whether the live thumbnail design overflows on a long line is
-unverified.
+came from a box right edge of 0.68 against the designed 0.603. The composed frame
+is saved in the execution as the `<thumb>` asset of `Jev: Thumb Check Body`, and
+reading it settles the note: the second headline line, "DASHBOARD FIRST", ends at
+x 866 of 1280 (0.677), while the dark panel ends at x 760. Jev was right on this
+frame. `Thumb: Pick Still` wraps an 84 px headline at
+floor(700 / (84 * 0.52)) = 16 characters, and on this frame 15 capitals at 84 px
+drew 787 px wide. Other headline lengths and sizes were not tested.
 
 ## Rebuilding it
 
@@ -47,8 +54,9 @@ unverified.
 
 The builder reads the lane files as they are now. Since the run they pin
 `jev-1.14.0`, where the run sent `jev-latest` and `jev-preview`, both of which
-answered as jev-1.14.0. Those three model lines are the only difference between a
-rebuild and `harness_as_run_4737.json`.
+answered as jev-1.14.0. A rebuild differs from `harness_as_run_4737.json` in those
+three model lines and in eight lines of the header comment of `Jev: Thumb Check
+Body`, rewritten in the same commit, and in nothing else.
 
 Posting the body creates a workflow and running it spends TypeSafe credit. Both
 are outward writes and both are Tee's call on a card.

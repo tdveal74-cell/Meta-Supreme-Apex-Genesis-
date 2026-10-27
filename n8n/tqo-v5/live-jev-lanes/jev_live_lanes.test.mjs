@@ -34,16 +34,26 @@ const byName = new Map(P.nodes.map((n) => [n.name, n]));
 eq(byName.size, P.nodes.length, "no node name appears twice");
 eq(P.nodes.length, 17, "14 added nodes and 3 changed ones");
 
+// ---- Every node is pinned whole ---------------------------------------------------
+// published.json holds every key of each published node except the id n8n
+// assigns, so a setting the live node gained (disabled, retryOnFail,
+// executeOnce, a mode, a credential) would sit in the copy and fail here. Each
+// node below is compared whole, minus its name and position, which are checked
+// on their own further down.
+const whole = (n) => { const { name, position, ...rest } = n; return rest; };
+
 // ---- Every Code node runs the repo file, at the sha the manifest names ---------
 const CODE = Object.entries(M.code);
 eq(CODE.length, 9, "six new Code nodes and three changed ones");
+const NOTES = { "Thumb: Pick Still": "Chooses the backdrop and computes the type layout. No render call." };
 for (const [name, { file, sha256 }] of CODE) {
   const body = read("../" + file);
   eq(sha(body), sha256, file + " is the body the manifest names");
   const n = byName.get(name);
   ok(n, name + " is in the published copy");
-  eq(n.type, "n8n-nodes-base.code", name + " is a Code node");
-  eq(n.parameters.jsCode, body, name + " runs " + file + " byte for byte");
+  const want = { type: "n8n-nodes-base.code", typeVersion: 2, parameters: { jsCode: body } };
+  if (NOTES[name]) want.notes = NOTES[name];
+  eq(whole(n), want, name + " is a Code node 2 running " + file + " byte for byte, run once for all items, with no other setting");
 }
 
 // ---- The model is pinned in every request body ---------------------------------
@@ -54,33 +64,39 @@ for (const file of ["jev_broll_bodies.js", "jev_thumb_body.js", "jev_thumb_check
 }
 
 // ---- The HTTP and Extract From File nodes carry the settings in JEV_WIRING.md ---
+// A custom header goes out only while sendHeaders is true, and without the
+// images header TypeSafe refuses every image request with 400, which these
+// nodes would swallow. So sendHeaders is pinned with the rest.
 const RANK = ["Jev: Rank B-Roll", "Jev: Rank Stills", "Jev: Check Thumb"];
 for (const name of RANK) {
-  const n = byName.get(name);
-  eq([n.type, n.typeVersion], ["n8n-nodes-base.httpRequest", 4.2], name + " is HTTP Request 4.2");
-  const p = n.parameters;
-  eq([p.method, p.url], ["POST", "https://api.typesafe.ai/v1/systemone"], name + " posts to System One");
-  eq([p.authentication, p.genericAuthType], ["genericCredentialType", "httpHeaderAuth"], name + " uses a Header Auth credential");
-  eq(n.credentials, { httpHeaderAuth: { id: "AJM16uvmcW88bSL4", name: "Jev" } }, name + " uses the Jev credential and holds no key");
-  eq(p.headerParameters, { parameters: [{ name: "TypeSafe-Danger-Zone-Images", value: "true" }] }, name + " sends the images header and nothing else");
-  eq([p.sendBody, p.specifyBody, p.jsonBody], [true, "json", "={{ JSON.stringify($json.body) }}"], name + " posts the body its Code node built");
-  eq(p.options, { timeout: 30000 }, name + " times out at 30 s");
-  eq([n.onError, n.alwaysOutputData], ["continueRegularOutput", true], name + " fails open");
+  eq(whole(byName.get(name)), {
+    type: "n8n-nodes-base.httpRequest", typeVersion: 4.2,
+    parameters: {
+      method: "POST", url: "https://api.typesafe.ai/v1/systemone",
+      authentication: "genericCredentialType", genericAuthType: "httpHeaderAuth",
+      sendHeaders: true, headerParameters: { parameters: [{ name: "TypeSafe-Danger-Zone-Images", value: "true" }] },
+      sendBody: true, specifyBody: "json", jsonBody: "={{ JSON.stringify($json.body) }}",
+      options: { timeout: 30000 },
+    },
+    credentials: { httpHeaderAuth: { id: "AJM16uvmcW88bSL4", name: "Jev" } },
+    onError: "continueRegularOutput", alwaysOutputData: true,
+  }, name + " posts its body to System One with the images header and the Jev credential, 30 s, no retry, fails open");
 }
 const FETCH = { "Jev: Fetch B-Roll Still": "={{ $json.stillUrl }}", "Jev: Fetch Thumb Still": "={{ $json.fetchUrl }}" };
 for (const [name, url] of Object.entries(FETCH)) {
-  const n = byName.get(name);
-  eq([n.type, n.typeVersion], ["n8n-nodes-base.httpRequest", 4.2], name + " is HTTP Request 4.2");
-  eq(n.parameters, { url, options: { response: { response: { responseFormat: "file" } }, timeout: 10000 } }, name + " fetches " + url + " as a file in 10 s");
-  eq(n.credentials, undefined, name + " sends no credential");
-  eq([n.onError, n.alwaysOutputData], ["continueRegularOutput", true], name + " fails open and keeps an item");
+  eq(whole(byName.get(name)), {
+    type: "n8n-nodes-base.httpRequest", typeVersion: 4.2,
+    parameters: { url, options: { response: { response: { responseFormat: "file" } }, timeout: 10000 } },
+    onError: "continueRegularOutput", alwaysOutputData: true,
+  }, name + " fetches " + url + " as a file in 10 s with no credential, once per item, and keeps an item on failure");
 }
 const EXTRACT = { "Jev: Still To Base64": "data", "Jev: Thumb To Base64": "data", "Jev: Thumb To Base64 (Composed)": "thumbData" };
 for (const [name, prop] of Object.entries(EXTRACT)) {
-  const n = byName.get(name);
-  eq([n.type, n.typeVersion], ["n8n-nodes-base.extractFromFile", 1.1], name + " is Extract From File 1.1");
-  eq(n.parameters, { operation: "binaryToPropery", binaryPropertyName: prop, destinationKey: "still_b64" }, name + " moves " + prop + " to still_b64");
-  eq(n.onError, "continueRegularOutput", name + " fails open");
+  eq(whole(byName.get(name)), {
+    type: "n8n-nodes-base.extractFromFile", typeVersion: 1.1,
+    parameters: { operation: "binaryToPropery", binaryPropertyName: prop, destinationKey: "still_b64" },
+    onError: "continueRegularOutput",
+  }, name + " moves " + prop + " to still_b64 and fails open");
 }
 eq(CODE.length + RANK.length + Object.keys(FETCH).length + Object.keys(EXTRACT).length, P.nodes.length, "every published node is checked above");
 
@@ -107,6 +123,7 @@ const FORKS = [
 ];
 for (const [side, sibling] of FORKS) {
   ok(byName.get(side).position[1] < P.siblingPositions[sibling][1], side + " sits above " + sibling + ", so it runs first");
+  if (byName.has(sibling)) eq(byName.get(sibling).position, P.siblingPositions[sibling], sibling + " has one position in the copy, not two");
 }
 
 // ---- Shadow ---------------------------------------------------------------------

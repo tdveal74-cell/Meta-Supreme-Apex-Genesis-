@@ -8,7 +8,7 @@ ranked and the segments where Jev would pick another clip, Pick Still records
 the photo Jev would pick, and the Shim records Jev's note on the finished
 thumbnail.
 
-**Live since 2026-10-27T21:59Z, in shadow.** Tee ruled three cards that day:
+**Live since 2026-10-27T21:58:51Z, in shadow.** Tee ruled three cards that day:
 "Standalone harness", "Draft now, publish card next" and "Publish now". The
 lanes were proven first in a separate inactive workflow against the real
 TypeSafe API (`jev-harness/`, execution 4737), then drafted into TQO FINAL V5
@@ -76,6 +76,17 @@ Movie` reads it. That puts every b-roll request inside the render path: with
 episode can make up to 180 still fetches and 45 TypeSafe calls, one after
 another.
 
+What that costs a render, from execution 4737 scaled to 45 segments. The five
+b-roll nodes took 1,255 ms of node time for 2 segments, and the branch 1,505 ms
+of wall time, so about 28 to 34 seconds a render, plus about 1.3 seconds for the
+two thumbnail lanes. That is a scaling of two segments, not a measured episode.
+The worst case is every call running to its timeout: 45 calls at 30 seconds and
+180 fetches at 10 seconds is 52.5 minutes, and with the thumbnail lanes about 54
+minutes. If only TypeSafe hangs it is about 23.5 minutes. No Jev node retries,
+so the timeouts are the bound, and both figures sit under the 3 hour stale
+claim window the Reaper uses. The cards Tee ruled on on 2026-10-27 said about
+15 seconds, which counted the TypeSafe calls alone.
+
 | Node | Type | Settings |
 |---|---|---|
 | `Jev: B-Roll Stills` | Code, run once for all items | body `jev_broll_stills.js` |
@@ -118,12 +129,12 @@ A side branch off `Thumb: Compose`, placed above `Shim: Thumbnail To Binary`.
 | `Jev: Thumb To Base64 (Composed)` | Extract From File on binary property `thumbData` | destination key `still_b64`, `onError: continueRegularOutput` |
 | `Jev: Thumb Check Body` | Code, run once for all items | body `jev_thumb_check_body.js` |
 | `Jev: Check Thumb` | HTTP Request 4.2, POST | as `Jev: Rank B-Roll`; a Box question needs Jev 1.14 |
+| `Jev: Thumb Verdict` | Code, run once for all items | body `jev_thumb_check_verdict.js` |
 
 All three request bodies send the pinned `jev-1.14.0`, ruled by Tee 2026-10-27
 on the draft card, so the floors cannot move under the shadow numbers if
 TypeSafe moves an alias. Until then the two rank bodies sent `jev-latest` and
 this one `jev-preview`; in execution 4737 all three answered as jev-1.14.0.
-| `Jev: Thumb Verdict` | Code, run once for all items | body `jev_thumb_check_verdict.js` |
 
 `Thumb: Compose` sets `onError: continueRegularOutput`, so a failed compose
 reaches the Extract From File node with no binary. That node must carry
@@ -178,10 +189,13 @@ wiring.
 - The b-roll stills are asked for at 1200 by 630, the `w` and `h` in the Pexels
   still urls of the fixture; the photo Jev sees is Pexels' landscape size,
   1200 by 627 by Pexels' own documentation; the composed thumbnail is 1280 by
-  720, from `Thumb: Compose`. None was measured from a live download.
+  720, from `Thumb: Compose`. Execution 4737 fetched the fixture stills live:
+  every one was a 1200 by 630 baseline JPEG, and the composed frame a 1280 by
+  720 baseline JPEG. The 1200 by 627 photo search size is still unmeasured,
+  because the harness stood video posters in for photos.
 - The docs call baseline JPEG the safest and say to re-save a progressive one.
-  Whether Pexels serves progressive JPEGs here, and what the API does with
-  one, is unverified until the first live run.
+  Whether Pexels serves a progressive JPEG for a real photo search is still
+  unverified.
 - The API strips EXIF and does not apply its orientation. Whether every
   Pexels still at these sizes has upright pixels is unverified here.
 - Asset references are matched as plain text anywhere in the request. These
@@ -191,13 +205,16 @@ wiring.
   images page says both accept images. The images page is the one these
   lanes follow; the first live call settles it.
 
-Re-read on 2026-10-27T21:28Z, before the harness ran. Every number above still
-matches. What changed or was not recorded above:
+Re-read on 2026-10-27T21:28Z, before the harness ran, and compared with the
+copies of the same pages read on 2026-10-16. Every number above still matches.
+One thing changed: the alias table. On 2026-10-16 `jev-latest` named
+`jev-1.13.0` and only `jev-preview` named `jev-1.14.0`. On 2026-10-27 both name
+`jev-1.14.0`, with a new note that there is no preview build, and `jev-preview`
+moves ahead of `jev-latest` when one exists. So an alias moved under these lanes
+once already, which is why the bodies now pin `jev-1.14.0`.
 
-- The models page now maps both `jev-latest` and `jev-preview` to `jev-1.14.0`,
-  says 1.14 was available from 2026-10-14, and says `jev-preview` moves ahead of
-  `jev-latest` when a preview build exists. That is why the bodies now pin
-  `jev-1.14.0` rather than name either alias.
+The rest of this list was on the 2026-10-16 pages too and was not copied in
+then:
 - A third 32 MiB limit applies to all images in a request after the API
   processes them, and processing can make an image larger than the file sent.
 - Animated PNGs are rejected. An image over a size limit returns 413, one under
@@ -212,9 +229,6 @@ matches. What changed or was not recorded above:
   execution 4737: 8,657 for four 1200 by 630 stills with one sentence, 6,659 for
   three with a subject and headline, 2,822 for one 1280 by 720 frame.
 - The images feature is still marked as not production ready.
-
-Whether these were new since 2026-10-16 or only not copied in then is not
-known; no copy of the earlier pages was kept.
 
 ## Known risks the first wired run should read
 
@@ -238,10 +252,15 @@ known; no copy of the earlier pages was kept.
 
 What was done on 2026-10-27, in order. Tee ruled a standalone harness over an
 inactive copy of the whole workflow, because the copy could not be isolated (see
-`jev-harness/README.md`). The harness ran once as execution 4737 and every check
-in step 1 below held on fixture input. The lanes were then drafted into the live
-workflow in seven updates, read back equal to the repo bodies byte for byte,
-published as `3db61aef` and read back again: step 2 held. Step 3 is
+`jev-harness/README.md`). The harness ran once as execution 4737. On fixture
+input the model, `jevRanked` and `jevApplied` checks in step 1 held; there was no
+earlier run of the same row to compare the picks with, so that half of step 1
+still rests on the offline mirror tests. The lanes were then drafted into the
+live workflow in seven updates, read back equal to the repo bodies byte for
+byte, and published as `3db61aef`, activated at 21:58:51Z. The read back at
+21:59:02Z found `activeVersionId` equal to `versionId` and the published nodes
+and connections equal to the read back draft. The public API returned no
+`sameAsDraft` flag, so that node and connection comparison stands in for it. Step 3 is
 `live-jev-lanes/`, which pins the published nodes to the repo files rather than
 regenerating the exports, because nine test files and
 `services/devon/show_registry.py` read the exports at `9320520f`, counted with

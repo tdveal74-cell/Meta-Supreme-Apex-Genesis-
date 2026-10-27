@@ -22,6 +22,7 @@
   "versionId": "3db61aef-43a9-494a-ab65-ef79d8fa0c18",
   "nodes": 297,
   "file": "published.json",
+  "activatedAt": "2026-10-27T21:58:51.820Z, workflowPublishHistory event \"activated\" on version 3db61aef",
   "publishedReadBack": "2026-10-27T21:59:02Z, on Tee's card 'Publish now': activeVersionId equals versionId 3db61aef, the published nodes and connections equal the read-back draft, the draft differs from fc75f7a6 by 14 added nodes, 14 added edges and the jsCode of Build Movie, Thumb: Pick Still and Shim: Thumbnail To Binary, and settings and static data are unchanged."
  },
  "code": {
