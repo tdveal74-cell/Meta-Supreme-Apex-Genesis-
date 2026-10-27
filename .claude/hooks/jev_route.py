@@ -50,7 +50,21 @@ that exists on this machine, so a secret that happens to fit the character
 class cannot pass as a path. A redirect target is a path by syntax and needs
 no such test. A single dash flag is kept only when it is one to three letters,
 because -phunter2 cannot be told from a cluster of flags, or when it is one of
-the few find primaries in FIND_FLAGS.
+the few find primaries in FIND_FLAGS. A flag's name has to be typed bare: a
+quoted string that starts with a dash is a value, and so is whatever follows
+the = in --name="value".
+
+The shell reader models a small part of the shell and stops at the first thing
+outside it. It does not guess at syntax it lacks, because a reader that guesses
+reads data as commands and sends every program word: an array literal, a case
+pattern, an operand of [[ ]] or $(( )), a word after a closing parenthesis and
+the tail of a quoted string have all been read as programs by a reader that
+guessed. What it models is in the Shell docstring. A construct it cannot model
+ends the read through Shell.halt(): what was read before stays, nothing after it
+is read, and nothing is sent that was guessed. A word is read whole, with every
+quote, escape and expansion in it, before it is judged, and a program name is
+taken from a whole word that is a plain piece and never from the tail of a
+longer string.
 
 Building the text is linear. Only the first MAX_SCAN characters of a command
 are read, no regex has a nested or adjacent unbounded quantifier, and the
@@ -112,6 +126,7 @@ MAX_DIGITS = 4
 MAX_NODES = 5000
 MAX_FANOUT = 200
 MAX_DEPTH = 8
+MAX_NEST = 8
 TAIL_BYTES = 256 * 1024
 BREAKER_ERRORS = 3
 BREAKER_S = 600
@@ -172,13 +187,20 @@ FIELD = re.compile(r"[A-Za-z][A-Za-z0-9_.-]{0,29}")
 KEY_SHAPE = re.compile(r"[\x21-\x7e]+")
 WORD_RUN = re.compile(r"[^ \t\r\n\f\v'\"\\$`;&|<>()]+")
 DQ_SPECIAL = re.compile(r"[\"\\$`]")
+# One character each, so no quantifier at all. They find the next character that
+# ends or changes the reading of a region the reader skips without looking in.
+ARITH_STOP = re.compile(r"[()'\"`\\]")
+BRACE_STOP = re.compile(r"[}$'\"`\\{\n]")
+ANSI_STOP = re.compile(r"[\\']")
 
 WS = " \t\r\f\v"
-SEPARATORS = "\n;&|<>()`"
+SEPARATORS = "\n;&|<>()"
 # The only words a command may start with that are not themselves the program.
+# A case statement is not here: its patterns are words that look like commands,
+# so the reader stops at it instead.
 OPENERS = frozenset(("if", "then", "else", "elif", "do", "while", "until", "!", "{"))
 CLOSERS = frozenset(("fi", "done", "esac", "}"))
-HEADERS = frozenset(("for", "select", "case", "function"))
+HEADERS = frozenset(("for", "select", "function"))
 # Programs whose next word is a program too. timeout and nice are left out on
 # purpose: their next word is a number.
 WRAPPERS = frozenset(("sudo", "doas", "env", "time", "nohup", "exec", "command", "builtin", "xargs", "watch"))
@@ -217,10 +239,17 @@ def vet_path(raw, home):
 
 
 def is_assignment(word):
+    """NAME=, NAME+= and NAME[subscript]=, which set a variable and run nothing."""
     name, eq, _ = word.partition("=")
+    if not eq:
+        return False
     if name.endswith("+"):
         name = name[:-1]
-    return bool(eq) and name.isascii() and name.isidentifier()
+    if name.endswith("]"):
+        name, bracket, _ = name.partition("[")
+        if not bracket:
+            return False
+    return name.isascii() and name.isidentifier()
 
 
 def few_digits(name):
@@ -229,6 +258,11 @@ def few_digits(name):
 
 
 def program_name(word):
+    """The program a whole word names, or None. The whole word has to be a plain
+    piece before its last path component is taken: a word with a space, a colon
+    or an = in it is a string or an assignment, and its tail is not a program."""
+    if not PIECE.fullmatch(word):
+        return None
     base = word.rsplit("/", 1)[-1]
     return base if PROGRAM.fullmatch(base) and few_digits(base) else None
 
@@ -272,6 +306,16 @@ class Outline:
             self.lines.append(self.line)
             self.line = []
 
+    def mark(self):
+        self.newline()
+        return len(self.lines), self.size, self.full
+
+    def rewind(self, mark):
+        """Take back every piece added since the mark."""
+        count, self.size, self.full = mark
+        del self.lines[count:]
+        self.line = []
+
     def text(self):
         self.newline()
         return "\n".join(" ".join(line) for line in self.lines)
@@ -280,13 +324,27 @@ class Outline:
 class Shell:
     """One pass over a shell command. It reads words and decides what each one
     is, and only a program, a flag, a redirect target or an existing path is
-    handed to the outline."""
+    handed to the outline.
+
+    It models a small part of the shell and stops at the first thing outside it:
+    halt() drops the rest of the command, so what was read before it stays and
+    nothing after it is guessed at. A reader that guesses at syntax it lacks
+    reads data as commands, and every program word is sent. The parts it models
+    are simple commands, pipelines, lists, if, while, until, for and select
+    lists, brace groups and subshells, quotes and escapes, $( ), backticks and
+    <( ), heredocs and here-strings, and it reads past $(( )), (( )), [[ ]],
+    ${ }, $' ' and the literal of an array assignment without looking inside. A
+    case statement, a function definition, an extglob group or a quote nested in
+    a way it cannot follow ends the read."""
 
     def __init__(self, text, out, cwd, home):
         self.t, self.n, self.i = text, len(text), 0
         self.out, self.cwd, self.home = out, cwd, home
         self.stats = 0
         self.heredocs = []
+        self.frames = []
+        self.halted = False
+        self.quoted_at = None
         self.reset()
 
     def reset(self):
@@ -295,11 +353,30 @@ class Shell:
         self.skip = False
         self.ddash = False
 
+    def saved(self):
+        return self.program, self.wrapper, self.skip, self.ddash
+
+    def restore(self, state):
+        self.program, self.wrapper, self.skip, self.ddash = state
+
     def end_command(self):
         self.out.newline()
         self.reset()
 
+    def halt(self):
+        """Syntax the reader does not model. Everything after this is read past."""
+        self.halted = True
+        self.i = self.n
+        return self.n
+
     def run(self):
+        self.commands(None)
+        self.out.newline()
+
+    def commands(self, closer):
+        """Commands up to the closer of the enclosing $( ), ( ) or pair of
+        backticks, or to the end of the text at the top. True when the closer was
+        found."""
         t, n = self.t, self.n
         while self.i < n and not self.out.full:
             i = self.i
@@ -313,12 +390,23 @@ class Shell:
             elif c == "#":
                 j = t.find("\n", i)
                 self.i = n if j < 0 else j
-            elif c in ";&|()`":
+            elif c in ";&|":
                 self.end_command()
                 self.i += 1
-            elif c == "$" and t.startswith("(", i + 1):
-                self.end_command()
-                self.i += 2
+            elif c == ")":
+                if closer != ")":
+                    self.halt()
+                    return False
+                self.i += 1
+                return True
+            elif c == "`" and "`" in self.frames:
+                if closer != "`":
+                    self.halt()
+                    return False
+                self.i += 1
+                return True
+            elif c == "(":
+                self.paren()
             elif c in "<>":
                 self.redirect()
             else:
@@ -326,48 +414,134 @@ class Shell:
                 if self.i == i:
                     self.i += 1
                 elif not (word.isdigit() and self.i < n and t[self.i] in "<>"):
-                    self.take(word)
+                    self.take(word, self.quoted_at)
+            if self.halted:
+                return False
+        return False
+
+    def substitution(self, closer):
+        """A command list inside $( ), ( ) or backticks, read with its own quote
+        state. The command around it is put back afterwards. One that cannot be
+        read to its closer sends nothing: a list that never closes is not known to
+        be a list."""
+        if len(self.frames) >= MAX_NEST:
+            self.halt()
+            return
+        outer = self.saved()
+        mark = self.out.mark()
+        self.reset()
+        self.frames.append(closer)
+        found = self.commands(closer)
+        self.frames.pop()
         self.out.newline()
+        self.restore(outer)
+        if not found:
+            self.out.rewind(mark)
+            self.halt()
+
+    def paren(self):
+        """A ( where a word does not start. Only a subshell at the start of a
+        command is read; an array literal, an arithmetic command and a bare group
+        are read past; anything else is syntax this reader does not model."""
+        t, i = self.t, self.i
+        prev = t[i - 1] if i else "\n"
+        if prev == "=":
+            self.i = self.skip_array(i + 1)
+        elif prev not in WS and prev not in SEPARATORS:
+            self.halt()
+        elif t.startswith("((", i):
+            j = self.skip_arith(i + 2)
+            if j < 0:
+                self.halt()
+            else:
+                self.i = j
+                self.skip = True
+        elif self.program is None and not self.skip:
+            self.i = i + 1
+            self.substitution(")")
+            self.skip = True
+        else:
+            self.halt()
 
     def word(self):
         """The next word with its quotes and escapes resolved. An expansion is
-        left as a literal $, which no piece rule accepts."""
+        left as a literal $, which no piece rule accepts. self.quoted_at is the
+        length of the plain text before the first quote, escape or expansion in the
+        word, or None when the word has none."""
         t, n, i = self.t, self.n, self.i
         buf = []
+        plain = 0
+        quoted_at = None
         while i < n:
             c = t[i]
-            if c in WS or c in SEPARATORS:
+            if c in WS or c in SEPARATORS or (c == "`" and "`" in self.frames):
                 break
-            if c == "$":
-                if t.startswith("(", i + 1):
-                    break
-                buf.append("$")
+            j = self.special(i, buf)
+            if j is not None:
+                if quoted_at is None:
+                    quoted_at = plain
+                i = j
+                continue
+            m = WORD_RUN.match(t, i)
+            if m is None:
                 i += 1
-            elif c == "\\":
-                if i + 1 < n and t[i + 1] != "\n":
-                    buf.append(t[i + 1])
-                i += 2
-            elif c == "'":
-                j = t.find("'", i + 1)
-                if j < 0:
-                    buf.append(t[i + 1:])
-                    i = n
-                else:
-                    buf.append(t[i + 1:j])
-                    i = j + 1
-            elif c == '"':
-                i = self.double(i + 1, buf)
             else:
-                m = WORD_RUN.match(t, i)
-                if m is None:
-                    i += 1
-                else:
-                    buf.append(m.group())
-                    i = m.end()
+                buf.append(m.group())
+                plain += m.end() - i
+                i = m.end()
         self.i = min(i, n)
+        self.quoted_at = quoted_at
         return "".join(buf)
 
+    def special(self, i, buf):
+        """A quote, an escape or an expansion starting at i. Its text goes into
+        buf, an expansion as a literal $, and the index after it comes back. None
+        when t[i] is a plain character."""
+        t, n = self.t, self.n
+        c = t[i]
+        if c == "\\":
+            if "`" in self.frames:
+                return self.halt()
+            if i + 1 < n and t[i + 1] != "\n":
+                buf.append(t[i + 1])
+            return i + 2
+        if c == "'":
+            j = t.find("'", i + 1)
+            if j < 0:
+                buf.append(t[i + 1:])
+                return n
+            buf.append(t[i + 1:j])
+            return j + 1
+        if c == '"':
+            return self.double(i + 1, buf)
+        if c == "`":
+            if "`" in self.frames:
+                return self.halt()
+            self.i = i + 1
+            self.substitution("`")
+            buf.append("$")
+            return self.i
+        if c != "$":
+            return None
+        buf.append("$")
+        nxt = t[i + 1:i + 2]
+        if nxt == "(":
+            if t.startswith("((", i + 1):
+                j = self.skip_arith(i + 3)
+                return self.halt() if j < 0 else j
+            self.i = i + 2
+            self.substitution(")")
+            return self.i
+        if nxt == "{":
+            return self.skip_brace(i)
+        if nxt == "'":
+            return self.skip_ansi(i)
+        return i + 1
+
     def double(self, i, buf):
+        """The inside of a double quoted string, from after the opening quote to
+        after the closing one. A $( ) or pair of backticks inside it is a command
+        list with its own quotes, so it is read as one and not as text."""
         t, n = self.t, self.n
         while i < n:
             m = DQ_SPECIAL.search(t, i)
@@ -380,16 +554,107 @@ class Shell:
             if c == '"':
                 return j + 1
             if c == "\\":
+                if "`" in self.frames:
+                    return self.halt()
                 nxt = t[j + 1:j + 2]
                 if nxt in ("$", "`", '"', "\\"):
                     buf.append(nxt)
                 elif nxt != "\n":
                     buf.append("\\" + nxt)
                 i = j + 2
+            elif c == "`" or t.startswith(("$(", "${"), j):
+                i = self.special(j, buf)
+                if self.halted:
+                    return n
             else:
                 buf.append(c)
                 i = j + 1
         return n
+
+    def skip_arith(self, i):
+        """From after (( or $(( to after the matching )), or -1. A quote, an escape
+        or a backtick inside, or a ) that does not close it, is not modelled."""
+        t, n = self.t, self.n
+        depth = 0
+        while i < n:
+            m = ARITH_STOP.search(t, i)
+            if m is None:
+                return -1
+            c = m.group()
+            i = m.end()
+            if c == "(":
+                depth += 1
+            elif c != ")":
+                return -1
+            elif depth:
+                depth -= 1
+            elif t.startswith(")", i):
+                return i + 1
+            else:
+                return -1
+        return -1
+
+    def skip_brace(self, i):
+        """From the $ of ${ to after the } that closes it. Only a plain body is
+        read: a quote, an escape, a nested expansion or a newline ends the read."""
+        t = self.t
+        j = i + 2
+        while True:
+            m = BRACE_STOP.search(t, j)
+            if m is None:
+                return self.halt()
+            if m.group() == "}":
+                return m.end()
+            if m.group() != "$" or t[m.end():m.end() + 1] in ("(", "{", "'", '"'):
+                return self.halt()
+            j = m.end()
+
+    def skip_ansi(self, i):
+        """From the $ of $' to after the closing quote, a \\' inside not closing it."""
+        t = self.t
+        j = i + 2
+        while True:
+            m = ANSI_STOP.search(t, j)
+            if m is None:
+                return self.halt()
+            if m.group() == "'":
+                return m.end()
+            j = m.end() + 1
+
+    def skip_array(self, i):
+        """From after the ( of NAME=( to after its ). Quotes and expansions inside
+        are read as they are in a word, so a ) in one does not close it."""
+        t, n = self.t, self.n
+        while i < n:
+            c = t[i]
+            if c == ")":
+                return i + 1
+            if c == "(" or (c == "#" and t[i - 1] in WS + "\n("):
+                return self.halt()
+            j = self.special(i, [])
+            if self.halted:
+                return n
+            i = i + 1 if j is None else j
+        return self.halt()
+
+    def skip_test(self, i):
+        """From after [[ to after the ]] that closes it. Operators and a regular
+        expression can hold ( ) | & < >, so only the closing ]] word ends it."""
+        t, n = self.t, self.n
+        boundary = False
+        while i < n:
+            if boundary and t.startswith("]]", i) and t[i + 2:i + 3] in ("", " ", "\t", "\n", ";", "&", "|", ")"):
+                return i + 2
+            j = self.special(i, [])
+            if self.halted:
+                return n
+            if j is None:
+                boundary = t[i] in WS + "\n"
+                i += 1
+            else:
+                boundary = False
+                i = j
+        return self.halt()
 
     def redirect(self):
         t, n, i = self.t, self.n, self.i
@@ -401,8 +666,9 @@ class Shell:
         elif two == "<<":
             kind, width = "heredoc", 2
         elif two in ("<(", ">("):
-            self.end_command()
             self.i = i + 2
+            self.substitution(")")
+            self.take("$")
             return
         elif two in (">&", "<&"):
             kind, width = "operand", 2
@@ -413,10 +679,12 @@ class Shell:
         self.i = i + width
         while self.i < n and t[self.i] in WS:
             self.i += 1
-        if self.i >= n or t[self.i] in SEPARATORS or (t[self.i] == "$" and t.startswith("(", self.i + 1)):
+        if self.i >= n or t[self.i] in SEPARATORS:
             return
         start = self.i
         operand = self.word()
+        if self.halted:
+            return
         if self.i == start:
             self.i += 1
         elif kind == "path":
@@ -437,7 +705,17 @@ class Shell:
                 if (line.lstrip("\t") if tabs else line) == delimiter:
                     break
 
-    def take(self, word):
+    def test_expression(self):
+        """A [[ just read: read past the expression to its ]] and past whatever
+        follows it on the command."""
+        j = self.skip_test(self.i)
+        if not self.halted:
+            self.i = j
+            self.skip = True
+
+    def take(self, word, quoted_at=None):
+        """One resolved word. quoted_at is where its first quote, escape or
+        expansion begins, as word() reports it."""
         if self.skip:
             return
         if self.program is None:
@@ -445,6 +723,12 @@ class Shell:
                 return
             if word in HEADERS:
                 self.skip = True
+                return
+            if word == "case":
+                self.halt()
+                return
+            if word == "[[" and quoted_at is None:
+                self.test_expression()
                 return
             if is_assignment(word):
                 return
@@ -457,6 +741,10 @@ class Shell:
         if self.wrapper:
             if is_assignment(word):
                 return
+            if word == "[[" and quoted_at is None:
+                # time [[ a > b ]] is a test, and sudo [[ ... is not a command at all.
+                self.test_expression()
+                return
             if not word.startswith("-"):
                 name = program_name(word)
                 if name:
@@ -467,9 +755,15 @@ class Shell:
         if word == "--":
             self.ddash = True
         elif word.startswith("-") and len(word) > 1 and not self.ddash:
-            name = flag_name(word)
-            if name:
-                self.out.add(name)
+            # A flag's name is typed bare. A quoted string that starts with a dash
+            # is a value, and so is anything after the = whatever its quoting.
+            eq = word.find("=")
+            if quoted_at is None or (eq >= 0 and quoted_at > eq):
+                name = flag_name(word)
+                if name:
+                    self.out.add(name)
+            else:
+                self.positional(word)
         else:
             self.positional(word)
 

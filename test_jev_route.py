@@ -29,6 +29,7 @@ import io
 import json
 import os
 import pathlib
+import random
 import re
 import socket
 import subprocess
@@ -299,6 +300,24 @@ ONE_MEGABYTE_COMMANDS = {
     "paths": lambda: "cat " + "./a " * (MB // 4),
     "newlines": lambda: "\n" * MB,
     "mixed": lambda: "a='b' \"c\" $d `e` ;f|g&h <i >j (k) " * (MB // 36),
+    # The regions the reader skips without looking in, closed and not closed.
+    "test expression": lambda: "[[ " + "a " * (MB // 2) + "]] && ls",
+    "unterminated test expression": lambda: "[[ " + "a " * (MB // 2),
+    "many test expressions": lambda: "[[ a ]] && " * (MB // 11),
+    "array literal": lambda: "A=(" + "a 'b c' " * (MB // 8) + ") ls",
+    "unterminated array literal": lambda: "A=(" + "a " * (MB // 2),
+    "many array literals": lambda: "A=(a) " * (MB // 6),
+    "arithmetic": lambda: "echo $((" + "1 + " * (MB // 4) + "1)) && ls",
+    "unterminated arithmetic": lambda: "echo $((" + "(" * (MB // 2),
+    "many arithmetic": lambda: "x=$((1<<2)) " * (MB // 12),
+    "parameter expansion": lambda: "echo ${X:-" + "a " * (MB // 2) + "} && ls",
+    "unterminated parameter expansion": lambda: "echo ${X:-" + "a " * (MB // 2),
+    "many parameter expansions": lambda: "echo ${X} " * (MB // 10),
+    "ansi string": lambda: "echo $'" + "a\\'" * (MB // 3) + "' && ls",
+    "unterminated ansi string": lambda: "echo $'" + "a\\'" * (MB // 3),
+    "deep substitutions": lambda: "echo " + "$(echo " * (MB // 7),
+    "substitutions in double quotes": lambda: 'echo "' + "$(echo a) " * (MB // 10) + '"',
+    "backticks in double quotes": lambda: 'echo "' + "`echo a` " * (MB // 9) + '"',
 }
 
 
@@ -459,10 +478,12 @@ def test_the_shipped_mode_is_shadow():
 def test_the_shipped_numbers_are_the_ones_claude_md_states():
     assert (jev.CONFIDENCE, jev.HOOK_BUDGET_S, jev.MAX_OUT, jev.MAX_PATH, jev.MAX_SCAN) == (0.8, 2.5, 2000, 200, 65536)
     assert (jev.BREAKER_ERRORS, jev.BREAKER_S) == (3, 600)
+    assert jev.MAX_NEST == 8 and len(WRAPPERS) == 14
     section = (ROOT / "CLAUDE.md").read_text().split("## The Jev router")[1].split("\n## ")[0]
     flat = " ".join(section.split())
     for stated in ("probability of 0.8", "2.5 seconds", "2,000 characters", "200 characters", "64 KiB",
-                   "three failed requests", "ten minutes", "`ENFORCE = False`", "`TYPESAFE_API_KEY`"):
+                   "three failed requests", "ten minutes", "`ENFORCE = False`", "`TYPESAFE_API_KEY`",
+                   "any nesting up to 8", "nesting past 8", "fourteen wrapping commands"):
         assert stated in flat, stated
 
 
@@ -842,6 +863,89 @@ VALUE_PLACES = [
     "echo {s} &",
     "echo {s} | cat",
     "echo {s} && echo {s} || echo {s}",
+    # Syntax the reader once guessed at. Each row below sent the value as a
+    # program name, a flag name or a path before the reader stopped guessing.
+    # An array literal.
+    "KEYS=({s} other)",
+    "KEYS=(other {s})",
+    "KEYS=(\"a b\" {s})",
+    "KEYS=($(echo a) {s})",
+    "A+=({s})",
+    "A=({s}) echo hi",
+    "declare -a KEYS=({s} other)",
+    "declare -A M=([a]={s} [b]=c)",
+    "PASSWORDS=({s} x) deploy.sh",
+    # A subscripted assignment is a variable, not a program with a path in it.
+    "A[0]=x/{s}",
+    "A[$i]=x/{s}",
+    "arr=(a b); arr[1]=http://h/{s}",
+    # case, [[ ]] and arithmetic: a pattern, an operand or a name, never a command.
+    "case $1 in start|{s}) echo hi;; esac",
+    "case x in ({s}) true;; esac",
+    "[[ $x =~ ^({s}|b)$ ]] && echo yes",
+    "[[ x > {s} ]]",
+    "[[ x < {s} ]]",
+    "[[ x == @({s}|b) ]]",
+    "[[ ( -n x ) && {s} == y ]]",
+    "[[ a =~ x\\ ]]|{s} ]] && ls",
+    "[[ a =~ \"x ]]\"|{s} ]] && ls",
+    "time [[ x > {s} ]]",
+    "! [[ x < {s} ]]",
+    "time (( {s} > 1 ))",
+    # A list that never closes is not known to be a list, so nothing in it is sent.
+    "echo \"$(echo a; {s}",
+    "echo $(echo a; {s}",
+    "echo `echo a; {s}",
+    "echo $(echo a; {s} 'unclosed)",
+    "echo \"`echo a$(`; {s}",
+    "[[ \"a b\" == '{s}' ]]; echo done",
+    "echo $(({s} + 1))",
+    "echo $(( ({s}) ))",
+    "echo $(({s}<<2))",
+    "(( {s} = 1 << 3 ))\nls",
+    "((i++)); echo {s}",
+    "for (({s}=0; {s}<3; {s}++)); do echo; done",
+    "x=$(({s}<<2))\ngit push",
+    # A separator inside a parameter expansion or an ANSI-C string.
+    "echo ${{X:-a b;{s} c}}",
+    "echo ${{X:+a|{s}}}",
+    "echo ${{X:-({s})}}",
+    "echo $'pre\\'; {s} --secret-flag \\'post'",
+    "echo $'a\\'b' {s}",
+    # Quotes nested inside a substitution inside a double quoted string.
+    "git commit -m \"$(cat <<'EOF'\nFix the 5\" pipe handling\n\nRotated the credential for staging\n{s} is the new value\nEOF\n)\"",
+    "git commit -m \"$(cat <<'EOF'\nFix a \"bug\nsecond line {s} here\nEOF\n)\"",
+    "gh pr create --body \"$(cat <<EOF\nit's \"odd\n{s}\nEOF\n)\"",
+    "echo \"$(echo \"\n{s} x x \")\"",
+    "echo \"$(echo 'x\"; {s} ')\"",
+    "echo \"x $(echo \"a;\n{s}\n\") y\"",
+    "curl -d \"$(printf '%s' \"user\n{s}\n\")\" https://x",
+    "echo \"`echo \"a;{s}\"`\"",
+    "echo \"$(echo \"$(echo \"a; {s}\")\")\"",
+    # A quoted string after a wrapper is one word, and its tail is not a program.
+    "watch \"curl https://h/api/{s}\"",
+    "time \"echo x/{s}\"",
+    "sudo \"A B=x/{s}\"",
+    "env \"A B={s}/x\" true",
+    "xargs \"echo a/{s}\"",
+    "command \"x y/{s}\"",
+    "exec \"a:b/{s}\"",
+    # A word after a substitution or a subshell is an argument, not a new command.
+    "echo $(whoami) {s}",
+    "echo `whoami` {s}",
+    "echo $(whoami){s} x",
+    "echo a$(whoami){s}",
+    "echo \"$(date)\" {s}",
+    "sudo $(which foo) {s}",
+    "cat <(echo a) {s}",
+    "cat <(echo a){s}",
+    "(echo a) {s}",
+    "(echo a){s}",
+    "{s}$(date) foo",
+    # A quoted string that starts with a dash is a value, not a flag.
+    "git commit -m '--{s}'",
+    "echo \"--{s}\"",
+    "ls '--{s}'=auto",
 ]
 
 
@@ -855,6 +959,123 @@ def test_no_value_leaves_wherever_it_sits_in_a_command(stub, command, canary):
     go(stub, payload(command=command))
     assert canary not in sent_everything(stub)
     assert canary[:6] not in sent_text(stub)
+
+
+Q, S, BT, BS, NL = '"', "'", "`", "\\", "\n"
+
+# Each wraps a command, as written inside another command's quotes or
+# substitution, so every row above is also read at a nesting the rows do not
+# spell out. Nothing here runs the command: the reader reads text.
+WRAPPERS = {
+    "dq_sub": lambda c: "echo " + Q + "$(" + c + ")" + Q,
+    "assign_dq_sub": lambda c: "X=" + Q + "$(" + c + ")" + Q,
+    "dq_backtick": lambda c: "echo " + Q + BT + c + BT + Q,
+    "sh_c_sq": lambda c: "sh -c " + S + c.replace(S, "") + S,
+    "eval_dq": lambda c: "eval " + Q + c.replace(Q, BS + Q) + Q,
+    "plain_sub": lambda c: "echo $(" + c + ")",
+    "if_then": lambda c: "if true; then " + c + "; fi",
+    "ssh_dq": lambda c: "ssh host " + Q + c.replace(Q, BS + Q) + Q,
+    "time_dq": lambda c: "time " + Q + c.replace(Q, BS + Q) + Q,
+    "xargs_dq": lambda c: "xargs " + Q + c.replace(Q, BS + Q) + Q,
+    "watch_dq": lambda c: "watch " + Q + c.replace(Q, BS + Q) + Q,
+    "group": lambda c: "{ " + c + "; }",
+    "subshell": lambda c: "( " + c + " )",
+    "for_do": lambda c: "for i in 1 2; do " + c + "; done",
+}
+
+
+def fits_wrapper(wrapper, template):
+    """Escaping the quotes of a command that holds a substitution, or putting a
+    command that holds backticks inside backticks, makes it a different command
+    in which the canary can be a program. Those pairs are not value places."""
+    if wrapper in ("eval_dq", "ssh_dq", "time_dq", "xargs_dq", "watch_dq"):
+        return "$(" not in template and BT not in template
+    if wrapper == "dq_backtick":
+        return BT not in template
+    return True
+
+
+@pytest.mark.parametrize("wrapper", sorted(WRAPPERS))
+def test_no_value_leaves_when_a_command_sits_inside_another_command(wrapper):
+    leaks = []
+    for template in VALUE_PLACES:
+        if not fits_wrapper(wrapper, template):
+            continue
+        for canary in CANARIES:
+            command = WRAPPERS[wrapper](template.format(s=canary))
+            text = outline(command)
+            if canary in text or canary[:6] in text:
+                leaks.append((command, text))
+    assert leaks == [], leaks[:3]
+
+
+def quoted_canary_command(rng, canary):
+    """A command with the canary only inside quoted text, which nests up to three
+    deep through $( ) and backticks, and with the separators, odd quote counts
+    and newlines that desynchronise a reader that tracks quotes badly. The canary
+    is quoted text in bash whatever the nesting: none of it is a command."""
+    seps = [" ", "; ", NL, " | ", " && ", " ", " ", " -", " --", " > "]
+
+    def text(with_canary):
+        parts = []
+        for _ in range(rng.randint(1, 4)):
+            parts.append(rng.choice(["foo", "bar baz", "x", "a-b", "k=v", "tok"]))
+            parts.append(rng.choice(seps))
+        s = "".join(parts)
+        if with_canary:
+            i = rng.randint(0, len(s))
+            s = s[:i] + rng.choice(seps) + canary + rng.choice(seps) + s[i:]
+        return s
+
+    def single(with_canary):
+        return S + text(with_canary).replace(S, "") + S
+
+    def double(depth, with_canary):
+        body, n = [], rng.randint(1, 3)
+        at = rng.randrange(n) if with_canary else -1
+        for k in range(n):
+            kind = rng.choice(["t", "t", "sub", "bt"]) if depth < 3 else "t"
+            if kind == "t":
+                body.append(text(k == at).replace(Q, "").replace("$", "").replace(BT, "").replace(BS, ""))
+            elif kind == "sub":
+                body.append("$(" + command(depth + 1, k == at) + ")")
+            else:
+                body.append(BT + command(depth + 1, k == at) + BT)
+        return Q + "".join(body) + Q
+
+    def command(depth, with_canary):
+        words, n = ["echo"], rng.randint(1, 3)
+        at = rng.randrange(n) if with_canary else -1
+        for k in range(n):
+            kind = rng.choice(["sq", "dq", "dq", "bare"])
+            if kind == "sq":
+                words.append(single(k == at))
+            elif kind == "dq":
+                words.append(double(depth, k == at))
+            else:
+                words.append(single(True) if k == at else "w%d" % k)
+        return " ".join(words)
+
+    return command(0, True)
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+def test_a_value_inside_quoted_text_never_leaves_at_any_nesting(seed):
+    """The differential fuzz the reader failed at 22165922: 876 leaks in 20,000
+    commands at seed 1, found by putting the canary only in quoted text."""
+    rng = random.Random(seed)
+    leaks, made = [], 0
+    for _ in range(4000):
+        command = quoted_canary_command(rng, CANARIES[0])
+        if CANARIES[0] not in command:
+            continue
+        made += 1
+        text = outline(command)
+        if CANARIES[0] in text:
+            leaks.append((len(command), command, text))
+    assert made > 3500
+    leaks.sort()
+    assert leaks == [], leaks[:3]
 
 
 @pytest.mark.parametrize("command,expected", [
@@ -892,9 +1113,85 @@ def test_no_value_leaves_wherever_it_sits_in_a_command(stub, command, canary):
     ("x86_64-linux-gnu-gcc --version", "x86_64-linux-gnu-gcc --version"),
     ("", ""),
     ("   \n\n  ", ""),
+    # What the reader reads past without looking in, and the commands around it.
+    ("[[ -f x ]] && rm -rf build", "rm -rf"),
+    ("if [[ -z \"$X\" ]]; then rm -rf build; fi", "rm -rf"),
+    ("x=$((1<<4))\ngit push --force origin main\nrm -rf build", "git --force\nrm -rf"),
+    ("dd if=/dev/zero of=x bs=$((1<<20)) count=1\nrm x", "dd\nrm"),
+    ("echo $((1<<4))\nls -la", "echo\nls -la"),
+    ("(( n = 1 << 3 ))\nls", "ls"),
+    ("for ((i=0;i<3;i++)); do echo $i; done", "echo"),
+    ("ls $(( $(date +%s) - 5 )) && git push --force", "ls\ngit --force"),
+    ("PASSWORDS=(hunter2 s3cr3tvalue) deploy.sh", "deploy.sh"),
+    ("declare -a KEYS=(a b)", "declare -a"),
+    ("echo $'it\\'s ok; hunter2' && ls", "echo\nls"),
+    ("echo ${X:-a b;c} && ls", "echo\nls"),
+    # A substitution inside double quotes is a command list with its own quotes.
+    ("git commit -m \"$(cat <<'EOF'\nFix the 5\" pipe\nbody\nEOF\n)\" && git push", "git -m\ncat\ngit"),
+    ("echo \"$(echo \"a;\nb\")\" && ls", "echo\necho\nls"),
+    # A word after a substitution belongs to the command around it.
+    ("echo $(whoami) -n", "echo\nwhoami\n-n"),
+    ("cat <(sort a) b", "cat\nsort"),
+    # A flag is typed bare. Quoting its value does not hide its name.
+    ("git commit --message=\"fix\" --author='a b'", "git --message --author"),
+    ("git commit -m '--wip-token'", "git -m"),
+    ("ls --co\"lor\"=auto", "ls"),
 ])
 def test_the_outline_of_a_command_is_programs_flags_and_paths(command, expected):
     assert outline(command) == expected
+
+
+@pytest.mark.parametrize("command,expected", [
+    ("ls -la; case $x in a) rm -rf b;; esac; git push --force", "ls -la"),
+    ("ls; foo() { rm -rf b; }; git push --force", "ls\nfoo"),
+    ("ls; echo a(b); git push --force", "ls\necho"),
+    ("ls; echo @(a|b); git push --force", "ls\necho"),
+    ("ls; echo ${X:-'a'}; git push --force", "ls\necho"),
+    ("ls; echo ${X:-$(date)}; git push --force", "ls\necho"),
+    ("ls; echo $(( 'a' )); git push --force", "ls\necho"),
+    ("ls; echo $((1+2); git push --force", "ls\necho"),
+    ("ls; echo $'abc; git push --force", "ls\necho"),
+    ("ls; echo ${X:-a; git push --force", "ls\necho"),
+    ("ls; A=(a (b)); git push --force", "ls"),
+    ("ls; echo a); git push --force", "ls\necho"),
+    ("ls; [[ a == b; git push --force", "ls"),
+    # A list inside $( ) or backticks that does not close sends nothing from inside.
+    ("ls; echo $(echo a; git push --force", "ls\necho"),
+    ("ls; echo \"$(echo a; git push --force", "ls\necho"),
+    ("ls; echo `echo a; git push --force", "ls\necho"),
+    ("ls; echo $(echo a 'b; git push --force)", "ls\necho"),
+    ("ls; echo $(echo $(echo a; git push --force)", "ls\necho"),
+])
+def test_syntax_the_reader_does_not_model_ends_the_read_and_nothing_after_it_is_guessed_at(command, expected):
+    assert outline(command) == expected
+
+
+def test_a_backslash_inside_backticks_ends_the_read():
+    assert "git" not in outline("echo `echo \\`x\\``; git push --force")
+    assert "git" not in outline("echo `echo \"a\\\"b\"`; git push --force")
+
+
+def test_substitutions_nested_past_the_cap_end_the_read_and_never_crash():
+    deep = "echo " + "$(echo " * 40 + ")" * 40 + "; git push --force"
+    lines = outline(deep).split("\n")
+    assert len(lines) <= jev.MAX_NEST + 2 and "git" not in lines
+    assert outline("echo " + "$(echo " * (jev.MAX_NEST - 1) + ")" * (jev.MAX_NEST - 1) + "; ls").endswith("ls")
+
+
+def test_a_program_name_comes_from_a_whole_word_that_is_a_plain_piece():
+    assert jev.program_name("git") == "git"
+    assert jev.program_name("/usr/bin/env") == "env"
+    assert jev.program_name("./run.sh") == "run.sh"
+    for word in ("curl https://h/api/Zq81nTwUvaBcDe", "A B=x/Zq81nTwUvaBcDe", "A[0]=x/Zq81nTwUvaBcDe",
+                 "x:y/Zq81nTwUvaBcDe", "a=b/c", "a/b c", "$/x", "", "/", "a/" + "b" * 41):
+        assert jev.program_name(word) is None, word
+
+
+def test_an_assignment_may_carry_a_subscript_and_is_still_an_assignment():
+    for word in ("A=1", "A+=1", "A=", "A[0]=x", "A[i]+=x", "arr[1]=http://h/x", "A[$i]=x/y", "_a1=b"):
+        assert jev.is_assignment(word), word
+    for word in ("A", "A[0]", "A[0", "[0]=x", "A[0]x=1", "a-b=c", "=x", "1a=b", "A.b=c"):
+        assert not jev.is_assignment(word), word
 
 
 def test_a_long_run_of_digits_is_not_a_program_or_a_flag_name():

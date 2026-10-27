@@ -831,7 +831,36 @@ it so, which is why a name over 30 characters, outside letters, digits and
 a secret would still leave. A path that exists and has a secret in its own name
 is a path and leaves. Subcommands do not leave, so Jev sees `git` and
 `--force` and not `push`. Whether Jev can judge anything from so little is not
-known; the ledger is where that gets measured.
+known; the ledger is where that gets measured. A flag's name has to be typed
+bare: a quoted string that starts with a dash is a value and is not sent, and so
+is whatever follows the `=` in `--name="value"`, while `--name` is.
+
+**The reader models a small part of the shell and stops at the first thing
+outside it.** A reader that guesses at syntax it lacks reads data as commands,
+and every program word is sent. Independent verifiers found that the first
+rebuild (`2216592`) did exactly that: an array literal, a `case` pattern, the
+operands of `[[ ]]` and `$(( ))`, a `${X:-a;b}` default, an ANSI-C string with an
+escaped quote, a double quote nested inside `$( )` inside a double quoted string (the
+`git commit -m "$(cat <<'EOF' ... )"` idiom), the tail of a quoted string after
+`sudo`, `watch` or `time`, and any word after a closing `)` or backtick were
+each read as a program, and the first word of each went out. It now reads simple
+commands, pipelines and lists, `if`, `while`, `until`, `for`, brace groups,
+subshells, quotes and escapes, `$( )`, backticks and `<( )` with their own quote
+state at any nesting up to 8, heredocs and here-strings. It reads past, without
+looking inside, `$(( ))`, `(( ))`, `[[ ]]`, `${ }`, `$' '` and the literal of an
+array assignment. It stops, drops the rest of the command and sends what it had
+read before that point, at a `case`, a function definition, an extglob group, a
+`${ }` with a quote or a nested expansion in it, arithmetic with a quote in it,
+a backslash inside backticks, a stray `)`, an unterminated region and nesting
+past 8. A command list inside `$( )`, `<( )` or backticks that stops before its
+closer sends nothing from inside it, because a list that never closes is not
+known to be one. A program name comes from a whole word that is a plain piece: a
+word with a space, a colon or an `=` in it is a string or an assignment and its
+tail is not a program. The cost is fidelity and not secrecy: a command that stops
+early shows Jev less, and `foo() { rm -rf x; }` shows `foo` and not the `rm`.
+`test_jev_route.py` pins each construct as a value place, runs the whole table
+again inside fourteen wrapping commands, and runs a seeded fuzz that puts a
+canary only in quoted text nested three deep.
 
 It ships in shadow mode, `ENFORCE = False`: it asks, records the answer and
 prints nothing. Enforcement is a separate ruling and a one line commit, and
