@@ -197,7 +197,7 @@ assert.deepEqual(Object.keys(out[0].json), ["segIndex", "links", "body"]);
 // so s0c2 is the PNG and scores links[1], which is the third clip.
 const first = out[0].json;
 assert.deepEqual(first.links, ["https://videos.pexels.com/s0c1.mp4", "https://videos.pexels.com/s0c3.mp4"]);
-assert.equal(first.body.model, "jev-latest");
+assert.equal(first.body.model, "jev-1.14.0", "pinned, ruled 2026-10-27");
 assert.deepEqual(first.body.state, { sentence: "First we open the dashboard." });
 assert.deepEqual(Object.keys(first.body.questions), ["s0c1", "s0c2"]);
 assert.deepEqual(first.body.questions.s0c1, { type: "score", instructions: ask("s0c1"), criteria: CRITERIA });

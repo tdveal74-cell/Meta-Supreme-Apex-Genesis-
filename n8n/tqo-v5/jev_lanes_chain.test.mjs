@@ -422,7 +422,7 @@ const checkOut = checkBody(dollar({ "Thumb: Pick Still": [{ json: pickShadow }] 
 assert.equal(checkOut.length, 1);
 const cb = checkOut[0].json.body;
 checkRequest(cb, { types: ["noul", "box"] });
-assert.equal(cb.model, "jev-preview", "the check has a box question, and Box needs Jev 1.14");
+assert.equal(cb.model, "jev-1.14.0", "the check has a box question, Box needs Jev 1.14, and the model is pinned");
 assert.equal(cb.state.headline, pickShadow.headline);
 assert.equal(cb.assets["<thumb>"].data_base64, COMPOSED);
 assert.ok(Object.values(cb.questions).some((q) => q.type === "box"));

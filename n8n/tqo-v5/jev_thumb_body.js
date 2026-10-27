@@ -147,5 +147,5 @@ try {
     urls[k - 1] = meta.url;
   }
   if (!Object.keys(questions).length) return [];
-  return [{ json: { urls, body: { model: 'jev-latest', state: { subject, headline }, questions, assets } } }];
+  return [{ json: { urls, body: { model: 'jev-1.14.0', state: { subject, headline }, questions, assets } } }];
 } catch (e) { return []; }

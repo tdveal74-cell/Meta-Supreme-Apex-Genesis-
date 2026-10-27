@@ -1,18 +1,27 @@
 # Wiring the Jev image lanes into TQO FINAL V5
 
 Ruled by Tee 2026-10-16, "Do thumbnail & b roll". This directory holds the
-code for three Jev side branches. None of it is wired, nothing is published,
-and no TypeSafe request has been made from any of it. Every lane ships in
-shadow, behind a `JEV_APPLY` constant that only a ruling flips. While it is
-false, today's choices stand and the lanes only report: Build Movie counts the
-segments Jev ranked and the segments where Jev would pick another clip, Pick
-Still records the photo Jev would pick, and the Shim records Jev's note on the
-finished thumbnail.
+code for three Jev side branches. Every lane ships in shadow, behind a
+`JEV_APPLY` constant that only a ruling flips. While it is false, today's
+choices stand and the lanes only report: Build Movie counts the segments Jev
+ranked and the segments where Jev would pick another clip, Pick Still records
+the photo Jev would pick, and the Shim records Jev's note on the finished
+thumbnail.
 
-What exists is offline proof: each node body runs in a harness against stubs
-and against the unmodified export code, and those harnesses run in CI. They
-prove the nodes keep today's output and read Jev's answers the way the
-TypeSafe docs describe them. They prove nothing about what Jev answers.
+**Live since 2026-10-27T21:59Z, in shadow.** Tee ruled three cards that day:
+"Standalone harness", "Draft now, publish card next" and "Publish now". The
+lanes were proven first in a separate inactive workflow against the real
+TypeSafe API (`jev-harness/`, execution 4737), then drafted into TQO FINAL V5
+and published as version `3db61aef`, read back equal to the draft.
+`live-jev-lanes/` holds the published nodes and the test that holds the repo
+to them. Rollback is one publish of `fc75f7a6`. Every `JEV_APPLY` is still
+false, and flipping one is still a separate ruling.
+
+The offline proof still stands beside that: each node body runs in a harness
+against stubs and against the unmodified export code, and those harnesses run in
+CI. They prove the nodes keep today's output and read Jev's answers the way the
+TypeSafe docs describe them. What Jev answers on a real episode is read from the
+first real render, and as of the publish no render had run through the lanes.
 
 ## The files
 
@@ -34,6 +43,11 @@ the export read on 2026-10-10. Whether it was still the published version on
 anything outside the Jev code differs from it.
 
 ## Before anything is wired, Tee's on a card
+
+All three were done by 2026-10-27. Tee funded the account, made the Header Auth
+credential "Jev" (`AJM16uvmcW88bSL4`) on the instance, and ruled the wiring on
+the three cards above. One approved authenticated call answered as jev-1.14.0
+before the harness ran.
 
 1. Fund the TypeSafe account. Jev bills per input token, $0.042 per million
    on both Jev 1.13 and 1.14 (docs.typesafe.ai/models, read 2026-10-16), and
@@ -68,7 +82,11 @@ another.
 | `Jev: Fetch B-Roll Still` | HTTP Request 4.2, GET `={{ $json.stillUrl }}` | response format File, timeout 10000, `onError: continueRegularOutput`, `alwaysOutputData: true` |
 | `Jev: Still To Base64` | Extract From File, Move File to Base64 String | destination key `still_b64`, `onError: continueRegularOutput` |
 | `Jev: B-Roll Bodies` | Code, run once for all items | body `jev_broll_bodies.js` |
-| `Jev: Rank B-Roll` | HTTP Request 4.2, POST `https://api.typesafe.ai/v1/systemone` | Header Auth credential, header `TypeSafe-Danger-Zone-Images: true`, JSON body `={{ $json.body }}`, timeout 30000, `onError: continueRegularOutput`, `alwaysOutputData: true` |
+| `Jev: Rank B-Roll` | HTTP Request 4.2, POST `https://api.typesafe.ai/v1/systemone` | Header Auth credential, header `TypeSafe-Danger-Zone-Images: true`, JSON body `={{ JSON.stringify($json.body) }}`, timeout 30000, `onError: continueRegularOutput`, `alwaysOutputData: true` |
+
+The JSON body is the form the live Cerebras nodes already use on this instance.
+This table said `={{ $json.body }}` until 2026-10-27; the stringify form is the
+one the harness ran and the one published.
 
 Then replace `Build Movie`'s code with `build_movie.js`.
 
@@ -99,7 +117,12 @@ A side branch off `Thumb: Compose`, placed above `Shim: Thumbnail To Binary`.
 |---|---|---|
 | `Jev: Thumb To Base64 (Composed)` | Extract From File on binary property `thumbData` | destination key `still_b64`, `onError: continueRegularOutput` |
 | `Jev: Thumb Check Body` | Code, run once for all items | body `jev_thumb_check_body.js` |
-| `Jev: Check Thumb` | HTTP Request 4.2, POST | as `Jev: Rank B-Roll`; the body names `jev-preview`, because a Box question needs Jev 1.14 |
+| `Jev: Check Thumb` | HTTP Request 4.2, POST | as `Jev: Rank B-Roll`; a Box question needs Jev 1.14 |
+
+All three request bodies send the pinned `jev-1.14.0`, ruled by Tee 2026-10-27
+on the draft card, so the floors cannot move under the shadow numbers if
+TypeSafe moves an alias. Until then the two rank bodies sent `jev-latest` and
+this one `jev-preview`; in execution 4737 all three answered as jev-1.14.0.
 | `Jev: Thumb Verdict` | Code, run once for all items | body `jev_thumb_check_verdict.js` |
 
 `Thumb: Compose` sets `onError: continueRegularOutput`, so a failed compose
@@ -168,6 +191,31 @@ wiring.
   images page says both accept images. The images page is the one these
   lanes follow; the first live call settles it.
 
+Re-read on 2026-10-27T21:28Z, before the harness ran. Every number above still
+matches. What changed or was not recorded above:
+
+- The models page now maps both `jev-latest` and `jev-preview` to `jev-1.14.0`,
+  says 1.14 was available from 2026-10-14, and says `jev-preview` moves ahead of
+  `jev-latest` when a preview build exists. That is why the bodies now pin
+  `jev-1.14.0` rather than name either alias.
+- A third 32 MiB limit applies to all images in a request after the API
+  processes them, and processing can make an image larger than the file sent.
+- Animated PNGs are rejected. An image over a size limit returns 413, one under
+  the minimum or damaged returns 400.
+- Each asset reference is at most 1,024 bytes and all of them at most 65,536,
+  and an asset that no question or state references returns 400.
+- Multipart upload is now the recommended way to send images. Base64 in JSON,
+  which these lanes use, is still allowed and costs about a third more size.
+- A `TypeSafe-Danger-Zone-Long-Context: true` header raises the context limits
+  to 262k tokens. These lanes do not send it.
+- How many input tokens an image costs is still not published. Measured in
+  execution 4737: 8,657 for four 1200 by 630 stills with one sentence, 6,659 for
+  three with a subject and headline, 2,822 for one 1280 by 720 frame.
+- The images feature is still marked as not production ready.
+
+Whether these were new since 2026-10-16 or only not copied in then is not
+known; no copy of the earlier pages was kept.
+
 ## Known risks the first wired run should read
 
 - Two Split In Batches loops hold these lanes: `One Row at a Time` around the
@@ -187,6 +235,22 @@ wiring.
   and request body is kept in n8n's database. The size of that is unmeasured.
 
 ## Proving it after wiring
+
+What was done on 2026-10-27, in order. Tee ruled a standalone harness over an
+inactive copy of the whole workflow, because the copy could not be isolated (see
+`jev-harness/README.md`). The harness ran once as execution 4737 and every check
+in step 1 below held on fixture input. The lanes were then drafted into the live
+workflow in seven updates, read back equal to the repo bodies byte for byte,
+published as `3db61aef` and read back again: step 2 held. Step 3 is
+`live-jev-lanes/`, which pins the published nodes to the repo files rather than
+regenerating the exports, because nine test files and
+`services/devon/show_registry.py` read the exports at `9320520f`, counted with
+grep on 2026-10-27. Step 4 has not been asked.
+
+Still open after the publish, and readable only on the first real render:
+whether n8n's two Split In Batches loops hand the side branches the right row,
+whether Compose behaves the same inside the full graph, the item counts after a
+failed still fetch, and Jev's answers on a real episode's narration and photos.
 
 The house pattern for this workflow: wire an inactive copy, run it, read the
 execution, archive the copy, then change the live workflow.

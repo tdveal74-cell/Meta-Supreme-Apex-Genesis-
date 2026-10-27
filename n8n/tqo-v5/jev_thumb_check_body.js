@@ -7,14 +7,14 @@
 // It asks three things about the 1280x720 frame Thumb: Compose made, and the
 // verdict node turns the answers into a note:
 //   headline_present   is the headline on the image as text at all
-//   headline_box       where that text sits. A Box question needs Jev 1.14, which
-//                      is jev-preview or jev-1.14.0 (box.md), so the whole request
-//                      uses one of them. It names the moving alias jev-preview on
-//                      purpose: nothing is tuned against a version yet. The
-//                      response's model field names the version that answered;
-//                      the HTTP node's saved execution keeps it, and nothing
-//                      downstream records it.
-//                      Pin jev-1.14.0 once thresholds are tuned on shadow data.
+//   headline_box       where that text sits. A Box question needs Jev 1.14
+//                      (box.md). All three lanes send the pinned jev-1.14.0, ruled
+//                      by Tee 2026-10-27 on a card, so the thresholds cannot move
+//                      under the shadow numbers if TypeSafe moves an alias. On that
+//                      day jev-latest and jev-preview both answered as jev-1.14.0,
+//                      measured in harness execution 4737. The response's model
+//                      field names the version that answered; the HTTP node's
+//                      saved execution keeps it, and nothing downstream records it.
 //   headline_readable  is every word of the headline easy to read at phone size.
 //                      One condition, as noul.md asks for one per Noul. A headline
 //                      touching the edge is the box rules' job in the verdict.
@@ -44,7 +44,7 @@ try {
   }
   if (format && headline) {
     out = [{ json: { body: {
-      model: 'jev-preview',
+      model: 'jev-1.14.0',
       state: { thumb: '<thumb>', headline },
       questions: {
         headline_present: {

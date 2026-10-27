@@ -180,7 +180,7 @@ let out = bodyOf([JPEG, PNG, JPEG]);
 assert.equal(out.length, 1);
 assert.deepEqual(out[0].json.urls, [U1, U2, U3]);
 let body = out[0].json.body;
-assert.equal(body.model, "jev-latest");
+assert.equal(body.model, "jev-1.14.0", "pinned, ruled 2026-10-27");
 assert.deepEqual(body.state, { subject: "professional desk window evening", headline: "THE MIDDLE IS THE TARGET" });
 assert.deepEqual(Object.keys(body.questions), ["p1", "p2", "p3"]);
 for (const k of [1, 2, 3]) {

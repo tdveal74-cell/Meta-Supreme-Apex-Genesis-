@@ -190,7 +190,7 @@ try {
     }
     if (!links.length) continue;
 
-    out.push({ json: { segIndex, links, body: { model: 'jev-latest', state: { sentence: narration }, questions, assets } } });
+    out.push({ json: { segIndex, links, body: { model: 'jev-1.14.0', state: { sentence: narration }, questions, assets } } });
   }
   return out;
 } catch (e) { return []; }
