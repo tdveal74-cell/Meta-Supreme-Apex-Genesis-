@@ -846,18 +846,27 @@ escaped quote, a double quote nested inside `$( )` inside a double quoted string
 each read as a program, and the first word of each went out. It now reads simple
 commands, pipelines and lists, `if`, `while`, `until`, `for`, brace groups,
 subshells, quotes and escapes, `$( )`, backticks and `<( )` with their own quote
-state at any nesting up to 8, heredocs and here-strings. It reads past, without
-looking inside, `$(( ))`, `(( ))`, `[[ ]]`, `${ }`, `$' '` and the literal of an
-array assignment. It stops, drops the rest of the command and sends what it had
-read before that point, at a `case`, a function definition, an extglob group, a
-`${ }` with a quote or a nested expansion in it, arithmetic with a quote in it,
-a backslash inside backticks, a stray `)`, an unterminated region and nesting
-past 8. A command list inside `$( )`, `<( )` or backticks that stops before its
-closer sends nothing from inside it, because a list that never closes is not
-known to be one. A program name comes from a whole word that is a plain piece: a
-word with a space, a colon or an `=` in it is a string or an assignment and its
-tail is not a program. The cost is fidelity and not secrecy: a command that stops
-early shows Jev less, and `foo() { rm -rf x; }` shows `foo` and not the `rm`.
+state at any nesting up to 8, redirects including `&>` and `&>>`, heredocs and
+here-strings. It reads past, without looking inside, `$(( ))`, `(( ))`, `[[ ]]`,
+`${ }`, `$' '` and the literal of an array assignment. It stops, drops the rest
+of the command and sends what it had read before that point, at a `case`, a
+function definition, an extglob group, a `${ }` with a quote or a nested
+expansion in it, arithmetic with a quote in it, the legacy `$[ ]` arithmetic, a
+backslash inside backticks, a line continuation inside an operator (`<\` then
+`<EOF` is a heredoc once bash joins the lines), a subshell after an assignment or
+a redirect, a stray `)`, an unterminated region, a quote or an escape the text
+ends inside and nesting past 8. A command list inside `$( )`, `<( )` or
+backticks that stops before its closer sends nothing from inside it, because a
+list that never closes is not known to be one, and a word the read stopped inside
+is never judged, which includes the cut at 64 KiB landing inside a quote. A
+program name comes from a whole word that is a plain piece: a word with a space,
+a colon or an `=` in it is a string or an assignment and its tail is not a
+program. An assignment is one only when its name and its `=` are typed bare, and
+a reserved word only when it is typed bare with nothing read ahead of it on its
+command: `"FOO=bar"`, `\if`, `FOO=bar if` and `> f if` are each a command name
+and the word after is its argument, as bash has it. The cost is fidelity and not
+secrecy: a command that stops early shows Jev less, and `foo() { rm -rf x; }`
+shows `foo` and not the `rm`.
 `test_jev_route.py` pins each construct as a value place, runs the whole table
 again inside fourteen wrapping commands, and runs a seeded fuzz that puts a
 canary only in quoted text nested three deep.

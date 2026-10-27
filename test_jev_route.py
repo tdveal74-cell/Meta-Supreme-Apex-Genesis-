@@ -313,6 +313,19 @@ ONE_MEGABYTE_COMMANDS = {
     "parameter expansion": lambda: "echo ${X:-" + "a " * (MB // 2) + "} && ls",
     "unterminated parameter expansion": lambda: "echo ${X:-" + "a " * (MB // 2),
     "many parameter expansions": lambda: "echo ${X} " * (MB // 10),
+    # What the second round of fixes reads or stops at.
+    "ampersand redirects": lambda: "ls &>x " * (MB // 7),
+    "ampersand redirects with targets": lambda: "ls &>> x y " * (MB // 11),
+    "ampersand then continuation": lambda: "ls &\\\n" * (MB // 6),
+    "continuations": lambda: "\\\n" * (MB // 2),
+    "continuations after an ampersand": lambda: "ls &" + "\\\n" * (MB // 2),
+    "quoted assignments": lambda: '"A=1" ' * (MB // 6),
+    "assignment then keyword": lambda: "A=1 if " * (MB // 7),
+    "redirect then keyword": lambda: ">x if " * (MB // 6),
+    "carriage returns": lambda: "a\r" * (MB // 2),
+    "legacy arithmetic": lambda: "echo $[" + "1 + " * (MB // 4) + "]",
+    "many legacy arithmetic": lambda: "echo $[1] " * (MB // 10),
+    "continuation inside an operator": lambda: "cat <\\\n<EOF\n" + "x\n" * (MB // 2),
     "ansi string": lambda: "echo $'" + "a\\'" * (MB // 3) + "' && ls",
     "unterminated ansi string": lambda: "echo $'" + "a\\'" * (MB // 3),
     "deep substitutions": lambda: "echo " + "$(echo " * (MB // 7),
@@ -946,6 +959,72 @@ VALUE_PLACES = [
     "git commit -m '--{s}'",
     "echo \"--{s}\"",
     "ls '--{s}'=auto",
+    # A word after the target of &> or &>> is an argument. The & was read as a
+    # separator before the > was seen, so the word became a program.
+    "echo a &>/dev/null {s}",
+    "echo a &>>log.txt {s}",
+    "echo a &> out.log {s} correcthorsebatterystaple",
+    "ls &>out.log {s}",
+    "{{ echo a; }} && echo b &>/dev/null {s}",
+    # An assignment or a reserved word is one only when it is typed bare. Quoted or
+    # escaped it is a command name, and the next word is its argument.
+    "\"FOO=bar\" {s}",
+    "\\FOO=bar {s}",
+    "FOO\"=\"bar {s}",
+    "F\\OO=bar {s}",
+    "\"if\" {s}",
+    "\"then\" {s}",
+    "\"{{\" {s}",
+    "\"!\" {s}",
+    "\"fi\" {s}",
+    "\\done {s}",
+    "false || \\ex=cho {s}",
+    "(ex=cho a\\= {s})",
+    "time \"A=1\" {s}",
+    # Nothing read ahead of a command makes the reserved word after it one: after
+    # an assignment or a redirect, if and then are command names.
+    "FOO=bar if {s}",
+    "x= if {s} echo",
+    "A=1 then {s}",
+    "A=1 do {s}",
+    "A=1 while {s}",
+    "A=1 ! {s}",
+    "A=1 {{ {s}",
+    "> out.txt if {s}",
+    "2>/dev/null then {s}",
+    "<in.txt do {s}",
+    "2>&1 if {s}",
+    "> out.txt {{ {s}",
+    "A=1 ({s})",
+    "> out.txt ({s})",
+    # Bash keeps a carriage return inside the word, so this is one assignment.
+    "FOO=bar\r{s}",
+    "A=1\rB=2\r{s}",
+    "\r{s}",
+    "ls && \r{s}",
+    "sudo \r{s}",
+    # Bash joins a line continuation before it reads an operator, so the two
+    # halves of one operator are not two operators.
+    "cat <\\\n<EOF\n{s}\nEOF",
+    "cat <\\\n<EOF\n{s}\nEOF\nls",
+    "cat <<\\\n<{s}",
+    "echo a >\\\n&{s} x",
+    "echo a &\\\n>/dev/null {s}",
+    "echo $\\\n{{X:-a;{s} }}",
+    # The legacy $[ ] arithmetic is not a command list and holds a ; or a newline.
+    "echo $[ 1 ; {s} ]",
+    "echo $[ 1\n{s} ]",
+    "echo \"$[ 1 \"; {s} ]\"",
+    "x=$[ 1 ; {s} ]",
+    # A quoted string that never closes is not known to be a word, whether the
+    # command is malformed or a 64 KiB cut opened the quote.
+    "'{s}",
+    "\"{s}",
+    "sudo '{s}",
+    "echo hi; '{s}",
+    "time \"{s}",
+    "echo hi; ls | \\{s}\\",
+    "echo hi; \"{s}\\\n",
 ]
 
 
@@ -1136,6 +1215,38 @@ def test_a_value_inside_quoted_text_never_leaves_at_any_nesting(seed):
     ("git commit --message=\"fix\" --author='a b'", "git --message --author"),
     ("git commit -m '--wip-token'", "git -m"),
     ("ls --co\"lor\"=auto", "ls"),
+    # &> and &>> are one redirect: the target is a path and the next word an argument.
+    ("echo hi &>/dev/null; ls", "echo /dev/null\nls"),
+    ("ls &>> log.txt && rm -rf build", "ls log.txt\nrm -rf"),
+    ("make 2>&1 &>build.log | tee x", "make build.log\ntee"),
+    ("cmd &>f &", "cmd f"),
+    ("sleep 1 & ls", "sleep\nls"),
+    ("sleep 1 &\nls", "sleep\nls"),
+    # An assignment is one when its name and = are typed bare, whatever its value.
+    ("FOO=\"bar baz\" ls -la", "ls -la"),
+    ("FOO='a b' BAR=2 ls", "ls"),
+    ("FOO=$(echo a) ls", "echo\nls"),
+    ("FOO=bar BAZ=qux ./run.sh --verbose", "run.sh --verbose"),
+    ("A+=x ls", "ls"),
+    ("A[0]=x ls", "ls"),
+    ("\"A=1\" ls", ""),
+    ("\\A=1 ls", ""),
+    ("A\"=\"1 ls", ""),
+    ("time \"A=1\" ls", "time"),
+    # A reserved word is one only when typed bare and first on its command. After
+    # an assignment or a redirect, or quoted or escaped, it is a program.
+    ("FOO=bar if x", "if"),
+    ("> out.txt if x", "out.txt if"),
+    ("2>&1 if x", "if"),
+    ("\"if\" x", "if"),
+    ("\\if x", "if"),
+    ("FOO=bar ! ls", ""),
+    ("! FOO=bar ls", "ls"),
+    ("> out.txt ls -la", "out.txt ls -la"),
+    ("if FOO=bar x; then ls; fi", "x\nls"),
+    # A carriage return is part of the word, as bash has it.
+    ("FOO=bar\rls", ""),
+    ("ls\r\npwd", "pwd"),
 ])
 def test_the_outline_of_a_command_is_programs_flags_and_paths(command, expected):
     assert outline(command) == expected
@@ -1161,9 +1272,59 @@ def test_the_outline_of_a_command_is_programs_flags_and_paths(command, expected)
     ("ls; echo `echo a; git push --force", "ls\necho"),
     ("ls; echo $(echo a 'b; git push --force)", "ls\necho"),
     ("ls; echo $(echo $(echo a; git push --force)", "ls\necho"),
+    # The legacy $[ ] arithmetic, in a word and inside double quotes.
+    ("ls; echo $[ 1 ; x ]; git push --force", "ls\necho"),
+    ("ls; echo \"$[ 1 \"; x ]\"; git push --force", "ls\necho"),
+    # A line continuation inside an operator joins its two halves in bash, so what
+    # follows may be a different operator than the characters show.
+    ("ls; cat <\\\n<EOF\nx\nEOF\ngit push --force", "ls\ncat"),
+    ("ls; echo $\\\n{X:-a;b}; git push --force", "ls\necho"),
+    ("ls; echo a &\\\n>f; git push --force", "ls\necho"),
+    ("ls; echo a >\\\n&2; git push --force", "ls\necho"),
+    # A subshell cannot follow an assignment or a redirect.
+    ("ls; FOO=bar (git push --force)", "ls"),
+    ("ls; > f (git push --force)", "ls\nf"),
+    # A quote or an escape the text ends inside is a word that was cut, not a word.
+    ("ls; 'abc", "ls"),
+    ("ls; \"abc", "ls"),
+    ("ls; \\abc\\", "ls"),
+    ("ls; \"abc\\\n", "ls"),
+    ("ls; echo abc\\", "ls\necho"),
+    ("ls; echo 'abc; git push --force", "ls\necho"),
+    ("ls; echo \"abc; git push --force", "ls\necho"),
 ])
 def test_syntax_the_reader_does_not_model_ends_the_read_and_nothing_after_it_is_guessed_at(command, expected):
     assert outline(command) == expected
+
+
+def test_a_word_cut_inside_a_quote_or_an_escape_is_never_judged():
+    """A command over 64 KiB is cut at the last separator in its first 64 KiB, and
+    that can fall inside a quoted string or after an escaped space. What is left
+    is a piece of a word, and a piece of a word is not a program."""
+    canary = CANARIES[0]
+    filler = "b" * (jev.MAX_SCAN + 10)
+    cuts = {
+        "single quote": "'" + canary + " " + filler + "'",
+        "double quote": '"' + canary + " " + filler + '"',
+        "escaped space": canary + "\\ " + filler,
+        "escaped first character": "\\" + canary + "\\ " + filler,
+        "double quote in a substitution": '"$(echo ' + canary + " " + filler + ')"',
+    }
+    for name, word in cuts.items():
+        for head in ("", "ls && ", "echo hi; ", "sudo ", "env FOO=1 ", "time ", "ls | "):
+            command = head + word
+            assert len(command) > jev.MAX_SCAN
+            text = outline(command)
+            assert canary not in text, (name, head, text)
+    assert outline("ls && " + cuts["single quote"]) == "ls"
+    assert outline("sudo " + cuts["double quote"]) == "sudo"
+
+
+def test_an_assignment_needs_its_name_and_its_equals_sign_typed_bare():
+    for word, quoted_at in (("A=1", None), ("A=b c", 2), ("A+=1", None), ("A[0]=x", None), ("A=", 2)):
+        assert jev.assignment(word, quoted_at), (word, quoted_at)
+    for word, quoted_at in (("A=1", 0), ("A=1", 1), ("A+=1", 2), ("a b", None), ("A", None), ("=1", None)):
+        assert not jev.assignment(word, quoted_at), (word, quoted_at)
 
 
 def test_a_backslash_inside_backticks_ends_the_read():

@@ -64,7 +64,15 @@ ends the read through Shell.halt(): what was read before stays, nothing after it
 is read, and nothing is sent that was guessed. A word is read whole, with every
 quote, escape and expansion in it, before it is judged, and a program name is
 taken from a whole word that is a plain piece and never from the tail of a
-longer string.
+longer string. A word the read stopped inside is a piece of a word and is never
+judged: that covers a quote that never closes, an escape the text ends on and
+the cut at MAX_SCAN. An assignment is one only when its name and its = are typed
+bare, and a reserved word only when it is typed bare and nothing was read ahead
+of it on its command, so "FOO=bar", \\if, FOO=bar if and > f if are each a command
+name and the word after is its argument. &> and &>> are one redirect. A carriage
+return is part of a word, as it is in bash. A line continuation inside an
+operator, the legacy $[ ] arithmetic and a subshell after an assignment or a
+redirect are not modelled and end the read.
 
 Building the text is linear. Only the first MAX_SCAN characters of a command
 are read, no regex has a nested or adjacent unbounded quantifier, and the
@@ -185,7 +193,7 @@ TOOL_NAME = re.compile(r"[A-Za-z0-9._-]{1,120}")
 PROGRAM = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,39}")
 FIELD = re.compile(r"[A-Za-z][A-Za-z0-9_.-]{0,29}")
 KEY_SHAPE = re.compile(r"[\x21-\x7e]+")
-WORD_RUN = re.compile(r"[^ \t\r\n\f\v'\"\\$`;&|<>()]+")
+WORD_RUN = re.compile(r"[^ \t\n'\"\\$`;&|<>()]+")
 DQ_SPECIAL = re.compile(r"[\"\\$`]")
 # One character each, so no quantifier at all. They find the next character that
 # ends or changes the reading of a region the reader skips without looking in.
@@ -193,7 +201,9 @@ ARITH_STOP = re.compile(r"[()'\"`\\]")
 BRACE_STOP = re.compile(r"[}$'\"`\\{\n]")
 ANSI_STOP = re.compile(r"[\\']")
 
-WS = " \t\r\f\v"
+# Bash splits words at a space or a tab and at a metacharacter. A carriage
+# return, a form feed and a vertical tab are ordinary characters inside a word.
+WS = " \t"
 SEPARATORS = "\n;&|<>()"
 # The only words a command may start with that are not themselves the program.
 # A case statement is not here: its patterns are words that look like commands,
@@ -250,6 +260,15 @@ def is_assignment(word):
         if not bracket:
             return False
     return name.isascii() and name.isidentifier()
+
+
+def assignment(word, quoted_at):
+    """is_assignment, with the name and the = typed bare. "A=1", \\A=1 and A"="1
+    are command names in bash, and the word after one is its argument. So is a
+    name with a quote or an expansion in its subscript, which costs a program name
+    shown to Jev and no secrecy. quoted_at is where the word's first quote, escape
+    or expansion begins, as Shell.word() reports it."""
+    return is_assignment(word) and (quoted_at is None or quoted_at > word.index("="))
 
 
 def few_digits(name):
@@ -332,10 +351,13 @@ class Shell:
     reads data as commands, and every program word is sent. The parts it models
     are simple commands, pipelines, lists, if, while, until, for and select
     lists, brace groups and subshells, quotes and escapes, $( ), backticks and
-    <( ), heredocs and here-strings, and it reads past $(( )), (( )), [[ ]],
-    ${ }, $' ' and the literal of an array assignment without looking inside. A
-    case statement, a function definition, an extglob group or a quote nested in
-    a way it cannot follow ends the read."""
+    <( ), redirects including &> and &>>, heredocs and here-strings, and it
+    reads past $(( )), (( )), [[ ]], ${ }, $' ' and the literal of an array
+    assignment without looking inside. A case statement, a function
+    definition, an extglob group, the legacy $[ ] arithmetic, a line continuation
+    inside an operator, a subshell after an assignment or a redirect, a quote
+    nested in a way it cannot follow, or a quote or an escape the text ends
+    inside, ends the read."""
 
     def __init__(self, text, out, cwd, home):
         self.t, self.n, self.i = text, len(text), 0
@@ -352,12 +374,16 @@ class Shell:
         self.wrapper = False
         self.skip = False
         self.ddash = False
+        # An assignment or a redirect has been read ahead of the program. Bash
+        # recognises a reserved word only as the first word of a command, so after
+        # either one if, then, { and the rest are ordinary command names.
+        self.prefixed = False
 
     def saved(self):
-        return self.program, self.wrapper, self.skip, self.ddash
+        return self.program, self.wrapper, self.skip, self.ddash, self.prefixed
 
     def restore(self, state):
-        self.program, self.wrapper, self.skip, self.ddash = state
+        self.program, self.wrapper, self.skip, self.ddash, self.prefixed = state
 
     def end_command(self):
         self.out.newline()
@@ -390,6 +416,10 @@ class Shell:
             elif c == "#":
                 j = t.find("\n", i)
                 self.i = n if j < 0 else j
+            elif c == "&" and t.startswith(">", self.past_continuations(i + 1)):
+                # &>file and &>>file are one redirect, and the word after the
+                # target is an argument. They are not a separator and a command.
+                self.redirect()
             elif c in ";&|":
                 self.end_command()
                 self.i += 1
@@ -411,6 +441,10 @@ class Shell:
                 self.redirect()
             else:
                 word = self.word()
+                if self.halted:
+                    # The read stopped inside this word, so what is in hand is a
+                    # piece of it. A half read word is never judged.
+                    return False
                 if self.i == i:
                     self.i += 1
                 elif not (word.isdigit() and self.i < n and t[self.i] in "<>"):
@@ -418,6 +452,12 @@ class Shell:
             if self.halted:
                 return False
         return False
+
+    def past_continuations(self, i):
+        """The index after any backslash-newline pairs that start at i."""
+        while self.t.startswith("\\\n", i):
+            i += 2
+        return i
 
     def substitution(self, closer):
         """A command list inside $( ), ( ) or backticks, read with its own quote
@@ -441,8 +481,10 @@ class Shell:
 
     def paren(self):
         """A ( where a word does not start. Only a subshell at the start of a
-        command is read; an array literal, an arithmetic command and a bare group
-        are read past; anything else is syntax this reader does not model."""
+        command, with nothing read ahead of it, is read; an array literal, an
+        arithmetic command and a bare group are read past; anything else, a
+        subshell after an assignment or a redirect included, is syntax this reader
+        does not model."""
         t, i = self.t, self.i
         prev = t[i - 1] if i else "\n"
         if prev == "=":
@@ -456,7 +498,7 @@ class Shell:
             else:
                 self.i = j
                 self.skip = True
-        elif self.program is None and not self.skip:
+        elif self.program is None and not self.skip and not self.prefixed:
             self.i = i + 1
             self.substitution(")")
             self.skip = True
@@ -500,16 +542,17 @@ class Shell:
         t, n = self.t, self.n
         c = t[i]
         if c == "\\":
-            if "`" in self.frames:
+            # A backslash with nothing after it is the text cut off, and the word
+            # it ends is a piece of a longer one.
+            if "`" in self.frames or i + 1 >= n:
                 return self.halt()
-            if i + 1 < n and t[i + 1] != "\n":
+            if t[i + 1] != "\n":
                 buf.append(t[i + 1])
             return i + 2
         if c == "'":
             j = t.find("'", i + 1)
             if j < 0:
-                buf.append(t[i + 1:])
-                return n
+                return self.halt()
             buf.append(t[i + 1:j])
             return j + 1
         if c == '"':
@@ -524,6 +567,9 @@ class Shell:
         if c != "$":
             return None
         buf.append("$")
+        if t.startswith("\\\n", i + 1):
+            # $\ then ( or { is an expansion once bash joins the lines.
+            return self.halt()
         nxt = t[i + 1:i + 2]
         if nxt == "(":
             if t.startswith("((", i + 1):
@@ -536,6 +582,10 @@ class Shell:
             return self.skip_brace(i)
         if nxt == "'":
             return self.skip_ansi(i)
+        if nxt == "[":
+            # The legacy $[ ] arithmetic. Its body is not a command list and may
+            # hold a ; or a newline, and this reader does not read arithmetic.
+            return self.halt()
         return i + 1
 
     def double(self, i, buf):
@@ -546,8 +596,7 @@ class Shell:
         while i < n:
             m = DQ_SPECIAL.search(t, i)
             if m is None:
-                buf.append(t[i:])
-                return n
+                return self.halt()
             j = m.start()
             buf.append(t[i:j])
             c = t[j]
@@ -562,14 +611,14 @@ class Shell:
                 elif nxt != "\n":
                     buf.append("\\" + nxt)
                 i = j + 2
-            elif c == "`" or t.startswith(("$(", "${"), j):
+            elif c == "`" or t.startswith(("$(", "${", "$["), j):
                 i = self.special(j, buf)
                 if self.halted:
                     return n
             else:
                 buf.append(c)
                 i = j + 1
-        return n
+        return self.halt()
 
     def skip_arith(self, i):
         """From after (( or $(( to after the matching )), or -1. A quote, an escape
@@ -659,7 +708,11 @@ class Shell:
     def redirect(self):
         t, n, i = self.t, self.n, self.i
         two = t[i:i + 2]
-        if t.startswith("<<<", i):
+        if t[i] == "&":
+            # &>file and &>>file send both streams to one file. Only reached when
+            # a > follows, and a line continuation between them is stopped at below.
+            kind, width = "path", 3 if t.startswith("&>>", i) else 2 if two == "&>" else 1
+        elif t.startswith("<<<", i):
             kind, width = "operand", 3
         elif t.startswith("<<-", i):
             kind, width = "heredoc-", 3
@@ -677,6 +730,13 @@ class Shell:
         else:
             kind, width = "path", 1
         self.i = i + width
+        self.prefixed = True
+        if t.startswith("\\\n", self.i):
+            # Bash joins the lines before it reads tokens, so this may be a longer
+            # operator than the characters show: <\ then <EOF is a heredoc. A line
+            # continuation inside an operator is not modelled.
+            self.halt()
+            return
         while self.i < n and t[self.i] in WS:
             self.i += 1
         if self.i >= n or t[self.i] in SEPARATORS:
@@ -719,18 +779,23 @@ class Shell:
         if self.skip:
             return
         if self.program is None:
-            if word in OPENERS or word in CLOSERS:
-                return
-            if word in HEADERS:
-                self.skip = True
-                return
-            if word == "case":
-                self.halt()
-                return
-            if word == "[[" and quoted_at is None:
-                self.test_expression()
-                return
-            if is_assignment(word):
+            # A reserved word is one only when it is typed bare and nothing has
+            # been read ahead of it in this command: "if", \if, FOO=bar if and
+            # > f if are each a command name, and the word after is its argument.
+            if quoted_at is None and not self.prefixed:
+                if word in OPENERS or word in CLOSERS:
+                    return
+                if word in HEADERS:
+                    self.skip = True
+                    return
+                if word == "case":
+                    self.halt()
+                    return
+                if word == "[[":
+                    self.test_expression()
+                    return
+            if assignment(word, quoted_at):
+                self.prefixed = True
                 return
             self.program = word
             name = program_name(word)
@@ -739,7 +804,7 @@ class Shell:
             self.wrapper = name in WRAPPERS
             return
         if self.wrapper:
-            if is_assignment(word):
+            if assignment(word, quoted_at):
                 return
             if word == "[[" and quoted_at is None:
                 # time [[ a > b ]] is a test, and sudo [[ ... is not a command at all.
