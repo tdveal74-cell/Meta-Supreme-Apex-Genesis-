@@ -525,8 +525,8 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_devon_vision_fixture.py test_pulse_watchdog.py \
   test_devon_rule_ledger.py test_devon_wager.py test_devon_tqo_canon.py \
   test_provider_watchdog.py test_devon_show_registry.py test_show_registry_seed.py \
-  test_devon_lesson_registry.py test_gate_ledger.py test_ledger_receipt.py \
-  test_code_worker.py
+  test_devon_lesson_registry.py test_gate_ledger.py test_jev_route.py \
+  test_ledger_receipt.py test_code_worker.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .
@@ -780,6 +780,100 @@ unverified: a subagent's hook input. The script reads the session file when
 `transcript_path` is under `/subagents/`, which a fixture and a critic's
 synthetic run pin and no live subagent call has confirmed. Settings reload at session start, so the first
 session after this merges is where the live behaviour is measured.
+
+## The Jev router
+
+Ruled by Tee 2026-10-16 over a recommendation to hold it. The first version
+(PR #368) was held after four findings were confirmed against its scrubbing,
+and Tee ruled on 2026-10-17, on a card, "Hold it, rebuild as allowlist". This
+section describes the rebuild. `.claude/hooks/jev_route.py`, wired on PreToolUse
+for exactly Bash, Edit, Write, NotebookEdit and every MCP tool, asks Jev,
+TypeSafe's typed decision model, two independent yes/no questions about each of
+those calls before it runs: would a dedicated tool (Read, Grep, Glob, Edit,
+Write) do this step better, and does the step change something outside the
+repository or something that cannot be undone. At or above a probability of 0.8
+the second asks Tee and, failing that, the first denies the call with a reason.
+Every other answer prints nothing. The hook never prints allow, so it can only
+narrow what runs. Read, Grep and Glob are not matched at all.
+
+**It sends nothing until Tee sets `TYPESAFE_API_KEY` as an environment secret.**
+With no key the hook writes a `no_key` row and makes no request. The key is read
+from that one variable, goes into one request header, and is written nowhere:
+not the ledger, not stderr, and not an error message, because an error row holds
+the exception's class name or a fixed phrase and never an exception's text. Setting the secret is Tee's.
+Until he does, a ledger of `no_key` rows is the configured state and not a
+fault.
+
+**What leaves the machine is an outline that is built, never a call that is
+cleaned.** The first version scrubbed the raw call, and every scrubber missed
+something: Basic auth, Cookie headers, `curl -u` values and secret values under
+a field name nobody had listed. This one never starts from the raw call. The
+pieces that may leave are these and no others. The tool name. For Bash, each
+program name, each flag name (`-X`, `--force`) and never a flag's value, plus
+the file paths the call names. For Edit, Write and NotebookEdit, the file path
+and the names of the input fields. For every MCP tool, the names of the input
+fields. No value of any kind leaves: not a command argument, a quoted string, a
+heredoc body, an assignment such as `TOKEN=abc`, a header, a file's content or
+an MCP field's value. A piece outside letters, digits and `. _ / ~ -` is
+dropped, not escaped. A path over 200 characters is dropped, the home directory
+is written `~`, and the whole text, tool name included, stops at 2,000
+characters at a piece boundary. A bare word in a command counts as a path only
+when it names something that exists on the machine, so a secret that fits the
+character class cannot pass as one. A redirect target is a path by syntax and
+needs no such test. Only the first 64 KiB of a command is read.
+
+The edges, stated so a verifier does not have to find them. A short flag cannot
+be told from a flag with its value stuck to it, so a single dash flag is kept
+only when it is one to three letters, and a two letter value after a one letter
+flag would pass; `-phunter2` does not. A field name is data when a caller makes
+it so, which is why a name over 30 characters, outside letters, digits and
+`_ . -`, or with more than four digits is dropped, and a short key that is itself
+a secret would still leave. A path that exists and has a secret in its own name
+is a path and leaves. Subcommands do not leave, so Jev sees `git` and
+`--force` and not `push`. Whether Jev can judge anything from so little is not
+known; the ledger is where that gets measured.
+
+It ships in shadow mode, `ENFORCE = False`: it asks, records the answer and
+prints nothing. Enforcement is a separate ruling and a one line commit, and
+`test_jev_route.py` pins the shipped value so a fixture cannot flip it quietly.
+A deny recorded in shadow mode never counts toward the repeat pass described
+below, so flipping the flag starts every session clean.
+
+It fails open and it is fast. The whole hook, request included, is held inside
+2.5 seconds of its 5 second timeout whatever the input: the request gets what is
+left once 0.6 of a second is set aside for start up and the ledger write, and
+`test_jev_route.py` feeds a 1 MB command through a real process to measure it.
+With no key, a refused host, a redirect, the deadline passing, an HTTP error, a
+malformed answer, input that is not JSON, input over 8 MiB or a tool name
+outside the character class, the call runs exactly as it would without the
+hook, so a quiet hook proves nothing. After three failed requests in a row it
+sends nothing for ten minutes, so a dead vendor costs three deadlines and not
+one per call.
+
+`.claude/ledger/jev-route.jsonl` gets one row for each call the hook sees, and
+that file is the only evidence that Jev decided anything. The outcome is
+`answered`, `error`, `no_key`, `repeat_pass`, `breaker_open`, `bad_input` or
+`crash`. Only an `answered` row carries the two probabilities, and only a row
+that made a request carries the latency. A row that made no request neither adds
+to the failure streak nor ends it. A deny prints only after its row is written,
+because that row is what lets the identical call through the second time once
+enforcement is on. The ledger holds a hash of the raw call, so "identical" means
+identical input, and the count of characters sent. It holds no copy of the
+input. An ask is asked every time and a different call is never passed by a deny
+of another.
+
+It cannot pick a tool, choose a path or retry. Jev answers typed questions and
+writes no text, and no hook can swap one tool for another. It sits beside the
+outward gate above and neither reads the other.
+
+`test_jev_route.py` proves the hook's own logic against a loopback stub and
+proves nothing about Jev's judgment. Unverified: the request and answer shapes,
+which the first version recorded checking against TypeSafe's OpenAPI spec 0.2.0
+and `typesafe-sdk` 0.7.5 on 2026-10-16 and this rebuild did not re-read; any
+live answer, because no authenticated call has been made and no key has reached
+a session; what the harness does with the wrapper's `exit 1`, as under the gate;
+and whether a fresh verifier finds a piece that leaves and should not. The 0.8
+threshold is a starting guess, to be set from the ledger once real answers exist.
 
 ## The receipt on a status doc
 
