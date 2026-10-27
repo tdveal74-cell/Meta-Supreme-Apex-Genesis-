@@ -266,6 +266,13 @@ regenerating the exports, because nine test files and
 `services/devon/show_registry.py` read the exports at `9320520f`, counted with
 grep on 2026-10-27. Step 4 has not been asked.
 
+The harness frame also exposed two defects in the live thumbnail design that
+predate Jev: the navy panel drawn about 15 percent opaque, and full headline
+lines running past it. Jev's check reported the second one correctly. Both were
+fixed on Tee's cards and published as `de4ac645` the same evening; see
+`live-thumb-layout/`. `live-jev-lanes/published.json` is read from that version,
+and the Jev nodes in it are as `3db61aef` published them.
+
 Still open after the publish, and readable only on the first real render:
 whether n8n's two Split In Batches loops hand the side branches the right row,
 whether Compose behaves the same inside the full graph, the item counts after a

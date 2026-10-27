@@ -28,7 +28,7 @@ const ok = (v, msg) => { assert.ok(v, msg); checks++; };
 // ---- The copy is the version the manifest names --------------------------------
 eq(M.workflowId, "qEkGOUsNyVaRAmm6", "TQO FINAL V5");
 eq(P.workflowId, M.workflowId, "published.json is the same workflow");
-eq(P.versionId, M.after.versionId, "published.json is the version the manifest read back");
+eq(P.versionId, M.current.versionId, "published.json is the current version the manifest names");
 eq(M.rollback, "publish " + M.before.versionId, "rollback is the version before");
 const byName = new Map(P.nodes.map((n) => [n.name, n]));
 eq(byName.size, P.nodes.length, "no node name appears twice");

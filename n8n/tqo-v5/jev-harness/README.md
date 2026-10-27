@@ -46,7 +46,14 @@ reading it settles the note: the second headline line, "DASHBOARD FIRST", ends a
 x 866 of 1280 (0.677), while the dark panel ends at x 760. Jev was right on this
 frame. `Thumb: Pick Still` wraps an 84 px headline at
 floor(700 / (84 * 0.52)) = 16 characters, and on this frame 15 capitals at 84 px
-drew 787 px wide. Other headline lengths and sizes were not tested.
+drew 787 px wide.
+
+The same frame showed a second defect: the navy panel was drawn about 15
+percent opaque, not 85, because GraphicsMagick reads the last pair of an 8 digit
+colour as transparency. Both were fixed in the live workflow on 2026-10-27 on
+Tee's cards and published as `de4ac645`, after four more harness runs on the
+instance's own Compose node. `../live-thumb-layout/` holds the change and its
+proof.
 
 ## Rebuilding it
 

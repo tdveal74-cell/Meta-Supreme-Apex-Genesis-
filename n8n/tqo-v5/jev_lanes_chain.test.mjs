@@ -74,7 +74,14 @@ const exportCode = (name) => {
   return hits[0].parameters.jsCode;
 };
 const MOVIE_OLD = exportCode("Build Movie");
-const PICK_OLD = exportCode("Thumb: Pick Still");
+// Today's Pick Still is the export's with the layout fix Tee ruled on 2026-10-27
+// ("Fix both, prove first"), published as de4ac645. Each pair must occur once.
+const LAYOUT = JSON.parse(read("./live-thumb-layout/replacement.json"));
+const withLayout = (code) => LAYOUT.pairs.reduce((s, p) => {
+  assert.equal(s.split(p.old).length, 2, "a layout pair occurs once in the export's Pick Still");
+  return s.replace(p.old, () => p.new);
+}, code);
+const PICK_OLD = withLayout(exportCode("Thumb: Pick Still"));
 
 // The shadow flag, flipped in memory only. The files on disk are never touched.
 const flip = (code) => {

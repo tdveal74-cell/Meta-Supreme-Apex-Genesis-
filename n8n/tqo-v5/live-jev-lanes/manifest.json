@@ -25,6 +25,11 @@
   "activatedAt": "2026-10-27T21:58:51.820Z, workflowPublishHistory event \"activated\" on version 3db61aef",
   "publishedReadBack": "2026-10-27T21:59:02Z, on Tee's card 'Publish now': activeVersionId equals versionId 3db61aef, the published nodes and connections equal the read-back draft, the draft differs from fc75f7a6 by 14 added nodes, 14 added edges and the jsCode of Build Movie, Thumb: Pick Still and Shim: Thumbnail To Binary, and settings and static data are unchanged."
  },
+ "current": {
+  "versionId": "de4ac645-b4ea-43b8-90ec-b570fec5eeb8",
+  "activatedAt": "2026-10-27T23:33:59.281Z, workflowPublishHistory event \"activated\" on version de4ac645",
+  "note": "Thumb: Pick Still layout fixed on Tee's cards, see ../live-thumb-layout. The 14 Jev nodes and the other two consumers are as 3db61aef published them. published.json is read from this version."
+ },
  "code": {
   "Jev: B-Roll Stills": {
    "file": "jev_broll_stills.js",
@@ -56,7 +61,7 @@
   },
   "Thumb: Pick Still": {
    "file": "thumb_pick_still.js",
-   "sha256": "aa005b1c849e78bdc9730c245f99b8e742672bd9485558672cdca445567f288c"
+   "sha256": "a3e88bcc4d3d89cba7145c6906c87544973ab9811f3423bbd253a73af3f350e6"
   },
   "Shim: Thumbnail To Binary": {
    "file": "shim_thumbnail_to_binary.js",

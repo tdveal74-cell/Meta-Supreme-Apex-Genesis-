@@ -410,7 +410,13 @@ assert.deepEqual(askedFor([SKIPPED_BIG + "A".repeat(20000001 - SKIPPED_BIG.lengt
 assert.ok(kept("/9j/" + "!".repeat(100)) && kept("iVBORw0KGgo" + "!".repeat(100)));
 
 // ---- thumb_pick_still.js -------------------------------------------------------
-const ORIGINAL = exportCode("Thumb: Pick Still");
+// Today's Pick Still is the export's with the layout fix Tee ruled on 2026-10-27
+// ("Fix both, prove first"), published as de4ac645. Each pair must occur once.
+const LAYOUT = JSON.parse(src("live-thumb-layout/replacement.json"));
+const ORIGINAL = LAYOUT.pairs.reduce((s, p) => {
+  assert.equal(s.split(p.old).length, 2, "a layout pair occurs once in the export's Pick Still");
+  return s.replace(p.old, () => p.new);
+}, exportCode("Thumb: Pick Still"));
 const SHIPPED = src("thumb_pick_still.js");
 const flipped = SHIPPED.replace("const JEV_APPLY = false;", "const JEV_APPLY = true;");
 assert.notEqual(flipped, SHIPPED, "the shipped file declares JEV_APPLY = false");
