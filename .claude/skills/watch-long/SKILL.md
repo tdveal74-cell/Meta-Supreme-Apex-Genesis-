@@ -99,8 +99,10 @@ is estimated; pass `--duration` to override it. Windows are read in parallel
 by threads, three at once by default, and each window gets one retry because
 the relay's 502 is a timing failure rather than a verdict. A window that fails
 both attempts is read once more after the whole first pass has finished, and
-the report marks it `re-pass`; one that fails again is still reported as
-unavailable, with both errors. A 400 is never re-read. Gemini spends
+the report marks it `re-pass`; one that fails again, a 400 included, is still
+reported as unavailable, with both errors. The re-pass covers the planned
+windows only: a probe past the estimate that fails is reported as a gap and not
+re-read. A 400 on the first pass is never re-read. Gemini spends
 tokens on every window: `countTokens` counted 161,100 video and 64,440 audio
 tokens for 35:48, about 6,300 tokens per minute of video, so a four hour video
 is about 1.5 million input tokens before the synthesis.

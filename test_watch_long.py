@@ -340,3 +340,34 @@ def test_the_re_pass_never_re_reads_a_400(wl, monkeypatch):
     report = wl.run(args)
     assert calls == [0, 600]
     assert [(w.start, w.ok) for w in report.windows] == [(0, True)]
+
+
+def test_a_re_pass_that_answers_400_keeps_the_gap_and_both_errors(wl, monkeypatch, capsys):
+    """Critic finding, 2026-10-28: the last planned window failed twice on the 502, its
+    re-pass answered 400, and the window was dropped as past the end with exit 0."""
+    calls = []
+
+    def fake_stream(payload, *, model, key, timeout):
+        part = payload["contents"][0]["parts"][0]
+        if "file_data" in part:
+            start = int(part["video_metadata"]["start_offset"].rstrip("s"))
+            calls.append(start)
+            if start == 1200 and calls.count(1200) <= 2:
+                raise RuntimeError("HTTP 502: upstream request failed")
+            if start >= 1200:
+                raise wl.PastEnd("HTTP 400: Request contains an invalid argument.")
+            return f"notes from {start}", {}, 1.0
+        return "synthesis", {}, 0.5
+
+    monkeypatch.setattr(wl, "stream_generate", fake_stream)
+    monkeypatch.setenv("GEMINI_API_KEY", "placeholder")
+    code = wl.main(["https://youtu.be/x", "--duration", "1800", "--parallel", "1"])
+    assert code == 1
+    out = capsys.readouterr()
+    assert (
+        "- 20:00 to 30:00: attempt 2: HTTP 502: upstream request failed; "
+        "re-pass HTTP 400: Request contains an invalid argument." in out.out
+    )
+    assert "2 windows of 600s, 1 unavailable" in out.out
+    assert "20:00 to 30:00: FAILED" in out.err and "(re-pass)" in out.err
+    assert "past the end, dropped" not in out.err

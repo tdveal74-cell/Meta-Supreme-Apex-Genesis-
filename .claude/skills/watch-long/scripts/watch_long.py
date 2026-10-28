@@ -388,15 +388,18 @@ def run(args: argparse.Namespace) -> Report:
         # spans read cleanly on a later run. By the time the first pass ends the rest of the
         # video has been ingested, which is the slow part the 30 s first byte cap catches.
         # A 400 is not re-read: inside the plan it is classified below, and at the tail it
-        # is the end of the video.
+        # is the end of the video. Only a readable re-pass replaces the first result; any
+        # other answer, a 400 included, leaves the window a reported gap with both errors,
+        # because a span that timed out twice is never evidence the video ended there.
         failed = [w for w in windows if not w.ok and not w.past_end]
         retried = [pool.submit(read, w.index, (w.start, w.end)) for w in failed]
         for first, future in zip(failed, retried, strict=True):
             second = future.result()
-            second.reread = True
-            if not second.ok and not second.past_end:
-                second.error = f"{first.error}; re-pass {second.error}"
-            windows[first.index] = second
+            if second.ok:
+                windows[first.index] = second
+            else:
+                first.error = f"{first.error}; re-pass {second.error}"
+            windows[first.index].reread = True
     # "Request contains an invalid argument" is Google's generic 400. It means past the end
     # only where the end can be: an unbroken run of 400s at the tail of the plan. The same
     # answer on a window with readable video after it is a gap, and the report must say so.
