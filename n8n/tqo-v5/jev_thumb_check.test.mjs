@@ -130,7 +130,7 @@ assert.equal(out.length, 1);
 assert.deepEqual(Object.keys(out[0].json), ["body"]);
 let body = out[0].json.body;
 checkRequest(body);
-assert.equal(body.model, "jev-preview");
+assert.equal(body.model, "jev-1.14.0", "pinned, ruled 2026-10-27");
 // The composed image is sent once, in state, and the questions name it by its
 // backtick path. The asset key stays "<thumb>".
 assert.deepEqual(body.state, { thumb: "<thumb>", headline: HEADLINE });

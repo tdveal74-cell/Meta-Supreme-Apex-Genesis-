@@ -74,7 +74,14 @@ const exportCode = (name) => {
   return hits[0].parameters.jsCode;
 };
 const MOVIE_OLD = exportCode("Build Movie");
-const PICK_OLD = exportCode("Thumb: Pick Still");
+// Today's Pick Still is the export's with the layout fix Tee ruled on 2026-10-27
+// ("Fix both, prove first"), published as de4ac645. Each pair must occur once.
+const LAYOUT = JSON.parse(read("./live-thumb-layout/replacement.json"));
+const withLayout = (code) => LAYOUT.pairs.reduce((s, p) => {
+  assert.equal(s.split(p.old).length, 2, "a layout pair occurs once in the export's Pick Still");
+  return s.replace(p.old, () => p.new);
+}, code);
+const PICK_OLD = withLayout(exportCode("Thumb: Pick Still"));
 
 // The shadow flag, flipped in memory only. The files on disk are never touched.
 const flip = (code) => {
@@ -422,7 +429,7 @@ const checkOut = checkBody(dollar({ "Thumb: Pick Still": [{ json: pickShadow }] 
 assert.equal(checkOut.length, 1);
 const cb = checkOut[0].json.body;
 checkRequest(cb, { types: ["noul", "box"] });
-assert.equal(cb.model, "jev-preview", "the check has a box question, and Box needs Jev 1.14");
+assert.equal(cb.model, "jev-1.14.0", "the check has a box question, Box needs Jev 1.14, and the model is pinned");
 assert.equal(cb.state.headline, pickShadow.headline);
 assert.equal(cb.assets["<thumb>"].data_base64, COMPOSED);
 assert.ok(Object.values(cb.questions).some((q) => q.type === "box"));
