@@ -16,6 +16,16 @@ stays inside its time budget on any input up to 1 MB.
 They prove the hook's own logic and nothing about Jev's judgment, which only a
 live call can measure.
 
+Ruled by Tee 2026-10-28: the container never holds the TypeSafe key. It is a
+network secret of the cloud environment and the agent proxy adds it to requests
+for api.typesafe.ai. So the hook reads no key and sends no Authorization header,
+its request has to go through the proxy the environment sets, and a module
+constant SEND, shipped False, gates every request. These tests pin each of
+those against loopback stubs and a loopback fake proxy only. No test makes a
+request to api.typesafe.ai or to any outside host, and a guard that applies to
+every test fails the test that tries: it refuses to resolve or connect to
+anything but the loopback interface.
+
 Ruled by Tee 2026-10-28 on a card, "Known commands only": a word the reader takes
 for a program is sent only when it is a bash builtin or reserved word, a name
 PATH resolves to an executable file, or a path to an existing executable file.
@@ -41,7 +51,9 @@ import os
 import pathlib
 import random
 import re
+import shutil
 import socket
+import ssl
 import string
 import subprocess
 import sys
@@ -73,7 +85,8 @@ def fresh_module():
 
 jev = fresh_module()
 SHIPPED_ENFORCE = jev.ENFORCE
-NOW = datetime(2026, 10, 17, 18, 0, 0, tzinfo=timezone.utc)
+SHIPPED_SEND = jev.SEND
+NOW =datetime(2026, 10, 17, 18, 0, 0, tzinfo=timezone.utc)
 DEAD = "http://127.0.0.1:9/v1/systemone"
 MEGABYTE = 1024 * 1024
 ORIGINAL_PATH = os.environ.get("PATH", "/usr/bin:/bin")
@@ -128,14 +141,18 @@ class Stub:
         threading.Thread(target=self.server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
 
     def answer(self, better_tool, needs_human, model="jev-1.14.0"):
-        self.reply = (200, {
-            "model": model,
-            "answers": {
-                "better_tool": {"type": "noul", "noul": better_tool},
-                "needs_human": {"type": "noul", "noul": needs_human},
-            },
-            "usage": {"input_tokens": 120, "output_tokens": 2},
-        })
+        self.reply = (200, answer_body(better_tool, needs_human, model))
+
+
+def answer_body(better_tool, needs_human, model="jev-1.14.0"):
+    return {
+        "model": model,
+        "answers": {
+            "better_tool": {"type": "noul", "noul": better_tool},
+            "needs_human": {"type": "noul", "noul": needs_human},
+        },
+        "usage": {"input_tokens": 120, "output_tokens": 2},
+    }
 
 
 @pytest.fixture
@@ -143,6 +160,162 @@ def stub():
     s = Stub()
     yield s
     s.server.shutdown()
+
+
+def read_head(conn):
+    """Bytes up to and including the blank line that ends an HTTP head."""
+    data = b""
+    while b"\r\n\r\n" not in data:
+        chunk = conn.recv(65536)
+        if not chunk:
+            break
+        data += chunk
+    return data
+
+
+class FakeProxy:
+    """A loopback HTTP proxy, so that the route of a request can be read without
+    a request leaving the machine. It records the head of the first request on
+    each connection, which for an https URL is the CONNECT line. Without a tls
+    context it refuses the tunnel with a 502, so nothing goes further. Given one
+    it accepts the tunnel and plays the origin inside it: it terminates TLS with
+    the context's certificate, records the request it reads there and answers it."""
+
+    def __init__(self, tls=None, reply=None):
+        self.heads = []
+        self.tunnelled = []
+        self.tls = tls
+        self.reply = reply or (200, answer_body(0.1, 0.1))
+        self.listener = socket.socket()
+        self.listener.bind(("127.0.0.1", 0))
+        self.listener.listen(8)
+        self.url = "http://127.0.0.1:%d" % self.listener.getsockname()[1]
+        threading.Thread(target=self.accept_forever, daemon=True).start()
+
+    def accept_forever(self):
+        while True:
+            try:
+                conn, _ = self.listener.accept()
+            except OSError:
+                return
+            threading.Thread(target=self.handle, args=(conn,), daemon=True).start()
+
+    def handle(self, conn):
+        try:
+            conn.settimeout(5)
+            self.heads.append(read_head(conn).decode("latin-1"))
+            if self.tls is None:
+                conn.sendall(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                return
+            conn.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
+            with self.tls.wrap_socket(conn, server_side=True) as tunnel:
+                head = read_head(tunnel)
+                lines = head.decode("latin-1").split("\r\n")
+                headers = {}
+                for line in lines[1:]:
+                    name, _, value = line.partition(":")
+                    if name:
+                        headers[name.strip().lower()] = value.strip()
+                length = int(headers.get("content-length", 0) or 0)
+                body = head.split(b"\r\n\r\n", 1)[1]
+                while len(body) < length:
+                    body += tunnel.recv(65536)
+                self.tunnelled.append({"line": lines[0], "headers": headers, "body": json.loads(body) if body else None})
+                status, answer = self.reply
+                raw = json.dumps(answer).encode()
+                tunnel.sendall(("HTTP/1.1 %d X\r\nContent-Type: application/json\r\nContent-Length: %d\r\n"
+                                "Connection: close\r\n\r\n" % (status, len(raw))).encode() + raw)
+        except (OSError, ssl.SSLError, ValueError):
+            pass
+        finally:
+            conn.close()
+
+    def connects(self):
+        """The request line of every connection the proxy was asked to make."""
+        return [head.split("\r\n")[0] for head in self.heads]
+
+    def close(self):
+        self.listener.close()
+
+
+@pytest.fixture
+def fake_proxy():
+    made = []
+
+    def make(**kw):
+        made.append(FakeProxy(**kw))
+        return made[-1]
+
+    yield make
+    for proxy in made:
+        proxy.close()
+
+
+PROXY_VARIABLES = ("http_proxy", "https_proxy", "all_proxy", "ftp_proxy", "no_proxy")
+
+
+def route_through(monkeypatch, proxy):
+    """Point the environment's HTTPS proxy at a fake one, in both spellings."""
+    for name in list(os.environ):
+        if name.lower() in PROXY_VARIABLES:
+            monkeypatch.delenv(name)
+    monkeypatch.setenv("HTTPS_PROXY", proxy.url)
+    monkeypatch.setenv("https_proxy", proxy.url)
+
+
+def proxy_env(proxy):
+    """The environment of a child process whose HTTPS proxy is a fake one."""
+    return {"HTTPS_PROXY": proxy.url, "https_proxy": proxy.url}
+
+
+@pytest.fixture(autouse=True)
+def the_hook_is_switched_on(monkeypatch):
+    """The shipped SEND is False, which test_the_shipped_send_switch_is_off pins.
+    Every other test needs the request path, so they run with it on, and a test of
+    the off state turns it off again itself."""
+    monkeypatch.setattr(jev, "SEND", True)
+
+
+@pytest.fixture(autouse=True)
+def no_environment_proxy(monkeypatch):
+    """The suite does not depend on the proxy of the machine it runs on. The
+    agent container sets HTTPS_PROXY to its real proxy, and a test that reached it
+    would be a request to an outside host."""
+    for name in list(os.environ):
+        if name.lower() in PROXY_VARIABLES:
+            monkeypatch.delenv(name)
+    monkeypatch.setenv("no_proxy", "127.0.0.1,localhost")
+
+
+@pytest.fixture(autouse=True)
+def loopback_only(monkeypatch):
+    """Nothing in this file resolves or connects to anything but the loopback
+    interface. A name that is not loopback is refused and the test fails at the
+    end, so a request to api.typesafe.ai cannot pass quietly as an error row."""
+    refused = []
+    real_getaddrinfo = socket.getaddrinfo
+    real_connect = socket.socket.connect
+
+    def loopback(host):
+        return host in (None, "", "localhost", "127.0.0.1", "::1")
+
+    def getaddrinfo(host, *args, **kwargs):
+        if not loopback(host):
+            refused.append(("resolve", host))
+            raise socket.gaierror("refused by the test: not loopback")
+        return real_getaddrinfo(host, *args, **kwargs)
+
+    def connect(self, address):
+        host = address[0] if isinstance(address, tuple) else address
+        if not loopback(host):
+            refused.append(("connect", host))
+            raise OSError("refused by the test: not loopback")
+        return real_connect(self, address)
+
+    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+    monkeypatch.setattr(socket.socket, "connect", connect)
+    yield refused
+    assert not refused, refused
 
 
 @pytest.fixture(autouse=True)
@@ -230,7 +403,6 @@ def payload(command="cat README.md", session="s1", tool="Bash", tool_input=None,
 
 
 def go(stub, p=None, **kw):
-    kw.setdefault("key", "k")
     kw.setdefault("endpoint", stub.url)
     return jev.run(p or payload(), now=NOW, **kw)
 
@@ -257,9 +429,8 @@ def decision(out):
     return out["hookSpecificOutput"]["permissionDecision"]
 
 
-def run_main(monkeypatch, stdin_text, endpoint, key="k"):
+def run_main(monkeypatch, stdin_text, endpoint):
     monkeypatch.setattr(jev, "ENDPOINT", endpoint)
-    monkeypatch.setenv("TYPESAFE_API_KEY", key)
     monkeypatch.setattr("sys.stdin", io.StringIO(stdin_text))
     out = io.StringIO()
     monkeypatch.setattr("sys.stdout", out)
@@ -441,25 +612,61 @@ def test_the_cap_is_2000_characters_cut_at_a_piece_boundary(stub):
     assert set(sent_text(stub).split()) <= {"ls", "-la"} and sent_chars(stub) <= jev.MAX_OUT
 
 
-def run_in_a_process(project, stub_url, stdin_text, key="k"):
+# The loopback guard of loopback_only, for a child process. A child cannot be
+# reached by a fixture, and a hook that went around its proxy from a child would be
+# a request to an outside host, so every child starts with the guard in place.
+CHILD_GUARD = (
+    "import socket\n"
+    "_resolve, _connect = socket.getaddrinfo, socket.socket.connect\n"
+    "_loopback = (None, '', 'localhost', '127.0.0.1', '::1')\n"
+    "def _getaddrinfo(host, *args, **kwargs):\n"
+    "    if host not in _loopback:\n"
+    "        raise socket.gaierror('refused by the test: not loopback')\n"
+    "    return _resolve(host, *args, **kwargs)\n"
+    "def _guarded(self, address):\n"
+    "    if (address[0] if isinstance(address, tuple) else address) not in _loopback:\n"
+    "        raise OSError('refused by the test: not loopback')\n"
+    "    return _connect(self, address)\n"
+    "socket.getaddrinfo = _getaddrinfo\n"
+    "socket.socket.connect = _guarded\n"
+)
+
+
+def child_env(project, extra_env=None):
+    return {"CLAUDE_PROJECT_DIR": str(project), "HOME": os.environ["HOME"],
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin"), **(extra_env or {})}
+
+
+def run_in_a_process(project, stub_url, stdin_text, extra_env=None):
     """The harness's path: a new interpreter, the payload on stdin, the exit
-    code and stdout read back. Only the endpoint is swapped, in a driver, because
-    the hook reads nothing but the key and the project directory from its
-    environment."""
-    driver = (
+    code and stdout read back. The endpoint is swapped and SEND is switched on, in
+    a driver, because the shipped file is off and the hook reads nothing from its
+    environment but the project directory and PATH. extra_env is for the proxy
+    variables that urllib itself reads."""
+    driver = CHILD_GUARD + (
         "import importlib.util, sys\n"
         "spec = importlib.util.spec_from_file_location('jev_route_child', sys.argv[1])\n"
         "m = importlib.util.module_from_spec(spec)\n"
         "spec.loader.exec_module(m)\n"
         "m.ENDPOINT = sys.argv[2]\n"
+        "m.SEND = True\n"
         "sys.exit(m.main())\n"
     )
-    env = {"CLAUDE_PROJECT_DIR": str(project), "TYPESAFE_API_KEY": key, "HOME": os.environ["HOME"],
-           "PATH": os.environ.get("PATH", "/usr/bin:/bin")}
     started = time.monotonic()
     proc = subprocess.run([sys.executable, "-c", driver, str(HOOK), stub_url], input=stdin_text,
-                          capture_output=True, text=True, env=env, timeout=30)
+                          capture_output=True, text=True, env=child_env(project, extra_env), timeout=30)
     return proc, time.monotonic() - started
+
+
+def run_the_shipped_file(project, stdin_text, extra_env=None):
+    """The file as it ships, with nothing swapped, run as the script it is: its own
+    __main__ block, under the loopback guard."""
+    driver = CHILD_GUARD + (
+        "import runpy, sys\n"
+        "runpy.run_path(sys.argv[1], run_name='__main__')\n"
+    )
+    return subprocess.run([sys.executable, "-c", driver, str(HOOK)], input=stdin_text, capture_output=True,
+                          text=True, env=child_env(project, extra_env), timeout=30)
 
 
 def test_a_one_megabyte_command_through_a_real_process_stays_inside_the_budget(stub, project):
@@ -487,7 +694,7 @@ def test_the_whole_process_stays_inside_the_budget_when_jev_never_answers(stub, 
 def test_the_request_gets_what_is_left_of_the_budget(stub, project):
     stub.delay = 8.0
     started = time.monotonic()
-    out = jev.run(payload(), key="k", endpoint=stub.url, now=NOW, started=time.monotonic() - 1.5)
+    out = jev.run(payload(), endpoint=stub.url, now=NOW, started=time.monotonic() - 1.5)
     assert out is None
     assert time.monotonic() - started < 1.0, "1.5 s of the budget was already spent"
     assert ledger(project)[-1]["error"] == "TimeoutError"
@@ -530,7 +737,7 @@ def test_an_ask_is_asked_again_on_the_identical_call(stub, project, enforce):
 def idle_rows():
     stamp = jev.stamp(NOW)
     return [
-        {"ts": stamp, "outcome": "no_key"},
+        {"ts": stamp, "outcome": "off"},
         {"ts": stamp, "outcome": "repeat_pass"},
         {"ts": stamp, "outcome": "breaker_open"},
         {"ts": stamp, "outcome": "bad_input"},
@@ -551,14 +758,16 @@ def test_a_row_that_made_no_request_neither_closes_nor_breaks_the_failure_streak
     assert jev.breaker_open([failure, failure, failure], NOW)
 
 
-def test_a_no_key_row_between_failures_does_not_reset_the_streak(project):
+def test_an_off_row_between_failures_does_not_reset_the_streak(project, monkeypatch):
     for _ in range(2):
-        jev.run(payload(), key="k", endpoint=DEAD, now=NOW, timeout=0.5)
-    jev.run(payload(), key="", endpoint=DEAD, now=NOW)
-    assert ledger(project)[-1]["outcome"] == "no_key"
-    jev.run(payload(), key="k", endpoint=DEAD, now=NOW, timeout=0.5)
-    jev.run(payload(), key="k", endpoint=DEAD, now=NOW, timeout=0.5)
-    assert [r["outcome"] for r in ledger(project)] == ["error", "error", "no_key", "error", "breaker_open"]
+        jev.run(payload(), endpoint=DEAD, now=NOW, timeout=0.5)
+    monkeypatch.setattr(jev, "SEND", False)
+    jev.run(payload(), endpoint=DEAD, now=NOW)
+    monkeypatch.setattr(jev, "SEND", True)
+    assert ledger(project)[-1]["outcome"] == "off"
+    jev.run(payload(), endpoint=DEAD, now=NOW, timeout=0.5)
+    jev.run(payload(), endpoint=DEAD, now=NOW, timeout=0.5)
+    assert [r["outcome"] for r in ledger(project)] == ["error", "error", "off", "error", "breaker_open"]
 
 
 # ------------------------------------------------------ what it decides
@@ -569,6 +778,15 @@ def test_the_shipped_mode_is_shadow():
     assert SHIPPED_ENFORCE is False
 
 
+def test_the_shipped_send_switch_is_off():
+    """Turning the hook on is Tee's ruling and a one line commit, so the shipped
+    value is pinned the way ENFORCE is, from the module as it was loaded and before
+    any fixture of this file touches it. The line is pinned as well, so that a
+    later assignment in the module cannot turn it on behind the constant."""
+    assert SHIPPED_SEND is False
+    assert re.findall(r"^SEND\s*[:=].*$", HOOK.read_text(), re.M) == ["SEND = False"]
+
+
 def test_the_shipped_numbers_are_the_ones_claude_md_states():
     assert (jev.CONFIDENCE, jev.HOOK_BUDGET_S, jev.MAX_OUT, jev.MAX_PATH, jev.MAX_SCAN) == (0.8, 2.5, 2000, 200, 65536)
     assert (jev.BREAKER_ERRORS, jev.BREAKER_S) == (3, 600)
@@ -577,7 +795,7 @@ def test_the_shipped_numbers_are_the_ones_claude_md_states():
     section = (ROOT / "CLAUDE.md").read_text().split("## The Jev router")[1].split("\n## ")[0]
     flat = " ".join(section.split())
     for stated in ("probability of 0.8", "2.5 seconds", "2,000 characters", "200 characters", "64 KiB",
-                   "three failed requests", "ten minutes", "`ENFORCE = False`", "`TYPESAFE_API_KEY`",
+                   "three failed requests", "ten minutes", "`ENFORCE = False`", "`SEND = False`",
                    "any nesting up to 8", "nesting past 8", "fourteen wrapping commands",
                    "over 64 characters", "128 distinct names"):
         assert stated in flat, stated
@@ -674,10 +892,48 @@ def test_the_repeat_pass_reads_only_the_ledger_tail(stub, project, enforce):
 # ------------------------------------------------------------ fails open
 
 
-def test_no_key_sends_nothing(stub, project):
-    assert go(stub, key="") is None
-    assert stub.requests == []
-    assert ledger(project)[-1]["outcome"] == "no_key"
+def test_send_off_makes_no_request_opens_no_socket_and_writes_an_off_row(stub, project, monkeypatch):
+    """SEND gates every request. The stub is there so that a request would be seen,
+    and the socket is poisoned so that even one that reached no stub would be."""
+    monkeypatch.setattr(jev, "SEND", False)
+    monkeypatch.setattr(jev, "ENFORCE", True)
+    touched = []
+
+    def refuse(*args, **kwargs):
+        touched.append(args)
+        raise AssertionError("a request was made while SEND is off")
+
+    calls = (payload(), payload(tool="Write", tool_input={"file_path": "/repo/a.txt", "content": "x"}),
+             payload(tool="mcp__x__y", tool_input={"a": 1}))
+    for p in calls:
+        with monkeypatch.context() as poisoned:
+            poisoned.setattr(socket.socket, "__init__", refuse)
+            poisoned.setattr(socket, "create_connection", refuse)
+            poisoned.setattr(socket, "getaddrinfo", refuse)
+            poisoned.setattr(jev, "ask_within", refuse)
+            poisoned.setattr(jev, "ask_jev", refuse)
+            assert go(stub, p) is None
+    assert touched == [] and stub.requests == []
+    rows = ledger(project)
+    assert [row["outcome"] for row in rows] == ["off"] * 3
+    for row in rows:
+        assert row["decision"] == "none" and row["enforced"] is True and "latency_ms" not in row
+
+
+def test_a_401_from_the_api_is_an_error_row_prints_nothing_and_opens_the_breaker(stub, project, enforce, monkeypatch):
+    """The proxy adds the key. One that does not gets a 401, and the hook, which
+    holds no key to blame, fails open: the call runs as it would without the hook,
+    and three in a row stop the requests for ten minutes."""
+    stub.reply = (401, {"detail": "Not authenticated"})
+    for _ in range(jev.BREAKER_ERRORS):
+        rc, out = run_main(monkeypatch, json.dumps(payload()), stub.url)
+        assert rc == 0 and out == ""
+    rows = ledger(project)
+    assert [(r["outcome"], r["error"], r["decision"]) for r in rows] == [("error", "HTTP 401", "none")] * 3
+    assert len(stub.requests) == 3
+    rc, out = run_main(monkeypatch, json.dumps(payload()), stub.url)
+    assert rc == 0 and out == ""
+    assert ledger(project)[-1]["outcome"] == "breaker_open" and len(stub.requests) == 3
 
 
 @pytest.mark.parametrize("reply", [
@@ -732,7 +988,7 @@ def test_a_trickling_server_is_cut_at_the_deadline(project, enforce):
 
     threading.Thread(target=trickle, daemon=True).start()
     started = time.monotonic()
-    out = jev.run(payload(), key="k", endpoint="http://127.0.0.1:%d/v1/systemone" % port, now=NOW, timeout=0.5)
+    out = jev.run(payload(), endpoint="http://127.0.0.1:%d/v1/systemone" % port, now=NOW, timeout=0.5)
     assert out is None
     assert time.monotonic() - started < 1.5
     assert ledger(project)[-1]["outcome"] == "error"
@@ -740,17 +996,17 @@ def test_a_trickling_server_is_cut_at_the_deadline(project, enforce):
 
 
 def test_a_dead_host_fails_open(project):
-    assert jev.run(payload(), key="k", endpoint=DEAD, now=NOW, timeout=0.5) is None
+    assert jev.run(payload(), endpoint=DEAD, now=NOW, timeout=0.5) is None
     assert ledger(project)[-1]["outcome"] == "error"
 
 
-def test_a_redirect_is_refused_and_the_key_does_not_follow(stub, project, enforce):
+def test_a_redirect_is_refused_and_the_request_does_not_follow(stub, project, enforce):
     target = Stub()
     try:
         target.answer(0.99, 0.0)
         stub.redirect_to = target.url.replace("/v1/systemone", "/elsewhere")
         assert go(stub) is None
-        assert target.requests == [], "the Bearer key followed a redirect"
+        assert target.requests == [], "the request followed a redirect"
         assert ledger(project)[-1]["error"] == "HTTP 302"
     finally:
         target.server.shutdown()
@@ -763,58 +1019,62 @@ def test_a_redirect_is_refused_and_the_key_does_not_follow(stub, project, enforc
     "ftp://api.typesafe.ai/",
 ])
 def test_an_unsafe_endpoint_is_refused_before_any_send(url):
-    assert jev.run(payload(), key="k", endpoint=url, now=NOW) is None
+    assert jev.run(payload(), endpoint=url, now=NOW) is None
 
 
 def test_a_refused_endpoint_is_recorded(project):
-    jev.run(payload(), key="k", endpoint="http://api.typesafe.ai/v1/systemone", now=NOW)
+    jev.run(payload(), endpoint="http://api.typesafe.ai/v1/systemone", now=NOW)
     assert ledger(project)[-1]["error"] == "endpoint refused"
 
 
 def test_three_failed_requests_open_the_breaker_for_ten_minutes(project):
     for _ in range(jev.BREAKER_ERRORS):
-        jev.run(payload(), key="k", endpoint=DEAD, now=NOW, timeout=0.5)
+        jev.run(payload(), endpoint=DEAD, now=NOW, timeout=0.5)
     assert [r["outcome"] for r in ledger(project)] == ["error"] * jev.BREAKER_ERRORS
     started = time.monotonic()
-    jev.run(payload(), key="k", endpoint=DEAD, now=NOW, timeout=0.5)
+    jev.run(payload(), endpoint=DEAD, now=NOW, timeout=0.5)
     assert ledger(project)[-1]["outcome"] == "breaker_open"
     assert "latency_ms" not in ledger(project)[-1]
     assert time.monotonic() - started < 0.4
     nine = NOW + timedelta(seconds=jev.BREAKER_S - 1)
-    jev.run(payload(), key="k", endpoint=DEAD, now=nine, timeout=0.5)
+    jev.run(payload(), endpoint=DEAD, now=nine, timeout=0.5)
     assert ledger(project)[-1]["outcome"] == "breaker_open"
     later = NOW + timedelta(seconds=jev.BREAKER_S)
-    jev.run(payload(), key="k", endpoint=DEAD, now=later, timeout=0.5)
+    jev.run(payload(), endpoint=DEAD, now=later, timeout=0.5)
     assert ledger(project)[-1]["outcome"] == "error", "the breaker must let one request through after BREAKER_S"
 
 
 def test_two_failures_do_not_open_the_breaker(project):
     for _ in range(jev.BREAKER_ERRORS - 1):
-        jev.run(payload(), key="k", endpoint=DEAD, now=NOW, timeout=0.5)
-    jev.run(payload(), key="k", endpoint=DEAD, now=NOW, timeout=0.5)
+        jev.run(payload(), endpoint=DEAD, now=NOW, timeout=0.5)
+    jev.run(payload(), endpoint=DEAD, now=NOW, timeout=0.5)
     assert ledger(project)[-1]["outcome"] == "error"
     assert len(ledger(project)) == 3
 
 
 def test_an_answer_closes_the_breaker(stub, project):
     for _ in range(jev.BREAKER_ERRORS - 1):
-        jev.run(payload(), key="k", endpoint=DEAD, now=NOW, timeout=0.5)
+        jev.run(payload(), endpoint=DEAD, now=NOW, timeout=0.5)
     go(stub)
-    jev.run(payload(), key="k", endpoint=DEAD, now=NOW, timeout=0.5)
+    jev.run(payload(), endpoint=DEAD, now=NOW, timeout=0.5)
     go(stub)
     assert ledger(project)[-1]["outcome"] == "answered"
 
 
 def test_each_call_leaves_exactly_one_row(stub, project, monkeypatch):
+    def switched_off():
+        with monkeypatch.context() as off:
+            off.setattr(jev, "SEND", False)
+            go(stub)
+
     calls = [
         lambda: go(stub),
-        lambda: go(stub, key=""),
+        switched_off,
         lambda: go(stub, payload(tool="Not A Tool;")),
         lambda: go(stub, endpoint="http://api.typesafe.ai/v1/x"),
         lambda: go(stub, "not a payload"),
         lambda: go(stub, payload(tool="mcp__x__y", tool_input={"a": 1})),
         lambda: go(stub, payload(tool="Write", tool_input=None)),
-        lambda: go(stub, key="a\nb"),
     ]
     for n, call in enumerate(calls, 1):
         call()
@@ -826,57 +1086,172 @@ def test_the_shipped_endpoint_and_model():
     assert jev.MODEL.startswith("jev-")
 
 
-# --------------------------------------------------- the key stays in the header
+# ------------------- no key in the hook, and the request goes through the proxy
+
+SECRET = "tsk_live_abcDEF123456xyz"
+# What a request from this hook may carry. urllib adds the first six itself.
+ALLOWED_HEADERS = {"host", "content-type", "content-length", "user-agent", "accept-encoding", "connection"}
 
 
-def test_the_key_goes_in_one_header_and_nowhere_else(stub, project):
-    go(stub, key="tsk_live_abcDEF123456xyz")
-    assert stub.requests[-1]["headers"]["Authorization"] == "Bearer tsk_live_abcDEF123456xyz"
-    assert "tsk_live" not in sent_everything(stub)
-    assert "tsk_live" not in (project / ".claude" / "ledger" / "jev-route.jsonl").read_text()
+def make_certificate(directory, name):
+    """A self-signed certificate for api.typesafe.ai and its key, made by the
+    openssl binary. It is a test fixture and trusts nothing: only a test that
+    names it in SSL_CERT_FILE trusts it."""
+    openssl = shutil.which("openssl", path=ORIGINAL_PATH)
+    if openssl is None:
+        pytest.skip("no openssl binary to make a certificate with")
+    cert, key = directory / (name + ".crt"), directory / (name + ".key")
+    subprocess.run([openssl, "req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:prime256v1", "-nodes",
+                    "-keyout", str(key), "-out", str(cert), "-days", "2", "-subj", "/CN=api.typesafe.ai",
+                    "-addext", "subjectAltName=DNS:api.typesafe.ai"], check=True, capture_output=True, timeout=30)
+    return cert, key
 
 
-def test_a_key_with_a_trailing_newline_is_stripped_and_never_written(stub, project):
-    go(stub, key="tsk_live_abcDEF123456xyz\n")
-    assert stub.requests[-1]["headers"]["Authorization"] == "Bearer tsk_live_abcDEF123456xyz"
-    assert "tsk_live" not in (project / ".claude" / "ledger" / "jev-route.jsonl").read_text()
+@pytest.fixture(scope="session")
+def certificates(tmp_path_factory):
+    directory = tmp_path_factory.mktemp("certificates")
+    return make_certificate(directory, "api"), make_certificate(directory, "stranger")
 
 
-def test_a_key_a_header_cannot_carry_is_refused_before_any_send(stub, project):
-    go(stub, key="tsk_live_abc\nDEF123456xyz")
-    assert stub.requests == []
-    assert "tsk_live" not in (project / ".claude" / "ledger" / "jev-route.jsonl").read_text()
+def serve_with(cert_and_key):
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(*map(str, cert_and_key))
+    return context
 
 
-def test_an_error_carrying_the_key_is_never_written(project, monkeypatch, capsys):
-    def leaky(body, key, endpoint, deadline):
-        raise ValueError("Invalid header value b'Bearer %s'" % key)
+def test_the_request_has_no_authorization_header_and_the_body_is_the_outline_only(stub, project, monkeypatch):
+    """The key is the proxy's. A value in the environment is not read, whatever
+    it is called, by run() or by main()."""
+    for name in ("TYPESAFE_API_KEY", "TYPESAFE_KEY"):
+        monkeypatch.setenv(name, SECRET)
+    command = "curl -u admin:hunter2 https://x.example"
+    go(stub, payload(command=command))
+    rc, _ = run_main(monkeypatch, json.dumps(payload(command=command)), stub.url)
+    assert rc == 0 and len(stub.requests) == 2
+    for sent in stub.requests:
+        names = {name.lower() for name in sent["headers"]}
+        assert not names & {"authorization", "proxy-authorization", "cookie", "x-api-key"}, names
+        assert names <= ALLOWED_HEADERS, names
+        assert SECRET not in json.dumps(sent["headers"])
+        assert sent["body"] == {"model": jev.MODEL, "state": {"tool_name": "Bash", "tool_input": "curl -u"},
+                                "questions": jev.QUESTIONS}
+        for fragment in ("hunter2", "admin", "x.example", SECRET):
+            assert fragment not in json.dumps(sent["body"])
+    assert SECRET not in (project / ".claude" / "ledger" / "jev-route.jsonl").read_text()
+
+
+def test_an_error_carrying_a_secret_in_its_text_is_never_written(project, monkeypatch, capsys):
+    def leaky(body, endpoint, deadline):
+        raise ValueError("Invalid header value b'%s'" % SECRET)
     monkeypatch.setattr(jev, "ask_within", leaky)
-    jev.run(payload(), key="tsk_live_abcDEF123456xyz", endpoint=DEAD, now=NOW)
+    jev.run(payload(), endpoint=DEAD, now=NOW)
     row = ledger(project)[-1]
     assert row["outcome"] == "error" and row["error"] == "ValueError"
     assert "tsk_live" not in (project / ".claude" / "ledger" / "jev-route.jsonl").read_text()
     assert "tsk_live" not in capsys.readouterr().err
 
 
-def test_a_crash_carrying_the_key_leaves_a_row_with_the_class_name_only(stub, project, monkeypatch, capsys):
+def test_a_crash_carrying_a_secret_leaves_a_row_with_the_class_name_only(stub, project, monkeypatch, capsys):
     def boom(*a, **k):
-        raise RuntimeError("Bearer tsk_live_abcDEF123456xyz")
+        raise RuntimeError(SECRET)
     monkeypatch.setattr(jev, "run", boom)
-    run_main(monkeypatch, json.dumps(payload()), stub.url, key="tsk_live_abcDEF123456xyz")
+    run_main(monkeypatch, json.dumps(payload()), stub.url)
     row = ledger(project)[-1]
     assert row["outcome"] == "crash" and row["error"] == "RuntimeError"
     assert "tsk_live" not in (project / ".claude" / "ledger" / "jev-route.jsonl").read_text()
     assert "tsk_live" not in capsys.readouterr().err
 
 
-def test_main_reads_only_the_key_the_project_dir_and_path_from_the_environment():
+def test_main_reads_only_the_project_dir_and_path_from_the_environment():
     """PATH is how the hook tells a command from a word. It is read to look for a
-    file and is never sent, and the lookups run nothing."""
+    file and is never sent, and the lookups run nothing. No variable holds a key:
+    the proxy and the certificates are read by urllib and ssl, not by this file."""
     source = HOOK.read_text()
     reads = set(re.findall(r"""(?:environ\.get|getenv)\(\s*["']([A-Za-z_]+)["']""", source))
-    assert reads == {"CLAUDE_PROJECT_DIR", "PATH", "TYPESAFE_API_KEY"}
+    assert reads == {"CLAUDE_PROJECT_DIR", "PATH"}
     assert "os.environ[" not in source and "environ.copy" not in source and "dict(os.environ" not in source
+    assert "TYPESAFE_API_KEY" not in source and "Bearer" not in source and "KEY_SHAPE" not in source
+
+
+def test_the_request_goes_through_the_proxy_the_environment_sets(project, monkeypatch, fake_proxy):
+    """With HTTPS_PROXY at a fake proxy the CONNECT for api.typesafe.ai reaches it.
+    The fake proxy refuses the tunnel, so nothing goes further, and the loopback
+    guard fails the test if the request tried to go around the proxy."""
+    proxy = fake_proxy()
+    route_through(monkeypatch, proxy)
+    assert jev.ENDPOINT == "https://api.typesafe.ai/v1/systemone"
+    assert jev.run(payload(), now=NOW, timeout=5) is None
+    assert proxy.connects() == ["CONNECT api.typesafe.ai:443 HTTP/1.1"]
+    assert proxy.tunnelled == []
+    assert ledger(project)[-1]["outcome"] == "error"
+
+
+def test_the_proxy_is_read_when_the_request_is_made_and_a_redirect_is_still_refused(monkeypatch, fake_proxy):
+    """The opener is built for each request, so a proxy set after the module was
+    loaded is the one used, and the one handler that is not the default refuses
+    redirects."""
+    first, second = fake_proxy(), fake_proxy()
+    route_through(monkeypatch, first)
+    assert jev.run(payload(), now=NOW, timeout=5) is None
+    route_through(monkeypatch, second)
+    assert jev.run(payload(), now=NOW + timedelta(seconds=1), timeout=5) is None
+    assert (len(first.heads), len(second.heads)) == (1, 1)
+    handlers = jev.opener().handlers
+    assert sum(isinstance(h, jev.urllib.request.HTTPRedirectHandler) for h in handlers) == 1
+    assert any(isinstance(h, jev._NoRedirect) for h in handlers)
+    assert any(isinstance(h, jev.urllib.request.ProxyHandler) and h.proxies.get("https") == second.url
+               for h in handlers)
+
+
+def test_the_tunnel_trusts_ssl_cert_file_and_carries_no_credential(project, monkeypatch, fake_proxy, certificates):
+    """The whole path with loopback standing in for the world: CONNECT through the
+    proxy, TLS to a certificate the environment names in SSL_CERT_FILE, the
+    request read inside the tunnel, the answer read back."""
+    (cert, key), _ = certificates
+    proxy = fake_proxy(tls=serve_with((cert, key)))
+    route_through(monkeypatch, proxy)
+    monkeypatch.setenv("SSL_CERT_FILE", str(cert))
+    assert jev.run(payload(command="curl -u admin:hunter2 https://x.example"), now=NOW, timeout=5) is None
+    assert proxy.connects() == ["CONNECT api.typesafe.ai:443 HTTP/1.1"]
+    assert len(proxy.tunnelled) == 1
+    request = proxy.tunnelled[0]
+    assert request["line"] == "POST /v1/systemone HTTP/1.1"
+    assert request["headers"]["host"] == "api.typesafe.ai"
+    assert not set(request["headers"]) & {"authorization", "proxy-authorization", "x-api-key"}
+    assert set(request["headers"]) <= ALLOWED_HEADERS
+    assert request["body"]["state"] == {"tool_name": "Bash", "tool_input": "curl -u"}
+    row = ledger(project)[-1]
+    assert row["outcome"] == "answered" and row["better_tool"] == 0.1
+
+
+def test_a_certificate_the_environment_does_not_trust_is_refused_through_the_proxy(
+        project, monkeypatch, fake_proxy, certificates):
+    """The trust is the environment's. Name another certificate in SSL_CERT_FILE and
+    the same tunnel is refused before any request is written into it."""
+    (cert, key), (stranger, _) = certificates
+    proxy = fake_proxy(tls=serve_with((cert, key)))
+    route_through(monkeypatch, proxy)
+    monkeypatch.setenv("SSL_CERT_FILE", str(stranger))
+    assert jev.run(payload(), now=NOW, timeout=5) is None
+    assert proxy.connects() == ["CONNECT api.typesafe.ai:443 HTTP/1.1"]
+    assert proxy.tunnelled == []
+    assert ledger(project)[-1]["outcome"] == "error"
+
+
+def test_a_real_process_reaches_the_proxy_with_send_on_and_never_as_shipped(project, fake_proxy):
+    """The shipped file, run as the harness runs it, opens no connection at all: the
+    fake proxy sees none. The same environment with SEND switched on by a driver
+    reaches it, so the zero is not an environment that never could."""
+    proxy = fake_proxy()
+    stdin_text = json.dumps(payload())
+    proc, _ = run_in_a_process(project, jev.ENDPOINT, stdin_text, extra_env=proxy_env(proxy))
+    assert proc.returncode == 0 and proc.stdout == "", proc.stderr
+    assert proxy.connects() == ["CONNECT api.typesafe.ai:443 HTTP/1.1"]
+    assert ledger(project)[-1]["outcome"] == "error"
+    shipped = run_the_shipped_file(project, stdin_text, proxy_env(proxy))
+    assert shipped.returncode == 0 and shipped.stdout == "" and shipped.stderr == ""
+    assert proxy.connects() == ["CONNECT api.typesafe.ai:443 HTTP/1.1"], "the shipped file made a connection"
+    assert ledger(project)[-1]["outcome"] == "off"
 
 
 # ------------------------------------------- what leaves: the allowed pieces
@@ -2461,7 +2836,9 @@ def test_a_tool_name_outside_the_character_class_sends_nothing(stub, project):
 def test_the_request_shape(stub):
     go(stub)
     sent = stub.requests[-1]
-    assert sent["headers"]["Authorization"] == "Bearer k"
+    assert sent["method"] == "POST" and sent["path"] == "/v1/systemone"
+    assert sent["headers"]["Content-Type"] == "application/json"
+    assert "Authorization" not in sent["headers"]
     body = sent["body"]
     assert set(body) == {"model", "state", "questions"}
     assert set(body["state"]) == {"tool_name", "tool_input"}
@@ -2626,12 +3003,11 @@ def test_a_lone_surrogate_is_sent_and_recorded(stub, project, monkeypatch):
     assert ledger(project)[-1]["outcome"] == "answered"
 
 
-def test_the_script_runs_as_a_process_and_prints_nothing_without_a_key(project):
-    env = {"CLAUDE_PROJECT_DIR": str(project), "PATH": os.environ.get("PATH", "/usr/bin:/bin")}
-    proc = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload()), capture_output=True, text=True,
-                          env=env, timeout=30)
+def test_the_script_runs_as_a_process_and_prints_nothing_while_send_is_off(project):
+    proc = run_the_shipped_file(project, json.dumps(payload()))
     assert proc.returncode == 0 and proc.stdout == "" and proc.stderr == ""
-    assert ledger(project)[-1]["outcome"] == "no_key"
+    row = ledger(project)[-1]
+    assert row["outcome"] == "off" and row["decision"] == "none" and "latency_ms" not in row
 
 
 # --------------------------------------------------------------- the wiring

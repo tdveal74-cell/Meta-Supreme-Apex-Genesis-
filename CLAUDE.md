@@ -796,13 +796,43 @@ the second asks Tee and, failing that, the first denies the call with a reason.
 Every other answer prints nothing. The hook never prints allow, so it can only
 narrow what runs. Read, Grep and Glob are not matched at all.
 
-**It sends nothing until Tee sets `TYPESAFE_API_KEY` as an environment secret.**
-With no key the hook writes a `no_key` row and makes no request. The key is read
-from that one variable, goes into one request header, and is written nowhere:
-not the ledger, not stderr, and not an error message, because an error row holds
-the exception's class name or a fixed phrase and never an exception's text. Setting the secret is Tee's.
-Until he does, a ledger of `no_key` rows is the configured state and not a
-fault.
+**It sends nothing until Tee turns `SEND` on, and the container never holds the
+key.** Ruled by Tee 2026-10-28, carrying his earlier ruling that the container
+never holds the TypeSafe key. The module constant `SEND = False` gates every
+request: while it is False the hook makes no request, opens no socket and writes
+an `off` row for each call it sees, and a ledger of `off` rows is the configured
+state and not a fault. Turning it on is a separate ruling and a one line commit,
+`SEND = True`, as `ENFORCE` is. `test_jev_route.py` pins the shipped value the
+same way and pins the line.
+
+The hook reads no key from any environment variable and sends no Authorization
+header of its own. An earlier version read `TYPESAFE_API_KEY`; that variable is
+now ignored, and a test sets it and checks that it goes nowhere. Tee added the
+key as a network secret in the cloud environment, where the agent proxy is to
+add it to requests for `api.typesafe.ai`, so the request has to go through the
+proxy the environment sets and not around it. The hook builds its opener for
+each request with `ProxyHandler()`, which reads `HTTPS_PROXY` and `NO_PROXY`,
+uses the default TLS context, which trusts `SSL_CERT_FILE`, and changes one
+thing: a redirect is refused. The earlier opener, built once at import, did not
+disable the proxy either (its default handlers include `ProxyHandler`, checked
+on Python 3.13); the change is that it is built for each request, so a proxy set
+after the module loaded is the one used. A proxy that does not add the header
+gets HTTP 401 from the API. That is an `error` row, it prints nothing, the call
+runs as it would without the hook, and three in a row open the breaker for ten
+minutes. An error row holds the exception's class name or a fixed phrase and
+never an exception's text.
+
+`test_jev_route.py` proves the routing against loopback only. A guard on every
+in-process test refuses to resolve or connect to anything but the loopback
+interface and fails the test that tries, and each child process starts under the
+same guard with an environment whose only proxy is the fake one. With
+`HTTPS_PROXY` at a fake proxy, the `CONNECT api.typesafe.ai:443` reaches it, from
+a call in the test process and from a real process. A fake proxy that answers the
+tunnel with a self signed certificate for `api.typesafe.ai`, named in
+`SSL_CERT_FILE`, receives a request with no Authorization header and a body that
+is the outline only, and the same tunnel is refused when `SSL_CERT_FILE` names
+another certificate. The shipped file, run as a process with that proxy in its
+environment, makes no connection to it.
 
 **What leaves the machine is an outline that is built, never a call that is
 cleaned.** The first version scrubbed the raw call, and every scrubber missed
@@ -952,16 +982,16 @@ It fails open and it is fast. The whole hook, request included, is held inside
 2.5 seconds of its 5 second timeout whatever the input: the request gets what is
 left once 0.6 of a second is set aside for start up and the ledger write, and
 `test_jev_route.py` feeds a 1 MB command through a real process to measure it.
-With no key, a refused host, a redirect, the deadline passing, an HTTP error, a
-malformed answer, input that is not JSON, input over 8 MiB or a tool name
-outside the character class, the call runs exactly as it would without the
-hook, so a quiet hook proves nothing. After three failed requests in a row it
-sends nothing for ten minutes, so a dead vendor costs three deadlines and not
-one per call.
+With `SEND` off, a refused host, a redirect, the deadline passing, an HTTP error
+(a 401 from a proxy that added no key among them), a malformed answer, input
+that is not JSON, input over 8 MiB or a tool name outside the character class,
+the call runs exactly as it would without the hook, so a quiet hook proves
+nothing. After three failed requests in a row it sends nothing for ten minutes,
+so a dead vendor costs three deadlines and not one per call.
 
 `.claude/ledger/jev-route.jsonl` gets one row for each call the hook sees, and
 that file is the only evidence that Jev decided anything. The outcome is
-`answered`, `error`, `no_key`, `repeat_pass`, `breaker_open`, `bad_input` or
+`answered`, `error`, `off`, `repeat_pass`, `breaker_open`, `bad_input` or
 `crash`. Only an `answered` row carries the two probabilities, and only a row
 that made a request carries the latency. A row that made no request neither adds
 to the failure streak nor ends it. A deny prints only after its row is written,
@@ -979,9 +1009,13 @@ outward gate above and neither reads the other.
 proves nothing about Jev's judgment. Unverified: the request and answer shapes,
 which the first version recorded checking against TypeSafe's OpenAPI spec 0.2.0
 and `typesafe-sdk` 0.7.5 on 2026-10-16 and this rebuild did not re-read; any
-live answer, because no authenticated call has been made and no key has reached
-a session; what the harness does with the wrapper's `exit 1`, as under the gate;
-and whether a fresh verifier finds a piece that leaves and should not. Also
+live answer, because `SEND` is False and no authenticated request has been made;
+that the agent proxy adds the key to a request for `api.typesafe.ai`, which no
+request has shown yet, so a run of 401 rows is the first sign it does not;
+whether the TLS tunnel to the real host verifies under the `SSL_CERT_FILE` a
+session carries, which the tests proved only against a certificate they made;
+what the harness does with the wrapper's `exit 1`, as under the gate; and
+whether a fresh verifier finds a piece that leaves and should not. Also
 unverified: which `PATH` the harness gives a hook, because the code reads the
 `PATH` of its own process and no live session has been measured, and how much of a
 real call Jev still sees once the programs that are not installed are dropped,

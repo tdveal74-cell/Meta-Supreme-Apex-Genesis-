@@ -10,7 +10,7 @@ timeout. This version never starts from the raw call. It assembles the outbound
 text from a short list of allowed pieces and sends nothing else.
 
 Jev is TypeSafe's typed decision model, called at POST
-https://api.typesafe.ai/v1/systemone with a Bearer key. Each call asks two
+https://api.typesafe.ai/v1/systemone. This file holds no key. Each call asks two
 independent noul questions in one request:
 
     better_tool  a dedicated tool (Read, Grep, Glob, Edit, Write) would do
@@ -129,27 +129,38 @@ whole hook, request included, stays inside HOOK_BUDGET_S of its 5 second
 timeout whatever the input. The request itself gets what is left of that
 budget once RESERVE_S is set aside for start up and the ledger write.
 
-It fails open. With no TYPESAFE_API_KEY, a refused host, a redirect, the
-deadline passing, an HTTP error or a malformed answer, it prints nothing and
-the call runs exactly as it would without this file. So a quiet hook proves
-nothing. Each call it sees gets one row in .claude/ledger/jev-route.jsonl,
-which is the only evidence that Jev decided anything. A deny is printed only
-after its ledger row is written, because that row is what lets the identical
-call through the second time. After BREAKER_ERRORS failed requests in a row it
-stops asking for BREAKER_S seconds, so a dead vendor costs three deadlines and
-not one per call.
+It fails open. With SEND false, a refused host, a redirect, the deadline
+passing, an HTTP error or a malformed answer, it prints nothing and the call
+runs exactly as it would without this file. So a quiet hook proves nothing. Each
+call it sees gets one row in .claude/ledger/jev-route.jsonl, which is the only
+evidence that Jev decided anything. A deny is printed only after its ledger row
+is written, because that row is what lets the identical call through the second
+time. After BREAKER_ERRORS failed requests in a row it stops asking for
+BREAKER_S seconds, so a dead vendor costs three deadlines and not one per call.
 
-The key is read from TYPESAFE_API_KEY and from nowhere else. It goes into one
-request header and is never written to the ledger, to stderr or to any
-message: an error row holds the exception's class name and never its text. The
-ledger holds a hash of the raw call, so "the identical call" means identical
-input, and no copy of the input.
+SEND gates every request. While it is False the hook makes no request, opens no
+socket and writes an off row for each call it sees. Turning it on is Tee's
+ruling and a one line commit, as ENFORCE is.
+
+The hook holds no key. It reads none from any environment variable and sends no
+Authorization header of its own. The TypeSafe key is a network secret of the
+cloud environment, and the agent proxy adds it to requests for api.typesafe.ai,
+so the container never holds it. That means the request has to go through the
+proxy the environment sets and not around it: the opener is built for each
+request with ProxyHandler(), which reads HTTPS_PROXY and NO_PROXY from the
+environment, the TLS context is the default one, which trusts SSL_CERT_FILE, and
+the one thing the opener changes is that a redirect is refused. A proxy that does
+not add the header gets HTTP 401 from the API. That is an error row, the call
+runs as it would without this file, and three in a row open the breaker. An error
+row holds the exception's class name and never its text. The ledger holds a hash
+of the raw call, so "the identical call" means identical input, and no copy of
+the input.
 
 CONFIDENCE is a starting guess, to be set from the ledger once real answers
 exist. The request and answer shapes were taken from the first version, which
 recorded checking them against TypeSafe's OpenAPI spec (version 0.2.0) and the
 official typesafe-sdk 0.7.5 on 2026-10-16. This rebuild did not re-read the
-spec, and no authenticated call has been made.
+spec, and no authenticated request has been made.
 """
 
 from __future__ import annotations
@@ -188,6 +199,7 @@ TAIL_BYTES = 256 * 1024
 BREAKER_ERRORS = 3
 BREAKER_S = 600
 ENFORCE = False
+SEND = False
 
 STATE_NOTE = (
     "`tool_name` is the tool a coding agent is about to call. `tool_input` is an "
@@ -241,7 +253,6 @@ PIECE = re.compile(r"[A-Za-z0-9._/~-]{1,200}")
 TOOL_NAME = re.compile(r"[A-Za-z0-9._-]{1,120}")
 PROGRAM = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,39}")
 FIELD = re.compile(r"[A-Za-z][A-Za-z0-9_.-]{0,29}")
-KEY_SHAPE = re.compile(r"[\x21-\x7e]+")
 WORD_RUN = re.compile(r"[^ \t\n'\"\\$`;&|<>()]+")
 DQ_SPECIAL = re.compile(r"[\"\\$`]")
 # One character each, so no quantifier at all. They find the next character that
@@ -1203,27 +1214,36 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         raise urllib.error.HTTPError(req.full_url, code, "redirect refused", headers, fp)
 
 
-_OPENER = urllib.request.build_opener(_NoRedirect)
+def opener():
+    """The opener for one request. It is built here and not at import so that the
+    proxy is read from the environment when the request is made. ProxyHandler()
+    with no argument is the environment's proxy: HTTPS_PROXY for an https URL and
+    NO_PROXY for the hosts that skip it. The request reaches api.typesafe.ai as a
+    CONNECT through that proxy, which is what adds the key, and the TLS context is
+    the default one, which trusts SSL_CERT_FILE. _NoRedirect replaces the default
+    redirect handler and is the only thing this changes."""
+    return urllib.request.build_opener(urllib.request.ProxyHandler(), _NoRedirect)
 
 
-def ask_jev(body, key, endpoint, timeout):
+def ask_jev(body, endpoint, timeout):
+    """The request. It carries no credential header: the proxy adds the key."""
     req = urllib.request.Request(
         endpoint,
         data=json.dumps(body).encode("utf-8"),
-        headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"},
+        headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with _OPENER.open(req, timeout=timeout) as resp:
+    with opener().open(req, timeout=timeout) as resp:
         return json.loads(resp.read(1 << 20).decode("utf-8"))
 
 
-def ask_within(body, key, endpoint, deadline):
+def ask_within(body, endpoint, deadline):
     """The request, DNS and every read included, inside one deadline."""
     box = {}
 
     def work():
         try:
-            box["response"] = ask_jev(body, key, endpoint, deadline)
+            box["response"] = ask_jev(body, endpoint, deadline)
         except BaseException as exc:
             box["error"] = exc
 
@@ -1358,12 +1378,11 @@ def stamp(now):
     return now.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def run(payload, key=None, endpoint=None, now=None, timeout=None, started=None):
+def run(payload, endpoint=None, now=None, timeout=None, started=None):
     """Returns the JSON object to print on stdout, or None to print nothing."""
     started = time.monotonic() if started is None else started
     now = now or datetime.now(timezone.utc)
     endpoint = endpoint or ENDPOINT
-    key = (key or "").strip()
     if not isinstance(payload, dict) or not isinstance(payload.get("tool_name"), str) or not payload["tool_name"]:
         write_row({"ts": stamp(now), "enforced": ENFORCE, "decision": "none", "outcome": "bad_input"})
         return None
@@ -1371,12 +1390,8 @@ def run(payload, key=None, endpoint=None, now=None, timeout=None, started=None):
     session = str(payload.get("session_id") or "")[:100]
     row = {"ts": stamp(now), "session": session, "tool": name[:200], "enforced": ENFORCE, "decision": "none"}
 
-    if not key:
-        row["outcome"] = "no_key"
-        write_row(row)
-        return None
-    if not KEY_SHAPE.fullmatch(key):
-        row.update(outcome="error", error="key has characters a header cannot carry, nothing sent")
+    if not SEND:
+        row["outcome"] = "off"
         write_row(row)
         return None
     if not endpoint_ok(endpoint):
@@ -1416,7 +1431,7 @@ def run(payload, key=None, endpoint=None, now=None, timeout=None, started=None):
     timeout = max(0.1, timeout)
     began = time.monotonic()
     try:
-        better_tool, needs_human, model = read_answers(ask_within(body, key, endpoint, timeout))
+        better_tool, needs_human, model = read_answers(ask_within(body, endpoint, timeout))
     except urllib.error.HTTPError as exc:
         row.update(outcome="error", error="HTTP %d" % exc.code)
     except Exception as exc:
@@ -1445,7 +1460,7 @@ def main():
     except Exception:
         payload = None
     try:
-        out = run(payload, key=os.environ.get("TYPESAFE_API_KEY", ""), started=started)
+        out = run(payload, started=started)
     except Exception as exc:
         sys.stderr.write("jev_route: %s\n" % type(exc).__name__)
         write_row({"ts": stamp(datetime.now(timezone.utc)), "enforced": ENFORCE, "decision": "none",
