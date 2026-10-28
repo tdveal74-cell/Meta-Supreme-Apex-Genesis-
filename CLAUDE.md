@@ -506,6 +506,7 @@ job, which is the real thing the local run mirrors.
 ```bash
 env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -c "import standalone_api"
 env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
+  test_devon_rsi.py test_devon_rsi_ops.py test_devon_rsi_experiments.py \
   test_agent_evaluation.py test_agent_benchmarks.py \
   test_runtime_verification.py test_skill_evaluation_policy.py \
   test_billing.py test_definition.py test_providers.py test_schedule.py \
@@ -903,7 +904,8 @@ is whatever follows the `=` in `--name="value"`, while `--name` is.
 **A program name leaves only when it is a command on the machine the hook runs
 on.** Ruled by Tee 2026-10-28 on a card, "Known commands only", after four verify
 rounds against the shell reader each found a new way for a value to leave as a
-"program name", and the third round found more blockers than the second. The
+"program name", and the last of the four found more than the one before it (six
+findings against `59ef1ed` and three against `c65e5c7`, by the fix commits). The
 reader cannot be made to model the shell perfectly, so this closes the class from
 the other side. A word the reader takes for a program is sent only when it is a
 bash builtin or reserved word from a list pinned in `jev_route.py` (61 builtins
