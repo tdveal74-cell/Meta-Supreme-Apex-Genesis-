@@ -156,6 +156,119 @@ def test_a_failed_window_is_reported_as_unavailable_not_filled_in(wl, monkeypatc
     assert "Synthesis unavailable: not run" in text
 
 
+def test_the_extension_stops_at_the_first_probe_that_fails_and_is_capped(wl, monkeypatch):
+    """Critic probe A, 2026-10-28: with every call failing, the old loop made 41 calls and
+    was still going. A failed probe is a gap to report, not evidence of more video."""
+    calls = []
+
+    def fake_stream(payload, *, model, key, timeout):
+        part = payload["contents"][0]["parts"][0]
+        if "file_data" in part:
+            start = int(part["video_metadata"]["start_offset"].rstrip("s"))
+            calls.append(start)
+            if start >= 600:
+                raise RuntimeError("HTTP 502: upstream request failed")
+            return f"notes from {start}", {}, 1.0
+        return "synthesis", {}, 0.5
+
+    monkeypatch.setattr(wl, "stream_generate", fake_stream)
+    monkeypatch.setenv("GEMINI_API_KEY", "placeholder")
+    args = wl.build_parser().parse_args(["https://youtu.be/x", "--duration", "600", "--parallel", "1"])
+    report = wl.run(args)
+    assert calls == [0, 600, 600]  # the planned window, then one probe with its one retry
+    assert [(w.start, w.end, w.ok) for w in report.windows] == [(0, 600, True), (600, 1200, False)]
+    assert "## Unavailable evidence" in wl.render(report)
+
+    # A relay that answers content forever is capped rather than followed without end.
+    calls.clear()
+
+    def endless(payload, *, model, key, timeout):
+        part = payload["contents"][0]["parts"][0]
+        if "file_data" in part:
+            calls.append(int(part["video_metadata"]["start_offset"].rstrip("s")))
+            return "more", {}, 1.0
+        return "synthesis", {}, 0.5
+
+    monkeypatch.setattr(wl, "stream_generate", endless)
+    report = wl.run(args)
+    assert len(calls) == 1 + wl.MAX_EXTENSION
+    assert len(report.windows) == 1 + wl.MAX_EXTENSION
+
+
+def test_zero_readable_windows_is_exit_one_not_an_empty_success(wl, monkeypatch, capsys):
+    """Critic probe B: every window past the end used to render 'Covered: 00:00 across 0
+    windows, 0 unavailable' with exit 0."""
+
+    def fake_stream(payload, *, model, key, timeout):
+        raise wl.PastEnd("HTTP 400: Request contains an invalid argument.")
+
+    monkeypatch.setattr(wl, "stream_generate", fake_stream)
+    monkeypatch.setenv("GEMINI_API_KEY", "placeholder")
+    code = wl.main(["https://youtu.be/x", "--duration", "600", "--parallel", "1"])
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "## Unavailable evidence" in out
+    assert "no window could be read" in out
+
+
+def test_a_400_inside_the_planned_length_is_a_gap_not_the_end(wl, monkeypatch):
+    """Critic probe C: a 400 on the 10:00 window of a 30:00 plan used to vanish from the
+    report, which then claimed 'Covered: 30:00 ... 0 unavailable'."""
+
+    def fake_stream(payload, *, model, key, timeout):
+        part = payload["contents"][0]["parts"][0]
+        if "file_data" in part:
+            start = int(part["video_metadata"]["start_offset"].rstrip("s"))
+            if start == 600:
+                raise wl.PastEnd("HTTP 400: Request contains an invalid argument.")
+            if start >= 1800:
+                raise wl.PastEnd("HTTP 400: Request contains an invalid argument.")
+            return f"notes from {start}", {}, 1.0
+        return "synthesis", {}, 0.5
+
+    monkeypatch.setattr(wl, "stream_generate", fake_stream)
+    monkeypatch.setenv("GEMINI_API_KEY", "placeholder")
+    args = wl.build_parser().parse_args(["https://youtu.be/x", "--duration", "1800", "--parallel", "1"])
+    report = wl.run(args)
+    assert [(w.start, w.ok) for w in report.windows] == [(0, True), (600, False), (1200, True)]
+    text = wl.render(report)
+    assert "- 10:00 to 20:00: HTTP 400" in text
+    assert "inside the planned length" in text
+    assert "2 windows of 600s, 1 unavailable" in text
+
+
+def test_sse_tolerates_shapes_google_could_send_and_keeps_the_block_reason(wl):
+    lines = [
+        "data: [1, 2]",
+        "data: 7",
+        'data: {"candidates": [{"content": null}]}',
+        'data: {"candidates": [null, {"content": {"parts": [null, {"text": "ok"}]}}]}',
+        'data: {"promptFeedback": {"blockReason": "SAFETY"}}',
+    ]
+    text, usage, finish = wl.parse_sse("\n".join(lines))
+    assert text == "ok"
+    assert usage == {}
+    assert finish == "blocked: SAFETY"
+
+
+def test_a_malformed_answer_costs_one_window_not_the_run(wl, monkeypatch):
+    def fake_stream(payload, *, model, key, timeout):
+        part = payload["contents"][0]["parts"][0]
+        if "file_data" in part:
+            start = int(part["video_metadata"]["start_offset"].rstrip("s"))
+            if start == 0:
+                raise KeyError("candidates")
+            raise wl.PastEnd("HTTP 400: Request contains an invalid argument.")
+        return "synthesis", {}, 0.5
+
+    monkeypatch.setattr(wl, "stream_generate", fake_stream)
+    monkeypatch.setenv("GEMINI_API_KEY", "placeholder")
+    args = wl.build_parser().parse_args(["https://youtu.be/x", "--duration", "600", "--parallel", "2"])
+    report = wl.run(args)
+    assert len(report.windows) == 1
+    assert report.windows[0].error == "attempt 2: KeyError: 'candidates'"
+
+
 def test_the_key_must_exist_and_the_source_must_be_youtube(wl, monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     args = wl.build_parser().parse_args(["https://www.youtube.com/watch?v=abc123"])

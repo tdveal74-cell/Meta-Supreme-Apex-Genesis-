@@ -144,8 +144,10 @@ The relay in front of the container answers 502 at about 30 seconds whatever
 Google is doing; which layer enforces it is unverified. So from a cloud session:
 
 - pass `--start 0` on every YouTube run, which forces static mode and keeps a
-  short clip inside the cap; a 56 second Short took 20 s, so expect clips of a
-  few minutes at most to fit;
+  short clip inside the cap; the Short took 20 s (Google counts it as 32 s of
+  video, 2,400 video tokens at 75 a second; the 56 s elsewhere in this file is
+  the screen recording of it, not the Short), so expect clips of a few minutes
+  at most to fit;
 - run anything longer from Claude Code on Tee's own machine, where there is no
   relay and the default agentic mode works;
 - the engine is chosen only when a `GEMINI_API_KEY` variable exists. The

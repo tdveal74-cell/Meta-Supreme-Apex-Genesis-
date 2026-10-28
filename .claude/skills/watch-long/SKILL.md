@@ -24,8 +24,9 @@ text-only synthesis. It is ours, so it can be edited; the vendored copy cannot.
 | streamed answer, first byte 16.3 s, 5,219 tokens out | 200 at 55.0 s |
 
 So the cap is on the first byte, not the total, and the safe window is about
-ten minutes. Ten minute windows on a 36 minute video is four requests; on a four
-hour video, twenty five, run three at a time.
+ten minutes. Ten minute windows on a 36 minute video is four reads plus one
+probe past the estimate that answers 400 in under a second; on a four hour
+video, twenty four reads plus the probe, run three at a time.
 
 ## Run it
 
@@ -66,11 +67,17 @@ measured. YouTube refuses its watch page and player endpoint from the
 container's address (`LOGIN_REQUIRED`), so the length is estimated from
 Gemini's `countTokens`, which answers in about a second: 75 video tokens per
 second on two measured videos, 76.5 on a four hour one. The estimate reads
-right or a little long, a window placed past the end answers 400 in under a
-second and is dropped, and one extra window is always tried past the estimate
-so a short estimate cannot lose the tail. The report says the length is
-estimated; pass `--duration` to override it. Windows are read in parallel by threads,
-three at once by default, and each window gets one retry because the relay's
-502 is a timing failure rather than a verdict. Gemini spends tokens on every
-window: about 6,000 video tokens per minute of video at the default sampling,
-so a four hour video is about 1.4 million input tokens before the synthesis.
+right or a little long, so a 400 counts as past the end only in an unbroken
+run of 400s at the tail of the plan and on the probes beyond it; the same 400
+on a window with readable video after it is recorded as unavailable, never
+dropped. Probing continues
+while windows keep answering and stops at the first that does not, with a
+hard cap of twelve windows past the estimate, after which the run says so and
+asks for `--duration`. Zero readable windows is exit 1 and an `Unavailable
+evidence` line, never an empty report with exit 0. The report says the length
+is estimated; pass `--duration` to override it. Windows are read in parallel
+by threads, three at once by default, and each window gets one retry because
+the relay's 502 is a timing failure rather than a verdict. Gemini spends
+tokens on every window: `countTokens` counted 161,100 video and 64,440 audio
+tokens for 35:48, about 6,300 tokens per minute of video, so a four hour video
+is about 1.5 million input tokens before the synthesis.

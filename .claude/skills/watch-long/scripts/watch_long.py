@@ -37,6 +37,7 @@ API = "https://generativelanguage.googleapis.com"
 DEFAULT_MODEL = "gemini-4-argon"
 DEFAULT_WINDOW = 600
 DEFAULT_PARALLEL = 3
+MAX_EXTENSION = 12  # windows probed past the estimate before the run stops and says so
 YOUTUBE = re.compile(
     r"^https?://(?:(?:www\.|m\.|music\.)?youtube\.com/(?:watch\?\S*\bv=|shorts/|live/)|youtu\.be/)\S+$",
     re.I,
@@ -157,12 +158,21 @@ def parse_sse(text: str) -> Tuple[str, Dict[str, object], Optional[str]]:
             chunk = json.loads(line[6:])
         except ValueError:
             continue
-        for candidate in chunk.get("candidates", []):
+        if not isinstance(chunk, dict):
+            continue
+        feedback = chunk.get("promptFeedback")
+        if isinstance(feedback, dict) and feedback.get("blockReason"):
+            finish = f"blocked: {feedback['blockReason']}"
+        for candidate in chunk.get("candidates") or []:
+            if not isinstance(candidate, dict):
+                continue
             finish = candidate.get("finishReason", finish)
-            for part in candidate.get("content", {}).get("parts", []):
-                if part.get("text"):
+            content = candidate.get("content")
+            parts_in = content.get("parts") if isinstance(content, dict) else None
+            for part in parts_in or []:
+                if isinstance(part, dict) and part.get("text"):
                     parts.append(part["text"])
-        if chunk.get("usageMetadata"):
+        if isinstance(chunk.get("usageMetadata"), dict):
             usage = chunk["usageMetadata"]
     return "".join(parts), usage, finish
 
@@ -227,8 +237,18 @@ def stream_generate(payload: dict, *, model: str, key: str, timeout: float) -> T
 
 
 def read_window(
-    source: str, span: Tuple[int, int], index: int, *, question: str, model: str, key: str, timeout: float
+    source: str,
+    span: Tuple[int, int],
+    index: int,
+    *,
+    question: str,
+    model: str,
+    key: str,
+    timeout: float,
 ) -> WindowResult:
+    """Read one window. A 400 is recorded as `past_end`; `run` keeps that reading only for
+    an unbroken run of 400s at the end of the plan and demotes any earlier one to a failed
+    window, so a gap never vanishes from the report."""
     start, end = span
     result = WindowResult(index=index, start=start, end=end)
     prompt = WINDOW_PROMPT.format(start=clock(start), end=clock(end))
@@ -264,6 +284,8 @@ def read_window(
             break
         except RuntimeError as exc:
             last_error = f"attempt {attempt}: {exc}"
+        except Exception as exc:  # a malformed response must cost one window, never the run
+            last_error = f"attempt {attempt}: {type(exc).__name__}: {exc}"
     result.error = last_error
     result.seconds = time.monotonic() - began
     return result
@@ -303,8 +325,10 @@ def render(report: Report) -> str:
         f"- Question: {report.question}",
         "",
     ]
-    if failed:
+    if failed or not ok:
         lines += ["## Unavailable evidence", ""]
+        if not ok:
+            lines.append("- no window could be read; nothing below is evidence of the video")
         lines += [f"- {clock(w.start)} to {clock(w.end)}: {w.error}" for w in failed]
         lines.append("")
     lines += ["## Synthesis", ""]
@@ -314,7 +338,11 @@ def render(report: Report) -> str:
         lines += [f"Synthesis unavailable: {report.synthesis_error or 'not run'}", ""]
     lines += ["## Segment notes", ""]
     for w in report.windows:
-        timing = f"{w.seconds:.1f}s, first byte {w.first_byte:.1f}s" if w.ok else f"{w.seconds:.1f}s"
+        timing = f"{w.seconds:.1f}s"
+        if w.ok:
+            timing += f", first byte {w.first_byte:.1f}s"
+            if w.prompt_tokens is not None and w.output_tokens is not None:
+                timing += f", {w.prompt_tokens} tokens in, {w.output_tokens} out"
         lines.append(f"### {clock(w.start)} to {clock(w.end)} ({timing})")
         lines.append("")
         lines.append(w.text.strip() if w.ok else f"UNAVAILABLE: {w.error}")
@@ -351,12 +379,37 @@ def run(args: argparse.Namespace) -> Report:
 
     with ThreadPoolExecutor(max_workers=max(1, args.parallel)) as pool:
         windows = [f.result() for f in [pool.submit(read, i, s) for i, s in enumerate(spans)]]
-    # The estimate can run short. Keep reading full windows past it until one answers 400.
-    while windows and not windows[-1].past_end:
+    # "Request contains an invalid argument" is Google's generic 400. It means past the end
+    # only where the end can be: an unbroken run of 400s at the tail of the plan. The same
+    # answer on a window with readable video after it is a gap, and the report must say so.
+    tail = len(windows)
+    while tail and windows[tail - 1].past_end:
+        tail -= 1
+    for w in windows[:tail]:
+        if w.past_end:
+            w.past_end = False
+            w.error = f"{w.error} on a window inside the planned length; the video may be unreadable here"
+    # The estimate can also run short. Probe full windows past it while they keep answering,
+    # and stop at the first that does not: a 400 is the end, a failure is a gap to report,
+    # and neither is evidence that more video exists. The cap keeps a relay that answers
+    # content forever from spending without end.
+    probes = 0
+    while windows[-1].ok and probes < MAX_EXTENSION:
         last = windows[-1]
+        probes += 1
         windows.append(read(len(windows), (last.end, last.end + args.window)))
-    kept = [w for w in windows if not w.past_end]
-    for w in kept:
+    if probes == MAX_EXTENSION and windows[-1].ok:
+        print(
+            f"[watch-long] stopped after {MAX_EXTENSION} windows past the estimate; pass --duration "
+            "if the video really is that much longer",
+            file=sys.stderr,
+        )
+    kept = []
+    for w in windows:
+        if w.past_end:
+            print(f"[watch-long] {clock(w.start)} to {clock(w.end)}: past the end, dropped", file=sys.stderr)
+            continue
+        kept.append(w)
         state = f"ok {w.seconds:.1f}s" if w.ok else f"FAILED {w.error}"
         print(f"[watch-long] {clock(w.start)} to {clock(w.end)}: {state}", file=sys.stderr)
     report = Report(
@@ -400,7 +453,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"[watch-long] wrote {args.out}", file=sys.stderr)
     else:
         print(text)
-    return 0 if all(w.ok for w in report.windows) and not report.synthesis_error else 1
+    complete = bool(report.windows) and all(w.ok for w in report.windows)
+    return 0 if complete and not report.synthesis_error else 1
 
 
 if __name__ == "__main__":
