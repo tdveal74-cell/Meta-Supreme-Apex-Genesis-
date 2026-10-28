@@ -5,8 +5,9 @@
  *   node n8n/tqo-v5/build_movie.test.mjs
  *
  * build_movie.js is the Build Movie node as exported (version 9320520f of
- * TQO FINAL V5) plus the Jev shadow reader. The unmodified node is read straight
- * out of the export JSON here, never retyped, and run beside the new body on the
+ * TQO FINAL V5) plus the Jev shadow reader, and is byte for byte the live node in
+ * the export from version e98e09b9. The unmodified node is read from a fixture
+ * copied out of the 9320520f export, never retyped, and run beside the new body on the
  * same stubs. With no Jev node run, the two must agree on everything but the
  * three keys the shadow adds. The Jev nodes are stubbed: nothing here touches a
  * network, and no TypeSafe key is funded yet, so these answers are written by
@@ -17,10 +18,18 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const NEW_SRC = readFileSync(new URL("./build_movie.js", import.meta.url), "utf8");
+// The unmodified node is the body from export version 9320520f, kept as a fixture.
+// The export moved on: from version e98e09b9 the live Build Movie IS the Jev shadow
+// build, so reading "the original" from the current export would compare the file
+// with itself. The fixture is the pre-Jev body, byte for byte, taken from that
+// earlier version of the export.
+const ORIGINAL = readFileSync(new URL("./fixtures/build_movie_pre_jev_9320520f.js", import.meta.url), "utf8");
+assert.ok(ORIGINAL.length > 5000, "the fixture must carry the Build Movie body");
 const EXPORT = JSON.parse(readFileSync(new URL("./exports/qEkGOUsNyVaRAmm6_active.json", import.meta.url), "utf8"));
-const ORIGINAL = EXPORT.nodes.find((n) => n.name === "Build Movie").parameters.jsCode;
-assert.equal(typeof ORIGINAL, "string");
-assert.ok(ORIGINAL.length > 5000, "the export must carry the Build Movie body");
+const LIVE = EXPORT.nodes.find((n) => n.name === "Build Movie").parameters.jsCode;
+assert.equal(typeof LIVE, "string");
+// The mirror is the live node. When the live node moves, this turns red first.
+assert.equal(NEW_SRC, LIVE, "build_movie.js is not the Build Movie body in the current export");
 
 // ---- stubs ------------------------------------------------------------------
 
