@@ -28,6 +28,26 @@ ten minutes. Ten minute windows on a 36 minute video is four reads plus one
 probe past the estimate that answers 400 in under a second; on a four hour
 video, twenty four reads plus the probe, run three at a time.
 
+## Window size does not move the 502 rate
+
+Tested 2026-10-28 after a 600 s window on the Tech With Tim video failed both
+attempts. Four videos were each read twice, once at 600 s windows and once at
+300 s, with the order alternated so that neither size always went in warm:
+
+| video | length | 600 s windows lost | 300 s windows lost |
+| --- | --- | --- | --- |
+| `ntDIxaeo3Wg` | 35:48 | 1 of 4 | 0 of 8 |
+| `c6Hxnu4JoOw` | 30:17 | 0 of 4 | 0 of 7 |
+| `E03WGMO_4A4` | 2:18:52 | 0 of 14 | 1 of 28 |
+| `eA9Zf2-qYYM` | 58:55 | 0 of 6 | 1 of 12 |
+
+One of 28 against two of 55: the same rate, about one window in thirty. Smaller
+windows lose less video per failure and fail more often per run, so the default
+stays at 600 s. Every lost span read cleanly on the other run, which is why the
+script makes one re-pass over the failed windows after the first pass ends.
+Four videos and three failures is a small sample; it supports keeping the
+default, not a claim about the relay in general.
+
 ## Run it
 
 ```bash
@@ -77,7 +97,12 @@ asks for `--duration`. Zero readable windows is exit 1 and an `Unavailable
 evidence` line, never an empty report with exit 0. The report says the length
 is estimated; pass `--duration` to override it. Windows are read in parallel
 by threads, three at once by default, and each window gets one retry because
-the relay's 502 is a timing failure rather than a verdict. Gemini spends
+the relay's 502 is a timing failure rather than a verdict. A window that fails
+both attempts is read once more after the whole first pass has finished, and
+the report marks it `re-pass`; one that fails again, a 400 included, is still
+reported as unavailable, with both errors. The re-pass covers the planned
+windows only: a probe past the estimate that fails is reported as a gap and not
+re-read. A 400 on the first pass is never re-read. Gemini spends
 tokens on every window: `countTokens` counted 161,100 video and 64,440 audio
 tokens for 35:48, about 6,300 tokens per minute of video, so a four hour video
 is about 1.5 million input tokens before the synthesis.

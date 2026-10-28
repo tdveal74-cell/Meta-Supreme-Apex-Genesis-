@@ -84,6 +84,7 @@ class WindowResult:
     first_byte: float = 0.0
     prompt_tokens: Optional[int] = None
     output_tokens: Optional[int] = None
+    reread: bool = False
 
     @property
     def ok(self) -> bool:
@@ -339,6 +340,8 @@ def render(report: Report) -> str:
     lines += ["## Segment notes", ""]
     for w in report.windows:
         timing = f"{w.seconds:.1f}s"
+        if w.reread:
+            timing += ", re-pass"
         if w.ok:
             timing += f", first byte {w.first_byte:.1f}s"
             if w.prompt_tokens is not None and w.output_tokens is not None:
@@ -379,6 +382,24 @@ def run(args: argparse.Namespace) -> Report:
 
     with ThreadPoolExecutor(max_workers=max(1, args.parallel)) as pool:
         windows = [f.result() for f in [pool.submit(read, i, s) for i, s in enumerate(spans)]]
+        # One re-pass over the planned windows that failed. Measured 2026-10-28 on four
+        # videos: 1 of 28 windows at 600s and 2 of 55 at 300s died on the relay's 502 after
+        # both attempts, so the window size did not move the rate, and every one of those
+        # spans read cleanly on a later run. By the time the first pass ends the rest of the
+        # video has been ingested, which is the slow part the 30 s first byte cap catches.
+        # A 400 is not re-read: inside the plan it is classified below, and at the tail it
+        # is the end of the video. Only a readable re-pass replaces the first result; any
+        # other answer, a 400 included, leaves the window a reported gap with both errors,
+        # because a span that timed out twice is never evidence the video ended there.
+        failed = [w for w in windows if not w.ok and not w.past_end]
+        retried = [pool.submit(read, w.index, (w.start, w.end)) for w in failed]
+        for first, future in zip(failed, retried, strict=True):
+            second = future.result()
+            if second.ok:
+                windows[first.index] = second
+            else:
+                first.error = f"{first.error}; re-pass {second.error}"
+            windows[first.index].reread = True
     # "Request contains an invalid argument" is Google's generic 400. It means past the end
     # only where the end can be: an unbroken run of 400s at the tail of the plan. The same
     # answer on a window with readable video after it is a gap, and the report must say so.
@@ -411,6 +432,8 @@ def run(args: argparse.Namespace) -> Report:
             continue
         kept.append(w)
         state = f"ok {w.seconds:.1f}s" if w.ok else f"FAILED {w.error}"
+        if w.reread:
+            state += " (re-pass)"
         print(f"[watch-long] {clock(w.start)} to {clock(w.end)}: {state}", file=sys.stderr)
     report = Report(
         source=args.source,
