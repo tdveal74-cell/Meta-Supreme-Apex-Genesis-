@@ -277,25 +277,37 @@ A fresh critic on `de4ac645` confirmed the live node equals the repo, the four
 proof frames, and the layout on every input `Thumb: Plan` can send. It also showed
 the first layout test let a budget of 760, a looser height rule and drifted widths
 through once every pinned copy was moved together. The test now pins the layout
-constants and the 1.2 em line pitch, checks the width table against Liberation
-Sans read from the font file, compares the node's wrap with n8n's line for line,
-and adds seven crafted headlines. Each of these edits to the node, made in every
-pinned copy at once, now fails it: a budget of 760 or 682, widths scaled by
-1000/1005, W at 700, M at 600, E at 500, an unlisted glyph at 400, a pitch of
-0.5 or 1.1, a floor of 900, a search bound of 1, the wrap without its plus one,
-and a wrap one short of the search's answer. Four things were left as they are.
-The first three do not reach what `Thumb: Plan` sends, and the fourth predates the
-fix; changing any of them is a publish:
+constants, the 1.2 em line pitch and the search floor, checks the width table
+against Liberation Sans read from the font file, compares the node's wrap with
+n8n's line for line, wraps the headline the node returns rather than the one it
+was given, and adds nine crafted headlines. Each of these edits to the node, made
+in every pinned copy at once, now fails it: a budget of 760 or 682, a budget
+check loosened by 2 px, widths scaled by 1000/1005, W at 700, M at 600, E at 500,
+an unlisted glyph at 400, a pitch of 0.5 or 1.1, a floor of 900, a search bound
+of 1, the search floor raised by one to four, the lines judged at one more than
+the wrap returned, the wrap without its plus one, a wrap one short of the
+search's answer, and the headline left untrimmed. Three rounds of review each
+found edits the previous test let through, so this is not a complete
+specification of the node, and a deliberate change to it still needs its own
+review.
+
+Four things were left as they are, because changing any of them is a publish. The
+first three do not touch an English headline that `Thumb: Plan` sends, and the
+fourth predates the fix:
 
 - A double space or a newline in a headline can still make Compose draw an empty
-  line. Plan collapses all whitespace first, so Pick Still never sees one.
-- The height rule assumes a 1.2 em line pitch and the frames measure 1.12 to
-  1.135 em. It can only reject a size that would fit, never let one overflow.
+  line. Plan collapses every run of whitespace to one space, and Pick Still trims
+  the ends, so neither reaches Compose.
+- The height rule assumes a 1.2 em line pitch. The four proof frames, executions
+  4764 to 4767, measure 1.12 to 1.135 em, and GraphicsMagick drawing Liberation
+  Sans at 84 px gives 1.131 em. The rule can only reject a size that would fit,
+  never let one overflow.
 - The comment above the width table says an unlisted glyph can only make the
   wrap tighter. That is wrong for the few glyphs wider than 1 em, such as
-  Cyrillic Ю at 1010; English capitals are all in the table.
-- The 24 px kicker draws at about 3 px in a 168 px wide thumbnail. That predates
-  this fix and was outside the ruling.
+  Cyrillic Ю at 1010. Plan does not filter characters, so such a glyph could
+  reach Pick Still; every English capital is in the table.
+- The 24 px kicker draws at about 3 px when the thumbnail is shown 168 px wide.
+  That predates this fix and was outside the ruling.
 
 Still open after the publish, and readable only on the first real render:
 whether n8n's two Split In Batches loops hand the side branches the right row,

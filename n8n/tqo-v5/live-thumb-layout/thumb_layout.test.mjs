@@ -12,7 +12,7 @@
  * from Arial's advance widths with the same word wrap Compose applies.
  *
  * This test holds the files to the manifest, holds the change to the three
- * replacement pairs, and checks the layout on 600 generated headlines and seven
+ * replacement pairs, and checks the layout on 600 generated headlines and nine
  * crafted ones with an independent copy of n8n's wrap loop. The width table is
  * checked against the one line measured on the instance and, entry by entry,
  * against Liberation Sans, the metric twin of Arial, read from the font file's
@@ -23,8 +23,11 @@
  * drifted widths through, once every pinned copy was re-baselined together. The
  * layout constants, the replica check and the crafted headlines below each turn
  * one of those back into a failure. Two verifiers then found a budget loosened
- * by a few pixels and a wrap one short of the search's answer still passing;
- * the last two crafted headlines catch those.
+ * by a few pixels and a wrap one short of the search's answer still passing,
+ * and a third found an untrimmed headline and a raised search floor passing.
+ * The last four crafted headlines and the floor pin catch those. This is not a
+ * complete specification of the node: it catches each drift a reviewer has
+ * found, and a deliberate edit to after.js still needs its own review.
  */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -105,6 +108,11 @@ eq(after.split("(ARIAL[ch] || 1000)").length, 2, "an unlisted glyph counts as 10
 // is the safe side. Nothing Thumb: Plan can send reaches the height rule, so it
 // is pinned here rather than by a headline.
 eq(after.split("TOP[px] + lines.length * px * 1.2 > FLOOR_Y").length, 2, "the height rule reads a 1.2 em line pitch");
+// The search starts no lower than the longest word plus one, and judges the
+// lines at the lineLength it would return. A higher floor can leave no fitting
+// wrap at any size, and judging at len + 1 can pass a line that is too wide.
+eq(constant("minLen"), "Math.max(8, ...head.split(' ').map(w => w.length + 1))", "the search floor is the longest word plus one, and at least 8");
+eq(after.split("const lines = wrapLines(head, len);").length, 2, "the search judges the lines at the lineLength it returns");
 
 // ---- The width table against the font -------------------------------------------
 // Liberation Sans is metric compatible with Arial. liberation_widths.py read these
@@ -163,9 +171,12 @@ let seed = 20261027;
 const next = () => (seed = (seed * 1103515245 + 12345) % 2147483648);
 // Returns true when every word fits the budget at the smallest size, which is
 // when the width and height checks apply.
-const checkHeadline = (headline, isNCO) => {
+const checkHeadline = (input, isNCO) => {
+  const out = run({ airtableId: "x", headline: input, kicker: "K", isNCO });
+  // Compose draws the headline Pick Still returns, so that is what is wrapped.
+  const headline = out.headline;
+  eq(headline, input.trim(), JSON.stringify(input) + ": Pick Still returns the headline trimmed");
   const words = headline.split(" ");
-  const out = run({ airtableId: "x", headline, kicker: "K", isNCO });
   ok([104, 84, 66, 54].includes(out.headSize), headline + ": a size from the scale");
   eq(out.headY, TOP[out.headSize], headline + ": headY follows the size");
   sameWrap(headline);
@@ -215,6 +226,12 @@ const CRAFTED = {
   // The only wrap that fits is the longest word plus one, and that word comes
   // first, so a wrap one shorter than the search's answer starts on an empty line.
   "ACCOUNTABILITY WORKERS MANAGER": "the wrap the search returns",
+  // Thumb: Plan turns a dash at either end of its text into a space, so Pick
+  // Still can receive this. Untrimmed, Compose would start on an empty line.
+  " ACCOUNTABILITY WORKERS MANAGER ": "the trim",
+  // With the search floor raised by four, no wrap fits at any size and this one
+  // falls back to a 696 px line at 54 px.
+  "WORKFORCE MOMENTUM TRANSFORMATION JOB": "the search floor",
 };
 for (const [headline, what] of Object.entries(CRAFTED)) {
   ok(checkHeadline(headline, false), headline + ": every word fits the budget at 54 px, so the checks for " + what + " apply");
