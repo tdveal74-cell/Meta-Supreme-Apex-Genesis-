@@ -546,9 +546,10 @@ class Shell:
     or, inside backticks, has a backtick in it, a subshell after an assignment
     or a redirect, inside backticks a comment, a backslash in an ANSI-C string
     or a here-document line that ends in a backslash, an array subscript at the
-    start of a command that does not close before a blank or an operator, a
-    ]] that is glued to a parenthesis or sits before a ( , a $ followed by a line
-    continuation inside double quotes, the word alias, a word that names
+    start of a command that does not close before a blank or an operator, an
+    element of an array literal that holds a [ the same way, text glued to the )
+    that ends an array literal, a ]] that is glued to a parenthesis or sits before
+    a ( , a $ followed by a line continuation inside double quotes, the word alias, a word that names
     expand_aliases or BASH_ALIASES, an expansion handed to shopt, a quote nested in a way it
     cannot follow, or a quote or an escape the text ends inside, ends the read. A
     line continuation between or inside words is stepped over, and so is one
@@ -710,24 +711,30 @@ class Shell:
         way. The subscript is bash's own matching: a [ inside it opens another.
         The head is found with line continuations taken out, because bash removes
         them before it reads a token: a\\ then [k >f ]=1 is the one word a[k >f ]=1."""
-        t = self.t
         start = self.array_head(i)
-        if start < 0:
-            return True
-        depth, j = 1, start
+        return start < 0 or self.subscript_end(start) >= 0
+
+    def subscript_end(self, i):
+        """From just after a [ to just after the ] that matches it, or -1 when
+        something that splits the word, or that bash reads as a pair inside the
+        subscript, comes first. See subscript_closes(). A ) is one of those: in the
+        subscript of an array element bash takes it into the word, and this reader
+        would close the array literal there."""
+        t = self.t
+        depth, j = 1, i
         while True:
             stop = SUBSCRIPT_STOP.search(t, j)
             if stop is None:
-                return False
+                return -1
             c, j = stop.group(), stop.end()
             if c == "[":
                 depth += 1
             elif c == "]":
                 depth -= 1
                 if depth == 0:
-                    return True
+                    return j
             elif not (c == "$" and t[j:j + 1] in NAME_START):
-                return False
+                return -1
 
     def array_head(self, i):
         """The index after NAME[ when a NAME starts at i, or -1. A line continuation
@@ -805,6 +812,14 @@ class Shell:
         prev = t[i - 1] if i else "\n"
         if prev == "=":
             self.i = self.skip_array(i + 1)
+            # Whatever is glued to the ) is part of the same word in bash: a=()$(>f)
+            # is one word and a=()W is one. Here it would start a new command, so
+            # only a blank, a separator, a closer or the end of the text may follow.
+            # A line continuation is removed before bash reads a token.
+            after = self.past_continuations(self.i)
+            follower = t[after:after + 1]
+            if follower and follower not in WS + SEPARATORS and not (follower == "`" and "`" in self.frames):
+                self.halt()
         elif prev not in WS and prev not in SEPARATORS:
             self.halt()
         elif t.startswith("(", self.past_continuations(i + 1)):
@@ -1026,7 +1041,12 @@ class Shell:
 
     def skip_array(self, i):
         """From after the ( of NAME=( to after its ). Quotes and expansions inside
-        are read as they are in a word, so a ) in one does not close it."""
+        are read as they are in a word, so a ) in one does not close it. A [ is the
+        start of a subscript, and bash keeps all of it in the element: [a)]=1 is one
+        word, and so is [b>f ]=2 with its blank and its operator. It is stepped over
+        when it closes with a ] before anything that splits the word, a ) included,
+        and otherwise the read ends, because the rest of the literal would be read
+        here as commands."""
         t, n = self.t, self.n
         while i < n:
             c = t[i]
@@ -1034,6 +1054,12 @@ class Shell:
                 return i + 1
             if c == "(" or (c == "#" and t[i - 1] in WS + "\n("):
                 return self.halt()
+            if c == "[":
+                j = self.subscript_end(i + 1)
+                if j < 0:
+                    return self.halt()
+                i = j
+                continue
             j = self.special(i, [])
             if self.halted:
                 return n

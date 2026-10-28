@@ -983,7 +983,10 @@ before a blank, an operator, a quote, an escape or an expansion other than
 `$NAME` (bash reads it as the head of an array assignment and takes the word to
 the matching `]`, so `m[k >f ]=1` is one word and runs nothing, and `a`, a line
 continuation and `[k >f ]=1` is that word too, because the name and the `[` are
-found with the continuations taken out), a `#` after an
+found with the continuations taken out), an element of an array literal with a `[` whose subscript does not close the same way (bash keeps
+the whole subscript in the element, so `[a)]=1` is one word and the literal goes on),
+text glued to the `)` that ends an array literal (`a=()$(>f)` is one word, a line
+continuation between the two counting as nothing), a `#` after an
 operator or a parenthesis inside `[[ ]]`, a `]]` glued to a parenthesis or before
 a `(`, a `$` followed by a line continuation inside double quotes, the word
 `alias`, a word that names `expand_aliases` or `BASH_ALIASES`, an expansion handed
@@ -1040,6 +1043,27 @@ commands after it. The edge, unverified in the harness: an alias that the shell'
 profile or a file the command sources defines, one the command writes with a
 here-document and then sources included, is not in the text, and nothing here
 sees it.
+
+Round 7, against `ecc10b0`, found two more ways a redirect target or a flag left,
+both in the array literal, which the reader steps over without looking in. Bash
+keeps a `)` inside the subscript of an element, so `declare -A m=([a)]=1 [b>f ]=2)`
+is one word that runs nothing, and the reader closed the literal at that `)` and
+read the rest as commands: a redirect target, which no gate tests, a flag after a
+known program such as `declare`, and the name of an installed command. Text glued
+to the `)` that ends a literal is the same word in bash (`a=()$(>f)`), and the
+reader started a new command there. Both are closed in the reader and not in the
+gate. A `[` in an array literal is stepped over only when its subscript closes with
+a `]` before a blank, an operator, a quote, an escape, a `)` or an expansion other
+than `$NAME`, which is the scan the head of a command already used, and otherwise
+the read ends. After the `)` that ends a literal only a blank, a separator, a
+closer or the end of the text may follow, a line continuation counting as nothing,
+and otherwise the read ends. The cost is fidelity: an array with a blank in a
+subscript (`[a b]=1`), or text after its `)`, shows Jev less. The rows are also run
+through real bash, as for rounds 5 and 6. Separately, the proxy tests failed on
+Python 3.11, which is the version the standalone job in CI runs: `http.client`
+puts `HTTP/1.0` on the `CONNECT` line up to 3.11 and `HTTP/1.1` from 3.12, and the
+tests had the second written into them, so the file passed on 3.12 and 3.13 and
+would have gone red in CI. They compare the host and the port now.
 
 It ships in shadow mode, `ENFORCE = False`: it asks, records the answer and
 prints nothing. Enforcement is a separate ruling and a one line commit, and

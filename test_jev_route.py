@@ -231,8 +231,11 @@ class FakeProxy:
             conn.close()
 
     def connects(self):
-        """The request line of every connection the proxy was asked to make."""
-        return [head.split("\r\n")[0] for head in self.heads]
+        """The request line of every connection the proxy was asked to make, without
+        its HTTP version. http.client puts HTTP/1.0 on the CONNECT line up to Python
+        3.11 and HTTP/1.1 from 3.12, and CI runs 3.11, so the version is the
+        interpreter's and not something the hook chooses."""
+        return [head.split("\r\n")[0].rsplit(" ", 1)[0] for head in self.heads]
 
     def close(self):
         self.listener.close()
@@ -1194,7 +1197,7 @@ def test_the_request_goes_through_the_proxy_the_environment_sets(project, monkey
     route_through(monkeypatch, proxy)
     assert jev.ENDPOINT == "https://api.typesafe.ai/v1/systemone"
     assert jev.run(payload(), now=NOW, timeout=5) is None
-    assert proxy.connects() == ["CONNECT api.typesafe.ai:443 HTTP/1.1"]
+    assert proxy.connects() == ["CONNECT api.typesafe.ai:443"]
     assert proxy.tunnelled == []
     assert ledger(project)[-1]["outcome"] == "error"
 
@@ -1225,7 +1228,7 @@ def test_the_tunnel_trusts_ssl_cert_file_and_carries_no_credential(project, monk
     route_through(monkeypatch, proxy)
     monkeypatch.setenv("SSL_CERT_FILE", str(cert))
     assert jev.run(payload(command="curl -u admin:hunter2 https://x.example"), now=NOW, timeout=5) is None
-    assert proxy.connects() == ["CONNECT api.typesafe.ai:443 HTTP/1.1"]
+    assert proxy.connects() == ["CONNECT api.typesafe.ai:443"]
     assert len(proxy.tunnelled) == 1
     request = proxy.tunnelled[0]
     assert request["line"] == "POST /v1/systemone HTTP/1.1"
@@ -1246,7 +1249,7 @@ def test_a_certificate_the_environment_does_not_trust_is_refused_through_the_pro
     route_through(monkeypatch, proxy)
     monkeypatch.setenv("SSL_CERT_FILE", str(stranger))
     assert jev.run(payload(), now=NOW, timeout=5) is None
-    assert proxy.connects() == ["CONNECT api.typesafe.ai:443 HTTP/1.1"]
+    assert proxy.connects() == ["CONNECT api.typesafe.ai:443"]
     assert proxy.tunnelled == []
     assert ledger(project)[-1]["outcome"] == "error"
 
@@ -1259,12 +1262,32 @@ def test_a_real_process_reaches_the_proxy_with_send_on_and_never_as_shipped(proj
     stdin_text = json.dumps(payload())
     proc, _ = run_in_a_process(project, jev.ENDPOINT, stdin_text, extra_env=proxy_env(proxy))
     assert proc.returncode == 0 and proc.stdout == "", proc.stderr
-    assert proxy.connects() == ["CONNECT api.typesafe.ai:443 HTTP/1.1"]
+    assert proxy.connects() == ["CONNECT api.typesafe.ai:443"]
     assert ledger(project)[-1]["outcome"] == "error"
     shipped = run_the_shipped_file(project, stdin_text, proxy_env(proxy))
     assert shipped.returncode == 0 and shipped.stdout == "" and shipped.stderr == ""
-    assert proxy.connects() == ["CONNECT api.typesafe.ai:443 HTTP/1.1"], "the shipped file made a connection"
+    assert proxy.connects() == ["CONNECT api.typesafe.ai:443"], "the shipped file made a connection"
     assert ledger(project)[-1]["outcome"] == "off"
+
+
+@pytest.mark.parametrize("version", ["HTTP/1.0", "HTTP/1.1"])
+def test_the_proxy_reads_a_connect_line_the_same_whatever_http_version_the_interpreter_sends(fake_proxy, version):
+    """CI runs Python 3.11, whose http.client sends HTTP/1.0 on the CONNECT line, and
+    3.12 and later send HTTP/1.1. The routing tests compare the host and the port,
+    so they hold on either, and this fails if the comparison goes back to the whole
+    line."""
+    proxy = fake_proxy()
+    proxy.heads.append("CONNECT api.typesafe.ai:443 %s\r\nHost: api.typesafe.ai:443\r\n\r\n" % version)
+    assert proxy.connects() == ["CONNECT api.typesafe.ai:443"]
+
+
+def test_the_connect_line_the_running_interpreter_sends_is_one_of_the_two_versions(monkeypatch, fake_proxy):
+    """The version dropped above is a version and nothing else: whatever this
+    interpreter puts after the port is HTTP/1.0 or HTTP/1.1."""
+    proxy = fake_proxy()
+    route_through(monkeypatch, proxy)
+    assert jev.run(payload(), now=NOW, timeout=5) is None
+    assert [head.split("\r\n")[0].rsplit(" ", 1)[1] for head in proxy.heads] in (["HTTP/1.0"], ["HTTP/1.1"])
 
 
 # ------------------------------------------- what leaves: the allowed pieces
@@ -1676,6 +1699,29 @@ VALUE_PLACES = [
     "shopt -s expand_alia\\\nses\nalias foo='cat <<EOF'\nfoo\na >{s}\nEOF",
     "o=expand_ali; o+=ases; shopt -s $o\nalias foo='cat <<EOF'\nfoo\na >{s}\nEOF",
     "shopt -s \"$(echo expand_aliases)\"\nalias foo='cat <<EOF'\nfoo\na >{s}\nEOF",
+    # Round 7. Bash keeps a ) inside the subscript of an array element, so the literal
+    # does not close there, and what is after it, a blank and an operator included, is
+    # one word with the rest. Anything glued to the ) that ends a literal is the same
+    # word too, a $( ) with a redirect in it included. Nothing here runs a command.
+    "declare -A m=([a)]=1 [b>{s} ]=2)",
+    "declare -A m=([a)]=1 [b<{s} ]=2)",
+    "declare -A m=(\n[a)]=1\n[b<{s} ]=2\n)",
+    "a=([k)>{s};]=v)",
+    "a=([x)]\n{s}\n)",
+    "declare -A m=([a)]=1 --{s})",
+    "declare -A m=([a)]=1 [b;echo >{s};]=2)",
+    "declare -A m=([a)]=1 &>{s} [b]=2)",
+    "declare -A m=([a)]=1 [b]=2 [c>{s} ]=3)",
+    "x=1 a=(b [c)>{s} ]=3)",
+    "a=(b b[c)>{s} ]=3)",
+    "a=(b [c)>{s} ] [d]=3)\nls",
+    "declare a=()$(>{s})",
+    "a+=()$(< {s})",
+    "declare a=()$(echo hi >{s})",
+    "declare a=()\\\n$(>{s})",
+    "a=(b)$(>{s})",
+    "a=([1]=x)$(>{s})",
+    "a=()$(echo --{s})",
 ]
 
 
@@ -2029,6 +2075,25 @@ OUTLINE_ROWS = [
     ("ls; echo unalias aliases; git push --force", "ls\necho\ngit --force"),
     ("ls; git --alias; git push --force", "ls\ngit --alias\ngit --force"),
     ("ls; echo \"$o\"; git push --force", "ls\necho\ngit --force"),
+    # What the stops of round 7 leave alone: a subscript that closes before anything
+    # that splits the word, in any element, and an array literal that ends at a blank,
+    # a separator, a closer or the end of the text, with or without a continuation.
+    ("ls; a=([1]=x [$i]=y [i+1]=z [a[b]c]=w); git push --force", "ls\ngit --force"),
+    ("ls; files=(*.[ch] [[:alpha:]]x [!a-z]y); git push --force", "ls\ngit --force"),
+    ("ls; declare -A M=([a]=s [b]=c); git push --force", "ls\ndeclare -A\ngit --force"),
+    ("ls; a=() ; git push --force", "ls\ngit --force"),
+    ("ls; a=();git push --force", "ls\ngit --force"),
+    ("ls; a=()\ngit push --force", "ls\ngit --force"),
+    ("ls; a=()\\\n; git push --force", "ls\ngit --force"),
+    ("ls; a=()\\\n git push --force", "ls\ngit --force"),
+    ("ls; a=() >f; git push --force", "ls\nf\ngit --force"),
+    ("ls; a=()>f; git push --force", "ls\nf\ngit --force"),
+    ("ls; a=()&& git push --force", "ls\ngit --force"),
+    ("ls; a=() | cat; git push --force", "ls\ncat\ngit --force"),
+    ("ls; echo $(a=()); git push --force", "ls\necho\ngit --force"),
+    ("ls; echo `a=()`; git push --force", "ls\necho\ngit --force"),
+    ("ls; (a=()); git push --force", "ls\ngit --force"),
+    ("ls; declare -A M=([a]=s)>/dev/null; git push --force", "ls\ndeclare -A /dev/null\ngit --force"),
 ]
 
 
@@ -2333,6 +2398,30 @@ STOP_ROWS = [
     ("ls; o=expand_aliases; git push --force", "ls"),
     ("ls; shopt -s $o; git push --force", "ls\nshopt -s"),
     ("ls; shopt -s \"$o\"; git push --force", "ls\nshopt -s"),
+    # Round 7. An element of an array literal that holds a [ is read only when the
+    # subscript closes with a ] before a blank, an operator, a quote, an escape, a ) or
+    # an expansion other than $NAME. Bash takes all of it into the element, and this
+    # reader would end the literal at the first ) or read the rest as commands.
+    ("ls; declare -A m=([a b]=1); git push --force", "ls\ndeclare -A"),
+    ("ls; a=([a\n]=1); git push --force", "ls"),
+    ("ls; a=([a;b]=1); git push --force", "ls"),
+    ("ls; a=([a>f ]=1); git push --force", "ls"),
+    ("ls; a=(x b[c)]=1); git push --force", "ls"),
+    ("ls; a=(x b[c d]=1); git push --force", "ls"),
+    ("ls; a=(['a']=1); git push --force", "ls"),
+    ("ls; a=([$((1))]=1); git push --force", "ls"),
+    ("ls; a=([a]=1 [b", "ls"),
+    # Text glued to the ) that ends an array literal is part of the same word, a line
+    # continuation between them counting as nothing.
+    ("ls; a=()x; git push --force", "ls"),
+    ("ls; a=(b)x; git push --force", "ls"),
+    ("ls; a=([1]=b)x; git push --force", "ls"),
+    ("ls; a=()$(whoami); git push --force", "ls"),
+    ("ls; a=()#c\ngit push --force", "ls"),
+    ("ls; a=()\\\nx; git push --force", "ls"),
+    ("ls; a=()\\\n\\\nx; git push --force", "ls"),
+    ("ls; declare a=()x; git push --force", "ls\ndeclare"),
+    ("ls; echo `a=()x`; git push --force", "ls\necho"),
 ]
 
 
@@ -2871,6 +2960,22 @@ PRIOR_FINDINGS = [
     # start of a here-document, and the lines after it are data to bash.
     ("r6f5", "shopt -s expand_aliases\nalias foo='cat <<EOF'\nfoo\na >{C}\nEOF", ("{C}",)),
     ("r6f5", "shopt -s expand_aliases; alias foo='cat <<EOF'\nfoo\na >{C}\nEOF", ("{C}",)),
+    # Round 7, against ecc10b0. The array literal closed at a ) inside a subscript,
+    # which bash keeps in the element, and the rest of it was read as commands: a
+    # redirect target, a flag after a known program, a name that is installed.
+    ("r7f1", "declare -A m=([a)]=1 [b>{C} ]=2)", ("{C}",)),
+    ("r7f1", "a=([k)>{C};]=v)", ("{C}",)),
+    ("r7f1", "declare -A m=(\n[a)]=1\n[b<{C} ]=2\n)", ("{C}",)),
+    ("r7f1", "declare -A m=([a)]=1 --{C})", ("{C}",)),
+    ("r7f1", "declare -A m=([a)]=1 [b;echo >{C};]=2)", ("{C}",)),
+    ("r7f1", "a=([x)]\n{C}\n)", ("{C}",)),
+    ("r7f1", "declare -A m=([a)]=1 [b;whoami --secret-flag;]=2)", ("whoami", "--secret-flag")),
+    # Text glued to the ) that ends the literal is part of the same word, so a $( ) there
+    # was read as a new command with a redirect target or a flag of its own.
+    ("r7f2", "declare a=()$(>{C})", ("{C}",)),
+    ("r7f2", "a+=()$(< {C})", ("{C}",)),
+    ("r7f2", "declare a=()$(whoami --secret-flag)", ("whoami", "--secret-flag")),
+    ("r7f2", "declare a=()\\\n$(>{C})", ("{C}",)),
 ]
 
 
@@ -2948,6 +3053,16 @@ def test_a_subscript_is_read_only_when_it_closes_before_anything_that_splits_the
         assert not shell_of(text).subscript_closes(0), text
     assert shell_of("ls m[k >f ]=1").subscript_closes(3) is False
     assert shell_of("ls m[k >f ]=1").subscript_closes(0) is True
+
+
+def test_a_subscript_ends_after_its_matching_bracket_and_a_paren_is_not_a_plain_character_in_it():
+    """The one scan the head of a command and an element of an array literal share.
+    A ) is not plain: bash keeps it in the subscript, where this reader would end the
+    literal, so a subscript that holds one is not read."""
+    for text, end in (("[1]=x", 3), ("[a[b]c]=x", 7), ("[$i]", 4), ("[i+1]", 5), ("[]", 2)):
+        assert shell_of(text).subscript_end(1) == end, text
+    for text in ("[a)]", "[a(b]", "[a b]", "[a>f ]", "[a", "[a;b]", "['a']", "[$(x)]", "[a\\]]", "[a[b]", "[a\nb]"):
+        assert shell_of(text).subscript_end(1) == -1, text
 
 
 def test_a_comment_inside_backticks_ends_the_read_and_one_outside_does_not():
@@ -3088,6 +3203,54 @@ def test_the_syntax_next_to_the_round_6_stops_that_does_run_a_redirect_is_still_
     assert bash_parse(pinned_bash(), command, tmp_path) is not None, command
     files, _ = what_bash_does(tmp_path, command)
     assert files == [CANARIES[0]]
+
+
+ROUND_7 = [row for row in PRIOR_FINDINGS if row[0].startswith("r7")]
+
+
+@pytest.mark.parametrize("finding,command,forbidden", ROUND_7, ids=["%s-%d" % (row[0], n) for n, row in enumerate(ROUND_7)])
+def test_bash_parses_and_runs_nothing_of_what_the_round_7_reproductions_hide(tmp_path, finding, command, forbidden):
+    """As for round 6: the row is a script bash accepts, and the redirect target, the
+    flag and the command name in it are part of one word, so no file is created under
+    a forbidden name and no command is looked up by one."""
+    command = command.replace("{C}", CANARIES[0])
+    forbidden = [w.replace("{C}", CANARIES[0]) for w in forbidden]
+    assert bash_parse(pinned_bash(), command, tmp_path) is not None, command
+    files, ran = what_bash_does(tmp_path, command)
+    assert [w for w in forbidden if w in files or w in ran] == []
+
+
+ROUND_7_CONTROLS = [
+    # Next to each stop of round 7, the same text where bash does run the redirect. The
+    # reader reads these and sends the path, so the stops are no wider than the findings.
+    ("declare -A m=([a]=1 [b]=2) >{C}", "declare -A {C}"),
+    ("declare -A m=([a]=1 [b]=2)>{C}", "declare -A {C}"),
+    ("a=([1]=x [$i]=y [i+1]=z) >{C}; ls", "{C}\nls"),
+    ("a=()>{C}; ls", "{C}\nls"),
+    ("a=()\\\n >{C}; ls", "{C}\nls"),
+    ("a=() ; echo hi >{C}", "echo {C}"),
+    ("echo $(a=()) >{C}", "echo\n{C}"),
+    ("echo `a=()` >{C}", "echo\n{C}"),
+    ("(a=()) >{C}; ls", "{C}\nls"),
+]
+
+
+@pytest.mark.parametrize("command,expected", ROUND_7_CONTROLS)
+def test_the_syntax_next_to_the_round_7_stops_that_does_run_a_redirect_is_still_read(tmp_path, command, expected):
+    command, expected = command.replace("{C}", CANARIES[0]), expected.replace("{C}", CANARIES[0])
+    assert outline(command) == expected
+    assert bash_parse(pinned_bash(), command, tmp_path) is not None, command
+    files, _ = what_bash_does(tmp_path, command)
+    assert files == [CANARIES[0]]
+
+
+def test_the_docs_name_each_stop_of_round_7():
+    flat = " ".join((ROOT / "CLAUDE.md").read_text().split("## The Jev router")[1].split("\n## ")[0].split())
+    for stated in ("an element of an array literal with a `[` whose subscript does not close the same way",
+                   "text glued to the `)` that ends an array literal",
+                   "Round 7, against `ecc10b0`",
+                   "`HTTP/1.0` on the `CONNECT` line up to 3.11"):
+        assert stated in flat, stated
 
 
 def test_the_docs_name_each_stop_of_round_6():
