@@ -155,9 +155,21 @@ Google is doing; which layer enforces it is unverified. So from a cloud session:
 
 Google's 404 on `gemini-2.5-flash` that day read "no longer available to new
 users, use `gemini-3.8-flash`". The skill's default `gemini-3.7-flash` was still
-listed and answered; `WATCH_GEMINI_MODEL=gemini-3.8-flash` is the switch if
-that changes. Ruled by Tee on a card 2026-10-28: record this and use
+listed and answered. Ruled by Tee on a card 2026-10-28: record this and use
 `--start 0` from cloud sessions.
+
+**The model is `gemini-4-argon`, ruled by Tee in chat 2026-10-28 ("Set the
+model to Argon"), set as `WATCH_GEMINI_MODEL` on the cloud environment beside
+the key.** Measured before it was set: `models/gemini-4-argon` ("Gemini 4
+Argon", version 3.0, 1,048,576 input and 32,768 output tokens) answered the
+skill's static interactions request on the same Short with 200 in 22.6 s,
+3,245 video tokens in, 1,460 text tokens out, zero thought tokens, and a
+sharper read than 3.7-flash (it named the terminal window's title, `claude`
+in `~/skills`, at 00:01 and the `LEARNED: new skill` badge at 00:04). 22.6 s is closer to
+the 30 s relay cap than 3.7-flash's 20.1 s, so the `--start 0` rule above
+matters more, not less, on this model. The variable lives in the environment
+settings, not in this repository; `config.py` reads it from the environment
+first.
 
 ## House lint
 
