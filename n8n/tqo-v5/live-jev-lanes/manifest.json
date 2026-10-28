@@ -26,9 +26,9 @@
   "publishedReadBack": "2026-10-27T21:59:02Z, on Tee's card 'Publish now': activeVersionId equals versionId 3db61aef, the published nodes and connections equal the read-back draft, the draft differs from fc75f7a6 by 14 added nodes, 14 added edges and the jsCode of Build Movie, Thumb: Pick Still and Shim: Thumbnail To Binary, and settings and static data are unchanged."
  },
  "current": {
-  "versionId": "de4ac645-b4ea-43b8-90ec-b570fec5eeb8",
-  "activatedAt": "2026-10-27T23:33:59.281Z, workflowPublishHistory event \"activated\" on version de4ac645",
-  "note": "Thumb: Pick Still layout fixed on Tee's cards, see ../live-thumb-layout. The 14 Jev nodes and the other two consumers are as 3db61aef published them. published.json is read from this version."
+  "versionId": "51a807f7-1213-459f-a8a6-50e5157b4fd4",
+  "activatedAt": "not read; published 2026-10-28 on Tee's card \"Fix it and publish\", and the export read at 2026-10-28T20:53:01Z shows activeVersionId equal to versionId",
+  "note": "Jev: Thumb Verdict moved its TEXT_RIGHT from 700 to the layout's 680 px on that card. The other 16 nodes are unchanged from de4ac645, checked against this export. published.json is read from this version."
  },
  "code": {
   "Jev: B-Roll Stills": {
@@ -53,7 +53,7 @@
   },
   "Jev: Thumb Verdict": {
    "file": "jev_thumb_check_verdict.js",
-   "sha256": "79b05d4bae80d6f0b7e75d3fa0f2237a6b06ee932a9d2f16674c06e8c4a9cb74"
+   "sha256": "54f74c7464e0088e1c40ff5fd25330e41aa75e07f5da88c2c5385ed5481dbee1"
   },
   "Build Movie": {
    "file": "build_movie.js",

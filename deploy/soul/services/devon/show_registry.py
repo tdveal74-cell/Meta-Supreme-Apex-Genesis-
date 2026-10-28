@@ -62,9 +62,9 @@ SOURCE = {
         "and 'Series Addendum' in TQO FINAL V5"
     ),
     "workflow_id": "qEkGOUsNyVaRAmm6",
-    "version_id": "9320520f-2e59-4558-853b-2761e5023d67",
+    "version_id": "51a807f7-1213-459f-a8a6-50e5157b4fd4",
     "export": "n8n/tqo-v5/exports/qEkGOUsNyVaRAmm6_active.json",
-    "read": "2026-10-10",
+    "read": "2026-10-28",
 }
 
 #: The export this registry is traced against, resolved from the repository
@@ -79,7 +79,9 @@ EXPORT = pathlib.Path(__file__).resolve().parents[2] / "n8n" / "tqo-v5" / "expor
 #: Doctor Sources and Sources Gate arrived TQO only, and to 26 with d7f4d56f the
 #: same day, when NCO was ruled to the same standard and those three stopped
 #: branching, while Token Budget: Script began to, for the TQO close line.
-V5_SHOW_BRANCHES = 26
+#: It went to 27 by 51a807f7, read 2026-10-28, when Doctor: Ground the Request
+#: began to branch on the show.
+V5_SHOW_BRANCHES = 27
 SHOW_BRANCH_SPELLINGS: Tuple[str, ...] = (
     r"\bisNCO\b",
     r"\$json\.nco\b",
@@ -343,11 +345,13 @@ NCO = Show(
     script_limit=2,
     promote_limit=1,
     package_limit=3,
-    # Flip only after the NCO Forge channel's own YouTube credential is attached
-    # to 'Upload to YouTube (NCO Forge)'. Both upload nodes carry the same
-    # credential today, 'YouTube account 1', and an n8n credential binds to a
-    # node, not to a row.
-    youtube_ready=False,
+    # True since 2026-10-28, on Tee's card: 'YouTube account 2' answered
+    # channels?mine=true with NCO Forge, UCqDxdm1tFEtQg-uiEhUT_gg, and was
+    # attached to 'Upload to YouTube (NCO Forge)'; 'YouTube account 1' answers
+    # The Quiet Operator and stays on the TQO node. An n8n credential binds to
+    # a node, not to a row, so a credential re-signed into another channel
+    # needs this flipped back first.
+    youtube_ready=True,
     voice=VOICE,
     brief=Brief(
         name="The Forge Report",

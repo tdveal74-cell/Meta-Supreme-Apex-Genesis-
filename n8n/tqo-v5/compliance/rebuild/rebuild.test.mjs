@@ -1,32 +1,31 @@
 /**
- * PR #367 rebuilt on the live TQO FINAL V5, ruled by Tee on 2026-10-24:
+ * The compliance laws on the LIVE TQO FINAL V5, read from the export:
  *
  *   node n8n/tqo-v5/compliance/rebuild/rebuild.test.mjs
  *
- * #367 merged on 2026-10-17 and was written into n8n draft 761302a2. It was
- * never published, and on 2026-10-21 the workflow was re-imported as version
- * dd734ea2 carrying the Quality90 layer and none of #367. That draft is gone
- * from the instance. live/ holds the node bodies of dd734ea2 byte for byte,
- * pinned by live/manifest.json. draft/ is live/ plus exactly the pairs in
- * replacements.json:
+ * This began as PR #367 rebuilt on live version dd734ea2 (ruled by Tee on
+ * 2026-10-24): draft node bodies pinned to a copy of live plus a list of
+ * replacements, and a Quality90 AI review that had to hold. Those drafts have
+ * since been published, and on 2026-10-28 Tee ruled "Drop the AI review from
+ * the publish gate", so the review requirement is gone from Preflight, the QC
+ * Doctor Gate and OS 28. The drafts, the pinned copy and the replacement list
+ * are deleted. Every check below runs on exportCode(name), read from
+ * ../../exports/qEkGOUsNyVaRAmm6_active.json, so it cannot pass on code the
+ * workflow does not run. Re-export the workflow and this test follows it.
  *
- *   OS 28: Publish Gate       #367 gate 3c (title laws) and gate 5 (the C4
- *                             line in the first three lines, no "Not
- *                             required"); the tension word now whole words.
- *   Script: Fill Run Fields   #367: the line always first, once.
- *   QC Doctor Gate            #367's script doctor check, on top of the
- *                             Quality90 AI review; "PASS WITH NOTES" holds;
- *                             the doctor floor is the live 90.
- *   Preflight: Can This Clear "Not required" never passes, as in OS 28; and
- *                             it refuses to pay for a row OS 28 gates 3c and
- *                             5 or the QC Doctor Gate will hold, through byte
- *                             copies of their rules (ruled 2026-10-24).
+ *   OS 28: Publish Gate       title laws (whole word tension words, proper noun,
+ *                             no dash), the C4 line in the first three lines,
+ *                             "Not required" never passes, authorship is the
+ *                             human approval approved:<sha256 of the script>.
+ *   Script: Fill Run Fields   the line always first, once.
+ *   QC Doctor Gate            the script doctor verdict (PASS or REPAIRED at
+ *                             90 or more) plus the QC verdict; PASS WITH NOTES
+ *                             holds; no AI review receipt is needed.
+ *   Preflight: Can This Clear Mirrors OS 28 and the Doctor Gate through byte
+ *                             copies of their rules, so it refuses to pay for
+ *                             a row they will hold.
  *
- * The fourth gap ruled with these, Parse QC shipping under the gate's floor,
- * is already closed live: Parse QC ships at 90 (SHIP_AT, 2026-10-19).
- *
- * Every Quality90 control in live/ must still hold in draft/; the tests below
- * check that too. Nothing here touches n8n or the network. Rows are synthetic.
+ * Nothing here touches n8n or the network. Rows are synthetic.
  */
 
 import assert from "node:assert/strict";
@@ -37,40 +36,13 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const sha = (s) => createHash("sha256").update(s, "utf8").digest("hex");
-const MANIFEST = JSON.parse(read("./live/manifest.json"));
-const REPLACEMENTS = JSON.parse(read("./replacements.json"));
-const DRAFT = {
-  "OS 28: Publish Gate": "os28_publish_gate.js",
-  "Script: Fill Run Fields": "fill_run_fields.js",
-  "QC Doctor Gate": "qc_doctor_gate.js",
-  "Preflight: Can This Clear?": "preflight_can_this_clear.js",
+const EXPORT = JSON.parse(read("../../exports/qEkGOUsNyVaRAmm6_active.json"));
+const exportCode = (name) => {
+  const found = EXPORT.nodes.filter((n) => n.name === name);
+  assert.equal(found.length, 1, name + ": one node of that name in the export");
+  return found[0].parameters.jsCode;
 };
 const C4 = "Presented with a synthetic voice and synthetic likeness of Terrance Veal, used with his consent.";
-const DASHES = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
-
-// ---- live/ is the published version, byte for byte ---------------------------
-assert.equal(MANIFEST.workflowId, "qEkGOUsNyVaRAmm6");
-assert.equal(MANIFEST.versionId, "dd734ea2-3b17-4633-b7bd-a428b34403bb");
-assert.equal(MANIFEST.activeVersionId, MANIFEST.versionId, "read when nothing sat in draft");
-for (const [name, { file, sha256 }] of Object.entries(MANIFEST.nodes)) {
-  assert.equal(sha(read("./live/" + file)), sha256, name + ": live copy matches the manifest");
-}
-const liveCode = (name) => read("./live/" + MANIFEST.nodes[name].file);
-
-// ---- draft/ is live/ plus exactly the listed replacements --------------------
-assert.deepEqual(Object.keys(REPLACEMENTS).sort(), Object.keys(DRAFT).sort());
-for (const [name, file] of Object.entries(DRAFT)) {
-  let code = liveCode(name);
-  for (const [oldText, newText] of REPLACEMENTS[name]) {
-    assert.equal(code.split(oldText).length, 2, name + ": a replaced fragment occurs once in live");
-    code = code.replace(oldText, () => newText);
-    assert.equal(DASHES.test(newText), false, name + ": an added fragment carries a literal dash");
-    // n8n's tools have decoded \u escapes into the literal characters on the
-    // way in before (the OS 28 DASH regex, 2026-10-17). Nothing added relies on one.
-    assert.equal(/\\u[0-9a-fA-F]{4}/.test(newText), false, name + ": an added fragment carries a \\u escape");
-  }
-  assert.equal(read("./draft/" + file), code, name + ": the draft is live plus the listed replacements and nothing else");
-}
 
 const dollar = (nodes) => (name) => {
   if (!(name in nodes)) throw new Error("node did not run: " + name);
@@ -78,17 +50,16 @@ const dollar = (nodes) => (name) => {
   return { first: () => items[0], all: () => items };
 };
 const node = (code) => new Function("$", "$input", "$json", "require", code);
-const draftNode = (name) => node(read("./draft/" + DRAFT[name]));
-const liveNode = (name) => node(liveCode(name));
+const liveNode = (name) => node(exportCode(name));
 
-// A signed AI review that matches the script, as AI Review: Verified Result
-// hands it on when the receipt verifies.
+// What AI Review: Verified Result hands on. Since 2026-10-28 it gates nothing,
+// so most rows below carry none; a receipt that exists must change nothing.
 const SCRIPT = "A calm script about what changed this month.";
+const noReview = {};
 const passedReview = (script = SCRIPT) => ({ aiReviewPassed: true, artifactSha256: sha(script), scope: "script", score: 93, reviewId: "r1" });
 
 // ---- OS 28: Publish Gate --------------------------------------------------
-const OS28_NEW = draftNode("OS 28: Publish Gate");
-const OS28_OLD = liveNode("OS 28: Publish Gate");
+const OS28 = liveNode("OS 28: Publish Gate");
 const BLOCK = ["YOUTUBE TAGS", "PINNED COMMENT", "TIKTOK", "INSTAGRAM", "FACEBOOK", "LINKEDIN 1", "X THREAD 1", "X VALUE POST", "SHORT SCRIPT 1", "THUMBNAIL TEXT"].join("\n\nbody\n\n");
 const DESC_BODY = "A calm walk through what changed in the tooling this month and what it costs a manager who waits. ".repeat(2).trim();
 const cleanRow = (edit = {}) => ({
@@ -97,7 +68,7 @@ const cleanRow = (edit = {}) => ({
   Description: C4 + "\n\n" + DESC_BODY, Tags: "ai, career, the quiet operator", "AI Disclosure": "Disclosed in description",
   "QC Verdict": "SHIP", Show: "TQO", Season: 1, Episode: 3, "Asset Type": "Flagship", ...edit,
 });
-const runGate = (code, fields, { qcScore = 91, review = passedReview() } = {}) => code(dollar({
+const runGate = (fields, { qcScore = 91, review = noReview } = {}) => OS28(dollar({
   "Show Context: Publish": [{ json: { channel: "The Quiet Operator", requiredTags: ["the quiet operator"] } }],
   "One Row at a Time": [{ json: { fields } }],
   "Parse Packaging": [{ json: { airtableId: "rec1", packagingBlock: BLOCK, youtubeTags: "", linkedinCount: 3, xThreadCount: 5, shortScriptCount: 2 } }],
@@ -109,52 +80,53 @@ const runGate = (code, fields, { qcScore = 91, review = passedReview() } = {}) =
 }), undefined, undefined, require)[0].json;
 const blocked = (out, prefix) => out.os28_blocking.filter((b) => b.startsWith(prefix));
 
-// A clean row clears both the live gate and the draft.
-let out = runGate(OS28_NEW, cleanRow());
-assert.deepEqual(out.os28_blocking, [], "the clean row clears the draft gate");
+// A clean row clears the live gate, with no AI review receipt.
+let out = runGate(cleanRow());
+assert.deepEqual(out.os28_blocking, [], "the clean row clears the gate");
 assert.equal(out.os28_allowed, true);
-assert.equal(runGate(OS28_OLD, cleanRow()).os28_allowed, true, "and the live gate");
 
-// Quality90 still holds in the draft, unchanged.
-for (const [why, fields, opts] of [
-  ["a QC score of 89", cleanRow(), { qcScore: 89 }],
-  ["no AI review", cleanRow(), { review: {} }],
-  ["an AI review of another script", cleanRow(), { review: passedReview("another script") }],
-  ["Human Review ticked yes", cleanRow({ "Human Review": "yes" }), {}],
-  ["Human Review approved for another hash", cleanRow({ "Human Review": "approved:" + sha("another") }), {}],
-  ["a WAIVED QC verdict", cleanRow({ "QC Verdict": "WAIVED" }), { qcScore: 100 }],
+// Authorship, per the 2026-10-28 ruling: approval bound to the script hash
+// clears without a review receipt, a receipt changes nothing either way, and a
+// wrong or missing hash blocks.
+assert.equal(runGate(cleanRow(), { review: noReview }).os28_allowed, true, "approval bound to the script hash clears with no receipt");
+assert.equal(runGate(cleanRow(), { review: passedReview() }).os28_allowed, true, "a verified receipt changes nothing");
+assert.equal(runGate(cleanRow(), { review: passedReview("another script") }).os28_allowed, true, "a receipt for another script neither blocks nor is required");
+for (const [why, hr] of [
+  ["approved for another script hash", "approved:" + sha("another")],
+  ["ticked yes", "yes"], ["ticked true", "true"], ["empty", ""],
 ]) {
-  assert.equal(runGate(OS28_OLD, fields, opts).os28_allowed, runGate(OS28_NEW, fields, opts).os28_allowed, "live and draft agree on " + why);
+  assert.equal(runGate(cleanRow({ "Human Review": hr })).os28_allowed, false, "Human Review " + why + " blocks");
 }
-assert.equal(runGate(OS28_NEW, cleanRow(), { qcScore: 89 }).os28_allowed, false);
-assert.equal(runGate(OS28_NEW, cleanRow({ "Human Review": "yes" })).os28_allowed, false);
-assert.equal(runGate(OS28_NEW, cleanRow(), { review: {} }).os28_allowed, false);
+assert.equal(runGate(cleanRow({ Script: SCRIPT + " Edited." })).os28_allowed, false, "approval does not survive a script edit");
+assert.equal(runGate(cleanRow({ "Human Review": "" }), { review: passedReview() }).os28_allowed, false, "a receipt alone does not clear authorship");
+// The numeric floor and the waiver, unchanged.
+assert.equal(runGate(cleanRow(), { qcScore: 89 }).os28_allowed, false, "a QC score of 89 blocks");
+assert.equal(runGate(cleanRow(), { qcScore: 90 }).os28_allowed, true, "90 clears");
+assert.equal(runGate(cleanRow({ "QC Verdict": "WAIVED" }), { qcScore: 100 }).os28_allowed, false, "a WAIVED QC verdict does not bypass the floor");
 
-// "Not required" with no line at all clears the live gate. The draft holds it.
+// "Not required" with no line at all is held.
 const notRequired = cleanRow({ "AI Disclosure": "Not required", Description: DESC_BODY });
-assert.equal(runGate(OS28_OLD, notRequired).os28_allowed, true, "the live gate lets a presenter-led episode through with no disclosure");
-out = runGate(OS28_NEW, notRequired);
+out = runGate(notRequired);
 assert.equal(out.os28_allowed, false);
 assert.equal(blocked(out, "disclosure: AI Disclosure is \"Not required\"").length, 1);
 assert.equal(blocked(out, "disclosure: the Description does not contain the exact C4 line").length, 1);
-assert.equal(runGate(OS28_NEW, cleanRow({ "AI Disclosure": "Not required" })).os28_allowed, false, "refused with the line in place too");
+assert.equal(runGate(cleanRow({ "AI Disclosure": "Not required" })).os28_allowed, false, "refused with the line in place too");
 
-// The line below the first three lines clears live. The draft holds it.
+// The line below the first three lines is held.
 const lowLine = cleanRow({ Description: "one\ntwo\nthree\n" + C4 + "\n" + DESC_BODY });
-assert.equal(runGate(OS28_OLD, lowLine).os28_allowed, true, "the live gate accepts the line anywhere");
-out = runGate(OS28_NEW, lowLine);
+out = runGate(lowLine);
 assert.equal(out.os28_allowed, false);
 assert.equal(blocked(out, "disclosure: the C4 line is in the Description but not on a line of its own in its first three lines").length, 1);
 for (const d of ["Disclaimer: " + C4 + "\n" + DESC_BODY, DESC_BODY + " " + C4, C4 + " (not really)\n" + DESC_BODY]) {
-  assert.equal(runGate(OS28_NEW, cleanRow({ Description: d })).os28_allowed, false, JSON.stringify(d.slice(0, 40)));
+  assert.equal(runGate(cleanRow({ Description: d })).os28_allowed, false, JSON.stringify(d.slice(0, 40)));
 }
-assert.equal(runGate(OS28_NEW, cleanRow({ Description: C4 + "\r\n" + DESC_BODY })).os28_allowed, true, "a CRLF line ending is still the line");
-assert.equal(runGate(OS28_NEW, cleanRow({ Description: "one\ntwo\n" + C4 + "\n" + DESC_BODY })).os28_allowed, true, "line three is inside");
-assert.equal(runGate(OS28_NEW, cleanRow({ Description: C4.replace("consent.", "consent") + "\n\n" + DESC_BODY })).os28_allowed, false, "a variant is not the line");
-assert.equal(runGate(OS28_NEW, cleanRow({ "AI Disclosure": "Disclosed on-screen + description" })).os28_allowed, true);
-assert.equal(blocked(runGate(OS28_NEW, cleanRow({ "AI Disclosure": "" })), "disclosure: AI Disclosure is unset").length, 1);
+assert.equal(runGate(cleanRow({ Description: C4 + "\r\n" + DESC_BODY })).os28_allowed, true, "a CRLF line ending is still the line");
+assert.equal(runGate(cleanRow({ Description: "one\ntwo\n" + C4 + "\n" + DESC_BODY })).os28_allowed, true, "line three is inside");
+assert.equal(runGate(cleanRow({ Description: C4.replace("consent.", "consent") + "\n\n" + DESC_BODY })).os28_allowed, false, "a variant is not the line");
+assert.equal(runGate(cleanRow({ "AI Disclosure": "Disclosed on-screen + description" })).os28_allowed, true);
+assert.equal(blocked(runGate(cleanRow({ "AI Disclosure": "" })), "disclosure: AI Disclosure is unset").length, 1);
 
-// The title laws. The live gate holds none of these.
+// The title laws.
 for (const [title, why] of [
   ["Copilot Settings Explained Simply", "no tension word"],
   ["Costume Ideas For Copilot Managers", "no tension word"],
@@ -169,9 +141,8 @@ for (const [title, why] of [
   ["The Quiet Mistake " + String.fromCharCode(0x2014) + " Copilot", "em or en dash"],
   ["The Quiet Mistake " + String.fromCharCode(0x2013) + " Copilot", "em or en dash"],
 ]) {
-  assert.equal(runGate(OS28_OLD, cleanRow({ "Video Title": title })).os28_allowed, true, "live gate: " + title);
-  out = runGate(OS28_NEW, cleanRow({ "Video Title": title }));
-  assert.equal(out.os28_allowed, false, "draft gate: " + title);
+  out = runGate(cleanRow({ "Video Title": title }));
+  assert.equal(out.os28_allowed, false, "gate: " + title);
   assert.ok(blocked(out, "quality law titles:")[0].includes(why), title + " -> " + out.os28_blocking.join(" / "));
 }
 // Whole words, with a plain inflection still counting.
@@ -183,47 +154,44 @@ for (const title of [
   "The Quieter Way Copilot Replaces You", "Mistaken About Copilot", "The Wrongful Copilot Rollout",
   "The Truthful Copilot Review",
 ]) {
-  assert.deepEqual(blocked(runGate(OS28_NEW, cleanRow({ "Video Title": title })), "quality law titles:"), [], title);
+  assert.deepEqual(blocked(runGate(cleanRow({ "Video Title": title })), "quality law titles:"), [], title);
 }
 
 // ---- Script: Fill Run Fields ----------------------------------------------
-const FILL_NEW = draftNode("Script: Fill Run Fields");
-const FILL_OLD = liveNode("Script: Fill Run Fields");
-const runFill = (code, description) => code(dollar({
+const FILL = liveNode("Script: Fill Run Fields");
+const runFill = (description) => FILL(dollar({
   "Show Context: Script": [{ json: { show: "TQO", tableId: "t", tableRef: "r", channel: "The Quiet Operator" } }],
   "One Idea at a Time": [{ json: { fields: {} } }],
   "Originality Scan": [{ json: { recordId: "rec1", script: "A script.", title: "The Quiet Mistake", description, broll: ["desk"] } }],
 }), undefined, undefined, require)[0].json.body.records[0].fields;
 const head3 = (s) => s.split("\n").slice(0, 3).join("\n");
 const loose = "Made with AI-assisted research.\n\n" + DESC_BODY;
-assert.ok(!runFill(FILL_OLD, loose).Description.includes(C4), "the live fill skips the line after a looser phrase");
-assert.ok(head3(runFill(FILL_NEW, loose).Description).includes(C4));
-const low = runFill(FILL_NEW, "one\ntwo\nthree\nfour\n" + C4 + "\n" + DESC_BODY).Description;
+assert.ok(head3(runFill(loose).Description).includes(C4));
+const low = runFill("one\ntwo\nthree\nfour\n" + C4 + "\n" + DESC_BODY).Description;
 assert.ok(low.startsWith(C4 + "\n\n"));
 assert.equal(low.split(C4).length, 2, "the line appears once");
 for (const d of ["intro\n" + C4 + "\n" + DESC_BODY, C4 + "\n" + C4 + "\n" + DESC_BODY, C4 + "\n\n" + DESC_BODY + "\n" + C4]) {
-  const filled = runFill(FILL_NEW, d).Description;
+  const filled = runFill(d).Description;
   assert.ok(filled.startsWith(C4 + "\n\n"), JSON.stringify(d.slice(0, 30)));
   assert.equal(filled.split(C4).length, 2, "once: " + JSON.stringify(d.slice(0, 30)));
-  assert.equal(runFill(FILL_NEW, filled).Description, filled, "a second fill changes nothing");
+  assert.equal(runFill(filled).Description, filled, "a second fill changes nothing");
 }
-assert.equal(runFill(FILL_NEW, C4 + "\n\n" + DESC_BODY).Description, C4 + "\n\n" + DESC_BODY);
-assert.equal(runFill(FILL_NEW, DESC_BODY)["AI Disclosure"], "Disclosed in description", "the fill writes the placed value");
+assert.equal(runFill(C4 + "\n\n" + DESC_BODY).Description, C4 + "\n\n" + DESC_BODY);
+assert.equal(runFill(DESC_BODY)["AI Disclosure"], "Disclosed in description", "the fill writes the placed value");
 for (const d of [loose, "", DESC_BODY, "one\ntwo\nthree\nfour\n" + C4]) {
-  const filled = runFill(FILL_NEW, d).Description;
-  const gate = runGate(OS28_NEW, cleanRow({ Description: filled + (filled.length < 120 ? "\n" + DESC_BODY : "") }));
+  const filled = runFill(d).Description;
+  const gate = runGate(cleanRow({ Description: filled + (filled.length < 120 ? "\n" + DESC_BODY : "") }));
   assert.equal(blocked(gate, "disclosure:").length, 0, "filled from: " + JSON.stringify(d.slice(0, 30)));
 }
 
 // ---- QC Doctor Gate, on the shapes the live lane produces ------------------
 // A raw data table row goes through the live DT Shim: Ready Rows and the live
 // Parse QC + Set Verdict, fed a model answer, before it reaches the gate.
-const SHIM = node(liveCode("DT Shim: Ready Rows"));
-const PARSE_QC = node(liveCode("Parse QC + Set Verdict"));
-const GATE_NEW = draftNode("QC Doctor Gate");
-const GATE_OLD = liveNode("QC Doctor Gate");
+const SHIM = liveNode("DT Shim: Ready Rows");
+const PARSE_QC = liveNode("Parse QC + Set Verdict");
+const GATE = liveNode("QC Doctor Gate");
 const line = (score, v) => "2026-10-24T10:00:00Z | doctor " + score + "/100 " + v + " | originality 71/100 (rhythm 70, similarity 12) | gate Scripted at 1540 words";
-const realDoctor = (code, { history, total = 92, blockers = [], review = passedReview() } = {}) => {
+const realDoctor = ({ history, total = 92, blockers = [], review = noReview } = {}) => {
   const raw = { id: 7, createdAt: "2026-10-23T10:00:00Z", updatedAt: "2026-10-24T10:00:00Z", status: "Ready", system_status: "",
     brand: "TQO", show: "TQO", script: SCRIPT, ai_disclosure: "Disclosed in description", ...(history === undefined ? {} : { score_history: history }) };
   const shimmed = SHIM(dollar({}), { all: () => [{ json: raw }] }, undefined, require);
@@ -236,30 +204,25 @@ const realDoctor = (code, { history, total = 92, blockers = [], review = passedR
     "AI Review: Verified Result": [{ json: { aiReview: review } }],
   };
   const qc = PARSE_QC(dollar(nodes), undefined, answer, require)[0].json;
-  return code(dollar({ ...nodes, "Parse QC + Set Verdict": [{ json: qc }] }), undefined, undefined, require)[0].json;
+  return GATE(dollar({ ...nodes, "Parse QC + Set Verdict": [{ json: qc }] }), undefined, undefined, require)[0].json;
 };
 
-// The live gate clears on the QC verdict and the AI review alone; the script
-// doctor's verdict plays no part.
-assert.equal(realDoctor(GATE_OLD, { history: line(95, "PASS") }).doctorGate, "READY_FOR_HUMAN_REVIEW");
-assert.equal(realDoctor(GATE_OLD, { history: line(95, "PASS WITH NOTES") }).doctorGate, "READY_FOR_HUMAN_REVIEW", "live: PASS WITH NOTES clears");
-assert.equal(realDoctor(GATE_OLD, {}).doctorGate, "READY_FOR_HUMAN_REVIEW", "live: no doctor line at all clears");
-
-// The draft needs a doctor PASS or REPAIRED at the floor as well.
-let real = realDoctor(GATE_NEW, { history: line(90, "PASS") });
+// The gate needs a doctor PASS or REPAIRED at the floor plus a SHIP QC verdict,
+// and no AI review receipt (ruled 2026-10-28).
+let real = realDoctor({ history: line(90, "PASS") });
 assert.equal(real.doctorGate, "READY_FOR_HUMAN_REVIEW", JSON.stringify(real));
 assert.equal(real.qc_verdict, "SHIP");
 assert.equal(real.qc_score, 92);
-assert.equal(realDoctor(GATE_NEW, { history: line(96, "REPAIRED") }).doctorGate, "READY_FOR_HUMAN_REVIEW");
-assert.equal(realDoctor(GATE_NEW, { history: line(90, "pass") }).doctorGate, "READY_FOR_HUMAN_REVIEW", "case does not matter");
-assert.equal(realDoctor(GATE_NEW, { history: line(90.5, "PASS") }).doctorGate, "READY_FOR_HUMAN_REVIEW", "a decimal score at the floor");
-assert.equal(realDoctor(GATE_NEW, { history: line(89.9, "PASS") }).doctorGate, "HOLD", "a decimal score under the floor");
+assert.equal(realDoctor({ history: line(96, "REPAIRED") }).doctorGate, "READY_FOR_HUMAN_REVIEW");
+assert.equal(realDoctor({ history: line(90, "pass") }).doctorGate, "READY_FOR_HUMAN_REVIEW", "case does not matter");
+assert.equal(realDoctor({ history: line(90.5, "PASS") }).doctorGate, "READY_FOR_HUMAN_REVIEW", "a decimal score at the floor");
+assert.equal(realDoctor({ history: line(89.9, "PASS") }).doctorGate, "HOLD", "a decimal score under the floor");
 // Only a doctor entry counts: the words "doctor 95/100 PASS" inside other
 // text, with no bar in front, are not the doctor's verdict.
-assert.equal(realDoctor(GATE_NEW, { history: "2026-10-24T10:00:00Z note: asked the doctor 95/100 PASS" }).doctorGate, "HOLD", "no bar, no doctor entry");
-assert.notEqual(realDoctor(GATE_NEW, { history: line(100, "PASS") }).doctorGate, "RELEASE_ELIGIBLE", "never releases on its own");
+assert.equal(realDoctor({ history: "2026-10-24T10:00:00Z note: asked the doctor 95/100 PASS" }).doctorGate, "HOLD", "no bar, no doctor entry");
+assert.notEqual(realDoctor({ history: line(100, "PASS") }).doctorGate, "RELEASE_ELIGIBLE", "never releases on its own");
 // A QC line appended under the doctor line does not hide it.
-assert.equal(realDoctor(GATE_NEW, { history: line(90, "PASS") + "\n2026-10-24T11:00:00Z | 92/100 SHIP | batch 8.0/10" }).doctorGate, "READY_FOR_HUMAN_REVIEW");
+assert.equal(realDoctor({ history: line(90, "PASS") + "\n2026-10-24T11:00:00Z | 92/100 SHIP | batch 8.0/10" }).doctorGate, "READY_FOR_HUMAN_REVIEW");
 for (const [input, state, why] of [
   [{}, "HOLD", "no score history"],
   [{ history: "" }, "HOLD", "an empty history"],
@@ -272,34 +235,36 @@ for (const [input, state, why] of [
   [{ history: line(95, "PASS") + "\n" + line(95, "FAIL") }, "HOLD", "the newest doctor line counts"],
   [{ history: line(95, "PASS"), total: 89 }, "REVISE", "a QC total under 90"],
   [{ history: line(95, "PASS"), blockers: ["claim unsourced"] }, "REVISE", "a QC hard blocker"],
-  [{ history: line(95, "PASS"), review: {} }, "EVIDENCE_REQUIRED", "no AI review"],
-  [{ history: line(95, "PASS"), review: passedReview("another script") }, "EVIDENCE_REQUIRED", "an AI review of another script"],
-]) assert.equal(realDoctor(GATE_NEW, input).doctorGate, state, why);
-assert.equal(realDoctor(GATE_NEW, { history: line(95, "PASS WITH NOTES") }).doctorGateReason, "Presenter script unchecked");
-assert.equal(realDoctor(GATE_NEW, { history: line(95, "FAIL") + "\n" + line(95, "PASS") }).doctorGate, "READY_FOR_HUMAN_REVIEW", "a newer PASS after a FAIL clears");
+  [{ history: line(95, "PASS"), review: noReview }, "READY_FOR_HUMAN_REVIEW", "no AI review receipt is needed"],
+  [{ history: line(95, "PASS"), review: passedReview() }, "READY_FOR_HUMAN_REVIEW", "a receipt changes nothing"],
+  [{ history: line(95, "PASS"), review: passedReview("another script") }, "READY_FOR_HUMAN_REVIEW", "a receipt for another script changes nothing"],
+  [{ history: line(89, "PASS"), review: passedReview() }, "HOLD", "a receipt does not lift a doctor score under 90"],
+]) assert.equal(realDoctor(input).doctorGate, state, why);
+assert.equal(realDoctor({ history: line(95, "PASS WITH NOTES") }).doctorGateReason, "Presenter script unchecked");
+assert.equal(realDoctor({ history: line(95, "FAIL") + "\n" + line(95, "PASS") }).doctorGate, "READY_FOR_HUMAN_REVIEW", "a newer PASS after a FAIL clears");
 
 // ---- Preflight: Can This Clear? --------------------------------------------
-const PRE_NEW = draftNode("Preflight: Can This Clear?");
-const PRE_OLD = liveNode("Preflight: Can This Clear?");
+const PRE = liveNode("Preflight: Can This Clear?");
 const preRow = (edit = {}) => ({
   Show: "TQO", Season: 1, Episode: 3, "Asset Type": "Flagship", "Video Title": "The Quiet Mistake Managers Make With Copilot",
   Description: C4 + "\n\n" + DESC_BODY, Script: SCRIPT, "AI Disclosure": "Disclosed in description",
   "Score History": line(95, "PASS"),
-  "Human Review": "approved:" + sha(SCRIPT), aiReview: passedReview(), ...edit,
+  "Human Review": "approved:" + sha(SCRIPT), aiReview: noReview, aiReviewIdentity: { artifactSha256: sha(SCRIPT) }, ...edit,
 });
-const runPre = (code, fields) => code(dollar({ "Show Context: Publish": [{ json: { channel: "The Quiet Operator" } }] }), undefined, fields, require)[0].json;
-assert.equal(runPre(PRE_NEW, preRow())._preflightOk, true, "a clean row clears the draft preflight");
-assert.equal(runPre(PRE_OLD, preRow())._preflightOk, true, "and the live one");
-assert.equal(runPre(PRE_OLD, preRow({ "AI Disclosure": "Not required" }))._preflightOk, true, "live preflight accepts Not required");
-const pre = runPre(PRE_NEW, preRow({ "AI Disclosure": "Not required" }));
+const runPre = (fields) => PRE(dollar({ "Show Context: Publish": [{ json: { channel: "The Quiet Operator" } }] }), undefined, fields, require)[0].json;
+assert.equal(runPre(preRow())._preflightOk, true, "a clean row clears preflight with no AI review receipt");
+const pre = runPre(preRow({ "AI Disclosure": "Not required" }));
 assert.equal(pre._preflightOk, false);
 assert.equal(pre._preflightBlockers.filter((b) => b.startsWith("AI Disclosure is \"Not required\"")).length, 1);
-assert.equal(runPre(PRE_NEW, preRow({ "AI Disclosure": "Disclosed on-screen + description" }))._preflightOk, true);
-assert.equal(runPre(PRE_NEW, preRow({ "AI Disclosure": "" }))._preflightBlockers.includes("AI Disclosure is unset"), true);
-assert.equal(runPre(PRE_NEW, preRow({ "AI Disclosure": "Maybe" }))._preflightBlockers.includes("AI Disclosure is \"Maybe\""), true);
-// Quality90 still holds in the draft preflight.
-assert.equal(runPre(PRE_NEW, preRow({ aiReview: {} }))._preflightOk, false);
-assert.equal(runPre(PRE_NEW, preRow({ "Human Review": "yes" }))._preflightOk, false);
+assert.equal(runPre(preRow({ "AI Disclosure": "Disclosed on-screen + description" }))._preflightOk, true);
+assert.equal(runPre(preRow({ "AI Disclosure": "" }))._preflightBlockers.includes("AI Disclosure is unset"), true);
+assert.equal(runPre(preRow({ "AI Disclosure": "Maybe" }))._preflightBlockers.includes("AI Disclosure is \"Maybe\""), true);
+// Authorship in preflight, per the 2026-10-28 ruling: the approval is bound to
+// the script hash (carried on aiReviewIdentity), and a receipt neither helps nor hurts.
+assert.equal(runPre(preRow({ aiReview: passedReview() }))._preflightOk, true, "a receipt changes nothing");
+assert.equal(runPre(preRow({ "Human Review": "yes" }))._preflightOk, false);
+assert.equal(runPre(preRow({ "Human Review": "approved:" + sha("another") }))._preflightOk, false, "approval for another script hash blocks");
+assert.equal(runPre(preRow({ "Human Review": "" }))._preflightOk, false);
 
 // The mirrors, ruled 2026-10-24: Preflight refuses to pay for a run that OS 28
 // or the QC Doctor Gate will hold. Each constant and pattern is a byte copy of
@@ -310,9 +275,9 @@ const lineOf = (code, start) => {
   assert.equal(found.length, 1, "one line starts with " + start);
   return found[0];
 };
-const preCode = read("./draft/" + DRAFT["Preflight: Can This Clear?"]);
-const os28Code = read("./draft/" + DRAFT["OS 28: Publish Gate"]);
-const doctorCode = read("./draft/" + DRAFT["QC Doctor Gate"]);
+const preCode = exportCode("Preflight: Can This Clear?");
+const os28Code = exportCode("OS 28: Publish Gate");
+const doctorCode = exportCode("QC Doctor Gate");
 for (const start of ["const C4_LINE = ", "const DASH = ", "const tensionWord = ", "const properNoun = "]) {
   assert.equal(lineOf(preCode, start), lineOf(os28Code, start), "Preflight copies OS 28: " + start);
 }
@@ -336,25 +301,24 @@ const histories = [line(95, "PASS"), line(90, "REPAIRED"), line(89.9, "PASS"), l
 const mirrored = (b) => /^(the C4 line|title carries|title has no|script doctor:)/.test(b);
 let compared = 0;
 for (const title of titles) for (const description of descriptions) {
-  const preBlocks = runPre(PRE_NEW, preRow({ "Video Title": title, Description: description }))._preflightBlockers.filter((b) => /^(the C4 line|title carries|title has no)/.test(b));
-  const gate = runGate(OS28_NEW, cleanRow({ "Video Title": title, Description: description }));
+  const preBlocks = runPre(preRow({ "Video Title": title, Description: description }))._preflightBlockers.filter((b) => /^(the C4 line|title carries|title has no)/.test(b));
+  const gate = runGate(cleanRow({ "Video Title": title, Description: description }));
   const gateBlocks = gate.os28_blocking.filter((b) => b.startsWith("quality law titles:") || b.startsWith("disclosure: the C4 line") || b.startsWith("disclosure: the Description does not contain"));
   assert.equal(preBlocks.length > 0, gateBlocks.length > 0, "Preflight and OS 28 agree on " + JSON.stringify([title, description.slice(0, 20)]));
   compared++;
 }
 for (const history of histories) {
-  const pre = runPre(PRE_NEW, preRow({ "Score History": history }))._preflightBlockers.filter((b) => b.startsWith("script doctor:"));
-  const doctor = realDoctor(GATE_NEW, { history });
+  const pre = runPre(preRow({ "Score History": history }))._preflightBlockers.filter((b) => b.startsWith("script doctor:"));
+  const doctor = realDoctor({ history });
   assert.equal(pre.length > 0, doctor.doctorGateReason === "Presenter script unchecked", "Preflight and the Doctor Gate agree on " + JSON.stringify(history.slice(-40)));
   compared++;
 }
 assert.equal(compared, titles.length * descriptions.length + histories.length);
 // A row that clears Preflight carries none of the mirrored blockers.
-assert.deepEqual(runPre(PRE_NEW, preRow())._preflightBlockers.filter(mirrored), []);
-// The live Preflight paid for every one of these.
+assert.deepEqual(runPre(preRow())._preflightBlockers.filter(mirrored), []);
+// Preflight refuses to pay for each of these.
 for (const edit of [{ "Video Title": "Copilot Settings Explained Simply" }, { Description: "one\ntwo\nthree\n" + C4 + "\n" + DESC_BODY }, { "Score History": "" }]) {
-  assert.equal(runPre(PRE_OLD, preRow(edit))._preflightOk, true, "live preflight pays for " + JSON.stringify(edit));
-  assert.equal(runPre(PRE_NEW, preRow(edit))._preflightOk, false, "draft preflight refuses " + JSON.stringify(edit));
+  assert.equal(runPre(preRow(edit))._preflightOk, false, "preflight refuses " + JSON.stringify(edit));
 }
 
-console.log("#367 rebuilt on live dd734ea2: disclosure, title and doctor laws hold, Quality90 untouched, the four gaps closed");
+console.log("Live TQO FINAL V5: disclosure, title and doctor laws hold, authorship is the script hash approval, Preflight mirrors the gates");

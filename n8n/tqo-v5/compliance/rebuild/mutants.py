@@ -1,11 +1,10 @@
 """Mutants for rebuild.test.mjs.
 
-Each mutant undoes one fix in BOTH the draft body and replacements.json, so
-the ledger check cannot be what kills it; a behaviour test has to. Preflight
-carries byte copies of some OS 28 and Doctor Gate lines, so a mutant of a
-copied line is applied to the Preflight copy too; otherwise the drift check
-alone would kill it and prove nothing about behaviour. It works on a temporary
-copy of this folder and never edits the real files.
+Each mutant undoes one rule in the jsCode of a node in a temporary copy of the
+live export, and the test has to fail on it. Preflight carries byte copies of
+some OS 28 and Doctor Gate lines, so a mutant of a copied line is applied to
+the Preflight copy too; otherwise the drift check alone would kill it and prove
+nothing about behaviour. It never edits the real files.
 
     python3 n8n/tqo-v5/compliance/rebuild/mutants.py
 
@@ -20,13 +19,8 @@ import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+EXPORT = "qEkGOUsNyVaRAmm6_active.json"
 MIRROR = "Preflight: Can This Clear?"
-FILES = {
-    "OS 28: Publish Gate": "os28_publish_gate.js",
-    "Script: Fill Run Fields": "fill_run_fields.js",
-    "QC Doctor Gate": "qc_doctor_gate.js",
-    "Preflight: Can This Clear?": "preflight_can_this_clear.js",
-}
 
 # (name, node, [(old, new), ...]). Each old text must occur once in the draft.
 MUTANTS = [
@@ -83,6 +77,14 @@ MUTANTS = [
      [("some(l => l.trim() === C4_LINE)) blockers.push", "some(l => l.trim().startsWith(C4_LINE))) blockers.push")]),
     ("preflight copy drifts from the Doctor Gate", "Preflight: Can This Clear?",
      [("const DOCTOR_FLOOR = 90;", "const DOCTOR_FLOOR = 85;")]),
+    ("OS 28 authorship accepts any approval", "OS 28: Publish Gate",
+     [("gates.authorship = reviewStr === 'approved:' + aiFinalHash;", "gates.authorship = reviewStr.startsWith('approved:');")]),
+    ("OS 28 authorship accepts a ticked box", "OS 28: Publish Gate",
+     [("gates.authorship = reviewStr === 'approved:' + aiFinalHash;", "gates.authorship = reviewStr === 'approved:' + aiFinalHash || TICKED.includes(reviewStr);")]),
+    ("OS 28 authorship needs an AI review again", "OS 28: Publish Gate",
+     [("gates.authorship = reviewStr === 'approved:' + aiFinalHash;", "gates.authorship = aiReview.aiReviewPassed === true && reviewStr === 'approved:' + aiFinalHash;")]),
+    ("preflight hash ignores the approval", "Preflight: Can This Clear?",
+     [("if (!(finalSha && reviewStr === 'approved:' + finalSha)) {", "if (false) {")]),
     ("preflight accepts Not required", "Preflight: Can This Clear?",
      [("if (disc === 'Not required') {", "if (false) {"),
       ("} else if (!['Disclosed in description', 'Disclosed on-screen + description'].includes(disc)) {",
@@ -91,7 +93,16 @@ MUTANTS = [
 
 
 def run(folder):
-    return subprocess.run(["node", str(folder / "rebuild.test.mjs")], capture_output=True, text=True)
+    return subprocess.run(["node", str(folder / "compliance" / "rebuild" / "rebuild.test.mjs")], capture_output=True, text=True)
+
+
+def lay_out(tmp):
+    """tmp/compliance/rebuild plus tmp/exports, the layout the test reads."""
+    shutil.rmtree(tmp, ignore_errors=True)
+    shutil.copytree(HERE.parent, tmp / "compliance")
+    (tmp / "exports").mkdir()
+    shutil.copy(HERE.parent.parent / "exports" / EXPORT, tmp / "exports" / EXPORT)
+    return tmp / "exports" / EXPORT
 
 
 def main():
@@ -99,40 +110,34 @@ def main():
     ok = True
     try:
         control = tmp / "control"
-        shutil.copytree(HERE, control)
+        lay_out(control)
         if run(control).returncode != 0:
             print("CONTROL FAILED: the unmutated test does not pass")
             return 1
         for name, node, steps in MUTANTS:
             work = tmp / "work"
-            shutil.rmtree(work, ignore_errors=True)
-            shutil.copytree(HERE, work)
-            ledger = json.loads((work / "replacements.json").read_text())
-            codes = {n: (work / "draft" / f).read_text() for n, f in FILES.items()}
+            path = lay_out(work)
+            export = json.loads(path.read_text())
+            nodes = {n["name"]: n for n in export["nodes"]}
             applied = True
             for old, new in steps:
-                hits = sum(pair[1].count(old) for pair in ledger[node])
-                if hits != 1 or codes[node].count(old) != 1:
-                    print("BAD MUTANT", name, "ledger hits", hits, "draft hits", codes[node].count(old))
+                code = nodes[node]["parameters"]["jsCode"]
+                if code.count(old) != 1:
+                    print("BAD MUTANT", name, "hits", code.count(old))
                     applied = False
                     break
                 targets = [node]
-                if node != MIRROR and codes[MIRROR].count(old) == 1:
+                if node != MIRROR and nodes[MIRROR]["parameters"]["jsCode"].count(old) == 1:
                     targets.append(MIRROR)
                 for target in targets:
-                    for pair in ledger[target]:
-                        pair[1] = pair[1].replace(old, new)
-                    codes[target] = codes[target].replace(old, new)
+                    nodes[target]["parameters"]["jsCode"] = nodes[target]["parameters"]["jsCode"].replace(old, new)
             if not applied:
                 ok = False
                 continue
-            (work / "replacements.json").write_text(json.dumps(ledger, indent=2))
-            for n, f in FILES.items():
-                (work / "draft" / f).write_text(codes[n])
+            path.write_text(json.dumps(export))
             result = run(work)
-            by_ledger = "listed replacements" in result.stderr or "occurs once" in result.stderr
             by_drift = "Preflight copies" in result.stderr
-            killed = result.returncode != 0 and not by_ledger and (node == MIRROR or not by_drift)
+            killed = result.returncode != 0 and (node == MIRROR or not by_drift)
             ok = ok and killed
             first = next((line.strip() for line in result.stderr.splitlines() if "AssertionError" in line), "")
             print(("KILLED   " if killed else "SURVIVED ") + name + " | " + first[:140])

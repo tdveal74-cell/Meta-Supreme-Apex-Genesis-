@@ -8,16 +8,17 @@
  * Three node bodies run inside a Function with `$` and `$input` stubbed: the
  * request builder (jev_thumb_check_body.js), the verdict
  * (jev_thumb_check_verdict.js) and the Shim (shim_thumbnail_to_binary.js). The
- * Shim is also run beside the UNMODIFIED code read out of the live export,
- * exports/qEkGOUsNyVaRAmm6_active.json. Set the four Jev keys aside and every
- * case gives the export code's output while JEV_APPLY is false; the paths that
- * make no thumbnail match it field for field with nothing set aside. `$('X')`
- * throws when node X did not run, as it does in n8n, and the stub does too.
+ * Shim is read out of the live export, exports/qEkGOUsNyVaRAmm6_active.json,
+ * where the Jev block is live, and run beside the same code with the Jev block
+ * taken out, which is the Shim as it ran before Jev. Set the four Jev keys aside
+ * and every case gives that baseline's output while JEV_APPLY is false; the
+ * paths that make no thumbnail match it field for field with nothing set aside.
+ * `$('X')` throws when node X did not run, as it does in n8n, and the stub does too.
  *
  * Two things are read out of the live export so a drift turns this red: the
- * Shim's unmodified code, which the shipped Shim must equal outside its Jev
- * block (the strict mirror at the end), and the compositor layout the verdict's
- * right edge is built on (Thumb: Compose and Thumb: Pick Still). The Shim also
+ * Shim, which the file on disk must equal, and the compositor layout the
+ * verdict's right edge is built on (Thumb: Compose and Thumb: Pick Still). The
+ * verdict's edge is currently a standing failure, see FINDING below. The Shim also
  * refuses a verdict built for another row's headline, which is the stale run
  * guard for the Split In Batches loop.
  *
@@ -38,7 +39,17 @@ const verdictNode = make("jev_thumb_check_verdict.js");
 // The Shim as shipped (JEV_APPLY false), and a scratch copy with the constant
 // flipped to true, the way jev_thumb_rank.test.mjs flips its own. The file on
 // disk is never written.
-const SHIM_SHIPPED = read("shim_thumbnail_to_binary.js");
+const EXPORT = JSON.parse(read("exports/qEkGOUsNyVaRAmm6_active.json"));
+const exportNode = (name) => {
+  const hits = EXPORT.nodes.filter((n) => n.name === name);
+  assert.equal(hits.length, 1, name);
+  return hits[0];
+};
+const exportCode = (name) => exportNode(name).parameters.jsCode;
+// The Jev block is live now (published as 3db61aef), so the code under test is
+// the live Shim read out of the export, and the file on disk must equal it.
+const SHIM_SHIPPED = exportCode("Shim: Thumbnail To Binary");
+assert.equal(read("shim_thumbnail_to_binary.js"), SHIM_SHIPPED, "shim_thumbnail_to_binary.js is the live Shim, byte for byte");
 const SHIM_FLIPPED = SHIM_SHIPPED.replace("const JEV_APPLY = false;", "const JEV_APPLY = true;");
 assert.notEqual(SHIM_FLIPPED, SHIM_SHIPPED, "the shipped Shim declares JEV_APPLY = false");
 assert.match(SHIM_SHIPPED, /^const JEV_APPLY = false;$/m);
@@ -47,16 +58,23 @@ assert.match(SHIM_FLIPPED, /^const JEV_APPLY = true;$/m);
 const shimNew = new Function("$", "$input", SHIM_SHIPPED);
 const shimOn = new Function("$", "$input", SHIM_FLIPPED);
 
-// The unmodified Shim, straight from the live export's node.
-const EXPORT = JSON.parse(read("exports/qEkGOUsNyVaRAmm6_active.json"));
-const exportNode = (name) => {
-  const hits = EXPORT.nodes.filter((n) => n.name === name);
-  assert.equal(hits.length, 1, name);
-  return hits[0];
-};
-const exportCode = (name) => exportNode(name).parameters.jsCode;
-const SHIM_EXPORT = exportCode("Shim: Thumbnail To Binary");
-const shimOld = new Function("$", "$input", SHIM_EXPORT);
+// The Shim as it ran before Jev: the live Shim with the Jev block taken out. The
+// block runs from its first comment line to the end of the file and ends with
+// `return result;`; `const result = [{` goes back to `return [{`.
+const JEV_MARK = "\n// Jev's check of the composed frame";
+const markAt = SHIM_SHIPPED.indexOf(JEV_MARK);
+assert.ok(markAt > 0, "the Jev block starts at its first comment line");
+assert.equal(SHIM_SHIPPED.indexOf(JEV_MARK, markAt + 1), -1, "and that comment line is there once");
+const jevBlock = SHIM_SHIPPED.slice(markAt + 1);
+assert.ok(jevBlock.endsWith("\nreturn result;\n"), "the Jev block ends with `return result;`");
+const exportPart = SHIM_SHIPPED.slice(0, markAt + 1);
+assert.ok(exportPart.endsWith("}];\n\n"), "one blank line sits between the pre-Jev code and the Jev block");
+const exportLines = exportPart.slice(0, -2).split("\n");
+assert.equal(exportLines.filter((l) => l === "const result = [{").length, 1, "the pre-Jev part declares result once");
+assert.equal(exportLines.filter((l) => l === "return [{").length, 0, "and has no bare return of its own");
+const SHIM_BASE = exportLines.map((l) => (l === "const result = [{" ? "return [{" : l)).join("\n");
+assert.doesNotMatch(SHIM_BASE, /jev/i, "no Jev code is left in the baseline");
+const shimOld = new Function("$", "$input", SHIM_BASE);
 
 // n8n's `$('Name')`: an object with all() and first(), and a throw when the
 // node did not run.
@@ -363,24 +381,38 @@ assert.equal(headlineOps[0].positionX, 72, "the headline is drawn at positionX 7
 assert.equal(opsOf("draw").length, 1, "one scrim");
 assert.equal(opsOf("draw")[0].startPositionX, 0);
 assert.equal(opsOf("draw")[0].endPositionX, 760, "the scrim ends at endPositionX 760");
-// Pick Still wraps the headline to a 700 px budget.
-const budget = /Math\.floor\((\d+) \/ \(size \* 0\.52\)\)/.exec(exportCode("Thumb: Pick Still"));
-assert.ok(budget, "Thumb: Pick Still wraps the headline with floor(budget / (size * 0.52))");
-assert.equal(Number(budget[1]), 700, "Thumb: Pick Still wraps the headline to a 700 px budget");
-const TEXT_RIGHT = (headlineOps[0].positionX + Number(budget[1])) / opsOf("resize")[0].width;
-assert.equal(TEXT_RIGHT, 0.603125, "the designed right edge of the text is 772 of 1280 px");
-assert.ok(TEXT_RIGHT > opsOf("draw")[0].endPositionX / 1280, "a full line ends a little past the scrim, so the scrim edge is not the line");
+// Pick Still (layout fix published as de4ac645) works the wrap out from Arial
+// advance widths against a TEXT_BUDGET in pixels, 680, so no line is wider than
+// that and the designed right edge of the text is x 72 + 680 = 752 of 1280.
+const budget = /\nconst TEXT_BUDGET = (\d+);/.exec(exportCode("Thumb: Pick Still"));
+assert.ok(budget, "Thumb: Pick Still declares const TEXT_BUDGET in pixels");
+assert.equal(Number(budget[1]), 680, "Thumb: Pick Still keeps every line inside a 680 px budget");
+const DESIGNED_RIGHT = (headlineOps[0].positionX + Number(budget[1])) / opsOf("resize")[0].width;
+assert.equal(DESIGNED_RIGHT, 0.5875, "the designed right edge of the text is 752 of 1280 px");
+assert.ok(DESIGNED_RIGHT < opsOf("draw")[0].endPositionX / 1280, "a full line now ends inside the scrim, which ends at 760");
 
-// Each threshold, one step either side.
+// The edge the live verdict actually uses, read from the live verdict node.
+const verdictEdge = /\nconst TEXT_RIGHT = \(72 \+ (\d+)\) \/ 1280;/.exec(exportCode("Jev: Thumb Verdict"));
+assert.ok(verdictEdge, "Jev: Thumb Verdict declares TEXT_RIGHT as (72 + budget) / 1280");
+const TEXT_RIGHT = (72 + Number(verdictEdge[1])) / 1280;
+assert.equal(read("jev_thumb_check_verdict.js"), exportCode("Jev: Thumb Verdict"), "jev_thumb_check_verdict.js is the live Verdict, byte for byte");
+
+// The verdict's right edge must be the layout's designed right edge, or "the
+// headline runs off the dark panel" is judged against a line the layout can no
+// longer draw. It read 700 px (0.603125) against the layout's 680 (0.5875) until
+// 2026-10-28, when Tee ruled on a card to fix the live node.
+assert.equal(TEXT_RIGHT, DESIGNED_RIGHT, "Jev: Thumb Verdict TEXT_RIGHT equals the layout's designed right edge, (72 + TEXT_BUDGET) / 1280");
+
+// Each threshold, one step either side, against the verdict's own edge.
 const withBox = (edit) => verdict(response({ box: { ...CLEAN_BOX, ...edit } }));
 assert.equal(withBox({ right: TEXT_RIGHT - 0.001 }).jevThumbNote, null);
 assert.equal(withBox({ right: TEXT_RIGHT }).jevThumbNote, null, "exactly at the designed edge is not over it");
 assert.equal(withBox({ right: TEXT_RIGHT + 0.001 }).jevThumbNote, NOTE.runsOff);
 assert.equal(withBox({ right: 0.97 }).jevThumbNote, NOTE.runsOff);
-// A full line that ends past the scrim (760 px, 0.59375) and inside the text
-// budget is the layout working as designed, not a headline that ran off.
-assert.equal(withBox({ right: 0.595 }).jevThumbNote, null);
-assert.equal(withBox({ right: 0.6 }).jevThumbNote, null);
+// A box that ends past the scrim (760 px, 0.59375) is past the designed edge
+// too, so it is noted. Under the old 700 px edge these two were silent.
+assert.equal(withBox({ right: 0.595 }).jevThumbNote, NOTE.runsOff);
+assert.equal(withBox({ right: 0.6 }).jevThumbNote, NOTE.runsOff);
 assert.equal(withBox({ bottom: 0.95 }).jevThumbNote, null);
 assert.equal(withBox({ bottom: 0.951 }).jevThumbNote, NOTE.edge);
 assert.equal(withBox({ top: 0.02 }).jevThumbNote, null);
@@ -795,25 +827,8 @@ for (const headline of [undefined, null, ""]) {
   assert.equal(runShim(shimOn, { pick: { ...PICK, headline }, binary: BIG, verdictItems: VERDICTS.runsOff })[0].json.jevThumbChecked, false, String(headline));
 }
 
-// The shim is the export code plus the Jev block, and nothing else, STRICTLY:
-// take the Jev block out (it runs from its first comment line to the end of the
-// file, and ends with `return result;`), turn `const result = [{` back into
-// `return [{`, and what is left must EQUAL the export's jsCode, byte for byte.
-// So a change to the export part of the Shim, one ordinary line anywhere in it,
-// fails here whether or not any case above can see it.
-const JEV_MARK = "\n// Jev's check of the composed frame";
-const markAt = SHIM_SHIPPED.indexOf(JEV_MARK);
-assert.ok(markAt > 0, "the Jev block starts at its first comment line");
-assert.equal(SHIM_SHIPPED.indexOf(JEV_MARK, markAt + 1), -1, "and that comment line is there once");
-const jevBlock = SHIM_SHIPPED.slice(markAt + 1);
-assert.ok(jevBlock.endsWith("\nreturn result;\n"), "the Jev block ends with `return result;`");
-const exportPart = SHIM_SHIPPED.slice(0, markAt + 1);
-assert.ok(exportPart.endsWith("}];\n\n"), "one blank line sits between the export code and the Jev block");
-const exportLines = exportPart.slice(0, -2).split("\n");
-assert.equal(exportLines.filter((l) => l === "const result = [{").length, 1, "the export part declares result once");
-assert.equal(exportLines.filter((l) => l === "return [{").length, 0, "and has no bare return of its own");
-const unmirrored = exportLines.map((l) => (l === "const result = [{" ? "return [{" : l)).join("\n");
-assert.equal(unmirrored, SHIM_EXPORT, "shim_thumbnail_to_binary.js is the exported Shim code plus the Jev block");
+// The Jev block was split off the live Shim at the top of this file, and the
+// shadow cases above compare the live Shim with the Shim as it ran before Jev.
 // JEV_APPLY is declared in the Jev block, beside a comment that says flipping
 // it is a ruling for Tee, and the verdict lookup follows it.
 assert.equal(jevBlock.match(/^const JEV_APPLY = false;$/gm).length, 1);

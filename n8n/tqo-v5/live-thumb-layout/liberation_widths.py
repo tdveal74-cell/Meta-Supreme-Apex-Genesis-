@@ -2,12 +2,12 @@
 
     python3 -I n8n/tqo-v5/live-thumb-layout/liberation_widths.py \
         /usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf \
-        n8n/tqo-v5/live-thumb-layout/after.js > liberation_sans_widths.json
+        n8n/tqo-v5/thumb_pick_still.js > liberation_sans_widths.json
 
 Liberation Sans is metric compatible with Arial, which is what GraphicsMagick
 draws the thumbnail headline in. The widths come from the font's own cmap, hhea,
 head and hmtx tables, with no font library, so the fixture this writes is a
-second source for the table in after.js rather than a copy of it. CI never runs
+second source for the table in the live Pick Still rather than a copy of it. CI never runs
 this script; thumb_layout.test.mjs reads the fixture it wrote.
 """
 

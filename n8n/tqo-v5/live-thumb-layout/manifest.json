@@ -28,15 +28,14 @@
  },
  "before": {
   "versionId": "3db61aef-43a9-494a-ab65-ef79d8fa0c18",
-  "file": "before.js",
-  "sha256": "aa005b1c849e78bdc9730c245f99b8e742672bd9485558672cdca445567f288c"
+  "note": "The body before the fix is in git history. The fix is live, so the test no longer replays it."
  },
  "after": {
   "versionId": "de4ac645-b4ea-43b8-90ec-b570fec5eeb8",
-  "file": "after.js",
+  "file": "../thumb_pick_still.js",
   "sha256": "a3e88bcc4d3d89cba7145c6906c87544973ab9811f3423bbd253a73af3f350e6",
   "activatedAt": "2026-10-27T23:33:59.281Z",
-  "publishedReadBack": "2026-10-27T23:34:12Z, on Tee's card Draft and publish now: activeVersionId equals versionId de4ac645, the published nodes and connections equal the read back draft, the draft differs from 3db61aef only in the jsCode of Thumb: Pick Still, and that code equals after.js byte for byte."
+  "publishedReadBack": "2026-10-27T23:34:12Z, on Tee's card Draft and publish now: activeVersionId equals versionId de4ac645, the published nodes and connections equal the read back draft, the draft differs from 3db61aef only in the jsCode of Thumb: Pick Still, and that code equals the body at the sha256 below byte for byte."
  },
  "rollback": "publish 3db61aef-43a9-494a-ab65-ef79d8fa0c18"
 }

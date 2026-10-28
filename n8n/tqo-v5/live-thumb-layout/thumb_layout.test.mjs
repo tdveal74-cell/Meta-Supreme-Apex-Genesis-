@@ -8,15 +8,15 @@
  * drawn about 15 percent opaque, because GraphicsMagick reads the last pair of
  * an 8 digit colour as transparency and the code sent D9. And a full headline
  * line ran past the panel, because the wrap assumed 0.52 em a character where
- * Arial capitals run about 0.66 em. after.js sends 26 and works the wrap out
+ * Arial capitals run about 0.66 em. The live node sends 26 and works the wrap out
  * from Arial's advance widths with the same word wrap Compose applies.
  *
- * This test holds the files to the manifest, holds the change to the three
- * replacement pairs, and checks the layout on 600 generated headlines and nine
+ * This test holds the live node to the manifest, and checks the layout on 600
+ * generated headlines and nine
  * crafted ones with an independent copy of n8n's wrap loop. The width table is
  * checked against the one line measured on the instance and, entry by entry,
  * against Liberation Sans, the metric twin of Arial, read from the font file's
- * own tables by liberation_widths.py. It reads no live data.
+ * own tables by liberation_widths.py. It reads the export, not the instance.
  *
  * A fresh critic on 2026-10-27 showed that the first version of this test let
  * TEXT_BUDGET 760, a looser height rule, a search bound of 1, a drifted wrap and
@@ -27,7 +27,7 @@
  * and a third found an untrimmed headline and a raised search floor passing.
  * The last four crafted headlines and the floor pin catch those. This is not a
  * complete specification of the node: it catches each drift a reviewer has
- * found, and a deliberate edit to after.js still needs its own review.
+ * found, and a deliberate edit to the live Pick Still still needs its own review.
  */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -36,9 +36,10 @@ import { readFileSync } from "node:fs";
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const sha = (s) => createHash("sha256").update(s, "utf8").digest("hex");
 const M = JSON.parse(read("./manifest.json"));
-const R = JSON.parse(read("./replacement.json"));
-const before = read("./before.js");
-const after = read("./after.js");
+const EXPORT = JSON.parse(read("../exports/qEkGOUsNyVaRAmm6_active.json"));
+const picks = EXPORT.nodes.filter((n) => n.name === "Thumb: Pick Still");
+// The fix is live, so the code under test is the live node read out of the export.
+const after = picks[0].parameters.jsCode;
 let checks = 0;
 const eq = (a, b, msg) => { assert.deepEqual(a, b, msg); checks++; };
 const ok = (v, msg) => { assert.ok(v, msg); checks++; };
@@ -47,18 +48,12 @@ const FONT = JSON.parse(read("./liberation_sans_widths.json"));
 // ---- The files are the ones the manifest names ---------------------------------
 eq(M.workflowId, "qEkGOUsNyVaRAmm6", "TQO FINAL V5");
 eq(M.node, "Thumb: Pick Still", "the one node it changes");
-eq(sha(before), M.before.sha256, "before.js is the body the manifest names");
-eq(sha(after), M.after.sha256, "after.js is the body the manifest names");
+eq(picks.length, 1, "the export has one Thumb: Pick Still");
+eq(sha(after), M.after.sha256, "the live Pick Still is the body the manifest names");
 eq(M.rollback, "publish " + M.before.versionId, "rollback is the version before");
-eq(read("../thumb_pick_still.js"), after, "the repo's Pick Still is after.js");
-eq(R.pairs.length, 3, "three pairs: the type scale, the panel colour and headY");
-for (const p of R.pairs) eq(before.split(p.old).length, 2, "each replaced block occurs once in before.js");
-eq(R.pairs.reduce((s, p) => s.replace(p.old, () => p.new), before), after, "after.js is before.js with the three pairs and nothing else");
-const EXPORT = JSON.parse(read("../exports/qEkGOUsNyVaRAmm6_active.json"));
-const exported = EXPORT.nodes.filter((n) => n.name === "Thumb: Pick Still")[0].parameters.jsCode;
-for (const p of R.pairs) eq(exported.split(p.old).length, 2, "each replaced block occurs once in the export too, so the mirror tests can apply it");
+eq(read("../thumb_pick_still.js"), after, "the repo's Pick Still is the live one");
 
-// ---- Running after.js ------------------------------------------------------------
+// ---- Running the live Pick Still -------------------------------------------------
 const run = (plan, photos = [{ id: 1, photographer: "x", src: { landscape: "https://images.pexels.com/a.jpg" } }]) => {
   const $ = (name) => {
     if (name === "Thumb: Plan") return { first: () => ({ json: plan }) };
@@ -68,7 +63,7 @@ const run = (plan, photos = [{ id: 1, photographer: "x", src: { landscape: "http
 };
 
 // n8n Edit Image, text operation, copied from EditImage.node.ts on n8n master as
-// read on 2026-10-27, so the test does not share after.js's own copy.
+// read on 2026-10-27, so the test does not share the live Pick Still's own copy.
 const n8nWrap = (text, lineLength) => {
   const lines = [];
   let currentLine = "";
@@ -99,10 +94,10 @@ const TOP = { 104: 250, 84: 235, 66: 225, 54: 220 };
 // node's copy would otherwise go unseen until a headline happened to land in the
 // gap. TEXT_BUDGET 760 is the case the critic found: it passed every check here.
 const constant = (name) => (after.match(new RegExp("\\nconst " + name + " = ([^;]+);")) || [])[1];
-eq(constant("TEXT_BUDGET"), String(BUDGET), "after.js keeps the text budget at " + BUDGET + " px");
-eq(constant("FLOOR_Y"), "680", "after.js keeps the block above y 680");
-eq(constant("SIZES"), "[104, 84, 66, 54]", "after.js keeps the four sizes");
-eq(constant("TOP"), "{ 104: 250, 84: 235, 66: 225, 54: 220 }", "after.js keeps the first baseline for each size");
+eq(constant("TEXT_BUDGET"), String(BUDGET), "the live Pick Still keeps the text budget at " + BUDGET + " px");
+eq(constant("FLOOR_Y"), "680", "the live Pick Still keeps the block above y 680");
+eq(constant("SIZES"), "[104, 84, 66, 54]", "the live Pick Still keeps the four sizes");
+eq(constant("TOP"), "{ 104: 250, 84: 235, 66: 225, 54: 220 }", "the live Pick Still keeps the first baseline for each size");
 eq(after.split("(ARIAL[ch] || 1000)").length, 2, "an unlisted glyph counts as 1000, in the one width function");
 // The 1.2 em pitch over-reads the 1.12 to 1.135 em GraphicsMagick draws, which
 // is the safe side. Nothing Thumb: Plan can send reaches the height rule, so it
@@ -124,7 +119,7 @@ eq(Object.keys(FONT.widths).sort(), Object.keys(ARIAL).sort(), "the fixture cove
 for (const [ch, w] of Object.entries(ARIAL)) eq(w, FONT.widths[ch], JSON.stringify(ch) + " is " + FONT.widths[ch] + " thousandths in Liberation Sans");
 
 // ---- The node's wrap against n8n's -------------------------------------------------
-// The search in after.js predicts Compose's lines with its own wrapLines. If that
+// The search in the live Pick Still predicts Compose's lines with its own wrapLines. If that
 // copy drifts from n8n's loop, the size it picks no longer matches what Compose
 // draws, so the two are compared line for line on every headline below.
 const wrapLines = new Function(after.match(/\nconst wrapLines = \(text, len\) => \{[\s\S]*?\n\};/)[0] + "\nreturn wrapLines;")();
@@ -247,6 +242,6 @@ eq([...after.matchAll(/const JEV_APPLY = (\w+);/g)].map((m) => m[1]), ["false"],
 
 // ---- No dash in this folder ---------------------------------------------------------
 const DASH = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
-for (const f of ["./manifest.json", "./replacement.json", "./after.js"]) ok(!DASH.test(read(f)), f + " carries no em or en dash");
+for (const f of ["./manifest.json", "../thumb_pick_still.js"]) ok(!DASH.test(read(f)), f + " carries no em or en dash");
 
 console.log("Thumb layout: the panel is 85 percent opaque and every line fits inside it, " + checks + " checks");

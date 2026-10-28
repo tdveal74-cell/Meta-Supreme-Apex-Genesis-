@@ -348,8 +348,16 @@ ok(!scoreOnlyPrompt().includes(LIVE_CHECKLIST_EMPTY), "and the live text is gone
 }
 
 // ---- the doctor line, read the way the published gates read it ----------------
-const gateSource = read("../compliance/rebuild/draft/qc_doctor_gate.js");
-const preflightSource = read("../compliance/rebuild/draft/preflight_can_this_clear.js");
+// Read from the live V5 export since 2026-10-28, when the compliance draft
+// copies were retired after the patches they pinned went live.
+const V5_EXPORT = JSON.parse(read("../exports/qEkGOUsNyVaRAmm6_active.json"));
+const v5Code = (name) => {
+  const hits = V5_EXPORT.nodes.filter((n) => n.name === name);
+  if (hits.length !== 1) throw new Error(name + ": expected exactly one node in the V5 export, found " + hits.length);
+  return hits[0].parameters.jsCode;
+};
+const gateSource = v5Code("QC Doctor Gate");
+const preflightSource = v5Code("Preflight: Can This Clear?");
 const REGEX_LINE = "const doctorLines = [...history.matchAll(/\\|\\s*doctor\\s+(\\d+(?:\\.\\d+)?)\\/100\\s+([^|\\n]*?)\\s*(?=\\||\\n|$)/g)];";
 ok(gateSource.includes(REGEX_LINE), "the QC Doctor Gate reads the doctor line with this pattern");
 ok(preflightSource.includes(REGEX_LINE), "Preflight reads it with the same pattern");
