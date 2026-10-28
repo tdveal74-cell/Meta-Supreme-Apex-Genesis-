@@ -525,8 +525,8 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_devon_vision_fixture.py test_pulse_watchdog.py \
   test_devon_rule_ledger.py test_devon_wager.py test_devon_tqo_canon.py \
   test_provider_watchdog.py test_devon_show_registry.py test_show_registry_seed.py \
-  test_devon_lesson_registry.py test_gate_ledger.py test_ledger_receipt.py \
-  test_code_worker.py test_watch_long.py
+  test_devon_lesson_registry.py test_gate_ledger.py test_jev_route.py \
+  test_ledger_receipt.py test_code_worker.py test_watch_long.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .
@@ -786,6 +786,417 @@ unverified: a subagent's hook input. The script reads the session file when
 `transcript_path` is under `/subagents/`, which a fixture and a critic's
 synthetic run pin and no live subagent call has confirmed. Settings reload at session start, so the first
 session after this merges is where the live behaviour is measured.
+
+## The Jev router
+
+Ruled by Tee 2026-10-16 over a recommendation to hold it. The first version
+(PR #368) was held after four findings were confirmed against its scrubbing,
+and Tee ruled on 2026-10-17, on a card, "Hold it, rebuild as allowlist". This
+section describes the rebuild. `.claude/hooks/jev_route.py`, wired on PreToolUse
+for exactly Bash, Edit, Write, NotebookEdit and every MCP tool, asks Jev,
+TypeSafe's typed decision model, two independent yes/no questions about each of
+those calls before it runs: would a dedicated tool (Read, Grep, Glob, Edit,
+Write) do this step better, and does the step change something outside the
+repository or something that cannot be undone. At or above a probability of 0.8
+the second asks Tee and, failing that, the first denies the call with a reason.
+Every other answer prints nothing. The hook never prints allow, so it can only
+narrow what runs. Read, Grep and Glob are not matched at all.
+
+**It sends nothing until Tee turns `SEND` on, and the container never holds the
+key.** Ruled by Tee 2026-10-28, carrying his earlier ruling that the container
+never holds the TypeSafe key. The module constant `SEND = False` gates every
+request: while it is False the hook makes no request, opens no socket and writes
+an `off` row for each call it can read, and a ledger of `off` rows is the
+configured state and not a fault. Input it cannot read, which is anything that is
+not a JSON object with a tool name, gets a `bad_input` row first, switch or no
+switch. Turning it on is a separate ruling and a one line commit,
+`SEND = True`, as `ENFORCE` is. `test_jev_route.py` pins the shipped value the
+same way and pins the line.
+
+The hook reads no key from any environment variable and sends no Authorization
+header of its own. An earlier version read `TYPESAFE_API_KEY`; that variable is
+now ignored, and a test sets it and checks that it goes nowhere. Tee added the
+key as a network secret in the cloud environment, where the agent proxy is to
+add it to requests for `api.typesafe.ai`, so the request has to go through the
+proxy the environment sets and not around it. The hook builds its opener for
+each request with `ProxyHandler()`, which reads `HTTPS_PROXY` and `NO_PROXY`,
+uses the default TLS context, which trusts `SSL_CERT_FILE`, and changes one
+thing: a redirect is refused. The earlier opener, built once at import, did not
+disable the proxy either (its default handlers include `ProxyHandler`, checked
+on Python 3.13); the change is that it is built for each request, so a proxy set
+after the module loaded is the one used. A proxy that does not add the header
+gets HTTP 401 from the API. That is an `error` row, it prints nothing, the call
+runs as it would without the hook, and three in a row open the breaker for ten
+minutes. An error row holds the exception's class name or a fixed phrase and
+never an exception's text.
+
+`test_jev_route.py` proves the routing against loopback only. A guard on every
+in-process test refuses to resolve or connect to anything but the loopback
+interface and fails the test that tries, and each child process starts under the
+same guard with an environment whose only proxy is the fake one. With
+`HTTPS_PROXY` at a fake proxy, the `CONNECT api.typesafe.ai:443` reaches it, from
+a call in the test process and from a real process. A fake proxy that answers the
+tunnel with a self signed certificate for `api.typesafe.ai`, named in
+`SSL_CERT_FILE`, receives a request with no Authorization header and a body that
+is the outline only, and the same tunnel is refused when `SSL_CERT_FILE` names
+another certificate. The shipped file, run as a process with that proxy in its
+environment, makes no connection to it.
+
+**What leaves the machine is an outline that is built, never a call that is
+cleaned.** The first version scrubbed the raw call, and every scrubber missed
+something: Basic auth, Cookie headers, `curl -u` values and secret values under
+a field name nobody had listed. This one never starts from the raw call. The
+pieces that may leave are these and no others. The tool name. For Bash, each
+program name, each flag name (`-X`, `--force`) and never a flag's value, plus
+the file paths the call names. For Edit, Write and NotebookEdit, the file path
+and the names of the input fields. For every MCP tool, the names of the input
+fields. No value of any kind leaves: not a command argument that is not a path,
+a quoted string, a heredoc body, an assignment such as `TOKEN=abc`, a header, a
+file's content or an MCP field's value. A piece outside letters, digits and
+`. _ / ~ -` is dropped, not escaped. A path over 200 characters is dropped. A
+path is written lexically before anything else is done to it: repeated slashes (a
+leading `//` included) collapse, `.` and `..` are resolved from the text alone,
+so no filesystem is touched and a link is not followed, and a trailing slash
+goes. Then the home directory is written `~`, so `//home/alice/x`,
+`/home//alice/x`, `/home/bob/../alice/x` and `~/../alice/x` are each `~/x`. A
+path that still holds the home directory's last component, the account name, as a
+component of its own after that is a spelling the hook cannot map, and it is
+dropped: `/proc/self/root/home/alice/x`, `/home/ALICE/x`, `/mnt/alice` and
+`~alice/x` do not leave. The comparison ignores case, and a component that only
+contains the name (`alice-backup`) is another name and does leave. The tool name,
+one character for the join and the text stop at 2,000 characters together, at a
+piece boundary, so 1,999 is the most that is sent. A bare word in a command
+counts as a path only when it names something that exists on the machine, and a
+call looks at no more than 64 bare words, so a secret that fits the character
+class cannot pass as one. A redirect target is a path by syntax and needs no such
+test. Only the first 64 KiB of a command is read, cut back to the last blank,
+newline, `;`, `|` or `&` in it, so a word the cut lands in is never read.
+
+The edges, stated so a verifier does not have to find them. A short flag cannot
+be told from a flag with its value stuck to it, so a single dash flag is kept
+only when it is one to three letters or is one of the find primaries kept in
+`FIND_FLAGS` (`-name`, `-type`, `-exec`, `-maxdepth` and the other eighteen of
+the twenty two), and a two letter value after a one letter flag would pass, after
+a program that is a known command (below); `-phunter2` does not. A long flag is
+`--` and up to 30 letters, digits and single hyphens, none at either end, with
+no more than four digits in all. A program name is up to 40 letters, digits,
+`.`, `_` and `-`, starts with a letter or a digit, and has no more than four
+digits either. Only the keys of the input object itself leave, never a key below
+the top. Ruled by Tee 2026-10-28 on a card: Top-level only. A key under a
+parameter is the caller's data (a map keyed by ids, names or tokens, a header, an
+environment variable), and a random 24 character alphanumeric token fits the key
+rule 58 times in a hundred, and 69 when it starts with a letter (measured on
+random tokens, not worked out), so Jev sees `variables` and not the names under
+it. A top level key leaves only when it starts with a letter, is made of letters,
+digits and `_ . -`, is 30 characters at most and carries no more than four
+digits; at most 60 keys leave, taken from the first 200 of the object, and a
+short top level key that is itself a secret would still leave. A redirect to
+`/dev/tcp/HOST/PORT` or `/dev/udp/HOST/PORT` is a socket and
+not a path, so it is dropped, however the path spells it (`//dev/tcp/...`,
+`/./dev/tcp/...`, `/x/../dev/tcp/...`). A path that exists and has a secret in its own name
+is a path and leaves. Subcommands do not leave, so Jev sees `git` and
+`--force` and not `push`. Whether Jev can judge anything from so little is not
+known; the ledger is where that gets measured. A flag's name has to be typed
+bare: a quoted string that starts with a dash is a value and is not sent, and so
+is whatever follows the `=` in `--name="value"`, while `--name` is.
+
+**A program name leaves only when it is a command on the machine the hook runs
+on.** Ruled by Tee 2026-10-28 on a card, "Known commands only", after four verify
+rounds against the shell reader each found a new way for a value to leave as a
+"program name", and the third round found more blockers than the second. The
+reader cannot be made to model the shell perfectly, so this closes the class from
+the other side. A word the reader takes for a program is sent only when it is a
+bash builtin or reserved word from a list pinned in `jev_route.py` (61 builtins
+and 22 reserved words, taken from `bash -c 'compgen -b; compgen -k'` in the
+container on 2026-10-28, bash 5.2.21(1)-release, both recorded beside the list),
+or a name the hook process's `PATH` resolves to an executable file, or, for a
+word with a `/` in it, an existing executable file. Any other word is dropped, and
+so is every flag of the same simple command, because a word the reader wrongly
+took for a program carries its neighbours with it. A reader mistake that takes
+data for a program now costs a word and does not leak one. That sentence said
+"every reader mistake" until round 5, which found the gate does not reach a
+redirect target: it is a path by syntax and is sent untested, so a comment, an
+array subscript or a here-document delimiter the reader took for code could send
+one. There the reader's own stops are the only defence. The gate is on what the
+reader hands out and replaces none of its defences: `test_jev_route.py` runs each reader test twice,
+once with the value not installed and once with the value installed as a command,
+so the gate cannot be what keeps a value out of a test, and a further test fails
+when a row names a program no test machine has. Nothing is run to find out. A
+lookup is a stat on a path, bash is never started and the list is a constant. A
+word over 64 characters is not looked up, a name is looked up once per call, and a
+call stops looking after 128 distinct names. Only the first 128 directories of
+`PATH` are searched, empty entries not counted, so a 1 MB command of distinct
+words costs at most 128 names times 128 directories in stats, 16,384. And no name
+is looked up once the hook has run for one second from the moment it starts
+reading its input (`LOOKUP_BUDGET_S`): a lookup cut off half way finds nothing,
+and the names after that moment are dropped, builtins and reserved words
+excepted, which need no lookup. The names after any of the three caps are dropped.
+The first version of this paragraph had the name cap and not the directory cap or
+the deadline, and measured against a `PATH` of 40 directories: against a `PATH`
+of 10,000 directories the same 1 MB command was 1.28 million stats and 45 seconds
+on this container, and the hook is killed at 5 seconds and leaves no row. The test
+now runs 10,000 real directories through a real process, written as relative
+names because one environment variable is capped at 128 KiB, and pins the stat
+count and the deadline apart. The cost, accepted with the ruling: Jev sees less. A
+script, a tool or a program named by a path that is not installed where the hook
+runs is dropped with its flags, so the same call can read thinner in one
+container than in another, a program named by a path over 64 characters is
+dropped even when it exists, a name first seen after the 128th lookup is
+dropped even when `PATH` has it, and so is a command that lives only in the 129th
+directory of `PATH` or later. A program that is installed, such as `git` or
+`curl`, is unchanged. The edge: a secret that is itself the name of an installed
+command still leaves when the reader takes it for a program, because the gate asks
+whether a word is a command and not whether it is a secret, so a value that is
+both a command name and in a program slot passes the reader and the gate.
+
+**The reader models a small part of the shell and stops at the first thing
+outside it.** A reader that guesses at syntax it lacks reads data as commands,
+and every program word is sent. Independent verifiers found that the first
+rebuild (`2216592`) did exactly that: an array literal, a `case` pattern, the
+operands of `[[ ]]` and `$(( ))`, a `${X:-a;b}` default, an ANSI-C string with an
+escaped quote, a double quote nested inside `$( )` inside a double quoted string (the
+`git commit -m "$(cat <<'EOF' ... )"` idiom), the tail of a quoted string after
+`sudo`, `watch` or `time`, and any word after a closing `)` or backtick were
+each read as a program, and the first word of each went out. It now reads simple
+commands, pipelines and lists, `if`, `while`, `until`, `for`, `select`, brace groups,
+subshells, quotes and escapes, `$( )`, backticks and `<( )` with their own quote
+state at any nesting up to 8, redirects including `&>` and `&>>`, heredocs and
+here-strings. It reads past, without looking inside, `$(( ))`, `(( ))`, `[[ ]]`,
+`${ }`, `$' '` and the literal of an array assignment. A line continuation is
+not there: bash removes it before it reads a token, so the reader steps over it
+between words, joins what is on both sides of it inside a word and counts it as
+no quote. A `$` followed by one inside double quotes ends the read, because
+whether the `$` opens an expansion depends on the character bash sees once the
+pair is gone. A bare `case` ends the read wherever it stands, whatever the reader
+thinks the command is, because a case pattern is data that looks like a command,
+and so does a bare `[[` that does not begin a command or follow the reserved word
+`time`: read there it is an argument (`echo [[`) or the reader has lost its
+place, and the text after it is not an expression to skip. A `[[` that does
+begin a command is read to its `]]` without looking in, except that a `$( )` or
+backticks inside it is read as the command list it is and a `#` that begins a
+word is a comment, which runs nothing. The `]]` is the first one that is a word by
+itself, as bash has it: after a blank or a newline and before a blank, a newline,
+`;`, `&`, `|`, `)` or a `<` or `>` that does not open `<(` or `>(`, a line
+continuation counting as nothing, so `]` then a continuation then `]` is the word
+and a continuation neither ends the blank before a `]]` or a `#` nor hides a
+comment. A `]]` glued to a parenthesis ends the read, because it is the end of a
+group or the end of a regular expression (`[[ a =~ (b)]]` never closes there), and
+so does one before a `(`, `<(` or `>(`. A reader that closed on fewer of these
+than bash does goes on to a later `]]` that is data, a here-document body or a
+quoted string, and reads code there. `$$` is the process id, so the `(` in
+`"$$(x y)"` is text and nothing in it runs. A `$( )`, a `<( )` and a pair of
+backticks are parsed apart from the command around them: a here-document the
+outer command waits for takes its body from the line after the whole line, not
+from a newline inside one. Inside one, bash finds where the substitution ends
+before it parses what is in it, and a here-document body does not hide the end:
+a body line that begins with the delimiter and goes on (`E)`, `E )`, `E) # c`)
+ends the here-document and the substitution together, and inside backticks any
+closing backtick in a body cuts it. The reader ends a body only at a line that is
+the delimiter, so it would go on to a later line that is the delimiter in other
+data and read what follows as code. A body line inside a substitution that begins
+with the delimiter and is not it, and any body line with a backtick in it inside
+backticks, ends the read. A plain subshell does neither, and the reader does not
+stop for it there. A subshell is part of the outer parse and shares it.
+`NAME=value` before the program is skipped after `env`, `sudo`, `watch` and the
+reserved word `time`, and nowhere else: after `nohup`, `exec`, `command`,
+`builtin`, `xargs`, `doas`, and `time` typed after an assignment, a redirect or a
+quote (then it is `/usr/bin/time`), it is the name of the program to run, and the
+word after it is only an argument. A here-document delimiter is literal text,
+and when it is typed bare the body is expanded, so a body line that ends in an odd
+number of backslashes is joined to the next before it is compared with the
+delimiter, as bash does. It stops, drops the rest of the command and sends what
+it had read before that point, at a `case`, a `[[` that does not begin a command,
+a function definition, a coprocess, an extglob group, a `${ }` with a quote, a
+backslash, a backtick, a brace or a newline in it or a `$` followed by `(`, `{`,
+`'` or `"` (a plain `$Y` is read past), arithmetic with a quote, a backtick or a
+backslash in it or parentheses that do not pair, the legacy `$[ ]`
+arithmetic, a backslash inside backticks, a line continuation inside an operator
+(`<\` then `<EOF` is a heredoc once bash joins the lines), a here-document
+delimiter with an expansion in it, a here-document delimiter that runs into `<(`
+or `>(` (bash reads those two characters into the word and runs nothing in a
+delimiter), a here-document a `$( )` leaves pending when
+it closes, inside backticks a comment, a backslash in an ANSI-C string and a
+here-document line that ends in a backslash (bash cuts a backtick body at the
+closing backtick and undoes its backslashes before it reads a word, so where a
+comment ends, where the string closes and which lines continue are not what the
+text shows), `NAME[` at the start of a command when the subscript does not close
+before a blank, an operator, a quote, an escape or an expansion other than
+`$NAME` (bash reads it as the head of an array assignment and takes the word to
+the matching `]`, so `m[k >f ]=1` is one word and runs nothing, and `a`, a line
+continuation and `[k >f ]=1` is that word too, because the name and the `[` are
+found with the continuations taken out), an element of an array literal with a `[` whose subscript does not close the same way (bash keeps
+the whole subscript in the element, so `[a)]=1` is one word and the literal goes on),
+text glued to the `)` that ends an array literal (`a=()$(>f)` is one word, a line
+continuation between the two counting as nothing), a `#` after an
+operator or a parenthesis inside `[[ ]]`, a `]]` glued to a parenthesis or before
+a `(`, a `$` followed by a line continuation inside double quotes, the word
+`alias`, a word that names `expand_aliases` or `BASH_ALIASES`, an expansion handed
+to `shopt`, a subshell
+after an assignment or a redirect, a stray `)`, an unterminated region, a quote
+or an escape the text ends inside and nesting past 8. A command list inside `$( )`, `<( )` or
+backticks that stops before its closer sends nothing from inside it, because a
+list that never closes is not known to be one, and a word the read stopped inside
+is never judged, which includes the cut at 64 KiB landing inside a quote. A
+program name comes from a whole word that is a plain piece: a word with a space,
+a colon or an `=` in it is a string or an assignment and its tail is not a
+program. An assignment is one only when its name and its `=` are typed bare, and
+a reserved word only when it is typed bare with nothing read ahead of it on its
+command: `"FOO=bar"`, `\if`, `FOO=bar if` and `> f if` are each a command name
+and the word after is its argument, as bash has it. The cost is fidelity and not
+secrecy: a command that stops early shows Jev less, and `foo() { rm -rf x; }`
+shows nothing, or `foo` where a command by that name is installed (the read stops
+at the parenthesis, and `foo` is sent only if the gate knows it), and never the
+`rm`. This example said `foo` and not the `rm` until the known commands gate
+changed it. A bare `case`, or a `[[` away from the start of a
+command, that bash reads as an ordinary argument, as in `grep case src`, costs
+the commands after it for the same reason. This paragraph said the cost of a
+bare `[[` was fidelity and not secrecy until the skip to its `]]` was found to
+read a comment and a quoted here-document body after `echo [[` as command lists.
+`test_jev_route.py` pins each construct as a value place, runs the whole table
+again inside fourteen wrapping commands, and runs a seeded fuzz that puts a
+canary only in quoted text nested three deep. It also replays every Bash
+reproduction from the verify rounds that was a program name or a flag leaving as
+one, and from round 5 a redirect target leaving, with the value installed as a
+command and with it not. The round 5 and round 6 rows are also run through real
+bash, when bash is the pinned version, to show that bash creates no file and runs
+no command from what they hide. It also inserts a line continuation at every index
+of a corpus, the constructs above among it, and fails when the outline gains
+anything the unbroken command did not have.
+
+Round 6, against `ab83181`, found five more ways a redirect target or a program
+name left. Four are closed at the place the reader looked at the raw text where
+bash looks at the text with the continuations removed, or at the end of a
+construct where bash ends it earlier than the reader does: a `$` then a
+continuation then `(` or `{` inside double quotes, which bash reads as an
+expansion and the reader read as text, ending the string at an inner quote; the
+head of an array assignment split by a continuation (`a`, a continuation,
+`[k >f ]=1`); a `[[ ]]` whose `]]` is closed across a continuation, after a `)` or
+before a `<` or `>` (the reader went on to a later `]]` that was a here-document
+body and read code there), and one whose comment follows a continuation; and a
+here-document inside `$( )`, `<( )` or backticks ended by `E)` or a closing
+backtick on the delimiter line. The fifth, runtime parse state, is the alias:
+after `shopt -s expand_aliases` an alias can expand to the start of a
+here-document, so the lines after it are data to bash. A static reader cannot
+know what a later word expands to, so the read ends at the word `alias` wherever
+it is typed (as a program, as an argument such as `eval alias f=g` or
+`command -p alias`, or inside a string such as `eval "x=1; alias f=g"`), at a word
+that names `expand_aliases` or `BASH_ALIASES`, and at an expansion handed to
+`shopt`. `unalias`, `aliases`, `alias.co` and `--alias` are other words, and a
+`git commit -m "fix alias handling"` ends the read as well, which costs the
+commands after it. The edge, unverified in the harness: an alias that the shell's
+profile or a file the command sources defines, one the command writes with a
+here-document and then sources included, is not in the text, and nothing here
+sees it.
+
+Round 7, against `ecc10b0`, found two more ways a redirect target or a flag left,
+both in the array literal, which the reader steps over without looking in. Bash
+keeps a `)` inside the subscript of an element, so `declare -A m=([a)]=1 [b>f ]=2)`
+is one word that runs nothing, and the reader closed the literal at that `)` and
+read the rest as commands: a redirect target, which no gate tests, a flag after a
+known program such as `declare`, and the name of an installed command. Text glued
+to the `)` that ends a literal is the same word in bash (`a=()$(>f)`), and the
+reader started a new command there. Both are closed in the reader and not in the
+gate. A `[` in an array literal is stepped over only when its subscript closes with
+a `]` before a blank, an operator, a quote, an escape, a `)` or an expansion other
+than `$NAME`, which is the scan the head of a command already used, and otherwise
+the read ends. After the `)` that ends a literal only a blank, a separator, a
+closer or the end of the text may follow, a line continuation counting as nothing,
+and otherwise the read ends. The cost is fidelity: an array with a blank in a
+subscript (`[a b]=1`), or text after its `)`, shows Jev less. The rows are also run
+through real bash, as for rounds 5 and 6. Separately, the proxy tests failed on
+Python 3.11, which is the version the standalone job in CI runs: `http.client`
+puts `HTTP/1.0` on the `CONNECT` line up to 3.11 and `HTTP/1.1` from 3.12, and the
+tests had the second written into them, so the file passed on 3.12 and 3.13 and
+would have gone red in CI. They compare the host and the port now.
+
+Round 8, on 2026-10-28, was the nits that independent verifiers raised several
+times each. Each was reproduced first, fixed at its root and given a test that
+fails on the old code. A `PATH` of 10,000 directories ran the lookups to 45
+seconds (the known commands paragraph above). A ledger line nested past the JSON
+parser, 60,000 brackets, raised `RecursionError`, which `ledger_tail()` did not
+catch, so one such line in the last 256 KiB turned every call into a `crash` row
+until it aged out. The home directory was written `~` only for the exact spelling
+`HOME` plus `/`, and `//home/alice/x`, `/home//alice/x` and `/home/bob/../alice/x`
+let the account name out (the path rules above). The model string from the answer
+went into the ledger as it came, 5,012 characters with an escape in it in the
+reproduction. The unpinned properties were found by mutation: every bound in the
+hook, each moved one step either way, and the suite run against each. Of 143
+mutants of the bounds and of the lookup and path code, 80 survived the suite with
+the tests for the first four nits in it. They included the 64 KiB cap, `doas` in
+the wrappers, the find primaries, the 8 MiB input cap, the 256 KiB ledger tail,
+the 1 MiB answer cap, the 60 and 200 key limits, the four digit limit, the
+breaker window and the two ends of a probability. Tests now say each number
+literally. 17 mutants still survive: 3 are constants that the shipped numbers test
+pins by value, 3 are one of two bounds that each hold the property (`MAX_PATH`
+and the `PIECE` pattern, `FIELD` and `MAX_FIELD_LEN`), 2 are the factor in the
+millisecond conversion of the latency, and 9 are equivalent mutants, each
+compared with the original and found to differ nowhere: on generated inputs for
+eight, and for the ninth, a read of `MAX_STDIN + 2` characters, on inputs from one
+under the cap to a thousand over it. The reader's own index arithmetic was not mutated; its reproductions are
+the tests above.
+
+It ships in shadow mode, `ENFORCE = False`: once `SEND` is on it asks, records the
+answer and prints nothing, and until then it asks nothing. Enforcement is a separate ruling and a one line commit, and
+`test_jev_route.py` pins the shipped value so a fixture cannot flip it quietly.
+A deny recorded in shadow mode never counts toward the repeat pass described
+below, so flipping the flag starts every session clean.
+
+It fails open and it is fast. The whole hook, request included, is held inside
+2.5 seconds of its 5 second timeout whatever the input: the request gets what is
+left once 0.6 of a second is set aside for start up and the ledger write, and
+`test_jev_route.py` feeds a 1 MB command through a real process to measure it,
+against a `PATH` of 10,000 directories as well as a short one. That sentence was
+untrue of a long `PATH` until the lookups got a directory cap and a deadline (the
+known commands paragraph above), which are why the outline is built inside its
+second of the budget. A line of the ledger that is not JSON, or is nested deeper
+than the parser will follow, is skipped when the tail is read, like any other bad
+line, and does not stop the call. With `SEND` off, a refused host, a redirect, the deadline passing, an HTTP error
+(a 401 from a proxy that added no key among them), a malformed answer, input
+that is not JSON, input over 8 MiB or a tool name outside the character class,
+the call runs exactly as it would without the hook, so a quiet hook proves
+nothing. After three failed requests in a row it sends nothing for ten minutes,
+so a dead vendor costs three deadlines and not one per call.
+
+`.claude/ledger/jev-route.jsonl` gets one row for each call the hook sees, and
+that file is the only evidence that Jev decided anything. The outcome is
+`answered`, `error`, `off`, `repeat_pass`, `breaker_open`, `bad_input` or
+`crash`. Only an `answered` row carries the two probabilities, and only a row
+that made a request carries the latency. A row that made no request neither adds
+to the failure streak nor ends it. A deny prints only after its row is written,
+because that row is what lets the identical call through the second time once
+enforcement is on. A row holds the time, the session id (cut at 100 characters),
+the tool name (cut at 200), whether the hook was enforcing, the decision and the
+outcome. A row that got as far as the outline also holds a hash of the raw call,
+so "identical" means identical input, and `sent_chars`, the length of the tool
+name and the outline as built. That is what was sent only on a row that made a
+request. A `repeat_pass` or `breaker_open` row carries the length of an outline
+that was built and then not sent, and an `off`, `bad_input` or endpoint refused
+row carries none. The model is written as the answer named it only when it is
+`jev-` and up to 36 letters, digits, dots and hyphens, 40 characters at most, and
+as `unrecognised` otherwise; the answer itself still counts. A row holds no copy
+of the input. An ask is asked every time and a different call is never passed by
+a deny of another.
+
+It cannot pick a tool, choose a path or retry. Jev answers typed questions and
+writes no text, and no hook can swap one tool for another. It sits beside the
+outward gate above and neither reads the other.
+
+`test_jev_route.py` proves the hook's own logic against a loopback stub and
+proves nothing about Jev's judgment. Unverified: the request and answer shapes,
+which the first version recorded checking against TypeSafe's OpenAPI spec 0.2.0
+and `typesafe-sdk` 0.7.5 on 2026-10-16 and this rebuild did not re-read; any
+live answer, because `SEND` is False and no authenticated request has been made;
+that the agent proxy adds the key to a request for `api.typesafe.ai`, which no
+request has shown yet, so a run of 401 rows is the first sign it does not;
+whether the TLS tunnel to the real host verifies under the `SSL_CERT_FILE` a
+session carries, which the tests proved only against a certificate they made;
+what the harness does with the wrapper's `exit 1`, as under the gate; and
+whether a fresh verifier finds a piece that leaves and should not. Also
+unverified: which `PATH` the harness gives a hook, because the code reads the
+`PATH` of its own process and no live session has been measured, and how much of a
+real call Jev still sees once the programs that are not installed are dropped,
+which `sent_chars` in the ledger is where that gets measured. The 0.8 threshold is
+a starting guess, to be set from the ledger once real answers exist.
 
 ## The receipt on a status doc
 

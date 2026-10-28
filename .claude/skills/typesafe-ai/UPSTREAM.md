@@ -60,8 +60,14 @@ Two reads on 2026-10-16, both from the cloud environment:
 
 Those are dated reads of outside state. Re-read them before relying on them.
 
-Calling the API needs `TYPESAFE_API_KEY`, which is an environment secret and
-Tee's to set. A new session picks it up; a running one does not.
+Calling the API needs a key that no file or variable in this repository holds.
+Tee added it as a network secret in the cloud environment, and the environment's
+agent proxy adds it to requests for `api.typesafe.ai`, so a call has to go
+through the proxy the environment sets and not around it. The Jev router hook
+(`.claude/hooks/jev_route.py`) is built that way: it reads no key, sends no
+Authorization header, and ships with `SEND = False`, so it makes no request until
+Tee turns that on. A proxy that does not add the key gets HTTP 401 back. Nothing
+here has shown the proxy adding it yet.
 
 ## Syncing a newer upstream
 
