@@ -273,6 +273,26 @@ fixed on Tee's cards and published as `de4ac645` the same evening; see
 `live-thumb-layout/`. `live-jev-lanes/published.json` is read from that version,
 and the Jev nodes in it are as `3db61aef` published them.
 
+A fresh critic on `de4ac645` confirmed the live node equals the repo, the four
+proof frames, and the layout on every input `Thumb: Plan` can send. It also showed
+the first layout test let a budget of 760, a looser height rule and drifted widths
+through once every pinned copy was moved together. The test now pins the layout
+constants, checks the width table against Liberation Sans read from the font file,
+compares the node's wrap with n8n's line for line, and adds five crafted
+headlines; each of those nine mutations now fails it. Four things were left as
+they are, because none of them reaches what `Thumb: Plan` sends and changing the
+live node is a publish:
+
+- A double space or a newline in a headline can still make Compose draw an empty
+  line. Plan collapses all whitespace first, so Pick Still never sees one.
+- The height rule assumes a 1.2 em line pitch and the frames measure 1.12 to
+  1.135 em. It can only reject a size that would fit, never let one overflow.
+- The comment above the width table says an unlisted glyph can only make the
+  wrap tighter. That is wrong for the few glyphs wider than 1 em, such as
+  Cyrillic Ю at 1010; English capitals are all in the table.
+- The 24 px kicker draws at about 3 px in a 168 px wide thumbnail. That predates
+  this fix and was outside the ruling.
+
 Still open after the publish, and readable only on the first real render:
 whether n8n's two Split In Batches loops hand the side branches the right row,
 whether Compose behaves the same inside the full graph, the item counts after a

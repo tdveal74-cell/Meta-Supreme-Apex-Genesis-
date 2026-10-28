@@ -12,10 +12,17 @@
  * from Arial's advance widths with the same word wrap Compose applies.
  *
  * This test holds the files to the manifest, holds the change to the three
- * replacement pairs, and checks the layout on 600 generated headlines with an
- * independent copy of n8n's wrap loop. The width table itself is checked only
- * against the one line measured on the instance, so other glyphs rest on Arial's
- * published metrics. It reads no live data.
+ * replacement pairs, and checks the layout on 600 generated headlines and five
+ * crafted ones with an independent copy of n8n's wrap loop. The width table is
+ * checked against the one line measured on the instance and, entry by entry,
+ * against Liberation Sans, the metric twin of Arial, read from the font file's
+ * own tables by liberation_widths.py. It reads no live data.
+ *
+ * A fresh critic on 2026-10-27 showed that the first version of this test let
+ * TEXT_BUDGET 760, a looser height rule, a search bound of 1, a drifted wrap and
+ * drifted widths through, once every pinned copy was re-baselined together. The
+ * layout constants, the replica check and the crafted headlines below each turn
+ * one of those back into a failure.
  */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -30,6 +37,7 @@ const after = read("./after.js");
 let checks = 0;
 const eq = (a, b, msg) => { assert.deepEqual(a, b, msg); checks++; };
 const ok = (v, msg) => { assert.ok(v, msg); checks++; };
+const FONT = JSON.parse(read("./liberation_sans_widths.json"));
 
 // ---- The files are the ones the manifest names ---------------------------------
 eq(M.workflowId, "qEkGOUsNyVaRAmm6", "TQO FINAL V5");
@@ -81,6 +89,35 @@ const PANEL_RIGHT = 760;
 const TEXT_X = 72;
 const TOP = { 104: 250, 84: 235, 66: 225, 54: 220 };
 
+// ---- The layout constants are the ones this test checks against ---------------
+// The checks below use their own copies of these numbers, so a change to the
+// node's copy would otherwise go unseen until a headline happened to land in the
+// gap. TEXT_BUDGET 760 is the case the critic found: it passed every check here.
+const constant = (name) => (after.match(new RegExp("\\nconst " + name + " = ([^;]+);")) || [])[1];
+eq(constant("TEXT_BUDGET"), String(BUDGET), "after.js keeps the text budget at " + BUDGET + " px");
+eq(constant("FLOOR_Y"), "680", "after.js keeps the block above y 680");
+eq(constant("SIZES"), "[104, 84, 66, 54]", "after.js keeps the four sizes");
+eq(constant("TOP"), "{ 104: 250, 84: 235, 66: 225, 54: 220 }", "after.js keeps the first baseline for each size");
+eq(after.split("(ARIAL[ch] || 1000)").length, 2, "an unlisted glyph counts as 1000, in the one width function");
+
+// ---- The width table against the font -------------------------------------------
+// Liberation Sans is metric compatible with Arial. liberation_widths.py read these
+// widths from the font file's cmap, hhea, head and hmtx tables, so this is a
+// second source for the table rather than a copy of it.
+eq(FONT.font, "LiberationSans-Regular.ttf", "the fixture names the font it was read from");
+eq(FONT.unitsPerEm, 2048, "and its units per em");
+eq(Object.keys(FONT.widths).sort(), Object.keys(ARIAL).sort(), "the fixture covers exactly the table's 92 glyphs");
+for (const [ch, w] of Object.entries(ARIAL)) eq(w, FONT.widths[ch], JSON.stringify(ch) + " is " + FONT.widths[ch] + " thousandths in Liberation Sans");
+
+// ---- The node's wrap against n8n's -------------------------------------------------
+// The search in after.js predicts Compose's lines with its own wrapLines. If that
+// copy drifts from n8n's loop, the size it picks no longer matches what Compose
+// draws, so the two are compared line for line on every headline below.
+const wrapLines = new Function(after.match(/\nconst wrapLines = \(text, len\) => \{[\s\S]*?\n\};/)[0] + "\nreturn wrapLines;")();
+const sameWrap = (headline) => {
+  for (let len = 1; len <= 45; len++) eq(wrapLines(headline, len), n8nWrap(headline, len), headline + ": the node's wrap at " + len + " is n8n's");
+};
+
 // ---- The width table against the one line measured on the instance ------------
 // Execution 4737: "DASHBOARD FIRST" at 84 px, drawn from x 72, showed ink from
 // x 79 to x 866, 787 px. An advance width also holds the two side bearings, so
@@ -118,31 +155,58 @@ const WORDS = ["THE", "A", "AI", "WHY", "HOW", "QUIET", "OPERATOR", "WORK", "MOV
   "ISN’T", "DON'T", "FOUR", "STEPS", "TO", "KEEP", "SEAT", "ACCOUNTABILITY", "LEADERSHIP"];
 let seed = 20261027;
 const next = () => (seed = (seed * 1103515245 + 12345) % 2147483648);
-let fitted = 0;
-for (let i = 0; i < 600; i++) {
-  const count = 1 + (next() % 8);
-  const words = Array.from({ length: count }, () => WORDS[next() % WORDS.length]);
-  const headline = words.join(" ");
-  const out = run({ airtableId: "x", headline, kicker: "K", isNCO: i % 2 === 0 });
+// Returns true when every word fits the budget at the smallest size, which is
+// when the width and height checks apply.
+const checkHeadline = (headline, isNCO) => {
+  const words = headline.split(" ");
+  const out = run({ airtableId: "x", headline, kicker: "K", isNCO });
   ok([104, 84, 66, 54].includes(out.headSize), headline + ": a size from the scale");
   eq(out.headY, TOP[out.headSize], headline + ": headY follows the size");
+  sameWrap(headline);
   const lines = n8nWrap(headline, out.headWrap);
   ok(lines[0] !== "", headline + ": Compose does not start on an empty line");
   ok(lines.every((l) => l !== ""), headline + ": and draws no empty line anywhere");
   const longest = Math.max(...words.map((w) => width(w, 54)));
-  if (longest <= BUDGET) {
-    ok(lines.every((l) => width(l, out.headSize) <= BUDGET), headline + ": every line inside the budget at " + out.headSize + " px");
-    ok(TOP[out.headSize] + lines.length * out.headSize * 1.2 <= 680, headline + ": the block ends above y 680");
-    fitted++;
-  }
+  if (longest > BUDGET) return false;
+  ok(lines.every((l) => width(l, out.headSize) <= BUDGET), headline + ": every line inside the budget at " + out.headSize + " px");
+  ok(TOP[out.headSize] + lines.length * out.headSize * 1.2 <= 680, headline + ": the block ends above y 680");
   // The fewest lines for that size: one more character on the line would break the budget or the height.
   const looser = n8nWrap(headline, out.headWrap + 1);
-  if (longest <= BUDGET && looser.length < lines.length) {
+  if (looser.length < lines.length) {
     ok(looser.some((l) => width(l, out.headSize) > BUDGET) || TOP[out.headSize] + looser.length * out.headSize * 1.2 > 680,
       headline + ": the wrap is the longest that fits");
   }
+  return true;
+};
+let fitted = 0;
+for (let i = 0; i < 600; i++) {
+  const count = 1 + (next() % 8);
+  const headline = Array.from({ length: count }, () => WORDS[next() % WORDS.length]).join(" ");
+  if (checkHeadline(headline, i % 2 === 0)) fitted++;
 }
 ok(fitted >= 550, "almost every generated headline fits: " + fitted + " of 600");
+
+// ---- The layout, on headlines the generated set never reaches -----------------------
+// Each one was found by the 2026-10-27 critic as the input that tells a correct
+// node from a drifted one the generated set let through.
+const CRAFTED = {
+  // At 104 px this one word is 693 px, inside the panel edge but past the budget,
+  // so a budget raised to 760 would keep the largest size and run past the panel.
+  "AUTOMATION": "the budget",
+  // Seven wide words fit the width at 66 px but not the height, so only the
+  // height rule steps this one down to 54 px.
+  "MMMMMMMMM MMMMMMMMM MMMMMMMMM MMMMMMMMM MMMMMMMMM MMMMMMMMM MMMMMMMMM": "the height rule",
+  // The longest word comes first, so a search allowed below it would pick a
+  // lineLength that makes Compose start on an empty line.
+  "ACCOUNTABILITY WWWW WWWW WORK QUIET WWW IIII": "the search bound",
+  // W is the widest capital in the table.
+  "WWWW DON'T": "the width of W",
+  // An unlisted glyph counts as a full em, so nine of them step the size down.
+  "ÉÉÉÉÉÉÉÉÉ": "an unlisted glyph",
+};
+for (const [headline, what] of Object.entries(CRAFTED)) {
+  ok(checkHeadline(headline, false), headline + ": every word fits the budget at 54 px, so the checks for " + what + " apply");
+}
 
 // ---- A word too wide for any size --------------------------------------------------
 const huge = run({ airtableId: "x", headline: "M".repeat(28), kicker: "K" });
