@@ -274,7 +274,8 @@ fixed on Tee's cards and published as `de4ac645` the same evening; see
 and the Jev nodes in it are as `3db61aef` published them.
 
 A fresh critic on `de4ac645` confirmed the live node equals the repo, the four
-proof frames, and the layout on every input `Thumb: Plan` can send. It also showed
+proof frames, and the layout on every Plan-shaped headline it tried; a later
+verifier found the one exception in the last bullet below. It also showed
 the first layout test let a budget of 760, a looser height rule and drifted widths
 through once every pinned copy was moved together. The test now pins the layout
 constants, the 1.2 em line pitch and the search floor, checks the width table
@@ -291,9 +292,8 @@ found edits the previous test let through, so this is not a complete
 specification of the node, and a deliberate change to it still needs its own
 review.
 
-Four things were left as they are, because changing any of them is a publish. The
-first three do not touch an English headline that `Thumb: Plan` sends, and the
-fourth predates the fix:
+Five things were left as they are, because changing any of them is a publish.
+Each says why it was left:
 
 - A double space or a newline in a headline can still make Compose draw an empty
   line. Plan collapses every run of whitespace to one space, and Pick Still trims
@@ -308,6 +308,11 @@ fourth predates the fix:
   reach Pick Still; every English capital is in the table.
 - The 24 px kicker draws at about 3 px when the thumbnail is shown 168 px wide.
   That predates this fix and was outside the ruling.
+- A 20 letter word makes every size fail, and the 54 px fallback then joins the
+  next two words on one line: `INTERNATIONALIZATION MOMENTUM MANAGEMENT` draws
+  `MOMENTUM MANAGEMENT` out to x 796, past the panel edge at x 760. Plan caps the
+  word count but not the word length. A verifier's search of 400,000 combinations
+  of real English words found it only with a 20 letter word.
 
 Still open after the publish, and readable only on the first real render:
 whether n8n's two Split In Batches loops hand the side branches the right row,
