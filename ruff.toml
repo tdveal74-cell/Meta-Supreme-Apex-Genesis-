@@ -6,6 +6,11 @@
 target-version = "py311"
 line-length = 100
 
+# Vendored third-party Python. test_vendored_skills.py pins every file there
+# to upstream's bytes, so a lint fix cannot be applied locally; upstream fails
+# 23 of the rules above (B904, E741, I001 and the like). Fixes go upstream.
+extend-exclude = [".claude/skills/watch"]
+
 [lint]
 select = ["E", "F", "W", "B", "I"]
 ignore = [
