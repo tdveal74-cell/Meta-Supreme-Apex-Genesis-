@@ -16,6 +16,15 @@ stays inside its time budget on any input up to 1 MB.
 They prove the hook's own logic and nothing about Jev's judgment, which only a
 live call can measure.
 
+Ruled by Tee 2026-10-28 on a card, "Known commands only": a word the reader takes
+for a program is sent only when it is a bash builtin or reserved word, a name
+PATH resolves to an executable file, or a path to an existing executable file.
+So every test runs with a PATH that is one temporary directory of empty
+executables, and a row that names a program needs that program in INSTALLED. The
+reader tests run twice, once with the secret not installed, which is the ordinary
+machine, and once with the secret installed as a command, so the gate cannot be
+what keeps a value out and the reader's own defences stay tested.
+
 Standalone: no database, no network beyond loopback, no repository state
 beyond the files.
 """
@@ -26,12 +35,14 @@ import ast
 import http.server
 import importlib.util
 import io
+import itertools
 import json
 import os
 import pathlib
 import random
 import re
 import socket
+import string
 import subprocess
 import sys
 import threading
@@ -65,6 +76,7 @@ SHIPPED_ENFORCE = jev.ENFORCE
 NOW = datetime(2026, 10, 17, 18, 0, 0, tzinfo=timezone.utc)
 DEAD = "http://127.0.0.1:9/v1/systemone"
 MEGABYTE = 1024 * 1024
+ORIGINAL_PATH = os.environ.get("PATH", "/usr/bin:/bin")
 
 
 class Stub:
@@ -146,6 +158,60 @@ def project(tmp_path, monkeypatch):
 @pytest.fixture
 def home(tmp_path):
     return tmp_path / "home"
+
+
+# The programs the rows below run. The hook sends a program name only when the
+# machine has the program, so these are empty executables in one temporary
+# directory that is the whole PATH of every test: no row depends on what is
+# installed where the suite runs, and a program that is not here is not a command.
+# The last group are names no machine has. A few rows need one to be a command so
+# that the reader's own reading of it is what the row tests: a delimiter line EOF
+# is a command bash runs when it sits inside a $( ), and run.sh and deploy.sh are
+# scripts that rows run by name and by the path {bin}/run.sh.
+# test_the_installed_programs_cover_every_program_the_reader_tests_name fails when
+# a row needs a program that is not here, and this list holds no program no row runs.
+INSTALLED = (
+    "aws bash cat curl date dd docker doas env find gh git grep ls make mysql nohup printenv python3 python3.11 "
+    "rm sed sh sha256sum sleep sort ssh sudo tar tee timeout watch which whoami xargs x86_64-linux-gnu-gcc "
+    "EOF run.sh deploy.sh"
+).split()
+
+
+@pytest.fixture(scope="session")
+def installed_bin(tmp_path_factory):
+    return make_bin(tmp_path_factory.mktemp("installed"), INSTALLED)
+
+
+@pytest.fixture(scope="session")
+def secret_bin(tmp_path_factory):
+    """Every value the tests hide, as the name of an installed command. A secret
+    that is the name of a command does leave, and it is the one case where only the
+    reader keeps it out of a program slot, which is what the reader tests need."""
+    names = CANARIES + tuple(sorted(secret_words()))
+    return make_bin(tmp_path_factory.mktemp("secrets"), names)
+
+
+def make_bin(directory, names):
+    for name in names:
+        path = directory / name
+        path.write_text("#!/bin/sh\nexit 0\n")
+        path.chmod(0o755)
+    return directory
+
+
+@pytest.fixture(autouse=True)
+def only_the_installed_programs(installed_bin, monkeypatch):
+    monkeypatch.setenv("PATH", str(installed_bin))
+    return installed_bin
+
+
+@pytest.fixture(params=["secret not installed", "secret installed as a command"])
+def secrets(request, installed_bin, secret_bin, monkeypatch):
+    """Run a reader test on an ordinary machine and on one where the value is the
+    name of a command. Both must keep the value out of the text."""
+    if request.param.endswith("command"):
+        monkeypatch.setenv("PATH", os.pathsep.join((str(installed_bin), str(secret_bin))))
+    return request.param
 
 
 @pytest.fixture
@@ -507,11 +573,13 @@ def test_the_shipped_numbers_are_the_ones_claude_md_states():
     assert (jev.CONFIDENCE, jev.HOOK_BUDGET_S, jev.MAX_OUT, jev.MAX_PATH, jev.MAX_SCAN) == (0.8, 2.5, 2000, 200, 65536)
     assert (jev.BREAKER_ERRORS, jev.BREAKER_S) == (3, 600)
     assert jev.MAX_NEST == 8 and len(WRAPPERS) == 14
+    assert (jev.MAX_WORD, jev.MAX_LOOKUPS) == (64, 128)
     section = (ROOT / "CLAUDE.md").read_text().split("## The Jev router")[1].split("\n## ")[0]
     flat = " ".join(section.split())
     for stated in ("probability of 0.8", "2.5 seconds", "2,000 characters", "200 characters", "64 KiB",
                    "three failed requests", "ten minutes", "`ENFORCE = False`", "`TYPESAFE_API_KEY`",
-                   "any nesting up to 8", "nesting past 8", "fourteen wrapping commands"):
+                   "any nesting up to 8", "nesting past 8", "fourteen wrapping commands",
+                   "over 64 characters", "128 distinct names"):
         assert stated in flat, stated
 
 
@@ -802,10 +870,12 @@ def test_a_crash_carrying_the_key_leaves_a_row_with_the_class_name_only(stub, pr
     assert "tsk_live" not in capsys.readouterr().err
 
 
-def test_main_reads_only_the_key_and_the_project_dir_from_the_environment():
+def test_main_reads_only_the_key_the_project_dir_and_path_from_the_environment():
+    """PATH is how the hook tells a command from a word. It is read to look for a
+    file and is never sent, and the lookups run nothing."""
     source = HOOK.read_text()
     reads = set(re.findall(r"""(?:environ\.get|getenv)\(\s*["']([A-Za-z_]+)["']""", source))
-    assert reads == {"CLAUDE_PROJECT_DIR", "TYPESAFE_API_KEY"}
+    assert reads == {"CLAUDE_PROJECT_DIR", "PATH", "TYPESAFE_API_KEY"}
     assert "os.environ[" not in source and "environ.copy" not in source and "dict(os.environ" not in source
 
 
@@ -832,8 +902,8 @@ VALUE_PLACES = [
     "mysql -u root -p{s}",
     "mysql --password={s}",
     "mysql --password {s}",
-    "TOKEN={s} ./run.sh",
-    "TOKEN={s} PASSWORD=x ./run.sh",
+    "TOKEN={s} run.sh",
+    "TOKEN={s} PASSWORD=x run.sh",
     "export TOKEN={s}",
     "env TOKEN={s} printenv",
     "env -i TOKEN={s} printenv",
@@ -1066,7 +1136,7 @@ VALUE_PLACES = [
     "true && \\\n[[ -n x && {s} == y ]]",
     "true && \\\n[[ -z x || {s} == y ]]",
     "true && \\\ncase x in a|{s}) true;; esac",
-    "prog1 && [\\\n[ x < {s} ]]",
+    "true && [\\\n[ x < {s} ]]",
     "function f {{ [[ x < {s} ]]; }}",
     "function f {{ [[ -n x && {s} == y ]]; }}",
     "function f {{ case x in a|{s}) true;; esac; }}",
@@ -1169,7 +1239,7 @@ VALUE_PLACES = [
 
 @pytest.mark.parametrize("canary", CANARIES)
 @pytest.mark.parametrize("command", VALUE_PLACES)
-def test_no_value_leaves_wherever_it_sits_in_a_command(stub, command, canary):
+def test_no_value_leaves_wherever_it_sits_in_a_command(stub, secrets, command, canary):
     command = command.format(s=canary)
     assert canary in command
     text = outline(command)
@@ -1214,7 +1284,7 @@ def fits_wrapper(wrapper, template):
 
 
 @pytest.mark.parametrize("wrapper", sorted(WRAPPERS))
-def test_no_value_leaves_when_a_command_sits_inside_another_command(wrapper):
+def test_no_value_leaves_when_a_command_sits_inside_another_command(secrets, wrapper):
     leaks = []
     for template in VALUE_PLACES:
         if not fits_wrapper(wrapper, template):
@@ -1278,7 +1348,7 @@ def quoted_canary_command(rng, canary):
 
 
 @pytest.mark.parametrize("seed", [1, 2, 3])
-def test_a_value_inside_quoted_text_never_leaves_at_any_nesting(seed):
+def test_a_value_inside_quoted_text_never_leaves_at_any_nesting(secrets, seed):
     """The differential fuzz the reader failed at 22165922: 876 leaks in 20,000
     commands at seed 1, found by putting the canary only in quoted text."""
     rng = random.Random(seed)
@@ -1296,7 +1366,8 @@ def test_a_value_inside_quoted_text_never_leaves_at_any_nesting(seed):
     assert leaks == [], leaks[:3]
 
 
-@pytest.mark.parametrize("command,expected", [
+# {bin} is the directory of installed programs, for a program named by its path.
+OUTLINE_ROWS = [
     ("curl -u admin:hunter2 https://x.example", "curl -u"),
     ("curl --user admin:hunter2 --cookie a=b https://x", "curl --user --cookie"),
     ("curl --user=admin:hunter2 https://x", "curl --user"),
@@ -1307,8 +1378,8 @@ def test_a_value_inside_quoted_text_never_leaves_at_any_nesting(seed):
     ("sudo rm -rf x", "sudo rm -rf"),
     ("sudo -u admin rm -rf x", "sudo -u -rf"),
     ("env FOO=bar python3 -m pytest -q", "env python3 -m -q"),
-    ("FOO=bar ./run.sh --verbose", "run.sh --verbose"),
-    ("/usr/bin/env python3.11 script.py", "env python3.11"),
+    ("FOO=bar {bin}/run.sh --verbose", "run.sh --verbose"),
+    ("{bin}/env python3.11 script.py", "env python3.11"),
     ("cat <<'EOF' > notes.md\nhello hunter2\nEOF\nls", "cat notes.md\nls"),
     ("cat > .env <<EOF\nTOKEN=x\nEOF", "cat .env"),
     ("echo hi > out.txt 2>&1", "echo out.txt"),
@@ -1322,7 +1393,7 @@ def test_a_value_inside_quoted_text_never_leaves_at_any_nesting(seed):
     ("if true; then echo hi; fi", "true\necho"),
     ("for f in a b; do rm -f $f; done", "rm -f"),
     ("while read l; do echo $l; done", "read\necho"),
-    ("a && b || c; d | e & f", "a\nb\nc\nd\ne\nf"),
+    ("ls && cat || grep; sort | tee & rm", "ls\ncat\ngrep\nsort\ntee\nrm"),
     ("echo hi # a comment", "echo"),
     ("python3 -c 'import os'", "python3 -c"),
     ("ls --color=auto -la", "ls --color -la"),
@@ -1340,7 +1411,7 @@ def test_a_value_inside_quoted_text_never_leaves_at_any_nesting(seed):
     ("(( n = 1 << 3 ))\nls", "ls"),
     ("for ((i=0;i<3;i++)); do echo $i; done", "echo"),
     ("ls $(( $(date +%s) - 5 )) && git push --force", "ls\ngit --force"),
-    ("PASSWORDS=(hunter2 s3cr3tvalue) deploy.sh", "deploy.sh"),
+    ("PASSWORDS=(hunter2 s3cr3tvalue) ls", "ls"),
     ("declare -a KEYS=(a b)", "declare -a"),
     ("echo $'it\\'s ok; hunter2' && ls", "echo\nls"),
     ("echo ${X:-a b;c} && ls", "echo\nls"),
@@ -1358,14 +1429,14 @@ def test_a_value_inside_quoted_text_never_leaves_at_any_nesting(seed):
     ("echo hi &>/dev/null; ls", "echo /dev/null\nls"),
     ("ls &>> log.txt && rm -rf build", "ls log.txt\nrm -rf"),
     ("make 2>&1 &>build.log | tee x", "make build.log\ntee"),
-    ("cmd &>f &", "cmd f"),
+    ("ls &>f &", "ls f"),
     ("sleep 1 & ls", "sleep\nls"),
     ("sleep 1 &\nls", "sleep\nls"),
     # An assignment is one when its name and = are typed bare, whatever its value.
     ("FOO=\"bar baz\" ls -la", "ls -la"),
     ("FOO='a b' BAR=2 ls", "ls"),
     ("FOO=$(echo a) ls", "echo\nls"),
-    ("FOO=bar BAZ=qux ./run.sh --verbose", "run.sh --verbose"),
+    ("FOO=bar BAZ=qux {bin}/run.sh --verbose", "run.sh --verbose"),
     ("A+=x ls", "ls"),
     ("A[0]=x ls", "ls"),
     ("\"A=1\" ls", ""),
@@ -1382,7 +1453,7 @@ def test_a_value_inside_quoted_text_never_leaves_at_any_nesting(seed):
     ("FOO=bar ! ls", ""),
     ("! FOO=bar ls", "ls"),
     ("> out.txt ls -la", "out.txt ls -la"),
-    ("if FOO=bar x; then ls; fi", "x\nls"),
+    ("if FOO=bar cat; then ls; fi", "cat\nls"),
     # A carriage return is part of the word, as bash has it.
     ("FOO=bar\rls", ""),
     ("ls\r\npwd", "pwd"),
@@ -1391,7 +1462,7 @@ def test_a_value_inside_quoted_text_never_leaves_at_any_nesting(seed):
     ("cd build && \\\n  git push --force origin main", "cd\ngit --force"),
     ("FOO=1 \\\n  BAR=2 \\\n  git push --force origin main", "git --force"),
     ("cat a.log |\\\n  grep -rn foo", "cat\ngrep -rn"),
-    ("prog1 ;\\\n prog2 --force", "prog1\nprog2 --force"),
+    ("ls ;\\\n cat --force", "ls\ncat --force"),
     ("git push \\\n  --force", "git --force"),
     ("ec\\\nho hi", "echo"),
     ("FOO=\\\nbar ls -la", "ls -la"),
@@ -1417,8 +1488,8 @@ def test_a_value_inside_quoted_text_never_leaves_at_any_nesting(seed):
     # $$ is the process id. A ( after it is text, and a $( after a pair is a
     # substitution, as it is in bash.
     ("echo \"pid$$(x y)\" && ls", "echo\nls"),
-    ("echo \"$$$(x y)\"", "echo\nx"),
-    ("echo \"\\$$(x y)\"", "echo\nx"),
+    ("echo \"$$$(ls y)\"", "echo\nls"),
+    ("echo \"\\$$(ls y)\"", "echo\nls"),
     ("echo $$ && ls", "echo\nls"),
     ("rm -f /tmp/x.$$; git push --force", "rm -f\ngit --force"),
     ("echo \"$$\"; git push --force", "echo\ngit --force"),
@@ -1454,7 +1525,8 @@ def test_a_value_inside_quoted_text_never_leaves_at_any_nesting(seed):
     ("doas A=1 ls", "doas"),
     ("sudo nohup A=1 ls", "sudo nohup"),
     ("A=1 time k=v ls", "time"),
-    ("nohup A=1 -x ls", "nohup -x"),
+    # The program nohup runs is A=1, which is not a command, so its flag goes too.
+    ("nohup A=1 -x ls", "nohup"),
     ("nohup A=1 'x y' ls", "nohup"),
     # A redirect to /dev/tcp/HOST/PORT or /dev/udp/HOST/PORT is a socket and not a
     # path. Any other redirect target is still a path, and so is the same text when
@@ -1464,9 +1536,12 @@ def test_a_value_inside_quoted_text_never_leaves_at_any_nesting(seed):
     ("echo hi >/dev/udp/10.9.8.7/514", "echo"),
     ("echo hi > /dev/null", "echo /dev/null"),
     ("echo hi > ./dev/tcp/x/y", "echo ./dev/tcp/x/y"),
-])
-def test_the_outline_of_a_command_is_programs_flags_and_paths(command, expected):
-    assert outline(command) == expected
+]
+
+
+@pytest.mark.parametrize("command,expected", OUTLINE_ROWS)
+def test_the_outline_of_a_command_is_programs_flags_and_paths(secrets, installed_bin, command, expected):
+    assert outline(command.replace("{bin}", str(installed_bin))) == expected
 
 
 @pytest.mark.parametrize("tool,field", [("Write", "file_path"), ("Edit", "file_path"), ("NotebookEdit", "notebook_path")])
@@ -1481,7 +1556,7 @@ CONTINUATION_CORPUS = [
     "cd build && git push --force origin main",
     "FOO=1 BAR=2 git push --force origin main",
     "cat a.log | grep -rn foo",
-    "prog1 ; prog2 --force",
+    "ls ; cat --force",
     "curl -u admin:hunter2 https://x.example",
     "sudo -u admin rm -rf x",
     "env FOO=bar python3 -m pytest -q",
@@ -1521,9 +1596,9 @@ def test_a_line_continuation_next_to_a_space_changes_nothing_in_the_outline(comm
     assert seen >= 4
 
 
-@pytest.mark.parametrize("command,expected", [
+STOP_ROWS = [
     ("ls -la; case $x in a) rm -rf b;; esac; git push --force", "ls -la"),
-    ("ls; foo() { rm -rf b; }; git push --force", "ls\nfoo"),
+    ("ls; cat() { rm -rf b; }; git push --force", "ls\ncat"),
     ("ls; echo a(b); git push --force", "ls\necho"),
     ("ls; echo @(a|b); git push --force", "ls\necho"),
     ("ls; echo ${X:-'a'}; git push --force", "ls\necho"),
@@ -1591,12 +1666,15 @@ def test_a_line_continuation_next_to_a_space_changes_nothing_in_the_outline(comm
     ("ls; echo abc\\", "ls\necho"),
     ("ls; echo 'abc; git push --force", "ls\necho"),
     ("ls; echo \"abc; git push --force", "ls\necho"),
-])
-def test_syntax_the_reader_does_not_model_ends_the_read_and_nothing_after_it_is_guessed_at(command, expected):
+]
+
+
+@pytest.mark.parametrize("command,expected", STOP_ROWS)
+def test_syntax_the_reader_does_not_model_ends_the_read_and_nothing_after_it_is_guessed_at(secrets, command, expected):
     assert outline(command) == expected
 
 
-def test_a_word_cut_inside_a_quote_or_an_escape_is_never_judged():
+def test_a_word_cut_inside_a_quote_or_an_escape_is_never_judged(secrets):
     """A command over 64 KiB is cut at the last separator in its first 64 KiB, and
     that can fall inside a quoted string or after an escaped space. What is left
     is a piece of a word, and a piece of a word is not a program."""
@@ -1617,6 +1695,477 @@ def test_a_word_cut_inside_a_quote_or_an_escape_is_never_judged():
             assert canary not in text, (name, head, text)
     assert outline("ls && " + cuts["single quote"]) == "ls"
     assert outline("sudo " + cuts["double quote"]) == "sudo"
+
+
+# ----------------------------- known commands only, ruled by Tee 2026-10-28
+
+
+def distinct_names(count):
+    """count different words that are program names: a letter, then four lowercase
+    letters. No two are alike, and none carries a digit."""
+    words = itertools.product(string.ascii_lowercase, repeat=4)
+    return ["n" + "".join(letters) for letters in itertools.islice(words, count)]
+
+
+def an_executable(path, body="#!/bin/sh\nexit 0\n", mode=0o755):
+    path.write_text(body)
+    path.chmod(mode)
+    return path
+
+
+def path_of(*directories, monkeypatch):
+    monkeypatch.setenv("PATH", os.pathsep.join(str(d) for d in directories))
+
+
+def test_an_unknown_program_and_every_flag_of_its_command_are_dropped():
+    assert outline("mytool --force -rf x") == ""
+    assert outline("mytool ls -la --color") == "", "a known name as an argument is an argument"
+    assert outline("mytool --force; ls -la") == "ls -la", "the next command is another command"
+    assert outline("ls -la | mytool -x --y | cat -n") == "ls -la\ncat -n"
+    assert outline("FOO=1 mytool --force") == ""
+    assert outline("\"mytool\" --force") == ""
+    assert outline("sudo mytool --force -x") == "sudo", "the wrapper is a command, the program it runs is not"
+    assert outline("echo $(mytool --force -x) --color") == "echo\n--color"
+    assert outline("{ mytool --force; } && git push --force") == "git --force"
+    assert outline("mytool --force > out.txt") == "out.txt", "a redirect target is a path by syntax"
+    assert outline("nohup A=1 -x ls") == "nohup", "A=1 is the program nohup runs, and it is not a command"
+
+
+def test_the_gate_is_what_drops_it_and_not_the_reader(monkeypatch):
+    assert outline("mytool --force -rf x") == ""
+    monkeypatch.setattr(jev.Shell, "known", lambda self, word: True)
+    assert outline("mytool --force -rf x") == "mytool --force -rf"
+
+
+def test_a_known_program_keeps_its_flags():
+    assert outline("ls -la --color=auto") == "ls -la --color"
+    assert outline("git push --force-with-lease origin main") == "git --force-with-lease"
+    assert outline("echo -n hi") == "echo -n", "a builtin needs no file"
+    assert outline("cd -P build && pwd -L") == "cd -P\npwd -L"
+    assert outline("if true; then ls -la; fi") == "true\nls -la", "a reserved word is not a program name"
+    assert outline("time ls -la") == "time ls -la"
+
+
+def test_a_program_put_on_path_by_the_test_is_known_until_it_is_taken_off(tmp_path, installed_bin, monkeypatch):
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    an_executable(tools / "tmptool")
+    assert outline("tmptool --force -x") == ""
+    path_of(installed_bin, tools, monkeypatch=monkeypatch)
+    assert outline("tmptool --force -x") == "tmptool --force -x"
+    assert outline("ls | tmptool -v") == "ls\ntmptool -v"
+    path_of(installed_bin, monkeypatch=monkeypatch)
+    assert outline("tmptool --force -x") == ""
+
+
+def test_only_an_executable_file_on_path_is_a_command(tmp_path, installed_bin, monkeypatch):
+    first, second = tmp_path / "first", tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    an_executable(first / "notexec", mode=0o644)
+    (first / "adir").mkdir()
+    an_executable(second / "notexec")
+    an_executable(second / "adir")
+    path_of(first, "", second, monkeypatch=monkeypatch)
+    assert outline("adir -x") == "adir -x", "a directory does not shadow the file behind it"
+    assert outline("notexec -x") == "notexec -x", "nor does a file that is not executable"
+    path_of(first, monkeypatch=monkeypatch)
+    assert outline("adir -x") == "" and outline("notexec -x") == ""
+    path_of("", monkeypatch=monkeypatch)
+    assert outline("ls -la") == "", "no directory on PATH"
+    an_executable(tmp_path / "here")
+    monkeypatch.chdir(tmp_path)
+    path_of(first, "", monkeypatch=monkeypatch)
+    assert outline("here -x") == "", "an empty PATH entry is not read as the current directory"
+
+
+def test_an_unset_path_is_the_platforms_default(tmp_path, monkeypatch):
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    an_executable(tools / "tmptool")
+    monkeypatch.delenv("PATH")
+    monkeypatch.setattr(os, "defpath", str(tools))
+    assert outline("tmptool -x") == "tmptool -x"
+    assert outline("ls -la") == ""
+
+
+def test_the_path_that_counts_is_the_one_the_hook_process_has_at_the_call(monkeypatch):
+    """The suite runs on a PATH of its own, so this is the one place the PATH of
+    the machine is used: ls and cat are real commands wherever this runs."""
+    assert outline("ls -la; cat -n") == "ls -la\ncat -n"
+    monkeypatch.setenv("PATH", ORIGINAL_PATH)
+    assert outline("ls -la; cat -n; no-such-command-here -x") == "ls -la\ncat -n"
+    monkeypatch.setenv("PATH", "")
+    assert outline("ls -la; cat -n") == "", "read at each call, not at import"
+
+
+def test_a_word_with_a_slash_is_a_program_when_it_names_an_existing_executable_file(
+        tmp_path, installed_bin, monkeypatch):
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    run = an_executable(tools / "run.sh")
+    an_executable(tools / "notes.txt", mode=0o644)
+    (tools / "adir").mkdir()
+    (tools / "link.sh").symlink_to(run)
+    cwd = str(tmp_path)
+    absolute = "%s/run.sh" % installed_bin
+    assert len(absolute) <= jev.MAX_WORD
+    assert outline("%s --verbose" % absolute, cwd="/nonexistent") == "run.sh --verbose", "an absolute path"
+    assert outline("./tools/run.sh --verbose", cwd=cwd) == "run.sh --verbose", "relative to the working directory"
+    assert outline("tools/run.sh --verbose", cwd=cwd) == "run.sh --verbose"
+    assert outline("FOO=bar ./tools/run.sh --verbose", cwd=cwd) == "run.sh --verbose"
+    assert outline("./tools/link.sh --verbose", cwd=cwd) == "link.sh --verbose", "a link to an executable file"
+    assert outline("sudo ./tools/run.sh --verbose", cwd=cwd) == "sudo run.sh --verbose"
+    assert outline("%s/tools/run.sh --verbose" % "~", cwd="/nonexistent", home=cwd) == "run.sh --verbose"
+    for gone in ("./tools/missing.sh", "./tools/notes.txt", "./tools/adir", "/nonexistent/run.sh"):
+        assert outline(gone + " --verbose", cwd=cwd) == "", gone
+    assert outline("./tools/run.sh --verbose", cwd="/nonexistent") == "", "the working directory is not this one"
+    assert outline("~/tools/run.sh --verbose", cwd="/nonexistent", home="") == ""
+    monkeypatch.setenv("PATH", "")
+    assert outline("./tools/run.sh --verbose", cwd=cwd) == "run.sh --verbose", "a path does not need PATH"
+
+
+def test_a_word_over_64_characters_is_not_looked_up(tmp_path, monkeypatch):
+    looked = []
+    real = jev.is_executable
+    monkeypatch.setattr(jev, "is_executable", lambda path: looked.append(path) or real(path))
+    for length, kept in ((jev.MAX_WORD, True), (jev.MAX_WORD + 1, False)):
+        directory = tmp_path / ("d" * (length - len("./") - len("/x.sh")))
+        directory.mkdir()
+        an_executable(directory / "x.sh")
+        word = "./%s/x.sh" % directory.name
+        assert len(word) == length
+        looked.clear()
+        assert outline(word + " --flag", cwd=str(tmp_path)) == ("x.sh --flag" if kept else ""), length
+        assert bool(looked) == kept, length
+
+
+def test_a_lookup_runs_nothing(tmp_path, installed_bin, monkeypatch):
+    marker = tmp_path / "ran"
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    an_executable(tools / "tmptool", body="#!/bin/sh\ntouch %s\n" % marker)
+    path_of(installed_bin, tools, monkeypatch=monkeypatch)
+    assert outline("tmptool --x; ./tools/tmptool --y", cwd=str(tmp_path)) == "tmptool --x\ntmptool --y"
+    assert not marker.exists()
+
+
+def test_the_hook_has_no_way_to_run_a_program():
+    tree = ast.parse(HOOK.read_text())
+    os_calls = {n.func.attr for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and isinstance(n.func.value, ast.Name) and n.func.value.id == "os"}
+    names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+    assert not os_calls & {"system", "popen", "execv", "execve", "execvp", "execvpe", "execl", "execle", "execlp",
+                           "execlpe", "spawnv", "spawnve", "spawnvp", "spawnl", "spawnle", "spawnlp", "posix_spawn",
+                           "posix_spawnp", "fork", "forkpty", "startfile"}
+    assert not names & {"subprocess", "shutil", "eval", "exec", "compile", "__import__"}
+
+
+def test_a_name_is_looked_up_once_per_call(monkeypatch):
+    looked = []
+    real = jev.is_executable
+    monkeypatch.setattr(jev, "is_executable", lambda path: looked.append(os.path.basename(path)) or real(path))
+    assert outline("mytool -a; mytool -b; ls; ls -la; mytool -c; ls") == "ls\nls -la\nls"
+    assert sorted(looked) == ["ls", "mytool"], "one directory on PATH, one lookup for each name"
+    looked.clear()
+    outline("echo a; echo b; cd c; true; pwd")
+    assert looked == [], "a builtin is never looked up"
+
+
+def test_the_lookups_stop_at_the_cap_and_the_names_after_it_are_dropped(tmp_path, monkeypatch):
+    dirs = [tmp_path / ("bin%d" % i) for i in range(3)]
+    for d in dirs:
+        d.mkdir()
+    an_executable(dirs[0] / "early")
+    an_executable(dirs[2] / "late")
+    path_of(*dirs, monkeypatch=monkeypatch)
+    looked = []
+    real = jev.is_executable
+    monkeypatch.setattr(jev, "is_executable", lambda path: looked.append(path) or real(path))
+    unknown = distinct_names(jev.MAX_LOOKUPS + 50)
+    command = "; ".join(["early"] + unknown + ["late -x", "early -y", "echo -n"])
+    assert outline(command) == "early\nearly -y\necho -n", "late was never looked up, early and echo need none"
+    assert len(looked) == 1 + (jev.MAX_LOOKUPS - 1) * len(dirs), "early is found in the first directory"
+    looked.clear()
+    assert outline("late -x") == "late -x", "the cap is per call"
+
+
+def test_a_name_found_before_the_cap_stays_known_after_it(tmp_path, monkeypatch):
+    path_of(tmp_path, monkeypatch=monkeypatch)
+    an_executable(tmp_path / "early")
+    command = "; ".join(["early"] + distinct_names(jev.MAX_LOOKUPS * 2) + ["early --again"])
+    assert outline(command) == "early\nearly --again"
+
+
+ONE_MEGABYTE_DISTINCT = {
+    "programs": lambda: ";".join(distinct_names(200000)),
+    "programs with flags": lambda: "\n".join(name + " --flag" for name in distinct_names(120000)),
+    "paths as programs": lambda: ";".join("./" + name for name in distinct_names(150000)),
+    "paths in a directory": lambda: ";".join("/usr/bin/" + name + " -x" for name in distinct_names(80000)),
+    "long words": lambda: ";".join("w" * 30 + name for name in distinct_names(30000)),
+    "unknown wrappers": lambda: ";".join("sudo " + name for name in distinct_names(150000)),
+}
+
+
+@pytest.mark.parametrize("shape", sorted(ONE_MEGABYTE_DISTINCT))
+def test_a_one_megabyte_command_of_distinct_words_through_a_real_process_stays_inside_the_budget(
+        stub, project, installed_bin, tmp_path, monkeypatch, shape):
+    """The case the cap is for. The hook is a new interpreter each time, and every
+    distinct name that is not a builtin is a stat on each directory of PATH, so the
+    PATH here is forty directories and the budget is the whole 2.5 seconds."""
+    dirs = []
+    for i in range(40):
+        d = tmp_path / ("bin%d" % i)
+        d.mkdir()
+        dirs.append(d)
+    path_of(installed_bin, *dirs, monkeypatch=monkeypatch)
+    command = ONE_MEGABYTE_DISTINCT[shape]()[:MEGABYTE]
+    assert len(command) > MEGABYTE * 0.9
+    p = payload(command=command)
+    proc, elapsed = run_in_a_process(project, stub.url, json.dumps(p))
+    assert proc.returncode == 0 and proc.stdout == "", proc.stderr
+    assert elapsed < 2.5, elapsed
+    assert sent_chars(stub) <= 2000
+    row = ledger(project)[-1]
+    assert row["outcome"] == "answered" and row["input_sha"] == jev.input_digest("Bash", p["tool_input"])
+
+
+def test_the_cap_bounds_the_work_a_command_of_distinct_names_can_cause(monkeypatch, tmp_path):
+    dirs = [tmp_path / ("bin%d" % i) for i in range(20)]
+    for d in dirs:
+        d.mkdir()
+    path_of(*dirs, monkeypatch=monkeypatch)
+    looked = []
+    real = jev.is_executable
+    monkeypatch.setattr(jev, "is_executable", lambda path: looked.append(path) or real(path))
+    outline(";".join(distinct_names(5000)))
+    assert len(looked) == jev.MAX_LOOKUPS * len(dirs)
+
+
+def test_the_pinned_bash_words_are_the_ones_the_docs_state():
+    assert (jev.BASH_VERSION_PINNED, jev.BASH_WORDS_TAKEN) == ("5.2.21(1)-release", "2026-10-28")
+    assert (len(jev.BASH_BUILTINS), len(jev.BASH_RESERVED), len(jev.BASH_WORDS)) == (61, 22, 83)
+    assert not set(jev.BASH_BUILTINS) & set(jev.BASH_RESERVED)
+    assert {"echo", "cd", "export", "read", "declare", "exec", "command", "builtin", "eval", "type", "true",
+            "false", "set", "source"} <= set(jev.BASH_BUILTINS)
+    assert {"if", "then", "case", "esac", "for", "do", "done", "time", "function", "coproc", "[[", "]]", "{", "}",
+            "!"} <= set(jev.BASH_RESERVED)
+    assert jev.OPENERS | jev.CLOSERS | jev.HEADERS | jev.UNMODELLED | {"case", "[[", "time"} <= jev.BASH_WORDS
+    assert not set(jev.WRAPPERS) - {"time", "exec", "command", "builtin"} & jev.BASH_WORDS
+    section = " ".join((ROOT / "CLAUDE.md").read_text().split("## The Jev router")[1].split("\n## ")[0].split())
+    for stated in ("5.2.21(1)-release", "2026-10-28", "Known commands only", "Top-level only"):
+        assert stated in section, stated
+
+
+def test_the_pinned_bash_words_match_bash_when_it_is_the_version_they_came_from():
+    import shutil
+    bash = shutil.which("bash", path=ORIGINAL_PATH)
+    if not bash:
+        pytest.skip("no bash here")
+
+    def say(script):
+        return subprocess.run([bash, "-c", script], capture_output=True, text=True, timeout=30).stdout.split()
+
+    version = " ".join(say("echo $BASH_VERSION"))
+    if version != jev.BASH_VERSION_PINNED:
+        pytest.skip("bash here is %s and the list is from %s" % (version, jev.BASH_VERSION_PINNED))
+    assert set(say("compgen -b")) == set(jev.BASH_BUILTINS)
+    assert set(say("compgen -k")) == set(jev.BASH_RESERVED)
+
+
+def test_a_secret_that_is_the_name_of_an_installed_command_still_leaves(installed_bin, secret_bin, monkeypatch):
+    """The edge Tee accepted with the ruling, pinned so the docs and the code agree.
+    A word the reader takes for a program is checked against the machine and not
+    against what it means, so a value that happens to name a command goes out."""
+    canary = CANARIES[0]
+    command = "echo hi; %s --token" % canary
+    assert outline(command) == "echo", "on a machine that has no command by that name"
+    path_of(installed_bin, secret_bin, monkeypatch=monkeypatch)
+    assert outline(command) == "echo\n%s --token" % canary
+    assert outline("echo %s" % canary) == "echo", "and only where the reader reads it as a program"
+
+
+def test_a_two_letter_value_after_a_short_flag_is_the_old_edge_and_needs_the_program_to_be_known(
+        tmp_path, monkeypatch):
+    """-pab cannot be told from a flag cluster, so a flag of one to three letters is
+    kept, and the program in front of it now has to be a command too. This was
+    already documented and the ruling does not change it."""
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    path_of(tools, monkeypatch=monkeypatch)
+    for command in ("mysql -pab", "curl -uab x", "mysql -pxy", "mysql -pab -uroot -h db.example"):
+        assert outline(command) == "", command
+    an_executable(tools / "mysql")
+    an_executable(tools / "curl")
+    assert outline("mysql -pab") == "mysql -pab"
+    assert outline("curl -uab x") == "curl -uab"
+    assert outline("mysql -phunter2 -uroot") == "mysql", "a longer value is dropped, as it was"
+
+
+# Every reproduction in the verify rounds that was a Bash input and a program name or
+# a flag leaving as one. (round and finding, command, the words that must not leave.)
+# {C} is the canary. Each one sent its words at the commit the round was run against.
+PRIOR_FINDINGS = [
+    ("r0f0", "KEYS=({C} other)", ("{C}",)),
+    ("r0f0", "declare -a KEYS=({C} other)", ("{C}",)),
+    ("r0f0", "case $1 in start|{C}) echo hi;; esac", ("{C}",)),
+    ("r0f0", "[[ $x =~ ^({C}|b)$ ]] && echo yes", ("{C}",)),
+    ("r0f0", "echo $(({C} + 1))", ("{C}",)),
+    ("r0f0", "echo ${X:-a b;{C} c}", ("{C}",)),
+    ("r0f0", "A[0]=x/{C}", ("{C}",)),
+    ("r0f0", "arr=(a b); arr[1]=http://h/{C}", ("{C}",)),
+    ("r0f1", "git commit -m \"$(cat <<'EOF'\nFix the 5\" pipe handling\n\nRotated the credential for staging\n"
+             "{C} is the new value\nEOF\n)\"", ("{C}", "Rotated")),
+    ("r0f1", "echo \"$(echo \"\n{C} x x \")\"", ("{C}",)),
+    ("r0f1", "echo \"$(echo 'x\"; {C} ')\"", ("{C}",)),
+    ("r0f1", "echo $'pre\\'; {C} --secret-flag \\'post'", ("{C}", "--secret-flag")),
+    ("r0f2", "watch \"curl https://h/api/{C}\"", ("{C}",)),
+    ("r0f2", "time \"echo x/{C}\"", ("{C}",)),
+    ("r0f2", "sudo \"A B=x/{C}\"", ("{C}",)),
+    ("r0f3", "KEYS=(hunter2 correcthorse)", ("hunter2", "correcthorse")),
+    ("r0f3", "API_KEY=(sk-ant-api03-AbCdEfGh)", ("sk-ant-api03-AbCdEfGh",)),
+    ("r0f3", "declare -a KEYS=(AKIAIOSFODNN7EXAMPLE x)", ("AKIAIOSFODNN7EXAMPLE",)),
+    ("r0f3", "A=({C})", ("{C}",)),
+    ("r0f3", "[[ x > {C} ]]", ("{C}",)),
+    ("r0f3", "echo $((hunter2))", ("hunter2",)),
+    ("r0f3", "case x in ({C}) true;; esac", ("{C}",)),
+    ("r0f4", "echo \"$(echo \"x; {C} \")\"", ("{C}",)),
+    ("r0f4", "curl -d \"$(printf '%s' \"user\n{C}\n\")\" https://x", ("{C}",)),
+    ("r0f4", "echo \"$(echo \"x\n{C}\ny\")\"", ("{C}",)),
+    ("r0f4", "git commit -m \"$(cat <<'EOF'\nFix a \"bug\nsecond line hunter2 here\nEOF\n)\"", ("hunter2", "second")),
+    ("r0f6", "PASSWORDS=(hunter2 s3cr3tvalue) deploy.sh", ("hunter2", "s3cr3tvalue")),
+    ("r0f6", "arr=(correcthorsebattery)", ("correcthorsebattery",)),
+    ("r0f6", "echo $'it\\'s ok; hunter2 is the password'", ("hunter2",)),
+    ("r0f6", "echo ${X:-a ;correcthorsebattery b}", ("correcthorsebattery",)),
+    ("r0f6", "echo $'a\\'; correcthorsebattery'", ("correcthorsebattery",)),
+    ("r0f6", "TOKENS=(correcthorsebattery other) run.sh", ("correcthorsebattery",)),
+    ("r0f7", "git commit -m \"$(cat <<'EOF'\nFix the 5\" display bug\n\nRotate the key hunter2 after deploy.\n"
+             "Run it again; deploy done\nEOF\n)\"\n", ("hunter2", "Rotate", "Run it")),
+    ("r0f7", "echo \"$(cat <<'EOF'\nFix the 5\" thing; correcthorsebattery here\nsecond line\nEOF\n)\"",
+     ("correcthorsebattery",)),
+    ("r0f8", "git commit -m '--wip-token-abc'", ("wip-token-abc",)),
+    ("r0f8", "echo \"--correcthorsebattery\"", ("correcthorsebattery",)),
+    ("r1f15", "echo a &>/dev/null hunter2", ("hunter2",)),
+    ("r1f15", "echo a &>>log.txt hunter2", ("hunter2",)),
+    ("r1f15", "echo a &> out.log hunter2 correcthorsebatterystaple", ("hunter2", "correcthorsebatterystaple")),
+    ("r1f16", "\"FOO=bar\" hunter2", ("hunter2",)),
+    ("r1f16", "\\FOO=bar hunter2", ("hunter2",)),
+    ("r1f16", "'FOO=bar' hunter2", ("hunter2",)),
+    ("r1f16", "FOO\"=\"bar hunter2", ("hunter2",)),
+    ("r1f16", "\"if\" hunter2", ("hunter2",)),
+    ("r1f16", "'then' hunter2", ("hunter2",)),
+    ("r1f16", "\"{\" hunter2", ("hunter2",)),
+    ("r1f16", "'!' hunter2", ("hunter2",)),
+    ("r1f16", "\"fi\" hunter2", ("hunter2",)),
+    ("r1f16", "false || \\ex=cho zqxsecret", ("zqxsecret",)),
+    ("r1f16", "(ex=cho a\\= zqxsecret)", ("zqxsecret",)),
+    ("r1f17", "FOO=bar\rhunter2", ("hunter2",)),
+    ("r1f17", "cat <\\\n<EOF\nhunter2\nEOF", ("hunter2",)),
+    ("r1f17", "echo $[ 1 ; hunter2 ]", ("hunter2",)),
+    ("r1f18", "'ZQXSECRET", ("ZQXSECRET",)),
+    ("r1f18", "\"ZQXSECRET", ("ZQXSECRET",)),
+    ("r1f18", "sudo 'ZQXSECRET", ("ZQXSECRET",)),
+    ("r1f18", "echo hi; 'ZQXSECRET", ("ZQXSECRET",)),
+    ("r1f18", "ls && \"ZQXSECRET " + "b" * 70000 + "\"", ("ZQXSECRET",)),
+    ("r1f18", "'ZQXSECRET " + "b" * 70000 + "'", ("ZQXSECRET",)),
+    ("r1f19", "FOO=bar if {C}", ("{C}",)),
+    ("r1f19", "x= if {C} echo", ("{C}",)),
+    ("r1f19", "A=1 then {C}", ("{C}",)),
+    ("r1f19", "A=1 do {C}", ("{C}",)),
+    ("r1f19", "\"A=1\" {C}", ("{C}",)),
+    ("r1f19", "\"if\" {C}", ("{C}",)),
+    ("r1f19", "\\if {C}", ("{C}",)),
+    ("r1f19", "> out.txt if {C}", ("{C}",)),
+    ("r1f19", "2>/dev/null then {C}", ("{C}",)),
+    ("r2f25", "cat > /tmp/note.txt <<EOF\nline one\\\nEOF\nhunter2pw --token abc\nEOF\n", ("hunter2pw", "--token")),
+    ("r2f25", "cat > /tmp/note.txt <<$'EOF'\n$\nhunter2pw --token abc\nEOF\n", ("hunter2pw", "--token")),
+    ("r2f25", "cat > /tmp/note.txt <<${X}\n$\nhunter2pw --token abc\n${X}\n", ("hunter2pw", "--token")),
+    ("r2f25", "cat <<$(hunter2pw)\n$\nhunter2pw --token abc\n$(hunter2pw)\nend", ("hunter2pw", "--token")),
+    ("r2f26", "true && \\\n[[ x < {C} ]]", ("{C}",)),
+    ("r2f26", "true && \\\n[[ x > {C} ]]", ("{C}",)),
+    ("r2f26", "true && \\\n[[ -n x && {C} == y ]]", ("{C}", "-n")),
+    ("r2f26", "true && \\\n[[ -z x || {C} == y ]]", ("{C}", "-z")),
+    ("r2f26", "true && \\\ncase x in a|{C}) true;; esac", ("{C}",)),
+    ("r2f26", "function f { [[ x < {C} ]]; }", ("{C}",)),
+    ("r2f26", "function f { case x in a|{C}) true;; esac; }", ("{C}",)),
+    ("r2f26", "function f { [[ -n x && {C} == y ]]; }", ("{C}",)),
+    ("r2f26", "time -p [[ x < {C} ]]", ("{C}",)),
+    ("r2f26", "time -p case x in a|{C}) true;; esac", ("{C}",)),
+    ("r2f26", "coproc c { [[ x < {C} ]]; }", ("{C}",)),
+    ("r2f26", "coproc { case x in a|{C}) true;; esac; }", ("{C}",)),
+    ("r2f26", "true && [\\\n[ x < {C} ]]", ("{C}",)),
+    ("r3f37", "curl -d \"password=ab$$(hunter2 --token=abc -u admin)\" https://x.example",
+     ("hunter2", "--token", "admin")),
+    ("r3f37", "echo \"pid$$(hunter2 -u admin)\"", ("hunter2", "admin")),
+    ("r3f37", "echo \"$$(secA secB)\"", ("secA", "secB")),
+    ("r3f37", "cat \"$$(secA)\"", ("secA",)),
+    ("r3f38", "cat <<EOF $(true\nEOF\n)\nhunter2\ncorrecthorsebatterystaple\nsudo s3cr3tpass\nx --api-key-abcdef\nEOF\n",
+     ("hunter2", "correcthorsebatterystaple", "s3cr3tpass", "--api-key-abcdef", "sudo")),
+    ("r3f38", "cat <<\\END $(cat <<END\nx\nEND\n) $(cat <<END\ny\nEND\n)\nhunter2\ncorrecthorsebatterystaple\nEND\n",
+     ("hunter2", "correcthorsebatterystaple")),
+    ("r3f38", "cat <<EOF `true\nEOF\n`\nhunter2\nEOF\n", ("hunter2",)),
+    ("r3f38", "cat <<EOF <(true\nEOF\n)\nhunter2\nEOF\n", ("hunter2",)),
+    ("r3f39", "echo [[\ncat > run.sh <<'EOF'\nresult=$(hunter2 --token=abc)\nEOF\n", ("hunter2", "--token")),
+    ("r3f39", "type [[\n# deploy with $(hunter2 --api-key-abc123)\n", ("hunter2", "--api-key")),
+    ("r3f39", "printf '%s' [[\ncat <<'EOF'\n$(secA)\nEOF\n", ("secA",)),
+    ("r3f39", "echo [[ ; cat <<'EOF'\n$(secA)\nEOF\n", ("secA",)),
+    ("r3f39", "grep -c [[ file\ncat <<'EOF'\n$(secA)\nEOF\n", ("secA",)),
+    ("r3f42", "nohup A=1 {C}", ("{C}",)),
+    ("r3f42", "exec A=1 {C}", ("{C}",)),
+    ("r3f42", "command A=1 {C}", ("{C}",)),
+    ("r3f42", "builtin A=1 {C}", ("{C}",)),
+    ("r3f42", "xargs A=1 {C}", ("{C}",)),
+    ("r3f42", "A=1 time k=v {C}", ("{C}",)),
+    ("r3f42", "echo $(A=1 time k=v 'Cnry7Kq') 5", ("Cnry7Kq",)),
+    ("r3f43", "echo $'x\\'\\'; {C} ' 'z'", ("{C}",)),
+    ("r3f43", "A=(a # note )\n{C} x)", ("{C}",)),
+    ("r3f43", "\"{C}\\x\"", ("{C}",)),
+    ("r3f43", "echo hi # note; {C}", ("{C}",)),
+]
+
+
+def secret_words():
+    """The words the prior findings hide, as names a program could have. A flag is
+    not one, and neither is anything outside what a program name may be."""
+    words = {w.replace("{C}", CANARIES[0]) for _, _, forbidden in PRIOR_FINDINGS for w in forbidden}
+    words |= {"hunter2", "hunter2pw", "correcthorsebattery", "s3cr3tvalue", "secA", "secB", "S3cret"}
+    return {w for w in words if jev.PROGRAM.fullmatch(w) and not w.startswith("-")}
+
+
+@pytest.mark.parametrize("finding,command,forbidden", PRIOR_FINDINGS,
+                         ids=["%s-%d" % (row[0], n) for n, row in enumerate(PRIOR_FINDINGS)])
+def test_no_reproduction_from_the_verify_rounds_sends_a_value(stub, secrets, finding, command, forbidden):
+    """Each of these sent its words at the commit its round ran against. On an
+    ordinary machine the gate drops them, and on one where the words are the names
+    of commands the reader alone has to, which is the case that matters."""
+    command = command.replace("{C}", CANARIES[0])
+    forbidden = [w.replace("{C}", CANARIES[0]) for w in forbidden]
+    text = outline(command)
+    assert [w for w in forbidden if w in text] == [], text
+    go(stub, payload(command=command))
+    assert [w for w in forbidden if w in sent_text(stub)] == []
+    everything = sent_everything(stub)
+    assert [w for w in forbidden if len(w) > 6 and not w.startswith("-") and w in everything] == []
+
+
+def test_the_installed_programs_cover_every_program_the_reader_tests_name(installed_bin, secret_bin, monkeypatch):
+    """Without this a row that names a program that is not installed would pass
+    because the gate dropped the program, and the reader behind it would go
+    untested. With the gate open the outline of every row is the same."""
+    path_of(installed_bin, secret_bin, monkeypatch=monkeypatch)
+    commands = [t.format(s=c) for t in VALUE_PLACES for c in CANARIES]
+    commands += [WRAPPERS[w](t.format(s=CANARIES[0])) for w in sorted(WRAPPERS) for t in VALUE_PLACES
+                 if fits_wrapper(w, t)]
+    commands += [c.replace("{bin}", str(installed_bin)) for c, _ in OUTLINE_ROWS]
+    commands += [c for c, _ in STOP_ROWS]
+    commands += [c.replace("{C}", CANARIES[0]) for _, c, _ in PRIOR_FINDINGS if len(c) < 1000]
+    shut = [outline(c) for c in commands]
+    with monkeypatch.context() as m:
+        m.setattr(jev.Shell, "known", lambda self, word: True)
+        opened = [outline(c) for c in commands]
+    differ = [(c, a, b) for c, a, b in zip(commands, shut, opened, strict=True) if a != b]
+    assert differ == [], differ[:3]
+    assert len(commands) > 4000
 
 
 def test_an_assignment_needs_its_name_and_its_equals_sign_typed_bare():
@@ -1655,9 +2204,11 @@ def test_an_assignment_may_carry_a_subscript_and_is_still_an_assignment():
 
 
 def test_a_long_run_of_digits_is_not_a_program_or_a_flag_name():
-    assert outline("0123456789abcdef0123456789abcdef --0123456789abcdef -x") == "-x"
-    assert outline("ghp_aB3dE5fG7hJ9kL1mN3pQ5rS7tU9vW1xY3zA5 --flag") == "--flag"
-    assert outline("cmd --sha256 --x509") == "cmd --sha256 --x509"
+    assert outline("ls 0123456789abcdef0123456789abcdef --0123456789abcdef -x") == "ls -x"
+    assert outline("ls ghp_aB3dE5fG7hJ9kL1mN3pQ5rS7tU9vW1xY3zA5 --flag") == "ls --flag"
+    assert outline("ls --sha256 --x509") == "ls --sha256 --x509"
+    for program in ("0123456789abcdef0123456789abcdef", "ghp_aB3dE5fG7hJ9kL1mN3pQ5rS7tU9vW1xY3zA5"):
+        assert outline("%s --flag -x" % program) == "", "not a program, so the flags of its command go too"
 
 
 def test_a_flag_value_attached_to_a_short_flag_is_dropped_beyond_two_letters():

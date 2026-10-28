@@ -38,7 +38,26 @@ What leaves the container, and nothing else:
 The input fields are the keys of the input object itself and no others. A key
 below the top is the caller's data: a map keyed by ids, names or tokens, a
 header, an environment variable. The character class cannot tell one from a
-field name, so none of them leaves.
+field name, so none of them leaves. Ruled by Tee 2026-10-28 on a card: Top-level
+only.
+
+A program name leaves only when it is a command on this machine. Ruled by Tee
+2026-10-28 on a card: Known commands only. Four verify rounds against the shell
+reader each found a new way for a value to leave as a "program name", and the
+reader cannot be made to model the shell perfectly. So a word the reader takes
+for a program is handed out only when it is a bash builtin or reserved word from
+BASH_WORDS, or a name the hook process's PATH resolves to an executable file, or,
+for a word with a / in it, an existing executable file. Any other word is
+dropped, and so is every flag of the same simple command, because a word the
+reader wrongly took for a program carries its neighbours with it. Every reader
+mistake then costs a word and does not leak one. This is a gate on what the
+reader hands out and replaces none of its defences. Nothing is executed to find
+out: a lookup is a stat on a path, BASH_WORDS is a list pinned in this file, and
+bash is never run. A word over MAX_WORD characters is not looked up, a name is
+looked up once per call, and a call stops looking after MAX_LOOKUPS distinct
+names, so the names after the cap are dropped. The cost is fidelity: Jev sees
+less of a script or a tool that is not installed where the hook runs. The edge is
+a secret that is itself the name of an installed command, which still leaves.
 
 A piece outside the character class [A-Za-z0-9._/~-] is dropped, not escaped.
 A path over MAX_PATH characters is dropped. /dev/tcp/HOST/PORT and
@@ -158,6 +177,8 @@ MAX_SCAN = 64 * 1024
 MAX_STDIN = 8 * 1024 * 1024
 MAX_PATH = 200
 MAX_STATS = 64
+MAX_WORD = 64
+MAX_LOOKUPS = 128
 MAX_FIELDS = 60
 MAX_FIELD_LEN = 30
 MAX_DIGITS = 4
@@ -260,6 +281,25 @@ FIND_FLAGS = frozenset((
 ))
 PATH_FIELDS = {"Edit": ("file_path",), "Write": ("file_path",), "NotebookEdit": ("notebook_path",)}
 
+# The words bash itself runs, taken from this container's
+#     bash -c 'compgen -b; compgen -k'
+# which is bash 5.2.21(1)-release, on 2026-10-28: 61 builtins, then 22 reserved
+# words. Bash is never run at hook time, so the list is pinned here and a test
+# compares it with the local bash when that is the same version. A name outside
+# this list is a command only if PATH resolves it or it is an existing file.
+BASH_VERSION_PINNED = "5.2.21(1)-release"
+BASH_WORDS_TAKEN = "2026-10-28"
+BASH_BUILTINS = tuple((
+    ". : [ alias bg bind break builtin caller cd command compgen complete compopt continue declare dirs "
+    "disown echo enable eval exec exit export false fc fg getopts hash help history jobs kill let local "
+    "logout mapfile popd printf pushd pwd read readarray readonly return set shift shopt source suspend "
+    "test times trap true type typeset ulimit umask unalias unset wait"
+).split())
+BASH_RESERVED = tuple((
+    "if then else elif fi case esac for select while until do done in function time { } ! [[ ]] coproc"
+).split())
+BASH_WORDS = frozenset(BASH_BUILTINS + BASH_RESERVED)
+
 
 def project_dir():
     return os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
@@ -328,6 +368,19 @@ def program_name(word):
         return None
     base = word.rsplit("/", 1)[-1]
     return base if PROGRAM.fullmatch(base) and few_digits(base) else None
+
+
+def is_executable(path):
+    """An existing executable file. It is looked at and never run."""
+    return os.path.isfile(path) and os.access(path, os.X_OK)
+
+
+def search_path():
+    """The directories of this process's PATH, in order, without the empty entries
+    that bash reads as the current directory. An unset PATH is the platform's
+    default, as it is for shutil.which."""
+    raw = os.environ.get("PATH")
+    return [d for d in (os.defpath if raw is None else raw).split(os.pathsep) if d]
 
 
 def wrapper_kind(name, keyword=False):
@@ -419,12 +472,18 @@ class Shell:
     pending by a $( ), a subshell after an assignment or a redirect, a quote
     nested in a way it cannot follow, or a quote or an escape the text ends
     inside, ends the read. A line continuation between or inside words is
-    stepped over."""
+    stepped over.
+
+    What it takes for a program is then checked against the machine by known():
+    a word that is not a command here is dropped with the flags of its command, so
+    a word it misreads costs a word and does not send one."""
 
     def __init__(self, text, out, cwd, home):
         self.t, self.n, self.i = text, len(text), 0
         self.out, self.cwd, self.home = out, cwd, home
         self.stats = 0
+        # What the lookups of this call found, by word, so a name is looked up once.
+        self.path, self.found = search_path(), {}
         self.heredocs = []
         self.frames = []
         self.halted = False
@@ -442,12 +501,15 @@ class Shell:
         # recognises a reserved word only as the first word of a command, so after
         # either one if, then, { and the rest are ordinary command names.
         self.prefixed = False
+        # The word read as the program is not a known command, so no flag of this
+        # command is sent. See known().
+        self.dropped = False
 
     def saved(self):
-        return self.program, self.wrapper, self.skip, self.ddash, self.prefixed
+        return self.program, self.wrapper, self.skip, self.ddash, self.prefixed, self.dropped
 
     def restore(self, state):
-        self.program, self.wrapper, self.skip, self.ddash, self.prefixed = state
+        self.program, self.wrapper, self.skip, self.ddash, self.prefixed, self.dropped = state
 
     def end_command(self):
         self.out.newline()
@@ -933,6 +995,42 @@ class Shell:
             self.i = j
             self.skip = True
 
+    def known(self, word):
+        """True when a word is a command here: a bash builtin or reserved word, a
+        name PATH resolves to an executable file, or, with a / in it, an existing
+        executable file. Nothing is run. A word over MAX_WORD characters is not
+        looked up. A word is looked up once per call, and once MAX_LOOKUPS words
+        have been, a word not seen yet is not a command: the cost of the cap is a
+        name dropped, never one let through."""
+        if len(word) > MAX_WORD:
+            return False
+        if word in BASH_WORDS:
+            return True
+        hit = self.found.get(word)
+        if hit is not None:
+            return hit
+        if len(self.found) >= MAX_LOOKUPS:
+            return False
+        if "/" not in word:
+            hit = any(is_executable(os.path.join(directory, word)) for directory in self.path)
+        elif word.startswith("~/"):
+            hit = bool(self.home) and is_executable(self.home + word[1:])
+        else:
+            hit = is_executable(os.path.join(self.cwd, word))
+        self.found[word] = hit
+        return hit
+
+    def command_name(self, word):
+        """The name to send for a word the reader took as a program, or None. A
+        word that is not a known command is not sent, and the flags of its command
+        are not sent either: the reader may have taken a word of the caller's data
+        for a program, and the words beside it are the caller's data too."""
+        name = program_name(word)
+        if name and self.known(word):
+            return name
+        self.dropped = True
+        return None
+
     def take(self, word, quoted_at=None):
         """One resolved word. quoted_at is where its first quote, escape or
         expansion begins, as word() reports it."""
@@ -976,7 +1074,7 @@ class Shell:
                 self.prefixed = True
                 return
             self.program = word
-            name = program_name(word)
+            name = self.command_name(word)
             if name:
                 self.out.add(name)
             self.wrapper = wrapper_kind(name, word == "time" and quoted_at is None and not self.prefixed)
@@ -991,7 +1089,7 @@ class Shell:
                     self.wrapper = "assigns"
                 return
             if not word.startswith("-"):
-                name = program_name(word)
+                name = self.command_name(word)
                 if name:
                     self.out.add(name)
                 self.wrapper = wrapper_kind(name)
@@ -1005,7 +1103,7 @@ class Shell:
             eq = word.find("=")
             if quoted_at is None or (eq >= 0 and quoted_at > eq):
                 name = flag_name(word)
-                if name:
+                if name and not self.dropped:
                     self.out.add(name)
             else:
                 self.positional(word)

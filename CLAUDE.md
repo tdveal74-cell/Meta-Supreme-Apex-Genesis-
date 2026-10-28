@@ -825,11 +825,13 @@ needs no such test. Only the first 64 KiB of a command is read.
 The edges, stated so a verifier does not have to find them. A short flag cannot
 be told from a flag with its value stuck to it, so a single dash flag is kept
 only when it is one to three letters, and a two letter value after a one letter
-flag would pass; `-phunter2` does not. Only the keys of the input object itself
-leave, never a key below the top: a key under a parameter is the caller's data
-(a map keyed by ids, names or tokens, a header, an environment variable), and a
-random 24 character token fits the character class seven times in ten, so Jev
-sees `variables` and not the names under it. A top level key is dropped when it
+flag would pass, after a program that is a known command (below); `-phunter2`
+does not. Only the keys of the input object itself leave, never a key below the
+top. Ruled by Tee 2026-10-28 on a card: Top-level only. A key under a parameter
+is the caller's data (a map keyed by ids, names or tokens, a header, an
+environment variable), and a random 24 character token fits the character class
+seven times in ten, so Jev sees `variables` and not the names under it. A top
+level key is dropped when it
 is over 30 characters, outside letters, digits and `_ . -`, or carries more than
 four digits, and a short top level key that is itself a secret would still
 leave. A redirect to `/dev/tcp/HOST/PORT` or `/dev/udp/HOST/PORT` is a socket and
@@ -839,6 +841,40 @@ is a path and leaves. Subcommands do not leave, so Jev sees `git` and
 known; the ledger is where that gets measured. A flag's name has to be typed
 bare: a quoted string that starts with a dash is a value and is not sent, and so
 is whatever follows the `=` in `--name="value"`, while `--name` is.
+
+**A program name leaves only when it is a command on the machine the hook runs
+on.** Ruled by Tee 2026-10-28 on a card, "Known commands only", after four verify
+rounds against the shell reader each found a new way for a value to leave as a
+"program name", and the third round found more blockers than the second. The
+reader cannot be made to model the shell perfectly, so this closes the class from
+the other side. A word the reader takes for a program is sent only when it is a
+bash builtin or reserved word from a list pinned in `jev_route.py` (61 builtins
+and 22 reserved words, taken from `bash -c 'compgen -b; compgen -k'` in the
+container on 2026-10-28, bash 5.2.21(1)-release, both recorded beside the list),
+or a name the hook process's `PATH` resolves to an executable file, or, for a
+word with a `/` in it, an existing executable file. Any other word is dropped, and
+so is every flag of the same simple command, because a word the reader wrongly
+took for a program carries its neighbours with it. Every reader mistake now costs
+a word and does not leak one. The gate is on what the reader hands out and
+replaces none of its defences: `test_jev_route.py` runs each reader test twice,
+once with the value not installed and once with the value installed as a command,
+so the gate cannot be what keeps a value out of a test, and a further test fails
+when a row names a program no test machine has. Nothing is run to find out. A
+lookup is a stat on a path, bash is never started and the list is a constant. A
+word over 64 characters is not looked up, a name is looked up once per call, and a
+call stops looking after 128 distinct names, so a 1 MB command of distinct words
+costs at most 128 names times the directories of `PATH` in stats, and the names
+after the cap are dropped. The test measures that through a real process against
+a `PATH` of 40 directories. The cost, accepted with the ruling: Jev sees less. A
+script, a tool or a program named by a path that is not installed where the hook
+runs is dropped with its flags, so the same call can read thinner in one
+container than in another, a program named by a path over 64 characters is
+dropped even when it exists, and a name first seen after the 128th lookup is
+dropped even when `PATH` has it. A program that is installed, such as `git` or
+`curl`, is unchanged. The edge: a secret that is itself the name of an installed
+command still leaves when the reader takes it for a program, because the gate asks
+whether a word is a command and not whether it is a secret, so a value that is
+both a command name and in a program slot passes the reader and the gate.
 
 **The reader models a small part of the shell and stops at the first thing
 outside it.** A reader that guesses at syntax it lacks reads data as commands,
@@ -902,7 +938,9 @@ bare `[[` was fidelity and not secrecy until the skip to its `]]` was found to
 read a comment and a quoted here-document body after `echo [[` as command lists.
 `test_jev_route.py` pins each construct as a value place, runs the whole table
 again inside fourteen wrapping commands, and runs a seeded fuzz that puts a
-canary only in quoted text nested three deep.
+canary only in quoted text nested three deep. It also replays every Bash
+reproduction from the four verify rounds that was a program name or a flag
+leaving as one, with the value installed as a command and with it not.
 
 It ships in shadow mode, `ENFORCE = False`: it asks, records the answer and
 prints nothing. Enforcement is a separate ruling and a one line commit, and
@@ -943,8 +981,12 @@ which the first version recorded checking against TypeSafe's OpenAPI spec 0.2.0
 and `typesafe-sdk` 0.7.5 on 2026-10-16 and this rebuild did not re-read; any
 live answer, because no authenticated call has been made and no key has reached
 a session; what the harness does with the wrapper's `exit 1`, as under the gate;
-and whether a fresh verifier finds a piece that leaves and should not. The 0.8
-threshold is a starting guess, to be set from the ledger once real answers exist.
+and whether a fresh verifier finds a piece that leaves and should not. Also
+unverified: which `PATH` the harness gives a hook, because the code reads the
+`PATH` of its own process and no live session has been measured, and how much of a
+real call Jev still sees once the programs that are not installed are dropped,
+which `sent_chars` in the ledger is where that gets measured. The 0.8 threshold is
+a starting guess, to be set from the ledger once real answers exist.
 
 ## The receipt on a status doc
 
