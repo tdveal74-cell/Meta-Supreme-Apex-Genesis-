@@ -506,6 +506,7 @@ job, which is the real thing the local run mirrors.
 ```bash
 env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -c "import standalone_api"
 env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
+  test_devon_rsi.py test_devon_rsi_ops.py test_devon_rsi_experiments.py \
   test_agent_evaluation.py test_agent_benchmarks.py \
   test_runtime_verification.py test_skill_evaluation_policy.py \
   test_billing.py test_definition.py test_providers.py test_schedule.py \
