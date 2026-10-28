@@ -708,6 +708,63 @@ def test_the_whole_process_stays_inside_the_budget_when_jev_never_answers(stub, 
     assert row["outcome"] == "error" and row["error"] == "TimeoutError"
 
 
+TRICKLE_FOR_S = 8.0
+
+
+@pytest.fixture
+def trickler():
+    """A loopback server that answers 200 with a Content-Length it will never
+    reach and then sends one byte every 0.3 seconds for TRICKLE_FOR_S. Every byte
+    resets a socket timeout, so only the deadline can end the read. It stops the
+    moment its peer goes away, which is the hook process exiting."""
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(4)
+    url = "http://127.0.0.1:%d/v1/systemone" % listener.getsockname()[1]
+
+    def serve(conn):
+        try:
+            conn.recv(65536)
+            conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 100000\r\n\r\n")
+            end = time.monotonic() + TRICKLE_FOR_S
+            while time.monotonic() < end:
+                conn.sendall(b" ")
+                time.sleep(0.3)
+        except OSError:
+            pass
+        finally:
+            conn.close()
+
+    def accept_forever():
+        while True:
+            try:
+                conn, _ = listener.accept()
+            except OSError:
+                return
+            threading.Thread(target=serve, args=(conn,), daemon=True).start()
+
+    threading.Thread(target=accept_forever, daemon=True).start()
+    yield url
+    listener.close()
+
+
+def test_the_process_exits_at_the_deadline_when_jev_trickles_bytes(trickler, project):
+    """The request thread in ask_within is a daemon, and this is the test that says
+    so. A vendor that sends a byte every 0.3 seconds keeps resetting the socket
+    timeout, so the worker is still reading when the deadline passes and main
+    returns. The interpreter then waits for every non-daemon thread before it
+    exits, so with daemon=False the real process outlives the 5 second hook
+    timeout (measured: still running after 12 s) while every in-process test
+    stays green. The sleeping server above does not catch it, because there the
+    socket timeout ends the thread at about the same moment as the deadline."""
+    assert TRICKLE_FOR_S > 5.0, "the trickle has to outlast the hook's own 5 second timeout"
+    proc, elapsed = run_in_a_process(project, trickler, json.dumps(payload()))
+    assert proc.returncode == 0 and proc.stdout == "", proc.stderr
+    assert elapsed < jev.HOOK_BUDGET_S, elapsed
+    row = ledger(project)[-1]
+    assert row["outcome"] == "error" and row["error"] == "TimeoutError", row
+
+
 def test_the_request_gets_what_is_left_of_the_budget(stub, project):
     stub.delay = 8.0
     started = time.monotonic()
