@@ -20,9 +20,12 @@ the suite rather than surviving as a silent fork.
 The copy is byte identical to that upstream path at that commit, plus this
 file, `MANIFEST.sha256`, and a copy of the upstream repository root `LICENSE`
 (the skill folder itself carries none). The commit is upstream `main` and
-`HEAD` on the day it was vendored, read with `git ls-remote`; the `v0.3.2`
-tag points at `280a6e62498f3c8af797f029ace7a5a6e4d20a91`, one commit behind,
-and the commit vendored is the one titled `chore: release 0.3.2`.
+`HEAD` on the day it was vendored, read with `git ls-remote`, and it is
+exactly `v0.3.2`: that tag is an annotated tag object
+(`280a6e62498f3c8af797f029ace7a5a6e4d20a91`) that peels to this commit. The
+first draft of this file read the tag's own sha off `ls-remote` and called it
+"one commit behind"; a critic peeled it. Read `refs/tags/v0.3.2^{}`, not
+`refs/tags/v0.3.2`, when checking this again.
 
 ## Why it is here
 
@@ -76,7 +79,15 @@ and nothing below depends on having run it.
 
 - `setup.py` is a wizard. It writes `~/.config/watch/.env` (mode 0600 on
   POSIX), looks for `ffmpeg`, `ffprobe` and `yt-dlp` with `shutil.which`, and
-  on macOS offers to install them through Homebrew. With `--backend whisperx`
+  on macOS offers to install them through Homebrew. Keys are read from the
+  environment first, then that file, then `.env` in the current directory
+  (`config.py` lines 103 and 116), so a `GEMINI_API_KEY` in a repo-root
+  `.env` is picked up silently; that file is gitignored here.
+  `SKILL.md` also offers to take the key pasted in chat. Do not take that
+  route in this estate: the gate ledger hook reads every session transcript,
+  and a key pasted in chat lands in it. An environment secret, Tee's to set,
+  is the only placement that survives a cloud container and stays out of
+  the transcript. With `--backend whisperx`
   it downloads `uv` from `astral.sh`, builds a Python 3.12 environment under
   `~/.cache/watch/whisperx-venv`, and pulls CPU PyTorch wheels and about
   1.5 GB of models from PyPI and Hugging Face. None of that happens without
@@ -115,8 +126,8 @@ it lives in is gone when the container is reclaimed.
 
 ## House lint
 
-`python3 -m ruff check` under this repository's `ruff.toml` reports 23
-findings in `scripts/` (B904, E741, I001 among them). They are upstream's
+`python3 -m ruff check --statistics` under this repository's `ruff.toml`
+reports 23 findings in `scripts/`: 12 E702, 5 I001, 3 B904, 3 B905. They are upstream's
 style, not defects we can touch, so `ruff.toml` carries
 `extend-exclude = [".claude/skills/watch"]`. `SKILL.md` also contains six em
 or en dashes; the house dash ban is enforced on `services/devon` and

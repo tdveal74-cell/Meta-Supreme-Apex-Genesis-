@@ -1036,7 +1036,9 @@ the setup wizard is answered. Its scripts fail 23 house lint rules, so
 `yt-dlp` and Deno are not in the cloud image, `ffmpeg` is; the scripts were
 read in full and not executed here. The API key, if Tee wants the Gemini
 engine, is his to set, and in a cloud session `~/.config/watch/.env` lives in
-the ephemeral `$HOME`, so it does not persist between tasks. Do not also add
+the ephemeral `$HOME`, so it does not persist between tasks. The skill's own
+wizard offers to take the key pasted in chat; never take that route here,
+because the gate ledger reads every transcript. Do not also add
 `bradautomates/claude-video` as a plugin marketplace in a session that has
 this checkout; its `SessionStart` hook was deliberately not vendored.
 `.claude/skills/watch/UPSTREAM.md` carries the full reading.
