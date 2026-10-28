@@ -107,17 +107,37 @@ return is part of a word, as it is in bash. A line continuation is not there:
 bash removes it before it reads a token, so the reader steps over it between
 words, joins what is on both sides of it inside a word and counts it as no quote,
 and a program, a keyword or an assignment split or preceded by one is still that.
+A $ followed by one inside double quotes ends the read, because whether the $
+opens an expansion depends on the character bash sees after the pair is gone.
 A bare case ends the read wherever it stands, because the words after a case
 pattern are data that look like commands, and so does a bare [[ that does not
 begin a command or follow the reserved word time: read there it is an argument
 (echo [[), or the reader has lost its place, and the text after it is not an
 expression. A [[ that does begin a command is read to its ]] without looking in,
 except that a $( ) or a pair of backticks is read as the command list it is, and
-a # that begins a word is a comment, which runs nothing. $$ is the process id: a
+a # that begins a word is a comment, which runs nothing. The ]] is the first one
+that is a word by itself, as bash has it: after a blank or a newline and before a
+blank, a newline, ; & | ) or a < or > that does not open <( or >(, and a line
+continuation counts as nothing, so ] then a continuation then ] is the word and a
+continuation neither ends the blank before a ]] or a # nor hides a comment. A ]]
+glued to a parenthesis ends the read, because it is the end of a group or the end
+of a regular expression ([[ a =~ (b)]] never closes there), and so does one before
+a ( or a <( or a >(. A reader that closed on fewer of these than bash does would go
+on to a later ]] that is data, a here-document body or a quoted string, and read
+code there. $$ is the process id: a
 ( or a { after the pair is text. A $( ), a <( ) and a pair of backticks are parsed
 apart from the command around them, so a here-document the outer command waits
 for does not take its body from a newline inside one, and one the list leaves
-pending when it closes ends the read. A subshell is part of the outer parse. A
+pending when it closes ends the read. Inside one, bash finds where the
+substitution ends before it parses what is in it, and a here-document body does
+not hide the end: a body line that begins with the delimiter and goes on, E) or
+E ) or E) # c, ends the here-document and the substitution together, and inside
+backticks any closing backtick in a body cuts it. This reader ends a body only at
+a line that is the delimiter, so it would go on to a later line that is the
+delimiter in other data and read what follows as code. A body line inside a
+substitution that begins with the delimiter and is not it, and any body line with
+a backtick in it inside backticks, ends the read. A plain subshell does neither.
+A subshell is part of the outer parse. A
 here-document delimiter is literal text: it is not resolved, and one with an
 expansion in it ends the read. When it is typed bare the body is expanded, so a
 body line that ends in an odd number of backslashes is joined to the next one
@@ -133,9 +153,23 @@ command begins, NAME[ is the head of an array assignment and bash takes the word
 up to the matching ], blanks and operators included, so m[k >f ]=1 is one word
 and runs nothing. The reader reads such a word only when the ] comes before a
 blank, an operator, a quote, an escape or an expansion other than $NAME, and
-otherwise ends the read. A line continuation inside an operator, a function
+otherwise ends the read. The name and the [ are found with line continuations
+taken out, so a, a continuation and [k >f ]=1 is that word too. A line
+continuation inside an operator, a function
 definition, a coprocess, the legacy $[ ] arithmetic and a subshell after an
 assignment or a redirect are not modelled and end the read.
+
+Bash reads aliases at parse time, so after shopt -s expand_aliases and alias
+foo='cat <<EOF' the lines after a line that holds only foo are data to bash, and
+this reader reads text and not the state the shell has built by running the lines
+before. What an alias is cannot be known statically, so the read ends at a word
+that names expand_aliases or BASH_ALIASES, at the word alias wherever it is typed,
+as a program, as an argument (eval alias f=g, command -p alias) or inside a string
+(eval "x=1; alias f=g"), and at an expansion handed to shopt, which may be that
+option name. unalias, aliases, alias.co and --alias are other words. The edge: an
+alias that a profile or a file the command sources defines, one the command writes
+with a here-document and then sources included, is not in the text, and nothing
+here sees it.
 
 Building the text is linear. Only the first MAX_SCAN characters of a command
 are read, no regex has a nested or adjacent unbounded quantifier, and the
@@ -274,11 +308,16 @@ DQ_SPECIAL = re.compile(r"[\"\\$`]")
 ARITH_STOP = re.compile(r"[()'\"`\\]")
 BRACE_STOP = re.compile(r"[}$'\"`\\{\n]")
 ANSI_STOP = re.compile(r"[\\']")
-# NAME[ at the start of a word, and the next character in a subscript that ends or
-# changes the reading of the word. See Shell.subscript_closes().
-ARRAY_HEAD = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\[")
+# The next character in an array subscript that ends or changes the reading of the
+# word, and the characters of a NAME. See Shell.subscript_closes() and
+# Shell.array_head().
 SUBSCRIPT_STOP = re.compile(r"[\[\]\t \n;&|<>()'\"\\$`]")
 NAME_START = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_")
+NAME_CHARS = NAME_START | frozenset("0123456789")
+# The word alias on its own, in a word or in a string a word holds (eval "x=1; alias
+# f=g"). A letter, a digit, _, . or - on either side makes it part of another name:
+# unalias, aliases, alias.co and --alias are not it. No quantifier at all.
+ALIAS_WORD = re.compile(r"(?<![\w.-])alias(?![\w.-])")
 # Bash reads these two as the start of a process substitution wherever a word is
 # being read, a here-document delimiter included. See Shell.redirect().
 PROCESS_OPENERS = ("<(", ">(")
@@ -502,13 +541,18 @@ class Shell:
     begin a command, a function definition, a coprocess, an extglob group, the
     legacy $[ ] arithmetic, a line continuation inside an operator, a
     here-document delimiter with an expansion in it or one that runs into <( or
-    >(, a here-document left pending by a $( ), a subshell after an assignment
+    >(, a here-document left pending by a $( ), a here-document body line inside
+    a substitution that begins with the delimiter and is not it (E) ends both)
+    or, inside backticks, has a backtick in it, a subshell after an assignment
     or a redirect, inside backticks a comment, a backslash in an ANSI-C string
     or a here-document line that ends in a backslash, an array subscript at the
-    start of a command that does not close before a blank or an operator, a quote
-    nested in a way it cannot follow, or a quote or an escape the text ends
-    inside, ends the read. A line continuation between or inside words is
-    stepped over.
+    start of a command that does not close before a blank or an operator, a
+    ]] that is glued to a parenthesis or sits before a ( , a $ followed by a line
+    continuation inside double quotes, the word alias, a word that names
+    expand_aliases or BASH_ALIASES, an expansion handed to shopt, a quote nested in a way it
+    cannot follow, or a quote or an escape the text ends inside, ends the read. A
+    line continuation between or inside words is stepped over, and so is one
+    inside the name or before the [ of an array subscript and one inside a ]].
 
     What it takes for a program is then checked against the machine by known():
     a word that is not a command here is dropped with the flags of its command, so
@@ -542,12 +586,15 @@ class Shell:
         # The word read as the program is not a known command, so no flag of this
         # command is sent. See known().
         self.dropped = False
+        # The program of this command is shopt, so a word that is an expansion is
+        # an option name this reader cannot read. See note_program().
+        self.shopt = False
 
     def saved(self):
-        return self.program, self.wrapper, self.skip, self.ddash, self.prefixed, self.dropped
+        return self.program, self.wrapper, self.skip, self.ddash, self.prefixed, self.dropped, self.shopt
 
     def restore(self, state):
-        self.program, self.wrapper, self.skip, self.ddash, self.prefixed, self.dropped = state
+        self.program, self.wrapper, self.skip, self.ddash, self.prefixed, self.dropped, self.shopt = state
 
     def end_command(self):
         self.out.newline()
@@ -660,12 +707,14 @@ class Shell:
         quote, an escape, a backtick or an expansion, which bash reads as pairs
         inside the subscript and this reader reads as pieces of a word. $NAME is the
         one expansion that is plain. True also when the word does not start that
-        way. The subscript is bash's own matching: a [ inside it opens another."""
+        way. The subscript is bash's own matching: a [ inside it opens another.
+        The head is found with line continuations taken out, because bash removes
+        them before it reads a token: a\\ then [k >f ]=1 is the one word a[k >f ]=1."""
         t = self.t
-        head = ARRAY_HEAD.match(t, i)
-        if head is None:
+        start = self.array_head(i)
+        if start < 0:
             return True
-        depth, j = 1, head.end()
+        depth, j = 1, start
         while True:
             stop = SUBSCRIPT_STOP.search(t, j)
             if stop is None:
@@ -679,6 +728,22 @@ class Shell:
                     return True
             elif not (c == "$" and t[j:j + 1] in NAME_START):
                 return False
+
+    def array_head(self, i):
+        """The index after NAME[ when a NAME starts at i, or -1. A line continuation
+        between two characters of the name, or between the name and the [, is
+        stepped over: bash removes it before it reads a token, so ab, a\\ then b[ and
+        a\\ then [ are each the head of an array assignment, and a reader that
+        matched the raw text would read the word as a name and its subscript as a
+        redirect. Nothing is backtracked, so the scan is linear."""
+        t, n = self.t, self.n
+        j = self.past_continuations(i)
+        if j >= n or t[j] not in NAME_START:
+            return -1
+        j = self.past_continuations(j + 1)
+        while j < n and t[j] in NAME_CHARS:
+            j = self.past_continuations(j + 1)
+        return j + 1 if t.startswith("[", j) else -1
 
     def skip_blanks(self):
         """Step over spaces, tabs and line continuations."""
@@ -714,7 +779,9 @@ class Shell:
             self.heredocs = []
         mark = self.out.mark()
         self.reset()
-        self.frames.append(closer)
+        # What kind of frame this is: ( for a subshell, which is part of the outer
+        # parse, and the closer for the rest. See skip_heredocs().
+        self.frames.append("(" if subshell else closer)
         found = self.commands(closer)
         self.frames.pop()
         self.out.newline()
@@ -880,9 +947,17 @@ class Shell:
                 elif nxt != "\n":
                     buf.append("\\" + nxt)
                 i = j + 2
+            elif c == "$" and t.startswith("\\\n", j + 1):
+                # $ then a line continuation then ( or { is an expansion once bash
+                # removes the pair, and what is inside it is code or a pid and
+                # literal text, which this reader cannot tell from the characters.
+                # special() stops at the same place outside a string.
+                return self.halt()
             elif c == "$" and t.startswith("$", j + 1):
                 # The process id: the pair is one parameter and a ( after it is
                 # text. Without this the second $ is read as the start of $( ).
+                if t.startswith("\\\n", j + 2):
+                    return self.halt()
                 buf.append("$")
                 i = j + 2
             elif c == "`" or t.startswith(("$(", "${", "$["), j):
@@ -972,31 +1047,68 @@ class Shell:
         bash, and a $( ) or backticks in it run nothing, so it is read past
         without looking in. One after an operator or a parenthesis may be a
         comment or the middle of a regular expression, and ends the read, and so
-        does any comment inside backticks. See comment_end()."""
+        does any comment inside backticks. See comment_end().
+
+        ]] is a word, and bash closes the test at the first one. It is one after a
+        blank or a newline, and before a blank, a newline, ; & | ) or a < or > that
+        does not open a <( or a >(. Bash removes a line continuation before it reads
+        a token, so one is nothing here: it does not end the blank before a ] or a #,
+        and a ] then a continuation then a ] is the word. A reader that closed on
+        fewer of these than bash does goes on to a later ]] that is data, a
+        here-document body or a quoted string, and reads code there. A ]] glued to a
+        parenthesis is either the end of a group or the end of a regular expression
+        ([[ a =~ (b)]] never closes), a ]] after any other operator is not valid
+        syntax, and a ]] before a ( or a <( or a >( is a longer word or not valid
+        either; none of them is guessed at and each ends the read."""
         t, n = self.t, self.n
-        boundary = False
+        # The last character bash sees before i, a line continuation not counted
+        # as one. "[" stands for the [[ just read.
+        prev = "["
         while i < n:
-            if boundary and t.startswith("]]", i) and t[i + 2:i + 3] in ("", " ", "\t", "\n", ";", "&", "|", ")"):
-                return i + 2
+            if self.continuation(i):
+                i += 2
+                continue
+            if t[i] == "]":
+                end = self.double_bracket(i)
+                if end >= 0 and prev in WS + "\n":
+                    after = self.past_continuations(end)
+                    follower = t[after:after + 1]
+                    if follower in ("", " ", "\t", "\n", ";", "&", "|", ")"):
+                        return end
+                    if follower in ("<", ">") and not t.startswith("(", self.past_continuations(after + 1)):
+                        return end
+                    if follower in ("<", ">", "("):
+                        return self.halt()
+                elif end >= 0 and prev in "()&|<>;":
+                    return self.halt()
             if t[i] == "#":
-                if boundary:
+                if prev in WS + "\n":
                     i = self.comment_end(i)
                     if self.halted:
                         return n
-                    boundary = False
+                    prev = "#"
                     continue
-                if t[i - 1] in "()&|<>;":
+                if prev in "()&|<>;":
                     return self.halt()
             j = self.special(i, [])
             if self.halted:
                 return n
             if j is None:
-                boundary = t[i] in WS + "\n"
+                prev = t[i]
                 i += 1
             else:
-                boundary = False
+                prev = "w"
                 i = j
         return self.halt()
+
+    def double_bracket(self, i):
+        """The index after a ]] that starts at i, or -1. A line continuation between
+        the two brackets is stepped over, as bash removes it before it reads a token."""
+        t = self.t
+        if not t.startswith("]", i):
+            return -1
+        j = self.past_continuations(i + 1)
+        return j + 1 if t.startswith("]", j) else -1
 
     def redirect(self):
         t, n, i = self.t, self.n, self.i
@@ -1061,12 +1173,29 @@ class Shell:
             self.heredocs.append((operand, kind == "heredoc-", self.quoted_at is None))
 
     def skip_heredocs(self):
+        """Read past the bodies of the here-documents a line left pending. Inside a
+        $( ), a <( ) or a pair of backticks bash finds where the substitution ends
+        before it parses what is in it, and a here-document body does not hide the
+        end: a body line that begins with the delimiter and goes on, E) or E ) or
+        E) # c, ends the here-document and the substitution together, and so does
+        a closing backtick anywhere in a body inside backticks. A plain subshell does
+        not do either. This reader ends a body only at a line that is the delimiter,
+        so it would go on to a later line that is the delimiter in other data and
+        read what follows as code. A line like that inside a substitution ends the
+        read. See heredoc_line() for the backtick."""
         pending, self.heredocs = self.heredocs, []
+        cut = ")" in self.frames or "`" in self.frames
         for delimiter, tabs, bare in pending:
             while self.i < self.n:
                 line = self.heredoc_line(bare)
-                if (line.lstrip("\t") if tabs else line) == delimiter:
+                if self.halted:
+                    return
+                shown = line.lstrip("\t") if tabs else line
+                if shown == delimiter:
                     break
+                if cut and shown.startswith(delimiter):
+                    self.halt()
+                    return
 
     def heredoc_line(self, joined):
         """The next line of a here-document body. When the delimiter was typed
@@ -1078,7 +1207,11 @@ class Shell:
         Inside backticks a line that ends in a backslash ends the read, whatever
         the delimiter: bash unescapes the body and removes a backslash-newline pair
         before it reads the here-document, so which lines continue is not what the
-        text shows, and the body can end where this reader does not end it."""
+        text shows, and the body can end where this reader does not end it. So does
+        a line with a backtick in it: bash cuts the body of a pair of backticks at
+        the closing one with no regard for a here-document, so a body line that is
+        the delimiter and a closing backtick ends the substitution there, and the
+        text after it is code that this reader would still be reading as data."""
         t, n = self.t, self.n
         parts, run = [], 0
         while True:
@@ -1086,7 +1219,7 @@ class Shell:
             end = n if j < 0 else j
             line = t[self.i:end]
             self.i = n if j < 0 else end + 1
-            if line.endswith("\\") and "`" in self.frames:
+            if "`" in self.frames and (line.endswith("\\") or "`" in line):
                 self.halt()
                 return line
             head = line.rstrip("\\")
@@ -1141,9 +1274,29 @@ class Shell:
         self.dropped = True
         return None
 
+    def note_program(self, word):
+        """A word has been taken as a program, a wrapper's included, so that take()
+        knows when the arguments are those of shopt. Bash reads aliases at parse
+        time, and an alias can expand to the start of a here-document or of anything
+        else that changes where a command ends: after shopt -s expand_aliases and
+        alias foo='cat <<EOF', the lines after a line that holds only foo are data
+        to bash, and this reader, which reads the text and not the state the shell
+        has built by running it, would read them as commands. What an alias is
+        cannot be known without running the lines before it, so the read ends at
+        the command that makes one or allows one, which take() sees in its words."""
+        self.shopt = word == "shopt"
+
     def take(self, word, quoted_at=None):
         """One resolved word. quoted_at is where its first quote, escape or
         expansion begins, as word() reports it."""
+        if (("alias" in word and ALIAS_WORD.search(word)) or "expand_aliases" in word or "BASH_ALIASES" in word
+                or (self.shopt and "$" in word)):
+            # Wherever it is typed, as a program, a wrapper's program, an argument
+            # such as eval's or inside a string: the word alias, the shell option and
+            # the variable that turn aliases on or define one, and an option of shopt
+            # that is an expansion and so may be that name. See note_program().
+            self.halt()
+            return
         if quoted_at is None:
             # These two are acted on wherever they are typed bare, whatever the
             # reader makes of the command around them: a case pattern and an
@@ -1188,6 +1341,7 @@ class Shell:
             if name:
                 self.out.add(name)
             self.wrapper = wrapper_kind(name, word == "time" and quoted_at is None and not self.prefixed)
+            self.note_program(word)
             return
         if self.wrapper:
             # Only some wrappers take NAME=value: after the others it is the name
@@ -1203,6 +1357,7 @@ class Shell:
                 if name:
                     self.out.add(name)
                 self.wrapper = wrapper_kind(name)
+                self.note_program(word)
                 return
             self.wrapper = False
         if word == "--":

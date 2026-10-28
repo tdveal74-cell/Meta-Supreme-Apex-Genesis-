@@ -926,18 +926,38 @@ here-strings. It reads past, without looking inside, `$(( ))`, `(( ))`, `[[ ]]`,
 `${ }`, `$' '` and the literal of an array assignment. A line continuation is
 not there: bash removes it before it reads a token, so the reader steps over it
 between words, joins what is on both sides of it inside a word and counts it as
-no quote. A bare `case` ends the read wherever it stands, whatever the reader
+no quote. A `$` followed by one inside double quotes ends the read, because
+whether the `$` opens an expansion depends on the character bash sees once the
+pair is gone. A bare `case` ends the read wherever it stands, whatever the reader
 thinks the command is, because a case pattern is data that looks like a command,
 and so does a bare `[[` that does not begin a command or follow the reserved word
 `time`: read there it is an argument (`echo [[`) or the reader has lost its
 place, and the text after it is not an expression to skip. A `[[` that does
 begin a command is read to its `]]` without looking in, except that a `$( )` or
 backticks inside it is read as the command list it is and a `#` that begins a
-word is a comment, which runs nothing. `$$` is the process id, so the `(` in
+word is a comment, which runs nothing. The `]]` is the first one that is a word by
+itself, as bash has it: after a blank or a newline and before a blank, a newline,
+`;`, `&`, `|`, `)` or a `<` or `>` that does not open `<(` or `>(`, a line
+continuation counting as nothing, so `]` then a continuation then `]` is the word
+and a continuation neither ends the blank before a `]]` or a `#` nor hides a
+comment. A `]]` glued to a parenthesis ends the read, because it is the end of a
+group or the end of a regular expression (`[[ a =~ (b)]]` never closes there), and
+so does one before a `(`, `<(` or `>(`. A reader that closed on fewer of these
+than bash does goes on to a later `]]` that is data, a here-document body or a
+quoted string, and reads code there. `$$` is the process id, so the `(` in
 `"$$(x y)"` is text and nothing in it runs. A `$( )`, a `<( )` and a pair of
 backticks are parsed apart from the command around them: a here-document the
 outer command waits for takes its body from the line after the whole line, not
-from a newline inside one. A subshell is part of the outer parse and shares it.
+from a newline inside one. Inside one, bash finds where the substitution ends
+before it parses what is in it, and a here-document body does not hide the end:
+a body line that begins with the delimiter and goes on (`E)`, `E )`, `E) # c`)
+ends the here-document and the substitution together, and inside backticks any
+closing backtick in a body cuts it. The reader ends a body only at a line that is
+the delimiter, so it would go on to a later line that is the delimiter in other
+data and read what follows as code. A body line inside a substitution that begins
+with the delimiter and is not it, and any body line with a backtick in it inside
+backticks, ends the read. A plain subshell does neither, and the reader does not
+stop for it there. A subshell is part of the outer parse and shares it.
 `NAME=value` before the program is skipped after `env`, `sudo`, `watch` and the
 reserved word `time`, and nowhere else: after `nohup`, `exec`, `command`,
 `builtin`, `xargs`, `doas`, and `time` typed after an assignment, a redirect or a
@@ -961,8 +981,13 @@ comment ends, where the string closes and which lines continue are not what the
 text shows), `NAME[` at the start of a command when the subscript does not close
 before a blank, an operator, a quote, an escape or an expansion other than
 `$NAME` (bash reads it as the head of an array assignment and takes the word to
-the matching `]`, so `m[k >f ]=1` is one word and runs nothing), a `#` after an
-operator or a parenthesis inside `[[ ]]`, a subshell
+the matching `]`, so `m[k >f ]=1` is one word and runs nothing, and `a`, a line
+continuation and `[k >f ]=1` is that word too, because the name and the `[` are
+found with the continuations taken out), a `#` after an
+operator or a parenthesis inside `[[ ]]`, a `]]` glued to a parenthesis or before
+a `(`, a `$` followed by a line continuation inside double quotes, the word
+`alias`, a word that names `expand_aliases` or `BASH_ALIASES`, an expansion handed
+to `shopt`, a subshell
 after an assignment or a redirect, a stray `)`, an unterminated region, a quote
 or an escape the text ends inside and nesting past 8. A command list inside `$( )`, `<( )` or
 backticks that stops before its closer sends nothing from inside it, because a
@@ -985,9 +1010,36 @@ again inside fourteen wrapping commands, and runs a seeded fuzz that puts a
 canary only in quoted text nested three deep. It also replays every Bash
 reproduction from the verify rounds that was a program name or a flag leaving as
 one, and from round 5 a redirect target leaving, with the value installed as a
-command and with it not. The round 5 rows are also run through real bash, when
-bash is the pinned version, to show that bash creates no file and runs no
-command from what they hide.
+command and with it not. The round 5 and round 6 rows are also run through real
+bash, when bash is the pinned version, to show that bash creates no file and runs
+no command from what they hide. It also inserts a line continuation at every index
+of a corpus, the constructs above among it, and fails when the outline gains
+anything the unbroken command did not have.
+
+Round 6, against `ab83181`, found five more ways a redirect target or a program
+name left. Four are closed at the place the reader looked at the raw text where
+bash looks at the text with the continuations removed, or at the end of a
+construct where bash ends it earlier than the reader does: a `$` then a
+continuation then `(` or `{` inside double quotes, which bash reads as an
+expansion and the reader read as text, ending the string at an inner quote; the
+head of an array assignment split by a continuation (`a`, a continuation,
+`[k >f ]=1`); a `[[ ]]` whose `]]` is closed across a continuation, after a `)` or
+before a `<` or `>` (the reader went on to a later `]]` that was a here-document
+body and read code there), and one whose comment follows a continuation; and a
+here-document inside `$( )`, `<( )` or backticks ended by `E)` or a closing
+backtick on the delimiter line. The fifth, runtime parse state, is the alias:
+after `shopt -s expand_aliases` an alias can expand to the start of a
+here-document, so the lines after it are data to bash. A static reader cannot
+know what a later word expands to, so the read ends at the word `alias` wherever
+it is typed (as a program, as an argument such as `eval alias f=g` or
+`command -p alias`, or inside a string such as `eval "x=1; alias f=g"`), at a word
+that names `expand_aliases` or `BASH_ALIASES`, and at an expansion handed to
+`shopt`. `unalias`, `aliases`, `alias.co` and `--alias` are other words, and a
+`git commit -m "fix alias handling"` ends the read as well, which costs the
+commands after it. The edge, unverified in the harness: an alias that the shell's
+profile or a file the command sources defines, one the command writes with a
+here-document and then sources included, is not in the text, and nothing here
+sees it.
 
 It ships in shadow mode, `ENFORCE = False`: it asks, records the answer and
 prints nothing. Enforcement is a separate ruling and a one line commit, and

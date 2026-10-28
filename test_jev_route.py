@@ -1622,6 +1622,60 @@ VALUE_PLACES = [
     "sudo \"{s}\\q\"",
     "echo hi # note; {s}",
     "ls\n# a | {s} -x",
+    # Round 6. Bash removes a line continuation before it reads a token, so a $ then
+    # a continuation then ( or { inside double quotes is an expansion, and the inner
+    # quote does not end the string.
+    "echo \"$\\\n(echo \"x >{s} \")\"",
+    "echo \"$\\\n{{x:-\"a >{s} \"}}\"",
+    "echo \"$\\\n$(echo hi >{s})\"",
+    "echo \"$$\\\n$(echo hi >{s})\"",
+    # The head of an array assignment is NAME[ with the continuations taken out, and
+    # its subscript runs to the matching ] with blanks and operators in it.
+    "a\\\n[k >{s} ]=1",
+    "time a\\\n[k >{s} ]=1",
+    "x=1 a\\\n[k >{s} ]=1",
+    "ab\\\nc[k >{s} ]=1",
+    "a\\\n\\\n[k >{s} ]=1",
+    "_a1\\\n\\\n[k;>{s} ]+=x",
+    "( m\\\n[k >{s} ] )",
+    # A [[ closes at the first ]] that is a word by itself, across a continuation,
+    # after a ) and before a < or >. The later ]] here is a here-document body.
+    "[[ -f a \\\n]]\ncat <<'E'\nx ]] >{s}\nE",
+    "[[ a ]\\\n] && cat <<'E'\nx ]] >{s}\nE",
+    "[[ -f a ]]\\\n\ncat <<'E'\nx ]] >{s}\nE",
+    "[[ ( -f a )]]\ncat <<'E'\nx ]] >{s}\nE",
+    "[[ -f a ]]>/dev/null\ncat <<'E'\nx ]] >{s}\nE",
+    "[[ -f a ]]</dev/null\ncat <<'E'\nx ]] >{s}\nE",
+    "[[ -f a ]]&>/dev/null\ncat <<'E'\nx ]] >{s}\nE",
+    "[[ a =~ (b)]]\ncat <<'E'\nx ]] >{s}\nE",
+    # A continuation does not end the blank before a #, so the comment is a comment.
+    "[[ -n x \\\n# $(a >{s} b)\n]]",
+    "[[ -n x ]] && [[ -z y \\\n# $(a >{s} b)\n]]",
+    # Inside $( ), <( ) and backticks bash ends the substitution at a here-document
+    # line that begins with the delimiter and goes on, E) or a closing backtick.
+    "x=$(cat <<E\nbody\nE )\ncat <<'F'\nE\nls >{s}\n)\nF",
+    "x=$(cat <<E\nbody\nE)\ncat <<'F'\nE\nls >{s}\n)\nF",
+    "x=$(cat <<E\nbody\nE) # c\ncat <<'F'\nE\nls >{s}\n)\nF",
+    "x=$(cat <<E\nbody\nE)x\ncat <<'F'\nE\nls >{s}\n)\nF",
+    "x=$(cat <<'E'\nbody\nE)\ncat <<'F'\nE\nls >{s}\n)\nF",
+    "x=$(cat <<-E\nbody\n\tE)\ncat <<'F'\nE\nls >{s}\n)\nF",
+    "x=$(cat <<E\nbody\nE\\\n)\ncat <<'F'\nE\nls >{s}\n)\nF",
+    "echo <(cat <<-E\n/tmp/x\nE)\ncat <<'F'\nE\nls >{s}\n)\nF",
+    "x=`cat <<E\nbody\nE`\ncat <<'F'\nE\nls >{s}\n`\nF",
+    "x=`cat <<'E'\nbody\nE`\ncat <<'F'\nE\nls >{s}\n`\nF",
+    "echo \"$(cat <<'EOF'\nsubject\nEOF)\"\ncat <<'F'\nEOF\nls >{s}\n)\nF",
+    "echo \"$( (cat <<E\nbody\nE) )\ncat <<'F'\nE\nls >{s}\n)\nF",
+    # Runtime parse state: an alias can expand to the start of a here-document.
+    "shopt -s expand_aliases\nalias foo='cat <<EOF'\nfoo\na >{s}\nEOF",
+    "shopt -s expand_aliases; alias foo='cat <<EOF'\nfoo\na >{s}\nEOF",
+    "eval 'shopt -s expand_aliases'\nalias foo='cat <<EOF'\nfoo\na >{s}\nEOF",
+    "shopt -s expand_aliases\neval \"alias foo='cat <<EOF'\"\nfoo\na >{s}\nEOF",
+    "shopt -s expand_aliases\ncommand alias foo='cat <<EOF'\nfoo\na >{s}\nEOF",
+    "shopt -s expand_aliases\nbuiltin alias foo='cat <<EOF'\nfoo\na >{s}\nEOF",
+    "shopt -s expand_aliases\nBASH_ALIASES[foo]='cat <<EOF'\nfoo\na >{s}\nEOF",
+    "shopt -s expand_alia\\\nses\nalias foo='cat <<EOF'\nfoo\na >{s}\nEOF",
+    "o=expand_ali; o+=ases; shopt -s $o\nalias foo='cat <<EOF'\nfoo\na >{s}\nEOF",
+    "shopt -s \"$(echo expand_aliases)\"\nalias foo='cat <<EOF'\nfoo\na >{s}\nEOF",
 ]
 
 
@@ -1936,6 +1990,45 @@ OUTLINE_ROWS = [
     ("echo `echo $'abc'`; ls", "echo\necho\nls"),
     ("ls # a `comment`\ngit push --force", "ls\ngit --force"),
     ("echo $(echo $'a\\\\'); git push --force", "echo\necho\ngit --force"),
+    # What the stops of round 6 leave alone. A ]] is the first one that is a word by
+    # itself, so the test closes there and what follows is read: across a line
+    # continuation, and before a ; & | ) < or > that does not open a <( or a >(.
+    ("ls; [[ -f a \\\n]]; git push --force", "ls\ngit --force"),
+    ("ls; [[ a ]\\\n]; git push --force", "ls\ngit --force"),
+    ("ls; [[ a ]]\\\n; git push --force", "ls\ngit --force"),
+    ("ls; [[ a ]]\\\n>/dev/null; git push --force", "ls\n/dev/null\ngit --force"),
+    ("ls; [[ a ]]>/dev/null; git push --force", "ls\n/dev/null\ngit --force"),
+    ("ls; [[ a ]]</dev/null; git push --force", "ls\n/dev/null\ngit --force"),
+    ("ls; [[ -n x \\\n# $(a b)\n]]; git push --force", "ls\ngit --force"),
+    ("ls; [[ -n x \\\n# c\n]]; git push --force", "ls\ngit --force"),
+    ("ls; ( [[ a ]]); git push --force", "ls\ngit --force"),
+    # A $ that is not followed by a line continuation is a literal one, and a
+    # continuation after an escaped $ or a doubled one that is not an expansion.
+    ("ls; echo \"\\$\\\n(x y)\"; git push --force", "ls\necho\ngit --force"),
+    ("ls; echo \"$\"; git push --force", "ls\necho\ngit --force"),
+    # A subscript that closes before anything that splits the word is read with a
+    # continuation in the name or before the [, as it is without one.
+    ("ls; m\\\n[1]=x; git push --force", "ls\ngit --force"),
+    ("ls; a\\\nb[1]=x >f; git push --force", "ls\nf\ngit --force"),
+    # A here-document body line that begins with the delimiter ends the read only
+    # inside a $( ), a <( ) or backticks. Anywhere else it is a line of the body,
+    # and so is one that does not begin with the delimiter.
+    ("ls; (cat <<E\nbody\nE)\nE\n); git push --force", "ls\ncat\ngit --force"),
+    ("ls; { cat <<E\nbody\nE)\nE\n}; git push --force", "ls\ncat\ngit --force"),
+    ("ls\ncat <<E\nbody\nE)\nE\ngit push --force", "ls\ncat\ngit --force"),
+    ("ls; echo $(cat <<E\nfoo (parens) here\nE\n); git push --force", "ls\necho\ncat\ngit --force"),
+    ("ls; echo $(cat <<E\n E)\nE\n); git push --force", "ls\necho\ncat\ngit --force"),
+    ("ls; echo $(cat <<-E\n\tE\n); git push --force", "ls\necho\ncat\ngit --force"),
+    ("ls; echo `cat <<E\nbody\nE\n`; git push --force", "ls\necho\ncat\ngit --force"),
+    # shopt with an option that is a plain name is not a stop, and neither is a word
+    # that only looks like the start of one.
+    ("ls; shopt -s nullglob; git push --force", "ls\nshopt -s\ngit --force"),
+    ("ls; shopt -u dotglob; git push --force", "ls\nshopt -u\ngit --force"),
+    ("ls; unalias foo; git push --force", "ls\nunalias\ngit --force"),
+    ("ls; git config alias.co checkout; git push --force", "ls\ngit\ngit --force"),
+    ("ls; echo unalias aliases; git push --force", "ls\necho\ngit --force"),
+    ("ls; git --alias; git push --force", "ls\ngit --alias\ngit --force"),
+    ("ls; echo \"$o\"; git push --force", "ls\necho\ngit --force"),
 ]
 
 
@@ -1994,6 +2087,97 @@ def test_a_line_continuation_next_to_a_space_changes_nothing_in_the_outline(comm
                 seen += 1
                 assert outline(variant) == expected, variant
     assert seen >= 4
+
+
+def pinned_bash():
+    """The bash these rows were checked against, or a skip. The rules they pin are
+    old, but a runner's bash is not necessarily this version."""
+    bash = shutil.which("bash", path=ORIGINAL_PATH)
+    if not bash:
+        pytest.skip("no bash here")
+    version = subprocess.run([bash, "-c", "echo $BASH_VERSION"], capture_output=True, text=True, timeout=30).stdout.strip()
+    if version != jev.BASH_VERSION_PINNED:
+        pytest.skip("bash here is %s and the rows were checked against %s" % (version, jev.BASH_VERSION_PINNED))
+    return bash
+
+
+def bash_parse(bash, text, tmp_path):
+    """How bash parses a script, as its own --pretty-print prints it, or None when it
+    does not parse. Nothing is run: the option prints the script and exits."""
+    script = tmp_path / "script.sh"
+    script.write_text(text)
+    done = subprocess.run([bash, "--pretty-print", str(script)], capture_output=True, text=True, timeout=30,
+                          cwd=tmp_path, env={"PATH": "/nonexistent", "LC_ALL": "C"}, stdin=subprocess.DEVNULL)
+    return done.stdout if done.returncode == 0 else None
+
+
+# The commands above, and the constructs bash reads differently once a line
+# continuation is taken out of them, each with a redirect target "f" in a place that
+# is data in bash: a $ before a ( inside double quotes, the head of an array
+# assignment, the end of a [[ ]] and a comment inside one, a here-document in a
+# substitution, an alias.
+EVERY_INDEX_CORPUS = CONTINUATION_CORPUS + [
+    "echo \"$(echo \"x >f \")\"",
+    "echo \"${x:-\"a >f \"}\"",
+    "echo \"$(echo hi >f)\"",
+    "echo \"$$(echo hi)\" >f",
+    "m[k >f ]=1",
+    "time m[k >f ]=1",
+    "x=1 ab[k >f ]=1",
+    "ls; abc[k >f ]=1; ls",
+    "[[ -f a ]]\ncat <<'E'\nx ]] >f\nE",
+    "[[ ( -f a ) ]]\ncat <<'E'\nx ]] >f\nE",
+    "[[ -f a ]] >/dev/null\ncat <<'E'\nx ]] >f\nE",
+    "[[ -n x ]] && cat <<'E'\nx ]] >f\nE",
+    "[[ -n x # $(a >f b)\n]]",
+    "x=$(cat <<E\nbody\nE\n)\ncat <<'F'\nE\nls >f\n)\nF",
+    "echo <(cat <<-E\n/tmp/x\n\tE\n)\ncat <<'F'\nE\nls >f\n)\nF",
+    "x=`cat <<E\nbody\nE\n`\ncat <<'F'\nE\nls >f\n`\nF",
+    "shopt -s expand_aliases\nalias foo='cat <<EOF'\nfoo\na >f\nEOF",
+]
+
+
+def continuation_violations(bash, command, tmp_path, outline_of=outline):
+    """(how many variants were compared, the ones that gained a piece). A variant is the
+    command with a line continuation at one index, and it is compared only when bash's
+    own parse of it is the parse of the command without the continuation, which is when
+    the continuation is nothing: one inside a comment moves the rest of the comment onto
+    a new line, and bash reads that as code. The outline of a variant may be shorter,
+    because the reader stops at a continuation it cannot place, and it may never hold a
+    piece the command without the continuation did not."""
+    parsed = bash_parse(bash, command, tmp_path)
+    assert parsed is not None, "a command in the corpus that bash does not parse"
+    base = outline_of(command).split()
+    checked, gained = 0, []
+    for at in range(len(command) + 1):
+        variant = command[:at] + "\\\n" + command[at:]
+        if bash_parse(bash, variant, tmp_path) != parsed:
+            continue
+        checked += 1
+        got = outline_of(variant).split()
+        if got != base[:len(got)]:
+            gained.append((variant, got, base))
+    return checked, gained
+
+
+@pytest.mark.parametrize("command", EVERY_INDEX_CORPUS, ids=[str(n) for n in range(len(EVERY_INDEX_CORPUS))])
+def test_a_line_continuation_anywhere_that_bash_reads_through_adds_nothing_to_the_outline(tmp_path, command):
+    """The test above puts the continuation next to a space. The leaks of round 6 were
+    a continuation in the middle of a construct, so this puts one at every index."""
+    checked, gained = continuation_violations(pinned_bash(), command, tmp_path)
+    assert gained == [], gained[:3]
+    assert checked >= 4
+
+
+def test_the_every_index_check_sees_a_reader_that_gains_a_piece_from_a_continuation(tmp_path):
+    """The check has to fail on a reader that reads the raw text, or it proves nothing.
+    This one adds a piece to every outline whose command holds a continuation."""
+    def reads_raw_text(command):
+        return outline(command) + (" f" if "\\\n" in command else "")
+
+    command = "echo \"$(echo \"x >f \")\"; ls"
+    checked, gained = continuation_violations(pinned_bash(), command, tmp_path, outline_of=reads_raw_text)
+    assert checked > 4 and len(gained) == checked
 
 
 STOP_ROWS = [
@@ -2091,6 +2275,64 @@ STOP_ROWS = [
     ("ls; echo abc\\", "ls\necho"),
     ("ls; echo 'abc; git push --force", "ls\necho"),
     ("ls; echo \"abc; git push --force", "ls\necho"),
+    # Round 6. A $ then a line continuation inside double quotes may be an expansion
+    # once bash removes the pair, and the reader cannot tell from the characters
+    # what the string holds or where it ends.
+    ("ls; echo \"$\\\n(x y)\"; git push --force", "ls\necho"),
+    ("ls; echo \"$\\\n{x:-a}\"; git push --force", "ls\necho"),
+    ("ls; echo \"a$\\\n$(x y)\"; git push --force", "ls\necho"),
+    ("ls; echo \"$$\\\n(x y)\"; git push --force", "ls\necho"),
+    # The head of an array assignment is found with the continuations taken out, so
+    # a subscript that is not closed before a blank ends the read wherever the
+    # continuation sits in the name or before the [.
+    ("ls; m\\\n[k >f ]=1; git push --force", "ls"),
+    ("ls; ab\\\nc[k >f ]=1; git push --force", "ls"),
+    ("ls; a\\\n\\\n[k >f ]=1; git push --force", "ls"),
+    ("ls; time a\\\n[k >f ]=1; git push --force", "ls\ntime"),
+    ("ls; x=1 a\\\n[k >f ]=1; git push --force", "ls"),
+    ("ls; m[\\\n1]=x; git push --force", "ls"),
+    # A ]] glued to a parenthesis is the end of a group or the end of a regular
+    # expression, and one before a ( is a longer word or not valid. A comment after a
+    # parenthesis may be the middle of a regular expression.
+    ("ls; [[ ( -f a )]]; git push --force", "ls"),
+    ("ls; [[ a =~ (b)]]; git push --force", "ls"),
+    ("ls; [[ a ]]>(cat); git push --force", "ls"),
+    ("ls; [[ a ]](; git push --force", "ls"),
+    ("ls; [[ ( -n x \\\n)# c\n]]; git push --force", "ls"),
+    # Inside $( ), <( ) and backticks a here-document body line that begins with the
+    # delimiter and is not it may end the substitution, as E) does, and the reader
+    # would go on to a later line that is the delimiter. Inside backticks so does a
+    # backtick anywhere in a body line.
+    ("ls; echo $(cat <<E\nbody\nE)\ngit push --force", "ls\necho"),
+    ("ls; echo $(cat <<E\nbody\nE )\ngit push --force", "ls\necho"),
+    ("ls; echo $(cat <<'E'\nbody\nE) # c\ngit push --force", "ls\necho"),
+    ("ls; echo $(cat <<-E\nbody\n\tE)\ngit push --force", "ls\necho"),
+    ("ls; echo $(cat <<E\nbody\nEx\nE\n)\ngit push --force", "ls\necho"),
+    ("ls; echo $(cat <<E\nbody\nE\\\n)\ngit push --force", "ls\necho"),
+    ("ls; echo \"$(cat <<'EOF'\nsubject\nEOF)\"; git push --force", "ls\necho"),
+    ("ls; echo <(cat <<E\nbody\nE )\ngit push --force", "ls\necho"),
+    ("ls; echo $( (cat <<E\nbody\nE) )\ngit push --force", "ls\necho"),
+    ("ls; echo `cat <<E\nbody\nE`\ngit push --force", "ls\necho"),
+    ("ls; echo `cat <<'E'\nfoo ` bar\nE\n`; git push --force", "ls\necho"),
+    # Aliases are read at parse time. What an alias expands to is not in the text, so
+    # the read ends at the command that makes one, and at the option that allows them.
+    ("ls; alias foo=bar; git push --force", "ls"),
+    ("ls; command alias foo=bar; git push --force", "ls\ncommand"),
+    ("ls; builtin alias foo=bar; git push --force", "ls\nbuiltin"),
+    ("ls; shopt -s expand_aliases; git push --force", "ls\nshopt -s"),
+    ("ls; shopt -s 'expand_aliases'; git push --force", "ls\nshopt -s"),
+    ("ls; shopt -s expand_alia\\\nses; git push --force", "ls\nshopt -s"),
+    ("ls; eval alias foo=bar; git push --force", "ls\neval"),
+    ("ls; command -p alias foo=bar; git push --force", "ls\ncommand -p"),
+    ("ls; eval \"x=1; alias foo=bar\"; git push --force", "ls\neval"),
+    ("ls; al\\\nias foo=bar; git push --force", "ls"),
+    ("ls; \"alias\" foo=bar; git push --force", "ls"),
+    ("ls; echo expand_aliases; git push --force", "ls\necho"),
+    ("ls; BASH_ALIASES[foo]=bar; git push --force", "ls"),
+    ("ls; eval 'shopt -s expand_aliases'; git push --force", "ls\neval"),
+    ("ls; o=expand_aliases; git push --force", "ls"),
+    ("ls; shopt -s $o; git push --force", "ls\nshopt -s"),
+    ("ls; shopt -s \"$o\"; git push --force", "ls\nshopt -s"),
 ]
 
 
@@ -2591,6 +2833,44 @@ PRIOR_FINDINGS = [
     ("r5f3", "cat <<'EOF'<(>{C})\nbody\nEOF\n", ("{C}",)),
     ("r5f3", "cat <<\"EOF\"<(>{C})\nbody\nEOF\n", ("{C}",)),
     ("r5f3", "cat <<EOF>(>{C})\nbody\nEOF\n", ("{C}",)),
+    # Round 6, against ab83181. Again the value is a redirect target or a program
+    # that is installed, and bash runs none of it. A $ then a line continuation then
+    # ( or { inside double quotes is an expansion once bash removes the pair, so the
+    # inner quote does not end the string and the text inside is a nested string.
+    ("r6f1", "echo \"$\\\n(echo \"x >{C} \")\"", ("{C}",)),
+    ("r6f1", "echo \"$\\\n{x:-\"a >{C} \"}\"", ("{C}",)),
+    ("r6f1", "echo \"$\\\n$(echo hi >{C})\"", ("{C}",)),
+    # The head of an array assignment is NAME[ with the continuations taken out.
+    ("r6f2", "a\\\n[k >{C} ]=1", ("{C}",)),
+    ("r6f2", "time a\\\n[k >{C} ]=1", ("{C}",)),
+    ("r6f2", "x=1 a\\\n[k >{C} ]=1", ("{C}",)),
+    ("r6f2", "ab\\\nc[k >{C} ]=1", ("{C}",)),
+    ("r6f2", "a\\\n\\\n[k >{C} ]=1", ("{C}",)),
+    # A [[ closes at the first ]] that is a word by itself. The reader closed on fewer
+    # forms than bash does and went on to a later ]] in a here-document body.
+    ("r6f3", "[[ -f a \\\n]]\ncat <<'E'\nx ]] >{C}\nE", ("{C}",)),
+    ("r6f3", "[[ a ]\\\n] && cat <<'E'\nx ]] >{C}\nE", ("{C}",)),
+    ("r6f3", "[[ ( -f a )]]\ncat <<'E'\nx ]] >{C}\nE", ("{C}",)),
+    ("r6f3", "[[ -f a ]]>/dev/null\ncat <<'E'\nx ]] >{C}\nE", ("{C}",)),
+    ("r6f3", "[[ -f a ]]</dev/null\ncat <<'E'\nx ]] >{C}\nE", ("{C}",)),
+    ("r6f3", "[[ -n x \\\n# $(a >{C} b)\n]]", ("{C}",)),
+    ("r6f3", "[[ -f a \\\n]]\ncat <<'E'\nnote ]]\necho --api-key-AbCdEf1234\ncurl -u admin:hunter2 --header-secret\n"
+             "ls /tmp/AbCdEf1234 > /tmp/AbCdEf1234.out\nE", ("--api-key", "--header-secret", "AbCdEf1234", "hunter2")),
+    # Inside $( ), <( ) and backticks bash ends the substitution at a here-document
+    # line that begins with the delimiter and goes on, and at a closing backtick.
+    ("r6f4", "x=$(cat <<E\nbody\nE )\ncat <<'F'\nE\ny >{C}\n)\nF", ("{C}",)),
+    ("r6f4", "x=$(cat <<E\nbody\nE)\ncat <<'F'\nE\ny >{C}\n)\nF", ("{C}",)),
+    ("r6f4", "x=$(cat <<E\nbody\nE) # c\ncat <<'F'\nE\ny >{C}\n)\nF", ("{C}",)),
+    ("r6f4", "x=$(cat <<E\nbody\nE)x\ncat <<'F'\nE\ny >{C}\n)\nF", ("{C}",)),
+    ("r6f4", "x=$(cat <<'E'\nbody\nE)\ncat <<'F'\nE\ny >{C}\n)\nF", ("{C}",)),
+    ("r6f4", "x=$(cat <<-E\nbody\nE)\ncat <<'F'\nE\ny >{C}\n)\nF", ("{C}",)),
+    ("r6f4", "echo <(cat <<-E\n/tmp/x\nE)\ncat <<'F'\nE\ny >{C}\n)\nF", ("{C}",)),
+    ("r6f4", "x=`cat <<E\nbody\nE`\ncat <<'F'\nE\ny >{C}\n`\nF", ("{C}",)),
+    ("r6f4", "echo \"$(cat <<'EOF'\nsubject\nEOF)\"\ncat <<'F'\nEOF\ny >{C}\n)\nF", ("{C}",)),
+    # Runtime parse state: after shopt -s expand_aliases an alias can expand to the
+    # start of a here-document, and the lines after it are data to bash.
+    ("r6f5", "shopt -s expand_aliases\nalias foo='cat <<EOF'\nfoo\na >{C}\nEOF", ("{C}",)),
+    ("r6f5", "shopt -s expand_aliases; alias foo='cat <<EOF'\nfoo\na >{C}\nEOF", ("{C}",)),
 ]
 
 
@@ -2720,12 +3000,7 @@ def what_bash_does(tmp_path, command):
     """The files the command creates and the command names it asks for, in real bash
     in an empty directory. Skipped unless bash is the version the pinned list came
     from: the rules these rows pin are old, but a runner's bash is not this one."""
-    bash = shutil.which("bash", path=ORIGINAL_PATH)
-    if not bash:
-        pytest.skip("no bash here")
-    version = subprocess.run([bash, "-c", "echo $BASH_VERSION"], capture_output=True, text=True, timeout=30).stdout.strip()
-    if version != jev.BASH_VERSION_PINNED:
-        pytest.skip("bash here is %s and the rows were checked against %s" % (version, jev.BASH_VERSION_PINNED))
+    bash = pinned_bash()
     work = tmp_path / "cwd"
     work.mkdir()
     log = tmp_path / "ran.log"
@@ -2770,6 +3045,64 @@ def test_the_syntax_next_to_the_round_5_stops_that_does_run_a_redirect_is_still_
     assert outline(command) == expected
     files, _ = what_bash_does(tmp_path, command)
     assert files == [CANARIES[0]]
+
+
+ROUND_6 = [row for row in PRIOR_FINDINGS if row[0].startswith("r6")]
+
+
+@pytest.mark.parametrize("finding,command,forbidden", ROUND_6, ids=["%s-%d" % (row[0], n) for n, row in enumerate(ROUND_6)])
+def test_bash_parses_and_runs_nothing_of_what_the_round_6_reproductions_hide(tmp_path, finding, command, forbidden):
+    """As for round 5, and a row is also a command bash accepts, so that the text it
+    hides is data in a script that parses and not in one that is a syntax error."""
+    command = command.replace("{C}", CANARIES[0])
+    forbidden = [w.replace("{C}", CANARIES[0]) for w in forbidden]
+    assert bash_parse(pinned_bash(), command, tmp_path) is not None, command
+    files, ran = what_bash_does(tmp_path, command)
+    assert [w for w in forbidden if w in files or w in ran] == []
+
+
+ROUND_6_CONTROLS = [
+    # Next to each stop of round 6, the same text where bash does run the redirect. The
+    # reader reads these and sends the path, so the stops are no wider than the findings.
+    ("[[ -n x ]]>{C}", "{C}"),
+    ("[[ -n x \\\n]] >{C}", "{C}"),
+    ("[[ -n x ]\\\n] >{C}", "{C}"),
+    ("[[ -n x ]]\\\n>{C}", "{C}"),
+    ("[[ ( -n x ) ]] >{C}", "{C}"),
+    ("m\\\n[1]=x >{C}; ls", "{C}\nls"),
+    ("a\\\nb[1]=x >{C}; ls", "{C}\nls"),
+    ("(cat <<E\nbody\nE)\nE\n); echo hi >{C}", "cat\necho {C}"),
+    ("cat <<E\nbody\nE)\nE\n>{C}", "cat\n{C}"),
+    ("echo $(cat <<E\nbody\nE\n) >{C}", "echo\ncat\n{C}"),
+    ("echo `cat <<E\nbody\nE\n` >{C}", "echo\ncat\n{C}"),
+    ("shopt -s nullglob; echo hi >{C}", "shopt -s\necho {C}"),
+    ("echo \"\\$\\\n(x y)\" >{C}", "echo {C}"),
+    ("echo \"$$\" >{C}", "echo {C}"),
+]
+
+
+@pytest.mark.parametrize("command,expected", ROUND_6_CONTROLS)
+def test_the_syntax_next_to_the_round_6_stops_that_does_run_a_redirect_is_still_read(tmp_path, command, expected):
+    command, expected = command.replace("{C}", CANARIES[0]), expected.replace("{C}", CANARIES[0])
+    assert outline(command) == expected
+    assert bash_parse(pinned_bash(), command, tmp_path) is not None, command
+    files, _ = what_bash_does(tmp_path, command)
+    assert files == [CANARIES[0]]
+
+
+def test_the_docs_name_each_stop_of_round_6():
+    flat = " ".join((ROOT / "CLAUDE.md").read_text().split("## The Jev router")[1].split("\n## ")[0].split())
+    for stated in ("A `$` followed by one inside double quotes ends the read",
+                   "found with the continuations taken out",
+                   "The `]]` is the first one that is a word by itself",
+                   "A `]]` glued to a parenthesis ends the read",
+                   "A body line inside a substitution that begins with the delimiter and is not it",
+                   "any body line with a backtick in it inside backticks",
+                   "the read ends at the word `alias` wherever it is typed",
+                   "at a word that names `expand_aliases` or `BASH_ALIASES`, and at an expansion handed to `shopt`",
+                   "an alias that the shell's profile or a file the command sources defines",
+                   "Round 6, against `ab83181`"):
+        assert stated in flat, stated
 
 
 def test_the_docs_name_each_stop_of_round_5_and_no_longer_claim_the_gate_covers_a_redirect_target():
