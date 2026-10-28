@@ -2,8 +2,9 @@
 
 Each skill named in `VENDORED` is a byte for byte copy of an upstream folder
 at the commit its `UPSTREAM.md` records: `scroll-craft` from
-`nateherkai/scroll-craft`, `hypit` from `hypit-ai/hypit`, and `typesafe-ai`
-from `typesafe-ai/skills`. Prose in those
+`nateherkai/scroll-craft`, `hypit` from `hypit-ai/hypit`, `typesafe-ai`
+from `typesafe-ai/skills`, and `watch` from `bradautomates/claude-video`.
+Prose in those
 files says never edit them in place. Prose is not an invariant, so this module
 makes it one: a local edit, a partial sync, or a deleted file fails here
 instead of surviving as a silent fork nobody can reconcile with upstream.
@@ -21,12 +22,13 @@ import pytest
 SKILLS = pathlib.Path(__file__).parent / ".claude" / "skills"
 
 # Each vendored skill and the lines its LICENSE must still carry. The
-# licences differ: scroll-craft and typesafe-ai are MIT, hypit is Apache 2.0
-# with conditions.
+# licences differ: scroll-craft, typesafe-ai and watch are MIT, hypit is
+# Apache 2.0 with conditions.
 VENDORED = {
     "scroll-craft": ("MIT License", "Nate Herk"),
     "hypit": ("Apache License 2.0", "Hypit.AI"),
     "typesafe-ai": ("MIT License", "TypeSafe AI"),
+    "watch": ("MIT License", "Bradley Bonanno"),
 }
 
 # Written by us, so deliberately outside the manifest: everything else under
