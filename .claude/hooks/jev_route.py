@@ -58,17 +58,31 @@ its defences. Nothing is executed to find
 out: a lookup is a stat on a path, BASH_WORDS is a list pinned in this file, and
 bash is never run. A word over MAX_WORD characters is not looked up, a name is
 looked up once per call, and a call stops looking after MAX_LOOKUPS distinct
-names, so the names after the cap are dropped. The cost is fidelity: Jev sees
-less of a script or a tool that is not installed where the hook runs. The edge is
-a secret that is itself the name of an installed command, which still leaves.
+names. Only the first MAX_PATH_DIRS directories of PATH are searched, so a call
+costs at most MAX_LOOKUPS times MAX_PATH_DIRS stats, and no name is looked up once
+LOOKUP_BUDGET_S seconds have passed since the hook started reading its input, a
+lookup cut off half way included. The names after any of those caps are dropped.
+Builtins and reserved words need no lookup and are known to the end. The cost is
+fidelity: Jev sees less of a script or a tool that is not installed where the
+hook runs, or that lives only in a late directory of a long PATH. The edge is a
+secret that is itself the name of an installed command, which still leaves.
 
 A piece outside the character class [A-Za-z0-9._/~-] is dropped, not escaped.
-A path over MAX_PATH characters is dropped. /dev/tcp/HOST/PORT and
-/dev/udp/HOST/PORT are sockets and not paths, and are dropped. The home directory
-is written as ~.
-The whole text, tool name included, stops at MAX_OUT characters at a piece
-boundary. Nothing is ever cut out of a longer string, because no longer string
-is ever sent.
+A program name is also at most 40 characters, starts with a letter or a digit and
+carries at most MAX_DIGITS digits; a long flag is -- and at most MAX_FIELD_LEN
+letters, digits and single hyphens. A path over MAX_PATH characters is dropped.
+/dev/tcp/HOST/PORT and /dev/udp/HOST/PORT are sockets and not paths, and are
+dropped, however the path spells them. A path is written lexically first, from the
+text alone and with no filesystem touched: repeated slashes collapse, . and .. are
+resolved and a trailing slash goes. Then the home directory is written as ~, so
+//home/alice/x, /home//alice/x, /home/bob/../alice/x and ~/../alice/x are each
+~/x. A path that still holds the last component of the home directory, the
+account name, as a component of its own is a spelling that cannot be mapped, and
+it is dropped (/proc/self/root/home/alice/x, /home/ALICE/x, ~alice/x). A component
+that only contains the name is another name and leaves.
+The tool name, one character for the join and the text stop at MAX_OUT characters
+together, at a piece boundary, so MAX_OUT - 1 is the most that is sent. Nothing is
+ever cut out of a longer string, because no longer string is ever sent.
 
 In a Bash command a word is read only as one of: the program (first word of a
 command, or the word after sudo, env and the like), a flag, the target of a
@@ -172,10 +186,13 @@ with a here-document and then sources included, is not in the text, and nothing
 here sees it.
 
 Building the text is linear. Only the first MAX_SCAN characters of a command
-are read, no regex has a nested or adjacent unbounded quantifier, and the
-whole hook, request included, stays inside HOOK_BUDGET_S of its 5 second
-timeout whatever the input. The request itself gets what is left of that
-budget once RESERVE_S is set aside for start up and the ledger write.
+are read, no regex has a nested or adjacent unbounded quantifier, the lookups of
+program names are held by MAX_LOOKUPS, MAX_PATH_DIRS and the LOOKUP_BUDGET_S
+deadline whatever PATH holds, and the whole hook, request included, stays inside
+HOOK_BUDGET_S of its 5 second timeout whatever the input. The request itself gets
+what is left of that budget once RESERVE_S is set aside for start up and the
+ledger write. A line of the ledger that is not JSON, or is nested deeper than the
+parser will follow, is skipped when the tail is read.
 
 It fails open. With SEND false, a refused host, a redirect, the deadline
 passing, an HTTP error or a malformed answer, it prints nothing and the call
@@ -187,7 +204,8 @@ time. After BREAKER_ERRORS failed requests in a row it stops asking for
 BREAKER_S seconds, so a dead vendor costs three deadlines and not one per call.
 
 SEND gates every request. While it is False the hook makes no request, opens no
-socket and writes an off row for each call it sees. Turning it on is Tee's
+socket and writes an off row for each call it can read. Input that is not a JSON
+object with a tool name gets a bad_input row first. Turning it on is Tee's
 ruling and a one line commit, as ENFORCE is.
 
 The hook holds no key. It reads none from any environment variable and sends no
@@ -202,7 +220,12 @@ not add the header gets HTTP 401 from the API. That is an error row, the call
 runs as it would without this file, and three in a row open the breaker. An error
 row holds the exception's class name and never its text. The ledger holds a hash
 of the raw call, so "the identical call" means identical input, and no copy of
-the input.
+the input. sent_chars is the length of the tool name and the outline as built,
+and it is what was sent only on a row that made a request: a repeat_pass or
+breaker_open row carries the length of an outline that was not sent. The model
+the answer names is written only when it is jev- and up to 36 letters, digits,
+dots and hyphens, and as MODEL_UNKNOWN otherwise, because it is the vendor's
+string and goes into the ledger.
 
 CONFIDENCE is a starting guess, to be set from the ledger once real answers
 exist. The request and answer shapes were taken from the first version, which
@@ -238,6 +261,8 @@ MAX_PATH = 200
 MAX_STATS = 64
 MAX_WORD = 64
 MAX_LOOKUPS = 128
+MAX_PATH_DIRS = 128
+LOOKUP_BUDGET_S = 1.0
 MAX_FIELDS = 60
 MAX_FIELD_LEN = 30
 MAX_DIGITS = 4
@@ -301,6 +326,8 @@ PIECE = re.compile(r"[A-Za-z0-9._/~-]{1,200}")
 TOOL_NAME = re.compile(r"[A-Za-z0-9._-]{1,120}")
 PROGRAM = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,39}")
 FIELD = re.compile(r"[A-Za-z][A-Za-z0-9_.-]{0,29}")
+MODEL_NAME = re.compile(r"jev-[A-Za-z0-9.-]{1,36}")
+MODEL_UNKNOWN = "unrecognised"
 WORD_RUN = re.compile(r"[^ \t\n'\"\\$`;&|<>()]+")
 DQ_SPECIAL = re.compile(r"[\"\\$`]")
 # One character each, so no quantifier at all. They find the next character that
@@ -381,27 +408,78 @@ def ledger_path():
     return os.path.join(project_dir(), ".claude", "ledger", "jev-route.jsonl")
 
 
+def lexical(path):
+    """The path with repeated slashes collapsed, . dropped and .. taken against the
+    name before it, from the text alone. Nothing is looked at on disk, so a link
+    is not followed: a/link/../b is a/b here. A .. at the root stays at the root,
+    and in a relative path a .. with nothing before it stays. A trailing slash goes."""
+    rooted = path.startswith("/")
+    parts = []
+    for part in path.split("/"):
+        if part in ("", "."):
+            continue
+        if part != "..":
+            parts.append(part)
+        elif parts and parts[-1] != "..":
+            parts.pop()
+        elif not rooted:
+            parts.append(part)
+    joined = "/".join(parts)
+    return "/" + joined if rooted else joined or "."
+
+
 def home_dir():
-    """The home directory without a trailing slash, or "" when it is / or unknown."""
+    """The home directory as lexical() writes it, or "" when it is / or unknown."""
     home = os.path.expanduser("~")
-    return "" if home in ("", "~") else home.rstrip("/")
+    if home in ("", "~"):
+        return ""
+    home = lexical(home)
+    return "" if home in ("/", ".") else home
 
 
 # ------------------------------------------------------- the allowed pieces
 
 
+def is_socket(path):
+    """/dev/tcp/HOST/PORT and /dev/udp/HOST/PORT are not paths: bash connects to
+    the host, and the text after the prefix is a destination, which the character
+    class cannot tell from a file name. Extra slashes in front are dropped too."""
+    return path.startswith("/") and path.lstrip("/").startswith(SOCKET_PATHS)
+
+
 def vet_path(raw, home):
-    """A path piece with the home directory as ~, or None. /dev/tcp/HOST/PORT and
-    /dev/udp/HOST/PORT are not paths: bash connects to the host, and the text
-    after the prefix is a destination, which the character class cannot tell
-    from a file name."""
-    if not isinstance(raw, str) or not 0 < len(raw) <= MAX_PATH:
+    """A path piece with the home directory as ~, or None. The path is written
+    with lexical() first, so //home/alice/x, /home//alice/x, /home/./alice/x and
+    /tmp/../home/alice/x are each ~/x, and a leading ~ is taken for the home
+    directory before the .. in ~/../alice/x is read. What is left after that is
+    dropped when it still holds the last component of the home directory, in any
+    case: the account name leaves as a name of its own and cannot be mapped, as
+    in /proc/self/root/home/alice/x, /home/ALICE/x and ~alice/x. A component that
+    only contains the name (alice-backup) is a different name and leaves."""
+    if not isinstance(raw, str) or not 0 < len(raw) <= MAX_PATH or not PIECE.fullmatch(raw):
         return None
-    if raw.startswith("/") and raw.lstrip("/").startswith(SOCKET_PATHS):
+    if is_socket(raw):
         return None
-    if home and (raw == home or raw.startswith(home + "/")):
-        raw = "~" + raw[len(home):]
-    return raw if PIECE.fullmatch(raw) else None
+    if raw == "~" or raw.startswith("~/"):
+        if home:
+            full = lexical(home + raw[1:])
+        else:
+            rest = lexical(raw[1:].lstrip("/") or ".")
+            full = "~" if rest == "." else "~/" + rest
+    else:
+        full = lexical(raw)
+    if is_socket(full):
+        return None
+    mapped = False
+    if home and (full == home or full.startswith(home + "/")):
+        full, mapped = "~" + full[len(home):], True
+    account = home.rsplit("/", 1)[-1].casefold() if home else ""
+    if account:
+        parts = full.split("/")
+        for part in parts[1:] if mapped else parts:
+            if part.casefold() in (account, "~" + account):
+                return None
+    return full if PIECE.fullmatch(full) else None
 
 
 def is_assignment(word):
@@ -448,11 +526,14 @@ def is_executable(path):
 
 
 def search_path():
-    """The directories of this process's PATH, in order, without the empty entries
-    that bash reads as the current directory. An unset PATH is the platform's
-    default, as it is for shutil.which."""
+    """The first MAX_PATH_DIRS directories of this process's PATH, in order, without
+    the empty entries that bash reads as the current directory. An unset PATH is the
+    platform's default, as it is for shutil.which. A command that lives only in a
+    later directory is not found, which drops it and never sends a word that was
+    not checked."""
     raw = os.environ.get("PATH")
-    return [d for d in (os.defpath if raw is None else raw).split(os.pathsep) if d]
+    entries = (os.defpath if raw is None else raw).split(os.pathsep)
+    return [d for d in entries if d][:MAX_PATH_DIRS]
 
 
 def wrapper_kind(name, keyword=False):
@@ -561,10 +642,12 @@ class Shell:
     redirect target is not checked, so it is the stops above that keep data out
     of one."""
 
-    def __init__(self, text, out, cwd, home):
+    def __init__(self, text, out, cwd, home, deadline=None):
         self.t, self.n, self.i = text, len(text), 0
         self.out, self.cwd, self.home = out, cwd, home
         self.stats = 0
+        # When time.monotonic() reaches this, no name is looked up any more. See known().
+        self.deadline = deadline
         # What the lookups of this call found, by word, so a name is looked up once.
         self.path, self.found = search_path(), {}
         self.heredocs = []
@@ -1009,7 +1092,8 @@ class Shell:
 
     def skip_brace(self, i):
         """From the $ of ${ to after the } that closes it. Only a plain body is
-        read: a quote, an escape, a nested expansion or a newline ends the read."""
+        read: a quote, an escape, a backtick, a brace, a newline or a $ followed
+        by ( { ' or " ends the read. A plain $NAME inside is read past."""
         t = self.t
         j = i + 2
         while True:
@@ -1264,13 +1348,20 @@ class Shell:
             self.i = j
             self.skip = True
 
+    def out_of_time(self):
+        return self.deadline is not None and time.monotonic() >= self.deadline
+
     def known(self, word):
         """True when a word is a command here: a bash builtin or reserved word, a
         name PATH resolves to an executable file, or, with a / in it, an existing
         executable file. Nothing is run. A word over MAX_WORD characters is not
         looked up. A word is looked up once per call, and once MAX_LOOKUPS words
-        have been, a word not seen yet is not a command: the cost of the cap is a
-        name dropped, never one let through."""
+        have been, a word not seen yet is not a command. Only the first
+        MAX_PATH_DIRS directories of PATH are searched, and once the deadline has
+        passed no name is looked up at all, one cut off half way included. So the
+        work is at most MAX_LOOKUPS times MAX_PATH_DIRS stats and ends by the
+        deadline whatever PATH holds. The cost of each cap is a name dropped,
+        never one let through. A builtin needs no lookup and is known to the end."""
         if len(word) > MAX_WORD:
             return False
         if word in BASH_WORDS:
@@ -1278,10 +1369,16 @@ class Shell:
         hit = self.found.get(word)
         if hit is not None:
             return hit
-        if len(self.found) >= MAX_LOOKUPS:
+        if len(self.found) >= MAX_LOOKUPS or self.out_of_time():
             return False
         if "/" not in word:
-            hit = any(is_executable(os.path.join(directory, word)) for directory in self.path)
+            hit = False
+            for directory in self.path:
+                if is_executable(os.path.join(directory, word)):
+                    hit = True
+                    break
+                if self.out_of_time():
+                    return False
         elif word.startswith("~/"):
             hit = bool(self.home) and is_executable(self.home + word[1:])
         else:
@@ -1418,12 +1515,12 @@ class Shell:
                 self.out.add(piece)
 
 
-def shell_pieces(command, out, cwd, home):
+def shell_pieces(command, out, cwd, home, deadline=None):
     text = command[:MAX_SCAN]
     if len(command) > MAX_SCAN:
         cut = max(text.rfind(ch) for ch in " \t\n;|&")
         text = text[:cut] if cut > 0 else ""
-    Shell(text, out, cwd, home).run()
+    Shell(text, out, cwd, home, deadline).run()
 
 
 def field_names(value):
@@ -1431,8 +1528,10 @@ def field_names(value):
     value, and never a key below the top: the top level is the tool's own
     parameters, and a key under one is the caller's data (a map keyed by ids,
     names or tokens, a header, an environment variable, a JSON body), which the
-    character class cannot tell from a name. A key that is long, or carries more
-    than MAX_DIGITS digits, or leaves the character class, is dropped as well."""
+    character class cannot tell from a name. A key leaves only when it starts with
+    a letter, goes on with letters, digits and _ . -, is at most MAX_FIELD_LEN
+    characters and carries at most MAX_DIGITS digits. At most MAX_FIELDS keys
+    leave, taken from the first MAX_FANOUT of the object."""
     names = []
     if isinstance(value, dict):
         for key in itertools.islice(value, MAX_FANOUT):
@@ -1443,13 +1542,14 @@ def field_names(value):
     return names
 
 
-def build_text(name, tool_input, cwd, home):
-    """The whole outbound text for one call, from allowed pieces only."""
+def build_text(name, tool_input, cwd, home, deadline=None):
+    """The whole outbound text for one call, from allowed pieces only. deadline is a
+    time.monotonic() value after which a program name is no longer looked up."""
     out = Outline(MAX_OUT - len(name) - 1)
     if name.lower() == "bash":
         command = tool_input.get("command") if isinstance(tool_input, dict) else None
         if isinstance(command, str):
-            shell_pieces(command, out, cwd, home)
+            shell_pieces(command, out, cwd, home, deadline)
         return out.text()
     if isinstance(tool_input, dict):
         for field in PATH_FIELDS.get(name, ()):
@@ -1538,7 +1638,11 @@ def ask_within(body, endpoint, deadline):
 
 
 def read_answers(response):
-    """(better_tool, needs_human, model), or ValueError on any shape it does not know."""
+    """(better_tool, needs_human, model), or ValueError on any shape it does not know.
+    The model comes back as the answer named it only when it is jev- and up to 36
+    letters, digits, dots and hyphens. The string is the vendor's, it goes into the
+    ledger, and a longer one or one with other characters in it is written as
+    MODEL_UNKNOWN."""
     model = response.get("model")
     if not isinstance(model, str) or not model.startswith("jev-"):
         raise ValueError("model is not a jev model")
@@ -1550,7 +1654,7 @@ def read_answers(response):
         if answer.get("type") != "noul" or isinstance(p, bool) or not isinstance(p, (int, float)) or not 0 <= p <= 1:
             raise ValueError("bad %s answer" % name)
         values.append(float(p))
-    return values[0], values[1], model
+    return values[0], values[1], model if MODEL_NAME.fullmatch(model) else MODEL_UNKNOWN
 
 
 def decision_for(better_tool, needs_human):
@@ -1581,7 +1685,9 @@ def ledger_tail():
     for line in lines:
         try:
             row = json.loads(line)
-        except ValueError:
+        except (ValueError, RecursionError):
+            # A line that is not JSON, or is nested past what the parser will
+            # follow, is skipped like any other bad line.
             continue
         if isinstance(row, dict):
             rows.append(row)
@@ -1686,7 +1792,7 @@ def run(payload, endpoint=None, now=None, timeout=None, started=None):
     cwd = payload.get("cwd")
     cwd = cwd if isinstance(cwd, str) and os.path.isabs(cwd) else project_dir()
     tool_input = payload.get("tool_input")
-    text = build_text(name, tool_input, cwd, home_dir())
+    text = build_text(name, tool_input, cwd, home_dir(), started + LOOKUP_BUDGET_S)
     digest = input_digest(name, tool_input)
     row["input_sha"] = digest
     row["sent_chars"] = len(name) + len(text)

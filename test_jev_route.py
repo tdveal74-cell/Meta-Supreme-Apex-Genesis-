@@ -653,12 +653,13 @@ def child_env(project, extra_env=None):
             "PATH": os.environ.get("PATH", "/usr/bin:/bin"), **(extra_env or {})}
 
 
-def run_in_a_process(project, stub_url, stdin_text, extra_env=None):
+def run_in_a_process(project, stub_url, stdin_text, extra_env=None, cwd=None):
     """The harness's path: a new interpreter, the payload on stdin, the exit
     code and stdout read back. The endpoint is swapped and SEND is switched on, in
     a driver, because the shipped file is off and the hook reads nothing from its
-    environment but the project directory and PATH. extra_env is for the proxy
-    variables that urllib itself reads."""
+    environment but the project directory, PATH and HOME (which it writes as ~).
+    extra_env is for the proxy variables that urllib itself reads. cwd is the
+    working directory of the child, which a relative PATH entry is read against."""
     driver = CHILD_GUARD + (
         "import importlib.util, sys\n"
         "spec = importlib.util.spec_from_file_location('jev_route_child', sys.argv[1])\n"
@@ -670,7 +671,7 @@ def run_in_a_process(project, stub_url, stdin_text, extra_env=None):
     )
     started = time.monotonic()
     proc = subprocess.run([sys.executable, "-c", driver, str(HOOK), stub_url], input=stdin_text,
-                          capture_output=True, text=True, env=child_env(project, extra_env), timeout=30)
+                          capture_output=True, text=True, env=child_env(project, extra_env), timeout=30, cwd=cwd)
     return proc, time.monotonic() - started
 
 
@@ -714,6 +715,24 @@ def test_the_request_gets_what_is_left_of_the_budget(stub, project):
     assert out is None
     assert time.monotonic() - started < 1.0, "1.5 s of the budget was already spent"
     assert ledger(project)[-1]["error"] == "TimeoutError"
+
+
+def test_the_request_is_given_what_is_left_of_2_5_seconds_less_0_6_and_never_less_than_a_tenth(stub, monkeypatch):
+    given = []
+    real = jev.ask_within
+    monkeypatch.setattr(jev, "ask_within", lambda body, endpoint, deadline: given.append(deadline) or real(body, endpoint, deadline))
+    go(stub, started=time.monotonic())
+    assert 1.8 < given[-1] <= 1.9, given[-1]
+    go(stub, started=time.monotonic() - 1.5)
+    assert 0.3 < given[-1] <= 0.4, given[-1]
+    go(stub, started=time.monotonic() - 10)
+    assert given[-1] == 0.1, "a spent budget still gets a tenth of a second"
+    go(stub, started=time.monotonic() - 1.9)
+    assert given[-1] == 0.1, "and so does one that has under that left"
+    go(stub, timeout=0.7)
+    assert given[-1] == 0.7, "a timeout that is passed in is used as it is"
+    go(stub, timeout=0.05)
+    assert given[-1] == 0.1
 
 
 def test_a_deny_on_one_call_does_not_pass_a_different_call(stub, project, enforce):
@@ -808,6 +827,9 @@ def test_the_shipped_numbers_are_the_ones_claude_md_states():
     assert (jev.BREAKER_ERRORS, jev.BREAKER_S) == (3, 600)
     assert jev.MAX_NEST == 8 and len(WRAPPERS) == 14
     assert (jev.MAX_WORD, jev.MAX_LOOKUPS) == (64, 128)
+    assert (jev.MAX_PATH_DIRS, jev.LOOKUP_BUDGET_S, jev.RESERVE_S) == (128, 1.0, 0.6)
+    assert (jev.MAX_STDIN, jev.TAIL_BYTES, jev.MAX_STATS) == (8 * 1024 * 1024, 256 * 1024, 64)
+    assert (jev.MAX_FIELDS, jev.MAX_FIELD_LEN, jev.MAX_DIGITS, jev.MAX_FANOUT) == (60, 30, 4, 200)
     section = (ROOT / "CLAUDE.md").read_text().split("## The Jev router")[1].split("\n## ")[0]
     flat = " ".join(section.split())
     for stated in ("probability of 0.8", "2.5 seconds", "2,000 characters", "200 characters", "64 KiB",
@@ -815,6 +837,22 @@ def test_the_shipped_numbers_are_the_ones_claude_md_states():
                    "any nesting up to 8", "nesting past 8", "fourteen wrapping commands",
                    "over 64 characters", "128 distinct names"):
         assert stated in flat, stated
+    for stated in ("first 128 directories", "128 names times 128 directories", "16,384", "`LOOKUP_BUDGET_S`",
+                   "a `PATH` of 10,000 directories", "1.28 million stats and 45 seconds", "1,999 is the most that is sent",
+                   "at most 60 keys leave, taken from the first 200", "`FIND_FLAGS`", "twenty two",
+                   "starts with a letter", "58 times in a hundred", "`unrecognised`", "40 characters at most",
+                   "is nested deeper than the parser will follow", "lexically", "the account name", "`alice-backup`",
+                   "`bad_input` row first"):
+        assert stated in flat, stated
+
+
+def test_the_typesafe_skill_notes_say_the_key_is_a_network_secret_and_the_hook_ships_off():
+    """UPSTREAM.md is ours (outside MANIFEST.sha256) and used to say that calling the
+    API needs TYPESAFE_API_KEY. No variable holds the key: the proxy adds it."""
+    text = " ".join((ROOT / ".claude" / "skills" / "typesafe-ai" / "UPSTREAM.md").read_text().split())
+    assert "TYPESAFE_API_KEY" not in text
+    assert "network secret" in text and "adds it to requests for `api.typesafe.ai`" in text
+    assert "ships with `SEND = False`" in text
 
 
 def test_needs_human_at_threshold_asks(stub, enforce):
@@ -904,6 +942,47 @@ def test_the_repeat_pass_reads_only_the_ledger_tail(stub, project, enforce):
     assert ledger(project)[-1]["outcome"] == "repeat_pass"
     assert time.monotonic() - started < 0.5
 
+# A line nested deeper than the JSON parser will follow raises RecursionError, which
+# is not a ValueError. One such line in the last 256 KiB of the ledger used to leave
+# run() with an exception on every call until the line aged out of the tail, so no
+# call was asked about and each one left a crash row.
+DEEP_LINE = "[" * 60000 + "]" * 60000
+
+
+def ledger_with(project, *lines):
+    path = project / ".claude" / "ledger" / "jev-route.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(line + "\n" for line in lines))
+    return path
+
+
+def test_the_premise_of_the_deep_line_tests_is_what_the_parser_does():
+    with pytest.raises(RecursionError):
+        json.loads(DEEP_LINE)
+
+
+def test_a_ledger_line_nested_past_the_parser_is_skipped_like_any_bad_line(project):
+    assert len(DEEP_LINE) < jev.TAIL_BYTES // 2
+    ledger_with(project, json.dumps({"ts": "t1", "outcome": "off"}), DEEP_LINE, "not json",
+                json.dumps({"ts": "t2", "outcome": "off"}), "[1, 2]")
+    assert [row["ts"] for row in jev.ledger_tail()] == ["t1", "t2"]
+
+
+def test_a_deep_ledger_line_does_not_stop_a_call_from_being_asked(stub, project):
+    path = ledger_with(project, DEEP_LINE)
+    assert go(stub) is None
+    assert len(stub.requests) == 1
+    assert json.loads(path.read_text().splitlines()[-1])["outcome"] == "answered"
+
+
+def test_a_deep_ledger_line_leaves_no_crash_row_through_main(stub, project, monkeypatch):
+    path = ledger_with(project, DEEP_LINE, json.dumps({"ts": "t1", "outcome": "off"}))
+    rc, out = run_main(monkeypatch, json.dumps(payload()), stub.url)
+    assert rc == 0 and out == ""
+    outcomes = [json.loads(line)["outcome"] for line in path.read_text().splitlines()[1:]]
+    assert outcomes == ["off", "answered"]
+
+
 
 # ------------------------------------------------------------ fails open
 
@@ -967,6 +1046,48 @@ def test_a_bad_answer_prints_nothing_and_is_recorded(stub, project, enforce, rep
     stub.reply = reply
     assert go(stub) is None
     assert ledger(project)[-1]["outcome"] == "error"
+
+# The model string is the vendor's, and it goes into the ledger. It is written only
+# when it is jev- and up to 36 letters, digits, dots and hyphens (40 characters), and
+# otherwise as the fixed word. The answer itself still counts.
+@pytest.mark.parametrize("model,written", [
+    ("jev-1.14.0", "jev-1.14.0"),
+    ("jev-latest", "jev-latest"),
+    ("jev-A", "jev-A"),
+    ("jev-" + "a" * 36, "jev-" + "a" * 36),
+    ("jev-a.b-C9", "jev-a.b-C9"),
+    ("jev-" + "a" * 37, "unrecognised"),
+    ("jev-" + "a" * 5000, "unrecognised"),
+    ("jev-", "unrecognised"),
+    ("jev-1.0 beta", "unrecognised"),
+    ("jev-1.0\n", "unrecognised"),
+    ("jev-1.0\x1b[31m", "unrecognised"),
+    ("jev-1.0_x", "unrecognised"),
+    ("jev-1/2", "unrecognised"),
+    ("jev-café", "unrecognised"),
+    ("jev-1.0;rm", "unrecognised"),
+])
+def test_the_model_string_is_written_only_when_it_is_short_and_plain(stub, project, model, written):
+    stub.answer(0.1, 0.1, model=model)
+    go(stub)
+    row = ledger(project)[-1]
+    assert row["outcome"] == "answered" and row["model"] == written
+    assert len(json.dumps(row)) < 1000
+
+
+def test_a_model_that_is_not_written_still_has_its_answer_counted(stub, project, enforce):
+    stub.answer(0.95, 0.0, model="jev-" + "x" * 5000)
+    out = go(stub)
+    assert decision(out) == "deny"
+    row = ledger(project)[-1]
+    assert row["model"] == "unrecognised" and row["better_tool"] == 0.95 and row["decision"] == "deny"
+
+
+def test_the_model_pattern_and_the_placeholder_are_pinned():
+    assert jev.MODEL_UNKNOWN == "unrecognised" and not jev.MODEL_NAME.fullmatch(jev.MODEL_UNKNOWN)
+    assert jev.MODEL_NAME.fullmatch("jev-" + "a" * 36) and not jev.MODEL_NAME.fullmatch("jev-" + "a" * 37)
+    assert jev.MODEL_NAME.fullmatch(jev.MODEL), "the model the hook asks for is one it would write"
+
 
 
 def test_an_http_error_is_recorded_by_code(stub, project, enforce):
@@ -1180,11 +1301,14 @@ def test_a_crash_carrying_a_secret_leaves_a_row_with_the_class_name_only(stub, p
 
 def test_main_reads_only_the_project_dir_and_path_from_the_environment():
     """PATH is how the hook tells a command from a word. It is read to look for a
-    file and is never sent, and the lookups run nothing. No variable holds a key:
-    the proxy and the certificates are read by urllib and ssl, not by this file."""
+    file and is never sent, and the lookups run nothing. HOME is the third, read
+    once through os.path.expanduser so that the home directory is written ~, and it
+    is never sent either. No variable holds a key: the proxy and the certificates
+    are read by urllib and ssl, not by this file."""
     source = HOOK.read_text()
     reads = set(re.findall(r"""(?:environ\.get|getenv)\(\s*["']([A-Za-z_]+)["']""", source))
     assert reads == {"CLAUDE_PROJECT_DIR", "PATH"}
+    assert source.count("expanduser") == 1, "HOME is read in one place, for the tilde"
     assert "os.environ[" not in source and "environ.copy" not in source and "dict(os.environ" not in source
     assert "TYPESAFE_API_KEY" not in source and "Bearer" not in source and "KEY_SHAPE" not in source
 
@@ -2023,7 +2147,7 @@ OUTLINE_ROWS = [
     ("exec 3<>/dev/tcp/db.internal.example.com/5432", "exec"),
     ("echo hi >/dev/udp/10.9.8.7/514", "echo"),
     ("echo hi > /dev/null", "echo /dev/null"),
-    ("echo hi > ./dev/tcp/x/y", "echo ./dev/tcp/x/y"),
+    ("echo hi > ./dev/tcp/x/y", "echo dev/tcp/x/y"),
     # What the stops of round 5 leave alone: a subscript closed before anything that
     # splits the word, a process substitution after a blank, a comment outside
     # backticks, and backticks without a comment or a backslash in them.
@@ -2802,6 +2926,143 @@ def test_the_cap_bounds_the_work_a_command_of_distinct_names_can_cause(monkeypat
     outline(";".join(distinct_names(5000)))
     assert len(looked) == jev.MAX_LOOKUPS * len(dirs)
 
+# PATH is long and slow in the ways a PATH can be. Two bounds hold the work: only
+# the first MAX_PATH_DIRS directories are searched, and no name is looked up once
+# the hook's own deadline has passed. Both cost a name dropped, never one let through.
+
+
+def test_only_the_first_128_directories_of_path_are_searched(tmp_path, monkeypatch):
+    dirs = [tmp_path / ("bin%03d" % i) for i in range(130)]
+    for d in dirs:
+        d.mkdir()
+    an_executable(dirs[127] / "inside")
+    an_executable(dirs[128] / "beyond")
+    path_of(*dirs, monkeypatch=monkeypatch)
+    assert jev.MAX_PATH_DIRS == 128
+    assert outline("inside -x; beyond -y; ls -la") == "inside -x"
+    assert outline("beyond -y") == ""
+
+
+def test_the_directories_of_path_are_counted_without_the_empty_entries(tmp_path, monkeypatch):
+    dirs = [tmp_path / ("bin%03d" % i) for i in range(130)]
+    for d in dirs:
+        d.mkdir()
+    an_executable(dirs[127] / "inside")
+    an_executable(dirs[128] / "beyond")
+    path_of(*dirs[:100], "", "", "", *dirs[100:], monkeypatch=monkeypatch)
+    assert len(jev.search_path()) == 128
+    assert outline("inside -x; beyond -y") == "inside -x"
+
+
+def test_a_path_of_ten_thousand_directories_costs_at_most_the_two_caps_in_stats(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATH", os.pathsep.join(str(tmp_path / ("d%d" % i)) for i in range(10000)))
+    looked = []
+    monkeypatch.setattr(jev, "is_executable", lambda path: looked.append(path) or False)
+    outline(";".join(distinct_names(5000)))
+    assert len(looked) == 128 * 128 == jev.MAX_LOOKUPS * jev.MAX_PATH_DIRS
+
+
+def test_no_name_is_looked_up_once_the_deadline_has_passed(monkeypatch):
+    looked = []
+    real = jev.is_executable
+    monkeypatch.setattr(jev, "is_executable", lambda path: looked.append(path) or real(path))
+    command = "ls -la; echo hi; mytool -x; ./run.sh -v; ~/run.sh -w; sudo ls -a"
+    past = time.monotonic() - 1.0
+    text = jev.build_text("Bash", {"command": command}, "/nonexistent", "/home/nobody", past)
+    assert text == "echo", "a builtin needs no lookup, and nothing else was checked"
+    assert looked == []
+    assert jev.build_text("Bash", {"command": command}, "/nonexistent", "/home/nobody", None).startswith("ls -la\necho")
+
+
+def test_a_deadline_stops_the_lookups_and_the_names_after_it_are_dropped(tmp_path, monkeypatch):
+    dirs = [tmp_path / ("bin%d" % i) for i in range(3)]
+    for d in dirs:
+        d.mkdir()
+    an_executable(dirs[0] / "early")
+    an_executable(dirs[2] / "late")
+    path_of(*dirs, monkeypatch=monkeypatch)
+    looked = []
+    real = jev.is_executable
+
+    def slow(path):
+        looked.append(path)
+        time.sleep(0.02)
+        return real(path)
+
+    monkeypatch.setattr(jev, "is_executable", slow)
+    command = "; ".join(["early"] + distinct_names(400) + ["late"])
+    started = time.monotonic()
+    text = jev.build_text("Bash", {"command": command}, "/nonexistent", "/home/nobody", started + 0.25)
+    assert time.monotonic() - started < 1.0
+    assert text == "early", "late is on PATH and was never reached"
+    assert 3 <= len(looked) <= 30, len(looked)
+
+
+def test_a_lookup_cut_off_half_way_finds_nothing(tmp_path, monkeypatch):
+    dirs = [tmp_path / ("bin%d" % i) for i in range(3)]
+    for d in dirs:
+        d.mkdir()
+    an_executable(dirs[2] / "tail")
+    path_of(*dirs, monkeypatch=monkeypatch)
+    looked = []
+    real = jev.is_executable
+
+    def slow(path):
+        looked.append(path)
+        time.sleep(0.2)
+        return real(path)
+
+    monkeypatch.setattr(jev, "is_executable", slow)
+    deadline = time.monotonic() + 0.3
+    text = jev.build_text("Bash", {"command": "tail -x"}, "/nonexistent", "/home/nobody", deadline)
+    assert text == "", "tail is in the third directory, and the deadline passed in the second"
+    assert len(looked) == 2
+
+
+def test_run_gives_the_outline_a_lookup_deadline_inside_the_budget(stub, monkeypatch):
+    seen = []
+    real = jev.build_text
+    monkeypatch.setattr(jev, "build_text", lambda *args, **kw: seen.append(args) or real(*args, **kw))
+    started = time.monotonic() - 0.2
+    go(stub, started=started)
+    assert seen[0][4] == started + jev.LOOKUP_BUDGET_S
+    assert jev.LOOKUP_BUDGET_S == 1.0
+    assert jev.LOOKUP_BUDGET_S <= jev.HOOK_BUDGET_S - jev.RESERVE_S - 0.5, "the request keeps time of its own"
+
+
+@pytest.fixture(scope="session")
+def ten_thousand_directories(tmp_path_factory):
+    """10,000 real directories. A PATH of them is written with relative names and
+    run with this as the working directory, because one environment variable is
+    capped at 128 KiB and ten thousand absolute paths do not fit in it."""
+    root = tmp_path_factory.mktemp("manydirs")
+    names = ["d%05d" % i for i in range(10000)]
+    for name in names:
+        (root / name).mkdir()
+    return root, names
+
+
+@pytest.mark.parametrize("shape", sorted(ONE_MEGABYTE_DISTINCT))
+def test_a_one_megabyte_command_on_a_path_of_ten_thousand_directories_stays_inside_the_budget(
+        stub, project, installed_bin, ten_thousand_directories, monkeypatch, shape):
+    """The case the PATH cap is for, measured through a real process. Before the cap
+    the 128 distinct names this command allows were each a stat in every one of the
+    ten thousand directories, 1.28 million stats and 45 seconds on this container,
+    where the hook is killed at 5 and writes no row."""
+    root, names = ten_thousand_directories
+    path_of(installed_bin, *names, monkeypatch=monkeypatch)
+    assert len(os.environ["PATH"].split(os.pathsep)) == 10001
+    command = ONE_MEGABYTE_DISTINCT[shape]()[:MEGABYTE]
+    assert len(command) > MEGABYTE * 0.9
+    p = payload(command=command)
+    proc, elapsed = run_in_a_process(project, stub.url, json.dumps(p), cwd=str(root))
+    assert proc.returncode == 0 and proc.stdout == "", proc.stderr
+    assert elapsed < 2.5, elapsed
+    assert sent_chars(stub) <= 2000
+    row = ledger(project)[-1]
+    assert row["outcome"] == "answered" and row["input_sha"] == jev.input_digest("Bash", p["tool_input"])
+
+
 
 def test_the_pinned_bash_words_are_the_ones_the_docs_state():
     assert (jev.BASH_VERSION_PINNED, jev.BASH_WORDS_TAKEN) == ("5.2.21(1)-release", "2026-10-28")
@@ -2861,6 +3122,346 @@ def test_a_two_letter_value_after_a_short_flag_is_the_old_edge_and_needs_the_pro
     assert outline("mysql -pab") == "mysql -pab"
     assert outline("curl -uab x") == "curl -uab"
     assert outline("mysql -phunter2 -uroot") == "mysql", "a longer value is dropped, as it was"
+
+
+# The wrappers, the find primaries and the read cap, each pinned by value. They were
+# properties of the hook that a mutation of the source left green: doas out of
+# WRAPPERS, a primary out of FIND_FLAGS, the 64 KiB cap moved a character either way.
+WRAPPER_NAMES = "sudo doas env time nohup exec command builtin xargs watch".split()
+# `W A=1 ls -la`. Sudo, env, watch and the reserved word time take NAME=value words
+# before the program, so A=1 is skipped and ls is the program. After the others A=1 is
+# the name of the program to run, it is not a command, and the word after it is only an
+# argument, so nothing but the wrapper is sent.
+AFTER_AN_ASSIGNMENT = {
+    "sudo": "sudo ls -la", "env": "env ls -la", "watch": "watch ls -la", "time": "time ls -la",
+    "doas": "doas", "nohup": "nohup", "exec": "exec", "command": "command", "builtin": "builtin", "xargs": "xargs",
+}
+
+
+def test_the_wrappers_are_these_ten_and_three_of_them_take_assignments():
+    assert jev.WRAPPERS == frozenset(WRAPPER_NAMES) and len(jev.WRAPPERS) == 10
+    assert jev.ASSIGNING == frozenset(("sudo", "env", "watch"))
+    assert set(AFTER_AN_ASSIGNMENT) == set(WRAPPER_NAMES)
+
+
+@pytest.mark.parametrize("wrapper", WRAPPER_NAMES)
+def test_the_word_after_a_wrapper_is_read_as_a_program(wrapper):
+    assert outline("%s ls -la" % wrapper) == "%s ls -la" % wrapper
+    assert outline("%s mytool -x -y" % wrapper) == wrapper, "the program it runs is not a command, so its flags go"
+    assert outline("%s -v ls -la" % wrapper) == "%s -v -la" % wrapper, "a flag of its own ends the read"
+    assert outline("%s ls | %s git -x" % (wrapper, wrapper)) == "%s ls\n%s git -x" % (wrapper, wrapper)
+
+
+@pytest.mark.parametrize("wrapper", WRAPPER_NAMES)
+def test_an_assignment_after_a_wrapper_is_skipped_by_four_of_them_and_is_the_program_name_after_the_rest(wrapper):
+    assert outline("%s A=1 ls -la" % wrapper) == AFTER_AN_ASSIGNMENT[wrapper]
+
+
+def test_a_program_that_is_not_a_wrapper_does_not_pass_its_next_word_on():
+    for program in ("git", "ls", "timeout", "ssh"):
+        assert outline("%s mytool -x" % program) == "%s -x" % program, program
+    assert outline("timeout 5 ls -la") == "timeout -la", "ls is an argument of timeout"
+
+
+FIND_PRIMARIES = (
+    "-name -iname -type -exec -execdir -ok -delete -maxdepth -mindepth -print -print0 -mtime -mmin -size -path "
+    "-regex -newer -perm -user -group -prune -empty"
+).split()
+
+
+def test_the_find_primaries_are_these_twenty_two():
+    assert jev.FIND_FLAGS == frozenset(FIND_PRIMARIES) and len(jev.FIND_FLAGS) == 22
+
+
+@pytest.mark.parametrize("primary", FIND_PRIMARIES)
+def test_a_find_primary_is_kept_beyond_three_letters_and_its_value_is_not(primary):
+    assert outline("find . %s hunter2" % primary) == "find %s" % primary
+    assert outline("find . %s=hunter2" % primary) == "find %s" % primary
+
+
+def test_a_single_dash_word_that_is_not_a_primary_or_three_letters_is_dropped():
+    for word in ("-follow", "-nonexistent", "-names", "-maxdepth5", "-4", "-n5", "-a1", "-x_y", "-"):
+        assert outline("find . %s" % word) == "find", word
+    for word in ("-a", "-ab", "-abc", "-L", "-H"):
+        assert outline("find . %s" % word) == "find %s" % word, word
+
+
+def test_a_function_definition_shows_its_name_only_where_that_is_a_command():
+    """The example CLAUDE.md gives. foo is not installed here, so nothing of the
+    definition is sent; ls is, and the read stops at the parenthesis after it."""
+    assert outline("foo() { rm -rf x; }") == ""
+    assert outline("ls() { rm -rf x; }") == "ls"
+    assert outline("foo() { rm -rf x; }; ls -la") == "", "the read ended at the parenthesis"
+
+
+# The 64 KiB read cap on a command, in literal numbers. The text is cut back to the
+# last blank, newline, ; | or & inside the first 65,536 characters, so a word the cut
+# lands in is never read. Each row puts a word on one side of the line.
+CAP = 65536
+SEPARATOR_CHARS = [" ", "\t", "\n", ";", "|", "&"]
+
+
+def test_a_command_is_read_as_far_as_65536_characters_and_no_further():
+    assert jev.MAX_SCAN == CAP
+    tail = "git push --force"
+    # ls fills indexes 65533 and 65534, a newline closes it at 65535, the last index read.
+    command = "#" * 65532 + "\nls\n" + tail
+    assert command.index("ls") == 65533 and command.index(tail) == 65536
+    assert outline(command) == "ls"
+    # ls fills 65534 and 65535, the last index read, and the newline after it is at 65536,
+    # which is not read, so the word may go on and is dropped.
+    command = "#" * 65533 + "\nls\n" + tail
+    assert command.index("ls") == 65534
+    assert outline(command) == ""
+    # Exactly 65,536 characters is not cut at all, so a word that ends the command is read.
+    command = "#" * 65533 + "\nls"
+    assert len(command) == CAP
+    assert outline(command) == "ls"
+    assert outline("#" * 65533 + "\nls\n") == "", "one character more and the cut lands in it"
+    # Far inside the cap, and far past it.
+    assert outline("#" * 65000 + "\nls -la\n" + "#" * 2000) == "ls -la"
+    assert outline("#" * 70000 + "\nls") == ""
+
+
+@pytest.mark.parametrize("separator", SEPARATOR_CHARS, ids=["blank", "tab", "newline", "semicolon", "pipe", "ampersand"])
+def test_the_cut_falls_back_to_each_kind_of_separator(separator):
+    filler = "A=1 " * 16383
+    assert len(filler) == 65532
+    command = filler + "ls" + separator + "git --force"
+    assert command.index("ls") == 65532 and len(command) > CAP
+    assert outline(command) == "ls"
+
+
+def test_a_command_with_no_separator_before_the_cut_reads_nothing_and_one_with_a_first_word_reads_it():
+    assert outline("x" * 70000) == ""
+    assert outline("ls" * 40000) == ""
+    assert outline("ls " + "x" * 70000) == "ls", "the first word has its blank behind it"
+
+
+# Every input bound the hook enforces, in literal numbers. The tests that came with the
+# bounds were written with the constant on both sides (jev.MAX_WORD, jev.MAX_SCAN), so
+# a changed constant moved the test with it. These say the number.
+
+
+def test_the_outline_stops_at_1995_characters_for_a_tool_named_bash(stub):
+    """2000, less the 4 of Bash and the 1 of the join. The pieces are sized so that
+    one fits exactly and the next is one character too long."""
+    fits = "ls" + " -x" * 663 + " -xy"
+    assert len(outline(fits)) == 1995
+    over = "ls" + " -x" * 662 + " -xy -xy"
+    assert len(outline(over)) == 1992 and outline(over).endswith(" -xy")
+    assert outline(fits + " -z") == outline(fits), "a piece that does not fit ends the text"
+    go(stub, payload(command=fits + " -z"))
+    assert sent_chars(stub) == 1999 and sent_text(stub) == outline(fits)
+
+
+def test_stdin_of_exactly_8_mib_is_read_and_one_character_more_is_refused(stub, project, monkeypatch):
+    limit = 8 * 1024 * 1024
+    base = json.dumps(payload())
+    exactly = base + " " * (limit - len(base))
+    assert len(exactly) == limit
+    rc, out = run_main(monkeypatch, exactly, stub.url)
+    assert rc == 0 and out == "" and ledger(project)[-1]["outcome"] == "answered"
+    rc, out = run_main(monkeypatch, exactly + " ", stub.url)
+    assert rc == 0 and out == "" and ledger(project)[-1]["outcome"] == "bad_input"
+
+
+def test_a_bare_word_of_200_characters_is_a_path_and_one_of_201_is_not(tmp_path):
+    for length in (200, 201):
+        (tmp_path / ("a" * length)).write_text("x")
+    cwd = str(tmp_path)
+    assert outline("cat " + "a" * 200, cwd=cwd) == "cat " + "a" * 200
+    assert outline("cat " + "a" * 201, cwd=cwd) == "cat"
+
+
+def test_64_bare_words_are_looked_at_per_call(tmp_path, monkeypatch):
+    looked = []
+    real = os.path.lexists
+    monkeypatch.setattr(os.path, "lexists", lambda p: looked.append(p) or real(p))
+    outline("cat " + " ".join("w%d" % i for i in range(200)), cwd=str(tmp_path))
+    assert len(looked) == 64
+
+
+def test_a_word_of_64_characters_is_looked_up_and_one_of_65_is_not(tmp_path):
+    for length, kept in ((64, True), (65, False)):
+        directory = tmp_path / ("d" * (length - 7))
+        directory.mkdir()
+        an_executable(directory / "x.sh")
+        word = "./%s/x.sh" % directory.name
+        assert len(word) == length
+        assert outline(word + " --flag", cwd=str(tmp_path)) == ("x.sh --flag" if kept else ""), length
+
+
+def test_sixty_keys_leave_taken_from_the_first_two_hundred_of_the_object():
+    assert jev.field_names({"k%d" % i: i for i in range(300)}) == ["k%d" % i for i in range(60)]
+    keys = {"9bad%d" % i: 0 for i in range(199)}
+    keys["good199"] = 1
+    keys["good200"] = 2
+    assert len(keys) == 201
+    assert jev.field_names(keys) == ["good199"], "the 200th key is looked at and the 201st is not"
+
+
+def test_four_digits_are_allowed_in_a_name_and_five_are_not():
+    assert jev.field_names({"a1234": 1, "a12345": 2, "b1b2b3b4": 3, "b1b2b3b4b5": 4}) == ["a1234", "b1b2b3b4"]
+    assert jev.program_name("tool1234") == "tool1234" and jev.program_name("tool12345") is None
+    assert jev.program_name("/usr/bin/py1234") == "py1234" and jev.program_name("/usr/bin/py12345") is None
+    assert jev.flag_name("--a1234") == "--a1234" and jev.flag_name("--a12345") is None
+    assert jev.flag_name("--a1234=x") == "--a1234"
+
+
+def test_a_field_name_is_30_characters_a_program_name_40_and_a_long_flag_30():
+    assert jev.field_names({"a" * 30: 1, "b" * 31: 2}) == ["a" * 30]
+    assert jev.field_names({"_a": 1, "9a": 2, ".a": 3, "-a": 4, "a_.-": 5}) == ["a_.-"], "a name starts with a letter"
+    assert jev.program_name("a" * 40) == "a" * 40 and jev.program_name("a" * 41) is None
+    assert jev.program_name("9tool") == "9tool" and jev.program_name("_tool") is None
+    assert jev.program_name("a.b_c-d") == "a.b_c-d"
+    assert jev.flag_name("--" + "a" * 30) == "--" + "a" * 30 and jev.flag_name("--" + "a" * 31) is None
+    assert jev.flag_name("--") is None and jev.flag_name("--a") == "--a"
+    for bad in ("---a", "--a-", "--a--b", "--a_b", "--a.b"):
+        assert jev.flag_name(bad) is None, bad
+    assert jev.flag_name("--a-b") == "--a-b"
+
+
+def test_substitutions_are_read_to_a_depth_of_8_and_the_ninth_ends_the_read():
+    def nested(depth):
+        return "echo " + "$(echo " * depth + ")" * depth + "; ls -la"
+    assert jev.MAX_NEST == 8
+    assert outline(nested(8)) == "echo\n" * 9 + "ls -la"
+    assert outline(nested(9)) == "echo"
+
+
+def test_the_ledger_tail_is_256_kib():
+    assert jev.TAIL_BYTES == 262144
+
+
+def deny_line(session="s1", sha="abc"):
+    return json.dumps({"ts": "2026-10-17T18:00:00Z", "session": session, "input_sha": sha, "decision": "deny",
+                       "enforced": True, "outcome": "answered"}, sort_keys=True) + "\n"
+
+
+def filler_line(total):
+    """One JSON line of exactly this many bytes, newline included."""
+    line = '{"pad": "%s"}\n' % ("x" * (total - 12))
+    assert len(line.encode()) == total
+    return line
+
+
+@pytest.mark.parametrize("distance,seen", [(262143, True), (262144, False), (200000, True), (300000, False)])
+def test_a_row_is_seen_when_it_starts_inside_the_last_262144_bytes_and_not_when_it_starts_at_or_before_the_cut(
+        project, distance, seen):
+    """distance is from the start of the deny row to the end of the file. The tail
+    starts at size - 262144; the line that the cut lands in, or that begins exactly
+    at it, is the first line of the tail and is dropped."""
+    deny = deny_line()
+    ledger_with(project).write_text("x\n" + deny + filler_line(distance - len(deny)))
+    size = (project / ".claude" / "ledger" / "jev-route.jsonl").stat().st_size
+    assert size == 2 + distance
+    assert jev.denied_before(jev.ledger_tail(), "s1", "abc") is seen
+
+
+def test_a_ledger_of_exactly_262144_bytes_is_read_whole_and_one_byte_more_drops_its_first_line(project):
+    deny = deny_line()
+    path = ledger_with(project)
+    path.write_text(deny + filler_line(262144 - len(deny)))
+    assert path.stat().st_size == 262144
+    assert jev.denied_before(jev.ledger_tail(), "s1", "abc") is True
+    path.write_text(deny + filler_line(262145 - len(deny)))
+    assert path.stat().st_size == 262145
+    assert jev.denied_before(jev.ledger_tail(), "s1", "abc") is False
+
+
+def test_an_answer_is_read_up_to_1_mib_and_not_beyond(stub, project):
+    body = json.dumps(answer_body(0.1, 0.1)).encode()
+    stub.reply = (200, b" " * (1048576 - len(body)) + body)
+    go(stub)
+    assert ledger(project)[-1]["outcome"] == "answered", "an answer that ends at exactly 1 MiB is read whole"
+    stub.reply = (200, body + b" " * (1048576 - len(body)))
+    go(stub)
+    assert ledger(project)[-1]["outcome"] == "answered"
+    stub.reply = (200, body + b" " * (1048576 - len(body)) + b"x")
+    go(stub)
+    assert ledger(project)[-1]["outcome"] == "answered", "what lies past the 1 MiB is not read"
+    stub.reply = (200, b" " * 1048576 + body)
+    go(stub)
+    assert ledger(project)[-1]["outcome"] == "error", "an answer that starts past it is never seen"
+
+
+def test_the_session_is_written_to_100_characters_and_the_tool_name_to_200(stub, project):
+    go(stub, payload(session="s" * 150))
+    assert ledger(project)[-1]["session"] == "s" * 100
+    go(stub, payload(session="s" * 100))
+    assert ledger(project)[-1]["session"] == "s" * 100
+    go(stub, payload(tool="a;" * 150))
+    row = ledger(project)[-1]
+    assert row["outcome"] == "bad_input" and row["tool"] == "a;" * 100 and len(row["tool"]) == 200
+    go(stub, payload(tool="t" * 120))
+    assert ledger(project)[-1]["tool"] == "t" * 120
+
+
+# More bounds the mutation run found nothing pinning. The deadline is "at or past",
+# the breaker window is 600 seconds with its edges, an answer is a probability from 0
+# to 1 with both ends in, and the hash that names a call is 16 hex digits.
+def test_a_lookup_at_the_very_instant_of_the_deadline_is_out_of_time(monkeypatch):
+    now = 5000.0
+
+    def text(deadline):
+        with monkeypatch.context() as clock:
+            clock.setattr(jev.time, "monotonic", lambda: now)
+            return jev.build_text("Bash", {"command": "ls -la; echo"}, "/nonexistent", "/home/nobody", deadline)
+
+    assert text(now) == "echo"
+    assert text(now + 0.001) == "ls -la\necho"
+    assert text(None) == "ls -la\necho"
+
+
+def test_the_breaker_window_is_600_seconds_and_a_failure_from_the_future_does_not_open_it():
+    def failures(age):
+        ts = jev.stamp(NOW - timedelta(seconds=age))
+        return [{"ts": ts, "outcome": "error", "latency_ms": 5, "error": "TimeoutError"}] * 3
+    assert jev.breaker_open(failures(0), NOW)
+    assert jev.breaker_open(failures(599), NOW)
+    assert not jev.breaker_open(failures(600), NOW)
+    assert not jev.breaker_open(failures(601), NOW)
+    assert not jev.breaker_open(failures(-1), NOW), "a clock that ran backwards does not hold the breaker shut"
+    assert jev.breaker_open(failures(599)[:3], NOW) and not jev.breaker_open(failures(0)[:2], NOW)
+
+
+@pytest.mark.parametrize("better_tool,needs_human,outcome", [
+    (0.0, 0.0, "answered"), (1.0, 1.0, "answered"), (0, 1, "answered"),
+    (1.0000001, 0.5, "error"), (0.5, 1.5, "error"), (2, 0.5, "error"), (0.5, 2, "error"),
+    (-0.0000001, 0.5, "error"), (0.5, -1, "error"),
+])
+def test_an_answer_is_a_probability_from_0_to_1_with_both_ends_in(stub, project, better_tool, needs_human, outcome):
+    stub.answer(better_tool, needs_human)
+    go(stub)
+    assert ledger(project)[-1]["outcome"] == outcome
+
+
+def test_a_tool_name_of_120_characters_is_asked_about_and_one_of_121_is_not(stub, project):
+    go(stub, payload(tool="t" * 120))
+    assert ledger(project)[-1]["outcome"] == "answered" and stub.requests[-1]["body"]["state"]["tool_name"] == "t" * 120
+    go(stub, payload(tool="t" * 121))
+    assert ledger(project)[-1]["outcome"] == "bad_input" and len(stub.requests) == 1
+
+
+def test_the_hash_of_a_call_is_16_hex_digits():
+    digest = jev.input_digest("Bash", {"command": "ls"})
+    assert len(digest) == 16 and set(digest) <= set("0123456789abcdef")
+
+
+def test_the_lexical_path_keeps_a_leading_dotdot_and_takes_one_against_the_name_before_it():
+    assert jev.lexical("../x/..") == ".."
+    assert jev.lexical("../../x/../..") == "../../.."
+    assert jev.lexical("a/../../b") == "../b"
+    assert jev.lexical("/a/../../b") == "/b"
+    assert jev.lexical("x/./y//z/") == "x/y/z"
+    assert jev.lexical("") == "." and jev.lexical("/") == "/" and jev.lexical("//") == "/" and jev.lexical("..") == ".."
+
+
+def test_a_home_directory_that_is_itself_named_tilde_is_still_the_home_directory():
+    assert jev.vet_path("/home/~/x", "/home/~") == "~/x", "the marker is not compared with the account name"
+    assert jev.vet_path("/home/~", "/home/~") == "~"
+    assert jev.vet_path("/srv/~/x", "/home/~") is None, "but the name ~ anywhere else is the account name"
 
 
 # Every reproduction in the verify rounds that was a Bash input and a program name or
@@ -3429,7 +4030,7 @@ def test_a_bare_word_is_a_path_only_when_it_exists(tmp_path):
     (tmp_path / "sub" / "a.py").write_text("x")
     cwd = str(tmp_path)
     assert outline("cat notes.txt missing.txt", cwd=cwd) == "cat notes.txt"
-    assert outline("cat sub/a.py ./sub/a.py sub/b.py", cwd=cwd) == "cat sub/a.py ./sub/a.py"
+    assert outline("cat sub/a.py ./sub/a.py sub/b.py", cwd=cwd) == "cat sub/a.py sub/a.py", "a path is written lexically"
     assert outline("cat %s" % (tmp_path / "notes.txt"), cwd="/nonexistent") == "cat %s" % (tmp_path / "notes.txt")
     assert outline("cat 'notes.txt'", cwd=cwd) == "cat notes.txt"
     assert outline("cat 'no tes.txt'", cwd=cwd) == "cat"
@@ -3477,6 +4078,142 @@ def test_a_home_of_slash_replaces_nothing(stub, monkeypatch):
     monkeypatch.setenv("HOME", "/")
     go(stub, payload(tool="Write", tool_input={"file_path": "/etc/x.conf", "content": "x"}))
     assert sent_text(stub).startswith("path /etc/x.conf\n")
+
+# The home directory is written ~ however the path spells it. Ruled out by the verify
+# rounds: only HOME + "/" was replaced, and //home/alice/x, /home//alice/x and
+# /home/bob/../alice/x are the same directory and let the account name out. The path
+# is read lexically first (no filesystem), and what still holds the account name after
+# that is dropped, because it cannot be mapped.
+HOME_ROWS = [
+    ("/home/alice", "~"),
+    ("/home/alice/", "~"),
+    ("/home/alice/x", "~/x"),
+    ("//home/alice/x", "~/x"),
+    ("///home/alice/x", "~/x"),
+    ("/home//alice/x", "~/x"),
+    ("/home/alice//x", "~/x"),
+    ("/home/./alice/x", "~/x"),
+    ("/home/alice/./x", "~/x"),
+    ("/home/bob/../alice/x", "~/x"),
+    ("/tmp/../home/alice/x", "~/x"),
+    ("/../home/alice/x", "~/x"),
+    ("/home/alice/sub/../x", "~/x"),
+    ("/home/alice/../alice", "~"),
+    ("~", "~"),
+    ("~/", "~"),
+    ("~//x", "~/x"),
+    ("~/./x", "~/x"),
+    ("~/../alice/x", "~/x"),
+    ("~/sub/../x", "~/x"),
+    ("/home/alice/..", "/home"),
+    ("/home/alice/../bob/x", "/home/bob/x"),
+    ("~/../bob/x", "/home/bob/x"),
+    ("/repo//a/../b.txt", "/repo/b.txt"),
+    ("/repo/", "/repo"),
+    ("a//b/./c", "a/b/c"),
+    ("a/../../b", "../b"),
+    ("../x", "../x"),
+    ("./x", "x"),
+    (".", "."),
+    ("a/..", "."),
+    ("/", "/"),
+    ("//", "/"),
+    # A component that only contains the name is another name and is not dropped.
+    ("/home/alice-backup/x", "/home/alice-backup/x"),
+    ("/home/malice/x", "/home/malice/x"),
+    ("/home/alice.d/x", "/home/alice.d/x"),
+    ("/homealice/x", "/homealice/x"),
+]
+UNMAPPABLE = [
+    "/proc/self/root/home/alice/x",
+    "/home/ALICE/x",
+    "/HOME/Alice",
+    "/var/home/alice/x",
+    "/mnt/alice",
+    "/mnt/alice/x",
+    "~alice/x",
+    "~alice",
+    "~ALICE/x",
+    "alice/x",
+    "../alice/x",
+    "a/b/alice",
+    "/home/alice/alice/x",
+    "~/alice",
+    "/home/bob/../alice/../alice/../../alice",
+]
+
+
+@pytest.mark.parametrize("raw,expected", HOME_ROWS)
+def test_the_home_directory_is_a_tilde_however_the_path_spells_it(raw, expected):
+    assert jev.vet_path(raw, "/home/alice") == expected
+
+
+@pytest.mark.parametrize("raw", UNMAPPABLE)
+def test_a_path_that_still_holds_the_account_name_after_the_mapping_is_dropped(raw):
+    assert jev.vet_path(raw, "/home/alice") is None
+
+
+def test_the_account_name_is_the_last_component_of_the_home_directory_only():
+    assert jev.vet_path("/home/alice/x", "/home/alice") == "~/x"
+    assert jev.vet_path("/home/x", "/home/alice") == "/home/x", "home and the other components are not the name"
+    assert jev.vet_path("/srv/data/x", "/srv/data/alice") == "/srv/data/x"
+    assert jev.vet_path("/srv/data/alice/x", "/srv/data/alice") == "~/x"
+    assert jev.vet_path("/srv/data/ALICE/x", "/srv/data/alice") is None
+    assert jev.vet_path("/home/alice/x", "") == "/home/alice/x", "no home, no name to hold back"
+    assert jev.vet_path("~/x", "") == "~/x"
+    assert jev.vet_path("~//x", "") == "~/x"
+    assert jev.vet_path("~/../x", "") == "~/../x", "without a home, ~ is not resolved away"
+    assert jev.vet_path("~", "") == "~"
+
+
+def test_the_sockets_are_dropped_however_the_path_spells_them():
+    for raw in ("/dev/tcp/203.0.113.7/4444", "//dev/tcp/h.example/80", "/./dev/tcp/h.example/80",
+                "/dev//udp/h.example/53", "/x/../dev/tcp/h.example/80", "///dev/udp/h.example/53"):
+        assert jev.vet_path(raw, "/home/alice") is None, raw
+    assert jev.vet_path("dev/tcp/x/y", "/home/alice") == "dev/tcp/x/y", "relative, so not a socket"
+
+
+def test_the_home_directory_is_read_lexically_from_home(monkeypatch):
+    for spelling in ("/home/alice", "/home/alice/", "/home//alice", "/home/./alice/", "/home/bob/../alice"):
+        monkeypatch.setenv("HOME", spelling)
+        assert jev.home_dir() == "/home/alice", spelling
+    for none in ("/", "//", "/.", "/..", "."):
+        monkeypatch.setenv("HOME", none)
+        assert jev.home_dir() == "", none
+
+
+@pytest.mark.parametrize("spelling", ["{p}//alice/notes.txt", "{p}/./alice/notes.txt", "{p}/bob/../alice/notes.txt",
+                                      "/{p}/alice/notes.txt", "{p}/alice/sub/../notes.txt", "{p}/alice//notes.txt"])
+def test_no_spelling_of_the_home_directory_lets_the_account_name_out(stub, tmp_path, monkeypatch, spelling):
+    people = tmp_path / "people"
+    (people / "alice" / "sub").mkdir(parents=True)
+    (people / "bob").mkdir()
+    (people / "alice" / "notes.txt").write_text("x")
+    monkeypatch.setenv("HOME", str(people / "alice"))
+    path = spelling.format(p=str(people))
+    for tool, field in (("Write", "file_path"), ("Edit", "file_path"), ("NotebookEdit", "notebook_path")):
+        go(stub, payload(tool=tool, tool_input={field: path, "content": "x"}))
+        assert sent_text(stub).split("\n")[0] == "path ~/notes.txt", (tool, sent_text(stub))
+        assert "alice" not in sent_everything(stub) and str(people) not in sent_everything(stub)
+    go(stub, payload(command="echo hi > %s" % path, cwd="/nonexistent"))
+    assert sent_text(stub) == "echo ~/notes.txt"
+    assert "alice" not in sent_everything(stub)
+    go(stub, payload(command="cat %s" % path, cwd="/nonexistent"))
+    assert sent_text(stub) == "cat ~/notes.txt"
+    assert "alice" not in sent_everything(stub)
+
+
+def test_a_path_the_account_name_survives_is_not_sent_by_any_tool(stub, tmp_path, monkeypatch):
+    people = tmp_path / "people"
+    (people / "alice").mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(people / "alice"))
+    for tool, field in (("Write", "file_path"), ("Edit", "file_path"), ("NotebookEdit", "notebook_path")):
+        go(stub, payload(tool=tool, tool_input={field: "/proc/self/root%s/notes.txt" % (people / "alice"), "content": "x"}))
+        assert sent_text(stub) == "fields %s content" % field
+        assert "alice" not in sent_everything(stub)
+    go(stub, payload(command="echo hi > /mnt/ALICE/notes.txt; ls -la"))
+    assert sent_text(stub) == "echo\nls -la"
+
 
 
 def test_a_redirect_target_over_200_characters_is_dropped():
@@ -3620,8 +4357,10 @@ def test_field_names_are_the_top_level_keys_in_order_and_nothing_below():
 ])
 def test_a_key_below_the_top_of_the_input_is_the_callers_data_and_never_leaves(stub, tool_input, names):
     """A map keyed by user strings has its secret in a key. The character class
-    cannot tell it from a name, 69 percent of random 24 character tokens fit it,
-    and so nothing below the top level of the input leaves."""
+    cannot tell it from a name, 58 percent of random 24 character alphanumeric
+    tokens fit it (69 when the first character is a letter, which is what the
+    token test below draws), and so nothing below the top level of the input
+    leaves."""
     go(stub, payload(tool="mcp__kv__set", tool_input=tool_input))
     assert sent_text(stub) == "fields " + names
     everything = sent_everything(stub)

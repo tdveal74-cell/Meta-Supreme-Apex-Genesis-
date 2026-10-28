@@ -800,8 +800,10 @@ narrow what runs. Read, Grep and Glob are not matched at all.
 key.** Ruled by Tee 2026-10-28, carrying his earlier ruling that the container
 never holds the TypeSafe key. The module constant `SEND = False` gates every
 request: while it is False the hook makes no request, opens no socket and writes
-an `off` row for each call it sees, and a ledger of `off` rows is the configured
-state and not a fault. Turning it on is a separate ruling and a one line commit,
+an `off` row for each call it can read, and a ledger of `off` rows is the
+configured state and not a fault. Input it cannot read, which is anything that is
+not a JSON object with a tool name, gets a `bad_input` row first, switch or no
+switch. Turning it on is a separate ruling and a one line commit,
 `SEND = True`, as `ENFORCE` is. `test_jev_route.py` pins the shipped value the
 same way and pins the line.
 
@@ -842,30 +844,50 @@ pieces that may leave are these and no others. The tool name. For Bash, each
 program name, each flag name (`-X`, `--force`) and never a flag's value, plus
 the file paths the call names. For Edit, Write and NotebookEdit, the file path
 and the names of the input fields. For every MCP tool, the names of the input
-fields. No value of any kind leaves: not a command argument, a quoted string, a
-heredoc body, an assignment such as `TOKEN=abc`, a header, a file's content or
-an MCP field's value. A piece outside letters, digits and `. _ / ~ -` is
-dropped, not escaped. A path over 200 characters is dropped, the home directory
-is written `~`, and the whole text, tool name included, stops at 2,000
-characters at a piece boundary. A bare word in a command counts as a path only
-when it names something that exists on the machine, so a secret that fits the
-character class cannot pass as one. A redirect target is a path by syntax and
-needs no such test. Only the first 64 KiB of a command is read.
+fields. No value of any kind leaves: not a command argument that is not a path,
+a quoted string, a heredoc body, an assignment such as `TOKEN=abc`, a header, a
+file's content or an MCP field's value. A piece outside letters, digits and
+`. _ / ~ -` is dropped, not escaped. A path over 200 characters is dropped. A
+path is written lexically before anything else is done to it: repeated slashes (a
+leading `//` included) collapse, `.` and `..` are resolved from the text alone,
+so no filesystem is touched and a link is not followed, and a trailing slash
+goes. Then the home directory is written `~`, so `//home/alice/x`,
+`/home//alice/x`, `/home/bob/../alice/x` and `~/../alice/x` are each `~/x`. A
+path that still holds the home directory's last component, the account name, as a
+component of its own after that is a spelling the hook cannot map, and it is
+dropped: `/proc/self/root/home/alice/x`, `/home/ALICE/x`, `/mnt/alice` and
+`~alice/x` do not leave. The comparison ignores case, and a component that only
+contains the name (`alice-backup`) is another name and does leave. The tool name,
+one character for the join and the text stop at 2,000 characters together, at a
+piece boundary, so 1,999 is the most that is sent. A bare word in a command
+counts as a path only when it names something that exists on the machine, and a
+call looks at no more than 64 bare words, so a secret that fits the character
+class cannot pass as one. A redirect target is a path by syntax and needs no such
+test. Only the first 64 KiB of a command is read, cut back to the last blank,
+newline, `;`, `|` or `&` in it, so a word the cut lands in is never read.
 
 The edges, stated so a verifier does not have to find them. A short flag cannot
 be told from a flag with its value stuck to it, so a single dash flag is kept
-only when it is one to three letters, and a two letter value after a one letter
-flag would pass, after a program that is a known command (below); `-phunter2`
-does not. Only the keys of the input object itself leave, never a key below the
-top. Ruled by Tee 2026-10-28 on a card: Top-level only. A key under a parameter
-is the caller's data (a map keyed by ids, names or tokens, a header, an
-environment variable), and a random 24 character token fits the character class
-seven times in ten, so Jev sees `variables` and not the names under it. A top
-level key is dropped when it
-is over 30 characters, outside letters, digits and `_ . -`, or carries more than
-four digits, and a short top level key that is itself a secret would still
-leave. A redirect to `/dev/tcp/HOST/PORT` or `/dev/udp/HOST/PORT` is a socket and
-not a path, so it is dropped. A path that exists and has a secret in its own name
+only when it is one to three letters or is one of the find primaries kept in
+`FIND_FLAGS` (`-name`, `-type`, `-exec`, `-maxdepth` and the other eighteen of
+the twenty two), and a two letter value after a one letter flag would pass, after
+a program that is a known command (below); `-phunter2` does not. A long flag is
+`--` and up to 30 letters, digits and single hyphens, none at either end, with
+no more than four digits in all. A program name is up to 40 letters, digits,
+`.`, `_` and `-`, starts with a letter or a digit, and has no more than four
+digits either. Only the keys of the input object itself leave, never a key below
+the top. Ruled by Tee 2026-10-28 on a card: Top-level only. A key under a
+parameter is the caller's data (a map keyed by ids, names or tokens, a header, an
+environment variable), and a random 24 character alphanumeric token fits the key
+rule 58 times in a hundred, and 69 when it starts with a letter (measured on
+random tokens, not worked out), so Jev sees `variables` and not the names under
+it. A top level key leaves only when it starts with a letter, is made of letters,
+digits and `_ . -`, is 30 characters at most and carries no more than four
+digits; at most 60 keys leave, taken from the first 200 of the object, and a
+short top level key that is itself a secret would still leave. A redirect to
+`/dev/tcp/HOST/PORT` or `/dev/udp/HOST/PORT` is a socket and
+not a path, so it is dropped, however the path spells it (`//dev/tcp/...`,
+`/./dev/tcp/...`, `/x/../dev/tcp/...`). A path that exists and has a secret in its own name
 is a path and leaves. Subcommands do not leave, so Jev sees `git` and
 `--force` and not `push`. Whether Jev can judge anything from so little is not
 known; the ledger is where that gets measured. A flag's name has to be typed
@@ -896,15 +918,26 @@ so the gate cannot be what keeps a value out of a test, and a further test fails
 when a row names a program no test machine has. Nothing is run to find out. A
 lookup is a stat on a path, bash is never started and the list is a constant. A
 word over 64 characters is not looked up, a name is looked up once per call, and a
-call stops looking after 128 distinct names, so a 1 MB command of distinct words
-costs at most 128 names times the directories of `PATH` in stats, and the names
-after the cap are dropped. The test measures that through a real process against
-a `PATH` of 40 directories. The cost, accepted with the ruling: Jev sees less. A
+call stops looking after 128 distinct names. Only the first 128 directories of
+`PATH` are searched, empty entries not counted, so a 1 MB command of distinct
+words costs at most 128 names times 128 directories in stats, 16,384. And no name
+is looked up once the hook has run for one second from the moment it starts
+reading its input (`LOOKUP_BUDGET_S`): a lookup cut off half way finds nothing,
+and the names after that moment are dropped, builtins and reserved words
+excepted, which need no lookup. The names after any of the three caps are dropped.
+The first version of this paragraph had the name cap and not the directory cap or
+the deadline, and measured against a `PATH` of 40 directories: against a `PATH`
+of 10,000 directories the same 1 MB command was 1.28 million stats and 45 seconds
+on this container, and the hook is killed at 5 seconds and leaves no row. The test
+now runs 10,000 real directories through a real process, written as relative
+names because one environment variable is capped at 128 KiB, and pins the stat
+count and the deadline apart. The cost, accepted with the ruling: Jev sees less. A
 script, a tool or a program named by a path that is not installed where the hook
 runs is dropped with its flags, so the same call can read thinner in one
 container than in another, a program named by a path over 64 characters is
-dropped even when it exists, and a name first seen after the 128th lookup is
-dropped even when `PATH` has it. A program that is installed, such as `git` or
+dropped even when it exists, a name first seen after the 128th lookup is
+dropped even when `PATH` has it, and so is a command that lives only in the 129th
+directory of `PATH` or later. A program that is installed, such as `git` or
 `curl`, is unchanged. The edge: a secret that is itself the name of an installed
 command still leaves when the reader takes it for a program, because the gate asks
 whether a word is a command and not whether it is a secret, so a value that is
@@ -919,7 +952,7 @@ escaped quote, a double quote nested inside `$( )` inside a double quoted string
 `git commit -m "$(cat <<'EOF' ... )"` idiom), the tail of a quoted string after
 `sudo`, `watch` or `time`, and any word after a closing `)` or backtick were
 each read as a program, and the first word of each went out. It now reads simple
-commands, pipelines and lists, `if`, `while`, `until`, `for`, brace groups,
+commands, pipelines and lists, `if`, `while`, `until`, `for`, `select`, brace groups,
 subshells, quotes and escapes, `$( )`, backticks and `<( )` with their own quote
 state at any nesting up to 8, redirects including `&>` and `&>>`, heredocs and
 here-strings. It reads past, without looking inside, `$(( ))`, `(( ))`, `[[ ]]`,
@@ -967,8 +1000,10 @@ and when it is typed bare the body is expanded, so a body line that ends in an o
 number of backslashes is joined to the next before it is compared with the
 delimiter, as bash does. It stops, drops the rest of the command and sends what
 it had read before that point, at a `case`, a `[[` that does not begin a command,
-a function definition, a coprocess, an extglob group, a `${ }` with a quote or a
-nested expansion in it, arithmetic with a quote in it, the legacy `$[ ]`
+a function definition, a coprocess, an extglob group, a `${ }` with a quote, a
+backslash, a backtick, a brace or a newline in it or a `$` followed by `(`, `{`,
+`'` or `"` (a plain `$Y` is read past), arithmetic with a quote, a backtick or a
+backslash in it or parentheses that do not pair, the legacy `$[ ]`
 arithmetic, a backslash inside backticks, a line continuation inside an operator
 (`<\` then `<EOF` is a heredoc once bash joins the lines), a here-document
 delimiter with an expansion in it, a here-document delimiter that runs into `<(`
@@ -1003,7 +1038,10 @@ a reserved word only when it is typed bare with nothing read ahead of it on its
 command: `"FOO=bar"`, `\if`, `FOO=bar if` and `> f if` are each a command name
 and the word after is its argument, as bash has it. The cost is fidelity and not
 secrecy: a command that stops early shows Jev less, and `foo() { rm -rf x; }`
-shows `foo` and not the `rm`. A bare `case`, or a `[[` away from the start of a
+shows nothing, or `foo` where a command by that name is installed (the read stops
+at the parenthesis, and `foo` is sent only if the gate knows it), and never the
+`rm`. This example said `foo` and not the `rm` until the known commands gate
+changed it. A bare `case`, or a `[[` away from the start of a
 command, that bash reads as an ordinary argument, as in `grep case src`, costs
 the commands after it for the same reason. This paragraph said the cost of a
 bare `[[` was fidelity and not secrecy until the skip to its `]]` was found to
@@ -1065,8 +1103,34 @@ puts `HTTP/1.0` on the `CONNECT` line up to 3.11 and `HTTP/1.1` from 3.12, and t
 tests had the second written into them, so the file passed on 3.12 and 3.13 and
 would have gone red in CI. They compare the host and the port now.
 
-It ships in shadow mode, `ENFORCE = False`: it asks, records the answer and
-prints nothing. Enforcement is a separate ruling and a one line commit, and
+Round 8, on 2026-10-28, was the nits that independent verifiers raised several
+times each. Each was reproduced first, fixed at its root and given a test that
+fails on the old code. A `PATH` of 10,000 directories ran the lookups to 45
+seconds (the known commands paragraph above). A ledger line nested past the JSON
+parser, 60,000 brackets, raised `RecursionError`, which `ledger_tail()` did not
+catch, so one such line in the last 256 KiB turned every call into a `crash` row
+until it aged out. The home directory was written `~` only for the exact spelling
+`HOME` plus `/`, and `//home/alice/x`, `/home//alice/x` and `/home/bob/../alice/x`
+let the account name out (the path rules above). The model string from the answer
+went into the ledger as it came, 5,012 characters with an escape in it in the
+reproduction. The unpinned properties were found by mutation: every bound in the
+hook, each moved one step either way, and the suite run against each. Of 143
+mutants of the bounds and of the lookup and path code, 80 survived the suite with
+the tests for the first four nits in it. They included the 64 KiB cap, `doas` in
+the wrappers, the find primaries, the 8 MiB input cap, the 256 KiB ledger tail,
+the 1 MiB answer cap, the 60 and 200 key limits, the four digit limit, the
+breaker window and the two ends of a probability. Tests now say each number
+literally. 17 mutants still survive: 3 are constants that the shipped numbers test
+pins by value, 3 are one of two bounds that each hold the property (`MAX_PATH`
+and the `PIECE` pattern, `FIELD` and `MAX_FIELD_LEN`), 2 are the factor in the
+millisecond conversion of the latency, and 9 are equivalent mutants, each
+compared with the original and found to differ nowhere: on generated inputs for
+eight, and for the ninth, a read of `MAX_STDIN + 2` characters, on inputs from one
+under the cap to a thousand over it. The reader's own index arithmetic was not mutated; its reproductions are
+the tests above.
+
+It ships in shadow mode, `ENFORCE = False`: once `SEND` is on it asks, records the
+answer and prints nothing, and until then it asks nothing. Enforcement is a separate ruling and a one line commit, and
 `test_jev_route.py` pins the shipped value so a fixture cannot flip it quietly.
 A deny recorded in shadow mode never counts toward the repeat pass described
 below, so flipping the flag starts every session clean.
@@ -1074,8 +1138,13 @@ below, so flipping the flag starts every session clean.
 It fails open and it is fast. The whole hook, request included, is held inside
 2.5 seconds of its 5 second timeout whatever the input: the request gets what is
 left once 0.6 of a second is set aside for start up and the ledger write, and
-`test_jev_route.py` feeds a 1 MB command through a real process to measure it.
-With `SEND` off, a refused host, a redirect, the deadline passing, an HTTP error
+`test_jev_route.py` feeds a 1 MB command through a real process to measure it,
+against a `PATH` of 10,000 directories as well as a short one. That sentence was
+untrue of a long `PATH` until the lookups got a directory cap and a deadline (the
+known commands paragraph above), which are why the outline is built inside its
+second of the budget. A line of the ledger that is not JSON, or is nested deeper
+than the parser will follow, is skipped when the tail is read, like any other bad
+line, and does not stop the call. With `SEND` off, a refused host, a redirect, the deadline passing, an HTTP error
 (a 401 from a proxy that added no key among them), a malformed answer, input
 that is not JSON, input over 8 MiB or a tool name outside the character class,
 the call runs exactly as it would without the hook, so a quiet hook proves
@@ -1089,10 +1158,18 @@ that file is the only evidence that Jev decided anything. The outcome is
 that made a request carries the latency. A row that made no request neither adds
 to the failure streak nor ends it. A deny prints only after its row is written,
 because that row is what lets the identical call through the second time once
-enforcement is on. The ledger holds a hash of the raw call, so "identical" means
-identical input, and the count of characters sent. It holds no copy of the
-input. An ask is asked every time and a different call is never passed by a deny
-of another.
+enforcement is on. A row holds the time, the session id (cut at 100 characters),
+the tool name (cut at 200), whether the hook was enforcing, the decision and the
+outcome. A row that got as far as the outline also holds a hash of the raw call,
+so "identical" means identical input, and `sent_chars`, the length of the tool
+name and the outline as built. That is what was sent only on a row that made a
+request. A `repeat_pass` or `breaker_open` row carries the length of an outline
+that was built and then not sent, and an `off`, `bad_input` or endpoint refused
+row carries none. The model is written as the answer named it only when it is
+`jev-` and up to 36 letters, digits, dots and hyphens, 40 characters at most, and
+as `unrecognised` otherwise; the answer itself still counts. A row holds no copy
+of the input. An ask is asked every time and a different call is never passed by
+a deny of another.
 
 It cannot pick a tool, choose a path or retry. Jev answers typed questions and
 writes no text, and no hook can swap one tool for another. It sits beside the
