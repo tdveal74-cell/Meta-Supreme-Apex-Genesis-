@@ -1,17 +1,23 @@
-# TQO FINAL V5 compliance nodes
+# TQO FINAL V5 compliance checks
 
-Do not paste the three `*.js` files in this folder into n8n. They are PR #367
-as written on 2026-10-17 against export `9320520f`, plus a Quality90 layer
-staged here on 2026-10-21 that is not the one that went live. Pasting them
-would roll back the live Quality90 controls.
+These tests run behaviour checks on the LIVE node code, read from
+`../exports/qEkGOUsNyVaRAmm6_active.json`. Nothing in this folder is pasted into
+n8n. The candidate patches that used to live here (PR #367 and its rebuild) have
+been published, and the copies and replacement lists are deleted.
 
-The live workflow was re-imported on 2026-10-21 as version `dd734ea2`
-without #367. What goes into n8n now is `rebuild/draft/`, built on the live
-bodies in `rebuild/live/` and pinned by `rebuild/live/manifest.json`. Read the
-live `activeVersionId` before writing anything: if it has moved past
-`dd734ea2`, rebuild on the new version first.
+- `compliance.test.mjs` drives OS 28: Publish Gate, Script: Fill Run Fields and
+  QC Doctor Gate with synthetic rows: the C4 line in the first three lines, the
+  title laws, the 90 floors, the script doctor verdict on the real data table
+  shapes, and the universal acceptance contract.
+- `rebuild/rebuild.test.mjs` runs the same laws plus Preflight: Can This Clear?,
+  including that Preflight agrees with the two gates it mirrors.
+- `rebuild/mutants.py` proves `rebuild.test.mjs` can fail: it breaks one rule at
+  a time in a temporary copy of the export. Run it after any change to the test.
 
-- `compliance.test.mjs` still pins the old files to the old export, as a record.
-- `rebuild/rebuild.test.mjs` is the test for what goes live. It runs in CI.
-- `rebuild/mutants.py` proves that test can fail. Run it after any change to
-  `rebuild/`.
+Since 2026-10-28 (ruled by Tee, "Drop the AI review from the publish gate") the
+AI review receipt gates nothing. Authorship is the human approval
+`approved:<sha256 of the script>`; the script slot of the QC Doctor Gate is the
+script doctor verdict at a floor of 90. The tests assert that behaviour.
+
+After a new export, run both tests. A failure means live code changed a rule
+these tests protect: read it before editing the test.
