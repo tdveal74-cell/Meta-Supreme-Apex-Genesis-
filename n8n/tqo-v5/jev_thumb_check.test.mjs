@@ -397,16 +397,11 @@ assert.ok(verdictEdge, "Jev: Thumb Verdict declares TEXT_RIGHT as (72 + budget) 
 const TEXT_RIGHT = (72 + Number(verdictEdge[1])) / 1280;
 assert.equal(read("jev_thumb_check_verdict.js"), exportCode("Jev: Thumb Verdict"), "jev_thumb_check_verdict.js is the live Verdict, byte for byte");
 
-// FINDING, kept failing on purpose. The verdict's right edge must be the layout's
-// designed right edge, or "the headline runs off the dark panel" is judged
-// against a line the layout can no longer draw. Live, the verdict still uses the
-// old 700 px budget (0.603125) while Pick Still keeps lines inside 680 px
-// (0.5875). Recorded here and thrown at the end of the file, so every check below
-// still runs against the verdict's real edge.
-const deferred = [];
-try {
-  assert.equal(TEXT_RIGHT, DESIGNED_RIGHT, "Jev: Thumb Verdict TEXT_RIGHT equals the layout's designed right edge, (72 + TEXT_BUDGET) / 1280");
-} catch (e) { deferred.push(e); }
+// The verdict's right edge must be the layout's designed right edge, or "the
+// headline runs off the dark panel" is judged against a line the layout can no
+// longer draw. It read 700 px (0.603125) against the layout's 680 (0.5875) until
+// 2026-10-28, when Tee ruled on a card to fix the live node.
+assert.equal(TEXT_RIGHT, DESIGNED_RIGHT, "Jev: Thumb Verdict TEXT_RIGHT equals the layout's designed right edge, (72 + TEXT_BUDGET) / 1280");
 
 // Each threshold, one step either side, against the verdict's own edge.
 const withBox = (edit) => verdict(response({ box: { ...CLEAN_BOX, ...edit } }));
@@ -414,10 +409,10 @@ assert.equal(withBox({ right: TEXT_RIGHT - 0.001 }).jevThumbNote, null);
 assert.equal(withBox({ right: TEXT_RIGHT }).jevThumbNote, null, "exactly at the designed edge is not over it");
 assert.equal(withBox({ right: TEXT_RIGHT + 0.001 }).jevThumbNote, NOTE.runsOff);
 assert.equal(withBox({ right: 0.97 }).jevThumbNote, NOTE.runsOff);
-// A box that ends past the scrim (760 px, 0.59375) and inside the verdict's own
-// edge is not noted as running off. These pin the verdict's code as it is.
-assert.equal(withBox({ right: 0.595 }).jevThumbNote, null);
-assert.equal(withBox({ right: 0.6 }).jevThumbNote, null);
+// A box that ends past the scrim (760 px, 0.59375) is past the designed edge
+// too, so it is noted. Under the old 700 px edge these two were silent.
+assert.equal(withBox({ right: 0.595 }).jevThumbNote, NOTE.runsOff);
+assert.equal(withBox({ right: 0.6 }).jevThumbNote, NOTE.runsOff);
 assert.equal(withBox({ bottom: 0.95 }).jevThumbNote, null);
 assert.equal(withBox({ bottom: 0.951 }).jevThumbNote, NOTE.edge);
 assert.equal(withBox({ top: 0.02 }).jevThumbNote, null);
@@ -846,12 +841,6 @@ assert.ok(shimLines.slice(applyAt).some((l) => l.includes("$('Jev: Thumb Verdict
 // Plain ASCII in every file this check touches.
 for (const file of ["jev_thumb_check_body.js", "jev_thumb_check_verdict.js", "shim_thumbnail_to_binary.js", "jev_thumb_check.test.mjs"]) {
   assert.doesNotMatch(read(file), /[^\x00-\x7f]/, file + " is plain ASCII");
-}
-
-// The deferred findings fail the run, after everything else has been checked.
-if (deferred.length) {
-  for (const e of deferred) console.error("FAILED: " + e.message + "\n  verdict " + e.actual + ", layout " + e.expected);
-  throw deferred[0];
 }
 
 console.log("Jev thumbnail check: every case behaves");

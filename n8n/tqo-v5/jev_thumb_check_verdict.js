@@ -25,7 +25,7 @@
 //                                box beside an absent headline therefore still
 //                                gives this note. headline_readable is not read
 //                                either.
-//   otherwise, box right edge above TEXT_RIGHT (0.603125)
+//   otherwise, box right edge above TEXT_RIGHT (0.5875)
 //                                the headline runs off the dark panel. The
 //                                threshold is the designed right edge of the
 //                                text, not the scrim edge: see TEXT_RIGHT.
@@ -50,14 +50,15 @@
 //
 // TEXT_RIGHT is the designed right edge of the headline text, as a fraction of
 // the 1280 px frame. Thumb: Compose draws the headline at x 72 and Thumb: Pick
-// Still wraps it to a 700 px budget (floor(700 / (size * 0.52)) characters), so a
-// full line ends near x 772. The dark panel (scrim) ends at x 760, a little
-// inside that, so the scrim edge is not the line between "inside the design" and
-// "ran off": 760 / 1280 would flag a full line that is laid out as designed.
+// Still wraps it to TEXT_BUDGET, 680 px measured from Arial's advance widths, so
+// a full line ends at or before x 752, inside the dark panel (scrim) that ends
+// at x 760. It read 700 until 2026-10-28, when Tee ruled on a card to follow the
+// layout: the layout had moved to 680 and this line had not, so the note fired
+// about 20 px late.
 // This is a STARTING VALUE to tune from shadow data, not a measured one.
 // jev_thumb_check.test.mjs reads the export and fails when the compositor's
 // position, width or budget moves without this line.
-const TEXT_RIGHT = (72 + 700) / 1280;
+const TEXT_RIGHT = (72 + 680) / 1280;
 const EDGE_LOW = 0.02;
 const EDGE_BOTTOM = 0.95;
 const HALF = 0.5;

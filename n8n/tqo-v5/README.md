@@ -86,8 +86,8 @@ row and fails when either row drifts from the export of the same role.
 
 | version | id | nodes |
 |---|---|---|
-| active | `e98e09b9` | 297 nodes |
-| draft | `e98e09b9` | 297 nodes |
+| active | `51a807f7` | 297 nodes |
+| draft | `51a807f7` | 297 nodes |
 
 Regenerated 2026-10-28 at `e98e09b9`, after the export had trailed production
 since `9320520f` through several publishes. That version is the one Tee ruled
@@ -96,6 +96,9 @@ that answered NCO Forge (`UCqDxdm1tFEtQg-uiEhUT_gg`) with `ncoYouTubeReady`
 true, and the quality90 AI review no longer blocks publish in `Preflight: Can
 This Clear?`, `QC Doctor Gate` or `OS 28: Publish Gate`. The script doctor at
 90 carries the script slot, and the approval stays bound to the script hash.
+Published again the same evening as `51a807f7` on a third card: `Jev: Thumb
+Verdict` now judges the headline's right edge at the layout's 680 px budget
+instead of the old 700, so its shadow note no longer fires 20 px late.
 
 Every webhook path and webhook id in the exports reads `redacted`. The Gumroad
 sale ping carries no authentication, so its random path suffix is the only
