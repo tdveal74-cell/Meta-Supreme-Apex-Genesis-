@@ -35,15 +35,26 @@ What leaves the container, and nothing else:
     any other tool (every MCP tool)
                the names of the input fields, never a value
 
+The input fields are the keys of the input object itself and no others. A key
+below the top is the caller's data: a map keyed by ids, names or tokens, a
+header, an environment variable. The character class cannot tell one from a
+field name, so none of them leaves.
+
 A piece outside the character class [A-Za-z0-9._/~-] is dropped, not escaped.
-A path over MAX_PATH characters is dropped. The home directory is written as ~.
+A path over MAX_PATH characters is dropped. /dev/tcp/HOST/PORT and
+/dev/udp/HOST/PORT are sockets and not paths, and are dropped. The home directory
+is written as ~.
 The whole text, tool name included, stops at MAX_OUT characters at a piece
 boundary. Nothing is ever cut out of a longer string, because no longer string
 is ever sent.
 
 In a Bash command a word is read only as one of: the program (first word of a
 command, or the word after sudo, env and the like), a flag, the target of a
-redirect, or a path. A word that is none of those, a quoted string, a heredoc
+redirect, or a path. NAME=value before the program is skipped only after env,
+sudo, watch and the reserved word time. After nohup, exec, command, builtin,
+xargs, doas, and time typed after an assignment, a redirect or a quote (then it
+is /usr/bin/time), NAME=value is the name of the program to run, and the word
+after it is an argument. A word that is none of those, a quoted string, a heredoc
 body, an assignment like TOKEN=abc, a here-string and a comment are all read
 past and never sent. A bare word counts as a path only when it names something
 that exists on this machine, so a secret that happens to fit the character
@@ -74,15 +85,24 @@ return is part of a word, as it is in bash. A line continuation is not there:
 bash removes it before it reads a token, so the reader steps over it between
 words, joins what is on both sides of it inside a word and counts it as no quote,
 and a program, a keyword or an assignment split or preceded by one is still that.
-A bare case or [[ is read as what it is wherever it stands, because the words
-after a case pattern and the operands of [[ ]] are data that look like commands,
-and a reader that has lost its place would send them. A here-document delimiter
-is literal text: it is not resolved, and one with an expansion in it ends the
-read. When it is typed bare the body is expanded, so a body line that ends in an
-odd number of backslashes is joined to the next one before it is compared with
-the delimiter, as bash does. A line continuation inside an operator, a function
-definition, a coprocess, the legacy $[ ] arithmetic and a subshell after an
-assignment or a redirect are not modelled and end the read.
+A bare case ends the read wherever it stands, because the words after a case
+pattern are data that look like commands, and so does a bare [[ that does not
+begin a command or follow the reserved word time: read there it is an argument
+(echo [[), or the reader has lost its place, and the text after it is not an
+expression. A [[ that does begin a command is read to its ]] without looking in,
+except that a $( ) or a pair of backticks is read as the command list it is, and
+a # that begins a word is a comment, which runs nothing. $$ is the process id: a
+( or a { after the pair is text. A $( ), a <( ) and a pair of backticks are parsed
+apart from the command around them, so a here-document the outer command waits
+for does not take its body from a newline inside one, and one the list leaves
+pending when it closes ends the read. A subshell is part of the outer parse. A
+here-document delimiter is literal text: it is not resolved, and one with an
+expansion in it ends the read. When it is typed bare the body is expanded, so a
+body line that ends in an odd number of backslashes is joined to the next one
+before it is compared with the delimiter, as bash does. A line continuation
+inside an operator, a function definition, a coprocess, the legacy $[ ]
+arithmetic and a subshell after an assignment or a redirect are not modelled and
+end the read.
 
 Building the text is linear. Only the first MAX_SCAN characters of a command
 are read, no regex has a nested or adjacent unbounded quantifier, and the
@@ -141,9 +161,7 @@ MAX_STATS = 64
 MAX_FIELDS = 60
 MAX_FIELD_LEN = 30
 MAX_DIGITS = 4
-MAX_NODES = 5000
 MAX_FANOUT = 200
-MAX_DEPTH = 8
 MAX_NEST = 8
 TAIL_BYTES = 256 * 1024
 BREAKER_ERRORS = 3
@@ -227,6 +245,14 @@ UNMODELLED = frozenset(("function", "coproc"))
 # Programs whose next word is a program too. timeout and nice are left out on
 # purpose: their next word is a number.
 WRAPPERS = frozenset(("sudo", "doas", "env", "time", "nohup", "exec", "command", "builtin", "xargs", "watch"))
+# Of those, the ones that take NAME=value words before the program: sudo, env and
+# watch do, and so does the reserved word time. For nohup, exec, command, builtin,
+# xargs, doas and the program /usr/bin/time, NAME=value is the program's name, it
+# fails, and the word after it is only an argument.
+ASSIGNING = frozenset(("sudo", "env", "watch"))
+# Bash opens a socket for a redirect to these two, so what follows is a host and a
+# port, never a file.
+SOCKET_PATHS = ("dev/tcp/", "dev/udp/")
 FIND_FLAGS = frozenset((
     "-name", "-iname", "-type", "-exec", "-execdir", "-ok", "-delete", "-maxdepth", "-mindepth",
     "-print", "-print0", "-mtime", "-mmin", "-size", "-path", "-regex", "-newer", "-perm", "-user",
@@ -253,8 +279,13 @@ def home_dir():
 
 
 def vet_path(raw, home):
-    """A path piece with the home directory as ~, or None."""
+    """A path piece with the home directory as ~, or None. /dev/tcp/HOST/PORT and
+    /dev/udp/HOST/PORT are not paths: bash connects to the host, and the text
+    after the prefix is a destination, which the character class cannot tell
+    from a file name."""
     if not isinstance(raw, str) or not 0 < len(raw) <= MAX_PATH:
+        return None
+    if raw.startswith("/") and raw.lstrip("/").startswith(SOCKET_PATHS):
         return None
     if home and (raw == home or raw.startswith(home + "/")):
         raw = "~" + raw[len(home):]
@@ -297,6 +328,21 @@ def program_name(word):
         return None
     base = word.rsplit("/", 1)[-1]
     return base if PROGRAM.fullmatch(base) and few_digits(base) else None
+
+
+def wrapper_kind(name, keyword=False):
+    """How the word after a program is read. False when the program runs nothing
+    else. "plain" when the next word that is not a flag is a program. "assigns"
+    when NAME=value words may come first: env, sudo and watch. "time" for the
+    reserved word time, which takes them too and after which a command begins
+    again, so a [[ there is a test. keyword is True only for time typed bare as
+    the first word of a command: /usr/bin/time, which it is after an assignment,
+    a redirect or a quote, is a plain wrapper whose NAME=value is the program."""
+    if keyword:
+        return "time"
+    if name in ASSIGNING:
+        return "assigns"
+    return "plain" if name in WRAPPERS else False
 
 
 def flag_name(word):
@@ -366,12 +412,14 @@ class Shell:
     lists, brace groups and subshells, quotes and escapes, $( ), backticks and
     <( ), redirects including &> and &>>, heredocs and here-strings, and it
     reads past $(( )), (( )), [[ ]], ${ }, $' ' and the literal of an array
-    assignment without looking inside. A case statement, a function
-    definition, a coprocess, an extglob group, the legacy $[ ] arithmetic, a line
-    continuation inside an operator, a here-document delimiter with an expansion
-    in it, a subshell after an assignment or a redirect, a quote nested in a way
-    it cannot follow, or a quote or an escape the text ends inside, ends the
-    read. A line continuation between or inside words is stepped over."""
+    assignment without looking inside. A case statement, a [[ that does not
+    begin a command, a function definition, a coprocess, an extglob group, the
+    legacy $[ ] arithmetic, a line continuation inside an operator, a
+    here-document delimiter with an expansion in it, a here-document left
+    pending by a $( ), a subshell after an assignment or a redirect, a quote
+    nested in a way it cannot follow, or a quote or an escape the text ends
+    inside, ends the read. A line continuation between or inside words is
+    stepped over."""
 
     def __init__(self, text, out, cwd, home):
         self.t, self.n, self.i = text, len(text), 0
@@ -496,15 +544,27 @@ class Shell:
             else:
                 break
 
-    def substitution(self, closer):
-        """A command list inside $( ), ( ) or backticks, read with its own quote
-        state. The command around it is put back afterwards. One that cannot be
-        read to its closer sends nothing: a list that never closes is not known to
-        be a list."""
+    def substitution(self, closer, subshell=False):
+        """A command list inside $( ), ( ), <( ) or backticks, read with its own
+        quote state. The command around it is put back afterwards. One that cannot
+        be read to its closer sends nothing: a list that never closes is not known
+        to be a list.
+
+        A $( ), a <( ) and a pair of backticks are parsed apart from the command
+        around them, so a here-document the outer command is waiting for does not
+        take its body from a newline inside one: the body starts at the newline
+        after the whole line, and a delimiter-only line inside is only a command
+        named after it. The list gets a here-document list of its own, and one it
+        leaves pending when it closes ends the read, because where bash then
+        takes the body from is not something this reader models. A subshell, which
+        is subshell=True, is part of the outer parse and shares the list."""
         if len(self.frames) >= MAX_NEST:
             self.halt()
             return
         outer = self.saved()
+        waiting = self.heredocs
+        if not subshell:
+            self.heredocs = []
         mark = self.out.mark()
         self.reset()
         self.frames.append(closer)
@@ -512,8 +572,13 @@ class Shell:
         self.frames.pop()
         self.out.newline()
         self.restore(outer)
+        left = [] if subshell else self.heredocs
+        if not subshell:
+            self.heredocs = waiting
         if not found:
             self.out.rewind(mark)
+            self.halt()
+        elif left:
             self.halt()
 
     def paren(self):
@@ -538,7 +603,7 @@ class Shell:
                 self.skip = True
         elif self.program is None and not self.skip and not self.prefixed:
             self.i = i + 1
-            self.substitution(")")
+            self.substitution(")", subshell=True)
             self.skip = True
         else:
             self.halt()
@@ -615,6 +680,14 @@ class Shell:
             # cannot say what the delimiter is, and it does not run the text.
             return self.halt()
         buf.append("$")
+        if t.startswith("$", i + 1):
+            # $$ is the process id, one parameter. Bash does not look for a ( or a
+            # { after the pair: "$$(x y)" is the number and the text (x y), and
+            # nothing in it runs. Pairs are taken left to right, so "$$$(x)" is the
+            # number and then a substitution, as it is in bash.
+            if t.startswith("\\\n", i + 2):
+                return self.halt()
+            return i + 2
         if t.startswith("\\\n", i + 1):
             # $\ then ( or { is an expansion once bash joins the lines.
             return self.halt()
@@ -659,6 +732,11 @@ class Shell:
                     buf.append(nxt)
                 elif nxt != "\n":
                     buf.append("\\" + nxt)
+                i = j + 2
+            elif c == "$" and t.startswith("$", j + 1):
+                # The process id: the pair is one parameter and a ( after it is
+                # text. Without this the second $ is read as the start of $( ).
+                buf.append("$")
                 i = j + 2
             elif c == "`" or t.startswith(("$(", "${", "$["), j):
                 i = self.special(j, buf)
@@ -737,12 +815,24 @@ class Shell:
 
     def skip_test(self, i):
         """From after [[ to after the ]] that closes it. Operators and a regular
-        expression can hold ( ) | & < >, so only the closing ]] word ends it."""
+        expression can hold ( ) | & < >, so only the closing ]] word ends it. A
+        # that begins a word is a comment to the end of the line, as it is in
+        bash, and a $( ) or backticks in it run nothing, so it is read past
+        without looking in. One after an operator or a parenthesis may be a
+        comment or the middle of a regular expression, and ends the read."""
         t, n = self.t, self.n
         boundary = False
         while i < n:
             if boundary and t.startswith("]]", i) and t[i + 2:i + 3] in ("", " ", "\t", "\n", ";", "&", "|", ")"):
                 return i + 2
+            if t[i] == "#":
+                if boundary:
+                    j = t.find("\n", i)
+                    i = n if j < 0 else j
+                    boundary = False
+                    continue
+                if t[i - 1] in "()&|<>;":
+                    return self.halt()
             j = self.special(i, [])
             if self.halted:
                 return n
@@ -847,18 +937,25 @@ class Shell:
         """One resolved word. quoted_at is where its first quote, escape or
         expansion begins, as word() reports it."""
         if quoted_at is None:
-            # These two are read wherever they are typed bare, whatever the reader
-            # makes of the command around them: a case pattern and an operand of
-            # [[ ]] are data that look like commands, and a reader that has lost
-            # its place (after time -p, in a function body or a coprocess, past a
-            # line continuation) would send them. A bare case or [[ that bash
-            # reads as an ordinary argument costs the commands after it, which is
-            # fidelity and not secrecy.
+            # These two are acted on wherever they are typed bare, whatever the
+            # reader makes of the command around them: a case pattern and an
+            # operand of [[ ]] are data that look like commands, and a reader that
+            # has lost its place (after time -p, in a function body or a
+            # coprocess) would send them. A case ends the read. A [[ begins a test
+            # only where a command begins, and after the reserved word time. Read
+            # anywhere else it is an argument (echo [[, type [[) or something the
+            # reader does not follow, and the text after it is not an expression:
+            # skipping to a ]] would read a comment or a here-document body as
+            # commands. It ends the read as a case does, which costs the commands
+            # after it, fidelity and not secrecy.
             if word == "case":
                 self.halt()
                 return
             if word == "[[":
-                self.test_expression()
+                if (self.program is None and not self.prefixed and not self.skip) or self.wrapper == "time":
+                    self.test_expression()
+                else:
+                    self.halt()
                 return
         if self.skip:
             return
@@ -882,16 +979,22 @@ class Shell:
             name = program_name(word)
             if name:
                 self.out.add(name)
-            self.wrapper = name in WRAPPERS
+            self.wrapper = wrapper_kind(name, word == "time" and quoted_at is None and not self.prefixed)
             return
         if self.wrapper:
-            if assignment(word, quoted_at):
+            # Only some wrappers take NAME=value: after the others it is the name
+            # of the program to run, which fails, and the word after it is an
+            # argument and not a program.
+            if self.wrapper != "plain" and assignment(word, quoted_at):
+                if self.wrapper == "time":
+                    # After an assignment a [[ is a command name and not a test.
+                    self.wrapper = "assigns"
                 return
             if not word.startswith("-"):
                 name = program_name(word)
                 if name:
                     self.out.add(name)
-                self.wrapper = name in WRAPPERS
+                self.wrapper = wrapper_kind(name)
                 return
             self.wrapper = False
         if word == "--":
@@ -935,28 +1038,20 @@ def shell_pieces(command, out, cwd, home):
 
 
 def field_names(value):
-    """The dict keys of a JSON value that are plain names, shallowest first.
-    Never a value. A key that is long, or carries more than MAX_DIGITS digits,
-    or leaves the character class, is data and is dropped."""
-    names, seen = [], set()
-    stack, visited = [(value, 0)], 0
-    while stack and visited < MAX_NODES and len(names) < MAX_FIELDS:
-        node, depth = stack.pop()
-        visited += 1
-        if isinstance(node, dict):
-            children = []
-            for key, child in itertools.islice(node.items(), MAX_FANOUT):
-                if (isinstance(key, str) and key not in seen and len(key) <= MAX_FIELD_LEN
-                        and FIELD.fullmatch(key) and few_digits(key)):
-                    seen.add(key)
-                    names.append(key)
-                children.append(child)
-            if depth < MAX_DEPTH:
-                stack.extend((child, depth + 1) for child in reversed(children))
-        elif isinstance(node, (list, tuple)) and depth < MAX_DEPTH:
-            children = list(itertools.islice(node, MAX_FANOUT))
-            stack.extend((child, depth + 1) for child in reversed(children))
-    return names[:MAX_FIELDS]
+    """The keys of the tool's input object that are plain names, in order. Never a
+    value, and never a key below the top: the top level is the tool's own
+    parameters, and a key under one is the caller's data (a map keyed by ids,
+    names or tokens, a header, an environment variable, a JSON body), which the
+    character class cannot tell from a name. A key that is long, or carries more
+    than MAX_DIGITS digits, or leaves the character class, is dropped as well."""
+    names = []
+    if isinstance(value, dict):
+        for key in itertools.islice(value, MAX_FANOUT):
+            if isinstance(key, str) and len(key) <= MAX_FIELD_LEN and FIELD.fullmatch(key) and few_digits(key):
+                names.append(key)
+                if len(names) >= MAX_FIELDS:
+                    break
+    return names
 
 
 def build_text(name, tool_input, cwd, home):

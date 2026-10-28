@@ -825,10 +825,15 @@ needs no such test. Only the first 64 KiB of a command is read.
 The edges, stated so a verifier does not have to find them. A short flag cannot
 be told from a flag with its value stuck to it, so a single dash flag is kept
 only when it is one to three letters, and a two letter value after a one letter
-flag would pass; `-phunter2` does not. A field name is data when a caller makes
-it so, which is why a name over 30 characters, outside letters, digits and
-`_ . -`, or with more than four digits is dropped, and a short key that is itself
-a secret would still leave. A path that exists and has a secret in its own name
+flag would pass; `-phunter2` does not. Only the keys of the input object itself
+leave, never a key below the top: a key under a parameter is the caller's data
+(a map keyed by ids, names or tokens, a header, an environment variable), and a
+random 24 character token fits the character class seven times in ten, so Jev
+sees `variables` and not the names under it. A top level key is dropped when it
+is over 30 characters, outside letters, digits and `_ . -`, or carries more than
+four digits, and a short top level key that is itself a secret would still
+leave. A redirect to `/dev/tcp/HOST/PORT` or `/dev/udp/HOST/PORT` is a socket and
+not a path, so it is dropped. A path that exists and has a secret in its own name
 is a path and leaves. Subcommands do not leave, so Jev sees `git` and
 `--force` and not `push`. Whether Jev can judge anything from so little is not
 known; the ledger is where that gets measured. A flag's name has to be typed
@@ -851,17 +856,33 @@ here-strings. It reads past, without looking inside, `$(( ))`, `(( ))`, `[[ ]]`,
 `${ }`, `$' '` and the literal of an array assignment. A line continuation is
 not there: bash removes it before it reads a token, so the reader steps over it
 between words, joins what is on both sides of it inside a word and counts it as
-no quote. A bare `case` or `[[` is read as that wherever it stands, whatever the
-reader thinks the command is, because a case pattern and an operand of `[[ ]]`
-are data that look like commands. A here-document delimiter is literal text, and
-when it is typed bare the body is expanded, so a body line that ends in an odd
+no quote. A bare `case` ends the read wherever it stands, whatever the reader
+thinks the command is, because a case pattern is data that looks like a command,
+and so does a bare `[[` that does not begin a command or follow the reserved word
+`time`: read there it is an argument (`echo [[`) or the reader has lost its
+place, and the text after it is not an expression to skip. A `[[` that does
+begin a command is read to its `]]` without looking in, except that a `$( )` or
+backticks inside it is read as the command list it is and a `#` that begins a
+word is a comment, which runs nothing. `$$` is the process id, so the `(` in
+`"$$(x y)"` is text and nothing in it runs. A `$( )`, a `<( )` and a pair of
+backticks are parsed apart from the command around them: a here-document the
+outer command waits for takes its body from the line after the whole line, not
+from a newline inside one. A subshell is part of the outer parse and shares it.
+`NAME=value` before the program is skipped after `env`, `sudo`, `watch` and the
+reserved word `time`, and nowhere else: after `nohup`, `exec`, `command`,
+`builtin`, `xargs`, `doas`, and `time` typed after an assignment, a redirect or a
+quote (then it is `/usr/bin/time`), it is the name of the program to run, and the
+word after it is only an argument. A here-document delimiter is literal text,
+and when it is typed bare the body is expanded, so a body line that ends in an odd
 number of backslashes is joined to the next before it is compared with the
 delimiter, as bash does. It stops, drops the rest of the command and sends what
-it had read before that point, at a `case`, a function definition, a coprocess,
-an extglob group, a `${ }` with a quote or a nested expansion in it, arithmetic
-with a quote in it, the legacy `$[ ]` arithmetic, a backslash inside backticks, a
-line continuation inside an operator (`<\` then `<EOF` is a heredoc once bash
-joins the lines), a here-document delimiter with an expansion in it, a subshell
+it had read before that point, at a `case`, a `[[` that does not begin a command,
+a function definition, a coprocess, an extglob group, a `${ }` with a quote or a
+nested expansion in it, arithmetic with a quote in it, the legacy `$[ ]`
+arithmetic, a backslash inside backticks, a line continuation inside an operator
+(`<\` then `<EOF` is a heredoc once bash joins the lines), a here-document
+delimiter with an expansion in it, a here-document a `$( )` leaves pending when
+it closes, a `#` after an operator or a parenthesis inside `[[ ]]`, a subshell
 after an assignment or a redirect, a stray `)`, an unterminated region, a quote
 or an escape the text ends inside and nesting past 8. A command list inside `$( )`, `<( )` or
 backticks that stops before its closer sends nothing from inside it, because a
@@ -874,9 +895,11 @@ a reserved word only when it is typed bare with nothing read ahead of it on its
 command: `"FOO=bar"`, `\if`, `FOO=bar if` and `> f if` are each a command name
 and the word after is its argument, as bash has it. The cost is fidelity and not
 secrecy: a command that stops early shows Jev less, and `foo() { rm -rf x; }`
-shows `foo` and not the `rm`. A bare `case` or `[[` that bash reads as an
-ordinary argument, as in `grep case src`, costs the commands after it for the
-same reason.
+shows `foo` and not the `rm`. A bare `case`, or a `[[` away from the start of a
+command, that bash reads as an ordinary argument, as in `grep case src`, costs
+the commands after it for the same reason. This paragraph said the cost of a
+bare `[[` was fidelity and not secrecy until the skip to its `]]` was found to
+read a comment and a quoted here-document body after `echo [[` as command lists.
 `test_jev_route.py` pins each construct as a value place, runs the whole table
 again inside fourteen wrapping commands, and runs a seeded fuzz that puts a
 canary only in quoted text nested three deep.
