@@ -583,6 +583,19 @@ ONE_MEGABYTE_COMMANDS = {
     "delimiters with an expansion": lambda: "cat <<$'EOF'\n" * (MB // 13),
     "bare case words": lambda: "echo case " * (MB // 10),
     "bare test words": lambda: "echo [[ " * (MB // 8),
+    # What round 5 reads or stops at: a subscript is scanned to its matching bracket,
+    # and a comment, an ANSI string or a here-document body inside backticks ends the read.
+    "many subscripts": lambda: "m[a]=1 " * (MB // 7),
+    "many subscripts, one command each": lambda: "m[a]=1;" * (MB // 7),
+    "many subscripts that do not close": lambda: "m[a " * (MB // 3),
+    "one subscript opened for ever": lambda: "m" + "[" * MB,
+    "one long closed subscript": lambda: "m[" + "[]" * (MB // 2) + "]=1 && ls",
+    "many subscripts after a keyword": lambda: "if m[a]=1; then " * (MB // 16),
+    "comments in backticks": lambda: "echo `echo a # b\n` " * (MB // 20),
+    "here-document bodies in backticks": lambda: "echo `cat <<EOF\n" + "x\\\n" * (MB // 3),
+    "ansi strings in backticks": lambda: "echo `echo $'a\\\\'` " * (MB // 20),
+    "delimiters that run into a process substitution": lambda: "cat <<EOF<(" * (MB // 11),
+    "delimiters that run into a process substitution, after a blank": lambda: "cat << <(" * (MB // 9),
 }
 
 
@@ -1911,6 +1924,18 @@ OUTLINE_ROWS = [
     ("echo hi >/dev/udp/10.9.8.7/514", "echo"),
     ("echo hi > /dev/null", "echo /dev/null"),
     ("echo hi > ./dev/tcp/x/y", "echo ./dev/tcp/x/y"),
+    # What the stops of round 5 leave alone: a subscript closed before anything that
+    # splits the word, a process substitution after a blank, a comment outside
+    # backticks, and backticks without a comment or a backslash in them.
+    ("m[1]=x; m[$i]=y; m[i+1]=z; ls", "ls"),
+    ("m[1]=x >f; ls", "f\nls"),
+    ("cat <<EOF <(sort a)\nbody\nEOF\nls", "cat\nsort\nls"),
+    ("cat <<EOF >(sort a)\nbody\nEOF\nls", "cat\nsort\nls"),
+    ("cat <<EOF>out.txt\nbody\nEOF\nls", "cat out.txt\nls"),
+    ("echo `cat <<EOF\nhello\nEOF\n`; ls", "echo\ncat\nls"),
+    ("echo `echo $'abc'`; ls", "echo\necho\nls"),
+    ("ls # a `comment`\ngit push --force", "ls\ngit --force"),
+    ("echo $(echo $'a\\\\'); git push --force", "echo\necho\ngit --force"),
 ]
 
 
@@ -2027,6 +2052,31 @@ STOP_ROWS = [
     # A # after an operator or a parenthesis inside [[ ]] may open a comment or sit
     # in the middle of a regular expression, and the reader does not guess which.
     ("ls; [[ $x =~ (a)#b ]]; git push --force", "ls"),
+    # Inside backticks the reader cannot say where a comment ends, what a backslash
+    # before the closing quote of an ANSI-C string does, or which lines of a
+    # here-document body continue: bash cuts the body at the closing backtick first
+    # and undoes its backslashes before it reads a word. Each ends the read there,
+    # and what was read inside the backticks is not sent.
+    ("ls; echo `# note\n`; git push --force", "ls\necho"),
+    ("ls; echo `echo hi # note`; git push --force", "ls\necho"),
+    ("ls; echo `[[ a == b # note\n]]`; git push --force", "ls\necho"),
+    ("ls; echo `echo $'a\\\\'`; git push --force", "ls\necho"),
+    ("ls; echo `cat <<EOF\nx\\\nEOF\n`; git push --force", "ls\necho"),
+    ("ls; echo `cat <<'EOF'\nx\\\\\nEOF\n`; git push --force", "ls\necho"),
+    # Where a command begins, NAME[ is the head of an array assignment and bash takes
+    # everything up to the matching ] into the one word. A subscript that is not
+    # closed before a blank, an operator, a quote, an escape or an expansion other
+    # than $NAME ends the read.
+    ("ls; m[k >f ]=1; git push --force", "ls"),
+    ("ls; m[k; whoami ]=1; git push --force", "ls"),
+    ("ls; time m[k >f ]=1; git push --force", "ls\ntime"),
+    ("ls; m[k", "ls"),
+    ("ls; m['a b']=1; git push --force", "ls"),
+    ("ls; m[${i}]=1; git push --force", "ls"),
+    # <( and >( run into a here-document delimiter, which is literal text.
+    ("ls; cat <<EOF<(sort)\nx\nEOF\ngit push --force", "ls\ncat"),
+    ("ls; cat << >(sort\n)\ngit push --force", "ls\ncat"),
+    ("ls; cat <<'EOF'>(sort)\nx\nEOF\ngit push --force", "ls\ncat"),
     # A list inside $( ) that closes with a here-document pending takes its body from
     # a place this reader does not model.
     ("ls; echo $(cat <<EOF)\nbody\nEOF\ngit push --force", "ls\necho\ncat"),
@@ -2496,6 +2546,51 @@ PRIOR_FINDINGS = [
     ("r3f43", "A=(a # note )\n{C} x)", ("{C}",)),
     ("r3f43", "\"{C}\\x\"", ("{C}",)),
     ("r3f43", "echo hi # note; {C}", ("{C}",)),
+    # Round 5, against bc5b316. The value is a redirect target here, which is a
+    # path by syntax and which the known commands gate does not test, or a program
+    # that is installed. Bash runs none of it: each is data in bash.
+    # A backtick body is cut at the closing backtick first and has its backslashes
+    # undone, and only then read as commands. A comment that ends in a backslash
+    # goes on to the next line, a backtick can sit inside what looks like a comment,
+    # and \\ is \ before an ANSI-C string is read.
+    ("r5f1", "echo `# rotate \\\n>{C}`", ("{C}",)),
+    ("r5f1", "echo `# ` `<<EOF\n >{C} `", ("{C}",)),
+    ("r5f1", "echo `echo $'a\\\\' ; >{C} ; echo $'b\\\\'`", ("{C}",)),
+    ("r5f1", "echo `echo $'a\\\\' ; {C} --secret-flag ; echo $'b\\\\'`", ("{C}", "--secret-flag")),
+    ("r5f1", "echo `echo $'a\\\\' ; whoami --secret-flag ; echo $'b\\\\'`", ("whoami", "--secret-flag")),
+    ("r5f1", "echo `[[ x # ` `<<EOF\n]] >{C} `", ("{C}",)),
+    # The same rule for a here-document body: a line that ends in a backslash is
+    # joined or not by what the backtick body looks like after bash undoes it.
+    ("r5f1", "echo `cat <<EOF\nfoo\\\\\nEOF\n>{C}\nEOF\n`", ("{C}",)),
+    ("r5f1", "echo `cat <<'EOF'\nfoo\\\nEOF\n>{C}\nEOF\n`", ("{C}",)),
+    # Where bash expects a command it reads NAME[ as an array assignment and takes
+    # everything up to the matching ] into one word, spaces and operators included.
+    ("r5f2", "declare -A m; m[k >{C} ]=1", ("{C}",)),
+    ("r5f2", "declare -A m; m[k; echo --secret-flag ]=1", ("--secret-flag",)),
+    ("r5f2", "declare -A m; m[k; {C} --secret-flag ]=1", ("{C}", "--secret-flag")),
+    ("r5f2", "declare -A m; m[k; whoami ]=1", ("whoami",)),
+    ("r5f2", "echo \"a $(true[[ \n>{C}\n]] ) b\"", ("{C}",)),
+    ("r5f2", "declare -A m; m['a]' >{C} ]=1", ("{C}",)),
+    ("r5f2", "declare -A m; m[a[b >{C} ]c]=1", ("{C}",)),
+    ("r5f2", "declare -A m; m[k\n>{C}\n]=1", ("{C}",)),
+    ("r5f2", "declare -A m; m[a\\ >{C} ]=1", ("{C}",)),
+    ("r5f2", "declare -A m; time m[k >{C} ]=1", ("{C}",)),
+    ("r5f2", "declare -A m; time -p m[k >{C} ]=1", ("{C}",)),
+    ("r5f2", "declare -A m; >g m[k >{C} ]=1", ("{C}",)),
+    ("r5f2", "declare -A m; X=1 m[k >{C} ]=1", ("{C}",)),
+    ("r5f2", "declare -A m; if true; then m[k >{C} ]=1; fi", ("{C}",)),
+    ("r5f2", "declare -A m; (m[k >{C} ]=1)", ("{C}",)),
+    ("r5f2", "declare -A m; echo $(m[k >{C} ]=1)", ("{C}",)),
+    # A delimiter is the text up to the next blank, and bash takes <( and >( into
+    # the word whole. Nothing in it is run.
+    ("r5f3", "cat <<EOF<(>{C})\nbody\nEOF\n", ("{C}",)),
+    ("r5f3", "cat << >(>{C}\n)", ("{C}",)),
+    ("r5f3", "cat <<EOF<({C} --secret-flag)\nbody\nEOF\n", ("{C}", "--secret-flag")),
+    ("r5f3", "cat <<EOF<(whoami)\nbody\nEOF\n", ("whoami",)),
+    ("r5f3", "cat <<-EOF<(>{C})\nbody\nEOF\n", ("{C}",)),
+    ("r5f3", "cat <<'EOF'<(>{C})\nbody\nEOF\n", ("{C}",)),
+    ("r5f3", "cat <<\"EOF\"<(>{C})\nbody\nEOF\n", ("{C}",)),
+    ("r5f3", "cat <<EOF>(>{C})\nbody\nEOF\n", ("{C}",)),
 ]
 
 
@@ -2553,6 +2648,139 @@ def test_an_assignment_needs_its_name_and_its_equals_sign_typed_bare():
 def test_a_backslash_inside_backticks_ends_the_read():
     assert "git" not in outline("echo `echo \\`x\\``; git push --force")
     assert "git" not in outline("echo `echo \"a\\\"b\"`; git push --force")
+
+
+def shell_of(text):
+    return jev.Shell(text, jev.Outline(jev.MAX_OUT), "/nonexistent-cwd", "/home/nobody")
+
+
+def test_a_subscript_is_read_only_when_it_closes_before_anything_that_splits_the_word():
+    """Where bash expects a command, NAME[ takes everything up to the matching ] into
+    one word. This reader ends a word at a blank or an operator, so it has to see the
+    ] before one, and before anything it reads as a piece of a word and bash reads as
+    a pair inside the subscript."""
+    for text in ("m[1]=x", "m[$i]=x", "m[i+1]=x", "m[a[b]c]=x", "m[1]", "m[]=x", "a[1]b[2]=c", "_a1[0]+=x",
+                 "ls", "[ -f x ]", "x=1", "echo", "m", "9[ >f ]"):
+        assert shell_of(text).subscript_closes(0), text
+    for text in ("m[k >f ]=1", "m[k", "a[", "m[k;x]=1", "m[k|x]=1", "m[k&x]=1", "m[a b]=1", "m[a\tb]=1", "m[k\n]=1",
+                 "m[a<b]=1", "m[a>b]=1", "m[a(b)]=1", "m['a']=1", 'm["a"]=1', "m[a\\]]=1", "m[$(x)]=1",
+                 "m[${i}]=1", "m[`x`]=1", "m[$1]=1", "m[$]=1", "m[$((1))]=1", "m[a[b ]c]=1", "m[a[b]=1"):
+        assert not shell_of(text).subscript_closes(0), text
+    assert shell_of("ls m[k >f ]=1").subscript_closes(3) is False
+    assert shell_of("ls m[k >f ]=1").subscript_closes(0) is True
+
+
+def test_a_comment_inside_backticks_ends_the_read_and_one_outside_does_not():
+    assert outline("ls; echo `echo hi # note`; git push --force") == "ls\necho"
+    assert outline("ls; echo `echo hi`; echo hi # note `x`\ngit push --force") == "ls\necho\necho\necho\ngit --force"
+    assert outline("ls; echo $(echo hi # note\n); git push --force") == "ls\necho\necho\ngit --force"
+    assert outline("ls; echo `echo $(echo hi # note\n)`; git push --force") == "ls\necho"
+
+
+def test_an_ansi_c_string_with_a_backslash_inside_backticks_ends_the_read_and_one_without_does_not():
+    assert outline("ls; echo `echo $'a\\\\'`; git push --force") == "ls\necho"
+    assert outline("ls; echo `echo $'a\\n'`; git push --force") == "ls\necho"
+    assert outline("ls; echo `echo $'abc'`; git push --force") == "ls\necho\necho\ngit --force"
+    assert outline("ls; echo $(echo $'a\\\\'); git push --force") == "ls\necho\necho\ngit --force"
+
+
+def test_a_here_document_line_that_ends_in_a_backslash_inside_backticks_ends_the_read():
+    for delimiter in ("EOF", "'EOF'", '"EOF"'):
+        for tail in ("\\", "\\\\", "\\\\\\"):
+            command = "ls; echo `cat <<%s\nx%s\nEOF\n`; git push --force" % (delimiter, tail)
+            assert outline(command) == "ls\necho", command
+    assert outline("ls; echo `cat <<EOF\nx\nEOF\n`; git push --force") == "ls\necho\ncat\ngit --force"
+    assert outline("ls; cat <<EOF\nx\\\\\nEOF\ngit push --force") == "ls\ncat\ngit --force"
+
+
+def test_a_here_document_delimiter_that_runs_into_a_process_substitution_ends_the_read():
+    for opener in ("<(", ">("):
+        for delimiter in ("EOF", "'EOF'", '"EOF"', "E\"O\"F", "''"):
+            for glue in ("<<", "<<-"):
+                command = "ls; cat %s%s%ssort)\nx\nEOF\ngit push --force" % (glue, delimiter, opener)
+                assert outline(command) == "ls\ncat", command
+        assert outline("ls; cat << %ssort\n)\ngit push --force" % opener) == "ls\ncat"
+    # A process substitution that follows a blank, and every other redirect operand,
+    # is read, because bash expands it there.
+    assert outline("ls; cat <<EOF <(sort)\nx\nEOF\ngit push --force") == "ls\ncat\nsort\ngit --force"
+    assert outline("ls; cat <<<a<(sort); git push --force") == "ls\ncat\nsort\ngit --force"
+    assert outline("ls; cat >a<(sort); git push --force") == "ls\ncat a\nsort\ngit --force"
+
+
+# cat is a stub because the real one opens /dev/fd/63 for reading when a row hands it
+# a >( ) and waits on the pipe for ever. Nothing a row asks of cat is to read.
+BASH_GROUND_PREAMBLE = (
+    'command_not_found_handle() { printf "%s\\n" "$1" >> "$LOG"; return 0; }\n'
+    'whoami() { printf "whoami\\n" >> "$LOG"; }\n'
+    'cat() { return 0; }\n'
+)
+
+
+def what_bash_does(tmp_path, command):
+    """The files the command creates and the command names it asks for, in real bash
+    in an empty directory. Skipped unless bash is the version the pinned list came
+    from: the rules these rows pin are old, but a runner's bash is not this one."""
+    bash = shutil.which("bash", path=ORIGINAL_PATH)
+    if not bash:
+        pytest.skip("no bash here")
+    version = subprocess.run([bash, "-c", "echo $BASH_VERSION"], capture_output=True, text=True, timeout=30).stdout.strip()
+    if version != jev.BASH_VERSION_PINNED:
+        pytest.skip("bash here is %s and the rows were checked against %s" % (version, jev.BASH_VERSION_PINNED))
+    work = tmp_path / "cwd"
+    work.mkdir()
+    log = tmp_path / "ran.log"
+    log.write_text("")
+    env = {"PATH": ORIGINAL_PATH, "HOME": str(work), "LOG": str(log), "LC_ALL": "C"}
+    subprocess.run([bash, "-c", BASH_GROUND_PREAMBLE + command], cwd=work, env=env, stdin=subprocess.DEVNULL,
+                   capture_output=True, timeout=30)
+    return sorted(p.name for p in work.iterdir()), log.read_text().split("\n")
+
+
+ROUND_5 = [row for row in PRIOR_FINDINGS if row[0].startswith("r5")]
+
+
+@pytest.mark.parametrize("finding,command,forbidden", ROUND_5, ids=["%s-%d" % (row[0], n) for n, row in enumerate(ROUND_5)])
+def test_bash_runs_nothing_of_what_the_round_5_reproductions_hide(tmp_path, finding, command, forbidden):
+    """The rows are only findings if bash treats the hidden text as data. Run each in
+    bash itself: no file is created under a forbidden name and no command is looked
+    up by one."""
+    command = command.replace("{C}", CANARIES[0])
+    forbidden = [w.replace("{C}", CANARIES[0]) for w in forbidden]
+    files, ran = what_bash_does(tmp_path, command)
+    assert [w for w in forbidden if w in files or w in ran] == []
+
+
+ROUND_5_CONTROLS = [
+    # Next to each stop, the same text where bash does run the redirect. The reader
+    # reads these and sends the path: stopping at them would only cost fidelity, but
+    # the rows pin that the stops are no wider than the findings.
+    ("cat <<EOF >(>{C})\nbody\nEOF", "cat\n{C}"),
+    ("cat <<EOF><(>{C})\nbody\nEOF\n", "cat\n{C}"),
+    ("declare m[k >{C} ]=1", "declare {C}"),
+    ("export m[k >{C} ]=1", "export {C}"),
+    ("m[1]=x >{C}; ls", "{C}\nls"),
+    ("m[$k]=x >{C}; ls", "{C}\nls"),
+    ("cat <<EOF >{C}\nbody\nEOF\nls", "cat {C}\nls"),
+]
+
+
+@pytest.mark.parametrize("command,expected", ROUND_5_CONTROLS)
+def test_the_syntax_next_to_the_round_5_stops_that_does_run_a_redirect_is_still_read(tmp_path, command, expected):
+    command, expected = command.replace("{C}", CANARIES[0]), expected.replace("{C}", CANARIES[0])
+    assert outline(command) == expected
+    files, _ = what_bash_does(tmp_path, command)
+    assert files == [CANARIES[0]]
+
+
+def test_the_docs_name_each_stop_of_round_5_and_no_longer_claim_the_gate_covers_a_redirect_target():
+    flat = " ".join((ROOT / "CLAUDE.md").read_text().split("## The Jev router")[1].split("\n## ")[0].split())
+    for stated in ("a here-document delimiter that runs into `<(` or `>(`",
+                   "inside backticks a comment, a backslash in an ANSI-C string and a here-document line that ends "
+                   "in a backslash",
+                   "`NAME[` at the start of a command", "until round 5"):
+        assert stated in flat, stated
+    assert "Every reader mistake now costs a word" not in flat
+    assert "Every reader mistake then costs a word" not in " ".join(HOOK.read_text().split())
 
 
 def test_substitutions_nested_past_the_cap_end_the_read_and_never_crash():

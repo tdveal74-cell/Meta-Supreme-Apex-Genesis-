@@ -884,9 +884,13 @@ container on 2026-10-28, bash 5.2.21(1)-release, both recorded beside the list),
 or a name the hook process's `PATH` resolves to an executable file, or, for a
 word with a `/` in it, an existing executable file. Any other word is dropped, and
 so is every flag of the same simple command, because a word the reader wrongly
-took for a program carries its neighbours with it. Every reader mistake now costs
-a word and does not leak one. The gate is on what the reader hands out and
-replaces none of its defences: `test_jev_route.py` runs each reader test twice,
+took for a program carries its neighbours with it. A reader mistake that takes
+data for a program now costs a word and does not leak one. That sentence said
+"every reader mistake" until round 5, which found the gate does not reach a
+redirect target: it is a path by syntax and is sent untested, so a comment, an
+array subscript or a here-document delimiter the reader took for code could send
+one. There the reader's own stops are the only defence. The gate is on what the
+reader hands out and replaces none of its defences: `test_jev_route.py` runs each reader test twice,
 once with the value not installed and once with the value installed as a command,
 so the gate cannot be what keeps a value out of a test, and a further test fails
 when a row names a program no test machine has. Nothing is run to find out. A
@@ -947,8 +951,18 @@ a function definition, a coprocess, an extglob group, a `${ }` with a quote or a
 nested expansion in it, arithmetic with a quote in it, the legacy `$[ ]`
 arithmetic, a backslash inside backticks, a line continuation inside an operator
 (`<\` then `<EOF` is a heredoc once bash joins the lines), a here-document
-delimiter with an expansion in it, a here-document a `$( )` leaves pending when
-it closes, a `#` after an operator or a parenthesis inside `[[ ]]`, a subshell
+delimiter with an expansion in it, a here-document delimiter that runs into `<(`
+or `>(` (bash reads those two characters into the word and runs nothing in a
+delimiter), a here-document a `$( )` leaves pending when
+it closes, inside backticks a comment, a backslash in an ANSI-C string and a
+here-document line that ends in a backslash (bash cuts a backtick body at the
+closing backtick and undoes its backslashes before it reads a word, so where a
+comment ends, where the string closes and which lines continue are not what the
+text shows), `NAME[` at the start of a command when the subscript does not close
+before a blank, an operator, a quote, an escape or an expansion other than
+`$NAME` (bash reads it as the head of an array assignment and takes the word to
+the matching `]`, so `m[k >f ]=1` is one word and runs nothing), a `#` after an
+operator or a parenthesis inside `[[ ]]`, a subshell
 after an assignment or a redirect, a stray `)`, an unterminated region, a quote
 or an escape the text ends inside and nesting past 8. A command list inside `$( )`, `<( )` or
 backticks that stops before its closer sends nothing from inside it, because a
@@ -969,8 +983,11 @@ read a comment and a quoted here-document body after `echo [[` as command lists.
 `test_jev_route.py` pins each construct as a value place, runs the whole table
 again inside fourteen wrapping commands, and runs a seeded fuzz that puts a
 canary only in quoted text nested three deep. It also replays every Bash
-reproduction from the four verify rounds that was a program name or a flag
-leaving as one, with the value installed as a command and with it not.
+reproduction from the verify rounds that was a program name or a flag leaving as
+one, and from round 5 a redirect target leaving, with the value installed as a
+command and with it not. The round 5 rows are also run through real bash, when
+bash is the pinned version, to show that bash creates no file and runs no
+command from what they hide.
 
 It ships in shadow mode, `ENFORCE = False`: it asks, records the answer and
 prints nothing. Enforcement is a separate ruling and a one line commit, and

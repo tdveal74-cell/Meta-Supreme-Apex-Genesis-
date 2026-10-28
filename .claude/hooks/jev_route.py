@@ -49,9 +49,12 @@ for a program is handed out only when it is a bash builtin or reserved word from
 BASH_WORDS, or a name the hook process's PATH resolves to an executable file, or,
 for a word with a / in it, an existing executable file. Any other word is
 dropped, and so is every flag of the same simple command, because a word the
-reader wrongly took for a program carries its neighbours with it. Every reader
-mistake then costs a word and does not leak one. This is a gate on what the
-reader hands out and replaces none of its defences. Nothing is executed to find
+reader wrongly took for a program carries its neighbours with it. A reader
+mistake that takes data for a program then costs a word and does not leak one.
+The gate does not reach a redirect target, which is a path by syntax and is sent
+untested, so there the only defence is the reader itself stopping at what it
+cannot model. This is a gate on what the reader hands out and replaces none of
+its defences. Nothing is executed to find
 out: a lookup is a stat on a path, BASH_WORDS is a list pinned in this file, and
 bash is never run. A word over MAX_WORD characters is not looked up, a name is
 looked up once per call, and a call stops looking after MAX_LOOKUPS distinct
@@ -118,10 +121,21 @@ pending when it closes ends the read. A subshell is part of the outer parse. A
 here-document delimiter is literal text: it is not resolved, and one with an
 expansion in it ends the read. When it is typed bare the body is expanded, so a
 body line that ends in an odd number of backslashes is joined to the next one
-before it is compared with the delimiter, as bash does. A line continuation
-inside an operator, a function definition, a coprocess, the legacy $[ ]
-arithmetic and a subshell after an assignment or a redirect are not modelled and
-end the read.
+before it is compared with the delimiter, as bash does. A delimiter that runs
+into <( or >( ends the read as well: bash reads those two characters into the
+word, nothing in a delimiter is run, and this reader would run what is inside.
+Bash reads a backtick body in two steps, cutting it at the closing backtick and
+undoing its backslashes, and only then reading words. The reader does neither, so
+inside backticks a comment, a backslash in an ANSI-C string and a here-document
+line that ends in a backslash end the read: where the comment ends, where the
+string closes and which lines continue are not what the text shows. Where a
+command begins, NAME[ is the head of an array assignment and bash takes the word
+up to the matching ], blanks and operators included, so m[k >f ]=1 is one word
+and runs nothing. The reader reads such a word only when the ] comes before a
+blank, an operator, a quote, an escape or an expansion other than $NAME, and
+otherwise ends the read. A line continuation inside an operator, a function
+definition, a coprocess, the legacy $[ ] arithmetic and a subshell after an
+assignment or a redirect are not modelled and end the read.
 
 Building the text is linear. Only the first MAX_SCAN characters of a command
 are read, no regex has a nested or adjacent unbounded quantifier, and the
@@ -260,6 +274,14 @@ DQ_SPECIAL = re.compile(r"[\"\\$`]")
 ARITH_STOP = re.compile(r"[()'\"`\\]")
 BRACE_STOP = re.compile(r"[}$'\"`\\{\n]")
 ANSI_STOP = re.compile(r"[\\']")
+# NAME[ at the start of a word, and the next character in a subscript that ends or
+# changes the reading of the word. See Shell.subscript_closes().
+ARRAY_HEAD = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\[")
+SUBSCRIPT_STOP = re.compile(r"[\[\]\t \n;&|<>()'\"\\$`]")
+NAME_START = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_")
+# Bash reads these two as the start of a process substitution wherever a word is
+# being read, a here-document delimiter included. See Shell.redirect().
+PROCESS_OPENERS = ("<(", ">(")
 
 # Bash splits words at a space or a tab and at a metacharacter. A carriage
 # return, a form feed and a vertical tab are ordinary characters inside a word.
@@ -479,15 +501,20 @@ class Shell:
     assignment without looking inside. A case statement, a [[ that does not
     begin a command, a function definition, a coprocess, an extglob group, the
     legacy $[ ] arithmetic, a line continuation inside an operator, a
-    here-document delimiter with an expansion in it, a here-document left
-    pending by a $( ), a subshell after an assignment or a redirect, a quote
+    here-document delimiter with an expansion in it or one that runs into <( or
+    >(, a here-document left pending by a $( ), a subshell after an assignment
+    or a redirect, inside backticks a comment, a backslash in an ANSI-C string
+    or a here-document line that ends in a backslash, an array subscript at the
+    start of a command that does not close before a blank or an operator, a quote
     nested in a way it cannot follow, or a quote or an escape the text ends
     inside, ends the read. A line continuation between or inside words is
     stepped over.
 
     What it takes for a program is then checked against the machine by known():
     a word that is not a command here is dropped with the flags of its command, so
-    a word it misreads costs a word and does not send one."""
+    a word it misreads as a program costs a word and does not send one. A
+    redirect target is not checked, so it is the stops above that keep data out
+    of one."""
 
     def __init__(self, text, out, cwd, home):
         self.t, self.n, self.i = text, len(text), 0
@@ -551,8 +578,7 @@ class Shell:
                 self.i += 1
                 self.skip_heredocs()
             elif c == "#":
-                j = t.find("\n", i)
-                self.i = n if j < 0 else j
+                self.i = self.comment_end(i)
             elif c == "&" and t.startswith(">", self.past_continuations(i + 1)):
                 # &>file and &>>file are one redirect, and the word after the
                 # target is an argument. They are not a separator and a command.
@@ -582,6 +608,9 @@ class Shell:
                 # word after it is the first word of the command.
                 self.i += 2
             else:
+                if self.program in (None, "time") and not self.subscript_closes(i):
+                    self.halt()
+                    return False
                 word = self.word()
                 if self.halted:
                     # The read stopped inside this word, so what is in hand is a
@@ -605,6 +634,51 @@ class Shell:
         while self.continuation(i):
             i += 2
         return i
+
+    def comment_end(self, i):
+        """The index of the newline that ends the comment starting at i, or the end
+        of the text. Inside backticks it is not known where a comment ends, and the
+        read stops. Bash cuts a backtick body at the closing backtick first, with
+        no regard for a comment, and removes a backslash-newline pair from what it
+        cut. So the backtick that closes the body can sit inside what looks like a
+        comment, and a comment that ends in a backslash goes on to the next line.
+        The reader sees neither, ends the comment at the newline, pairs the
+        backticks differently from bash and reads data as commands."""
+        if "`" in self.frames:
+            return self.halt()
+        j = self.t.find("\n", i)
+        return self.n if j < 0 else j
+
+    def subscript_closes(self, i):
+        """False when the word at i is NAME[ and its subscript is not one this
+        reader sees whole, and the caller stops. Where bash expects a command it
+        reads NAME[ as the head of an array assignment and takes everything up to
+        the matching ] into the same word: spaces, ; | & < > and newlines included.
+        m[k >f ]=1 is one word, whose key is "k >f ", and it runs nothing. This
+        reader ends a word at the first of those characters and would read >f as a
+        redirect. So the subscript has to close before one of them, and before a
+        quote, an escape, a backtick or an expansion, which bash reads as pairs
+        inside the subscript and this reader reads as pieces of a word. $NAME is the
+        one expansion that is plain. True also when the word does not start that
+        way. The subscript is bash's own matching: a [ inside it opens another."""
+        t = self.t
+        head = ARRAY_HEAD.match(t, i)
+        if head is None:
+            return True
+        depth, j = 1, head.end()
+        while True:
+            stop = SUBSCRIPT_STOP.search(t, j)
+            if stop is None:
+                return False
+            c, j = stop.group(), stop.end()
+            if c == "[":
+                depth += 1
+            elif c == "]":
+                depth -= 1
+                if depth == 0:
+                    return True
+            elif not (c == "$" and t[j:j + 1] in NAME_START):
+                return False
 
     def skip_blanks(self):
         """Step over spaces, tabs and line continuations."""
@@ -859,7 +933,10 @@ class Shell:
             j = m.end()
 
     def skip_ansi(self, i):
-        """From the $ of $' to after the closing quote, a \\' inside not closing it."""
+        """From the $ of $' to after the closing quote, a \\' inside not closing it.
+        Inside backticks a backslash ends the read: bash turns \\\\ into \\ before
+        it reads the string, so $'a\\\\' is $'a\\' there, the quote is escaped and
+        the string goes on, where this reader would close it."""
         t = self.t
         j = i + 2
         while True:
@@ -868,6 +945,8 @@ class Shell:
                 return self.halt()
             if m.group() == "'":
                 return m.end()
+            if "`" in self.frames:
+                return self.halt()
             j = m.end() + 1
 
     def skip_array(self, i):
@@ -892,7 +971,8 @@ class Shell:
         # that begins a word is a comment to the end of the line, as it is in
         bash, and a $( ) or backticks in it run nothing, so it is read past
         without looking in. One after an operator or a parenthesis may be a
-        comment or the middle of a regular expression, and ends the read."""
+        comment or the middle of a regular expression, and ends the read, and so
+        does any comment inside backticks. See comment_end()."""
         t, n = self.t, self.n
         boundary = False
         while i < n:
@@ -900,8 +980,9 @@ class Shell:
                 return i + 2
             if t[i] == "#":
                 if boundary:
-                    j = t.find("\n", i)
-                    i = n if j < 0 else j
+                    i = self.comment_end(i)
+                    if self.halted:
+                        return n
                     boundary = False
                     continue
                 if t[i - 1] in "()&|<>;":
@@ -950,14 +1031,25 @@ class Shell:
             self.halt()
             return
         self.skip_blanks()
+        heredoc = kind in ("heredoc", "heredoc-")
+        if heredoc and t.startswith(PROCESS_OPENERS, self.i):
+            # <<EOF<(x) and << >(x) are one delimiter, text and parentheses
+            # included: bash reads <( and >( into the word being read, and expands
+            # nothing in a delimiter. See below for the same after the word.
+            self.halt()
+            return
         if self.i >= n or t[self.i] in SEPARATORS:
             return
         start = self.i
         # The delimiter of a here-document is literal text, never a word to resolve.
-        self.literal = kind in ("heredoc", "heredoc-")
+        self.literal = heredoc
         operand = self.word()
         self.literal = False
         if self.halted:
+            return
+        if heredoc and t.startswith(PROCESS_OPENERS, self.i):
+            # The word ended at a < or a > that bash takes into the delimiter.
+            self.halt()
             return
         if self.i == start:
             self.i += 1
@@ -982,7 +1074,11 @@ class Shell:
         before it compares the line with the delimiter: foo\\ then EOF is the line
         fooEOF, and the body goes on. A quoted delimiter expands nothing and the
         lines are the lines. A line that ends in an odd number of backslashes
-        continues, the last of a run of an even number is an escaped backslash."""
+        continues, the last of a run of an even number is an escaped backslash.
+        Inside backticks a line that ends in a backslash ends the read, whatever
+        the delimiter: bash unescapes the body and removes a backslash-newline pair
+        before it reads the here-document, so which lines continue is not what the
+        text shows, and the body can end where this reader does not end it."""
         t, n = self.t, self.n
         parts, run = [], 0
         while True:
@@ -990,6 +1086,9 @@ class Shell:
             end = n if j < 0 else j
             line = t[self.i:end]
             self.i = n if j < 0 else end + 1
+            if line.endswith("\\") and "`" in self.frames:
+                self.halt()
+                return line
             head = line.rstrip("\\")
             run = len(line) - len(head) + (run if not head else 0)
             if not (joined and j >= 0 and self.i < n and run % 2):
