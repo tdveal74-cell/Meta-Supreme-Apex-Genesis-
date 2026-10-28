@@ -167,9 +167,9 @@ def test_the_voice_lane_traces_into_the_render_node():
 
 def test_youtube_readiness_follows_the_publish_node():
     code = export_nodes()["Show Context: Publish"]
-    assert _traces("ncoYouTubeReady", False, show_segment(code, "NCO"))
+    assert _traces("ncoYouTubeReady", True, show_segment(code, "NCO"))
     assert "ncoYouTubeReady" not in show_segment(code, "TQO")
-    assert get_show("nco").youtube_ready is False
+    assert get_show("nco").youtube_ready is True
     assert get_show("tqo").youtube_ready is True
 
 
