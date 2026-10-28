@@ -57,13 +57,13 @@ The editorial fields are *reported judgments*, not deterministic proof of author
 
 ### 90-point n8n candidate (NOT ACTIVE)
 
-`tqo90_workflow_candidate.mjs` (legacy filename, now `buildUniversal90Candidate`) transforms a clone of the **pinned** 274-node V5 workflow in memory. It intentionally does not mutate the pinned live export, call the n8n API, or modify the active workflow.
+`tqo90_workflow_candidate.mjs` (legacy filename, now `buildUniversal90Candidate`) no longer patches anything. The 90 floors are live in the re-exported V5 workflow, and on 2026-10-28 the owner ruled "Drop the AI review from the publish gate", so no signed AI review receipt is required and nothing is held for a pending review adapter. The function asserts that the four live node bodies still carry the 90 anchors, throws on drift, and returns the export unchanged. It does not call the n8n API.
 
-- `Script Gate: Quality`: **90** for TQO and NCO; both remain **HOLD** pending trusted final-script review.
+- `Script Gate: Quality`: script doctor floor **90** for TQO and NCO; a 90 clears with no receipt.
 - `Parse QC + Set Verdict`: **90** for the episode QC score.
-- `QC Doctor Gate`: **90** for every scored scope, including NCO, TQO, TSWS and ACX. All remain **HOLD** pending signed-review wiring.
-- `OS 28: Publish Gate`: manual QC `WAIVED` cannot bypass the new 90 score requirement; all brands remain **HELD** pending independently authenticated final-text review.
-- Candidate tests execute all **four** patched node bodies, including the publishing gate, with synthetic rows. **89 fails**; **90 meets the numerical floor**, but even 100 remains **HOLD** until signed-review verification is wired. The pinned original export is untouched.
+- `QC Doctor Gate`: **90** for every scored scope; a doctor line of 90 or more reaches `READY_FOR_HUMAN_REVIEW` with no receipt, and a doctor score under 90 holds.
+- `OS 28: Publish Gate`: QC **90** with no `WAIVED` bypass, and the human approval must read `approved:<sha256 of the script>`.
+- Candidate tests execute all four live node bodies with synthetic rows. **89 does not clear**; **90 clears** with the script hash approval and no AI receipt.
 - These checks cover the score boundary and the provisional fail-closed hold **only**. The current QC code reads a text score-history line, not an authenticated final-draft hash. Do not deploy this candidate without the additional signed review intake and a final-text Doctor score. A manually changed Airtable status can bypass today's script gate and must not bypass the downstream receipt requirement.
 
 ### Review handoff (NO PAID MODEL CALL FROM n8n)
