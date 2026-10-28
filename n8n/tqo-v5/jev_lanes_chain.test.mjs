@@ -55,7 +55,6 @@ const thumbBody = body("jev_thumb_body.js", "$", "$input");
 const checkBody = body("jev_thumb_check_body.js", "$", "$input");
 const checkVerdict = body("jev_thumb_check_verdict.js", "$", "$input");
 const MOVIE_SRC = read("./build_movie.js");
-const PICK_SRC = read("./thumb_pick_still.js");
 
 // n8n's `$('Node')` throws when that node did not run, so an unknown name throws.
 const dollar = (nodes) => (name) => {
@@ -74,14 +73,19 @@ const exportCode = (name) => {
   return hits[0].parameters.jsCode;
 };
 const MOVIE_OLD = exportCode("Build Movie");
-// Today's Pick Still is the export's with the layout fix Tee ruled on 2026-10-27
-// ("Fix both, prove first"), published as de4ac645. Each pair must occur once.
-const LAYOUT = JSON.parse(read("./live-thumb-layout/replacement.json"));
-const withLayout = (code) => LAYOUT.pairs.reduce((s, p) => {
-  assert.equal(s.split(p.old).length, 2, "a layout pair occurs once in the export's Pick Still");
-  return s.replace(p.old, () => p.new);
-}, code);
-const PICK_OLD = withLayout(exportCode("Thumb: Pick Still"));
+const PICK_SRC = exportCode("Thumb: Pick Still");
+assert.equal(read("./thumb_pick_still.js"), PICK_SRC, "thumb_pick_still.js is the live Pick Still, byte for byte");
+// Today's Pick Still is Pick Still as it ran before Jev: the live node (layout fix
+// published as de4ac645, Jev block published in 3db61aef) with the Jev block taken
+// out, the two consts put back and the two output keys dropped.
+const JEV_BLOCK = /\n\/\/ Jev scoring, ruled by Tee[\s\S]*?\nif \(JEV_APPLY && jevPhoto\) \{ pick = jevPhoto; src = jevPick; \}\n/;
+assert.match(PICK_SRC, JEV_BLOCK, "the live Pick Still carries the Jev block");
+const PICK_OLD = PICK_SRC
+  .replace(JEV_BLOCK, "")
+  .replace("let pick = ", "const pick = ")
+  .replace("let src = ", "const src = ")
+  .replace(",\n  jevPick,\n  jevApplied: JEV_APPLY\n", "\n");
+assert.doesNotMatch(PICK_OLD, /jev/i, "no Jev code is left in the baseline");
 
 // The shadow flag, flipped in memory only. The files on disk are never touched.
 const flip = (code) => {
@@ -235,8 +239,11 @@ const runMovie = (code, { segs, px, jev = {} }) => new Function("$", "$json", co
   { presenterClips: [] },
 )[0].json;
 const clips = (out) => out.j2vBody.scenes[0].elements.filter((e) => e.type === "video").map((e) => e.src);
-// Every key the export's output has comes out the same. Extra keys are allowed.
-const sameAsExport = (got, want, label) => { for (const k of Object.keys(want)) assert.deepEqual(got[k], want[k], label + ": " + k); };
+// Every key the baseline's output has comes out the same. Extra keys are allowed.
+// The live Build Movie carries the Jev code, so its own output has the three Jev
+// report keys; those are Jev's report and are asserted by name where it matters.
+const JEV_KEYS = ["jevRanked", "jevWouldChange", "jevApplied"];
+const sameAsExport = (got, want, label) => { for (const k of Object.keys(want)) if (!JEV_KEYS.includes(k)) assert.deepEqual(got[k], want[k], label + ": " + k); };
 
 // ---- stills ----
 

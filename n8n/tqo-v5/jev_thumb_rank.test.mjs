@@ -15,9 +15,10 @@
  * original, large2x, large, medium, small, portrait, landscape and tiny, alt),
  * and they are synthetic because no execution in retention ran Thumb: Find
  * Still, so there is no real response to copy. The Pick Still check does not
- * depend on them looking real. It runs the UNMODIFIED code of Thumb: Pick Still
- * read out of the workflow export, runs the shipped file on the same stubs, and
- * requires the same output apart from the two keys the shipped file adds.
+ * depend on them looking real. It reads the live code of Thumb: Pick Still out of
+ * the workflow export, strips the Jev block to get Pick Still as it ran before
+ * Jev, runs both on the same stubs, and requires the same output apart from the
+ * two keys the Jev block adds.
  */
 
 import assert from "node:assert/strict";
@@ -410,28 +411,29 @@ assert.deepEqual(askedFor([SKIPPED_BIG + "A".repeat(20000001 - SKIPPED_BIG.lengt
 assert.ok(kept("/9j/" + "!".repeat(100)) && kept("iVBORw0KGgo" + "!".repeat(100)));
 
 // ---- thumb_pick_still.js -------------------------------------------------------
-// Today's Pick Still is the export's with the layout fix Tee ruled on 2026-10-27
-// ("Fix both, prove first"), published as de4ac645. Each pair must occur once.
-const LAYOUT = JSON.parse(src("live-thumb-layout/replacement.json"));
-const ORIGINAL = LAYOUT.pairs.reduce((s, p) => {
-  assert.equal(s.split(p.old).length, 2, "a layout pair occurs once in the export's Pick Still");
-  return s.replace(p.old, () => p.new);
-}, exportCode("Thumb: Pick Still"));
-const SHIPPED = src("thumb_pick_still.js");
+// Both the layout fix (published as de4ac645) and the Jev block are live in the
+// export now, so the code under test is the live node read out of the export.
+// "Today's" Pick Still, the baseline every shadow check compares against, is that
+// code with the Jev block taken out and the two consts put back.
+const SHIPPED = exportCode("Thumb: Pick Still");
+assert.equal(src("thumb_pick_still.js"), SHIPPED, "thumb_pick_still.js is the live Pick Still, byte for byte");
 const flipped = SHIPPED.replace("const JEV_APPLY = false;", "const JEV_APPLY = true;");
-assert.notEqual(flipped, SHIPPED, "the shipped file declares JEV_APPLY = false");
+assert.notEqual(flipped, SHIPPED, "the live Pick Still declares JEV_APPLY = false");
 assert.match(SHIPPED, /^const JEV_APPLY = false;$/m);
 // The floor is a named constant and it is 2, the level that reads "fits the subject".
 assert.match(SHIPPED, /^const JEV_FLOOR = 2;$/m);
 
-// The shipped file is the export code plus the Jev block. Take the block out,
-// put the two consts back and drop the two output keys, and the export is left.
-const stripped = SHIPPED
-  .replace(/\n\/\/ Jev scoring, ruled by Tee[\s\S]*?\nif \(JEV_APPLY && jevPhoto\) \{ pick = jevPhoto; src = jevPick; \}\n/, "")
+// Take the Jev block out, put the two consts back and drop the two output keys,
+// and what is left is Pick Still as it ran before Jev. It must name Jev nowhere.
+const JEV_BLOCK = /\n\/\/ Jev scoring, ruled by Tee[\s\S]*?\nif \(JEV_APPLY && jevPhoto\) \{ pick = jevPhoto; src = jevPick; \}\n/;
+assert.match(SHIPPED, JEV_BLOCK, "the live Pick Still carries the Jev block this test strips");
+const ORIGINAL = SHIPPED
+  .replace(JEV_BLOCK, "")
   .replace("let pick = ", "const pick = ")
   .replace("let src = ", "const src = ")
   .replace(",\n  jevPick,\n  jevApplied: JEV_APPLY\n", "\n");
-assert.equal(stripped, ORIGINAL, "thumb_pick_still.js is the exported Pick Still code plus the Jev block");
+assert.doesNotMatch(ORIGINAL, /jev/i, "with the block and the two keys removed, no Jev code is left");
+assert.match(ORIGINAL, /const TEXT_BUDGET = 680;/, "and what is left carries the live layout fix");
 
 const runPick = (code, { json, plan = PLAN, jev = {} }) => {
   const $ = (node) => {
