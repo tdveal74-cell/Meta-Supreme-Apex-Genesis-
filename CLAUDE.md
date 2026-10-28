@@ -698,9 +698,15 @@ card and no message from him in the 30 minutes before.
 
 `.claude/hooks/gate_ledger.py`, wired in `.claude/settings.json` on PreToolUse,
 PostToolUse and PostToolUseFailure, refuses a gated call unless a human signal
-sits inside 30 minutes before it: a message Tee typed, or an answered
+sits inside 2 hours before it: a message Tee typed, or an answered
 `AskUserQuestion` card. A refusal means put the decision on a card and retry.
 Do not rephrase the call to get past it.
+
+The window was 30 minutes from 2026-10-14 and became 2 hours on 2026-10-28,
+ruled by Tee on a card, "All", after a day in which reads on the VPS and n8n
+stopped every half hour for a fresh word from him. The trade he accepted is an
+outward call running on a word up to two hours old. `WINDOW_MIN` in the hook
+is the number; this paragraph is not.
 
 - Gated: every n8n write (publish, unpublish, archive, execute, update,
   restore, data table writes, folder moves); every tool on a server named
