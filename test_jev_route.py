@@ -2606,15 +2606,120 @@ def test_a_lookup_runs_nothing(tmp_path, installed_bin, monkeypatch):
     assert not marker.exists()
 
 
+# The ruled property is that the hook never runs bash or any other program. The
+# guard for it is an allowlist of what the module may import, not a list of bad
+# names: a list of names is bypassed by `from subprocess import run as _spawn`,
+# `from os import system`, `import os as o`, importlib or ctypes, and a hook that
+# ran /bin/true on every call stayed green under it. Adding an import to the hook
+# means adding it here, which is a decision and not an accident.
+ALLOWED_IMPORTS = frozenset({"hashlib", "itertools", "json", "os", "re", "sys", "threading", "time", "urllib.error",
+                             "urllib.parse", "urllib.request"})
+ALLOWED_FROM_IMPORTS = frozenset({("__future__", "annotations"), ("datetime", "datetime"), ("datetime", "timezone")})
+SPAWN_ATTRIBUTES = frozenset({"system", "popen", "startfile"})
+SPAWN_ATTRIBUTE_PREFIXES = ("exec", "spawn", "posix_spawn", "fork")
+MODULE_REACHING_ATTRIBUTES = frozenset({"modules", "__dict__", "__builtins__", "__globals__", "__subclasses__",
+                                        "__loader__", "__import__"})
+DYNAMIC_NAMES = frozenset({"eval", "exec", "compile", "__import__", "getattr", "setattr", "delattr", "globals",
+                           "locals", "vars", "breakpoint", "subprocess", "shutil", "importlib", "ctypes", "pty",
+                           "multiprocessing", "runpy", "pkgutil"})
+
+
+def spawn_hazards(source):
+    """Every way the source could start a program, or reach for one by a route
+    the import allowlist cannot see. Empty means none found."""
+    found = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name not in ALLOWED_IMPORTS:
+                    found.append("import %s is not on the allowlist" % alias.name)
+                if alias.asname:
+                    found.append("import %s as %s hides the name from every other check" % (alias.name, alias.asname))
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if node.level or (node.module, alias.name) not in ALLOWED_FROM_IMPORTS:
+                    found.append("from %s import %s is not on the allowlist" % ("." * node.level + (node.module or ""),
+                                                                              alias.name))
+                if alias.asname:
+                    found.append("from %s import %s as %s hides the name" % (node.module, alias.name, alias.asname))
+        elif isinstance(node, ast.Attribute):
+            if node.attr in SPAWN_ATTRIBUTES or node.attr.startswith(SPAWN_ATTRIBUTE_PREFIXES):
+                found.append("attribute .%s starts a program" % node.attr)
+            if node.attr in MODULE_REACHING_ATTRIBUTES:
+                found.append("attribute .%s reaches a module without an import" % node.attr)
+        elif isinstance(node, ast.Name) and node.id in DYNAMIC_NAMES:
+            found.append("name %s runs or reaches code by a dynamic route" % node.id)
+    return found
+
+
 def test_the_hook_has_no_way_to_run_a_program():
-    tree = ast.parse(HOOK.read_text())
-    os_calls = {n.func.attr for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
-                and isinstance(n.func.value, ast.Name) and n.func.value.id == "os"}
-    names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
-    assert not os_calls & {"system", "popen", "execv", "execve", "execvp", "execvpe", "execl", "execle", "execlp",
-                           "execlpe", "spawnv", "spawnve", "spawnvp", "spawnl", "spawnle", "spawnlp", "posix_spawn",
-                           "posix_spawnp", "fork", "forkpty", "startfile"}
-    assert not names & {"subprocess", "shutil", "eval", "exec", "compile", "__import__"}
+    assert spawn_hazards(HOOK.read_text()) == []
+
+
+def test_the_program_guard_sees_the_hook_with_a_program_run_added():
+    """The mutation a verifier made on the shipped file: run /bin/true on every
+    call through an aliased import. The name based guard it replaced passed this."""
+    shipped = HOOK.read_text()
+    anchor = '    raw = os.environ.get("PATH")\n'
+    assert shipped.count(anchor) == 1
+    mutated = shipped.replace(anchor, "    from subprocess import run as _spawn\n    _spawn([\"/bin/true\"])\n" + anchor)
+    assert mutated != shipped
+    assert spawn_hazards(mutated) == [
+        "from subprocess import run is not on the allowlist",
+        "from subprocess import run as _spawn hides the name",
+    ]
+
+
+@pytest.mark.parametrize("source", [
+    "from subprocess import run as _spawn\n_spawn(['/bin/true'])",
+    "from subprocess import run\nrun(['/bin/true'])",
+    "import subprocess",
+    "import subprocess as sp",
+    "def f():\n    import subprocess\n    subprocess.run(['/bin/true'])",
+    "from os import system\nsystem('true')",
+    "from os import system as s\ns('true')",
+    "from os import popen",
+    "from os import posix_spawn",
+    "import os as o\no.system('true')",
+    "import os\nos.system('true')",
+    "import os\nos.popen('true')",
+    "import os\nos.execv('/bin/true', ['true'])",
+    "import os\nos.execvp('true', ['true'])",
+    "import os\nos.spawnl(os.P_WAIT, '/bin/true', 'true')",
+    "import os\nos.posix_spawn('/bin/true', ['true'], {})",
+    "import os\nos.fork()",
+    "import os\nos.forkpty()",
+    "import os\nos.startfile('x')",
+    "import importlib\nimportlib.import_module('subprocess')",
+    "from importlib import import_module",
+    "import ctypes",
+    "import ctypes.util",
+    "import pty",
+    "import multiprocessing",
+    "import shutil",
+    "import runpy",
+    "import asyncio",
+    "import socketserver",
+    "from . import sibling",
+    "from .sibling import run",
+    "import urllib.request as r",
+    "__import__('subprocess')",
+    "import os\ngetattr(os, 'sys' + 'tem')('true')",
+    "import os\nvars(os)['system']",
+    "import os\nos.__dict__['system']",
+    "import sys\nsys.modules['subprocess']",
+    "eval('1')",
+    "exec('1')",
+    "compile('1', 'x', 'exec')",
+])
+def test_the_program_guard_flags_each_way_to_start_or_reach_a_program(source):
+    assert spawn_hazards(source), source
+
+
+def test_the_program_guard_passes_what_the_hook_does_use():
+    assert spawn_hazards("from __future__ import annotations\nimport os\nimport re\nimport urllib.request\n"
+                         "from datetime import datetime, timezone\n"
+                         "def f():\n    return os.path.isfile(os.environ.get('PATH', '')) and re.compile('x')\n") == []
 
 
 def test_a_name_is_looked_up_once_per_call(monkeypatch):
