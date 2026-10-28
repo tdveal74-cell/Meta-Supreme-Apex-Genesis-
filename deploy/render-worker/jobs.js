@@ -2295,5 +2295,10 @@ function realish(p) {
   }
 }
 
+// ACX Node assembly (2026-10-28, ruled R22): two native jobs in their own file,
+// built against the same validators so a path, a number or a choice is refused
+// the same way here as everywhere else in this table.
+Object.assign(JOBS, require('./acx_node.js').jobs({ BadJob, safePath, existingPath, num, oneOf, getRoot, ensureDir }));
+
 module.exports = { JOBS, BadJob, safePath, existingPath, num, oneOf, setRoot, getRoot, PRESETS,
                    normalizeChain, isStill, gainEnvelope, setTagReader, alignTokens };
