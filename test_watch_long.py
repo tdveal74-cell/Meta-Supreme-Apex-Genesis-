@@ -148,11 +148,11 @@ def test_a_failed_window_is_reported_as_unavailable_not_filled_in(wl, monkeypatc
     report = wl.run(args)
     assert len(report.windows) == 1
     assert not report.windows[0].ok
-    assert report.windows[0].error == "attempt 2: HTTP 502: upstream request failed"
+    assert report.windows[0].error == "attempt 2: HTTP 502: upstream request failed; re-pass attempt 2: HTTP 502: upstream request failed"
     assert report.synthesis == ""  # nothing readable, so no synthesis was attempted
     text = wl.render(report)
     assert "## Unavailable evidence" in text
-    assert "- 00:00 to 10:00: attempt 2: HTTP 502: upstream request failed" in text
+    assert "- 00:00 to 10:00: attempt 2: HTTP 502: upstream request failed; re-pass attempt 2: HTTP 502: upstream request failed" in text
     assert "Synthesis unavailable: not run" in text
 
 
@@ -266,7 +266,7 @@ def test_a_malformed_answer_costs_one_window_not_the_run(wl, monkeypatch):
     args = wl.build_parser().parse_args(["https://youtu.be/x", "--duration", "600", "--parallel", "2"])
     report = wl.run(args)
     assert len(report.windows) == 1
-    assert report.windows[0].error == "attempt 2: KeyError: 'candidates'"
+    assert report.windows[0].error == "attempt 2: KeyError: 'candidates'; re-pass attempt 2: KeyError: 'candidates'"
 
 
 def test_the_key_must_exist_and_the_source_must_be_youtube(wl, monkeypatch):
@@ -286,3 +286,57 @@ def test_the_model_defaults_to_the_environment_then_argon(wl, monkeypatch):
     monkeypatch.setenv("WATCH_GEMINI_MODEL", "gemini-3.7-flash")
     assert wl.build_parser().parse_args(["u"]).model == "gemini-3.7-flash"
     assert wl.build_parser().parse_args(["u", "--model", "x"]).model == "x"
+
+
+def test_a_window_that_fails_both_attempts_is_read_again_after_the_first_pass(wl, monkeypatch):
+    """Measured 2026-10-28: 3 of 83 windows across four videos died on the relay's 502
+    after both attempts, and each of those spans read cleanly on a later run. The re-pass
+    reads only those windows again, once, after the rest of the plan has finished."""
+    calls = []
+
+    def fake_stream(payload, *, model, key, timeout):
+        part = payload["contents"][0]["parts"][0]
+        if "file_data" in part:
+            start = int(part["video_metadata"]["start_offset"].rstrip("s"))
+            calls.append(start)
+            if start == 600 and calls.count(600) <= 2:
+                raise RuntimeError("HTTP 502: upstream request failed")
+            if start >= 1800:
+                raise wl.PastEnd("HTTP 400: Request contains an invalid argument.")
+            return f"notes from {start}", {}, 1.0
+        return "synthesis", {}, 0.5
+
+    monkeypatch.setattr(wl, "stream_generate", fake_stream)
+    monkeypatch.setenv("GEMINI_API_KEY", "placeholder")
+    args = wl.build_parser().parse_args(["https://youtu.be/x", "--duration", "1800", "--parallel", "1"])
+    report = wl.run(args)
+    # the plan in order, the two failed attempts on 600, the re-pass, then the tail probe
+    assert calls == [0, 600, 600, 1200, 600, 1800]
+    assert [(w.start, w.ok, w.reread) for w in report.windows] == [
+        (0, True, False), (600, True, True), (1200, True, False)
+    ]
+    assert report.windows[1].text == "notes from 600"
+    text = wl.render(report)
+    assert "Unavailable evidence" not in text
+    assert "### 10:00 to 20:00 (" in text and ", re-pass, first byte" in text
+
+
+def test_the_re_pass_never_re_reads_a_400(wl, monkeypatch):
+    calls = []
+
+    def fake_stream(payload, *, model, key, timeout):
+        part = payload["contents"][0]["parts"][0]
+        if "file_data" in part:
+            start = int(part["video_metadata"]["start_offset"].rstrip("s"))
+            calls.append(start)
+            if start >= 600:
+                raise wl.PastEnd("HTTP 400: Request contains an invalid argument.")
+            return "notes", {}, 1.0
+        return "synthesis", {}, 0.5
+
+    monkeypatch.setattr(wl, "stream_generate", fake_stream)
+    monkeypatch.setenv("GEMINI_API_KEY", "placeholder")
+    args = wl.build_parser().parse_args(["https://youtu.be/x", "--duration", "1200", "--parallel", "1"])
+    report = wl.run(args)
+    assert calls == [0, 600]
+    assert [(w.start, w.ok) for w in report.windows] == [(0, True)]
