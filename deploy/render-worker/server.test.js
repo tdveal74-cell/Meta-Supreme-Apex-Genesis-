@@ -81,7 +81,7 @@ t('health needs no token and lists the job types', async () => {
   // to tell a stale jobs.js from a current one. 18 until 2026-09-15, when
   // presenter_composite made it 19; 21 from 2026-10-15, when the Voice Lab
   // jobs align_script and take_patch landed.
-  assert.strictEqual(r.body.job_count, 21, 'job_count was ' + r.body.job_count);
+  assert.strictEqual(r.body.job_count, 23, 'job_count was ' + r.body.job_count);
   assert.ok(r.body.jobs.includes('assemble_cut'));
   assert.ok(r.body.jobs.includes('duck_mix'));
   assert.ok(r.body.jobs.includes('presenter_composite'));
