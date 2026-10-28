@@ -277,11 +277,15 @@ A fresh critic on `de4ac645` confirmed the live node equals the repo, the four
 proof frames, and the layout on every input `Thumb: Plan` can send. It also showed
 the first layout test let a budget of 760, a looser height rule and drifted widths
 through once every pinned copy was moved together. The test now pins the layout
-constants, checks the width table against Liberation Sans read from the font file,
-compares the node's wrap with n8n's line for line, and adds five crafted
-headlines; each of those nine mutations now fails it. Four things were left as
-they are, because none of them reaches what `Thumb: Plan` sends and changing the
-live node is a publish:
+constants and the 1.2 em line pitch, checks the width table against Liberation
+Sans read from the font file, compares the node's wrap with n8n's line for line,
+and adds seven crafted headlines. Each of these edits to the node, made in every
+pinned copy at once, now fails it: a budget of 760 or 682, widths scaled by
+1000/1005, W at 700, M at 600, E at 500, an unlisted glyph at 400, a pitch of
+0.5 or 1.1, a floor of 900, a search bound of 1, the wrap without its plus one,
+and a wrap one short of the search's answer. Four things were left as they are.
+The first three do not reach what `Thumb: Plan` sends, and the fourth predates the
+fix; changing any of them is a publish:
 
 - A double space or a newline in a headline can still make Compose draw an empty
   line. Plan collapses all whitespace first, so Pick Still never sees one.

@@ -12,7 +12,7 @@
  * from Arial's advance widths with the same word wrap Compose applies.
  *
  * This test holds the files to the manifest, holds the change to the three
- * replacement pairs, and checks the layout on 600 generated headlines and five
+ * replacement pairs, and checks the layout on 600 generated headlines and seven
  * crafted ones with an independent copy of n8n's wrap loop. The width table is
  * checked against the one line measured on the instance and, entry by entry,
  * against Liberation Sans, the metric twin of Arial, read from the font file's
@@ -22,7 +22,9 @@
  * TEXT_BUDGET 760, a looser height rule, a search bound of 1, a drifted wrap and
  * drifted widths through, once every pinned copy was re-baselined together. The
  * layout constants, the replica check and the crafted headlines below each turn
- * one of those back into a failure.
+ * one of those back into a failure. Two verifiers then found a budget loosened
+ * by a few pixels and a wrap one short of the search's answer still passing;
+ * the last two crafted headlines catch those.
  */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -99,6 +101,10 @@ eq(constant("FLOOR_Y"), "680", "after.js keeps the block above y 680");
 eq(constant("SIZES"), "[104, 84, 66, 54]", "after.js keeps the four sizes");
 eq(constant("TOP"), "{ 104: 250, 84: 235, 66: 225, 54: 220 }", "after.js keeps the first baseline for each size");
 eq(after.split("(ARIAL[ch] || 1000)").length, 2, "an unlisted glyph counts as 1000, in the one width function");
+// The 1.2 em pitch over-reads the 1.12 to 1.135 em GraphicsMagick draws, which
+// is the safe side. Nothing Thumb: Plan can send reaches the height rule, so it
+// is pinned here rather than by a headline.
+eq(after.split("TOP[px] + lines.length * px * 1.2 > FLOOR_Y").length, 2, "the height rule reads a 1.2 em line pitch");
 
 // ---- The width table against the font -------------------------------------------
 // Liberation Sans is metric compatible with Arial. liberation_widths.py read these
@@ -203,6 +209,12 @@ const CRAFTED = {
   "WWWW DON'T": "the width of W",
   // An unlisted glyph counts as a full em, so nine of them step the size down.
   "ÉÉÉÉÉÉÉÉÉ": "an unlisted glyph",
+  // At 84 px the line "THE MEMO MISS" is 681.4 px, so a budget loosened by even
+  // 2 px, or widths scaled down by half a percent, draws it past the budget.
+  "THE MEMO MISS TO": "the budget to the pixel",
+  // The only wrap that fits is the longest word plus one, and that word comes
+  // first, so a wrap one shorter than the search's answer starts on an empty line.
+  "ACCOUNTABILITY WORKERS MANAGER": "the wrap the search returns",
 };
 for (const [headline, what] of Object.entries(CRAFTED)) {
   ok(checkHeadline(headline, false), headline + ": every word fits the budget at 54 px, so the checks for " + what + " apply");
