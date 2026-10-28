@@ -1036,12 +1036,12 @@ def test_the_vendored_skills_are_the_ones_claude_md_names():
     """The ours/vendored split in CLAUDE.md is load bearing: vendored skills
     are never edited in place. UPSTREAM.md is what marks one, so another
     vendored skill arriving must move the prose, not sit silently. This said
-    scroll-craft alone until hypit was vendored on 2026-10-16, and typesafe-ai
-    followed the same day."""
+    scroll-craft alone until hypit was vendored on 2026-10-16, typesafe-ai
+    followed the same day, and watch arrived on 2026-10-28."""
     vendored = sorted(d.name for d in SKILLS.iterdir() if (d / "UPSTREAM.md").is_file())
-    assert vendored == ["hypit", "scroll-craft", "typesafe-ai"], (
+    assert vendored == ["hypit", "scroll-craft", "typesafe-ai", "watch"], (
         f"vendored skills are now {vendored}; CLAUDE.md and the "
-        "ours/vendored counts above assume hypit, scroll-craft and typesafe-ai"
+        "ours/vendored counts above assume hypit, scroll-craft, typesafe-ai and watch"
     )
 
 

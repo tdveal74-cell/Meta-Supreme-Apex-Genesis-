@@ -1,0 +1,72 @@
+{
+ "workflow": "TQO FINAL V5",
+ "workflowId": "qEkGOUsNyVaRAmm6",
+ "ruled": [
+  "Tee 2026-10-16: Do thumbnail & b roll",
+  "Tee 2026-10-27 on a card: Standalone harness",
+  "Tee 2026-10-27 on a card: Draft now, publish card next",
+  "Tee 2026-10-27 on a card: Publish now"
+ ],
+ "harness": {
+  "workflowId": "yNr8lXrSbdNUqHba",
+  "archived": true,
+  "execution": "4737",
+  "ranAt": "2026-10-27T21:47:22Z",
+  "result": "success, all 25 nodes, no node error, 5.07 s. Two b-roll calls of 4 stills (8,657 input tokens each), one photo ranking of 3 photos (6,659), one composed check (2,822). Every answer named model jev-1.14.0. Build Movie jevRanked 2, jevWouldChange 1, jevApplied false. Pick Still jevPick equal to its own pick. The check noted the headline runs off the dark panel, box right edge 0.68 against 0.603. Inputs were fixtures/pexels_video_search_2221.json and three Pexels video posters standing in for photos."
+ },
+ "before": {
+  "versionId": "fc75f7a6-7947-402c-9bf2-2396bd866b12",
+  "nodes": 283
+ },
+ "after": {
+  "versionId": "3db61aef-43a9-494a-ab65-ef79d8fa0c18",
+  "nodes": 297,
+  "file": "published.json",
+  "activatedAt": "2026-10-27T21:58:51.820Z, workflowPublishHistory event \"activated\" on version 3db61aef",
+  "publishedReadBack": "2026-10-27T21:59:02Z, on Tee's card 'Publish now': activeVersionId equals versionId 3db61aef, the published nodes and connections equal the read-back draft, the draft differs from fc75f7a6 by 14 added nodes, 14 added edges and the jsCode of Build Movie, Thumb: Pick Still and Shim: Thumbnail To Binary, and settings and static data are unchanged."
+ },
+ "current": {
+  "versionId": "de4ac645-b4ea-43b8-90ec-b570fec5eeb8",
+  "activatedAt": "2026-10-27T23:33:59.281Z, workflowPublishHistory event \"activated\" on version de4ac645",
+  "note": "Thumb: Pick Still layout fixed on Tee's cards, see ../live-thumb-layout. The 14 Jev nodes and the other two consumers are as 3db61aef published them. published.json is read from this version."
+ },
+ "code": {
+  "Jev: B-Roll Stills": {
+   "file": "jev_broll_stills.js",
+   "sha256": "e9ce3d11d3017cf7c06b32b538a1aefa146a5b561321679edf4d13cdcdcf1918"
+  },
+  "Jev: B-Roll Bodies": {
+   "file": "jev_broll_bodies.js",
+   "sha256": "9b80847fe24e08e192cd557daf5d5284d499da7481d11dd4651136ff5fb04b83"
+  },
+  "Jev: Thumb Stills": {
+   "file": "jev_thumb_stills.js",
+   "sha256": "4b00153e8c973dcbca1210bae7b9a9ab0838f5211b566032b89eb3f76b6057a5"
+  },
+  "Jev: Thumb Body": {
+   "file": "jev_thumb_body.js",
+   "sha256": "e93e69b62a0cfba675e0a59857ae15618add23bd15d146d258e5cd87907e77e7"
+  },
+  "Jev: Thumb Check Body": {
+   "file": "jev_thumb_check_body.js",
+   "sha256": "0513a66d779b7a37b1f0f46396e4734e824fad03da6742b943ffb3fc8b4c6eb7"
+  },
+  "Jev: Thumb Verdict": {
+   "file": "jev_thumb_check_verdict.js",
+   "sha256": "79b05d4bae80d6f0b7e75d3fa0f2237a6b06ee932a9d2f16674c06e8c4a9cb74"
+  },
+  "Build Movie": {
+   "file": "build_movie.js",
+   "sha256": "684cca737aeb2d38dff9d1357d966b049dc55ca76d7808aefd9c0175b928e843"
+  },
+  "Thumb: Pick Still": {
+   "file": "thumb_pick_still.js",
+   "sha256": "a3e88bcc4d3d89cba7145c6906c87544973ab9811f3423bbd253a73af3f350e6"
+  },
+  "Shim: Thumbnail To Binary": {
+   "file": "shim_thumbnail_to_binary.js",
+   "sha256": "2591425c261e13481de909b9b25b76f01ed1c0e44bf2f61e15fd8db5d8c09eb7"
+  }
+ },
+ "rollback": "publish fc75f7a6-7947-402c-9bf2-2396bd866b12"
+}

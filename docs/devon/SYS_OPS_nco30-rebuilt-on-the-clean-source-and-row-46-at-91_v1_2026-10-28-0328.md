@@ -1,0 +1,41 @@
+# NCO 30 rebuilt on the clean source, and row 46 at 91
+
+Written 2026-10-28, 01:50Z to 03:30Z, the session that carried the 2026-10-28 treatment pass on NCO 30 and TQO 46 (zooms, lower thirds, animated title and checklist, an owned music bed) through a fresh critic workflow and out the other side. Two masters that had passed every check the session ran were both wrong, in the same way the first law in CLAUDE.md tabulates: the check was cheap and had not been run against the artifact.
+
+## What the critic found and what it cost
+
+The completeness critic read the rendered NCO 30 master, not only the timeline, and found two caption layers on every presenter frame. The file imported as the presenter source, NCO30_drive.mp4, carries HeyGen's own serif word captions burned into the picture. ChatCut's Inter captions rendered on top of them, so the v1 and v2 masters were double captioned for the whole runtime. The sibling file downloaded from the HeyGen API, NCO30_heygen_c62e0e46.mp4, is the same take with a clean band: 475.181 s against 475.180 s, audio envelope correlation 1.0000 at lag zero over 10 ms frames, and the serif text absent at 0.4 s, 150 s and 303 s where the Drive file shows it. The v2 "verification" had read the caption band at the splice only, where a full frame card covers the presenter.
+
+The rebuild replaced the five V1 pieces with the clean asset at the same source offsets, re-added the fourteen zoom effects, and re-derived the captions. Two things about ChatCut's external API are worth keeping. A zoom effect is stored relative to the item it is attached to, so moving an item's start by one frame moves every effect on it by one frame, and an update of an effect's fromFrame reports success and changes nothing. Delete and re-add with absolute frames. Caption custom edits survive an item boundary change inside a pause but not an asset swap: after the swap all 25 custom cards and one split had to be re-applied against new card ids, and the diff was taken from the saved pre-swap card list, not from memory.
+
+The second wrong claim was the muted "uh". The v1 and v2 masters muted source 98.52 to 98.60 s, and the v2 verification confirmed that window was quiet. It was quiet in the source too. The vowel sits at 98.44 to 98.52 s, an 80 ms burst at minus 22 dBFS on both source files, and it was audible in every master until v4. The mute now covers 98.44 to 98.56 s, three frames at minus 60 dB, and the v4 master reads minus 47 dBFS across the vowel window, which is the bed alone. Both the v3 and v4 masters' audio lags the source by 40 ms on the first two pieces and 50 ms on the last, measured by cross correlation. That is most likely AAC priming in the cloud renderer and it is within one frame. Tee's watch is the judge of lip sync.
+
+## The bed, re-measured
+
+The bed critic measured the synthesized bed instead of trusting its loudnorm target. The 7 s fade in did not survive single pass loudnorm (the bed reached its body level by 2 s and ran 4 LU hot under the opening sentence), the file ended at full level, and the two timelines sat at different distances under the voice because the presenter loudness differs: 18.1 dB under on NCO and 15.0 dB under on TQO at the same minus 16 dB. Bed v2 uses equal power chord crossfades, two pass linear loudnorm and an 8 s tail fade, and TQO's item sits at minus 19 dB so both episodes run 18 dB under their voice. The 24 s breathing the critic measured at 7.6 to 9.5 LU per block is 6.2 to 8.2 LU in v2: three slow leveling filters were tried on a 144 s render and none moved it below 7 LU, so the swing is the detuned pad's own character. It is recorded here for Tee's ear. Ducking is off on both A1 tracks and the markers now say so. The earlier markers claimed ducking that the masters did not carry.
+
+## Row 46, the script
+
+Tee ruled on a card at 01:25Z: revise, re-voice, re-render the changed parts. The v1 script scored 72 at the quality90 reviewer on the VPS, v3 scored 86, and v4 scored 91 with every statistic SUPPORTED against a dated snapshot. The reviewer holds on gates 5 and 6, a QC receipt and Tee's authorization, which cannot exist before the voice does. What moved the score was not prose. The Gartner line is now quoted from Gartner's own press release of October 22, 2024 ("through 2026, 20% of organizations will use AI to flatten their organizational structure, eliminating more than half of current middle management positions"), which also corrected the script's wording from "by 2026" and "managers". The Korn Ferry and Gallup years are carried by the pages themselves, Ramp dated 2026-05-12 and Gallup dated 2026-01-13, both fetched and quoted into the packet. The capability claims are labelled as the presenter's view. v5 carries three further wording fixes the v4 review asked for and is written to the VPS with its packet, but its review held on preflight twice because the reviewer's subscription session usage was over the 50% reserve. A scheduled task retries it at 05:30Z.
+
+The voice is the open decision. HeyGen reads 321 plan credits with a reset on 2026-11-26. Part 2 of the v1 render cost 299 credits for 372.88 s, so a whole v5 render at the v1 pace is about 499 credits and the changed paragraphs alone, 85 percent of the words, about 425. Neither fits. The card to Tee puts the owned route first: Chatterbox on his Colab for the voice and MuseTalk over the existing Avatar V footage for the mouth, at no HeyGen cost and with the lip sync quality unverified at this length.
+
+## State at close
+
+NCO 30 v4 master: render 0d41a04c36, 314,495,447 bytes, sha256 37f650c23cc1033a92a3c9afd93b1a8aee63373afa964f793501a770cfe06675, 477.29 s, full decode clean, copied to Drive root as NCO30_master_2026-10-28_v4.mp4 (file id 1QAZu5EDvSYxshwO-vm7ZWVuB3QsMLtpy, Drive sha256 identical). Nothing published. The v1, v2 and v3 masters are superseded and should not be watched.
+
+TQO 46: the timeline carries the v2 bed at minus 19 dB and the v4 cards (the Gartner card in the press release wording, the Operator Test card naming The Gain). The lower third still reads THE THIRD LENS because the v1 voice still says Leverage. The treatment render on Drive (TQO46_treatment_review_2026-10-28.mp4) is a review render that predates the S1E2 header, the title seam fix, that label and the v4 cards, and it carries the v1 voice. No TQO master exists yet.
+
+Shorts, thumbnails and the Sisinty cadence pass are the next arc on Tee's ruling, after his watch of NCO 30 and the TQO re-voice. The repository's own QC prompt for the TQO lane still names the third lens Leverage (n8n/tqo-v5/build_qc_prompt.js, line 12) while Tee's VPS brand rules name it The Gain since the 2026-10-18 addendum. That is a ruling for Tee, not a fix made here.
+
+## DEVON RECEIPT
+
+TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
+AREA: NCO, TQO
+TYPE: SYS_OPS
+ARTIFACT: docs/devon/SYS_OPS_nco30-rebuilt-on-the-clean-source-and-row-46-at-91_v1_2026-10-28-0328.md
+DATE: 2026-10-28
+DECISIONS: Tee ruled keep the owned synth bed, cloud render both masters, ship both after his watch, then a Sisinty cadence pass on TQO 46, and revise, re-voice, re-render the changed parts of row 46; the session swapped NCO 30 to the clean HeyGen source on the critic's blocker and moved the mute onto the vowel, both measured on the file
+FINDINGS: the imported NCO 30 source carried burned in HeyGen captions and two masters were double captioned; the muted window was 80 ms of silence after the vowel and the vowel was audible in three masters; zoom effects are item relative in ChatCut and an effect fromFrame update is a silent no op; the bed's fade in did not survive single pass loudnorm and ducking was never applied; row 46 reached 91 on dated primary snapshots, the Gartner wording corrected from the press release
+OPEN: Tee's end to end watch of NCO 30 v4; the voice route for row 46 (321 HeyGen credits against 425 to 499 needed, reset 2026-11-26); the v5 review retry at 05:30Z; the lower third label swap to THE GAIN ASKS at the re-voice; the stale Leverage line in the repository QC prompt; the 40 ms master audio lag to be judged by ear; Shorts, thumbnails and the cadence pass
+STATUS: NCO 30 v4 on Drive and verified, unwatched; TQO 46 timeline updated, no master; row 46 at v5 with v4 scored 91, HOLD on gates 5 and 6 by design

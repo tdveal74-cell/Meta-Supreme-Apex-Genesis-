@@ -180,7 +180,7 @@ let out = bodyOf([JPEG, PNG, JPEG]);
 assert.equal(out.length, 1);
 assert.deepEqual(out[0].json.urls, [U1, U2, U3]);
 let body = out[0].json.body;
-assert.equal(body.model, "jev-latest");
+assert.equal(body.model, "jev-1.14.0", "pinned, ruled 2026-10-27");
 assert.deepEqual(body.state, { subject: "professional desk window evening", headline: "THE MIDDLE IS THE TARGET" });
 assert.deepEqual(Object.keys(body.questions), ["p1", "p2", "p3"]);
 for (const k of [1, 2, 3]) {
@@ -410,7 +410,13 @@ assert.deepEqual(askedFor([SKIPPED_BIG + "A".repeat(20000001 - SKIPPED_BIG.lengt
 assert.ok(kept("/9j/" + "!".repeat(100)) && kept("iVBORw0KGgo" + "!".repeat(100)));
 
 // ---- thumb_pick_still.js -------------------------------------------------------
-const ORIGINAL = exportCode("Thumb: Pick Still");
+// Today's Pick Still is the export's with the layout fix Tee ruled on 2026-10-27
+// ("Fix both, prove first"), published as de4ac645. Each pair must occur once.
+const LAYOUT = JSON.parse(src("live-thumb-layout/replacement.json"));
+const ORIGINAL = LAYOUT.pairs.reduce((s, p) => {
+  assert.equal(s.split(p.old).length, 2, "a layout pair occurs once in the export's Pick Still");
+  return s.replace(p.old, () => p.new);
+}, exportCode("Thumb: Pick Still"));
 const SHIPPED = src("thumb_pick_still.js");
 const flipped = SHIPPED.replace("const JEV_APPLY = false;", "const JEV_APPLY = true;");
 assert.notEqual(flipped, SHIPPED, "the shipped file declares JEV_APPLY = false");

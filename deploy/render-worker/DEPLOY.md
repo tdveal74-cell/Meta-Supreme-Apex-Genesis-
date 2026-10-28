@@ -44,7 +44,10 @@ Proved on that box, by execution:
   rather than inferred from a chain.
 * `/health` reports 21 job types, read on the bridge address after the
   2026-10-16 restart, with the service active. It read 18 before the
-  2026-09-15 build and 19 after it.
+  2026-09-15 build and 19 after it. The 2026-10-28 ACX Node build makes it
+  23 once that build is copied up and the service restarted; 23 has so far
+  been read only from the worker on loopback in the cloud sandbox, never from
+  the box, and this line changes when the box is read again, not before.
 * Public IPv4 and IPv6 both refuse. The n8n container reaches the worker on the
   bridge address. Between those two facts the bind is proved by behaviour: it
   cannot be loopback, because the container reached it, and it cannot be
@@ -316,7 +319,7 @@ sudo useradd --system --home /opt/tsws-render-worker --shell /usr/sbin/nologin t
 sudo mkdir -p /opt/tsws-render-worker /data/tsws
 sudo chown -R tsws:tsws /data/tsws
 
-# copy jobs.js server.js package.json into /opt/tsws-render-worker
+# copy jobs.js acx_node.js words.py server.js package.json into /opt/tsws-render-worker
 sudo chown -R root:root /opt/tsws-render-worker
 
 # 2. ffmpeg
@@ -362,8 +365,8 @@ nothing else. Operational detail (`work_root`, queue depth, concurrency) is on
 `/status`, behind the token, because the first version put a filesystem path and
 a load signal in front of anyone who could reach the TLS terminator.
 
-`job_count` must read **21** from the 2026-10-15 Voice Lab build onward, 19
-from the 2026-09-15 build, 18 before it.
+`job_count` must read **23** from the 2026-10-28 ACX Node build onward, 21
+from the 2026-10-15 Voice Lab build, 19 from the 2026-09-15 build, 18 before it.
 Fewer means an older `jobs.js` is loaded, and the sticky note's warning applies:
 a still plate renders as one frame, not a held one.
 
@@ -806,6 +809,141 @@ Still open by design: the token is a single shared secret with no rotation
 mechanism, there are no per-job resource ceilings (`MemoryMax`, `CPUQuota`,
 `TasksMax` are not set in the unit), and there is no disk quota on the work root,
 so `render_mark_full` will accept a request for a great many 4K frames.
+
+## The ACX Node build (added 2026-10-28, ruled R22)
+
+Two native jobs in `acx_node.js`, wired into the table by `jobs.js`, for the
+ACX micro drama lane: a Node is 60 to 90 seconds at 9:16, five accepted stills
+and the owned narration lines, assembled with picture following voice. Tee
+ruled on 2026-10-28 (R22) that this is where the Node picture and cut stages
+live, after EditForge's free lanes were measured and found to have no door for
+the stills and the lines. The job is the Node 01 Proof 0 pipeline, stage for
+stage, as `build.py` ran it in the cloud sandbox that day; the numbers in the
+acceptance table below are that same Node 01 run through this worker on
+loopback in the sandbox, not on the box.
+
+**`word_timings`** runs one python process over the line files and writes word
+timings keyed by each file's stem. It needs `WHISPER_PYTHON` in the unit's
+environment, a python that carries `faster-whisper` with PyAV pinned below 14
+(1.1.1 breaks on PyAV 19, measured 2026-10-28). Unset, the JOB fails with a
+sentence naming the variable; the server starts and the health route is
+unchanged, because the job table must not depend on which box this runs on.
+The model (`base.en` by default, `tiny.en` and `small.en` allowed) downloads
+to the service user's cache on the first run, about 145 MB for base.en, so
+that first run needs outbound HTTPS to Hugging Face and the ones after it do
+not.
+
+```bash
+# once, on the box, as root: a venv the service user can read
+python3 -m venv /opt/tsws-render-worker/whisper
+/opt/tsws-render-worker/whisper/bin/pip install faster-whisper==1.1.1 "av<14"
+# then in /etc/tsws-render-worker.env
+WHISPER_PYTHON=/opt/tsws-render-worker/whisper/bin/python
+# the model cache. The unit runs ProtectSystem=strict with ReadWritePaths only
+# /data/tsws, and the service user's home under /opt is root owned, so the
+# default cache at $HOME/.cache/huggingface is not writable and the first
+# word_timings job would die downloading base.en (critic F4, read from the
+# unit file, not run). Point it inside the writable root:
+HF_HOME=/data/tsws/hf
+mkdir -p /data/tsws/hf && chown tsws:tsws /data/tsws/hf
+# and the three Chakra Petch faces, OFL, under the work root
+mkdir -p /data/tsws/fonts/chakra   # ChakraPetch--400.ttf, --600.ttf, --700.ttf
+```
+
+**`acx_node_assemble`** takes the beat manifest and does the rest in one job:
+
+```json
+{"type": "acx_node_assemble", "params": {
+  "output_dir": "acx/node01/out", "node_id": "ACX_NODE01", "node_label": "NODE 01",
+  "title": "THE ORCHESTRATOR", "fonts_dir": "fonts/chakra",
+  "images": {"R1": "acx/node01/img/R1.png", "R2": "...", "R3": "...", "R4": "...", "R5": "..."},
+  "beats": [{"id": "B01", "image": "R1", "line": "acx/node01/lines/L01.mp3",
+             "text": "Third dive. Same query. Two empty returns behind me.", "verdict": false}],
+  "pauses": {"cold_open": 2.5, "within_image": 0.9, "image_change": 1.8, "end_hold": 5.0, "extra_after": {"B07": 1.1}},
+  "copy_treatment": {"lines": ["B10", "B11"]},
+  "words_path": "acx/node01/words.json",
+  "voice_slot": "t_veal_2 (ElevenLabs clone, owned; prerecorded lines)"}}
+```
+
+What it does, in order, every step an argv and none of them a shell: decodes
+each line to 48 kHz PCM, the Copy treatment (a 14 ms double at -7 dB with a
+2 dB low shelf and a 2.5 dB high shelf cut, every value overridable) on the
+beats named; measures the DECODED files and plans the beats from those, so
+picture, captions and mix share one clock; lays the lines on a silent timeline
+with the pause rule (a gap inside an image, a longer one at an image change,
+an extra one where `extra_after` says, an end hold); raises the whole programme
+to `target_lufs` (-14) under a sample peak limiter 0.5 dB below `true_peak`
+(-1) so the AAC encode still clears the ceiling, and records what the limiter
+removed, measured in float inside the filter chain; one slow push shot (1.00 to
+1.05) per run of beats on the same image at double resolution, hard cuts; the
+title lockup above the book on the cold open and over the end hold, the canon
+disclosure line verbatim on both, wrapped to three 30 px lines above the
+caption band; captions burned in from an ASS file in the Chakra Petch SemiBold
+face, the sheet's own words with timings aligned from the word timings (a word
+the model heard that is not in the sheet is dropped, a word it rendered
+differently takes the timing of what replaced it), Critic Red on verdict beats
+only, bottom margin 560 px above the platform band; the master at H.264 High
+CRF 18, 30 fps, AAC 192k, faststart; a thumbnail, ten frames and a contact
+sheet; a canon lint that reads the master back at two frames a second and
+fails the job on Critic Red outside a verdict caption; and `build.json` with
+runtime, loudness, true peak, the picture to sound delta, the lint, every
+stage's seconds, the tool versions, and a sha256 of every file read or written.
+The result the poll returns is that record.
+
+Refused at submit rather than escaped or defaulted: a reworded disclosure, a
+title or label with a character drawtext cannot take verbatim, a caption line
+with a brace or a backslash, a beat on an image not sent, a missing font face,
+a 16:9 canvas (the long form is a second render under R19 and does not exist
+yet), `words` and `words_path` together, a pause or a treatment on a beat that
+does not exist, any path outside the work root, a font file that is not an
+sfnt or whose name table does not name the face the filename claims (drawtext
+and libass both fall back to another face on that, exit 0 and say nothing, so
+it can only be caught here; the three full names are recorded in
+`build.json` under `fonts`), and word timings that cover some beats but not
+all, because a beat spread evenly beside timed beats would be recorded as
+timed.
+
+Two things `build.py` did that this job does not. Its `transcript_check`
+stage ran `verify_transcript.py` after the mix, a second faster-whisper pass
+over the finished narration compared against the sheet, and reported the
+mismatches. That stage is not ported: it needs the whisper python at
+assembly time, which this job deliberately does not, so the transcript proof
+stays a separate `word_timings` run over the master when it is wanted, and the
+Proof 0 report's transcript line is from the sandbox run, not from this job.
+And the contact sheet samples ten uniform times across the runtime where
+`build.py` used ten hand picked ones, so `contact_sheet.png` is the one output
+whose hash differs between the two runs; the table below does not claim it.
+
+Nothing in the job is canon. The palette, the type, the disclosure and the
+beats come from the caller; the defaults are the values Tee ruled or Proof 0
+used. The caller owns the labels: which beats are verdicts, which lines carry
+the Copy treatment, and the mapping of lines to images are the manifest's
+claims, and the build record carries them as sent.
+
+Measured 2026-10-28 in the cloud sandbox, ffmpeg 6.1.1, the worker on loopback
+with a real token, the Node 01 inputs under the work root (five 1080x1920
+masters, eleven owned lines, the three faces, word timings from a local
+faster-whisper run), job `1809aa54-06b2-4c2c-8e44-2e54f098b860`:
+
+| check | result |
+|---|---|
+| job | `done` in 204.276 s wall, 27 stages timed, 66 files hashed |
+| master against the Proof 0 master built by `build.py` the same day | sha256 identical, `9e2802af97d8a235...` on both; captions.srt identical |
+| runtime from the file | 65.8 s, inside the 60 to 90 window |
+| picture against sound | 0.24 frames apart |
+| integrated loudness, true peak | -14.14 LUFS, -1.40 dBTP |
+| gain and limiter | +5.99 dB applied; the limiter removed 2.19 LU and 7.49 dB of peak, recorded |
+| canon lint | 132 frames, Critic Red on 9, all inside the two verdict captions, 0 breaches |
+| captions | 31 chunks, sheet text verbatim, timed from the word timings |
+| rerun after the critic's fixes, job `3f23c6c0-e1f5-4bb6-8603-8e387f19d8b5` | master sha256 `9e2802af97d8a235...` again, captions.srt identical; `build.json` now carries the three font names, the words source, the bit rate and 70 hashes (the two concat lists, `caption_chunks.json` and `words.json` added); a submit with text files as the three faces refused 400 through the route |
+
+A master identical to the sandbox build is the strongest check available here:
+the job reproduces the pipeline Tee's watch will judge, byte for byte.
+
+Not measured: the same run on the box's own ffmpeg, Node and fonts, and the
+first `word_timings` run there with its model download. Run the Node 01 case
+above on the box before the first Node goes to Tee's watch from this path, and
+compare its build.json against the sandbox record.
 
 ## Open
 

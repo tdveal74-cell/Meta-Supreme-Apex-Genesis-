@@ -75,6 +75,11 @@ jobs:
       - name: Job builders (argv and filter graph)
         run: node jobs.test.js
 
+      # The ACX Node assembly (2026-10-28, R22): the plan, the captions, the ASS
+      # text and every argv it would run, pinned without ffmpeg like the rest.
+      - name: ACX Node job builders
+        run: node acx_node.test.js
+
       - name: HTTP contract against a real listening server
         run: node server.test.js
 

@@ -112,6 +112,14 @@ jobs:
         run: node n8n/tqo-v5/jev_thumb_check.test.mjs
       - name: The Jev lanes hold together across their nodes
         run: node n8n/tqo-v5/jev_lanes_chain.test.mjs
+      # Published 2026-10-27 as 3db61aef on Tee's card. The repo bodies must be
+      # the ones that version runs, in shadow, with the model pinned.
+      - name: The published Jev lanes run the repo bodies
+        run: node n8n/tqo-v5/live-jev-lanes/jev_live_lanes.test.mjs
+      # Ruled by Tee 2026-10-27 on two cards and published as de4ac645: the
+      # thumbnail panel drawn 85 percent opaque, and every headline line inside it.
+      - name: The thumbnail panel is opaque and the headline fits inside it
+        run: node n8n/tqo-v5/live-thumb-layout/thumb_layout.test.mjs
       # Ruled by Tee 2026-10-17: the disclosure and title laws OS 28 never ran,
       # and the Doctor Gate that held every row. Pinned to the live export.
       - name: OS 28 enforces the disclosure and title laws, and the Doctor Gate can clear
@@ -222,7 +230,8 @@ jobs:
             test_gate_ledger.py \
             test_jev_route.py \
             test_ledger_receipt.py \
-            test_code_worker.py
+            test_code_worker.py \
+            test_watch_long.py
 
   dependency-audit:
     name: Dependency audit (pip-audit + pnpm audit)

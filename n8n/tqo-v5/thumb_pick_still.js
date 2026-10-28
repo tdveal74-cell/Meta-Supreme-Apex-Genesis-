@@ -74,10 +74,65 @@ const accent = BRAND.accent;
 
 // Type scale. The headline sets in one of three sizes so a long headline stays
 // inside the scrim instead of running over the photograph.
+//
+// FIXED 2026-10-27, ruled by Tee on a card, "Fix both, prove first". The wrap
+// used to assume 0.52 em a character. Thumb: Compose draws in Arial, the Edit
+// Image node's default font, whose capitals run about 0.66 em, so a full line
+// ran about 100 px past the panel: harness execution 4737 drew "DASHBOARD FIRST"
+// out to x 866 with the panel ending at x 760. The wrap is now worked out from
+// Arial's advance widths, using the same word wrap Compose applies to
+// lineLength, so every line of the headline fits TEXT_BUDGET. A word too wide to
+// fit at a size steps the size down, and so does a block too tall for the frame.
 const head = String(p.headline || '').trim();
 const n = head.length;
-const size = n <= 14 ? 104 : (n <= 24 ? 84 : 66);
-const wrapAt = Math.max(8, Math.floor(700 / (size * 0.52)));
+// Arial advance widths in thousandths of an em. A character not listed counts
+// as a full em, so an unexpected glyph can only make the wrap tighter.
+const ARIAL = {
+  ' ': 278, '!': 278, '"': 355, '#': 556, '$': 556, '%': 889, '&': 667, "'": 191,
+  '(': 333, ')': 333, '*': 389, '+': 584, ',': 278, '-': 333, '.': 278, '/': 278,
+  '0': 556, '1': 556, '2': 556, '3': 556, '4': 556, '5': 556, '6': 556, '7': 556,
+  '8': 556, '9': 556, ':': 278, ';': 278, '<': 584, '=': 584, '>': 584, '?': 556,
+  '@': 1015, A: 667, B: 667, C: 722, D: 722, E: 667, F: 611, G: 778, H: 722,
+  I: 278, J: 500, K: 667, L: 556, M: 833, N: 722, O: 778, P: 667, Q: 778, R: 722,
+  S: 667, T: 611, U: 722, V: 667, W: 944, X: 667, Y: 667, Z: 611, '[': 278,
+  ']': 278, _: 556, a: 556, b: 556, c: 500, d: 556, e: 556, f: 278, g: 556,
+  h: 556, i: 222, j: 222, k: 500, l: 222, m: 833, n: 556, o: 556, p: 556, q: 556,
+  r: 333, s: 500, t: 278, u: 556, v: 500, w: 722, x: 500, y: 500, z: 500,
+  '’': 222, '‘': 222, '“': 333, '”': 333,
+};
+// The headline is drawn from x 72 and the panel ends at x 760, so 680 px keeps
+// the widest line about 8 px inside the panel.
+const TEXT_BUDGET = 680;
+const widthOf = (s, px) => [...s].reduce((w, ch) => w + (ARIAL[ch] || 1000), 0) * px / 1000;
+// Compose's own wrap (n8n Edit Image, text operation): a word goes to a new line
+// when the line, a space and the word would pass lineLength characters.
+const wrapLines = (text, len) => {
+  const lines = [];
+  let line = '';
+  for (const word of text.split(' ')) {
+    if (line.length + word.length + 1 > len) { lines.push(line.trim()); line = word + ' '; }
+    else line += word + ' ';
+  }
+  lines.push(line.trim());
+  return lines;
+};
+// A lineLength shorter than a word makes Compose start with an empty line, so
+// the search never goes below the longest word plus one.
+const SIZES = [104, 84, 66, 54];
+const TOP = { 104: 250, 84: 235, 66: 225, 54: 220 };
+const FLOOR_Y = 680;
+const minLen = Math.max(8, ...head.split(' ').map(w => w.length + 1));
+let size = SIZES[SIZES.length - 1];
+let wrapAt = minLen;
+for (const px of SIZES.slice(n <= 14 ? 0 : (n <= 24 ? 1 : 2))) {
+  let found = 0;
+  for (let len = Math.max(40, minLen); len >= minLen && !found; len--) {
+    const lines = wrapLines(head, len);
+    const tall = TOP[px] + lines.length * px * 1.2 > FLOOR_Y;
+    if (!tall && lines.every(l => widthOf(l, px) <= TEXT_BUDGET)) found = len;
+  }
+  if (found) { size = px; wrapAt = found; break; }
+}
 
 return [{ json: {
   airtableId: p.airtableId,
@@ -86,10 +141,14 @@ return [{ json: {
   photoUsed: src,
   photographer: pick ? (pick.photographer || '') : '',
   ink, accent,
-  scrimColor: ink + 'D9',
+  // GraphicsMagick reads the last pair of an 8 digit colour as transparency, not
+  // as alpha: 'D9' drew the panel 85% clear (measured 0.15 opaque in execution
+  // 4737). '26' is 15% clear, the 85% opaque panel the design meant. Fixed
+  // 2026-10-27 on the same card as the wrap.
+  scrimColor: ink + '26',
   headSize: size,
   headWrap: wrapAt,
-  headY: n <= 14 ? 250 : (n <= 24 ? 235 : 225),
+  headY: TOP[size],
   jevPick,
   jevApplied: JEV_APPLY
 } }];

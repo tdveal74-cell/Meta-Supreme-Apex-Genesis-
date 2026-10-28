@@ -526,7 +526,7 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_devon_rule_ledger.py test_devon_wager.py test_devon_tqo_canon.py \
   test_provider_watchdog.py test_devon_show_registry.py test_show_registry_seed.py \
   test_devon_lesson_registry.py test_gate_ledger.py test_jev_route.py \
-  test_ledger_receipt.py test_code_worker.py
+  test_ledger_receipt.py test_code_worker.py test_watch_long.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .
@@ -1292,7 +1292,7 @@ whichever is reached first ends the loop.
 
 ## Skills in this repository
 
-`.claude/skills/` carries sixteen. Thirteen are ours: `steward` (CI and PR
+`.claude/skills/` carries eighteen. Fourteen are ours: `steward` (CI and PR
 conventions, load it for anything touching either), `deploy-readback` (what the
 production surfaces are actually serving), `estate-reconcile` (checking records
 against the live estate), `devon-learning-lane` (the Build 12 learning lane and
@@ -1311,10 +1311,14 @@ working hook patterns of the niche, inside the live episode canon, with no
 invented metric), `nco-forge-viral-output` (the same for NCO Forge, with the
 stolen valor, benefits and combat footage lines from its canon branch),
 `acx-viral-output` (the same for Ascension Caudex awakening content, with physics
-words held as metaphor and no health, fear or conspiracy claims), and
+words held as metaphor and no health, fear or conspiracy claims),
 `genjutsu-open-workflow` (installing or judging the Genjutsu persona-swap app,
 what it sends off the machine, and the three changes required before any key
-goes in).
+goes in), and `watch-long` (long-form video evidence from a cloud session:
+ten minute windows read by Gemini, then one synthesis, because the relay in
+front of the container cuts a request at its 30 second first byte and a cold
+whole video of twenty minutes or more does not make it; measured 2026-10-28
+and written into its SKILL.md).
 
 This paragraph said six and five until 2026-09-12, when a session counted the
 directory instead of the sentence. `shadow-we-share-brand` had been committed
@@ -1355,6 +1359,27 @@ the same skill. Its first rule is to read `docs.typesafe.ai`. The cloud network
 policy refused that host early on 2026-10-16 and answered it later the same
 day, after Tee updated the environment; `.claude/skills/typesafe-ai/UPSTREAM.md`
 records both reads and what was checked on each.
+
+The fourteenth, `watch`, is vendored too: Bradley Bonanno's `/watch` skill,
+which turns a video URL or local file into timestamped frames and a transcript
+for the agent to read, or hands the whole video to Gemini when a
+`GEMINI_API_KEY` is set. Copied from `bradautomates/claude-video` at `03ceb42`
+(release 0.3.2) on 2026-10-28, after Tee sent a screen recording of a YouTube
+Short that named it. MIT. Same rules and the same test. Unlike the other three
+it ships ten Python scripts that run `ffmpeg` and `yt-dlp` and, by the user's
+choice at setup, send video to Google, audio to Groq or OpenAI, or install a
+1.5 GB WhisperX environment. None of that runs until the skill is invoked and
+the setup wizard is answered. Its scripts fail 23 house lint rules, so
+`ruff.toml` excludes that one directory rather than editing upstream code.
+`yt-dlp` and Deno are not in the cloud image, `ffmpeg` is; the scripts were
+read in full and not executed here. The API key, if Tee wants the Gemini
+engine, is his to set, and in a cloud session `~/.config/watch/.env` lives in
+the ephemeral `$HOME`, so it does not persist between tasks. The skill's own
+wizard offers to take the key pasted in chat; never take that route here,
+because the gate ledger reads every transcript. Do not also add
+`bradautomates/claude-video` as a plugin marketplace in a session that has
+this checkout; its `SessionStart` hook was deliberately not vendored.
+`.claude/skills/watch/UPSTREAM.md` carries the full reading.
 
 A pinned plugin is not a substitute here. `.claude/settings.json` enabling a
 plugin does not install it, and in a Claude Code on the web session
