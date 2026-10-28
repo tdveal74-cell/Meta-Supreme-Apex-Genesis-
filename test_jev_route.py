@@ -331,6 +331,21 @@ ONE_MEGABYTE_COMMANDS = {
     "deep substitutions": lambda: "echo " + "$(echo " * (MB // 7),
     "substitutions in double quotes": lambda: 'echo "' + "$(echo a) " * (MB // 10) + '"',
     "backticks in double quotes": lambda: 'echo "' + "`echo a` " * (MB // 9) + '"',
+    # What the third round reads: a continuation in the body of a here-document is
+    # joined to the line after it, and a joined line can be as long as the body.
+    "heredoc lines that continue": lambda: "cat <<EOF\n" + "a\\\n" * (MB // 3) + "EOF\nls",
+    "heredoc lines of one backslash": lambda: "cat <<EOF\n" + "\\\n" * (MB // 2) + "EOF\nls",
+    "heredoc lines of long backslash runs": lambda: "cat <<EOF\n" + ("\\" * 999 + "\n") * (MB // 1000),
+    "heredoc lines that continue, tabbed": lambda: "cat <<-EOF\n" + "\ta\\\n" * (MB // 4) + "\tEOF\nls",
+    "many heredocs that continue": lambda: "cat <<EOF\na\\\nEOF\nEOF\n" * (MB // 22),
+    "continuations between words": lambda: "ls \\\n" * (MB // 5),
+    "continuations inside a word": lambda: "e\\\n" * (MB // 3),
+    "continuations before a keyword": lambda: "true && \\\n[[ a ]] " * (MB // 18),
+    "continuations before a redirect operand": lambda: "ls > \\\n" * (MB // 7),
+    "continuations inside parentheses": lambda: "(\\\n(a)) " * (MB // 8),
+    "delimiters with an expansion": lambda: "cat <<$'EOF'\n" * (MB // 13),
+    "bare case words": lambda: "echo case " * (MB // 10),
+    "bare test words": lambda: "echo [[ " * (MB // 8),
 }
 
 
@@ -1025,6 +1040,48 @@ VALUE_PLACES = [
     "time \"{s}",
     "echo hi; ls | \\{s}\\",
     "echo hi; \"{s}\\\n",
+    # A bare delimiter means an expanded body, and bash removes a backslash-newline
+    # from it before it compares a line with the delimiter: foo\ then EOF is the one
+    # line fooEOF and the body goes on, so the lines after it are text. A line that
+    # ends in an odd number of backslashes joins, an even number does not.
+    "cat <<EOF\nline one\\\nEOF\n{s} --token abc\nEOF\nls",
+    "cat <<EOF\nline one\\\nEOF\n{s}\nEOF",
+    "cat <<EOF\nfoo\\\\\\\nEOF\n{s} two\nEOF",
+    "cat <<EOF\nfoo\\\n\\\nEOF\n{s} two\nEOF",
+    "cat <<-EOF\n\tfoo\\\n\tEOF\n{s} two\n\tEOF",
+    # A delimiter is literal text. Bash expands nothing in it and runs nothing in
+    # it, so a $ in it is not a resolved word, and $(cmd) in it is not a command.
+    "cat <<$'EOF'\n$\n{s} --token abc\nEOF",
+    "cat <<$\"EOF\"\n$\n{s} --token abc\nEOF",
+    "cat <<${{X}}\n$\n{s} --token abc\n${{X}}",
+    "cat <<$X\n$\n{s} --token abc\n$X",
+    "cat <<$(echo)\n$\n{s} --token abc\n$(echo)\nend",
+    "cat <<$({s})\n$\nx\n$({s})\nend",
+    "cat <<`{s}`\n$\nx\n`{s}`\nend",
+    # Whether [[ and case are read does not depend on where the reader thinks a
+    # command starts. A line continuation, time -p, a function body and a coprocess
+    # each hid the keyword, and then < > && || and a case pattern were commands.
+    "true && \\\n[[ x < {s} ]]",
+    "true && \\\n[[ x > {s} ]]",
+    "true && \\\n[[ -n x && {s} == y ]]",
+    "true && \\\n[[ -z x || {s} == y ]]",
+    "true && \\\ncase x in a|{s}) true;; esac",
+    "prog1 && [\\\n[ x < {s} ]]",
+    "function f {{ [[ x < {s} ]]; }}",
+    "function f {{ [[ -n x && {s} == y ]]; }}",
+    "function f {{ case x in a|{s}) true;; esac; }}",
+    "time -p [[ x < {s} ]]",
+    "time -p case x in a|{s}) true;; esac",
+    "coproc c {{ [[ x < {s} ]]; }}",
+    "coproc {{ case x in a|{s}) true;; esac; }}",
+    "coproc [[ x < {s} ]]",
+    # Bash joins the two halves of (( and $(( across a line continuation.
+    "(\\\n(x < {s}))",
+    "echo $(\\\n(3 < {s}))",
+    # A line continuation is not a word, so the here-string operand after one is
+    # still the operand.
+    "<<< \\\n  {s}",
+    "cat <<< \\\n  {s}",
 ]
 
 
@@ -1247,9 +1304,81 @@ def test_a_value_inside_quoted_text_never_leaves_at_any_nesting(seed):
     # A carriage return is part of the word, as bash has it.
     ("FOO=bar\rls", ""),
     ("ls\r\npwd", "pwd"),
+    # Bash removes a line continuation before it reads a token. It is not a word,
+    # it quotes nothing, and what is on both sides of it is joined.
+    ("cd build && \\\n  git push --force origin main", "cd\ngit --force"),
+    ("FOO=1 \\\n  BAR=2 \\\n  git push --force origin main", "git --force"),
+    ("cat a.log |\\\n  grep -rn foo", "cat\ngrep -rn"),
+    ("prog1 ;\\\n prog2 --force", "prog1\nprog2 --force"),
+    ("git push \\\n  --force", "git --force"),
+    ("ec\\\nho hi", "echo"),
+    ("FOO=\\\nbar ls -la", "ls -la"),
+    ("i\\\nf true; then ls; fi", "true\nls"),
+    ("[\\\n[ -f x ]] && rm -rf build", "rm -rf"),
+    ("true && \\\n[[ -f x ]] && rm -rf build", "true\nrm -rf"),
+    # A here-document body ends at the line that is the delimiter once bash has
+    # joined a line that ends in an odd number of backslashes to the one after it.
+    # A quoted delimiter joins nothing, and neither does an even number.
+    ("cat <<EOF\nfoo\\\nEOF\nhunter2pw --token abc\nEOF\nls", "cat\nls"),
+    ("cat <<EOF\nE\\\nOF\nls", "cat\nls"),
+    ("cat <<EOF\n\\\nEOF\nls", "cat\nls"),
+    ("cat <<EOF\nfoo\\\\\nEOF\nls", "cat\nls"),
+    ("cat <<EOF\nfoo\\\\\\\nEOF\nls\nEOF\npwd", "cat\npwd"),
+    ("cat <<-EOF\n\tfoo\\\n\tEOF\nls\n\tEOF\npwd", "cat\npwd"),
+    ("cat <<-EOF\n\\\n\tEOF\nls", "cat\nls"),
+    ("cat <<'EOF'\nfoo\\\nEOF\nls -la\nEOF", "cat\nls -la\nEOF"),
+    ("cat <<E\"O\"F\nfoo\\\nEOF\nls", "cat\nls"),
+    ("cat <<E\\\nOF\nx\nEOF\nls", "cat\nls"),
+    # A delimiter is literal text, quoted or not, and a quoted $ in it is only a $.
+    ("cat <<\"$X\"\n$X\nls", "cat\nls"),
+    ("cat <<'$'\n$\nls", "cat\nls"),
 ])
 def test_the_outline_of_a_command_is_programs_flags_and_paths(command, expected):
     assert outline(command) == expected
+
+
+CONTINUATION_CORPUS = [
+    "cd build && git push --force origin main",
+    "FOO=1 BAR=2 git push --force origin main",
+    "cat a.log | grep -rn foo",
+    "prog1 ; prog2 --force",
+    "curl -u admin:hunter2 https://x.example",
+    "sudo -u admin rm -rf x",
+    "env FOO=bar python3 -m pytest -q",
+    "if true; then echo hi; fi",
+    "for f in a b; do rm -f $f; done",
+    "echo $(whoami) -n",
+    "ls -la || rm -rf build",
+    "time -p ls",
+    "! FOO=bar ls",
+    "x=$(date) ls -la",
+    "git commit -m 'ab' --author=x",
+    "sort < in.txt > out.txt",
+    "echo a &>/dev/null; ls",
+    "(echo a; ls -la)",
+    "{ echo a; ls -la; }",
+]
+
+
+@pytest.mark.parametrize("command", CONTINUATION_CORPUS)
+def test_a_line_continuation_next_to_a_space_changes_nothing_in_the_outline(command):
+    """Bash removes the continuation before it reads a token, so a command that
+    has one next to any of its spaces is the same command. The one place that is
+    stopped at on purpose is right after < > or &, which may be half an operator."""
+    expected = outline(command)
+    assert expected
+    seen = 0
+    for at, ch in enumerate(command):
+        if ch != " ":
+            continue
+        for glue in ("\\\n", "\\\n  "):
+            variants = [command[:at + 1] + glue + command[at + 1:]]
+            if command[at - 1] not in "<>&":
+                variants.append(command[:at] + glue + command[at:])
+            for variant in variants:
+                seen += 1
+                assert outline(variant) == expected, variant
+    assert seen >= 4
 
 
 @pytest.mark.parametrize("command,expected", [
@@ -1281,6 +1410,24 @@ def test_the_outline_of_a_command_is_programs_flags_and_paths(command, expected)
     ("ls; echo $\\\n{X:-a;b}; git push --force", "ls\necho"),
     ("ls; echo a &\\\n>f; git push --force", "ls\necho"),
     ("ls; echo a >\\\n&2; git push --force", "ls\necho"),
+    # A here-document delimiter that holds an expansion cannot be read as the text
+    # bash takes it for, and the substitution in it is not run.
+    ("ls; cat <<$'EOF'\n$\nx\nEOF\ngit push --force", "ls\ncat"),
+    ("ls; cat <<$\"EOF\"\n$\nx\nEOF\ngit push --force", "ls\ncat"),
+    ("ls; cat <<${X}\n$\nx\n${X}\ngit push --force", "ls\ncat"),
+    ("ls; cat <<$X\n$X\ngit push --force", "ls\ncat"),
+    ("ls; cat <<$(echo)\n$\nx\n$(echo)\ngit push --force", "ls\ncat"),
+    ("ls; cat <<`echo`\n$\nx\n`echo`\ngit push --force", "ls\ncat"),
+    # A function definition and a coprocess hold a command list the reader does not
+    # open. function and coproc are reserved at the start of a command only.
+    ("ls; function f { rm -rf b; }; git push --force", "ls"),
+    ("ls; coproc c { rm -rf b; }; git push --force", "ls"),
+    ("ls; echo function coproc; git push --force", "ls\necho\ngit --force"),
+    # [[ and case end the read or skip to ]] wherever they are typed bare. When bash
+    # reads one as an ordinary argument the cost is the commands after it.
+    ("ls; echo case; git push --force", "ls\necho"),
+    ("ls; grep [[ file; git push --force", "ls\ngrep"),
+    ("ls; echo \"case\" '[[' \\case; git push --force", "ls\necho\ngit --force"),
     # A subshell cannot follow an assignment or a redirect.
     ("ls; FOO=bar (git push --force)", "ls"),
     ("ls; > f (git push --force)", "ls\nf"),

@@ -848,14 +848,22 @@ commands, pipelines and lists, `if`, `while`, `until`, `for`, brace groups,
 subshells, quotes and escapes, `$( )`, backticks and `<( )` with their own quote
 state at any nesting up to 8, redirects including `&>` and `&>>`, heredocs and
 here-strings. It reads past, without looking inside, `$(( ))`, `(( ))`, `[[ ]]`,
-`${ }`, `$' '` and the literal of an array assignment. It stops, drops the rest
-of the command and sends what it had read before that point, at a `case`, a
-function definition, an extglob group, a `${ }` with a quote or a nested
-expansion in it, arithmetic with a quote in it, the legacy `$[ ]` arithmetic, a
-backslash inside backticks, a line continuation inside an operator (`<\` then
-`<EOF` is a heredoc once bash joins the lines), a subshell after an assignment or
-a redirect, a stray `)`, an unterminated region, a quote or an escape the text
-ends inside and nesting past 8. A command list inside `$( )`, `<( )` or
+`${ }`, `$' '` and the literal of an array assignment. A line continuation is
+not there: bash removes it before it reads a token, so the reader steps over it
+between words, joins what is on both sides of it inside a word and counts it as
+no quote. A bare `case` or `[[` is read as that wherever it stands, whatever the
+reader thinks the command is, because a case pattern and an operand of `[[ ]]`
+are data that look like commands. A here-document delimiter is literal text, and
+when it is typed bare the body is expanded, so a body line that ends in an odd
+number of backslashes is joined to the next before it is compared with the
+delimiter, as bash does. It stops, drops the rest of the command and sends what
+it had read before that point, at a `case`, a function definition, a coprocess,
+an extglob group, a `${ }` with a quote or a nested expansion in it, arithmetic
+with a quote in it, the legacy `$[ ]` arithmetic, a backslash inside backticks, a
+line continuation inside an operator (`<\` then `<EOF` is a heredoc once bash
+joins the lines), a here-document delimiter with an expansion in it, a subshell
+after an assignment or a redirect, a stray `)`, an unterminated region, a quote
+or an escape the text ends inside and nesting past 8. A command list inside `$( )`, `<( )` or
 backticks that stops before its closer sends nothing from inside it, because a
 list that never closes is not known to be one, and a word the read stopped inside
 is never judged, which includes the cut at 64 KiB landing inside a quote. A
@@ -866,7 +874,9 @@ a reserved word only when it is typed bare with nothing read ahead of it on its
 command: `"FOO=bar"`, `\if`, `FOO=bar if` and `> f if` are each a command name
 and the word after is its argument, as bash has it. The cost is fidelity and not
 secrecy: a command that stops early shows Jev less, and `foo() { rm -rf x; }`
-shows `foo` and not the `rm`.
+shows `foo` and not the `rm`. A bare `case` or `[[` that bash reads as an
+ordinary argument, as in `grep case src`, costs the commands after it for the
+same reason.
 `test_jev_route.py` pins each construct as a value place, runs the whole table
 again inside fourteen wrapping commands, and runs a seeded fuzz that puts a
 canary only in quoted text nested three deep.

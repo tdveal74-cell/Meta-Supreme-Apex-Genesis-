@@ -70,9 +70,19 @@ the cut at MAX_SCAN. An assignment is one only when its name and its = are typed
 bare, and a reserved word only when it is typed bare and nothing was read ahead
 of it on its command, so "FOO=bar", \\if, FOO=bar if and > f if are each a command
 name and the word after is its argument. &> and &>> are one redirect. A carriage
-return is part of a word, as it is in bash. A line continuation inside an
-operator, the legacy $[ ] arithmetic and a subshell after an assignment or a
-redirect are not modelled and end the read.
+return is part of a word, as it is in bash. A line continuation is not there:
+bash removes it before it reads a token, so the reader steps over it between
+words, joins what is on both sides of it inside a word and counts it as no quote,
+and a program, a keyword or an assignment split or preceded by one is still that.
+A bare case or [[ is read as what it is wherever it stands, because the words
+after a case pattern and the operands of [[ ]] are data that look like commands,
+and a reader that has lost its place would send them. A here-document delimiter
+is literal text: it is not resolved, and one with an expansion in it ends the
+read. When it is typed bare the body is expanded, so a body line that ends in an
+odd number of backslashes is joined to the next one before it is compared with
+the delimiter, as bash does. A line continuation inside an operator, a function
+definition, a coprocess, the legacy $[ ] arithmetic and a subshell after an
+assignment or a redirect are not modelled and end the read.
 
 Building the text is linear. Only the first MAX_SCAN characters of a command
 are read, no regex has a nested or adjacent unbounded quantifier, and the
@@ -210,7 +220,10 @@ SEPARATORS = "\n;&|<>()"
 # so the reader stops at it instead.
 OPENERS = frozenset(("if", "then", "else", "elif", "do", "while", "until", "!", "{"))
 CLOSERS = frozenset(("fi", "done", "esac", "}"))
-HEADERS = frozenset(("for", "select", "function"))
+HEADERS = frozenset(("for", "select"))
+# A function definition and a coprocess hold a command list the reader does not
+# open, so it stops at either one typed at the start of a command.
+UNMODELLED = frozenset(("function", "coproc"))
 # Programs whose next word is a program too. timeout and nice are left out on
 # purpose: their next word is a number.
 WRAPPERS = frozenset(("sudo", "doas", "env", "time", "nohup", "exec", "command", "builtin", "xargs", "watch"))
@@ -354,10 +367,11 @@ class Shell:
     <( ), redirects including &> and &>>, heredocs and here-strings, and it
     reads past $(( )), (( )), [[ ]], ${ }, $' ' and the literal of an array
     assignment without looking inside. A case statement, a function
-    definition, an extglob group, the legacy $[ ] arithmetic, a line continuation
-    inside an operator, a subshell after an assignment or a redirect, a quote
-    nested in a way it cannot follow, or a quote or an escape the text ends
-    inside, ends the read."""
+    definition, a coprocess, an extglob group, the legacy $[ ] arithmetic, a line
+    continuation inside an operator, a here-document delimiter with an expansion
+    in it, a subshell after an assignment or a redirect, a quote nested in a way
+    it cannot follow, or a quote or an escape the text ends inside, ends the
+    read. A line continuation between or inside words is stepped over."""
 
     def __init__(self, text, out, cwd, home):
         self.t, self.n, self.i = text, len(text), 0
@@ -367,6 +381,8 @@ class Shell:
         self.frames = []
         self.halted = False
         self.quoted_at = None
+        # A here-document delimiter is read as literal text. See redirect().
+        self.literal = False
         self.reset()
 
     def reset(self):
@@ -439,6 +455,11 @@ class Shell:
                 self.paren()
             elif c in "<>":
                 self.redirect()
+            elif c == "\\" and self.continuation(i):
+                # Bash removes a line continuation before it reads a token, so
+                # between two words it is not there. It is not a word, and the
+                # word after it is the first word of the command.
+                self.i += 2
             else:
                 word = self.word()
                 if self.halted:
@@ -453,11 +474,27 @@ class Shell:
                 return False
         return False
 
+    def continuation(self, i):
+        """True when a backslash-newline pair that bash removes starts at i. Inside
+        backticks a backslash is not modelled at all, so there it is not one."""
+        return self.t.startswith("\\\n", i) and "`" not in self.frames
+
     def past_continuations(self, i):
         """The index after any backslash-newline pairs that start at i."""
-        while self.t.startswith("\\\n", i):
+        while self.continuation(i):
             i += 2
         return i
+
+    def skip_blanks(self):
+        """Step over spaces, tabs and line continuations."""
+        t, n = self.t, self.n
+        while self.i < n:
+            if t[self.i] in WS:
+                self.i += 1
+            elif self.continuation(self.i):
+                self.i += 2
+            else:
+                break
 
     def substitution(self, closer):
         """A command list inside $( ), ( ) or backticks, read with its own quote
@@ -491,8 +528,9 @@ class Shell:
             self.i = self.skip_array(i + 1)
         elif prev not in WS and prev not in SEPARATORS:
             self.halt()
-        elif t.startswith("((", i):
-            j = self.skip_arith(i + 2)
+        elif t.startswith("(", self.past_continuations(i + 1)):
+            # (( with or without a continuation between the two: bash joins them.
+            j = self.skip_arith(self.past_continuations(i + 1) + 1)
             if j < 0:
                 self.halt()
             else:
@@ -509,7 +547,9 @@ class Shell:
         """The next word with its quotes and escapes resolved. An expansion is
         left as a literal $, which no piece rule accepts. self.quoted_at is the
         length of the plain text before the first quote, escape or expansion in the
-        word, or None when the word has none."""
+        word, or None when the word has none. A line continuation is neither: bash
+        removes it before it reads a token, so it joins what is on both sides and
+        quotes nothing."""
         t, n, i = self.t, self.n, self.i
         buf = []
         plain = 0
@@ -518,6 +558,9 @@ class Shell:
             c = t[i]
             if c in WS or c in SEPARATORS or (c == "`" and "`" in self.frames):
                 break
+            if c == "\\" and self.continuation(i):
+                i += 2
+                continue
             j = self.special(i, buf)
             if j is not None:
                 if quoted_at is None:
@@ -558,7 +601,7 @@ class Shell:
         if c == '"':
             return self.double(i + 1, buf)
         if c == "`":
-            if "`" in self.frames:
+            if "`" in self.frames or self.literal:
                 return self.halt()
             self.i = i + 1
             self.substitution("`")
@@ -566,14 +609,20 @@ class Shell:
             return self.i
         if c != "$":
             return None
+        if self.literal:
+            # A here-document delimiter is taken as typed: bash expands nothing
+            # in it, runs nothing in it and reads $'EOF' as EOF, so this reader
+            # cannot say what the delimiter is, and it does not run the text.
+            return self.halt()
         buf.append("$")
         if t.startswith("\\\n", i + 1):
             # $\ then ( or { is an expansion once bash joins the lines.
             return self.halt()
         nxt = t[i + 1:i + 2]
         if nxt == "(":
-            if t.startswith("((", i + 1):
-                j = self.skip_arith(i + 3)
+            second = self.past_continuations(i + 2)
+            if t.startswith("(", second):
+                j = self.skip_arith(second + 1)
                 return self.halt() if j < 0 else j
             self.i = i + 2
             self.substitution(")")
@@ -737,12 +786,14 @@ class Shell:
             # continuation inside an operator is not modelled.
             self.halt()
             return
-        while self.i < n and t[self.i] in WS:
-            self.i += 1
+        self.skip_blanks()
         if self.i >= n or t[self.i] in SEPARATORS:
             return
         start = self.i
+        # The delimiter of a here-document is literal text, never a word to resolve.
+        self.literal = kind in ("heredoc", "heredoc-")
         operand = self.word()
+        self.literal = False
         if self.halted:
             return
         if self.i == start:
@@ -752,18 +803,37 @@ class Shell:
             if piece:
                 self.out.add(piece)
         elif kind != "operand":
-            self.heredocs.append((operand, kind == "heredoc-"))
+            self.heredocs.append((operand, kind == "heredoc-", self.quoted_at is None))
 
     def skip_heredocs(self):
         pending, self.heredocs = self.heredocs, []
-        for delimiter, tabs in pending:
+        for delimiter, tabs, bare in pending:
             while self.i < self.n:
-                j = self.t.find("\n", self.i)
-                end = self.n if j < 0 else j
-                line = self.t[self.i:end]
-                self.i = self.n if j < 0 else end + 1
+                line = self.heredoc_line(bare)
                 if (line.lstrip("\t") if tabs else line) == delimiter:
                     break
+
+    def heredoc_line(self, joined):
+        """The next line of a here-document body. When the delimiter was typed
+        bare the body is expanded, and bash removes a backslash-newline from it
+        before it compares the line with the delimiter: foo\\ then EOF is the line
+        fooEOF, and the body goes on. A quoted delimiter expands nothing and the
+        lines are the lines. A line that ends in an odd number of backslashes
+        continues, the last of a run of an even number is an escaped backslash."""
+        t, n = self.t, self.n
+        parts, run = [], 0
+        while True:
+            j = t.find("\n", self.i)
+            end = n if j < 0 else j
+            line = t[self.i:end]
+            self.i = n if j < 0 else end + 1
+            head = line.rstrip("\\")
+            run = len(line) - len(head) + (run if not head else 0)
+            if not (joined and j >= 0 and self.i < n and run % 2):
+                parts.append(line)
+                return "".join(parts)
+            parts.append(line[:-1])
+            run -= 1
 
     def test_expression(self):
         """A [[ just read: read past the expression to its ]] and past whatever
@@ -776,6 +846,20 @@ class Shell:
     def take(self, word, quoted_at=None):
         """One resolved word. quoted_at is where its first quote, escape or
         expansion begins, as word() reports it."""
+        if quoted_at is None:
+            # These two are read wherever they are typed bare, whatever the reader
+            # makes of the command around them: a case pattern and an operand of
+            # [[ ]] are data that look like commands, and a reader that has lost
+            # its place (after time -p, in a function body or a coprocess, past a
+            # line continuation) would send them. A bare case or [[ that bash
+            # reads as an ordinary argument costs the commands after it, which is
+            # fidelity and not secrecy.
+            if word == "case":
+                self.halt()
+                return
+            if word == "[[":
+                self.test_expression()
+                return
         if self.skip:
             return
         if self.program is None:
@@ -788,11 +872,8 @@ class Shell:
                 if word in HEADERS:
                     self.skip = True
                     return
-                if word == "case":
+                if word in UNMODELLED:
                     self.halt()
-                    return
-                if word == "[[":
-                    self.test_expression()
                     return
             if assignment(word, quoted_at):
                 self.prefixed = True
@@ -805,10 +886,6 @@ class Shell:
             return
         if self.wrapper:
             if assignment(word, quoted_at):
-                return
-            if word == "[[" and quoted_at is None:
-                # time [[ a > b ]] is a test, and sudo [[ ... is not a command at all.
-                self.test_expression()
                 return
             if not word.startswith("-"):
                 name = program_name(word)
