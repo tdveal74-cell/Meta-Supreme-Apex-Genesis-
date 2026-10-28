@@ -36,6 +36,8 @@ const SAFE_TEXT = /^[A-Za-z0-9 ,.;!?-]+$/;
 const SAFE_ASS = /^[^{}\\\r\n]+$/;
 
 const DISCLOSURE = 'Presented with a synthetic voice and synthetic likeness of Terrance Veal, used with his consent.';
+/** The three faces the job needs, by file name, and the full name each one must carry in its name table. */
+const FONT_FACES = { 'ChakraPetch--400.ttf': 'Chakra Petch Regular', 'ChakraPetch--600.ttf': 'Chakra Petch SemiBold', 'ChakraPetch--700.ttf': 'Chakra Petch Bold' };
 const DISCLOSURE_LINES = ['Presented with a synthetic voice and', 'synthetic likeness of Terrance Veal,', 'used with his consent.'];
 
 /** #RRGGBB -> &H00BBGGRR, the colour order ASS styles use. */
@@ -262,6 +264,46 @@ function countNear(buf, hex, tol, region) {
 
 function sha256(p) { return crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex'); }
 
+/**
+ * The full name (name id 4) out of a TrueType or OpenType font's name table,
+ * read from the bytes rather than trusted from the filename. drawtext and
+ * libass both fall back to a generic face when a file named .ttf is not a
+ * font, exit 0 and say nothing, so this is the only place a wrong font can be
+ * refused (critic finding F1, 2026-10-28). Throws with a reason on anything
+ * that is not an sfnt with a readable name table.
+ */
+function fontFullName(file) {
+  const d = fs.readFileSync(file);
+  if (d.length < 12) throw new Error('shorter than an sfnt header');
+  const tag = d.readUInt32BE(0);
+  if (tag !== 0x00010000 && tag !== 0x74727565 && tag !== 0x4F54544F) throw new Error('not an sfnt (TrueType or OpenType) file');
+  const n = d.readUInt16BE(4);
+  for (let i = 0; i < n; i++) {
+    const e = 12 + 16 * i;
+    if (e + 16 > d.length) break;
+    if (d.toString('latin1', e, e + 4) !== 'name') continue;
+    const off = d.readUInt32BE(e + 8), len = d.readUInt32BE(e + 12);
+    if (off + 6 > d.length || off + len > d.length) throw new Error('name table runs past the end of the file');
+    const count = d.readUInt16BE(off + 2), strOff = d.readUInt16BE(off + 4);
+    let fallback = null;
+    for (let j = 0; j < count; j++) {
+      const r = off + 6 + 12 * j;
+      if (r + 12 > off + len) break;
+      const pid = d.readUInt16BE(r), nid = d.readUInt16BE(r + 6), l = d.readUInt16BE(r + 8), o = d.readUInt16BE(r + 10);
+      if (nid !== 4) continue;
+      const a = off + strOff + o;
+      if (a + l > d.length) continue;
+      // platform 3 (Windows) strings are UTF-16BE; platform 1 (Macintosh) strings are single byte
+      const name = pid === 3 ? Buffer.from(d.subarray(a, a + l)).swap16().toString('utf16le') : d.toString('latin1', a, a + l);
+      if (pid === 3) return name;
+      if (fallback === null) fallback = name;
+    }
+    if (fallback !== null) return fallback;
+    throw new Error('name table carries no full name (id 4)');
+  }
+  throw new Error('no name table');
+}
+
 // --- the jobs --------------------------------------------------------------
 
 function jobs(H) {
@@ -343,8 +385,14 @@ function jobs(H) {
 
         const fontsDir = existingPath(p.fonts_dir, 'fonts_dir');
         if (!SAFE_PATH.test(fontsDir)) throw new BadJob('fonts_dir: carries a character the filter graph cannot take verbatim');
-        for (const f of ['ChakraPetch--400.ttf', 'ChakraPetch--600.ttf', 'ChakraPetch--700.ttf']) {
-          if (!fs.existsSync(path.join(fontsDir, f))) throw new BadJob(`fonts_dir: ${f} is missing; the three Chakra Petch faces must sit there`);
+        o.fonts = {};
+        for (const [f, want] of Object.entries(FONT_FACES)) {
+          const file = path.join(fontsDir, f);
+          if (!fs.existsSync(file)) throw new BadJob(`fonts_dir: ${f} is missing; the three Chakra Petch faces must sit there`);
+          let got;
+          try { got = fontFullName(file); } catch (e) { throw new BadJob(`fonts_dir: ${f} is not a usable font (${e.message}); drawtext and libass would fall back to another face without saying so`); }
+          if (got !== want) throw new BadJob(`fonts_dir: ${f} names itself ${JSON.stringify(got)}, expected ${JSON.stringify(want)}`);
+          o.fonts[f] = got;
         }
         o.fonts_dir = fontsDir;
         o.font_regular = path.join(fontsDir, 'ChakraPetch--400.ttf');
@@ -411,6 +459,11 @@ function jobs(H) {
           wordsByLine = p.words;
         }
         const checkWords = (W) => {
+          // Either every beat has timings or none does: a beat silently spread evenly
+          // beside beats timed from the audio would be recorded as timed (critic F2).
+          for (const b of beats) {
+            if (!Array.isArray(W[b.id]) || W[b.id].length === 0) throw new BadJob(`words.${b.id}: no word timings for this beat; send timings for every beat or for none`);
+          }
           for (const [k, arr] of Object.entries(W)) {
             if (!Array.isArray(arr)) throw new BadJob(`words.${k}: not an array`);
             arr.forEach((w, i) => {
@@ -560,26 +613,27 @@ function jobs(H) {
           await tick('contact_sheet', () => run(contactArgv(framePaths, P('contact_sheet.png')), 'contact sheet'));
           const lintRep = await tick('lint', () => lint(master, chunks));
           const ln = await measure(master);
-          const probe = JSON.parse((await run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration,size:stream=codec_name,profile,width,height,r_frame_rate,pix_fmt,sample_rate,channels', '-of', 'json', master], 'ffprobe')).stdout);
+          const probe = JSON.parse((await run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration,size,bit_rate:stream=codec_name,profile,width,height,r_frame_rate,pix_fmt,sample_rate,channels,bit_rate', '-of', 'json', master], 'ffprobe')).stdout);
           const vdur = Number((await run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=duration', '-of', 'csv=p=0', master], 'ffprobe')).stdout);
           const adur = Number((await run(['ffprobe', '-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=duration', '-of', 'csv=p=0', master], 'ffprobe')).stdout);
           const ffv = (await run(['ffmpeg', '-version'], 'ffmpeg -version')).stdout.split('\n')[0];
           const runtime = Number(probe.format.duration);
           const hashes = {};
-          for (const f of [master, srtPath, assPath, thumb, P('contact_sheet.png'), ...framePaths, mix, raw, silent, picture, ...vlist, ...list, ...Object.values(images), ...beats.map(b => b.line), o.font_regular, o.font_semibold, o.font_bold]) {
+          for (const f of [master, srtPath, assPath, thumb, P('contact_sheet.png'), ...framePaths, mix, raw, silent, picture, ...vlist, ...list, path.join(segA, 'concat.txt'), path.join(segV, 'concat.txt'), P('caption_chunks.json'), ...(wordsPath ? [wordsPath] : []), ...Object.values(images), ...beats.map(b => b.line), o.font_regular, o.font_semibold, o.font_bold]) {
             hashes[path.relative(getRoot(), f)] = sha256(f);
           }
           const record = {
             node_id: o.node_id, built_at_utc: new Date().toISOString(), built_by: 'render worker acx_node_assemble',
             voice_slot: p.voice_slot === undefined ? 'unstated by the caller' : String(p.voice_slot).slice(0, 200),
+            fonts: o.fonts,
             labels: { mapping: 'as sent by the caller', verdict_beats: planned.filter(b => b.verdict).map(b => b.id), copy_treatment: treat ? [...treat.lines] : [], pauses },
             measured: {
               runtime_s_from_file: r3(runtime), video_stream_s: r3(vdur), audio_stream_s: r3(adur), av_length_delta_frames: Number(((vdur - adur) * o.fps).toFixed(2)),
-              integrated_lufs: ln.input_i, true_peak_dbtp: ln.input_tp, lra: ln.input_lra, streams: probe.streams, bytes: Number(probe.format.size),
+              integrated_lufs: ln.input_i, true_peak_dbtp: ln.input_tp, lra: ln.input_lra, streams: probe.streams, bytes: Number(probe.format.size), bit_rate: Number(probe.format.bit_rate),
             },
             runtime_window_ok: runtime >= o.window[0] && runtime <= o.window[1], window: o.window,
             lint: lintRep, audio, beats: planned, shots: shots.map(s => ({ image: s.image, start: s.start, end: s.end, frames: s.frames, file: path.relative(getRoot(), s.file) })),
-            captions: { chunks: chunks.length, srt: path.relative(getRoot(), srtPath), ass: path.relative(getRoot(), assPath), words: W ? 'word timings from the caller' : 'no word timings: each line shared evenly over its measured span' },
+            captions: { chunks: chunks.length, srt: path.relative(getRoot(), srtPath), ass: path.relative(getRoot(), assPath), words: wordsPath ? `word timings for every beat from words_path ${path.relative(getRoot(), wordsPath)}` : (W ? 'word timings for every beat sent inline by the caller' : 'no word timings: each line shared evenly over its measured span') },
             stage_timings_s: T, tool_versions: { ffmpeg: ffv, node: process.version },
             outputs: { master: path.relative(getRoot(), master), thumbnail: path.relative(getRoot(), thumb), contact_sheet: path.relative(getRoot(), P('contact_sheet.png')), srt: path.relative(getRoot(), srtPath) },
             sha256: hashes,
@@ -602,5 +656,5 @@ function jobs(H) {
 module.exports = {
   jobs, planBeats, planShots, timedSheetWords, captionChunks, assText, srtText, hexbgr, assTime, srtTime,
   decodeArgv, silenceArgv, concatArgv, measureArgv, gainLimitArgv, shotArgv, overlayArgv, muxArgv, thumbnailArgv, frameArgv, contactArgv, lintArgv, countNear,
-  DISCLOSURE, DISCLOSURE_LINES, SAFE_PATH, SAFE_TEXT, SAFE_ASS,
+  fontFullName, FONT_FACES, DISCLOSURE, DISCLOSURE_LINES, SAFE_PATH, SAFE_TEXT, SAFE_ASS,
 };

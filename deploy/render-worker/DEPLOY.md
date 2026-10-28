@@ -42,9 +42,12 @@ Proved on that box, by execution:
   has not been re-run since; that denominator is stale until someone runs it
   against the Drive original again. Exit code 0 on each, checked individually
   rather than inferred from a chain.
-* `/health` reports 23 job types, read on the bridge address after the
+* `/health` reports 21 job types, read on the bridge address after the
   2026-10-16 restart, with the service active. It read 18 before the
-  2026-09-15 build and 19 after it.
+  2026-09-15 build and 19 after it. The 2026-10-28 ACX Node build makes it
+  23 once that build is copied up and the service restarted; 23 has so far
+  been read only from the worker on loopback in the cloud sandbox, never from
+  the box, and this line changes when the box is read again, not before.
 * Public IPv4 and IPv6 both refuse. The n8n container reaches the worker on the
   bridge address. Between those two facts the bind is proved by behaviour: it
   cannot be loopback, because the container reached it, and it cannot be
@@ -836,6 +839,13 @@ python3 -m venv /opt/tsws-render-worker/whisper
 /opt/tsws-render-worker/whisper/bin/pip install faster-whisper==1.1.1 "av<14"
 # then in /etc/tsws-render-worker.env
 WHISPER_PYTHON=/opt/tsws-render-worker/whisper/bin/python
+# the model cache. The unit runs ProtectSystem=strict with ReadWritePaths only
+# /data/tsws, and the service user's home under /opt is root owned, so the
+# default cache at $HOME/.cache/huggingface is not writable and the first
+# word_timings job would die downloading base.en (critic F4, read from the
+# unit file, not run). Point it inside the writable root:
+HF_HOME=/data/tsws/hf
+mkdir -p /data/tsws/hf && chown tsws:tsws /data/tsws/hf
 # and the three Chakra Petch faces, OFL, under the work root
 mkdir -p /data/tsws/fonts/chakra   # ChakraPetch--400.ttf, --600.ttf, --700.ttf
 ```
@@ -885,7 +895,24 @@ title or label with a character drawtext cannot take verbatim, a caption line
 with a brace or a backslash, a beat on an image not sent, a missing font face,
 a 16:9 canvas (the long form is a second render under R19 and does not exist
 yet), `words` and `words_path` together, a pause or a treatment on a beat that
-does not exist, and any path outside the work root.
+does not exist, any path outside the work root, a font file that is not an
+sfnt or whose name table does not name the face the filename claims (drawtext
+and libass both fall back to another face on that, exit 0 and say nothing, so
+it can only be caught here; the three full names are recorded in
+`build.json` under `fonts`), and word timings that cover some beats but not
+all, because a beat spread evenly beside timed beats would be recorded as
+timed.
+
+Two things `build.py` did that this job does not. Its `transcript_check`
+stage ran `verify_transcript.py` after the mix, a second faster-whisper pass
+over the finished narration compared against the sheet, and reported the
+mismatches. That stage is not ported: it needs the whisper python at
+assembly time, which this job deliberately does not, so the transcript proof
+stays a separate `word_timings` run over the master when it is wanted, and the
+Proof 0 report's transcript line is from the sandbox run, not from this job.
+And the contact sheet samples ten uniform times across the runtime where
+`build.py` used ten hand picked ones, so `contact_sheet.png` is the one output
+whose hash differs between the two runs; the table below does not claim it.
 
 Nothing in the job is canon. The palette, the type, the disclosure and the
 beats come from the caller; the defaults are the values Tee ruled or Proof 0
@@ -908,6 +935,7 @@ faster-whisper run), job `1809aa54-06b2-4c2c-8e44-2e54f098b860`:
 | gain and limiter | +5.99 dB applied; the limiter removed 2.19 LU and 7.49 dB of peak, recorded |
 | canon lint | 132 frames, Critic Red on 9, all inside the two verdict captions, 0 breaches |
 | captions | 31 chunks, sheet text verbatim, timed from the word timings |
+| rerun after the critic's fixes, job `3f23c6c0-e1f5-4bb6-8603-8e387f19d8b5` | master sha256 `9e2802af97d8a235...` again, captions.srt identical; `build.json` now carries the three font names, the words source, the bit rate and 70 hashes (the two concat lists, `caption_chunks.json` and `words.json` added); a submit with text files as the three faces refused 400 through the route |
 
 A master identical to the sandbox build is the strongest check available here:
 the job reproduces the pipeline Tee's watch will judge, byte for byte.

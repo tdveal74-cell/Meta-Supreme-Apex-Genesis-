@@ -17,7 +17,24 @@ const A = require('./acx_node.js');
 const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'acx-node-test-'));
 J.setRoot(ROOT);
 const touch = (rel) => { const abs = path.join(ROOT, rel); fs.mkdirSync(path.dirname(abs), { recursive: true }); fs.writeFileSync(abs, 'x'); return rel; };
-for (const f of ['ChakraPetch--400.ttf', 'ChakraPetch--600.ttf', 'ChakraPetch--700.ttf']) touch('fonts/' + f);
+/**
+ * A minimal sfnt carrying only a name table with one Windows full name record,
+ * so the font check reads a real name table rather than trusting the filename.
+ */
+function sfnt(fullName, platform = 3) {
+  const str = platform === 3 ? Buffer.from(fullName, 'utf16le').swap16() : Buffer.from(fullName, 'latin1');
+  const nameTable = Buffer.alloc(6 + 12 + str.length);
+  nameTable.writeUInt16BE(0, 0); nameTable.writeUInt16BE(1, 2); nameTable.writeUInt16BE(18, 4);
+  nameTable.writeUInt16BE(platform, 6); nameTable.writeUInt16BE(1, 8); nameTable.writeUInt16BE(0x409, 10); nameTable.writeUInt16BE(4, 12);
+  nameTable.writeUInt16BE(str.length, 14); nameTable.writeUInt16BE(0, 16);
+  str.copy(nameTable, 18);
+  const head = Buffer.alloc(12 + 16);
+  head.writeUInt32BE(0x00010000, 0); head.writeUInt16BE(1, 4);
+  head.write('name', 12, 'latin1'); head.writeUInt32BE(0, 16); head.writeUInt32BE(28, 20); head.writeUInt32BE(nameTable.length, 24);
+  return Buffer.concat([head, nameTable]);
+}
+const writeFont = (rel, fullName, platform) => { const abs = path.join(ROOT, rel); fs.mkdirSync(path.dirname(abs), { recursive: true }); fs.writeFileSync(abs, sfnt(fullName, platform)); return rel; };
+for (const [f, name] of Object.entries(A.FONT_FACES)) writeFont('fonts/' + f, name);
 const IMAGES = { R1: touch('img/R1.png'), R2: touch('img/R2.png'), R3: touch('img/R3.png') };
 const LINES = ['L01', 'L02', 'L03', 'L04'].map(l => touch('lines/' + l + '.mp3'));
 const BEATS = [
@@ -30,9 +47,15 @@ const base = (over) => Object.assign({ output_dir: 'out/node01', fonts_dir: 'fon
 const build = (over) => J.JOBS.acx_node_assemble.build(base(over));
 
 let pass = 0, fail = 0;
+const pending = [];
 function t(name, fn) {
-  try { fn(); pass++; console.log('  ok   ' + name); }
-  catch (e) { fail++; console.log('  FAIL ' + name + '\n       ' + (e && e.message || e).split('\n')[0]); }
+  const ok = () => { pass++; console.log('  ok   ' + name); };
+  const bad = (e) => { fail++; console.log('  FAIL ' + name + '\n       ' + (e && e.message || e).split('\n')[0]); };
+  try {
+    const r = fn();
+    // an async test is counted when it settles, never before (critic F9)
+    if (r && typeof r.then === "function") pending.push(r.then(ok, bad)); else ok();
+  } catch (e) { bad(e); }
 }
 function refuses(name, params, re) {
   t(name, () => { assert.throws(() => J.JOBS.acx_node_assemble.build(params), (e) => e instanceof J.BadJob && re.test(e.message)); });
@@ -185,7 +208,7 @@ t('the contact sheet is a 5 by 2 xstack of 432x768 tiles', () => {
 });
 
 console.log('\n-- refusals --');
-refuses('a missing font face is refused at submit', (() => { const r = base({ fonts_dir: 'fonts2' }); touch('fonts2/ChakraPetch--400.ttf'); return r; })(), /ChakraPetch--600.ttf is missing/);
+refuses('a missing font face is refused at submit', (() => { const r = base({ fonts_dir: 'fonts2' }); writeFont('fonts2/ChakraPetch--400.ttf', 'Chakra Petch Regular'); return r; })(), /ChakraPetch--600.ttf is missing/);
 refuses('a beat on an unknown image is refused', base({ beats: [Object.assign({}, BEATS[0], { image: 'R9' })] }), /beats\[0\].image/);
 refuses('a beat with a brace in its text is refused, never escaped', base({ beats: [Object.assign({}, BEATS[0], { text: 'Purge {now}' })] }), /brace, backslash or line break/);
 refuses('a reworded disclosure is refused', base({ disclosure: 'Made with AI.' }), /canon line verbatim/);
@@ -196,6 +219,31 @@ refuses('a copy treatment on a beat that does not exist is refused', base({ copy
 refuses('extra_after on an unknown beat is refused', base({ pauses: { extra_after: { B77: 1 } } }), /no such beat/);
 refuses('an output_dir outside the work root is refused', base({ output_dir: '../../etc' }), /output_dir/);
 refuses('a missing line file is refused at submit', base({ beats: [Object.assign({}, BEATS[0], { line: 'lines/L99.mp3' })] }), /beats\[0\].line/);
+
+console.log('\n-- fonts and word timings (critic F1, F2) --');
+t('the three faces are read from their name tables and recorded on the plan', () => {
+  assert.deepStrictEqual(build().plan.options.fonts, A.FONT_FACES);
+  assert.strictEqual(A.fontFullName(path.join(ROOT, writeFont('fonts/mac.ttf', 'Chakra Petch Bold', 1))), 'Chakra Petch Bold');
+});
+t('a text file named like a font is refused at submit, not rendered in a fallback face', () => {
+  const dir = 'fonts_text'; for (const f of Object.keys(A.FONT_FACES)) touch(dir + '/' + f);
+  assert.throws(() => build({ fonts_dir: dir }), (e) => e instanceof J.BadJob && /ChakraPetch--400.ttf is not a usable font \(shorter than an sfnt header\)/.test(e.message));
+  fs.writeFileSync(path.join(ROOT, dir, 'ChakraPetch--400.ttf'), Buffer.concat([Buffer.from('%PDF-1.4'), Buffer.alloc(64)]));
+  assert.throws(() => build({ fonts_dir: dir }), (e) => e instanceof J.BadJob && /not an sfnt/.test(e.message));
+});
+t('a real font with the wrong name is refused by name', () => {
+  const dir = 'fonts_wrong'; for (const [f, name] of Object.entries(A.FONT_FACES)) writeFont(dir + '/' + f, name);
+  writeFont(dir + '/ChakraPetch--600.ttf', 'Chakra Petch Bold');
+  assert.throws(() => build({ fonts_dir: dir }), (e) => e instanceof J.BadJob && /ChakraPetch--600.ttf names itself "Chakra Petch Bold", expected "Chakra Petch SemiBold"/.test(e.message));
+});
+t('word timings for some beats but not all are refused, so no beat is spread evenly and recorded as timed', () => {
+  const one = { B01: [{ text: 'Third', start: 0, end: 0.4 }] };
+  assert.throws(() => build({ words: one }), (e) => e instanceof J.BadJob && /words.B02: no word timings for this beat/.test(e.message));
+  const all = {}; for (const b of BEATS) all[b.id] = [{ text: b.text.split(' ')[0], start: 0, end: 0.4 }];
+  assert.ok(build({ words: all }).plan);
+  all.B03 = [];
+  assert.throws(() => build({ words: all }), /words.B03: no word timings/);
+});
 
 console.log('\n-- word_timings --');
 t('word_timings plans one python call with the model and the line files, and refuses a non-json output', () => {
@@ -214,8 +262,8 @@ t('word_timings fails the JOB, not the server, when WHISPER_PYTHON is unset', as
   } finally { if (saved !== undefined) process.env.WHISPER_PYTHON = saved; }
 });
 
-setTimeout(() => {
+Promise.all(pending).then(() => {
   console.log(`\n${pass} passed, ${fail} failed`);
   fs.rmSync(ROOT, { recursive: true, force: true });
   process.exit(fail ? 1 : 0);
-}, 200);
+});
