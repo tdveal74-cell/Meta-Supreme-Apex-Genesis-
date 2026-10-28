@@ -60,12 +60,14 @@ also the sha256 in `live-thumb-layout/manifest.json`. The live code reads
 
 The workflow moved on after `de4ac645`. Its history, read through the n8n
 connector, lists six versions and no older ones: `de4ac645`, then five saves on
-2026-10-28, `88b36040` (Show Context: Publish and Upload to YouTube for NCO
-Forge), `cd27ab26` (QC Doctor Gate), `efc24d94` (Preflight), `e98e09b9` (OS 28
-Publish Gate) and `51a807f7` (Jev: Thumb Verdict). This session made none of
-them. PR #434, from another session, records the export at `51a807f7`, names
-`e98e09b9`, and re-anchors the Jev thumbnail tests on the live export. The repo
-does not name `88b36040`, `cd27ab26` or `efc24d94` by id.
+2026-10-28, `88b36040` (`Show Context: Publish, Upload to YouTube (NCO
+Forge)`), `cd27ab26` (`QC Doctor Gate`), `efc24d94` (`Preflight: Can This
+Clear?`), `e98e09b9` (`OS 28: Publish Gate`) and `51a807f7` (`Jev: Thumb
+Verdict`). No commit of this session records any of them. Commit `11d2932`, from
+another session, records the `51a807f7` publish, and PR #434 records the export
+at `51a807f7` and re-anchors the Jev thumbnail tests on it. The repo does not
+name `88b36040`, `cd27ab26` or `efc24d94` by id, and n8n gives every save the same
+author, so which session made those three is not on record.
 
 Five executions have started since the lanes went live, all in trigger mode at a
 scheduled trigger's minute, and all successful. A fresh critic opened all five.
@@ -94,9 +96,11 @@ ruling stands too: the container never holds the TypeSafe key, so the hook sends
 no Authorization header and relies on the environment's proxy to add it.
 
 The fix commits name each verify round. Before the known commands ruling there
-were five reader findings against `42b0e2d`, three against `c65e5c7` and six
-against `59ef1ed`. After it there were three redirect target findings against
-`bc5b316`, five reader leaks in round 6 and the array literal leaks of round 7.
+were nine findings against `2216592`, five reader findings against `42b0e2d`,
+three against `c65e5c7` and six against `59ef1ed`. After it there were three
+redirect target findings against `bc5b316`, five reader leaks in round 6 and three
+findings in round 7, then the recurring nits fixed in `fda8bc2` and a test added
+in `1d4fa3f`.
 Per PR #432's description, each round had four independent verifiers, one each
 for leaks, time and shape, spec and tests, and auth, with real bash 5.2 as the
 oracle. The last round, on `1d4fa3f`, found no blocker and no should fix, and
@@ -135,16 +139,14 @@ agree with each other.
 
 A privacy filter cannot be made safe by modelling the shell more closely. Four
 rounds each found a new construct the reader took for a command. The known
-commands gate closed that path from the other side, so a reader mistake about a
-program name now drops a word instead of sending one. It does not cover redirect
-targets, which are paths by syntax, and rounds 5 to 7 still found leaks there and
-through flags, each closed in the reader. An allowlist narrows what a mistake can
-cost; it does not end the need for adversarial rounds.
-
-In this session the main checkout once read as dirty after an editor committed
-inside its worktree: the branch ref had moved under the checkout while its index
-still matched the older commit's tree. Check that before resetting, and never
-commit those changes as if they were your own.
+commands gate narrowed that path from the other side: a word the reader wrongly
+takes for a program now leaves only when it is an installed command, and its
+flags go with it only then. It does not cover redirect targets, which are paths
+by syntax, and a value that is itself an installed command's name still leaves.
+Rounds 5 to 7 found leaks through all three, a redirect target, the flags of an
+installed program and an installed command's name, each closed in the reader. An
+allowlist narrows what a mistake can cost; it does not end the need for
+adversarial rounds.
 
 ## Open
 
@@ -178,7 +180,7 @@ TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_jev-arc-close_v1_2026-10-28-2313.md
 DATE: 2026-10-28
 DECISIONS: Tee ruled on cards: hold #368 and rebuild the hook as an allowlist (2026-10-17); prove the image lanes in a standalone harness, draft them, then publish (2026-10-27); fix the thumbnail panel and overflow, prove first, then draft and publish (2026-10-27); send a program name only when it is a known command, and send only top level MCP field names (2026-10-28). The container never holds the TypeSafe key.
-FINDINGS: GraphicsMagick drew the navy thumbnail panel about 15 percent opaque because it reads the last colour pair as transparency, and full headline lines ran past the panel because the wrap assumed 0.52 em a character; both fixed live as de4ac645 and still live in 51a807f7, read back byte for byte. Each shell reader version of the hook leaked some value; the known commands gate closed the program name path, and later rounds closed redirect target and flag leaks in the reader. The CLAUDE.md standalone list missed three rsi tests the CI job runs, and a CLAUDE.md sentence misstated which verify round found more. The rollback versions named in the thumbnail and lanes records are no longer in the workflow's history.
+FINDINGS: GraphicsMagick drew the navy thumbnail panel about 15 percent opaque because it reads the last colour pair as transparency, and full headline lines ran past the panel because the wrap assumed 0.52 em a character; both fixed live as de4ac645 and still live in 51a807f7, read back byte for byte. Each shell reader version of the hook leaked some value; the known commands gate narrowed the program name path to installed commands, and later rounds closed redirect target, flag and installed command name leaks in the reader. The CLAUDE.md standalone list missed three rsi tests the CI job runs, and a CLAUDE.md sentence misstated which verify round found more. The rollback versions named in the thumbnail and lanes records are no longer in the workflow's history.
 OPEN: SEND, ENFORCE and each JEV_APPLY are rulings; the first real render through the lanes is unread; the rollback lines point at versions the history no longer lists; twelve hook nits; the PATH, HOME and shell the harness gives a hook are unverified.
 STATUS: #423, #422 and #432 are merged and #368 is closed. TQO FINAL V5 is active at 51a807f7 with versionId equal to activeVersionId, read 2026-10-28T23:09Z. The hook ships switched off.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
