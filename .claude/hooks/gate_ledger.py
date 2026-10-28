@@ -55,7 +55,11 @@ import sys
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
-WINDOW_MIN = 30
+# Two hours, ruled by Tee 2026-10-28 on a card, "All", after a day of
+# reads and retries stopped every 30 minutes for a fresh word. It was 30 from
+# 2026-10-14. The trade he accepted: an outward call can now run on a word
+# from him up to two hours old.
+WINDOW_MIN = 120
 # A signal stamped later than this beyond now is clock skew or a forgery, and
 # is ignored instead of counting as "just now" forever.
 SKEW_MIN = 5

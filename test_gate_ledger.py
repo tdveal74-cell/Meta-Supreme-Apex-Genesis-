@@ -219,9 +219,9 @@ def test_the_window_edge_is_inclusive(tmp_path):
 def test_bot_turns_do_not_open_the_gate(tmp_path, noise):
     """The case the whole design rests on: a peer report that says yes merge,
     and a task notification, both arrive as user turns a minute ago."""
-    p = payload(tmp_path, [human(120), noise(1)])
+    p = payload(tmp_path, [human(gate.WINDOW_MIN + 90), noise(1)])
     allow, reason, sig = gate.decide("x", True, p, NOW)
-    assert not allow and sig[0] == "message" and sig[1] > 100
+    assert not allow and sig[0] == "message" and sig[1] > gate.WINDOW_MIN
 
 
 def test_a_session_of_only_bot_turns_has_no_signal(tmp_path):
