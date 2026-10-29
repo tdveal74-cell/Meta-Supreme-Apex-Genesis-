@@ -37,5 +37,6 @@
   "activatedAt": "2026-10-27T23:33:59.281Z",
   "publishedReadBack": "2026-10-27T23:34:12Z, on Tee's card Draft and publish now: activeVersionId equals versionId de4ac645, the published nodes and connections equal the read back draft, the draft differs from 3db61aef only in the jsCode of Thumb: Pick Still, and that code equals the body at the sha256 below byte for byte."
  },
- "rollback": "publish 3db61aef-43a9-494a-ab65-ef79d8fa0c18"
+ "rollbackAtPublish": "publish 3db61aef-43a9-494a-ab65-ef79d8fa0c18",
+ "rollback": "No version to publish. A read of 3db61aef on 2026-10-28 returned 404, and n8n keeps only recent versions: by 2026-10-29T00:20Z it no longer held de4ac645 either. Publishing an older version would also undo every later save. Undoing this fix means putting the before body back into Thumb: Pick Still in the live version, as a draft, then a publish on Tee's card. The before body is n8n/tqo-v5/live-thumb-layout/before.js at 81321df^, sha256 aa005b1c849e78bdc9730c245f99b8e742672bd9485558672cdca445567f288c."
 }

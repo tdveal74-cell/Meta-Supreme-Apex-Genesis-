@@ -29,7 +29,12 @@ const ok = (v, msg) => { assert.ok(v, msg); checks++; };
 eq(M.workflowId, "qEkGOUsNyVaRAmm6", "TQO FINAL V5");
 eq(P.workflowId, M.workflowId, "published.json is the same workflow");
 eq(P.versionId, M.current.versionId, "published.json is the current version the manifest names");
-eq(M.rollback, "publish " + M.before.versionId, "rollback is the version before");
+eq(M.rollbackAtPublish, "publish " + M.before.versionId, "at publish, rollback was the version before");
+ok(!M.rollback.startsWith("publish ") && M.rollback.includes(M.before.versionId.slice(0, 8) + " on 2026-10-28 returned 404"), "the before version is pruned, so rollback is an edit, not a publish");
+{
+  const jev = P.nodes.filter((n) => n.name.startsWith("Jev: ")).length;
+  ok(M.rollback.includes("removing the " + jev + " Jev nodes and their " + P.newEdges.length + " edges"), "rollback counts the Jev nodes and edges the published copy holds");
+}
 const byName = new Map(P.nodes.map((n) => [n.name, n]));
 eq(byName.size, P.nodes.length, "no node name appears twice");
 eq(P.nodes.length, 17, "14 added nodes and 3 changed ones");
