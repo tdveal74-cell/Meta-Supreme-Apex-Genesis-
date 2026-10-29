@@ -46,4 +46,6 @@ const broken = run(before, { "One Idea at a Time": [row] }, [row])[0];
 eq([fixed.learningObjective, fixed.broll], [RAW.learning_objective, RAW.broll_keywords], "the fixed body hands on the row's objective and b-roll");
 eq([broken.learningObjective, broken.broll], ["", ""], "the old body dropped both");
 for (const k of ["recordId", "title", "script", "description", "tags", "checklist", "__source"]) eq(fixed[k], broken[k], k + " is unchanged by the fix");
+eq(M.rollbackAtPublish, "publish " + M.before.versionId, "at publish, rollback was the version before");
+eq(!M.rollback.startsWith("publish ") && M.rollback.includes(M.before.versionId.slice(0, 8) + " on 2026-10-29 returned 404") && M.rollback.includes((M.node || M.before.node) + " in the live version"), true, "the before version is pruned, so rollback is an edit, not a publish");
 console.log("live hydrate fix: " + checks + " checks passed");

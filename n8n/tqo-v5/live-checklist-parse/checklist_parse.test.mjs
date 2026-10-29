@@ -78,4 +78,6 @@ const shown = user(hydrate(after, JSON.stringify(STEPS)));
 eq(shown.includes("CHECKLIST (keep these steps as spoken, in order): 1. Choose one recurring problem. 2. Show the decision you made. 3. Separate evidence from proposals. 4. Prepare a shareable sample."), true, "the doctor is shown the four steps, numbered, in order");
 eq(user(hydrate(before, JSON.stringify(STEPS))).includes("(not stored on this row; judge the spoken steps in the script itself)"), true, "where the live body told it none was stored");
 
+eq(M.rollbackAtPublish, "publish " + M.before.versionId, "at publish, rollback was the version before");
+eq(!M.rollback.startsWith("publish ") && M.rollback.includes(M.before.versionId.slice(0, 8) + " on 2026-10-29 returned 404") && M.rollback.includes((M.node || M.before.node) + " in the live version"), true, "the before version is pruned, so rollback is an edit, not a publish");
 console.log("live checklist parse: " + checks + " checks passed");

@@ -13,5 +13,6 @@
   "sha256": "4db8944a4036f7b9e3404fc5d1cd538721b3dac7f6a3aa303a5f442af69a3962",
   "publishedReadBack": "2026-10-24, activeVersionId equals versionId, every active node equals the draft, only this node differs from 9f80c967"
  },
- "rollback": "publish 9f80c967-a649-488a-91ac-3f354178dfa8"
+ "rollbackAtPublish": "publish 9f80c967-a649-488a-91ac-3f354178dfa8",
+ "rollback": "No version to publish. A read of 9f80c967 on 2026-10-29 returned 404, and n8n keeps only recent versions. Publishing an older version would also undo every later save. Undoing this change means editing Script: Hydrate from Row in the live version, as a draft, then a publish on Tee's card. before.js beside this manifest is the node as it stood before the change. Compare the live node with after.js first: a later save to the same node would be undone by pasting before.js."
 }

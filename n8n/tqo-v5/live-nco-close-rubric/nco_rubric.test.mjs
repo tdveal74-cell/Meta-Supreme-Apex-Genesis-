@@ -66,4 +66,6 @@ for (const show of ["TQO", "NCO"]) {
 }
 eq(/remove|cut it|subscribe/i.test(R.pairs.map((p) => p.new).join(" ")), false, "the clauses tell the doctor to remove nothing and say nothing of a subscribe line");
 
+eq(M.rollbackAtPublish, "publish " + M.before.versionId, "at publish, rollback was the version before");
+eq(!M.rollback.startsWith("publish ") && M.rollback.includes(M.before.versionId.slice(0, 8) + " on 2026-10-29 returned 404") && M.rollback.includes((M.node || M.before.node) + " in the live version"), true, "the before version is pruned, so rollback is an edit, not a publish");
 console.log("live NCO close rubric: " + checks + " checks passed");
