@@ -51,7 +51,8 @@ eq(M.node, "Thumb: Pick Still", "the one node it changes");
 eq(picks.length, 1, "the export has one Thumb: Pick Still");
 eq(sha(after), M.after.sha256, "the live Pick Still is the body the manifest names");
 eq(M.rollbackAtPublish, "publish " + M.before.versionId, "at publish, rollback was the version before");
-ok(!M.rollback.startsWith("publish ") && M.rollback.includes("404"), "the before version is pruned, so rollback is an edit, not a publish");
+ok(!M.rollback.startsWith("publish ") && M.rollback.includes(M.before.versionId.slice(0, 8) + " on 2026-10-28 returned 404"), "the before version is pruned, so rollback is an edit, not a publish");
+ok(M.rollback.includes("into " + M.node + " ") && M.rollback.includes("before.js at 81321df^, sha256 aa005b1c849e78bdc9730c245f99b8e742672bd9485558672cdca445567f288c"), "rollback names the node and the before body by commit and hash");
 eq(read("../thumb_pick_still.js"), after, "the repo's Pick Still is the live one");
 
 // ---- Running the live Pick Still -------------------------------------------------
