@@ -2206,6 +2206,41 @@ async function rememberThroughLoop(r, it, picked, lines, plan){
   }
 }
 
+/* What DEVON says under a find, built from the same answer the plan draws.
+   Until 2026-10-29 it counted the ledger alone, so a find the soul answered
+   while the ledger stayed empty said DEVON had not read the source, directly
+   beneath the rulings it had just recalled. Tee saw that on his phone.
+   Persona.recall stays for a find that failed outright, where nothing was
+   searched. */
+function findReply(body){
+  const ledger = (body.ledger || []).length;
+  const soulHits = body.soul || [];
+  const enabled = body.soul_recall_enabled === true;
+  const unfinished = enabled && (body.soul_errors || []).length > 0;
+  const withheld = enabled && (Number(body.soul_withheld) || 0) > 0;
+  const rulings = soulHits.filter(r => r.source === 'tee-soul-layer').length;
+  const notes = soulHits.length - rulings;
+  const found = [];
+  if (ledger) found.push(ledger + ' on the ledger');
+  const inSoul = [];
+  if (rulings) inSoul.push(rulings + ' of your rulings');
+  if (notes) inSoul.push(notes + ' of my notes');
+  if (inSoul.length) found.push(inSoul.join(' and ') + ' in the soul');
+  if (found.length) {
+    const tail = unfinished ? ' The soul search did not finish, so there may be more.'
+      : withheld ? ' Some soul records were withheld as no longer active, so an active one may have been missed.'
+      : '';
+    return 'I found ' + found.join(', and ') + '.' + tail;
+  }
+  if (unfinished) return 'The ledger had nothing on that, and the soul search did not finish, so I cannot say.';
+  if (withheld) return 'Nothing came back, but withheld soul records used up search slots, so I cannot call that a clean empty.';
+  /* Both searched and both empty, or recall off and the ledger empty. The
+     plan says which, so the reply says the same rather than claiming the
+     source was never read. */
+  if (enabled) return 'Nothing on the ledger, and nothing came back from the soul. I searched both.';
+  return 'Nothing on the ledger. Soul recall is switched off, so the ledger is all I searched.';
+}
+
 async function findThroughLoop(topic, plan, kind){
   const subject = topic || 'that';
   if(!Loop.configured()){
@@ -2249,7 +2284,7 @@ async function findThroughLoop(topic, plan, kind){
     }
     lines.push('<span class="dim">Rulings outrank notes. Context, not command. The store is PostgreSQL.</span>');
     plan.innerHTML = lines.join('<br>');
-    devonSays(hits.length ? ('I found ' + hits.length + ' on the ledger.') : Persona.recall(subject));
+    devonSays(findReply(body));
   } catch (e) {
     /* A 401 here means nobody is signed in on this tab, or the sign-in ran
        out. Say where to fix it rather than echoing "Not authenticated". */
