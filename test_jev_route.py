@@ -273,9 +273,9 @@ def proxy_env(proxy):
 
 @pytest.fixture(autouse=True)
 def the_hook_is_switched_on(monkeypatch):
-    """The shipped SEND is False, which test_the_shipped_send_switch_is_off pins.
-    Every other test needs the request path, so they run with it on, and a test of
-    the off state turns it off again itself."""
+    """The shipped SEND is True, which test_the_shipped_send_switch_is_on pins.
+    The fixture sets it anyway, so that the request path these tests need does not
+    depend on the shipped value, and a test of the off state turns it off itself."""
     monkeypatch.setattr(jev, "SEND", True)
 
 
@@ -655,8 +655,8 @@ def child_env(project, extra_env=None):
 
 def run_in_a_process(project, stub_url, stdin_text, extra_env=None, cwd=None):
     """The harness's path: a new interpreter, the payload on stdin, the exit
-    code and stdout read back. The endpoint is swapped and SEND is switched on, in
-    a driver, because the shipped file is off and the hook reads nothing from its
+    code and stdout read back. The endpoint is swapped and SEND is set on in a
+    driver, whatever the shipped value, because the hook reads nothing from its
     environment but the project directory, PATH and HOME (which it writes as ~).
     extra_env is for the proxy variables that urllib itself reads. cwd is the
     working directory of the child, which a relative PATH entry is read against."""
@@ -870,13 +870,14 @@ def test_the_shipped_mode_is_shadow():
     assert SHIPPED_ENFORCE is False
 
 
-def test_the_shipped_send_switch_is_off():
-    """Turning the hook on is Tee's ruling and a one line commit, so the shipped
-    value is pinned the way ENFORCE is, from the module as it was loaded and before
-    any fixture of this file touches it. The line is pinned as well, so that a
-    later assignment in the module cannot turn it on behind the constant."""
-    assert SHIPPED_SEND is False
-    assert re.findall(r"^SEND\s*[:=].*$", HOOK.read_text(), re.M) == ["SEND = False"]
+def test_the_shipped_send_switch_is_on():
+    """Tee turned the hook on on 2026-10-29, on a card, after one call made by hand
+    came back answered. Turning it off again is his ruling and a one line commit, so
+    the shipped value is pinned the way ENFORCE is, from the module as it was loaded
+    and before any fixture of this file touches it. The line is pinned as well, so
+    that a later assignment in the module cannot change it behind the constant."""
+    assert SHIPPED_SEND is True
+    assert re.findall(r"^SEND\s*[:=].*$", HOOK.read_text(), re.M) == ["SEND = True"]
 
 
 def test_the_shipped_numbers_are_the_ones_claude_md_states():
@@ -890,7 +891,7 @@ def test_the_shipped_numbers_are_the_ones_claude_md_states():
     section = (ROOT / "CLAUDE.md").read_text().split("## The Jev router")[1].split("\n## ")[0]
     flat = " ".join(section.split())
     for stated in ("probability of 0.8", "2.5 seconds", "2,000 characters", "200 characters", "64 KiB",
-                   "three failed requests", "ten minutes", "`ENFORCE = False`", "`SEND = False`",
+                   "three failed requests", "ten minutes", "`ENFORCE = False`", "`SEND = True`",
                    "any nesting up to 8", "nesting past 8", "fourteen wrapping commands",
                    "over 64 characters", "128 distinct names"):
         assert stated in flat, stated
@@ -903,13 +904,13 @@ def test_the_shipped_numbers_are_the_ones_claude_md_states():
         assert stated in flat, stated
 
 
-def test_the_typesafe_skill_notes_say_the_key_is_a_network_secret_and_the_hook_ships_off():
+def test_the_typesafe_skill_notes_say_the_key_is_a_network_secret_and_the_hook_ships_on():
     """UPSTREAM.md is ours (outside MANIFEST.sha256) and used to say that calling the
     API needs TYPESAFE_API_KEY. No variable holds the key: the proxy adds it."""
     text = " ".join((ROOT / ".claude" / "skills" / "typesafe-ai" / "UPSTREAM.md").read_text().split())
     assert "TYPESAFE_API_KEY" not in text
     assert "network secret" in text and "adds it to requests for `api.typesafe.ai`" in text
-    assert "ships with `SEND = False`" in text
+    assert "ships with `SEND = True`" in text
 
 
 def test_needs_human_at_threshold_asks(stub, enforce):
@@ -1435,10 +1436,11 @@ def test_a_certificate_the_environment_does_not_trust_is_refused_through_the_pro
     assert ledger(project)[-1]["outcome"] == "error"
 
 
-def test_a_real_process_reaches_the_proxy_with_send_on_and_never_as_shipped(project, fake_proxy):
-    """The shipped file, run as the harness runs it, opens no connection at all: the
-    fake proxy sees none. The same environment with SEND switched on by a driver
-    reaches it, so the zero is not an environment that never could."""
+def test_a_real_process_reaches_the_proxy_as_shipped(project, fake_proxy):
+    """The shipped file, run as the harness runs it with nothing swapped, goes
+    through the proxy its environment names, the same way the driver does: one
+    CONNECT each. The fake proxy answers no tunnel, so each writes an error row and
+    prints nothing."""
     proxy = fake_proxy()
     stdin_text = json.dumps(payload())
     proc, _ = run_in_a_process(project, jev.ENDPOINT, stdin_text, extra_env=proxy_env(proxy))
@@ -1447,8 +1449,8 @@ def test_a_real_process_reaches_the_proxy_with_send_on_and_never_as_shipped(proj
     assert ledger(project)[-1]["outcome"] == "error"
     shipped = run_the_shipped_file(project, stdin_text, proxy_env(proxy))
     assert shipped.returncode == 0 and shipped.stdout == "" and shipped.stderr == ""
-    assert proxy.connects() == ["CONNECT api.typesafe.ai:443"], "the shipped file made a connection"
-    assert ledger(project)[-1]["outcome"] == "off"
+    assert proxy.connects() == ["CONNECT api.typesafe.ai:443"] * 2, "the shipped file went around the proxy"
+    assert ledger(project)[-1]["outcome"] == "error"
 
 
 @pytest.mark.parametrize("version", ["HTTP/1.0", "HTTP/1.1"])
@@ -4628,11 +4630,15 @@ def test_a_lone_surrogate_is_sent_and_recorded(stub, project, monkeypatch):
     assert ledger(project)[-1]["outcome"] == "answered"
 
 
-def test_the_script_runs_as_a_process_and_prints_nothing_while_send_is_off(project):
+def test_the_script_runs_as_a_process_and_prints_nothing_when_its_request_is_refused(project):
+    """As shipped, SEND is on. With no proxy in its environment the request goes
+    to the host itself, the child's loopback guard refuses it, and the hook writes
+    an error row and prints nothing, so a refused request costs the call nothing."""
     proc = run_the_shipped_file(project, json.dumps(payload()))
     assert proc.returncode == 0 and proc.stdout == "" and proc.stderr == ""
     row = ledger(project)[-1]
-    assert row["outcome"] == "off" and row["decision"] == "none" and "latency_ms" not in row
+    assert row["outcome"] == "error" and row["decision"] == "none"
+    assert row["error"] == "URLError" and "latency_ms" in row
 
 
 # --------------------------------------------------------------- the wiring

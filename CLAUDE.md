@@ -803,16 +803,19 @@ the second asks Tee and, failing that, the first denies the call with a reason.
 Every other answer prints nothing. The hook never prints allow, so it can only
 narrow what runs. Read, Grep and Glob are not matched at all.
 
-**It sends nothing until Tee turns `SEND` on, and the container never holds the
-key.** Ruled by Tee 2026-10-28, carrying his earlier ruling that the container
-never holds the TypeSafe key. The module constant `SEND = False` gates every
-request: while it is False the hook makes no request, opens no socket and writes
-an `off` row for each call it can read, and a ledger of `off` rows is the
+**It ships with `SEND = True` since 2026-10-29, and the container never holds the
+key.** It shipped off first, ruled by Tee 2026-10-28, carrying his earlier ruling
+that the container never holds the TypeSafe key. He ruled it on 2026-10-29 on a
+card, "Supervised first call": one call made by hand before any commit, then the
+one line. A copy of the hook with only the `SEND` line changed, fed one Bash call
+at 2026-10-29T00:10:44Z through the environment's proxy, wrote an `answered` row
+from `jev-1.14.0` in 549 ms. The module constant still gates every request: set
+back to `SEND = False`, the hook makes no request, opens no socket and writes an
+`off` row for each call it can read, and a ledger of `off` rows is then the
 configured state and not a fault. Input it cannot read, which is anything that is
 not a JSON object with a tool name, gets a `bad_input` row first, switch or no
-switch. Turning it on is a separate ruling and a one line commit,
-`SEND = True`, as `ENFORCE` is. `test_jev_route.py` pins the shipped value the
-same way and pins the line.
+switch. Turning it off again is a ruling and a one line commit, as `ENFORCE` is.
+`test_jev_route.py` pins the shipped value the same way and pins the line.
 
 The hook reads no key from any environment variable and sends no Authorization
 header of its own. An earlier version read `TYPESAFE_API_KEY`; that variable is
@@ -841,7 +844,8 @@ tunnel with a self signed certificate for `api.typesafe.ai`, named in
 `SSL_CERT_FILE`, receives a request with no Authorization header and a body that
 is the outline only, and the same tunnel is refused when `SSL_CERT_FILE` names
 another certificate. The shipped file, run as a process with that proxy in its
-environment, makes no connection to it.
+environment, goes through it, and with no proxy in its environment it reaches
+nothing but loopback under the guard.
 
 **What leaves the machine is an outline that is built, never a call that is
 cleaned.** The first version scrubbed the raw call, and every scrubber missed
@@ -1137,8 +1141,8 @@ eight, and for the ninth, a read of `MAX_STDIN + 2` characters, on inputs from o
 under the cap to a thousand over it. The reader's own index arithmetic was not mutated; its reproductions are
 the tests above.
 
-It ships in shadow mode, `ENFORCE = False`: once `SEND` is on it asks, records the
-answer and prints nothing, and until then it asks nothing. Enforcement is a separate ruling and a one line commit, and
+It ships in shadow mode, `ENFORCE = False`: it asks, records the answer and
+prints nothing. Enforcement is a separate ruling and a one line commit, and
 `test_jev_route.py` pins the shipped value so a fixture cannot flip it quietly.
 A deny recorded in shadow mode never counts toward the repeat pass described
 below, so flipping the flag starts every session clean.
@@ -1184,14 +1188,14 @@ writes no text, and no hook can swap one tool for another. It sits beside the
 outward gate above and neither reads the other.
 
 `test_jev_route.py` proves the hook's own logic against a loopback stub and
-proves nothing about Jev's judgment. Unverified: the request and answer shapes,
-which the first version recorded checking against TypeSafe's OpenAPI spec 0.2.0
-and `typesafe-sdk` 0.7.5 on 2026-10-16 and this rebuild did not re-read; any
-live answer, because `SEND` is False and no authenticated request has been made;
-that the agent proxy adds the key to a request for `api.typesafe.ai`, which no
-request has shown yet, so a run of 401 rows is the first sign it does not;
-whether the TLS tunnel to the real host verifies under the `SSL_CERT_FILE` a
-session carries, which the tests proved only against a certificate they made;
+proves nothing about Jev's judgment. Measured once, by the hand-run call of
+2026-10-29 above and from one container: the API accepted the request and its
+answer parsed as two probabilities, the agent proxy added the key, and the TLS
+tunnel verified under the `SSL_CERT_FILE` that session carried. Another
+environment whose proxy does not add the key shows a run of 401 rows. Unverified:
+the request and answer shapes beyond that one call, which the first version
+recorded checking against TypeSafe's OpenAPI spec 0.2.0 and `typesafe-sdk` 0.7.5
+on 2026-10-16 and this rebuild did not re-read;
 what the harness does with the wrapper's `exit 1`, as under the gate; and
 whether a fresh verifier finds a piece that leaves and should not. Also
 unverified: which `PATH` the harness gives a hook, because the code reads the

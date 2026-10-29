@@ -65,9 +65,10 @@ Tee added it as a network secret in the cloud environment, and the environment's
 agent proxy adds it to requests for `api.typesafe.ai`, so a call has to go
 through the proxy the environment sets and not around it. The Jev router hook
 (`.claude/hooks/jev_route.py`) is built that way: it reads no key, sends no
-Authorization header, and ships with `SEND = False`, so it makes no request until
-Tee turns that on. A proxy that does not add the key gets HTTP 401 back. Nothing
-here has shown the proxy adding it yet.
+Authorization header, and ships with `SEND = True` since 2026-10-29. A proxy that
+does not add the key gets HTTP 401 back. One call made by hand on 2026-10-29,
+before `SEND` was turned on, came back answered from `jev-1.14.0`, so the proxy
+added the key in that container.
 
 ## Syncing a newer upstream
 

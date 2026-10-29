@@ -203,10 +203,11 @@ is written, because that row is what lets the identical call through the second
 time. After BREAKER_ERRORS failed requests in a row it stops asking for
 BREAKER_S seconds, so a dead vendor costs three deadlines and not one per call.
 
-SEND gates every request. While it is False the hook makes no request, opens no
-socket and writes an off row for each call it can read. Input that is not a JSON
-object with a tool name gets a bad_input row first. Turning it on is Tee's
-ruling and a one line commit, as ENFORCE is.
+SEND gates every request. It ships True since 2026-10-29, ruled by Tee on a card
+after one call made by hand came back answered. Set to False, the hook makes no
+request, opens no socket and writes an off row for each call it can read. Input
+that is not a JSON object with a tool name gets a bad_input row first. Turning it
+off again is Tee's ruling and a one line commit, as ENFORCE is.
 
 The hook holds no key. It reads none from any environment variable and sends no
 Authorization header of its own. The TypeSafe key is a network secret of the
@@ -231,7 +232,9 @@ CONFIDENCE is a starting guess, to be set from the ledger once real answers
 exist. The request and answer shapes were taken from the first version, which
 recorded checking them against TypeSafe's OpenAPI spec (version 0.2.0) and the
 official typesafe-sdk 0.7.5 on 2026-10-16. This rebuild did not re-read the
-spec, and no authenticated request has been made.
+spec. One authenticated request has been made: a copy of this file with only the
+SEND line changed, fed one Bash call by hand at 2026-10-29T00:10:44Z, wrote an
+answered row from jev-1.14.0 in 549 ms through the environment's proxy.
 """
 
 from __future__ import annotations
@@ -272,7 +275,7 @@ TAIL_BYTES = 256 * 1024
 BREAKER_ERRORS = 3
 BREAKER_S = 600
 ENFORCE = False
-SEND = False
+SEND = True
 
 STATE_NOTE = (
     "`tool_name` is the tool a coding agent is about to call. `tool_input` is an "
