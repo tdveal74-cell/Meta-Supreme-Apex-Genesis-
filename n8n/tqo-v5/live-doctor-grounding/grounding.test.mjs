@@ -146,4 +146,10 @@ ok(R.sentence.includes("an NCO episode may end on one or on a quiet action"), "t
 eq(R.sentence, "A specific question for the comments is not a solicitation or engagement bait, and an NCO episode may end on one or on a quiet action. The one closing line the writer adds asking the viewer to subscribe is the NCO call to action, and it stands. It is not a solicitation under the close score.", "the NCO sentence is the ruled wording, word for word");
 eq(R.new, R.old.replace("  ...(isNCO ? [] : [\n", () => "  ...(isNCO ? [\n    '" + R.sentence + "'\n  ] : [\n"), "and the replacement inserts that one line into the NCO branch and nothing else");
 
+for (const c of M.change) {
+  const names = c.op === "add node" ? [c.node.name] : c.op === "rewire" ? [...c.remove, ...c.add.flat()] : [c.node];
+  for (const n of names) eq(M.rollback.includes(n), true, "rollback undoes the " + c.op + " of " + n);
+}
+eq(M.rollbackAtPublish, "publish " + M.before.versionId, "at publish, rollback was the version before");
+eq(!M.rollback.startsWith("publish ") && M.rollback.includes(M.before.versionId.slice(0, 8) + " on 2026-10-29 returned 404") && M.rollback.includes((M.node || M.before.node) + " in the live version"), true, "the before version is pruned, so rollback is an edit, not a publish");
 console.log("live doctor grounding: " + checks + " checks passed");

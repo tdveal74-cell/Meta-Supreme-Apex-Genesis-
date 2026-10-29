@@ -99,4 +99,6 @@ eq(fieldsOf(fill(after, { description: TRAILED, checklist: [] })).Description, f
 const TWO = "S1.\n\nThe checklist from this episode:\n1. First old.\n\nMiddle.\n\nThe checklist from this episode:\n1. Second old.";
 eq(fieldsOf(fill(after, { description: TWO })).Description, DISCLOSURE + "\n\nS1." + BLOCK + "\n\nMiddle.\n\nThe checklist from this episode:\n1. Second old.", "with two old blocks, the first is replaced and the second stays");
 
+eq(M.rollbackAtPublish, "publish " + M.before.versionId, "at publish, rollback was the version before");
+eq(!M.rollback.startsWith("publish ") && M.rollback.includes(M.before.versionId.slice(0, 8) + " on 2026-10-29 returned 404") && M.rollback.includes((M.node || M.before.node) + " in the live version"), true, "the before version is pruned, so rollback is an edit, not a publish");
 console.log("description checklist: " + checks + " checks passed");

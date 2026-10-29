@@ -44,4 +44,6 @@ eq(run(after, { ...D, checklist: [] }).includes(LINE + "(not stored on this row;
 eq(run(before, { ...D, checklist: [] }).includes(LINE + "(none returned)"), true, "the old body said none returned");
 eq(run(after, { ...D, checklist: ["one", "two", "three"] }), run(before, { ...D, checklist: ["one", "two", "three"] }), "with a checklist stored the message is unchanged");
 eq(run(after, { ...D, learningObjective: "" }).includes("LEARNING OBJECTIVE (keep word for word, inside the first 30 seconds): (none returned)"), true, "the learning objective line is untouched");
+eq(M.rollbackAtPublish, "publish " + M.before.versionId, "at publish, rollback was the version before");
+eq(!M.rollback.startsWith("publish ") && M.rollback.includes(M.before.versionId.slice(0, 8) + " on 2026-10-29 returned 404") && M.rollback.includes((M.node || M.before.node) + " in the live version"), true, "the before version is pruned, so rollback is an edit, not a publish");
 console.log("live doctor checklist fix: " + checks + " checks passed");
