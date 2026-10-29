@@ -37,5 +37,6 @@
   "activatedAt": "2026-10-27T23:33:59.281Z",
   "publishedReadBack": "2026-10-27T23:34:12Z, on Tee's card Draft and publish now: activeVersionId equals versionId de4ac645, the published nodes and connections equal the read back draft, the draft differs from 3db61aef only in the jsCode of Thumb: Pick Still, and that code equals the body at the sha256 below byte for byte."
  },
- "rollback": "publish 3db61aef-43a9-494a-ab65-ef79d8fa0c18"
+ "rollbackAtPublish": "publish 3db61aef-43a9-494a-ab65-ef79d8fa0c18",
+ "rollback": "No version to publish. Read 2026-10-28, n8n kept six versions of the workflow, de4ac645 the oldest, and a read of 3db61aef returned 404. Publishing an older version would also undo every later save. Undoing this fix means editing Thumb: Pick Still in the live version back to the before body in git history, as a draft, then a publish on Tee's card."
 }

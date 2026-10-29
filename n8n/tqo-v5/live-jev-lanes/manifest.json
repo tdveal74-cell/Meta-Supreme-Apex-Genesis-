@@ -68,5 +68,6 @@
    "sha256": "2591425c261e13481de909b9b25b76f01ed1c0e44bf2f61e15fd8db5d8c09eb7"
   }
  },
- "rollback": "publish fc75f7a6-7947-402c-9bf2-2396bd866b12"
+ "rollbackAtPublish": "publish fc75f7a6-7947-402c-9bf2-2396bd866b12",
+ "rollback": "No version to publish. Read 2026-10-28, n8n kept six versions of the workflow, de4ac645 the oldest, and a read of fc75f7a6 returned 404. Publishing an older version would also undo every later save. Undoing the lanes means editing the live version: removing the 14 Jev nodes and their 14 edges and taking the Jev block out of Build Movie, Thumb: Pick Still and Shim: Thumbnail To Binary, as a draft, then a publish on Tee's card."
 }

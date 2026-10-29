@@ -50,7 +50,8 @@ eq(M.workflowId, "qEkGOUsNyVaRAmm6", "TQO FINAL V5");
 eq(M.node, "Thumb: Pick Still", "the one node it changes");
 eq(picks.length, 1, "the export has one Thumb: Pick Still");
 eq(sha(after), M.after.sha256, "the live Pick Still is the body the manifest names");
-eq(M.rollback, "publish " + M.before.versionId, "rollback is the version before");
+eq(M.rollbackAtPublish, "publish " + M.before.versionId, "at publish, rollback was the version before");
+ok(!M.rollback.startsWith("publish ") && M.rollback.includes("404"), "the before version is pruned, so rollback is an edit, not a publish");
 eq(read("../thumb_pick_still.js"), after, "the repo's Pick Still is the live one");
 
 // ---- Running the live Pick Still -------------------------------------------------

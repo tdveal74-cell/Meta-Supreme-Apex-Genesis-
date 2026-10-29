@@ -14,7 +14,10 @@ lanes were proven first in a separate inactive workflow against the real
 TypeSafe API (`jev-harness/`, execution 4737), then drafted into TQO FINAL V5
 and published as version `3db61aef`, read back equal to the draft.
 `live-jev-lanes/` holds the published nodes and the test that holds the repo
-to them. Rollback is one publish of `fc75f7a6`. Every `JEV_APPLY` is still
+to them. Rollback was one publish of `fc75f7a6`. It is not now: read on
+2026-10-28, n8n kept six versions of the workflow, `de4ac645` the oldest, and a
+read of `fc75f7a6` returned 404, so undoing the lanes means editing the live
+version, as `live-jev-lanes/manifest.json` says. Every `JEV_APPLY` is still
 false, and flipping one is still a separate ruling.
 
 The offline proof still stands beside that: each node body runs in a harness
