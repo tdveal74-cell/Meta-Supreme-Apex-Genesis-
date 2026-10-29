@@ -820,9 +820,12 @@ switch. Turning it off again is a ruling and a one line commit, as `ENFORCE` is.
 The hook reads no key from any environment variable and sends no Authorization
 header of its own. An earlier version read `TYPESAFE_API_KEY`; that variable is
 now ignored, and a test sets it and checks that it goes nowhere. Tee added the
-key as a network secret in the cloud environment, where the agent proxy is to
-add it to requests for `api.typesafe.ai`, so the request has to go through the
-proxy the environment sets and not around it. The hook builds its opener for
+key as a network secret in the cloud environment, where the agent proxy adds it
+to requests for `api.typesafe.ai`, so the request has to go through the proxy the
+environment sets and not around it. On a machine whose environment names no such
+proxy, a local checkout for one, the request goes to the host directly with no
+key: the outline still leaves, the API answers 401, and three in a row open the
+breaker. The hook builds its opener for
 each request with `ProxyHandler()`, which reads `HTTPS_PROXY` and `NO_PROXY`,
 uses the default TLS context, which trusts `SSL_CERT_FILE`, and changes one
 thing: a redirect is refused. The earlier opener, built once at import, did not
