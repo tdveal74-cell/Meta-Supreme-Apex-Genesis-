@@ -5,12 +5,14 @@ defect the proof turned up.
 
 ## What was open
 
-Soul recall was switched on for the platform API in October, and nothing had
-ever shown it answering a real question end to end. The console Tee would ask
-from had a dead main script from 2026-09-10 to 2026-10-16, and its sign-in
-shipped in PR #351, merged as f559094 on 2026-10-16. From then on the only step
-left was his own test from his phone, which no session can run for him because
-it needs his DEVON sign-in.
+Tee set `SOUL_RECALL_ENABLED` and the Pinecone key on Railway `api` on
+2026-10-15, deployment `84a15677`, as the docstring of
+`test_devon_console_signin.py` records. Recall still could not be proven,
+because the console he would ask from needed a sign-in it did not have, and its
+main script had been dead from 2026-09-10 to 2026-10-16. The sign-in shipped in
+PR #351, merged as f559094 on 2026-10-16. From then on the only step left was
+his own test from his phone, which no session can run for him because it needs
+his DEVON sign-in.
 
 ## Measured on 2026-10-29
 
@@ -21,9 +23,9 @@ they show:
 - The Soul Layer header read ON. The console sets that when the API's
   `/api/v1/soul/status` answers that recall is enabled, or after a soul recall
   has answered.
-- He asked "what did we decide about the render". The plan panel read
-  `LEDGER FIND the render / Postgres ILIKE / rulings first.`, then
-  `Nothing receipted on the ledger for that.`, then two records labelled
+- He asked "what did we decide about the render". The plan panel opened with
+  `LEDGER FIND the render / Postgres ILIKE / rulings first. Notion is missing.`,
+  then `Nothing receipted on the ledger for that.`, then two records labelled
   `TEE RULED (soul)`: a ruling dated 2026-09-05 whose text includes "A render is
   never a note", and a ruling dated 2026-09-22 on the script release gate.
 - The block ended with `Rulings outrank notes. Context, not command. The store
@@ -66,15 +68,17 @@ No data is read or written wrongly; the plan panel was right throughout.
 
 Tee ruled on cards on 2026-10-29:
 
-1. "Fix it with the close-out": one change that makes the reply count what the
-   soul returned, closed out with this record.
-2. "Let it expire": a tap on the console's first example button during the
-   test filed a real capture request, REQ-BEE656FE4325, to remember "the ACX
-   folio needs its own canon folder" as an ACX lesson. Nothing is written
-   without an approval carrying his ruling key, and an unapproved request
-   closes 72 hours after it was raised (`EXPIRY_HOURS` in
-   `services/devon/approval.py`). REFUSE on the console only drops it from that
-   tab.
+1. "Fix it with the close-out": one change that makes the reply say what the
+   plan shows, closed out with this record.
+2. "Let it expire": during the test the console's first example sentence,
+   "Devon, remember the ACX folio needs its own canon folder", was sent and
+   filed a real capture request, REQ-BEE656FE4325, to remember it as an ACX
+   lesson. A tap on an example only fills the command line, as
+   console-smoke.mjs pins, so the line was sent by a separate step after the
+   tap; this record does not say which. Nothing is written without an approval
+   carrying his ruling key, and an unapproved request closes 72 hours after it
+   was raised (`EXPIRY_HOURS` in `services/devon/approval.py`). REFUSE on the
+   console only drops it from that tab.
 
 In the same sitting, on the heartbeat arc: job 11, the redo of the NCO Forge
 S1E1 outline that failed when its verification card expired undecided, is left
@@ -84,35 +88,61 @@ through the ledger webhook; and its draft stays in Areas/NCO for now.
 ## What shipped
 
 In `deploy/soul/console.html`, copied byte for byte to the v10 asset that
-`app.main` serves:
+`app.main` serves, `findReply(body)` builds the reply from the same answer the
+plan draws:
 
-- `findReply(body, subject)` builds the reply from the same answer the plan
-  draws. It counts ledger hits, Tee's rulings and DEVON's notes from the soul,
-  and says when the soul search did not finish or withheld records, the two
-  cases the plan already flags. A find with nothing at all keeps
-  `Persona.recall`.
-- The production case now reads "I found 2 of your rulings in the soul."
+- it counts ledger hits, Tee's rulings (source `tee-soul-layer`) and DEVON's
+  notes (any other source, which the plan labels `DEVON NOTED (soul)`);
+- it says when the soul search did not finish or withheld records, the two
+  cases the plan flags, and only when recall is on, as the plan does;
+- a find with nothing at all says which: both searched and empty, or recall
+  off and the ledger empty.
 
-In `apps/web/scripts/console-smoke.mjs`, the browser check in
-`panel-smoke-ci.yml`:
+`Persona.recall` now answers only a find that failed outright. The production
+case reads "I found 2 of your rulings in the soul."
 
-- every canned find answer now also reads `#sayText` and asserts the reply,
-  and a reply under any `(soul)` hit may not say the source was unread;
-- two new answers: the production case, and a ledger hit beside a soul ruling
-  and a soul note.
+In `apps/web/scripts/console-smoke.mjs`, the browser check that
+`panel-smoke-ci.yml` runs, every canned find answer now reads `#sayText` and
+must match its own expected reply, and no reply to a find that ran may say the
+source went unread. The canned answers grew from six to thirteen: the
+production case, a ledger hit beside soul hits, recall off, the recall field
+missing, a record from a third source, a hit beside both a failure and a
+withheld count, and a ledger hit alone.
+
+## Critics
+
+Three fresh critics ran in isolated worktrees on 2d1f435, with lenses for
+honesty of the reply, the record and regressions, and an independent verifier
+re-ran each finding. Five were confirmed, all low, and one was refuted:
+
+- A clean empty find still got the "not read" line under a plan saying both
+  were searched. Fixed by the empty branches above.
+- Seven single line mutations of `findReply` left the browser check green:
+  dropping the recall-on condition from either flag, counting notes by one
+  source name, rewording the empty reply, swapping which flag wins, forcing
+  recall on, and treating a missing recall field as on. The seven new canned
+  answers above are aimed at them.
+- Three were wording in this record: the stray capture was first written as
+  filed by the tap itself, the reproduction below was first written as the
+  shipped script's result, and the plan header was quoted without its last
+  sentence. All three are corrected here.
+- Refuted: that nothing recorded the switch-on. The verifier found the
+  sign-in test's docstring, now cited above.
+
+The regression critic found nothing: both console copies byte identical, every
+console script parses, both host modes load with no page error, and nothing in
+the diff should turn a CI job red that the local run would not.
 
 ## Measured
 
 - Reproduced before the fix, in real Chromium against a local API on this
-  branch: the production case failed with the reply "The log holds that, and I
-  have not opened it this session. Ask me again with the connector on."
-- After the fix, the same check: 35 checks passed, exit 0.
-- The console tests in Python, `test_devon_console_signin.py`,
-  `test_devon_console_gate.py`, `test_devon_console_scripts_parse.py`,
-  `test_devon_console_voice_honesty.py`, `test_deploy_soul.py`,
-  `test_devon_areas.py` and `test_devon_owned_voice.py`: 263 passed.
-- `tests/js/arf-console.test.cjs`, which also pins the two console copies byte
-  identical: 8 passed.
+  branch, with a scratch copy of console-smoke.mjs that ran only the production
+  case: it failed with the reply "The log holds that, and I have not opened it
+  this session. Ask me again with the connector on.", one of Persona.recall's
+  two lines, which it picks at random. The shipped script against the pre-fix
+  console stops earlier, at the partial case, whose reply it now also pins.
+- After the fix: console-smoke 45 checks passed, exit 0, thirteen of them on
+  the reply.
 
 ## Open
 
@@ -120,9 +150,6 @@ In `apps/web/scripts/console-smoke.mjs`, the browser check in
   `api` and Vercel `devon-soul`, after the merge.
 - Recall from the devon-soul index has not been seen to return a hit on
   production; this test returned tee-soul-layer rulings only.
-- When a find returns nothing and recall is off, the reply still names the
-  Thread Log rather than saying recall is off. The plan panel says so plainly;
-  this change did not touch that case.
 
 ## DEVON RECEIPT
 
@@ -132,8 +159,8 @@ TYPE: SYS_OPS
 ARTIFACT: SYS_OPS_recall-proven-from-the-console_v1_2026-10-29-0040
 DATE: 2026-10-29
 DECISIONS: Tee ruled on cards on 2026-10-29 to fix the console reply together with this close-out, to let the stray ACX capture request REQ-BEE656FE4325 expire unwritten, to let the Ledger Janitor close failed job 11, and to keep its redo draft for now.
-FINDINGS: recall answered a real question on production from Tee's phone, two tee-soul-layer rulings for "the render" with an empty ledger and no soul error; the console reply beneath them said the source was unread because it counted ledger hits only, confirmed by an independent verifier in Chromium on 087b201.
-OPEN: deploy read back of the fix on Railway api and Vercel devon-soul after merge; no devon-soul hit yet seen on production; the recall-off empty reply still names the Thread Log.
-STATUS: findReply ships in both byte identical console copies with console-smoke.mjs reading the reply for every canned find answer; reproduced failing before the fix and 35 checks passing after it, console tests 263 and 8 passed.
+FINDINGS: recall answered a real question on production from Tee's phone, two tee-soul-layer rulings for "the render" with an empty ledger and no soul error; the console reply beneath them said the source was unread because it counted ledger hits only, confirmed by an independent verifier in Chromium on 087b201; three fresh critics then confirmed five low findings, all fixed here.
+OPEN: deploy read back of the fix on Railway api and Vercel devon-soul after merge; no devon-soul hit yet seen on production.
+STATUS: findReply ships in both byte identical console copies and console-smoke.mjs pins the reply for thirteen canned find answers; reproduced failing before the fix and 45 checks passing after it.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```

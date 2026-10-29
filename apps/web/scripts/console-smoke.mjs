@@ -398,7 +398,7 @@ const FIXTURES = {
     body: { query: "x", ledger: [], soul: [], soul_errors: [], soul_withheld: 0, soul_recall_enabled: true },
     expect: /SOUL SEARCHED Nothing recalled from the soul\. A measured empty, not a guess\./,
     refuse: /SOUL PARTIAL|SOUL OFF/,
-    refuseSay: /I found/,
+    say: /^Nothing on the ledger, and nothing came back from the soul\. I searched both\.$/,
   },
   withheld: {
     body: { query: "x", ledger: [], soul: [], soul_errors: [], soul_withheld: 3, soul_recall_enabled: true },
@@ -466,6 +466,38 @@ const FIXTURES = {
     refuse: /Nothing receipted|measured empty/,
     say: /^I found 1 on the ledger, and 1 of your rulings and 1 of my notes in the soul\.$/,
   },
+  /* Recall off: errors and a withheld count the API should never send with
+     recall off are ignored, as the plan ignores them. */
+  recallOff: {
+    body: { query: "x", ledger: [], soul: [], soul_errors: ["tee-soul-layer: ignored"], soul_withheld: 2, soul_recall_enabled: false },
+    expect: /SOUL OFF Soul recall is switched off on the API, so only the ledger was searched\./,
+    refuse: /SOUL PARTIAL|SOUL WINDOW|measured empty/,
+    say: /^Nothing on the ledger\. Soul recall is switched off, so the ledger is all I searched\.$/,
+  },
+  recallMissing: {
+    body: { query: "x", ledger: [], soul: [], soul_errors: [], soul_withheld: 0 },
+    expect: /SOUL OFF Soul recall is switched off on the API, so only the ledger was searched\./,
+    refuse: /SOUL PARTIAL|SOUL WINDOW|measured empty/,
+    say: /^Nothing on the ledger\. Soul recall is switched off, so the ledger is all I searched\.$/,
+  },
+  otherSource: {
+    body: { query: "x", ledger: [], soul: [{ source: "another-index", text: "A record from another index." }], soul_errors: [], soul_withheld: 0, soul_recall_enabled: true },
+    expect: /DEVON NOTED \(soul\) A record from another index\./,
+    refuse: /measured empty|TEE RULED/,
+    say: /^I found 1 of my notes in the soul\.$/,
+  },
+  hitsErrorsWithheld: {
+    body: { query: "x", ledger: [], soul: [{ source: "tee-soul-layer", text: "A ruling beside a failure." }], soul_errors: ["devon-soul: timed out"], soul_withheld: 2, soul_recall_enabled: true },
+    expect: /TEE RULED \(soul\) A ruling beside a failure\..*SOUL PARTIAL The soul search did not finish: devon-soul: timed out.*SOUL WINDOW 2 soul record\(s\) withheld/,
+    refuse: /measured empty/,
+    say: /^I found 1 of your rulings in the soul\. The soul search did not finish, so there may be more\.$/,
+  },
+  ledgerOnly: {
+    body: { query: "x", ledger: [{ kind: "task", body: "A task on the ledger." }], soul: [], soul_errors: [], soul_withheld: 0, soul_recall_enabled: true },
+    expect: /TASK A task on the ledger\..*SOUL SEARCHED/,
+    refuse: /Nothing receipted|SOUL PARTIAL|SOUL OFF/,
+    say: /^I found 1 on the ledger\.$/,
+  },
 };
 for (const [label, fixture] of Object.entries(FIXTURES)) {
   await page.route(`${ORIGIN}/api/v1/soul/find**`, (route) =>
@@ -482,9 +514,10 @@ for (const [label, fixture] of Object.entries(FIXTURES)) {
     assert.doesNotMatch(answer, fixture.refuse);
   });
   check(`DEVON's reply to a ${label} find answer says what the plan shows`, () => {
-    if (fixture.say) assert.match(said, fixture.say);
-    if (fixture.refuseSay) assert.doesNotMatch(said, fixture.refuseSay);
-    if (/\(soul\)/.test(answer)) assert.doesNotMatch(said, /Thread Log|have not opened|not read/);
+    assert.match(said, fixture.say);
+    /* Every canned answer is a find that ran, so no reply may say the
+       source went unread. Persona.recall is for a find that failed. */
+    assert.doesNotMatch(said, /Thread Log|have not opened|not read/);
   });
 }
 const ownedRan = await page.evaluate(() => window.__owned === 1);
