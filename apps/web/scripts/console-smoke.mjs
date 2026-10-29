@@ -392,26 +392,31 @@ const FIXTURES = {
     body: { query: "x", ledger: [], soul: [], soul_errors: ["tee-soul-layer: PineconeApiException 403 Forbidden"], soul_withheld: 0, soul_recall_enabled: true },
     expect: /SOUL PARTIAL The soul search did not finish: tee-soul-layer: PineconeApiException 403 Forbidden/,
     refuse: /measured empty/,
+    say: /^The ledger had nothing on that, and the soul search did not finish, so I cannot say\.$/,
   },
   empty: {
     body: { query: "x", ledger: [], soul: [], soul_errors: [], soul_withheld: 0, soul_recall_enabled: true },
     expect: /SOUL SEARCHED Nothing recalled from the soul\. A measured empty, not a guess\./,
     refuse: /SOUL PARTIAL|SOUL OFF/,
+    refuseSay: /I found/,
   },
   withheld: {
     body: { query: "x", ledger: [], soul: [], soul_errors: [], soul_withheld: 3, soul_recall_enabled: true },
     expect: /SOUL WINDOW 3 soul record\(s\) withheld as no longer active\. They used slots in the search, so an active record may not have been fetched\./,
     refuse: /measured empty/,
+    say: /^Nothing came back, but withheld soul records used up search slots, so I cannot call that a clean empty\.$/,
   },
   hitsAndErrors: {
     body: { query: "x", ledger: [], soul: [{ source: "devon-soul", text: "A note that did come back." }], soul_errors: ["tee-soul-layer: timed out"], soul_withheld: 0, soul_recall_enabled: true },
     expect: /DEVON NOTED \(soul\) A note that did come back\..*SOUL PARTIAL The soul search did not finish: tee-soul-layer: timed out/,
     refuse: /measured empty/,
+    say: /^I found 1 of my notes in the soul\. The soul search did not finish, so there may be more\.$/,
   },
   hitsAndWithheld: {
     body: { query: "x", ledger: [], soul: [{ source: "tee-soul-layer", text: "A ruling that did come back." }], soul_errors: [], soul_withheld: 2, soul_recall_enabled: true },
     expect: /TEE RULED \(soul\) A ruling that did come back\..*SOUL WINDOW 2 soul record\(s\) withheld/,
     refuse: /measured empty/,
+    say: /^I found 1 of your rulings in the soul\. Some soul records were withheld as no longer active, so an active one may have been missed\.$/,
   },
   markup: {
     body: {
@@ -424,6 +429,42 @@ const FIXTURES = {
     },
     expect: /TEE RULED \(soul\) Render stays local\.<img src=x onerror="window\.__owned=1"><script>window\.__owned=1<\/script>/,
     refuse: /measured empty/,
+    say: /^I found 1 of your rulings in the soul\.$/,
+  },
+  /* The production case of 2026-10-29: the ledger had nothing, the soul
+     answered with two of Tee's rulings, and the reply under them said DEVON
+     had not read the source. The reply counted the ledger alone. */
+  soulOnly: {
+    body: {
+      query: "x",
+      ledger: [],
+      soul: [
+        { source: "tee-soul-layer", text: "A render is never a note." },
+        { source: "tee-soul-layer", text: "The script release gate needs its own signal." },
+      ],
+      soul_errors: [],
+      soul_withheld: 0,
+      soul_recall_enabled: true,
+    },
+    expect: /Nothing receipted on the ledger for that\..*TEE RULED \(soul\) A render is never a note\..*TEE RULED \(soul\) The script release gate needs its own signal\./,
+    refuse: /measured empty|SOUL PARTIAL|SOUL OFF/,
+    say: /^I found 2 of your rulings in the soul\.$/,
+  },
+  ledgerAndSoul: {
+    body: {
+      query: "x",
+      ledger: [{ kind: "ruling", body: "A ruling filed on the ledger." }],
+      soul: [
+        { source: "tee-soul-layer", text: "A ruling from the soul." },
+        { source: "devon-soul", text: "A note from the soul." },
+      ],
+      soul_errors: [],
+      soul_withheld: 0,
+      soul_recall_enabled: true,
+    },
+    expect: /TEE RULED A ruling filed on the ledger\..*TEE RULED \(soul\) A ruling from the soul\..*DEVON NOTED \(soul\) A note from the soul\./,
+    refuse: /Nothing receipted|measured empty/,
+    say: /^I found 1 on the ledger, and 1 of your rulings and 1 of my notes in the soul\.$/,
   },
 };
 for (const [label, fixture] of Object.entries(FIXTURES)) {
@@ -431,10 +472,19 @@ for (const [label, fixture] of Object.entries(FIXTURES)) {
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(fixture.body) }),
   );
   const answer = await ask(page, `what did we decide about ${label} ${RUN}`);
+  /* What DEVON says under the plan, read off the page rather than off the
+     source. Until 2026-10-29 nothing read it, and it said "I have not read
+     it" beneath rulings the soul had just returned. */
+  const said = flat(await page.textContent("#sayText"));
   await page.unroute(`${ORIGIN}/api/v1/soul/find**`);
   check(`a ${label} find answer reads as exactly that`, () => {
     assert.match(answer, fixture.expect);
     assert.doesNotMatch(answer, fixture.refuse);
+  });
+  check(`DEVON's reply to a ${label} find answer says what the plan shows`, () => {
+    if (fixture.say) assert.match(said, fixture.say);
+    if (fixture.refuseSay) assert.doesNotMatch(said, fixture.refuseSay);
+    if (/\(soul\)/.test(answer)) assert.doesNotMatch(said, /Thread Log|have not opened|not read/);
   });
 }
 const ownedRan = await page.evaluate(() => window.__owned === 1);
