@@ -144,10 +144,29 @@ the diff should turn a CI job red that the local run would not.
 - After the fix: console-smoke 45 checks passed, exit 0, thirteen of them on
   the reply.
 
+## Deploy read back
+
+PR #439 merged as 7deda01 at 01:49:53Z. Read back by deployment id, state and
+commit:
+
+- Railway `api`: `4e78c712`, SUCCESS on 7deda01, last updated 02:03:36Z.
+- Railway `scheduler-cron`: `b8f4d1a8`, SUCCESS on 7deda01, last updated
+  02:15:34Z.
+- Railway `presence`: `62d2c38e`, SKIPPED on 7deda01.
+- Vercel `devon-soul`: `dpl_2MiZbAw4t8a3s8anffHPkSjvTb3D`, READY, target
+  production, on 7deda01.
+- Vercel `meta-supreme-apex-genesis-web`: `dpl_4rtRf8bTYEWXVBV1fSdv2iLJY2Q9`,
+  READY, target production, on 7deda01.
+
+The served page itself, fetched at 02:16:59Z from
+https://api-production-5644.up.railway.app/console, answered 200, contains
+`function findReply(body)`, and has sha256 `92cafefb...59f70505`, the same as
+`deploy/soul/console.html` at 7deda01. The `devon-soul` console answers 401
+without its token, so its page was not read; its record above is the evidence
+for that host.
+
 ## Open
 
-- Deploy read back of the fix, by deployment id, state and commit on Railway
-  `api` and Vercel `devon-soul`, after the merge.
 - Recall from the devon-soul index has not been seen to return a hit on
   production; this test returned tee-soul-layer rulings only.
 
@@ -160,7 +179,7 @@ ARTIFACT: SYS_OPS_recall-proven-from-the-console_v1_2026-10-29-0040
 DATE: 2026-10-29
 DECISIONS: Tee ruled on cards on 2026-10-29 to fix the console reply together with this close-out, to let the stray ACX capture request REQ-BEE656FE4325 expire unwritten, to let the Ledger Janitor close failed job 11, and to keep its redo draft for now.
 FINDINGS: recall answered a real question on production from Tee's phone, two tee-soul-layer rulings for "the render" with an empty ledger and no soul error; the console reply beneath them said the source was unread because it counted ledger hits only, confirmed by an independent verifier in Chromium on 087b201; three fresh critics then confirmed five low findings, all fixed here.
-OPEN: deploy read back of the fix on Railway api and Vercel devon-soul after merge; no devon-soul hit yet seen on production.
-STATUS: findReply ships in both byte identical console copies and console-smoke.mjs pins the reply for thirteen canned find answers; reproduced failing before the fix and 45 checks passing after it.
+OPEN: no devon-soul hit yet seen on production.
+STATUS: findReply ships in both byte identical console copies and console-smoke.mjs pins the reply for thirteen canned find answers; reproduced failing before the fix and 45 checks passing after it; PR #439 merged as 7deda01, Railway api 4e78c712 and scheduler-cron b8f4d1a8 SUCCESS, both Vercel production deployments READY, and the production console serves the fixed page byte for byte.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
