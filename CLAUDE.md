@@ -1384,7 +1384,7 @@ whichever is reached first ends the loop.
 
 ## Skills in this repository
 
-`.claude/skills/` carries eighteen. Fourteen are ours: `steward` (CI and PR
+`.claude/skills/` carries nineteen. Fifteen are ours: `steward` (CI and PR
 conventions, load it for anything touching either), `deploy-readback` (what the
 production surfaces are actually serving), `estate-reconcile` (checking records
 against the live estate), `devon-learning-lane` (the Build 12 learning lane and
@@ -1406,11 +1406,17 @@ stolen valor, benefits and combat footage lines from its canon branch),
 words held as metaphor and no health, fear or conspiracy claims),
 `genjutsu-open-workflow` (installing or judging the Genjutsu persona-swap app,
 what it sends off the machine, and the three changes required before any key
-goes in), and `watch-long` (long-form video evidence from a cloud session:
+goes in), `watch-long` (long-form video evidence from a cloud session:
 ten minute windows read by Gemini, then one synthesis, because the relay in
 front of the container cuts a request at its 30 second first byte and a cold
 whole video of twenty minutes or more does not make it; measured 2026-10-28
-and written into its SKILL.md).
+and written into its SKILL.md), and `openmontage` (installing and driving
+calesthio/OpenMontage, an AGPL-3.0 agent-driven video production system, from
+a pinned commit outside this repository by its own installer, with the owned
+voice, spend and publishing rules its defaults would break; installed and a
+zero-key demo rendered 2026-10-30). It is ours rather than vendored: no
+upstream file is copied in, so it carries no `UPSTREAM.md`, and its
+provenance lives in its SKILL.md.
 
 This paragraph said six and five until 2026-09-12, when a session counted the
 directory instead of the sentence. `shadow-we-share-brand` had been committed
