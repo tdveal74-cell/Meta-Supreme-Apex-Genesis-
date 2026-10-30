@@ -11,7 +11,7 @@ For SH020, SH070 and SH100 also load `tsws-repair-workflows`. It holds those sho
 
 ## Read the canon first, every time
 
-The precedence rule from Visual Bible v2.11 governs: newest filed ruling first, then the skill, data stores, packages, and the bible last. The skill in that ladder is `shadow-we-share-brand`, which the bible's store table names as brand law, not this file. Older production books on Drive still carry superseded directions, so check every source's date before using a line from it. When two sources disagree and no filed ruling settles which one stands, that is a real contradiction. It goes to Tee on an `AskUserQuestion` card. Never resolve one yourself.
+The precedence rule from Visual Bible v2.11 governs: newest filed ruling first, then the skill, data stores, packages, and the bible last. The skill in that ladder is `shadow-we-share-brand`, which the bible's store table names as brand law, not this file. Older production books on Drive still carry superseded directions, so check every source's date before using a line from it. The bible says what the ladder settles: when the bible and a store disagree, the store wins, and when stores disagree, the newest filed ruling wins. Where no filed ruling covers the point, the canon leaves the text as written and flags it, because rewriting it changes canon rather than restating it. That is a real contradiction. It goes to Tee on an `AskUserQuestion` card; never resolve one yourself. A disagreement the ladder does settle can still go on a card when following it rewrites drafted work, as the SH070 stopper did on 2026-10-30, with the ladder's answer as the recommended option.
 
 | Source | Drive id | What it gives |
 |---|---|---|
@@ -74,7 +74,7 @@ Its built-in regions were drawn on background that no person crosses in either S
 | 2026-10-30 | The end-still edit dropped two walkers seen from behind at the right edge. They were restored from native pixels along a seam at x 1668 to 1711. | prediction `0f2d81b163fb4bfb8e2c5c68a73b3df2` |
 | 2026-10-30 | The first static regions in `align_still.py` held a pedestrian's head in each native frame and understated the end still's error, 0.33 px against 0.56 px on people-free regions. | commit `bd765e0` of this skill |
 | 2026-10-30 | A `get_prediction` call with `wait_seconds` 100 timed out on the client after 60 s while the run went on. | 20:04:49Z call on prediction `9b810015b1e249e4ae341ed4f9945e4f` |
-| 2026-10-30 | A test frame made on 2026-10-23, before the 2026-10-25 mask ruling, carried small lower-face masks, which do not meet that ruling (a fitted Venetian eye and nose half-mask; no medical masks). Do not reuse an earlier test frame without checking it against the current ruling. | `TSWS_E01_SH020_startframe_image_TEST_20261023.jpg`, Drive `1PN4QvcSyEG6f6kYJjgnjjQHWUC9jeYPW` |
+| 2026-10-30 | A test frame made on 2026-10-23, before the 2026-10-25 mask ruling, shows masks over the nose and mouth, which do not meet that ruling: it requires a "physically fitted Venetian-style eye/nose half-mask" and bans "medical masks, skin-shell faces". It is also a different, high-angle composition, not the SH020 eye-level plate. Do not reuse an earlier test frame without checking it against the current ruling. | `TSWS_E01_SH020_startframe_image_TEST_20261023.jpg`, Drive `1PN4QvcSyEG6f6kYJjgnjjQHWUC9jeYPW` |
 
 ## Still unverified
 
