@@ -4,17 +4,21 @@
 # Exit codes:
 #   0  installed, every optional step included
 #   1  a check after the fetch or after make setup failed: the checkout is not
-#      at the pin, make left no .venv python, or the registry found no tools;
-#      the FAILED line says which
+#      at the pin, a resumed fetch left code the pin does not carry, make left
+#      no .venv python, or the registry did not load or found no tools; the
+#      FAILED line says which
 #   3  refused before anything changed; the message says why
 #   4  installed, but upstream skipped an optional step; the summary names it
 #   any other non-zero code is the failing tool's own: git 128, make 2,
 #   timeout 124 when the fetch or make setup runs past OPENMONTAGE_SETUP_TIMEOUT
 #
-# Idempotent: a checkout at the pin with no change to a tracked file and no
-# untracked Python under tools/ is reused, and `make setup` runs again, which
-# only fills in what is missing. Anything else at the target is refused and
-# left alone, because it may hold someone's productions.
+# Idempotent: a checkout at the pin with no change to a tracked file, no
+# untracked file under tools/ and no untracked .py at its top level is reused,
+# and `make setup` runs again, which only fills in what is missing. A repository
+# with OpenMontage's origin and no commit, which is what a fetch interrupted
+# after git init leaves, is fetched into and then held to the same untracked
+# check. Anything else at the target is refused and left alone, because it may
+# hold someone's productions.
 set -euo pipefail
 
 PIN="195eab24478dc9363326aec437aefc3701635ddf"
@@ -44,7 +48,7 @@ for tool in git make python3 node npm npx; do
 done
 [ -z "$missing" ] || refuse "missing prerequisites:$missing"
 case "$SETUP_TIMEOUT" in
-  ''|*[!0-9]*|0) refuse "OPENMONTAGE_SETUP_TIMEOUT must be a whole number of seconds above 0, not '$SETUP_TIMEOUT'; 0 would switch the limit off." ;;
+  ''|*[!0-9]*|0*) refuse "OPENMONTAGE_SETUP_TIMEOUT must be a whole number of seconds above 0 with no leading zero, not '$SETUP_TIMEOUT'; timeout reads 0 and 00 alike as no limit at all." ;;
 esac
 at_least() {  # at_least <python> <major.minor>: does it run and meet the version?
   "$1" -c "import sys; raise SystemExit(0 if sys.version_info[:2] >= tuple(int(x) for x in '$2'.split('.')[:2]) else 1)" 2>/dev/null
@@ -52,23 +56,6 @@ at_least() {  # at_least <python> <major.minor>: does it run and meet the versio
 # constraints.txt pins numpy 2.4.6, which needs Python 3.11 or newer.
 python3 -c "import sys; raise SystemExit(0 if tuple(int(x) for x in '$PY'.split('.')[:2]) >= (3, 11) else 1)" 2>/dev/null \
   || refuse "OPENMONTAGE_PYTHON=$PY is below 3.11, and the pinned packages in constraints.txt need 3.11 or newer."
-# Upstream's make setup makes its venv with uv when uv is on PATH, else with the
-# first of python$PY, python3 and python, which must be $PY or newer.
-if command -v uv >/dev/null 2>&1; then
-  venv_py="$PY, from uv"
-else
-  base=""
-  for candidate in "python$PY" python3 python; do
-    if command -v "$candidate" >/dev/null 2>&1; then base="$candidate"; break; fi
-  done
-  at_least "$base" "$PY" \
-    || refuse "make setup needs uv, or a Python $PY or newer as python$PY, python3 or python; the first found, $base, is older. Install uv, or set OPENMONTAGE_PYTHON to the version you have, 3.11 or newer."
-  venv_py="$("$base" -c 'import sys; print("%d.%d" % sys.version_info[:2])'), from $base"
-fi
-case "$venv_py" in
-  "$MEASURED_PY",*) ;;
-  *) echo "WARNING: the venv will use Python $venv_py; constraints.txt was measured on $MEASURED_PY, so its pins are untested there." >&2 ;;
-esac
 command -v ffmpeg >/dev/null 2>&1 \
   || echo "WARNING: ffmpeg is not on PATH, so rendering will not work." >&2
 node_major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
@@ -105,6 +92,29 @@ case "$constraints" in
   *[[:space:]]*) refuse "the script's path has whitespace in it ($constraints), which pip would split. Move the checkout to a path without spaces." ;;
 esac
 dest_abs="$(resolve "$DEST")"
+# Upstream's make setup reuses an existing .venv before it looks at anything
+# else. Failing that it makes one with uv when uv is on PATH, else with the
+# first of python$PY, python3 and python, which must be $PY or newer.
+existing="$dest_abs/.venv/bin/python"
+if [ -x "$existing" ]; then
+  at_least "$existing" "$PY" \
+    || refuse "$existing is older than Python $PY or does not run, and make setup would reuse it. Remove $dest_abs/.venv so make setup makes a new one."
+  venv_py="$("$existing" -c 'import sys; print("%d.%d" % sys.version_info[:2])'), the existing .venv"
+elif command -v uv >/dev/null 2>&1; then
+  venv_py="$PY, from uv"
+else
+  base=""
+  for candidate in "python$PY" python3 python; do
+    if command -v "$candidate" >/dev/null 2>&1; then base="$candidate"; break; fi
+  done
+  at_least "$base" "$PY" \
+    || refuse "make setup needs uv, or a Python $PY or newer as python$PY, python3 or python; the first found, $base, is older. Install uv, or set OPENMONTAGE_PYTHON to the version you have, 3.11 or newer."
+  venv_py="$("$base" -c 'import sys; print("%d.%d" % sys.version_info[:2])'), from $base"
+fi
+case "$venv_py" in
+  "$MEASURED_PY",*) ;;
+  *) echo "WARNING: the venv will use Python $venv_py; constraints.txt was measured on $MEASURED_PY, so its pins are untested there." >&2 ;;
+esac
 if repo_root="$(git -C "$here" rev-parse --show-toplevel 2>/dev/null)"; then
   repo_root="$(resolve "$repo_root")"
   case "$dest_abs/" in
@@ -115,6 +125,13 @@ if repo_root="$(git -C "$here" rev-parse --show-toplevel 2>/dev/null)"; then
 else
   echo "WARNING: could not find the repository this script lives in, so the inside-the-repository guard is off: $(git -C "$here" rev-parse --show-toplevel 2>&1 >/dev/null || true)" >&2
 fi
+
+# Untracked files that would load as code: anything under tools/ outside
+# __pycache__, since the registry imports .py, .pyc and .so alike, and any .py
+# at the top, where make runs python and a stray module shadows a real one.
+untracked_code() {
+  git -C "$dest_abs" ls-files --others -- tools ':(exclude,glob)tools/**/__pycache__/**' ':(glob)*.py'
+}
 
 fetch_pin() {
   echo "==> Fetching OpenMontage $PIN into $dest_abs"
@@ -144,16 +161,22 @@ if [ -e "$dest_abs" ]; then
     # made by hand with this origin and no commit is resumed the same way.
     echo "==> Resuming an interrupted fetch"
     fetch_pin
+    if ! extra="$(untracked_code)" || [ -n "$extra" ]; then
+      echo "FAILED: $dest_abs held files the pin does not carry, which the tool registry or make setup would load: $extra" >&2
+      exit 1
+    fi
   elif [ "$have" != "$PIN" ]; then
     refuse "$dest_abs is at $have, not the pinned $PIN. Move it aside or set OPENMONTAGE_HOME."
-  elif ! changes="$(git -C "$dest_abs" status --porcelain --untracked-files=no 2>&1)"; then
-    refuse "git status failed in $dest_abs, so its files cannot be checked: $changes"
+  elif ! changes="$(git -C "$dest_abs" status --porcelain --untracked-files=no)"; then
+    refuse "git status failed in $dest_abs, so its files cannot be checked; git's own message is above."
   elif [ -n "$changes" ]; then
     refuse "$dest_abs has local changes to tracked files, so make setup would not run the pinned code. See git -C $dest_abs status."
-  elif ! extra="$(git -C "$dest_abs" ls-files --others -- 'tools/*.py' 2>&1)" || [ -n "$extra" ]; then
-    refuse "$dest_abs has Python files under tools/ that the pin does not carry, and the tool registry would import them: $extra"
+  elif ! extra="$(untracked_code)"; then
+    refuse "git ls-files failed in $dest_abs, so its files cannot be checked; git's own message is above."
+  elif [ -n "$extra" ]; then
+    refuse "$dest_abs has files the pin does not carry, which the tool registry or make setup would load: $extra"
   else
-    echo "==> $dest_abs is already at the pinned commit, with no change to a tracked file and no untracked Python under tools/"
+    echo "==> $dest_abs is already at the pinned commit, with no change to a tracked file and nothing untracked that would load as code"
   fi
 else
   git init -q "$dest_abs"
@@ -198,10 +221,16 @@ import sys
 
 os.chdir(sys.argv[1])
 sys.path.insert(0, sys.argv[1])
-from tools.tool_registry import registry
+try:
+    from tools.tool_registry import registry
 
-registry.discover()
-menu = registry.provider_menu()
+    registry.discover()
+    menu = registry.provider_menu()
+except Exception:
+    import traceback
+
+    traceback.print_exc()
+    sys.exit("FAILED: the tool registry did not load; the traceback is above")
 total = sum(group["total"] for group in menu.values())
 configured = sum(group["configured"] for group in menu.values())
 print(f"==> tool registry loaded: {total} tools in {len(menu)} capability groups, {configured} usable now")
