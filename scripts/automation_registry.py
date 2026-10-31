@@ -24,6 +24,7 @@ WHAT TURNS IT RED, exit 1:
   - a row whose review is overdue: `reviewed` older than `review_every_days`,
     or the workflow's `updatedAt` later than the day it was reviewed, because a
     review of an earlier version is not a review of what runs now
+  - a `reviewed` date after today, which would otherwise silence both alarms
 
 WHAT IT REPORTS AND DOES NOT ALARM ON: rows with `reviewed: null`. The file was
 seeded on 2026-10-31 with no review dates, because none had been recorded and
@@ -163,6 +164,12 @@ def diff(
             never += 1
             continue
         reviewed = date.fromisoformat(row["reviewed"])
+        if reviewed > today:
+            findings.append(
+                f"BAD REVIEW DATE: {label} says it was reviewed on {row['reviewed']}, after today "
+                f"{today.isoformat()}, which would silence its review alarms until then"
+            )
+            continue
         age = (today - reviewed).days
         if age > every:
             findings.append(
@@ -190,7 +197,7 @@ def fetch_workflows(base: str, key: str) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     cursor = ""
     for _ in range(MAX_PAGES):
-        path = "/api/v1/workflows?limit=100&excludePinnedData=true"
+        path = "/api/v1/workflows?limit=100"
         if cursor:
             path += "&cursor=" + urllib.parse.quote(cursor)
         request = urllib.request.Request(base.rstrip("/") + path)

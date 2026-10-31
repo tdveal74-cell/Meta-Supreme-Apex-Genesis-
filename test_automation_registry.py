@@ -190,3 +190,23 @@ def test_fetch_follows_the_cursor_and_refuses_a_partial_listing(monkeypatch):
     monkeypatch.setattr(reg.urllib.request, "urlopen", lambda r, timeout: Response(endless))
     with pytest.raises(ValueError, match="still had a cursor"):
         reg.fetch_workflows("https://host", "k")
+
+
+def test_a_review_date_in_the_future_is_a_finding():
+    # Found by the critic of c7bc739: 2027 typed for 2026 silenced both alarms.
+    findings, _ = reg.diff(doc(row(reviewed="2027-01-01")), [live()], TODAY)
+    assert len(findings) == 1 and findings[0].startswith("BAD REVIEW DATE")
+
+
+def test_a_review_dated_today_is_not_in_the_future():
+    findings, _ = reg.diff(doc(row(reviewed="2026-10-31")), [live()], TODAY)
+    assert findings == []
+
+
+def test_the_listing_request_uses_only_parameters_the_watchdogs_already_use():
+    # excludePinnedData was in the first version and is used nowhere else in
+    # the repository, so it was unproven against the live API and dropped.
+    import inspect
+    source = inspect.getsource(reg.fetch_workflows)
+    assert "excludePinnedData" not in source
+    assert "/api/v1/workflows?limit=100" in source
