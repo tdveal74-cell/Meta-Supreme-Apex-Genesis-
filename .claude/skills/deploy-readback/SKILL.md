@@ -89,14 +89,18 @@ is this failure. It cost nothing that day only because eight of the nine
 merges touched no runtime path and the ninth changed only a Dockerfile no
 running service was built from.
 
-**`api`'S `checkSuites` READS FALSE SINCE 2026-10-31, SO NO RAILWAY SERVICE
-WAITS FOR CI ANY MORE.** It read true at about 18:50Z that day and false at
-21:23Z, after deployments resumed. This session did not change it, and whether
-the change is part of Railway's fix for the outage above is unverified. While it
-reads false, a red commit on main deploys to `api` as it does to
-`scheduler-cron`, and the gate measured below is gone. The table and the
-paragraphs under it are the 2026-09-16 reading, kept because the behaviour they
-measured returns if the setting is turned back on.
+**`api`'S `checkSuites` WENT FALSE FOR AN EVENING AND IS BACK ON.** On
+2026-10-31 it read true at about 18:50Z and false at 21:23Z, after deployments
+resumed, changed by nothing a session did; whether it was part of Railway's fix
+for the outage above is unverified. While it read false, the merge of PR #461
+deployed to `api` within a second of the push, with no WAITING row. Tee ruled to
+turn it back on. A change staged through Railway's agent, which a staged-changes
+read showed only as `Source: "" to "{}"`, was committed and left the gate off;
+Tee then flipped the "Wait for CI" toggle under the service's Source settings,
+and it read true at 22:12Z. So set this toggle in the dashboard, not through the
+agent, and read it back. Railway's docs say the toggle is hidden until the
+Railway GitHub App's updated permissions are accepted at
+github.com/settings/installations.
 
 **THE THREE RAILWAY SERVICES DO NOT DEPLOY ON THE SAME RULE, AND ONE OF THEM
 STOPPED WHEN CI WAS RED.** Read from `get-service-config` on 2026-09-16, because
