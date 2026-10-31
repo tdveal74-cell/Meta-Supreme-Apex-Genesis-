@@ -15,10 +15,11 @@ name: Dependency audit daily
 #
 # THE STEPS ARE THE ci.yml ONES, AND A TEST HOLDS THEM THERE.
 # test_estate_reconcile.py::test_the_daily_audit_runs_what_the_ci_audit_runs
-# compares every step of this job with every step of ci.yml's dependency-audit
-# job and fails on any difference. Change both together. The reasons for each
-# step (two pip-audit resolutions on purpose, no pnpm cache) are written beside
-# the job in ci.yml and are not repeated here.
+# compares this job with ci.yml's dependency-audit job, everything but the
+# name, and pins this file's triggers, permissions and top-level keys. Change
+# both jobs together. The reasons for each step (two pip-audit resolutions on
+# purpose, --strict, each audit running after an earlier one goes red, no pnpm
+# cache) are written beside the job in ci.yml and are not repeated here.
 #
 # IT ONLY READS. pip-audit resolves the two requirements files and pnpm audit
 # reads the lockfile. Nothing is installed into the repository, nothing is
@@ -29,8 +30,9 @@ name: Dependency audit daily
 # that last changed the cron line, which is a recalled rule and was not re-read
 # when this was written; merges here land as tdveal74-cell, so that should be
 # Tee's account, and the first red run is the proof. An advisory that stays
-# unfixed goes red every day, which is the intended nag. A red run here can also be the advisory service
-# or the registry being down; the log says which before anyone bumps a pin.
+# unfixed goes red every day, which is the intended nag. A red run can also
+# be a registry or an advisory service that did not answer, so read the log
+# before bumping a pin.
 #
 # A NEW SCHEDULE DOES NOT FIRE AT ITS FIRST SLOTS. Measured twice on the two
 # watchdogs (5h06m and 6h03m to the first scheduled run, see CLAUDE.md). Use
@@ -59,16 +61,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: pip-audit the pinned requirements and the soul host's
-        run: |
-          python -m pip install --quiet --upgrade pip pip-audit
-          python -m pip_audit -r requirements.txt --progress-spinner off
-          python -m pip_audit -r deploy/soul/requirements.txt --progress-spinner off
+      - name: Install pip-audit
+        id: pip-audit
+        run: python -m pip install --quiet --upgrade pip pip-audit
+      - name: pip-audit the pinned requirements
+        run: python -m pip_audit --strict -r requirements.txt --progress-spinner off
+      - name: pip-audit the soul host's requirements
+        if: ${{ !cancelled() && steps.pip-audit.outcome == 'success' }}
+        run: python -m pip_audit --strict -r deploy/soul/requirements.txt --progress-spinner off
       - uses: pnpm/action-setup@v4
+        if: ${{ !cancelled() }}
         with:
           version: 10
       - uses: actions/setup-node@v4
+        if: ${{ !cancelled() }}
         with:
           node-version: "22"
       - name: pnpm audit the locked workspace
+        if: ${{ !cancelled() }}
         run: pnpm audit --audit-level=moderate

@@ -76,10 +76,12 @@ run it.
 
 ## Before you push
 
-CI is six jobs and the environment has real traps in it. Both are documented in
-`CLAUDE.md` under "Reproducing CI", including the two that silently pass a
-broken run: `pytest ... | tail` reports tail's exit code, and `next lint` drops
-into an interactive setup that looks like a lint failure and is not one.
+CI has more jobs than one pull request shows, and the environment has real
+traps in it. Both are documented in `CLAUDE.md` under "Reproducing CI", where the
+job count is pinned to `.github/workflows` by a test, including the two traps
+that silently pass a broken run: `pytest ... | tail` reports tail's exit code,
+and `next lint` drops into an interactive setup that looks like a lint failure
+and is not one.
 
 Small PRs on the designated branch, draft first, full local validation before
 every push. Merge only with Tee's explicit authorization.

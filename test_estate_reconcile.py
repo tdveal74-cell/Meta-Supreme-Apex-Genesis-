@@ -1047,13 +1047,46 @@ def test_the_vendored_skills_are_the_ones_claude_md_names():
 
 WORKFLOWS = ROOT / ".github" / "workflows"
 
+_TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50}
+_UNITS = {"one": 1, "two": 2, "three": 3, **_NUMBER_WORDS}
+
+
+def _job_total(phrase):
+    """The CI total is written in words and will pass twenty: "TWENTY ONE" and
+    "twenty-one" both have to read as 21, where _count would stop at the first
+    word and report a misleading mismatch."""
+    words = re.split(r"[\s-]+", phrase.strip().lower())
+    if len(words) == 1 and words[0] in _UNITS:
+        return _UNITS[words[0]]
+    if len(words) == 1 and words[0] in _TENS:
+        return _TENS[words[0]]
+    if len(words) == 2 and words[0] in _TENS and words[1] in _UNITS and _UNITS[words[1]] < 10:
+        return _TENS[words[0]] + _UNITS[words[1]]
+    raise AssertionError(f"CLAUDE.md now says CI is {phrase!r} jobs, which this pin cannot read as a number")
+
 
 def _workflows():
-    """Every workflow file, parsed. PyYAML reads the bare key `on` as True."""
+    """Every workflow file, parsed. PyYAML reads the bare key `on` as True. A
+    file that is not a mapping with jobs fails here and names itself. Without
+    this check it would surface as a bare KeyError in a test that has nothing
+    to do with it."""
     import yaml
 
     paths = sorted([*WORKFLOWS.glob("*.yml"), *WORKFLOWS.glob("*.yaml")])
-    return {path.name: yaml.safe_load(path.read_text(encoding="utf-8")) for path in paths}
+    parsed = {}
+    for path in paths:
+        spec = yaml.safe_load(path.read_text(encoding="utf-8"))
+        assert isinstance(spec, dict) and isinstance(spec.get("jobs"), dict) and spec["jobs"], (
+            f"{path.name} did not parse as a workflow with at least one job"
+        )
+        parsed[path.name] = spec
+    return parsed
+
+
+def _reproducing_ci_section():
+    claude_md = _prose(ROOT / "CLAUDE.md")
+    assert "## Reproducing CI" in claude_md, "CLAUDE.md lost its Reproducing CI section"
+    return claude_md.split("## Reproducing CI", 1)[1].split("\n## ", 1)[0].split(" ## ", 1)[0]
 
 
 def test_the_ci_job_count_is_counted_from_the_workflows():
@@ -1062,40 +1095,66 @@ def test_the_ci_job_count_is_counted_from_the_workflows():
     2026-10-22, and neither moved the sentence or was named anywhere in it. The
     paragraph had already asked to be counted from the files twice. Asking did
     not hold it, so the sentence is now pinned to the files the way the skill
-    total above is pinned to its directory."""
-    claude_md = _prose(ROOT / "CLAUDE.md")
+    total above is pinned to its directory, and every workflow file has to be
+    named in the same section that states the total."""
+    section = _reproducing_ci_section()
     workflows = _workflows()
     total = sum(len(spec["jobs"]) for spec in workflows.values())
 
-    stated = re.search(r"CI is (\w+) jobs", claude_md)
-    assert stated, "CLAUDE.md no longer states a CI job total; the pin cannot check it"
-    assert _count(stated.group(1), "CLAUDE.md") == total, (
+    stated = re.search(r"CI is ([A-Za-z][A-Za-z -]*?) jobs", section)
+    assert stated, "the Reproducing CI section no longer states a CI job total; the pin cannot check it"
+    assert _job_total(stated.group(1)) == total, (
         f"CLAUDE.md says CI is {stated.group(1)} jobs, the workflow files hold "
         f"{total}: " + ", ".join(f"{name} {len(spec['jobs'])}" for name, spec in workflows.items())
     )
 
-    unnamed = [name for name in workflows if not re.search(rf"[`/]{re.escape(name)}`", claude_md)]
+    unnamed = [name for name in workflows if not re.search(rf"[`/]{re.escape(name)}`", section)]
     assert not unnamed, (
-        f"these workflows exist and CLAUDE.md names none of them: {unnamed}. "
-        "A reader counting from that paragraph would miss their jobs."
+        f"these workflows exist and CLAUDE.md's Reproducing CI section names none of them: "
+        f"{unnamed}. A reader counting from that section would miss their jobs."
     )
+
+
+def test_the_job_total_reads_compound_numbers():
+    assert _job_total("SIXTEEN") == 16
+    assert _job_total("twenty") == 20
+    assert _job_total("TWENTY ONE") == 21
+    assert _job_total("twenty-three") == 23
+    with pytest.raises(AssertionError):
+        _job_total("many")
+    with pytest.raises(AssertionError):
+        _job_total("twenty sixteen")
 
 
 def test_the_daily_audit_runs_what_the_ci_audit_runs():
     """dependency-audit-daily.yml repeats ci.yml's dependency-audit job on a
-    schedule, ruled by Tee 2026-10-31. Two copies of the same steps drift: an
+    schedule, ruled by Tee 2026-10-31. Two copies of the same job drift: an
     ignore added to one, a Python version moved in the other, and the daily run
-    goes red on a pin CI accepts or green on one it refuses. So every step,
-    names and arguments included, has to match."""
+    goes red on a pin CI accepts or green on one it refuses. So the two jobs
+    must match in everything but their names, which covers the steps and also
+    a job-level continue-on-error, if or timeout that would keep the daily job
+    green or stop it running. The daily file's own shape is pinned too: it
+    fires on one cron and by hand and on nothing else, reads only, and has no
+    top-level defaults that could change the shell its steps run in."""
     workflows = _workflows()
-    ci = workflows["ci.yml"]["jobs"]["dependency-audit"]
+    ci = dict(workflows["ci.yml"]["jobs"]["dependency-audit"])
     daily_spec = workflows["dependency-audit-daily.yml"]
-    daily = daily_spec["jobs"]["audit"]
+    assert list(daily_spec["jobs"]) == ["audit"], "the daily audit workflow should hold one job, audit"
+    daily = dict(daily_spec["jobs"]["audit"])
+    ci.pop("name")
+    daily.pop("name")
+    assert daily == ci, "the daily audit job and ci.yml's dependency-audit job differ beyond their names"
 
-    assert daily["steps"] == ci["steps"]
-    assert daily["runs-on"] == ci["runs-on"]
-    assert set(daily_spec[True]) == {"schedule", "workflow_dispatch"}
-    assert daily_spec["permissions"] == {"contents": "read"}
+    assert set(daily_spec) == {"name", True, "permissions", "concurrency", "jobs"}, (
+        f"the daily audit workflow's top-level keys changed: {sorted(map(str, daily_spec))}"
+    )
+    triggers = daily_spec[True]
+    assert set(triggers) == {"schedule", "workflow_dispatch"}, f"the daily audit fires on {sorted(triggers)}"
+    crons = [entry.get("cron") for entry in triggers["schedule"]]
+    assert len(crons) == 1 and re.fullmatch(r"\d{1,2} \d{1,2} \* \* \*", crons[0] or ""), (
+        f"the daily audit should fire on one daily cron, found {crons}"
+    )
+    assert daily_spec["permissions"] == {"contents": "read"}, "the daily audit should only read"
 
 
 def test_the_skill_carries_the_inventory_rule():

@@ -486,9 +486,10 @@ never posts and never writes to the instance, and it goes red on a missing
 `N8N_VPS_KEY` like the other scheduled jobs. Counted from the `jobs:` keys of
 the nine files in `.github/workflows`, not from this paragraph.
 
-The fourteenth and fifteenth arrived without moving this count, and it said
-THIRTEEN for ten days while the files held fifteen. Found on 2026-10-31 when the
-sixteenth was added and the `jobs:` keys were counted. The fourteenth is
+The fourteenth and fifteenth arrived without moving this count. It said
+THIRTEEN while the files held fourteen from 2026-10-21 and fifteen from
+2026-10-22, found on 2026-10-31 when the sixteenth was added and the `jobs:`
+keys were counted. The fourteenth is
 `.github/workflows/quality90-ai-review.yml`, committed to main as `067d32d` on
 2026-10-21: pull requests only, filtered to `services/quality90_ai/**`,
 `n8n/quality90-ai/**` and itself, so it never runs on main. Its one job,
@@ -503,23 +504,31 @@ unsupported sandbox or any skipped test is red, and that it activates no worker.
 
 So the number is pinned now:
 `test_estate_reconcile.py::test_the_ci_job_count_is_counted_from_the_workflows`
-sums the `jobs:` keys of every file in `.github/workflows` against the word in
-the first sentence of this section, and fails when a workflow file is named
-nowhere in this file. A new workflow moves this prose in the same commit or the
-api job goes red.
+sums the `jobs:` keys of every file in `.github/workflows` against the number
+in the first sentence of this section, and fails when a workflow file is named
+nowhere in this section. A new workflow moves this prose in the same commit or
+the api job goes red.
 
 The sixteenth arrived on 2026-10-31: `.github/workflows/dependency-audit-daily.yml`,
 `schedule` once a day at 05:23Z plus `workflow_dispatch`. It runs ci.yml's
-`dependency-audit` steps exactly, and
+`dependency-audit` job exactly, and
 `test_estate_reconcile.py::test_the_daily_audit_runs_what_the_ci_audit_runs`
-fails on any difference, so change both together. It exists because on
+fails when the two jobs differ in anything but their names, so change both
+together. It exists because on
 2026-10-30 four advisories against `pyasn1` 0.6.4 turned the audit red on PR
 #441, which touched no requirements file. Main's last run, the day before, had
 been green and the advisories were newer than it, so the vulnerable pin sat in
 the closure Railway builds with nothing reading it until somebody pushed. Tee
-ruled it on a card the same day, "Add it". It reads only and uses no secret. A
-red run is a new advisory or the advisory service being down, and the log says
-which.
+ruled it on a card on 2026-10-31, "Add it". It reads only and uses no secret.
+The critic of this workflow found that the audits masked each other: one red
+`pip_audit` call stopped the soul host's audit and `pnpm audit` from running, so
+an advisory left open hid any newer one behind it. Each audit now runs after an
+earlier one goes red, and `pip_audit` runs with `--strict`, so a dependency it
+could not check fails the audit. Without the flag it prints a skip and exits 0.
+Both changes are in ci.yml's job as well. A red run is most often a new advisory, but
+a registry or advisory service that did not answer turns it red too, so read the
+log before bumping a pin. An advisory left open turns it red every day until it
+is fixed.
 
 **The standalone list above drifted and was regenerated from `ci.yml`.** It
 named 30 files while the job ran 36, missing `test_devon_data_tables.py`,
