@@ -825,7 +825,15 @@ loopback in the sandbox, not on the box.
 **`word_timings`** runs one python process over the line files and writes word
 timings keyed by each file's stem. It needs `WHISPER_PYTHON` in the unit's
 environment, a python that carries `faster-whisper` with PyAV pinned below 14
-(1.1.1 breaks on PyAV 19, measured 2026-10-28). Unset, the JOB fails with a
+(1.1.1 breaks on PyAV 19, measured 2026-10-28) and `requests` installed beside
+it. faster-whisper 1.1.1 imports `requests` without declaring it, and
+huggingface_hub 2.x moved to httpx and stopped pulling it in, so the install
+line without it succeeds and the first import dies on `No module named
+'requests'`. Found on the box on 2026-10-31, when the step as first written
+failed there exactly that way; reproduced on a clean venv the same day and
+cleared by adding `requests` (faster-whisper 1.1.1, av 13.1.0, huggingface_hub
+2.4.0, the base.en model downloaded under `HF_HOME` and word timings written
+for two Node 01 lines). Unset, the JOB fails with a
 sentence naming the variable; the server starts and the health route is
 unchanged, because the job table must not depend on which box this runs on.
 The model (`base.en` by default, `tiny.en` and `small.en` allowed) downloads
@@ -836,7 +844,7 @@ not.
 ```bash
 # once, on the box, as root: a venv the service user can read
 python3 -m venv /opt/tsws-render-worker/whisper
-/opt/tsws-render-worker/whisper/bin/pip install faster-whisper==1.1.1 "av<14"
+/opt/tsws-render-worker/whisper/bin/pip install faster-whisper==1.1.1 "av<14" requests
 # then in /etc/tsws-render-worker.env
 WHISPER_PYTHON=/opt/tsws-render-worker/whisper/bin/python
 # the model cache. The unit runs ProtectSystem=strict with ReadWritePaths only
