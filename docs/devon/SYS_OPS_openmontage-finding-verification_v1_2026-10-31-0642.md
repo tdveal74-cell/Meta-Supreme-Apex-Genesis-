@@ -1,6 +1,6 @@
-# OpenMontage: the 54 review findings verified, and three passes of fixes
+# OpenMontage: the 54 review findings verified, and four passes of fixes
 
-Status doc for the independent verification of the 54 findings that the 2026-10-31 gauntlet review left unverified, and for the three passes of fixes that followed, each read by fresh critics and checked by independent verifiers. Written 2026-10-31. It closes the item both `SYS_OPS_openmontage-review-and-fixes_v1_2026-10-31-0123.md` and `SYS_OPS_openmontage-rulings-and-daily-audit_v1_2026-10-31-0438.md` carried as open. The 0123 doc had put the verification off to 2026-11-03 because the subagent limit stopped it; the limit was not in force on the morning of 2026-10-31, so it ran then and the trigger for 2026-11-03 was deleted.
+Status doc for the independent verification of the 54 findings that the 2026-10-31 gauntlet review left unverified, and for the four passes of fixes that followed, each read by fresh critics and checked by independent verifiers. Written 2026-10-31. It closes the item both `SYS_OPS_openmontage-review-and-fixes_v1_2026-10-31-0123.md` and `SYS_OPS_openmontage-rulings-and-daily-audit_v1_2026-10-31-0438.md` carried as open. The 0123 doc had put the verification off to 2026-11-03 because the subagent limit stopped it; the limit was not in force on the morning of 2026-10-31, so it ran then and the trigger for 2026-11-03 was deleted.
 
 ## How they were verified
 
@@ -125,6 +125,14 @@ The critic raised six, all confirmed, none refuted:
 | C3-5 | NIT | on the resume path a git failure in the untracked check reads as files the pin does not carry, with an empty list, and the `git ls-files failed` refusal has no test | open |
 | C3-6 | NIT | the test row said 37 while the file collects 58 | closed in `ebdb72c` |
 
+## The fourth revision
+
+Tee authorized it on a card at 09:12:25Z, over merging as recorded, for two findings only: the existing `.venv` run before the target was validated (C3-2) and the top-level loading gap (C3-3). Codex had reviewed the PR at 09:00Z and raised the first as a P2 with the same reproduction, a marker written by the target's python before the installer refused the target.
+
+`cd4f220` answers both. The existing `.venv` is only seen to exist up front, and it runs after the origin, pin, tracked-change and untracked-code checks, so a refused target is never executed; an old one still refuses on the reuse path, and after a resumed fetch it is a FAILED exit 1. The untracked check covers a top-level `.pyc`, `.so` and package as well as a `.py`. Workflow `wf_8aaba490-def` checked it: both findings resolved, each by a fresh verifier, and a fresh critic of the commit raised six more, all confirmed, 3 LOW and 3 NIT. Five were gaps inside the two authorized fixes and are closed in `47fa74e`: a package whose `__init__` is a `.pyc` or an `.so`; the `.pyc` guard depending on `ls-files` running without `--exclude-standard`, which nothing pinned, so the fixture now ignores `*.pyc` as upstream does; the never-run test covering three of the five target refusals and not checking which fired; and SKILL.md calling the resume-path failure a refusal. The sixth is C3-4's message, recorded below. Workflow `wf_76c2b1d3-088` sent a fresh verifier to each of the five at `47fa74e`: all five resolved, each re-running its own mutation, and none found a new defect.
+
+Codex's thread was answered with the fix and the evidence and resolved. At 16:34:36Z Tee kept both rulings on a card, merging #452 with the remaining NITs recorded.
+
 ## Railway does not build the Dockerfiles CI builds
 
 Found while scoping Tee's ruling of 08:36:39Z to build the presence image in CI, and confirmed by two independent verifiers in `wf_9ff8c465-8e0`, one reading Railway and one reading the repository.
@@ -133,7 +141,7 @@ All three Railway services, `api`, `presence` and `scheduler-cron`, build with R
 
 So the CI job named "Railway container contract" (`.github/workflows/ci.yml:286-298`) builds an image Railway never builds. It differs in interpreter, base image, the files copied, the install flags (`--require-hashes` against a plain `-r`) and the start command. Every Python job in CI runs 3.11 or 3.12, and none runs the 3.13 that production runs. The comment that pins the audit job to 3.12 calls it "the interpreter Dockerfile.api ships, so the audit resolves the same set Railway builds", which is false. `DEPLOY.md:86`, the 2026-09-08 SYS_SPEC, the CHANGELOG, `scripts/estate_reconcile.py` and `app/services/agent_scheduler.py:10` also describe `Dockerfile.api` as Railway's image, and the deploy-readback skill gives presence's root directory as `apps/presence` where it is `.`.
 
-The ruling rested on a premise this session gave Tee on the card: that a requirements change reaches the presence image untested. The pip install is the same in both Dockerfiles, and the API image's build already tests it. And neither Dockerfile is what Railway runs, so a CI build of `Dockerfile.presence` would test nothing production runs. That ruling goes back to him on a card with the premise corrected, and nothing was built on it. His second ruling, a test that reaches pyasn1's android-key decode, stands, and goes in the next pull request.
+The ruling rested on a premise this session gave Tee on the card: that a requirements change reaches the presence image untested. The pip install is the same in both Dockerfiles, and the API image's build already tests it. And neither Dockerfile is what Railway runs, so a CI build of `Dockerfile.presence` would test nothing production runs. That ruling went back to him on a card with the premise corrected, and nothing was built on it. At 09:12:25Z he ruled to point Railway at the Dockerfiles, and kept it at 16:34:36Z. Read-only scouting in `wf_ae655b7d-7bf`, each claimed gap verified, found one blocker: `Dockerfile.api` does not copy `policies/`, and `app/api/v1/arf_shadow.py:30` reads `policies/reliability/profiles.v1.json` on every request to the reliability shadow route, so that route would fail. Presence and scheduler-cron read nothing outside what their Dockerfiles copy. Railway's docs say the start command overrides the Dockerfile's CMD and runs in exec form, which does not expand `$PORT`, so the api and presence start commands need a shell form; and presence's watch patterns do not include its own Dockerfile. His second ruling, a test that reaches pyasn1's android-key decode, stands. Both go in the next pull requests.
 
 ## Measured
 
@@ -148,7 +156,9 @@ The ruling rested on a premise this session gave Tee on the card: that a require
 | pip with `PIP_CONSTRAINT` on two local wheels, offline | the constrained version with the variable, the newer one without it, and a path with a space split at the space |
 | `PriceQuoteRequired` at the pin | 18 files mention it, 16 raise it |
 | full api suite on `0c5d046`, local PostgreSQL 16 | 9460 passed, 2 skipped, exit 0 |
-| CI on `1d8850a`, `0c5d046` and `ebdb72c` | every check green on each, the API suite last at 08:45:57Z |
+| CI on `1d8850a`, `0c5d046`, `ebdb72c` and `8edeabc` | every check green on each |
+| `test_openmontage_installer.py` at `47fa74e` | 69 passed on Python 3.13.17 and on 3.11.17; against the installer at `ebdb72c` the new marker and loading cases fail |
+| three mutations at `47fa74e`: `--exclude-standard` added, the package rule narrowed to `__init__.py`, the venv run moved ahead of the later target checks | each caught by exactly the cases written for it |
 | Railway build plan for `api`, `presence` and `scheduler-cron` | Railpack 0.43.0, Python 3.13.16, read from the build logs by two verifiers |
 
 ## Not verified
@@ -160,21 +170,20 @@ The ruling rested on a premise this session gave Tee on the card: that a require
 ## Gauntlet verdict
 
 ```
-VERDICT: PASS-WITH-CONDITIONS
+VERDICT: PASS
 Deliverable: PR #452, the OpenMontage installer, its tests and skill after three passes, and this record | Ask: "Fix per your recommendations and merge/deploy", and the 54 findings left open
 Critic mode: subagents, fresh, every finding verified independently; the review's 54, then 25, 13 and 6 confirmed from three more critics, 2 refuted in all, both in the second pass
-Scores: correctness 4, scope 4, verification 5, security 4, reversibility 5, failure handling 4, idempotency 5, traceability 5, observability 4, completeness 4, maintainability 4 | mean 4.4 | flagship floor: met, conditional
-Security is 4 and not 5 for C3-2: the installer runs the target's .venv python before it has shown the target is an OpenMontage checkout, which the header's "left alone" promise does not allow. The target is a directory the operator chose, so no boundary is crossed.
-Conditions: Tee's ruling on a fourth revision for the open residue, and his re-ruling on the presence CI job now that the Railpack finding is verified.
-Recommendation: merge under the standing approval when CI is green on the head; the PR is strictly better than main, and the residue is LOW or NIT. The human owns SHIP.
+Scores: correctness 4, scope 4, verification 5, security 5, reversibility 5, failure handling 4, idempotency 5, traceability 5, observability 4, completeness 4, maintainability 4 | mean 4.5 | flagship floor: met
+Security is 5 since cd4f220: a refused target's code is never run, pinned by a marker test across all five target refusals.
+Conditions: none on the merge. The residue below is NIT, and Tee kept it recorded at 16:34:36Z.
+Recommendation: merge under the standing approval when CI is green on the head and the verifiers of 47fa74e report resolved. The human owns SHIP.
 ```
 
 ## Open
 
-- Tee's ruling, on a card: a fourth revision for C3-2, C3-3, C3-5, C3-4's message, RF10, X-OM-INS-08, X-T2 and the `constraints.txt` regeneration line.
-- Tee's ruling, on a card: the presence CI job, re-asked with the Railpack finding.
-- The android-key attestation test for pyasn1, ruled at 08:36:39Z, in the next pull request.
-- The stale records that name `Dockerfile.api` as Railway's image, and the deploy-readback skill's presence root, to be corrected with whatever the presence ruling becomes.
+- Recorded, all NIT, kept by Tee at 16:34:36Z: C3-4's message (the time limit refuses `0900` while explaining only `0` and `00`); C3-5 (a git failure in the resume-path check reads as planted files, and the `git ls-files failed` refusal has no test); X-OM-INS-08 (a staged, never committed file in a hand-made repository survives a resumed fetch); X-T2 (no test for `git` missing as a prerequisite); and the `constraints.txt` regeneration line naming `~/OpenMontage/.venv`.
+- Pointing Railway at the Dockerfiles, ruled at 09:12:25Z and kept at 16:34:36Z: a pull request that copies `policies/` in `Dockerfile.api`, builds the presence image in CI path filtered, and corrects the stale records, then each service switched and read back.
+- The android-key attestation test for pyasn1, ruled at 08:36:39Z, in its own pull request.
 - Carried from the 0438 doc: the first scheduled run of the daily audit, and the probe branch `claude/audit-red-path-probe`, which the proxy would not delete.
 
 ## DEVON RECEIPT
@@ -183,8 +192,8 @@ AREA: Systems, TQO
 TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_openmontage-finding-verification_v1_2026-10-31-0642.md
 DATE: 2026-10-31
-DECISIONS: The 54 unverified findings of the 2026-10-31 OpenMontage review were verified the same day once the subagent limit was found lifted, and the 2026-11-03 trigger was deleted. The fix loop stopped at its third revision, as ruled, and the residue goes to Tee. Tee ruled at 08:36:39Z to build the presence image in CI, path filtered, and to add an android-key attestation test for pyasn1; the first goes back to him because its premise was wrong.
-FINDINGS: 49 confirmed, 5 unsettled and all NIT, none refuted; 13 of the 14 MEDs graded LOW. Three passes of fixes drew 25, then 13, then 6 confirmed findings, all LOW or NIT, 2 refuted in all; the installer now has 58 offline tests. The proxy gives its Gemini credential to any process in the container, measured. Railway builds api, presence and scheduler-cron with Railpack on Python 3.13.16, not from the Dockerfiles CI builds on 3.12, so CI's Railway container contract tests an image Railway never builds; confirmed by two independent verifiers.
-OPEN: Tee's rulings on a fourth revision of the installer and on the presence CI job; the android-key pyasn1 test; the stale records naming Dockerfile.api as Railway's image; the first scheduled daily audit run; the probe branch.
-STATUS: PR #452 green on ebdb72c, this doc its last commit, to be merged under the standing approval once CI passes on that head; verdict PASS-WITH-CONDITIONS.
+DECISIONS: The 54 unverified findings of the 2026-10-31 OpenMontage review were verified the same day and the 2026-11-03 trigger deleted. The fix loop stopped at its third revision as ruled; Tee authorized a fourth at 09:12:25Z for two findings, one of them also raised by Codex. He ruled at 08:36:39Z to build the presence image in CI and to add an android-key test for pyasn1; the first rested on a false premise, and at 09:12:25Z, kept at 16:34:36Z, he ruled to point Railway at the Dockerfiles.
+FINDINGS: 49 confirmed, 5 unsettled and all NIT, none refuted; 13 of the 14 MEDs graded LOW. Four passes of fixes drew 25, 13, 6 and 6 confirmed findings, all LOW or NIT, 2 refuted in all; Codex raised one of them as well; the installer now has 69 offline tests. The proxy gives its Gemini credential to any process in the container, measured. Railway builds api, presence and scheduler-cron with Railpack on Python 3.13.16, not from the Dockerfiles CI builds on 3.12, so CI's Railway container contract tests an image Railway never builds; confirmed by two independent verifiers.
+OPEN: the Railway Dockerfile switch, with policies/ added to Dockerfile.api first; the android-key pyasn1 test; five NITs recorded in the installer; the first scheduled daily audit run; the probe branch.
+STATUS: PR #452 at 47fa74e plus this doc, all five verifiers of 47fa74e resolved, to be merged under the standing approval once CI passes; verdict PASS.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
