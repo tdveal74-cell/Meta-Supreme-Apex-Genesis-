@@ -185,14 +185,49 @@ cleaned up, and a real full disk and a real file size limit each left no
 marker and the next render ran. The second and third stay as known limits,
 written into the skill.
 
+## On the VPS
+
+Tee ruled on a card to run the install himself in Termius, on srv1936199, the
+EditForge VPS, not srv1936193, which runs n8n. A read only check found the
+tools and Python 3.12.3 there and the disk 95% full, 5.7G free. On his card
+"Package caches" the session cleared the pip and npm caches over Desktop
+Commander, which took the disk to 90% and 11G free; `uv cache prune` freed only
+71M, because installed environments still link to that cache.
+
+The first install failed. Asked for `python3`, uv chose the host's uv-managed
+CPython 3.15 over `/usr/bin/python3`; ctranslate2 4.7.1 ships no 3.15 wheel.
+Measured on the host afterwards: the pinned uv 0.11.32's `python find python3`
+returns the managed 3.15.0, and `/usr/bin/python3` with
+`UV_PYTHON_PREFERENCE=only-system`. The container reproduced the failure by
+another route: uv does not prefer a prerelease, so its managed 3.15.0b4 was
+reached through the `python3.15` link `uv python install` puts in
+`~/.local/bin`, a finding of the verifier.
+Run again with `UV_PYTHON_PREFERENCE=only-system`, the install on the VPS
+finished, and a read back over Desktop Commander showed an empty audit, Python
+3.12.3, the caption model's imports working, MoneyPrinterTurbo at `27843a9`,
+`config.toml` at mode 600, nothing listening on 8080 or 8501, 1.8G in
+`/opt/mpt-shorts` and the disk at 91%. `install.sh` now hands uv the `python3`
+first on PATH by its absolute path, refuses one outside 3.11 to 3.14, and runs
+uv with `UV_PYTHON_PREFERENCE=only-system`. A uv-managed `python3` placed first
+on PATH is still used, which a fresh verifier showed. On the container with the managed 3.15
+present it exited 0 on 3.13, rebuilt a venv left on 3.15, and refused a
+`python3` that is 3.15 before creating anything.
+
+Separately, on Tee's word, two leftovers named psycle were removed from that
+host, `/home/tee/migration/psyclehouse` and `psyclehouse.env` from the
+2026-09-17 migration export; nothing ran from them and a search afterwards
+found none left on either VPS.
+
 ## Open, and whose
 
-- Installing it on the VPS is Tee's ruling. Nothing was installed on any device.
+- The install on srv1936199 is done. No render has run there yet.
 - Wiring it into `TQO FINAL V5` or the render worker is a workflow edit and a
   publish, so it is his too.
 - The thresholds (0.85 voice coverage per third, 0.5 repeat similarity) are
   starting values. The ledger is where they get set once real renders exist.
-- Render time on the VPS's 2 shared cores is unmeasured.
+- Render time on the VPS's 2 shared cores is unmeasured until the first render.
+- The `psyclehouse.env` copy is gone; the keys it held still work wherever
+  they were issued.
 - Two known limits from the last verifier round, kept by Tee's ruling: the
   encoder a SIGKILL leaves for a few seconds, and the cleanup after a killed
   render reaching copies made before the next one.
@@ -208,6 +243,6 @@ ARTIFACT: docs/devon/SYS_OPS_mpt-shorts-tailored_v1_2026-10-31-0044.md
 DATE: 2026-10-31
 DECISIONS: Tee asked to install MoneyPrinterTurbo and then to tailor it to the YouTube inauthentic content policy, and said "Ok do it" to running it only as an assembler of our own script, Tee-clone voiceover and local clips. No device install and no n8n change were made without a ruling.
 FINDINGS: The default flow is the template the policy refuses and its voice is rented. MoneyPrinterTurbo rewrites captions to the script and keeps only the first slice of each clip in sequential mode; the wrapper works around both. The bundled fonts and songs carry no licence. The wrapper's render makes no network connection, measured with strace. Two critics' findings on the first commit were verified and fixed: the code cannot check whose voice or whose clips it is, so manifests say so; a frozen-frame clip and half a voiceover used to pass; the repeat check failed open four ways; most gate lines had no test. Four verifier rounds after that found and closed leftover files, an orphaned encoder and a signal regression; the last round confirmed four smaller problems and corrected an overstated SIGKILL claim; Tee ruled to fix two in a follow-up and keep two as known limits.
-OPEN: Tee runs the VPS install himself in Termius, ruled on a card; n8n wiring is his ruling; two last round problems are kept as known limits; thresholds are starting values; VPS render time unmeasured.
-STATUS: PR #444 merged 2026-10-31 as `164497a`; the follow-up on claude/mpt-shorts-tailored carries the two fixes. Sandbox install and renders proven in the cloud container only; nothing installed on the VPS at writing.
+OPEN: the VPS install is done and no render has run there; n8n wiring is his ruling; two last round problems are kept as known limits; thresholds are starting values; VPS render time unmeasured.
+STATUS: PRs #444 and #449 merged 2026-10-31; installed on srv1936199 the same day, audit empty; the installer's Python fix rides the next PR. No render on the VPS yet.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
