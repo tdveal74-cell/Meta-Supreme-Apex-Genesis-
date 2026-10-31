@@ -13,9 +13,14 @@ Two ways to anchor the start:
                          frame_idx 0 at both stages, so motion carries across
                          the seam. The seam is then at the last of those frames.
 
-Usage: python3 build_graph.py OUT.json (--first IMG | --first-frames F...) --prompt TEXT
-       [--last IMG] [--width 1920 --height 1088 --frames 241 --fps 24 --seed 42]
-       [--prefix P] [--save-frames] [--single-stage]
+Usage: python3 ltx_build_graph.py OUT.json (--first IMG | --first-frames F...) --prompt TEXT
+       [--last IMG] [--negative TEXT] [--width 1920 --height 1088 --frames 241 --fps 24]
+       [--seed 42] [--ckpt NAME] [--text-encoder NAME] [--upscaler NAME] [--prefix P]
+       [--first-strength1 0.7] [--last-strength 1.0] [--single-stage] [--save-frames]
+
+Limits the builder enforces: sides divisible by 32, and by 64 for the two stage
+path because stage 1 runs at half size; frames 8k plus 1; guide frames 8k plus 1
+and at most 97 of them.
 """
 import argparse
 import json
@@ -50,10 +55,14 @@ def main():
     a = ap.parse_args()
 
     assert a.width % 32 == 0 and a.height % 32 == 0, "LTX needs width and height divisible by 32"
+    if not a.single_stage:
+        assert a.width % 64 == 0 and a.height % 64 == 0, (
+            "the two stage path runs stage 1 at half size, so sides must be divisible by 64 (or pass --single-stage)")
     assert (a.frames - 1) % 8 == 0, "LTX needs frames = 8k + 1"
     assert bool(a.first) != bool(a.first_frames), "give --first or --first-frames, not both"
     if a.first_frames:
         assert (len(a.first_frames) - 1) % 8 == 0, "guide frames must be 8k + 1"
+        assert len(a.first_frames) <= 97, "at most 97 guide frames"
     last_idx = a.frames - 1
 
     g = {}
@@ -84,8 +93,8 @@ def main():
             if prev is None:
                 prev = out(100 + i)
             else:
-                node(130 + i, "ImageBatch", image1=prev, image2=out(100 + i))
-                prev = out(130 + i)
+                node(300 + i, "ImageBatch", image1=prev, image2=out(100 + i))
+                prev = out(300 + i)
         guide_img = prev
     if a.last:
         node(13, "LoadImage", image=a.last)

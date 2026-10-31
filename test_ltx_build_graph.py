@@ -12,11 +12,12 @@ import pathlib
 import subprocess
 import sys
 
-SCRIPT = pathlib.Path(".claude/skills/tsws-shot-prompt/scripts/ltx_build_graph.py")
+SCRIPT = pathlib.Path(__file__).resolve().parent / ".claude/skills/tsws-shot-prompt/scripts/ltx_build_graph.py"
 
 
 def build(tmp_path, *args):
     out = tmp_path / "graph.json"
+    out.unlink(missing_ok=True)
     proc = subprocess.run(
         [sys.executable, "-I", str(SCRIPT), str(out), "--prompt", "p", *args],
         capture_output=True, text=True, timeout=60,
@@ -46,8 +47,33 @@ def test_sides_must_divide_by_32(tmp_path):
 def test_one_anchor_path_only(tmp_path):
     proc, graph = build(tmp_path, "--first", "a.png", "--first-frames", *["f%d.png" % i for i in range(9)])
     assert proc.returncode != 0 and graph is None
+    assert "not both" in proc.stderr
     proc, graph = build(tmp_path)
     assert proc.returncode != 0 and graph is None
+    assert "not both" in proc.stderr
+
+
+def test_two_stage_needs_sides_divisible_by_64(tmp_path):
+    # 1280x736 is divisible by 32 but its half size 640x368 is not
+    proc, graph = build(tmp_path, "--first", "a.png", "--width", "1280", "--height", "736")
+    assert proc.returncode != 0 and graph is None
+    assert "divisible by 64" in proc.stderr
+    proc, graph = build(tmp_path, "--first", "a.png", "--width", "1280", "--height", "736", "--single-stage")
+    assert proc.returncode == 0, proc.stderr
+    assert graph["20"]["inputs"]["width"] == 1280 and graph["20"]["inputs"]["height"] == 736
+
+
+def test_many_guide_frames_keep_distinct_node_ids(tmp_path):
+    frames = ["g%03d.png" % i for i in range(33)]
+    proc, graph = build(tmp_path, "--first-frames", *frames, "--frames", "225")
+    assert proc.returncode == 0, proc.stderr
+    loads = [n for n in graph.values() if n["class_type"] == "LoadImage"]
+    batches = [n for n in graph.values() if n["class_type"] == "ImageBatch"]
+    assert len(loads) == 33 and len(batches) == 32
+    assert [n["inputs"]["image"] for n in loads] == frames
+    proc, graph = build(tmp_path, "--first-frames", *["g%03d.png" % i for i in range(105)], "--frames", "225")
+    assert proc.returncode != 0 and graph is None
+    assert "at most 97" in proc.stderr
 
 
 def test_guide_frames_must_be_8k_plus_1(tmp_path):
@@ -68,6 +94,9 @@ def test_still_anchor_uses_inplace_at_both_stages(tmp_path):
         assert graph[nid]["class_type"] == "LTXVAddGuide"
         assert graph[nid]["inputs"]["frame_idx"] == 240 and graph[nid]["inputs"]["image"] == ["15", 0]
     assert graph["20"]["inputs"] == {"width": 960, "height": 544, "length": 241, "batch_size": 1}
+    assert graph["31"]["class_type"] == "LTXVCropGuides" and graph["31"]["inputs"]["latent"] == ["30", 0]
+    assert graph["49"]["class_type"] == "LTXVCropGuides" and graph["49"]["inputs"]["latent"] == ["48", 0]
+    assert graph["40"]["inputs"]["samples"] == ["31", 2] and graph["60"]["inputs"]["samples"] == ["49", 2]
     assert graph["25"]["inputs"]["noise_seed"] == 7 and graph["44"]["inputs"]["noise_seed"] == 8
     assert graph["27"]["inputs"]["sigmas"] == "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"
     assert graph["45"]["inputs"]["sigmas"] == "0.85, 0.7250, 0.4219, 0.0"
@@ -84,8 +113,8 @@ def test_frame_guide_chains_nine_frames_and_guides_at_zero(tmp_path):
     assert [n["inputs"]["image"] for n in loads] == frames
     batches = [nid for nid, n in graph.items() if n["class_type"] == "ImageBatch"]
     assert len(batches) == 8
-    last_batch = ["138", 0]
-    assert graph["138"]["inputs"]["image2"] == ["108", 0]
+    last_batch = ["308", 0]
+    assert graph["308"]["inputs"]["image2"] == ["108", 0]
     assert "21" not in graph and "41" not in graph and "12" not in graph
     for nid in ("19", "39"):
         assert graph[nid]["class_type"] == "LTXVAddGuide"

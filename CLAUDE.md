@@ -528,7 +528,7 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_provider_watchdog.py test_devon_show_registry.py test_show_registry_seed.py \
   test_devon_lesson_registry.py test_gate_ledger.py test_jev_route.py \
   test_ledger_receipt.py test_code_worker.py test_watch_long.py \
-  test_mpt_shorts.py test_openmontage_installer.py
+  test_mpt_shorts.py test_openmontage_installer.py test_ltx_build_graph.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .

@@ -2,13 +2,16 @@
 
 Reads every STEP-th frame of an mp4, crops four rows off top and bottom when
 the frame is 1088 tall, and measures the shift of each static region against
-frame 0 and against the previous sample by windowed phase correlation, the
-same measure align_still.py prints as "plain resize". Prints the peak absolute
-shift per region and where it lands, then a thinned table.
+frame 0 and against the previous sample by windowed phase correlation alone.
+That is the seed align_still.py starts from; align_still then refines it with
+an ECC translation fit, so the two read the same frame up to about 0.17 px
+apart (SH100 frame 96, 2026-10-31: 0.59 px by align_still on the PNG, 0.42 by
+this scan on the mp4). The difference is the estimator, not the h264 decode.
+This is the overview; align_still on the lossless frames is the measurement.
 
-A frame decoded from h264 and the same frame as a lossless PNG differ by up to
-about 0.17 px on this measure (SH100, 2026-10-31), so this is the overview and
-the PNG frames are the measurement.
+The built-in regions are drawn on the 1920x1080 Episode 1 street plate, so a
+clip of another size needs --regions; the scanner refuses otherwise. Prints
+the peak absolute shift per region and where it lands, then a thinned table.
 
 Usage: python3 drift_scan.py CLIP.mp4 [--step 4] [--regions name=x0,y0,x1,y1 ...]
 """
@@ -66,6 +69,11 @@ def main():
             name, value = text.split("=")
             regions[name] = tuple(int(x) for x in value.split(","))
     total, frames = read_samples(a.clip, a.step)
+    if not frames:
+        raise SystemExit(f"{a.clip}: no frames read")
+    h, w = frames[0][1].shape
+    if not a.regions and (w, h) != (1920, 1080):
+        raise SystemExit(f"{a.clip}: frames are {w}x{h}; the built-in regions are for 1920x1080, pass --regions")
     print(f"{a.clip}: {total} frames read, {len(frames)} sampled every {a.step}")
     base = frames[0][1]
     prev = base
@@ -88,9 +96,9 @@ def main():
         dx, dy, fi = peak[k]
         print(f"  {k:10s} peak vs f0: dx={dx:+.3f} dy={dy:+.3f} at f{fi}; "
               f"largest step between samples {step_peak[k][0]:.3f} px at f{step_peak[k][1]}")
-    print("  frame " + " ".join(f"{k[:7]:>16s}" for k in regions))
+    print("  frame  " + "  ".join(f"{k[:15]:>15s}" for k in regions))
     for row in rows[:: max(1, len(rows) // 12)]:
-        print(f"  {row[0]:5d} " + " ".join(f"{row[1 + 3 * i]:+7.3f},{row[2 + 3 * i]:+7.3f}" for i in range(len(regions))))
+        print(f"  {row[0]:5d}  " + "  ".join(f"{row[1 + 3 * i]:+7.3f},{row[2 + 3 * i]:+7.3f}" for i in range(len(regions))))
 
 
 if __name__ == "__main__":

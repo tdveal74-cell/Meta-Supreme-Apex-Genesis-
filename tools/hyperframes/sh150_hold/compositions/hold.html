@@ -1,0 +1,58 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; background: #050308; }
+    #hold-plate-wrap { position: absolute; inset: 0; transform-origin: 50% 46%; }
+    #hold-plate { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; object-fit: contain; }
+    #hold-rain { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; mix-blend-mode: screen; opacity: 0.55; }
+  </style>
+  <div id="root" data-composition-id="hold" data-width="1920" data-height="1080">
+    <div id="hold-plate-clip" class="clip" data-start="0" data-duration="12" data-layout-allow-overflow>
+      <div id="hold-plate-wrap">
+        <img id="hold-plate" src="assets/SH150_conform.png" alt="" />
+      </div>
+    </div>
+    <div id="hold-rain-clip" class="clip" data-start="0" data-duration="12" data-layout-ignore>
+      <canvas id="hold-rain" width="1920" height="1080"></canvas>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const D = 12;
+      const vars = (window.__hyperframes && window.__hyperframes.getVariables) ? window.__hyperframes.getVariables() : {};
+      const pushTo = Number(vars.push || 1.035);
+      const drops = Math.max(0, Math.min(2000, Math.round(Number(vars.rain != null ? vars.rain : 700))));
+
+      // Rain as a pure function of timeline time: a seeded field, no clocks, no randomness at draw time.
+      let seed = 72126;
+      const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+      const field = [];
+      for (let i = 0; i < 2000; i++) {
+        field.push({ x: rnd() * 2000 - 40, y: rnd() * 1200, len: 14 + rnd() * 26, v: 900 + rnd() * 700, a: 0.08 + rnd() * 0.22, w: 0.6 + rnd() * 0.9 });
+      }
+      const canvas = document.getElementById("hold-rain");
+      const ctx = canvas.getContext("2d");
+      function draw(t) {
+        ctx.clearRect(0, 0, 1920, 1080);
+        ctx.lineCap = "round";
+        for (let i = 0; i < drops; i++) {
+          const d = field[i];
+          const yy = (d.y + d.v * t) % (1080 + d.len);
+          const xx = d.x + 0.06 * (d.v * t) % 2000;
+          const x = ((xx % 2000) + 2000) % 2000 - 40;
+          ctx.strokeStyle = "rgba(220, 228, 255, " + d.a.toFixed(3) + ")";
+          ctx.lineWidth = d.w;
+          ctx.beginPath();
+          ctx.moveTo(x, yy - d.len);
+          ctx.lineTo(x - d.len * 0.06, yy);
+          ctx.stroke();
+        }
+      }
+      const state = { t: 0 };
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo("#hold-plate-wrap", { scale: 1.0 }, { scale: pushTo, duration: D, ease: "power1.inOut" }, 0);
+      tl.fromTo(state, { t: 0 }, { t: D, duration: D, ease: "none", onUpdate: () => draw(state.t) }, 0);
+      draw(0);
+      window.__timelines["hold"] = tl;
+    })();
+  </script>
+</template>
