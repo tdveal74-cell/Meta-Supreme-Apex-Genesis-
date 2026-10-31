@@ -243,7 +243,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           # The interpreter Dockerfile.api ships, so the audit resolves the
-          # same set Railway builds.
+          # same set a service built from that Dockerfile installs.
           python-version: "3.12"
       - name: Install pip-audit
         id: install-pip-audit
@@ -296,6 +296,18 @@ jobs:
           docker run --rm --entrypoint python \
             -e DEFAULT_AI_PROVIDER=mock \
             devon-api-ci -c "from app.main import app; from app.api.v1.auth import passkey_login_options; from services.intelligence.providers.cerebras_provider import CerebrasProvider; print(app.title, passkey_login_options.__name__, CerebrasProvider.name)"
+      # Tee ruled on 2026-10-31 that Railway builds api and scheduler-cron from
+      # this Dockerfile. Under Railpack, which copies the whole repository, a
+      # file the API reads at runtime and this image does not copy broke
+      # nothing; under this Dockerfile it breaks the route that reads it. The
+      # reliability shadow route reads policies/ per request, and
+      # scheduler-cron runs dispatch.py. Which builder a service uses is a
+      # Railway setting: read it from get-service-config.
+      - name: Image carries the reliability policy file and the dispatcher
+        run: |
+          docker run --rm --entrypoint python \
+            -e DEFAULT_AI_PROVIDER=mock \
+            devon-api-ci -c "from app.api.v1.arf_shadow import _POLICY_PATH; assert _POLICY_PATH.is_file(), _POLICY_PATH; import dispatch; print(_POLICY_PATH, dispatch.__name__)"
 
   engine:
     name: Engine + cadence (no database)

@@ -40,10 +40,37 @@ count-from-the-lane miss CLAUDE.md's first law describes.
 | Surface | What it serves | How to read it |
 |---|---|---|
 | Railway `api` | The FastAPI app, the ledger, migrations | `list-deployments`, then `get-logs` on the deployment id |
-| Railway `presence` | DEVON's voice and live inference, root `apps/presence`: `POST /tts`, the WebSocket lane, LiveKit tokens | `list-deployments`, then `GET /health` on the public host, which a container CAN reach since 2026-09-16 (see below) |
+| Railway `presence` | DEVON's voice and live inference, code in `apps/presence` (the service's root directory is `.`): `POST /tts`, the WebSocket lane, LiveKit tokens | `list-deployments`, then `GET /health` on the public host, which a container CAN reach since 2026-09-16 (see below) |
 | Railway `scheduler-cron` | The scheduled lane, `python dispatch.py` on a `*/5 * * * *` cron | `list-deployments`; it carries no public host of its own to read back |
 | Vercel `meta-supreme-apex-genesis-web` | The web app and Command Center, root `apps/web` (recorded as `meta-supreme-web` until 2026-09-02; that project no longer exists) | `list_deployments` for the project |
 | Vercel `devon-soul` | The phone lane, root `deploy/soul` | `list_deployments` for the project |
+
+**WHAT RAILWAY BUILDS IS A SETTING, AND IT WAS NOT WHAT CI BUILT.** Read on
+2026-10-31, every live deployment of the three services had been built with
+Railpack from the repository root, on Railpack's default Python, 3.13.16, while
+CI built the Dockerfiles on 3.12: the job named "Railway container contract"
+tested an image Railway never built. Read from `get-service-config` and the
+build logs, and confirmed by two independent verifiers. Tee ruled that day to
+point Railway at the Dockerfiles, `infrastructure/docker/Dockerfile.api` for
+`api` and `scheduler-cron` and `infrastructure/docker/Dockerfile.presence` for
+`presence`. The switch is a setting changed one service at a time, so this file
+cannot say which services have it. **Read `build.builder` and the
+Dockerfile path from `get-service-config` before saying what an image contains**,
+and read a build log for the `FROM` line: a builder flipped back in the dashboard
+reopens the gap, and no check in this repository would notice.
+
+Two things change with the builder, both from Railway's docs and neither
+measured when this was written. Under a Dockerfile the service's start command
+replaces the image's command in exec form, which expands no variables, so a
+start command naming `$PORT` has to be wrapped in `/bin/sh -c` or the server
+gets the literal text as its port. And `presence`'s watch patterns were set
+for Railpack: until they name `infrastructure/docker/Dockerfile.presence`, a change to
+that file alone passes CI and never deploys.
+
+A third follows from `checkSuites` below. Railway's docs say `api` waits until
+every GitHub Actions check suite on the commit has finished, so a push to `main`
+that touches the presence image's paths also waits on the "Presence image"
+workflow, and a red run there skips the `api` deploy.
 
 **THE THREE RAILWAY SERVICES DO NOT DEPLOY ON THE SAME RULE, AND ONE OF THEM
 STOPS WHEN CI IS RED.** Read from `get-service-config` on 2026-09-16, because

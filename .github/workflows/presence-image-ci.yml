@@ -1,0 +1,82 @@
+name: Presence image
+
+# Builds the presence service's image, the voice lane, and proves it starts in
+# deployed mode. Read on 2026-10-31, every live Railway deployment had been
+# built with Railpack and no job here built what it deployed; Tee ruled that
+# day to point presence at infrastructure/docker/Dockerfile.presence, which
+# makes this the image it runs once the service is switched. Which builder it uses is a Railway setting: read
+# build.builder from get-service-config before calling this the deployed image.
+# Path filtered, as Tee ruled on 2026-10-31, to what can change the image: the
+# presence code, the services/ it imports, the pinned closure and the
+# Dockerfile. It proves the image builds, imports, refuses to start deployed
+# without a SECRET_KEY, and answers GET /health with its pinned keys when given
+# one; it proves nothing about speech, LiveKit or a provider.
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "apps/presence/**"
+      - "services/**"
+      - "requirements.txt"
+      - "infrastructure/docker/Dockerfile.presence"
+      - ".github/workflows/presence-image-ci.yml"
+  push:
+    branches: ["main"]
+    paths:
+      - "apps/presence/**"
+      - "services/**"
+      - "requirements.txt"
+      - "infrastructure/docker/Dockerfile.presence"
+      - ".github/workflows/presence-image-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: presence-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  presence-image:
+    name: Presence image builds and answers /health
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the production presence image
+        run: docker build -f infrastructure/docker/Dockerfile.presence -t devon-presence-ci .
+      - name: Image imports the presence app
+        run: |
+          docker run --rm --entrypoint python -e ENVIRONMENT=test \
+            devon-presence-ci -c "from apps.presence.main import app; print(app.title)"
+      - name: Image refuses to start deployed without a SECRET_KEY
+        run: |
+          set +e
+          timeout 60 docker run --rm -e ENVIRONMENT=production devon-presence-ci > refusal.log 2>&1
+          code=$?
+          set -e
+          cat refusal.log
+          test "$code" -ne 0
+          test "$code" -ne 124
+          grep -q "Refusing to start" refusal.log
+      - name: Image starts deployed and answers GET /health
+        run: |
+          docker run -d --name presence -e ENVIRONMENT=production \
+            -e SECRET_KEY="$(openssl rand -hex 32)" -e PORT=8010 -p 8010:8010 devon-presence-ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8010/health > health.json; then break; fi
+            sleep 1
+          done
+          docker logs presence
+          python3 - <<'PY'
+          import json
+          body = json.load(open("health.json"))
+          print(json.dumps(body, indent=1))
+          assert isinstance(body, dict) and body, "GET /health returned no keys"
+          for key in ("inference", "speech", "breaker"):
+              assert key in body, f"GET /health has no {key}"
+          PY
+      - name: Stop the container
+        if: ${{ always() }}
+        run: docker rm -f presence || true

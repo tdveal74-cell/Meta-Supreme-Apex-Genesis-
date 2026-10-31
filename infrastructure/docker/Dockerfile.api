@@ -22,6 +22,9 @@ RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 
 COPY app/ ./app/
 COPY services/ ./services/
+# The reliability shadow route reads policies/reliability/profiles.v1.json on
+# every request (app/api/v1/arf_shadow.py:30).
+COPY policies/ ./policies/
 COPY database/ ./database/
 COPY docs/ ./docs/
 COPY alembic.ini ./alembic.ini
