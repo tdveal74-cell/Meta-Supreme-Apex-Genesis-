@@ -1379,7 +1379,7 @@ script.
 **A `scanner` cannot reach a connector.** Its tools are Read, Grep and Glob, so
 it has no MCP tool and no `ToolSearch` to load one. Found 2026-10-31, when a
 sweep of all 25 TSWS workflows on the VPS n8n instance by 25 scanner agents
-returned 25 failed reads and 2.7 million tokens of repository evidence, each
+returned 25 failed reads and 2.7 million tokens of repository evidence by the run's own tally, each
 row saying honestly that the live read was not made. A read of n8n, Drive,
 Airtable or any other connector is the main session's or a `general-purpose`
 agent's, and a workflow that needs one says so in its agent type.
