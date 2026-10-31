@@ -51,8 +51,9 @@ Proved on that box, by execution:
   drift build (below) until this one.
 * Read `/health` on the bridge address only. On N8N-HOST `127.0.0.1:8080` is
   the `docker-proxy` of the `temporal-ui` container (`temporalio/ui:2.34.0`),
-  and its `/health` answers HTTP 200 with an HTML page. On 2026-10-31 a session took that 200 for the worker and reported it,
-  and a verifier caught it. A 200 from loopback on this box says the Temporal
+  and its `/health` answers HTTP 200 with an HTML page. On 2026-10-31 a
+  session took that 200 for the worker and reported it, and a verifier caught
+  it. A 200 from loopback on this box says the Temporal
   UI is up and nothing about the render worker.
 * The ACX Node build, deployed 2026-10-31 from merge commit ac691aa through
   Desktop Commander, by "Upgrading the live box" below. `/status` read idle
@@ -1135,20 +1136,19 @@ faster-whisper run), job `1809aa54-06b2-4c2c-8e44-2e54f098b860`:
 A master identical to the sandbox build is the strongest check available here:
 the job reproduces the pipeline Tee's watch will judge, byte for byte.
 
-Read on the box on 2026-10-31 after the deploy, each by an independent
-verifier, no job run: ffmpeg is `7:6.1.1-3ubuntu5` and lists every filter and
-encoder `acx_node.js` calls (drawtext, ass, zoompan, xstack, loudnorm,
-alimiter, adelay, amix, lowshelf, highshelf, anullsrc, libx264, aac, and
-`pcm_s16le`, which the session read itself after a critic found no verifier
-had); the
-three faces under `/data/tsws/fonts/chakra` hash to the Proof 0 copies and the
-deployed `fontFullName` reads all three names; the venv imports faster-whisper
-1.1.1, av 13.1.0 and requests 2.34.2 as `tsws`; `/data/tsws/hf` is owned and
-writable by `tsws` and inside the unit's `ReadWritePaths`; and `tsws` reaches
-`huggingface.co` (HTTP 200 on the base.en model's API page). The venv import,
-the write test and the Hugging Face probe were run with `runuser`, outside the
-unit's sandbox, so none of them proves the import or the model download inside
-the unit.
+Read on the box on 2026-10-31 after the deploy, each by an independent verifier
+except the one encoder noted, no job run: ffmpeg is `7:6.1.1-3ubuntu5` and
+lists every filter and encoder `acx_node.js` calls (drawtext, ass, zoompan,
+xstack, loudnorm, alimiter, adelay, amix, lowshelf, highshelf, anullsrc,
+libx264, aac, and `pcm_s16le`, which the session read itself after a critic
+found no verifier had); the three faces under `/data/tsws/fonts/chakra` hash to
+the Proof 0 copies and the deployed `fontFullName` reads all three names; the
+venv imports faster-whisper 1.1.1, av 13.1.0 and requests 2.34.2 as `tsws`;
+`/data/tsws/hf` is owned and writable by `tsws` and inside the unit's
+`ReadWritePaths`; and `tsws` reaches `huggingface.co` (HTTP 200 on the base.en
+model's API page). The venv import, the write test and the Hugging Face probe
+were run with `runuser`, outside the unit's sandbox, so none of them proves the
+import or the model download inside the unit.
 
 Not measured: the same run on the box's own ffmpeg, Node and fonts, and the
 first `word_timings` run there with its model download. Run the Node 01 case
