@@ -19,7 +19,7 @@ no profile mounts and deny-all browser/network policy remain mandatory.
 
 Build inputs are pinned to Node image manifest digest
 `sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205`
-and Debian Chromium/common/sandbox `156.0.8078.47-1~deb12u1`. Apt repositories remain
+and Debian Chromium/common/sandbox `156.0.8078.73-1~deb12u1`. Apt repositories remain
 external build dependencies; pins fail closed when packages disappear. Record the
 resulting image ID/digest for each reviewed rollout and do not equate a Dockerfile
 pin with proof of what a deployed host runs.
@@ -27,12 +27,22 @@ pin with proof of what a deployed host runs.
 On 2026-10-23 a fresh GitHub build could not resolve the previous three
 `155.0.8059.79-1~deb12u1` pins. Fresh signed APT metadata and the official
 [Debian security tracker](https://security-tracker.debian.org/tracker/source-package/chromium)
-identified `156.0.8078.47-1~deb12u1` for all three packages. On 2026-10-31 the same thing happened again: `156.0.8078.47-1~deb12u1` had left `bookworm-security` and the signed `Packages.xz` named `156.0.8078.73-1~deb12u1` for all three, so the Dockerfile pins moved to it (run 41185942735 on PR #453 was the red that found it). An exact pin on a rolling security pocket goes stale at every Chromium security upload, about every two weeks, and is corrected the same way each time. A no-cache build
+identified `156.0.8078.47-1~deb12u1` for all three packages. A no-cache build
 installed that version and produced image
 `sha256:7c27b521037d44416cb03951f9652bda7d8f393b7c0b86b6f965ba7aa241557e`.
 All 20 actual worker tests and 8 proxy tests passed with no skips. Only the
 three package pins changed; the sandbox profile and constraints below did not.
 This is isolated validation evidence, not browser activation or deployment.
+
+On 2026-10-31 the same thing happened again: `156.0.8078.47-1~deb12u1` had
+left `bookworm-security` and the signed `Packages.xz` named
+`156.0.8078.73-1~deb12u1` for all three, so the Dockerfile pins moved to it
+(run 41185942735 on PR #453 was the red that found it). An exact pin on a
+rolling security pocket goes stale at every Chromium security upload; the two
+seen here were eight days apart, and the next upload breaks the pin the same
+way. The image digest above belongs to the .47 build of 2026-10-23. No digest
+was recorded for the .73 build: the CI job on run 41186779573 built it in a
+container and passed, and nothing captured its image ID.
 
 
 ## Actual candidate smoke receipt (2026-10-22)

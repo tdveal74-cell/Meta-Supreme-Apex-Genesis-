@@ -1,4 +1,5 @@
 import json
+import time
 from uuid import uuid4
 
 import httpx
@@ -332,19 +333,23 @@ async def test_total_deadline_bounds_trickle_response_without_retry(monkeypatch,
                 + b"\r\nConnection: close\r\n\r\n"
             )
             # The first 40 bytes go out at once and the rest wait until the
-            # test releases them, after the adapter has given up, so the
-            # response cannot finish inside the deadline however slow the
-            # runner is. The earlier shape trickled on a 30 ms sleep against a
-            # 70 ms deadline, and on a loaded CI runner the deadline fired
-            # before this handler had read the request: `calls` read empty for
-            # a reason that had nothing to do with a retry (run 41183925890,
-            # 2026-10-31; 18 of 25 local runs under two burners per core).
+            # test releases them, so the response cannot finish inside the
+            # total deadline however slow the runner is. The read timeout
+            # stays at its 35 s default, so only the total deadline can end
+            # the call, and the elapsed time assertion below is what proves
+            # it did: a stall is also bounded by the read timeout, and without
+            # that assertion the test passed with the total deadline deleted.
+            # The earlier shape trickled 40 byte chunks on a 30 ms sleep
+            # against a 70 ms deadline; each chunk reset the read timeout,
+            # which was the point, but on a loaded runner the 70 ms were spent
+            # before this handler had read the request, so `calls` read empty
+            # (reproduced under CPU load on 2026-10-31).
             writer.write(raw[:40])
             await writer.drain()
             await release.wait()
             writer.write(raw[40:])
             await writer.drain()
-        except (ConnectionError, asyncio.IncompleteReadError):
+        except ConnectionError:
             pass
         finally:
             writer.close()
@@ -363,12 +368,20 @@ async def test_total_deadline_bounds_trickle_response_without_retry(monkeypatch,
     a = adapter()
     args, record = approve(a)
     try:
+        started = time.monotonic()
         result = await a.execute("open", args)
+        elapsed = time.monotonic() - started
         release.set()
         assert not result.ok and result.metadata["outcome"] == "unknown"
+        # Well under the 35 s read timeout, so the total deadline ended the
+        # call and not the read timeout.
+        assert elapsed < 10, elapsed
         assert len(calls) == 1
         assert a.approvals.get(record.request_id).state is ApprovalState.CONSUMED
         await asyncio.wait_for(finished.wait(), timeout=1)
     finally:
+        # On every path, or a handler blocked on the event outlives the
+        # server and `wait_closed` hangs on Python 3.12 and later.
+        release.set()
         server.close()
         await server.wait_closed()
