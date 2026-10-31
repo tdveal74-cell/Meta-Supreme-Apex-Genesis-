@@ -572,7 +572,7 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_provider_watchdog.py test_devon_show_registry.py test_show_registry_seed.py \
   test_devon_lesson_registry.py test_gate_ledger.py test_jev_route.py \
   test_ledger_receipt.py test_code_worker.py test_watch_long.py \
-  test_openmontage_installer.py
+  test_mpt_shorts.py test_openmontage_installer.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .
@@ -1458,15 +1458,19 @@ goes in), `watch-long` (long-form video evidence from a cloud session:
 ten minute windows read by Gemini, then one synthesis, because the relay in
 front of the container cuts a request at its 30 second first byte and a cold
 whole video of twenty minutes or more does not make it; measured 2026-10-28
-and written into its SKILL.md), and `openmontage` (installing and driving
+and written into its SKILL.md), `openmontage` (installing and driving
 calesthio/OpenMontage, an AGPL-3.0 agent-driven video production system, from
 a pinned commit outside this repository by its own installer, with the owned
 voice, spend and publishing rules its defaults would break; installed and a
 zero-key demo rendered 2026-10-30, then put through a gauntlet review and
-hardened 2026-10-31). It is ours: no upstream file is copied in, so it carries
-no `UPSTREAM.md` and is not vendored, and its provenance lives in its
-SKILL.md. Its installer's guards are tested offline in
-`test_openmontage_installer.py`.
+hardened 2026-10-31; its installer's guards are tested offline in
+`test_openmontage_installer.py`), and `mpt-shorts` (MoneyPrinterTurbo held to
+one flow: our own script, Tee-clone voiceover and local clips assembled into
+one vertical Short through `tools/mpt_shorts/render_short.py`, which refuses
+the keyword-to-video template YouTube will not monetize; audited and rendered
+in a sandbox on 2026-10-31). Neither is vendored: no upstream file is copied
+in, so neither carries an `UPSTREAM.md`, and each one's provenance lives in its
+SKILL.md.
 
 This paragraph said six and five until 2026-09-12, when a session counted the
 directory instead of the sentence. `shadow-we-share-brand` had been committed
