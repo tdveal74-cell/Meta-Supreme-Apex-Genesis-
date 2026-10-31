@@ -264,6 +264,10 @@ const MEASURE = ['-nostdin', '-hide_banner', '-nostats'];
 
 const JOBS = {
 
+  tsws_repair: {
+    build(p) { return require('./tsws-repair.js').build(p, { safePath, getRoot }); },
+  },
+
   /** ffprobe duration. Replaces `Probe Duration` and `Probe Source Layer`. */
   probe: {
     build(p) {

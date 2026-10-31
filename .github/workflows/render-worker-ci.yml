@@ -83,6 +83,12 @@ jobs:
       - name: HTTP contract against a real listening server
         run: node server.test.js
 
+      # tsws_repair and the server's claim hook (on the box since 2026-10-17, in
+      # the repo since 2026-10-31): the submit refusals, the durable claim, a
+      # run through a stand-in package, and the 409 and 503 at the HTTP layer.
+      - name: tsws_repair bridge and claim hook
+        run: node tsws-repair.test.js
+
       # The load bearing check. Runs the SAME suite against the engine exactly as
       # recovered from Drive on 2026-09-11, and requires that it FAILS. A suite
       # that passes against known-defective code proves nothing, and this repo
