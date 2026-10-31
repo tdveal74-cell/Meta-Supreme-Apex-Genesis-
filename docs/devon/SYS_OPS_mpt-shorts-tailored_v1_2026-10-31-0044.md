@@ -194,17 +194,22 @@ tools and Python 3.12.3 there and the disk 95% full, 5.7G free. On his card
 Commander, which took the disk to 90% and 11G free; `uv cache prune` freed only
 71M, because installed environments still link to that cache.
 
-The first install failed. uv prefers a Python it manages over the system one,
-the host has a uv-managed CPython 3.15, and `--python python3` resolved to it;
-ctranslate2 4.7.1 ships no 3.15 wheel. Reproduced in the container with a
-managed 3.15 beside the system 3.13, the same command failed the same way.
+The first install failed. Asked for `python3`, uv chose the host's uv-managed
+CPython 3.15 over `/usr/bin/python3`; ctranslate2 4.7.1 ships no 3.15 wheel.
+Measured on the host afterwards: the pinned uv 0.11.32's `python find python3`
+returns the managed 3.15.0, and `/usr/bin/python3` with
+`UV_PYTHON_PREFERENCE=only-system`. The container reproduced the failure by
+another route: uv does not prefer a prerelease, so its managed 3.15.0b4 was
+reached through the `python3.15` link `uv python install` puts in
+`~/.local/bin`, a finding of the verifier.
 Run again with `UV_PYTHON_PREFERENCE=only-system`, the install on the VPS
 finished, and a read back over Desktop Commander showed an empty audit, Python
 3.12.3, the caption model's imports working, MoneyPrinterTurbo at `27843a9`,
 `config.toml` at mode 600, nothing listening on 8080 or 8501, 1.8G in
-`/opt/mpt-shorts` and the disk at 91%. `install.sh` now resolves `python3` to
-an absolute path, refuses one outside 3.11 to 3.14, and runs uv with
-`UV_PYTHON_PREFERENCE=only-system`. On the container with the managed 3.15
+`/opt/mpt-shorts` and the disk at 91%. `install.sh` now hands uv the `python3`
+first on PATH by its absolute path, refuses one outside 3.11 to 3.14, and runs
+uv with `UV_PYTHON_PREFERENCE=only-system`. A uv-managed `python3` placed first
+on PATH is still used, which a fresh verifier showed. On the container with the managed 3.15
 present it exited 0 on 3.13, rebuilt a venv left on 3.15, and refused a
 `python3` that is 3.15 before creating anything.
 

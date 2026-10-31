@@ -26,10 +26,12 @@ ff77588746d3a2595d32ab5b69ffd7b95ce2441ac57533cb66fc3eb575a115cf  vocabulary.txt
 for tool in git curl sha256sum ffmpeg ffprobe python3; do
   command -v "$tool" >/dev/null || { echo "missing on PATH: $tool" >&2; exit 2; }
 done
-# The system python3, by absolute path. uv prefers a Python it manages over the
-# system one, so on a host with a uv-managed 3.15 a bare "python3" resolved to
-# 3.15, which ctranslate2 4.7.1 (the caption model) ships no wheel for.
-PY="$(command -v python3)"
+# The python3 first on PATH, by absolute path, so uv cannot swap in another.
+# Asked for a bare "python3", uv 0.11.32 picked the uv-managed CPython 3.15 on
+# srv1936199 over /usr/bin/python3, and ctranslate2 4.7.1 (the caption model)
+# ships no 3.15 wheel.
+PY="$(python3 -c 'import os, sys; print(os.path.abspath(sys.executable))')"
+[ -x "$PY" ] || { echo "python3 did not report an absolute path to itself" >&2; exit 2; }
 "$PY" -c 'import sys; sys.exit(not (3, 11) <= sys.version_info[:2] <= (3, 14))' \
   || { echo "python3 must be 3.11 to 3.14; ctranslate2 4.7.1 has wheels for those only" >&2; exit 2; }
 

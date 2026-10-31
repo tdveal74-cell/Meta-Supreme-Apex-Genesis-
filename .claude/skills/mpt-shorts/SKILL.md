@@ -35,7 +35,7 @@ Disclosure: YouTube's altered content page (support.google.com/youtube/answer/14
 
 - No network on the wrapper's path, measured: one full render run under `strace -f -e trace=connect,sendto` covered 18 processes (the transcription check and MoneyPrinterTurbo's render) and recorded zero `connect` calls. A control socket under the same tracer recorded its one. An audit verifier's trace across the project's whole test suite and a plain CLI render, taken together, did see two TCP 443 attempts to GitHub addresses, which it attributed to the version check; which of the two runs made them was not separated.
 
-Installed on srv1936199, the EditForge VPS, on 2026-10-31 by Tee in Termius: audit empty, Python 3.12.3, MoneyPrinterTurbo at the audited commit, 1.8G under `/opt/mpt-shorts` with the source at `/opt/mpt-shorts-src`. The first attempt failed because uv chose a uv-managed CPython 3.15 on that host over the system Python, and ctranslate2 4.7.1 has no 3.15 wheel; `install.sh` now passes the system `python3` by absolute path with `UV_PYTHON_PREFERENCE=only-system` and refuses a `python3` outside 3.11 to 3.14. Not verified: a render on that host, so its time on 2 shared cores is unknown.
+Installed on srv1936199, the EditForge VPS, on 2026-10-31 by Tee in Termius: audit empty, Python 3.12.3, MoneyPrinterTurbo at the audited commit, 1.8G under `/opt/mpt-shorts` with the source at `/opt/mpt-shorts-src`. The first attempt failed because uv, asked for `python3`, chose a uv-managed CPython 3.15 on that host over `/usr/bin/python3` (measured there: the pinned uv's `python find python3` returns the managed 3.15.0, and `/usr/bin/python3` under `UV_PYTHON_PREFERENCE=only-system`), and ctranslate2 4.7.1 has no 3.15 wheel. `install.sh` now hands uv the `python3` first on PATH by absolute path, with `UV_PYTHON_PREFERENCE=only-system`, and refuses one outside 3.11 to 3.14. If the first `python3` on PATH is itself one uv manages, the install uses it. Not verified: a render on that host, so its time on 2 shared cores is unknown.
 
 ## Two defects found in its own behaviour
 
@@ -50,7 +50,7 @@ On the host, as the user that will run it. Needs git, curl, sha256sum, ffmpeg an
 tools/mpt_shorts/install.sh /opt/mpt-shorts
 ```
 
-It clones the audited commit and checks it, installs pinned uv 0.11.32 into its own venv, runs `uv sync --frozen --no-dev` on the system `python3` (3.11 to 3.14) and never on a uv-managed Python, downloads `Systran/faster-whisper-base.en` at revision `3d3d5de` and checks four sha256 sums, then writes the locked `config.toml`: listen on 127.0.0.1, a random inbound `api_key`, captions from local Whisper, no provider key anywhere. It pipes nothing into a shell, starts nothing and asks for no key.
+It clones the audited commit and checks it, installs pinned uv 0.11.32 into its own venv, runs `uv sync --frozen --no-dev` on the `python3` first on PATH, by absolute path and only if it is 3.11 to 3.14, so uv cannot swap in a Python it manages, downloads `Systran/faster-whisper-base.en` at revision `3d3d5de` and checks four sha256 sums, then writes the locked `config.toml`: listen on 127.0.0.1, a random inbound `api_key`, captions from local Whisper, no provider key anywhere. It pipes nothing into a shell, starts nothing and asks for no key.
 
 ## Render
 
