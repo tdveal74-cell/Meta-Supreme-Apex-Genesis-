@@ -231,7 +231,8 @@ jobs:
             test_jev_route.py \
             test_ledger_receipt.py \
             test_code_worker.py \
-            test_watch_long.py
+            test_watch_long.py \
+            test_openmontage_installer.py
 
   dependency-audit:
     name: Dependency audit (pip-audit + pnpm audit)
