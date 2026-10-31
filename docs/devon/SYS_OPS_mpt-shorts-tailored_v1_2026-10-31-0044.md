@@ -57,7 +57,7 @@ audit and the rules. `test_mpt_shorts.py`, 33 tests, joins the standalone job.
 | repeat, short clips, woff2 font | each refused |
 | network on the wrapper's path, `strace -f` | 18 processes, 0 `connect` calls; a control socket under the same tracer recorded 1 |
 | `test_mpt_shorts.py` | 56 passed; 21 of 22 gate mutants fail it |
-| standalone list, ruff | 5526 passed, clean |
+| standalone list, ruff | 5544 passed after merging main with #445 and #446, clean |
 
 The voiceover used for every render was a Piper test voice, never published, and
 never Tee's. No render has run on the VPS.

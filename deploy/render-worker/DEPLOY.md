@@ -824,19 +824,31 @@ loopback in the sandbox, not on the box.
 
 **`word_timings`** runs one python process over the line files and writes word
 timings keyed by each file's stem. It needs `WHISPER_PYTHON` in the unit's
-environment, a python that carries `faster-whisper` with PyAV pinned below 14
-(1.1.1 breaks on PyAV 19, measured 2026-10-28). Unset, the JOB fails with a
-sentence naming the variable; the server starts and the health route is
+environment, a python that carries `faster-whisper`. Unset, the JOB fails with
+a sentence naming the variable; the server starts and the health route is
 unchanged, because the job table must not depend on which box this runs on.
 The model (`base.en` by default, `tiny.en` and `small.en` allowed) downloads
-to the service user's cache on the first run, about 145 MB for base.en, so
-that first run needs outbound HTTPS to Hugging Face and the ones after it do
-not.
+under `HF_HOME` on the first run, about 145 MB for base.en, so that first run
+needs outbound HTTPS to Hugging Face and the ones after it do not.
+
+Two things go into that python beside faster-whisper 1.1.1. PyAV stays below
+14, because 1.1.1 breaks on PyAV 19 (measured 2026-10-28). And `requests` is
+installed by name: faster-whisper 1.1.1 imports it in `faster_whisper/utils.py`
+without declaring it, and huggingface_hub stopped bringing it at 1.0. Read from
+each wheel's metadata on 2026-10-31, 0.36.2 requires `requests`, 1.0.0 requires
+httpx and 2.0.0 and 2.4.0 require httpx2. So on a fresh venv today the install
+line without it succeeds and the first import dies on `No module named
+'requests'`, which is what the box did on 2026-10-31 with the step as first
+written. A clean venv reproduced it the same day and adding `requests` cleared
+it: faster-whisper 1.1.1, av 13.1.0 and huggingface_hub 2.4.0 imported, the
+base.en model downloaded under `HF_HOME`, and `words.py` wrote word timings for
+two Node 01 lines. An independent verifier then reproduced the failure and the
+fix again from its own checkout.
 
 ```bash
 # once, on the box, as root: a venv the service user can read
 python3 -m venv /opt/tsws-render-worker/whisper
-/opt/tsws-render-worker/whisper/bin/pip install faster-whisper==1.1.1 "av<14"
+/opt/tsws-render-worker/whisper/bin/pip install faster-whisper==1.1.1 "av<14" requests
 # then in /etc/tsws-render-worker.env
 WHISPER_PYTHON=/opt/tsws-render-worker/whisper/bin/python
 # the model cache. The unit runs ProtectSystem=strict with ReadWritePaths only
