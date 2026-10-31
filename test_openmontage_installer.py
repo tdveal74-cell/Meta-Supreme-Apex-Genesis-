@@ -113,6 +113,9 @@ def fixture_repo(tmp_path):
     (work / "tools" / "__init__.py").write_text("")
     (work / "tools" / "tool_registry.py").write_text(REGISTRY)
     (work / "Makefile").write_text("setup:\n\t@echo real make never runs here\n")
+    # Upstream's .gitignore ignores these, and an ignored .pyc still imports,
+    # so the untracked check has to see ignored files as well.
+    (work / ".gitignore").write_text("*.pyc\n__pycache__/\n")
     _git("init", "-q", str(work))
     _git("add", ".", cwd=work)
     _git("commit", "-q", "-m", "fixture", cwd=work)
@@ -623,6 +626,7 @@ def test_a_rerun_with_git_writing_to_stderr_reuses_a_clean_checkout(stubs, patch
 
 @pytest.mark.parametrize("planted", [
     "tools/lone.pyc", "tools/native.so", "json.py", "lone.pyc", "native.so", "json/__init__.py",
+    "json/__init__.pyc", "json/__init__.cpython-313-x86_64-linux-gnu.so",
 ])
 def test_a_rerun_refuses_untracked_code_the_registry_or_make_would_load(stubs, patched, tmp_path, planted):
     """The registry imports sourceless .pyc and extension .so modules under
@@ -802,40 +806,67 @@ def _marker_python(directory, marker):
     _executable(venv_python, f'#!/bin/sh\necho ran >> "{marker}"\nexit 0\n')
 
 
-def _not_a_checkout(tmp_path, repo):
+def _not_a_checkout(tmp_path, script, env, repo):
     dest = tmp_path / "plain"
     dest.mkdir()
-    return dest
+    return dest, "is not a git checkout"
 
 
-def _other_origin(tmp_path, repo):
+def _other_origin(tmp_path, script, env, repo):
     dest = tmp_path / "other"
     _git("init", "-q", str(dest))
     _git("commit", "-q", "--allow-empty", "-m", "x", cwd=dest)
-    return dest
+    return dest, "has origin 'none'"
 
 
-def _other_commit(tmp_path, repo):
+def _other_commit(tmp_path, script, env, repo):
     dest = tmp_path / "moved"
     _git("init", "-q", str(dest))
     _git("remote", "add", "origin", repo, cwd=dest)
     _git("commit", "-q", "--allow-empty", "-m", "x", cwd=dest)
-    return dest
+    return dest, "not the pinned"
 
 
-@pytest.mark.parametrize("make_target", [_not_a_checkout, _other_origin, _other_commit])
+def _installed_then(change):
+    def make(tmp_path, script, env, repo):
+        dest = tmp_path / "om"
+        assert _run(script, env, dest).returncode == 0
+        (pathlib.Path(env["STUB_RECORD"])).unlink()
+        (dest / ".venv" / "bin" / "python").unlink()
+        (dest / ".venv" / "bin").rmdir()
+        (dest / ".venv").rmdir()
+        return dest, change(dest)
+    return make
+
+
+def _local_change(dest):
+    (dest / "Makefile").write_text("setup:\n\t@echo edited\n")
+    return "local changes to tracked files"
+
+
+def _untracked_code(dest):
+    (dest / "tools" / "planted.py").write_text("print('ran')\n")
+    return "files the pin does not carry"
+
+
+@pytest.mark.parametrize("make_target", [
+    _not_a_checkout, _other_origin, _other_commit,
+    _installed_then(_local_change), _installed_then(_untracked_code),
+], ids=["not-a-checkout", "other-origin", "other-commit", "local-change", "untracked-code"])
 def test_a_refused_target_s_venv_is_never_run(stubs, patched, tmp_path, make_target):
     """Found by Codex on PR #452 and by the final check: the existing .venv's
     python ran before the target was shown to be OpenMontage, so a target the
-    installer then refused had already had its code executed."""
+    installer then refused had already had its code executed. Every refusal
+    that looks at the target is covered, and each asserts which one fired, so
+    a reordering that runs the venv before any of them turns a case red."""
     env, record = stubs
     script, repo, _ = patched
-    dest = make_target(tmp_path, repo)
+    dest, refusal = make_target(tmp_path, script, env, repo)
     marker = tmp_path / "ran.txt"
     _marker_python(dest, marker)
     result = _run(script, env, dest)
     assert result.returncode == 3, result.stderr
-    assert "REFUSED" in result.stderr
+    assert refusal in result.stderr, result.stderr
     assert not marker.exists(), "the refused target's python ran"
     assert not record.exists()
 

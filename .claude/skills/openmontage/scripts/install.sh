@@ -126,11 +126,13 @@ fi
 
 # Untracked files that would load as code: anything under tools/ outside
 # __pycache__, since the registry imports .py, .pyc and .so alike, and any
-# module at the top, a .py, .pyc, .so or package, where make runs python and a
-# stray module shadows a real one.
+# module at the top, a .py, .pyc, .so or a package whose __init__ is any of the
+# three, where make runs python and a stray module shadows a real one.
+# --others without --exclude-standard, on purpose: upstream's .gitignore
+# ignores *.pyc, and an ignored .pyc still imports.
 untracked_code() {
   git -C "$dest_abs" ls-files --others -- tools ':(exclude,glob)tools/**/__pycache__/**' \
-    ':(glob)*.py' ':(glob)*.pyc' ':(glob)*.so' ':(glob)*/__init__.py'
+    ':(glob)*.py' ':(glob)*.pyc' ':(glob)*.so' ':(glob)*/__init__.*'
 }
 
 fetched="no"
