@@ -527,7 +527,8 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_devon_rule_ledger.py test_devon_wager.py test_devon_tqo_canon.py \
   test_provider_watchdog.py test_devon_show_registry.py test_show_registry_seed.py \
   test_devon_lesson_registry.py test_gate_ledger.py test_jev_route.py \
-  test_ledger_receipt.py test_code_worker.py test_watch_long.py
+  test_ledger_receipt.py test_code_worker.py test_watch_long.py \
+  test_openmontage_installer.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .
@@ -1414,9 +1415,11 @@ and written into its SKILL.md), and `openmontage` (installing and driving
 calesthio/OpenMontage, an AGPL-3.0 agent-driven video production system, from
 a pinned commit outside this repository by its own installer, with the owned
 voice, spend and publishing rules its defaults would break; installed and a
-zero-key demo rendered 2026-10-30). It is ours rather than vendored: no
-upstream file is copied in, so it carries no `UPSTREAM.md`, and its
-provenance lives in its SKILL.md.
+zero-key demo rendered 2026-10-30, then put through a gauntlet review and
+hardened 2026-10-31). It is ours: no upstream file is copied in, so it carries
+no `UPSTREAM.md` and is not vendored, and its provenance lives in its
+SKILL.md. Its installer's guards are tested offline in
+`test_openmontage_installer.py`.
 
 This paragraph said six and five until 2026-09-12, when a session counted the
 directory instead of the sentence. `shadow-we-share-brand` had been committed
