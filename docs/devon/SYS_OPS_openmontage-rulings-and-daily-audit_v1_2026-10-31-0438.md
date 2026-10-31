@@ -56,6 +56,29 @@ The unsettled one is the claim that the later audits run after an earlier one go
 - The red path: that the soul host's audit and `pnpm audit` run after the first audit goes red. The test is a `workflow_dispatch` of the daily workflow on a throwaway branch that pins a version with a known advisory.
 - The deploy read back after the merge.
 
+## After the merge, read back 2026-10-31
+
+PR #447 merged at 05:32:39Z as `d30b405`. `main` had taken #449 at 05:04Z and #448 at 05:28Z since this branch's last CI, so the merge commit joined this PR to #448 untested. #448 added no workflow file and changed CLAUDE.md, `test_estate_reconcile.py` and the gate ledger. On `d30b405` locally, those tests and the receipt, integrity, vendored skill and mpt-shorts tests passed, 2126 of them, and CI run 1554 on `main` passed at 05:45:26Z.
+
+| check | result |
+|---|---|
+| `workflow_dispatch` of the daily audit on `main` | run 41173018792 passed at 05:33:23Z, every audit step green |
+| the red path, a dispatch on a probe branch carrying `pyasn1==0.6.4` | run 41173033693: the first audit found the four pyasn1 advisories and exited 1; the soul host's audit and `pnpm audit` then ran and each found no known vulnerabilities; the job went red |
+| the failure email for that red run | in Tee's inbox from notifications@github.com, "Run failed: Dependency audit daily - claude/audit-red-path-probe (36acc64)" |
+| Railway `api` | deployment 92d128e5 SUCCESS at 05:46:08Z on `d30b405`, after CI passed; `/api/v1/health` healthy at 05:51:32Z |
+| Railway `scheduler-cron` | deployment 49206f5c SUCCESS at 05:33:38Z on `d30b405` |
+| Railway `presence` | SKIPPED on `d30b405`, correct: no path it watches changed; `/health` 200 with eleven keys, speech `cartesia`, breaker closed with no breaches |
+| Vercel `meta-supreme-apex-genesis-web` | `dpl_9KMyintZMnccaGvTEMzab1qbUkhz` READY, target production, on `d30b405` |
+| Vercel `devon-soul` | `dpl_DcPt5w7AAZ6iATaYfcf49tbcT9Tg` READY, target production, on `d30b405` |
+
+Both Vercel projects built when a skip was expected. The web build log shows the ignore command running and then `vercel build`, the fail-open signature. Neither project's watched paths changed between its last READY production build, `7deda01`, and `d30b405`, so both serve the same code as before. Why the guard fired here, when the three commits before it skipped against the same base, is not established.
+
+The probe branch could not be deleted. The environment's git proxy answered the delete with HTTP 403, and its rules say a policy denial is reported, not retried. `claude/audit-red-path-probe` stays on GitHub until Tee deletes it; nothing deploys from it.
+
+Still unmeasured: the first scheduled run of the daily audit, which new schedules here have taken five to six hours to fire, and whether a scheduled run's failure email reaches the same inbox. The email above came from a run dispatched under tdveal74-cell; who GitHub mails for a scheduled run is the recalled rule, and the first scheduled red run will show it.
+
+Re-graded after the read back: verification 5, because the green path, the red path and the alarm channel each ran on GitHub. Mean 4.5. The verdict stands at PASS-WITH-CONDITIONS on one condition, the first scheduled run.
+
 ## Open
 
 - The 54 findings from the 0123 arc that no independent agent has verified. That doc gave the subagent limit as the reason and scheduled the verification for 2026-11-03T05:30Z. The limit was not in force today: the 24 agents above ran between 04:16Z and 04:34Z with no failure, so the verification can run sooner.
@@ -78,6 +101,6 @@ ARTIFACT: docs/devon/SYS_OPS_openmontage-rulings-and-daily-audit_v1_2026-10-31-0
 DATE: 2026-10-31
 DECISIONS: Tee ruled on one card at 04:00:46Z: the free Remotion licence for an operation of three or fewer, the OpenMontage install trust accepted as disclosed, and a daily scheduled dependency audit added.
 FINDINGS: CLAUDE.md counted thirteen CI jobs while the files held fifteen, and two workflow files were named nowhere; the count is now pinned by a test. A fresh critic confirmed 17 LOW or NIT findings on the first commit, among them audit steps that hid each other once one went red, all addressed.
-OPEN: the 54 unverified findings from the 0123 arc; the first dispatch and the first scheduled run of the daily audit; the full Remotion terms.
-STATUS: At writing, PR #447 is open as a draft with this doc in its last commit. CI on 99a2b36 passed standalone, container, engine and the dependency audit, the audit running the restructured steps on GitHub, and failed the API suite on the skill count conflict between #443 and #444 that was red on main too; the fix from #449 is ported. The merge, the first dispatch, the negative control and the deploy read back come after it.
+OPEN: the 54 unverified findings from the 0123 arc, verification running since 05:37Z; the first scheduled run of the daily audit; the probe branch, which the proxy would not delete; the full Remotion terms.
+STATUS: PR #447 merged as d30b405 at 05:32:39Z, CI run 1554 green on main. The daily audit is proven by dispatch on main, green, and on a probe branch, red with the later audits still running, and its failure email reached Tee. Read back: api and scheduler-cron SUCCESS on d30b405, presence correctly skipped, both Vercel projects READY production on d30b405 with unchanged code.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
