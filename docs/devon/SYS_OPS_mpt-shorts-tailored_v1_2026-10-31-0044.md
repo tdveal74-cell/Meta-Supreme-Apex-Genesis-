@@ -40,7 +40,7 @@ and `Systran/faster-whisper-base.en` at revision `3d3d5de` with four sha256 sums
 and writes the locked `config.toml`. `tools/mpt_shorts/fonts` holds Atkinson
 Hyperlegible Next instanced to Bold for TQO and the unmodified Inter 4.1 Bold
 TrueType for NCO Forge, each with its OFL text. Skill `mpt-shorts` carries the
-audit and the rules. `test_mpt_shorts.py`, 33 tests, joins the standalone job.
+audit and the rules. `test_mpt_shorts.py`, 74 tests, joins the standalone job.
 
 ## Measured
 
@@ -57,7 +57,7 @@ audit and the rules. `test_mpt_shorts.py`, 33 tests, joins the standalone job.
 | repeat, short clips, woff2 font | each refused |
 | network on the wrapper's path, `strace -f` | 18 processes, 0 `connect` calls; a control socket under the same tracer recorded 1 |
 | `test_mpt_shorts.py` | 74 passed; 35 of 36 gate mutants fail it, the survivor equivalent |
-| stop signals on the real install | timeout, SIGTERM and SIGKILL each leave no MoneyPrinterTurbo process; the next render cleans what a SIGKILL left |
+| stop signals on the real install | a timeout, SIGTERM and SIGHUP leave no MoneyPrinterTurbo process; a SIGKILL takes `cli.py` at once, an encoder it already started finishes its step (about 6 s in the concat step), and the next render cleans what it left |
 | standalone list, ruff | 5562 passed, clean |
 
 The voiceover used for every render was a Piper test voice, never published, and
@@ -137,14 +137,43 @@ of reach of a signal sent to the wrapper, so under a supervisor's
 wrapper now passes TERM, HUP and INT on by killing the group and cleaning up,
 `cli.py` is set to die with the wrapper so a SIGKILL takes it too, and each
 render writes an in-flight marker that the next render uses to clean up after
-one killed outright. Measured on the real install: SIGTERM and SIGKILL each
-left no MoneyPrinterTurbo process, and the render after the SIGKILL brought
-the copies back to 20 and the task folders to 9. 74 tests; 35 of 36 gate
+one killed outright. Measured on the real install: SIGTERM left no
+MoneyPrinterTurbo process, a SIGKILL took `cli.py` at once, and the render
+after the SIGKILL brought the copies and task folders back to their counts
+before it. This paragraph first said the SIGKILL also left no process; that
+held only at the point the kill landed (see below). 74 tests; 35 of 36 gate
 mutants fail them, the survivor the equivalent `chmod` one.
 
 That was the fourth round of fixes. The gauntlet caps revision at three
 cycles, so the loop stops here: what a further verifier finds goes to Tee as a
 ruling, not into a fifth round.
+
+A fourth fresh verifier ran the stop signals on the real install at
+`c07980c`. A TERM and a HUP from `timeout` each refused cleanly, left no
+`cli.py` and no encoder within 2 s, and left 22 copies and 9 task folders as
+before. A SIGKILL left the marker, and the next render returned ok and removed
+exactly the two copies and the task folder the killed one made. It raised four
+problems, and four more verifiers, one each, confirmed all four:
+
+1. Minor. The wrapper catches HUP and INT even when its caller had set them to
+   ignored, so a render started with `nohup ... &` is now stopped by the
+   hangup it was shielded from. At `060749f` the same render ran on and
+   finished. About 4 lines to fix.
+2. Minor. A SIGKILL during MoneyPrinterTurbo's concat step leaves its ffmpeg
+   encoder running, reparented to pid 1, for about 6 s, writing into the task
+   folder the next render removes. The two lines above that said no process
+   survived a SIGKILL were corrected for it. Closing the window takes a small
+   launcher process, about 12 to 15 lines.
+3. Nit. The cleanup after a killed render deletes any copy made between that
+   render and the next, so a direct `cli.py` run on the same install, which
+   the skill already forbids, would lose its copies. About 6 lines.
+4. Nit. If writing the in-flight marker fails part way, on a full disk for
+   one, the empty or cut marker blocks every later render with a message
+   blaming a killed render that never happened, until someone deletes it by
+   hand. About 2 lines.
+
+None touches anything running: nothing calls the wrapper and it is installed
+nowhere but the sandbox. What to do with them is Tee's ruling.
 
 ## Open, and whose
 
@@ -154,6 +183,7 @@ ruling, not into a fifth round.
 - The thresholds (0.85 voice coverage per third, 0.5 repeat similarity) are
   starting values. The ledger is where they get set once real renders exist.
 - Render time on the VPS's 2 shared cores is unmeasured.
+- The four problems the last verifier round confirmed, above, wait on Tee.
 - Unverified: whether MoneyPrinterTurbo's hard coded Codex OAuth client id is
   OpenAI's own. It only matters to someone signing in through that provider,
   which this flow never does.
@@ -165,7 +195,7 @@ TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_mpt-shorts-tailored_v1_2026-10-31-0044.md
 DATE: 2026-10-31
 DECISIONS: Tee asked to install MoneyPrinterTurbo and then to tailor it to the YouTube inauthentic content policy, and said "Ok do it" to running it only as an assembler of our own script, Tee-clone voiceover and local clips. No device install and no n8n change were made without a ruling.
-FINDINGS: The default flow is the template the policy refuses and its voice is rented. MoneyPrinterTurbo rewrites captions to the script and keeps only the first slice of each clip in sequential mode; the wrapper works around both. The bundled fonts and songs carry no licence. The wrapper's render makes no network connection, measured with strace. Two critics' findings on the first commit were verified and fixed: the code cannot check whose voice or whose clips it is, so manifests say so; a frozen-frame clip and half a voiceover used to pass; the repeat check failed open four ways; most gate lines had no test.
-OPEN: VPS install and n8n wiring are Tee's rulings; thresholds are starting values; VPS render time unmeasured.
+FINDINGS: The default flow is the template the policy refuses and its voice is rented. MoneyPrinterTurbo rewrites captions to the script and keeps only the first slice of each clip in sequential mode; the wrapper works around both. The bundled fonts and songs carry no licence. The wrapper's render makes no network connection, measured with strace. Two critics' findings on the first commit were verified and fixed: the code cannot check whose voice or whose clips it is, so manifests say so; a frozen-frame clip and half a voiceover used to pass; the repeat check failed open four ways; most gate lines had no test. Four verifier rounds after that found and closed leftover files, an orphaned encoder and a signal regression; the last round confirmed four smaller problems, two minor and two nits, and corrected an overstated SIGKILL claim.
+OPEN: VPS install and n8n wiring are Tee's rulings; the four last round problems wait on his ruling; thresholds are starting values; VPS render time unmeasured.
 STATUS: Branch claude/mpt-shorts-tailored, draft PR #444, not merged at writing. Sandbox install and renders proven in the cloud container only.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
