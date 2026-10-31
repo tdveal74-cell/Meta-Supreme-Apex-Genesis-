@@ -78,15 +78,16 @@ deploys the voice lane.
 
 **RAILWAY CAN STOP CREATING DEPLOYMENTS ALTOGETHER, AND NOTHING ANNOUNCES IT.**
 On 2026-10-31 Railway created no `api` or `scheduler-cron` deployment at all,
-in any status, from 06:08:42Z until about 20:54Z, across eight merges to main,
-while `presence` logged a SKIPPED row for each of them, so the pushes were
-reaching Railway. Confirmed by an independent verifier, which found no staged
+in any status, from 06:08:42Z until 20:54:35Z, across nine merges to main,
+while `presence` logged a SKIPPED row for each of them at push time, so the
+pushes were reaching Railway. Confirmed by an independent verifier, which found no staged
 change, no watch pattern, no config file and no skip marker to explain it.
 Tee reported that Railway fixed it. The cause was never established here.
 After a merge, read `list-deployments` for `api` and `scheduler-cron` and
 expect a row for the merge commit: a SKIPPED row is a skip, and no row at all
-is this failure. It cost nothing that day only because none of the eight
-merges touched a runtime path.
+is this failure. It cost nothing that day only because eight of the nine
+merges touched no runtime path and the ninth changed only a Dockerfile no
+running service was built from.
 
 **`api`'S `checkSuites` READS FALSE SINCE 2026-10-31, SO NO RAILWAY SERVICE
 WAITS FOR CI ANY MORE.** It read true at about 18:50Z that day and false at

@@ -279,7 +279,9 @@ async def test_the_route_acts_on_what_pyasn1_decoded(
     attestation challenge, and the format check compares the two. Swapping
     the decoded challenge for 32 zero bytes, after pyasn1 returns it and
     before the check reads it, must turn the same device response into a
-    refusal. A decoder that misread that field would do the same.
+    refusal. This one proves the route reads the decoded value; the test
+    above proves the decoder returns the device's value. Each needs the
+    other: an empty KeyDescription fails the first and still passes this.
     """
     from pyasn1.type.univ import OctetString
 
