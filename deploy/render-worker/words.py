@@ -11,7 +11,7 @@ Invoked only by the worker through WHISPER_PYTHON, a python that carries
 faster-whisper; see DEPLOY.md, ACX Node section. Pin PyAV below 14 in that
 environment: faster-whisper 1.1.1 breaks on PyAV 19 (measured 2026-10-28).
 Install requests beside it: faster-whisper 1.1.1 imports it without declaring
-it, and huggingface_hub 2.x no longer brings it (found on the box 2026-10-31).
+it, and huggingface_hub stopped bringing it at 1.0 (found on the box 2026-10-31).
 """
 import argparse
 import json
