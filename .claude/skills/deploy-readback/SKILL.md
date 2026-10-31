@@ -57,6 +57,19 @@ Dockerfile path from `get-service-config` before saying what an image contains**
 and read a build log for the `FROM` line: a builder flipped back in the dashboard
 reopens the gap, and no check in this repository would notice.
 
+Two things change with the builder, both from Railway's docs and neither
+measured here before the switch. Under a Dockerfile the service's start command
+replaces the image's command in exec form, which expands no variables, so a
+start command naming `$PORT` has to be wrapped in `/bin/sh -c` or the server
+gets the literal text as its port. And `presence`'s watch patterns predate the
+switch: until they name `infrastructure/docker/Dockerfile.presence`, a change to
+that file alone passes CI and never deploys.
+
+A third follows from `checkSuites` below. Railway's docs say `api` waits until
+every GitHub Actions check suite on the commit has finished, so a push to `main`
+that touches the presence image's paths also waits on the "Presence image"
+workflow, and a red run there skips the `api` deploy.
+
 **THE THREE RAILWAY SERVICES DO NOT DEPLOY ON THE SAME RULE, AND ONE OF THEM
 STOPS WHEN CI IS RED.** Read from `get-service-config` on 2026-09-16, because
 this file had said `scheduler-cron` deploys from the same commit as `api`, and

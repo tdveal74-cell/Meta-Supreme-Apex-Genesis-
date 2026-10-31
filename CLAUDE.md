@@ -539,12 +539,15 @@ Railpack on Python 3.13 until 2026-10-31 while CI built the Dockerfiles on 3.12,
 so the job named "Railway container contract" tested an image Railway never
 built, found while scoping Tee's ruling of that morning to build the presence
 image in CI and confirmed by two independent verifiers. Tee ruled on a card to
-point Railway at the Dockerfiles, so this job and the container job now build
-what deploys. Scouting for the switch found the API reads
+point Railway at the Dockerfiles, which makes this job and the container job
+build what deploys for each service that has been switched, and for none that
+has not. Scouting for the switch found the API reads
 `policies/reliability/profiles.v1.json` per request and `Dockerfile.api` did not
-copy it; it does now, and the container job checks the file is in the image. Read
-the builder from `get-service-config` before trusting this paragraph: a builder
-changed back in the dashboard reopens the gap and nothing here would notice.
+copy it; it does now, and the container job checks the file is in the image.
+Whether a service is switched is a Railway setting and this file cannot show it:
+read `build.builder` from `get-service-config`, and a build log for its `FROM`
+line, before saying what production runs. A builder changed back in the
+dashboard reopens the gap and nothing here would notice.
 
 **The standalone list above drifted and was regenerated from `ci.yml`.** It
 named 30 files while the job ran 36, missing `test_devon_data_tables.py`,

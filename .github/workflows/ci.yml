@@ -296,12 +296,14 @@ jobs:
           docker run --rm --entrypoint python \
             -e DEFAULT_AI_PROVIDER=mock \
             devon-api-ci -c "from app.main import app; from app.api.v1.auth import passkey_login_options; from services.intelligence.providers.cerebras_provider import CerebrasProvider; print(app.title, passkey_login_options.__name__, CerebrasProvider.name)"
-      # Railway builds api and scheduler-cron from this Dockerfile since
-      # 2026-10-31; before that it built them with Railpack, which copies the
-      # whole repository, so a file the API reads at runtime and the image does
-      # not copy broke nothing. The reliability shadow route reads policies/ per
-      # request, and scheduler-cron runs dispatch.py from this image.
-      - name: Image carries what the API and the scheduler read at runtime
+      # Tee ruled on 2026-10-31 that Railway builds api and scheduler-cron from
+      # this Dockerfile. Under Railpack, which copies the whole repository, a
+      # file the API reads at runtime and this image does not copy broke
+      # nothing; under this Dockerfile it breaks the route that reads it. The
+      # reliability shadow route reads policies/ per request, and
+      # scheduler-cron runs dispatch.py. Which builder a service uses is a
+      # Railway setting: read it from get-service-config.
+      - name: Image carries the reliability policy file and the dispatcher
         run: |
           docker run --rm --entrypoint python \
             -e DEFAULT_AI_PROVIDER=mock \
