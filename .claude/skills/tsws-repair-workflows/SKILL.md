@@ -42,6 +42,8 @@ Every composer check carries a status: PASS, FAIL, NOT_EXERCISED (the situation 
 
 No paid generation, purchase or upgrade. No change to scripts, voices, episode audio or timelines. Rakazo's Visual Producer stays paused. Episodes 2 to 12 and trailer v03 stay paused. Every original and checkpoint preserved. Do not modify the live Google Media Runner, workflow `6AOsI9T0u37DRv4E`. Generation and local compositing are separate operations. No key, token or password in a job file, prompt or log.
 
+New footage for these shots is a paid generation and Tee's budget call (see "Episode 1, what unblocks each shot" below). It is made under `tsws-shot-prompt`, which carries the current mask design, the Venetian half-mask ruled on 2026-10-25, and asks Tee for each paid run on a card. The shell wording in this file predates that ruling.
+
 ## What the gauntlet found, and the test that now guards each one
 
 The first draft passed its own 34 tests. A fresh critic, given only the package and the ask, found these; each was reproduced, fixed and re-measured before the package shipped.
