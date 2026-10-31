@@ -1,0 +1,59 @@
+name: Automation registry check
+
+# WHO OWNS EACH AUTOMATION, AND WHEN DID A PERSON LAST READ IT.
+#
+# registry/automations.json holds one row per active workflow on the VPS n8n
+# instance: owner, lane and the date it was last reviewed end to end. This job
+# reads the instance's workflow list and diffs it against the file once a day.
+#
+# Ruled by Tee 2026-10-31 on a card, "Build the registry", after Nate Herk's
+# agent management framework was read against the estate and the one gap found
+# was no record of ownership or review.
+#
+# IT ONLY READS. scripts/automation_registry.py --check makes GET requests and
+# never writes to the instance or to the file. Settling a finding is a commit.
+#
+# RED means an active workflow with no row, a row whose workflow is gone or
+# inactive, or a recorded review that is overdue or older than the workflow's
+# last change. Rows that were never reviewed are counted, not alarmed on, so
+# the seed of 2026-10-31 is green on day one and the backlog shows on every run.
+#
+# A MISSING KEY GOES RED TOO, exit 2, the same posture as the two watchdogs and
+# registry-check.yml. The alarm channel is the job going red and GitHub mailing
+# the owner; there is deliberately no SMTP here.
+#
+# A new schedule does not fire at its first slots (measured twice, see
+# CLAUDE.md). Use workflow_dispatch to prove the script before then.
+#
+# The diff is unit tested offline in test_automation_registry.py in the
+# standalone job of ci.yml. Those tests prove nothing about the key or the host.
+
+on:
+  schedule:
+    # Once a day at 08:17Z, off the hour and clear of the 07:41Z registry check.
+    - cron: "17 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: automation-registry-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Does every active workflow have an owner and a current review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # No pip install: the script uses only the standard library.
+      - name: Read the instance and diff it against the registry
+        env:
+          N8N_VPS_KEY: ${{ secrets.N8N_VPS_KEY }}
+        run: python3 scripts/automation_registry.py --check
