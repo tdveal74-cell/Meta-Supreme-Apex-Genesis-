@@ -42,13 +42,39 @@ Proved on that box, by execution:
   has not been re-run since; that denominator is stale until someone runs it
   against the Drive original again. Exit code 0 on each, checked individually
   rather than inferred from a chain.
-* `/health` reports 22 job types, read on the bridge address on 2026-10-31
-  with the service active since its restart of 2026-10-28T06:31:23Z. It read
-  18 before the 2026-09-15 build, 19 after it and 21 after the 2026-10-16
-  restart. The 22nd is `tsws_repair` (below). The 2026-10-28 ACX Node build
-  plus `tsws_repair` makes it 24 once copied up and restarted; 24 has been
-  read only from this repository's tests, never from the box, and this line
-  changes when the box is read again, not before.
+* `/health` reports 24 job types, read on the bridge address on 2026-10-31 at
+  18:51:47Z, two seconds after the restart that loaded merge commit ac691aa.
+  The 24 names equal the `JOBS` keys of that commit's `jobs.js` one for one,
+  `tsws_repair`, `word_timings` and `acx_node_assemble` among them, as an
+  independent verifier compared them. It read 18 before the 2026-09-15 build,
+  19 after it, 21 after the 2026-10-16 restart and 22 from the 2026-10-17
+  drift build (below) until this one.
+* Read `/health` on the bridge address only. On N8N-HOST `127.0.0.1:8080` is
+  not the worker: it is the `docker-proxy` of the `temporal-ui` container
+  (`temporalio/ui:2.34.0`), and its `/health` answers HTTP 200 with an HTML
+  page. On 2026-10-31 a session took that 200 for the worker and reported it,
+  and a verifier caught it. A 200 from loopback on this box says the Temporal
+  UI is up and nothing about the render worker.
+* The ACX Node build, deployed 2026-10-31 from merge commit ac691aa through
+  Desktop Commander, by "Upgrading the live box" below. `/status` read idle
+  (0 running, 0 queued) at 18:30:50Z and again at 18:51:32Z. Staged in `/tmp`
+  and run on the box's own `/usr/bin/node` 18.19.1: jobs.test.js 115,
+  acx_node.test.js 35, server.test.js 47, tsws-repair.test.js 22, and the
+  negative control failing 110 of 115 against the unfixed engine, each exit 0.
+  Copied at 18:41Z, keeping `jobs.js`, `server.js`, `package.json` and
+  `tsws-repair.js` as `.bak-20261031`; `acx_node.js` and `words.py` were new
+  there and have no backup. The unit and its drop-in were not touched and hash
+  as they did before. The env file gained `WHISPER_PYTHON` and `HF_HOME` by
+  append, the whisper venv and the three Chakra Petch faces were made, and the
+  service restarted at 18:51:45Z with the journal reading `job types 24`. An
+  independent verifier hashed the six live files and found each byte identical
+  to ac691aa. Others read the suite logs (all dated before the 18:41:06Z copy),
+  the two idle `/status` lines and the clean drain in the journal (no job
+  submitted in the window, no 401 at all), and the backups: the four
+  `.bak-20261031` files hash to the pre-deploy live files and load 22 jobs with
+  no `acx_node.js`. Rolling back is copying those four over, removing
+  `acx_node.js` and `words.py`, and restarting. The `.bak-20261016` set holds no
+  `tsws-repair.js`, because that file did not exist then.
 * **The box ran a build no commit held, from 2026-10-17 to 2026-10-31.** Read
   through Desktop Commander on 2026-10-31, read only, and confirmed by two
   independent verifiers the same day: `jobs.js`, `server.js` and
@@ -378,6 +404,11 @@ render.editforge.online {
 
 Point an A record for that name at the host first, or the certificate will not
 issue.
+
+This block is for a new host and is not live anywhere. `render.editforge.online`
+has no A, AAAA or CNAME record (NXDOMAIN from dns.google on 2026-10-31). Do not
+put it on N8N-HOST: `127.0.0.1:8080` there is the Temporal UI, so this block
+would publish the Temporal UI under the worker's name.
 
 ```bash
 curl -s https://render.editforge.online/health | python3 -m json.tool
@@ -932,7 +963,10 @@ The first install under "Deploying it" is for a new host. On the live box:
 4. **Never copy `tsws-render-worker.service` over the live unit.** The live one
    carries the two deviations above (the bridge bind and `MemoryMax=5G`) and the
    repair drop-in sits beside it. Copying the committed unit rebinds the worker
-   to loopback, where the n8n container cannot reach it.
+   to loopback, where the n8n container cannot reach it, and on N8N-HOST
+   loopback port 8080 is already held by the Temporal UI (read 2026-10-31).
+   What the worker does when it finds the port taken there has not been
+   measured.
 5. Make the ACX runtime once, from "The ACX Node build" below: the whisper venv,
    the three Chakra Petch faces under the work root, and `/data/tsws/hf` owned by
    `tsws`. Add `WHISPER_PYTHON` and `HF_HOME` to `/etc/tsws-render-worker.env` by
@@ -941,7 +975,8 @@ The first install under "Deploying it" is for a new host. On the live box:
    `/health` reads 24, but `word_timings` fails at run time naming the variable
    and `acx_node_assemble` refuses at submit for want of the faces.
 6. Read `GET /status` again immediately before the restart, and restart only
-   when it is still idle. Then read `/health` on the bridge address: 24, with
+   when it is still idle. Then read `/health` on the bridge address, never on
+   `127.0.0.1`, which on this box is the Temporal UI: 24, with
    `tsws_repair`, `word_timings` and `acx_node_assemble` among the names. 24
    proves the job table loaded, not that the ACX jobs can run; their proof is the
    Node 01 case below. Read the live files' sha256 back against the merge
@@ -1099,6 +1134,18 @@ faster-whisper run), job `1809aa54-06b2-4c2c-8e44-2e54f098b860`:
 
 A master identical to the sandbox build is the strongest check available here:
 the job reproduces the pipeline Tee's watch will judge, byte for byte.
+
+Read on the box on 2026-10-31 after the deploy, each by an independent
+verifier, no job run: ffmpeg is `7:6.1.1-3ubuntu5` and lists every filter and
+encoder `acx_node.js` calls (drawtext, ass, zoompan, xstack, loudnorm,
+alimiter, adelay, amix, lowshelf, highshelf, anullsrc, libx264, aac); the
+three faces under `/data/tsws/fonts/chakra` hash to the Proof 0 copies and the
+deployed `fontFullName` reads all three names; the venv imports faster-whisper
+1.1.1, av 13.1.0 and requests 2.34.2 as `tsws`; `/data/tsws/hf` is owned and
+writable by `tsws` and inside the unit's `ReadWritePaths`; and `tsws` reaches
+`huggingface.co` (HTTP 200 on the base.en model's API page). Those last two
+were run with `runuser`, outside the unit's sandbox, so they do not prove the
+model download inside the unit.
 
 Not measured: the same run on the box's own ffmpeg, Node and fonts, and the
 first `word_timings` run there with its model download. Run the Node 01 case

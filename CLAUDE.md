@@ -847,11 +847,19 @@ run, is refused on every gated call by design.
 
 Unverified: what the harness does with the wrapper's `exit 1` when the script or
 python3 is missing. The contract was recalled, not measured, and it is meant to
-be a visible non-blocking error rather than python's blocking exit 2. Also
-unverified: a subagent's hook input. The script reads the session file when
-`transcript_path` is under `/subagents/`, which a fixture and a critic's
-synthetic run pin and no live subagent call has confirmed. Settings reload at session start, so the first
-session after this merges is where the live behaviour is measured.
+be a visible non-blocking error rather than python's blocking exit 2.
+
+A subagent's hook input is measured now, in both directions. The script reads
+the session file when `transcript_path` is under `/subagents/`, and on
+2026-10-31 the ledger of one session held 52 `gate-allow` rows from subagents
+and workflow agents, each reason naming the age of the parent's card or
+message ("card 23.1 min ago"), and 6 `gate-deny` rows once that card was 164
+to 166 minutes old. So a workflow agent's gated call passes on Tee's word in
+the parent session and is refused when that word ages out. The cost of that:
+a workflow outlives the window. Seven read-only verifiers on one box ran
+about two at a time in this container and took 151 minutes, and the last three
+were refused mid-run. Keep a workflow that makes gated calls short, or ask the
+card again before it starts the part that needs the gate.
 
 ## The Jev router
 
