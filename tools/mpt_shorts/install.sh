@@ -9,7 +9,7 @@
 #
 #   tools/mpt_shorts/install.sh /opt/mpt-shorts
 #
-# Needs git, curl, sha256sum, ffmpeg and python3 3.11 or newer on the host.
+# Needs git, curl, sha256sum, ffmpeg and python3 3.11 to 3.14 on the host.
 set -euo pipefail
 
 DEST="${1:?usage: install.sh DEST}"
@@ -26,7 +26,12 @@ ff77588746d3a2595d32ab5b69ffd7b95ce2441ac57533cb66fc3eb575a115cf  vocabulary.txt
 for tool in git curl sha256sum ffmpeg ffprobe python3; do
   command -v "$tool" >/dev/null || { echo "missing on PATH: $tool" >&2; exit 2; }
 done
-python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' || { echo "python3 must be 3.11 or newer" >&2; exit 2; }
+# The system python3, by absolute path. uv prefers a Python it manages over the
+# system one, so on a host with a uv-managed 3.15 a bare "python3" resolved to
+# 3.15, which ctranslate2 4.7.1 (the caption model) ships no wheel for.
+PY="$(command -v python3)"
+"$PY" -c 'import sys; sys.exit(not (3, 11) <= sys.version_info[:2] <= (3, 14))' \
+  || { echo "python3 must be 3.11 to 3.14; ctranslate2 4.7.1 has wheels for those only" >&2; exit 2; }
 
 mkdir -p "$DEST/ledger"
 DEST="$(cd "$DEST" && pwd)"  # absolute, because later steps cd into the checkout
@@ -38,10 +43,11 @@ git -C "$MPT" -c advice.detachedHead=false checkout --quiet --detach "$COMMIT"
 [ "$(git -C "$MPT" rev-parse HEAD)" = "$COMMIT" ] || { echo "checkout is not $COMMIT" >&2; exit 2; }
 
 if [ ! -x "$DEST/uv-env/bin/uv" ]; then
-  python3 -m venv "$DEST/uv-env"
+  "$PY" -m venv "$DEST/uv-env"
   "$DEST/uv-env/bin/pip" install --quiet --progress-bar off "uv==$UV_VERSION"
 fi
-(cd "$MPT" && UV_PYTHON_DOWNLOADS=never "$DEST/uv-env/bin/uv" sync --quiet --frozen --no-dev --python python3)
+(cd "$MPT" && UV_PYTHON_PREFERENCE=only-system UV_PYTHON_DOWNLOADS=never \
+  "$DEST/uv-env/bin/uv" sync --quiet --frozen --no-dev --python "$PY")
 
 WHISPER="$MPT/models/whisper-base.en"
 mkdir -p "$WHISPER"
