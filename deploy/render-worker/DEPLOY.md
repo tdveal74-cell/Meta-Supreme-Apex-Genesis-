@@ -42,12 +42,28 @@ Proved on that box, by execution:
   has not been re-run since; that denominator is stale until someone runs it
   against the Drive original again. Exit code 0 on each, checked individually
   rather than inferred from a chain.
-* `/health` reports 21 job types, read on the bridge address after the
-  2026-10-16 restart, with the service active. It read 18 before the
-  2026-09-15 build and 19 after it. The 2026-10-28 ACX Node build makes it
-  23 once that build is copied up and the service restarted; 23 has so far
-  been read only from the worker on loopback in the cloud sandbox, never from
-  the box, and this line changes when the box is read again, not before.
+* `/health` reports 22 job types, read on the bridge address on 2026-10-31
+  with the service active since its restart of 2026-10-28T06:31:23Z. It read
+  18 before the 2026-09-15 build, 19 after it and 21 after the 2026-10-16
+  restart. The 22nd is `tsws_repair` (below). The 2026-10-28 ACX Node build
+  plus `tsws_repair` makes it 24 once copied up and restarted; 24 has been
+  read only from this repository's tests, never from the box, and this line
+  changes when the box is read again, not before.
+* **The box ran a build no commit held, from 2026-10-17 to 2026-10-31.** Read
+  through Desktop Commander on 2026-10-31, read only, and confirmed by two
+  independent verifiers the same day: `jobs.js`, `server.js` and
+  `package.json` were d75114d's plus three changes, the `tsws_repair` entry,
+  a claim hook in `server.js` and a test line, and a new `tsws-repair.js` sat
+  beside them, with a systemd drop-in `repair-v01.conf` setting five
+  `TSWS_REPAIR_` variables. Rebuilding the three files from d75114d plus those
+  changes reproduced the live sha256 of each exactly
+  (`6e779a98...`, `99946226...`, `6725d4d2...`). No branch, commit or status doc
+  recorded the deploy, and the newest doc on the repair arc still said the job
+  did not exist. Copying `main`'s files onto the box, as "Deploying it" below
+  says, would have deleted `tsws_repair` from production. The repository now
+  carries it byte for byte (`tsws-repair.js`, sha256 `4af32fea...`), with the
+  same three changes, and with the test the box's own `package.json` named and
+  nobody had written.
 * Public IPv4 and IPv6 both refuse. The n8n container reaches the worker on the
   bridge address. Between those two facts the bind is proved by behaviour: it
   cannot be loopback, because the container reached it, and it cannot be
@@ -810,6 +826,76 @@ mechanism, there are no per-job resource ceilings (`MemoryMax`, `CPUQuota`,
 `TasksMax` are not set in the unit), and there is no disk quota on the work root,
 so `render_mark_full` will accept a request for a great many 4K frames.
 
+## tsws_repair (on the box 2026-10-17, in the repository 2026-10-31)
+
+`tsws-repair.js` is a DRAFT bridge from the worker to the pinned local TSWS
+repair package: three workflows (`TSWS_SHOT_COMPOSER`, `TSWS_SHOT_CLEANUP`,
+`TSWS_SCENE_BUILDER`), each a fixed script, method and flag in the package. It
+takes a repair envelope, refuses anything that asks for generation, a script, an
+interpreter, a URL or a path outside plain relative names, and reads its inputs
+only from a pre-staged cache laid out as `CACHE/DRIVE_ID/SHA256`, checking every
+byte count and hash; it fetches nothing. Its receipt is always `DRAFT` with
+`human_review_required: true` and `complete_shot_accepted: false`.
+
+**A repair envelope is claimed durably at submit, before it is queued.** The
+server calls the job's `claim(id)`, which creates `WORK_ROOT/repair/<envelope>`
+exclusively and fsyncs a `CLAIM.json` reading `retry: REFUSED`. A second submit
+of the same envelope is a 409, never a rerun, and a failed claim is never
+removed. This is why `server.js` now passes a 409 or a 503 from a build or a
+claim through to the caller instead of turning it into a 500. The job alone
+does nothing without the server's hook: `native()` refuses to run unclaimed.
+
+It needs the operator's configuration, and answers 503
+`BLOCKED_CONFIGURATION` at submit when any of it is missing. On N8N-HOST it is a
+drop-in, `/etc/systemd/system/tsws-render-worker.service.d/repair-v01.conf`,
+read 2026-10-31:
+
+```
+[Service]
+Environment=TSWS_REPAIR_PACKAGE_ROOT=/opt/tsws-repair-package-v01
+Environment=TSWS_REPAIR_PYTHON=/opt/tsws-repair-runtime-v01/venv/bin/python
+Environment=TSWS_REPAIR_PATH=/opt/tsws-repair-runtime-v01/blender-4.5.2-linux-x64:/usr/bin:/bin
+Environment=TSWS_REPAIR_CACHE_ROOT=/data/tsws/repair-cache-v01
+Environment=TSWS_REPAIR_PUBLIC_ORIGIN=http://BRIDGE-GATEWAY:8080
+```
+
+`tsws-repair.test.js` pins the submit refusals, the configuration and origin
+checks, the claim and its 409, a full run through a stand-in package (Node as
+the interpreter, the package's own script names), a staged input with the wrong
+hash, one never staged, a bad exit code, and the 409 and 503 through the real
+server. Each of eight deliberate breaks to the job, the hook or the `jobs.js`
+entry turns it red. It proves the bridge and the HTTP path and nothing about the
+real Python package, Blender or the box's runtime. Who deployed it on
+2026-10-17, and whether an n8n workflow calls it today, is not recorded
+anywhere this repository can read.
+
+## Upgrading the live box
+
+N8N-HOST, not the EditForge box. The hostnames are in the private DEVON log;
+the EditForge box has no `tsws` user, no unit and no worker. On 2026-10-31 two
+of the ACX steps below were pasted on the EditForge box by mistake, because a
+session named the wrong host from memory; check the prompt before pasting.
+
+The first install under "Deploying it" is for a new host. On the live box:
+
+1. Read `GET /status` with the token from inside the box (never print it) and
+   go on only when nothing is running or queued. A restart drops the job table,
+   and every poller loses its job ids.
+2. Run the suites from a copy of the new files in `/tmp` on the box, with the
+   box's own Node and ffmpeg, before anything in `/opt` is touched.
+3. Copy `jobs.js`, `server.js`, `package.json`, `tsws-repair.js`,
+   `acx_node.js` and `words.py` into `/opt/tsws-render-worker`, keeping each old
+   file as `.bak-<date>`. Leaving out `tsws-repair.js` deletes `tsws_repair`;
+   leaving out `acx_node.js` stops the service, because `jobs.js` requires it at
+   load and the unit gives up after five failed starts.
+4. **Never copy `tsws-render-worker.service` over the live unit.** The live one
+   carries the two deviations above (the bridge bind and `MemoryMax=5G`) and the
+   repair drop-in sits beside it. Copying the committed unit rebinds the worker
+   to loopback, where the n8n container cannot reach it.
+5. Restart, then read `/health` on the bridge address: 24, with `tsws_repair`,
+   `word_timings` and `acx_node_assemble` among the names. Read the live files'
+   sha256 back against the merge commit's.
+
 ## The ACX Node build (added 2026-10-28, ruled R22)
 
 Two native jobs in `acx_node.js`, wired into the table by `jobs.js`, for the
@@ -845,8 +931,11 @@ base.en model downloaded under `HF_HOME`, and `words.py` wrote word timings for
 two Node 01 lines. An independent verifier then reproduced the failure and the
 fix again from its own checkout.
 
+These steps run on N8N-HOST, where the worker runs, as root. Its Python is
+3.12.3 with `ensurepip`, so the venv needs no extra package (read 2026-10-31).
+
 ```bash
-# once, on the box, as root: a venv the service user can read
+# once, on N8N-HOST, as root: a venv the service user can read
 python3 -m venv /opt/tsws-render-worker/whisper
 /opt/tsws-render-worker/whisper/bin/pip install faster-whisper==1.1.1 "av<14" requests
 # then in /etc/tsws-render-worker.env

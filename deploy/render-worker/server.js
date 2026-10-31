@@ -388,7 +388,7 @@ const server = http.createServer(async (req, res) => {
       // exactly what Submit Rejected in TSWS 00 tells the operator.
       spec = J.JOBS[type].build(payload.params || {});
     } catch (e) {
-      const code = e && e.statusCode === 400 ? 400 : 500;
+      const code = e && [400, 409, 503].includes(e.statusCode) ? e.statusCode : 500;
       return send(res, code, { error: String(e && e.message || e) });
     }
     if (queue.length >= MAX_QUEUE) {
@@ -399,6 +399,13 @@ const server = http.createServer(async (req, res) => {
       return send(res, 503, { error: `queue is full (${queue.length}/${MAX_QUEUE})` });
     }
     const id = crypto.randomUUID();
+    // Repair envelopes commit an exclusive durable intent before any native effect.
+    // Queue rejection above does not claim; an orphan claim refuses automatic retry.
+    try { if (spec.claim) spec.claim(id); }
+    catch (e) {
+      const code = e && [400, 409, 503].includes(e.statusCode) ? e.statusCode : 500;
+      return send(res, code, { error: String(e && e.message || e) });
+    }
     const j = {
       id, type, spec,
       status: 'queued',
