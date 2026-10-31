@@ -91,15 +91,19 @@ running service was built from.
 
 **`api`'S `checkSuites` WENT FALSE FOR AN EVENING AND IS BACK ON.** On
 2026-10-31 it read true at about 18:50Z and false at 21:23Z, after deployments
-resumed, changed by nothing a session did; whether it was part of Railway's fix
-for the outage above is unverified. While it read false, the merge of PR #461
-deployed to `api` within a second of the push, with no WAITING row. Tee ruled to
+resumed. What changed it is unverified: Railway's fix for the outage above, the
+unknown hand that switched `api`'s builder before 21:01Z, and a session's own
+`update-service` call on `api` at 21:22Z are all candidates, and nothing read
+here separates them. While it read false, the merge of PR #461 deployed to `api`
+about three seconds after the merge, and the deploy finished while that
+commit's CI was still running. Tee ruled to
 turn it back on. A change staged through Railway's agent, which a staged-changes
 read showed only as `Source: "" to "{}"`, was committed and left the gate off;
 Tee then flipped the "Wait for CI" toggle under the service's Source settings,
 and it read true at 22:12Z. So set this toggle in the dashboard, not through the
-agent, and read it back. Railway's docs say the toggle is hidden until the
-Railway GitHub App's updated permissions are accepted at
+agent, and read it back. Railway's docs say the toggle shows in service settings
+when a workflow runs on push to the deployed branch, and that the feature needs
+the Railway GitHub App's updated permissions accepted at
 github.com/settings/installations.
 
 **THE THREE RAILWAY SERVICES DO NOT DEPLOY ON THE SAME RULE, AND ONE OF THEM
