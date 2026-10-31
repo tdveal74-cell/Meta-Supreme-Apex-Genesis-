@@ -1,15 +1,17 @@
-"""Vendored third-party skills are copies, not forks.
+"""Vendored skills are copies, not forks.
 
-Each skill named in `VENDORED` is a byte for byte copy of an upstream folder
-at the commit its `UPSTREAM.md` records: `scroll-craft` from
-`nateherkai/scroll-craft`, `hypit` from `hypit-ai/hypit`, `typesafe-ai`
-from `typesafe-ai/skills`, and `watch` from `bradautomates/claude-video`.
-Prose in those
+Each skill named in `VENDORED` is a byte for byte copy of a folder its
+`UPSTREAM.md` records. Four are third party, each at a named upstream commit:
+`scroll-craft` from `nateherkai/scroll-craft`, `hypit` from `hypit-ai/hypit`,
+`typesafe-ai` from `typesafe-ai/skills`, and `watch` from
+`bradautomates/claude-video`. Three are Tee's ArtCraft skills, written for him
+and copied off his VPS as a zip on 2026-10-31, each file checked against that
+zip's own manifest: `effectcraft`, `filmcraft` and `photocraft`. Prose in those
 files says never edit them in place. Prose is not an invariant, so this module
 makes it one: a local edit, a partial sync, or a deleted file fails here
-instead of surviving as a silent fork nobody can reconcile with upstream.
+instead of surviving as a silent fork nobody can reconcile with the source.
 
-Regenerating a manifest is part of syncing a newer upstream, and each
+Regenerating a manifest is part of syncing a newer copy, and each
 `UPSTREAM.md` carries the one liner that does it.
 """
 
@@ -23,12 +25,17 @@ SKILLS = pathlib.Path(__file__).parent / ".claude" / "skills"
 
 # Each vendored skill and the lines its LICENSE must still carry. The
 # licences differ: scroll-craft, typesafe-ai and watch are MIT, hypit is
-# Apache 2.0 with conditions.
+# Apache 2.0 with conditions. None means the copy carried no licence file:
+# the three ArtCraft skills were written for Tee and came off his VPS, so
+# there is no third party licence to carry and none is written for them here.
 VENDORED = {
     "scroll-craft": ("MIT License", "Nate Herk"),
     "hypit": ("Apache License 2.0", "Hypit.AI"),
     "typesafe-ai": ("MIT License", "TypeSafe AI"),
     "watch": ("MIT License", "Bradley Bonanno"),
+    "effectcraft": None,
+    "filmcraft": None,
+    "photocraft": None,
 }
 
 # Written by us, so deliberately outside the manifest: everything else under
@@ -102,8 +109,23 @@ def test_upstream_records_a_full_commit_sha(name: str) -> None:
 
 @pytest.mark.parametrize("name", sorted(VENDORED))
 def test_upstream_licence_is_carried_with_the_code(name: str) -> None:
+    markers = VENDORED[name]
+    if markers is None:
+        # The copy came with no licence file. UPSTREAM.md has to say so in
+        # those words, and a LICENSE turning up here later would be terms
+        # nobody at the source wrote, so its absence is pinned as well.
+        text = (SKILLS / name / "UPSTREAM.md").read_text()
+        assert "no licence file" in text, (
+            f"{name}/UPSTREAM.md must say the copy carried no licence file, "
+            "since this module checks no LICENSE for it"
+        )
+        assert not (SKILLS / name / "LICENSE").exists(), (
+            f"{name}/LICENSE exists but the source carried none; a licence "
+            "written here is not the source's and does not belong in the copy"
+        )
+        return
     licence = (SKILLS / name / "LICENSE").read_text()
-    for marker in VENDORED[name]:
+    for marker in markers:
         assert marker in licence, (
             f"{name}/LICENSE no longer carries {marker!r}; redistribution keeps "
             "the original licence and copyright line"
