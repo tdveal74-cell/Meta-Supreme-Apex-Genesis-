@@ -122,7 +122,7 @@ test failure. It shows up as a hundred or more collection ERRORs.
 
 ## Reproducing CI
 
-CI is SIXTEEN jobs, and on most pull requests you will see five. Five are in
+CI is SEVENTEEN jobs, and on most pull requests you will see five. Five are in
 `.github/workflows/ci.yml` (`standalone` then `container` and `engine` then
 `api`, plus `dependency-audit` on every push). The sixth is
 `.github/workflows/web-ci.yml`, path filtered to the web workspace, so a run of
@@ -529,6 +529,22 @@ Both changes are in ci.yml's job as well. A red run is most often a new advisory
 a registry or advisory service that did not answer turns it red too, so read the
 log before bumping a pin. An advisory left open turns it red every day until it
 is fixed.
+
+The seventeenth arrived on 2026-10-31: `.github/workflows/presence-image-ci.yml`,
+pull requests and pushes to `main`, path filtered to `apps/presence/**`,
+`services/**`, `requirements.txt`, `infrastructure/docker/Dockerfile.presence` and
+itself. It builds the presence image, imports the app inside it, starts it and
+reads `GET /health`. It exists because Railway built all three services with
+Railpack on Python 3.13 until 2026-10-31 while CI built the Dockerfiles on 3.12,
+so the job named "Railway container contract" tested an image Railway never
+built, found while scoping Tee's ruling of that morning to build the presence
+image in CI and confirmed by two independent verifiers. Tee ruled on a card to
+point Railway at the Dockerfiles, so this job and the container job now build
+what deploys. Scouting for the switch found the API reads
+`policies/reliability/profiles.v1.json` per request and `Dockerfile.api` did not
+copy it; it does now, and the container job checks the file is in the image. Read
+the builder from `get-service-config` before trusting this paragraph: a builder
+changed back in the dashboard reopens the gap and nothing here would notice.
 
 **The standalone list above drifted and was regenerated from `ci.yml`.** It
 named 30 files while the job ran 36, missing `test_devon_data_tables.py`,

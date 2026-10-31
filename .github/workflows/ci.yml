@@ -296,6 +296,16 @@ jobs:
           docker run --rm --entrypoint python \
             -e DEFAULT_AI_PROVIDER=mock \
             devon-api-ci -c "from app.main import app; from app.api.v1.auth import passkey_login_options; from services.intelligence.providers.cerebras_provider import CerebrasProvider; print(app.title, passkey_login_options.__name__, CerebrasProvider.name)"
+      # Railway builds api and scheduler-cron from this Dockerfile since
+      # 2026-10-31; before that it built them with Railpack, which copies the
+      # whole repository, so a file the API reads at runtime and the image does
+      # not copy broke nothing. The reliability shadow route reads policies/ per
+      # request, and scheduler-cron runs dispatch.py from this image.
+      - name: Image carries what the API and the scheduler read at runtime
+        run: |
+          docker run --rm --entrypoint python \
+            -e DEFAULT_AI_PROVIDER=mock \
+            devon-api-ci -c "from app.api.v1.arf_shadow import _POLICY_PATH; assert _POLICY_PATH.is_file(), _POLICY_PATH; import dispatch; print(_POLICY_PATH, dispatch.__name__)"
 
   engine:
     name: Engine + cadence (no database)

@@ -40,10 +40,22 @@ count-from-the-lane miss CLAUDE.md's first law describes.
 | Surface | What it serves | How to read it |
 |---|---|---|
 | Railway `api` | The FastAPI app, the ledger, migrations | `list-deployments`, then `get-logs` on the deployment id |
-| Railway `presence` | DEVON's voice and live inference, root `apps/presence`: `POST /tts`, the WebSocket lane, LiveKit tokens | `list-deployments`, then `GET /health` on the public host, which a container CAN reach since 2026-09-16 (see below) |
+| Railway `presence` | DEVON's voice and live inference, code in `apps/presence` (the service's root directory is `.`): `POST /tts`, the WebSocket lane, LiveKit tokens | `list-deployments`, then `GET /health` on the public host, which a container CAN reach since 2026-09-16 (see below) |
 | Railway `scheduler-cron` | The scheduled lane, `python dispatch.py` on a `*/5 * * * *` cron | `list-deployments`; it carries no public host of its own to read back |
 | Vercel `meta-supreme-apex-genesis-web` | The web app and Command Center, root `apps/web` (recorded as `meta-supreme-web` until 2026-09-02; that project no longer exists) | `list_deployments` for the project |
 | Vercel `devon-soul` | The phone lane, root `deploy/soul` | `list_deployments` for the project |
+
+**WHAT RAILWAY BUILDS IS A SETTING, AND IT WAS NOT WHAT CI BUILT.** Until
+2026-10-31 all three services built with Railpack from the repository root, on
+Railpack's default Python, 3.13.16, while CI built the Dockerfiles on 3.12: the
+job named "Railway container contract" tested an image Railway never built. Read
+from `get-service-config` and the build logs that day, and confirmed by two
+independent verifiers. Tee ruled to point Railway at the Dockerfiles: `api` and
+`scheduler-cron` build `infrastructure/docker/Dockerfile.api`, `presence` builds
+`infrastructure/docker/Dockerfile.presence`. **Read `build.builder` and the
+Dockerfile path from `get-service-config` before saying what an image contains**,
+and read a build log for the `FROM` line: a builder flipped back in the dashboard
+reopens the gap, and no check in this repository would notice.
 
 **THE THREE RAILWAY SERVICES DO NOT DEPLOY ON THE SAME RULE, AND ONE OF THEM
 STOPS WHEN CI IS RED.** Read from `get-service-config` on 2026-09-16, because

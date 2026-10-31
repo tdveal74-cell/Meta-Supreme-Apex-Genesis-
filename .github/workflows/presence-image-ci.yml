@@ -1,0 +1,68 @@
+name: Presence image
+
+# Builds the image Railway deploys for the presence service, the voice lane, and
+# proves it starts. Railway builds presence from
+# infrastructure/docker/Dockerfile.presence, so this is the same image; before
+# 2026-10-31 Railway built every service with Railpack and no job here built what
+# it deployed. Path filtered, as Tee ruled on 2026-10-31, to what can change the
+# image: the presence code, the services/ it imports, the pinned closure and the
+# Dockerfile. It proves the image builds, imports and answers GET /health with
+# its pinned keys; it proves nothing about speech, LiveKit or a provider.
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "apps/presence/**"
+      - "services/**"
+      - "requirements.txt"
+      - "infrastructure/docker/Dockerfile.presence"
+      - ".github/workflows/presence-image-ci.yml"
+  push:
+    branches: ["main"]
+    paths:
+      - "apps/presence/**"
+      - "services/**"
+      - "requirements.txt"
+      - "infrastructure/docker/Dockerfile.presence"
+      - ".github/workflows/presence-image-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: presence-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  presence-image:
+    name: Presence image builds and answers /health
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the production presence image
+        run: docker build -f infrastructure/docker/Dockerfile.presence -t devon-presence-ci .
+      - name: Image imports the presence app
+        run: |
+          docker run --rm --entrypoint python -e ENVIRONMENT=test \
+            devon-presence-ci -c "from apps.presence.main import app; print(app.title)"
+      - name: Image starts and answers GET /health
+        run: |
+          docker run -d --name presence -e ENVIRONMENT=test -e PORT=8010 -p 8010:8010 devon-presence-ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8010/health > health.json; then break; fi
+            sleep 1
+          done
+          docker logs presence
+          python3 - <<'PY'
+          import json
+          body = json.load(open("health.json"))
+          print(json.dumps(body, indent=1))
+          assert isinstance(body, dict) and body, "GET /health returned no keys"
+          for key in ("inference", "speech", "breaker"):
+              assert key in body, f"GET /health has no {key}"
+          PY
+      - name: Stop the container
+        if: ${{ always() }}
+        run: docker rm -f presence || true
