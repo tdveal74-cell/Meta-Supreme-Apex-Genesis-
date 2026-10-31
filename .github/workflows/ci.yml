@@ -233,7 +233,7 @@ jobs:
             test_code_worker.py \
             test_watch_long.py \
             test_mpt_shorts.py \
-            test_openmontage_installer.py
+            test_openmontage_installer.py test_ltx_build_graph.py
 
   dependency-audit:
     name: Dependency audit (pip-audit + pnpm audit)

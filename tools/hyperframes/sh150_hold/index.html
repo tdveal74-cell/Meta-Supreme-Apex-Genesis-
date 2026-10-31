@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en"
+  data-composition-variables='[
+    {"id":"push","type":"number","label":"Push in (scale at the end)","default":1.035,"min":1,"max":1.08,"step":0.005},
+    {"id":"rain","type":"number","label":"Rain density (drops)","default":700,"min":0,"max":2000,"step":50}
+  ]'>
+<head>
+  <meta charset="utf-8" />
+  <title>TSWS S01E01 SH150 hold, living still</title>
+  <style>
+    html, body { margin: 0; background: #050308; }
+    #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: #050308; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
+</head>
+<body>
+  <div id="root" data-composition-id="main" data-start="0" data-duration="12" data-width="1920" data-height="1080" data-fps="24">
+    <div id="hold" data-composition-id="hold" data-composition-src="compositions/hold.html"
+         data-start="0" data-duration="12" data-track-index="1" data-track-kind="graphics"
+         data-width="1920" data-height="1080"></div>
+  </div>
+  <script>
+    window.__timelines["main"] = gsap.timeline({ paused: true });
+  </script>
+</body>
+</html>
