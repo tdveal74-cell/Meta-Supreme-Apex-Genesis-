@@ -174,11 +174,16 @@ problems, and four more verifiers, one each, confirmed all four:
 
 None touches anything running: nothing calls the wrapper and it is installed
 nowhere but the sandbox. Tee ruled on a card, "Merge, then fix two": PR #444
-merged as it stood, and a follow-up fixed the first and the fourth. A HUP or
-INT the caller ignored now stays ignored, and the marker is written inside the
-try so a failed write is removed rather than left to block. Three new tests
-pass on the fix and fail on `c07980c` (77 tests). The second and third stay as
-known limits, written into the skill.
+merged as it stood at `0641635` (merge `164497a`), and a follow-up fixed the
+first and the fourth. A stop signal the caller had set to ignored (HUP under
+nohup, INT in a script's background job, or TERM) now stays ignored, and the
+marker is written inside the try so a failed write is removed rather than left
+to block. Three new tests pass on the fix and fail on `c07980c` (77 tests). Two
+fresh verifiers confirmed it: on the real install a nohup render rode out a
+HUP and returned ok while a HUP at its default still stopped the render and
+cleaned up, and a real full disk and a real file size limit each left no
+marker and the next render ran. The second and third stay as known limits,
+written into the skill.
 
 ## Open, and whose
 
@@ -204,5 +209,5 @@ DATE: 2026-10-31
 DECISIONS: Tee asked to install MoneyPrinterTurbo and then to tailor it to the YouTube inauthentic content policy, and said "Ok do it" to running it only as an assembler of our own script, Tee-clone voiceover and local clips. No device install and no n8n change were made without a ruling.
 FINDINGS: The default flow is the template the policy refuses and its voice is rented. MoneyPrinterTurbo rewrites captions to the script and keeps only the first slice of each clip in sequential mode; the wrapper works around both. The bundled fonts and songs carry no licence. The wrapper's render makes no network connection, measured with strace. Two critics' findings on the first commit were verified and fixed: the code cannot check whose voice or whose clips it is, so manifests say so; a frozen-frame clip and half a voiceover used to pass; the repeat check failed open four ways; most gate lines had no test. Four verifier rounds after that found and closed leftover files, an orphaned encoder and a signal regression; the last round confirmed four smaller problems and corrected an overstated SIGKILL claim; Tee ruled to fix two in a follow-up and keep two as known limits.
 OPEN: Tee runs the VPS install himself in Termius, ruled on a card; n8n wiring is his ruling; two last round problems are kept as known limits; thresholds are starting values; VPS render time unmeasured.
-STATUS: Branch claude/mpt-shorts-tailored, draft PR #444, not merged at writing. Sandbox install and renders proven in the cloud container only.
+STATUS: PR #444 merged 2026-10-31 as `164497a`; the follow-up on claude/mpt-shorts-tailored carries the two fixes. Sandbox install and renders proven in the cloud container only; nothing installed on the VPS at writing.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
