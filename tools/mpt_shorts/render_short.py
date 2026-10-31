@@ -28,6 +28,7 @@ import difflib
 import hashlib
 import json
 import math
+import os
 import re
 import secrets
 import shutil
@@ -44,8 +45,15 @@ MAX_VOICE_S = 180.0  # YouTube Shorts run to three minutes
 DURATION_TOLERANCE_S = 0.35
 MIN_SIDE_PX = 480  # MoneyPrinterTurbo drops smaller sources
 REPEAT_THRESHOLD = 0.5  # starting value, set from the ledger once real renders exist
-VOICE_AGREEMENT_MIN = 0.6  # starting value; a matched Piper fixture scores 1.0, a mismatched one near 0
+# Both shares of matched words must clear this. Measured 2026-10-31 on a Piper
+# fixture: the full take 0.944 and 0.944, the first 62 percent of it 0.606 of
+# the script, the take plus another script's speech 0.563 of what was said.
+VOICE_COVERAGE_MIN = 0.85
 SCRUBBED_PATH = "/usr/local/bin:/usr/bin:/bin"
+# Whisper writes small numbers as digits, a TTS-ready script spells them out.
+NUMBER_WORDS = {w: str(i) for i, w in enumerate(
+    "zero one two three four five six seven eight nine ten eleven twelve thirteen "
+    "fourteen fifteen sixteen seventeen eighteen nineteen twenty".split())}
 
 # MoneyPrinterTurbo's subtitle.correct() rewrites Whisper's text with the
 # script's lines, so its captions always read as the script even over the wrong
@@ -96,11 +104,22 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _seconds(value) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return math.nan
+
+
 def probe(path: Path) -> dict:
-    """ffprobe a file into {duration, width, height, video, audio}."""
+    """ffprobe a file into {duration, video_duration, width, height, video, audio}.
+
+    duration is the container's, which is the longest stream. video_duration is
+    the picture's own: a clip whose sound outlasts its picture has a container
+    duration MoneyPrinterTurbo trusts and fills with a frozen frame."""
     out = _run(
         ["ffprobe", "-v", "error", "-show_entries",
-         "format=duration:stream=codec_type,width,height", "-of", "json", str(path)],
+         "format=duration:stream=codec_type,width,height,duration", "-of", "json", str(path)],
         timeout=120,
     )
     if out.returncode != 0:
@@ -108,16 +127,18 @@ def probe(path: Path) -> dict:
     data = json.loads(out.stdout or "{}")
     streams = data.get("streams", [])
     video = [s for s in streams if s.get("codec_type") == "video"]
-    try:
-        duration = float(data.get("format", {}).get("duration", "nan"))
-    except ValueError:
-        duration = math.nan
+    audio = any(s.get("codec_type") == "audio" for s in streams)
+    duration = _seconds(data.get("format", {}).get("duration"))
+    video_duration = _seconds(video[0].get("duration")) if video else math.nan
+    if video and not math.isfinite(video_duration) and not audio:
+        video_duration = duration  # a picture-only file: the container length is the picture's
     return {
         "duration": duration,
+        "video_duration": video_duration,
         "width": int(video[0].get("width", 0)) if video else 0,
         "height": int(video[0].get("height", 0)) if video else 0,
         "video": bool(video),
-        "audio": any(s.get("codec_type") == "audio" for s in streams),
+        "audio": audio,
     }
 
 
@@ -189,7 +210,7 @@ def audit_install(root: Path) -> list[str]:
 
 
 def _tokens(text: str) -> list[str]:
-    return re.findall(r"[a-z0-9']+", text.lower())
+    return [NUMBER_WORDS.get(w, w) for w in re.findall(r"[a-z0-9']+", text.lower())]
 
 
 def shingles(text: str, n: int = 3) -> set[tuple[str, ...]]:
@@ -198,23 +219,32 @@ def shingles(text: str, n: int = 3) -> set[tuple[str, ...]]:
 
 
 def similarity(a: str, b: str) -> float:
+    """Shared 3 word shingles over the smaller set, so an old script inside a
+    longer new one still scores as the share of it that was reused."""
     left, right = shingles(a), shingles(b)
-    return len(left & right) / len(left | right) if left and right else 0.0
+    return len(left & right) / min(len(left), len(right)) if left and right else 0.0
 
 
-def repeats(script: str, spoken: str, voice_sha: str, episode: str, ledger: Path) -> list[str]:
-    """Earlier renders of another episode that this one repeats.
+def repeats(script: str, spoken: str, voice_sha: str, episode: str, show: str, ledger: Path) -> list[str]:
+    """Earlier renders that this one repeats.
 
     It compares the script, what the voiceover actually says (so a re-encoded
     copy of an old voiceover still matches) and the voiceover's bytes. It does
-    not compare clips: reusing our own b-roll across episodes is normal."""
+    not compare clips: reusing our own b-roll across episodes is normal. Only a
+    re-render of the same episode for the same show is exempt, so one render
+    cannot go out on two channels. A manifest it cannot read stops the render
+    rather than being skipped, because a skipped one is a repeat nobody saw."""
+    if not ledger.is_dir():
+        raise Refused(f"ledger {ledger} does not exist; create it once and keep it")
     found = []
-    for path in sorted(ledger.glob("*.json")) if ledger.is_dir() else []:
+    for path in sorted(ledger.glob("*.json")):
         try:
             prior = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        if not isinstance(prior, dict) or prior.get("episode") == episode:
+        except (OSError, ValueError, RecursionError):
+            prior = None
+        if not isinstance(prior, dict):
+            raise Refused(f"ledger manifest {path.name} cannot be read; repair or move it")
+        if prior.get("episode") == episode and prior.get("show") == show:
             continue
         if prior.get("voice_sha256") == voice_sha:
             found.append(f"{path.name}: the same voiceover file")
@@ -242,8 +272,15 @@ def transcribe(python: str, root: Path, voice: Path) -> str:
     return json.loads(done.stdout.strip().splitlines()[-1])
 
 
-def agreement(script: str, spoken: str) -> float:
-    return difflib.SequenceMatcher(None, _tokens(script), _tokens(spoken)).ratio()
+def coverage(script: str, spoken: str) -> tuple[float, float]:
+    """Share of the script that was said, and share of what was said that is
+    the script. A take of half the script fails the first, a take carrying
+    other speech fails the second."""
+    a, b = _tokens(script), _tokens(spoken)
+    if not a or not b:
+        return 0.0, 0.0
+    matched = sum(block.size for block in difflib.SequenceMatcher(None, a, b, autojunk=False).get_matching_blocks())
+    return matched / len(a), matched / len(b)
 
 
 def srt_text(path: Path) -> str:
@@ -274,8 +311,13 @@ def local_clips(raws: list[str]) -> list[tuple[Path, dict]]:
         if clip.suffix.lower() not in VIDEO_EXT or not clip.is_file():
             raise Refused(f"{clip.name} is not an existing mp4, mov, mkv or webm file")
         info = probe(clip)
-        if not info["video"] or not math.isfinite(info["duration"]) or info["duration"] <= 0:
-            raise Refused(f"{clip.name} holds no playable video")
+        if not info["video"] or not math.isfinite(info["video_duration"]) or info["video_duration"] <= 0:
+            raise Refused(f"{clip.name} has no measurable picture length; remux it without sound")
+        if info["duration"] - info["video_duration"] > DURATION_TOLERANCE_S:
+            raise Refused(
+                f"{clip.name}: its sound runs {info['duration']:.2f}s and its picture {info['video_duration']:.2f}s; "
+                "MoneyPrinterTurbo would hold the last frame for the difference"
+            )
         if min(info["width"], info["height"]) < MIN_SIDE_PX:
             raise Refused(f"{clip.name} is under {MIN_SIDE_PX} px on a side")
         clips.append((clip, info))
@@ -310,7 +352,7 @@ def preflight(args) -> dict:
         raise Refused(f"voiceover must hold audio and run 0 to {MAX_VOICE_S:.0f} seconds")
 
     clips = local_clips(args.clips)
-    total = sum(info["duration"] for _, info in clips)
+    total = sum(info["video_duration"] for _, info in clips)
     if total < voice_info["duration"]:
         raise Refused(
             f"clips run {total:.2f}s and the voiceover {voice_info['duration']:.2f}s; "
@@ -321,15 +363,18 @@ def preflight(args) -> dict:
     voice_sha = sha256(voice)
     ledger = Path(args.ledger)
     spoken = transcribe(args.mpt_python, root, voice)
-    match = agreement(script, spoken)
-    if match < VOICE_AGREEMENT_MIN:
-        raise Refused(f"the voiceover matches the script at {match:.2f}; it is not this script's recording")
-    found = repeats(script, spoken, voice_sha, args.episode, ledger)
+    said, extra = coverage(script, spoken)
+    if min(said, extra) < VOICE_COVERAGE_MIN:
+        raise Refused(
+            f"the voiceover says {said:.2f} of the script and {extra:.2f} of it is the script; "
+            "it is not this script's full recording"
+        )
+    found = repeats(script, spoken, voice_sha, args.episode, args.show, ledger)
     if found:
         raise Refused("repeats an earlier render: " + "; ".join(found))
     return {"root": root, "script": script, "voice": voice, "voice_info": voice_info,
-            "voice_sha": voice_sha, "clips": clips, "ledger": ledger, "agreement": match, "spoken": spoken,
-            "fit": args.fit, "font": font}
+            "voice_sha": voice_sha, "clips": clips, "ledger": ledger, "coverage": (said, extra),
+            "spoken": spoken, "fit": args.fit, "font": font}
 
 
 def place_font(root: Path, font: Path) -> str:
@@ -343,7 +388,7 @@ def place_font(root: Path, font: Path) -> str:
 
 def mpt_argv(python: str, plan: dict, task_id: str, font_name: str) -> list[str]:
     """The only MoneyPrinterTurbo invocation this wrapper makes."""
-    longest = max(info["duration"] for _, info in plan["clips"])
+    longest = max(info["video_duration"] for _, info in plan["clips"])
     return [
         python, "-X", "utf8", "cli.py",
         "--task-id", task_id,
@@ -368,8 +413,26 @@ def mpt_argv(python: str, plan: dict, task_id: str, font_name: str) -> list[str]
     ]
 
 
+def _clean(root: Path, task_id: str, materials: list) -> None:
+    """Remove this render's task folder and the clip copies MPT made for it."""
+    shutil.rmtree(root / "storage" / "tasks" / task_id, ignore_errors=True)
+    copies = (root / "storage" / "local_videos").resolve()
+    for item in materials:
+        path = Path(str(item)).resolve()
+        if path.parent == copies and path.name.startswith("cli-material-"):
+            path.unlink(missing_ok=True)
+
+
 def render(args, plan: dict, now: datetime) -> dict:
     task_id = str(uuid.uuid4())
+    materials = []
+    try:
+        return _render(args, plan, now, task_id, materials)
+    finally:
+        _clean(plan["root"], task_id, materials)
+
+
+def _render(args, plan: dict, now: datetime, task_id: str, materials: list) -> dict:
     font_name = place_font(plan["root"], plan["font"])
     done = _run(mpt_argv(args.mpt_python, plan, task_id, font_name),
                 env=scrubbed_env(plan["root"]), cwd=plan["root"], timeout=args.timeout)
@@ -377,6 +440,7 @@ def render(args, plan: dict, now: datetime) -> dict:
         tail = " | ".join(done.stderr.strip().splitlines()[-3:])
         raise Refused(f"MoneyPrinterTurbo exited {done.returncode}: {tail[-600:]}")
     result = json.loads(done.stdout).get("result", {})
+    materials.extend(result.get("materials") or [])
     videos = result.get("videos") or []
     if len(videos) != 1:
         raise Refused(f"expected one video, MoneyPrinterTurbo returned {len(videos)}")
@@ -406,13 +470,16 @@ def render(args, plan: dict, now: datetime) -> dict:
         "script_sha256": hashlib.sha256(plan["script"].encode("utf-8")).hexdigest(),
         "voice_sha256": plan["voice_sha"],
         "voice_seconds": round(plan["voice_info"]["duration"], 3),
-        "clips": [{"name": clip.name, "sha256": sha256(clip), "seconds": round(info["duration"], 3)}
-                  for clip, info in plan["clips"]],
+        # MPT stops taking clips once the picture covers the voiceover, so a
+        # late clip in this list may not appear in the output.
+        "clips_supplied": [{"name": clip.name, "sha256": sha256(clip), "seconds": round(info["video_duration"], 3)}
+                           for clip, info in plan["clips"]],
         "output": final.name,
         "output_sha256": sha256(final),
         "output_seconds": round(info["duration"], 3),
         "spoken": plan["spoken"],
-        "voice_agreement": round(plan["agreement"], 3),
+        "script_said": round(plan["coverage"][0], 3),
+        "said_is_script": round(plan["coverage"][1], 3),
         "fit": plan["fit"],
         "font": {"source": plan["font"].name, "sha256": sha256(plan["font"])},
         "argv": mpt_argv("<mpt-python>", plan, task_id, font_name)[1:],
@@ -434,12 +501,13 @@ def _render_cmd(args) -> int:
     try:
         plan = preflight(args)
         manifest = render(args, plan, datetime.now(timezone.utc))
-    except (Refused, OSError, ValueError, subprocess.TimeoutExpired) as exc:
+    except (Refused, OSError, ValueError, RecursionError, subprocess.TimeoutExpired) as exc:
         print(json.dumps({"ok": False, "refused": str(exc)}))
         return 2
     print(json.dumps({"ok": True, "output": str(Path(args.out) / manifest["output"]),
                       "seconds": manifest["output_seconds"],
-                      "voice_agreement": manifest["voice_agreement"]}))
+                      "script_said": manifest["script_said"],
+                      "said_is_script": manifest["said_is_script"]}))
     return 0
 
 
@@ -454,7 +522,9 @@ def _lock_cmd(args) -> int:
     except Refused as exc:
         print(json.dumps({"ok": False, "refused": str(exc)}))
         return 2
-    target.write_text(text, encoding="utf-8")
+    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(text)
     target.chmod(0o600)
     reasons = audit_install(root)
     print(json.dumps({"ok": not reasons, "audit": reasons}))

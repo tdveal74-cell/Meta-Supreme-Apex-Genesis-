@@ -28,7 +28,8 @@ for tool in git curl sha256sum ffmpeg ffprobe python3; do
 done
 python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' || { echo "python3 must be 3.11 or newer" >&2; exit 2; }
 
-mkdir -p "$DEST"
+mkdir -p "$DEST/ledger"
+DEST="$(cd "$DEST" && pwd)"  # absolute, because later steps cd into the checkout
 MPT="$DEST/mpt"
 if [ ! -d "$MPT/.git" ]; then
   git clone --quiet --filter=blob:none https://github.com/harry0703/MoneyPrinterTurbo.git "$MPT"
@@ -56,4 +57,4 @@ if [ -f "$MPT/config.toml" ]; then
 else
   python3 "$HERE/render_short.py" lock-config --mpt-root "$MPT"
 fi
-echo "installed: $MPT at $COMMIT; render with --mpt-python $MPT/.venv/bin/python"
+echo "installed: $MPT at $COMMIT; render with --mpt-python $MPT/.venv/bin/python --ledger $DEST/ledger"

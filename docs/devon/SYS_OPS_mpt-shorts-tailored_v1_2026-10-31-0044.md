@@ -50,12 +50,14 @@ audit and the rules. `test_mpt_shorts.py`, 33 tests, joins the standalone job.
 | plain pip install, Python 3.13.17 | exit 0, 153 s, Pillow 11.3.0 |
 | project test suite offline | 3000 passed, 9 failed, 54 skipped; the 9 pass with ffmpeg 7.0.2 |
 | `install.sh` from empty, then again | exit 0 in 40 s with warm caches, Pillow 13.0.0, MoviePy 2.2.1, audit empty; rerun exit 0 |
-| wrapper render, 19.26 s Piper voiceover, two 12 s clips, 4 cores | 193 s to 220 s, 1080x1920 h264 and aac, 19.267 s, voice agreement 0.944 |
+| wrapper render, 19.26 s Piper voiceover, two 12 s clips, 4 cores | 193 s to 220 s, 1080x1920 h264 and aac, 19.267 s; script said 1.0 and said is script 1.0 on the final code |
 | clip order and captions | frames at 2, 11, 13 and 18 s read clip 1, 1, 2, 2; captions burned in Atkinson Bold |
-| mismatched voiceover | refused at 0.12 in 5 s, before any render |
+| mismatched voiceover | refused in 5 s, before any render |
+| clip with 6 s of picture and 12 s of sound | refused before any render |
 | repeat, short clips, woff2 font | each refused |
 | network on the wrapper's path, `strace -f` | 18 processes, 0 `connect` calls; a control socket under the same tracer recorded 1 |
-| standalone list, ruff | 5503 passed, clean |
+| `test_mpt_shorts.py` | 56 passed; 21 of 22 gate mutants fail it |
+| standalone list, ruff | 5526 passed, clean |
 
 The voiceover used for every render was a Piper test voice, never published, and
 never Tee's. No render has run on the VPS.
@@ -92,15 +94,25 @@ findings against `9d46c46`, all fixed in `b694d64` or this doc:
 7. Clip rights and YouTube's reused content rule were not addressed. The skill
    now bars unlicensed clips, and manifests carry `clip_rights_checked: false`.
 
-The correctness critic was still running when this doc was written; its
-verified findings go into the PR and, if any change the code, into a newer doc.
+A second critic with the correctness lens attacked the same commit with real
+files. Its findings, fixed in the commit after this doc's first version: a clip
+whose sound outlasts its picture passed the footage check and came out with a
+frozen frame, so clips are now measured by their picture; a voiceover covering
+half the script passed the 0.6 ratio, so the check now needs 0.85 of the script
+said and 0.85 of what was said to be the script; the repeat check exempted a
+same episode id on another show, skipped unreadable manifests and treated a
+missing ledger as empty, and all three now stop the render; a nested manifest
+crashed it; `install.sh` broke on a relative path; renders left their clip
+copies and task folders behind, 152 MB after a few runs; and 25 of 33 gate
+mutants survived the tests. The tests now run preflight and render whole
+against a stand-in `cli.py`, and 21 of 22 gate mutants fail them.
 
 ## Open, and whose
 
 - Installing it on the VPS is Tee's ruling. Nothing was installed on any device.
 - Wiring it into `TQO FINAL V5` or the render worker is a workflow edit and a
   publish, so it is his too.
-- The thresholds (0.6 voice agreement, 0.5 repeat similarity) are starting
+- The thresholds (0.85 voice coverage, 0.5 repeat similarity) are starting
   values. The ledger is where they get set once real renders exist.
 - Render time on the VPS's 2 shared cores is unmeasured.
 - Unverified: whether MoneyPrinterTurbo's hard coded Codex OAuth client id is
@@ -114,7 +126,7 @@ TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_mpt-shorts-tailored_v1_2026-10-31-0044.md
 DATE: 2026-10-31
 DECISIONS: Tee asked to install MoneyPrinterTurbo and then to tailor it to the YouTube inauthentic content policy, and said "Ok do it" to running it only as an assembler of our own script, Tee-clone voiceover and local clips. No device install and no n8n change were made without a ruling.
-FINDINGS: The default flow is the template the policy refuses and its voice is rented. MoneyPrinterTurbo rewrites captions to the script and keeps only the first slice of each clip in sequential mode; the wrapper works around both. The bundled fonts and songs carry no licence. The wrapper's render makes no network connection, measured with strace. Seven critic findings on the first commit were confirmed and fixed, chiefly that the code cannot check whose voice or whose clips it is.
-OPEN: VPS install and n8n wiring are Tee's rulings; thresholds are starting values; VPS render time unmeasured; the correctness critic's verified findings land on PR #444.
+FINDINGS: The default flow is the template the policy refuses and its voice is rented. MoneyPrinterTurbo rewrites captions to the script and keeps only the first slice of each clip in sequential mode; the wrapper works around both. The bundled fonts and songs carry no licence. The wrapper's render makes no network connection, measured with strace. Two critics' findings on the first commit were verified and fixed: the code cannot check whose voice or whose clips it is, so manifests say so; a frozen-frame clip and half a voiceover used to pass; the repeat check failed open four ways; most gate lines had no test.
+OPEN: VPS install and n8n wiring are Tee's rulings; thresholds are starting values; VPS render time unmeasured.
 STATUS: Branch claude/mpt-shorts-tailored, draft PR #444, not merged at writing. Sandbox install and renders proven in the cloud container only.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
