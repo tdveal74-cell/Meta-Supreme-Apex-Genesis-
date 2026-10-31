@@ -77,3 +77,9 @@ This is isolated test evidence, not a deployed DEVON browser or Railway/VPS
 transport integration. Named persistent IPC/data volumes were not exercised by
 the temporary fixtures and remain a rollout gate. Stale IPC sockets remain the documented manual restart
 gate. Public egress remains categorically disabled.
+
+Pin policy, ruled by Tee on a card on 2026-10-31 at 18:28:36Z: keep the exact
+Chromium pin and bump it when it breaks. A stale pin fails closed, which is the
+direction this file asks for, and the cost is one red job and a one line bump
+each time Debian's security pocket moves; the two breaks seen were eight days
+apart.
