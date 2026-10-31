@@ -80,6 +80,11 @@ sandbox, and the first ACX master from the box's own ffmpeg. Its `build.json`
 gets compared against the sandbox record before any Node from this path goes to
 Tee's watch.
 
+The deploy's leftovers in `/tmp` on the box were the staged copy with its suite
+and venv logs, and three capture files two verifiers wrote outside the directory
+they were allowed. Tee ruled on a card to remove all four. They were removed by
+exact path and read back gone, and the worker still answered 24 afterwards.
+
 ## DEVON RECEIPT
 
 AREA: Systems, Podcast
@@ -88,6 +93,6 @@ ARTIFACT: docs/devon/SYS_OPS_render-worker-acx-deploy_v1_2026-10-31-2128.md
 DATE: 2026-10-31
 DECISIONS: Tee ruled on a card to deploy the ACX Node build to the n8n box with an independent workflow verifying it, after the gate closed on his first card at 123 minutes. When the first verify run outlived the gate window, he ruled on a second card to re-run the cut off checks shorter.
 FINDINGS: The render worker on the n8n box runs merge commit ac691aa with 24 job types, read on the bridge address. The six live files are byte identical to the commit, the ACX runtime (venv, fonts, model cache, env) is in place, and the unit is unchanged. Independent verifiers confirmed every claim but one. The session's report that loopback 8080 answered for the worker was false: that port is the Temporal UI. The DEPLOY.md Caddy block for render.editforge.online would front the Temporal UI on that box, and the name has no DNS record today. The outward gate reads the parent's card for a workflow agent, so a 151 minute workflow outlived its 120 minute window.
-OPEN: The Node 01 acceptance render on the box, the first word_timings model download inside the unit, and the build.json comparison against the sandbox record. The leftovers in /tmp on the box (the staged copy and logs in /tmp/rw-ac691aa, two verifier capture files and /tmp/verify-b2) await a ruling on removal. Tee's watch of the Proof 0 master. Who deployed tsws_repair on 2026-10-17 and whether an n8n workflow calls it.
-STATUS: Deployed and independently verified on the box; the acceptance render has not run.
+OPEN: The Node 01 acceptance render on the box, the first word_timings model download inside the unit, and the build.json comparison against the sandbox record. Tee's watch of the Proof 0 master. Who deployed tsws_repair on 2026-10-17 and whether an n8n workflow calls it.
+STATUS: Deployed and independently verified on the box; the acceptance render has not run. The deploy's leftovers in /tmp on the box were removed on Tee's card and read back gone, with the worker still active at 24 jobs.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
