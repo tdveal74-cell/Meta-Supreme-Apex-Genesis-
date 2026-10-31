@@ -1420,7 +1420,7 @@ whichever is reached first ends the loop.
 
 ## Skills in this repository
 
-`.claude/skills/` carries nineteen. Fifteen are ours: `steward` (CI and PR
+`.claude/skills/` carries twenty. Sixteen are ours: `steward` (CI and PR
 conventions, load it for anything touching either), `deploy-readback` (what the
 production surfaces are actually serving), `estate-reconcile` (checking records
 against the live estate), `devon-learning-lane` (the Build 12 learning lane and
@@ -1434,12 +1434,15 @@ device and judging the output he pastes back: one step, the exact success line,
 a pass or fail verdict first), `tsws-repair-workflows` (running and judging the
 three TSWS editable repair methods and their synthetic tests, with the twenty
 defects the 2026-10-13 gauntlet found and the test that now guards each one),
-`tqo-viral-output` (drafting Quiet Operator Shorts and long-form episodes to the
-working hook patterns of the niche, inside the live episode canon, with no
-invented metric), `nco-forge-viral-output` (the same for NCO Forge, with the
-stolen valor, benefits and combat footage lines from its canon branch),
-`acx-viral-output` (the same for Ascension Caudex awakening content, with physics
-words held as metaphor and no health, fear or conspiracy claims),
+`tsws-shot-prompt` (writing, running and judging a TSWS generation prompt on
+WaveSpeed or its Cinema Studio from the live canon on Drive: end frame first, a
+head sheet for the start frame, and the alignment checks measured on SH020 on
+2026-10-30), `tqo-viral-output` (drafting Quiet Operator Shorts and long-form
+episodes to the working hook patterns of the niche, inside the live episode
+canon, with no invented metric), `nco-forge-viral-output` (the same for NCO
+Forge, with the stolen valor, benefits and combat footage lines from its canon
+branch), `acx-viral-output` (the same for Ascension Caudex awakening content,
+with physics words held as metaphor and no health, fear or conspiracy claims),
 `genjutsu-open-workflow` (installing or judging the Genjutsu persona-swap app,
 what it sends off the machine, and the three changes required before any key
 goes in), `watch-long` (long-form video evidence from a cloud session:
