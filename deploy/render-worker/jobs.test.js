@@ -703,6 +703,16 @@ t('caption_srt refuses a non-.srt output, a path the subtitles filter cannot tak
 t('caption_srt refuses to write over its own words file, and a words file over 8 MiB', async () => {
   fs.writeFileSync(path.join(ROOT, 'q/self.srt'), JSON.stringify({ L01: { words: W([['a', 0, 1]]) } }));
   assert.throws(() => J.JOBS.caption_srt.build({ words: 'q/self.srt', output: 'q/self.srt' }), /is the words file itself/);
+  // An output that is a symlink to the words file is the same file (Codex on
+  // PR #467 reproduced the overwrite through a link); so is one that becomes a
+  // link after submit.
+  fs.writeFileSync(path.join(ROOT, 'q/timings.json'), JSON.stringify({ L01: { words: W([['a', 0, 1]]) } }));
+  fs.symlinkSync('timings.json', path.join(ROOT, 'q/alias.srt'));
+  assert.throws(() => J.JOBS.caption_srt.build({ words: 'q/timings.json', output: 'q/alias.srt' }), /is the words file itself/);
+  const late = J.JOBS.caption_srt.build({ words: 'q/timings.json', output: 'q/late.srt' });
+  fs.symlinkSync('timings.json', path.join(ROOT, 'q/late.srt'));
+  await assert.rejects(late.native(), /resolves to the words file itself/);
+  assert.ok(fs.readFileSync(path.join(ROOT, 'q/timings.json'), 'utf8').startsWith('{'), 'the timings survive');
   fs.writeFileSync(path.join(ROOT, 'q/huge.json'), Buffer.alloc(8 * 1024 * 1024 + 1, 0x20));
   await assert.rejects(J.JOBS.caption_srt.build({ words: 'q/huge.json', output: 'q/huge.srt' }).native(), /over 8 MiB/);
 });

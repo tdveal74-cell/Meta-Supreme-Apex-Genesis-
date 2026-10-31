@@ -1735,7 +1735,12 @@ const JOBS = {
       // presenter_composite refuses a captions path the subtitles filter cannot
       // take verbatim; refuse it here too, so the failure lands on this job.
       if (!/^[A-Za-z0-9_./-]+$/.test(out)) throw new BadJob('output: the resolved path carries a character the subtitles filter cannot take verbatim; rename it');
-      if (out === src) throw new BadJob('output: is the words file itself; writing it would destroy the timings');
+      // Resolved, not lexical: an output that is a symlink to the words file
+      // passed a string compare and the job replaced the timings with SRT
+      // (Codex, PR #467, reproduced). Checked again just before the write,
+      // since a link can appear between submit and run.
+      const sameFile = () => realish(out) === realish(src);
+      if (out === src || sameFile()) throw new BadJob('output: is the words file itself; writing it would destroy the timings');
       const maxWords = num(p.max_words ?? 4, 'max_words', { min: 2, max: 6, int: true });
       const offset = num(p.offset ?? 0, 'offset', { min: 0, max: 86400 });
       const tail = num(p.tail ?? 0.15, 'tail', { min: 0, max: 1 });
@@ -1755,6 +1760,7 @@ const JOBS = {
         const entry = Object.prototype.hasOwnProperty.call(doc, key) ? doc[key] : null;
         if (!entry || !Array.isArray(entry.words)) throw new Error(`words: no line ${key} with a words array`);
         const cues = seamCues(entry.words, { maxWords, offset, tail });
+        if (sameFile()) throw new Error('output: now resolves to the words file itself; refusing to overwrite the timings');
         await fs.promises.writeFile(out, seamSrt(cues), 'utf8');
         return { output: path.relative(WORK_ROOT, out), line: key, cues: cues.length,
                  words: cues.reduce((n, c) => n + c.words, 0), first: cues[0].start, last: cues[cues.length - 1].end };

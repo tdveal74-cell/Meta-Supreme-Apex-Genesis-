@@ -102,7 +102,12 @@ which wins over the TQO skill's old no-ask line.
   three overstatements in the canon (the frame check was one frame every 2
   seconds, not frame by frame; 13 of 14 shots were sampled, not all). Each is
   fixed or corrected. Each code fix has a test that fails when the fix is
-  reverted, run on a copy. Left as found: `safePath` follows a dangling
+  reverted, run on a copy. Codex then reviewed the fix commit and found that
+  the new guard against overwriting the words file compared paths as text,
+  so an output that was a symlink to the words file passed it and the timings
+  were replaced; reproduced, fixed by comparing resolved paths at submit and
+  again before the write, and pinned by a test that fails without it. Left as
+  found: `safePath` follows a dangling
   symlink out of the work root, which every output in the worker shares and
   this change does not touch.
 - DEPLOY.md documents both and the count. The skills `tqo-viral-output`,
