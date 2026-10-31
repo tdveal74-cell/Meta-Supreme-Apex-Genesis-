@@ -289,6 +289,12 @@ Set `LOG_REQUESTS=0` in the environment file to silence all of it.
 
 ## Deploying it
 
+**This section is for a new host only. On N8N-HOST, where the worker already
+runs, follow "Upgrading the live box" below instead.** The steps here generate
+a new token and overwrite `/etc/tsws-render-worker.env`, which cuts n8n's
+credential off, and copy the committed unit file, which binds to loopback where
+the n8n container cannot reach the worker.
+
 Node 18 or newer, and ffmpeg with libx264 and libx265. A TLS terminator only if
 the worker faces the internet, which on the deployment above it does not.
 
@@ -335,7 +341,7 @@ sudo useradd --system --home /opt/tsws-render-worker --shell /usr/sbin/nologin t
 sudo mkdir -p /opt/tsws-render-worker /data/tsws
 sudo chown -R tsws:tsws /data/tsws
 
-# copy jobs.js acx_node.js words.py server.js package.json into /opt/tsws-render-worker
+# copy jobs.js server.js package.json tsws-repair.js acx_node.js words.py into /opt/tsws-render-worker
 sudo chown -R root:root /opt/tsws-render-worker
 
 # 2. ffmpeg
@@ -381,8 +387,11 @@ nothing else. Operational detail (`work_root`, queue depth, concurrency) is on
 `/status`, behind the token, because the first version put a filesystem path and
 a load signal in front of anyone who could reach the TLS terminator.
 
-`job_count` must read **23** from the 2026-10-28 ACX Node build onward, 21
-from the 2026-10-15 Voice Lab build, 19 from the 2026-09-15 build, 18 before it.
+`job_count` must read **24** from the 2026-10-31 build onward, which carries
+`tsws_repair` and the two ACX Node jobs; 22 on the live box from 2026-10-17 to
+the next upgrade (`tsws_repair` without the ACX jobs), 23 in this repository
+only from 2026-10-28 to 2026-10-31, 21 from the 2026-10-15 Voice Lab build, 19
+from the 2026-09-15 build, 18 before it.
 Fewer means an older `jobs.js` is loaded, and the sticky note's warning applies:
 a still plate renders as one frame, not a held one.
 
@@ -831,10 +840,20 @@ so `render_mark_full` will accept a request for a great many 4K frames.
 `tsws-repair.js` is a DRAFT bridge from the worker to the pinned local TSWS
 repair package: three workflows (`TSWS_SHOT_COMPOSER`, `TSWS_SHOT_CLEANUP`,
 `TSWS_SCENE_BUILDER`), each a fixed script, method and flag in the package. It
-takes a repair envelope, refuses anything that asks for generation, a script, an
-interpreter, a URL or a path outside plain relative names, and reads its inputs
-only from a pre-staged cache laid out as `CACHE/DRIVE_ID/SHA256`, checking every
-byte count and hash; it fetches nothing. Its receipt is always `DRAFT` with
+takes a repair envelope and refuses one that asks for generation, names a
+script or command other than the fixed one, or gives an input role that is not
+a plain relative name. The interpreter, package, cache and origin come from the
+operator's environment and never from the caller. It reads inputs only from a
+pre-staged cache laid out as `CACHE/DRIVE_ID/SHA256`, refuses a cache entry that
+is a symlink, and checks every hash and declared byte count; it fetches
+nothing. In the staged job file it checks less: only string values under the
+keys `path`, `clean_plate` and `protected_mask`, and the entries of
+`actor_mattes`, must name a declared input, and those are rewritten to the
+staged copies. Any other key, and an array under `path`, reaches the Python
+package unchecked, absolute paths and URLs included. That is the live code as
+carried; tightening it would break byte identity with the box and is a ruling
+of its own. The exposure is to holders of the worker token, and the package
+runs as `tsws` under the unit's `ProtectSystem=strict`. Its receipt is always `DRAFT` with
 `human_review_required: true` and `complete_shot_accepted: false`.
 
 **A repair envelope is claimed durably at submit, before it is queued.** The
@@ -859,15 +878,27 @@ Environment=TSWS_REPAIR_CACHE_ROOT=/data/tsws/repair-cache-v01
 Environment=TSWS_REPAIR_PUBLIC_ORIGIN=http://BRIDGE-GATEWAY:8080
 ```
 
-`tsws-repair.test.js` pins the submit refusals, the configuration and origin
-checks, the claim and its 409, a full run through a stand-in package (Node as
-the interpreter, the package's own script names), a staged input with the wrong
-hash, one never staged, a bad exit code, and the 409 and 503 through the real
-server. Each of eight deliberate breaks to the job, the hook or the `jobs.js`
-entry turns it red. It proves the bridge and the HTTP path and nothing about the
-real Python package, Blender or the box's runtime. Who deployed it on
-2026-10-17, and whether an n8n workflow calls it today, is not recorded
-anywhere this repository can read.
+`tsws-repair.test.js` pins, in 21 tests, the submit refusals, the
+configuration and origin checks, the claim and its 409, a full run through a
+stand-in package (Node as the interpreter, the package's own script names) that
+is handed the staged input's path, a cache entry that is a symlink, a wrong
+hash, a wrong byte count, an input never staged, a bad exit code, a symlink
+left in the output, `abort()` killing the package's process group, the 16 MiB
+log cap, and through the real server the 409, the 503 for missing
+configuration, and a full queue answering 503 before the claim so the envelope
+is not burned. Each of fifteen deliberate breaks to the job, the hook or the
+`jobs.js` entry turns it red; seven of them were found surviving an earlier
+version of the suite by a critic. It covers the bridge as a stand-in package
+sees it and nothing about the real Python package, Blender or the box's
+runtime, and it does not test the unchecked job keys described above.
+
+Who deployed it on 2026-10-17 is not recorded anywhere this repository can
+read. The box shows when it was used: `/data/tsws/repair` holds three claimed
+envelopes, `vps-live-cleanup-20261017`, `vps-live-scene-20261017` and
+`private-drive-cleanup-20261017-v01`, and the folder was last modified at
+2026-10-17T11:19:50Z (read 2026-10-31). Each claim creates an entry there, so
+no `tsws_repair` submit has been claimed since. Whether an n8n workflow is wired
+to call it is not read.
 
 ## Upgrading the live box
 
@@ -881,8 +912,13 @@ The first install under "Deploying it" is for a new host. On the live box:
 1. Read `GET /status` with the token from inside the box (never print it) and
    go on only when nothing is running or queued. A restart drops the job table,
    and every poller loses its job ids.
-2. Run the suites from a copy of the new files in `/tmp` on the box, with the
-   box's own Node and ffmpeg, before anything in `/opt` is touched.
+2. Stage a copy of `deploy/render-worker` from the merge commit in `/tmp` on the
+   box: the `.js` files, `words.py`, `package.json` and the `reference/` folder
+   the negative control reads. There is no npm on the box, so run the five
+   suites one by one with the box's own `/usr/bin/node` and ffmpeg, checking
+   each exit code: `jobs.test.js`, `acx_node.test.js`, `server.test.js`,
+   `tsws-repair.test.js` and `negative-control.js`. Nothing in `/opt` is
+   touched until all five exit 0.
 3. Copy `jobs.js`, `server.js`, `package.json`, `tsws-repair.js`,
    `acx_node.js` and `words.py` into `/opt/tsws-render-worker`, keeping each old
    file as `.bak-<date>`. Leaving out `tsws-repair.js` deletes `tsws_repair`;
@@ -892,9 +928,19 @@ The first install under "Deploying it" is for a new host. On the live box:
    carries the two deviations above (the bridge bind and `MemoryMax=5G`) and the
    repair drop-in sits beside it. Copying the committed unit rebinds the worker
    to loopback, where the n8n container cannot reach it.
-5. Restart, then read `/health` on the bridge address: 24, with `tsws_repair`,
-   `word_timings` and `acx_node_assemble` among the names. Read the live files'
-   sha256 back against the merge commit's.
+5. Make the ACX runtime once, from "The ACX Node build" below: the whisper venv,
+   the three Chakra Petch faces under the work root, and `/data/tsws/hf` owned by
+   `tsws`. Add `WHISPER_PYTHON` and `HF_HOME` to `/etc/tsws-render-worker.env` by
+   appending two lines; that file holds `WORKER_TOKEN`, so never rewrite it with
+   a redirect and never print it. Without this step the service starts and
+   `/health` reads 24, but `word_timings` fails at run time naming the variable
+   and `acx_node_assemble` refuses at submit for want of the faces.
+6. Read `GET /status` again immediately before the restart, and restart only
+   when it is still idle. Then read `/health` on the bridge address: 24, with
+   `tsws_repair`, `word_timings` and `acx_node_assemble` among the names. 24
+   proves the job table loaded, not that the ACX jobs can run; their proof is the
+   Node 01 case below. Read the live files' sha256 back against the merge
+   commit's.
 
 ## The ACX Node build (added 2026-10-28, ruled R22)
 
@@ -938,7 +984,8 @@ These steps run on N8N-HOST, where the worker runs, as root. Its Python is
 # once, on N8N-HOST, as root: a venv the service user can read
 python3 -m venv /opt/tsws-render-worker/whisper
 /opt/tsws-render-worker/whisper/bin/pip install faster-whisper==1.1.1 "av<14" requests
-# then in /etc/tsws-render-worker.env
+# then APPEND these two lines to /etc/tsws-render-worker.env. It holds
+# WORKER_TOKEN: never rewrite it with a single > redirect and never print it.
 WHISPER_PYTHON=/opt/tsws-render-worker/whisper/bin/python
 # the model cache. The unit runs ProtectSystem=strict with ReadWritePaths only
 # /data/tsws, and the service user's home under /opt is root owned, so the

@@ -33,6 +33,8 @@ process.env.WORK_ROOT = ROOT;
 process.env.PORT = '0';
 process.env.LOG_REQUESTS = '0';
 process.env.JOB_TIMEOUT_MS = '20000';
+// Small, so the queue-full test can fill it with three slow envelopes.
+process.env.MAX_QUEUE = '2';
 
 const J = require('./jobs.js');
 const R = require('./tsws-repair.js');
@@ -53,20 +55,29 @@ const setEnv = (over) => {
 };
 setEnv();
 
-// A stand-in package. Each script reads the staged job, writes RESULT.json and
-// one frame into --out, and exits with the job's test_exit (0 when absent).
+// A stand-in package. Each script reads the staged job, writes its pid beside
+// the output folder, and after test_sleep_ms writes RESULT.json (echoing the
+// source path it was handed) and one frame into --out, then exits with
+// test_exit (0 when absent). test_flood writes 20 MiB to stdout first;
+// test_symlink leaves a symlink in the output.
 const FAKE = `
 const fs = require('fs'), path = require('path');
 const a = process.argv.slice(2);
 const job = JSON.parse(fs.readFileSync(a[a.indexOf(a[1]) + 1], 'utf8'));
 const out = a[a.indexOf('--out') + 1];
-if (!job.test_no_result) {
-  fs.writeFileSync(path.join(out, 'RESULT.json'), JSON.stringify({ verdict: job.test_verdict || 'PASS', method: a[0] }));
-  fs.mkdirSync(path.join(out, 'frames'));
-  fs.writeFileSync(path.join(out, 'frames', 'f0001.png'), 'frame-bytes');
-}
-console.log('fake repair ran', a[0]);
-process.exit(job.test_exit || 0);
+fs.writeFileSync(path.join(path.dirname(out), 'fake.pid'), String(process.pid));
+if (job.test_flood) { const chunk = 'x'.repeat(1 << 20); for (let i = 0; i < 20; i++) process.stdout.write(chunk); }
+setTimeout(() => {
+  if (!job.test_no_result) {
+    fs.writeFileSync(path.join(out, 'RESULT.json'), JSON.stringify({ verdict: job.test_verdict || 'PASS', method: a[0],
+      seen_path: job.source && job.source.path }));
+    fs.mkdirSync(path.join(out, 'frames'));
+    fs.writeFileSync(path.join(out, 'frames', 'f0001.png'), 'frame-bytes');
+  }
+  if (job.test_symlink) fs.symlinkSync('/etc/hostname', path.join(out, 'escape'));
+  console.log('fake repair ran', a[0]);
+  process.exit(job.test_exit || 0);
+}, job.test_sleep_ms || 0);
 `;
 for (const rel of Object.values(R.METHODS).map(m => m[0])) {
   fs.mkdirSync(path.join(PKG, path.dirname(rel)), { recursive: true });
@@ -177,6 +188,48 @@ t('a claimed run stages the inputs read only, runs the package, and returns a DR
   assert.strictEqual(fs.statSync(path.join(runRoot, 'inputs', 'plate.png')).mode & 0o777, 0o400);
   assert.ok(fs.existsSync(path.join(runRoot, 'DELIVERY.json')));
   assert.ok(/fake repair ran/.test(fs.readFileSync(path.join(runRoot, 'PROCESS.log'), 'utf8')));
+  // the package is handed the staged copy, never the caller's relative name
+  assert.strictEqual(r.result.seen_path, path.join(runRoot, 'inputs', 'plate.png'));
+});
+t('a cache entry that is a symlink is refused, even when its target holds the right bytes', async () => {
+  const p = envelope();
+  const real = path.join(TMP, 'outside-' + p.envelope_id);
+  fs.writeFileSync(real, 'plate-bytes-' + p.envelope_id);
+  const entry = path.join(CACHE, p.inputs[0].drive_id, p.inputs[0].sha256);
+  fs.unlinkSync(entry); fs.symlinkSync(real, entry);
+  const b = build(p); b.claim('job-link');
+  try { await assert.rejects(b.native(), /symlink or path escape refused/); } finally { fs.rmSync(real, { force: true }); }
+});
+t('a staged input whose size differs from the declared bytes fails the run', async () => {
+  const p = envelope();
+  p.inputs[0] = Object.assign({}, p.inputs[0], { bytes: p.inputs[0].bytes + 1 });
+  const b = build(p); b.claim('job-bytes');
+  await assert.rejects(b.native(), /byte count mismatch/);
+});
+t('a symlink the package leaves in its output is refused', async () => {
+  const b = build(envelope({ test_symlink: true })); b.claim('job-outlink');
+  await assert.rejects(b.native(), /output symlink refused/);
+});
+t('abort() kills the package\'s whole process group, and the run reports it', async () => {
+  const p = envelope({ test_sleep_ms: 30000 });
+  const b = build(p); b.claim('job-abort');
+  const run = b.native();
+  const pidFile = path.join(ROOT, 'repair', p.envelope_id, 'fake.pid');
+  for (let i = 0; i < 200 && !fs.existsSync(pidFile); i++) await new Promise(s => setTimeout(s, 25));
+  const pid = Number(fs.readFileSync(pidFile, 'utf8'));
+  b.abort();
+  await assert.rejects(run, /repair aborted/);
+  let alive = true;
+  for (let i = 0; i < 40 && alive; i++) {
+    try { process.kill(pid, 0); await new Promise(s => setTimeout(s, 25)); } catch (e) { alive = e.code !== 'ESRCH'; }
+  }
+  assert.strictEqual(alive, false, 'the package process outlived abort()');
+});
+t('more than 16 MiB of package output stops the run and the log stays under the cap', async () => {
+  const p = envelope({ test_flood: true, test_sleep_ms: 30000 });
+  const b = build(p); b.claim('job-flood');
+  await assert.rejects(b.native(), /log limit exceeded/);
+  assert.ok(fs.statSync(path.join(ROOT, 'repair', p.envelope_id, 'PROCESS.log')).size <= 16 * 1024 ** 2);
 });
 t('a staged input whose bytes do not match its SHA-256 fails the run and writes ERROR.json', async () => {
   const p = envelope();
@@ -248,6 +301,24 @@ t('a submitted envelope is claimed at submit, runs to done, and its second submi
   const b = await req('POST', '/jobs', { type: 'tsws_repair', params: p });
   assert.strictEqual(b.status, 409);
   assert.ok(/automatic retry refused/.test(b.body.error));
+});
+t('a full queue answers 503 before the claim, so the envelope is never burned', async () => {
+  const slow = [envelope({ test_sleep_ms: 400 }), envelope({ test_sleep_ms: 400 }), envelope({ test_sleep_ms: 400 })];
+  const ids = [];
+  for (const p of slow) {
+    const r = await req('POST', '/jobs', { type: 'tsws_repair', params: p });
+    assert.strictEqual(r.status, 202, JSON.stringify(r.body));
+    ids.push(r.body.id);
+  }
+  const extra = envelope();
+  const r = await req('POST', '/jobs', { type: 'tsws_repair', params: extra });
+  assert.strictEqual(r.status, 503, JSON.stringify(r.body));
+  assert.ok(/queue is full/.test(r.body.error));
+  assert.ok(!fs.existsSync(path.join(ROOT, 'repair', extra.envelope_id)), 'a refused submit claimed the envelope');
+  for (const id of ids) assert.strictEqual((await poll(id)).status, 'done');
+  const again = await req('POST', '/jobs', { type: 'tsws_repair', params: extra });
+  assert.strictEqual(again.status, 202, 'the refused envelope could not be submitted once the queue drained');
+  assert.strictEqual((await poll(again.body.id)).status, 'done');
 });
 t('an unconfigured box answers 503 at submit, and claims nothing', async () => {
   const p = envelope();

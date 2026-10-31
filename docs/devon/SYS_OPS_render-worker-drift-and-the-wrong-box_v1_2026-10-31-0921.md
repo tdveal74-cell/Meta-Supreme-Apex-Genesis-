@@ -55,9 +55,16 @@ It brings the live build home. `tsws-repair.js` is byte identical to the live
 file (sha256 `4af32fea...`, 11,656 bytes). The same three changes are applied on
 top of `main`, so `server.js` hashes exactly as the live one and `jobs.js` is
 `main`'s plus the one entry. `tsws-repair.test.js`, which the box's own
-`package.json` named and nobody had written, pins the bridge and the claim hook
-in 15 tests, and each of eight deliberate breaks to the job, the hook or the
-`jobs.js` entry turns it red. It runs in the render worker CI. `DEPLOY.md` gains
+`package.json` named and nobody had written, pins the bridge as a stand-in
+package sees it and the claim hook in 21 tests, and each of fifteen deliberate
+breaks to the job, the hook or the `jobs.js` entry turns it red. A fresh critic
+found seven of those fifteen surviving the first version's 15 tests (the cache
+symlink refusal, the job path rewrite, the byte count, the output symlink
+refusal, `abort()`, the log cap and the claim running before the queue-full
+check); the six tests that catch them were added and each break re-run. The
+same critic found that `DEPLOY.md` overstated the bridge's path checks: in the
+staged job file only three keys are checked, and the doc now says so. It runs
+in the render worker CI. `DEPLOY.md` gains
 the job, its drop-in with the bridge address as a placeholder, which host the
 ACX steps belong on, and an upgrade procedure for the live box that never copies
 the unit file. The repair skill's sentence saying the job does not exist is
@@ -74,6 +81,6 @@ ARTIFACT: docs/devon/SYS_OPS_render-worker-drift-and-the-wrong-box_v1_2026-10-31
 DATE: 2026-10-31
 DECISIONS: Tee ruled on a card to have the session remove the four stray paths from the EditForge box, and to bring the live repair build into the repository first and deploy the ACX build after, through Desktop Commander. The removal waits for a fresh word because the outward gate refused it at 292 minutes.
 FINDINGS: The render worker runs on the n8n box; two ACX steps ran on the EditForge box after the session named the wrong host from memory, leaving four stray items that nothing reads. The live worker has carried tsws_repair since 2026-10-17 with no commit or status doc, proven by rebuilding its three files from d75114d to the live sha256 and confirmed by two independent verifiers. The DEPLOY.md install steps would have deleted that job and rebound the worker away from n8n.
-OPEN: The four stray paths on the EditForge box; the ACX deploy to the n8n box, with the whisper venv, HF_HOME and fonts made there; who deployed tsws_repair on 2026-10-17 and whether an n8n workflow calls it; GET /status on the n8n box before any restart; Tee's watch of the Proof 0 master.
+OPEN: The four stray paths on the EditForge box; the ACX deploy to the n8n box, with the whisper venv, HF_HOME and fonts made there; who deployed tsws_repair on 2026-10-17 (the box holds three envelopes claimed that day and none since, by the claim folder's 2026-10-17T11:19:50Z mtime) and whether an n8n workflow is wired to call it; GET /status on the n8n box before any restart; whether to tighten the staged job checks, which would break byte identity with the box; Tee's watch of the Proof 0 master.
 STATUS: Live build reproduced byte for byte and brought into the repository with tests and the deploy procedure corrected; nothing deployed and nothing removed yet.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
