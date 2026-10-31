@@ -1376,6 +1376,14 @@ script.
 | edit | `editor` | yes, one fix | own worktree |
 | verify | `verifier` | never in the main checkout | own worktree |
 
+**A `scanner` cannot reach a connector.** Its tools are Read, Grep and Glob, so
+it has no MCP tool and no `ToolSearch` to load one. Found 2026-10-31, when a
+sweep of all 25 TSWS workflows on the VPS n8n instance by 25 scanner agents
+returned 25 failed reads and 2.7 million tokens of repository evidence, each
+row saying honestly that the live read was not made. A read of n8n, Drive,
+Airtable or any other connector is the main session's or a `general-purpose`
+agent's, and a workflow that needs one says so in its agent type.
+
 Pass `agentType` on every `agent()` call and leave `model` unset, so the
 definition decides the tier: a model named in the script outranks the one in
 the definition. Pass `isolation: 'worktree'` on every editor and verifier call
