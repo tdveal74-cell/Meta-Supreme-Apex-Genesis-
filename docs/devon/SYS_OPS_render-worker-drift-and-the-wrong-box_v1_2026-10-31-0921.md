@@ -56,12 +56,16 @@ file (sha256 `4af32fea...`, 11,656 bytes). The same three changes are applied on
 top of `main`, so `server.js` hashes exactly as the live one and `jobs.js` is
 `main`'s plus the one entry. `tsws-repair.test.js`, which the box's own
 `package.json` named and nobody had written, pins the bridge as a stand-in
-package sees it and the claim hook in 21 tests, and each of fifteen deliberate
+package sees it and the claim hook in 22 tests, and each of sixteen deliberate
 breaks to the job, the hook or the `jobs.js` entry turns it red. A fresh critic
 found seven of those fifteen surviving the first version's 15 tests (the cache
 symlink refusal, the job path rewrite, the byte count, the output symlink
 refusal, `abort()`, the log cap and the claim running before the queue-full
-check); the six tests that catch them were added and each break re-run. The
+check); the six tests that catch them were added and each break re-run. A
+fresh verifier then confirmed those fixes and found one more half guard
+unpinned, a cache symlink pointing inside the cache, now tested, and a pasted
+ACX env step that did nothing, now a guarded append that refuses on a box with
+no worker. The
 same critic found that `DEPLOY.md` overstated the bridge's path checks: in the
 staged job file only three keys are checked, and the doc now says so. It runs
 in the render worker CI. `DEPLOY.md` gains

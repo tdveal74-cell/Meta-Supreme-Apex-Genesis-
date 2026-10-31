@@ -328,8 +328,9 @@ keeps the property that matters: the token never crosses a network.
 **Node.** A host running n8n in docker will usually have no Node at all, because
 n8n never needed it there. Ubuntu 24.04's own `nodejs` package is 18.19.1, which
 satisfies this worker, so no third party repository is required. Skip the `npm`
-package; the worker has zero dependencies and the three suites run directly with
-`node jobs.test.js`, `node server.test.js`, `node negative-control.js`.
+package; the worker has zero dependencies and the five suites run directly with
+`node jobs.test.js`, `node acx_node.test.js`, `node server.test.js`,
+`node tsws-repair.test.js` and `node negative-control.js`.
 
 The autonomy driver recorded the intended home as EDITFORGE-HOST, the EditForge box,
 or its own host. It went to N8N-HOST instead, the n8n box, so that the call
@@ -847,10 +848,11 @@ operator's environment and never from the caller. It reads inputs only from a
 pre-staged cache laid out as `CACHE/DRIVE_ID/SHA256`, refuses a cache entry that
 is a symlink, and checks every hash and declared byte count; it fetches
 nothing. In the staged job file it checks less: only string values under the
-keys `path`, `clean_plate` and `protected_mask`, and the entries of
+keys `path`, `clean_plate` and `protected_mask`, and string entries of
 `actor_mattes`, must name a declared input, and those are rewritten to the
-staged copies. Any other key, and an array under `path`, reaches the Python
-package unchecked, absolute paths and URLs included. That is the live code as
+staged copies. Any other key, an array or object under `path`, and an array or
+object entry of `actor_mattes` reach the Python package unchecked, absolute
+paths and URLs included. That is the live code as
 carried; tightening it would break byte identity with the box and is a ruling
 of its own. The exposure is to holders of the worker token, and the package
 runs as `tsws` under the unit's `ProtectSystem=strict`. Its receipt is always `DRAFT` with
@@ -878,17 +880,17 @@ Environment=TSWS_REPAIR_CACHE_ROOT=/data/tsws/repair-cache-v01
 Environment=TSWS_REPAIR_PUBLIC_ORIGIN=http://BRIDGE-GATEWAY:8080
 ```
 
-`tsws-repair.test.js` pins, in 21 tests, the submit refusals, the
+`tsws-repair.test.js` pins, in 22 tests, the submit refusals, the
 configuration and origin checks, the claim and its 409, a full run through a
 stand-in package (Node as the interpreter, the package's own script names) that
 is handed the staged input's path, a cache entry that is a symlink, a wrong
-hash, a wrong byte count, an input never staged, a bad exit code, a symlink
+hash, a cache symlink to another file inside the cache, a wrong byte count, an input never staged, a bad exit code, a symlink
 left in the output, `abort()` killing the package's process group, the 16 MiB
 log cap, and through the real server the 409, the 503 for missing
 configuration, and a full queue answering 503 before the claim so the envelope
-is not burned. Each of fifteen deliberate breaks to the job, the hook or the
-`jobs.js` entry turns it red; seven of them were found surviving an earlier
-version of the suite by a critic. It covers the bridge as a stand-in package
+is not burned. Each of sixteen deliberate breaks to the job, the hook or the
+`jobs.js` entry turns it red; eight of them were found surviving earlier
+versions of the suite by a critic and a verifier. It covers the bridge as a stand-in package
 sees it and nothing about the real Python package, Blender or the box's
 runtime, and it does not test the unchecked job keys described above.
 
@@ -921,9 +923,12 @@ The first install under "Deploying it" is for a new host. On the live box:
    touched until all five exit 0.
 3. Copy `jobs.js`, `server.js`, `package.json`, `tsws-repair.js`,
    `acx_node.js` and `words.py` into `/opt/tsws-render-worker`, keeping each old
-   file as `.bak-<date>`. Leaving out `tsws-repair.js` deletes `tsws_repair`;
-   leaving out `acx_node.js` stops the service, because `jobs.js` requires it at
-   load and the unit gives up after five failed starts.
+   file as `.bak-<date>`. Leaving out `acx_node.js` stops the service, because
+   `jobs.js` requires it at load and the unit gives up after five failed starts.
+   `tsws-repair.js` is loaded only when a repair job is built, so leaving it out
+   on a host that lacks it keeps `tsws_repair` listed in `/health` while every
+   submit answers 500; on the live box the byte identical file is already in
+   place. Only the sha256 read back in step 6 catches a missing file.
 4. **Never copy `tsws-render-worker.service` over the live unit.** The live one
    carries the two deviations above (the bridge bind and `MemoryMax=5G`) and the
    repair drop-in sits beside it. Copying the committed unit rebinds the worker
@@ -984,16 +989,23 @@ These steps run on N8N-HOST, where the worker runs, as root. Its Python is
 # once, on N8N-HOST, as root: a venv the service user can read
 python3 -m venv /opt/tsws-render-worker/whisper
 /opt/tsws-render-worker/whisper/bin/pip install faster-whisper==1.1.1 "av<14" requests
-# then APPEND these two lines to /etc/tsws-render-worker.env. It holds
-# WORKER_TOKEN: never rewrite it with a single > redirect and never print it.
-WHISPER_PYTHON=/opt/tsws-render-worker/whisper/bin/python
-# the model cache. The unit runs ProtectSystem=strict with ReadWritePaths only
-# /data/tsws, and the service user's home under /opt is root owned, so the
-# default cache at $HOME/.cache/huggingface is not writable and the first
-# word_timings job would die downloading base.en (critic F4, read from the
-# unit file, not run). Point it inside the writable root:
-HF_HOME=/data/tsws/hf
-mkdir -p /data/tsws/hf && chown tsws:tsws /data/tsws/hf
+# then append WHISPER_PYTHON and HF_HOME to /etc/tsws-render-worker.env. It
+# holds WORKER_TOKEN: never rewrite it with a single > redirect and never print
+# it. HF_HOME is the model cache: the unit runs ProtectSystem=strict with
+# ReadWritePaths only /data/tsws, and the service user's home under /opt is root
+# owned, so the default cache at $HOME/.cache/huggingface is not writable and
+# the first word_timings job would die downloading base.en.
+# This refuses on a box with no worker. On 2026-10-31 an unguarded version of
+# these lines ran on the EditForge box and created the env file there.
+F=/etc/tsws-render-worker.env
+if [ -f "$F" ] && id tsws >/dev/null 2>&1; then
+  grep -q '^WHISPER_PYTHON=' "$F" || echo 'WHISPER_PYTHON=/opt/tsws-render-worker/whisper/bin/python' >> "$F"
+  grep -q '^HF_HOME=' "$F" || echo 'HF_HOME=/data/tsws/hf' >> "$F"
+  mkdir -p /data/tsws/hf && chown tsws:tsws /data/tsws/hf
+  cut -d= -f1 "$F"    # key names only: WORKER_TOKEN WORK_ROOT WHISPER_PYTHON HF_HOME
+else
+  echo "REFUSED: no $F or no tsws user on $(hostname); this is not the worker's box"
+fi
 # and the three Chakra Petch faces, OFL, under the work root
 mkdir -p /data/tsws/fonts/chakra   # ChakraPetch--400.ttf, --600.ttf, --700.ttf
 ```

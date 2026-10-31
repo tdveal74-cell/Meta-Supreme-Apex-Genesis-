@@ -200,6 +200,14 @@ t('a cache entry that is a symlink is refused, even when its target holds the ri
   const b = build(p); b.claim('job-link');
   try { await assert.rejects(b.native(), /symlink or path escape refused/); } finally { fs.rmSync(real, { force: true }); }
 });
+t('a cache entry that is a symlink to another file inside the cache is refused too', async () => {
+  const p = envelope();
+  const entry = path.join(CACHE, p.inputs[0].drive_id, p.inputs[0].sha256);
+  const twin = entry + '.twin';
+  fs.renameSync(entry, twin); fs.symlinkSync(twin, entry);
+  const b = build(p); b.claim('job-twin');
+  await assert.rejects(b.native(), /symlink or path escape refused/);
+});
 t('a staged input whose size differs from the declared bytes fails the run', async () => {
   const p = envelope();
   p.inputs[0] = Object.assign({}, p.inputs[0], { bytes: p.inputs[0].bytes + 1 });
