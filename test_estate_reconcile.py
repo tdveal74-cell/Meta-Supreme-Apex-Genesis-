@@ -977,7 +977,19 @@ _NUMBER_WORDS = {
     "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
     "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
     "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
+    "thirty": 30,
 }
+# The skill count passed twenty on 2026-10-31, when two PRs that each counted
+# twenty merged within eight minutes of each other, so compound words count too.
+_NUMBER_WORDS.update(
+    {
+        f"{tens}-{unit}": base + offset
+        for tens, base in (("twenty", 20), ("thirty", 30))
+        for offset, unit in enumerate(
+            ("one", "two", "three", "four", "five", "six", "seven", "eight", "nine"), start=1
+        )
+    }
+)
 
 
 def _skill_dirs():
@@ -1011,14 +1023,14 @@ def test_the_skill_inventory_is_counted_from_the_directory():
     vendored = sorted(d.name for d in SKILLS.iterdir() if (d / "UPSTREAM.md").is_file())
     ours = [name for name in skills if name not in vendored]
 
-    total = re.search(r"`\.claude/skills/` carries (\w+)\.", claude_md)
+    total = re.search(r"`\.claude/skills/` carries ([\w-]+)\.", claude_md)
     assert total, "CLAUDE.md no longer states a skill total; the pin cannot check it"
     assert _count(total.group(1), "CLAUDE.md") == len(skills), (
         f"CLAUDE.md says {total.group(1)} skills, the directory holds "
         f"{len(skills)}: {skills}"
     )
 
-    mine = re.search(r"(\w+) are ours:", claude_md)
+    mine = re.search(r"([\w-]+) are ours:", claude_md)
     assert mine, "CLAUDE.md no longer states how many skills are ours"
     assert _count(mine.group(1), "CLAUDE.md") == len(ours), (
         f"CLAUDE.md says {mine.group(1)} are ours, the directory holds "

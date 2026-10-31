@@ -1385,7 +1385,7 @@ whichever is reached first ends the loop.
 
 ## Skills in this repository
 
-`.claude/skills/` carries twenty. Sixteen are ours: `steward` (CI and PR
+`.claude/skills/` carries twenty-one. Seventeen are ours: `steward` (CI and PR
 conventions, load it for anything touching either), `deploy-readback` (what the
 production surfaces are actually serving), `estate-reconcile` (checking records
 against the live estate), `devon-learning-lane` (the Build 12 learning lane and
