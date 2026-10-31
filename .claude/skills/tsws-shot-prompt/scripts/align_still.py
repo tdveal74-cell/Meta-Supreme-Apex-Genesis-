@@ -27,12 +27,23 @@ moved differently can read near zero, so keep each region on one surface.
 
 Each shift is read twice. Phase correlation with a Hanning window gives a first
 answer and a response, but on known shifts of SH020 frame 191 it pulled
-sub-pixel shifts toward the nearest whole pixel by up to 0.30 px. A translation
-ECC seeded with that answer read every known shift from 0.1 to 19 px within
-0.03 px, so the ECC figure is printed when it converges and "phase" is printed
-when it does not. A low response means the content inside the box changed and
-the shift is not trustworthy; compare it with the static regions' responses on
-the same run rather than with a fixed number.
+sub-pixel shifts toward the nearest whole pixel by up to about 0.32 px. A
+translation ECC seeded with that answer read every known shift from 0.1 to
+19 px within 0.03 px. The ECC figure is printed, with ECC's own correlation
+coefficient, when it converges within 1 px of its seed. Otherwise the phase
+figure is printed and flagged: on a person who moved, ECC can lock onto the
+background inside the box and read a 30 px move as under 1 px. A low response
+means the content inside the box changed and the shift is not trustworthy;
+compare it with the static regions' responses on the same run rather than with
+a fixed number. On a generated edit, which is not a pure translation, the
+sub-pixel reading also depends on the estimator's smoothing by about 0.1 px, so
+treat differences smaller than that as within the estimator's spread.
+
+Read the "plain resize" lines for a still that is already native size and
+aligned, and for a frame of a generated clip: they come before any fit and
+measure the camera. The "after affine alignment" lines remove any whole-frame
+shift by construction, so they cannot show camera drift, and on an aligned still
+the second fit moves the readings again.
 """
 
 import argparse
@@ -47,6 +58,7 @@ STATIC_REGIONS = {
     "right_lamp": (1680, 0, 1920, 430),
 }
 MIN_SIDE = 16
+ECC_REACH = 1.0
 
 
 def gray(image):
@@ -81,10 +93,16 @@ def shift(native, other, box):
     warp = np.float32([[1, 0, dx], [0, 1, dy]])
     criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 500, 1e-8)
     try:
-        _, warp = cv2.findTransformECC(a, b, warp, cv2.MOTION_TRANSLATION, criteria, None, 5)
+        cc, warp = cv2.findTransformECC(a, b, warp, cv2.MOTION_TRANSLATION, criteria, None, 5)
     except cv2.error:
-        return dx, dy, response, "phase"
-    return float(warp[0, 2]), float(warp[1, 2]), response, "ecc"
+        return dx, dy, response, "phase, ecc did not converge"
+    ex, ey = float(warp[0, 2]), float(warp[1, 2])
+    # ECC refines a sub-pixel answer. When it lands more than ECC_REACH from its
+    # seed it has locked onto other content in the box, such as the background
+    # behind a person who moved, so the phase answer is kept and flagged.
+    if abs(ex - dx) > ECC_REACH or abs(ey - dy) > ECC_REACH:
+        return dx, dy, response, f"phase, ecc disagreed (ecc {ex:+.2f},{ey:+.2f})"
+    return ex, ey, response, f"ecc cc={cc:.2f}"
 
 
 def report(label, native, other, regions):
