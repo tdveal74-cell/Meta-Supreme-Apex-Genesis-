@@ -1040,11 +1040,16 @@ def test_the_vendored_skills_are_the_ones_claude_md_names():
     are never edited in place. UPSTREAM.md is what marks one, so another
     vendored skill arriving must move the prose, not sit silently. This said
     scroll-craft alone until hypit was vendored on 2026-10-16, typesafe-ai
-    followed the same day, and watch arrived on 2026-10-28."""
+    followed the same day, watch arrived on 2026-10-28, and the three ArtCraft
+    skills effectcraft, filmcraft and photocraft arrived together off Tee's VPS
+    on 2026-10-31."""
     vendored = sorted(d.name for d in SKILLS.iterdir() if (d / "UPSTREAM.md").is_file())
-    assert vendored == ["hypit", "scroll-craft", "typesafe-ai", "watch"], (
+    expected = [
+        "effectcraft", "filmcraft", "hypit", "photocraft", "scroll-craft", "typesafe-ai", "watch",
+    ]
+    assert vendored == expected, (
         f"vendored skills are now {vendored}; CLAUDE.md and the "
-        "ours/vendored counts above assume hypit, scroll-craft, typesafe-ai and watch"
+        f"ours/vendored counts above assume {expected}"
     )
 
 

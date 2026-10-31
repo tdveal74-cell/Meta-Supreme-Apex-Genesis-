@@ -1429,7 +1429,7 @@ whichever is reached first ends the loop.
 
 ## Skills in this repository
 
-`.claude/skills/` carries twenty-one. Seventeen are ours: `steward` (CI and PR
+`.claude/skills/` carries twenty-four. Seventeen are ours: `steward` (CI and PR
 conventions, load it for anything touching either), `deploy-readback` (what the
 production surfaces are actually serving), `estate-reconcile` (checking records
 against the live estate), `devon-learning-lane` (the Build 12 learning lane and
@@ -1532,6 +1532,33 @@ because the gate ledger reads every transcript. Do not also add
 `bradautomates/claude-video` as a plugin marketplace in a session that has
 this checkout; its `SessionStart` hook was deliberately not vendored.
 `.claude/skills/watch/UPSTREAM.md` carries the full reading.
+
+Three more are vendored too, from Tee rather than from GitHub: `effectcraft`,
+`filmcraft` and `photocraft`, three of the thirteen ArtCraft skills installed
+on his VPS, ruled on a card on 2026-10-31, "Vendor the three that touch this
+work", each "with a manifest and UPSTREAM.md, a separate PR". Each is a
+`SKILL.md`, an `evidence.md` claim table and a three line `agents/openai.yaml`,
+and filmcraft adds two `references/` files. They were written for Tee on
+2026-10-18 against the storytold clean room Rust reimplementations of After
+Effects (`storytold/effectcraft` v0.11.1), Premiere Pro (`storytold/filmcraft`
+v0.9.0) and Photoshop (`storytold/photocraft` v0.10.0), all three alpha by
+their own parity tables, all three MIT OR Apache-2.0, read from the
+repositories at the documented commits rather than from the skill text, since
+the filmcraft one never says. They came as `ArtCraft_Skills_for_Claude.zip`,
+sha256 `39ce1650184662d1c4c4db5168e4d7e660b971a7390b369379e665445bb29f60`,
+and every file was checked against the zip's own `MANIFEST.json` before it
+was copied, eleven of eleven. Same rules and the same test, with one
+difference the test now carries: the copy had no licence file, because the
+skills are Tee's and not a third party's, so none is written for them here and
+`test_vendored_skills.py` pins its absence. Fixes go to the source copy on the
+VPS and come back as a new zip; a file edited under `.claude/skills/` fails
+the manifest. The apps are in neither this repository nor the cloud image. The
+zip's README says they live under `/opt/artcraft` on `srv1936199`, which is
+unverified from a cloud session, while the skills' own launch lines are
+written for macOS `.app` bundles, so read the VPS before running one. The
+EffectCraft and FilmCraft control channels carry no authentication; the
+PhotoCraft one takes a token, which is a credential and never goes into chat.
+Each `UPSTREAM.md` carries the full reading.
 
 A pinned plugin is not a substitute here. `.claude/settings.json` enabling a
 plugin does not install it, and in a Claude Code on the web session
