@@ -245,7 +245,7 @@ jobs:
           # same set Railway builds.
           python-version: "3.12"
       - name: Install pip-audit
-        id: pip-audit
+        id: install-pip-audit
         run: python -m pip install --quiet --upgrade pip pip-audit
       # PYSEC-2026-1325 was ecdsa, pulled in by python-jose, which the
       # ecdsa maintainers said they would not fix. Audit item 16 replaced
@@ -265,7 +265,7 @@ jobs:
       - name: pip-audit the pinned requirements
         run: python -m pip_audit --strict -r requirements.txt --progress-spinner off
       - name: pip-audit the soul host's requirements
-        if: ${{ !cancelled() && steps.pip-audit.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.install-pip-audit.outcome == 'success' }}
         run: python -m pip_audit --strict -r deploy/soul/requirements.txt --progress-spinner off
       - uses: pnpm/action-setup@v4
         if: ${{ !cancelled() }}

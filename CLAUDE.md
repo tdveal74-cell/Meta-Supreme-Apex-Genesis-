@@ -167,9 +167,9 @@ files in `.github/workflows` instead of trusting the sentence: `render-worker-ci
 filtered to `deploy/render-worker/**`, runs on pull requests and on pushes to
 `main`. Its own comment says what it proves, the argv and filter graphs the
 builders emit and the HTTP contract against a listening server, and what it
-does not, no pixel and no sample. The steward skill still says five jobs plus
-a sixth; that count is older still. Before editing this number again, count it
-from the files.
+does not, no pixel and no sample. The steward skill describes ci.yml's five
+jobs and web-ci.yml's one, and since 2026-10-31 it sends the reader here for the
+total. Before editing this number again, count it from the files.
 
 The tenth arrived on 2026-09-17: `.github/workflows/pulse-watchdog.yml`, and it
 is the first one that will NEVER appear on a pull request. It has no `push` and
@@ -585,8 +585,8 @@ on demand, in a throwaway environment when you can:
 
 ```bash
 python3 -m pip install pip-audit
-python3 -m pip_audit -r requirements.txt --progress-spinner off
-python3 -m pip_audit -r deploy/soul/requirements.txt --progress-spinner off
+python3 -m pip_audit --strict -r requirements.txt --progress-spinner off
+python3 -m pip_audit --strict -r deploy/soul/requirements.txt --progress-spinner off
 pnpm audit --audit-level=moderate
 ```
 

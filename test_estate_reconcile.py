@@ -1141,8 +1141,8 @@ def test_the_daily_audit_runs_what_the_ci_audit_runs():
     daily_spec = workflows["dependency-audit-daily.yml"]
     assert list(daily_spec["jobs"]) == ["audit"], "the daily audit workflow should hold one job, audit"
     daily = dict(daily_spec["jobs"]["audit"])
-    ci.pop("name")
-    daily.pop("name")
+    ci.pop("name", None)
+    daily.pop("name", None)
     assert daily == ci, "the daily audit job and ci.yml's dependency-audit job differ beyond their names"
 
     assert set(daily_spec) == {"name", True, "permissions", "concurrency", "jobs"}, (
