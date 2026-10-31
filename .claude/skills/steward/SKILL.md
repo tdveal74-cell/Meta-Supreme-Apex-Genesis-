@@ -34,11 +34,17 @@ test path passes locally and fails there.
 `.github/workflows/web-ci.yml` runs `Next.js typecheck + build` and is path
 filtered to `apps/web/**`, `packages/ui/**`, the root `package.json`, the
 lockfile, the workspace file, and itself. Touch none of those and it never
-appears, which is why a run of Python-only PRs makes CI look like exactly four
+appears, which is why a run of Python-only PRs makes CI look like exactly five
 jobs. It is a real gate on any web change: `pnpm --filter @meta-supreme/web
 typecheck` then `build`. Reproduce it with `npx tsc --noEmit` and `npx next
 build` from `apps/web`, and note that `tsc` piped into `tail` reports the exit
 code of `tail`, so capture `$?` directly or a type error reads as a pass.
+
+Those six are not all of CI. Path filtered and scheduled workflows add more,
+some of which never appear on a pull request. `CLAUDE.md` under "Reproducing
+CI" counts every job in `.github/workflows` and names each file, and
+`test_estate_reconcile.py::test_the_ci_job_count_is_counted_from_the_workflows`
+pins that count to the files, so read the number there and not here.
 
 ESLint is NOT configured in this repository. `next lint` drops into its
 interactive setup prompt and exits non-zero, which looks like a lint failure and
@@ -73,8 +79,8 @@ python -m pytest -q --tb=short
 ruff check .
 
 # 5. dependency audit (network to PyPI and the npm registry through the proxy)
-python -m pip_audit -r requirements.txt --progress-spinner off
-python -m pip_audit -r deploy/soul/requirements.txt --progress-spinner off
+python -m pip_audit --strict -r requirements.txt --progress-spinner off
+python -m pip_audit --strict -r deploy/soul/requirements.txt --progress-spinner off
 pnpm audit --audit-level=moderate
 alembic upgrade head && alembic downgrade 004_federated_knowledge_waist && alembic upgrade head
 ```

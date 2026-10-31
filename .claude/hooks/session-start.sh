@@ -2,10 +2,11 @@
 # SessionStart hook: make a Claude Code on the web session able to reproduce
 # CI locally without any manual setup.
 #
-# CI is six jobs (see .claude/skills/steward/SKILL.md). This hook prepares the
-# four things they need: the pinned Python closure, the locked pnpm workspace,
-# a PostgreSQL 16 + pgvector cluster, and the environment variables the api and
-# engine jobs run under.
+# CLAUDE.md counts the CI jobs under "Reproducing CI", and
+# .claude/skills/steward/SKILL.md says how to reproduce the ones that run on
+# most pull requests. This hook prepares the four things those need: the pinned
+# Python closure, the locked pnpm workspace, a PostgreSQL 16 + pgvector
+# cluster, and the environment variables the api and engine jobs run under.
 #
 # Local machines are left alone: it exits immediately unless CLAUDE_CODE_REMOTE
 # is set. It is idempotent, non-interactive, and the database stage is best
