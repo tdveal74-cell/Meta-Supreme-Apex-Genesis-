@@ -84,7 +84,7 @@ t('health needs no token and lists the job types', async () => {
   // when tsws_repair was deployed there without reaching this repository; 24
   // from 2026-10-31, when that job was brought home beside the two ACX Node
   // jobs of 2026-10-28.
-  assert.strictEqual(r.body.job_count, 24, 'job_count was ' + r.body.job_count);
+  assert.strictEqual(r.body.job_count, 25, 'job_count was ' + r.body.job_count);
   assert.ok(r.body.jobs.includes('assemble_cut'));
   assert.ok(r.body.jobs.includes('duck_mix'));
   assert.ok(r.body.jobs.includes('presenter_composite'));

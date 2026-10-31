@@ -1,9 +1,19 @@
 ---
 name: mpt-shorts
-description: Install, run or judge MoneyPrinterTurbo (harry0703/MoneyPrinterTurbo), the topic-to-video generator, held to the one flow that keeps inside YouTube's inauthentic content policy and the owned-voice rule. Load before installing it on any device, before entering any key into it, before rendering a Short with it, or when someone shares a post about it. Compiled 2026-10-31 from a source audit of commit 27843a9 with every finding independently verified, a sandbox install, and renders through tools/mpt_shorts/render_short.py.
+description: Install, run or judge MoneyPrinterTurbo (harry0703/MoneyPrinterTurbo), the topic-to-video generator, held to the one flow that keeps inside YouTube's inauthentic content policy and the owned-voice rule. Not for TQO or NCO Forge Shorts, which Tee ruled on 2026-10-31 must carry his face. Load before installing it on any device, before entering any key into it, before rendering anything with it, or when someone shares a post about it. Compiled 2026-10-31 from a source audit of commit 27843a9 with every finding independently verified, a sandbox install, and renders through tools/mpt_shorts/render_short.py.
 ---
 
 # MoneyPrinterTurbo, tailored
+
+**Ruled out for TQO and NCO Forge Shorts, 2026-10-31.** Asked on a card which
+shows could use voice-only Shorts, Tee answered: "My face needs to be on them
+and my shorts needs to be like https://youtube.com/@vaibhavsisinty". This tool
+cannot carry a face (see Never, below: clips are cut, shuffled and muted, and
+it has no lip sync stage), so it has no role in either show's Shorts, and the
+n8n wiring mapped that day was not built. The face-on Shorts lane runs through
+the render worker's stacked `presenter_composite` with Tee's HeyGen avatar;
+its format reference is `docs/devon/TQO_CANON_face-on-shorts-format_v1_2026-10-31.md`.
+The install on srv1936199 stays as it is, idle, until Tee rules on removing it.
 
 A Python app with a Streamlit WebUI, a FastAPI server and a command line. Given a keyword it has an LLM write a script, a TTS voice read it, stock or AI clips matched to it and a random song mixed under it, then burns captions and writes an MP4. MIT licence. Version 1.3.9 at commit `27843a994bfa29c43c02150861d51490a6ca4bd2`, dated 2026-10-30. The GitHub page showed 136.6k stars that day.
 

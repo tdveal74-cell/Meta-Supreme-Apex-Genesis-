@@ -420,7 +420,10 @@ nothing else. Operational detail (`work_root`, queue depth, concurrency) is on
 `/status`, behind the token, because the first version put a filesystem path and
 a load signal in front of anyone who could reach the TLS terminator.
 
-`job_count` must read **24** from the 2026-10-31 build onward, which carries
+`job_count` reads **25** in this repository from 2026-10-31, when
+`caption_srt` was added, and will read 25 on the box once the next upgrade
+lands; until then the box reads 24. It must read **24** from the 2026-10-31 ACX
+build onward, which carries
 `tsws_repair` and the two ACX Node jobs; 22 on the live box from 2026-10-17 to
 the next upgrade (`tsws_repair` without the ACX jobs), 23 in this repository
 only from 2026-10-28 to 2026-10-31, 21 from the 2026-10-15 Voice Lab build, 19
@@ -589,6 +592,44 @@ window 6 to 7.5 s, a blue full cutaway 8 to 11 s, one caption over 0.5 to 3 s:
 Refused rather than defaulted: `cutaways` or `emphasis` present and not an
 array, `full` as anything but a boolean, `emphasis` on the full layout, and a
 window past the planned duration when one is given.
+
+**`split`** (added 2026-10-31, in this repository only until the next upgrade
+of the box) moves the seam. It is the payload zone's share of the canvas
+height, 0.3 to 0.75, stacked layout only. Tee ruled 0.5 for the native Shorts
+on 2026-10-31, matching the Vaibhav Sisinty Short he sent as the reference
+(`youtube.com/shorts/zopfY5ONIjA`): proof in the top half, presenter in the
+bottom half. Without `split` the graph is byte for byte the 1250 one and the
+default caption stays at `MarginV=92`. With it, the default caption moves to
+`round(288 * (1 - seam / H) - 8.4)`, which is 92.1 at the 1250 seam and 136 at
+0.5, so the measured offset travels with the seam. `parse()` reports `split_y`.
+Measured in a cloud session the same day with the builder's own argv through
+ffmpeg 6.1.1, 1080x1920, a 1920x1080 testsrc2 avatar, a 16:9 zone cutaway and
+a `caption_srt` caption, frame at 1.0 s:
+
+| check | result |
+|---|---|
+| `split: 0.5` | presenter zone from y 960, caption on the seam at roughly y 945 to 1005 |
+| no `split` | presenter zone from y 1250, caption on the seam as before |
+| a 16:9 zone cutaway at 0.5 | letterboxed inside 1080x960, so black bands above and below it |
+| `caption_style` with `BorderStyle=3`, white on `&H00000000`, `MarginV=136` | white bold text in an opaque black box on the seam, the reference's look |
+
+Not measured here: the box's own fonts (libass falls back to what is
+installed), and a real avatar's face against the 1080x960 crop.
+
+**`caption_srt`** (added 2026-10-31, in this repository only until the next
+upgrade) turns a `word_timings` file into seam captions. Params `{words,
+output, line?, max_words?, offset?, tail?}`. It reads `{stem: {words: [{text,
+start, end}]}}`, takes the only line or the one named in `line`, and writes an
+SRT of 2 to `max_words` (default 4) words a cue: a phrase ends at `. ? ! , ; :`,
+a single word left over joins the cue before it, a one word phrase after a
+sentence opens the next phrase, each cue runs first start to last end plus
+`tail` (0.15 s), stops 20 ms before the next and is never under 0.3 s when
+there is room. The characters libass reads as markup (`{ } \ < >`) are removed
+from the text; a word without a finite start and end, or ending before it
+starts, is refused, never guessed. The output path has to pass the same
+character test `presenter_composite` applies to `captions`, so a name it would
+refuse fails here first. Native, no child process. Pinned in jobs.test.js
+section C1.
 
 ## Voice Lab (added 2026-10-15)
 

@@ -776,10 +776,18 @@ const JOBS = {
       // full-frame head (`emphasis` windows) and full-frame payload (a cutaway
       // with `full: true`). Zone edges follow the spec's 1250 px split on a
       // 1080 x 1920 canvas and scale with the canvas when a caller changes it.
+      //
+      // `split` moves that edge: the payload zone's share of the canvas height.
+      // Tee ruled 0.5 for the native Shorts on 2026-10-31, matching the
+      // Vaibhav Sisinty reference he sent (proof top half, presenter bottom
+      // half). Absent, the edge stays at 1250/1920, byte for byte the graph it
+      // was, so every existing caller renders as before.
       const layout = oneOf(p.layout ?? 'full', 'layout', ['full', 'stacked']);
       const stacked = layout === 'stacked';
       if (stacked && !(H > W)) throw new BadJob(`layout stacked needs a portrait canvas (got ${W}x${H})`);
-      const splitY = stacked ? Math.round(H * 1250 / 1920) : 0;   // top of the presenter zone
+      if (p.split !== undefined && !stacked) throw new BadJob('split: only meaningful with layout stacked');
+      const split = p.split === undefined ? null : num(p.split, 'split', { min: 0.3, max: 0.75 });
+      const splitY = stacked ? Math.round(split === null ? H * 1250 / 1920 : H * split) : 0;   // top of the presenter zone
       const headH  = stacked ? H - splitY : H;
       const plate  = String(p.plate_color ?? '#0A1628');
       if (!/^#[0-9A-Fa-f]{6}$/.test(plate)) throw new BadJob('plate_color: must be #RRGGBB');
@@ -970,8 +978,13 @@ const JOBS = {
         // 92 puts the baseline near y 1300. The first cut used 45 and the
         // 2026-09-15 acceptance frame showed the line across the presenter's
         // chest, which is why this is measured rather than derived.
+        // With a `split`, the same placement is carried to the new seam: 92
+        // units is the measured bottom of the line 56 px (of 1920) below the
+        // 1250 seam, and 288 * (1 - seam / H) - 8.4 reproduces it (92.1), so
+        // the formula moves that measured offset rather than inventing one.
+        const marginV = split === null ? 92 : Math.round(288 * (1 - splitY / H) - 8.4);
         const style = String(p.caption_style ?? (stacked
-          ? 'FontSize=12,Bold=1,Outline=2,Shadow=0,MarginV=92'
+          ? `FontSize=12,Bold=1,Outline=2,Shadow=0,MarginV=${marginV}`
           : 'FontSize=22,Outline=2,Shadow=0,MarginV=60'));
         if (!/^[A-Za-z0-9=,._&# -]+$/.test(style)) {
           throw new BadJob('caption_style: only letters, digits, space and = , . _ & # - are accepted');
@@ -1038,6 +1051,7 @@ const JOBS = {
           fps,
           normalized_to: `${W}x${H}`,
           layout,
+          split_y: stacked ? splitY : null,
           emphasis: emphasis.length,
           full_cutaways: windows.filter(w => w.full).length,
           must_cover: covered.length,
@@ -1693,6 +1707,51 @@ const JOBS = {
     },
   },
 
+  /**
+   * Seam captions for a Short, from word timings (added 2026-10-31). Reads the
+   * JSON that word_timings writes, {stem: {text, words: [{text, start, end}]}},
+   * and writes an SRT of short spoken phrases for presenter_composite's
+   * `captions`. The format comes from the Vaibhav Sisinty Short Tee sent as
+   * the reference: 2 to 5 words on screen at a time, broken where he breathes,
+   * timed to the voice. Phrase rules live in seamCues below and are pinned by
+   * jobs.test.js; a word with no usable timing is refused, never guessed.
+   *
+   * params: { words, output, line?, max_words?, offset?, tail? }
+   */
+  caption_srt: {
+    build(p) {
+      const src = existingPath(p.words, 'words');
+      const out = ensureDir(safePath(p.output, 'output'));
+      if (!/\.srt$/.test(out)) throw new BadJob('output: must end .srt');
+      // presenter_composite refuses a captions path the subtitles filter cannot
+      // take verbatim; refuse it here too, so the failure lands on this job.
+      if (!/^[A-Za-z0-9_./-]+$/.test(out)) throw new BadJob('output: the resolved path carries a character the subtitles filter cannot take verbatim; rename it');
+      const maxWords = num(p.max_words ?? 4, 'max_words', { min: 2, max: 6, int: true });
+      const offset = num(p.offset ?? 0, 'offset', { min: 0, max: 86400 });
+      const tail = num(p.tail ?? 0.15, 'tail', { min: 0, max: 1 });
+      const line = p.line === undefined ? null : String(p.line);
+      if (line !== null && !/^[A-Za-z0-9._-]{1,64}$/.test(line)) throw new BadJob('line: must be 1 to 64 of A-Z a-z 0-9 . _ -');
+      return { native: async () => {
+        const st = await fs.promises.stat(src);
+        if (!st.isFile()) throw new Error(`not a regular file (${p.words})`);
+        if (st.size > 8 * 1024 * 1024) throw new Error(`words file is ${st.size} bytes, over 8 MiB`);
+        let doc;
+        try { doc = JSON.parse(await fs.promises.readFile(src, 'utf8')); }
+        catch (e) { throw new Error(`words: not valid JSON: ${e.message}`); }
+        if (!doc || typeof doc !== 'object' || Array.isArray(doc)) throw new Error('words: expected an object keyed by line');
+        const keys = Object.keys(doc);
+        const key = line !== null ? line : (keys.length === 1 ? keys[0] : null);
+        if (key === null) throw new Error(`words: the file holds ${keys.length} lines; name one with line`);
+        const entry = Object.prototype.hasOwnProperty.call(doc, key) ? doc[key] : null;
+        if (!entry || !Array.isArray(entry.words)) throw new Error(`words: no line ${key} with a words array`);
+        const cues = seamCues(entry.words, { maxWords, offset, tail });
+        await fs.promises.writeFile(out, seamSrt(cues), 'utf8');
+        return { output: path.relative(WORK_ROOT, out), line: key, cues: cues.length,
+                 words: cues.reduce((n, c) => n + c.words, 0), first: cues[0].start, last: cues[cues.length - 1].end };
+      }};
+    },
+  },
+
   /** Read a text file. Replaces `cat manifest.json`. */
   read_text: {
     build(p) {
@@ -2290,6 +2349,77 @@ function readVoiceLabWindows(f) {
 /** For the builder tests, which run without ffprobe. */
 function setTagReader(fn) { tagReader = fn; }
 
+/**
+ * Seam caption cues from timed words, for caption_srt. A phrase ends after a
+ * word that ends in . ? ! , ; or :, and a phrase longer than maxWords is cut
+ * into groups of maxWords, except that a single word left over joins the group
+ * before it rather than flashing alone. A one word phrase joins the phrase
+ * before it when that keeps the cue at maxWords + 1 or under. Text loses the
+ * characters libass would read as markup ({ } \ < >) and nothing else; a word
+ * left empty by that is dropped. Times: first word's start to last word's end
+ * plus tail, shifted by offset, cut 20 ms short of the next cue, and never
+ * under 0.3 s unless the next cue leaves less room. A word without a finite
+ * start and end, or with end before start, is refused: a guessed time puts a
+ * caption on the wrong line.
+ */
+function seamCues(words, { maxWords = 4, offset = 0, tail = 0.15 } = {}) {
+  if (!Array.isArray(words) || !words.length) throw new Error('words: none to caption');
+  if (words.length > 20000) throw new Error('words: too many (max 20000)');
+  const clean = [];
+  words.forEach((w, k) => {
+    const s = Number(w && w.start), e = Number(w && w.end);
+    if (!Number.isFinite(s) || !Number.isFinite(e) || s < 0 || e < s) {
+      throw new Error(`words[${k}]: start ${w && w.start} and end ${w && w.end} are not a usable time span`);
+    }
+    const text = String((w && (w.text ?? w.word)) ?? '').replace(/[{}\\<>\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim();
+    if (text) clean.push({ text, s, e });
+  });
+  if (!clean.length) throw new Error('words: none left after removing markup characters');
+  const phrases = []; let cur = [];
+  for (const w of clean) { cur.push(w); if (/[.?!,;:]["')\]]?$/.test(w.text)) { phrases.push(cur); cur = []; } }
+  if (cur.length) phrases.push(cur);
+  const endsSentence = (g) => /[.?!]["')\]]?$/.test(g[g.length - 1].text);
+  const groups = [];
+  for (let q = 0; q < phrases.length; q++) {
+    const ph = phrases[q];
+    // A one word phrase joins the group before it when that group did not end
+    // a sentence and has room; otherwise it opens the next phrase ("Before,"
+    // then "the bot worked" reads "Before, the bot worked"). Only a one word
+    // phrase with nothing after it stands alone.
+    if (ph.length === 1 && groups.length && !endsSentence(groups[groups.length - 1]) &&
+        groups[groups.length - 1].length + 1 <= maxWords + 1) {
+      groups[groups.length - 1].push(ph[0]);
+      continue;
+    }
+    if (ph.length === 1 && q + 1 < phrases.length) { phrases[q + 1] = [ph[0], ...phrases[q + 1]]; continue; }
+    let i = 0;
+    while (i < ph.length) {
+      const take = ph.length - (i + maxWords) === 1 ? maxWords + 1 : maxWords;
+      groups.push(ph.slice(i, i + take));
+      i += take;
+    }
+  }
+  const r3 = (x) => Math.round(x * 1000) / 1000;
+  const cues = groups.map(g => ({ start: r3(g[0].s + offset), end: r3(g[g.length - 1].e + tail + offset),
+                                  text: g.map(w => w.text).join(' '), words: g.length }));
+  for (let k = 0; k < cues.length; k++) {
+    const next = k + 1 < cues.length ? cues[k + 1].start - 0.02 : Infinity;
+    let end = Math.max(cues[k].end, cues[k].start + 0.3);
+    end = Math.min(end, next);
+    if (!(end > cues[k].start)) end = cues[k].start + 0.001;
+    cues[k].end = r3(end);
+  }
+  return cues;
+}
+function seamSrt(cues) {
+  const ts = (t) => {
+    const ms = Math.round(t * 1000);
+    const h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, s = Math.floor(ms / 1000) % 60, f = ms % 1000;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(f).padStart(3, '0')}`;
+  };
+  return cues.map((c, n) => `${n + 1}\n${ts(c.start)} --> ${ts(c.end)}\n${c.text}\n\n`).join('');
+}
+
 /** A path's real location, resolving symlinks, for a file that may not exist yet. */
 function realish(p) {
   try { return fs.realpathSync(p); }
@@ -2305,4 +2435,4 @@ function realish(p) {
 Object.assign(JOBS, require('./acx_node.js').jobs({ BadJob, safePath, existingPath, num, oneOf, getRoot, ensureDir }));
 
 module.exports = { JOBS, BadJob, safePath, existingPath, num, oneOf, setRoot, getRoot, PRESETS,
-                   normalizeChain, isStill, gainEnvelope, setTagReader, alignTokens };
+                   normalizeChain, isStill, gainEnvelope, setTagReader, alignTokens, seamCues, seamSrt };

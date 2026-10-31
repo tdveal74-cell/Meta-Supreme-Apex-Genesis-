@@ -442,7 +442,7 @@ t('parse reports what was composited', () => {
   const r = J.JOBS.presenter_composite.build(pc()).parse();
   assert.deepStrictEqual(r, { output: 'p/master.mp4', cutaways: 2, captions: true, bed: true,
     narration: 'avatar audio', pinned: true, planned_duration: 60, fps: 25, normalized_to: '1920x1080',
-    layout: 'full', emphasis: 0, full_cutaways: 2, must_cover: 0 });
+    layout: 'full', split_y: null, emphasis: 0, full_cutaways: 2, must_cover: 0 });
 });
 t('overlapping windows are refused at submit', () => {
   const p = pc(); p.cutaways[1].start = 9;
@@ -548,6 +548,100 @@ t('the full layout ignores the full flag and never splits the avatar', () => {
   assert.ok(!g.includes('split=2'), g);
   assert.ok(!g.includes('color=c='), g);
   assert.ok(g.includes('[2:v]trim=start=0.000000:end=3.000000,setpts=PTS-STARTPTS,scale=1920:1080:force_original_aspect_ratio=decrease'), g);
+});
+
+section('\n-- P3: the 50/50 split Tee ruled for native Shorts, 2026-10-31 --');
+t('split 0.5 puts the seam at 960: presenter fills 1080x960 at y 960, a zone cutaway letterboxes into 1080x960', () => {
+  const b = J.JOBS.presenter_composite.build({ ...st(), split: 0.5 });
+  const g = graph(b);
+  assert.ok(g.includes('[a_desk]scale=1080:960:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:960,'), g);
+  assert.ok(g.includes('[plate][head]overlay=0:960:shortest=1[base]'), g);
+  assert.ok(g.includes('[1:v]trim=start=0.000000:end=4.000000,setpts=PTS-STARTPTS,scale=1080:960:force_original_aspect_ratio=decrease:flags=lanczos,pad=1080:960:'), g);
+  assert.ok(g.includes('[2:v]trim=start=0.000000:end=3.000000,setpts=PTS-STARTPTS,scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,'), 'a full cutaway still fills the canvas: ' + g);
+  assert.strictEqual(b.parse().split_y, 960);
+});
+t('the default caption carries the measured 1250-seam offset to the new seam: MarginV 136 at 0.5', () => {
+  // 288 * (1 - 960/1920) - 8.4 = 135.6. The measured 92 at the 1250 seam is
+  // what the same formula gives there (92.1), so the offset moves with it.
+  assert.ok(graph(J.JOBS.presenter_composite.build({ ...st(), split: 0.5 })).includes("force_style='FontSize=12,Bold=1,Outline=2,Shadow=0,MarginV=136'"));
+  assert.ok(graph(J.JOBS.presenter_composite.build({ ...st(), split: 1250 / 1920 })).includes('MarginV=92'));
+  const own = graph(J.JOBS.presenter_composite.build({ ...st(), split: 0.5, caption_style: 'FontSize=11,BorderStyle=3,MarginV=140' }));
+  assert.ok(own.includes("force_style='FontSize=11,BorderStyle=3,MarginV=140'"), 'a caller style is used as given: ' + own);
+});
+t('no split leaves the stacked graph byte for byte as it was', () => {
+  const a = J.JOBS.presenter_composite.build(st());
+  assert.ok(graph(a).includes('[plate][head]overlay=0:1250:shortest=1[base]'));
+  assert.ok(graph(a).includes('MarginV=92'));
+  assert.strictEqual(a.parse().split_y, 1250);
+  assert.strictEqual(J.JOBS.presenter_composite.build({ ...st(), layout: 'full', width: 1920, height: 1080, emphasis: [] }).parse().split_y, null);
+});
+t('split is refused outside the stacked layout, outside 0.3 to 0.75, and as text', () => {
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...st(), layout: 'full', width: 1920, height: 1080, emphasis: [], split: 0.5 }), /split: only meaningful with layout stacked/);
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...st(), split: 0.2 }), /split/);
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...st(), split: 0.8 }), /split/);
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...st(), split: 'half' }), /split/);
+});
+
+section('\n-- C1: caption_srt, seam captions from word timings --');
+const W = (pairs) => pairs.map(([text, start, end]) => ({ text, start, end, p: 0.9 }));
+t('the Sisinty hook breaks as he did: "Now / it controls your / entire phone"-shaped groups of at most four', () => {
+  const cues = J.seamCues(W([['Elon', 0, 0.2], ['Musk', 0.2, 0.45], ['just', 0.45, 0.6], ['gave', 0.6, 0.8], ['his', 0.8, 0.9], ['AI', 0.9, 1.1], ['bot', 1.1, 1.3], ['a', 1.3, 1.35], ['crazy', 1.35, 1.7], ['update.', 1.7, 2.1],
+                              ['Now', 2.2, 2.4], ['it', 2.4, 2.5], ['controls', 2.5, 2.9], ['your', 2.9, 3.0], ['entire', 3.0, 3.4], ['phone.', 3.4, 3.9]]));
+  assert.deepStrictEqual(cues.map(c => c.text), ['Elon Musk just gave', 'his AI bot a', 'crazy update.', 'Now it controls your', 'entire phone.']);
+  assert.ok(cues.every(c => c.words >= 2 && c.words <= 5), JSON.stringify(cues));
+});
+t('a single word left at the end of a phrase joins the group before it instead of flashing alone', () => {
+  const cues = J.seamCues(W([['one', 0, 0.2], ['two', 0.2, 0.4], ['three', 0.4, 0.6], ['four', 0.6, 0.8], ['five.', 0.8, 1.0]]));
+  assert.deepStrictEqual(cues.map(c => c.text), ['one two three four five.']);
+});
+t('a one word phrase after a sentence opens the next phrase: "Before, the bot worked"', () => {
+  const cues = J.seamCues(W([['It', 0, 0.2], ['works.', 0.2, 0.6], ['Before,', 0.8, 1.1], ['the', 1.1, 1.2], ['bot', 1.2, 1.4], ['worked.', 1.4, 1.8]]));
+  assert.deepStrictEqual(cues.map(c => c.text), ['It works.', 'Before, the bot worked.']);
+});
+t('times: first start to last end plus tail, never overlapping the next cue, never under 0.3 s when there is room', () => {
+  const cues = J.seamCues(W([['A', 0, 0.05], ['b.', 0.05, 0.1], ['Next', 1.0, 1.2], ['one', 1.2, 1.4], ['here', 1.4, 1.6], ['now.', 1.6, 1.62]]), { tail: 0.15 });
+  assert.strictEqual(cues[0].start, 0); assert.strictEqual(cues[0].end, 0.3, 'floored to 0.3 s: ' + JSON.stringify(cues));
+  const tight = J.seamCues(W([['A', 0, 0.5], ['b.', 0.5, 0.9], ['C', 0.95, 1.2], ['d.', 1.2, 1.5]]), { tail: 0.15 });
+  assert.strictEqual(tight[0].end, 0.93, 'cut 20 ms short of the next cue: ' + JSON.stringify(tight));
+  const shifted = J.seamCues(W([['A', 0, 0.5], ['b.', 0.5, 0.9]]), { offset: 2.5, tail: 0 });
+  assert.deepStrictEqual([shifted[0].start, shifted[0].end], [2.5, 3.4]);
+});
+t('markup characters are stripped, a word they empty is dropped, and a word with no usable time is refused', () => {
+  // The characters go and the letters between them stay: '{\an8}Hi' reads
+  // 'an8Hi'. Ugly, and harmless: libass gets no tag to obey. Whisper output
+  // carries none of these; the rule exists for a hand-edited words file.
+  const cues = J.seamCues(W([['{\\an8}Hi', 0, 0.3], ['<b>there</b>', 0.3, 0.6], ['{}', 0.6, 0.7], ['friend.', 0.7, 1.0]]));
+  assert.deepStrictEqual(cues.map(c => c.text), ['an8Hi bthere/b friend.']);
+  assert.ok(cues.every(c => !/[{}\\<>]/.test(c.text)));
+  assert.throws(() => J.seamCues(W([['a', 0.5, 0.2]])), /not a usable time span/);
+  assert.throws(() => J.seamCues([{ text: 'a', start: 'soon', end: 1 }]), /not a usable time span/);
+  assert.throws(() => J.seamCues([]), /none to caption/);
+});
+t('SRT out: numbered cues, HH:MM:SS,mmm, blank line between', () => {
+  const s = J.seamSrt([{ start: 0, end: 1.25, text: 'Elon Musk just gave' }, { start: 3661.5, end: 3662, text: 'later' }]);
+  assert.strictEqual(s, '1\n00:00:00,000 --> 00:00:01,250\nElon Musk just gave\n\n2\n01:01:01,500 --> 01:01:02,000\nlater\n\n');
+});
+t('caption_srt runs against a word_timings file and writes the SRT presenter_composite can take', async () => {
+  const words = path.join(ROOT, 'q/short-words.json');
+  fs.writeFileSync(words, JSON.stringify({ short01: { text: 'x', words: W([['Number', 0, 0.3], ['one,', 0.3, 0.6], ['phone', 0.6, 0.9], ['control.', 0.9, 1.4]]) } }));
+  const r = await J.JOBS.caption_srt.build({ words: 'q/short-words.json', output: 'q/short01.srt' }).native();
+  assert.strictEqual(r.line, 'short01'); assert.strictEqual(r.cues, 2); assert.strictEqual(r.words, 4);
+  // The comma ends a phrase, so "Number one," and "phone control." are two
+  // cues, and the first stops 20 ms before the second starts.
+  assert.strictEqual(fs.readFileSync(path.join(ROOT, 'q/short01.srt'), 'utf8'),
+    '1\n00:00:00,000 --> 00:00:00,580\nNumber one,\n\n2\n00:00:00,600 --> 00:00:01,550\nphone control.\n\n');
+  const pcb = J.JOBS.presenter_composite.build({ ...st(), split: 0.5, captions: 'q/short01.srt' });
+  assert.ok(graph(pcb).includes('subtitles=filename='), 'presenter_composite accepts the written SRT');
+});
+t('caption_srt refuses a non-.srt output, a path the subtitles filter cannot take, a bad max_words and an unnamed line in a multi-line file', async () => {
+  fs.writeFileSync(path.join(ROOT, 'q/two-lines.json'), JSON.stringify({ L01: { words: W([['a', 0, 1]]) }, L02: { words: W([['b', 0, 1]]) } }));
+  assert.throws(() => J.JOBS.caption_srt.build({ words: 'q/two-lines.json', output: 'q/x.txt' }), /must end .srt/);
+  assert.throws(() => J.JOBS.caption_srt.build({ words: 'q/two-lines.json', output: 'q/bad name.srt' }), /subtitles filter/);
+  assert.throws(() => J.JOBS.caption_srt.build({ words: 'q/two-lines.json', output: 'q/x.srt', max_words: 9 }), /max_words/);
+  await assert.rejects(J.JOBS.caption_srt.build({ words: 'q/two-lines.json', output: 'q/x.srt' }).native(), /name one with line/);
+  const r = await J.JOBS.caption_srt.build({ words: 'q/two-lines.json', output: 'q/x.srt', line: 'L02' }).native();
+  assert.strictEqual(r.line, 'L02');
+  await assert.rejects(J.JOBS.caption_srt.build({ words: 'q/two-lines.json', output: 'q/x.srt', line: 'L09' }).native(), /no line L09/);
 });
 
 section('\n-- A3: -nostdin reaches ffmpeg and never ffprobe --');

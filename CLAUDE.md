@@ -1511,7 +1511,9 @@ hardened 2026-10-31; its installer's guards are tested offline in
 one flow: our own script, Tee-clone voiceover and local clips assembled into
 one vertical Short through `tools/mpt_shorts/render_short.py`, which refuses
 the keyword-to-video template YouTube will not monetize; audited and rendered
-in a sandbox on 2026-10-31). Neither is vendored: no upstream file is copied
+in a sandbox on 2026-10-31, then ruled out for TQO and NCO Forge Shorts the
+same day because it cannot carry Tee's face; the face-on Shorts format is
+`docs/devon/TQO_CANON_face-on-shorts-format_v1_2026-10-31.md`). Neither is vendored: no upstream file is copied
 in, so neither carries an `UPSTREAM.md`, and each one's provenance lives in its
 SKILL.md.
 
