@@ -130,32 +130,39 @@ def _ledger(tmp_path, **manifest):
 
 def test_the_same_script_under_another_episode_is_a_repeat(tmp_path):
     ledger = _ledger(tmp_path, episode="ep1", script=SCRIPT, voice_sha256="v1")
-    found = rs.repeats(SCRIPT, "v2", "ep2", ledger)
+    found = rs.repeats(SCRIPT, "", "v2", "ep2", ledger)
     assert found == ["prior.json: script similarity 1.00"]
 
 
 def test_the_same_voiceover_under_another_episode_is_a_repeat(tmp_path):
     ledger = _ledger(tmp_path, episode="ep1", script="something else entirely here", voice_sha256="v1")
-    assert rs.repeats(SCRIPT, "v1", "ep2", ledger) == ["prior.json: the same voiceover file"]
+    assert rs.repeats(SCRIPT, "", "v1", "ep2", ledger) == ["prior.json: the same voiceover file"]
+
+
+def test_a_re_encoded_old_voiceover_is_caught_by_what_it_says(tmp_path):
+    ledger = _ledger(tmp_path, episode="ep1", script="an unrelated script about phones and backups",
+                     spoken=SCRIPT, voice_sha256="v1")
+    found = rs.repeats("a reworded script about checking tools for value", SCRIPT, "v9", "ep2", ledger)
+    assert found == ["prior.json: spoken similarity 1.00"]
 
 
 def test_a_re_render_of_the_same_episode_is_not_a_repeat(tmp_path):
     ledger = _ledger(tmp_path, episode="ep1", script=SCRIPT, voice_sha256="v1")
-    assert rs.repeats(SCRIPT, "v1", "ep1", ledger) == []
+    assert rs.repeats(SCRIPT, SCRIPT, "v1", "ep1", ledger) == []
 
 
 def test_a_different_script_is_not_a_repeat(tmp_path):
     other = "Most people back up their phone the wrong way. Open settings and look for storage."
     ledger = _ledger(tmp_path, episode="ep1", script=other, voice_sha256="v1")
-    assert rs.repeats(SCRIPT, "v2", "ep2", ledger) == []
+    assert rs.repeats(SCRIPT, "", "v2", "ep2", ledger) == []
 
 
 def test_an_unreadable_manifest_is_skipped_and_a_missing_ledger_is_empty(tmp_path):
     ledger = tmp_path / "ledger"
     ledger.mkdir()
     (ledger / "bad.json").write_text("{", encoding="utf-8")
-    assert rs.repeats(SCRIPT, "v", "ep", ledger) == []
-    assert rs.repeats(SCRIPT, "v", "ep", tmp_path / "absent") == []
+    assert rs.repeats(SCRIPT, "", "v", "ep", ledger) == []
+    assert rs.repeats(SCRIPT, "", "v", "ep", tmp_path / "absent") == []
 
 
 def test_agreement_separates_the_right_recording_from_the_wrong_one():
@@ -263,3 +270,18 @@ def test_the_placed_font_name_is_fixed_by_its_content(tmp_path):
     name = rs.place_font(root, font)
     assert name == f"mpt-shorts-{rs.sha256(font)[:12]}.ttf"
     assert (root / "resource" / "fonts" / name).read_bytes() == b"glyphs"
+
+
+def test_a_clip_path_with_a_comma_is_refused_before_it_is_probed(tmp_path):
+    clip = tmp_path / "demo,cut.mp4"
+    clip.write_bytes(b"not probed")
+    with pytest.raises(rs.Refused, match="comma"):
+        rs.local_clips([str(clip)])
+
+
+def test_a_clip_that_is_not_a_video_file_is_refused(tmp_path):
+    with pytest.raises(rs.Refused, match="not an existing"):
+        rs.local_clips([str(tmp_path / "missing.mp4")])
+    (tmp_path / "notes.txt").write_text("x", encoding="utf-8")
+    with pytest.raises(rs.Refused, match="not an existing"):
+        rs.local_clips([str(tmp_path / "notes.txt")])

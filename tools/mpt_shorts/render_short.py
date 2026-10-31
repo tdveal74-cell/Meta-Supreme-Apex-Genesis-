@@ -202,8 +202,12 @@ def similarity(a: str, b: str) -> float:
     return len(left & right) / len(left | right) if left and right else 0.0
 
 
-def repeats(script: str, voice_sha: str, episode: str, ledger: Path) -> list[str]:
-    """Earlier renders of another episode that this one repeats."""
+def repeats(script: str, spoken: str, voice_sha: str, episode: str, ledger: Path) -> list[str]:
+    """Earlier renders of another episode that this one repeats.
+
+    It compares the script, what the voiceover actually says (so a re-encoded
+    copy of an old voiceover still matches) and the voiceover's bytes. It does
+    not compare clips: reusing our own b-roll across episodes is normal."""
     found = []
     for path in sorted(ledger.glob("*.json")) if ledger.is_dir() else []:
         try:
@@ -217,6 +221,9 @@ def repeats(script: str, voice_sha: str, episode: str, ledger: Path) -> list[str
         score = similarity(script, str(prior.get("script", "")))
         if score >= REPEAT_THRESHOLD:
             found.append(f"{path.name}: script similarity {score:.2f}")
+        heard = similarity(spoken, str(prior.get("spoken", "")))
+        if heard >= REPEAT_THRESHOLD:
+            found.append(f"{path.name}: spoken similarity {heard:.2f}")
     return found
 
 
@@ -257,6 +264,24 @@ def licensed_font(path: str) -> Path:
     return font
 
 
+def local_clips(raws: list[str]) -> list[tuple[Path, dict]]:
+    clips = []
+    for raw in raws:
+        clip = Path(raw).resolve()
+        if "," in str(clip):
+            # --video-materials is one comma separated argument.
+            raise Refused(f"{clip.name}: a clip path may not contain a comma")
+        if clip.suffix.lower() not in VIDEO_EXT or not clip.is_file():
+            raise Refused(f"{clip.name} is not an existing mp4, mov, mkv or webm file")
+        info = probe(clip)
+        if not info["video"] or not math.isfinite(info["duration"]) or info["duration"] <= 0:
+            raise Refused(f"{clip.name} holds no playable video")
+        if min(info["width"], info["height"]) < MIN_SIDE_PX:
+            raise Refused(f"{clip.name} is under {MIN_SIDE_PX} px on a side")
+        clips.append((clip, info))
+    return clips
+
+
 def preflight(args) -> dict:
     """Check every input and the install; return what the render needs."""
     if not EPISODE.fullmatch(args.episode):
@@ -284,18 +309,8 @@ def preflight(args) -> dict:
     if not voice_info["audio"] or not 0 < voice_info["duration"] <= MAX_VOICE_S:
         raise Refused(f"voiceover must hold audio and run 0 to {MAX_VOICE_S:.0f} seconds")
 
-    clips, total = [], 0.0
-    for raw in args.clips:
-        clip = Path(raw).resolve()
-        if clip.suffix.lower() not in VIDEO_EXT or not clip.is_file():
-            raise Refused(f"{clip.name} is not an existing mp4, mov, mkv or webm file")
-        info = probe(clip)
-        if not info["video"] or not math.isfinite(info["duration"]) or info["duration"] <= 0:
-            raise Refused(f"{clip.name} holds no playable video")
-        if min(info["width"], info["height"]) < MIN_SIDE_PX:
-            raise Refused(f"{clip.name} is under {MIN_SIDE_PX} px on a side")
-        clips.append((clip, info))
-        total += info["duration"]
+    clips = local_clips(args.clips)
+    total = sum(info["duration"] for _, info in clips)
     if total < voice_info["duration"]:
         raise Refused(
             f"clips run {total:.2f}s and the voiceover {voice_info['duration']:.2f}s; "
@@ -305,16 +320,15 @@ def preflight(args) -> dict:
     font = licensed_font(args.font)
     voice_sha = sha256(voice)
     ledger = Path(args.ledger)
-    found = repeats(script, voice_sha, args.episode, ledger)
-    if found:
-        raise Refused("repeats an earlier render: " + "; ".join(found))
-
     spoken = transcribe(args.mpt_python, root, voice)
     match = agreement(script, spoken)
     if match < VOICE_AGREEMENT_MIN:
         raise Refused(f"the voiceover matches the script at {match:.2f}; it is not this script's recording")
+    found = repeats(script, spoken, voice_sha, args.episode, ledger)
+    if found:
+        raise Refused("repeats an earlier render: " + "; ".join(found))
     return {"root": root, "script": script, "voice": voice, "voice_info": voice_info,
-            "voice_sha": voice_sha, "clips": clips, "ledger": ledger, "agreement": match,
+            "voice_sha": voice_sha, "clips": clips, "ledger": ledger, "agreement": match, "spoken": spoken,
             "fit": args.fit, "font": font}
 
 
@@ -397,12 +411,17 @@ def render(args, plan: dict, now: datetime) -> dict:
         "output": final.name,
         "output_sha256": sha256(final),
         "output_seconds": round(info["duration"], 3),
+        "spoken": plan["spoken"],
         "voice_agreement": round(plan["agreement"], 3),
         "fit": plan["fit"],
         "font": {"source": plan["font"].name, "sha256": sha256(plan["font"])},
         "argv": mpt_argv("<mpt-python>", plan, task_id, font_name)[1:],
         "published": False,
-        "human_review": "pending: watch end to end before upload",
+        # Neither of these can be read from the files, so the code records that
+        # it did not check them and leaves both to the person who reviews.
+        "voice_identity_checked": False,
+        "clip_rights_checked": False,
+        "human_review": "pending: watch end to end, confirm the voice is Tee's own and every clip is ours or licensed",
     }
     ledger = plan["ledger"]
     ledger.mkdir(parents=True, exist_ok=True)
@@ -467,7 +486,8 @@ def main(argv=None) -> int:
     run.add_argument("--episode", required=True)
     run.add_argument("--show", required=True)
     run.add_argument("--script", required=True, help="UTF-8 text file holding the finished script")
-    run.add_argument("--voice", required=True, help="finished voiceover from the owned voice")
+    run.add_argument("--voice", required=True,
+                     help="finished voiceover; the code checks that it reads this script, not whose voice it is")
     run.add_argument("--clips", required=True, nargs="+", help="local clips, in playing order")
     run.add_argument("--out", required=True)
     run.add_argument("--ledger", required=True, help="directory of earlier render manifests")
