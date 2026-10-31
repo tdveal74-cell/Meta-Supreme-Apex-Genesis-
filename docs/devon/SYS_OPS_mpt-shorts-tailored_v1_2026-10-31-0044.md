@@ -56,8 +56,9 @@ audit and the rules. `test_mpt_shorts.py`, 33 tests, joins the standalone job.
 | clip with 6 s of picture and 12 s of sound | refused before any render |
 | repeat, short clips, woff2 font | each refused |
 | network on the wrapper's path, `strace -f` | 18 processes, 0 `connect` calls; a control socket under the same tracer recorded 1 |
-| `test_mpt_shorts.py` | 69 passed; 28 of 29 gate mutants fail it, the survivor equivalent; the process group test fails on a kill of `cli.py` alone |
-| standalone list, ruff | 5557 passed, clean |
+| `test_mpt_shorts.py` | 74 passed; 35 of 36 gate mutants fail it, the survivor equivalent |
+| stop signals on the real install | timeout, SIGTERM and SIGKILL each leave no MoneyPrinterTurbo process; the next render cleans what a SIGKILL left |
+| standalone list, ruff | 5562 passed, clean |
 
 The voiceover used for every render was a Piper test voice, never published, and
 never Tee's. No render has run on the VPS.
@@ -128,6 +129,22 @@ now runs in its own process group and a timeout kills the group (a real render
 killed at 30 s left no encoder and no `cli.py`); and the per third bar refused
 a single misheard word in a six word third of a 20 word script, deterministically,
 so each third may now always miss one word. 69 tests.
+
+A third fresh verifier confirmed both at `060749f` and found a regression the
+first of them introduced: in a session of its own, MoneyPrinterTurbo was out
+of reach of a signal sent to the wrapper, so under a supervisor's
+`timeout -s TERM` it kept rendering detached with the lock released. The
+wrapper now passes TERM, HUP and INT on by killing the group and cleaning up,
+`cli.py` is set to die with the wrapper so a SIGKILL takes it too, and each
+render writes an in-flight marker that the next render uses to clean up after
+one killed outright. Measured on the real install: SIGTERM and SIGKILL each
+left no MoneyPrinterTurbo process, and the render after the SIGKILL brought
+the copies back to 20 and the task folders to 9. 74 tests; 35 of 36 gate
+mutants fail them, the survivor the equivalent `chmod` one.
+
+That was the fourth round of fixes. The gauntlet caps revision at three
+cycles, so the loop stops here: what a further verifier finds goes to Tee as a
+ruling, not into a fifth round.
 
 ## Open, and whose
 

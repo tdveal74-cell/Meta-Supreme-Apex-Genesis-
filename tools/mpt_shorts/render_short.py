@@ -24,6 +24,7 @@ and LANG, so no provider key in the caller's environment reaches it.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import difflib
 import fcntl
 import hashlib
@@ -402,7 +403,10 @@ def preflight(args) -> dict:
     spoken = transcribe(args.mpt_python, root, voice)
     said, extra = coverage(script, spoken)
     third, thirds_ok = thirds(script, spoken)
-    if not thirds_ok or min(said, extra) < VOICE_COVERAGE_MIN:
+    # A script here has 20 words or more, so its thirds have 6 or more, and one
+    # word of slack per third cannot take the whole below the bar: every third
+    # passing means the share said overall passes, so it is reported, not tested.
+    if not thirds_ok or extra < VOICE_COVERAGE_MIN:
         raise Refused(
             f"the voiceover says {said:.2f} of the script, {third:.2f} of its weakest third, "
             f"and {extra:.2f} of it is the script; it is not this script's full recording"
@@ -451,6 +455,22 @@ def mpt_argv(python: str, plan: dict, task_id: str, font_name: str) -> list[str]
     ]
 
 
+STOP_SIGNALS = (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)
+PR_SET_PDEATHSIG = 1
+
+
+def _stopped(signum, frame):
+    raise Refused(f"stopped by signal {signum}; the render was killed and its files removed")
+
+
+def _die_with_parent():
+    """In the child before exec: Linux kills it when the wrapper dies, even by SIGKILL."""
+    try:
+        ctypes.CDLL(None, use_errno=True).prctl(PR_SET_PDEATHSIG, signal.SIGKILL)
+    except (OSError, AttributeError):
+        pass
+
+
 def _copies(root: Path) -> set[str]:
     folder = root / "storage" / "local_videos"
     return {p.name for p in folder.glob("cli-material-*")} if folder.is_dir() else set()
@@ -467,6 +487,18 @@ def _clean(root: Path, task_id: str, before: set[str]) -> None:
         (root / "storage" / "local_videos" / name).unlink(missing_ok=True)
 
 
+def _finish_killed(root: Path, inflight: Path) -> None:
+    if not inflight.is_file():
+        return
+    try:
+        left = json.loads(inflight.read_text(encoding="utf-8"))
+        task_id, before = str(uuid.UUID(left["task_id"])), set(left["before"])
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        raise Refused(f"{inflight.name} cannot be read; a killed render left files to check by hand") from None
+    _clean(root, task_id, before)
+    inflight.unlink()
+
+
 def render(args, plan: dict, now: datetime) -> dict:
     root = plan["root"]
     (root / "storage").mkdir(exist_ok=True)
@@ -475,32 +507,48 @@ def render(args, plan: dict, now: datetime) -> dict:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
             raise Refused("another render is running on this install; run one at a time") from None
+        # A wrapper killed outright cannot clean up after itself, so each
+        # render first writes what it will need to be cleaned up by, and the
+        # next render under the lock finishes the job for one that never did.
+        inflight = root / "storage" / "mpt-shorts-inflight.json"
+        _finish_killed(root, inflight)
         task_id, before = str(uuid.uuid4()), _copies(root)
+        inflight.write_text(json.dumps({"task_id": task_id, "before": sorted(before)}), encoding="utf-8")
         try:
             return _render(args, plan, now, task_id)
         finally:
             _clean(root, task_id, before)
+            inflight.unlink(missing_ok=True)
 
 
 def _render(args, plan: dict, now: datetime, task_id: str) -> dict:
     font_name = place_font(plan["root"], plan["font"])
     # MPT starts ffmpeg children of its own. It runs in a session of its own
     # so that a timeout kills the whole group, not cli.py alone with its
-    # encoder left writing into a task folder already cleaned away.
-    child = subprocess.Popen(mpt_argv(args.mpt_python, plan, task_id, font_name),
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                             env=scrubbed_env(plan["root"]), cwd=plan["root"], start_new_session=True)
+    # encoder left writing into a task folder already cleaned away. Being in
+    # its own session also puts it out of reach of a signal sent to this
+    # wrapper's group, so the wrapper passes TERM, HUP and INT on by killing
+    # the group and cleaning up, and cli.py is set to die with the wrapper if
+    # the wrapper is killed outright.
+    previous = {sig: signal.signal(sig, _stopped) for sig in STOP_SIGNALS}
     try:
-        stdout, stderr = child.communicate(timeout=args.timeout)
-    except subprocess.TimeoutExpired:
-        os.killpg(child.pid, signal.SIGKILL)
-        child.communicate()
-        raise Refused(f"MoneyPrinterTurbo did not finish inside {args.timeout} s") from None
-    finally:
+        child = subprocess.Popen(mpt_argv(args.mpt_python, plan, task_id, font_name),
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                 env=scrubbed_env(plan["root"]), cwd=plan["root"],
+                                 start_new_session=True, preexec_fn=_die_with_parent)
         try:
-            os.killpg(child.pid, signal.SIGKILL)  # anything it left behind
-        except OSError:
-            pass
+            stdout, stderr = child.communicate(timeout=args.timeout)
+        except subprocess.TimeoutExpired:
+            raise Refused(f"MoneyPrinterTurbo did not finish inside {args.timeout} s") from None
+        finally:
+            try:
+                os.killpg(child.pid, signal.SIGKILL)  # anything it left behind
+            except OSError:
+                pass
+            child.wait()
+    finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
     done = subprocess.CompletedProcess(child.args, child.returncode, stdout, stderr)
     if done.returncode != 0:
         tail = " | ".join(done.stderr.strip().splitlines()[-3:])

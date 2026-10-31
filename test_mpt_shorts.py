@@ -384,7 +384,11 @@ while i < len(args):
     else:
         flags[args[i]] = True
         i += 1
-pathlib.Path("seen.json").write_text(json.dumps({"argv": args, "env": dict(os.environ)}))
+import ctypes
+death = ctypes.c_int(0)
+ctypes.CDLL(None).prctl(2, ctypes.byref(death))  # PR_GET_PDEATHSIG
+pathlib.Path("seen.json").write_text(json.dumps({"argv": args, "env": dict(os.environ),
+                                                 "pdeathsig": death.value, "sid": os.getsid(0), "pid": os.getpid()}))
 mode = pathlib.Path("fake_mode.txt").read_text().strip() if pathlib.Path("fake_mode.txt").exists() else ""
 task = pathlib.Path("storage/tasks") / flags["--task-id"]
 task.mkdir(parents=True, exist_ok=True)
@@ -469,6 +473,8 @@ def test_a_clean_run_renders_records_and_cleans_up(fake):
     assert flags["--custom-audio-file"] == str(Path(fake.args.voice).resolve())
     assert flags["--video-source"] == "local"
     assert set(seen["env"]) <= {"PATH", "HOME", "LANG", "LC_CTYPE"}
+    assert seen["pdeathsig"] == 9  # dies by SIGKILL with the wrapper
+    assert seen["sid"] == seen["pid"]  # a session of its own, so a timeout can kill the group
     assert "ELEVENLABS_API_KEY" not in seen["env"]
     assert (fake.tmp / "out" / "tqo-s001.mp4").read_bytes() == b"video"
     assert (fake.tmp / "out" / "tqo-s001.srt").is_file()
@@ -663,3 +669,92 @@ def test_lock_config_writes_owner_only_and_will_not_overwrite(tmp_path, capsys):
     capsys.readouterr()
     assert rs._lock_cmd(args) == 2
     assert "pass --replace" in capsys.readouterr().out
+
+
+def test_a_stop_signal_to_the_wrapper_stops_mpt_and_cleans_up(fake):
+    import os
+    import signal
+    import threading
+    import time
+    from datetime import datetime, timezone
+
+    (fake.root / "fake_mode.txt").write_text("hang")
+    fake.args.timeout = 60
+    plan = rs.preflight(fake.args)
+    before = signal.getsignal(signal.SIGTERM)
+    # A supervisor's `timeout`, a job runner or an SSH hangup signals the
+    # wrapper, and MPT is in a session of its own where that cannot reach it.
+    timer = threading.Timer(1.5, os.kill, (os.getpid(), signal.SIGTERM))
+    timer.start()
+    try:
+        with pytest.raises(rs.Refused, match="stopped by signal 15"):
+            rs.render(fake.args, plan, datetime(2026, 10, 31, tzinfo=timezone.utc))
+    finally:
+        timer.cancel()
+    assert signal.getsignal(signal.SIGTERM) is before
+    pid = int((fake.root / "grandchild.pid").read_text())
+    for _ in range(20):
+        if not _alive(pid):
+            break
+        time.sleep(0.1)
+    assert not _alive(pid)
+    assert not list((fake.root / "storage" / "tasks").iterdir())
+    assert not list((fake.root / "storage" / "local_videos").glob("cli-material-*"))
+
+
+def test_mpt_dies_with_a_wrapper_that_is_killed_outright(tmp_path):
+    import os
+    import signal
+    import subprocess
+    import sys
+    import time
+
+    pid_file = tmp_path / "pid"
+    parent = subprocess.Popen([sys.executable, "-c", (
+        "import importlib.util, pathlib, subprocess, sys, time\n"
+        f"spec = importlib.util.spec_from_file_location('rs', {str(FILE)!r})\n"
+        "rs = importlib.util.module_from_spec(spec); spec.loader.exec_module(rs)\n"
+        "child = subprocess.Popen(['sleep', '60'], preexec_fn=rs._die_with_parent)\n"
+        f"pathlib.Path({str(pid_file)!r}).write_text(str(child.pid))\n"
+        "time.sleep(60)\n")])
+    for _ in range(50):
+        if pid_file.exists() and pid_file.read_text():
+            break
+        time.sleep(0.1)
+    pid = int(pid_file.read_text())
+    os.kill(parent.pid, signal.SIGKILL)
+    parent.wait()
+    for _ in range(20):
+        if not _alive(pid):
+            break
+        time.sleep(0.1)
+    assert not _alive(pid)
+
+
+def test_the_next_render_cleans_up_after_one_killed_outright(fake):
+    from datetime import datetime, timezone
+
+    copies = fake.root / "storage" / "local_videos"
+    copies.mkdir(parents=True)
+    (copies / "cli-material-kept.mp4").write_bytes(b"there before the killed run")
+    (copies / "cli-material-left.mp4").write_bytes(b"left by the killed run")
+    killed = "6fd7563e-f449-4690-aac9-8467466b8bc6"
+    (fake.root / "storage" / "tasks" / killed).mkdir(parents=True)
+    (fake.root / "storage" / "mpt-shorts-inflight.json").write_text(
+        json.dumps({"task_id": killed, "before": ["cli-material-kept.mp4"]}), encoding="utf-8")
+    plan = rs.preflight(fake.args)
+    rs.render(fake.args, plan, datetime(2026, 10, 31, tzinfo=timezone.utc))
+    assert sorted(p.name for p in copies.iterdir()) == ["cli-material-kept.mp4"]
+    assert not (fake.root / "storage" / "tasks" / killed).exists()
+    assert not (fake.root / "storage" / "mpt-shorts-inflight.json").exists()
+
+
+@pytest.mark.parametrize("body", ["{", json.dumps({"task_id": "../../etc", "before": []})])
+def test_an_unreadable_inflight_marker_stops_the_render(fake, body):
+    from datetime import datetime, timezone
+
+    (fake.root / "storage").mkdir(exist_ok=True)
+    (fake.root / "storage" / "mpt-shorts-inflight.json").write_text(body, encoding="utf-8")
+    plan = rs.preflight(fake.args)
+    with pytest.raises(rs.Refused, match="check by hand"):
+        rs.render(fake.args, plan, datetime(2026, 10, 31, tzinfo=timezone.utc))
