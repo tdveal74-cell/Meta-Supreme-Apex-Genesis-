@@ -17,7 +17,8 @@ PIN="195eab24478dc9363326aec437aefc3701635ddf"
 REPO="https://github.com/calesthio/OpenMontage.git"
 DEST="${OPENMONTAGE_HOME:-$HOME/OpenMontage}"
 # Upstream's CI runs 3.11; its .python-version says 3.10. 3.11 is the one
-# that is tested, so ask for it. uv fetches it when the machine lacks it.
+# that is tested, so ask for it. uv can fetch it when the machine lacks it;
+# that path was not exercised here, where python3.11 was already installed.
 PY="${OPENMONTAGE_PYTHON:-3.11}"
 SETUP_TIMEOUT="${OPENMONTAGE_SETUP_TIMEOUT:-900}"
 
