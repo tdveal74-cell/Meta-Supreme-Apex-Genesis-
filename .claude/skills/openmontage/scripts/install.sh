@@ -4,16 +4,16 @@
 # Exit codes:
 #   0  installed, every optional step included
 #   1  a check after the fetch or after make setup failed: the checkout is not
-#      at the pin, a resumed fetch left code the pin does not carry, make left
-#      no .venv python, or the registry did not load or found no tools; the
-#      FAILED line says which
+#      at the pin, a resumed fetch left code the pin does not carry or a .venv
+#      older than the Python asked for, make left no .venv python, or the
+#      registry did not load or found no tools; the FAILED line says which
 #   3  refused before anything changed; the message says why
 #   4  installed, but upstream skipped an optional step; the summary names it
 #   any other non-zero code is the failing tool's own: git 128, make 2,
 #   timeout 124 when the fetch or make setup runs past OPENMONTAGE_SETUP_TIMEOUT
 #
 # Idempotent: a checkout at the pin with no change to a tracked file, no
-# untracked file under tools/ and no untracked .py at its top level is reused,
+# untracked file under tools/ and no untracked module at its top level is reused,
 # and `make setup` runs again, which only fills in what is missing. A repository
 # with OpenMontage's origin and no commit, which is what a fetch interrupted
 # after git init leaves, is fetched into and then held to the same untracked
@@ -94,12 +94,14 @@ esac
 dest_abs="$(resolve "$DEST")"
 # Upstream's make setup reuses an existing .venv before it looks at anything
 # else. Failing that it makes one with uv when uv is on PATH, else with the
-# first of python$PY, python3 and python, which must be $PY or newer.
+# first of python$PY, python3 and python, which must be $PY or newer. An
+# existing .venv is only seen to exist here. It runs once the target has been
+# shown to be OpenMontage at the pin, because running it now would run code
+# from a directory that may yet be refused and left alone.
 existing="$dest_abs/.venv/bin/python"
+venv_py=""
 if [ -x "$existing" ]; then
-  at_least "$existing" "$PY" \
-    || refuse "$existing is older than Python $PY or does not run, and make setup would reuse it. Remove $dest_abs/.venv so make setup makes a new one."
-  venv_py="$("$existing" -c 'import sys; print("%d.%d" % sys.version_info[:2])'), the existing .venv"
+  :
 elif command -v uv >/dev/null 2>&1; then
   venv_py="$PY, from uv"
 else
@@ -111,10 +113,6 @@ else
     || refuse "make setup needs uv, or a Python $PY or newer as python$PY, python3 or python; the first found, $base, is older. Install uv, or set OPENMONTAGE_PYTHON to the version you have, 3.11 or newer."
   venv_py="$("$base" -c 'import sys; print("%d.%d" % sys.version_info[:2])'), from $base"
 fi
-case "$venv_py" in
-  "$MEASURED_PY",*) ;;
-  *) echo "WARNING: the venv will use Python $venv_py; constraints.txt was measured on $MEASURED_PY, so its pins are untested there." >&2 ;;
-esac
 if repo_root="$(git -C "$here" rev-parse --show-toplevel 2>/dev/null)"; then
   repo_root="$(resolve "$repo_root")"
   case "$dest_abs/" in
@@ -127,13 +125,17 @@ else
 fi
 
 # Untracked files that would load as code: anything under tools/ outside
-# __pycache__, since the registry imports .py, .pyc and .so alike, and any .py
-# at the top, where make runs python and a stray module shadows a real one.
+# __pycache__, since the registry imports .py, .pyc and .so alike, and any
+# module at the top, a .py, .pyc, .so or package, where make runs python and a
+# stray module shadows a real one.
 untracked_code() {
-  git -C "$dest_abs" ls-files --others -- tools ':(exclude,glob)tools/**/__pycache__/**' ':(glob)*.py'
+  git -C "$dest_abs" ls-files --others -- tools ':(exclude,glob)tools/**/__pycache__/**' \
+    ':(glob)*.py' ':(glob)*.pyc' ':(glob)*.so' ':(glob)*/__init__.py'
 }
 
+fetched="no"
 fetch_pin() {
+  fetched="yes"
   echo "==> Fetching OpenMontage $PIN into $dest_abs"
   local status=0
   # shellcheck disable=SC2086
@@ -189,6 +191,23 @@ if [ "$have" != "$PIN" ]; then
   echo "FAILED: checkout is at $have, expected $PIN." >&2
   exit 1
 fi
+
+# The target is OpenMontage at the pin now, so an existing .venv may be run.
+if [ -z "$venv_py" ]; then
+  if ! at_least "$existing" "$PY"; then
+    why="$existing is older than Python $PY or does not run, and make setup would reuse it. Remove $dest_abs/.venv so make setup makes a new one."
+    if [ "$fetched" = "yes" ]; then
+      echo "FAILED: $why" >&2
+      exit 1
+    fi
+    refuse "$why"
+  fi
+  venv_py="$("$existing" -c 'import sys; print("%d.%d" % sys.version_info[:2])'), the existing .venv"
+fi
+case "$venv_py" in
+  "$MEASURED_PY",*) ;;
+  *) echo "WARNING: the venv will use Python $venv_py; constraints.txt was measured on $MEASURED_PY, so its pins are untested there." >&2 ;;
+esac
 
 # Upstream's Makefile installs into an active virtualenv or conda env, and
 # honours VENV_DIR from the environment, before it ever makes its own .venv.

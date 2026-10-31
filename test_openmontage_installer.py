@@ -621,16 +621,19 @@ def test_a_rerun_with_git_writing_to_stderr_reuses_a_clean_checkout(stubs, patch
     assert "already at the pinned commit" in again.stdout
 
 
-@pytest.mark.parametrize("planted", ["tools/lone.pyc", "tools/native.so", "json.py"])
+@pytest.mark.parametrize("planted", [
+    "tools/lone.pyc", "tools/native.so", "json.py", "lone.pyc", "native.so", "json/__init__.py",
+])
 def test_a_rerun_refuses_untracked_code_the_registry_or_make_would_load(stubs, patched, tmp_path, planted):
     """The registry imports sourceless .pyc and extension .so modules under
     tools/ as well as .py, and make runs python from the top of the checkout,
-    where a stray json.py shadows the standard module."""
+    where a stray json.py, .pyc, .so or package shadows the standard module."""
     env, record = stubs
     script, _, _ = patched
     dest = tmp_path / "om"
     assert _run(script, env, dest).returncode == 0
     record.unlink()
+    (dest / planted).parent.mkdir(parents=True, exist_ok=True)
     (dest / planted).write_bytes(b"")
     result = _run(script, env, dest)
     assert result.returncode == 3, result.stderr
@@ -790,3 +793,66 @@ def test_pip_honours_the_constraint_file_the_installer_exports(tmp_path):
     split = _pip_install(tmp_path, wheels, spaced / "constraints.txt", tmp_path / "split")
     assert split.returncode != 0, split.stdout
     assert f"No such file or directory: '{tmp_path / 'with'}'" in split.stderr, split.stderr
+
+
+def _marker_python(directory, marker):
+    """An executable .venv/bin/python that leaves a marker when it runs."""
+    venv_python = directory / ".venv" / "bin" / "python"
+    venv_python.parent.mkdir(parents=True)
+    _executable(venv_python, f'#!/bin/sh\necho ran >> "{marker}"\nexit 0\n')
+
+
+def _not_a_checkout(tmp_path, repo):
+    dest = tmp_path / "plain"
+    dest.mkdir()
+    return dest
+
+
+def _other_origin(tmp_path, repo):
+    dest = tmp_path / "other"
+    _git("init", "-q", str(dest))
+    _git("commit", "-q", "--allow-empty", "-m", "x", cwd=dest)
+    return dest
+
+
+def _other_commit(tmp_path, repo):
+    dest = tmp_path / "moved"
+    _git("init", "-q", str(dest))
+    _git("remote", "add", "origin", repo, cwd=dest)
+    _git("commit", "-q", "--allow-empty", "-m", "x", cwd=dest)
+    return dest
+
+
+@pytest.mark.parametrize("make_target", [_not_a_checkout, _other_origin, _other_commit])
+def test_a_refused_target_s_venv_is_never_run(stubs, patched, tmp_path, make_target):
+    """Found by Codex on PR #452 and by the final check: the existing .venv's
+    python ran before the target was shown to be OpenMontage, so a target the
+    installer then refused had already had its code executed."""
+    env, record = stubs
+    script, repo, _ = patched
+    dest = make_target(tmp_path, repo)
+    marker = tmp_path / "ran.txt"
+    _marker_python(dest, marker)
+    result = _run(script, env, dest)
+    assert result.returncode == 3, result.stderr
+    assert "REFUSED" in result.stderr
+    assert not marker.exists(), "the refused target's python ran"
+    assert not record.exists()
+
+
+def test_a_resumed_fetch_with_an_old_venv_fails_before_make(stubs, patched, tmp_path):
+    """On the resume path the fetch has already happened when the .venv is
+    checked, so an old one is a FAILED exit 1, not a refusal."""
+    env, record = stubs
+    script, repo, pin = patched
+    dest = tmp_path / "om"
+    _git("init", "-q", str(dest))
+    _git("remote", "add", "origin", repo, cwd=dest)
+    venv_python = dest / ".venv" / "bin" / "python"
+    venv_python.parent.mkdir(parents=True)
+    _executable(venv_python, "#!/bin/sh\nexit 1\n")
+    result = _run(script, env, dest)
+    assert result.returncode == 1, result.stderr
+    assert "FAILED:" in result.stderr and "make setup would reuse it" in result.stderr
+    assert _git("rev-parse", "HEAD", cwd=dest) == pin
+    assert not record.exists()
