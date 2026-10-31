@@ -513,8 +513,10 @@ def render(args, plan: dict, now: datetime) -> dict:
         inflight = root / "storage" / "mpt-shorts-inflight.json"
         _finish_killed(root, inflight)
         task_id, before = str(uuid.uuid4()), _copies(root)
-        inflight.write_text(json.dumps({"task_id": task_id, "before": sorted(before)}), encoding="utf-8")
         try:
+            # Inside the try, so a write that fails part way (a full disk)
+            # leaves no cut marker to block every later render.
+            inflight.write_text(json.dumps({"task_id": task_id, "before": sorted(before)}), encoding="utf-8")
             return _render(args, plan, now, task_id)
         finally:
             _clean(root, task_id, before)
@@ -529,8 +531,12 @@ def _render(args, plan: dict, now: datetime, task_id: str) -> dict:
     # its own session also puts it out of reach of a signal sent to this
     # wrapper's group, so the wrapper passes TERM, HUP and INT on by killing
     # the group and cleaning up, and cli.py is set to die with the wrapper if
-    # the wrapper is killed outright.
-    previous = {sig: signal.signal(sig, _stopped) for sig in STOP_SIGNALS}
+    # the wrapper is killed outright. A signal the caller ignored stays
+    # ignored: nohup ignores HUP and a script's background job ignores INT.
+    previous = {sig: signal.getsignal(sig) for sig in STOP_SIGNALS}
+    for sig, handler in previous.items():
+        if handler is not signal.SIG_IGN:
+            signal.signal(sig, _stopped)
     try:
         child = subprocess.Popen(mpt_argv(args.mpt_python, plan, task_id, font_name),
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,

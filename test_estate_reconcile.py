@@ -977,19 +977,10 @@ _NUMBER_WORDS = {
     "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
     "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
     "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
-    "thirty": 30,
+    "twenty-one": 21, "twenty-two": 22, "twenty-three": 23, "twenty-four": 24,
+    "twenty-five": 25, "twenty-six": 26, "twenty-seven": 27, "twenty-eight": 28,
+    "twenty-nine": 29, "thirty": 30,
 }
-# The skill count passed twenty on 2026-10-31, when two PRs that each counted
-# twenty merged within eight minutes of each other, so compound words count too.
-_NUMBER_WORDS.update(
-    {
-        f"{tens}-{unit}": base + offset
-        for tens, base in (("twenty", 20), ("thirty", 30))
-        for offset, unit in enumerate(
-            ("one", "two", "three", "four", "five", "six", "seven", "eight", "nine"), start=1
-        )
-    }
-)
 
 
 def _skill_dirs():

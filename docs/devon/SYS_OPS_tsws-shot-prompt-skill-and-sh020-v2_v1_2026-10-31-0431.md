@@ -33,7 +33,7 @@ Three critic cycles ran on the skill. Cycle 1 confirmed ten findings and cycle 2
 
 The follow-up had a cold re-read before its first push, which found two wording defects, and then a fresh critic after it, once agents could run again: a workflow of three attackers, on the gate, the records and this doc, each in its own worktree at `506586c`, with an independent refuter for each of the six most severe findings. The gate attacker found nothing. Nine findings came back, all low. Five were confirmed and one refuted; the other three hit the cap of six, and one of them duplicated a confirmed finding. The confirmed five and the two unverified non-duplicates were each checked again in this session and fixed:
 
-- the seam limits of x 1640 and x 1655 were the intended cut, while the changed pixels reach as far left as x 1639 at head height and x 1645 below it; the record now gives only the measured bounds;
+- the seam limits of x 1640 and x 1655 were the intended cut, while the changed pixels reach as far left as x 1639 at head height and x 1645 to x 1655 below it, band by band; the record now gives only the measured bounds;
 - "the Drive connector cannot carry files of this size" was reasoned from base64 sizes and never tried, and now says so;
 - "fixed SH020" for the carried masks overstated a check that was by eye only, and zoomed in the briefcase man's mask is a soft bronze shape whose cat-eye outline does not read; the skill now says so and lists it as unverified;
 - the v1 PNGs were sent at 23:00:22Z, with the head sheet earlier at 22:56:46Z, not both together;
