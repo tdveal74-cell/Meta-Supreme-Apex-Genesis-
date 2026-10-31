@@ -44,7 +44,7 @@ Installed on srv1936199, the EditForge VPS, on 2026-10-31 by Tee in Termius: aud
 
 ## Install
 
-On the host, as the user that will run it. Needs git, curl, sha256sum, ffmpeg and python3 3.11 or newer.
+On the host, as the user that will run it. Needs git, curl, sha256sum, ffmpeg, ffprobe and python3 3.11 to 3.14.
 
 ```bash
 tools/mpt_shorts/install.sh /opt/mpt-shorts

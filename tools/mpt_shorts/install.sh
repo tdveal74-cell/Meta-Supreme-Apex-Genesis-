@@ -9,7 +9,7 @@
 #
 #   tools/mpt_shorts/install.sh /opt/mpt-shorts
 #
-# Needs git, curl, sha256sum, ffmpeg and python3 3.11 to 3.14 on the host.
+# Needs git, curl, sha256sum, ffmpeg, ffprobe and python3 3.11 to 3.14 on the host.
 set -euo pipefail
 
 DEST="${1:?usage: install.sh DEST}"
