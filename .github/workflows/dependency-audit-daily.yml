@@ -1,0 +1,74 @@
+name: Dependency audit daily
+
+# A NEW ADVISORY AGAINST AN UNCHANGED PIN WAS INVISIBLE UNTIL SOMEONE PUSHED.
+#
+# The dependency-audit job in ci.yml runs on push, on pull requests and by
+# hand, so it reads the advisory databases only when the repository changes.
+# On 2026-10-30 four advisories against pyasn1 0.6.4 turned it red on PR #441,
+# which touched no requirements file. Main's last run, on 2026-10-29, had been
+# green and the advisories were newer than it. The vulnerable pin was in the
+# closure Railway builds the whole time, and nothing would have said so until
+# the next push. PR #442 bumped it.
+#
+# Ruled by Tee 2026-10-31 on an inline card, "Add it": the same audit, once a
+# day, going red with a GitHub email on a new advisory.
+#
+# THE STEPS ARE THE ci.yml ONES, AND A TEST HOLDS THEM THERE.
+# test_estate_reconcile.py::test_the_daily_audit_runs_what_the_ci_audit_runs
+# compares every step of this job with every step of ci.yml's dependency-audit
+# job and fails on any difference. Change both together. The reasons for each
+# step (two pip-audit resolutions on purpose, no pnpm cache) are written beside
+# the job in ci.yml and are not repeated here.
+#
+# IT ONLY READS. pip-audit resolves the two requirements files and pnpm audit
+# reads the lockfile. Nothing is installed into the repository, nothing is
+# committed and no secret is used. Fixing an advisory is a pull request.
+#
+# THE ALARM IS THE JOB GOING RED, the same channel as registry-check.yml and
+# the two watchdogs. GitHub sends a failed scheduled run's email to the account
+# that last changed the cron line, which is a recalled rule and was not re-read
+# when this was written; merges here land as tdveal74-cell, so that should be
+# Tee's account, and the first red run is the proof. An advisory that stays
+# unfixed goes red every day, which is the intended nag. A red run here can also be the advisory service
+# or the registry being down; the log says which before anyone bumps a pin.
+#
+# A NEW SCHEDULE DOES NOT FIRE AT ITS FIRST SLOTS. Measured twice on the two
+# watchdogs (5h06m and 6h03m to the first scheduled run, see CLAUDE.md). Use
+# workflow_dispatch to prove the job before the schedule has fired.
+
+on:
+  schedule:
+    # Once a day at 05:23Z. The minute is off the hour so it does not queue
+    # behind every other :00 schedule on the platform.
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-audit-daily
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Daily dependency audit (pip-audit + pnpm audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: pip-audit the pinned requirements and the soul host's
+        run: |
+          python -m pip install --quiet --upgrade pip pip-audit
+          python -m pip_audit -r requirements.txt --progress-spinner off
+          python -m pip_audit -r deploy/soul/requirements.txt --progress-spinner off
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: pnpm audit the locked workspace
+        run: pnpm audit --audit-level=moderate

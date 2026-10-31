@@ -1045,6 +1045,59 @@ def test_the_vendored_skills_are_the_ones_claude_md_names():
     )
 
 
+WORKFLOWS = ROOT / ".github" / "workflows"
+
+
+def _workflows():
+    """Every workflow file, parsed. PyYAML reads the bare key `on` as True."""
+    import yaml
+
+    paths = sorted([*WORKFLOWS.glob("*.yml"), *WORKFLOWS.glob("*.yaml")])
+    return {path.name: yaml.safe_load(path.read_text(encoding="utf-8")) for path in paths}
+
+
+def test_the_ci_job_count_is_counted_from_the_workflows():
+    """CLAUDE.md said THIRTEEN jobs on 2026-10-31 while the files held fifteen:
+    quality90-ai-review.yml arrived on 2026-10-21 and browser-worker-ci.yml on
+    2026-10-22, and neither moved the sentence or was named anywhere in it. The
+    paragraph had already asked to be counted from the files twice. Asking did
+    not hold it, so the sentence is now pinned to the files the way the skill
+    total above is pinned to its directory."""
+    claude_md = _prose(ROOT / "CLAUDE.md")
+    workflows = _workflows()
+    total = sum(len(spec["jobs"]) for spec in workflows.values())
+
+    stated = re.search(r"CI is (\w+) jobs", claude_md)
+    assert stated, "CLAUDE.md no longer states a CI job total; the pin cannot check it"
+    assert _count(stated.group(1), "CLAUDE.md") == total, (
+        f"CLAUDE.md says CI is {stated.group(1)} jobs, the workflow files hold "
+        f"{total}: " + ", ".join(f"{name} {len(spec['jobs'])}" for name, spec in workflows.items())
+    )
+
+    unnamed = [name for name in workflows if not re.search(rf"[`/]{re.escape(name)}`", claude_md)]
+    assert not unnamed, (
+        f"these workflows exist and CLAUDE.md names none of them: {unnamed}. "
+        "A reader counting from that paragraph would miss their jobs."
+    )
+
+
+def test_the_daily_audit_runs_what_the_ci_audit_runs():
+    """dependency-audit-daily.yml repeats ci.yml's dependency-audit job on a
+    schedule, ruled by Tee 2026-10-31. Two copies of the same steps drift: an
+    ignore added to one, a Python version moved in the other, and the daily run
+    goes red on a pin CI accepts or green on one it refuses. So every step,
+    names and arguments included, has to match."""
+    workflows = _workflows()
+    ci = workflows["ci.yml"]["jobs"]["dependency-audit"]
+    daily_spec = workflows["dependency-audit-daily.yml"]
+    daily = daily_spec["jobs"]["audit"]
+
+    assert daily["steps"] == ci["steps"]
+    assert daily["runs-on"] == ci["runs-on"]
+    assert set(daily_spec[True]) == {"schedule", "workflow_dispatch"}
+    assert daily_spec["permissions"] == {"contents": "read"}
+
+
 def test_the_skill_carries_the_inventory_rule():
     """Rule zero governs a record's values. The 2026-09-12 addition governs the
     record's list of what there is to check, which rotted independently."""
