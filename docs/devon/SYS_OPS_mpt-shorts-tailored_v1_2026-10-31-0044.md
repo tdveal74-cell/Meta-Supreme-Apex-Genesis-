@@ -40,7 +40,7 @@ and `Systran/faster-whisper-base.en` at revision `3d3d5de` with four sha256 sums
 and writes the locked `config.toml`. `tools/mpt_shorts/fonts` holds Atkinson
 Hyperlegible Next instanced to Bold for TQO and the unmodified Inter 4.1 Bold
 TrueType for NCO Forge, each with its OFL text. Skill `mpt-shorts` carries the
-audit and the rules. `test_mpt_shorts.py`, 74 tests, joins the standalone job.
+audit and the rules. `test_mpt_shorts.py`, 77 tests with the follow-up, joins the standalone job.
 
 ## Measured
 
@@ -173,7 +173,12 @@ problems, and four more verifiers, one each, confirmed all four:
    hand. About 2 lines.
 
 None touches anything running: nothing calls the wrapper and it is installed
-nowhere but the sandbox. What to do with them is Tee's ruling.
+nowhere but the sandbox. Tee ruled on a card, "Merge, then fix two": PR #444
+merged as it stood, and a follow-up fixed the first and the fourth. A HUP or
+INT the caller ignored now stays ignored, and the marker is written inside the
+try so a failed write is removed rather than left to block. Three new tests
+pass on the fix and fail on `c07980c` (77 tests). The second and third stay as
+known limits, written into the skill.
 
 ## Open, and whose
 
@@ -183,7 +188,9 @@ nowhere but the sandbox. What to do with them is Tee's ruling.
 - The thresholds (0.85 voice coverage per third, 0.5 repeat similarity) are
   starting values. The ledger is where they get set once real renders exist.
 - Render time on the VPS's 2 shared cores is unmeasured.
-- The four problems the last verifier round confirmed, above, wait on Tee.
+- Two known limits from the last verifier round, kept by Tee's ruling: the
+  encoder a SIGKILL leaves for a few seconds, and the cleanup after a killed
+  render reaching copies made before the next one.
 - Unverified: whether MoneyPrinterTurbo's hard coded Codex OAuth client id is
   OpenAI's own. It only matters to someone signing in through that provider,
   which this flow never does.
@@ -195,7 +202,7 @@ TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_mpt-shorts-tailored_v1_2026-10-31-0044.md
 DATE: 2026-10-31
 DECISIONS: Tee asked to install MoneyPrinterTurbo and then to tailor it to the YouTube inauthentic content policy, and said "Ok do it" to running it only as an assembler of our own script, Tee-clone voiceover and local clips. No device install and no n8n change were made without a ruling.
-FINDINGS: The default flow is the template the policy refuses and its voice is rented. MoneyPrinterTurbo rewrites captions to the script and keeps only the first slice of each clip in sequential mode; the wrapper works around both. The bundled fonts and songs carry no licence. The wrapper's render makes no network connection, measured with strace. Two critics' findings on the first commit were verified and fixed: the code cannot check whose voice or whose clips it is, so manifests say so; a frozen-frame clip and half a voiceover used to pass; the repeat check failed open four ways; most gate lines had no test. Four verifier rounds after that found and closed leftover files, an orphaned encoder and a signal regression; the last round confirmed four smaller problems, two minor and two nits, and corrected an overstated SIGKILL claim.
-OPEN: VPS install and n8n wiring are Tee's rulings; the four last round problems wait on his ruling; thresholds are starting values; VPS render time unmeasured.
+FINDINGS: The default flow is the template the policy refuses and its voice is rented. MoneyPrinterTurbo rewrites captions to the script and keeps only the first slice of each clip in sequential mode; the wrapper works around both. The bundled fonts and songs carry no licence. The wrapper's render makes no network connection, measured with strace. Two critics' findings on the first commit were verified and fixed: the code cannot check whose voice or whose clips it is, so manifests say so; a frozen-frame clip and half a voiceover used to pass; the repeat check failed open four ways; most gate lines had no test. Four verifier rounds after that found and closed leftover files, an orphaned encoder and a signal regression; the last round confirmed four smaller problems and corrected an overstated SIGKILL claim; Tee ruled to fix two in a follow-up and keep two as known limits.
+OPEN: Tee runs the VPS install himself in Termius, ruled on a card; n8n wiring is his ruling; two last round problems are kept as known limits; thresholds are starting values; VPS render time unmeasured.
 STATUS: Branch claude/mpt-shorts-tailored, draft PR #444, not merged at writing. Sandbox install and renders proven in the cloud container only.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f

@@ -409,6 +409,9 @@ if mode == "hang":
                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     pathlib.Path("grandchild.pid").write_text(str(grandchild.pid))
     time.sleep(30)
+if mode == "slow":
+    import time
+    time.sleep(3)
 (task / "final-1.mp4").write_bytes(b"video")
 (task / "subtitle.srt").write_text("" if mode == "nosrt" else "1\n00:00:00,000 --> 00:00:01,000\nhello\n")
 print(json.dumps({"task_id": flags["--task-id"], "result": {
@@ -700,6 +703,56 @@ def test_a_stop_signal_to_the_wrapper_stops_mpt_and_cleans_up(fake):
     assert not _alive(pid)
     assert not list((fake.root / "storage" / "tasks").iterdir())
     assert not list((fake.root / "storage" / "local_videos").glob("cli-material-*"))
+
+
+@pytest.mark.parametrize("name", ["SIGHUP", "SIGINT"])
+def test_a_signal_the_caller_ignored_stays_ignored(fake, name):
+    import os
+    import signal
+    import threading
+    from datetime import datetime, timezone
+
+    sig = getattr(signal, name)
+    (fake.root / "fake_mode.txt").write_text("slow")
+    plan = rs.preflight(fake.args)
+    # nohup ignores HUP and a script's background job ignores INT; a render
+    # started that way must ride out the signal it was shielded from.
+    old = signal.signal(sig, signal.SIG_IGN)
+    timer = threading.Timer(1.5, os.kill, (os.getpid(), sig))
+    timer.start()
+    try:
+        manifest = rs.render(fake.args, plan, datetime(2026, 10, 31, tzinfo=timezone.utc))
+        assert signal.getsignal(sig) is signal.SIG_IGN
+    finally:
+        timer.cancel()
+        signal.signal(sig, old)
+    assert manifest["published"] is False
+    assert (fake.tmp / "out" / "tqo-s001.mp4").read_bytes() == b"video"
+
+
+def test_a_marker_write_that_fails_does_not_block_the_next_render(fake, monkeypatch):
+    import errno
+    from datetime import datetime, timezone
+
+    marker = fake.root / "storage" / "mpt-shorts-inflight.json"
+    real_write = Path.write_text
+    full = {"disk": True}
+
+    def write_text(self, data, *args, **kwargs):
+        if self.name == marker.name and full["disk"]:
+            real_write(self, data[:20], *args, **kwargs)  # a write cut short
+            raise OSError(errno.ENOSPC, "No space left on device")
+        return real_write(self, data, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", write_text)
+    plan = rs.preflight(fake.args)
+    with pytest.raises(OSError, match="No space left"):
+        rs.render(fake.args, plan, datetime(2026, 10, 31, tzinfo=timezone.utc))
+    assert not marker.exists()
+    full["disk"] = False
+    manifest = rs.render(fake.args, plan, datetime(2026, 10, 31, tzinfo=timezone.utc))
+    assert manifest["published"] is False
+    assert not marker.exists()
 
 
 def test_mpt_dies_with_a_wrapper_that_is_killed_outright(tmp_path):
