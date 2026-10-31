@@ -420,14 +420,13 @@ nothing else. Operational detail (`work_root`, queue depth, concurrency) is on
 `/status`, behind the token, because the first version put a filesystem path and
 a load signal in front of anyone who could reach the TLS terminator.
 
-`job_count` reads **25** in this repository from 2026-10-31, when
-`caption_srt` was added, and will read 25 on the box once the next upgrade
-lands; until then the box reads 24. It must read **24** from the 2026-10-31 ACX
-build onward, which carries
-`tsws_repair` and the two ACX Node jobs; 22 on the live box from 2026-10-17 to
-the next upgrade (`tsws_repair` without the ACX jobs), 23 in this repository
-only from 2026-10-28 to 2026-10-31, 21 from the 2026-10-15 Voice Lab build, 19
-from the 2026-09-15 build, 18 before it.
+`job_count` must read **25** from this repository's face-on Shorts build
+(2026-10-31, `caption_srt` added) once a box is upgraded to it. Until that
+upgrade the live box reads **24**, the 2026-10-31 ACX build (`tsws_repair` and
+the two ACX Node jobs), and 24 there is correct, not stale. Earlier: 22 on the
+live box from 2026-10-17 to the ACX upgrade (`tsws_repair` without the ACX
+jobs), 23 in this repository only from 2026-10-28 to 2026-10-31, 21 from the
+2026-10-15 Voice Lab build, 19 from the 2026-09-15 build, 18 before it.
 Fewer means an older `jobs.js` is loaded, and the sticky note's warning applies:
 a still plate renders as one frame, not a held one.
 
@@ -620,16 +619,29 @@ installed), and a real avatar's face against the 1080x960 crop.
 upgrade) turns a `word_timings` file into seam captions. Params `{words,
 output, line?, max_words?, offset?, tail?}`. It reads `{stem: {words: [{text,
 start, end}]}}`, takes the only line or the one named in `line`, and writes an
-SRT of 2 to `max_words` (default 4) words a cue: a phrase ends at `. ? ! , ; :`,
-a single word left over joins the cue before it, a one word phrase after a
-sentence opens the next phrase, each cue runs first start to last end plus
-`tail` (0.15 s), stops 20 ms before the next and is never under 0.3 s when
-there is room. The characters libass reads as markup (`{ } \ < >`) are removed
-from the text; a word without a finite start and end, or ending before it
-starts, is refused, never guessed. The output path has to pass the same
-character test `presenter_composite` applies to `captions`, so a name it would
-refuse fails here first. Native, no child process. Pinned in jobs.test.js
+SRT of short cues, at most `max_words` + 1 words each (5 at the default 4): a
+phrase ends at `. ? ! , ; :`, a single word left over joins the cue before it,
+a one word phrase after a sentence opens the next phrase, so a one word cue
+appears only as the last thing said or when the whole text is one word. Each
+cue runs first start to last end plus `tail` (0.15 s), stops 20 ms before the
+next and is never under 0.3 s when there is room. The characters libass reads
+as markup (`{ } \ < >`) are removed from the text and control characters
+become a space. A word whose start or end is not a number (null, text, a
+boolean or an array are refused, not coerced), ends before it starts, ends past
+86400 s or starts before the word ahead of it is refused, never guessed. The
+output path has to pass the same character test `presenter_composite` applies
+to `captions`, so a name it would refuse fails here first, and it may not be
+the words file itself. Native, no child process. Pinned in jobs.test.js
 section C1.
+
+`split` rounds the seam to an even row. The first version rounded to the
+nearest row, and an odd zone height passed submit and then stopped ffmpeg at
+render time (exit 234, "Padded dimensions cannot be smaller than input
+dimensions") on a square or portrait zone clip; a critic reproduced it at 0.333
+and 0.56 on 1080x1920. Re-rendered after the fix with 1080x1080 and 720x1280
+zone clips at 0.333, 0.56, 0.66 and 0.5: every one exit 0, seams at 640, 1076,
+1268 and 960. Without `split` the argv is pinned in jobs.test.js against the one
+captured from b9422ef, byte for byte.
 
 ## Voice Lab (added 2026-10-15)
 
@@ -1014,15 +1026,17 @@ The first install under "Deploying it" is for a new host. On the live box:
    `tsws`. Add `WHISPER_PYTHON` and `HF_HOME` to `/etc/tsws-render-worker.env` by
    appending two lines; that file holds `WORKER_TOKEN`, so never rewrite it with
    a redirect and never print it. Without this step the service starts and
-   `/health` reads 24, but `word_timings` fails at run time naming the variable
-   and `acx_node_assemble` refuses at submit for want of the faces.
+   `/health` reads the full count, but `word_timings` fails at run time naming
+   the variable and `acx_node_assemble` refuses at submit for want of the faces.
+   (Done on 2026-10-31 with the ACX build; a later upgrade skips it.)
 6. Read `GET /status` again immediately before the restart, and restart only
    when it is still idle. Then read `/health` on the bridge address, never on
-   `127.0.0.1`, which on this box is the Temporal UI: 24, with
-   `tsws_repair`, `word_timings` and `acx_node_assemble` among the names. 24
-   proves the job table loaded, not that the ACX jobs can run; their proof is the
-   Node 01 case below. Read the live files' sha256 back against the merge
-   commit's.
+   `127.0.0.1`, which on this box is the Temporal UI: the count for the commit
+   copied, 25 from the face-on Shorts build (24 for the ACX build), with
+   `tsws_repair`, `word_timings`, `acx_node_assemble` and, from 25,
+   `caption_srt` among the names. The count proves the job table loaded, not
+   that a job can run; the ACX jobs' proof is the Node 01 case below. Read the
+   live files' sha256 back against the merge commit's.
 
 ## The ACX Node build (added 2026-10-28, ruled R22)
 

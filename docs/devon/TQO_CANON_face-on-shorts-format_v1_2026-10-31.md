@@ -36,8 +36,10 @@ in `docs/devon/assets/TQO_PROOF_face-on-shorts-reference_v1_2026-10-31.json`.
 Tee sent `youtube.com/shorts/zopfY5ONIjA`, "Elon Musk Just Gave Grok AI Full
 Control of Your Phone!", 1:44, as a screenshot and a screen recording. Gemini
 read the whole video from YouTube. Claude then checked the first 50 seconds
-frame by frame against Tee's recording (one frame every 2 seconds). Every shot
-Gemini listed in that span is there at the time it gave. One correction: in
+against Tee's recording at one frame every 2 seconds, not frame by frame. Of the
+14 shots Gemini listed in that span, 13 landed on a sampled frame and matched,
+about a second early in the recording at 0:04; the "#02 PAGES" card (0:31 to
+0:32) fell between samples and was not seen. One correction: in
 the split shots he is framed chest up, not waist up. One claim is withdrawn:
 Gemini said product names were pasted onto other products' screens, and the
 frame it cited shows no font mismatch.
@@ -50,8 +52,8 @@ What it does, observed:
   product screen, a phone mockup or a short b-roll clip), him chest up and
   centred below. On each numbered point he goes full frame and a card reads
   "#01 PHONE CONTROL", with a red flash and a whoosh on the cut.
-- Captions sit on the seam, 2 to 5 words at a time, bold white sans on a black
-  box. The hook alone mixes a small sans word with a large italic serif one.
+- Captions sit on the seam in short phrases of about 2 to 4 words, bold white
+  sans on a black box. The hook alone mixes a small sans word with a large italic serif one.
 - Script: a named entity and a claim in the first two seconds, a counted
   promise ("six things"), each item as "before" then "now" with one example, an
   explicit caveat ("Now the honest part. It is still a beta"), a one line
@@ -67,8 +69,8 @@ What it does, observed:
 Gemini also read six of the Shorts from the 2026-09-08 benchmark
 (`6UR-EXqeNW4`, `WmeEd3A64AU`, `fVIfAOJF9xc`, `2vKU3J29FJw`, `KxAGWENTUpw`,
 `FZml4h4uXJU`), observations only and not frame checked. Traits in at least
-five of the six: captions burned in for the whole Short, white, 1 to 5 words at
-a time, key words set apart by type or colour; the face full frame in the upper
+five of the six: captions burned in for the whole Short, white, typically 1 to 5
+words at a time with maximums from 3 to 8, key words set apart by type or colour; the face full frame in the upper
 centre third as a medium close-up; average shot length 2.4 to 2.9 seconds; the
 named tool on screen as a real screen recording with push-ins; a ducked
 electronic bed and a whoosh on transitions; a hard ending. All four produced
@@ -80,7 +82,7 @@ bottom half of a split while the tool shows above.
 
 Taken: the 9:16 frame split 50/50; proof on top as a real screen recording of
 the tool being taught, never a staged screen; Tee's face chest up below and full
-frame on each numbered beat; seam captions of 2 to 5 words in white on black;
+frame on each numbered beat; seam captions of a few words, at most five, in white on black;
 a named, specific hook inside two seconds; a numbered body; one honest caveat;
 one comment keyword with a real deliverable; a ducked bed; 45 to 75 seconds,
 which is the skills' range and sits inside the benchmark's 33 to 153.
@@ -104,7 +106,8 @@ In the repository from 2026-10-31, not yet on the box:
 - `presenter_composite` takes `split` (0.3 to 0.75, stacked only). At 0.5 the
   seam is at 960 of 1920 and the default caption follows it. Without it the
   layout is the 1250 one, unchanged.
-- `caption_srt` turns a `word_timings` file into seam captions of 2 to 5 words.
+- `caption_srt` turns a `word_timings` file into seam captions of at most five
+  words (`max_words` plus one, default four).
 
 Rendered in a cloud session with the builder's own ffmpeg arguments: at 0.5 the
 caption sits on the seam, and a black box style gives the reference's look.

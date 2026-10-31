@@ -31,8 +31,9 @@ srv1936199 is untouched and idle.
 ## Voice Lab moved to his professional clone
 
 The live map found `TQO Voice Lab` (jKrUIEQSUcGzr4tK, active) sending its
-re-read lines to ElevenLabs voice `ypnKDQtIhp4N3yn4UnqO`, while V5's own comment
-called that voice "an ElevenLabs voice GENERATED from a written description, so
+re-read lines to ElevenLabs voice `ypnKDQtIhp4N3yn4UnqO`, while the live V5's
+comment in `Show Context: Render` (read 2026-10-31 by a verifier; the repository's
+V5 exports are from 2026-10-28 and predate it) called that voice "an ElevenLabs voice GENERATED from a written description, so
 not his voice". Tee ruled on a card to move it. The `Clone Voice` node now posts
 to `LLhnFOCTr3y3wrH59DtJ` with V5's settings, and its sticky note records the
 move. Published at 2026-10-31T22:26Z.
@@ -58,10 +59,11 @@ workflow's history for a rollback.
 
 Tee sent a Vaibhav Sisinty Short as a screenshot and then a screen recording.
 It is `youtube.com/shorts/zopfY5ONIjA`. Gemini read the whole Short from
-YouTube; the first 50 seconds were checked frame by frame against the
-recording, which Tee link-shared for the download and set back to Restricted,
-confirmed from the session by the link redirecting to a Google sign-in. Every
-shot Gemini placed in that span matched. One correction (chest up, not waist
+YouTube; the first 50 seconds were checked at one frame every 2 seconds against
+the recording, which Tee link-shared for the download and set back to Restricted,
+confirmed from the session by the link redirecting to a Google sign-in. Of the
+14 shots Gemini placed in that span, the 13 that landed on a sampled frame
+matched; the 1 second "#02 PAGES" card fell between samples. One correction (chest up, not waist
 up) and one withdrawn claim (relabelled product screens) are recorded in the
 canon doc, `TQO_CANON_face-on-shorts-format_v1_2026-10-31.md`, with the full
 format and the evidence file.
@@ -80,13 +82,29 @@ which wins over the TQO skill's old no-ask line.
   0.75, stacked only); without it the graph is the 1250 one, byte for byte.
   The default caption margin follows the seam by a formula that reproduces the
   measured 92 at 1250 and gives 136 at 0.5. A new job, `caption_srt`, turns a
-  `word_timings` file into seam captions of 2 to 5 words.
-- Tests: jobs.test.js 127 passed (115 on main, 12 new), acx_node 35, server 47 and
-  tsws-repair 22 with the job count moved from 24 to 25, and the negative
-  control failing 122 against the unfixed engine; each run alone with its own
-  exit code 0.
+  `word_timings` file into seam captions of at most five words.
+- Tests: jobs.test.js 136 passed (115 on main, 21 new), acx_node 35, server 47
+  and tsws-repair 22 with the job count moved from 24 to 25, and the negative
+  control failing 131 against the unfixed engine; each run alone with its own
+  exit code 0. The argv without `split` is pinned against the one captured
+  from b9422ef, byte for byte.
 - A real render with the builder's own ffmpeg arguments put the caption on the
   960 seam at 0.5 and on the 1250 seam without `split`.
+- A fresh critic on the first commit (5449b3b) found nothing critical or high
+  and reproduced one real defect: a `split` whose seam fell on an odd row
+  passed submit and stopped ffmpeg at render (exit 234) on a square or
+  portrait zone clip, at 0.333 and 0.56. Reproduced here, fixed by rounding
+  the seam to an even row, and re-rendered clean at 0.333, 0.56, 0.66 and 0.5
+  with 1080x1080 and 720x1280 clips. It also found word times coerced from
+  null or text, out of order words making a 1 ms cue, a newline gluing two
+  words, a job count that read both 24 and 25 in DEPLOY.md, the "2 to 5 words"
+  claim (a cue holds at most five, and a lone last word can stand alone), and
+  three overstatements in the canon (the frame check was one frame every 2
+  seconds, not frame by frame; 13 of 14 shots were sampled, not all). Each is
+  fixed or corrected. Each code fix has a test that fails when the fix is
+  reverted, run on a copy. Left as found: `safePath` follows a dangling
+  symlink out of the work root, which every output in the worker shares and
+  this change does not touch.
 - DEPLOY.md documents both and the count. The skills `tqo-viral-output`,
   `nco-forge-viral-output` and `mpt-shorts` carry the rulings; CLAUDE.md names
   the ruling beside the mpt-shorts entry.
@@ -115,7 +133,7 @@ TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_face-on-shorts-and-the-voice-lab-clone_v1_2026-10-31-2306.md
 DATE: 2026-10-31
 DECISIONS: Tee ruled on cards that every Short carries his face and looks like Vaibhav Sisinty's, which takes MoneyPrinterTurbo out of the Shorts and stops its n8n wiring; that TQO Voice Lab moves to his professional clone; that the face comes from his HeyGen avatar on native Shorts; that the Shorts frame splits 50/50 now; and that a Short ends on one comment keyword with a real deliverable, over the TQO skill's no-ask line. He link-shared his screen recording for one download and set it back to Restricted.
-FINDINGS: The render worker is on srv1936193 and MoneyPrinterTurbo on srv1936199, with no private link or SSH credential between n8n and the second box. Voice Lab read lines in a generated voice, never used; fixed and read back. ElevenLabs confirms LLhnFOCTr3y3wrH59DtJ as his professional clone and ypnKDQtIhp4N3yn4UnqO as generated, against show_registry.py. The reference Short's format was read by Gemini and its first 50 seconds frame checked; one Gemini claim was withdrawn. The worker gained a 50/50 split and a seam caption job, tested and rendered.
+FINDINGS: The render worker is on srv1936193 and MoneyPrinterTurbo on srv1936199, with no private link or SSH credential between n8n and the second box. Voice Lab read lines in a generated voice, never used; fixed and read back. ElevenLabs confirms LLhnFOCTr3y3wrH59DtJ as his professional clone and ypnKDQtIhp4N3yn4UnqO as generated, against show_registry.py. The reference Short's format was read by Gemini and its first 50 seconds checked at one frame every 2 seconds; one Gemini claim was withdrawn. The worker gained a 50/50 split and a seam caption job, tested and rendered. A fresh critic reproduced an odd-seam render failure at splits other than 0.5 and several smaller defects and overstatements; all fixed or corrected, each code fix pinned by a test that fails without it.
 OPEN: live worker upgrade; the n8n Shorts lane with HeyGen balance checks; on-screen cards, zooms, sound effects and zone fill; comment deliverables; the voice clone consent record; PR #460 for show_registry; the first portrait Short and Tee's watch of it; whether to remove the idle MoneyPrinterTurbo install.
 STATUS: Repository work in review on branch claude/mpt-shorts-tailored; the Voice Lab change is live and verified; nothing has published.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f

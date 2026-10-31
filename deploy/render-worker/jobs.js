@@ -751,7 +751,7 @@ const JOBS = {
    * params: { avatar, output, cutaways?: [{path, start, end, in?, full?}],
    *           captions?, caption_style?, bed?, bed_gain?, narration?, duration?,
    *           width?, height?, fps?, fade?, crf?, preset?,
-   *           layout?: 'full' | 'stacked', plate_color?, emphasis?: [{start, end}] }
+   *           layout?: 'full' | 'stacked', split?, plate_color?, emphasis?: [{start, end}] }
    */
   presenter_composite: {
     build(p) {
@@ -787,7 +787,15 @@ const JOBS = {
       if (stacked && !(H > W)) throw new BadJob(`layout stacked needs a portrait canvas (got ${W}x${H})`);
       if (p.split !== undefined && !stacked) throw new BadJob('split: only meaningful with layout stacked');
       const split = p.split === undefined ? null : num(p.split, 'split', { min: 0.3, max: 0.75 });
-      const splitY = stacked ? Math.round(split === null ? H * 1250 / 1920 : H * split) : 0;   // top of the presenter zone
+      // With a split the seam is rounded to an even row. An odd zone height
+      // passed submit and then killed ffmpeg (exit 234, "Padded dimensions
+      // cannot be smaller than input dimensions") on every square or portrait
+      // zone clip: yuv420p pad rounds the odd height down below the scaled
+      // clip (critic, 2026-10-31, at 0.333 and 0.56 on 1080x1920). The no
+      // split path keeps its old rounding so its graph does not move.
+      const splitY = !stacked ? 0
+        : split === null ? Math.round(H * 1250 / 1920)
+          : 2 * Math.round(H * split / 2);   // top of the presenter zone
       const headH  = stacked ? H - splitY : H;
       const plate  = String(p.plate_color ?? '#0A1628');
       if (!/^#[0-9A-Fa-f]{6}$/.test(plate)) throw new BadJob('plate_color: must be #RRGGBB');
@@ -1712,9 +1720,10 @@ const JOBS = {
    * JSON that word_timings writes, {stem: {text, words: [{text, start, end}]}},
    * and writes an SRT of short spoken phrases for presenter_composite's
    * `captions`. The format comes from the Vaibhav Sisinty Short Tee sent as
-   * the reference: 2 to 5 words on screen at a time, broken where he breathes,
-   * timed to the voice. Phrase rules live in seamCues below and are pinned by
-   * jobs.test.js; a word with no usable timing is refused, never guessed.
+   * the reference: a few words on screen at a time (at most max_words + 1),
+   * broken where he breathes, timed to the voice. Phrase rules live in
+   * seamCues below and are pinned by jobs.test.js; a word with no usable
+   * timing is refused, never guessed.
    *
    * params: { words, output, line?, max_words?, offset?, tail? }
    */
@@ -1726,6 +1735,7 @@ const JOBS = {
       // presenter_composite refuses a captions path the subtitles filter cannot
       // take verbatim; refuse it here too, so the failure lands on this job.
       if (!/^[A-Za-z0-9_./-]+$/.test(out)) throw new BadJob('output: the resolved path carries a character the subtitles filter cannot take verbatim; rename it');
+      if (out === src) throw new BadJob('output: is the words file itself; writing it would destroy the timings');
       const maxWords = num(p.max_words ?? 4, 'max_words', { min: 2, max: 6, int: true });
       const offset = num(p.offset ?? 0, 'offset', { min: 0, max: 86400 });
       const tail = num(p.tail ?? 0.15, 'tail', { min: 0, max: 1 });
@@ -2353,25 +2363,44 @@ function setTagReader(fn) { tagReader = fn; }
  * Seam caption cues from timed words, for caption_srt. A phrase ends after a
  * word that ends in . ? ! , ; or :, and a phrase longer than maxWords is cut
  * into groups of maxWords, except that a single word left over joins the group
- * before it rather than flashing alone. A one word phrase joins the phrase
- * before it when that keeps the cue at maxWords + 1 or under. Text loses the
- * characters libass would read as markup ({ } \ < >) and nothing else; a word
- * left empty by that is dropped. Times: first word's start to last word's end
- * plus tail, shifted by offset, cut 20 ms short of the next cue, and never
- * under 0.3 s unless the next cue leaves less room. A word without a finite
- * start and end, or with end before start, is refused: a guessed time puts a
- * caption on the wrong line.
+ * before it rather than flashing alone. A one word phrase joins the group
+ * before it when that group did not end a sentence and the cue stays at
+ * maxWords + 1 or under; otherwise it opens the next phrase. So a cue holds at
+ * most maxWords + 1 words (5 at the default 4), and a one word cue happens only
+ * when that word is the last thing said after a sentence, or the whole text.
+ * Text loses the characters libass would read as markup ({ } \ < >); control
+ * characters become a space; a word left empty is dropped. Times: first word's
+ * start to last word's end plus tail, shifted by offset, cut 20 ms short of the
+ * next cue, and never under 0.3 s unless the next cue leaves less room. A word
+ * whose start or end is not a finite number, ends before it starts, ends past
+ * 86400 s, or starts before the word ahead of it, is refused: a guessed time
+ * puts a caption on the wrong line.
+ *
+ * acx_node.js has its own chunker (captionChunks) for the ACX Node renders,
+ * with different rules on purpose: five words before a cut, a 0.30 s tail and a
+ * 0.6 s floor, tuned for a slower narrated read. These are tuned for the Shorts
+ * reference; change one without assuming the other should follow.
  */
 function seamCues(words, { maxWords = 4, offset = 0, tail = 0.15 } = {}) {
   if (!Array.isArray(words) || !words.length) throw new Error('words: none to caption');
   if (words.length > 20000) throw new Error('words: too many (max 20000)');
   const clean = [];
+  let prevStart = -Infinity;
   words.forEach((w, k) => {
-    const s = Number(w && w.start), e = Number(w && w.end);
-    if (!Number.isFinite(s) || !Number.isFinite(e) || s < 0 || e < s) {
-      throw new Error(`words[${k}]: start ${w && w.start} and end ${w && w.end} are not a usable time span`);
+    // Numbers only. Number() turned null, "", true and [3] into times, so a
+    // word with no timing was captioned at 0 s (critic, 2026-10-31).
+    const s = w && w.start, e = w && w.end;
+    if (typeof s !== 'number' || typeof e !== 'number' || !Number.isFinite(s) || !Number.isFinite(e) ||
+        s < 0 || e < s || e > 86400) {
+      throw new Error(`words[${k}]: start ${JSON.stringify(s)} and end ${JSON.stringify(e)} are not a usable time span`);
     }
-    const text = String((w && (w.text ?? w.word)) ?? '').replace(/[{}\\<>\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim();
+    // Out of order is a broken file, not a timing to smooth over: it made a
+    // 1 ms cue when a later word started before an earlier one.
+    if (s < prevStart) throw new Error(`words[${k}]: starts at ${s}s, before the word ahead of it (${prevStart}s); the words are out of order`);
+    prevStart = s;
+    // Control characters become a space so "foo\nbar" reads "foo bar"; the
+    // markup characters go entirely.
+    const text = String((w && (w.text ?? w.word)) ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/[{}\\<>]/g, '').replace(/\s+/g, ' ').trim();
     if (text) clean.push({ text, s, e });
   });
   if (!clean.length) throw new Error('words: none left after removing markup characters');

@@ -1,6 +1,6 @@
 {
  "pulled": "2026-10-31",
- "method": "Gemini gemini-4-argon reading public YouTube URLs from a Claude Code cloud session; one streamed generateContent call per Short; observations only. Labelled OBS: these are a model's observations, not frame-checked, except where frame_check says so.",
+ "method": "Gemini gemini-4-argon reading public YouTube URLs from a Claude Code cloud session; one streamed generateContent call per Short; observations only. Labelled OBS: these are a model's observations, not frame-checked, except where frame_check says so. The script that made the six benchmark reads (watch_shorts.py) and the watch-long run for the reference lived in the session scratchpad and were not kept; the raw model answers are embedded here verbatim.",
  "reference_short": {
   "id": "zopfY5ONIjA",
   "url": "https://www.youtube.com/shorts/zopfY5ONIjA",
@@ -10,7 +10,7 @@
  },
  "frame_check": {
   "recording": "ScreenRecording_10-31-2026 18-22-37_1.mp4, Drive 16DC6Au2otytvt5JmxE4x2wCdhy81jEYe, 93,981,252 bytes, sha256 c7ec5e17a36eaaea90167b2ccdb14be3bfde58a2fd092c83ac12bd5fb4ad01ea, 1180x2556, 60 fps, 50.47 s, covering the reference from 0:00 to about 0:50; link-shared by Tee for the download and set back to Restricted, confirmed by the link redirecting to accounts.google.com afterwards",
-  "contact_sheet": "one frame every 2 s, 0 to 48 s, read by Claude",
+  "contact_sheet": "one frame every 2 s from 0 to 48 s, plus single frames at 5.6, 6.2, 40 and 50.2 s, read by Claude; not frame by frame",
   "confirmed": [
    "0:00 split, Cybertruck footage top, presenter bottom, \"Elon Musk / Just gave his\" mixed serif italic and sans hook",
    "0:02 and 0:22 phone permission mockup top",
@@ -22,14 +22,20 @@
    "0:38 to 0:40 Q4 Forecast and Pipeline dashboard top",
    "0:44 \"VAULT #03\" card",
    "0:46 to 0:50 Google Ads sign-in with \"Securely save to Grok Bot's vault\"",
-   "captions in short black boxes on the seam throughout"
+   "captions in short black boxes on the seam throughout",
+   "0:05.6 and 0:06.2 full-frame presenter walking with \"Here are / 06 things it can do\" (Gemini shot 3); the 0:06.0 thumbnail decoded black",
+   "0:34 chat input typing \"Update this ev\" top (Gemini shot 10)"
   ],
   "corrected": [
    "in split shots the presenter is framed chest up, not waist up as Gemini said"
   ],
   "withdrawn": [
    "Gemini's claim that product UI text was synthetically patched: the 0:50 frame reads \"Securely save to Grok Bot's vault\" with no visible font mismatch; the 0:58 example is past the recording's end. Not supported by the frames."
-  ]
+  ],
+  "not_sampled": [
+   "Gemini shot 9, the \"#02 PAGES\" card at 0:31 to 0:32, fell between the 0:30 and 0:32 samples"
+  ],
+  "shot_count": "Gemini places 14 shots starting before 0:50; 13 landed on a sampled frame and matched; the recording runs about 1 s ahead of Gemini at 0:04"
  },
  "six_benchmark_shorts": {
   "reader_facts": [

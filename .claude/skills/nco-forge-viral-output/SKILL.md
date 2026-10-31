@@ -79,7 +79,7 @@ mapping that beat makes.
 Every Short carries Tee's face (ruled 2026-10-31): his HeyGen avatar reading
 the script in his professional clone, in the 9:16 stacked layout split 50/50,
 the proof in the top half, his face chest up in the bottom half, full frame on
-each numbered beat, captions of 2 to 5 words on the seam. Voice-only Shorts
+each numbered beat, captions of at most five words on the seam. Voice-only Shorts
 are out. The format reference is
 `docs/devon/TQO_CANON_face-on-shorts-format_v1_2026-10-31.md`.
 
