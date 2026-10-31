@@ -23,7 +23,7 @@ The two declined install options were installing only in a second environment wi
 - `AGENTS.md` said CI is six jobs, and the steward skill said a Python-only pull request shows four. Neither states a stale count now; both point to CLAUDE.md.
 - `.claude/skills/openmontage/SKILL.md`: both rulings recorded where each item was open, with the cost the card stated, and the provenance list names the licence a render ran under.
 
-`main` moved during the work: PR #443 merged at 04:28Z with a new skill and a CLAUDE.md change. It was merged into the branch as `9f1f3ff` with no conflict, and the skill count pin passed on the result.
+`main` moved twice during the work. PR #443 merged at 04:28Z with a new skill and a CLAUDE.md change, and was merged into the branch as `9f1f3ff` with no conflict. PR #444 merged at 04:36Z with another skill. Each PR had moved CLAUDE.md's skill count from nineteen to twenty, so `main` after both said twenty while the directory held twenty-one, and CI on `main` went red at `164497a` on `test_the_skill_inventory_is_counted_from_the_directory`. The same test failed on this PR's merge ref at `99a2b36`, 1 failed and 9190 passed, through no change of its own. PR #449, from the session that owns #444, carries the fix. Its two hunks were ported here verbatim in `498617f`, so whichever PR merges second takes those lines cleanly.
 
 ## The critic
 
@@ -79,5 +79,5 @@ DATE: 2026-10-31
 DECISIONS: Tee ruled on one card at 04:00:46Z: the free Remotion licence for an operation of three or fewer, the OpenMontage install trust accepted as disclosed, and a daily scheduled dependency audit added.
 FINDINGS: CLAUDE.md counted thirteen CI jobs while the files held fifteen, and two workflow files were named nowhere; the count is now pinned by a test. A fresh critic confirmed 17 LOW or NIT findings on the first commit, among them audit steps that hid each other once one went red, all addressed.
 OPEN: the 54 unverified findings from the 0123 arc; the first dispatch and the first scheduled run of the daily audit; the full Remotion terms.
-STATUS: At writing, PR #447 is open as a draft with this doc in its last commit. CI on 99a2b36 had passed standalone, container, engine and the dependency audit, the audit running the restructured steps on GitHub, with the API suite still running. The merge, the first dispatch, the negative control and the deploy read back come after it.
+STATUS: At writing, PR #447 is open as a draft with this doc in its last commit. CI on 99a2b36 passed standalone, container, engine and the dependency audit, the audit running the restructured steps on GitHub, and failed the API suite on the skill count conflict between #443 and #444 that was red on main too; the fix from #449 is ported. The merge, the first dispatch, the negative control and the deploy read back come after it.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
