@@ -852,14 +852,18 @@ be a visible non-blocking error rather than python's blocking exit 2.
 A subagent's hook input is measured now, in both directions. The script reads
 the session file when `transcript_path` is under `/subagents/`, and on
 2026-10-31 the ledger of one session held 52 `gate-allow` rows from subagents
-and workflow agents, each reason naming the age of the parent's card or
-message ("card 23.1 min ago"), and 6 `gate-deny` rows once that card was 164
-to 166 minutes old. So a workflow agent's gated call passes on Tee's word in
-the parent session and is refused when that word ages out. The cost of that:
-a workflow outlives the window. Seven read-only verifiers on one box ran
-about two at a time in this container and took 151 minutes, and the last three
-were refused mid-run. Keep a workflow that makes gated calls short, or ask the
-card again before it starts the part that needs the gate.
+and workflow agents. 43 were gated calls, each reason naming the age of the
+parent's card (14) or message (29), as in "card 23.1 min ago", and 9 were
+ungated Bash calls reading `not gated`. It also held 6 `gate-deny` rows, 5 of
+them from one workflow when the card was 164 to 166 minutes old and one from an
+earlier run at 300. So a workflow agent's gated call passes on Tee's word in the
+parent session and is refused when that word ages out. The cost of that: a
+workflow can outlive the window. Seven read-only verifiers and a critic on one
+box took 151 minutes, and four of the verifiers and the critic were refused
+mid-run. Most of that time was two verifiers each held on one Remote Desktop
+Commander call from 18:56Z to 21:14Z, about 138 minutes; the cause was not
+found. Keep a workflow that makes gated calls short, or ask the card again
+before it starts the part that needs the gate.
 
 ## The Jev router
 
