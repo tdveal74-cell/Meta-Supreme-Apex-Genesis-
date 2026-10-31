@@ -713,8 +713,8 @@ is the number; this paragraph is not.
 - Gated: every n8n write (publish, unpublish, archive, execute, update,
   restore, data table writes, folder moves); every tool on a server named
   Railway, Airtable, Vercel, Supabase, Hostinger, Rakazo, Blotato, Docusign,
-  Zapier, Remote Desktop Commander, Runpod or Graphify except a read (get, list, search, describe, query and the like, listed
-  in `READ_VERB`); GitHub Actions triggers; Drive trash; a curl that writes to a
+  Zapier, Remote Desktop Commander, Runpod, Graphify or WaveSpeed except a read (get, list, search, describe, query and the like, listed
+  in `READ_VERB`), and except a WaveSpeed generate, edit or extend call that only asks for a price (`estimate_only` true); GitHub Actions triggers; Drive trash; a curl that writes to a
   non-local host; a wget that posts to one; `gh workflow run`, `gh api` writes
   and GraphQL mutations, `gh release`, `gh repo`, `gh secret` and `gh variable`
   changes, `gh run rerun`; and any force push, delete push or mirror push except

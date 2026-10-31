@@ -807,6 +807,59 @@ def test_runpod_reads_pass_without_a_signal(server, verb):
     assert gate.classify(tool, {}) == (None, False), tool
 
 
+# WaveSpeed, ruled by Tee 2026-10-31 on a card. Its tools run paid image and
+# video models. The names below are the connector's tools as this session's
+# WaveSpeedAI connector lists them on 2026-10-31.
+WAVESPEED_SERVERS = ("WaveSpeedAI", "wavespeed", "claude_ai_WaveSpeedAI")
+WAVESPEED_WRITES = (
+    "run_model", "generate_image", "generate_video", "edit_image", "edit_video",
+    "extend_video", "create_upload", "upload_attachment", "delete_predictions",
+)
+WAVESPEED_READS = (
+    "get_price", "get_balance", "get_prediction", "get_model_schema", "get_usage",
+    "list_models", "list_predictions", "list_billings",
+)
+
+
+@pytest.mark.parametrize("server", WAVESPEED_SERVERS)
+@pytest.mark.parametrize("verb", WAVESPEED_WRITES)
+def test_wavespeed_writes_are_gated(server, verb):
+    tool = f"mcp__{server}__{verb}"
+    cls, gated = gate.classify(tool, {"prompt": "x"})
+    assert cls == verb and gated, tool
+
+
+@pytest.mark.parametrize("server", WAVESPEED_SERVERS)
+@pytest.mark.parametrize("verb", WAVESPEED_READS)
+def test_wavespeed_reads_pass_without_a_signal(server, verb):
+    tool = f"mcp__{server}__{verb}"
+    assert gate.classify(tool, {}) == (None, False), tool
+
+
+@pytest.mark.parametrize("verb", sorted(gate.WAVESPEED_QUOTE))
+def test_a_wavespeed_price_quote_passes(verb):
+    tool = f"mcp__WaveSpeedAI__{verb}"
+    assert gate.classify(tool, {"prompt": "x", "estimate_only": True}) == (None, False)
+
+
+@pytest.mark.parametrize("value", [False, "true", 1, None])
+@pytest.mark.parametrize("verb", sorted(gate.WAVESPEED_QUOTE))
+def test_anything_but_a_literal_true_estimate_is_a_gated_run(verb, value):
+    tool = f"mcp__WaveSpeedAI__{verb}"
+    cls, gated = gate.classify(tool, {"prompt": "x", "estimate_only": value})
+    assert cls == verb and gated, (tool, value)
+
+
+def test_run_model_is_gated_even_when_it_asks_for_an_estimate():
+    cls, gated = gate.classify("mcp__WaveSpeedAI__run_model", {"estimate_only": True})
+    assert cls == "run_model" and gated
+
+
+def test_an_estimate_flag_passes_nothing_on_another_server():
+    cls, gated = gate.classify("mcp__runpod__run-endpoint", {"estimate_only": True})
+    assert cls and gated
+
+
 # Graphify, ruled by Tee 2026-10-17: only its non-read tools need a signal.
 # These are the 26 real tool names read from the live connector on 2026-10-22,
 # each pinned as a read or a write. The stand-in verbs this replaced

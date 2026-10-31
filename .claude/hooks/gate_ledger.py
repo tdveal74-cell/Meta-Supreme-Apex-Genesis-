@@ -113,6 +113,14 @@ NAMED_SERVERS = (
     # 2026-10-17, the day it was added: only its non-read tools need a human
     # signal. Its reads are listed by name in GRAPHIFY_READS below.
     "graphify",
+    # WaveSpeed runs paid image and video models. Ruled by Tee 2026-10-31 on a
+    # card, after the tsws-shot-prompt skill found that only its written rule
+    # stopped an unasked paid run. Matches the claude.ai connector WaveSpeedAI
+    # and a direct "wavespeed" registration. Reads (get_price, get_balance,
+    # get_prediction, get_model_schema, list_models and the like) still pass,
+    # and so does a generate, edit or extend call that only asks for a price,
+    # below in WAVESPEED_QUOTE.
+    "wavespeed",
 )
 # Graphify's read tools, by exact name, read from the live connector on
 # 2026-10-22. Most of them start "graphify_" or name a noun (graph_stats,
@@ -178,6 +186,12 @@ RAKAZO = "rakazo"
 
 # Ledger only: recorded, never refused.
 LEDGER_ONLY_SUFFIXES = {"merge_pull_request", "test_workflow"}
+# A WaveSpeed generate, edit or extend call with estimate_only true returns the
+# price and runs nothing, so it passes like get_price does. Only the literal
+# boolean true counts; a string or a missing key is a run, and is gated.
+WAVESPEED_QUOTE = frozenset({
+    "generate_image", "generate_video", "edit_image", "edit_video", "extend_video",
+})
 
 # The daily reflection's own row is ledger only too, and nothing else on that
 # table or any other. Ruled by Tee 2026-10-22 on a card: "Exempt that one row".
@@ -986,6 +1000,12 @@ def classify(tool_name, tool_input, cwd="", now=None, shape_only=False):
         return "reflection_row", False
     if suffix in GATED_SUFFIXES:
         return suffix, True
+    if (
+        "wavespeed" in server
+        and suffix in WAVESPEED_QUOTE
+        and tool_input.get("estimate_only") is True
+    ):
+        return None, False
     if suffix == "send_message" and RAKAZO in server:
         return suffix, True
     if HOSTINGER_WRITE.match(suffix):
