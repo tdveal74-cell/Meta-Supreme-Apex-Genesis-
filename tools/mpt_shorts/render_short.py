@@ -33,6 +33,7 @@ import os
 import re
 import secrets
 import shutil
+import signal
 import subprocess
 import sys
 import tomllib
@@ -296,21 +297,27 @@ def coverage(script: str, spoken: str) -> tuple[float, float]:
     return matched / len(a), matched / len(b)
 
 
-def weakest_third(script: str, spoken: str) -> float:
-    """The lowest share said of the script's first, middle and last third.
+def thirds(script: str, spoken: str) -> tuple[float, bool]:
+    """The lowest share said of the script's first, middle and last third, and
+    whether every third is said well enough.
 
     A take that drops one closing sentence still says 0.90 of a 70 word
-    script, and MPT would caption the missing sentence anyway. Each third
-    has to clear the bar on its own, so a gap anywhere shows."""
+    script, and MPT would caption the missing sentence anyway, so each third
+    is held to the bar on its own. A third may always miss one word, so a
+    single misheard word in a short script's six word third does not refuse
+    a take that a retry could never fix."""
     a, b = _tokens(script), _tokens(spoken)
     if len(a) < 3 or not b:
-        return 0.0
+        return 0.0, False
     hit = [False] * len(a)
     for block in difflib.SequenceMatcher(None, a, b, autojunk=False).get_matching_blocks():
         for i in range(block.a, block.a + block.size):
             hit[i] = True
     cuts = [0, len(a) // 3, 2 * len(a) // 3, len(a)]
-    return min(sum(hit[lo:hi]) / (hi - lo) for lo, hi in zip(cuts, cuts[1:], strict=False))
+    parts = [hit[lo:hi] for lo, hi in zip(cuts, cuts[1:], strict=False)]
+    allowed = [max(1, math.floor(len(part) * (1 - VOICE_COVERAGE_MIN) + 1e-9)) for part in parts]
+    ok = all(part.count(False) <= cap for part, cap in zip(parts, allowed, strict=False))
+    return min(sum(part) / len(part) for part in parts), ok
 
 
 def srt_text(path: Path) -> str:
@@ -394,10 +401,8 @@ def preflight(args) -> dict:
     ledger = Path(args.ledger)
     spoken = transcribe(args.mpt_python, root, voice)
     said, extra = coverage(script, spoken)
-    third = weakest_third(script, spoken)
-    # Every third clearing the bar means the whole script does, so the share
-    # said overall is reported and not tested.
-    if min(third, extra) < VOICE_COVERAGE_MIN:
+    third, thirds_ok = thirds(script, spoken)
+    if not thirds_ok or min(said, extra) < VOICE_COVERAGE_MIN:
         raise Refused(
             f"the voiceover says {said:.2f} of the script, {third:.2f} of its weakest third, "
             f"and {extra:.2f} of it is the script; it is not this script's full recording"
@@ -479,11 +484,24 @@ def render(args, plan: dict, now: datetime) -> dict:
 
 def _render(args, plan: dict, now: datetime, task_id: str) -> dict:
     font_name = place_font(plan["root"], plan["font"])
+    # MPT starts ffmpeg children of its own. It runs in a session of its own
+    # so that a timeout kills the whole group, not cli.py alone with its
+    # encoder left writing into a task folder already cleaned away.
+    child = subprocess.Popen(mpt_argv(args.mpt_python, plan, task_id, font_name),
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                             env=scrubbed_env(plan["root"]), cwd=plan["root"], start_new_session=True)
     try:
-        done = _run(mpt_argv(args.mpt_python, plan, task_id, font_name),
-                    env=scrubbed_env(plan["root"]), cwd=plan["root"], timeout=args.timeout)
+        stdout, stderr = child.communicate(timeout=args.timeout)
     except subprocess.TimeoutExpired:
+        os.killpg(child.pid, signal.SIGKILL)
+        child.communicate()
         raise Refused(f"MoneyPrinterTurbo did not finish inside {args.timeout} s") from None
+    finally:
+        try:
+            os.killpg(child.pid, signal.SIGKILL)  # anything it left behind
+        except OSError:
+            pass
+    done = subprocess.CompletedProcess(child.args, child.returncode, stdout, stderr)
     if done.returncode != 0:
         tail = " | ".join(done.stderr.strip().splitlines()[-3:])
         raise Refused(f"MoneyPrinterTurbo exited {done.returncode}: {tail[-600:]}")

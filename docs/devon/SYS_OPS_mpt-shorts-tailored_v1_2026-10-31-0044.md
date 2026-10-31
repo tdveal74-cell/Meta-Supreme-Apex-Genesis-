@@ -56,8 +56,8 @@ audit and the rules. `test_mpt_shorts.py`, 33 tests, joins the standalone job.
 | clip with 6 s of picture and 12 s of sound | refused before any render |
 | repeat, short clips, woff2 font | each refused |
 | network on the wrapper's path, `strace -f` | 18 processes, 0 `connect` calls; a control socket under the same tracer recorded 1 |
-| `test_mpt_shorts.py` | 65 passed; 28 of 29 gate mutants fail it, the survivor equivalent |
-| standalone list, ruff | 5553 passed, clean |
+| `test_mpt_shorts.py` | 69 passed; 28 of 29 gate mutants fail it, the survivor equivalent; the process group test fails on a kill of `cli.py` alone |
+| standalone list, ruff | 5557 passed, clean |
 
 The voiceover used for every render was a Piper test voice, never published, and
 never Tee's. No render has run on the VPS.
@@ -120,6 +120,14 @@ script must be 0.85 said. The 17.5 s cut is refused at 0.71, a render killed at
 30 s leaves the copy count at 20 before and after, and a real render with an
 mkv clip passes. 65 tests; 28 of 29 gate mutants fail them, the survivor
 equivalent.
+
+A second fresh verifier confirmed all three at `a10baf9` on real media and
+raised two smaller items, both closed in the next commit: a timeout killed
+`cli.py` but left its ffmpeg encoder running for a few seconds, so the render
+now runs in its own process group and a timeout kills the group (a real render
+killed at 30 s left no encoder and no `cli.py`); and the per third bar refused
+a single misheard word in a six word third of a 20 word script, deterministically,
+so each third may now always miss one word. 69 tests.
 
 ## Open, and whose
 

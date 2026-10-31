@@ -399,7 +399,11 @@ for n, _ in enumerate(flags["--video-materials"].split(",")):
 if mode == "fail":
     sys.exit(3)
 if mode == "hang":
-    import time
+    import subprocess, time
+    # Like MPT's ffmpeg encoder: a child of its own that outlives a kill of cli.py alone.
+    grandchild = subprocess.Popen(["sleep", "60"], stdin=subprocess.DEVNULL,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    pathlib.Path("grandchild.pid").write_text(str(grandchild.pid))
     time.sleep(30)
 (task / "final-1.mp4").write_bytes(b"video")
 (task / "subtitle.srt").write_text("" if mode == "nosrt" else "1\n00:00:00,000 --> 00:00:01,000\nhello\n")
@@ -561,6 +565,31 @@ def test_a_bad_render_keeps_nothing(fake, mode, final, match):
     assert not list((fake.root / "storage" / "local_videos").glob("cli-material-*"))
 
 
+def _alive(pid):
+    try:
+        state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+    except (FileNotFoundError, IndexError):
+        return False
+    return state != "Z"
+
+
+def test_a_timeout_kills_what_mpt_started_too(fake):
+    import time
+    from datetime import datetime, timezone
+
+    (fake.root / "fake_mode.txt").write_text("hang")
+    fake.args.timeout = 2
+    plan = rs.preflight(fake.args)
+    with pytest.raises(rs.Refused, match="did not finish"):
+        rs.render(fake.args, plan, datetime(2026, 10, 31, tzinfo=timezone.utc))
+    pid = int((fake.root / "grandchild.pid").read_text())
+    for _ in range(20):
+        if not _alive(pid):
+            break
+        time.sleep(0.1)
+    assert not _alive(pid)
+
+
 def test_cleanup_leaves_copies_that_were_there_before(fake):
     from datetime import datetime, timezone
 
@@ -599,6 +628,29 @@ def test_a_take_missing_its_last_sentence_is_refused(fake):
     fake.heard["text"] = script.rsplit(" That is", 1)[0]
     assert rs.coverage(script, fake.heard["text"])[0] >= rs.VOICE_COVERAGE_MIN
     _refused(fake, "weakest third")
+
+
+TWENTY = "one way to judge a tool is to time it then check each number it gives you against the source"
+
+
+def test_one_misheard_word_in_a_short_third_is_allowed():
+    assert len(rs._tokens(TWENTY)) == 20
+    misheard = TWENTY.replace("judge", "fudge", 1)
+    third, ok = rs.thirds(TWENTY, misheard)
+    assert ok and round(third, 3) == 0.833
+
+
+def test_two_missing_words_in_a_short_third_are_not():
+    _, ok = rs.thirds(TWENTY, TWENTY.replace("way to judge", "way", 1))
+    assert not ok
+
+
+def test_a_long_third_may_miss_its_share_and_no_more():
+    words = " ".join(f"w{i}" for i in range(60))  # thirds of 20, each may miss 3
+    three = words.replace("w1 w2 w3 ", "", 1)
+    four = words.replace("w1 w2 w3 w4 ", "", 1)
+    assert rs.thirds(words, three)[1]
+    assert not rs.thirds(words, four)[1]
 
 
 def test_lock_config_writes_owner_only_and_will_not_overwrite(tmp_path, capsys):
