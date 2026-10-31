@@ -306,6 +306,55 @@ def test_the_placed_font_name_is_fixed_by_its_content(tmp_path):
     assert (root / "resource" / "fonts" / name).read_bytes() == b"glyphs"
 
 
+def test_a_comma_in_the_folder_is_named_in_the_refusal(tmp_path):
+    folder = tmp_path / "dir,x"
+    folder.mkdir()
+    (folder / "clip.mp4").write_bytes(b"not probed")
+    with pytest.raises(rs.Refused, match=r"dir,x/clip\.mp4: a clip path may not contain a comma"):
+        rs.local_clips([str(folder / "clip.mp4")])
+
+
+def _probe_with(monkeypatch, report):
+    from types import SimpleNamespace as NS
+
+    monkeypatch.setattr(rs, "_run", lambda argv, **kw: NS(returncode=0, stdout=json.dumps(report), stderr=""))
+    return rs.probe(Path("clip.mp4"))
+
+
+def test_probe_measures_a_clip_by_its_picture_not_its_container(monkeypatch):
+    info = _probe_with(monkeypatch, {
+        "streams": [{"codec_type": "video", "width": 1920, "height": 1080, "duration": "6.000000"},
+                    {"codec_type": "audio", "duration": "12.000000"}],
+        "format": {"duration": "12.000000"}})
+    assert (info["video_duration"], info["duration"], info["audio"]) == (6.0, 12.0, True)
+
+
+def test_probe_reads_the_matroska_duration_tag(monkeypatch):
+    # The shape ffprobe 6.1.1 reported for a 3 s mkv with opus sound, 2026-10-31.
+    info = _probe_with(monkeypatch, {
+        "streams": [{"codec_type": "video", "width": 640, "height": 480, "tags": {"DURATION": "00:00:03.000000000"}},
+                    {"codec_type": "audio", "tags": {"DURATION": "00:00:03.008000000"}}],
+        "format": {"duration": "3.008000"}})
+    assert info["video_duration"] == 3.0
+
+
+def test_probe_will_not_guess_a_picture_length_when_sound_is_there(monkeypatch):
+    import math
+
+    info = _probe_with(monkeypatch, {
+        "streams": [{"codec_type": "video", "width": 640, "height": 480},
+                    {"codec_type": "audio"}],
+        "format": {"duration": "12.0"}})
+    assert math.isnan(info["video_duration"])
+
+
+def test_probe_uses_the_container_for_a_picture_only_file(monkeypatch):
+    info = _probe_with(monkeypatch, {
+        "streams": [{"codec_type": "video", "width": 640, "height": 480}],
+        "format": {"duration": "7.5"}})
+    assert info["video_duration"] == 7.5 and info["audio"] is False
+
+
 def test_a_clip_path_with_a_comma_is_refused_before_it_is_probed(tmp_path):
     clip = tmp_path / "demo,cut.mp4"
     clip.write_bytes(b"not probed")
@@ -339,17 +388,21 @@ pathlib.Path("seen.json").write_text(json.dumps({"argv": args, "env": dict(os.en
 mode = pathlib.Path("fake_mode.txt").read_text().strip() if pathlib.Path("fake_mode.txt").exists() else ""
 task = pathlib.Path("storage/tasks") / flags["--task-id"]
 task.mkdir(parents=True, exist_ok=True)
-if mode == "fail":
-    sys.exit(3)
-(task / "final-1.mp4").write_bytes(b"video")
-(task / "subtitle.srt").write_text("" if mode == "nosrt" else "1\n00:00:00,000 --> 00:00:01,000\nhello\n")
+# MPT copies the clips as it starts, before anything can fail (cli.py:1782).
 copies = pathlib.Path("storage/local_videos")
 copies.mkdir(parents=True, exist_ok=True)
 mats = []
 for n, _ in enumerate(flags["--video-materials"].split(",")):
-    copy = copies / f"cli-material-{n}.mp4"
+    copy = copies / f"cli-material-{flags['--task-id'][:8]}-{n}.mp4"
     copy.write_bytes(b"copy")
     mats.append(str(copy.resolve()))
+if mode == "fail":
+    sys.exit(3)
+if mode == "hang":
+    import time
+    time.sleep(30)
+(task / "final-1.mp4").write_bytes(b"video")
+(task / "subtitle.srt").write_text("" if mode == "nosrt" else "1\n00:00:00,000 --> 00:00:01,000\nhello\n")
 print(json.dumps({"task_id": flags["--task-id"], "result": {
     "videos": [str((task / "final-1.mp4").resolve())],
     "subtitle_path": str((task / "subtitle.srt").resolve()),
@@ -486,6 +539,7 @@ def test_a_repeat_of_another_episode_is_refused(fake):
     "mode, final, match",
     [
         ("fail", {}, "exited 3"),
+        ("hang", {}, "did not finish inside 2 s"),
         ("nosrt", {}, "no captions"),
         ("", {"width": 1920, "height": 1080}, "expected 1080x1920"),
         ("", {"audio": False}, "expected 1080x1920"),
@@ -497,12 +551,54 @@ def test_a_bad_render_keeps_nothing(fake, mode, final, match):
 
     (fake.root / "fake_mode.txt").write_text(mode)
     fake.probes["final-1.mp4"].update(final)
+    fake.args.timeout = 2
     plan = rs.preflight(fake.args)
     with pytest.raises(rs.Refused, match=match):
         rs.render(fake.args, plan, datetime(2026, 10, 31, tzinfo=timezone.utc))
     assert not list((fake.tmp / "ledger").glob("*.json"))
     assert not (fake.tmp / "out").exists() or not list((fake.tmp / "out").iterdir())
     assert not list((fake.root / "storage" / "tasks").iterdir())
+    assert not list((fake.root / "storage" / "local_videos").glob("cli-material-*"))
+
+
+def test_cleanup_leaves_copies_that_were_there_before(fake):
+    from datetime import datetime, timezone
+
+    older = fake.root / "storage" / "local_videos" / "cli-material-older.mp4"
+    older.parent.mkdir(parents=True)
+    older.write_bytes(b"not this run's")
+    (fake.root / "fake_mode.txt").write_text("fail")
+    plan = rs.preflight(fake.args)
+    with pytest.raises(rs.Refused):
+        rs.render(fake.args, plan, datetime(2026, 10, 31, tzinfo=timezone.utc))
+    assert [p.name for p in older.parent.iterdir()] == ["cli-material-older.mp4"]
+
+
+def test_a_second_render_on_the_same_install_is_refused(fake):
+    import fcntl
+    from datetime import datetime, timezone
+
+    plan = rs.preflight(fake.args)
+    (fake.root / "storage").mkdir(exist_ok=True)
+    with open(fake.root / "storage" / "mpt-shorts.lock", "w") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        with pytest.raises(rs.Refused, match="another render"):
+            rs.render(fake.args, plan, datetime(2026, 10, 31, tzinfo=timezone.utc))
+
+
+def test_a_take_missing_its_last_sentence_is_refused(fake):
+    script = (
+        "By the end of this short you will know how to check whether an AI tool is worth your time. "
+        "Step one. Give it a task you already know the answer to. Step two. Time how long it takes "
+        "against doing it yourself. Step three. Check every number it gives you against the source. "
+        "If it fails step three, it costs you more than it saves. That is the whole test."
+    )
+    Path(fake.args.script).write_text(script, encoding="utf-8")
+    # Measured 2026-10-31: the fixture take cut at 17.5 s drops the last
+    # sentence and said 0.90 of the script, which the overall share passed.
+    fake.heard["text"] = script.rsplit(" That is", 1)[0]
+    assert rs.coverage(script, fake.heard["text"])[0] >= rs.VOICE_COVERAGE_MIN
+    _refused(fake, "weakest third")
 
 
 def test_lock_config_writes_owner_only_and_will_not_overwrite(tmp_path, capsys):

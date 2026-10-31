@@ -56,8 +56,8 @@ audit and the rules. `test_mpt_shorts.py`, 33 tests, joins the standalone job.
 | clip with 6 s of picture and 12 s of sound | refused before any render |
 | repeat, short clips, woff2 font | each refused |
 | network on the wrapper's path, `strace -f` | 18 processes, 0 `connect` calls; a control socket under the same tracer recorded 1 |
-| `test_mpt_shorts.py` | 56 passed; 21 of 22 gate mutants fail it |
-| standalone list, ruff | 5544 passed after merging main with #445 and #446, clean |
+| `test_mpt_shorts.py` | 65 passed; 28 of 29 gate mutants fail it, the survivor equivalent |
+| standalone list, ruff | 5553 passed, clean |
 
 The voiceover used for every render was a Piper test voice, never published, and
 never Tee's. No render has run on the VPS.
@@ -107,13 +107,27 @@ copies and task folders behind, 152 MB after a few runs; and 25 of 33 gate
 mutants survived the tests. The tests now run preflight and render whole
 against a stand-in `cli.py`, and 21 of 22 gate mutants fail them.
 
+A fresh verifier then re-ran every failing check at `5c98104`. All seven fixes
+held on the success path, and it found three gaps, each measured: a render that
+failed or ran out of time left MoneyPrinterTurbo's clip copies behind, because
+MPT copies clips before it can fail and names them only on success; the tests
+stubbed `probe()`, so a mutant that restored the frozen-frame defect passed
+them; and a take missing only its last sentence said 0.90 of the script and
+passed. Now: a render cleans every copy that appeared during it, under a lock
+so it is one render per install; `probe()` is tested on ffprobe's own report
+shapes and reads an mkv or webm stream's DURATION tag; and each third of the
+script must be 0.85 said. The 17.5 s cut is refused at 0.71, a render killed at
+30 s leaves the copy count at 20 before and after, and a real render with an
+mkv clip passes. 65 tests; 28 of 29 gate mutants fail them, the survivor
+equivalent.
+
 ## Open, and whose
 
 - Installing it on the VPS is Tee's ruling. Nothing was installed on any device.
 - Wiring it into `TQO FINAL V5` or the render worker is a workflow edit and a
   publish, so it is his too.
-- The thresholds (0.85 voice coverage, 0.5 repeat similarity) are starting
-  values. The ledger is where they get set once real renders exist.
+- The thresholds (0.85 voice coverage per third, 0.5 repeat similarity) are
+  starting values. The ledger is where they get set once real renders exist.
 - Render time on the VPS's 2 shared cores is unmeasured.
 - Unverified: whether MoneyPrinterTurbo's hard coded Codex OAuth client id is
   OpenAI's own. It only matters to someone signing in through that provider,

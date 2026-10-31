@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import fcntl
 import hashlib
 import json
 import math
@@ -111,6 +112,15 @@ def _seconds(value) -> float:
         return math.nan
 
 
+def _tag_seconds(stream: dict) -> float:
+    """Matroska and WebM keep a stream's length in a DURATION tag, HH:MM:SS.fraction."""
+    match = re.fullmatch(r"(\d+):(\d{2}):(\d{2}(?:\.\d+)?)", str((stream.get("tags") or {}).get("DURATION", "")))
+    if not match:
+        return math.nan
+    hours, minutes, seconds = match.groups()
+    return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+
+
 def probe(path: Path) -> dict:
     """ffprobe a file into {duration, video_duration, width, height, video, audio}.
 
@@ -119,7 +129,8 @@ def probe(path: Path) -> dict:
     duration MoneyPrinterTurbo trusts and fills with a frozen frame."""
     out = _run(
         ["ffprobe", "-v", "error", "-show_entries",
-         "format=duration:stream=codec_type,width,height,duration", "-of", "json", str(path)],
+         "format=duration:stream=codec_type,width,height,duration:stream_tags=DURATION",
+         "-of", "json", str(path)],
         timeout=120,
     )
     if out.returncode != 0:
@@ -130,6 +141,8 @@ def probe(path: Path) -> dict:
     audio = any(s.get("codec_type") == "audio" for s in streams)
     duration = _seconds(data.get("format", {}).get("duration"))
     video_duration = _seconds(video[0].get("duration")) if video else math.nan
+    if video and not math.isfinite(video_duration):
+        video_duration = _tag_seconds(video[0])
     if video and not math.isfinite(video_duration) and not audio:
         video_duration = duration  # a picture-only file: the container length is the picture's
     return {
@@ -283,6 +296,23 @@ def coverage(script: str, spoken: str) -> tuple[float, float]:
     return matched / len(a), matched / len(b)
 
 
+def weakest_third(script: str, spoken: str) -> float:
+    """The lowest share said of the script's first, middle and last third.
+
+    A take that drops one closing sentence still says 0.90 of a 70 word
+    script, and MPT would caption the missing sentence anyway. Each third
+    has to clear the bar on its own, so a gap anywhere shows."""
+    a, b = _tokens(script), _tokens(spoken)
+    if len(a) < 3 or not b:
+        return 0.0
+    hit = [False] * len(a)
+    for block in difflib.SequenceMatcher(None, a, b, autojunk=False).get_matching_blocks():
+        for i in range(block.a, block.a + block.size):
+            hit[i] = True
+    cuts = [0, len(a) // 3, 2 * len(a) // 3, len(a)]
+    return min(sum(hit[lo:hi]) / (hi - lo) for lo, hi in zip(cuts, cuts[1:], strict=False))
+
+
 def srt_text(path: Path) -> str:
     keep = []
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -307,7 +337,7 @@ def local_clips(raws: list[str]) -> list[tuple[Path, dict]]:
         clip = Path(raw).resolve()
         if "," in str(clip):
             # --video-materials is one comma separated argument.
-            raise Refused(f"{clip.name}: a clip path may not contain a comma")
+            raise Refused(f"{clip}: a clip path may not contain a comma")
         if clip.suffix.lower() not in VIDEO_EXT or not clip.is_file():
             raise Refused(f"{clip.name} is not an existing mp4, mov, mkv or webm file")
         info = probe(clip)
@@ -364,16 +394,19 @@ def preflight(args) -> dict:
     ledger = Path(args.ledger)
     spoken = transcribe(args.mpt_python, root, voice)
     said, extra = coverage(script, spoken)
-    if min(said, extra) < VOICE_COVERAGE_MIN:
+    third = weakest_third(script, spoken)
+    # Every third clearing the bar means the whole script does, so the share
+    # said overall is reported and not tested.
+    if min(third, extra) < VOICE_COVERAGE_MIN:
         raise Refused(
-            f"the voiceover says {said:.2f} of the script and {extra:.2f} of it is the script; "
-            "it is not this script's full recording"
+            f"the voiceover says {said:.2f} of the script, {third:.2f} of its weakest third, "
+            f"and {extra:.2f} of it is the script; it is not this script's full recording"
         )
     found = repeats(script, spoken, voice_sha, args.episode, args.show, ledger)
     if found:
         raise Refused("repeats an earlier render: " + "; ".join(found))
     return {"root": root, "script": script, "voice": voice, "voice_info": voice_info,
-            "voice_sha": voice_sha, "clips": clips, "ledger": ledger, "coverage": (said, extra),
+            "voice_sha": voice_sha, "clips": clips, "ledger": ledger, "coverage": (said, extra), "third": third,
             "spoken": spoken, "fit": args.fit, "font": font}
 
 
@@ -413,34 +446,48 @@ def mpt_argv(python: str, plan: dict, task_id: str, font_name: str) -> list[str]
     ]
 
 
-def _clean(root: Path, task_id: str, materials: list) -> None:
-    """Remove this render's task folder and the clip copies MPT made for it."""
+def _copies(root: Path) -> set[str]:
+    folder = root / "storage" / "local_videos"
+    return {p.name for p in folder.glob("cli-material-*")} if folder.is_dir() else set()
+
+
+def _clean(root: Path, task_id: str, before: set[str]) -> None:
+    """Remove this render's task folder and every clip copy MPT made during it.
+
+    MPT copies the clips as it starts, before it can fail, and names the copies
+    only in the JSON of a run that succeeds, so the copies are found by what
+    appeared during this run. The lock in render() makes that this run's."""
     shutil.rmtree(root / "storage" / "tasks" / task_id, ignore_errors=True)
-    copies = (root / "storage" / "local_videos").resolve()
-    for item in materials:
-        path = Path(str(item)).resolve()
-        if path.parent == copies and path.name.startswith("cli-material-"):
-            path.unlink(missing_ok=True)
+    for name in _copies(root) - before:
+        (root / "storage" / "local_videos" / name).unlink(missing_ok=True)
 
 
 def render(args, plan: dict, now: datetime) -> dict:
-    task_id = str(uuid.uuid4())
-    materials = []
-    try:
-        return _render(args, plan, now, task_id, materials)
-    finally:
-        _clean(plan["root"], task_id, materials)
+    root = plan["root"]
+    (root / "storage").mkdir(exist_ok=True)
+    with open(root / "storage" / "mpt-shorts.lock", "w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            raise Refused("another render is running on this install; run one at a time") from None
+        task_id, before = str(uuid.uuid4()), _copies(root)
+        try:
+            return _render(args, plan, now, task_id)
+        finally:
+            _clean(root, task_id, before)
 
 
-def _render(args, plan: dict, now: datetime, task_id: str, materials: list) -> dict:
+def _render(args, plan: dict, now: datetime, task_id: str) -> dict:
     font_name = place_font(plan["root"], plan["font"])
-    done = _run(mpt_argv(args.mpt_python, plan, task_id, font_name),
-                env=scrubbed_env(plan["root"]), cwd=plan["root"], timeout=args.timeout)
+    try:
+        done = _run(mpt_argv(args.mpt_python, plan, task_id, font_name),
+                    env=scrubbed_env(plan["root"]), cwd=plan["root"], timeout=args.timeout)
+    except subprocess.TimeoutExpired:
+        raise Refused(f"MoneyPrinterTurbo did not finish inside {args.timeout} s") from None
     if done.returncode != 0:
         tail = " | ".join(done.stderr.strip().splitlines()[-3:])
         raise Refused(f"MoneyPrinterTurbo exited {done.returncode}: {tail[-600:]}")
     result = json.loads(done.stdout).get("result", {})
-    materials.extend(result.get("materials") or [])
     videos = result.get("videos") or []
     if len(videos) != 1:
         raise Refused(f"expected one video, MoneyPrinterTurbo returned {len(videos)}")
@@ -479,6 +526,7 @@ def _render(args, plan: dict, now: datetime, task_id: str, materials: list) -> d
         "output_seconds": round(info["duration"], 3),
         "spoken": plan["spoken"],
         "script_said": round(plan["coverage"][0], 3),
+        "weakest_third_said": round(plan["third"], 3),
         "said_is_script": round(plan["coverage"][1], 3),
         "fit": plan["fit"],
         "font": {"source": plan["font"].name, "sha256": sha256(plan["font"])},
