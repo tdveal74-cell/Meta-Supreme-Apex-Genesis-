@@ -334,3 +334,43 @@ def test_the_echoed_recipe_line_is_not_a_skip(stubs, patched, tmp_path):
     result = _run(script, env, tmp_path / "om", {"STUB_MAKE_OUTPUT": echoed})
     assert result.returncode == 0, result.stderr
     assert f"OK: OpenMontage {pin} installed" in result.stdout
+
+
+def test_a_refusal_for_python_names_the_override(stubs, tmp_path):
+    """Found by the independent verifier of 2026-10-31: a machine with only
+    python3.12 and no uv was refused with no hint that OPENMONTAGE_PYTHON
+    exists. The refusal now names it."""
+    env, record = stubs
+    (pathlib.Path(env["PATH"].split(os.pathsep)[0]) / "uv").unlink()
+    bare = dict(env, PATH=f"{env['PATH'].split(os.pathsep)[0]}{os.pathsep}/usr/bin{os.pathsep}/bin")
+    result = _run(SCRIPT, bare, tmp_path / "om", {"OPENMONTAGE_PYTHON": "3.99"})
+    assert result.returncode == 3, result.stderr
+    assert "neither uv nor python3.99 is on PATH" in result.stderr
+    assert "OPENMONTAGE_PYTHON" in result.stderr
+    assert not record.exists()
+
+
+def test_the_install_prints_the_versions_it_found(stubs, patched, tmp_path):
+    env, _ = stubs
+    script, _, _ = patched
+    stub_bin = pathlib.Path(env["PATH"].split(os.pathsep)[0])
+    _executable(stub_bin / "uv", "#!/bin/sh\necho 'uv 0.9.7'\n")
+    _executable(stub_bin / "ffmpeg", "#!/bin/sh\necho 'ffmpeg version 6.1.1 Copyright (c) the FFmpeg developers'\n")
+    result = _run(script, env, tmp_path / "om")
+    assert result.returncode == 0, result.stderr
+    assert "==> Found node: 22; uv: uv 0.9.7; ffmpeg: 6.1.1" in result.stdout
+
+
+def test_the_fetch_runs_under_the_time_limit(stubs, patched, tmp_path):
+    """The fetch had no time limit while make setup had one. A recording
+    timeout stub proves the fetch now goes through it with the same limit."""
+    env, _ = stubs
+    script, _, _ = patched
+    stub_bin = pathlib.Path(env["PATH"].split(os.pathsep)[0])
+    calls = tmp_path / "timeout-calls.txt"
+    _executable(stub_bin / "timeout", f'#!/bin/sh\necho "$*" >> "{calls}"\nshift\nexec "$@"\n')
+    result = _run(script, env, tmp_path / "om", {"OPENMONTAGE_SETUP_TIMEOUT": "77"})
+    assert result.returncode == 0, result.stderr
+    seen = calls.read_text().splitlines()
+    assert any(line.startswith("77 git -C ") and " fetch " in line for line in seen), seen
+    assert any(line.startswith("77 make -C ") for line in seen), seen

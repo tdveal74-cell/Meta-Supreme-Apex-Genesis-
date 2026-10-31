@@ -6,7 +6,7 @@
 #   3  refused before anything changed; the message says why
 #   4  installed, but upstream skipped an optional step; the summary names it
 #   any other non-zero code is the failing tool's own: git 128, make 2,
-#   timeout 124 when make setup runs past OPENMONTAGE_SETUP_TIMEOUT
+#   timeout 124 when the fetch or make setup runs past OPENMONTAGE_SETUP_TIMEOUT
 #
 # Idempotent: a clean checkout at the pin is reused and `make setup` runs
 # again, which only fills in what is missing. Anything else at the target is
@@ -37,13 +37,26 @@ for tool in git make python3 npm npx; do
 done
 [ -z "$missing" ] || refuse "missing prerequisites:$missing"
 if ! command -v uv >/dev/null 2>&1 && ! command -v "python$PY" >/dev/null 2>&1; then
-  refuse "neither uv nor python$PY is on PATH, and upstream's make setup needs one of them."
+  refuse "neither uv nor python$PY is on PATH, and upstream's make setup needs one of them. Install uv, or set OPENMONTAGE_PYTHON to a version whose python3.X is on PATH; upstream's README asks for 3.10 or newer."
 fi
 command -v ffmpeg >/dev/null 2>&1 \
   || echo "WARNING: ffmpeg is not on PATH, so rendering will not work." >&2
 node_major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
 [ "$node_major" -ge 22 ] 2>/dev/null \
   || echo "WARNING: Node $node_major found; HyperFrames needs 22 or newer and will be unavailable." >&2
+
+# The first line a tool prints about its version, "none" when it is absent.
+# sed reads to the end, so no pipe closes early under pipefail.
+ver() {
+  command -v "$1" >/dev/null 2>&1 || { echo "none"; return 0; }
+  local out
+  out="$("$@" 2>/dev/null | sed -n 1p)" || true
+  echo "${out:-unknown}"
+}
+echo "==> Found node: $(ver node --version); uv: $(ver uv --version); ffmpeg: $(ver ffmpeg -version | cut -d' ' -f3)"
+
+limit=""
+command -v timeout >/dev/null 2>&1 && limit="timeout $SETUP_TIMEOUT"
 
 here="$(dirname "$(resolve "$0")")"
 # Upstream pins no Python package. constraints.txt holds the versions measured
@@ -64,7 +77,8 @@ fi
 
 fetch_pin() {
   echo "==> Fetching OpenMontage $PIN into $dest_abs"
-  git -C "$dest_abs" fetch -q --depth 1 origin "$PIN"
+  # shellcheck disable=SC2086
+  $limit git -C "$dest_abs" fetch -q --depth 1 origin "$PIN"
   git -C "$dest_abs" checkout -q --detach FETCH_HEAD
 }
 
@@ -107,8 +121,6 @@ fi
 # Clear all three for this one call so nothing lands in the caller's env.
 log="$dest_abs/openmontage-setup.log"
 echo "==> make setup with Python $PY, at most ${SETUP_TIMEOUT}s; log: $log"
-limit=""
-command -v timeout >/dev/null 2>&1 && limit="timeout $SETUP_TIMEOUT"
 set +e
 # shellcheck disable=SC2086
 env -u VIRTUAL_ENV -u CONDA_PREFIX -u VENV_DIR PIP_CONSTRAINT="$constraints" $limit \
