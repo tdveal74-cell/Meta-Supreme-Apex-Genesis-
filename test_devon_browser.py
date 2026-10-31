@@ -303,6 +303,7 @@ async def test_total_deadline_bounds_trickle_response_without_retry(monkeypatch,
     socket = str(tmp_path / "trickle.sock")
     calls = []
     finished = asyncio.Event()
+    release = asyncio.Event()
 
     async def handle(reader, writer):
         try:
@@ -330,11 +331,20 @@ async def test_total_deadline_bounds_trickle_response_without_retry(monkeypatch,
                 + str(len(raw)).encode()
                 + b"\r\nConnection: close\r\n\r\n"
             )
-            for offset in range(0, len(raw), 40):
-                writer.write(raw[offset : offset + 40])
-                await writer.drain()
-                await asyncio.sleep(0.03)
-        except ConnectionError:
+            # The first 40 bytes go out at once and the rest wait until the
+            # test releases them, after the adapter has given up, so the
+            # response cannot finish inside the deadline however slow the
+            # runner is. The earlier shape trickled on a 30 ms sleep against a
+            # 70 ms deadline, and on a loaded CI runner the deadline fired
+            # before this handler had read the request: `calls` read empty for
+            # a reason that had nothing to do with a retry (run 41183925890,
+            # 2026-10-31; 18 of 25 local runs under two burners per core).
+            writer.write(raw[:40])
+            await writer.drain()
+            await release.wait()
+            writer.write(raw[40:])
+            await writer.drain()
+        except (ConnectionError, asyncio.IncompleteReadError):
             pass
         finally:
             writer.close()
@@ -349,11 +359,12 @@ async def test_total_deadline_bounds_trickle_response_without_retry(monkeypatch,
     monkeypatch.setattr(
         httpx, "AsyncHTTPTransport", lambda **kwargs: original(uds=socket, retries=0)
     )
-    monkeypatch.setattr(module, "ADAPTER_TOTAL_TIMEOUT_SECONDS", 0.07)
+    monkeypatch.setattr(module, "ADAPTER_TOTAL_TIMEOUT_SECONDS", 1.0)
     a = adapter()
     args, record = approve(a)
     try:
         result = await a.execute("open", args)
+        release.set()
         assert not result.ok and result.metadata["outcome"] == "unknown"
         assert len(calls) == 1
         assert a.approvals.get(record.request_id).state is ApprovalState.CONSUMED
