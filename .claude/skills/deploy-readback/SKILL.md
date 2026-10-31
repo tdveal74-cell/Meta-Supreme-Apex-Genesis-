@@ -90,13 +90,16 @@ merges touched no runtime path and the ninth changed only a Dockerfile no
 running service was built from.
 
 **`api`'S `checkSuites` WENT FALSE FOR AN EVENING AND IS BACK ON.** On
-2026-10-31 it read true at about 18:50Z and false at 21:23Z, after deployments
-resumed. What changed it is unverified: Railway's fix for the outage above, the
-unknown hand that switched `api`'s builder before 21:01Z, and a session's own
-`update-service` call on `api` at 21:22Z are all candidates, and nothing read
-here separates them. While it read false, the merge of PR #461 deployed to `api`
-about three seconds after the merge, and the deploy finished while that
-commit's CI was still running. Tee ruled to
+2026-10-31 it read true at about 18:50Z, and the next read, at 21:22:21Z, gave
+false, nine seconds after a session's own `update-service` call on `api` (start
+command and Dockerfile path only) returned. What changed it is unverified:
+Railway's fix for the outage above, the unknown hand that switched `api`'s
+builder before 21:01Z, and that call are all candidates, and no read between
+18:50Z and 21:22Z separates them. While it read false, the merge of PR #461
+created an `api` deployment about three seconds after the merge, live about 39
+seconds after it, while that commit's CI ran on for another twelve minutes.
+If an `update-service` call is the cause, every such call on `api` can turn the
+gate off, so read `checkSuites` back after one. Tee ruled to
 turn it back on. A change staged through Railway's agent, which a staged-changes
 read showed only as `Source: "" to "{}"`, was committed and left the gate off;
 Tee then flipped the "Wait for CI" toggle under the service's Source settings,
