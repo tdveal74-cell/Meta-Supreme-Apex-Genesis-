@@ -59,21 +59,47 @@ Dockerfile path from `get-service-config` before saying what an image contains**
 and read a build log for the `FROM` line: a builder flipped back in the dashboard
 reopens the gap, and no check in this repository would notice.
 
-Two things change with the builder, both from Railway's docs and neither
-measured when this was written. Under a Dockerfile the service's start command
-replaces the image's command in exec form, which expands no variables, so a
-start command naming `$PORT` has to be wrapped in `/bin/sh -c` or the server
-gets the literal text as its port. And `presence`'s watch patterns were set
-for Railpack: until they name `infrastructure/docker/Dockerfile.presence`, a change to
-that file alone passes CI and never deploys.
+All three were switched on the evening of 2026-10-31 and read back at commit
+`f2f3ccc`. `scheduler-cron` deployment `85c548c6` (20:56Z) and `api` deployment
+`22a45f34` (21:23Z) each logged `load build definition from
+infrastructure/docker/Dockerfile.api` and `FROM ... python:3.12-slim`;
+`presence` deployment `2edce5d4` (21:24Z) logged the same from
+`Dockerfile.presence`. That is what was read that evening, not a guarantee this
+file can keep.
 
-A third follows from `checkSuites` below. Railway's docs say `api` waits until
-every GitHub Actions check suite on the commit has finished, so a push to `main`
-that touches the presence image's paths also waits on the "Presence image"
-workflow, and a red run there skips the `api` deploy.
+Two things changed with the builder. Under a Dockerfile the service's start
+command replaces the image's command in exec form, which expands no variables
+(Railway's own page, "Set a Start Command"), so `api` and `presence` were given
+`/bin/sh -c "exec uvicorn ... --port $PORT"`; both deploy logs then read
+`Uvicorn running on http://0.0.0.0:8080`, so the variable expanded. And
+`presence`'s watch patterns were set for Railpack; they now also name
+`infrastructure/docker/Dockerfile.presence`, so a change to that file alone
+deploys the voice lane.
+
+**RAILWAY CAN STOP CREATING DEPLOYMENTS ALTOGETHER, AND NOTHING ANNOUNCES IT.**
+On 2026-10-31 Railway created no `api` or `scheduler-cron` deployment at all,
+in any status, from 06:08:42Z until 20:54:35Z, across nine merges to main,
+while `presence` logged a SKIPPED row for each of them at push time, so the
+pushes were reaching Railway. Confirmed by an independent verifier, which found no staged
+change, no watch pattern, no config file and no skip marker to explain it.
+Tee reported that Railway fixed it. The cause was never established here.
+After a merge, read `list-deployments` for `api` and `scheduler-cron` and
+expect a row for the merge commit: a SKIPPED row is a skip, and no row at all
+is this failure. It cost nothing that day only because eight of the nine
+merges touched no runtime path and the ninth changed only a Dockerfile no
+running service was built from.
+
+**`api`'S `checkSuites` READS FALSE SINCE 2026-10-31, SO NO RAILWAY SERVICE
+WAITS FOR CI ANY MORE.** It read true at about 18:50Z that day and false at
+21:23Z, after deployments resumed. This session did not change it, and whether
+the change is part of Railway's fix for the outage above is unverified. While it
+reads false, a red commit on main deploys to `api` as it does to
+`scheduler-cron`, and the gate measured below is gone. The table and the
+paragraphs under it are the 2026-09-16 reading, kept because the behaviour they
+measured returns if the setting is turned back on.
 
 **THE THREE RAILWAY SERVICES DO NOT DEPLOY ON THE SAME RULE, AND ONE OF THEM
-STOPS WHEN CI IS RED.** Read from `get-service-config` on 2026-09-16, because
+STOPPED WHEN CI WAS RED.** Read from `get-service-config` on 2026-09-16, because
 this file had said `scheduler-cron` deploys from the same commit as `api`, and
 that is only true while CI is green.
 
