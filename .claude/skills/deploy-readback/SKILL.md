@@ -107,7 +107,10 @@ and it read true at 22:12Z. So set this toggle in the dashboard, not through the
 agent, and read it back. Railway's docs say the toggle shows in service settings
 when a workflow runs on push to the deployed branch, and that the feature needs
 the Railway GitHub App's updated permissions accepted at
-github.com/settings/installations.
+github.com/settings/installations. The restored gate held the next merge: `api`
+deployment `6d110ce6` for `b9422ef` sat WAITING from 22:34:57Z and went SUCCESS
+at 22:49:13Z, after that commit's CI passed, while `scheduler-cron` built it at
+once.
 
 **THE THREE RAILWAY SERVICES DO NOT DEPLOY ON THE SAME RULE, AND ONE OF THEM
 STOPPED WHEN CI WAS RED.** Read from `get-service-config` on 2026-09-16, because
