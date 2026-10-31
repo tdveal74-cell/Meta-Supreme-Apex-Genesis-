@@ -45,24 +45,26 @@ count-from-the-lane miss CLAUDE.md's first law describes.
 | Vercel `meta-supreme-apex-genesis-web` | The web app and Command Center, root `apps/web` (recorded as `meta-supreme-web` until 2026-09-02; that project no longer exists) | `list_deployments` for the project |
 | Vercel `devon-soul` | The phone lane, root `deploy/soul` | `list_deployments` for the project |
 
-**WHAT RAILWAY BUILDS IS A SETTING, AND IT WAS NOT WHAT CI BUILT.** Until
-2026-10-31 all three services built with Railpack from the repository root, on
-Railpack's default Python, 3.13.16, while CI built the Dockerfiles on 3.12: the
-job named "Railway container contract" tested an image Railway never built. Read
-from `get-service-config` and the build logs that day, and confirmed by two
-independent verifiers. Tee ruled to point Railway at the Dockerfiles: `api` and
-`scheduler-cron` build `infrastructure/docker/Dockerfile.api`, `presence` builds
-`infrastructure/docker/Dockerfile.presence`. **Read `build.builder` and the
+**WHAT RAILWAY BUILDS IS A SETTING, AND IT WAS NOT WHAT CI BUILT.** Read on
+2026-10-31, every live deployment of the three services had been built with
+Railpack from the repository root, on Railpack's default Python, 3.13.16, while
+CI built the Dockerfiles on 3.12: the job named "Railway container contract"
+tested an image Railway never built. Read from `get-service-config` and the
+build logs, and confirmed by two independent verifiers. Tee ruled that day to
+point Railway at the Dockerfiles, `infrastructure/docker/Dockerfile.api` for
+`api` and `scheduler-cron` and `infrastructure/docker/Dockerfile.presence` for
+`presence`. The switch is a setting changed one service at a time, so this file
+cannot say which services have it. **Read `build.builder` and the
 Dockerfile path from `get-service-config` before saying what an image contains**,
 and read a build log for the `FROM` line: a builder flipped back in the dashboard
 reopens the gap, and no check in this repository would notice.
 
 Two things change with the builder, both from Railway's docs and neither
-measured here before the switch. Under a Dockerfile the service's start command
+measured when this was written. Under a Dockerfile the service's start command
 replaces the image's command in exec form, which expands no variables, so a
 start command naming `$PORT` has to be wrapped in `/bin/sh -c` or the server
-gets the literal text as its port. And `presence`'s watch patterns predate the
-switch: until they name `infrastructure/docker/Dockerfile.presence`, a change to
+gets the literal text as its port. And `presence`'s watch patterns were set
+for Railpack: until they name `infrastructure/docker/Dockerfile.presence`, a change to
 that file alone passes CI and never deploys.
 
 A third follows from `checkSuites` below. Railway's docs say `api` waits until

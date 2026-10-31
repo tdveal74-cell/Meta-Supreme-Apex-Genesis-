@@ -534,8 +534,9 @@ The seventeenth arrived on 2026-10-31: `.github/workflows/presence-image-ci.yml`
 pull requests and pushes to `main`, path filtered to `apps/presence/**`,
 `services/**`, `requirements.txt`, `infrastructure/docker/Dockerfile.presence` and
 itself. It builds the presence image, imports the app inside it, starts it and
-reads `GET /health`. It exists because Railway built all three services with
-Railpack on Python 3.13 until 2026-10-31 while CI built the Dockerfiles on 3.12,
+reads `GET /health`. It exists because, read on 2026-10-31, every live Railway
+deployment had been built with Railpack on Python 3.13 while CI built the
+Dockerfiles on 3.12,
 so the job named "Railway container contract" tested an image Railway never
 built, found while scoping Tee's ruling of that morning to build the presence
 image in CI and confirmed by two independent verifiers. Tee ruled on a card to

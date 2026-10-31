@@ -1,10 +1,10 @@
 name: Presence image
 
 # Builds the presence service's image, the voice lane, and proves it starts in
-# deployed mode. Until 2026-10-31 Railway built every service with Railpack and
-# no job here built what it deployed; Tee ruled that day to point presence at
-# infrastructure/docker/Dockerfile.presence, which makes this the image it runs
-# once the service is switched. Which builder it uses is a Railway setting: read
+# deployed mode. Read on 2026-10-31, every live Railway deployment had been
+# built with Railpack and no job here built what it deployed; Tee ruled that
+# day to point presence at infrastructure/docker/Dockerfile.presence, which
+# makes this the image it runs once the service is switched. Which builder it uses is a Railway setting: read
 # build.builder from get-service-config before calling this the deployed image.
 # Path filtered, as Tee ruled on 2026-10-31, to what can change the image: the
 # presence code, the services/ it imports, the pinned closure and the

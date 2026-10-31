@@ -243,7 +243,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           # The interpreter Dockerfile.api ships, so the audit resolves the
-          # same set Railway builds.
+          # same set a service built from that Dockerfile installs.
           python-version: "3.12"
       - name: Install pip-audit
         id: install-pip-audit
