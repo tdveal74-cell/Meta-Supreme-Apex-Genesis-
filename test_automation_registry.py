@@ -141,6 +141,12 @@ def test_check_exit_codes_follow_the_diff(tmp_path, monkeypatch):
     monkeypatch.setenv("N8N_VPS_KEY", "fixture")
     monkeypatch.setattr(reg, "repo_automations", lambda *a: [])
     monkeypatch.setattr(reg, "fetch_workflows", lambda *a: [live()])
+
+    def no_git(*_):
+        # CI checks out shallow; with nothing to date, git must not be asked.
+        raise ValueError("the checkout is shallow, so file dates would all read as the newest commit")
+
+    monkeypatch.setattr(reg, "git_changed", no_git)
     assert reg.main(["--check", "--registry", str(path)]) == reg.OK
     monkeypatch.setattr(reg, "fetch_workflows", lambda *a: [live(), live("b2", "New")])
     assert reg.main(["--check", "--registry", str(path)]) == reg.FINDING

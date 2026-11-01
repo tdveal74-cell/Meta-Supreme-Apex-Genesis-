@@ -292,11 +292,12 @@ def git_changed(root: str, path: str) -> Optional[date]:
 def changed_dates(root: str, present: Sequence[str]) -> Dict[str, Optional[date]]:
     """Last change for each automation. A hook also changes when its wiring
     in `.claude/settings.json` does, so it takes the later of the two dates."""
-    settings_date = git_changed(root, SETTINGS_PATH)
+    hooks = [path for path in present if path.startswith(".claude/")]
+    settings_date = git_changed(root, SETTINGS_PATH) if hooks else None
     out: Dict[str, Optional[date]] = {}
     for path in present:
         own = git_changed(root, path)
-        if path.startswith(".claude/"):
+        if path in hooks:
             known = [d for d in (own, settings_date) if d is not None]
             own = max(known) if known else None
         out[path] = own
