@@ -824,9 +824,11 @@ const JOBS = {
         if (e <= s) throw new BadJob(`emphasis[${k}]: end must exceed start`);
         if (pinned && e > planned) throw new BadJob(`emphasis[${k}]: ends at ${e}s, past the planned ${planned}s`);
         const hasCard = g.card !== undefined && g.card !== null && g.card !== '';
-        if (!hasCard && g.card_y !== undefined) throw new BadJob(`emphasis[${k}].card_y: only meaningful with a card`);
+        const givenY = g.card_y !== undefined && g.card_y !== null && g.card_y !== '';
+        if (!hasCard && givenY) throw new BadJob(`emphasis[${k}].card_y: only meaningful with a card`);
         const card = hasCard ? existingPath(g.card, `emphasis[${k}].card`) : null;
-        const cardY = hasCard ? num(g.card_y ?? 0, `emphasis[${k}].card_y`, { min: 0, max: H - 1, int: true }) : 0;
+        // An odd row is drawn one row higher: overlay places yuv420p on even rows.
+        const cardY = hasCard ? num(givenY ? g.card_y : 0, `emphasis[${k}].card_y`, { min: 0, max: H - 1, int: true }) : 0;
         return { s, e, card, cardY };
       }).sort((a, b) => a.s - b.s);
       for (let i = 1; i < emphasis.length; i++) {
@@ -987,12 +989,18 @@ const JOBS = {
         last = 'vemph';
         // Then each window's card over the head. A still gives one frame, so the
         // clip is cloned out to the window's length, as a cutaway is.
+        // The card clip runs two output frames past the window and the overlay's
+        // own between() cuts it. Cut to the window's length it ended a frame
+        // before the head did, because between() includes the end: on the NCO
+        // 30 v2 render the number dropped out for one frame at 26.28 s while
+        // the face was still full frame (verifier, 2026-11-01, pixel read).
         cards.forEach((g, i) => {
           const len = g.e - g.s;
+          const hold = len + 2 / fps;
           parts.push(
-            `[${windows.length + 1 + i}:v]trim=end=${len.toFixed(6)},setpts=PTS-STARTPTS,format=rgba,` +
+            `[${windows.length + 1 + i}:v]trim=end=${hold.toFixed(6)},setpts=PTS-STARTPTS,format=rgba,` +
             `scale=${W}:${H}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos,setsar=1,fps=${fps},` +
-            `tpad=stop_mode=clone:stop_duration=${len.toFixed(6)},trim=end=${len.toFixed(6)},` +
+            `tpad=stop_mode=clone:stop_duration=${hold.toFixed(6)},trim=end=${hold.toFixed(6)},` +
             `format=yuva420p,setpts=PTS+${g.s.toFixed(6)}/TB[k${i}]`);
           parts.push(`[${last}][k${i}]overlay=x=(main_w-overlay_w)/2:y=${g.cardY}:eof_action=pass:enable='between(t,${g.s.toFixed(6)},${g.e.toFixed(6)})'[vk${i}]`);
           last = `vk${i}`;
@@ -1047,6 +1055,8 @@ const JOBS = {
           // box over the lips). The subtitles filter takes no timeline, so the
           // picture is captioned twice, once in each style, and the emphasis
           // copy is laid over the seam copy inside the emphasis windows only.
+          // It is a whole force_style, not a change to caption_style: pass the
+          // full style with the new MarginV, or libass defaults fill the rest.
           parts.push(`[${last}]split=2[cap_a][cap_b]`);
           parts.push(`[cap_a]subtitles=filename=${captions}:force_style='${style}'[cap_s]`);
           parts.push(`[cap_b]subtitles=filename=${captions}:force_style='${emphStyle}'[cap_e]`);
@@ -1077,16 +1087,24 @@ const JOBS = {
       // about -19.7 LUFS, so a Short played quieter than its neighbours. One
       // pass of loudnorm on the finished mix, then back to 48 kHz, since
       // loudnorm works at 192 kHz. It is opt-in: every existing caller keeps
-      // the graph it had. A verifier measured this setting on that clip at
-      // -14.7 LUFS integrated and -1.0 dBTP.
+      // the graph it had. It is one dynamic pass, so it lands near the target
+      // and not on it: -14.7 LUFS on the NCO 30 voice, -13.0 to -15.7 on
+      // verifiers' synthetic sources. The peak ceiling holds before the AAC
+      // encode, which adds its own overshoot: 0.1 dB on that voice, up to 1.1
+      // dB on click-heavy sound, so ask for a ceiling under the one you need.
+      // asetpts re-stamps the samples in order: without it loudnorm left a
+      // 56 to 99 ms jump about 2.8 s from the end of any clip whose length is
+      // not a whole tenth of a second, and the last words played late
+      // against the picture (verifier, 2026-11-01, reproduced).
       let loud = null;
       if (p.loudness !== undefined && p.loudness !== null && p.loudness !== '') {
+        const givenTp = p.true_peak !== undefined && p.true_peak !== null && p.true_peak !== '';
         loud = { i: num(p.loudness, 'loudness', { min: -30, max: -8 }),
-                 tp: num(p.true_peak ?? -1, 'true_peak', { min: -9, max: 0 }) };
-      } else if (p.true_peak !== undefined) {
+                 tp: num(givenTp ? p.true_peak : -1, 'true_peak', { min: -9, max: 0 }) };
+      } else if (p.true_peak !== undefined && p.true_peak !== null && p.true_peak !== '') {
         throw new BadJob('true_peak: only meaningful with loudness');
       }
-      const loudChain = loud ? `,loudnorm=I=${loud.i}:TP=${loud.tp}:LRA=11,aresample=48000` : '';
+      const loudChain = loud ? `,loudnorm=I=${loud.i}:TP=${loud.tp}:LRA=11,aresample=48000,asetpts=N/SR/TB` : '';
       // Same pin as duck_mix: amix=duration=first came out 58 ms short on EP01,
       // so the mix is padded and cut to the planned length when one is given.
       const mixTail = loud
@@ -1806,10 +1824,13 @@ const JOBS = {
    * phrase is shared out evenly, so seven words at 3 read 3, 2, 2 and never
    * leave one word alone. bridge closes any gap between two cues shorter than
    * it, so the caption box does not drop out for a frame between phrases (15
-   * one-frame drop-outs in that test, each at a 20 ms gap). max_chars cuts a
-   * cue whose text runs longer, because a long three word cue still wrapped to
-   * two lines: at the default FontSize 12 a verifier measured one line up to
-   * 23 characters and a wrap from 24.
+   * one-frame drop-outs in that test at the 20 ms gaps; a bridge has to be
+   * longer than 0.02 to close those). max_chars cuts a cue whose text runs
+   * longer, because a long three word cue still wrapped to two lines. It counts
+   * characters, which only stand in for width: on the NCO 30 captions at
+   * FontSize 12, 23 held every cue on one line, but capitals and wide letters
+   * wrap sooner (a verifier wrapped 'MANUFACTURING STANDARD' at 22), so pick it
+   * for the font and the words, and look at the frames.
    */
   caption_srt: {
     build(p) {
@@ -1828,10 +1849,10 @@ const JOBS = {
       const maxWords = num(p.max_words ?? 4, 'max_words', { min: 2, max: 6, int: true });
       const offset = num(p.offset ?? 0, 'offset', { min: 0, max: 86400 });
       const tail = num(p.tail ?? 0.15, 'tail', { min: 0, max: 1 });
-      if (p.hard_max !== undefined && typeof p.hard_max !== 'boolean') throw new BadJob(`hard_max: must be true or false, not ${JSON.stringify(p.hard_max)}`);
+      if (p.hard_max !== undefined && p.hard_max !== null && typeof p.hard_max !== 'boolean') throw new BadJob(`hard_max: must be true or false, not ${JSON.stringify(p.hard_max)}`);
       const hardMax = p.hard_max === true;
       const bridge = num(p.bridge ?? 0, 'bridge', { min: 0, max: 1 });
-      const maxChars = p.max_chars === undefined ? null : num(p.max_chars, 'max_chars', { min: 10, max: 80, int: true });
+      const maxChars = (p.max_chars === undefined || p.max_chars === null || p.max_chars === '') ? null : num(p.max_chars, 'max_chars', { min: 10, max: 80, int: true });
       const line = p.line === undefined ? null : String(p.line);
       if (line !== null && !/^[A-Za-z0-9._-]{1,64}$/.test(line)) throw new BadJob('line: must be 1 to 64 of A-Z a-z 0-9 . _ -');
       return { native: async () => {
@@ -2559,7 +2580,9 @@ function seamCues(words, { maxWords = 4, offset = 0, tail = 0.15, hardMax = fals
     let end = Math.max(cues[k].end, cues[k].start + 0.3);
     end = Math.min(end, next);
     if (!(end > cues[k].start)) end = cues[k].start + 0.001;
-    if (bridge > 0 && k + 1 < cues.length && cues[k + 1].start - end < bridge) end = Math.max(end, cues[k + 1].start);
+    // Compared on the millisecond the SRT carries: on raw floats 0.6 - 0.5 is
+    // 0.0999..., and a gap exactly as long as bridge was closed (verifier).
+    if (bridge > 0 && k + 1 < cues.length && r3(cues[k + 1].start - end) < bridge) end = Math.max(end, cues[k + 1].start);
     cues[k].end = r3(end);
   }
   return cues;

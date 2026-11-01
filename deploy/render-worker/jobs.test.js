@@ -618,7 +618,7 @@ t('an emphasis card is its own input after the cutaways, laid over the full-fram
   const ins = b.argv.filter((a, i) => b.argv[i - 1] === '-i').map(a => path.basename(a));
   assert.deepStrictEqual(ins, ['avatar.mp4', 'cut-a.mp4', 'num01.png']);
   assert.ok(g.includes("[v1][headfull]overlay=0:0:eof_action=pass:enable='between(t,6.500000,7.500000)+between(t,9.000000,10.000000)'[vemph]"), g);
-  assert.ok(g.includes('[2:v]trim=end=1.000000,setpts=PTS-STARTPTS,format=rgba,scale=1080:1920:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos,setsar=1,fps=25,tpad=stop_mode=clone:stop_duration=1.000000,trim=end=1.000000,format=yuva420p,setpts=PTS+6.500000/TB[k0]'), g);
+  assert.ok(g.includes('[2:v]trim=end=1.080000,setpts=PTS-STARTPTS,format=rgba,scale=1080:1920:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos,setsar=1,fps=25,tpad=stop_mode=clone:stop_duration=1.080000,trim=end=1.080000,format=yuva420p,setpts=PTS+6.500000/TB[k0]'), g);
   assert.ok(g.includes("[vemph][k0]overlay=x=(main_w-overlay_w)/2:y=192:eof_action=pass:enable='between(t,6.500000,7.500000)'[vk0]"), g);
   assert.ok(g.includes('[vk0]subtitles='), 'captions burn in after the card: ' + g);
   assert.ok(!g.includes('[k1]'), 'the window with no card gets no card layer');
@@ -656,14 +656,14 @@ t('emphasis_caption_style is refused without captions, without emphasis, or with
 });
 t('loudness adds one loudnorm and a resample back to 48 kHz on the finished mix, before the pad', () => {
   const b = J.JOBS.presenter_composite.build({ ...st50(), loudness: -14 });
-  assert.ok(graph(b).endsWith('[0:a]aresample=48000,loudnorm=I=-14:TP=-1:LRA=11,aresample=48000,apad[mix]'), graph(b));
+  assert.ok(graph(b).endsWith('[0:a]aresample=48000,loudnorm=I=-14:TP=-1:LRA=11,aresample=48000,asetpts=N/SR/TB,apad[mix]'), graph(b));
   assert.deepStrictEqual(b.parse().loudness, { integrated: -14, true_peak: -1 });
   const unpinned = graph(J.JOBS.presenter_composite.build({ ...st50(), loudness: -16, true_peak: -2, duration: undefined }));
-  assert.ok(unpinned.endsWith('[0:a]aresample=48000,loudnorm=I=-16:TP=-2:LRA=11,aresample=48000[mix]'), unpinned);
+  assert.ok(unpinned.endsWith('[0:a]aresample=48000,loudnorm=I=-16:TP=-2:LRA=11,aresample=48000,asetpts=N/SR/TB[mix]'), unpinned);
   const bed = graph(J.JOBS.presenter_composite.build({ ...st50(), loudness: -14, bed: touch('q/bed.wav') }));
-  assert.ok(bed.endsWith('weights=1 0.35[mixraw];[mixraw]anull,loudnorm=I=-14:TP=-1:LRA=11,aresample=48000,apad[mix]'), bed);
+  assert.ok(bed.endsWith('weights=1 0.35[mixraw];[mixraw]anull,loudnorm=I=-14:TP=-1:LRA=11,aresample=48000,asetpts=N/SR/TB,apad[mix]'), bed);
   const bedUnpinned = graph(J.JOBS.presenter_composite.build({ ...st50(), loudness: -14, bed: touch('q/bed.wav'), duration: undefined }));
-  assert.ok(bedUnpinned.endsWith('weights=1 0.35[mixraw];[mixraw]anull,loudnorm=I=-14:TP=-1:LRA=11,aresample=48000[mix]'), bedUnpinned);
+  assert.ok(bedUnpinned.endsWith('weights=1 0.35[mixraw];[mixraw]anull,loudnorm=I=-14:TP=-1:LRA=11,aresample=48000,asetpts=N/SR/TB[mix]'), bedUnpinned);
 });
 t('loudness and true_peak are range checked, and true_peak alone is refused', () => {
   assert.throws(() => J.JOBS.presenter_composite.build({ ...st50(), loudness: -5 }), /loudness/);
@@ -671,6 +671,15 @@ t('loudness and true_peak are range checked, and true_peak alone is refused', ()
   assert.throws(() => J.JOBS.presenter_composite.build({ ...st50(), loudness: 'loud' }), /loudness/);
   assert.throws(() => J.JOBS.presenter_composite.build({ ...st50(), loudness: -14, true_peak: 1 }), /true_peak/);
   assert.throws(() => J.JOBS.presenter_composite.build({ ...st50(), true_peak: -1 }), /true_peak: only meaningful with loudness/);
+});
+t('verifier findings, 2026-11-01: card_y defaults to row 0, null optional fields count as absent, a style with only a quote is refused', () => {
+  const g = graph(J.JOBS.presenter_composite.build({ ...st50(), emphasis: [{ start: 6.5, end: 7.5, card: touch('q/num01.png') }] }));
+  assert.ok(g.includes("[vemph][k0]overlay=x=(main_w-overlay_w)/2:y=0:eof_action=pass"), 'card_y defaults to 0: ' + g);
+  assert.doesNotThrow(() => J.JOBS.presenter_composite.build({ ...st50(), emphasis: [{ start: 6.5, end: 7.5, card: null, card_y: null }] }));
+  assert.doesNotThrow(() => J.JOBS.presenter_composite.build({ ...st50(), loudness: null, true_peak: null }));
+  assert.doesNotThrow(() => J.JOBS.presenter_composite.build({ ...st50(), loudness: -14, true_peak: null }));
+  assert.strictEqual(J.JOBS.presenter_composite.build({ ...st50(), loudness: -14, true_peak: '' }).parse().loudness.true_peak, -1);
+  assert.throws(() => J.JOBS.presenter_composite.build({ ...st50(), emphasis_caption_style: "MarginV=60'" }), /emphasis_caption_style: only letters/);
 });
 t('none of the new fields given leaves the stacked argv byte for byte as before (the golden test above covers no split; this covers split 0.5)', () => {
   const plain = J.JOBS.presenter_composite.build({ ...st(), split: 0.5 });
@@ -835,6 +844,17 @@ t('max_chars cuts a cue whose text is longer, filling each piece; a word longer 
   assert.strictEqual(cut[1].start, 0.9, 'a cut piece starts at its own first word');
   const long = J.seamCues(W([['supercalifragilistic.', 0, 1]]), { maxChars: 10 });
   assert.deepStrictEqual(long.map(c => c.text), ['supercalifragilistic.']);
+});
+t('verifier findings, 2026-11-01: a cue exactly max_chars long stands; a gap exactly as long as bridge stays open; null hard_max and max_chars count as absent', async () => {
+  const ws = W([['abcde', 0, 0.2], ['fghij', 0.2, 0.4], ['k.', 0.4, 0.6]]);
+  assert.deepStrictEqual(J.seamCues(ws, { maxWords: 3, hardMax: true, maxChars: 14 }).map(c => c.text), ['abcde fghij k.']);
+  assert.deepStrictEqual(J.seamCues(ws, { maxWords: 3, hardMax: true, maxChars: 13 }).map(c => c.text), ['abcde fghij', 'k.']);
+  const gap = W([['a', 0, 0.2], ['b.', 0.2, 0.5], ['c', 0.6, 0.9], ['d.', 0.9, 1.2]]);
+  assert.strictEqual(J.seamCues(gap, { maxWords: 2, hardMax: true, tail: 0, bridge: 0.1 })[0].end, 0.5, 'a 100 ms gap with a 100 ms bridge is kept');
+  assert.strictEqual(J.seamCues(gap, { maxWords: 2, hardMax: true, tail: 0, bridge: 0.101 })[0].end, 0.6, 'and closed by a longer bridge');
+  fs.writeFileSync(path.join(ROOT, 'q/nul.json'), JSON.stringify({ L01: { words: ws } }));
+  const r = await J.JOBS.caption_srt.build({ words: 'q/nul.json', output: 'q/nul.srt', hard_max: null, max_chars: null, bridge: 0 }).native();
+  assert.strictEqual(r.cues, 1);
 });
 t('caption_srt passes hard_max and bridge through, and refuses a hard_max that is not a boolean or a bridge out of range', async () => {
   const words = [['Before', 0, 0.2], ['assigning', 0.2, 0.5], ['blame,', 0.5, 0.8], ['inspect', 0.82, 1.2], ['the', 1.2, 1.3], ['direction.', 1.3, 1.8]];

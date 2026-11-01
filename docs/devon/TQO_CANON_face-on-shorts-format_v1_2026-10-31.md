@@ -82,7 +82,8 @@ bottom half of a split while the tool shows above.
 
 Taken: the 9:16 frame split 50/50; proof on top as a real screen recording of
 the tool being taught, never a staged screen; Tee's face chest up below and full
-frame on each numbered beat; seam captions of a few words, at most five, in white on black;
+frame on each numbered beat; seam captions of a few words in white on black (at most five
+when this was written; three from Tee's ruling of 2026-11-01, "3 words max, no blinks");
 a named, specific hook inside two seconds; a numbered body; one honest caveat;
 one comment keyword with a real deliverable; a ducked bed; 45 to 75 seconds,
 which is the skills' range and sits inside the benchmark's 33 to 153.
@@ -114,14 +115,17 @@ four defects, and Tee ruled the fixes on a card the same day. They are in the
 repository from that day and reach the box with the next upgrade:
 
 - `caption_srt` takes `hard_max` (no cue passes `max_words`), `max_chars` (a
-  cue longer than it is cut; one line held to 23 characters at FontSize 12 in
-  that test) and `bridge` (gaps shorter than it are closed, so the caption box
-  stops dropping out for a frame between phrases). Ruled: "3 words max, no
-  blinks".
+  cue longer than it is cut) and `bridge` (gaps shorter than it are closed, so
+  the caption box stops dropping out for a frame between phrases). Characters
+  stand in for width: 23 held every NCO 30 cue on one line at FontSize 12, and
+  capitals wrap sooner. Ruled: "3 words max, no blinks".
+- `presenter_composite` takes `emphasis_caption_style`, a whole caption style
+  used inside the emphasis windows only, so the caption sits on his collar and
+  not across his mouth when the face fills the frame. Part of the same caption
+  ruling, since the mouth was the defect it named.
 - `presenter_composite` takes a `card` on an emphasis window, laid over the
-  full-frame face for that window, and `emphasis_caption_style`, a second
-  caption placement used inside the emphasis windows only, so the caption sits
-  on his collar and not across his mouth. Ruled: "Number over full-frame face".
+  full-frame face for exactly the frames the face is full frame. Ruled:
+  "Number over full-frame face".
 - `presenter_composite` takes `loudness` and `true_peak`, one loudnorm pass on
   the finished mix. On the NCO 30 audio, I -14 and TP -1 measured -14.7 LUFS
   and -1.0 dBTP before the AAC encode and -0.9 after it, so a Short asks for
