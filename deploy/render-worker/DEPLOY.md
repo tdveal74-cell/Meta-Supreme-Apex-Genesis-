@@ -1150,10 +1150,37 @@ model's API page). The venv import, the write test and the Hugging Face probe
 were run with `runuser`, outside the unit's sandbox, so none of them proves the
 import or the model download inside the unit.
 
-Not measured: the same run on the box's own ffmpeg, Node and fonts, and the
-first `word_timings` run there with its model download. Run the Node 01 case
-above on the box before the first Node goes to Tee's watch from this path, and
-compare its build.json against the sandbox record.
+Run on the box on 2026-11-01, on Tee's ruling, with the 17 Node 01 Masters input
+files pulled from Drive by a one-off n8n workflow (archived after) and each hashed
+against the 2026-10-28 table, 17 of 17. The five 1080x1920 masters were made on
+the box with `scale=1082:1922:flags=lanczos,crop=1080:1920:1:1`, the recipe that
+reproduces the sandbox masters byte for byte; the Proof 0 report says 1082x1923,
+which is one row off and reproduces nothing.
+
+| check | result on the box |
+|---|---|
+| `word_timings`, job `4382181c-8e8a-42c2-93f6-e84cb2ec0388` | `done` in 21.89 s, 11 lines, 130 words; base.en downloaded into `/data/tsws/hf` inside the unit |
+| `acx_node_assemble`, job `31e0ef51-30e6-4081-9226-9958cc12dfec` | `done`, queued 00:08:34Z and built 00:16:15Z, about 7.7 min on 2 cores |
+| runtime, picture against sound | 65.8 s, 0.24 frames, as the sandbox |
+| loudness, gain, limiter | -14.14 LUFS, -1.40 dBTP, +5.99 dB, 2.19 LU and 7.49 dB removed, as the sandbox |
+| shots, captions, lint | 305, 527, 264, 406, 472 frames; 31 chunks; 9 red frames, 0 breaches, as the sandbox |
+| master sha256 | `c2562dd5...`, not Proof 0's `9e2802af...` |
+
+Two causes, each measured. First, the box's own `base.en` run placed some word
+edges one 20 ms step from where the sandbox run placed them, so ten caption
+cues end or start 20 ms apart; why the two runs differ is not measured. Second,
+and enough on its own: a control run on the box with the sandbox's own word
+timings, job `a6e19156-c6e6-4063-9dba-4c25ed70e3d8`, matched the sandbox byte
+for byte in both narration WAVs, `captions.srt`, `captions.ass` and
+`caption_chunks.json`, and first differed at the five shot segments, which are
+the first libx264 output. libx264 picks its thread count from the cores it sees
+and its bitstream depends on that count: shot 0 encoded in a 4 core container
+reproduced the sandbox's `5418cb7a...`, the same command pinned to 2 cores with
+`taskset` reproduced the box's `840abf06...`, and adding `-threads 6` gave
+`5418cb7a...` on 2 cores and on 4. So a master here is reproducible across hosts
+only with the encoder's thread count fixed, which `acx_node.js` does not do
+today. The Node 01 master on the box is a valid render for Tee's watch; it is
+not the Proof 0 file.
 
 ## Open
 
