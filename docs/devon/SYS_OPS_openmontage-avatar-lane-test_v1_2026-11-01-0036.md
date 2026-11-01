@@ -84,9 +84,20 @@ The engine option on the card put two ratios in one sentence. Three times is Hey
 
 The HeyGen account was read at 17:09:25Z: 297 premium credits on the Pro plan, resetting on 2026-11-26, and every private look on it is a photo look, so there is no digital twin to test yet. A twin trained on footage of Tee is the likeliest fix for both photo faults, the seam and the lips held open in pauses. That is untested.
 
+## The twin test, ruled the same day
+
+Two more cards followed. At 17:15:55Z Tee chose to create the twin himself in HeyGen's own app flow, where HeyGen shows the creation cost before he submits, and approved one Avatar V render of the same 19.5 s line and audio through the connector, with a ceiling of 20 plan credits. He then asked whether the tests had been made with OpenMontage. Apart from the caption step, they had not. At 17:17:18Z he chose to have OpenMontage run the twin render end to end, over the recommended connector route, so the 20 credit ceiling no longer applies to it. That card gave the listed cost, about $2.34, and set no ceiling.
+
+The footage spec, the slot rules and the prices were read from HeyGen's help centre and API documentation by two researchers and confirmed claim by claim by two verifiers, 72 claims with none refuted. The parts that bear on the next run:
+
+- OpenMontage's `heygen_avatar` tool, at `195eab2`, has never run here. It reads `HEYGEN_API_KEY` and sends it as `x-api-key` to `https://api.heygen.com/v3` (lines 170 to 173 of `tools/avatar/heygen_avatar.py`), refuses Avatar V on any look that is not a digital twin (line 205), and takes the audio as `audio_url` or `audio_asset_id`.
+- It bills HeyGen API credits, a balance separate from the 297 plan credits. HeyGen's API pricing page lists Avatar V on a digital twin at $7.20 a minute, charged by the second, about $2.34 for this clip. Pay-as-you-go API credits expire 12 months after purchase. That page gives no minimum purchase.
+- Each twin slot can be remade only once a month. Pro carries 1 or 5 slots depending on region and account date; which applies to this account was not read.
+- At 17:18:23Z `api.heygen.com` answered 401 to a request with no key from this container, so the network allows the host and nothing injects a key for it yet.
+
 ## Open
 
-- The digital twin test, on Tee's ruling of 17:11:28Z. He films the footage and approves the consent link. Nothing is created or rendered until the footage spec and the credit cost, read from HeyGen's own pages, have been on a card and he has answered it.
+- The twin test through OpenMontage, on Tee's rulings of 17:15:55Z and 17:17:18Z. Tee films and submits the twin in HeyGen's app, makes a HeyGen API key and buys API credits, and adds the key in the cloud environment's settings, as a network secret for `api.heygen.com` or as the variable `HEYGEN_API_KEY`, never in chat. A new session picks it up. That session reinstalls OpenMontage with the skill's installer and runs `heygen_avatar` on the twin's look with engine `avatar_v` and `audio_asset_id` `fe7cddfa91064f5a8d0bc468b11028c9`, then `remotion_caption_burn`, and sends Tee both files. Whether an asset uploaded through the connector can be used with an API key on the same account is unverified; if it cannot, the take is uploaded again, which costs no ElevenLabs credits.
 - The two test renders stay in his HeyGen library under the video ids above, titled "not for publish". The scratchpad copies go when the container is reclaimed.
 - The three compose faults belong to upstream OpenMontage, AGPL code this repository does not edit.
 
@@ -96,8 +107,8 @@ AREA: Systems, TQO
 TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_openmontage-avatar-lane-test_v1_2026-11-01-0036.md
 DATE: 2026-11-01
-DECISIONS: Tee ruled "Test it" at 2026-10-31T23:41:12Z. On a card at 23:49:23Z he chose the connectors path, the drafted script and the black polo look. On a card at 2026-11-01T00:09:28Z he chose a second render on Avatar V and this write-up. After watching both renders on his phone, on a card at 17:11:28Z he judged the seam plain on both engines, said Avatar V moved more like him, and chose a digital twin as the next test.
+DECISIONS: Tee ruled "Test it" at 2026-10-31T23:41:12Z. On a card at 23:49:23Z he chose the connectors path, the drafted script and the black polo look. On a card at 2026-11-01T00:09:28Z he chose a second render on Avatar V and this write-up. After watching both renders on his phone, on a card at 17:11:28Z he judged the seam plain on both engines, said Avatar V moved more like him, and chose a digital twin as the next test. At 17:15:55Z he chose to create the twin in HeyGen's own app, and at 17:17:18Z to have OpenMontage's own HeyGen tool run its first render end to end, over the recommended connector route.
 FINDINGS: The clone voice and the photo look both ran through the connectors and the voice in the finals is Tee's take (correlation 0.99994). Captions match the script word for word. HeyGen leaves a light seam over the lower lip and chin on this look, seen in sampled frames of both the Avatar IV and the Avatar V render (one of three verifiers did not see it on Avatar V), and the lips stay open in pauses. OpenMontage's compose adds about 43 ms of audio delay of unsettled cause, a 25 to 30 fps repeat-frame hitch and a full range colour tag. Spend: 268 ElevenLabs credits and 24 HeyGen credits, 4 over the first card's 20 credit ceiling after the second card approved render 2.
-OPEN: the digital twin test, filmed by Tee, with the footage spec and credit cost on a card before any spend; the compose faults are upstream's.
+OPEN: the digital twin test through OpenMontage, which waits on Tee filming the twin, making a HeyGen API key and API credits, and adding the key in the environment settings for a new session; the compose faults are upstream's.
 STATUS: Two test renders made, checked by six independent verifiers, with this record checked by two more; delivered to Tee in chat. He watched both on his phone on 2026-11-01 and judged the seam plain on both engines. Not for publish.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
