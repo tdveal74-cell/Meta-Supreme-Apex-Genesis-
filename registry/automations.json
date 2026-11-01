@@ -1,0 +1,586 @@
+{
+  "_about": "One row per ACTIVE workflow on the VPS n8n instance under workflows, and one row per automation that runs from this repository under repo: every GitHub Actions workflow file and every hook script .claude/settings.json wires in. Edit owner, lane and reviewed by hand; scripts/automation_registry.py --check diffs this file against the live instance and git. reviewed is a YYYY-MM-DD date a human set after reading the automation end to end, or null for never. The workflow rows were seeded 2026-10-31 from the instance's listing: 68 active. The n8n connector listed 116 workflows in all and the public API 254 on 2026-11-01; the 68 active agree. The repo rows were seeded 2026-11-01 from the files.",
+  "review_every_days": 90,
+  "workflows": [
+    {
+      "id": "wXl6p7hKN74lKH0e",
+      "name": "DEVON - Bot Handoff to Repurpose",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "MmFNWeewHEuG5x8T",
+      "name": "DEVON - Bot QC Record",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "jbDzwMVQDkEvkEM3",
+      "name": "DEVON - Bot Research Filer",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "pkddqOLe0guVGEk9",
+      "name": "DEVON - Bot Script Drafter",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "o9w8btGoLyKAh5Lc",
+      "name": "DEVON - Drive Read for Bots",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "glEO2xa4IZmHDbkg",
+      "name": "DEVON Airtable Row Writer (Build 17)",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "Ia28EHrxtiI8cjeA",
+      "name": "DEVON Approval Queue",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "VzJsSlDswkIJ9wok",
+      "name": "DEVON Build 12 Upstream Test",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "3B8pGfSklJMte3ut",
+      "name": "DEVON Capture Nudge",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "0g9LH7bf8ynSiGCo",
+      "name": "DEVON Daily Desk",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "e5H3pk7YNF9jQi1r",
+      "name": "DEVON Gumroad Sale Check",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "6KGsMrVCVJe2nYnE",
+      "name": "DEVON Hears",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "IZBVlXQ8Y5dsGTRS",
+      "name": "DEVON Pipeline Watchdog",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "4BXO9CX8MdYYyGMq",
+      "name": "DEVON Precedence Guard",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "rZdhFXcsOyBcEkgR",
+      "name": "DEVON Soul Layer Write-Back",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "WjSNXSsGP8ZCxXMa",
+      "name": "DEVON Vision Describe",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "MIELNCkP9IyHWVlr",
+      "name": "DEVON Zapier Executor (Build 19)",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "2M8CIPebpl1nSLVx",
+      "name": "DEVON — _To Delete Auto-Purge (30d)",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "NYcEp03Oqlvq86Mb",
+      "name": "DEVON — Action Router, n8n lane (Build 05, half)",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "GEbNoDMBdGqDfZJ2",
+      "name": "DEVON — Build 12 Ledger Feeder",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "Me7DDHBDX28ppvHA",
+      "name": "DEVON — Capture Webhook",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "ePvPCXVUjygZzvQT",
+      "name": "DEVON — Conscious and Subconscious Runtime (Build 03)",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "FdQgiX2Thgk38CSa",
+      "name": "DEVON — Drive Draft Writer (Build 16)",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "6b4dJasBKcOPQ6oX",
+      "name": "DEVON — Driver Poll (Build 14)",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "3tY1sJF3brpvdkgi",
+      "name": "DEVON — Duplicate Sweep",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "LnbtB81ItUYptbWg",
+      "name": "DEVON — EditForge Handoff (Build 07)",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "bqcnIS0Qv4RkTCU1",
+      "name": "DEVON — Error Alarm",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "11weboiKowmLq3d0",
+      "name": "DEVON — Event Bus and Universal Receipts (Build 06)",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "sPv6Cq7elbjoi5Nw",
+      "name": "DEVON — Face (Build 15)",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "bsxKtdx1ebMu5hGs",
+      "name": "DEVON — Health and Observability Console (Build 10)",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "EEDrp2jLlw2Ssd5b",
+      "name": "DEVON — Heartbeat (Build 13)",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "TciVQhWJA0y92x9P",
+      "name": "DEVON — Intake Former (Build 14)",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "8QiP1xQiB21Ic42Z",
+      "name": "DEVON — Intelligence Router (Build 04)",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "CEy7WAl4QAzHfG46",
+      "name": "DEVON — iPhone Inbox Capture",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "MfJCYeJqVjBLFrCu",
+      "name": "DEVON — Job Driver (Build 14)",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "V0i8zTw1keMMJmhF",
+      "name": "DEVON — Ledger Janitor",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "hDmTRI5VAZ3a8sTn",
+      "name": "DEVON — Live State Ledger (Build 02)",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "ZKyaYzv7DAGhJSLi",
+      "name": "DEVON — Monthly Credential Review",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "ptAmD28msYTvobgq",
+      "name": "DEVON — Notion Buffer Drain",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "drP96ernQvbrvzIZ",
+      "name": "DEVON — Soul Committer (Build 12)",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "VUXIyCaur9lejAhL",
+      "name": "DEVON — Spine Conformance Executor (n8n)",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "rVXA5wH5AXW4tCjp",
+      "name": "DEVON — Weekly Table Backup",
+      "lane": "DEVON",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "H8IdVxtzGd9ZJ3hU",
+      "name": "Genjutsu - Enhancor Callback Sink",
+      "lane": "Genjutsu",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "6AOsI9T0u37DRv4E",
+      "name": "Google Media Runner: Veo 3.1 + Gemini generateContent (Nano Banana Pro, Lyria, TTS, Gemini)",
+      "lane": "Media",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "vpe8TglGmFwz4YRu",
+      "name": "OS 29 — Platform Policy Sensor",
+      "lane": "OS",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "GbeNilHQzjmoWDz3",
+      "name": "OS — Error Handler (all pipelines)",
+      "lane": "OS",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "m22GM2MZYUqGc1Gx",
+      "name": "TQO & NCO — Approve HF Presenter Clip",
+      "lane": "TQO+NCO",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "snRyzuQhPxkidipW",
+      "name": "TQO & NCO — Hugging Face Avatar + Lip Sync",
+      "lane": "TQO+NCO",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "qEkGOUsNyVaRAmm6",
+      "name": "TQO FINAL V5",
+      "lane": "TQO+NCO",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "0zLNB34UOOTq6mck",
+      "name": "TQO Research: Sources for Locked Rows",
+      "lane": "TQO",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "jKrUIEQSUcGzr4tK",
+      "name": "TQO Voice Lab",
+      "lane": "TQO",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "CX07qa6O1hTSXlpj",
+      "name": "TSWS 00 — Render Job (sub-workflow)",
+      "lane": "TSWS",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "UoJS8WDZfkVD9AVH",
+      "name": "TSWS 01 — Post-Production Master",
+      "lane": "TSWS",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "vqfgphaJUi1OWx5x",
+      "name": "TSWS 02 — Narration & Sound Bed",
+      "lane": "TSWS",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "s3TE4io4Qzl4DI1Q",
+      "name": "TSWS 03 — Visual Assembly",
+      "lane": "TSWS",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "khY3wwZt79FQgjAW",
+      "name": "TSWS 04 — Detail Recovery (EditForge)",
+      "lane": "TSWS",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "klTNudFrz5hXBVy2",
+      "name": "TSWS 05 — Conform & Grain",
+      "lane": "TSWS",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "TSWS_Continuity_V6_Gate_20261021",
+      "name": "TSWS Continuity V6 — Callable Preflight (READ ONLY, INACTIVE)",
+      "lane": "TSWS",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "TswsMicroRender26",
+      "name": "TSWS Micro EP01 — Guarded Review Render",
+      "lane": "TSWS",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "TswsMicroQueue26",
+      "name": "TSWS Micro — Production Intake",
+      "lane": "TSWS",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "TswsMicroWorker26",
+      "name": "TSWS Micro — Render Job with Correct Running-State Polling",
+      "lane": "TSWS",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "TswsMicroAssets26",
+      "name": "TSWS Micro — Snapshot and Verify Media",
+      "lane": "TSWS",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "0H06zFWhKF84NC39",
+      "name": "TSWS SH070 - 01 SAM3 Point Masks [SELF-HOSTED DRAFT]",
+      "lane": "TSWS",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "Vb2PlzRphQ8zs2g0",
+      "name": "TSWS SH070 - 02 Edge Matte - PyMatting or MatAnyone2 [SELF-HOSTED DRAFT]",
+      "lane": "TSWS",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "eizkWcw9TrJ32d1e",
+      "name": "TSWS SH070 - 03 VOID Object Removal [SELF-HOSTED DRAFT]",
+      "lane": "TSWS",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "7u76xAdrJdNB6Dum",
+      "name": "TSWS SH070 - 04 Wan VACE Uni3C Background [SELF-HOSTED DRAFT]",
+      "lane": "TSWS",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "Kdrb7ReSUF2eFPc4",
+      "name": "TSWS SH070 - 05 LTX 2.3 Masked Repair [SELF-HOSTED DRAFT]",
+      "lane": "TSWS",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "id": "j0Tcg5vF2pFbLj4m",
+      "name": "WhatBroke — Newsletter Subscribe",
+      "lane": "WhatBroke",
+      "owner": "Tee",
+      "reviewed": null
+    }
+  ],
+  "repo": [
+    {
+      "path": ".claude/hooks/gate_ledger.py",
+      "lane": "Repo hooks",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".claude/hooks/jev_route.py",
+      "lane": "Repo hooks",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".claude/hooks/session-start.sh",
+      "lane": "Repo hooks",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/audio-ci.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/automation-registry-check.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/browser-worker-ci.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/carousel-render.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/dependency-audit-daily.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/panel-smoke-ci.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/presence-image-ci.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/provider-watchdog.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/pulse-watchdog.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/quality90-ai-review.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/registry-check.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/render-worker-ci.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/web-ci.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    }
+  ]
+}

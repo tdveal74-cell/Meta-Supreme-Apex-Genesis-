@@ -66,10 +66,22 @@ Patterns that tend to fail:
 2. Translation, 3 to 20 seconds: the military task mapped to a civilian outcome, with a number if one exists
 3. How, 20 to 45 seconds: the actual steps, or the one change that made it usable
 4. Boundary, 45 to 60 seconds: what still takes the person, not the system
-5. Next step, 60 to 75 seconds: one thing the viewer can do this week
+5. Next step, 60 to 75 seconds: one thing the viewer can do this week, then
+   one comment keyword for a real deliverable, said once, naming what the
+   viewer gets. The deliverable exists before the Short posts and goes out
+   through a pinned comment link within 24 hours (canon ruling 8 of
+   2026-09-08, confirmed by Tee for both shows on 2026-10-31). No like or
+   subscribe ask.
 
 Write the on-screen text lines beside the spoken lines, each stating the
 mapping that beat makes.
+
+Every Short carries Tee's face (ruled 2026-10-31): his HeyGen avatar reading
+the script in his professional clone, in the 9:16 stacked layout split 50/50,
+the proof in the top half, his face chest up in the bottom half, full frame on
+each numbered beat, captions of at most five words on the seam. Voice-only Shorts
+are out. The format reference is
+`docs/devon/TQO_CANON_face-on-shorts-format_v1_2026-10-31.md`.
 
 ## Long-form format
 

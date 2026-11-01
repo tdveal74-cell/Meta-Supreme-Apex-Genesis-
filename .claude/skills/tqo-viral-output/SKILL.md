@@ -57,10 +57,23 @@ Patterns that tend to fail:
 3. Mechanism, 12 to 40 seconds: the exact narrow job the agent or process does
 4. Boundary, 40 to 55 seconds: what the human still does
 5. Test, 55 to 70 seconds: one way the viewer can try it this week
-6. Close: one sentence restating the system, with no like, subscribe or link ask
+6. Close: one sentence restating the system, then one comment keyword for a
+   real deliverable, said once, naming what the viewer gets. No like or
+   subscribe ask. The deliverable (a guide, a checklist or a template) exists
+   before the Short posts and goes out through a pinned comment link within 24
+   hours. This is canon ruling 8 of 2026-09-08; Tee ruled on 2026-10-31 that it
+   wins over this line's old "no like, subscribe or link ask".
 
 Write the on-screen text lines beside the spoken lines, one per beat, each
 repeating the claim that beat makes.
+
+Every Short carries Tee's face (ruled 2026-10-31): his HeyGen avatar reading
+the script in his professional clone, in the 9:16 stacked layout split 50/50,
+the tool on screen as a real screen recording in the top half, his face chest
+up in the bottom half, full frame on each numbered beat, captions of at most
+five words on the seam. Voice-only Shorts are out. Write every line to work spoken
+by him on camera. The format reference, measured on the Vaibhav Sisinty Short
+Tee sent, is `docs/devon/TQO_CANON_face-on-shorts-format_v1_2026-10-31.md`.
 
 ## Long-form format
 

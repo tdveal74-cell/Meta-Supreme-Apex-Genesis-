@@ -291,11 +291,11 @@ async function poll(id) {
   }
   throw new Error('job never finished');
 }
-t('/health lists tsws_repair among 24 job types', async () => {
+t('/health lists tsws_repair among 25 job types', async () => {
   const r = await req('GET', '/health');
   assert.strictEqual(r.status, 200);
   assert.ok(r.body.jobs.includes('tsws_repair'));
-  assert.strictEqual(r.body.job_count, 24);
+  assert.strictEqual(r.body.job_count, 25);
 });
 t('a submitted envelope is claimed at submit, runs to done, and its second submit is a 409, not a 500', async () => {
   const p = envelope();
