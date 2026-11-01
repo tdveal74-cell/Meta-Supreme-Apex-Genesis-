@@ -420,10 +420,11 @@ nothing else. Operational detail (`work_root`, queue depth, concurrency) is on
 `/status`, behind the token, because the first version put a filesystem path and
 a load signal in front of anyone who could reach the TLS terminator.
 
-`job_count` must read **25** from this repository's face-on Shorts build
-(2026-10-31, `caption_srt` added) once a box is upgraded to it. Until that
-upgrade the live box reads **24**, the 2026-10-31 ACX build (`tsws_repair` and
-the two ACX Node jobs), and 24 there is correct, not stale. Earlier: 22 on the
+`job_count` reads **25** from the face-on Shorts build (2026-10-31,
+`caption_srt` added), on the live box since its upgrade to `122bc70` at
+2026-11-01T00:59Z. The 2026-11-01 layout test fixes add no job, so 25 stays.
+Earlier: 24 from the 2026-10-31 ACX build (`tsws_repair` and the two ACX Node
+jobs), 22 on the
 live box from 2026-10-17 to the ACX upgrade (`tsws_repair` without the ACX
 jobs), 23 in this repository only from 2026-10-28 to 2026-10-31, 21 from the
 2026-10-15 Voice Lab build, 19 from the 2026-09-15 build, 18 before it.
@@ -592,8 +593,8 @@ Refused rather than defaulted: `cutaways` or `emphasis` present and not an
 array, `full` as anything but a boolean, `emphasis` on the full layout, and a
 window past the planned duration when one is given.
 
-**`split`** (added 2026-10-31, in this repository only until the next upgrade
-of the box) moves the seam. It is the payload zone's share of the canvas
+**`split`** (added 2026-10-31, on the live box since 2026-11-01T00:59Z) moves
+the seam. It is the payload zone's share of the canvas
 height, 0.3 to 0.75, stacked layout only. Tee ruled 0.5 for the native Shorts
 on 2026-10-31, matching the Vaibhav Sisinty Short he sent as the reference
 (`youtube.com/shorts/zopfY5ONIjA`): proof in the top half, presenter in the
@@ -615,9 +616,51 @@ a `caption_srt` caption, frame at 1.0 s:
 Not measured here: the box's own fonts (libass falls back to what is
 installed), and a real avatar's face against the 1080x960 crop.
 
-**`caption_srt`** (added 2026-10-31, in this repository only until the next
-upgrade) turns a `word_timings` file into seam captions. Params `{words,
-output, line?, max_words?, offset?, tail?}`. It reads `{stem: {words: [{text,
+**The NCO 30 layout test fixes** (added 2026-11-01, ruled by Tee on a card
+after he watched the first 60.8 s test; reach the box with the upgrade after
+PR #473). All opt-in: with none given the argv is byte for byte what it was.
+
+- `emphasis: [{start, end, card?, card_y?}]`. A `card` is a picture or clip,
+  transparent where the face should show, laid over the full-frame head for
+  that window only, scaled to fit inside the canvas keeping its shape, centred,
+  its top at `card_y` (default 0; an odd row is drawn one row higher, since the
+  overlay places yuv420p on even rows). It is held two frames past the window
+  and cut by the window's own `between()`, so it is up on every frame the head
+  is. A card a few pixels thin (1920x1, 1x2000) passes submit and fails at
+  render with "Cannot allocate memory"; use a real band. Ruled: "Number over
+  full-frame face".
+- `emphasis_caption_style`: the captions inside the emphasis windows use this
+  style instead of `caption_style`, so the seam caption does not lie across his
+  mouth when the face fills the frame. It is a whole `force_style`, not a
+  change to `caption_style`: pass the full style with the new `MarginV`, or
+  libass defaults fill the rest. The picture is captioned twice and the second
+  copy is laid over the first inside the windows.
+- `loudness` (LUFS, -30 to -8) and `true_peak` (dBTP, -9 to 0, default -1): one
+  dynamic `loudnorm` pass on the finished mix, back to 48 kHz, then `asetpts`
+  re-stamps the samples (without it the last ~2.8 s of a clip whose length is
+  not a whole tenth of a second played 56 to 99 ms late). It lands near the
+  target, not on it: -14.7 LUFS on the NCO 30 voice, -13.0 to -15.7 on a
+  verifier's synthetic sources. The peak ceiling holds before the AAC encode,
+  which adds 0.1 dB on that voice and up to 1.1 dB on click-heavy sound, so a
+  Short asks for -1.5 to land under -1. Ruled: "Add a loudness stage to the
+  worker".
+- `caption_srt` `hard_max` (no cue passes `max_words`; a long phrase is shared
+  out evenly), `max_chars` (a cue longer than it is cut; characters stand in for
+  width, so pick it for the font and look at the frames: 23 held every NCO 30
+  cue on one line at FontSize 12, capitals wrap sooner) and `bridge` (a gap
+  shorter than it is closed; it must be over 0.02 to close the 20 ms gaps the
+  cue timing leaves). Ruled: "3 words max, no blinks". The v2 test ran
+  `max_words: 3, hard_max: true, max_chars: 23, bridge: 0.3`.
+
+A box still on an older `jobs.js` accepts these fields, ignores them and
+returns ok, because a builder reads only the fields it knows. After the
+upgrade, check that `parse()` carries `emphasis_cards`, `emphasis_captions`
+and `loudness` before trusting a render that asked for them.
+
+**`caption_srt`** (added 2026-10-31, on the live box since 2026-11-01T00:59Z)
+turns a `word_timings` file into seam captions. Params `{words, output, line?,
+max_words?, hard_max?, max_chars?, bridge?, offset?, tail?}`; the three middle
+ones are described after this paragraph. It reads `{stem: {words: [{text,
 start, end}]}}`, takes the only line or the one named in `line`, and writes an
 SRT of short cues, at most `max_words` + 1 words each (5 at the default 4): a
 phrase ends at `. ? ! , ; :`, a single word left over joins the cue before it,
