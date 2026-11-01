@@ -751,7 +751,9 @@ const JOBS = {
    * params: { avatar, output, cutaways?: [{path, start, end, in?, full?}],
    *           captions?, caption_style?, bed?, bed_gain?, narration?, duration?,
    *           width?, height?, fps?, fade?, crf?, preset?,
-   *           layout?: 'full' | 'stacked', split?, plate_color?, emphasis?: [{start, end}] }
+   *           layout?: 'full' | 'stacked', split?, plate_color?,
+   *           emphasis?: [{start, end, card?, card_y?}], emphasis_caption_style?,
+   *           loudness?, true_peak? }
    */
   presenter_composite: {
     build(p) {
@@ -806,12 +808,28 @@ const JOBS = {
       const emph = Array.isArray(p.emphasis) ? p.emphasis : [];
       if (emph.length > 64) throw new BadJob('emphasis: too many (max 64)');
       if (emph.length && !stacked) throw new BadJob('emphasis: only meaningful with layout stacked');
+      // A `card` is laid OVER the full-frame head for its window (added
+      // 2026-11-01, Tee's ruling on the NCO 30 layout test: "Number over
+      // full-frame face"). Without it the head covered everything, so the
+      // "#01" card in the payload zone was hidden for the whole sentence it
+      // named and only appeared after the face went back to the split. The
+      // card is any picture or clip, transparent where the face should show
+      // (a PNG with alpha, made like the payload cards). It is scaled to fit
+      // inside the canvas keeping its shape, which makes a band as wide as the
+      // canvas, centred, its top at card_y px (default 0). It lands and leaves
+      // with the cut, no fade, the way the reference's card does.
       const emphasis = emph.map((g, k) => {
         const s = num(g && g.start, `emphasis[${k}].start`, { min: 0, max: 86400 });
         const e = num(g && g.end,   `emphasis[${k}].end`,   { min: 0, max: 86400 });
         if (e <= s) throw new BadJob(`emphasis[${k}]: end must exceed start`);
         if (pinned && e > planned) throw new BadJob(`emphasis[${k}]: ends at ${e}s, past the planned ${planned}s`);
-        return { s, e };
+        const hasCard = g.card !== undefined && g.card !== null && g.card !== '';
+        const givenY = g.card_y !== undefined && g.card_y !== null && g.card_y !== '';
+        if (!hasCard && givenY) throw new BadJob(`emphasis[${k}].card_y: only meaningful with a card`);
+        const card = hasCard ? existingPath(g.card, `emphasis[${k}].card`) : null;
+        // An odd row is drawn one row higher: overlay places yuv420p on even rows.
+        const cardY = hasCard ? num(givenY ? g.card_y : 0, `emphasis[${k}].card_y`, { min: 0, max: H - 1, int: true }) : 0;
+        return { s, e, card, cardY };
       }).sort((a, b) => a.s - b.s);
       for (let i = 1; i < emphasis.length; i++) {
         if (emphasis[i].s < emphasis[i - 1].e) throw new BadJob(`emphasis: windows overlap (${emphasis[i - 1].e} > ${emphasis[i].s})`);
@@ -958,17 +976,48 @@ const JOBS = {
         parts.push(`[${last}][c${i}]overlay=0:0:eof_action=pass:enable='between(t,${w.s.toFixed(6)},${w.e.toFixed(6)})'[${lbl}]`);
         last = lbl;
       });
+      // Cards are inputs after the cutaways, in window order, so every index
+      // the graph already used stays where it was.
+      const cards = emphasis.filter(g => g.card !== null);
+      cards.forEach((g) => { inputs.push('-i', g.card); });
+      const emphEn = emphasis.map(g => `between(t,${g.s.toFixed(6)},${g.e.toFixed(6)})`).join('+');
       if (stacked && emphasis.length) {
         // The emphasis line: the presenter takes the whole canvas. Laid last so
         // it wins over any cutaway that shares the second.
-        const en = emphasis.map(g => `between(t,${g.s.toFixed(6)},${g.e.toFixed(6)})`).join('+');
         parts.push(`[a_full]${fillChain(W, H)},fps=${fps},setpts=PTS-STARTPTS[headfull]`);
-        parts.push(`[${last}][headfull]overlay=0:0:eof_action=pass:enable='${en}'[vemph]`);
+        parts.push(`[${last}][headfull]overlay=0:0:eof_action=pass:enable='${emphEn}'[vemph]`);
         last = 'vemph';
+        // Then each window's card over the head. A still gives one frame, so the
+        // clip is cloned out to the window's length, as a cutaway is.
+        // The card clip runs two output frames past the window and the overlay's
+        // own between() cuts it. Cut to the window's length it ended a frame
+        // before the head did, because between() includes the end: on the NCO
+        // 30 v2 render the number dropped out for one frame at 26.28 s while
+        // the face was still full frame (verifier, 2026-11-01, pixel read).
+        cards.forEach((g, i) => {
+          const len = g.e - g.s;
+          const hold = len + 2 / fps;
+          parts.push(
+            `[${windows.length + 1 + i}:v]trim=end=${hold.toFixed(6)},setpts=PTS-STARTPTS,format=rgba,` +
+            `scale=${W}:${H}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos,setsar=1,fps=${fps},` +
+            `tpad=stop_mode=clone:stop_duration=${hold.toFixed(6)},trim=end=${hold.toFixed(6)},` +
+            `format=yuva420p,setpts=PTS+${g.s.toFixed(6)}/TB[k${i}]`);
+          parts.push(`[${last}][k${i}]overlay=x=(main_w-overlay_w)/2:y=${g.cardY}:eof_action=pass:enable='between(t,${g.s.toFixed(6)},${g.e.toFixed(6)})'[vk${i}]`);
+          last = `vk${i}`;
+        });
       } else if (stacked) {
         parts.push(`[a_full]nullsink`);
       }
 
+      let emphStyle = null;
+      if (p.emphasis_caption_style !== undefined && p.emphasis_caption_style !== null && p.emphasis_caption_style !== '') {
+        if (!emphasis.length) throw new BadJob('emphasis_caption_style: only meaningful with emphasis windows');
+        if (p.captions === undefined || p.captions === null || p.captions === '') throw new BadJob('emphasis_caption_style: only meaningful with captions');
+        emphStyle = String(p.emphasis_caption_style);
+        if (!/^[A-Za-z0-9=,._&# -]+$/.test(emphStyle)) {
+          throw new BadJob('emphasis_caption_style: only letters, digits, space and = , . _ & # - are accepted');
+        }
+      }
       let captions = null;
       if (p.captions !== undefined && p.captions !== null && p.captions !== '') {
         captions = existingPath(p.captions, 'captions');
@@ -997,14 +1046,29 @@ const JOBS = {
         if (!/^[A-Za-z0-9=,._&# -]+$/.test(style)) {
           throw new BadJob('caption_style: only letters, digits, space and = , . _ & # - are accepted');
         }
-        parts.push(`[${last}]subtitles=filename=${captions}:force_style='${style}'[vout]`);
+        if (emphStyle === null) {
+          parts.push(`[${last}]subtitles=filename=${captions}:force_style='${style}'[vout]`);
+        } else {
+          // The seam caption lies across the mouth and chin once the face fills
+          // the frame (NCO 30 layout test, 2026-11-01, measured by a verifier:
+          // the box top at row 927 under a lower lip at row 920, and a two-line
+          // box over the lips). The subtitles filter takes no timeline, so the
+          // picture is captioned twice, once in each style, and the emphasis
+          // copy is laid over the seam copy inside the emphasis windows only.
+          // It is a whole force_style, not a change to caption_style: pass the
+          // full style with the new MarginV, or libass defaults fill the rest.
+          parts.push(`[${last}]split=2[cap_a][cap_b]`);
+          parts.push(`[cap_a]subtitles=filename=${captions}:force_style='${style}'[cap_s]`);
+          parts.push(`[cap_b]subtitles=filename=${captions}:force_style='${emphStyle}'[cap_e]`);
+          parts.push(`[cap_s][cap_e]overlay=0:0:eof_action=pass:enable='${emphEn}'[vout]`);
+        }
       } else {
         parts.push(`[${last}]null[vout]`);
       }
 
       let bed = null;
       let narration = null;
-      let idx = windows.length + 1;
+      let idx = windows.length + cards.length + 1;
       let bedIdx = null;
       let narIdx = null;
       if (p.bed !== undefined && p.bed !== null && p.bed !== '') {
@@ -1018,9 +1082,34 @@ const JOBS = {
         inputs.push('-i', narration);
       }
       const narSrc = narIdx === null ? '[0:a]' : `[${narIdx}:a]`;
+      // Loudness (added 2026-11-01, Tee's ruling on the NCO 30 layout test:
+      // "Add a loudness stage to the worker"). The HeyGen voice arrives at
+      // about -19.7 LUFS, so a Short played quieter than its neighbours. One
+      // pass of loudnorm on the finished mix, then back to 48 kHz, since
+      // loudnorm works at 192 kHz. It is opt-in: every existing caller keeps
+      // the graph it had. It is one dynamic pass, so it lands near the target
+      // and not on it: -14.7 LUFS on the NCO 30 voice, -13.0 to -15.7 on
+      // verifiers' synthetic sources. The peak ceiling holds before the AAC
+      // encode, which adds its own overshoot: 0.1 dB on that voice, up to 1.1
+      // dB on click-heavy sound, so ask for a ceiling under the one you need.
+      // asetpts re-stamps the samples in order: without it loudnorm left a
+      // 56 to 99 ms jump about 2.8 s from the end of any clip whose length is
+      // not a whole tenth of a second, and the last words played late
+      // against the picture (verifier, 2026-11-01, reproduced).
+      let loud = null;
+      if (p.loudness !== undefined && p.loudness !== null && p.loudness !== '') {
+        const givenTp = p.true_peak !== undefined && p.true_peak !== null && p.true_peak !== '';
+        loud = { i: num(p.loudness, 'loudness', { min: -30, max: -8 }),
+                 tp: num(givenTp ? p.true_peak : -1, 'true_peak', { min: -9, max: 0 }) };
+      } else if (p.true_peak !== undefined && p.true_peak !== null && p.true_peak !== '') {
+        throw new BadJob('true_peak: only meaningful with loudness');
+      }
+      const loudChain = loud ? `,loudnorm=I=${loud.i}:TP=${loud.tp}:LRA=11,aresample=48000,asetpts=N/SR/TB` : '';
       // Same pin as duck_mix: amix=duration=first came out 58 ms short on EP01,
       // so the mix is padded and cut to the planned length when one is given.
-      const mixTail = pinned ? '[mixraw];[mixraw]apad[mix]' : '[mix]';
+      const mixTail = loud
+        ? `[mixraw];[mixraw]anull${loudChain}` + (pinned ? ',apad[mix]' : '[mix]')
+        : (pinned ? '[mixraw];[mixraw]apad[mix]' : '[mix]');
       if (bed) {
         parts.push(
           `${narSrc}aresample=48000,asplit=2[nar][key];` +
@@ -1028,7 +1117,7 @@ const JOBS = {
           `[bedg][key]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400:makeup=1[duck];` +
           `[nar][duck]amix=inputs=2:duration=first:dropout_transition=0:weights=1 ${gain}` + mixTail);
       } else {
-        parts.push(`${narSrc}aresample=48000` + (pinned ? ',apad[mix]' : '[mix]'));
+        parts.push(`${narSrc}aresample=48000` + loudChain + (pinned ? ',apad[mix]' : '[mix]'));
       }
 
       const argv = ['-y', ...QUIET, ...inputs, '-filter_complex', parts.join(';'),
@@ -1061,6 +1150,9 @@ const JOBS = {
           layout,
           split_y: stacked ? splitY : null,
           emphasis: emphasis.length,
+          emphasis_cards: cards.length,
+          emphasis_captions: emphStyle !== null,
+          loudness: loud ? { integrated: loud.i, true_peak: loud.tp } : null,
           full_cutaways: windows.filter(w => w.full).length,
           must_cover: covered.length,
         }),
@@ -1725,7 +1817,20 @@ const JOBS = {
    * seamCues below and are pinned by jobs.test.js; a word with no usable
    * timing is refused, never guessed.
    *
-   * params: { words, output, line?, max_words?, offset?, tail? }
+   * params: { words, output, line?, max_words?, hard_max?, max_chars?, bridge?, offset?, tail? }
+   *
+   * hard_max (added 2026-11-01, Tee's ruling on the NCO 30 layout test: "3
+   * words max, no blinks") makes max_words a ceiling no cue passes; a longer
+   * phrase is shared out evenly, so seven words at 3 read 3, 2, 2 and never
+   * leave one word alone. bridge closes any gap between two cues shorter than
+   * it, so the caption box does not drop out for a frame between phrases (15
+   * one-frame drop-outs in that test at the 20 ms gaps; a bridge has to be
+   * longer than 0.02 to close those). max_chars cuts a cue whose text runs
+   * longer, because a long three word cue still wrapped to two lines. It counts
+   * characters, which only stand in for width: on the NCO 30 captions at
+   * FontSize 12, 23 held every cue on one line, but capitals and wide letters
+   * wrap sooner (a verifier wrapped 'MANUFACTURING STANDARD' at 22), so pick it
+   * for the font and the words, and look at the frames.
    */
   caption_srt: {
     build(p) {
@@ -1744,6 +1849,10 @@ const JOBS = {
       const maxWords = num(p.max_words ?? 4, 'max_words', { min: 2, max: 6, int: true });
       const offset = num(p.offset ?? 0, 'offset', { min: 0, max: 86400 });
       const tail = num(p.tail ?? 0.15, 'tail', { min: 0, max: 1 });
+      if (p.hard_max !== undefined && p.hard_max !== null && typeof p.hard_max !== 'boolean') throw new BadJob(`hard_max: must be true or false, not ${JSON.stringify(p.hard_max)}`);
+      const hardMax = p.hard_max === true;
+      const bridge = num(p.bridge ?? 0, 'bridge', { min: 0, max: 1 });
+      const maxChars = (p.max_chars === undefined || p.max_chars === null || p.max_chars === '') ? null : num(p.max_chars, 'max_chars', { min: 10, max: 80, int: true });
       const line = p.line === undefined ? null : String(p.line);
       if (line !== null && !/^[A-Za-z0-9._-]{1,64}$/.test(line)) throw new BadJob('line: must be 1 to 64 of A-Z a-z 0-9 . _ -');
       return { native: async () => {
@@ -1759,7 +1868,7 @@ const JOBS = {
         if (key === null) throw new Error(`words: the file holds ${keys.length} lines; name one with line`);
         const entry = Object.prototype.hasOwnProperty.call(doc, key) ? doc[key] : null;
         if (!entry || !Array.isArray(entry.words)) throw new Error(`words: no line ${key} with a words array`);
-        const cues = seamCues(entry.words, { maxWords, offset, tail });
+        const cues = seamCues(entry.words, { maxWords, offset, tail, hardMax, bridge, maxChars });
         if (sameFile()) throw new Error('output: now resolves to the words file itself; refusing to overwrite the timings');
         await fs.promises.writeFile(out, seamSrt(cues), 'utf8');
         return { output: path.relative(WORK_ROOT, out), line: key, cues: cues.length,
@@ -2386,8 +2495,17 @@ function setTagReader(fn) { tagReader = fn; }
  * with different rules on purpose: five words before a cut, a 0.30 s tail and a
  * 0.6 s floor, tuned for a slower narrated read. These are tuned for the Shorts
  * reference; change one without assuming the other should follow.
+ *
+ * hardMax makes maxWords a ceiling: a one word phrase joins the group before it
+ * only while that group stays at maxWords or under, and a longer phrase is cut
+ * into the fewest groups that fit, as even as possible, larger ones first (4
+ * words at 3 read 2 and 2, 7 read 3, 2, 2). bridge, in seconds, closes a gap
+ * shorter than it by running the earlier cue to the next one's start. Both
+ * default off, which leaves every cue exactly as it was. maxChars, when given,
+ * then cuts any group whose text is longer than it, filling each piece with as
+ * many words as fit; a word longer than maxChars on its own stands alone.
  */
-function seamCues(words, { maxWords = 4, offset = 0, tail = 0.15 } = {}) {
+function seamCues(words, { maxWords = 4, offset = 0, tail = 0.15, hardMax = false, bridge = 0, maxChars = null } = {}) {
   if (!Array.isArray(words) || !words.length) throw new Error('words: none to caption');
   if (words.length > 20000) throw new Error('words: too many (max 20000)');
   const clean = [];
@@ -2422,17 +2540,37 @@ function seamCues(words, { maxWords = 4, offset = 0, tail = 0.15 } = {}) {
     // then "the bot worked" reads "Before, the bot worked"). Only a one word
     // phrase with nothing after it stands alone.
     if (ph.length === 1 && groups.length && !endsSentence(groups[groups.length - 1]) &&
-        groups[groups.length - 1].length + 1 <= maxWords + 1) {
+        groups[groups.length - 1].length + 1 <= (hardMax ? maxWords : maxWords + 1)) {
       groups[groups.length - 1].push(ph[0]);
       continue;
     }
     if (ph.length === 1 && q + 1 < phrases.length) { phrases[q + 1] = [ph[0], ...phrases[q + 1]]; continue; }
+    if (hardMax) {
+      const n = Math.ceil(ph.length / maxWords);
+      const base = Math.floor(ph.length / n), extra = ph.length % n;
+      let i = 0;
+      for (let g = 0; g < n; g++) { const take = base + (g < extra ? 1 : 0); groups.push(ph.slice(i, i + take)); i += take; }
+      continue;
+    }
     let i = 0;
     while (i < ph.length) {
       const take = ph.length - (i + maxWords) === 1 ? maxWords + 1 : maxWords;
       groups.push(ph.slice(i, i + take));
       i += take;
     }
+  }
+  if (maxChars !== null) {
+    const fitted = [];
+    for (const g of groups) {
+      let cur = [];
+      for (const w of g) {
+        if (cur.length && [...cur, w].map(x => x.text).join(' ').length > maxChars) { fitted.push(cur); cur = []; }
+        cur.push(w);
+      }
+      if (cur.length) fitted.push(cur);
+    }
+    groups.length = 0;
+    groups.push(...fitted);
   }
   const r3 = (x) => Math.round(x * 1000) / 1000;
   const cues = groups.map(g => ({ start: r3(g[0].s + offset), end: r3(g[g.length - 1].e + tail + offset),
@@ -2442,6 +2580,9 @@ function seamCues(words, { maxWords = 4, offset = 0, tail = 0.15 } = {}) {
     let end = Math.max(cues[k].end, cues[k].start + 0.3);
     end = Math.min(end, next);
     if (!(end > cues[k].start)) end = cues[k].start + 0.001;
+    // Compared on the millisecond the SRT carries: on raw floats 0.6 - 0.5 is
+    // 0.0999..., and a gap exactly as long as bridge was closed (verifier).
+    if (bridge > 0 && k + 1 < cues.length && r3(cues[k + 1].start - end) < bridge) end = Math.max(end, cues[k + 1].start);
     cues[k].end = r3(end);
   }
   return cues;

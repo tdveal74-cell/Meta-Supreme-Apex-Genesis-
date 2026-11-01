@@ -58,7 +58,7 @@ The unsettled one is the claim that the later audits run after an earlier one go
 
 ## After the merge, read back 2026-10-31
 
-PR #447 merged at 05:32:39Z as `d30b405`. `main` had taken #449 at 05:04Z and #448 at 05:28Z since this branch's last CI, so the merge commit joined this PR to #448 untested. #448 added no workflow file and changed CLAUDE.md, `test_estate_reconcile.py` and the gate ledger. On `d30b405` locally, those tests and the receipt, integrity, vendored skill and mpt-shorts tests passed, 2126 of them, and CI run 1554 on `main` passed at 05:45:26Z.
+PR #447 merged at 05:32:36Z as `d30b405`. `main` had taken #449 at 05:04Z and #448 at 05:28Z since this branch's last CI, so the merge commit joined this PR to #448 untested. #448 added no workflow file and changed CLAUDE.md, `test_estate_reconcile.py` and the gate ledger. On `d30b405` locally, those tests and the receipt, integrity, vendored skill and mpt-shorts tests passed, 2126 of them, and CI run 1554 on `main` passed at 05:45:26Z.
 
 | check | result |
 |---|---|
@@ -78,6 +78,12 @@ The probe branch could not be deleted. The environment's git proxy answered the 
 Still unmeasured: the first scheduled run of the daily audit, which new schedules here have taken five to six hours to fire, and whether a scheduled run's failure email reaches the same inbox. The email above came from a run dispatched under tdveal74-cell; who GitHub mails for a scheduled run is the recalled rule, and the first scheduled red run will show it.
 
 Re-graded after the read back: verification 5, because the green path, the red path and the alarm channel each ran on GitHub. Mean 4.5. The verdict stands at PASS-WITH-CONDITIONS on one condition, the first scheduled run.
+
+## The first scheduled run, read back 2026-11-01
+
+Run 41304000680 is the first with `event: schedule`, read from the workflow's run list at 2026-11-01T12:01Z. It started at 11:55:05Z, 6h32m after its `23 5 * * *` slot. That was the workflow's first slot, since PR #447 merged at 05:32:36Z on 2026-10-31, after that day's. It ran on `main` at `a85af9a` and passed: the pinned requirements audit, the soul host's audit and `pnpm audit` each passed, and the job finished at 11:55:37Z. That meets the one condition on the verdict above.
+
+Still unmeasured: who GitHub mails when a scheduled run goes red. A green run sends no failure email, so this run cannot show it.
 
 ## Open
 
@@ -101,6 +107,6 @@ ARTIFACT: docs/devon/SYS_OPS_openmontage-rulings-and-daily-audit_v1_2026-10-31-0
 DATE: 2026-10-31
 DECISIONS: Tee ruled on one card at 04:00:46Z: the free Remotion licence for an operation of three or fewer, the OpenMontage install trust accepted as disclosed, and a daily scheduled dependency audit added.
 FINDINGS: CLAUDE.md counted thirteen CI jobs while the files held fifteen, and two workflow files were named nowhere; the count is now pinned by a test. A fresh critic confirmed 17 LOW or NIT findings on the first commit, among them audit steps that hid each other once one went red, all addressed.
-OPEN: the 54 unverified findings from the 0123 arc, verification running since 05:37Z; the first scheduled run of the daily audit; the probe branch, which the proxy would not delete; the full Remotion terms.
-STATUS: PR #447 merged as d30b405 at 05:32:39Z, CI run 1554 green on main. The daily audit is proven by dispatch on main, green, and on a probe branch, red with the later audits still running, and its failure email reached Tee. Read back: api and scheduler-cron SUCCESS on d30b405, presence correctly skipped, both Vercel projects READY production on d30b405 with unchanged code.
+OPEN: the 54 unverified findings from the 0123 arc, verification running since 05:37Z; who GitHub mails for a scheduled red run, since the first scheduled run on 2026-11-01 was green; the probe branch, which the proxy would not delete; the full Remotion terms.
+STATUS: PR #447 merged as d30b405 at 05:32:36Z, CI run 1554 green on main. The daily audit is proven by dispatch on main, green, and on a probe branch, red with the later audits still running, and its failure email reached Tee. Read back: api and scheduler-cron SUCCESS on d30b405, presence correctly skipped, both Vercel projects READY production on d30b405 with unchanged code.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f

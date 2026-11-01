@@ -26,16 +26,23 @@ address read 25 job types, with `tsws_repair`, `word_timings`,
 `acx_node_assemble` and `caption_srt` among them. All six live files hash byte
 identical to `a85af9a`.
 
-The restart dropped the job table. It held five finished jobs from the session
-Tee started, the last ending at 01:39:21Z, about five hours before. Their
-records went with the table; their output files stay on disk.
+The restart dropped the job table. It held five finished jobs. The first, the
+`word_timings` job at 01:05:44Z, is covered by Tee's card: he said the 00:59Z
+upgrade and that job were a session he started. The other four ran from
+01:34:50Z to 01:39:21Z, two `caption_srt`, a `word_timings` and a
+`presenter_composite`, and nothing records who submitted them by id or time;
+PR #473 describes an NCO 30 layout test on the box that day in outline. The last
+ended about five hours before the restart. Their records went with the table;
+their output files stay on disk.
 
 ## The test that lost a race on the box
 
 `server.test.js` checked the access line for a file read after a fixed 50 ms
 wait. The line is written on the response's finish event, which lands after the
-client sees the end. With no wait at all the check failed 6 runs of 6 in the
-container, so the 50 ms was a race that the 2 core box lost once in two runs.
+client sees the end. With the wait cut to one setImmediate tick the check failed
+6 runs of 6 in the container, and a critic's rerun with no wait at all failed in
+nearly every run (29 of 30), so the 50 ms was a race that the 2 core box lost
+once in two runs.
 
 The test now waits for the line itself, up to 2 s. Five plain runs passed and
 three runs on one loaded core passed. As a negative control, a copy of
@@ -60,12 +67,13 @@ those timings, `c2562dd5...`, stays in `acx/node01/out` for Tee's watch.
 Tee ruled on a card to read the result and clean up. Removed by exact path and
 read back gone: the rerun's output `acx/node01/out_pin` (257 MB), the sandbox
 words file, `/tmp/acx-node01-job-pin.json` and the staged `/tmp/rw-a85af9a`.
-`/tmp/rw-122bc70`, the staging of the session Tee started, was left alone. The
+`/tmp/rw-122bc70`, a directory named for the 00:59Z deploy's commit, was left
+alone; its owner and time were not read. The
 worker still read 25 afterwards.
 
 ## The gate
 
-The outward gate refused this session's box calls twice. The first refusal came
+The outward gate refused this session's box calls twice during this redeploy. The first refusal came
 when Tee's last answered card read 162 minutes old, the second at 670 minutes;
 both came after container restarts. Each time the decision went to Tee on a card
 and the identical call was retried after his answer. Nothing was rephrased.
@@ -85,7 +93,7 @@ TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_render-worker-pin-on-the-box_v1_2026-11-01-1720.md
 DATE: 2026-11-01
 DECISIONS: Tee ruled on cards to redeploy only acx_node.js from the merge of PR #472, to go ahead with it when the gate needed a fresh word, and to read the box rerun and clean up its output and the sandbox words file. He confirmed on a card that the 00:59Z upgrade of the box to 122bc70 was a session he started.
-FINDINGS: The pinned acx_node.js is live on the n8n box since 06:28:57Z; all six worker files equal a85af9a and /health reads 25. On the box, with the sandbox word timings, the pinned code rebuilt the Proof 0 master 9e2802af byte for byte in 426.6 s, so a box render now differs from Proof 0 only through the box's own word timings. server.test.js lost a fixed 50 ms race once on the 2 core box; the test now waits for the line, with a negative control. The restart dropped five finished job records of the session Tee started; their files stay.
-OPEN: Tee's watch of the Node 01 master in acx/node01/out (c2562dd5). Why the box's base.en run differs from the sandbox's by 20 to 40 ms on 33 of 260 word edges. The session Tee started has not recorded its 00:59Z deploy or its 01:05Z to 01:39Z jobs in this repository.
+FINDINGS: The pinned acx_node.js is live on the n8n box since 06:28:57Z; all six worker files equal a85af9a and /health reads 25. On the box, with the sandbox word timings, the pinned code rebuilt the Proof 0 master 9e2802af byte for byte in 426.6 s, so a box render now differs from Proof 0 only through the box's own word timings. server.test.js lost a fixed 50 ms race once on the 2 core box; the test now waits for the line, with a negative control. The restart dropped five finished job records, one from the session Tee started and four whose submitter is not recorded; their files stay.
+OPEN: Tee's watch of the Node 01 master in acx/node01/out (c2562dd5). Why the box's base.en run differs from the sandbox's by 20 to 40 ms on 33 of 260 word edges. Who submitted the four jobs that ran on the box from 01:34:50Z to 01:39:21Z is not recorded by id or time; PR #473 records the 00:59Z upgrade to the minute and an NCO 30 layout test in outline.
 STATUS: Redeployed and proved on the box; rerun output and the sandbox words file removed; the acceptance render kept for Tee's watch.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
