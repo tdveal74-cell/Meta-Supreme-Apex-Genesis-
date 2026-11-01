@@ -68,10 +68,24 @@ Conditions: Tee watches both renders before anything else is decided about the l
 Receipts: six verifiers on the renders across two workflows, and two over this record, `wf_6c99097b-c4b` on the first draft and `wf_1b245d4c-0a2` on its corrections; HeyGen balances read before and after; the ElevenLabs generation record; the hash and ids above.
 Recommendation: watch both renders on the phone. The human owns SHIP.
 
+## Tee's watch, 2026-11-01
+
+Both finals were sent to Tee in chat on 2026-11-01. He wrote "I watched" at 17:09:01Z and answered one card at 17:11:28Z. That watch was the first item under Not verified above and the one condition on the verdict, so the condition is met.
+
+| question on the card | answer | what the card said follows |
+|---|---|---|
+| how the chin and lower-lip patch looked on his phone, at 4.4 s and 16.2 s | "Plain on both" | the black polo photo look is out for publish on either engine |
+| which engine moved more like him | "Avatar V" | Avatar V costs three times Avatar IV: 17 credits for this clip against 7 |
+| the next avatar test | "Digital twin (Recommended)" | he films himself talking and approves HeyGen's consent link; the footage spec and the credit cost are checked against HeyGen's pages and put on a card before anything is spent |
+
+His answer settles the question the verifiers split on: the patch is plain on both engines at phone size, whatever the sampled counts said about Avatar V. The black polo photo look is not used in anything published. The other two answers on the first question were "Plain on Avatar IV only" and "Faint, would pass".
+
+The HeyGen account was read at 17:09:25Z: 297 premium credits on the Pro plan, resetting on 2026-11-26, and every private look on it is a photo look, so there is no digital twin to test yet. A twin trained on footage of Tee is the likeliest fix for both photo faults, the seam and the lips held open in pauses. That is untested.
+
 ## Open
 
-- Tee to watch both renders. They are in the session's scratchpad, which goes when the container is reclaimed. The HeyGen copies stay in his HeyGen library under the two video ids above, titled "not for publish".
-- The seam: test a digital twin, or another look, on Tee's ruling.
+- The digital twin test, on Tee's ruling of 17:11:28Z. He films the footage and approves the consent link. Nothing is created or rendered until the footage spec and the credit cost, read from HeyGen's own pages, have been on a card and he has answered it.
+- The two test renders stay in his HeyGen library under the video ids above, titled "not for publish". The scratchpad copies go when the container is reclaimed.
 - The three compose faults belong to upstream OpenMontage, AGPL code this repository does not edit.
 
 ## DEVON RECEIPT
@@ -80,8 +94,8 @@ AREA: Systems, TQO
 TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_openmontage-avatar-lane-test_v1_2026-11-01-0036.md
 DATE: 2026-11-01
-DECISIONS: Tee ruled "Test it" at 2026-10-31T23:41:12Z. On a card at 23:49:23Z he chose the connectors path, the drafted script and the black polo look. On a card at 2026-11-01T00:09:28Z he chose a second render on Avatar V and this write-up.
+DECISIONS: Tee ruled "Test it" at 2026-10-31T23:41:12Z. On a card at 23:49:23Z he chose the connectors path, the drafted script and the black polo look. On a card at 2026-11-01T00:09:28Z he chose a second render on Avatar V and this write-up. After watching both renders on his phone, on a card at 17:11:28Z he judged the seam plain on both engines, said Avatar V moved more like him, and chose a digital twin as the next test.
 FINDINGS: The clone voice and the photo look both ran through the connectors and the voice in the finals is Tee's take (correlation 0.99994). Captions match the script word for word. HeyGen leaves a light seam over the lower lip and chin on this look, seen in sampled frames of both the Avatar IV and the Avatar V render (one of three verifiers did not see it on Avatar V), and the lips stay open in pauses. OpenMontage's compose adds about 43 ms of audio delay of unsettled cause, a 25 to 30 fps repeat-frame hitch and a full range colour tag. Spend: 268 ElevenLabs credits and 24 HeyGen credits, 4 over the first card's 20 credit ceiling after the second card approved render 2.
-OPEN: Tee watches both renders; a digital twin or another look for the seam, on his ruling; the compose faults are upstream's.
-STATUS: Two test renders made, checked by six independent verifiers, with this record checked by two more; delivered to Tee in chat. Not for publish.
+OPEN: the digital twin test, filmed by Tee, with the footage spec and credit cost on a card before any spend; the compose faults are upstream's.
+STATUS: Two test renders made, checked by six independent verifiers, with this record checked by two more; delivered to Tee in chat. He watched both on his phone on 2026-11-01 and judged the seam plain on both engines. Not for publish.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
