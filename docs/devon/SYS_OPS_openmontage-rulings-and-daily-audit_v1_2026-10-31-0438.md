@@ -81,7 +81,7 @@ Re-graded after the read back: verification 5, because the green path, the red p
 
 ## The first scheduled run, read back 2026-11-01
 
-Run 41304000680 is the first with `event: schedule`, read from the workflow's run list at 2026-11-01T12:01Z. It started at 11:55:05Z against the `23 5 * * *` slot, 6h32m late, which is later than the two first runs CLAUDE.md records, 5h06m and 6h03m. It ran on `main` at `a85af9a` and passed: the pinned requirements audit, the soul host's audit and `pnpm audit` each passed, and the job finished at 11:55:37Z. That meets the one condition on the verdict above.
+Run 41304000680 is the first with `event: schedule`, read from the workflow's run list at 2026-11-01T12:01Z. It started at 11:55:05Z, 6h32m after its `23 5 * * *` slot. That was the workflow's first slot, since PR #447 merged at 05:32:39Z on 2026-10-31, after that day's. It ran on `main` at `a85af9a` and passed: the pinned requirements audit, the soul host's audit and `pnpm audit` each passed, and the job finished at 11:55:37Z. That meets the one condition on the verdict above.
 
 Still unmeasured: who GitHub mails when a scheduled run goes red. A green run sends no failure email, so this run cannot show it.
 
