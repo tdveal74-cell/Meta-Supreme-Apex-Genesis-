@@ -122,7 +122,7 @@ test failure. It shows up as a hundred or more collection ERRORs.
 
 ## Reproducing CI
 
-CI is SEVENTEEN jobs, and on most pull requests you will see five. Five are in
+CI is EIGHTEEN jobs, and on most pull requests you will see five. Five are in
 `.github/workflows/ci.yml` (`standalone` then `container` and `engine` then
 `api`, plus `dependency-audit` on every push). The sixth is
 `.github/workflows/web-ci.yml`, path filtered to the web workspace, so a run of
@@ -550,6 +550,21 @@ read `build.builder` from `get-service-config`, and a build log for its `FROM`
 line, before saying what production runs. A builder changed back in the
 dashboard reopens the gap and nothing here would notice.
 
+The eighteenth arrived on 2026-10-31: `.github/workflows/automation-registry-check.yml`,
+`schedule` only, once a day at 08:17Z, plus `workflow_dispatch`. Tee ruled it on
+a card the same day, "Build the registry", after Nate Herk's agent management
+framework was read against the estate and the one gap was no record of who owns
+each automation or when a person last read it. It runs
+`scripts/automation_registry.py --check` against `registry/automations.json`,
+one row per active workflow with an owner, a lane and a review date, seeded from
+the instance's own listing: 116 workflows, 68 active, read 2026-10-31. The 45
+in the credential paragraphs above is the 2026-09-22 count. It goes red on an
+active workflow with no row, on a row whose workflow is gone or inactive, and on
+a recorded review older than 90 days or older than the workflow's last change.
+Rows with no review date are counted on every run and do not alarm, because the
+seed recorded none and inventing dates would be a false record. It reads only and
+goes red on a missing `N8N_VPS_KEY` like the other scheduled jobs.
+
 **The standalone list above drifted and was regenerated from `ci.yml`.** It
 named 30 files while the job ran 36, missing `test_devon_data_tables.py`,
 `test_devon_table_id_conversion.py`, `test_devon_provider_billing.py`,
@@ -592,7 +607,8 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_provider_watchdog.py test_devon_show_registry.py test_show_registry_seed.py \
   test_devon_lesson_registry.py test_gate_ledger.py test_jev_route.py \
   test_ledger_receipt.py test_code_worker.py test_watch_long.py \
-  test_mpt_shorts.py test_openmontage_installer.py test_ltx_build_graph.py
+  test_mpt_shorts.py test_openmontage_installer.py test_ltx_build_graph.py \
+  test_automation_registry.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .
