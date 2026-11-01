@@ -1,5 +1,5 @@
 {
-  "_about": "One row per ACTIVE workflow on the VPS n8n instance. Edit owner, lane and reviewed by hand; scripts/automation_registry.py --check diffs this file against the live instance. reviewed is a YYYY-MM-DD date a human set after reading the workflow end to end, or null for never. Seeded 2026-10-31 from the instance's own workflow listing (116 workflows, 68 active).",
+  "_about": "One row per ACTIVE workflow on the VPS n8n instance under workflows, and one row per automation that runs from this repository under repo: every GitHub Actions workflow file and every hook script .claude/settings.json wires in. Edit owner, lane and reviewed by hand; scripts/automation_registry.py --check diffs this file against the live instance and git. reviewed is a YYYY-MM-DD date a human set after reading the automation end to end, or null for never. The workflow rows were seeded 2026-10-31 from the instance's listing: 68 active. The n8n connector listed 116 workflows in all and the public API 254 on 2026-11-01; the 68 active agree. The repo rows were seeded 2026-11-01 from the files.",
   "review_every_days": 90,
   "workflows": [
     {
@@ -475,6 +475,110 @@
       "id": "j0Tcg5vF2pFbLj4m",
       "name": "WhatBroke — Newsletter Subscribe",
       "lane": "WhatBroke",
+      "owner": "Tee",
+      "reviewed": null
+    }
+  ],
+  "repo": [
+    {
+      "path": ".claude/hooks/gate_ledger.py",
+      "lane": "Repo hooks",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".claude/hooks/jev_route.py",
+      "lane": "Repo hooks",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".claude/hooks/session-start.sh",
+      "lane": "Repo hooks",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/audio-ci.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/automation-registry-check.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/browser-worker-ci.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/carousel-render.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/dependency-audit-daily.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/panel-smoke-ci.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/presence-image-ci.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/provider-watchdog.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/pulse-watchdog.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/quality90-ai-review.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/registry-check.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/render-worker-ci.yml",
+      "lane": "GitHub Actions",
+      "owner": "Tee",
+      "reviewed": null
+    },
+    {
+      "path": ".github/workflows/web-ci.yml",
+      "lane": "GitHub Actions",
       "owner": "Tee",
       "reviewed": null
     }

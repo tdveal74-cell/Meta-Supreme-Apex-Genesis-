@@ -563,7 +563,22 @@ active workflow with no row, on a row whose workflow is gone or inactive, and on
 a recorded review older than 90 days or older than the workflow's last change.
 Rows with no review date are counted on every run and do not alarm, because the
 seed recorded none and inventing dates would be a false record. It reads only and
-goes red on a missing `N8N_VPS_KEY` like the other scheduled jobs.
+goes red on a missing `N8N_VPS_KEY` like the other scheduled jobs. Its first
+run, by hand on 2026-11-01 after the merge, read 254 workflows from the public
+API against the connector's 116, both with 68 active, and returned OK; why the
+two totals differ was not settled.
+
+From 2026-11-01 it also claims the automations that run from this repository,
+ruled by Tee on a card the day before, "Add them in a second PR": every file in
+`.github/workflows` and every hook script `.claude/settings.json` wires in
+through `$CLAUDE_PROJECT_DIR`, 14 and 3, derived from the files rather than
+listed. `test_automation_registry.py` checks that coverage offline in the
+standalone job, so a pull request that adds a workflow file or a hook nobody
+has claimed in `registry/automations.json` goes red. A repository row's review
+is measured against the last commit that touched its file, so the daily job
+checks out full history and the script refuses a shallow clone, which would
+date every file to the one commit fetched. The checkout in a cloud session is
+shallow too: `git fetch --unshallow origin` before running `--check` there.
 
 **The standalone list above drifted and was regenerated from `ci.yml`.** It
 named 30 files while the job ran 36, missing `test_devon_data_tables.py`,

@@ -1,12 +1,23 @@
-"""Check the automation ownership registry against the live n8n instance.
+"""Check the automation ownership registry against what actually runs.
 
 `registry/automations.json` holds one row per ACTIVE workflow on the VPS n8n
-instance: who owns it, which lane it belongs to, and the date a human last
-read it end to end. This script reads the instance's own workflow list and
-diffs the two, so the registry cannot quietly stop describing the estate.
+instance, and one row per automation that runs from this repository by itself:
+every GitHub Actions workflow file and every hook script `.claude/settings.json`
+wires in. Each row says who owns it, which lane it belongs to, and the date a
+human last read it end to end. This script reads the instance's own workflow
+list and the repository's own files and diffs them against the registry, so it
+cannot quietly stop describing the estate.
 
-    python3 scripts/automation_registry.py --check     # read the instance, diff, exit 1 on a finding
-    python3 scripts/automation_registry.py --validate  # check the file's shape only, no network
+    python3 scripts/automation_registry.py --check     # read the instance and git, diff, exit 1 on a finding
+    python3 scripts/automation_registry.py --validate  # shape and repository coverage only, no network
+
+`--validate` runs in the standalone CI job through test_automation_registry.py,
+so a new workflow file or hook that nobody has claimed turns the pull request
+that adds it red. Review dates for repository rows are measured against the
+last commit that touched the file, which needs full history: `--check` refuses
+a shallow clone rather than date every file to the one commit it fetched.
+The repository rows were added 2026-11-01, ruled by Tee on a card the day
+before, "Add them in a second PR".
 
 Ruled by Tee 2026-10-31 on a card, "Build the registry", after a read of Nate
 Herk's five step agent management framework found one gap in the estate: no
@@ -19,10 +30,13 @@ the instance or to the file. Settling a finding is a commit to the file, made
 by a person, which is the ownership the registry exists to record.
 
 WHAT TURNS IT RED, exit 1:
-  - an active workflow with no row (an automation nobody has claimed)
-  - a row whose workflow is gone or no longer active (a stale claim)
+  - an active workflow, a workflow file or a wired hook with no row (an
+    automation nobody has claimed)
+  - a row whose workflow is gone or no longer active, or whose file is not
+    wired in (a stale claim)
   - a row whose review is overdue: `reviewed` older than `review_every_days`,
-    or the workflow's `updatedAt` later than the day it was reviewed, because a
+    or the workflow's `updatedAt` (the file's last commit, for a repository
+    row) later than the day it was reviewed, because a
     review of an earlier version is not a review of what runs now
   - a `reviewed` date after today, which would otherwise silence both alarms
 
@@ -45,6 +59,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import urllib.error
 import urllib.parse
@@ -65,6 +80,10 @@ MAX_PAGES = 20
 #: The fields a row must carry, and nothing else, so a typo such as `reveiwed`
 #: fails the shape check instead of reading as a never reviewed row.
 ROW_KEYS = ("id", "name", "lane", "owner", "reviewed")
+#: The same for an automation that runs from this repository, keyed by its path.
+REPO_ROW_KEYS = ("path", "lane", "owner", "reviewed")
+#: A hook script named in a `.claude/settings.json` command.
+HOOK_PATH_RE = re.compile(r"\$CLAUDE_PROJECT_DIR/([A-Za-z0-9_./-]+)")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 OK = 0
@@ -95,38 +114,70 @@ def validate(doc: Any) -> List[str]:
     every = doc.get("review_every_days")
     if not isinstance(every, int) or isinstance(every, bool) or every < 1:
         problems.append("review_every_days must be a whole number of days, 1 or more")
-    rows = doc.get("workflows")
+    problems += _validate_rows(doc.get("workflows"), "workflows", ROW_KEYS, "id")
+    problems += _validate_rows(doc.get("repo"), "repo", REPO_ROW_KEYS, "path")
+    return problems
+
+
+def _validate_rows(rows: Any, section: str, row_keys: Sequence[str], id_key: str) -> List[str]:
     if not isinstance(rows, list):
-        return problems + ["workflows must be a list"]
+        return [f"{section} must be a list"]
+    problems: List[str] = []
     seen: Dict[str, int] = {}
     for index, row in enumerate(rows):
-        where = f"row {index}"
+        where = f"{section} row {index}"
         if not isinstance(row, dict):
             problems.append(f"{where} is not an object")
             continue
         keys = set(row)
-        if keys != set(ROW_KEYS):
-            missing = sorted(set(ROW_KEYS) - keys)
-            extra = sorted(keys - set(ROW_KEYS))
+        if keys != set(row_keys):
+            missing = sorted(set(row_keys) - keys)
+            extra = sorted(keys - set(row_keys))
             problems.append(f"{where} has the wrong fields (missing {missing}, unexpected {extra})")
             continue
-        for field in ("id", "name", "lane", "owner"):
+        for field in row_keys:
+            if field == "reviewed":
+                continue
             if not isinstance(row[field], str) or not row[field].strip():
-                problems.append(f"{where} ({row.get('id')}) has an empty {field}")
+                problems.append(f"{where} ({row.get(id_key)}) has an empty {field}")
         reviewed = row["reviewed"]
         if reviewed is not None:
             if not isinstance(reviewed, str) or not DATE_RE.match(reviewed):
-                problems.append(f"{where} ({row['id']}) reviewed must be YYYY-MM-DD or null")
+                problems.append(f"{where} ({row[id_key]}) reviewed must be YYYY-MM-DD or null")
             else:
                 try:
                     date.fromisoformat(reviewed)
                 except ValueError:
-                    problems.append(f"{where} ({row['id']}) reviewed is not a real date: {reviewed}")
-        if isinstance(row["id"], str):
-            if row["id"] in seen:
-                problems.append(f"{where} repeats id {row['id']} from row {seen[row['id']]}")
-            seen.setdefault(row["id"], index)
+                    problems.append(f"{where} ({row[id_key]}) reviewed is not a real date: {reviewed}")
+        if isinstance(row[id_key], str):
+            if row[id_key] in seen:
+                problems.append(f"{where} repeats {id_key} {row[id_key]} from row {seen[row[id_key]]}")
+            seen.setdefault(row[id_key], index)
     return problems
+
+
+def review_finding(
+    label: str, row: Dict[str, Any], changed: Optional[date], every: int, today: date
+) -> Optional[str]:
+    """The one finding a reviewed row can raise, or None. Never called for a null review."""
+    reviewed = date.fromisoformat(row["reviewed"])
+    if reviewed > today:
+        return (
+            f"BAD REVIEW DATE: {label} says it was reviewed on {row['reviewed']}, after today "
+            f"{today.isoformat()}, which would silence its review alarms until then"
+        )
+    age = (today - reviewed).days
+    if age > every:
+        return (
+            f"REVIEW DUE: {label} owner {row['owner']}, last reviewed {row['reviewed']}, "
+            f"{age} days ago against a {every} day period"
+        )
+    if changed is not None and changed > reviewed:
+        return (
+            f"REVIEW DUE: {label} owner {row['owner']}, changed {changed.isoformat()} "
+            f"after its review on {row['reviewed']}"
+        )
+    return None
 
 
 def diff(
@@ -163,28 +214,86 @@ def diff(
         if row["reviewed"] is None:
             never += 1
             continue
-        reviewed = date.fromisoformat(row["reviewed"])
-        if reviewed > today:
-            findings.append(
-                f"BAD REVIEW DATE: {label} says it was reviewed on {row['reviewed']}, after today "
-                f"{today.isoformat()}, which would silence its review alarms until then"
-            )
-            continue
-        age = (today - reviewed).days
-        if age > every:
-            findings.append(
-                f"REVIEW DUE: {label} owner {row['owner']}, last reviewed {row['reviewed']}, "
-                f"{age} days ago against a {every} day period"
-            )
-            continue
         updated = parse_iso(workflow.get("updatedAt"))
-        if updated is not None and updated.date() > reviewed:
-            findings.append(
-                f"REVIEW DUE: {label} owner {row['owner']}, changed {updated.date().isoformat()} "
-                f"after its review on {row['reviewed']}"
-            )
+        finding = review_finding(label, row, updated.date() if updated else None, every, today)
+        if finding:
+            findings.append(finding)
     if never:
-        notes.append(f"NEVER REVIEWED: {never} of {len(rows)} rows carry no review date")
+        notes.append(f"NEVER REVIEWED: {never} of {len(rows)} workflow rows carry no review date")
+    return findings, notes
+
+
+def repo_automations(root: str = REPO) -> List[str]:
+    """Every automation the repository runs by itself, as paths from its root.
+
+    The GitHub Actions workflow files, and every hook script that
+    `.claude/settings.json` wires in through `$CLAUDE_PROJECT_DIR`. Derived
+    from the files rather than listed, so a new workflow or hook has to be
+    claimed in the registry before CI goes green.
+    """
+    found = set()
+    workflows = os.path.join(root, ".github", "workflows")
+    if os.path.isdir(workflows):
+        for name in os.listdir(workflows):
+            if name.endswith((".yml", ".yaml")):
+                found.add(f".github/workflows/{name}")
+    settings = os.path.join(root, ".claude", "settings.json")
+    if os.path.isfile(settings):
+        with open(settings, encoding="utf-8") as handle:
+            hooks = (json.load(handle) or {}).get("hooks") or {}
+        for groups in hooks.values():
+            for group in groups or []:
+                for hook in (group or {}).get("hooks") or []:
+                    for match in HOOK_PATH_RE.finditer(str((hook or {}).get("command") or "")):
+                        found.add(match.group(1))
+    return sorted(found)
+
+
+def repo_coverage(doc: Dict[str, Any], present: Sequence[str]) -> List[str]:
+    """Findings for repository automations nobody claimed, and claims on nothing."""
+    rows = {row["path"] for row in doc["repo"]}
+    findings = [f"UNOWNED: {path} runs from this repository and has no row" for path in present
+                if path not in rows]
+    findings += [f"STALE: the row for {path} names a file that is not wired in" for path in sorted(rows)
+                 if path not in set(present)]
+    return findings
+
+
+def git_changed(root: str, path: str) -> Optional[date]:
+    """The committer date of the last commit that touched `path`.
+
+    Refuses a shallow clone, where every file would date from the one commit
+    fetched and every review would read as overtaken.
+    """
+    shallow = subprocess.run(
+        ["git", "-C", root, "rev-parse", "--is-shallow-repository"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    if shallow == "true":
+        raise ValueError("the checkout is shallow, so file dates would all read as the newest commit")
+    out = subprocess.run(
+        ["git", "-C", root, "log", "-1", "--format=%cs", "--", path],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    return date.fromisoformat(out) if out else None
+
+
+def repo_diff(
+    doc: Dict[str, Any], present: Sequence[str], changed: Dict[str, Optional[date]], today: date
+) -> Tuple[List[str], List[str]]:
+    every = int(doc["review_every_days"])
+    findings = repo_coverage(doc, present)
+    never = 0
+    for row in sorted(doc["repo"], key=lambda r: r["path"]):
+        if row["path"] not in set(present):
+            continue
+        if row["reviewed"] is None:
+            never += 1
+            continue
+        finding = review_finding(row["path"], row, changed.get(row["path"]), every, today)
+        if finding:
+            findings.append(finding)
+    notes = [f"NEVER REVIEWED: {never} of {len(doc['repo'])} repository rows carry no review date"] if never else []
     return findings, notes
 
 
@@ -243,8 +352,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         for problem in problems:
             print(f"  {problem}")
         return FINDING
+    present = repo_automations()
     if args.validate:
-        print(f"OK: {len(doc['workflows'])} rows, well formed")
+        uncovered = repo_coverage(doc, present)
+        if uncovered:
+            print("REPOSITORY COVERAGE:")
+            for finding in uncovered:
+                print(f"  {finding}")
+            return FINDING
+        print(f"OK: {len(doc['workflows'])} workflow rows and {len(doc['repo'])} repository rows, well formed")
         return OK
 
     key = os.environ.get("N8N_VPS_KEY", "")
@@ -258,9 +374,19 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"CANNOT CHECK: reading {base} failed: {type(error).__name__}: {error}")
         return CANNOT_CHECK
 
-    findings, notes = diff(doc, live, datetime.now(timezone.utc).date())
+    today = datetime.now(timezone.utc).date()
+    findings, notes = diff(doc, live, today)
+    try:
+        changed = {path: git_changed(REPO, path) for path in present}
+    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+        print(f"CANNOT CHECK: reading file dates from git failed: {type(error).__name__}: {error}")
+        return CANNOT_CHECK
+    repo_findings, repo_notes = repo_diff(doc, present, changed, today)
+    findings += repo_findings
+    notes += repo_notes
     active = sum(1 for w in live if w.get("active") is True)
     print(f"Read {len(live)} workflows, {active} active, against {len(doc['workflows'])} rows.")
+    print(f"Read {len(present)} repository automations against {len(doc['repo'])} rows.")
     for note in notes:
         print(f"  {note}")
     if findings:
@@ -268,7 +394,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         for finding in findings:
             print(f"  {finding}")
         return FINDING
-    print("OK: every active workflow has an owner and no recorded review is overdue")
+    print("OK: every active workflow and repository automation has an owner and no recorded review is overdue")
     return OK
 
 
