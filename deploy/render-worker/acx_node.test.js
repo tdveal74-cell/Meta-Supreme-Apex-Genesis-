@@ -182,6 +182,25 @@ t('overlays: the disclosure is three lines at 30 px above the caption band, on t
   assert.ok(vf.endsWith(",ass='out/node01/captions.ass':fontsdir='" + o.fonts_dir + "'"), vf.slice(-120));
   assert.ok(!vf.includes('#D9626A'), 'no red in any overlay; red is the caption style on verdict beats only');
 });
+t('every libx264 encode pins its thread count to 6, so the bytes do not follow the host core count', () => {
+  const o = Object.assign({ cold_open: 2.5, last_line_end: 61.209 }, build().plan.options);
+  assert.strictEqual(A.X264_THREADS, 6);
+  const encodes = {
+    shot: A.shotArgv('img/R1.png', 305, 'seg/shot0.mp4', o),
+    overlay: A.overlayArgv('silent.mp4', 'out/node01/captions.ass', 'picture.mp4', o),
+    master: A.muxArgv('picture.mp4', 'mix.wav', 'master.mp4', o),
+  };
+  for (const [name, a] of Object.entries(encodes)) {
+    assert.ok(a.includes('libx264'), name + ' is a libx264 encode');
+    const i = a.indexOf('-threads');
+    assert.ok(i > a.indexOf('libx264') && a[i + 1] === '6', name + ' carries -threads 6 after the encoder');
+    assert.ok(i < a.length - 1 && a.lastIndexOf('-threads') === i, name + ' carries it once');
+  }
+  const src = require('fs').readFileSync(require('path').join(__dirname, 'acx_node.js'), 'utf8');
+  const total = (src.match(/'libx264'/g) || []).length;
+  const pinned = (src.match(/'-threads', String\(X264_THREADS\)/g) || []).length;
+  assert.strictEqual(pinned, total, `${total} libx264 encodes in acx_node.js and ${pinned} pinned`);
+});
 t('the master is H.264 High, CRF 18, 30 fps, yuv420p, AAC 192k 48 kHz, faststart, shortest', () => {
   const a = A.muxArgv('picture.mp4', 'mix.wav', 'master.mp4', build().plan.options);
   for (const need of [['-profile:v', 'high'], ['-crf', '18'], ['-r', '30'], ['-pix_fmt', 'yuv420p'], ['-c:a', 'aac'], ['-b:a', '192k'], ['-ar', '48000'], ['-movflags', '+faststart']]) {
