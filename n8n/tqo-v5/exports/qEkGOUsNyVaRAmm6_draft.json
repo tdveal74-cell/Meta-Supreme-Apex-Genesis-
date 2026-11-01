@@ -1214,6 +1214,11 @@
       "index": 0,
       "node": "One Row at a Time",
       "type": "main"
+     },
+     {
+      "index": 0,
+      "node": "Postiz: Carry Row",
+      "type": "main"
      }
     ]
    ]
@@ -1681,6 +1686,79 @@
      {
       "index": 0,
       "node": "Presenter: Write Shot List",
+      "type": "main"
+     }
+    ]
+   ]
+  },
+  "Postiz: Build Draft": {
+   "main": [
+    [
+     {
+      "index": 0,
+      "node": "Postiz: Has Draft?",
+      "type": "main"
+     }
+    ]
+   ]
+  },
+  "Postiz: Carry Row": {
+   "main": [
+    [
+     {
+      "index": 0,
+      "node": "Postiz: List Channels",
+      "type": "main"
+     }
+    ]
+   ]
+  },
+  "Postiz: Create Draft": {
+   "main": [
+    [
+     {
+      "index": 0,
+      "node": "Postiz: Read Result",
+      "type": "main"
+     }
+    ]
+   ]
+  },
+  "Postiz: Has Draft?": {
+   "main": [
+    [
+     {
+      "index": 0,
+      "node": "Postiz: Create Draft",
+      "type": "main"
+     }
+    ],
+    [
+     {
+      "index": 0,
+      "node": "Postiz: Read Result",
+      "type": "main"
+     }
+    ]
+   ]
+  },
+  "Postiz: List Channels": {
+   "main": [
+    [
+     {
+      "index": 0,
+      "node": "Postiz: Build Draft",
+      "type": "main"
+     }
+    ]
+   ]
+  },
+  "Postiz: Read Result": {
+   "main": [
+    [
+     {
+      "index": 0,
+      "node": "Postiz: Record",
       "type": "main"
      }
     ]
@@ -4498,7 +4576,7 @@
    "id": "808fea1b-2bde-41e6-867f-cf9ff6947a08",
    "name": "Show Context: Render",
    "parameters": {
-    "jsCode": "// Show Context: Render - v10, Speechify replaces Piper as the fallback lane (21 Aug 2026).\n//\n// voiceReady is FALSE (safety hold, ruled 21 Aug 2026): the ElevenLabs\n// Creator renewal lands 25 Aug and the render lane must not touch the\n// account before then. Renders fall back to Speechify. Flip to true during\n// the activation sitting on or after 25 Aug.\n//\n// History: this flag was set false on 9 Aug when the ElevenLabs account hit\n// zero credits mid-render and the lane died on 'This request exceeds your\n// quota'. A narration provider running out should change how the episode\n// sounds, not stop the pipeline, and two independent protections enforce that:\n//   1. This flag. Set voiceReady false to fall back to Speechify with no\n//      other change anywhere in the lane.\n//   2. The ElevenLabs node's error output is wired into Speechify, so even\n//      with voiceReady true a quota wall or an outage degrades to Speechify\n//      rather than failing the run.\n//\n// Fallback history: Piper (self-hosted, free) held this slot 9-21 Aug 2026.\n// Retired 21 Aug: its API key was hardcoded in plaintext, the vendor went\n// silent on rotation, and it could never carry Tee's voice. Speechify's\n// stream API replaced it (prepaid 500k characters, smoke-proven in exec 3023\n// of workflow be5rCRZ1ktLnmwI4: HTTP 200, audio/mpeg binary, 76.8 kB).\n//\n// If renders start failing at the TTS step, check in this order:\n//   1. the 'Eleven Labs' httpHeaderAuth credential is still attached to the\n//      ElevenLabs node, and 'Speechify API' to the Speechify node\n//   2. the voice ids below still exist in their accounts\n//   3. both plans have character credits left (Speechify returns 402 when\n//      the prepaid balance is gone; that is the last fallback, so the run\n//      fails loudly and the reaper reclaims the row)\n// Any of these produces the same symptom, which is a dead render branch.\n\nconst nco = $json.nco === true;\n\n// -- voices ------------------------------------------------------------------\n// ypnKDQtIhp4N3yn4UnqO is Tee's Professional Voice Clone, trained 9 Aug 2026\n// on a purpose-recorded 30 minute read. It replaces IS2y6AW9sjF8fFltBSqN\n// (\"Terrance - Cinematic Authentic Narrator\"), an ElevenLabs library voice\n// that is also cast as AUREN in the TSWS production stack. Until this change\n// all three brands narrated in the same rented voice.\n//\n// Both TQO and NCO Forge use the clone. That is deliberate: the face and the\n// voice are Tee's on both brands, and the presenter formerly labelled Elias\n// was always specified as his own likeness rather than a separate person.\n//\n// Standing rule from 08_PRODUCTION_STACK.md: voice and identity owned, never\n// rented. Do not point either brand back at a library voice.\nconst TEE_CLONE = 'ypnKDQtIhp4N3yn4UnqO';\nconst TQO_VOICE = TEE_CLONE;\nconst NCO_VOICE = TEE_CLONE;\n\n// -- Speechify fallback ------------------------------------------------------\n// The fallback narrator when ElevenLabs is held (voiceReady false) or errors.\n// Endpoint: POST /v1/audio/stream, 20,000 character cap per request. The\n// long-form spec is 1,200 to 2,000 words (roughly 7k to 12k characters), so\n// a full script fits in one call. An over-cap script fails loudly with a 400\n// rather than truncating narration; that is deliberate.\n//\n// speechifyVoiceId is geffen_32, a stock Speechify voice, until Tee's\n// consented clone exists on the Speechify account. The clone sample rides\n// the same recording sitting already owed for the ElevenLabs re-record, and\n// nothing narrated by the clone ships before it passes the 3-line listen\n// test. When the clone lands, swap BOTH values below together: Speechify's\n// docs state cloned and personal voices run on the simba-english model, not\n// simba-3.2. Verify with one live call at clone creation before trusting it.\n//\n// Owned-voice rule: geffen_32 is a stopgap so a degraded lane still produces\n// reviewable drafts. It is not a shipping voice. Contractual note: the\n// Speechify AI Voice API supplemental terms require AI-generated disclosure\n// on every published synthetic output. That is already standing channel\n// practice and the ai_disclosure field carries it.\nconst SPEECHIFY_VOICE = 'geffen_32';\nconst SPEECHIFY_MODEL = 'simba-3.2';\n\n// -- voice settings ----------------------------------------------------------\n// Single source of truth. 'ElevenLabs TTS (Tee Clone)' reads voiceSettings\n// from here rather than carrying its own copy, so these cannot drift apart.\n//\n// These are the exact values Tee validated by ear in the ElevenLabs UI on\n// 9 Aug 2026 against three fixed test lines. Do not change them casually and\n// do not tune per episode: a voice whose settings move between episodes\n// drifts, and drift is what makes an audience stop believing there is a\n// person there. If they must change, re-run the three test lines first and\n// record the new values with a date.\n//\n// style is the one that matters. It amplifies the expressiveness of the source\n// recording, and the source recording is a human being who, on tape, speaks in\n// a far more certain register than he writes in. Pushed high, that certainty\n// gets applied to written copy that deliberately hedges, which sounds\n// authentically like Tee while contradicting the claim being made. 0.10 sits\n// inside the documented 0 to 0.15 band: enough life to carry a hook, not\n// enough to overwrite the calibration. Do not raise it past 0.15.\n// See VOICE_DELIVERY_SPEC.md section 3 and VOICE_CALIBRATION_PROTOCOL.md.\n//\n// speed is set explicitly rather than left to the API default so it cannot\n// drift. 0.99 is a fraction under natural pace and holds the target of roughly\n// 140 words per minute. Faster reads as selling rather than teaching.\nconst VOICE_SETTINGS = {\n  stability: 0.50,\n  similarity_boost: 0.75,\n  style: 0.10,\n  use_speaker_boost: true,\n  speed: 0.99,\n};\n\n// The hold, in one place. Read by 'Voice Router: Clone Ready?' only. As of\n// 11 Sep 2026 it no longer feeds the narration record: that comes from which TTS\n// node actually executed. The flag says what was intended and the execution\n// record says what happened, and only the second one is provenance.\nconst VOICE_READY = true;\n\nconst VOICE = {\n  // The two CANDIDATE narrator strings. Neither is a claim about this run.\n  // 'Mark Ready + Save URL' chooses between them from the run's own execution\n  // record, via $('Speechify TTS (Fallback)').isExecuted, so the row records who\n  // actually spoke rather than who was expected to.\n  //\n  // History, because this field has been wrong twice in two different ways.\n  // Until 10 Sep 2026 it was the fixed literal 'elevenlabs', so every row\n  // rendered under the hold since 21 Aug would have credited the clone while\n  // Speechify spoke. That was fixed by deriving it from VOICE_READY, which left\n  // a residual this file recorded and then dismissed as unreachable while the\n  // hold stood: with the hold lifted and ElevenLabs erroring into Speechify it\n  // still read elevenlabs. On 11 Sep 2026 the ElevenLabs key was rotated on the\n  // VPS while the live lane runs on Cloud against its own credential, which\n  // turns that error into the likely case rather than the rare one. Tee ruled\n  // the residual closed the same day.\n  //\n  // There is deliberately no single 'provider' field any more. A PREDICTED\n  // narrator is the thing that was wrong both times, so a reader wanting one now\n  // gets undefined and fails loudly instead of a plausible lie.\n  providerEleven: 'elevenlabs, Tee clone',\n  providerSpeechify: 'speechify ' + SPEECHIFY_VOICE + ' STOPGAP VOICE, not for publish',\n  elevenModel: 'eleven_multilingual_v2',   // never Turbo - it trades prosody for latency we do not need\n  voiceReady: VOICE_READY,\n  voiceSettings: VOICE_SETTINGS,\n  speechifyVoiceId: SPEECHIFY_VOICE,\n  speechifyModel: SPEECHIFY_MODEL,\n  voiceNote: \"Tee's Professional Voice Clone, calibrated and live 9 Aug 2026. Speechify is the fallback on hold, quota, or outage (stock voice until Tee's consented Speechify clone passes the listen test).\",\n};\n\nreturn [{ json: nco ? {\n  show: 'NCO', channel: 'NCO Forge', tableId: 'nco_content', tableRef: 'DSH1tn4TZjzAEKxp',\n  brand: 'nco', kicker: 'NCO FORGE',\n  tagline: \"Leaders aren't born. They're forged.\",\n  positioning: 'Where doctrine ends and leadership begins.',\n  tagline2: 'Built by Discipline. Living on Purpose.',\n  requiredTags: ['NCO Forge'],\n  scriptLimit: 2, promoteLimit: 1,\n  staleClaimHours: 3,\n  ...VOICE, voiceId: NCO_VOICE,\n} : {\n  show: 'TQO', channel: 'The Quiet Operator', tableId: 'tqo_content', tableRef: '2GtmrFcTNqVMbddh',\n  brand: 'tqo', kicker: 'THE QUIET OPERATOR',\n  tagline: 'AI Strategy for the Next Economy.',\n  positioning: 'Leverage for the people the AI economy is quietly repricing.',\n  tagline2: 'Quiet Leverage. Real Results.',\n  requiredTags: [],\n  scriptLimit: 2, promoteLimit: 1,\n  staleClaimHours: 3,\n  ...VOICE, voiceId: TQO_VOICE,\n} }];\n"
+    "jsCode": "// Show Context: Render - v10, Speechify replaces Piper as the fallback lane (21 Aug 2026).\n//\n// voiceReady is FALSE (safety hold, ruled 21 Aug 2026): the ElevenLabs\n// Creator renewal lands 25 Aug and the render lane must not touch the\n// account before then. Renders fall back to Speechify. Flip to true during\n// the activation sitting on or after 25 Aug.\n//\n// History: this flag was set false on 9 Aug when the ElevenLabs account hit\n// zero credits mid-render and the lane died on 'This request exceeds your\n// quota'. A narration provider running out should change how the episode\n// sounds, not stop the pipeline, and two independent protections enforce that:\n//   1. This flag. Set voiceReady false to fall back to Speechify with no\n//      other change anywhere in the lane.\n//   2. The ElevenLabs node's error output is wired into Speechify, so even\n//      with voiceReady true a quota wall or an outage degrades to Speechify\n//      rather than failing the run.\n//\n// Fallback history: Piper (self-hosted, free) held this slot 9-21 Aug 2026.\n// Retired 21 Aug: its API key was hardcoded in plaintext, the vendor went\n// silent on rotation, and it could never carry Tee's voice. Speechify's\n// stream API replaced it (prepaid 500k characters, smoke-proven in exec 3023\n// of workflow be5rCRZ1ktLnmwI4: HTTP 200, audio/mpeg binary, 76.8 kB).\n//\n// If renders start failing at the TTS step, check in this order:\n//   1. the 'Eleven Labs' httpHeaderAuth credential is still attached to the\n//      ElevenLabs node, and 'Speechify API' to the Speechify node\n//   2. the voice ids below still exist in their accounts\n//   3. both plans have character credits left (Speechify returns 402 when\n//      the prepaid balance is gone; that is the last fallback, so the run\n//      fails loudly and the reaper reclaims the row)\n// Any of these produces the same symptom, which is a dead render branch.\n\nconst nco = $json.nco === true;\n\n// -- voices ------------------------------------------------------------------\n// TEE_CLONE below is Tee's Professional Voice Clone. His voice replaced\n// IS2y6AW9sjF8fFltBSqN\n// (\"Terrance - Cinematic Authentic Narrator\"), an ElevenLabs library voice\n// that is also cast as AUREN in the TSWS production stack. Until this change\n// all three brands narrated in the same rented voice.\n//\n// Both TQO and NCO Forge use the clone. That is deliberate: the face and the\n// voice are Tee's on both brands, and the presenter formerly labelled Elias\n// was always specified as his own likeness rather than a separate person.\n//\n// Standing rule from 08_PRODUCTION_STACK.md: voice and identity owned, never\n// rented. Do not point either brand back at a library voice.\n// TEE_CLONE moved 2026-10-31 on Tee's card from 'ypnKDQtIhp4N3yn4UnqO' (T Veal 2.1,\n// an ElevenLabs voice GENERATED from a written description, so not his voice)\n// to his professional clone 'LLhnFOCTr3y3wrH59DtJ'. A professional voice needs\n// the ElevenLabs Creator tier or above. The account read free tier that day,\n// Tee upgraded it, and one test line spoke in this voice at 19:30Z.\nconst TEE_CLONE = 'LLhnFOCTr3y3wrH59DtJ';\nconst TQO_VOICE = TEE_CLONE;\nconst NCO_VOICE = TEE_CLONE;\n\n// -- Speechify fallback ------------------------------------------------------\n// The fallback narrator when ElevenLabs is held (voiceReady false) or errors.\n// Endpoint: POST /v1/audio/stream, 20,000 character cap per request. The\n// long-form spec is 1,200 to 2,000 words (roughly 7k to 12k characters), so\n// a full script fits in one call. An over-cap script fails loudly with a 400\n// rather than truncating narration; that is deliberate.\n//\n// speechifyVoiceId is geffen_32, a stock Speechify voice, until Tee's\n// consented clone exists on the Speechify account. The clone sample rides\n// the same recording sitting already owed for the ElevenLabs re-record, and\n// nothing narrated by the clone ships before it passes the 3-line listen\n// test. When the clone lands, swap BOTH values below together: Speechify's\n// docs state cloned and personal voices run on the simba-english model, not\n// simba-3.2. Verify with one live call at clone creation before trusting it.\n//\n// Owned-voice rule: geffen_32 is a stopgap so a degraded lane still produces\n// reviewable drafts. It is not a shipping voice. Contractual note: the\n// Speechify AI Voice API supplemental terms require AI-generated disclosure\n// on every published synthetic output. That is already standing channel\n// practice and the ai_disclosure field carries it.\nconst SPEECHIFY_VOICE = 'geffen_32';\nconst SPEECHIFY_MODEL = 'simba-3.2';\n\n// -- voice settings ----------------------------------------------------------\n// Single source of truth. 'ElevenLabs TTS (Tee Clone)' reads voiceSettings\n// from here rather than carrying its own copy, so these cannot drift apart.\n//\n// These are the exact values Tee validated by ear in the ElevenLabs UI on\n// 9 Aug 2026 against three fixed test lines. Do not change them casually and\n// do not tune per episode: a voice whose settings move between episodes\n// drifts, and drift is what makes an audience stop believing there is a\n// person there. If they must change, re-run the three test lines first and\n// record the new values with a date.\n//\n// style is the one that matters. It amplifies the expressiveness of the source\n// recording, and the source recording is a human being who, on tape, speaks in\n// a far more certain register than he writes in. Pushed high, that certainty\n// gets applied to written copy that deliberately hedges, which sounds\n// authentically like Tee while contradicting the claim being made. 0.10 sits\n// inside the documented 0 to 0.15 band: enough life to carry a hook, not\n// enough to overwrite the calibration. Do not raise it past 0.15.\n// See VOICE_DELIVERY_SPEC.md section 3 and VOICE_CALIBRATION_PROTOCOL.md.\n//\n// speed is set explicitly rather than left to the API default so it cannot\n// drift. 0.99 is a fraction under natural pace and holds the target of roughly\n// 140 words per minute. Faster reads as selling rather than teaching.\nconst VOICE_SETTINGS = {\n  stability: 0.50,\n  similarity_boost: 0.75,\n  style: 0.10,\n  use_speaker_boost: true,\n  speed: 0.99,\n};\n\n// The hold, in one place. Read by 'Voice Router: Clone Ready?' only. As of\n// 11 Sep 2026 it no longer feeds the narration record: that comes from which TTS\n// node actually executed. The flag says what was intended and the execution\n// record says what happened, and only the second one is provenance.\nconst VOICE_READY = true;\n\nconst VOICE = {\n  // The two CANDIDATE narrator strings. Neither is a claim about this run.\n  // 'Mark Ready + Save URL' chooses between them from the run's own execution\n  // record, via $('Speechify TTS (Fallback)').isExecuted, so the row records who\n  // actually spoke rather than who was expected to.\n  //\n  // History, because this field has been wrong twice in two different ways.\n  // Until 10 Sep 2026 it was the fixed literal 'elevenlabs', so every row\n  // rendered under the hold since 21 Aug would have credited the clone while\n  // Speechify spoke. That was fixed by deriving it from VOICE_READY, which left\n  // a residual this file recorded and then dismissed as unreachable while the\n  // hold stood: with the hold lifted and ElevenLabs erroring into Speechify it\n  // still read elevenlabs. On 11 Sep 2026 the ElevenLabs key was rotated on the\n  // VPS while the live lane runs on Cloud against its own credential, which\n  // turns that error into the likely case rather than the rare one. Tee ruled\n  // the residual closed the same day.\n  //\n  // There is deliberately no single 'provider' field any more. A PREDICTED\n  // narrator is the thing that was wrong both times, so a reader wanting one now\n  // gets undefined and fails loudly instead of a plausible lie.\n  providerEleven: 'elevenlabs, Tee clone',\n  providerSpeechify: 'speechify ' + SPEECHIFY_VOICE + ' STOPGAP VOICE, not for publish',\n  elevenModel: 'eleven_multilingual_v2',   // never Turbo - it trades prosody for latency we do not need\n  voiceReady: VOICE_READY,\n  voiceSettings: VOICE_SETTINGS,\n  speechifyVoiceId: SPEECHIFY_VOICE,\n  speechifyModel: SPEECHIFY_MODEL,\n  voiceNote: \"Tee's Professional Voice Clone, calibrated and live 9 Aug 2026. Speechify is the fallback on hold, quota, or outage (stock voice until Tee's consented Speechify clone passes the listen test).\",\n};\n\nreturn [{ json: nco ? {\n  show: 'NCO', channel: 'NCO Forge', tableId: 'nco_content', tableRef: 'DSH1tn4TZjzAEKxp',\n  brand: 'nco', kicker: 'NCO FORGE',\n  tagline: \"Leaders aren't born. They're forged.\",\n  positioning: 'Where doctrine ends and leadership begins.',\n  tagline2: 'Built by Discipline. Living on Purpose.',\n  requiredTags: ['NCO Forge'],\n  scriptLimit: 2, promoteLimit: 1,\n  staleClaimHours: 3,\n  ...VOICE, voiceId: NCO_VOICE,\n} : {\n  show: 'TQO', channel: 'The Quiet Operator', tableId: 'tqo_content', tableRef: '2GtmrFcTNqVMbddh',\n  brand: 'tqo', kicker: 'THE QUIET OPERATOR',\n  tagline: 'AI Strategy for the Next Economy.',\n  positioning: 'Leverage for the people the AI economy is quietly repricing.',\n  tagline2: 'Quiet Leverage. Real Results.',\n  requiredTags: [],\n  scriptLimit: 2, promoteLimit: 1,\n  staleClaimHours: 3,\n  ...VOICE, voiceId: TQO_VOICE,\n} }];"
    },
    "position": [
     -896,
@@ -10002,9 +10080,193 @@
    ],
    "type": "n8n-nodes-base.code",
    "typeVersion": 2
+  },
+  {
+   "alwaysOutputData": true,
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "f7WLxmw0yh9SmKeL",
+     "name": "Postiz API"
+    }
+   },
+   "id": "cdbaf405-f205-4514-8b6c-6fc7addd258e",
+   "name": "Postiz: List Channels",
+   "notes": "Lists connected Postiz channels. Needs the Header Auth credential 'Postiz API' (header Authorization, value = Postiz API key).",
+   "onError": "continueRegularOutput",
+   "parameters": {
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "options": {
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "responseFormat": "json"
+      }
+     },
+     "timeout": 30000
+    },
+    "url": "https://postiz.editforge.online/api/public/v1/integrations"
+   },
+   "position": [
+    8960,
+    4192
+   ],
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2
+  },
+  {
+   "id": "9bb9fc36-496a-47ba-806d-fd765812d178",
+   "name": "Postiz: Build Draft",
+   "notes": "Builds one draft per connected X, Threads or LinkedIn channel. Never targets YouTube. Skips with a written reason instead of guessing.",
+   "parameters": {
+    "jsCode": "// Postiz: Build Draft. One DRAFT per connected X, Threads or LinkedIn channel.\n// YouTube is excluded on purpose: the video is already uploaded by the node above.\nconst C4 = 'Presented with a synthetic voice and synthetic likeness of Terrance Veal, used with his consent.';\nconst carry = $('Postiz: Carry Row').item.json;\nconst rowId = carry.rowId;\nconst skip = (why) => ({ json: { rowId, skip: true, status: 'skipped: ' + why + ' at ' + new Date().toISOString() } });\n\nif (carry.alreadyDrafted) return skip('drafts already exist for this row (' + carry.alreadyDrafted + ')');\nif ($json.error) return skip('could not list Postiz channels: ' + String($json.error.message || JSON.stringify($json.error)).slice(0, 200));\nif (!carry.uploadId) return skip('no YouTube upload id to link');\nif (!carry.title) return skip('no title on the row');\nif (!carry.description.split('\\n').slice(0, 3).some(l => l.trim() === C4)) return skip('the C4 disclosure line is not in the first three lines of the description');\n\nconst channels = Array.isArray($json.body) ? $json.body : [];\nconst wanted = ['x', 'threads', 'linkedin', 'linkedin-page'];\nconst targets = channels.filter(c => c && c.id && !c.disabled && wanted.includes(c.identifier));\nif (!targets.length) return skip('no connected X, Threads or LinkedIn channel in Postiz');\n\nconst yt = 'https://youtu.be/' + carry.uploadId;\nconst shortText = carry.title + '\\n\\n' + C4 + '\\n\\n' + yt;\n// LinkedIn caps a post at 3000 characters. The C4 line sits in the first three lines, so a cut at the tail keeps it.\nconst room = 3000 - yt.length - 2;\nlet desc = carry.description;\nif (desc.length > room) { desc = desc.slice(0, room - 1); desc = desc.slice(0, desc.lastIndexOf(' ') > 0 ? desc.lastIndexOf(' ') : desc.length) + '…'; }\nconst longText = desc + '\\n\\n' + yt;\n\nconst posts = targets.map(c => ({\n  integration: { id: c.id },\n  value: [{ content: c.identifier.startsWith('linkedin') ? longText : shortText, image: [] }],\n  settings: c.identifier === 'x' ? { who_can_reply_post: 'everyone', made_with_ai: true }\n          : c.identifier.startsWith('linkedin') ? { post_as_images_carousel: false } : {},\n}));\n\nreturn { json: { rowId, skip: false, targets: targets.map(t => t.identifier + ':' + (t.name || t.id)).join(', '),\n  body: { type: 'draft', shortLink: false, date: new Date(Date.now() + 86400000).toISOString(), tags: [], posts } } };",
+    "mode": "runOnceForEachItem"
+   },
+   "position": [
+    9184,
+    4192
+   ],
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2
+  },
+  {
+   "id": "50b17fa2-c306-4e71-be54-d72b0eaa6071",
+   "name": "Postiz: Has Draft?",
+   "parameters": {
+    "conditions": {
+     "combinator": "and",
+     "conditions": [
+      {
+       "id": "pz-skip",
+       "leftValue": "={{ $json.skip }}",
+       "operator": {
+        "operation": "false",
+        "singleValue": true,
+        "type": "boolean"
+       },
+       "rightValue": false
+      }
+     ],
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     }
+    },
+    "options": {}
+   },
+   "position": [
+    9408,
+    4192
+   ],
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2
+  },
+  {
+   "alwaysOutputData": true,
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "f7WLxmw0yh9SmKeL",
+     "name": "Postiz API"
+    }
+   },
+   "id": "b10e63aa-737a-4f96-86eb-dd12a6bda47c",
+   "name": "Postiz: Create Draft",
+   "notes": "type is always draft. Nothing publishes until Tee approves it in Postiz.",
+   "onError": "continueRegularOutput",
+   "parameters": {
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "jsonBody": "={{ JSON.stringify($json.body) }}",
+    "method": "POST",
+    "options": {
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "responseFormat": "json"
+      }
+     },
+     "timeout": 60000
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "url": "https://postiz.editforge.online/api/public/v1/posts"
+   },
+   "position": [
+    9632,
+    4112
+   ],
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2
+  },
+  {
+   "id": "7099675a-2606-4421-ae5a-2b57c51ee838",
+   "name": "Postiz: Read Result",
+   "notes": "Writes what actually came back, never a note composed before the call.",
+   "parameters": {
+    "jsCode": "// Postiz: Read Result. Compose the status from the real response, in both directions.\nconst built = $('Postiz: Build Draft').item.json;\nconst rowId = built.rowId;\nif ($json.skip) return { json: { rowId, postId: '', status: $json.status } };\nif ($json.error) return { json: { rowId, postId: '', status: 'failed: Postiz refused the draft: ' + String($json.error.message || JSON.stringify($json.error)).slice(0, 300) + ' at ' + new Date().toISOString() } };\nconst answer = Array.isArray($json.body) ? $json.body : [];\nconst ids = answer.map(x => x && x.postId).filter(Boolean);\nif (!ids.length) return { json: { rowId, postId: '', status: 'failed: Postiz answered HTTP ' + $json.statusCode + ' without a post id: ' + JSON.stringify($json.body).slice(0, 200) } };\nreturn { json: { rowId, postId: ids.join(','), status: 'draft created for ' + built.targets + ' at ' + new Date().toISOString()\n  + '. The YouTube video was uploaded unlisted: make it public before approving these drafts in Postiz.' } };",
+    "mode": "runOnceForEachItem"
+   },
+   "position": [
+    9856,
+    4192
+   ],
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2
+  },
+  {
+   "id": "9439f518-83b5-487f-9845-89885a4c9875",
+   "name": "Postiz: Record",
+   "parameters": {
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "postiz_post_id": "={{ $json.postId }}",
+      "postiz_status": "={{ $json.status }}"
+     }
+    },
+    "dataTableId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "={{ $('Show Context: Publish').first().json.tableRef }}"
+    },
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "id",
+       "keyValue": "={{ $json.rowId }}"
+      }
+     ]
+    },
+    "matchType": "allConditions",
+    "operation": "update",
+    "options": {}
+   },
+   "position": [
+    10080,
+    4192
+   ],
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1
+  },
+  {
+   "id": "b6949799-a37e-43ea-b864-c1c11daeadb7",
+   "name": "Postiz: Carry Row",
+   "notes": "Captures this row's values through paired items so the branch never depends on run order.",
+   "parameters": {
+    "jsCode": "// Postiz: Carry Row. Captures THIS row's values through paired items, so the branch\n// never depends on run order or on which loop iteration ran last.\nconst row = $('One Row at a Time').item.json;\nconst prep = $('Prep Publish').item.json;\nlet uploadId = '';\nfor (const n of ['Upload to YouTube', 'Upload to YouTube (NCO Forge)']) {\n  try { const j = $(n).item.json; if (j && (j.uploadId || j.id)) { uploadId = j.uploadId || j.id; break; } } catch (e) { /* that show's upload did not run */ }\n}\nreturn { json: {\n  rowId: row.id,\n  alreadyDrafted: String(row.postiz_post_id || '').trim(),\n  title: String(prep.title || '').trim(),\n  description: String(prep.description || '').trim(),\n  uploadId,\n} };",
+    "mode": "runOnceForEachItem"
+   },
+   "position": [
+    8736,
+    4192
+   ],
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2
   }
  ],
- "readAt": "2026-10-28T20:53:01Z",
+ "readAt": "2026-10-31T19:33:40Z",
  "role": "draft",
  "settings": {
   "availableInMCP": true,
@@ -10020,7 +10282,7 @@
   "timezone": "America/New_York"
  },
  "versionDescription": null,
- "versionId": "51a807f7-1213-459f-a8a6-50e5157b4fd4",
- "versionStamp": "2026-10-28T20:52:44.987Z",
+ "versionId": "5b2bd307-644f-46a2-b713-f09101efccb3",
+ "versionStamp": "2026-10-31T19:33:12.266Z",
  "workflowId": "qEkGOUsNyVaRAmm6"
 }

@@ -86,8 +86,8 @@ row and fails when either row drifts from the export of the same role.
 
 | version | id | nodes |
 |---|---|---|
-| active | `51a807f7` | 297 nodes |
-| draft | `51a807f7` | 297 nodes |
+| active | `5b2bd307` | 304 nodes |
+| draft | `5b2bd307` | 304 nodes |
 
 Regenerated 2026-10-28 at `e98e09b9`, after the export had trailed production
 since `9320520f` through several publishes. That version is the one Tee ruled
@@ -99,6 +99,14 @@ This Clear?`, `QC Doctor Gate` or `OS 28: Publish Gate`. The script doctor at
 Published again the same evening as `51a807f7` on a third card: `Jev: Thumb
 Verdict` now judges the headline's right edge at the layout's 680 px budget
 instead of the old 700, so its shadow note no longer fires 20 px late.
+
+Published again on 2026-10-31 as `5b2bd307` on two of Tee's cards. `Show
+Context: Render` now narrates both shows in his professional clone
+`LLhnFOCTr3y3wrH59DtJ` instead of `ypnKDQtIhp4N3yn4UnqO`, which ElevenLabs lists
+as a generated voice and not his. The same publish carried seven Postiz nodes
+that were already in the draft, hung off `Mark Published`, which create drafts
+only (`type: 'draft'`) and write `postiz_post_id` and `postiz_status` back to
+the row. Tee ruled that they ship with this publish.
 
 Every webhook path and webhook id in the exports reads `redacted`. The Gumroad
 sale ping carries no authentication, so its random path suffix is the only

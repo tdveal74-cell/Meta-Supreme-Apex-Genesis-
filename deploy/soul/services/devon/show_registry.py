@@ -62,9 +62,9 @@ SOURCE = {
         "and 'Series Addendum' in TQO FINAL V5"
     ),
     "workflow_id": "qEkGOUsNyVaRAmm6",
-    "version_id": "51a807f7-1213-459f-a8a6-50e5157b4fd4",
+    "version_id": "5b2bd307-644f-46a2-b713-f09101efccb3",
     "export": "n8n/tqo-v5/exports/qEkGOUsNyVaRAmm6_active.json",
-    "read": "2026-10-28",
+    "read": "2026-10-31",
 }
 
 #: The export this registry is traced against, resolved from the repository
@@ -89,11 +89,14 @@ SHOW_BRANCH_SPELLINGS: Tuple[str, ...] = (
     r"===\s*['\"]NCO['\"]",
 )
 
-#: Tee's Professional Voice Clone. The Render node's own comment records it as
-#: trained 9 Aug 2026 on a purpose recorded read; that comment is the only
-#: provenance in the tree. Both shows narrate in it: voice and identity owned,
-#: never rented.
-TEE_CLONE = "ypnKDQtIhp4N3yn4UnqO"
+#: Tee's Professional Voice Clone. Both shows narrate in it: voice and identity
+#: owned, never rented. Until 2026-10-31 this held ypnKDQtIhp4N3yn4UnqO, which
+#: ElevenLabs lists as T Veal 2.1 in category generated, a voice designed from a
+#: written description and so not his. Tee ruled on a card that day to move both
+#: shows to his professional clone, upgraded the ElevenLabs plan when the free
+#: tier refused it, and one test line spoke in it at 19:30Z before V5 was
+#: published as 5b2bd307 with the same id in Show Context: Render.
+TEE_CLONE = "LLhnFOCTr3y3wrH59DtJ"
 
 
 @dataclass(frozen=True)
