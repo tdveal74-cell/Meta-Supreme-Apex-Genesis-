@@ -39,6 +39,15 @@ const DISCLOSURE = 'Presented with a synthetic voice and synthetic likeness of T
 /** The three faces the job needs, by file name, and the full name each one must carry in its name table. */
 const FONT_FACES = { 'ChakraPetch--400.ttf': 'Chakra Petch Regular', 'ChakraPetch--600.ttf': 'Chakra Petch SemiBold', 'ChakraPetch--700.ttf': 'Chakra Petch Bold' };
 const DISCLOSURE_LINES = ['Presented with a synthetic voice and', 'synthetic likeness of Terrance Veal,', 'used with his consent.'];
+/**
+ * libx264 picks its thread count from the cores it can see, and its bitstream
+ * depends on that count, so the same job on a 2 core box and a 4 core sandbox
+ * wrote different bytes (measured 2026-11-01: shot 0 hashed 840abf06... on 2
+ * cores and 5418cb7a... on 4). Six is what a 4 core host picks on its own, so
+ * pinning it makes every host write the Proof 0 bytes. Every libx264 encode in
+ * this file carries it; acx_node.test.js fails if one does not.
+ */
+const X264_THREADS = 6;
 
 /** #RRGGBB -> &H00BBGGRR, the colour order ASS styles use. */
 function hexbgr(h) { return '&H00' + h.slice(5, 7) + h.slice(3, 5) + h.slice(1, 3); }
@@ -207,7 +216,7 @@ function gainLimitArgv(src, out, gainDb, limitLinear) {
 function shotArgv(img, frames, out, o) {
   const inc = o.push / Math.max(frames - 1, 1);
   const vf = `scale=${o.width * 2}:${o.height * 2}:flags=lanczos,zoompan=z='min(1+${inc}*on,${1 + o.push})':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${o.width}x${o.height}:fps=${o.fps},format=yuv420p`;
-  return ff('-loop', '1', '-i', img, '-vf', vf, '-frames:v', String(frames), '-r', String(o.fps), '-c:v', 'libx264', '-preset', 'medium', '-crf', '14', '-pix_fmt', 'yuv420p', out);
+  return ff('-loop', '1', '-i', img, '-vf', vf, '-frames:v', String(frames), '-r', String(o.fps), '-c:v', 'libx264', '-preset', 'medium', '-crf', '14', '-pix_fmt', 'yuv420p', '-threads', String(X264_THREADS), out);
 }
 function drawtext(font, text, color, size, y, enable) {
   return `drawtext=fontfile='${font}':text='${text}':fontcolor=${color}:fontsize=${size}:x=(w-text_w)/2:y=${y}:enable='${enable}'`;
@@ -226,11 +235,11 @@ function overlayArgv(silent, ass, out, o) {
     ...disc(`gte(t,${endStart})`),
   ];
   const vf = draw.join(',') + `,ass='${ass}':fontsdir='${o.fonts_dir}'`;
-  return ff('-i', silent, '-vf', vf, '-c:v', 'libx264', '-preset', 'medium', '-crf', '14', '-pix_fmt', 'yuv420p', out);
+  return ff('-i', silent, '-vf', vf, '-c:v', 'libx264', '-preset', 'medium', '-crf', '14', '-pix_fmt', 'yuv420p', '-threads', String(X264_THREADS), out);
 }
 function muxArgv(picture, mix, out, o) {
   return ff('-i', picture, '-i', mix, '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-profile:v', 'high', '-preset', 'slow', '-crf', String(o.crf),
-            '-pix_fmt', 'yuv420p', '-r', String(o.fps), '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-movflags', '+faststart', '-shortest', out);
+            '-pix_fmt', 'yuv420p', '-threads', String(X264_THREADS), '-r', String(o.fps), '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-movflags', '+faststart', '-shortest', out);
 }
 function thumbnailArgv(img, out, o) {
   const vf = drawtext(o.font_regular, o.brand, o.cyan, 52, 520, '1') + ',' + drawtext(o.font_bold, o.node_label, o.cyan, 150, 590, '1');
@@ -656,5 +665,5 @@ function jobs(H) {
 module.exports = {
   jobs, planBeats, planShots, timedSheetWords, captionChunks, assText, srtText, hexbgr, assTime, srtTime,
   decodeArgv, silenceArgv, concatArgv, measureArgv, gainLimitArgv, shotArgv, overlayArgv, muxArgv, thumbnailArgv, frameArgv, contactArgv, lintArgv, countNear,
-  fontFullName, FONT_FACES, DISCLOSURE, DISCLOSURE_LINES, SAFE_PATH, SAFE_TEXT, SAFE_ASS,
+  fontFullName, FONT_FACES, DISCLOSURE, DISCLOSURE_LINES, SAFE_PATH, SAFE_TEXT, SAFE_ASS, X264_THREADS,
 };

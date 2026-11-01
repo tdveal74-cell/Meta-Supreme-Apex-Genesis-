@@ -1205,10 +1205,57 @@ model's API page). The venv import, the write test and the Hugging Face probe
 were run with `runuser`, outside the unit's sandbox, so none of them proves the
 import or the model download inside the unit.
 
-Not measured: the same run on the box's own ffmpeg, Node and fonts, and the
-first `word_timings` run there with its model download. Run the Node 01 case
-above on the box before the first Node goes to Tee's watch from this path, and
-compare its build.json against the sandbox record.
+Run on the box on 2026-11-01, on Tee's ruling, with the 17 Node 01 Masters input
+files pulled from Drive by a one-off n8n workflow (archived after) and each hashed
+against the Proof 0 input table of 2026-10-28, 17 of 17. That table is kept with
+the Proof 0 report outside this repository; its 17 hashes are written out in
+`docs/devon/SYS_OPS_render-worker-node01-acceptance_v1_2026-11-01-0056.md`. The five 1080x1920 masters were made on
+the box with `scale=1082:1922:flags=lanczos,crop=1080:1920:1:1`, the recipe that
+reproduces the sandbox masters byte for byte; the Proof 0 report says 1082x1923,
+which is one row off and reproduces nothing.
+
+| check | result on the box |
+|---|---|
+| `word_timings`, job `4382181c-8e8a-42c2-93f6-e84cb2ec0388` | `done` in 21.89 s, 11 lines, 130 words; base.en downloaded into `/data/tsws/hf` inside the unit |
+| `acx_node_assemble`, job `31e0ef51-30e6-4081-9226-9958cc12dfec` | `done`, queued 00:08:34Z and built 00:16:15Z, about 7.7 min; the box reads `nproc` 2 |
+| runtime, picture against sound | 65.8 s, 0.24 frames, as the sandbox |
+| loudness, gain, limiter | -14.14 LUFS, -1.40 dBTP, +5.99 dB, 2.19 LU and 7.49 dB removed, as the sandbox |
+| shots | 305, 527, 264, 406, 472 frames, as the sandbox |
+| captions | 31 chunks with the sandbox's text; ten cues differ at an edge, below |
+| lint | 9 red frames and 0 red breaches, as the sandbox; two verdict windows end 20 ms later, and 84 dense cyan frames against 85, both following the word timings |
+| master sha256 | `c2562dd5...`, not Proof 0's `9e2802af...` |
+
+Two causes, each measured. First, the box's own `base.en` run placed 33 of 260
+word edges away from the sandbox run's, 32 by 20 ms and one, the end of
+"everything." in L06, by 40 ms. Ten of the 31 caption cues differ at an edge,
+nine by 20 ms and cue 14 by 20 ms at its start and 40 ms at its end, with the
+same text. The word files also differ by a trailing "Mhm." in the sandbox's L08
+and in the punctuation or case of six words. Why the two runs differ is not
+measured. Second,
+and enough on its own: a control run on the box with the sandbox's own word
+timings, job `a6e19156-c6e6-4063-9dba-4c25ed70e3d8`, matched the sandbox byte
+for byte in both narration WAVs, `captions.srt`, `captions.ass` and
+`caption_chunks.json`, and first differed at the five shot segments, which are
+the first libx264 output. libx264 picks its thread count from the cores it sees
+and its bitstream depends on that count: shot 0 encoded in a 4 core container
+reproduced the sandbox's `5418cb7a...`, the same command pinned to 2 cores with
+`taskset` reproduced the box's `840abf06...`, and adding `-threads 6` gave
+`5418cb7a...` on 2 cores and on 4. Only shot 0 was encoded that way, so this
+showed the thread count moves the bytes, not that it is the only cause; the full
+pinned run below shows that.
+
+Commit `020295c` fixes it. Every libx264 encode in `acx_node.js` (the shot
+segments, the overlay pass and the master mux) now carries `-threads 6`, the
+count a 4 core host picks on its own, and `acx_node.test.js` fails when any
+encode lacks it; with one pin removed the suite reads 35 passed and 1 failed.
+Run end to end on 2026-11-01 in a 4 core container, with the worker held to
+cores 0 and 1 by `taskset -c 0,1` and fed the sandbox masters, the sandbox
+lines and the sandbox word timings, the pinned code built
+`ACX_NODE01_master.mp4` at `9e2802af97d8a235...`, the Proof 0 master byte for
+byte. The five shot segments, the silent picture, the overlay picture, the
+narration mix and the three caption files matched the sandbox on the way. Until the pinned file is on
+the box the box still writes the old bytes, and the Node 01 master there,
+`c2562dd5...`, is a valid render for Tee's watch but not the Proof 0 file.
 
 ## Open
 
