@@ -101,7 +101,7 @@ folder; no separate consent record for the voice clone is filed.
 
 ## What the render worker does now
 
-In the repository from 2026-10-31, not yet on the box:
+On the live worker at srv1936193 since 2026-11-01T00:59Z (commit `122bc70`):
 
 - `presenter_composite` takes `split` (0.3 to 0.75, stacked only). At 0.5 the
   seam is at 960 of 1920 and the default caption follows it. Without it the
@@ -109,11 +109,34 @@ In the repository from 2026-10-31, not yet on the box:
 - `caption_srt` turns a `word_timings` file into seam captions of at most five
   words (`max_words` plus one, default four).
 
-Rendered in a cloud session with the builder's own ffmpeg arguments: at 0.5 the
-caption sits on the seam, and a black box style gives the reference's look.
+The NCO 30 layout test of 2026-11-01 rendered with those on the box and showed
+four defects, and Tee ruled the fixes on a card the same day. They are in the
+repository from that day and reach the box with the next upgrade:
 
-Not built yet, each a later piece of work: the numbered cards and the hook
-headline (the worker has no on-screen text), punch-in zooms, sound effects,
+- `caption_srt` takes `hard_max` (no cue passes `max_words`), `max_chars` (a
+  cue longer than it is cut; one line held to 23 characters at FontSize 12 in
+  that test) and `bridge` (gaps shorter than it are closed, so the caption box
+  stops dropping out for a frame between phrases). Ruled: "3 words max, no
+  blinks".
+- `presenter_composite` takes a `card` on an emphasis window, laid over the
+  full-frame face for that window, and `emphasis_caption_style`, a second
+  caption placement used inside the emphasis windows only, so the caption sits
+  on his collar and not across his mouth. Ruled: "Number over full-frame face".
+- `presenter_composite` takes `loudness` and `true_peak`, one loudnorm pass on
+  the finished mix. On the NCO 30 audio, I -14 and TP -1 measured -14.7 LUFS
+  and -1.0 dBTP before the AAC encode and -0.9 after it, so a Short asks for
+  TP -1.5. Ruled: "Add a loudness stage to the worker". It is opt-in: every
+  existing caller keeps the graph it had.
+
+The `word_timings` model matters for captions. On the NCO 30 audio `base.en`
+wrote three words that are not in it (checked by three Gemini models with a
+spliced positive control) and `small.en` got all 180 words of the window
+right, at about three times the time (23 s against 7.7 s for 80 s of audio).
+Caption runs pass `model: small.en`.
+
+Not built yet, each a later piece of work: the hook headline and a payload
+card generator in the worker (the test cards were drawn by a script outside
+it), punch-in zooms, sound effects,
 filling the top half with a 16:9 clip instead of letterboxing it, and the n8n
 lane that scripts the Short, voices it in his clone, renders the HeyGen avatar
 and calls the worker. No portrait Short has rendered end to end. Nothing
