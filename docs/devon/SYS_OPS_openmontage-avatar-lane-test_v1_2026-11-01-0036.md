@@ -1,6 +1,6 @@
 # OpenMontage avatar lane test: Tee's clone voice and photo look, through the connectors
 
-Status doc for the first test of OpenMontage as an avatar lane, ruled by Tee at 2026-10-31T23:41:12Z ("Test it") and shaped on a card at 23:49:23Z. Written 2026-11-01. Two renders were made and neither is for publishing. The skill's own record said speech output and any keyed provider were unverified; this test is the first time either ran.
+Status doc for the first test of OpenMontage as an avatar lane, ruled by Tee at 2026-10-31T23:41:12Z ("Test it") and shaped on a card at 23:49:23Z. Written 2026-11-01. Two renders were made and neither is for publishing. The skill's own record lists OpenMontage's speech and keyed provider tools as unverified, and they still are: in this test speech and the avatar ran through the claude.ai connectors, and OpenMontage only composed.
 
 ## The ruling
 
@@ -22,34 +22,34 @@ HeyGen's caption file wrote the show name as "the quiet operator". That one line
 
 ## Spend
 
-| account | before | after | cost | ceiling |
+| account | before | after | cost | what the card said |
 |---|---|---|---|---|
-| ElevenLabs | not read | not read | 268 credits, 4.9 cents, from the generation record | 600 credits |
-| HeyGen render 1 | 321 | 314 | 7 credits | 20 credits for the test |
-| HeyGen render 2 | 314 | 297 | 17 credits | about 16, on the second card |
+| ElevenLabs | not read | not read | 268 credits, 4.9 cents, from the generation record | ceiling 600 credits |
+| HeyGen render 1 | 321 | 314 | 7 credits | about 7; ceiling 20 credits for the whole test |
+| HeyGen render 2 | 314 | 297 | 17 credits | an estimate of about 16, on its own card |
 
-HeyGen's balances were read with `get_current_user` before and after each render. HeyGen's help centre lists Avatar IV photo looks at 16 credits a minute and Avatar V at 48, read on 2026-10-31. Render 1 stayed inside its ceiling. Render 2 cost one credit more than its card said and was approved on its own card, so the two renders together spent 24 HeyGen credits.
+HeyGen's balances were read with `get_current_user` at 23:41:54Z, 23:54:39Z and 00:12:16Z. HeyGen's help centre lists Avatar IV photo looks at 16 credits a minute and Avatar V at 48, read on 2026-10-31. The two renders together spent 24 HeyGen credits, which is over the 20 credit ceiling the first card set for the test. The extra came from render 2, which Tee approved on a second card that gave its cost as an estimate and set no new ceiling; it then cost one credit more than that estimate.
 
 ## What the verifiers found
 
 Two workflows sent three independent verifiers each, told to refute claims and given none of the reasoning behind them: `wf_cf23e692-38c` on render 1 and `wf_0d129e81-6c3` on render 2 against render 1.
 
-The voice is Tee's take and nothing else. The final audio of render 1 correlates with the ElevenLabs take at 0.99994. The two renders' audio tracks decode to identical samples. ElevenLabs' stored copy of the take has the same sha256 as the local file.
+The voice is Tee's take and nothing else. The final audio of render 1 correlates with the ElevenLabs take at 0.99994. The two renders' audio tracks decode to identical samples. ElevenLabs' stored copy of the take has the same sha256 as the local file, `71e449ccf4872f20ad2cb80ec4460641239e0665a8024c27f5ebe8f885a260e1`.
 
 The captions match the script word for word in both finals, read page by page from the frames, and they never cover the eyes, nose or mouth.
 
-Both renders carry a defect from HeyGen. A lighter rectangle with a hard vertical edge sits over the lower lip and chin, plainest at 4.4 s and 16.2 s. It is in HeyGen's raw clip before OpenMontage touches it. Avatar V did not remove it. One verifier measured the edge in render 2 at 90 to 95 percent of render 1's step, and another counted it at more sampled moments in render 2 than in render 1. A third saw it absent in render 2 at six sampled moments. The two measured readings outweigh the six samples, so this doc treats the patch as present in both.
+Both renders carry a defect from HeyGen. A lighter rectangle with a hard vertical edge sits over the lower lip and chin, plainest at 4.4 s and 16.2 s. It is in HeyGen's raw clip before OpenMontage touches it. On render 2 the three verifiers did not agree, and every one of them sampled moments; each tried an automatic seam score across the whole clip and none could separate the patch from the goatee. One measured a luminance step at 4.4 s and 16.2 s, the only measurement, and found render 2's edge at 90 to 95 percent of render 1's, and saw it by eye at more of 18 moments. A second counted it by eye at about 6 of 14 moments in render 2 against 2 or 3 in render 1. A third looked at six moments, 4.4 s and 16.2 s among them, and saw render 2's lip and chin continuous. The records verifier's own full size crops of render 2 at 4.4 s and 16.2 s show the lighter area and its vertical edge. On that, this doc treats the patch as present in both renders, with the caveat that nobody has measured it across the whole clip.
 
 In neither render do the lips close in the speech pauses. Render 2 closes them only in the last 0.6 s. It also moves the head more than render 1, and its face reads slightly paler.
 
 OpenMontage's compose step adds three faults of its own, the same in both renders:
-- It moves the audio about 43 ms later against the picture, because the encoder's start-up samples are not skipped: the vendor clip's audio edit list skips 943 samples and the final's skips none.
-- It converts 25 fps to 30 fps by repeating one frame in six, 97 duplicated frames in 586, a slight steady hitch.
-- It tags the picture as full range, `yuvj420p`, where the vendor clip is limited range. The colour measured the same, and how a phone player treats the tag was not checked.
+- It puts the audio 2048 samples, 42.7 ms, later against the picture than the vendor clip had it, measured by cross-correlation at 48 kHz in both renders. The vendor clip's audio edit list skips 943 samples and the final's skips none, but 943 samples is 19.6 ms, so that alone does not account for 2048. The cause is not settled.
+- It converts 25 fps to 30 fps by repeating one frame in six: all 488 vendor frames appear and 98 of the 586 are repeats, a slight steady hitch.
+- It tags the picture as full range, `yuvj420p`, where the vendor clip carries no range tag. Across the whole clip the final reads 0.8 to 1.6 levels brighter per channel on average, at most 1.7, too little to see. How a phone player treats the tag was not checked.
 
 ## What this says about the lane
 
-In this lane OpenMontage added word captions and three small faults, and the face quality is HeyGen's. On this photo look HeyGen's mouth region shows a seam that a viewer can see at full size, and two engines both show it. A video avatar, a digital twin trained on footage of Tee, is the likeliest fix, but nobody has tested that.
+In this lane OpenMontage added word captions and three small faults, and the face quality is HeyGen's. On this photo look HeyGen's mouth region shows a seam that a viewer can see at full size, and the sampled frames of both engines show it. A video avatar, a digital twin trained on footage of Tee, is the likeliest fix, but nobody has tested that.
 
 ## Not verified
 
@@ -65,7 +65,7 @@ VERDICT: PASS-WITH-CONDITIONS
 Deliverable: two 19.5 s test renders for Tee to watch, not to publish, and this record
 Scores: correctness 4, scope 5, verification 4, security 5, reversibility 5, failure handling 4, idempotency 5, traceability 5, observability 4, completeness 4, maintainability 4 | mean 4.5 | flagship bar: met as a test, missed for publish because of the chin seam
 Conditions: Tee watches both renders before anything else is decided about the lane.
-Receipts: six verifiers across two workflows; HeyGen balances read before and after; the ElevenLabs generation record; the hashes and ids above.
+Receipts: six verifiers across two workflows and a seventh over this record; HeyGen balances read before and after; the ElevenLabs generation record; the hash and ids above.
 Recommendation: watch both renders on the phone. The human owns SHIP.
 
 ## Open
@@ -81,7 +81,7 @@ TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_openmontage-avatar-lane-test_v1_2026-11-01-0036.md
 DATE: 2026-11-01
 DECISIONS: Tee ruled "Test it" at 2026-10-31T23:41:12Z. On a card at 23:49:23Z he chose the connectors path, the drafted script and the black polo look. On a card at 2026-11-01T00:09:28Z he chose a second render on Avatar V and this write-up.
-FINDINGS: The clone voice and the photo look both ran through the connectors and the voice in the finals is Tee's take (correlation 0.99994). Captions match the script word for word. HeyGen leaves a light seam over the lower lip and chin on this look with both Avatar IV and Avatar V, and the lips stay open in pauses. OpenMontage's compose adds about 43 ms of audio delay, a 25 to 30 fps repeat-frame hitch and a full range colour tag. Spend: 268 ElevenLabs credits and 24 HeyGen credits.
+FINDINGS: The clone voice and the photo look both ran through the connectors and the voice in the finals is Tee's take (correlation 0.99994). Captions match the script word for word. HeyGen leaves a light seam over the lower lip and chin on this look, seen in sampled frames of both the Avatar IV and the Avatar V render (one of three verifiers did not see it on Avatar V), and the lips stay open in pauses. OpenMontage's compose adds about 43 ms of audio delay of unsettled cause, a 25 to 30 fps repeat-frame hitch and a full range colour tag. Spend: 268 ElevenLabs credits and 24 HeyGen credits, 4 over the first card's 20 credit ceiling after the second card approved render 2.
 OPEN: Tee watches both renders; a digital twin or another look for the seam, on his ruling; the compose faults are upstream's.
 STATUS: Two test renders made, verified by six independent verifiers, delivered to Tee in chat. Not for publish.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
