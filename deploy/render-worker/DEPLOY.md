@@ -42,13 +42,37 @@ Proved on that box, by execution:
   has not been re-run since; that denominator is stale until someone runs it
   against the Drive original again. Exit code 0 on each, checked individually
   rather than inferred from a chain.
-* `/health` reports 24 job types, read on the bridge address on 2026-10-31 at
+* `/health` reports 25 job types, read on the bridge address on 2026-11-01 at
+  06:28:59Z, two seconds after the restart that loaded merge commit a85af9a
+  (next entry). It read 24 on 2026-10-31 at
   18:51:47Z, two seconds after the restart that loaded merge commit ac691aa.
   The 24 names equal the `JOBS` keys of that commit's `jobs.js` one for one,
   `tsws_repair`, `word_timings` and `acx_node_assemble` among them, as an
   independent verifier compared them. It read 18 before the 2026-09-15 build,
   19 after it, 21 after the 2026-10-16 restart and 22 from the 2026-10-17
   drift build (below) until this one.
+* Two changes on 2026-11-01. At 00:59:18Z a session Tee started copied the six
+  worker files of `122bc70`, the merge of PR #467 (face-on Shorts), into
+  `/opt/tsws-render-worker` and restarted the service at 00:59:38Z, 25 job
+  types. Six `.bak-20261101` files sit beside the live ones carrying the
+  18:41Z mtimes of the 2026-10-31 copy, so they are most likely its backups of
+  the `ac691aa` files (not hashed), and a directory named for the commit,
+  `/tmp/rw-122bc70`, is beside the others in `/tmp` (owner and time not read).
+  This session read that deploy on the box afterwards (file mtimes, hashes, the
+  journal); main records it to the minute in the job count paragraph below and
+  in the face-on Shorts canon (PR #473), and Tee confirmed on a
+  card that it was a session he started. Then this repository's merge
+  `a85af9a` changed one worker file against `122bc70`, `acx_node.js` (the
+  libx264 thread pin), and Tee ruled to copy that file alone. Staged in
+  `/tmp/rw-a85af9a` and run on the box's own Node 18.19.1: jobs.test.js 136,
+  acx_node.test.js 36, tsws-repair.test.js 22 and the negative control, each
+  exit 0; server.test.js read 46 and 1 failed on its first run, the access
+  line test losing a fixed 50 ms wait (fixed after, in server.test.js), and 47 of 47 on its
+  one re-run. `/status` read 0 running and 0 queued immediately before the copy
+  and again before the restart. The old file is
+  `acx_node.js.bak-20261101-pin`; the service restarted at 06:28:57Z, and all
+  six live files hash byte identical to `a85af9a`. Rolling back is copying that
+  backup over `acx_node.js` and restarting.
 * Read `/health` on the bridge address only. On N8N-HOST `127.0.0.1:8080` is
   the `docker-proxy` of the `temporal-ui` container (`temporalio/ui:2.34.0`),
   and its `/health` answers HTTP 200 with an HTML page. On 2026-10-31 a
@@ -422,7 +446,7 @@ a load signal in front of anyone who could reach the TLS terminator.
 
 `job_count` reads **25** from the face-on Shorts build (2026-10-31,
 `caption_srt` added), on the live box since its upgrade to `122bc70` at
-2026-11-01T00:59Z. The 2026-11-01 layout test fixes add no job, so 25 stays.
+2026-11-01T00:59:38Z. The 2026-11-01 layout test fixes add no job, so 25 stays.
 Earlier: 24 from the 2026-10-31 ACX build (`tsws_repair` and the two ACX Node
 jobs), 22 on the
 live box from 2026-10-17 to the ACX upgrade (`tsws_repair` without the ACX
@@ -1296,9 +1320,20 @@ cores 0 and 1 by `taskset -c 0,1` and fed the sandbox masters, the sandbox
 lines and the sandbox word timings, the pinned code built
 `ACX_NODE01_master.mp4` at `9e2802af97d8a235...`, the Proof 0 master byte for
 byte. The five shot segments, the silent picture, the overlay picture, the
-narration mix and the three caption files matched the sandbox on the way. Until the pinned file is on
-the box the box still writes the old bytes, and the Node 01 master there,
-`c2562dd5...`, is a valid render for Tee's watch but not the Proof 0 file.
+narration mix and the three caption files matched the sandbox on the way.
+
+On the box, after the pinned file went live at 06:28:57Z on 2026-11-01, job
+`f733b68c-fa3e-4b9f-bc54-686feb420a1c` ran the same Node on the box's masters
+and lines with the sandbox word timings and finished in 426.6 s. Its master
+hashed `9e2802af97d8a235d0029b22a027d4efacd755617c448359fd700bfeabc4d16e`, the
+Proof 0 master byte for byte, and the five shot segments, both pictures, the
+narration mix and the three caption files matched the sandbox again. The box's
+five masters hash the same as the sandbox's. So with the pin, the remaining
+difference between a box render and Proof 0 is the word timings alone. The
+rerun's output and the sandbox words file were removed afterwards on Tee's
+ruling and read back gone. The acceptance render from the box's own word
+timings, `c2562dd5...`, stays in `acx/node01/out` for Tee's watch; it is a
+valid render, not the Proof 0 file.
 
 ## Open
 

@@ -84,7 +84,7 @@ t('health needs no token and lists the job types', async () => {
   // when tsws_repair was deployed there without reaching this repository; 24
   // from 2026-10-31, when that job was brought home beside the two ACX Node
   // jobs of 2026-10-28; 25 from the same day's face-on Shorts build, when
-  // caption_srt landed (the box reads 24 until it is upgraded to it).
+  // caption_srt landed (the box has read 25 since 2026-11-01 00:59:38Z).
   assert.strictEqual(r.body.job_count, 25, 'job_count was ' + r.body.job_count);
   assert.ok(r.body.jobs.includes('assemble_cut'));
   assert.ok(r.body.jobs.includes('duck_mix'));
@@ -209,14 +209,18 @@ t('the access line for a file read carries type=file', async () => {
   const real = console.log;
   process.env.LOG_REQUESTS = '1';
   console.log = (...a) => lines.push(a.join(' '));
+  const hit = () => lines.some(l => l.includes('path=/files/out/master.mp4') && l.includes('type=file'));
   try {
     await req('GET', '/files/out/master.mp4');
     // The access line is written on the response's finish event, which lands
-    // a tick after the client sees end. Wait for it rather than race it.
-    await new Promise(r => setTimeout(r, 50));
+    // after the client sees end: with the wait cut to one setImmediate tick
+    // this read missed it 6 runs of 6, and with no wait it misses it in nearly
+    // every run. A fixed 50 ms wait passed here and failed once on the 2 core
+    // box on 2026-11-01, so wait for the line itself, up to 2 s.
+    const deadline = Date.now() + 2000;
+    while (!hit() && Date.now() < deadline) await new Promise(r => setTimeout(r, 10));
   } finally { console.log = real; }
-  assert.ok(lines.some(l => l.includes('path=/files/out/master.mp4') && l.includes('type=file')),
-    'no access line for the file read: ' + JSON.stringify(lines));
+  assert.ok(hit(), 'no access line for the file read: ' + JSON.stringify(lines));
 });
 
 section('\n-- THE SMOKE TEST FROM THE STICKY NOTE --');

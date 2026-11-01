@@ -112,7 +112,9 @@ Read on the box at 01:33Z: the six worker files in `/opt/tsws-render-worker`
 match `122bc70`, the merge of PR #467 (face-on Shorts), byte for byte. They were
 copied at 00:59:18Z, the service restarted at 00:59:38Z, and `/health` reads 25
 job types with `caption_srt` among them. A `word_timings` job, `03365f03`, ran
-at 01:05:44Z. This session did none of that. No open pull request records the
+at 01:05:44Z. This session did none of that; when this was written nothing
+identified who had, and Tee confirmed later the same day, on a card, that it was
+a session he started. No open pull request records the
 upgrade, and `DEPLOY.md` on main still says the box reads 24.
 
 Before reading the box, this session put a card to Tee that said #467 was not on
@@ -121,7 +123,7 @@ from `DEPLOY.md` and was false. Tee ruled to copy only `acx_node.js`. With the
 box already on `122bc70`, which is also current main for all six files, that
 copy leaves the box on one commit, the merge of this PR.
 
-Because another session is working on this box, the restart waits for `/status`
+Because that session was using the box, the restart waits for `/status`
 to read nothing running and nothing queued, immediately before it, as the
 upgrade steps require. A restart still drops the job table, so a finished job
 whose result has not been read yet loses its record; its output files stay.
@@ -133,7 +135,7 @@ TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_render-worker-node01-acceptance_v1_2026-11-01-0056.md
 DATE: 2026-11-01
 DECISIONS: Tee ruled on a card to run the Node 01 acceptance render on the n8n box that night, and on a second card to move the inputs with a one-off n8n Drive pull, which was archived after use, rather than a temporary public Drive link. On later cards he ruled to pin the encoder thread count, prove it on the full master, merge it and then redeploy; to remove the control run's output, the sandbox words file and the /tmp job files while keeping the acceptance render (the words file is held until the pinned rerun on the box, which needs it, and removed after); and to redeploy only acx_node.js rather than a whole build.
-FINDINGS: The ACX Node path runs end to end on the box. word_timings downloaded base.en inside the unit and the assembly matched the sandbox record on runtime, sync, loudness, limiter, shot frame counts, caption count and the red-frame lint. The master is not byte identical to Proof 0, for two measured causes: the box's speech model run placed 33 of 260 word edges 20 or 40 ms from the sandbox run's, and libx264's bitstream follows its automatic thread count, which follows the host's cores. With -threads 6 pinned in acx_node.js, a 2 core run on the sandbox inputs and word timings rebuilt the Proof 0 master byte for byte. The Proof 0 report's master recipe of 1082x1923 is one row off; 1082x1922 with a crop at 1,1 reproduces the masters. The box was upgraded to 122bc70 (25 jobs) at 00:59Z by another session, unrecorded, and this session's card to Tee wrongly said it was not.
+FINDINGS: The ACX Node path runs end to end on the box. word_timings downloaded base.en inside the unit and the assembly matched the sandbox record on runtime, sync, loudness, limiter, shot frame counts, caption count and the red-frame lint. The master is not byte identical to Proof 0, for two measured causes: the box's speech model run placed 33 of 260 word edges 20 or 40 ms from the sandbox run's, and libx264's bitstream follows its automatic thread count, which follows the host's cores. With -threads 6 pinned in acx_node.js, a 2 core run on the sandbox inputs and word timings rebuilt the Proof 0 master byte for byte. The Proof 0 report's master recipe of 1082x1923 is one row off; 1082x1922 with a crop at 1,1 reproduces the masters. The box was upgraded to 122bc70 (25 jobs) at 00:59Z by a session Tee started, unrecorded, and this session's card to Tee wrongly said it was not.
 OPEN: The redeploy of the pinned acx_node.js to the box after this merges, and a rerun there on the sandbox word timings expecting 9e2802af, after which the sandbox words file comes off the box. Why the two base.en runs differ. Tee's watch of the Node 01 master. A record of the 00:59Z upgrade to 122bc70 by whichever session made it.
 STATUS: Acceptance render done on the box and measured against the sandbox. Byte identity not reached on the box; the cause is found, and the pinned code reproduces the Proof 0 master on 2 cores in a container. The redeploy follows the merge.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
