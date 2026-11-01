@@ -3,8 +3,10 @@ name: Automation registry check
 # WHO OWNS EACH AUTOMATION, AND WHEN DID A PERSON LAST READ IT.
 #
 # registry/automations.json holds one row per active workflow on the VPS n8n
-# instance: owner, lane and the date it was last reviewed end to end. This job
-# reads the instance's workflow list and diffs it against the file once a day.
+# instance, and one per GitHub Actions workflow file and wired hook in this
+# repository: owner, lane and the date it was last reviewed end to end. This
+# job reads the instance's workflow list and git, and diffs both against the
+# file once a day. Repository rows were added 2026-11-01.
 #
 # Ruled by Tee 2026-10-31 on a card, "Build the registry", after Nate Herk's
 # agent management framework was read against the estate and the one gap found
@@ -46,7 +48,11 @@ jobs:
     name: Does every active workflow have an owner and a current review
     runs-on: ubuntu-latest
     steps:
+      # Full history: a repository row's review is measured against the last
+      # commit that touched its file, and the script refuses a shallow clone.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
