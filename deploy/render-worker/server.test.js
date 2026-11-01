@@ -209,14 +209,17 @@ t('the access line for a file read carries type=file', async () => {
   const real = console.log;
   process.env.LOG_REQUESTS = '1';
   console.log = (...a) => lines.push(a.join(' '));
+  const hit = () => lines.some(l => l.includes('path=/files/out/master.mp4') && l.includes('type=file'));
   try {
     await req('GET', '/files/out/master.mp4');
     // The access line is written on the response's finish event, which lands
-    // a tick after the client sees end. Wait for it rather than race it.
-    await new Promise(r => setTimeout(r, 50));
+    // after the client sees end: with no wait at all this read misses it every
+    // time. A fixed 50 ms wait passed here and failed once on the 2 core box on
+    // 2026-11-01, so wait for the line itself, up to 2 s.
+    const deadline = Date.now() + 2000;
+    while (!hit() && Date.now() < deadline) await new Promise(r => setTimeout(r, 10));
   } finally { console.log = real; }
-  assert.ok(lines.some(l => l.includes('path=/files/out/master.mp4') && l.includes('type=file')),
-    'no access line for the file read: ' + JSON.stringify(lines));
+  assert.ok(hit(), 'no access line for the file read: ' + JSON.stringify(lines));
 });
 
 section('\n-- THE SMOKE TEST FROM THE STICKY NOTE --');
