@@ -4,7 +4,7 @@ Status doc for the first test of OpenMontage as an avatar lane, ruled by Tee at 
 
 ## The ruling
 
-OpenMontage's own `heygen_avatar` and `elevenlabs_tts` tools read `HEYGEN_API_KEY` and an ElevenLabs key from the environment, and this cloud environment holds neither. On the 23:49:23Z card Tee chose to run the test through the claude.ai connectors he already has: the ElevenLabs connector for speech, HeyGen's for the lip sync, and OpenMontage for the compose step only. The card set ceilings of 600 ElevenLabs credits and 20 HeyGen credits. He also chose the script as drafted and the look "TQO landscape 4 black polo". After the first render, a second card at 2026-11-01T00:09:28Z chose a second render on the same look with HeyGen's Avatar V engine, with its cost written into the option: HeyGen may borrow a public studio look as the motion reference, because his photo group holds no digital twin. The same card chose this write-up.
+OpenMontage's own `heygen_avatar` and `elevenlabs_tts` tools read `HEYGEN_API_KEY` and an ElevenLabs key from the environment, and this cloud environment held neither when the test ran. On the 23:49:23Z card Tee chose to run the test through the claude.ai connectors he already has: the ElevenLabs connector for speech, HeyGen's for the lip sync, and OpenMontage for the compose step only. The card set ceilings of 600 ElevenLabs credits and 20 HeyGen credits. He also chose the script as drafted and the look "TQO landscape 4 black polo". After the first render, a second card at 2026-11-01T00:09:28Z chose a second render on the same look with HeyGen's Avatar V engine, with its cost written into the option: HeyGen may borrow a public studio look as the motion reference, because his photo group holds no digital twin. The same card chose this write-up.
 
 So the test proves OpenMontage's compose step on Tee's own voice and face. It does not prove OpenMontage's provider tools, which never ran.
 
@@ -55,7 +55,7 @@ In this lane OpenMontage added word captions and three small faults, and the fac
 
 - Tee watching either render on his phone, which is the only judgement of the seam that counts.
 - Which look, if any, HeyGen used as the motion reference for render 2. No HeyGen read names it.
-- OpenMontage's own `heygen_avatar` and `elevenlabs_tts` tools, which need keys this environment does not hold.
+- OpenMontage's own `heygen_avatar` and `elevenlabs_tts` tools, which needed keys this environment did not hold when this was written. A HeyGen key reached it later the same day, as recorded under the twin test below; `elevenlabs_tts` still has none.
 - Whether the full range tag shifts contrast on a phone player.
 - ElevenLabs' balance before and after. The cost comes from the generation record, not from a balance read.
 
@@ -68,10 +68,42 @@ Conditions: Tee watches both renders before anything else is decided about the l
 Receipts: six verifiers on the renders across two workflows, and two over this record, `wf_6c99097b-c4b` on the first draft and `wf_1b245d4c-0a2` on its corrections; HeyGen balances read before and after; the ElevenLabs generation record; the hash and ids above.
 Recommendation: watch both renders on the phone. The human owns SHIP.
 
+## Tee's watch, 2026-11-01
+
+Both finals were sent to Tee in chat on 2026-11-01. He wrote "I watched" at 17:09:01Z and answered one card at 17:11:28Z. That watch was the first item under Not verified above and the one condition on the verdict, so the condition is met.
+
+| question on the card | answer | what the card said follows |
+|---|---|---|
+| how the chin and lower-lip patch looked on his phone, at 4.4 s and 16.2 s | "Plain on both" | the black polo photo look is out for publish on either engine |
+| which engine moved more like him | "Avatar V" | "three times what Avatar IV does: 17 credits for this 19.5 s clip, against 7" |
+| the next avatar test | "Digital twin (Recommended)" | he films himself talking and approves HeyGen's consent link; the footage spec and the credit cost are checked against HeyGen's pages and put on a card before anything is spent |
+
+His answer settles the question the verifiers split on: the patch is plain on both engines at phone size, whatever the sampled counts said about Avatar V. The black polo photo look is not used in anything published. The two options he did not pick on the first question were "Plain on Avatar IV only" and "Faint, would pass".
+
+The engine option on the card put two ratios in one sentence. Three times is HeyGen's listed rate for photo looks, 48 credits a minute for Avatar V against 16 for Avatar IV. What this clip cost was 17 credits against 7, which is about 2.4 times.
+
+The HeyGen account was read at 17:09:25Z: 297 premium credits on the Pro plan, resetting on 2026-11-26, and every private look on it is a photo look, so there is no digital twin to test yet. A twin trained on footage of Tee is the likeliest fix for both photo faults, the seam and the lips held open in pauses. That is untested.
+
+## The twin test, ruled the same day
+
+Two more cards followed. At 17:15:55Z Tee chose to create the twin himself in HeyGen's own app flow, where HeyGen shows the creation cost before he submits, and approved one Avatar V render of the same 19.5 s line and audio with a ceiling of 20 credits, against his balance of 297 plan credits. He then asked whether the tests had been made with OpenMontage. Apart from the caption step, they had not. At 17:17:18Z he chose to have OpenMontage run the twin render end to end, over the recommended route through the connector on plan credits. OpenMontage's route bills HeyGen API credits instead. Its card gave the listed cost, about $2.34, and no ceiling.
+
+The card answered at 17:17:18Z said Tee would put the key into the `.env` himself. Thirteen seconds after that answer, at 17:17:30Z, the environment documentation pointed to a network secret instead, which keeps the key out of the container altogether, and the steps sent to him used that. He added it that way and wrote "Secret added" at 17:30:22Z.
+
+A further card, asked at 17:33:16Z, offered to carry the 20 credit ceiling over; at 17:34:04Z Tee chose a ceiling of $3 for that render instead: one render, no retry without a new card, the clip length checked against the listed rate before submitting, and the API balance read afterwards. The API wallet was then read at 17:55:53Z through `GET /v3/users/me`: billing type wallet, $2.20 remaining, and auto-reload on with a threshold of $5 and an amount of $10. That is less than the $2.34 the render lists at, and a reload would charge his card outside the ceiling. When a reload fires is not known: the API gives only the threshold and the amount, the balance stayed at $2.20 with no reload at every read from 17:47Z to 18:04Z, and the help-centre pages say only that credits are added when a balance runs low, of Business plan credits rather than this wallet. On a card answered at 17:57:17Z Tee chose to turn auto-reload off and add $5 by hand, and the wallet is read again before the render is submitted.
+
+The footage spec, the slot rules and the prices were read from HeyGen's help centre and API documentation by two researchers, one per source, and every claim was re-read at its source by an independent verifier, one verifier per researcher: 72 claims, 40 and 32, with none refuted. The parts that bear on the next run:
+
+- OpenMontage's `heygen_avatar` tool, at `195eab2`, has never run here. It reads `HEYGEN_API_KEY` and sends it as `x-api-key` to `https://api.heygen.com/v3` (lines 170 to 173 of `tools/avatar/heygen_avatar.py`), refuses Avatar V on any look that is not a digital twin (line 205), and takes the audio as `audio_url` or `audio_asset_id`.
+- It bills HeyGen API credits, a balance separate from the 297 plan credits. HeyGen's API pricing page lists Avatar V on a digital twin at $7.20 a minute, charged by the second, about $2.34 for this clip. Read again from the same page at 17:31:59Z, outside the 72: any amount of API credits can be bought, pay-as-you-go credits expire after 12 months, and keys can be scoped, with "A key used outside its scope gets a 403 insufficient_api_key_scope error". `heygen_avatar` POSTs to `/v3/videos`, so Tee's key needs write access to videos, which HeyGen's key permissions page calls `videos:write`, and a read-only key will get that 403. Neither page read says whether a refused request is billed. His key's scope has not been read.
+- Each twin slot can be remade only once a month. Pro carries 1 or 5 slots depending on region and account date; which applies to this account was not read.
+- At 17:18:23Z `api.heygen.com` answered 401 to a request with no key from this container, so the network allows the host and nothing injects a key for it yet.
+- Tee then added his HeyGen key as a network secret on the TQO environment, following steps that gave the host `api.heygen.com`, the path prefix `/v3/` and the header `X-Api-Key`. The saved settings were not read back; the requests below fit them. The same session picked the key up without a restart, though the environment documentation says a new session does. At 17:30:31Z `GET /v3/avatars/looks` answered 200 with a placeholder key. In a second command that finished at 17:30:40Z it answered 200 again with no key header at all, so the proxy supplies the key, and `GET /v2/user/remaining_quota` answered 401, which fits the key not being sent outside `/v3/`; that was the only path outside it tried. The first page of looks held 20 photo looks and no digital twin.
+
 ## Open
 
-- Tee to watch both renders. They are in the session's scratchpad, which goes when the container is reclaimed. The HeyGen copies stay in his HeyGen library under the two video ids above, titled "not for publish".
-- The seam: test a digital twin, or another look, on Tee's ruling.
+- The twin test through OpenMontage, on Tee's rulings of 17:15:55Z, 17:17:18Z, 17:34:04Z and 17:57:17Z, with a $3 ceiling. Tee films and submits the twin in HeyGen's app, turns off the API wallet's auto-reload and adds $5, and checks that his key has `videos:write`; the key is already in place as a network secret, which this session uses. Once the twin is ready, a session in the TQO environment, with OpenMontage installed by the skill's installer and `HEYGEN_API_KEY` set to a placeholder the proxy replaces, runs `heygen_avatar` on the twin's look with engine `avatar_v` and `audio_asset_id` `fe7cddfa91064f5a8d0bc468b11028c9`, then `remotion_caption_burn`, and sends Tee both files. Whether an asset uploaded through the connector can be used with an API key on the same account is unverified. If it cannot, `audio_url` is the fallback: HeyGen serves its copy of the take at `https://resource2.heygen.ai/audio/fe7cddfa91064f5a8d0bc468b11028c9/original.wav`, which answered 200 with 1720398 bytes on 2026-11-01 and has the same sha256 as the WAV that was uploaded, so no new upload or ElevenLabs credit is needed.
+- The two test renders stay in his HeyGen library under the video ids above, titled "not for publish". The scratchpad copies go when the container is reclaimed.
 - The three compose faults belong to upstream OpenMontage, AGPL code this repository does not edit.
 
 ## DEVON RECEIPT
@@ -80,8 +112,8 @@ AREA: Systems, TQO
 TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_openmontage-avatar-lane-test_v1_2026-11-01-0036.md
 DATE: 2026-11-01
-DECISIONS: Tee ruled "Test it" at 2026-10-31T23:41:12Z. On a card at 23:49:23Z he chose the connectors path, the drafted script and the black polo look. On a card at 2026-11-01T00:09:28Z he chose a second render on Avatar V and this write-up.
+DECISIONS: Tee ruled "Test it" at 2026-10-31T23:41:12Z. On a card at 23:49:23Z he chose the connectors path, the drafted script and the black polo look. On a card at 2026-11-01T00:09:28Z he chose a second render on Avatar V and this write-up. After watching both renders on his phone, on a card at 17:11:28Z he judged the seam plain on both engines, said Avatar V moved more like him, and chose a digital twin as the next test. At 17:15:55Z he chose to create the twin in HeyGen's own app, and at 17:17:18Z to have OpenMontage's own HeyGen tool run its first render end to end, over the recommended connector route, and at 17:34:04Z set a $3 ceiling on that render. At 17:57:17Z, with the API wallet at $2.20 and auto-reload on, he chose to turn auto-reload off and add $5 by hand.
 FINDINGS: The clone voice and the photo look both ran through the connectors and the voice in the finals is Tee's take (correlation 0.99994). Captions match the script word for word. HeyGen leaves a light seam over the lower lip and chin on this look, seen in sampled frames of both the Avatar IV and the Avatar V render (one of three verifiers did not see it on Avatar V), and the lips stay open in pauses. OpenMontage's compose adds about 43 ms of audio delay of unsettled cause, a 25 to 30 fps repeat-frame hitch and a full range colour tag. Spend: 268 ElevenLabs credits and 24 HeyGen credits, 4 over the first card's 20 credit ceiling after the second card approved render 2.
-OPEN: Tee watches both renders; a digital twin or another look for the seam, on his ruling; the compose faults are upstream's.
-STATUS: Two test renders made, checked by six independent verifiers, with this record checked by two more; delivered to Tee in chat. Not for publish.
+OPEN: the digital twin test through OpenMontage, which waits on Tee filming the twin, turning off auto-reload and adding $5 to the API wallet, the key being already in place as a network secret, its scope not yet read; the compose faults are upstream's.
+STATUS: Two test renders made, checked by six independent verifiers, with this record checked by two more; delivered to Tee in chat. He watched both on his phone on 2026-11-01 and judged the seam plain on both engines. Not for publish.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
