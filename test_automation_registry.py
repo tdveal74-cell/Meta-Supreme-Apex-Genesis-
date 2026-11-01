@@ -329,3 +329,60 @@ def test_check_cannot_check_on_a_shallow_clone(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(reg, "git_changed", shallow)
     assert reg.main(["--check", "--registry", str(path)]) == reg.CANNOT_CHECK
     assert "shallow" in capsys.readouterr().out
+
+
+# Found by the critic of 1e08f1da.
+
+
+def _tree(tmp_path, commands):
+    (tmp_path / ".claude").mkdir()
+    hooks = [{"type": "command", "command": c} for c in commands]
+    (tmp_path / ".claude" / "settings.json").write_text(
+        json.dumps({"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": hooks}]}})
+    )
+    return str(tmp_path)
+
+
+def test_a_hook_in_any_spelling_is_discovered(tmp_path):
+    root = _tree(tmp_path, [
+        '"${CLAUDE_PROJECT_DIR}/.claude/hooks/a.sh"',
+        ".claude/hooks/b.sh",
+        "bash /abs/c.sh",
+    ])
+    assert reg.repo_automations(root) == [
+        ".claude/hooks/a.sh", ".claude/settings.json#PreToolUse/2", ".claude/settings.json#PreToolUse/3",
+    ]
+
+
+def test_a_malformed_settings_file_cannot_check(tmp_path, monkeypatch, capsys):
+    (tmp_path / ".claude").mkdir()
+    (tmp_path / ".claude" / "settings.json").write_text("{bad")
+    monkeypatch.setattr(reg, "REPO", str(tmp_path))
+    real = reg.repo_automations
+    monkeypatch.setattr(reg, "repo_automations", lambda: real(str(tmp_path)))
+    assert reg.main(["--validate"]) == reg.CANNOT_CHECK
+    assert "JSONDecodeError" in capsys.readouterr().out
+
+
+def test_git_dates_are_utc_and_hooks_follow_their_wiring(tmp_path):
+    import subprocess
+
+    env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t",
+           "GIT_COMMITTER_EMAIL": "t@x"}
+
+    def commit(when, *files):
+        for name in files:
+            target = tmp_path / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(when + "\n")
+            subprocess.run(["git", "add", name], cwd=tmp_path, env=env, check=True)
+        e = {**env, "GIT_COMMITTER_DATE": when, "GIT_AUTHOR_DATE": when}
+        subprocess.run(["git", "commit", "-q", "-m", when], cwd=tmp_path, env=e, check=True)
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    # 23:30 at UTC-05:00 is 04:30 UTC the next day.
+    commit("2026-10-02T23:30:00-05:00", ".claude/hooks/h.py")
+    commit("2026-10-09T12:00:00+00:00", ".claude/settings.json")
+    assert reg.git_changed(str(tmp_path), ".claude/hooks/h.py") == date(2026, 10, 3)
+    dates = reg.changed_dates(str(tmp_path), [".claude/hooks/h.py", ".claude/settings.json#Stop/1"])
+    assert dates == {".claude/hooks/h.py": date(2026, 10, 9), ".claude/settings.json#Stop/1": date(2026, 10, 9)}

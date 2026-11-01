@@ -82,8 +82,12 @@ MAX_PAGES = 20
 ROW_KEYS = ("id", "name", "lane", "owner", "reviewed")
 #: The same for an automation that runs from this repository, keyed by its path.
 REPO_ROW_KEYS = ("path", "lane", "owner", "reviewed")
-#: A hook script named in a `.claude/settings.json` command.
-HOOK_PATH_RE = re.compile(r"\$CLAUDE_PROJECT_DIR/([A-Za-z0-9_./-]+)")
+#: A hook script named in a `.claude/settings.json` command, in either spelling
+#: of the variable. A command that names no script this way is still claimed,
+#: under `SETTINGS_PATH#<event>/<n>`, so a hook written another way (a relative
+#: path, an absolute one, an inline command) cannot go undiscovered.
+HOOK_PATH_RE = re.compile(r"\$(?:CLAUDE_PROJECT_DIR|\{CLAUDE_PROJECT_DIR\})/([A-Za-z0-9_./-]+)")
+SETTINGS_PATH = ".claude/settings.json"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 OK = 0
@@ -241,11 +245,17 @@ def repo_automations(root: str = REPO) -> List[str]:
     if os.path.isfile(settings):
         with open(settings, encoding="utf-8") as handle:
             hooks = (json.load(handle) or {}).get("hooks") or {}
-        for groups in hooks.values():
+        for event, groups in sorted(hooks.items()):
+            count = 0
             for group in groups or []:
                 for hook in (group or {}).get("hooks") or []:
-                    for match in HOOK_PATH_RE.finditer(str((hook or {}).get("command") or "")):
-                        found.add(match.group(1))
+                    count += 1
+                    command = str((hook or {}).get("command") or "")
+                    paths = [m.group(1) for m in HOOK_PATH_RE.finditer(command)]
+                    if paths:
+                        found.update(paths)
+                    else:
+                        found.add(f"{SETTINGS_PATH}#{event}/{count}")
     return sorted(found)
 
 
@@ -271,11 +281,26 @@ def git_changed(root: str, path: str) -> Optional[date]:
     ).stdout.strip()
     if shallow == "true":
         raise ValueError("the checkout is shallow, so file dates would all read as the newest commit")
-    out = subprocess.run(
-        ["git", "-C", root, "log", "-1", "--format=%cs", "--", path],
+    stamp = subprocess.run(
+        ["git", "-C", root, "log", "-1", "--format=%ct", "--", path.split("#", 1)[0]],
         capture_output=True, text=True, check=True,
     ).stdout.strip()
-    return date.fromisoformat(out) if out else None
+    # %ct is seconds since the epoch, read as a UTC date to match `today`.
+    return datetime.fromtimestamp(int(stamp), tz=timezone.utc).date() if stamp else None
+
+
+def changed_dates(root: str, present: Sequence[str]) -> Dict[str, Optional[date]]:
+    """Last change for each automation. A hook also changes when its wiring
+    in `.claude/settings.json` does, so it takes the later of the two dates."""
+    settings_date = git_changed(root, SETTINGS_PATH)
+    out: Dict[str, Optional[date]] = {}
+    for path in present:
+        own = git_changed(root, path)
+        if path.startswith(".claude/"):
+            known = [d for d in (own, settings_date) if d is not None]
+            own = max(known) if known else None
+        out[path] = own
+    return out
 
 
 def repo_diff(
@@ -352,7 +377,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         for problem in problems:
             print(f"  {problem}")
         return FINDING
-    present = repo_automations()
+    try:
+        present = repo_automations()
+    except (OSError, ValueError) as error:
+        print(f"CANNOT CHECK: could not read the repository's automations: {type(error).__name__}: {error}")
+        return CANNOT_CHECK
     if args.validate:
         uncovered = repo_coverage(doc, present)
         if uncovered:
@@ -377,7 +406,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     today = datetime.now(timezone.utc).date()
     findings, notes = diff(doc, live, today)
     try:
-        changed = {path: git_changed(REPO, path) for path in present}
+        changed = changed_dates(REPO, present)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f"CANNOT CHECK: reading file dates from git failed: {type(error).__name__}: {error}")
         return CANNOT_CHECK
