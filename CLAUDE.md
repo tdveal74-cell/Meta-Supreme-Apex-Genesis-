@@ -779,6 +779,17 @@ which is the form the steward skill already names for a standing grant. The
 two paragraphs above that say his authorization arrives in chat stay true: it
 arrived, once, and it stands until he withdraws it.
 
+A Vercel preview status is not one of those checks. Ruled by Tee 2026-11-01 on
+a card, "Merge; Vercel never gates", after PR #469 passed every CI job while both
+Vercel previews read failed on the account's free limit of 100 deployments a
+day, a PR that touched no web or soul file. The `steward` skill already said
+this; this sentence said "every check" and the two disagreed. The checks that
+gate a standing merge are the GitHub Actions jobs on the head commit. A red
+Vercel preview is still read and named on the PR, and a green one still proves
+nothing about production: the deploy read-back after the merge applies either
+way. PR #468 had merged the night before on the same footing, before the rule
+was written down.
+
 The grant covers the merge and nothing before or after it. Full local
 validation before every push, a fresh critic before an arc closes, and the
 deploy read-back after a merge all still apply, and a red check is never
