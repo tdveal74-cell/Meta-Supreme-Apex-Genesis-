@@ -75,10 +75,12 @@ Both finals were sent to Tee in chat on 2026-11-01. He wrote "I watched" at 17:0
 | question on the card | answer | what the card said follows |
 |---|---|---|
 | how the chin and lower-lip patch looked on his phone, at 4.4 s and 16.2 s | "Plain on both" | the black polo photo look is out for publish on either engine |
-| which engine moved more like him | "Avatar V" | Avatar V costs three times Avatar IV: 17 credits for this clip against 7 |
+| which engine moved more like him | "Avatar V" | "three times what Avatar IV does: 17 credits for this 19.5 s clip, against 7" |
 | the next avatar test | "Digital twin (Recommended)" | he films himself talking and approves HeyGen's consent link; the footage spec and the credit cost are checked against HeyGen's pages and put on a card before anything is spent |
 
 His answer settles the question the verifiers split on: the patch is plain on both engines at phone size, whatever the sampled counts said about Avatar V. The black polo photo look is not used in anything published. The other two answers on the first question were "Plain on Avatar IV only" and "Faint, would pass".
+
+The engine option on the card put two ratios in one sentence. Three times is HeyGen's listed rate, 48 credits a minute for Avatar V against 16 for Avatar IV. What this clip cost was 17 credits against 7, which is about 2.4 times.
 
 The HeyGen account was read at 17:09:25Z: 297 premium credits on the Pro plan, resetting on 2026-11-26, and every private look on it is a photo look, so there is no digital twin to test yet. A twin trained on footage of Tee is the likeliest fix for both photo faults, the seam and the lips held open in pauses. That is untested.
 
