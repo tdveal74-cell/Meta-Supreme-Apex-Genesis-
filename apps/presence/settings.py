@@ -41,7 +41,7 @@ LOCAL_ENVIRONMENTS = frozenset({"development", "dev", "test", "local", ""})
 #: Variables a hosting platform injects into every deployment it runs.
 PLATFORM_MARKERS = ("RAILWAY_ENVIRONMENT_NAME", "RAILWAY_PROJECT_ID", "VERCEL_ENV")
 
-INFERENCE_CHOICES = ("mock", "cerebras", "anthropic", "openai")
+INFERENCE_CHOICES = ("mock", "cerebras", "anthropic", "openai", "gemini")
 SPEECH_CHOICES = ("mock", "cartesia")
 
 #: What can transcribe the user. Added with protocol v2, which gave this
@@ -153,6 +153,8 @@ class PresenceSettings:
     PRESENCE_INFERENCE: str = "mock"
     PRESENCE_FALLBACK_INFERENCE: str = ""
     CEREBRAS_API_KEY: str = ""
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-3.8-flash"
     ANTHROPIC_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
     PRESENCE_SPEECH: str = "mock"
@@ -269,6 +271,8 @@ class PresenceSettings:
             PRESENCE_INFERENCE=text("PRESENCE_INFERENCE", "mock").lower() or "mock",
             PRESENCE_FALLBACK_INFERENCE=text("PRESENCE_FALLBACK_INFERENCE").lower(),
             CEREBRAS_API_KEY=text("CEREBRAS_API_KEY"),
+            GEMINI_API_KEY=text("GEMINI_API_KEY"),
+            GEMINI_MODEL=text("GEMINI_MODEL", "gemini-3.8-flash") or "gemini-3.8-flash",
             ANTHROPIC_API_KEY=text("ANTHROPIC_API_KEY"),
             OPENAI_API_KEY=text("OPENAI_API_KEY"),
             PRESENCE_SPEECH=text("PRESENCE_SPEECH", "mock").lower() or "mock",

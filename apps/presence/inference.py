@@ -19,9 +19,8 @@ no streaming API today. ``complete()`` returns the whole reply, so this
 adapter's time to first token is the whole completion latency, and the
 "tokens" it yields are the reply split into words after the fact. That is
 honest enough to drive the breaker (a slow completion is a slow first
-token) but it is not real streaming. SSE streaming against
-api.cerebras.ai is the next gate. It was not verified in this build and
-nothing here pretends otherwise.
+token) but it is not real streaming. Real provider streaming is a separate gate. It was not verified in this
+build and nothing here pretends otherwise.
 
 The system prompt reuses the DEVON persona from ``services.devon.persona``
 rather than inventing a second voice for the face.
@@ -166,6 +165,8 @@ def build_streamer(name: str, settings: PresenceSettings) -> Optional[TokenStrea
             anthropic_api_key=settings.ANTHROPIC_API_KEY,
             openai_api_key=settings.OPENAI_API_KEY,
             cerebras_api_key=settings.CEREBRAS_API_KEY,
+            gemini_api_key=settings.GEMINI_API_KEY,
+            model=settings.GEMINI_MODEL if chosen == "gemini" else None,
             timeout_seconds=PROVIDER_TIMEOUT_SECONDS,
             max_retries=0,
         )
