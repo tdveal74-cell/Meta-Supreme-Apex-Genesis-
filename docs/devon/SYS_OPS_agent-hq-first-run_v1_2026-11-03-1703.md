@@ -11,9 +11,9 @@ Tee has no Mac and works from an iPhone, so the host was found with one read
 only diagnostic pasted into Termius. It answered: `srv1936199`, Ubuntu 24.04.4
 LTS, logged in as root, Python 3.12.3 and git installed, no copy of this
 repository, and project folders already under `/root/.claude/projects`, so
-Claude Code had run there before. That is the VPS that runs n8n, not a
-laptop. Agent HQ there sees the sessions that run there, and none that run in
-the cloud, this one included.
+Claude Code had run there before. That is the host Termius lists as EditForge
+VPS, not a laptop. Agent HQ there sees the sessions that run there, and none
+that run in the cloud, this one included.
 
 Tee ruled on a card, before the run, that the phone reaches the page through
 a Termius local port forward, with no change to the server: it stays on
@@ -71,8 +71,8 @@ field, and never decodes the folder name.
 ## A lesson for the paste loop
 
 The first diagnostic was handed over as six lines, one command per line, at
-the day's first attempt, hours before the run: the VPS login line in that
-screenshot reads 08:22:38. It arrived in the shell with a trailing backslash
+the day's first attempt, earlier than the run by the phone's own clock, 3:22
+in that screenshot against 11:32 at the rerun. It arrived in the shell with a trailing backslash
 on five of the six lines, the shell showed its continuation prompt on each,
 and the output shows the first `echo` printing the next command's words as
 its own arguments, with no success line. Where the backslashes were added,
@@ -97,7 +97,7 @@ TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_agent-hq-first-run_v1_2026-11-03-1703.md
 DATE: 2026-11-03
 DECISIONS: Tee ruled on a card that the phone reaches Agent HQ through a Termius local port forward, the server unchanged and loopback only, and on the same card that the DEVON filing waits for the first run. The run was done on the VPS srv1936199 as root, in /opt/Meta-Supreme-Apex-Genesis- at 22f249c, with the roster of eight bots approved by typing y.
-FINDINGS: Five of the six hooks fired on one real session on the VPS, SessionStart, UserPromptSubmit, Stop, SubagentStop and an idle_prompt Notification, all for the root bot, read back from events.jsonl. The page opened in Safari on the iPhone through the forward and a session ran in /root while Tee watched the page; his words were "It opened" and "It worked", and no capture of the page exists. A six line block pasted into the shell from the iPhone arrived with a trailing backslash on five lines and ran as one command, cause not determined; the diagnostic rewritten as one line joined with ; ran. The roster path /opt/devon/quality90-ai-review comes from the transcripts' own cwd field, not a decode of the folder name, so it is not a finding.
+FINDINGS: Five of the six hooks fired on one real session on the VPS, SessionStart, UserPromptSubmit, Stop, SubagentStop and an idle_prompt Notification, all for the root bot, read back from events.jsonl. The Safari step and the session step came back as Tee's answers, "It opened" and "It worked"; the events file shows a session ran in /root, and no capture of the page exists. A six line block pasted into the shell from the iPhone arrived with a trailing backslash on five lines and ran as one command, cause not determined; the diagnostic rewritten as one line joined with ; ran. The roster path /opt/devon/quality90-ai-review comes from the transcripts' own cwd field, not a decode of the folder name, so it is not a finding.
 OPEN: SessionEnd did not appear in the five rows and the cause is not known, the session may still have been open. What the page showed during the session was not captured; a screenshot of it on the next session is the cheap artifact. The server runs in a foreground Termius tab and dies with it; a systemd unit is on a card. The Context Pill carries no line for Agent HQ on the VPS; on a card. Sessions in the cloud are invisible to this install by design.
-STATUS: First run done on the VPS on 2026-11-03 with Tee watching the page, his words "It opened" and "It worked"; five of six hooks fired and SessionEnd is open; filed to the Notion Thread Log, the page is linked in the body; this doc on branch claude/agent-hq in PR #483.
+STATUS: First run done on the VPS on 2026-11-03; Tee's answers to the two steps only he could see were "It opened" and "It worked"; five of six hooks fired and SessionEnd is open; filed to the Notion Thread Log, the page is linked in the body; this doc on branch claude/agent-hq in PR #483.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
