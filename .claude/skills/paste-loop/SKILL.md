@@ -42,10 +42,11 @@ it work".
   that in one sentence above the block.
 - When a step needs a link, give the full URL, plain, in the same message.
 - A step for Termius on the iPhone is one line, the commands joined with `;`.
-  Measured 2026-11-03 on srv1936199: a six line block pasted into Termius
-  arrived with a trailing backslash on every line, ran as one command, and
-  the first line swallowed the rest, so the success line never printed. The
-  same commands on one line ran cleanly.
+  Seen 2026-11-03 on srv1936199: a six line block, one command per line,
+  arrived in the shell with a trailing backslash on five of its lines and ran
+  as one command, so the first line swallowed the rest and the success line
+  never printed. Where the backslashes came from was not determined. The same
+  diagnostic rewritten as one line ran and printed its success line.
 
 ## The message that judges what he pastes
 
