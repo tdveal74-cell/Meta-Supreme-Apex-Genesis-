@@ -1,0 +1,58 @@
+# TSWS Episode 1: the Comfy/Kling lane on the VPS, read and reconciled with the pod lane
+
+Begun 2026-11-03 at about 05:25Z and written at 06:47Z, the stamp in its name; the first attempt to write it was cut by a worker restart, which an independent verifier found from the ledger. Supersedes nothing; it sits beside `SYS_OPS_tsws-ep01-ltx-pod-run_v1_2026-10-31-0721.md`, which stays the record of the pod lane and its cards.
+
+## What arrived
+
+Tee forwarded, at about 05:15Z on 2026-11-03, another agent's status note and asked for the repairs finished. The note points at `/root/rendered-videos/TSWS_EP01_RESHOOTS_2026-11-02/TSWS_EP01_Reshoot_Status.md` on `srv1936199`, read over Remote Desktop Commander at 05:17Z (105 lines, updated 2026-11-03), with `REPAIR_PROGRESS.md`, the two review stills, three receipts and the folder listing read beside it. That agent ran Kling Image O1 first frames and Kling motion through the Comfy service on the VPS, on the same shots the pod lane carries.
+
+What its own evidence shows, read here rather than taken from the note:
+
+- SH100 motion, Comfy job `9cbec11c-e890-427a-9ca6-6de3a9128df7`, 121 frames at 24 fps, 1920x1080, no audio, from `SH100_START_VENETIAN_COMPOSITE.png`. Its defect still (`SH100_failure_detail.jpg`, frames at 2.8 to 4.0 s) shows the foreground woman's face deforming with the mask at 3.3 s and her head and upper body gone by 3.5 to 3.7 s, the mask falling with the person instead of off her. Displayed estimate 73.9 credits; the actual charge and the provider task id were not in the retained receipt, and the account's API balance was not read.
+- Four first frames held, each 5.9 credits by displayed estimate, two passes each: SH020 (`276525b9`, foreground mask colours changed and one background face unmasked by the agent's own review; its first pass `58431b14`, the one in the composite still, had several pedestrians unmasked), SH045 (`d98d1e39`, studio heads on grey in the first pass `759da133` and, in the second, a long gold chest loop beside the collar strand), COLLAR_TUCK (`e58161ef`, the extra person removed but the hand already gripping the thread and the arm's ownership unresolved; its first pass `c5bab4bd`, in the composite still, had a second person's hand at his collar), SH160 (`fa1e91bc`, a character sheet with header text in the first pass; in the second the thread visible and Auren facing the lens). The composite review still `TSWS_Frame_Prep_Review_NOT_ACCEPTED.jpg` shows the first-pass four as described; the second-pass frames in `frames_HOLD/` were not read at full size from here.
+- SH070 motion (`4fad833c`) timed out at Kling with a reported deduction of zero and no output; not retried.
+- SH135 and SH150 never submitted there. Four `REPAIR2A_*_FOCUSED.json` workflows and four `VALIDATED_WAITING_FRAME_*` motion copies are staged and unrendered (`FOCUSED_REPAIR_PREFLIGHT.json`, checked 2026-11-02T20:26Z: inputs readable, 5.9 credits each, none submitted).
+- The queue is empty, nothing was purchased, no GPU was started, ChatCut was not edited, and the originals are preserved. All of that is the note's claim; the folder listing and receipts agree with it as far as they reach.
+
+Unverified from here: every credit figure (displayed estimates, no charge read), the account's balance, the sha256 the note gives for its 720p review copy (`928a6619...`), and the frames in `frames_HOLD/` at full size, which were read only through the agent's own composite.
+
+## The two lanes
+
+The Kling lane duplicated the pod lane. Tee ruled on 2026-10-31 at 06:13:29Z "All on your GPU, LTX 2.3, 80 GB tier", and by that evening the pod lane held the accepted SH020 v2 start and end stills, the SH020 pilot, a SH100 take (prompt `04b84e05`, 193 frames) whose first frame sits within 0.02 px of its start still and last within 0.03 px of the SH135 v11 conform, the skyline 0.33 to 0.42 px off mid clip by the mp4 scan, every head staying on and the masks hanging about two seconds, and the 19 s SH150 chain, all in the Drive takes folder for his watch. The Kling SH100 spent about 74 credits by estimate to fail at the one thing the pod take already does. The room shots (SH045, SH160, the collar tuck) wait on the six ChatCut exports in both lanes; the Kling lane tried to generate condo plates from identity crops instead and got headshots and a character sheet.
+
+One shot the pod cards do not carry: the collar tuck, Auren's own hand tucking the thread at the coat collar seam over 60 frames at 30 fps, the "price" between the thread-visible master and the closed master at 14978. The character sheet ruling of 2026-10-25 on Drive (`1Z4WP5FmTSzIWwtblaZUbAFCaucdvCrL4`), as the D17 verifier read it on 2026-11-01, says "Existing jaw-tuck coverage requires collar-action repair before use". It is uncarded and waits on the Auren single export like B2.
+
+## The eighth card after the merges, 2026-11-03
+
+Asked at about 05:22Z and answered at about 05:23Z (the ledger's next gated call read "card 0.5 min ago" at 05:23:41Z). Four questions:
+
+- Lane: "Use whatever best". Taken as the recommended option: the pod lane carries the reshoots and the Kling lane stops here; no further Comfy credits, the four staged workflows stay unrendered, the Kling candidates stay on the VPS as evidence. The latitude in his words is used only for the pod itself: a fresh pod when pod B's host keeps refusing and a take is ready to run.
+- SH100: "Whatever gets the shots right". Taken as the recommended option: the pod take stands for his watch and the Kling line is retired; a new seed on the pod only if the take fails his watch.
+- The four held frames: hold them; the room shots take the six ChatCut exports from his browser.
+- SH070: the pod lane under card A3 once he points at G01 and rules the distant face.
+
+Under that card, pod B's start was retried at 05:23:41Z and refused at 05:23:56Z with the same capacity answer, the sixth refusal (four on 2026-10-31, one on 2026-11-01). An earlier retry at 05:20:19Z was refused by the gate itself, not the host: the forwarded message arrived inside a running turn and the gate counted the newest human signal as the card of 2026-11-01, 2102 minutes old, so the start waited for this card. The ruling of 2026-11-01 stands: keep it stopped, retry each session, the mp4 read of the 0.66 px plateau standing.
+
+## The ruling after the card, about 06:57Z: the ComfyUI API carries new and repair shots
+
+Tee wrote in chat, after the card: "Use ComfyUI api for any new shots or repair shots." That replaces the first answer above. New and repair shots go through the ComfyUI API on `srv1936199` from here, not the pod; the pod SH100 take still stands for his watch, the four held frames still wait on the ChatCut exports, and SH070 still waits on G01, until a later card changes them. The objection, logged once: the Kling route through that API failed the SH100 fall where the pod take passed, and it spends comfy.org credits on an account whose balance nobody has read. Executed on his ruling.
+
+What that API is, read at about 06:55Z over Remote Desktop Commander: ComfyUI 0.42.0 under `/opt/comfyui-tsws/ComfyUI`, a systemd service with `DynamicUser`, CPU only (`--cpu`), listening on 127.0.0.1 and 172.16.3.1 port 8188, state under `/var/lib/comfyui-tsws`, custom nodes `ComfyUI-VideoHelperSuite` and `comfyui_tsws`; outside the box it is `comfy.2-24-109-87.sslip.io`, whose root answers 303 and whose `/_worker` path answers 401 to a bare request. `KlingOmniProImageNode` is present as an API node (`partner/image/Kling`) and the motion copies use `KlingImage2VideoNode` with `kling-v2-5-turbo`, so every generation is a paid comfy.org call. The queue was empty.
+
+The gap: an API node sends either a comfy.org API key (`X-API-KEY`, from the hidden input `api_key_comfy_org`) or a browser login token (`auth_token_comfy_org`) with each request (`comfy_api_nodes/util/_helpers.py` lines 168 to 203); a raw `POST /prompt` has to carry one in `extra_data`. The service environment holds no key, the process environment holds nothing named like one, and the stored history of the other agent's successful job carries no auth key (the server strips it), so that agent submitted from a signed-in browser. A key file is the path that keeps the key out of chat: `/root/.config/comfy/api_key`, mode 600, created by Tee from a comfy.org API key over his own terminal. A submit tool, `tools/comfy_submit.py` in the reshoot folder, reads it into memory, posts the graph with the key in `extra_data`, polls `/history` and writes a submission and a result receipt beside the other agent's, never writing or printing the key; its `validate` mode checks every class type against `/object_info` and every `LoadImage` file against the input directory without submitting. One card per paid submission, with the displayed estimate, before it fires.
+
+## What is left, and whose
+
+Nothing can run until the API key file exists on the box, which is Tee's to create, and Tee's five items land: the end to end watch of the pilot, the SH100 take, segment 1 and the chain; the two D9-A signatures; the six ChatCut exports; G01 and the distant face; the SH135 v11 businessman check. The Kling lane's note is answered by a ruling note written beside it on the VPS at 06:49Z, `CLAUDE_RULINGS_2026-11-03.md` in the same folder, amended at about 07:00Z with the ruling below, so the other agent reads the lane decision where it left its handoff.
+
+## DEVON RECEIPT
+
+AREA: Podcast, Systems
+TYPE: SYS_OPS
+ARTIFACT: docs/devon/SYS_OPS_tsws-ep01-kling-lane-reconcile_v1_2026-11-03-0647.md
+DATE: 2026-11-03
+DECISIONS: Tee's eighth post-merge card, 2026-11-03 at about 05:23Z: the pod lane carries the reshoots and the Kling lane on srv1936199 stops ("Use whatever best", taken as the recommendation), replaced at about 06:57Z by his chat ruling "Use ComfyUI api for any new shots or repair shots", so new and repair shots go through the VPS ComfyUI API, one card per paid submission; the pod SH100 take stands for his watch and the Kling SH100 is retired ("Whatever gets the shots right", taken the same way); the four Kling first frames hold and the room shots take the six ChatCut exports; SH070 runs on the pod under A3 once G01 is pointed at.
+FINDINGS: The other agent's handoff checks against its own stills and receipts: the Kling SH100 loses the woman's head with the mask at 3.3 to 3.7 s, SH045 and SH160 came back as studio heads and a character sheet, COLLAR_TUCK carries a second person's hand, SH020 has unmasked background faces; every credit figure is a displayed estimate and the balance was not read. The lane duplicated the pod lane on SH020, SH100 and SH150. The collar tuck is the one shot no pod card carries. Pod B refused its sixth start at 05:23:56Z. The ComfyUI API nodes need a comfy.org key or login token per request and the box holds neither for a raw call.
+OPEN: the comfy.org API key file on the box, Tee's; the first submissions card once it exists; Tee's five items (the watch, the two signatures, the six exports, G01 and the distant face, the SH135 v11 check); pod B's start each session; the collar tuck card once the Auren single export lands; the Kling account's actual charges and balance, readable only by Tee.
+STATUS: Begun at about 05:25Z and written at 06:47Z on 2026-11-03 after the card; the records of the pod lane carry the sixth refusal; the ruling note was written beside the handoff at 06:49Z and amended at about 07:00Z; the ComfyUI API ruling of about 06:57Z and the auth gap added at about 07:05Z after a verifier's four corrections (the SH100 figures, the route card's time, the second-pass defect wording, the self-date).
+TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
