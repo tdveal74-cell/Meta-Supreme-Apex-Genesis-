@@ -69,10 +69,10 @@ any process on the machine, as every loopback server does.
 
 ## What is Tee's
 
-The roster list for his own machine, asked on a card. Whether an idle prompt
-after a Stop should count as waiting on him. Running the one command on his
-machine and watching the first desk light up. The merge, under the standing
-grant, once CI is green on the head.
+The roster scheme and the idle rule were ruled on one card on 2026-11-03:
+approved as listed, and idle reads as resting. What stays his is running the
+one command on his machine and watching the first desk light up, and the
+merge, under the standing grant, once CI is green on the head.
 
 ## DEVON RECEIPT
 
@@ -80,8 +80,8 @@ AREA: Systems
 TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_agent-hq_v1_2026-11-03-0659.md
 DATE: 2026-11-03
-DECISIONS: Built as a tool in this repository rather than a one off in the container, since the container's home directory is ephemeral and the installer must run on Tee's machine. Three.js vendored from the npm tarball under a sha256 manifest rather than loaded from a CDN. The first roster is shown and confirmed before it is saved. Judgment calls on the status rules are documented rather than literal and put to Tee.
+DECISIONS: Built as a tool in this repository rather than a one off in the container, since the container's home directory is ephemeral and the installer must run on Tee's machine. Three.js vendored from the npm tarball under a sha256 manifest rather than loaded from a CDN. The first roster is shown and confirmed before it is saved. Tee ruled on a card on 2026-11-03 to approve the roster as listed with the inferred team scheme, and on the same card that an idle_prompt notification after a Stop reads as resting, so the Waiting on me panel holds only permission prompts and questions.
 FINDINGS: Three critic rounds confirmed 38, then 17, then 1 findings against successive commits, each answered in the next commit; the medium ones were a parent reading stuck while its subagent worked, agent bots never reading working, same second Stop and prompt ties, rescans retiring live folders, a settings symlink replaced by a plain file, lost file modes, a whole hook group dropped on uninstall, an unbounded first read, agents matched by a rewritable display name, ids that shifted on a duplicate name, and a broken roster.json flattened without backup. A real nested session fired all four hooks and reached the page; the page rendered clean in headless Chromium after every round.
-OPEN: Tee's OK on the roster for his machine, the idle_prompt ruling, running the one command on his machine, the merge of PR #480 once CI is green, and the verifier's read of 96d7de2.
+OPEN: Running the one command on Tee's machine and watching the first desk light up, and the merge of PR #480 once CI is green. The verifier confirmed the 96d7de2 fix.
 STATUS: Built, tested offline and with one real session, three critic rounds closed, PR #480 open as a draft with CI running on 96d7de2.
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
