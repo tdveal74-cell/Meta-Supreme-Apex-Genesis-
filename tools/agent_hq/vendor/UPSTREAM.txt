@@ -1,0 +1,6 @@
+three 0.187.0 (REVISION 187), MIT. Vendored 2026-11-03 from the npm registry tarball
+https://registry.npmjs.org/three/-/three-0.187.0.tgz (dist.integrity checked), files
+package/build/three.module.js, package/build/three.core.js, package/LICENSE. The package
+ships no minified build; the .min.js files on jsdelivr are its own minifier, not upstream.
+Pinned by MANIFEST.sha256 and test_agent_hq.py. Never edit these files; bump the version
+and regenerate the manifest instead.
