@@ -168,6 +168,8 @@ and every hook run and install keeps them that way.
   hundreds of megabytes of transcripts costs a few seconds once.
 - An `Agent` call run in the background returns its tool result at once, so
   its agent bot shows working only until then; the subagent's tokens land on
-  the parent until SubagentStop names the agent.
+  the parent until SubagentStop names the agent. An `Agent` call whose result
+  line never lands is closed by the session's Stop or by its next prompt, so
+  an agent bot never stays lit for a turn that is over.
 - The page needs WebGL2. iPhone Safari has it; a remote desktop without GPU
   acceleration may not. "fit view" in the header frames the tower again.

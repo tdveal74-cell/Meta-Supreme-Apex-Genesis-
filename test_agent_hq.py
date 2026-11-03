@@ -698,6 +698,32 @@ def test_a_parent_waiting_on_its_subagent_is_working_and_the_agent_shows_it(tmp_
     assert names["proj"]["status"] == "working", "the tool result is a fresh turn line"
 
 
+def test_an_agent_call_with_no_result_line_closes_with_the_turn(tmp_path):
+    hq_dir, now, emit, transcript, project = _state_fixture(tmp_path)
+    emit("SessionStart", now - timedelta(minutes=5), source="startup")
+    emit("UserPromptSubmit", now - timedelta(minutes=4), source="user")
+    transcript.write_text(_assistant("m1", now - timedelta(minutes=3), [
+        {"type": "tool_use", "id": "tu-bg", "name": "Agent", "input": {"subagent_type": "verifier", "run_in_background": True}}]))
+    os.utime(transcript, (now.timestamp() - 180, now.timestamp() - 180))
+    state = hq.State(hq_dir)
+    names = {b["name"]: b for b in state.snapshot(now=now.timestamp(), force=True)["bots"]}
+    assert names[VERA]["status"] == "working", "open while the turn runs"
+    emit("Stop", now - timedelta(minutes=2), summary="handed off")
+    names = {b["name"]: b for b in state.snapshot(now=now.timestamp() + 1, force=True)["bots"]}
+    assert names["proj"]["status"] == "resting" and names[VERA]["status"] == "resting", "a Stop closes the call"
+    assert names[VERA]["status"] == "resting"
+    names = {b["name"]: b for b in state.snapshot(now=now.timestamp() + 20 * 3600, force=True)["bots"]}
+    assert names[VERA]["status"] == "resting", "and it stays closed, never stuck"
+    emit("UserPromptSubmit", now - timedelta(minutes=1), source="user")
+    with transcript.open("a") as handle:
+        handle.write(_user(now - timedelta(minutes=1), "next question"))
+    os.utime(transcript, (now.timestamp() - 60, now.timestamp() - 60))
+    tr = state.transcript(str(transcript))
+    assert tr.open_agent_types() == [], "a typed prompt starts a new turn with no open calls"
+    names = {b["name"]: b for b in state.snapshot(now=now.timestamp() + 2, force=True)["bots"]}
+    assert names["proj"]["status"] == "working" and names[VERA]["status"] == "resting"
+
+
 def test_a_stale_session_opens_no_file_and_old_transcripts_are_evicted(tmp_path):
     hq_dir, now, emit, transcript, project = _state_fixture(tmp_path)
     old = tmp_path / "old.jsonl"

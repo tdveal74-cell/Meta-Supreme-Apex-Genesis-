@@ -609,6 +609,8 @@ class Transcript(_Tail):
                     self.recent_ids.append(mid)
                     self._add_usage(usage, ts)
         content = msg.get("content")
+        if kind == "user" and self.open_agents and _is_plain_prompt(content):
+            self.open_agents.clear()
         if not isinstance(content, list):
             return
         for block in content:
@@ -660,6 +662,16 @@ class Transcript(_Tail):
 
     def open_agent_types(self) -> List[str]:
         return [agent_type for agent_type, _ in self.open_agents.values()]
+
+
+def _is_plain_prompt(content: Any) -> bool:
+    """A user line that is a typed prompt, not a tool result: it starts a new turn."""
+    if isinstance(content, str):
+        return bool(content.strip())
+    if not isinstance(content, list):
+        return False
+    types = {b.get("type") for b in content if isinstance(b, dict)}
+    return "text" in types and "tool_result" not in types
 
 
 def _empty_tokens() -> Dict[str, int]:
@@ -919,7 +931,9 @@ class State:
             for sub_path in sub_paths:
                 seen_sub.add(sub_path)
                 self._fold_subagent(sub_path, view, views, agents, today, now, session.cwd)
-            if tr is not None and session.ended is None and not stale:
+            if tr is not None and status != "resting":
+                # Only a turn in flight can hold an Agent call open; a Stop or a
+                # new prompt closes whatever result line never arrived.
                 activity = max(tr.activity(), sub_activity, session.last_event)
                 for agent_type in tr.open_agent_types():
                     agent = _agent_for(agents, agent_type, session.cwd)
