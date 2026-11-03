@@ -41,6 +41,11 @@ it work".
 - No tour of what the command does. If it writes, deletes or sends anything, say
   that in one sentence above the block.
 - When a step needs a link, give the full URL, plain, in the same message.
+- A step for Termius on the iPhone is one line, the commands joined with `;`.
+  Measured 2026-11-03 on srv1936199: a six line block pasted into Termius
+  arrived with a trailing backslash on every line, ran as one command, and
+  the first line swallowed the rest, so the success line never printed. The
+  same commands on one line ran cleanly.
 
 ## The message that judges what he pastes
 
