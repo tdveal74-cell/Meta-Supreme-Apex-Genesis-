@@ -76,9 +76,13 @@ exports it. `CLAUDE_CONFIG_DIR` moves `~/.claude`, as Claude Code does.
 Team is inferred from keywords in the name and description (Visuals, Content,
 Research, Ops, in that order; Ops when nothing matches). Edit `team`, `name`
 or `job` in `roster.json` and a rescan keeps your edits; it refreshes `model`
-and `source` from the files. A bot the scan did not see stays while its file
-or folder is still on disk and is marked `retired` only once that is gone.
-A new bot in the roster gets a desk the next time the page polls.
+and `source` from the files, keeps the previous version as
+`roster.json.previous`, and refuses to touch a file it cannot parse, so a
+stray comma costs a retry rather than your edits. An agent's id is its file,
+so two files with one `name` are two desks. A bot the scan did not see
+stays while its file or folder is still on disk and is marked `retired`
+only once that is gone. A new bot in the roster gets a desk the next time
+the page polls.
 
 A session in a folder the roster does not know still shows up, on an
 "Unassigned" floor, so nothing runs invisibly.
@@ -87,13 +91,16 @@ A session in a folder the roster does not know still shows up, on an
 
 One JSON line per event: `time` (milliseconds, local offset), `event`,
 `session_id`, `cwd`, `transcript_path` (the token counter reads it) and
-`bot`. Added where the event carries them: `message` and
-`notification_type` on a Notification; `source`, `reason`, `agent_type`,
-`agent_id`, `agent_transcript_path`; and `summary`, the first 200 characters
-of the last assistant message on Stop and SubagentStop, which is what
-"Finished today" shows. Every added value is cut at 300 characters. The
-prompt text is never written. SubagentStop is installed for everyone, since
-the only cost of a hook that never fires is nothing.
+`bot`. Added where the event carries them: `message` on a Notification;
+`notification_type`, `title`, `source`, `reason`, `agent_type`, `agent_id`,
+`agent_transcript_path` and `stop_hook_active` (a boolean); and `summary`,
+the first 200 characters of the last assistant message on Stop and
+SubagentStop, which is what "Finished today" shows. Every added text value
+is cut at 300 characters. The prompt text is never written. SubagentStop is
+installed for everyone, since the only cost of a hook that never fires is
+nothing. `bot` is matched by the agent's frontmatter name (kept in the
+roster as `agent_type`) or by the longest folder match, so renaming a bot in
+the roster does not break the match.
 
 ## Status rules
 
@@ -111,10 +118,14 @@ still sort correctly.
   delegated a long job is working, not stuck.
 - stuck: mid turn, nothing new for 10 minutes (`STUCK_AFTER_S`).
 
-A bot shows the highest of its sessions: waiting, then stuck, working,
-resting. An agent bot (a `.claude/agents` definition) shows working while a
-session has an open `Agent` tool call of its type, and resting once
-SubagentStop lands. The header counts bots, not sessions.
+A bot shows the highest of its runs: waiting, then stuck, working, resting.
+An agent bot (a `.claude/agents` definition) shows working while a session
+has an open `Agent` tool call of its type, and resting once that call has
+returned and SubagentStop has landed. When the same agent name is defined
+in a project and at user level, the session's own project copy is the one
+that lights up. The detail panel's "runs" counts sessions for a folder bot
+and open calls plus finished subagent transcripts for an agent bot. The
+header counts bots.
 
 ## Tokens
 
@@ -138,9 +149,11 @@ What stays on the machine is still worth knowing. `/state` answers any
 process on this machine, as every loopback server does, and it carries each
 bot's current step, the notification text and the Stop summaries. The step
 is built from a tool call's description, file path or pattern, never from a
-Bash command, a URL, a prompt or a search query, so a secret typed into a
-command does not reach the page. `events.jsonl` and `roster.json` are 0600
-inside a 0700 directory.
+Bash command, a URL, a prompt or a search query; when the last block is
+plain assistant text, the step is the first 90 characters of that text, so
+whatever the assistant chose to say can appear there. `events.jsonl`,
+`roster.json` and `roster.json.previous` are 0600 inside a 0700 directory,
+and every hook run and install keeps them that way.
 
 ## Known limits
 

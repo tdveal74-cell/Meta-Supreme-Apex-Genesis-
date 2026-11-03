@@ -108,12 +108,17 @@ TOOL_DETAIL_KEYS = ("description", "file_path", "path", "pattern", "skill")
 # --------------------------------------------------------------------------- paths and time
 
 
+def _abs_dir(value: Optional[str], fallback: Path) -> Path:
+    """Absolute, so a relative AGENT_HQ_DIR never bakes a relative path into a hook line."""
+    return Path(os.path.abspath(os.path.expanduser(value))) if value else fallback
+
+
 def default_hq_dir() -> Path:
-    return Path(os.environ.get("AGENT_HQ_DIR") or (Path.home() / ".agent-hq")).expanduser()
+    return _abs_dir(os.environ.get("AGENT_HQ_DIR"), Path.home() / ".agent-hq")
 
 
 def default_claude_dir() -> Path:
-    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or (Path.home() / ".claude")).expanduser()
+    return _abs_dir(os.environ.get("CLAUDE_CONFIG_DIR"), Path.home() / ".claude")
 
 
 def now_iso(epoch: Optional[float] = None) -> str:
@@ -270,8 +275,9 @@ def agent_bot(path: Path, cwd: Optional[str], scope: str) -> Dict[str, Any]:
     name = front.get("name") or path.stem
     job = front.get("description") or "No description in the agent file"
     return {
-        "id": f"agent:{name}@{cwd or 'user'}",
+        "id": f"agent:{path.stem}@{cwd or 'user'}",
         "name": name,
+        "agent_type": name,
         "kind": "agent",
         "scope": scope,
         "job": job,
@@ -325,15 +331,19 @@ def scan_roster(claude_dir: Path, extra_cwds: Iterable[str] = ()) -> Tuple[List[
 
 
 def _disambiguate(bots: List[Dict[str, Any]]) -> None:
-    """Make names and ids unique: same name in two folders, or two files with one name."""
-    ids: Dict[str, int] = {}
+    """Make display names unique: two files with one name, or one name in two folders.
+
+    Ids never change here. An agent's id is its file, and `agent_type` keeps
+    the frontmatter name the hooks match on, whatever the display name becomes.
+    """
+    scoped: Dict[Tuple[str, Optional[str]], int] = {}
     for bot in bots:
-        ids[bot["id"]] = ids.get(bot["id"], 0) + 1
+        if bot.get("kind") == "agent":
+            key = (bot["name"], bot.get("cwd"))
+            scoped[key] = scoped.get(key, 0) + 1
     for bot in bots:
-        if ids[bot["id"]] > 1 and bot.get("kind") == "agent":
-            stem = Path(str(bot.get("source") or "")).stem
-            bot["id"] = f"{bot['id']}#{stem}"
-            bot["name"] = f"{bot['name']} ({stem})"
+        if bot.get("kind") == "agent" and scoped[(bot["name"], bot.get("cwd"))] > 1:
+            bot["name"] = f"{bot['name']} ({Path(str(bot.get('source') or '')).stem})"
     names: Dict[str, int] = {}
     for bot in bots:
         names[bot["name"]] = names.get(bot["name"], 0) + 1
@@ -360,14 +370,22 @@ def merge_roster(existing: Optional[Dict[str, Any]], scanned: List[Dict[str, Any
     from elsewhere); it is marked retired only once that source is gone.
     """
     old = {b.get("id"): b for b in (existing or {}).get("bots", []) if isinstance(b, dict) and b.get("id")}
+    by_source = {(b.get("kind"), b.get("source")): bot_id for bot_id, b in old.items() if b.get("source")}
     bots: List[Dict[str, Any]] = []
     seen = set()
     for bot in scanned:
         seen.add(bot["id"])
         prev = old.get(bot["id"])
+        if prev is None:
+            # The same file under an older id scheme: carry its edits, drop the old row.
+            old_id = by_source.get((bot.get("kind"), bot.get("source")))
+            if old_id and old_id not in seen:
+                prev = old[old_id]
+                seen.add(old_id)
         if prev:
             merged = dict(prev)
-            for key in ("kind", "scope", "model", "source", "cwd", "tools"):
+            merged["id"] = bot["id"]
+            for key in ("kind", "scope", "model", "source", "cwd", "tools", "agent_type"):
                 if key in bot:
                     merged[key] = bot[key]
             merged.pop("retired", None)
@@ -386,13 +404,21 @@ def merge_roster(existing: Optional[Dict[str, Any]], scanned: List[Dict[str, Any
     return {"version": 1, "generated": now_iso(), "bots": bots}
 
 
-def load_roster(hq_dir: Path) -> Dict[str, Any]:
+def load_roster(hq_dir: Path, strict: bool = False) -> Dict[str, Any]:
+    """The roster on disk. The server reads leniently; a writer reads strictly,
+    so a hand edit with a stray comma is never flattened into an empty roster."""
     path = hq_dir / "roster.json"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError, RecursionError):
+    except OSError:
+        return {"version": 1, "bots": []}
+    except (ValueError, RecursionError) as exc:
+        if strict:
+            raise ValueError(f"{path} is not valid JSON ({exc}); fix it or move it aside") from exc
         return {"version": 1, "bots": []}
     if not isinstance(data, dict) or not isinstance(data.get("bots"), list):
+        if strict:
+            raise ValueError(f"{path} does not hold an object with a bots list; fix it or move it aside")
         return {"version": 1, "bots": []}
     data["bots"] = [b for b in data["bots"] if isinstance(b, dict) and b.get("name")]
     for bot in data["bots"]:
@@ -403,8 +429,11 @@ def load_roster(hq_dir: Path) -> Dict[str, Any]:
 
 
 def write_roster(hq_dir: Path, roster: Dict[str, Any]) -> Path:
+    """Write roster.json, keeping the previous version beside it as roster.json.previous."""
     hq_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     path = hq_dir / "roster.json"
+    if path.exists():
+        shutil.copy2(path, path.with_name("roster.json.previous"))
     _atomic_write(path, json.dumps(roster, indent=2, ensure_ascii=False) + "\n", mode=0o600)
     return path
 
@@ -498,6 +527,9 @@ class _Tail:
         for raw in parts:
             if self.skipping:
                 self.skipping = False
+                self.oversized += 1
+                continue
+            if len(raw) > MAX_LINE_BYTES:
                 self.oversized += 1
                 continue
             if raw.strip():
@@ -778,6 +810,23 @@ def session_status(session: Session, transcript: Optional[Transcript], now: floa
 # --------------------------------------------------------------------------- state
 
 
+def _agent_for(agents: Dict[str, List[Dict[str, Any]]], agent_type: str,
+               cwd: Optional[str]) -> Optional[Dict[str, Any]]:
+    """The roster agent an agent_type names: the one defined in the session's own
+    project when there is one, else the user level one, else the first."""
+    candidates = agents.get(agent_type) or []
+    if not candidates:
+        return None
+    for bot in candidates:
+        lane = str(bot.get("cwd") or "").rstrip("/")
+        if lane and cwd and (cwd == lane or cwd.startswith(lane + "/")):
+            return bot
+    for bot in candidates:
+        if not bot.get("cwd"):
+            return bot
+    return candidates[0]
+
+
 class State:
     """Everything /state returns, rebuilt at most once per STATE_TTL_S."""
 
@@ -835,7 +884,10 @@ class State:
             views[bot["id"]] = self._view(bot)
             order.append(bot["id"])
         lanes = [b for b in roster["bots"] if b.get("kind") == "session" and b.get("cwd") and not b.get("retired")]
-        agents = {b["name"]: b for b in roster["bots"] if b.get("kind") == "agent" and not b.get("retired")}
+        agents: Dict[str, List[Dict[str, Any]]] = {}
+        for b in roster["bots"]:
+            if b.get("kind") == "agent" and not b.get("retired"):
+                agents.setdefault(str(b.get("agent_type") or b["name"]), []).append(b)
         session_bot: Dict[str, str] = {}
         seen_sub: set = set()
 
@@ -866,11 +918,11 @@ class State:
             self._fold(view, status, stale, session, tr, now)
             for sub_path in sub_paths:
                 seen_sub.add(sub_path)
-                self._fold_subagent(sub_path, view, views, agents, today, now)
+                self._fold_subagent(sub_path, view, views, agents, today, now, session.cwd)
             if tr is not None and session.ended is None and not stale:
                 activity = max(tr.activity(), sub_activity, session.last_event)
                 for agent_type in tr.open_agent_types():
-                    agent = agents.get(agent_type)
+                    agent = _agent_for(agents, agent_type, session.cwd)
                     if agent is None or agent["id"] not in views:
                         continue
                     live = "stuck" if now - activity > STUCK_AFTER_S else "working"
@@ -883,7 +935,7 @@ class State:
                 continue
             parent_id = session_bot.get(info["parent"])
             parent_view = views.get(parent_id) if parent_id else None
-            self._fold_subagent(sub_path, parent_view, views, agents, today, now)
+            self._fold_subagent(sub_path, parent_view, views, agents, today, now, parent.cwd)
 
         for path in list(self.transcripts):
             if path not in self._used:
@@ -959,8 +1011,8 @@ class State:
             "tokens_today": _empty_tokens(),
             "last_line": None,
             "last_line_epoch": 0.0,
-            "sessions_active": 0,
-            "sessions_seen": 0,
+            "runs_active": 0,
+            "runs_seen": 0,
             "waiting": None,
             "_rank": -1,
             "_step_at": 0.0,
@@ -982,9 +1034,9 @@ class State:
     def _mark(view: Dict[str, Any], status: str, activity: float, step: Optional[str], active: bool) -> None:
         """Fold one status observation into a bot view: the highest status wins, newest breaks ties."""
         view["last_line_epoch"] = max(view["last_line_epoch"], activity)
-        view["sessions_seen"] += 1
+        view["runs_seen"] += 1
         if active:
-            view["sessions_active"] += 1
+            view["runs_active"] += 1
         rank = STATUS_RANK[status]
         if rank > view["_rank"] or (rank == view["_rank"] and activity > view["_step_at"]):
             view["_rank"] = rank
@@ -1009,9 +1061,10 @@ class State:
             view["model_seen"] = tr.model
 
     def _fold_subagent(self, sub_path: str, parent_view: Optional[Dict[str, Any]],
-                       views: Dict[str, Dict[str, Any]], agents: Dict[str, Dict[str, Any]], today: str, now: float) -> None:
+                       views: Dict[str, Dict[str, Any]], agents: Dict[str, List[Dict[str, Any]]], today: str, now: float,
+                       cwd: Optional[str]) -> None:
         info = self.events.subagents.get(sub_path)
-        agent = agents.get(info["agent_type"]) if info else None
+        agent = _agent_for(agents, info["agent_type"], cwd) if info else None
         target = views.get(agent["id"]) if agent else parent_view
         if target is None:
             return
@@ -1277,6 +1330,10 @@ def remove_hooks(settings_path: Path) -> Dict[str, Any]:
 def copy_files(app_dir: Path, hq_dir: Path) -> List[str]:
     copied: List[str] = []
     hq_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(hq_dir, 0o700)
+    for private in ("events.jsonl", "roster.json", "roster.json.previous"):
+        if (hq_dir / private).is_file():
+            os.chmod(hq_dir / private, 0o600)
     (hq_dir / "vendor").mkdir(exist_ok=True)
     pairs = [(app_dir / n, hq_dir / n) for n in INSTALL_FILES]
     pairs += [(app_dir / "vendor" / n, hq_dir / "vendor" / n) for n in VENDOR_FILES]
@@ -1308,7 +1365,7 @@ def install(app_dir: Path, hq_dir: Path, claude_dir: Path) -> Dict[str, Any]:
 
 
 def refresh_roster(hq_dir: Path, claude_dir: Path, extra_cwds: Iterable[str], write: bool) -> Tuple[Dict[str, Any], List[str]]:
-    existing = load_roster(hq_dir) if (hq_dir / "roster.json").exists() else None
+    existing = load_roster(hq_dir, strict=True) if (hq_dir / "roster.json").exists() else None
     scanned, notes = scan_roster(claude_dir, extra_cwds)
     roster = merge_roster(existing, scanned)
     if write:
@@ -1385,6 +1442,11 @@ def main(argv: Optional[List[str]] = None) -> int:
             _, saved = _show_roster(hq_dir, claude_dir, extra, getattr(args, "yes", False), write=True)
             if not saved:
                 return 1
+        else:
+            try:
+                load_roster(hq_dir, strict=True)
+            except ValueError as exc:
+                sys.stderr.write(f"Agent HQ: {exc}. Serving with an empty roster until it is fixed.\n")
         try:
             result = install(APP_DIR, hq_dir, claude_dir)
             print(f"hooks   {result['path']}: " + (f"added {', '.join(result['added'])}" if result["added"] else "already present"))
@@ -1415,11 +1477,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
     if cmd == "roster":
         extra = [os.path.abspath(c) for c in args.cwd] + _cwd_hint()
-        if args.json:
-            roster, _ = refresh_roster(hq_dir, claude_dir, extra, write=False)
-            print(json.dumps(roster, indent=2, ensure_ascii=False))
-            return 0
-        _show_roster(hq_dir, claude_dir, extra, args.yes, write=not args.no_write)
+        try:
+            if args.json:
+                roster, _ = refresh_roster(hq_dir, claude_dir, extra, write=False)
+                print(json.dumps(roster, indent=2, ensure_ascii=False))
+                return 0
+            _show_roster(hq_dir, claude_dir, extra, args.yes, write=not args.no_write)
+        except ValueError as exc:
+            sys.stderr.write(f"Agent HQ: {exc}. Nothing was written.\n")
+            return 2
         return 0
     if cmd == "state":
         print(json.dumps(State(hq_dir).snapshot(force=True), indent=2, ensure_ascii=False))

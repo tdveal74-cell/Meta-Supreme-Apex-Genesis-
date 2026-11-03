@@ -62,7 +62,13 @@ class Orbit {
     dom.addEventListener('wheel', (e) => { e.preventDefault(); this.zoom(Math.exp(e.deltaY * 0.0012)); }, { passive: false });
     dom.addEventListener('contextmenu', (e) => e.preventDefault());
   }
-  down(e) { this.dom.setPointerCapture(e.pointerId); this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); this.moved = 0; this.pinch = this.span(); }
+  down(e) {
+    this.dom.setPointerCapture(e.pointerId);
+    if (this.pointers.size === 0) { this.moved = 0; this.multi = false; }
+    this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (this.pointers.size > 1) this.multi = true;
+    this.pinch = this.span();
+  }
   move(e) {
     const p = this.pointers.get(e.pointerId); if (!p) return;
     const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
@@ -75,9 +81,9 @@ class Orbit {
     }
   }
   up(e) {
-    const single = this.pointers.size === 1;
     this.pointers.delete(e.pointerId); this.pinch = this.span();
-    if (e.type === 'pointerup' && single && e.button === 0 && this.moved < 6) onTap(e);
+    const clean = e.type === 'pointerup' && e.button === 0 && !this.multi && this.moved < 6;
+    if (this.pointers.size === 0 && clean) onTap(e);
   }
   span() { const a = [...this.pointers.values()]; return a.length < 2 ? 0 : Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y); }
   zoom(f) { this.radius = clamp(this.radius * f, this.min, this.max); }
@@ -219,11 +225,15 @@ function shortModel(model) {
 function fmtTokens(n) {
   n = Number(n);
   if (!Number.isFinite(n) || n < 0) n = 0;
+  if (n >= 999950000) return (n / 1e9).toFixed(2) + 'B';
   if (n >= 999950) return (n / 1e6).toFixed(2) + 'M';
   if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
   return String(Math.round(n));
 }
-function clip(text, max) { text = String(text ?? ''); return text.length > max ? text.slice(0, max - 1) + '…' : text; }
+function clip(text, max) {
+  const chars = Array.from(String(text ?? ''));
+  return chars.length > max ? chars.slice(0, max - 1).join('') + '…' : chars.join('');
+}
 function hexCss(c) { return '#' + c.toString(16).padStart(6, '0'); }
 
 function buildBot(bot) {
@@ -429,7 +439,7 @@ function renderDetail(id) {
   const t = bot.tokens_today || {};
   $('d-tokens').textContent = `${fmtTokens(t.total)} total: ${fmtTokens(t.input)} in, ${fmtTokens(t.output)} out, ${fmtTokens(t.cache_read)} cache read, ${fmtTokens(t.cache_create)} cache write, ${t.calls || 0} calls`;
   $('d-last').textContent = bot.last_line ? `${new Date(bot.last_line).toLocaleString()} (${ago(bot.last_line, latest.now_epoch)} ago)${bot.stale ? ', stale' : ''}` : 'never';
-  $('d-sessions').textContent = `${bot.sessions_active} active, ${bot.sessions_seen} seen`;
+  $('d-runs').textContent = `${bot.runs_active} active, ${bot.runs_seen} seen`;
   $('d-source').textContent = bot.source || '';
   $('detail').hidden = false;
 }
@@ -506,23 +516,25 @@ renderer.setAnimationLoop(animate);
 // ---------------------------------------------------------------- data loop
 
 let inFlight = false;
-let seq = 0;
 async function tick() {
   if (inFlight) return;
   inFlight = true;
-  const mine = ++seq;
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 15000);
+  let state = null;
   try {
     const r = await fetch('/state', { cache: 'no-store', signal: ctl.signal });
     if (!r.ok) throw new Error(String(r.status));
-    const state = await r.json();
-    if (mine === seq) { applyState(state); document.body.classList.remove('offline'); }
+    state = await r.json();
+    document.body.classList.remove('offline');
   } catch (err) {
-    if (mine === seq) document.body.classList.add('offline');
+    document.body.classList.add('offline');
   } finally {
     clearTimeout(timer);
     inFlight = false;
+  }
+  if (state) {
+    try { applyState(state); } catch (err) { console.error('Agent HQ: could not draw the state', err); }
   }
 }
 tick();

@@ -46,6 +46,7 @@ hook = _load("hook")
 
 # A fixed clock at noon today, so a run near midnight still counts "today".
 NOON = datetime.now().astimezone().replace(hour=12, minute=0, second=0, microsecond=0)
+VERA = "Vera (renamed by hand)"
 
 
 def _iso(dt: datetime) -> str:
@@ -533,8 +534,12 @@ def test_merge_roster_keeps_edits_refreshes_files_and_retires_only_the_gone(tmp_
         {"id": f"session:{folder}", "name": "lane", "kind": "session", "job": "", "model": "x", "team": "Ops", "cwd": str(folder)},
         {"id": "session:/no/such/folder", "name": "nofolder", "kind": "session", "job": "", "model": "x", "team": "Ops", "cwd": "/no/such/folder"},
     ]}
+    existing["bots"].append({"id": "agent:renamed-scheme@user", "name": "Beta", "kind": "agent", "job": "kept", "model": "x", "team": "Visuals", "source": "/b.md"})
+    scanned.append({"id": "agent:b@user", "name": "b", "agent_type": "b", "kind": "agent", "job": "new", "model": "haiku", "team": "Ops", "source": "/b.md"})
     merged = hq.merge_roster(existing, scanned)
     by_id = {b["id"]: b for b in merged["bots"]}
+    assert "agent:renamed-scheme@user" not in by_id, "the same file under an older id is migrated, not duplicated"
+    assert by_id["agent:b@user"]["name"] == "Beta" and by_id["agent:b@user"]["team"] == "Visuals" and by_id["agent:b@user"]["agent_type"] == "b"
     assert by_id["agent:a@user"]["name"] == "Alpha" and by_id["agent:a@user"]["team"] == "Content"
     assert by_id["agent:a@user"]["job"] == "my words" and by_id["agent:a@user"]["model"] == "haiku"
     assert "retired" not in by_id["agent:old@user"], "the file is still there"
@@ -547,14 +552,17 @@ def test_merge_roster_keeps_edits_refreshes_files_and_retires_only_the_gone(tmp_
     assert "Alpha" in table and "retired (file or folder gone" in table and "nofolder" in table
 
 
-def test_duplicate_agent_names_get_distinct_ids_and_desks(tmp_path):
-    bots = [{"id": "agent:dup@user", "name": "dup", "kind": "agent", "source": "/a/x.md"},
-            {"id": "agent:dup@user", "name": "dup", "kind": "agent", "source": "/a/y.md"},
+def test_duplicate_agent_names_get_distinct_display_names_and_stable_ids(tmp_path):
+    (tmp_path / "x.md").write_text("---\nname: dup\n---\n")
+    (tmp_path / "y.md").write_text("---\nname: dup\n---\n")
+    bots = [hq.agent_bot(tmp_path / "x.md", None, "user"), hq.agent_bot(tmp_path / "y.md", None, "user"),
             {"id": "session:/a/repo", "name": "repo", "kind": "session", "cwd": "/a/repo"},
             {"id": "session:/b/repo", "name": "repo", "kind": "session", "cwd": "/b/repo"}]
+    assert [b["id"] for b in bots[:2]] == ["agent:x@user", "agent:y@user"], "the id is the file"
     hq._disambiguate(bots)
-    assert [b["id"] for b in bots[:2]] == ["agent:dup@user#x", "agent:dup@user#y"]
+    assert [b["id"] for b in bots[:2]] == ["agent:x@user", "agent:y@user"]
     assert [b["name"] for b in bots] == ["dup (x)", "dup (y)", "repo (a)", "repo (b)"]
+    assert [b["agent_type"] for b in bots[:2]] == ["dup", "dup"], "the hooks still match the frontmatter name"
 
 
 def test_team_order():
@@ -573,9 +581,10 @@ def _state_fixture(tmp_path: Path):
     transcript = tmp_path / "sess.jsonl"
     transcript.write_text(_assistant("m1", now - timedelta(seconds=40), [
         {"type": "tool_use", "id": "tu1", "name": "Bash", "input": {"description": "Run the suite"}}]))
+    os.utime(transcript, (now.timestamp() - 40, now.timestamp() - 40))
     roster = {"version": 1, "bots": [
         {"id": f"session:{project}", "name": "proj", "kind": "session", "team": "Ops", "model": "inherit", "cwd": str(project), "job": "j"},
-        {"id": "agent:verifier@x", "name": "verifier", "kind": "agent", "team": "Research", "model": "sonnet", "job": "v"},
+        {"id": "agent:verifier@x", "name": "Vera (renamed by hand)", "agent_type": "verifier", "kind": "agent", "team": "Research", "model": "sonnet", "job": "v"},
     ]}
     (hq_dir / "roster.json").write_text(json.dumps(roster))
     events = hq_dir / "events.jsonl"
@@ -599,7 +608,7 @@ def test_state_follows_the_session_through_its_day(tmp_path):
     proj = next(b for b in snap["bots"] if b["name"] == "proj")
     assert proj["status"] == "working" and proj["step"] == "Bash: Run the suite"
     assert proj["tokens_today"]["total"] == 1160 and snap["tokens_total_today"] == 1160
-    assert proj["model_seen"] == "claude-sonnet-4-5" and proj["sessions_active"] == 1
+    assert proj["model_seen"] == "claude-sonnet-4-5" and proj["runs_active"] == 1
     assert snap["counts"] == {"waiting": 0, "stuck": 0, "working": 1, "resting": 1}
     assert snap["teams"] == ["Research", "Ops"]
 
@@ -650,11 +659,11 @@ def test_an_unknown_folder_gets_an_unassigned_desk_and_a_subagent_feeds_its_agen
     names = {b["name"]: b for b in snap["bots"]}
     assert names["mystery"]["team"] == "Unassigned" and snap["teams"][-1] == "Unassigned"
     assert names["proj"]["tokens_today"]["total"] == 1160 + 7, "an unattributed subagent counts for its parent"
-    assert names["verifier"]["tokens_today"]["total"] == 0
+    assert names[VERA]["tokens_today"]["total"] == 0
     emit("SubagentStop", now, agent_type="verifier", agent_transcript_path=str(sub_dir / "agent-1.jsonl"))
     snap = state.snapshot(now=now.timestamp(), force=True)
     names = {b["name"]: b for b in snap["bots"]}
-    assert names["verifier"]["tokens_today"]["total"] == 7 and names["verifier"]["status"] == "resting"
+    assert names[VERA]["tokens_today"]["total"] == 7 and names[VERA]["status"] == "resting", "matched by agent_type, not by the edited name"
     assert names["proj"]["tokens_today"]["total"] == 1160
 
 
@@ -669,21 +678,23 @@ def test_a_parent_waiting_on_its_subagent_is_working_and_the_agent_shows_it(tmp_
     sub_dir.mkdir(parents=True)
     sub = sub_dir / "agent-2.jsonl"
     sub.write_text(_assistant("v1", now - timedelta(seconds=30), [{"type": "text", "text": "still checking"}], usage={"input_tokens": 1, "output_tokens": 1}))
+    os.utime(sub, (now.timestamp() - 30, now.timestamp() - 30))
     state = hq.State(hq_dir)
     snap = state.snapshot(now=now.timestamp(), force=True)
     names = {b["name"]: b for b in snap["bots"]}
     assert names["proj"]["status"] == "working", "the subagent wrote 30s ago"
-    assert names["verifier"]["status"] == "working" and names["verifier"]["step"] == "running for proj"
-    assert names["verifier"]["sessions_active"] == 1
+    assert names[VERA]["status"] == "working" and names[VERA]["step"] == "running for proj"
+    assert names[VERA]["runs_active"] == 1
     snap = state.snapshot(now=now.timestamp() + 700, force=True)
     names = {b["name"]: b for b in snap["bots"]}
-    assert names["proj"]["status"] == "stuck" and names["verifier"]["status"] == "stuck", "the subagent went quiet too"
+    assert names["proj"]["status"] == "stuck" and names[VERA]["status"] == "stuck", "the subagent went quiet too"
     with transcript.open("a") as handle:
         handle.write(_user(now, [{"type": "tool_result", "tool_use_id": "tu-a", "content": "REFUTED"}]))
+    os.utime(transcript, (now.timestamp(), now.timestamp()))
     emit("SubagentStop", now, agent_type="verifier", agent_transcript_path=str(sub))
     snap = state.snapshot(now=now.timestamp() + 2, force=True)
     names = {b["name"]: b for b in snap["bots"]}
-    assert names["verifier"]["status"] == "resting" and names["verifier"]["tokens_today"]["total"] == 2
+    assert names[VERA]["status"] == "resting" and names[VERA]["tokens_today"]["total"] == 2
     assert names["proj"]["status"] == "working", "the tool result is a fresh turn line"
 
 
@@ -698,7 +709,7 @@ def test_a_stale_session_opens_no_file_and_old_transcripts_are_evicted(tmp_path)
     snap = state.snapshot(now=now.timestamp(), force=True)
     assert str(old) not in state.transcripts and str(transcript) in state.transcripts
     proj = next(b for b in snap["bots"] if b["name"] == "proj")
-    assert proj["status"] == "resting" and proj["sessions_seen"] == 2 and proj["sessions_active"] == 1
+    assert proj["status"] == "resting" and proj["runs_seen"] == 2 and proj["runs_active"] == 1
     (hq_dir / "events.jsonl").write_text("")
     state.snapshot(now=now.timestamp() + 5, force=True)
     assert state.transcripts == {}, "a transcript no session names any more is dropped"
@@ -754,7 +765,7 @@ def test_server_routes_and_headers(server):
     assert status == 200
     snap = json.loads(body)
     assert {"now", "bots", "counts", "waiting", "finished_today", "teams", "tokens_total_today"} <= set(snap)
-    assert [b["name"] for b in snap["bots"]] == ["proj", "verifier"]
+    assert [b["name"] for b in snap["bots"]] == ["proj", "Vera (renamed by hand)"]
     status, headers, body = _get(server, "/health")
     assert status == 200 and json.loads(body) == {"ok": True}
 
@@ -841,7 +852,7 @@ def test_up_writes_the_roster_installs_the_hooks_and_the_hook_line_feeds_the_pag
         status, headers, body = _get(port, "/state")
         snap = json.loads(body)
         proj = next(b for b in snap["bots"] if b["name"] == "proj")
-        assert proj["status"] == "resting" and proj["sessions_seen"] == 1
+        assert proj["status"] == "resting" and proj["runs_seen"] == 1
         assert snap["finished_today"][0]["summary"] == "pong" and snap["finished_today"][0]["bot"] == "proj"
         assert _get(port, "/")[0] == 200 and _get(port, "/vendor/three.core.js")[0] == 200
     finally:
@@ -868,6 +879,124 @@ def test_cli_state_and_roster_run_offline(tmp_path):
     assert result.returncode == 0, result.stderr
     snap = json.loads(result.stdout)
     assert snap["counts"]["resting"] == len(snap["bots"]) >= 3
+
+
+# --------------------------------------------------------------------------- round two
+
+
+def test_a_broken_roster_is_refused_not_flattened(tmp_path):
+    project = tmp_path / "work" / "proj"
+    claude = _fake_claude(tmp_path, project)
+    env = dict(os.environ, AGENT_HQ_DIR=str(tmp_path / "hq"), CLAUDE_CONFIG_DIR=str(claude))
+    first = subprocess.run([sys.executable, str(APP / "hq.py"), "roster", "--yes"], env=env, capture_output=True, text=True, timeout=60, cwd=str(tmp_path))
+    assert first.returncode == 0
+    roster_path = tmp_path / "hq" / "roster.json"
+    good = roster_path.read_text()
+    roster_path.write_text(good.replace('"team": "Content"', '"team": "MyTeam",,', 1))
+    broken = roster_path.read_text()
+    assert broken != good
+    second = subprocess.run([sys.executable, str(APP / "hq.py"), "roster", "--yes"], env=env, capture_output=True, text=True, timeout=60, cwd=str(tmp_path))
+    assert second.returncode == 2 and "not valid JSON" in second.stderr and "Nothing was written" in second.stderr
+    assert roster_path.read_text() == broken, "the hand edit is untouched"
+    roster_path.write_text(good.replace('"team": "Content"', '"team": "MyTeam"', 1))
+    third = subprocess.run([sys.executable, str(APP / "hq.py"), "roster", "--yes"], env=env, capture_output=True, text=True, timeout=60, cwd=str(tmp_path))
+    assert third.returncode == 0
+    assert '"team": "MyTeam"' in roster_path.read_text(), "a valid edit survives a rescan"
+    previous = tmp_path / "hq" / "roster.json.previous"
+    assert previous.exists() and '"team": "MyTeam"' in previous.read_text()
+    bad = tmp_path / "bad"
+    bad.mkdir()
+    (bad / "roster.json").write_text("{nope")
+    with pytest.raises(ValueError, match="not valid JSON"):
+        hq.load_roster(bad, strict=True)
+    assert hq.load_roster(bad) == {"version": 1, "bots": []}, "the server reads leniently"
+    assert hq.load_roster(tmp_path / "nowhere", strict=True) == {"version": 1, "bots": []}, "a missing file is simply empty"
+
+
+def test_an_agent_is_matched_by_type_and_the_project_copy_wins(tmp_path):
+    hq_dir, now, emit, transcript, project = _state_fixture(tmp_path)
+    roster = json.loads((hq_dir / "roster.json").read_text())
+    roster["bots"].append({"id": f"agent:verifier@{project}", "name": "verifier (proj)", "agent_type": "verifier", "kind": "agent",
+                           "team": "Research", "model": "sonnet", "job": "v", "cwd": str(project)})
+    (hq_dir / "roster.json").write_text(json.dumps(roster))
+    emit("SessionStart", now - timedelta(minutes=2), source="startup")
+    emit("UserPromptSubmit", now - timedelta(minutes=1), source="user")
+    transcript.write_text(_assistant("m1", now - timedelta(seconds=30), [
+        {"type": "tool_use", "id": "tu-a", "name": "Agent", "input": {"subagent_type": "verifier"}}]))
+    os.utime(transcript, (now.timestamp() - 30, now.timestamp() - 30))
+    snap = hq.State(hq_dir).snapshot(now=now.timestamp(), force=True)
+    names = {b["name"]: b for b in snap["bots"]}
+    assert names["verifier (proj)"]["status"] == "working", "the session's own project agent"
+    assert names[VERA]["status"] == "resting", "the user level copy stays idle"
+
+
+def test_a_relative_data_dir_still_bakes_an_absolute_hook_line(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AGENT_HQ_DIR", "hqdata")
+    assert hq.default_hq_dir() == tmp_path / "hqdata"
+    assert str(tmp_path / "hqdata" / "hook.py") in hq.hook_command(hq.default_hq_dir())
+    monkeypatch.setenv("AGENT_HQ_DIR", "~/elsewhere")
+    assert hq.default_hq_dir() == Path.home() / "elsewhere"
+
+
+def test_an_oversized_line_is_dropped_whatever_the_chunk_alignment(tmp_path, monkeypatch):
+    monkeypatch.setattr(hq, "MAX_LINE_BYTES", 300)
+    now = NOON
+    path = tmp_path / "t.jsonl"
+    good = _assistant("m1", now, [{"type": "text", "text": "a"}], usage={"input_tokens": 7, "output_tokens": 0})
+    huge = json.dumps({"type": "assistant", "message": {"usage": {"input_tokens": 999999}, "content": [{"type": "text", "text": "x" * 400}]}}) + "\n"
+    path.write_text(good + huge + good.replace("m1", "m2"))
+    tr = hq.Transcript(str(path))
+    tr.refresh()
+    assert tr.tokens_for(hq.local_day(now.timestamp()))["total"] == 14 and tr.oversized == 1
+
+
+def test_the_hook_tightens_an_existing_tree(tmp_path):
+    target = tmp_path / "old"
+    target.mkdir()
+    os.chmod(target, 0o755)
+    (target / "events.jsonl").write_text("")
+    os.chmod(target / "events.jsonl", 0o644)
+    _run_hook({"hook_event_name": "Stop", "session_id": "s"}, target)
+    assert stat.S_IMODE(target.stat().st_mode) == 0o700
+    assert stat.S_IMODE((target / "events.jsonl").stat().st_mode) == 0o600
+    row = json.loads((target / "events.jsonl").read_text().splitlines()[0])
+    assert "permission_mode" not in row
+
+
+def test_install_tightens_an_existing_tree(tmp_path):
+    hq_dir = tmp_path / "hq"
+    hq_dir.mkdir()
+    os.chmod(hq_dir, 0o755)
+    (hq_dir / "events.jsonl").write_text("")
+    os.chmod(hq_dir / "events.jsonl", 0o644)
+    hq.install(APP, hq_dir, tmp_path / "claude")
+    assert stat.S_IMODE(hq_dir.stat().st_mode) == 0o700
+    assert stat.S_IMODE((hq_dir / "events.jsonl").stat().st_mode) == 0o600
+
+
+def _node(script: str) -> str:
+    node = shutil.which("node")
+    assert node, "node is needed for the page checks"
+    result = subprocess.run([node, "--input-type=module", "-e", script], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stderr
+    return result.stdout.strip()
+
+
+def test_the_page_helpers_format_and_clip_as_documented():
+    js = (APP / "app.js").read_text()
+    functions = []
+    for name in ("fmtTokens", "clip"):
+        match = re.search(r"^function " + name + r"\(.*?^\}", js, re.S | re.M)
+        assert match, name
+        functions.append(match.group(0))
+    script = "\n".join(functions) + "\n" + """
+const out = [fmtTokens(999949), fmtTokens(999950), fmtTokens(1200000000), fmtTokens('x'), fmtTokens(-5), fmtTokens(12)];
+const clipped = clip('a'.repeat(26) + String.fromCodePoint(0x1F600) + 'bb', 28);
+out.push(String([...clipped].length), String(/[\\ud800-\\udbff](?![\\udc00-\\udfff])/.test(clipped)), clip('short', 28));
+console.log(out.join('|'));
+"""
+    assert _node(script) == "999.9k|1.00M|1.20B|0|0|12|28|false|short"
 
 
 # --------------------------------------------------------------------------- pins and prose
@@ -943,11 +1072,18 @@ def test_the_page_reads_only_fields_the_server_emits(tmp_path):
         assert f'id="{element}"' in (APP / "index.html").read_text() or element.startswith("c-"), element
 
 
-def test_the_page_script_parses():
+def test_the_page_script_parses(tmp_path):
     node = shutil.which("node")
     assert node, "node is needed to syntax check app.js (it is on every CI runner and beside pnpm here)"
-    result = subprocess.run([node, "--check", str(APP / "app.js")], capture_output=True, text=True, timeout=60)
+    # node --check treats a .js file as CommonJS and passes an ES module unread, so check a .mjs copy.
+    copy = tmp_path / "app.mjs"
+    copy.write_bytes((APP / "app.js").read_bytes())
+    result = subprocess.run([node, "--check", str(copy)], capture_output=True, text=True, timeout=60)
     assert result.returncode == 0, result.stderr
+    broken = tmp_path / "broken.mjs"
+    broken.write_bytes((APP / "app.js").read_bytes() + b"\nconst = ;\n")
+    result = subprocess.run([node, "--check", str(broken)], capture_output=True, text=True, timeout=60)
+    assert result.returncode != 0, "the check must be able to fail"
 
 
 def test_time_helpers_round_trip():

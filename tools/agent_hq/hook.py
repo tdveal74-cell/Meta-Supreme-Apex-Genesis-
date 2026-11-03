@@ -8,12 +8,13 @@ prompt text is never written; only the fact that a prompt was submitted.
 
 Row: time, event, session_id, cwd, bot (the roster name matched by agent type
 or by folder, else the folder name) and transcript_path (the token counter
-reads it). Added where the event carries them: message and notification_type
-on a Notification; source, reason, agent_type, agent_id and
-agent_transcript_path; and summary, the first 200 characters of the last
-assistant message on Stop and SubagentStop, which feeds "Finished today".
-Every added value is cut at 300 characters. The directory is created 0700
-and the file 0600, because the rows hold conversation excerpts.
+reads it). Added where the event carries them: message on a Notification;
+notification_type, title, source, reason, agent_type, agent_id,
+agent_transcript_path and stop_hook_active (a boolean); and summary, the
+first 200 characters of the last assistant message on Stop and SubagentStop,
+which feeds "Finished today". Every added text value is cut at 300
+characters. The directory is kept 0700 and the file 0600 on every write,
+because the rows hold conversation excerpts.
 """
 import json
 import os
@@ -24,7 +25,7 @@ READ_LIMIT = 1_000_000
 SUMMARY_CHARS = 200
 VALUE_CHARS = 300
 PASSTHROUGH = ("source", "reason", "notification_type", "title", "agent_type", "agent_id",
-               "agent_transcript_path", "stop_hook_active", "permission_mode")
+               "agent_transcript_path", "stop_hook_active")
 
 
 def _text(value, limit):
@@ -37,7 +38,7 @@ def pick_bot(roster, cwd, agent_type):
     bots = [b for b in bots if isinstance(b, dict) and not b.get("retired")]
     if agent_type:
         for bot in bots:
-            if bot.get("kind") == "agent" and bot.get("name") == agent_type:
+            if bot.get("kind") == "agent" and (bot.get("agent_type") or bot.get("name")) == agent_type:
                 return bot.get("name")
     best = None
     best_len = -1
@@ -88,7 +89,10 @@ def main():
         if not isinstance(payload, dict):
             payload = {}
         hq_dir = os.environ.get("AGENT_HQ_DIR") or os.path.join(os.path.expanduser("~"), ".agent-hq")
+        hq_dir = os.path.abspath(os.path.expanduser(hq_dir))
         os.makedirs(hq_dir, mode=0o700, exist_ok=True)
+        if os.stat(hq_dir).st_mode & 0o777 != 0o700:
+            os.chmod(hq_dir, 0o700)
         try:
             with open(os.path.join(hq_dir, "roster.json"), encoding="utf-8") as handle:
                 roster = json.load(handle)
@@ -100,6 +104,8 @@ def main():
             cwd_fallback = None
         row = build_row(payload, roster, cwd_fallback)
         fd = os.open(os.path.join(hq_dir, "events.jsonl"), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        if os.fstat(fd).st_mode & 0o777 != 0o600:
+            os.fchmod(fd, 0o600)
         with os.fdopen(fd, "a", encoding="utf-8") as handle:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
     except Exception:
