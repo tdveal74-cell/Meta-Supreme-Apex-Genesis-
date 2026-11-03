@@ -2,12 +2,15 @@
 """Agent HQ: a live 3D office for the Claude Code sessions on this machine.
 
 One file, Python 3 standard library only, no network calls. The server binds
-to 127.0.0.1 and reads only files under ~/.claude and ~/.agent-hq. Nothing it
-reads leaves the machine.
+to 127.0.0.1 and reads only local files: ~/.agent-hq, ~/.claude, the
+.claude/agents folders of the projects sessions run in, and the transcripts
+the hooks name. Nothing it reads leaves the machine. Like any loopback
+server it answers every process on this machine, so /state is as private as
+the account that runs it.
 
-    python3 hq.py up          install the hooks, build the roster if missing, serve
+    python3 hq.py up          roster (asks for your OK the first time), hooks, serve
     python3 hq.py install     merge the hooks into ~/.claude/settings.json, copy files
-    python3 hq.py roster      scan agents and session folders; print and merge roster.json
+    python3 hq.py roster      scan agents and session folders; show, ask, merge roster.json
     python3 hq.py serve       serve the office on http://127.0.0.1:7777
     python3 hq.py state       print the current state once, as JSON
     python3 hq.py uninstall   remove the Agent HQ hooks, keep the data
@@ -17,14 +20,19 @@ Data lives in ~/.agent-hq (override with AGENT_HQ_DIR):
     events.jsonl   one JSON line per hook event, written by hook.py
     hq.py hook.py index.html app.js vendor/    the installed copies
 
-Status rules, per session, from events.jsonl and the session's transcript:
+Status rules, per session, from events.jsonl and the session's transcript.
+Event order is the order the hook wrote the rows, so a Stop and a prompt in
+the same second still sort correctly.
     waiting   a Notification since the last prompt that nothing has answered
               yet: no Stop after it and no transcript turn line after it. An
               idle_prompt notification reads as resting unless IDLE_IS_WAITING.
     resting   stopped, ended, no prompt yet, or quiet for STALE_AFTER_S
-    working   mid turn, and the transcript grew inside STUCK_AFTER_S
+    working   mid turn, and the transcript grew inside STUCK_AFTER_S; a
+              subagent transcript growing under the session counts too
     stuck     mid turn, nothing new for STUCK_AFTER_S (10 minutes)
 A bot shows the highest of its sessions: waiting, then stuck, working, resting.
+An agent bot (a .claude/agents definition) shows working while a session has
+an open Agent tool call of its type, and resting once SubagentStop lands.
 
 Tokens are summed from the usage field of every assistant line in the
 transcripts the hooks name, once per message id (the transcript repeats a
@@ -59,25 +67,31 @@ IDLE_IS_WAITING = False
 ANSWER_GRACE_S = 5.0
 STATE_TTL_S = 2.0
 TAIL_BYTES = 256 * 1024
+CHUNK_BYTES = 4 * 1024 * 1024
+MAX_LINE_BYTES = 8 * 1024 * 1024
 HOOK_EVENTS = ("SessionStart", "UserPromptSubmit", "Notification", "Stop", "SubagentStop", "SessionEnd")
-HOOK_MARK = re.compile(r"agent-hq[}\"']?/hook\.py")
-HOOK_COMMAND = 'python3 "${AGENT_HQ_DIR:-$HOME/.agent-hq}/hook.py" >/dev/null 2>&1 || true'
+HOOK_SUFFIX = '>/dev/null 2>&1 || true  # agent-hq'
+HOOK_MARK = re.compile(r"(?:agent-hq[}\"']?/hook\.py|# agent-hq\s*$)")
 HOOK_TIMEOUT_S = 5
 INSTALL_FILES = ("hq.py", "hook.py", "index.html", "app.js")
 VENDOR_FILES = ("three.module.js", "three.core.js", "LICENSE")
 TEAM_ORDER = ("Research", "Content", "Visuals", "Ops")
 UNASSIGNED = "Unassigned"
+# A trailing * makes a keyword a stem matched at a word start; without it the
+# keyword must be a whole word, so "frame" does not fire on "framework" and
+# "post" does not fire on "postgres". First team to match wins.
 TEAM_RULES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
-    ("Visuals", ("render", "video", "image", "thumbnail", "design", "carousel", "visual", "frame",
-                 "shot", "avatar", "scene", "motion", "art", "photo", "film", "graphic", "animat")),
-    ("Content", ("script", "writ", "draft", "copy", "episode", "podcast", "content", "story", "caption",
-                 "voice", "canon", "brand", "viral", "tqo", "nco", "tsws", "short", "newsletter",
-                 "post", "blog", "narrat")),
-    ("Research", ("research", "scan", "read-only", "search", "audit", "verif", "analy", "investigat",
-                  "review", "critic", "explor", "reader", "scout", "inspect")),
-    ("Ops", ("deploy", "ci", "test", "fix", "edit", "editor", "pipeline", "workflow", "infra", "ops",
-             "build", "registry", "steward", "hook", "release", "devops", "migrat", "monitor",
-             "watchdog", "backup")),
+    ("Visuals", ("render*", "video*", "image*", "thumbnail*", "design*", "carousel*", "visual*", "frame",
+                 "frames", "shot", "shots", "avatar*", "scene*", "motion", "art", "photo*", "film*",
+                 "graphic*", "animat*")),
+    ("Content", ("script*", "writ*", "draft*", "copy", "episode*", "podcast*", "content", "story", "stories",
+                 "caption*", "voice*", "canon", "brand*", "viral", "tqo", "nco", "tsws", "short", "shorts",
+                 "newsletter*", "post", "posts", "blog*", "narrat*")),
+    ("Research", ("research*", "scan*", "read-only", "search*", "audit*", "verif*", "analy*", "investigat*",
+                  "review*", "critic*", "explor*", "reader", "scout*", "inspect*")),
+    ("Ops", ("deploy*", "ci", "test", "tests", "testing", "fix", "fixes", "edit", "edits", "editor", "pipeline*",
+             "workflow*", "infra*", "ops", "build*", "registry", "steward*", "hook*", "release*", "devops",
+             "migrat*", "monitor*", "watchdog*", "backup*")),
 )
 STATUS_RANK = {"waiting": 3, "stuck": 2, "working": 1, "resting": 0}
 TOKEN_KEYS = (
@@ -86,8 +100,9 @@ TOKEN_KEYS = (
     ("cache_read", "cache_read_input_tokens"),
     ("cache_create", "cache_creation_input_tokens"),
 )
-TOOL_DETAIL_KEYS = ("description", "file_path", "pattern", "query", "command", "url", "prompt",
-                    "path", "skill", "name")
+# What the page shows as the current step. A Bash command, a URL, a prompt or
+# a search query can carry a secret, so only these fields are ever read.
+TOOL_DETAIL_KEYS = ("description", "file_path", "path", "pattern", "skill")
 
 
 # --------------------------------------------------------------------------- paths and time
@@ -103,7 +118,7 @@ def default_claude_dir() -> Path:
 
 def now_iso(epoch: Optional[float] = None) -> str:
     dt = datetime.fromtimestamp(epoch) if epoch is not None else datetime.now()
-    return dt.astimezone().isoformat(timespec="seconds")
+    return dt.astimezone().isoformat(timespec="milliseconds")
 
 
 def parse_ts(value: Any) -> Optional[float]:
@@ -175,16 +190,14 @@ def _unquote(value: str) -> str:
 
 
 def infer_team(*texts: Optional[str]) -> str:
-    """First team whose keyword appears in the texts; Ops when none does.
-
-    A keyword of four letters or fewer must be a whole word, so "ci" does not
-    fire on "specific" and "post" does not fire on "postgres". A longer one is
-    a stem matched at a word start, so "verif" covers verify and verifies.
-    """
+    """First team whose keyword appears in the texts; Ops when none does."""
     blob = " ".join(t for t in texts if t).lower()
     for team, words in TEAM_RULES:
         for word in words:
-            pattern = r"\b" + re.escape(word) + (r"\b" if len(word) <= 4 else "")
+            if word.endswith("*"):
+                pattern = r"\b" + re.escape(word[:-1])
+            else:
+                pattern = r"\b" + re.escape(word) + r"\b"
             if re.search(pattern, blob):
                 return team
     return "Ops"
@@ -212,12 +225,12 @@ def _cwd_of_project(folder: Path) -> Optional[str]:
         try:
             with path.open("rb") as handle:
                 for _ in range(400):
-                    line = handle.readline()
+                    line = handle.readline(MAX_LINE_BYTES)
                     if not line:
                         break
                     try:
                         row = json.loads(line)
-                    except ValueError:
+                    except (ValueError, RecursionError):
                         continue
                     cwd = row.get("cwd") if isinstance(row, dict) else None
                     if isinstance(cwd, str) and cwd:
@@ -242,7 +255,7 @@ def observed_model(folder: Optional[Path]) -> Optional[str]:
         for line in reversed(chunk.splitlines()):
             try:
                 row = json.loads(line)
-            except ValueError:
+            except (ValueError, RecursionError):
                 continue
             if not isinstance(row, dict) or row.get("type") != "assistant":
                 continue
@@ -294,7 +307,7 @@ def scan_roster(claude_dir: Path, extra_cwds: Iterable[str] = ()) -> Tuple[List[
             cwd_to_dir.setdefault(cwd, folder)
         else:
             notes.append(f"skipped {folder.name}: no transcript line carries a cwd")
-    cwds = sorted(set(cwd_to_dir) | {c for c in extra_cwds if c})
+    cwds = sorted(set(cwd_to_dir) | {os.path.abspath(c) for c in extra_cwds if c})
     bots: List[Dict[str, Any]] = []
     user_agents = claude_dir / "agents"
     if user_agents.is_dir():
@@ -312,17 +325,40 @@ def scan_roster(claude_dir: Path, extra_cwds: Iterable[str] = ()) -> Tuple[List[
 
 
 def _disambiguate(bots: List[Dict[str, Any]]) -> None:
-    seen: Dict[str, int] = {}
+    """Make names and ids unique: same name in two folders, or two files with one name."""
+    ids: Dict[str, int] = {}
     for bot in bots:
-        seen[bot["name"]] = seen.get(bot["name"], 0) + 1
+        ids[bot["id"]] = ids.get(bot["id"], 0) + 1
     for bot in bots:
-        if seen[bot["name"]] > 1 and bot.get("cwd"):
+        if ids[bot["id"]] > 1 and bot.get("kind") == "agent":
+            stem = Path(str(bot.get("source") or "")).stem
+            bot["id"] = f"{bot['id']}#{stem}"
+            bot["name"] = f"{bot['name']} ({stem})"
+    names: Dict[str, int] = {}
+    for bot in bots:
+        names[bot["name"]] = names.get(bot["name"], 0) + 1
+    for bot in bots:
+        if names[bot["name"]] > 1 and bot.get("cwd"):
             parent = os.path.basename(os.path.dirname(bot["cwd"].rstrip("/")))
             bot["name"] = f"{bot['name']} ({parent})" if parent else bot["name"]
 
 
+def _source_gone(bot: Dict[str, Any]) -> bool:
+    """True when the file or folder a bot came from is no longer on disk."""
+    if bot.get("kind") == "agent":
+        source = str(bot.get("source") or "")
+        return bool(source) and not os.path.isfile(source)
+    cwd = str(bot.get("cwd") or "")
+    return bool(cwd) and not os.path.isdir(cwd)
+
+
 def merge_roster(existing: Optional[Dict[str, Any]], scanned: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Keep the user's edits (name, team, job), refresh what the files say, retire the gone."""
+    """Keep the user's edits (name, team, job), refresh what the files say.
+
+    A bot the scan did not see stays as it was while its file or folder is
+    still on disk (a folder with no transcript yet is not seen by a scan run
+    from elsewhere); it is marked retired only once that source is gone.
+    """
     old = {b.get("id"): b for b in (existing or {}).get("bots", []) if isinstance(b, dict) and b.get("id")}
     bots: List[Dict[str, Any]] = []
     seen = set()
@@ -339,10 +375,14 @@ def merge_roster(existing: Optional[Dict[str, Any]], scanned: List[Dict[str, Any
         else:
             bots.append(dict(bot))
     for bot_id, prev in old.items():
-        if bot_id not in seen:
-            retired = dict(prev)
-            retired["retired"] = True
-            bots.append(retired)
+        if bot_id in seen:
+            continue
+        kept = dict(prev)
+        if _source_gone(kept):
+            kept["retired"] = True
+        else:
+            kept.pop("retired", None)
+        bots.append(kept)
     return {"version": 1, "generated": now_iso(), "bots": bots}
 
 
@@ -350,7 +390,7 @@ def load_roster(hq_dir: Path) -> Dict[str, Any]:
     path = hq_dir / "roster.json"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return {"version": 1, "bots": []}
     if not isinstance(data, dict) or not isinstance(data.get("bots"), list):
         return {"version": 1, "bots": []}
@@ -363,9 +403,9 @@ def load_roster(hq_dir: Path) -> Dict[str, Any]:
 
 
 def write_roster(hq_dir: Path, roster: Dict[str, Any]) -> Path:
-    hq_dir.mkdir(parents=True, exist_ok=True)
+    hq_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     path = hq_dir / "roster.json"
-    _atomic_write(path, json.dumps(roster, indent=2, ensure_ascii=False) + "\n")
+    _atomic_write(path, json.dumps(roster, indent=2, ensure_ascii=False) + "\n", mode=0o600)
     return path
 
 
@@ -392,52 +432,38 @@ def roster_table(roster: Dict[str, Any]) -> str:
         lines.append("  ".join(row[i].ljust(widths[i]) for i in range(4)) + "  " + row[4])
     retired = [b.get("name") for b in roster.get("bots", []) if b.get("retired")]
     if retired:
-        lines.append("retired (file gone, kept for history): " + ", ".join(map(str, retired)))
+        lines.append("retired (file or folder gone, kept for history): " + ", ".join(map(str, retired)))
     return "\n".join(lines)
 
 
-# --------------------------------------------------------------------------- transcripts
+# --------------------------------------------------------------------------- incremental files
 
 
-def describe_tool(block: Dict[str, Any]) -> str:
-    name = str(block.get("name") or "tool")
-    params = block.get("input")
-    if isinstance(params, dict):
-        for key in TOOL_DETAIL_KEYS:
-            value = params.get(key)
-            if isinstance(value, str) and value.strip():
-                return f"{name}: {squash(value, 70)}"
-    return name
+class _Tail:
+    """Reads a growing file from where it left off, one complete line at a time.
 
-
-class Transcript:
-    """Incremental reader of one Claude Code transcript (.jsonl).
-
-    Reads only the bytes appended since the last refresh, so a 50 MB file costs
-    one pass and then pennies. Usage is counted once per message id because
-    the transcript writes one line per content block, each carrying the whole
-    message's usage.
+    Memory is bounded by CHUNK_BYTES plus one line: a line longer than
+    MAX_LINE_BYTES is dropped and counted in `oversized`. A file that shrank
+    is read again from the start.
     """
 
-    def __init__(self, path: str) -> None:
+    def _init_tail(self, path: str) -> None:
         self.path = path
         self.offset = 0
         self.buf = b""
+        self.skipping = False
         self.mtime: float = 0.0
         self.size = 0
         self.missing = True
         self.lines = 0
         self.bad = 0
-        self.model: Optional[str] = None
-        self.last_ts: Optional[float] = None
-        self.step: Optional[str] = None
-        self.last_tool: Optional[str] = None
-        self.tokens: Dict[str, Dict[str, int]] = {}
-        self.recent_ids: Deque[str] = deque(maxlen=256)
-        self.texts: Deque[Tuple[float, str]] = deque(maxlen=200)
+        self.oversized = 0
 
     def _reset(self) -> None:
-        self.__init__(self.path)  # type: ignore[misc]
+        raise NotImplementedError
+
+    def _consume(self, raw: bytes) -> None:
+        raise NotImplementedError
 
     def refresh(self) -> None:
         try:
@@ -457,24 +483,80 @@ class Transcript:
         try:
             with open(self.path, "rb") as handle:
                 handle.seek(self.offset)
-                data = handle.read()
+                while True:
+                    data = handle.read(CHUNK_BYTES)
+                    if not data:
+                        break
+                    self.offset += len(data)
+                    self._feed(data)
         except OSError:
             return
-        self.offset += len(data)
+
+    def _feed(self, data: bytes) -> None:
         parts = (self.buf + data).split(b"\n")
         self.buf = parts.pop()
         for raw in parts:
+            if self.skipping:
+                self.skipping = False
+                self.oversized += 1
+                continue
             if raw.strip():
+                self.lines += 1
                 self._consume(raw)
+        if len(self.buf) > MAX_LINE_BYTES:
+            self.buf = b""
+            self.skipping = True
+
+
+def _load_row(raw: bytes) -> Optional[Dict[str, Any]]:
+    try:
+        row = json.loads(raw)
+    except (ValueError, RecursionError):
+        return None
+    return row if isinstance(row, dict) else None
+
+
+# --------------------------------------------------------------------------- transcripts
+
+
+def describe_tool(block: Dict[str, Any]) -> str:
+    name = str(block.get("name") or "tool")
+    params = block.get("input")
+    if isinstance(params, dict):
+        for key in TOOL_DETAIL_KEYS:
+            value = params.get(key)
+            if isinstance(value, str) and value.strip():
+                return f"{name}: {squash(value, 70)}"
+    return name
+
+
+class Transcript(_Tail):
+    """Incremental reader of one Claude Code transcript (.jsonl).
+
+    Usage is counted once per message id because the transcript writes one
+    line per content block, each carrying the whole message's usage. Open
+    Agent tool calls are tracked by tool_use_id so an agent bot can show
+    working while its subagent runs.
+    """
+
+    def __init__(self, path: str) -> None:
+        self._init_tail(path)
+        self.model: Optional[str] = None
+        self.last_ts: Optional[float] = None
+        self.step: Optional[str] = None
+        self.last_tool: Optional[str] = None
+        self.tokens: Dict[str, Dict[str, int]] = {}
+        self.recent_ids: Deque[str] = deque(maxlen=256)
+        self.texts: Deque[Tuple[float, str]] = deque(maxlen=200)
+        self.open_agents: Dict[str, Tuple[str, float]] = {}
+
+    def _reset(self) -> None:
+        self.__init__(self.path)  # type: ignore[misc]
 
     def _consume(self, raw: bytes) -> None:
-        self.lines += 1
-        try:
-            row = json.loads(raw)
-        except ValueError:
+        row = _load_row(raw)
+        if row is None:
             self.bad += 1
-            return
-        if not isinstance(row, dict):
             return
         kind = row.get("type")
         ts = parse_ts(row.get("timestamp"))
@@ -504,6 +586,12 @@ class Transcript:
             if kind == "assistant" and btype == "tool_use":
                 self.last_tool = describe_tool(block)
                 self.step = self.last_tool
+                if block.get("name") == "Agent" and isinstance(block.get("id"), str):
+                    params = block.get("input") if isinstance(block.get("input"), dict) else {}
+                    agent_type = str(params.get("subagent_type") or "general-purpose")
+                    if len(self.open_agents) >= 64:
+                        self.open_agents.pop(next(iter(self.open_agents)))
+                    self.open_agents[block["id"]] = (agent_type, ts or self.mtime)
             elif kind == "assistant" and btype == "text":
                 text = squash(block.get("text"), 200)
                 if text:
@@ -511,10 +599,12 @@ class Transcript:
                     self.step = "says: " + squash(text, 90)
             elif kind == "assistant" and btype == "thinking":
                 self.step = "thinking"
+            elif kind == "user" and btype == "tool_result":
+                self.open_agents.pop(str(block.get("tool_use_id")), None)
 
     def _add_usage(self, usage: Dict[str, Any], ts: Optional[float]) -> None:
         day = local_day(ts if ts else (self.mtime or time.time()))
-        bucket = self.tokens.setdefault(day, {k: 0 for k, _ in TOKEN_KEYS} | {"total": 0, "calls": 0})
+        bucket = self.tokens.setdefault(day, _empty_tokens())
         total = 0
         for key, source in TOKEN_KEYS:
             value = _int(usage.get(source))
@@ -524,7 +614,7 @@ class Transcript:
         bucket["calls"] += 1
 
     def tokens_for(self, day: str) -> Dict[str, int]:
-        return dict(self.tokens.get(day) or ({k: 0 for k, _ in TOKEN_KEYS} | {"total": 0, "calls": 0}))
+        return dict(self.tokens.get(day) or _empty_tokens())
 
     def summary_before(self, epoch: float) -> Optional[str]:
         best: Optional[str] = None
@@ -532,6 +622,21 @@ class Transcript:
             if ts <= epoch + ANSWER_GRACE_S:
                 best = text
         return best
+
+    def activity(self) -> float:
+        return max(self.mtime, self.last_ts or 0.0)
+
+    def open_agent_types(self) -> List[str]:
+        return [agent_type for agent_type, _ in self.open_agents.values()]
+
+
+def _empty_tokens() -> Dict[str, int]:
+    return {k: 0 for k, _ in TOKEN_KEYS} | {"total": 0, "calls": 0}
+
+
+def _add_tokens(into: Dict[str, int], more: Dict[str, int]) -> None:
+    for key, value in more.items():
+        into[key] = into.get(key, 0) + value
 
 
 def subagent_paths(transcript_path: Optional[str]) -> List[str]:
@@ -552,7 +657,8 @@ def subagent_paths(transcript_path: Optional[str]) -> List[str]:
 
 class Session:
     __slots__ = ("sid", "cwd", "transcript_path", "bot_hint", "started", "ended", "ended_reason",
-                 "last_prompt", "last_stop", "last_event", "notification", "events")
+                 "last_prompt", "last_stop", "last_event", "notification", "events",
+                 "prompt_seq", "stop_seq", "end_seq")
 
     def __init__(self, sid: str) -> None:
         self.sid = sid
@@ -567,54 +673,36 @@ class Session:
         self.last_event: float = 0.0
         self.notification: Optional[Dict[str, Any]] = None
         self.events = 0
+        self.prompt_seq = 0
+        self.stop_seq = 0
+        self.end_seq = 0
 
 
-class Events:
-    """Incremental reader of events.jsonl, folded into per-session state."""
+class Events(_Tail):
+    """Incremental reader of events.jsonl, folded into per-session state.
+
+    Every row gets a sequence number in file order; ordering decisions use
+    the sequence, durations use the timestamps.
+    """
 
     def __init__(self, path: Path) -> None:
-        self.path = path
-        self.offset = 0
-        self.buf = b""
-        self.lines = 0
-        self.bad = 0
+        self._init_tail(str(path))
+        self.seq = 0
         self.sessions: Dict[str, Session] = {}
         self.stops: Deque[Dict[str, Any]] = deque(maxlen=5000)
         self.subagents: Dict[str, Dict[str, Any]] = {}
 
-    def refresh(self) -> None:
-        try:
-            stat = os.stat(self.path)
-        except OSError:
-            return
-        if stat.st_size < self.offset:
-            self.__init__(self.path)  # type: ignore[misc]
-        if stat.st_size == self.offset:
-            return
-        try:
-            with open(self.path, "rb") as handle:
-                handle.seek(self.offset)
-                data = handle.read()
-        except OSError:
-            return
-        self.offset += len(data)
-        parts = (self.buf + data).split(b"\n")
-        self.buf = parts.pop()
-        for raw in parts:
-            if raw.strip():
-                self._consume(raw)
+    def _reset(self) -> None:
+        self.__init__(Path(self.path))  # type: ignore[misc]
 
     def _consume(self, raw: bytes) -> None:
-        self.lines += 1
-        try:
-            row = json.loads(raw)
-        except ValueError:
+        row = _load_row(raw)
+        if row is None:
             self.bad += 1
             return
-        if not isinstance(row, dict):
-            self.bad += 1
-            return
-        t = parse_ts(row.get("t")) or time.time()
+        self.seq += 1
+        seq = self.seq
+        t = parse_ts(row.get("time", row.get("t"))) or time.time()
         event = str(row.get("event") or "")
         sid = str(row.get("session_id") or "unknown")
         session = self.sessions.get(sid)
@@ -633,16 +721,19 @@ class Events:
             session.ended = None
         elif event == "UserPromptSubmit":
             session.last_prompt = t
+            session.prompt_seq = seq
             session.notification = None
             session.ended = None
         elif event == "Notification":
             session.notification = {
                 "t": t,
+                "seq": seq,
                 "message": squash(row.get("message"), 300),
                 "type": str(row.get("notification_type") or ""),
             }
         elif event == "Stop":
             session.last_stop = t
+            session.stop_seq = seq
             self.stops.append({"t": t, "session_id": sid, "summary": squash(row.get("summary"), 200)})
         elif event == "SubagentStop":
             path = row.get("agent_transcript_path")
@@ -655,41 +746,36 @@ class Events:
                 }
         elif event == "SessionEnd":
             session.ended = t
+            session.end_seq = seq
             session.ended_reason = str(row.get("reason") or "")
 
 
-def session_status(session: Session, transcript: Optional[Transcript], now: float) -> Tuple[str, bool]:
-    """(status, stale) for one session under the rules in the module docstring."""
+def session_status(session: Session, transcript: Optional[Transcript], now: float,
+                   extra_activity: float = 0.0) -> Tuple[str, bool]:
+    """(status, stale) for one session under the rules in the module docstring.
+
+    `extra_activity` is the newest write under the session's subagent
+    transcripts, so a parent waiting on a long subagent is working, not stuck.
+    """
     turn_ts = transcript.last_ts if transcript and transcript.last_ts else 0.0
-    any_ts = max(transcript.mtime if transcript else 0.0, session.last_event)
+    any_ts = max(transcript.mtime if transcript else 0.0, session.last_event, extra_activity)
     if session.ended is not None:
         return "resting", False
     if now - max(any_ts, turn_ts) > STALE_AFTER_S:
         return "resting", True
-    prompt = session.last_prompt or 0.0
-    stop = session.last_stop or 0.0
     note = session.notification
-    if note and note["t"] > prompt and note["t"] > stop:
+    if note and note["seq"] > session.prompt_seq and note["seq"] > session.stop_seq:
         idle = note["type"] == "idle_prompt"
         answered = turn_ts > note["t"] + ANSWER_GRACE_S
         if (not idle or IDLE_IS_WAITING) and not answered:
             return "waiting", False
-    if not session.last_prompt or stop >= prompt:
+    if session.prompt_seq == 0 or session.stop_seq > session.prompt_seq:
         return "resting", False
     quiet = now - max(any_ts, turn_ts)
     return ("stuck" if quiet > STUCK_AFTER_S else "working"), False
 
 
 # --------------------------------------------------------------------------- state
-
-
-def _empty_tokens() -> Dict[str, int]:
-    return {k: 0 for k, _ in TOKEN_KEYS} | {"total": 0, "calls": 0}
-
-
-def _add_tokens(into: Dict[str, int], more: Dict[str, int]) -> None:
-    for key, value in more.items():
-        into[key] = into.get(key, 0) + value
 
 
 class State:
@@ -702,6 +788,7 @@ class State:
         self.lock = threading.Lock()
         self.cache: Optional[Dict[str, Any]] = None
         self.cache_at = 0.0
+        self._used: set = set()
 
     def snapshot(self, now: Optional[float] = None, force: bool = False) -> Dict[str, Any]:
         with self.lock:
@@ -715,6 +802,7 @@ class State:
     def transcript(self, path: Optional[str]) -> Optional[Transcript]:
         if not path:
             return None
+        self._used.add(path)
         tr = self.transcripts.get(path)
         if tr is None:
             tr = self.transcripts[path] = Transcript(path)
@@ -725,18 +813,19 @@ class State:
         if not cwd:
             return None
         best: Optional[Dict[str, Any]] = None
+        best_len = -1
         for lane in lanes:
             lane_cwd = str(lane.get("cwd") or "").rstrip("/")
             if not lane_cwd:
                 continue
-            if cwd == lane_cwd or cwd.startswith(lane_cwd + "/"):
-                if best is None or len(lane_cwd) > len(str(best.get("cwd") or "")):
-                    best = lane
+            if (cwd == lane_cwd or cwd.startswith(lane_cwd + "/")) and len(lane_cwd) > best_len:
+                best, best_len = lane, len(lane_cwd)
         return best
 
     def _build(self, now: float) -> Dict[str, Any]:
         roster = load_roster(self.hq_dir)
         self.events.refresh()
+        self._used = set()
         today = local_day(now)
         views: Dict[str, Dict[str, Any]] = {}
         order: List[str] = []
@@ -756,26 +845,49 @@ class State:
                 lane = self._unassigned(session, views, order)
             session_bot[session.sid] = lane["id"]
             view = views[lane["id"]]
+            if now - session.last_event > STALE_AFTER_S:
+                # Nothing from this session in a day: no file is opened for it.
+                self._fold(view, "resting", True, session, None, now)
+                continue
             tr = self.transcript(session.transcript_path)
-            status, stale = session_status(session, tr, now)
+            sub_paths = subagent_paths(session.transcript_path)
+            sub_activity = 0.0
+            for sub_path in sub_paths:
+                st = self.transcript(sub_path)
+                if st is not None and not st.missing:
+                    info = self.events.subagents.get(sub_path)
+                    if not (info and info.get("stopped")):
+                        sub_activity = max(sub_activity, st.activity())
+            status, stale = session_status(session, tr, now, sub_activity)
             if tr is not None:
                 _add_tokens(view["tokens_today"], tr.tokens_for(today))
                 if tr.model:
                     view["model_seen"] = tr.model
             self._fold(view, status, stale, session, tr, now)
-            for sub_path in subagent_paths(session.transcript_path):
+            for sub_path in sub_paths:
                 seen_sub.add(sub_path)
-                self._fold_subagent(sub_path, session, view, views, agents, today, now)
+                self._fold_subagent(sub_path, view, views, agents, today, now)
+            if tr is not None and session.ended is None and not stale:
+                activity = max(tr.activity(), sub_activity, session.last_event)
+                for agent_type in tr.open_agent_types():
+                    agent = agents.get(agent_type)
+                    if agent is None or agent["id"] not in views:
+                        continue
+                    live = "stuck" if now - activity > STUCK_AFTER_S else "working"
+                    self._mark(views[agent["id"]], live, activity, f"running for {view['name']}", active=True)
         for sub_path, info in self.events.subagents.items():
             if sub_path in seen_sub:
                 continue
+            parent = self.events.sessions.get(info["parent"])
+            if parent is None or now - parent.last_event > STALE_AFTER_S:
+                continue
             parent_id = session_bot.get(info["parent"])
             parent_view = views.get(parent_id) if parent_id else None
-            if parent_view is None:
-                parent_session = self.events.sessions.get(info["parent"])
-                lane = self._lane_for(parent_session.cwd if parent_session else None, lanes)
-                parent_view = views[lane["id"]] if lane else None
-            self._fold_subagent(sub_path, self.events.sessions.get(info["parent"]), parent_view, views, agents, today, now)
+            self._fold_subagent(sub_path, parent_view, views, agents, today, now)
+
+        for path in list(self.transcripts):
+            if path not in self._used:
+                del self.transcripts[path]
 
         bots = [views[i] for i in order]
         for view in bots:
@@ -826,7 +938,8 @@ class State:
             "max_tokens_today": max([v["tokens_today"]["total"] for v in bots] or [0]),
             "rules": {"stuck_after_s": STUCK_AFTER_S, "stale_after_s": STALE_AFTER_S, "idle_is_waiting": IDLE_IS_WAITING},
             "roster_generated": roster.get("generated"),
-            "events": {"lines": self.events.lines, "bad": self.events.bad, "path": str(self.events.path)},
+            "events": {"lines": self.events.lines, "bad": self.events.bad, "oversized": self.events.oversized,
+                       "path": str(self.events.path)},
         }
 
     @staticmethod
@@ -865,20 +978,28 @@ class State:
             order.append(bot_id)
         return {"id": bot_id, "cwd": cwd}
 
-    def _fold(self, view: Dict[str, Any], status: str, stale: bool, session: Session,
-              tr: Optional[Transcript], now: float) -> None:
-        view["sessions_seen"] += 1
-        if session.ended is None and not stale:
-            view["sessions_active"] += 1
-        activity = max(session.last_event, tr.mtime if tr else 0.0, tr.last_ts if tr and tr.last_ts else 0.0)
+    @staticmethod
+    def _mark(view: Dict[str, Any], status: str, activity: float, step: Optional[str], active: bool) -> None:
+        """Fold one status observation into a bot view: the highest status wins, newest breaks ties."""
         view["last_line_epoch"] = max(view["last_line_epoch"], activity)
+        view["sessions_seen"] += 1
+        if active:
+            view["sessions_active"] += 1
         rank = STATUS_RANK[status]
         if rank > view["_rank"] or (rank == view["_rank"] and activity > view["_step_at"]):
             view["_rank"] = rank
             view["status"] = status
-            view["stale"] = stale
             view["_step_at"] = activity
-            view["step"] = (tr.step if tr else None) or ("idle" if status == "resting" else None)
+            view["step"] = step
+
+    def _fold(self, view: Dict[str, Any], status: str, stale: bool, session: Session,
+              tr: Optional[Transcript], now: float) -> None:
+        activity = max(session.last_event, tr.activity() if tr else 0.0)
+        step = (tr.step if tr else None) or ("idle" if status == "resting" else None)
+        before = view["_rank"]
+        self._mark(view, status, activity, step, active=session.ended is None and not stale)
+        if view["_rank"] != before or view["_step_at"] == activity:
+            view["stale"] = stale
             if status == "waiting" and session.notification:
                 view["waiting"] = {"message": session.notification["message"], "since": now_iso(session.notification["t"]),
                                    "type": session.notification["type"], "session_id": session.sid}
@@ -887,7 +1008,7 @@ class State:
         if view.get("model_seen") is None and tr and tr.model:
             view["model_seen"] = tr.model
 
-    def _fold_subagent(self, sub_path: str, session: Optional[Session], parent_view: Optional[Dict[str, Any]],
+    def _fold_subagent(self, sub_path: str, parent_view: Optional[Dict[str, Any]],
                        views: Dict[str, Dict[str, Any]], agents: Dict[str, Dict[str, Any]], today: str, now: float) -> None:
         info = self.events.subagents.get(sub_path)
         agent = agents.get(info["agent_type"]) if info else None
@@ -898,24 +1019,16 @@ class State:
         if tr is None or tr.missing:
             return
         _add_tokens(target["tokens_today"], tr.tokens_for(today))
-        activity = max(tr.mtime, tr.last_ts or 0.0)
+        activity = tr.activity()
         target["last_line_epoch"] = max(target["last_line_epoch"], activity)
         if target is parent_view:
             return
-        target["sessions_seen"] += 1
-        if info and info.get("stopped"):
-            status = "resting"
-        elif now - activity > STALE_AFTER_S:
-            status = "resting"
+        stopped = bool(info and info.get("stopped"))
+        if stopped or now - activity > STALE_AFTER_S:
+            self._mark(target, "resting", activity, tr.step or "idle", active=False)
         else:
-            target["sessions_active"] += 1
-            status = "stuck" if now - activity > STUCK_AFTER_S else "working"
-        rank = STATUS_RANK[status]
-        if rank > target["_rank"] or (rank == target["_rank"] and activity > target["_step_at"]):
-            target["_rank"] = rank
-            target["status"] = status
-            target["_step_at"] = activity
-            target["step"] = tr.step or ("idle" if status == "resting" else None)
+            live = "stuck" if now - activity > STUCK_AFTER_S else "working"
+            self._mark(target, live, activity, tr.step, active=True)
         if tr.model:
             target["model_seen"] = tr.model
 
@@ -1018,7 +1131,8 @@ def serve(hq_dir: Path, app_dir: Path, port: int = PORT) -> int:
         sys.stderr.write(f"Agent HQ: cannot listen on {HOST}:{port} ({exc.strerror or exc}). "
                          "Another copy may be running; stop it or pass --port.\n")
         return 2
-    print(f"Agent HQ  http://{HOST}:{port}")
+    bound = server.server_address[1]
+    print(f"Agent HQ  http://{HOST}:{bound}")
     print(f"  data    {hq_dir}")
     print(f"  events  {hq_dir / 'events.jsonl'}")
     print("  loopback only, no outbound calls; Ctrl-C stops it")
@@ -1035,19 +1149,39 @@ def serve(hq_dir: Path, app_dir: Path, port: int = PORT) -> int:
 # --------------------------------------------------------------------------- install
 
 
-def _atomic_write(path: Path, text: str) -> None:
-    tmp = path.with_name(path.name + ".agent-hq.tmp")
+def _atomic_write(path: Path, text: str, mode: Optional[int] = None) -> None:
+    """Replace the file in one step, through a symlink, keeping its mode.
+
+    A new file gets `mode` (0o644 when not given). An existing file keeps the
+    mode it had, and a symlink is written through, so a dotfile manager's
+    real file is the one that changes.
+    """
+    target = path.resolve() if path.is_symlink() else path
+    try:
+        keep = target.stat().st_mode & 0o777
+    except OSError:
+        keep = mode if mode is not None else 0o644
+    tmp = target.with_name(target.name + ".agent-hq.tmp")
     tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
+    os.chmod(tmp, keep)
+    os.replace(tmp, target)
 
 
-def _is_ours(group: Any) -> bool:
-    if not isinstance(group, dict):
-        return False
-    for hook in group.get("hooks") or []:
-        if isinstance(hook, dict) and HOOK_MARK.search(str(hook.get("command") or "")):
-            return True
-    return False
+def hook_command(hq_dir: Path) -> str:
+    """The shell line the hooks run. $HOME form for the default dir, a baked path otherwise."""
+    if hq_dir == (Path.home() / ".agent-hq"):
+        where = '"$HOME/.agent-hq/hook.py"'
+    else:
+        where = '"' + str(hq_dir / "hook.py").replace('"', '\\"') + '"'
+    return f"python3 {where} {HOOK_SUFFIX}"
+
+
+def _is_ours(hook: Any) -> bool:
+    return isinstance(hook, dict) and bool(HOOK_MARK.search(str(hook.get("command") or "")))
+
+
+def _group_has_ours(group: Any) -> bool:
+    return isinstance(group, dict) and any(_is_ours(h) for h in group.get("hooks") or [])
 
 
 def _load_settings(path: Path) -> Dict[str, Any]:
@@ -1067,18 +1201,19 @@ def _backup(path: Path) -> Optional[Path]:
         return None
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     backup = path.with_name(f"{path.name}.agent-hq-backup-{stamp}")
-    shutil.copy2(path, backup)
+    shutil.copy2(path, backup, follow_symlinks=True)
     return backup
 
 
-def merge_hooks(settings_path: Path) -> Dict[str, Any]:
-    """Add one Agent HQ hook group per event, leaving every other hook untouched."""
+def merge_hooks(settings_path: Path, hq_dir: Path) -> Dict[str, Any]:
+    """Add one Agent HQ hook per event, leaving every other hook untouched."""
     data = _load_settings(settings_path)
     hooks = data.get("hooks")
     if hooks is None:
         hooks = data["hooks"] = {}
     if not isinstance(hooks, dict):
         raise ValueError("settings.json 'hooks' is not an object")
+    command = hook_command(hq_dir)
     added: List[str] = []
     for event in HOOK_EVENTS:
         groups = hooks.get(event)
@@ -1086,19 +1221,20 @@ def merge_hooks(settings_path: Path) -> Dict[str, Any]:
             groups = hooks[event] = []
         if not isinstance(groups, list):
             raise ValueError(f"settings.json hooks.{event} is not a list")
-        if any(_is_ours(g) for g in groups):
+        if any(_group_has_ours(g) for g in groups):
             continue
-        groups.append({"hooks": [{"type": "command", "command": HOOK_COMMAND, "timeout": HOOK_TIMEOUT_S}]})
+        groups.append({"hooks": [{"type": "command", "command": command, "timeout": HOOK_TIMEOUT_S}]})
         added.append(event)
     backup = None
     if added:
         backup = _backup(settings_path)
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         _atomic_write(settings_path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
-    return {"added": added, "backup": str(backup) if backup else None, "path": str(settings_path)}
+    return {"added": added, "backup": str(backup) if backup else None, "path": str(settings_path), "command": command}
 
 
 def remove_hooks(settings_path: Path) -> Dict[str, Any]:
+    """Remove the Agent HQ hook entries only; a group that still has other hooks stays."""
     data = _load_settings(settings_path)
     hooks = data.get("hooks")
     removed: List[str] = []
@@ -1107,13 +1243,28 @@ def remove_hooks(settings_path: Path) -> Dict[str, Any]:
             groups = hooks.get(event)
             if not isinstance(groups, list):
                 continue
-            kept = [g for g in groups if not _is_ours(g)]
-            if len(kept) != len(groups):
+            kept_groups = []
+            changed = False
+            for group in groups:
+                if not isinstance(group, dict):
+                    kept_groups.append(group)
+                    continue
+                entries = group.get("hooks") or []
+                kept = [h for h in entries if not _is_ours(h)]
+                if len(kept) != len(entries):
+                    changed = True
+                    if kept:
+                        group = dict(group)
+                        group["hooks"] = kept
+                        kept_groups.append(group)
+                else:
+                    kept_groups.append(group)
+            if changed:
                 removed.append(event)
-            if kept:
-                hooks[event] = kept
-            else:
-                del hooks[event]
+                if kept_groups:
+                    hooks[event] = kept_groups
+                else:
+                    del hooks[event]
         if not hooks:
             del data["hooks"]
     backup = None
@@ -1125,7 +1276,7 @@ def remove_hooks(settings_path: Path) -> Dict[str, Any]:
 
 def copy_files(app_dir: Path, hq_dir: Path) -> List[str]:
     copied: List[str] = []
-    hq_dir.mkdir(parents=True, exist_ok=True)
+    hq_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     (hq_dir / "vendor").mkdir(exist_ok=True)
     pairs = [(app_dir / n, hq_dir / n) for n in INSTALL_FILES]
     pairs += [(app_dir / "vendor" / n, hq_dir / "vendor" / n) for n in VENDOR_FILES]
@@ -1138,6 +1289,9 @@ def copy_files(app_dir: Path, hq_dir: Path) -> List[str]:
             continue
         shutil.copy2(src, dst)
         copied.append(dst.name)
+    missing = [n for n in INSTALL_FILES if not (hq_dir / n).is_file()]
+    if missing:
+        raise OSError(f"{', '.join(missing)} not found beside {app_dir / 'hq.py'}; the checkout is incomplete")
     return copied
 
 
@@ -1147,7 +1301,7 @@ def _sha256(path: Path) -> str:
 
 def install(app_dir: Path, hq_dir: Path, claude_dir: Path) -> Dict[str, Any]:
     copied = copy_files(app_dir, hq_dir)
-    result = merge_hooks(claude_dir / "settings.json")
+    result = merge_hooks(claude_dir / "settings.json", hq_dir)
     result["copied"] = copied
     result["hq_dir"] = str(hq_dir)
     return result
@@ -1173,25 +1327,64 @@ def _cwd_hint() -> List[str]:
     return [] if Path(cwd) == Path.home() else [cwd]
 
 
+def _confirm(question: str, assume_yes: bool) -> bool:
+    """Ask on a terminal; without one (a service, a pipe) the answer is yes and says so."""
+    if assume_yes:
+        return True
+    if not sys.stdin.isatty():
+        print(f"{question} (no terminal to ask on, going ahead)")
+        return True
+    try:
+        answer = input(f"{question} [Y/n] ").strip().lower()
+    except EOFError:
+        return True
+    return answer in ("", "y", "yes")
+
+
+def _show_roster(hq_dir: Path, claude_dir: Path, extra_cwds: List[str], assume_yes: bool, write: bool) -> Tuple[Dict[str, Any], bool]:
+    roster, notes = refresh_roster(hq_dir, claude_dir, extra_cwds, write=False)
+    print(roster_table(roster))
+    for note in notes:
+        print(note)
+    if not write:
+        return roster, False
+    if not _confirm(f"Save this roster to {hq_dir / 'roster.json'}?", assume_yes):
+        print("Not saved. Edit the agent files or pass --cwd, then run again.")
+        return roster, False
+    write_roster(hq_dir, roster)
+    print(f"written to {hq_dir / 'roster.json'} ({len(roster['bots'])} bots)")
+    return roster, True
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="hq.py", description="Agent HQ: a local 3D office for Claude Code sessions.")
     sub = parser.add_subparsers(dest="cmd")
-    for name in ("up", "serve"):
-        p = sub.add_parser(name, help=f"{name}: " + ("install, roster if missing, then serve" if name == "up" else "serve only"))
-        p.add_argument("--port", type=int, default=PORT)
+    up = sub.add_parser("up", help="roster (asks for your OK the first time), hooks, then serve")
+    up.add_argument("--port", type=int, default=PORT)
+    up.add_argument("--yes", action="store_true", help="save the first roster without asking")
+    up.add_argument("--cwd", action="append", default=[], help="extra folder to treat as a session lane")
+    sv = sub.add_parser("serve", help="serve only")
+    sv.add_argument("--port", type=int, default=PORT)
     sub.add_parser("install", help="merge the hooks into settings.json and copy the files into ~/.agent-hq")
     sub.add_parser("uninstall", help="remove the Agent HQ hooks from settings.json; data stays")
-    r = sub.add_parser("roster", help="scan agents and session folders, print the roster, merge it into roster.json")
+    r = sub.add_parser("roster", help="scan agents and session folders, show the roster, ask, merge it into roster.json")
     r.add_argument("--no-write", action="store_true", help="print only")
-    r.add_argument("--json", action="store_true", help="print JSON instead of a table")
+    r.add_argument("--yes", action="store_true", help="save without asking")
+    r.add_argument("--json", action="store_true", help="print JSON instead of a table (implies --no-write)")
     r.add_argument("--cwd", action="append", default=[], help="extra folder to treat as a session lane")
     sub.add_parser("state", help="print /state once as JSON")
     args = parser.parse_args(argv)
 
     hq_dir = default_hq_dir()
     claude_dir = default_claude_dir()
-    if args.cmd in (None, "up"):
+    cmd = args.cmd or "up"
+    if cmd == "up":
         port = getattr(args, "port", PORT)
+        extra = [os.path.abspath(c) for c in getattr(args, "cwd", [])] + _cwd_hint()
+        if not (hq_dir / "roster.json").exists():
+            _, saved = _show_roster(hq_dir, claude_dir, extra, getattr(args, "yes", False), write=True)
+            if not saved:
+                return 1
         try:
             result = install(APP_DIR, hq_dir, claude_dir)
             print(f"hooks   {result['path']}: " + (f"added {', '.join(result['added'])}" if result["added"] else "already present"))
@@ -1201,16 +1394,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                 print(f"copied  {', '.join(result['copied'])} into {hq_dir}")
         except (OSError, ValueError) as exc:
             sys.stderr.write(f"Agent HQ: hooks not installed, {exc}. Fix {claude_dir / 'settings.json'} and run install again.\n")
-        if not (hq_dir / "roster.json").exists():
-            roster, notes = refresh_roster(hq_dir, claude_dir, _cwd_hint(), write=True)
-            print(f"roster  {hq_dir / 'roster.json'} written with {len(roster['bots'])} bots")
-            for note in notes:
-                print(f"        {note}")
-            print(roster_table(roster))
         return serve(hq_dir, APP_DIR, port)
-    if args.cmd == "serve":
+    if cmd == "serve":
         return serve(hq_dir, APP_DIR, args.port)
-    if args.cmd == "install":
+    if cmd == "install":
         try:
             result = install(APP_DIR, hq_dir, claude_dir)
         except (OSError, ValueError) as exc:
@@ -1218,7 +1405,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 2
         print(json.dumps(result, indent=2))
         return 0
-    if args.cmd == "uninstall":
+    if cmd == "uninstall":
         try:
             result = remove_hooks(claude_dir / "settings.json")
         except (OSError, ValueError) as exc:
@@ -1226,18 +1413,15 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 2
         print(json.dumps(result, indent=2))
         return 0
-    if args.cmd == "roster":
-        roster, notes = refresh_roster(hq_dir, claude_dir, list(args.cwd) + _cwd_hint(), write=not args.no_write)
+    if cmd == "roster":
+        extra = [os.path.abspath(c) for c in args.cwd] + _cwd_hint()
         if args.json:
+            roster, _ = refresh_roster(hq_dir, claude_dir, extra, write=False)
             print(json.dumps(roster, indent=2, ensure_ascii=False))
-        else:
-            print(roster_table(roster))
-            for note in notes:
-                print(note)
-            if not args.no_write:
-                print(f"written to {hq_dir / 'roster.json'}")
+            return 0
+        _show_roster(hq_dir, claude_dir, extra, args.yes, write=not args.no_write)
         return 0
-    if args.cmd == "state":
+    if cmd == "state":
         print(json.dumps(State(hq_dir).snapshot(force=True), indent=2, ensure_ascii=False))
         return 0
     parser.print_help()

@@ -30,6 +30,8 @@
   .chip.working i { background: var(--working); } .chip.waiting i { background: var(--waiting); }
   .chip.stuck i { background: var(--stuck); } .chip.resting i { background: var(--resting); }
   #tokens { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  #fit { background: rgba(30, 41, 59, 0.8); border: 1px solid var(--line); color: var(--text); border-radius: 999px;
+    padding: 3px 10px; font-size: 12px; cursor: pointer; }
   #offline { display: none; margin-left: 8px; color: #fca5a5; font-size: 12px; }
   body.offline #offline { display: inline; }
   aside { position: fixed; z-index: 2; right: 12px; top: 72px; width: 320px; max-height: calc(100vh - 96px);
@@ -77,6 +79,7 @@
     <span class="chip resting"><i></i><span id="c-resting">0</span> resting</span>
   </div>
   <div id="tokens">0 tokens today</div>
+  <button type="button" id="fit" title="frame the whole tower again">fit view</button>
   <span id="offline">server offline, retrying</span>
 </header>
 <aside>

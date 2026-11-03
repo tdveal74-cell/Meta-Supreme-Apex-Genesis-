@@ -74,7 +74,11 @@ class Orbit {
       this.pan(dx * 0.5, dy * 0.5);
     }
   }
-  up(e) { this.pointers.delete(e.pointerId); this.pinch = this.span(); if (this.moved < 6) onTap(e); }
+  up(e) {
+    const single = this.pointers.size === 1;
+    this.pointers.delete(e.pointerId); this.pinch = this.span();
+    if (e.type === 'pointerup' && single && e.button === 0 && this.moved < 6) onTap(e);
+  }
   span() { const a = [...this.pointers.values()]; return a.length < 2 ? 0 : Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y); }
   zoom(f) { this.radius = clamp(this.radius * f, this.min, this.max); }
   pan(dx, dy) {
@@ -213,11 +217,13 @@ function shortModel(model) {
   return m.length > 16 ? m.slice(0, 15) + '…' : m;
 }
 function fmtTokens(n) {
-  n = Number(n || 0);
-  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+  n = Number(n);
+  if (!Number.isFinite(n) || n < 0) n = 0;
+  if (n >= 999950) return (n / 1e6).toFixed(2) + 'M';
   if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
-  return String(n);
+  return String(Math.round(n));
 }
+function clip(text, max) { text = String(text ?? ''); return text.length > max ? text.slice(0, max - 1) + '…' : text; }
 function hexCss(c) { return '#' + c.toString(16).padStart(6, '0'); }
 
 function buildBot(bot) {
@@ -236,7 +242,7 @@ function buildBot(bot) {
 
   // model chip, propped on the right of the desk
   const chip = new THREE.Mesh(G.chip, new THREE.MeshBasicMaterial({ transparent: true, side: THREE.DoubleSide }));
-  chip.userData.height = 0.26; chip.position.set(0.5, 0.95, 0.05); chip.rotation.x = -0.35; g.add(chip);
+  chip.userData.height = 0.24; chip.position.set(0.56, 0.95, 0.08); chip.rotation.x = -0.35; g.add(chip);
 
   // token bar along the front edge of the desk
   const barBg = new THREE.Mesh(G.barBg, M.barBg); barBg.position.set(0, 0.83, 0.37); g.add(barBg);
@@ -273,17 +279,32 @@ function buildBot(bot) {
     screenMat, barFill, barLabel, chip, nameLabel, status: 'resting', targets: { eye: 1, emis: 0.05 }, seed: Math.random() * 100 };
 }
 
-function disposeGroup(obj) {
-  obj.traverse((o) => {
-    if (o.material && o.material.map && o.userData.key !== undefined) o.material.map.dispose();
-    if (o.isSprite || (o.material && o.material.map && o.userData.key)) o.material.dispose();
+const SHARED_GEOMETRY = new Set(Object.values(G));
+const SHARED_MATERIAL = new Set(Object.values(M));
+function disposeTower() {
+  tower.traverse((o) => {
+    if (o.geometry && !SHARED_GEOMETRY.has(o.geometry)) o.geometry.dispose();
+    if (o.material && !SHARED_MATERIAL.has(o.material)) {
+      if (o.material.map) o.material.map.dispose();
+      o.material.dispose();
+    }
   });
+  tower.clear();
 }
 
+let framed = false;
+function frameTower(width, totalH) {
+  orbit.target.set(0, totalH / 2 - 0.2, 0);
+  const aspect = window.innerWidth / Math.max(1, window.innerHeight);
+  orbit.radius = clamp(Math.max(width * 0.8, totalH * 1.05) * Math.max(1, 1.25 / aspect) + 9, 8, 120);
+  orbit.theta = 0.36; orbit.phi = 1.41;
+}
+let lastFrame = { width: 10, totalH: 4 };
+
 function buildTower(state) {
-  for (const rig of bots.values()) disposeGroup(rig.g);
+  disposeTower();
   bots.clear();
-  tower.clear();
+  if (selectedId && !state.bots.some((b) => b.id === selectedId)) select(null);
 
   const teams = state.teams.length ? state.teams : ['Unassigned'];
   const byTeam = new Map(teams.map((t) => [t, []]));
@@ -303,7 +324,7 @@ function buildTower(state) {
     for (const x of [-1, 1]) { const col = new THREE.Mesh(new THREE.BoxGeometry(0.34, FLOOR_H, 0.34), M.column); col.position.set(x * (width / 2 + 0.17), y + FLOOR_H / 2 - 0.12, -FLOOR_D / 2 + 0.3); tower.add(col); }
     const label = makeSprite(0.9); label.position.set(-width / 2 - 1.0, y + 1.6, 0.6);
     const list = byTeam.get(team);
-    setSprite(label, [{ text: team.toUpperCase(), color: hexCss(color), scale: 1 }, { text: `${list.length} ${list.length === 1 ? 'bot' : 'bots'}`, color: '#94a3b8', scale: 0.62, weight: 500 }], { bg: 'rgba(11,16,32,0.75)', border: hexCss(color), pad: 18 });
+    setSprite(label, [{ text: clip(team.toUpperCase(), 18), color: hexCss(color), scale: 1 }, { text: `${list.length} ${list.length === 1 ? 'bot' : 'bots'}`, color: '#94a3b8', scale: 0.62, weight: 500 }], { bg: 'rgba(11,16,32,0.75)', border: hexCss(color), pad: 18 });
     tower.add(label);
     list.forEach((bot, j) => {
       const rig = buildBot(bot);
@@ -318,10 +339,10 @@ function buildTower(state) {
   tower.add(sign);
 
   const totalH = floors * FLOOR_H;
-  orbit.target.set(0, totalH / 2 - 0.2, 0);
-  const aspect = window.innerWidth / Math.max(1, window.innerHeight);
-  orbit.radius = clamp(Math.max(width * 0.8, totalH * 1.05) * Math.max(1, 1.25 / aspect) + 9, 8, 120);
+  lastFrame = { width, totalH };
+  if (!framed) { frameTower(width, totalH); framed = true; }
 }
+$('fit').addEventListener('click', () => frameTower(lastFrame.width, lastFrame.totalH));
 
 // ---------------------------------------------------------------- apply state
 
@@ -337,8 +358,8 @@ function applyState(state) {
     const st = STATUS[bot.status] || STATUS.resting;
     const step = bot.step ? String(bot.step) : (bot.status === 'resting' ? 'idle' : '');
     setSprite(rig.nameLabel, [
-      { text: bot.name, color: '#f8fafc', scale: 1 },
-      { text: step.length > 34 ? step.slice(0, 33) + '…' : step, color: hexCss(st.color), scale: 0.6, weight: 500 },
+      { text: clip(bot.name, 28), color: '#f8fafc', scale: 1 },
+      { text: clip(step, 34), color: hexCss(st.color), scale: 0.6, weight: 500 },
     ], { bg: 'rgba(11,16,32,0.78)', border: hexCss(st.color), pad: 16 });
     const model = bot.model_seen && (bot.model === 'inherit' || bot.model === 'unknown') ? bot.model_seen : bot.model;
     setPlaneTexture(rig.chip, [{ text: shortModel(model), color: '#0b1020', scale: 1, weight: 800 }], { bg: modelColor(model), pad: 16, radius: 26 });
@@ -484,14 +505,24 @@ renderer.setAnimationLoop(animate);
 
 // ---------------------------------------------------------------- data loop
 
+let inFlight = false;
+let seq = 0;
 async function tick() {
+  if (inFlight) return;
+  inFlight = true;
+  const mine = ++seq;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 15000);
   try {
-    const r = await fetch('/state', { cache: 'no-store' });
+    const r = await fetch('/state', { cache: 'no-store', signal: ctl.signal });
     if (!r.ok) throw new Error(String(r.status));
-    applyState(await r.json());
-    document.body.classList.remove('offline');
+    const state = await r.json();
+    if (mine === seq) { applyState(state); document.body.classList.remove('offline'); }
   } catch (err) {
-    document.body.classList.add('offline');
+    if (mine === seq) document.body.classList.add('offline');
+  } finally {
+    clearTimeout(timer);
+    inFlight = false;
   }
 }
 tick();
