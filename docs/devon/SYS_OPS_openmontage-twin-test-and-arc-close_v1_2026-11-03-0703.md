@@ -50,7 +50,7 @@ PR #475 merged as `bbc8b05` at about 18:23Z. Railway `api` and `scheduler-cron` 
 - The seam and identity checks on the twin render at full size, which never ran.
 - The lips in pauses, which HeyGen leaves open on both photo looks and on the twin-referenced render. Untested: a render on the filmed twin itself (look 1) through OpenMontage's own tool, on API credits, with the $3 ceiling of 17:34:04Z and the wallet fix of 17:57:17Z still pending.
 - Publishing anything with look 4 needs Tee watching end to end, the C4 disclosure line and YouTube's altered or synthetic content label, as the 2026-10-31 canon records.
-- The HeyGen skills install is recorded in `SYS_OPS_heygen-skills-install_v1_2026-11-03-0703.md`.
+- The HeyGen skills install is recorded in `SYS_OPS_heygen-skills-install_v1_2026-11-03-0704.md`.
 
 ## Handover for the Grok bot
 

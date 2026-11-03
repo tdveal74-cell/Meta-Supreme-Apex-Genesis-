@@ -58,7 +58,7 @@ How the house rules win, in practice: every HeyGen call uses Tee's own face, eve
 
 AREA: Systems, TQO
 TYPE: SYS_OPS
-ARTIFACT: docs/devon/SYS_OPS_heygen-skills-install_v1_2026-11-03-0703.md
+ARTIFACT: docs/devon/SYS_OPS_heygen-skills-install_v1_2026-11-03-0704.md
 DATE: 2026-11-03
 DECISIONS: Tee asked at 17:35:32Z for HeyGen's agent install guide to be followed. On a card at 17:55:29Z he chose to install the skills with the house rules winning over their defaults, to install HeyGen's CLI with analytics off, and to skip the guide's paid smoke test.
 FINDINGS: A review of 153 claims, 147 confirmed by independent verifiers, found the skills install no hooks and the CLI installer checks a checksum but no signature. Their defaults conflict with the house rules on whose face and voice, ungated spend, silent routing, key handling, data sent off the machine and script fidelity.
