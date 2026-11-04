@@ -577,9 +577,26 @@ def test_a_bad_render_keeps_nothing(fake, mode, final, match):
 def _alive(pid):
     try:
         state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
-    except (FileNotFoundError, IndexError):
+    except (FileNotFoundError, ProcessLookupError, IndexError):
         return False
     return state != "Z"
+
+
+def test_process_probe_handles_process_disappearing_during_read(monkeypatch):
+    def vanished():
+        raise ProcessLookupError("process exited during procfs read")
+
+    monkeypatch.setitem(_alive.__globals__, "Path", lambda _: SimpleNamespace(read_text=vanished))
+    assert _alive(12345) is False
+
+
+def test_process_probe_does_not_hide_permission_errors(monkeypatch):
+    def denied():
+        raise PermissionError("procfs read denied")
+
+    monkeypatch.setitem(_alive.__globals__, "Path", lambda _: SimpleNamespace(read_text=denied))
+    with pytest.raises(PermissionError):
+        _alive(12345)
 
 
 def test_a_timeout_kills_what_mpt_started_too(fake):

@@ -111,7 +111,9 @@ class OpenAIProvider(AIProvider):
 
         self._raise_for_status(response)
 
-        data = response.json()
+        return self._parse_response(request, response.json())
+
+    def _parse_response(self, request: CompletionRequest, data: dict) -> CompletionResponse:
         choices = data.get("choices") or []
         if not choices:
             raise ProviderResponseError(

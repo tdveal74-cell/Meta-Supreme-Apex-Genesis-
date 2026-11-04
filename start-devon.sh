@@ -224,11 +224,12 @@ if grep -q '^GEMINI_API_KEY=$' .env 2>/dev/null; then
   printf "      Find it at https://aistudio.google.com under API Keys.\n"
   printf "      Paste it and press Enter, or press Enter to leave unset (live calls will fail closed).\n\n"
   printf "      Gemini key: "
-  read -r GEMINI_INPUT || GEMINI_INPUT=""
+  read -r -s GEMINI_INPUT || GEMINI_INPUT=""
+  printf "\n"
   if [ -n "${GEMINI_INPUT:-}" ]; then
-    "$VENV_PY" - "$GEMINI_INPUT" <<'PYEOF'
-import pathlib, sys
-key = sys.argv[1].strip()
+    GEMINI_BOOTSTRAP_KEY="$GEMINI_INPUT" "$VENV_PY" - <<'PYEOF'
+import os, pathlib
+key = os.environ["GEMINI_BOOTSTRAP_KEY"].strip()
 p = pathlib.Path(".env")
 p.write_text(p.read_text().replace("GEMINI_API_KEY=", "GEMINI_API_KEY=" + key, 1))
 PYEOF
@@ -360,7 +361,7 @@ bold "DEVON is up."
 printf "\n"
 printf "  Open this:    http://localhost:%s/console\n" "$API_PORT"
 printf "  Soul recall:  %s\n" "${SOUL:-unknown}"
-printf "  Voice model:  Gemini (gemini-3.8-flash) when GEMINI_API_KEY is set\n"
+printf "  Provider:     configured in .env; live inference readiness must be verified\n"
 printf "\n"
 printf "  In the console, find the Soul Layer panel on the right.\n"
 printf "  Leave API empty. Paste this into TOKEN, press SAVE, then TEST:\n"
