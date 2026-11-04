@@ -47,6 +47,7 @@ is a record of the session, not a durable archive. Long strings in it are
 scrubbed of anything shaped like a token before they are written.
 """
 
+import fnmatch
 import json
 import os
 import re
@@ -719,8 +720,18 @@ CURL_BODY_LONG = {
 WRITE_METHODS = ("POST", "PUT", "PATCH", "DELETE")
 
 
+def _may_be_http_client(program, client):
+    """Match a possible curl/wget word without expanding or executing shell text.
+
+    Dynamic words and globs may name a client. Only that client's existing
+    upload/method rules are applied; this does not classify all unknown tools.
+    """
+    program = re.sub(r"\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*", "*", program)
+    return fnmatch.fnmatchcase(client, os.path.basename(program))
+
+
 def _curl_mutating(argv):
-    if os.path.basename(argv[0]) != "curl":
+    if not _may_be_http_client(argv[0], "curl"):
         return False
     mutating = False
     explicit = False
@@ -779,7 +790,7 @@ def _is_local_url(u):
 def _wget_mutating(argv):
     """wget writing to a non-local host: --post-data, --post-file, --body-data,
     --body-file, or --method with a write verb."""
-    if os.path.basename(argv[0]) != "wget":
+    if not _may_be_http_client(argv[0], "wget"):
         return False
     mutating, urls = False, []
     for i in range(1, len(argv)):
@@ -932,6 +943,42 @@ def _is_server(server, name):
 OVERSIZE = 1_000_000  # characters; a longer Bash command is gated unread
 
 
+# Content checks precede shell parsing and the presence window. Never normalize
+# or remove these characters: doing so could change an argument or canon text.
+_BIDI_CONTROLS = frozenset({0x061C, 0x200E, 0x200F, *range(0x202A, 0x202F),
+                            *range(0x2066, 0x206A)})
+
+
+def _hidden_command_unicode(command):
+    """Return the first non-inspectable codepoint, without echoing arguments.
+
+    Emoji presentation selectors FE0E/FE0F are allowed after an emoji base or
+    keycap base. Other selectors can encode hidden text and refuse. This is a
+    conservative command-content rule, not a Unicode normalizer or sandbox.
+    """
+    for match in re.finditer("[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069\ufe00-\ufe0f\U000e0100-\U000e01ef]", command):
+        value = ord(match.group())
+        previous = ord(command[match.start() - 1]) if match.start() else 0
+        if value in _BIDI_CONTROLS:
+            return f"U+{value:04X}"
+        if 0xFE00 <= value <= 0xFE0F or 0xE0100 <= value <= 0xE01EF:
+            emoji_base = (0x1F000 <= previous <= 0x1FAFF
+                          or 0x2600 <= previous <= 0x27BF
+                          or previous in (0x00A9, 0x00AE, 0x203C, 0x2049, 0x2122, 0x2139,
+                                          0x2194, 0x2195, 0x2196, 0x2197, 0x2198, 0x2199,
+                                          0x21A9, 0x21AA, 0x231A, 0x231B, 0x2328, 0x23CF,
+                                          0x23E9, 0x23EA, 0x23EB, 0x23EC, 0x23ED, 0x23EE,
+                                          0x23EF, 0x23F0, 0x23F1, 0x23F2, 0x23F3, 0x23F8,
+                                          0x23F9, 0x23FA, 0x24C2, 0x25AA, 0x25AB, 0x25B6,
+                                          0x25C0, 0x25FB, 0x25FC, 0x25FD, 0x25FE, 0x2934,
+                                          0x2935, 0x2B05, 0x2B06, 0x2B07, 0x2B1B, 0x2B1C,
+                                          0x2B50, 0x2B55, 0x3030, 0x303D, 0x3297, 0x3299))
+            keycap = previous in (0x23, 0x2A, *range(0x30, 0x3A))
+            if value not in (0xFE0E, 0xFE0F) or not (emoji_base or keycap):
+                return f"U+{value:04X}"
+    return None
+
+
 def classify(tool_name, tool_input, cwd="", now=None, shape_only=False):
     """Returns (cls, gated). cls is None for a call that is not tracked.
     shape_only skips the clock in the reflection row check, for post and fail."""
@@ -943,6 +990,8 @@ def classify(tool_name, tool_input, cwd="", now=None, shape_only=False):
         # proportion to its length and its nesting, and four nested evals at
         # 5 MB took 21.6 s against the hook's 15 s timeout. A command this long
         # is gated unread, which ends that for every shape.
+        if _hidden_command_unicode(command):
+            return "bash_hidden_unicode", True
         if len(command) > OVERSIZE:
             return "bash_oversize", True
         _fresh_lookups()
@@ -964,10 +1013,10 @@ def classify(tool_name, tool_input, cwd="", now=None, shape_only=False):
                 if push:
                     classes.append(push[0])
                     gated = gated or push[1]
-                elif prog == "curl" and _curl_mutating(argv):
+                elif _may_be_http_client(argv[0], "curl") and _curl_mutating(argv):
                     classes.append("curl_mutating")
                     gated = True
-                elif prog == "wget" and _wget_mutating(argv):
+                elif _may_be_http_client(argv[0], "wget") and _wget_mutating(argv):
                     classes.append("wget_mutating")
                     gated = True
                 elif prog == "gh" and _gh_class(argv):
@@ -1254,6 +1303,10 @@ def reflection_capped(payload, now):
 
 def decide(cls, gated, payload, now):
     """Returns (allow, reason, signal). Pure apart from reading the transcript."""
+    if cls == "bash_hidden_unicode":
+        command = str((payload.get("tool_input") or {}).get("command", ""))
+        codepoint = _hidden_command_unicode(command)
+        return False, f"command contains hidden or bidirectional Unicode {codepoint}; submit inspectable command text without changing its intended arguments", None
     if not gated:
         return True, "not gated", None
     path = payload.get("transcript_path") or ""
@@ -1356,6 +1409,11 @@ def run(mode, payload, now=None):
         _try_ledger(_row("gate-allow" if allow else "gate-deny", payload, cls, gated, now, reason=reason))
         if allow:
             return None
+        if cls == "bash_hidden_unicode":
+            return {"hookSpecificOutput": {
+                "hookEventName": "PreToolUse", "permissionDecision": "deny",
+                "permissionDecisionReason": reason,
+            }}
         return {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
