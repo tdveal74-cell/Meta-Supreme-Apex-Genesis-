@@ -723,11 +723,16 @@ def capability_status(runtime_commit: Optional[str] = None) -> Dict[str, Any]:
         "runtime_commit": runtime_commit,
         "source_of_truth_rules": list(SOURCE_OF_TRUTH_RULES),
         "surfaces": surfaces,
-        "cerebras": {
-            "role": "preserved intelligence provider layer",
+        "gemini": {
+            "role": "selected intelligence provider policy",
             "routing_authority": False,
+            "live_verified": False,
             "live_status_source": "/api/v1/intelligence/status",
-            "note": "Provider identity remains separate from work-surface routing.",
+            "note": (
+                "Tee's 2026-11-02 ruling replaces Cerebras with Gemini. "
+                "This policy does not verify provider health. Provider identity "
+                "remains separate from work-surface routing."
+            ),
         },
         "preserved_boundaries": [
             "existing DEVON approval authority",

@@ -294,10 +294,13 @@ def test_artifact_return_refuses_path_escape_and_unverified_hash_claims():
     assert any(issue.severity == "error" for issue in plan.issues)
 
 
-def test_status_keeps_cerebras_as_intelligence_not_routing_authority():
+def test_status_keeps_gemini_as_intelligence_not_routing_authority():
     status = capability_status(runtime_commit="abc123")
     assert status["runtime_commit"] == "abc123"
-    assert status["cerebras"]["routing_authority"] is False
+    assert status["gemini"]["routing_authority"] is False
+    assert status["gemini"]["live_verified"] is False
+    assert "2026-11-02" in status["gemini"]["note"]
+    assert "cerebras" not in status
     external = [item for item in status["surfaces"] if item["surface"] != "devon"]
     assert external
     assert all(item["status"] == "contract_ready" for item in external)

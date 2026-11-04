@@ -1,21 +1,29 @@
 # Gemini provider compatibility candidate
 
-Status: validated isolated code candidate; provider activation is held.
+Status: validated integrated hardening candidate on main 2a7a55b.
+Provider activation is held.
 Supersedes: no historical record. Qualifies the staged-provider update notices.
 
-## Verified blocker
+## Historical registration blocker and current hardening gaps
 
 At main 9752eb08f8c9e08ab859567c4008df789dcc3be8, factory selection of gemini
 raises ProviderConfigError; Presence primary and fallback settings reject it.
 An independent verifier reproduced both without keys or inference.
 API provider construction is lazy, so healthy startup would not prove readiness.
 Presence settings validate during app construction and would prevent startup.
-The staged Railway patch must not be committed before compatible code deploys.
+That registration blocker was closed while this candidate was being validated:
+PR #478 merged as 2a7a55b87ead447a9374f7f8267e0ef47b9277c8 at 21:12Z. Independent
+pure checks now confirm factory and Presence accept Gemini. New main still
+sends deprecated 3.8 sampling and accepts missing/numeric content or negative
+usage. The integrated candidate retains only request/parser hardening, protected
+bootstrap input, process-test helper repair and this record. All new main
+provider wiring, doctrine, vendored copies and policy tests are preserved.
 
 The separate repository /opt/devon/gemini-migration-20261102 held three unmerged
-commits: eb8a80d, 165af69 and 50f054f. This candidate adopts the first two on
-current main and excludes 50f054f's provider-policy status changes. A local
-branch is not production evidence.
+commits: eb8a80d, 165af69 and 50f054f. The initial candidate adopted the first two and excluded 50f054f's policy
+changes. PR #478 independently brought provider-policy changes into current
+main; the integrated candidate preserves them. A local branch is not production
+evidence.
 
 ## Candidate behavior
 
@@ -83,7 +91,7 @@ helper. An independent verifier reproduced an uncaught ProcessLookupError on
 both base and candidate when a procfs read races a process exit. The narrow
 helper repair handles that exited-process result and retains permission errors.
 Its deterministic regression failed before the repair while the permission
-control passed. Repaired executable commit 18a658ae4ee79114e6ec661213153b9977676769:
+control passed. Before integration, executable commit 18a658ae4ee79114e6ec661213153b9977676769:
 9738 full tests passed, 3 skipped and 56 subtests passed; 5836 standalone tests
 passed, 1 skipped; 25 engine tests passed. Full lint, migration upgrade/downgrade/
 upgrade to head 030_arf_shadow_rate_limit, and app imports passed. Both production
@@ -91,10 +99,19 @@ Dockerfiles built; Presence imported, refused production without SECRET_KEY and
 answered local health configured for Gemini with a synthetic key. The API image
 passed canonical imports, policy/dispatcher presence and Gemini selection without
 inference. Both strict Python audits and the locked pnpm audit found no known
-vulnerabilities. Runtime payloads are unchanged from image-tested commit 1ae8dc4.
+vulnerabilities. These results predate integration with PR #478. Final integrated executable
+commit d298623c67e2ca212465facc7e15ec4cc3bf9efc passed 9739 full tests and 56
+subtests (3 skipped), 5836 standalone tests (1 skipped), 25 engine checks, full
+lint, migration roundtrip and imports. Both integrated Dockerfiles built and
+passed the same import, production-refusal, API policy/dispatcher and local
+Gemini health checks with container networking disabled. The independent critic
+confirmed all main wiring, doctrine, vendored copies and policy tests preserved
+byte for byte and reran the parser/bootstrap negative controls. Requirements
+and lockfiles are unchanged from the clean strict audits.
 The fresh critic verified provider and process-error negative controls, retained
 permission/I/O errors, and found no remaining blocker. No live provider call ran.
-Rollback code to main 9752eb0; current provider-variable values remain unchanged.
+Rollback this hardening to main 2a7a55b, preserving its provider integration.
+Current provider-variable values remain unchanged.
 Before any future activation, preserve the old non-secret values for a precise
 configuration rollback and verify the new deployment IDs and health afterward.
 
@@ -106,6 +123,6 @@ TYPE: SYS_OPS
 ARTIFACT: docs/devon/SYS_OPS_gemini-provider-compatibility_v1_2026-11-04-2051.md
 DATE: 2026-11-04
 DECISIONS: Continue compatible provider preparation without spending or changing credentials.
-FINDINGS: Staged Gemini selection is incompatible with current main; code candidate prepared.
-OPEN: CI, code rollout, exact provider activation and external network diagnosis.
+FINDINGS: PR #478 closed registration gap; remaining request and metering gaps independently verified.
+OPEN: CI, hardening rollout, provider activation and external network diagnosis.
 STATUS: candidate only; no provider configuration applied and no live inference performed
