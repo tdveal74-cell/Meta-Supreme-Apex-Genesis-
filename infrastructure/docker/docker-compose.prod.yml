@@ -52,12 +52,14 @@ x-python-env: &python-env
   SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set, generate one with openssl rand -hex 32}
   CORS_ORIGINS: ${CORS_ORIGINS:-["https://devon.example.invalid"]}
   # Providers default to mock so the stack starts with the keys still blank
-  # and /health says "simulated" out loud. Set cerebras (and the key) in
+  # and /health says "simulated" out loud. Set gemini (and the key) in
   # .env.prod to go live; a provider named without its key refuses to start
   # and takes the web container down with it, because web waits on health.
   DEFAULT_AI_PROVIDER: ${DEFAULT_AI_PROVIDER:-mock}
   ENRICHMENT_PROVIDER: ${ENRICHMENT_PROVIDER:-mock}
   CEREBRAS_API_KEY: ${CEREBRAS_API_KEY:-}
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
   CEREBRAS_MODEL: ${CEREBRAS_MODEL:-gpt-oss-120b}
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}

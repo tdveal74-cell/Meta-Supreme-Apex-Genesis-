@@ -48,8 +48,8 @@ What is a later gate
 --------------------
 - The provider base class has no streaming API, so the provider adapter
   in ``inference.py`` measures whole completion latency as its time to
-  first token. SSE streaming against api.cerebras.ai is the next gate and
-  was not verified in this build.
+  first token. Real provider streaming is a separate gate and was not
+  verified in this build.
 - ``CartesiaSpeech`` is a stub that raises ``SpeechNotConfigured``. The
   vendor response shape was not verified here and is not invented.
 - LiveKit: CLOSED on 2026-09-16. This paragraph said the publisher did not

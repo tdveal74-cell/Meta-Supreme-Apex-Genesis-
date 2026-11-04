@@ -71,6 +71,8 @@ def _completion_provider():
             openai_api_key=getattr(settings, "OPENAI_API_KEY", None),
             anthropic_api_key=getattr(settings, "ANTHROPIC_API_KEY", None),
             cerebras_api_key=getattr(settings, "CEREBRAS_API_KEY", None),
+            gemini_api_key=getattr(settings, "GEMINI_API_KEY", None),
+            model=(getattr(settings, "GEMINI_MODEL", None) if name == "gemini" else None),
         )
         return None if provider is None else MeteredProvider(provider)
     except Exception as exc:

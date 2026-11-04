@@ -64,7 +64,7 @@ class OpenAIProvider(AIProvider):
         self._api_key = api_key
         self._transport = transport  # injectable for tests
 
-    async def _complete_once(self, request: CompletionRequest) -> CompletionResponse:
+    def _request_body(self, request: CompletionRequest) -> dict:
         messages: list[dict] = []
         if request.system:
             messages.append({"role": "system", "content": request.system})
@@ -83,6 +83,10 @@ class OpenAIProvider(AIProvider):
         if request.stop_sequences:
             body["stop"] = request.stop_sequences
 
+        return body
+
+    async def _complete_once(self, request: CompletionRequest) -> CompletionResponse:
+        body = self._request_body(request)
         try:
             async with httpx.AsyncClient(
                 timeout=self.timeout_seconds, transport=self._transport
@@ -107,7 +111,9 @@ class OpenAIProvider(AIProvider):
 
         self._raise_for_status(response)
 
-        data = response.json()
+        return self._parse_response(request, response.json())
+
+    def _parse_response(self, request: CompletionRequest, data: dict) -> CompletionResponse:
         choices = data.get("choices") or []
         if not choices:
             raise ProviderResponseError(
