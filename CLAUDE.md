@@ -907,6 +907,22 @@ Desktop Commander call from 18:56Z to 21:14Z, about 138 minutes; the cause was
 not found. Keep a workflow that makes gated calls short, or ask the card again
 before it starts the part that needs the gate.
 
+### Inspectable command content
+
+Hermes v0.22.7 compatibility work adds a content guard ahead of the ordinary
+presence gate. Bash command text containing bidirectional controls or hidden
+variation selectors is refused even with a fresh human signal. Emoji FE0E/FE0F
+selectors after supported emoji or keycap bases retain the existing policy.
+The hook names the codepoint, never rewrites or normalizes the command, and
+leaves Edit, Write and source records alone. Use those file tools for literal
+text that needs such characters. This does not change the two hour presence
+window or turn a signal into effect consent.
+
+The curl/wget upload checks also recognize program words spelled with globs or
+variable expansion, without executing the expansion. They retain the existing
+read and loopback policy. This is bounded classification, not a full shell
+sandbox: aliases, arbitrary interpreters and other clients remain outside it.
+
 ## The Jev router
 
 Ruled by Tee 2026-10-16 over a recommendation to hold it. The first version
