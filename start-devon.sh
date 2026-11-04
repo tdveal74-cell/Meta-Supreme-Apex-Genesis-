@@ -156,13 +156,13 @@ DEVON_REGISTRATION_KEY=$REG_KEY
 SOUL_RECALL_ENABLED=true
 PINECONE_API_KEY=
 
-# DEVON voice and enrichment use Cerebras (measured 42ms lane, gpt-oss-120b).
-# Paste your Cerebras Cloud key. Without it the process fails loudly rather
+# DEVON voice and enrichment use Gemini (Gemini compatibility lane, gemini-3.8-flash).
+# Paste your Gemini Cloud key. Without it the process fails loudly rather
 # than silently falling back to a different provider.
-DEFAULT_AI_PROVIDER=cerebras
-ENRICHMENT_PROVIDER=cerebras
-CEREBRAS_MODEL=gpt-oss-120b
-CEREBRAS_API_KEY=
+DEFAULT_AI_PROVIDER=gemini
+ENRICHMENT_PROVIDER=gemini
+GEMINI_MODEL=gemini-3.8-flash
+GEMINI_API_KEY=
 
 # Media execution. DEVON stays the approval and orchestration authority;
 # EditForge renders. These address an EditForge on this machine rather than the
@@ -172,7 +172,7 @@ CEREBRAS_API_KEY=
 EDITFORGE_URL=http://localhost:3100
 EDITFORGE_TOKEN=
 ENVEOF
-  ok "Wrote .env (Cerebras is the default voice and enrichment provider)"
+  ok "Wrote .env (Gemini is the default voice and enrichment provider)"
 fi
 
 # An .env written before the local media lane existed carries no EditForge
@@ -219,22 +219,22 @@ PYEOF
   fi
 fi
 
-if grep -q '^CEREBRAS_API_KEY=$' .env 2>/dev/null; then
-  printf "\n      DEVON voice is set to Cerebras. Paste your Cerebras Cloud key.\n"
-  printf "      Find it at https://cloud.cerebras.ai under API Keys.\n"
+if grep -q '^GEMINI_API_KEY=$' .env 2>/dev/null; then
+  printf "\n      DEVON voice is set to Gemini. Paste your Gemini Cloud key.\n"
+  printf "      Find it at https://aistudio.google.com under API Keys.\n"
   printf "      Paste it and press Enter, or press Enter to leave unset (live calls will fail closed).\n\n"
-  printf "      Cerebras key: "
-  read -r CEREBRAS_INPUT || CEREBRAS_INPUT=""
-  if [ -n "${CEREBRAS_INPUT:-}" ]; then
-    "$VENV_PY" - "$CEREBRAS_INPUT" <<'PYEOF'
+  printf "      Gemini key: "
+  read -r GEMINI_INPUT || GEMINI_INPUT=""
+  if [ -n "${GEMINI_INPUT:-}" ]; then
+    "$VENV_PY" - "$GEMINI_INPUT" <<'PYEOF'
 import pathlib, sys
 key = sys.argv[1].strip()
 p = pathlib.Path(".env")
-p.write_text(p.read_text().replace("CEREBRAS_API_KEY=", "CEREBRAS_API_KEY=" + key, 1))
+p.write_text(p.read_text().replace("GEMINI_API_KEY=", "GEMINI_API_KEY=" + key, 1))
 PYEOF
-    ok "Saved Cerebras key to .env"
+    ok "Saved Gemini key to .env"
   else
-    warn "Skipped. DEFAULT_AI_PROVIDER=cerebras will refuse until the key is set."
+    warn "Skipped. DEFAULT_AI_PROVIDER=gemini will refuse until the key is set."
   fi
 fi
 
@@ -360,7 +360,7 @@ bold "DEVON is up."
 printf "\n"
 printf "  Open this:    http://localhost:%s/console\n" "$API_PORT"
 printf "  Soul recall:  %s\n" "${SOUL:-unknown}"
-printf "  Voice model:  Cerebras (gpt-oss-120b) when CEREBRAS_API_KEY is set\n"
+printf "  Voice model:  Gemini (gemini-3.8-flash) when GEMINI_API_KEY is set\n"
 printf "\n"
 printf "  In the console, find the Soul Layer panel on the right.\n"
 printf "  Leave API empty. Paste this into TOKEN, press SAVE, then TEST:\n"

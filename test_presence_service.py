@@ -174,7 +174,7 @@ def test_settings_refuse_the_public_default_and_an_empty_key_when_deployed():
 def test_settings_refuse_bad_values_by_name():
     base = {"ENVIRONMENT": "test"}
     with pytest.raises(PresenceConfigError, match="PRESENCE_INFERENCE"):
-        PresenceSettings.from_env({**base, "PRESENCE_INFERENCE": "gemini"})
+        PresenceSettings.from_env({**base, "PRESENCE_INFERENCE": "unknown-provider"})
     with pytest.raises(PresenceConfigError, match="names the primary"):
         PresenceSettings.from_env({**base, "PRESENCE_FALLBACK_INFERENCE": "mock"})
     with pytest.raises(PresenceConfigError, match="PRESENCE_SPEECH"):

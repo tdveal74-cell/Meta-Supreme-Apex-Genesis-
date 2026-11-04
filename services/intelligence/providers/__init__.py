@@ -38,6 +38,7 @@ from services.intelligence.providers.factory import (
     create_completion_provider,
     create_provider,
 )
+from services.intelligence.providers.gemini_provider import GeminiProvider
 from services.intelligence.providers.mock_provider import REQUIRED_KEYS_MARKER, MockProvider
 from services.intelligence.providers.openai_provider import OpenAIProvider
 
@@ -45,6 +46,7 @@ __all__ = [
     "AIProvider",
     "AnthropicProvider",
     "CerebrasProvider",
+    "GeminiProvider",
     "RateLimiter",
     "ChatMessage",
     "EmbeddingProvider",

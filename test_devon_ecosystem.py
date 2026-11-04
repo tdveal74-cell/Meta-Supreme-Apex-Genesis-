@@ -365,8 +365,8 @@ def test_only_tee_releases_the_emergency_stop():
 # Intelligence routing
 # ---------------------------------------------------------------------------
 
-def test_mechanical_work_goes_to_cerebras_and_judgement_to_the_council():
-    assert ecosystem.route_thinking("classification")[0] == "cerebras"
+def test_mechanical_work_goes_to_gemini_and_judgement_to_the_council():
+    assert ecosystem.route_thinking("classification")[0] == "gemini"
     assert ecosystem.route_thinking("risk analysis")[0] == "council"
 
 
@@ -375,23 +375,23 @@ def test_an_unrecorded_thinking_duty_is_declined_rather_than_guessed():
 
 
 def test_script_writing_routes_to_the_lane_it_actually_runs_on():
-    """Ruled by Tee on an inline card, 2026-09-15.
+    """The current provider ruling supersedes the historical vendor only.
 
-    Until this landed, `route_thinking("script writing")` returned DECLINED,
-    which is the right answer for a duty nobody recorded and the wrong one for
-    the work the studio does every day. The live script lane in TQO FINAL V5
-    carries `Write Script (Cerebras)` and `Expand Script (Cerebras)`, so the
-    registry was disagreeing with the estate it describes.
+    Tee said "Swap Cerebras out everywhere" on 2026-11-02. The original
+    2026-09-15 expansion cap still applies; changing vendor is not permission
+    to invent a new writing policy or move Council judgment.
     """
     lane, reason = ecosystem.route_thinking("script writing")
-    assert lane == "cerebras"
+    assert lane == "gemini"
     assert "2026-09-15" in reason
+    assert "2026-11-02" in reason
+    assert "capped at two" in reason
 
 
 def test_the_script_writing_reason_does_not_call_the_product_mechanical():
     """The route is right for a reason the generic one would misstate.
 
-    Everything in CEREBRAS_DUTIES is there because it is mechanical. Script
+    Everything in GEMINI_DUTIES is there because it is mechanical. Script
     writing is on the fast lane because that lane is funded and because two
     pass expansion was measured to clear the 1200 word floor. If a later edit
     collapses it into the tuple, the reason string silently starts calling the
@@ -399,17 +399,17 @@ def test_the_script_writing_reason_does_not_call_the_product_mechanical():
     """
     reason = ecosystem.route_thinking("script writing")[1]
     assert "mechanical" not in reason.replace("not because it is mechanical", "")
-    assert "script writing" not in ecosystem.CEREBRAS_DUTIES
+    assert "script writing" not in ecosystem.GEMINI_DUTIES
     assert "script writing" not in ecosystem.COUNCIL_DUTIES
 
 
 def test_a_ruled_duty_does_not_disturb_the_doctrine_around_it():
     """Anti vacuity: the ruled branch answers first, so prove it answers only
     for what it names."""
-    assert ecosystem.route_thinking("classification")[0] == "cerebras"
+    assert ecosystem.route_thinking("classification")[0] == "gemini"
     assert ecosystem.route_thinking("risk analysis")[0] == "council"
     assert ecosystem.route_thinking("read my mind")[0] == "DECLINED"
-    assert set(ecosystem.RULED_ONTO_CEREBRAS) == {"script writing"}
+    assert set(ecosystem.RULED_ONTO_GEMINI) == {"script writing"}
 
 
 def test_the_soul_copy_routes_thinking_the_same_way():
@@ -430,23 +430,23 @@ def test_the_soul_copy_routes_thinking_the_same_way():
             if not isinstance(node.target, ast.Name):
                 continue
             name = node.target.id
-            if name in ("CEREBRAS_DUTIES", "COUNCIL_DUTIES"):
+            if name in ("GEMINI_DUTIES", "COUNCIL_DUTIES"):
                 found[name] = tuple(e.value for e in node.value.elts)
-            elif name == "RULED_ONTO_CEREBRAS":
+            elif name == "RULED_ONTO_GEMINI":
                 found[name] = tuple(k.value for k in node.value.keys)
         return found
 
     here = duty_names("services/devon/ecosystem.py")
     soul = duty_names("deploy/soul/services/devon/ecosystem.py")
     assert set(here) == {
-        "CEREBRAS_DUTIES",
+        "GEMINI_DUTIES",
         "COUNCIL_DUTIES",
-        "RULED_ONTO_CEREBRAS",
+        "RULED_ONTO_GEMINI",
     }, here
     assert here == soul, "the soul copy's thinking duties have drifted"
     assert here["COUNCIL_DUTIES"] == ecosystem.COUNCIL_DUTIES
-    assert here["CEREBRAS_DUTIES"] == ecosystem.CEREBRAS_DUTIES
-    assert here["RULED_ONTO_CEREBRAS"] == tuple(ecosystem.RULED_ONTO_CEREBRAS)
+    assert here["GEMINI_DUTIES"] == ecosystem.GEMINI_DUTIES
+    assert here["RULED_ONTO_GEMINI"] == tuple(ecosystem.RULED_ONTO_GEMINI)
 
 
 def test_the_operating_surfaces_come_from_the_one_registry():
@@ -508,3 +508,15 @@ def test_the_summary_is_json_shaped_and_names_the_whole_organism():
     assert len(payload["portfolio"]) == 4
     assert payload["hierarchy"][0] == "TEE"
     assert set(payload["memory_indexes"]) == set(ecosystem.MEMORY_INDEXES)
+
+
+def test_every_mechanical_duty_and_public_status_use_the_current_provider():
+    for duty in ecosystem.GEMINI_DUTIES:
+        lane, reason = ecosystem.route_thinking(duty)
+        assert lane == "gemini"
+        assert "2026-11-02" in reason
+    status = ecosystem.summary()["external_intelligence"]
+    assert status["gemini"] == list(ecosystem.GEMINI_DUTIES)
+    assert status["ruled_onto_gemini"] == ["script writing"]
+    assert "cerebras" not in status
+    assert "ruled_onto_cerebras" not in status

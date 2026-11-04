@@ -148,17 +148,18 @@ class Settings(BaseSettings):
     ]
 
     # AI Providers (abstracted — keys injected at runtime, never hard-coded)
-    # Offline default is "mock". Live DEVON voice and enrichment use Cerebras
-    # (gpt-oss-120b, measured 42ms). start-devon.sh writes DEFAULT_AI_PROVIDER
-    # and ENRICHMENT_PROVIDER to cerebras and prompts for CEREBRAS_API_KEY.
+    # Offline default is "mock". The bootstrap selects Gemini for text
+    # and enrichment and prompts for GEMINI_API_KEY. Deployments must set
+    # their provider and key explicitly; a saved key is not a readiness proof.
     # CI keeps mock explicitly. Missing keys fail loudly, never silently degrade.
     OPENAI_API_KEY: str | None = None
     ANTHROPIC_API_KEY: str | None = None
     CEREBRAS_API_KEY: str | None = None
+    GEMINI_API_KEY: str | None = None
     # Read-only Stripe key for the company scoreboard. Must be a live restricted
     # key (rk_live_); anything else is refused. Unset means revenue is not measured.
     STRIPE_READ_KEY: str | None = None
-    DEFAULT_AI_PROVIDER: str = "mock"  # mock | anthropic | openai | cerebras
+    DEFAULT_AI_PROVIDER: str = "mock"  # mock | anthropic | openai | cerebras | gemini
 
     # Vision is its own backend, separate from DEFAULT_AI_PROVIDER, because
     # the text lane may sit on Cerebras (which serves no vision model) while
@@ -205,11 +206,12 @@ class Settings(BaseSettings):
     ANTHROPIC_MODEL: str = "claude-sonnet-5"
     OPENAI_MODEL: str = "gpt-5.2"
     CEREBRAS_MODEL: str = "gpt-oss-120b"
+    GEMINI_MODEL: str = "gemini-3.8-flash"
 
     # Capture enrichment. Cerebras is the measured lane for this job: it returns
     # an Area and a one line summary in tens of milliseconds, and the Area is
     # then validated against the nine rather than trusted.
-    ENRICHMENT_PROVIDER: str = "mock"  # mock | cerebras | openai | anthropic
+    ENRICHMENT_PROVIDER: str = "mock"  # mock | gemini | openai | anthropic | cerebras
     ENRICHMENT_ENABLED: bool = True
 
     # The soul layer. tee-soul-layer is read-only recall of Tee's rulings
