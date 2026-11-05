@@ -543,6 +543,12 @@ input,select{font:inherit}
           about X". Unconfigured or unreachable, Devon says so rather than guessing.</span>
         </div>
       </div>
+      <div class="pane" id="runtimePanel">
+        <div class="pane-h"><h2>Live Runtime Status</h2><span class="ph-meta">READ ONLY</span></div>
+        <div class="notice">Read this account's provider configuration and the self-hosted n8n inventory. Configuration is separate from a successful model response. The reference decks retain their dated snapshot.</div>
+        <button class="tgl" id="runtimeRead" type="button">READ LIVE STATUS</button>
+        <pre id="runtimeOutput" role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere">No live status requested.</pre>
+      </div>
       <div class="pane" id="arfPanel">
         <div class="pane-h"><h2>ARF Diagnostics</h2><span class="ph-meta">READ ONLY</span></div>
         <div class="notice">Inspect DEVON build evidence using this tab's sign-in. A diagnostic recommends; it never runs or approves a task. Requests use your shared diagnostic budget.</div>
@@ -1703,6 +1709,93 @@ function wireArfPanel() {
   $('arfTasks').onchange = () => { $('arfTaskId').value = $('arfTasks').value; };
 }
 /* ARF_PANEL_END */
+/* LIVE_RUNTIME_STATUS_BEGIN */
+const LiveRuntimeStatus = {
+  busy: false,
+  revision: 0,
+  clear() { this.revision++; $('runtimeOutput').textContent = 'Session changed. Read live status again.'; },
+  routes: Object.freeze({
+    account: '/api/v1/auth/me',
+    provider: '/api/v1/intelligence/status',
+    inventory: '/api/v1/n8n/workflows',
+    telemetry: '/api/v1/n8n/executions?limit=1'
+  }),
+  canonical: 'https://n8n.editforge.online',
+  async request(kind, jwt, revision) {
+    if (onVercelSoulHost()) throw new Error('host');
+    if (!Object.prototype.hasOwnProperty.call(this.routes, kind)) throw new Error('route');
+    if (!jwt) throw new Error('auth');
+    if (jwt !== operatorJwt() || revision !== this.revision) throw new Error('session');
+    const response = await fetch(this.routes[kind], {
+      method: 'GET', mode: 'same-origin', redirect: 'error', credentials: 'omit', cache: 'no-store',
+      headers: { Accept: 'application/json', Authorization: 'Bearer ' + jwt }
+    });
+    // A refusal body can contain upstream diagnostics. Never reflect it into the console.
+    const result = response.status === 200 ? {status: 200, body: await response.json()} : {status: response.status};
+    if (jwt !== operatorJwt() || revision !== this.revision) throw new Error('session');
+    return result;
+  },
+  summary(kind, result) {
+    const label = {account: 'Account', provider: 'Provider configuration', inventory: 'n8n inventory', telemetry: 'n8n connection'}[kind];
+    if (result.status !== 200) return label + ': unavailable (HTTP ' + result.status + ').';
+    const b = result.body;
+    const text = value => typeof value === 'string' && value.length > 0 && value.length <= 120;
+    const count = value => Number.isSafeInteger(value) && value >= 0;
+    if (kind === 'account' && b && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(b.id)) {
+      return 'Account binding: ' + b.id;
+    }
+    if (kind === 'provider' && b && text(b.provider) && text(b.model) && typeof b.simulated === 'boolean') {
+      return 'Provider configuration: ' + b.provider + ' / ' + b.model + '; simulated=' + b.simulated + '. Configuration only, no inference test.';
+    }
+    if (kind === 'inventory' && b && b.source === this.canonical && b.read_only === true &&
+        ['ok', 'partial', 'failed'].includes(b.state) && typeof b.complete === 'boolean' && Array.isArray(b.workflows) &&
+        b.counts && count(b.counts.observed) && count(b.counts.active_observed) &&
+        b.counts.observed === b.workflows.length && b.counts.active_observed <= b.counts.observed &&
+        (b.state !== 'ok' || b.complete === true)) {
+      return 'n8n inventory: ' + b.state + '; complete=' + b.complete + '; observed=' + b.counts.observed +
+        '; active=' + b.counts.active_observed + '; source=' + this.canonical + '. Active is separate from execution health.';
+    }
+    if (kind === 'telemetry' && b && Array.isArray(b.instances) && b.instances.length === 1) {
+      const i = b.instances[0];
+      const host = i && (i.host || i.configured_host);
+      if (i && text(i.state) && (host === this.canonical || host === 'n8n.editforge.online')) {
+        return 'n8n connection: ' + i.state + '; source=' + this.canonical + '; upstream HTTP ' +
+          (Number.isInteger(i.status_code) ? i.status_code : 'unverified') + '. Saved execution metadata only.';
+      }
+    }
+    return label + ': response unverified.';
+  },
+  async act() {
+    if (this.busy) return;
+    this.busy = true;
+    const button = $('runtimeRead'), output = $('runtimeOutput');
+    button.disabled = true;
+    output.textContent = 'Reading current status...';
+    const lines = [];
+    const jwt = operatorJwt(), revision = this.revision;
+    try {
+      for (const kind of Object.keys(this.routes)) {
+        try { lines.push(this.summary(kind, await this.request(kind, jwt, revision))); }
+        catch (error) {
+          if (error && error.message === 'session') { lines.length = 0; lines.push('Session changed. Read live status again.'); break; }
+          if (error && error.message === 'auth') { lines.push('Sign in in the Soul Layer panel first.'); break; }
+          if (error && error.message === 'host') { lines.push('Use the platform operator console for live runtime status.'); break; }
+          lines.push('Status read did not complete. No result established.');
+        }
+      }
+      output.textContent = jwt !== operatorJwt() || revision !== this.revision ?
+        'Session changed. Read live status again.' : lines.join('\n');
+    } finally { this.busy = false; button.disabled = false; }
+  }
+};
+function wireLiveRuntimeStatus() {
+  if (onVercelSoulHost()) { $('runtimePanel').hidden = true; return; }
+  $('runtimeRead').onclick = () => LiveRuntimeStatus.act();
+  $('signForm').addEventListener('submit', () => LiveRuntimeStatus.clear());
+  $('soulSave').addEventListener('click', () => LiveRuntimeStatus.clear());
+}
+/* LIVE_RUNTIME_STATUS_END */
+
 
 /* Knowledge loop client. On the platform operator console (app.main) the
    base URL is always same origin, so PLATFORM is not used there. JWT is the
@@ -2479,6 +2572,7 @@ renderLearned();
 wireKeys();
 wireSoul();
 wireArfPanel();
+wireLiveRuntimeStatus();
 
 $('learnForget').addEventListener('click',()=>{
   const n=Learn.entries().length;

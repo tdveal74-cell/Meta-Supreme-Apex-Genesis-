@@ -17,3 +17,14 @@ def test_arf_console_behavior():
         cwd=root, capture_output=True, text=True, timeout=60, check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_live_runtime_status_console_behavior():
+    node = shutil.which("node")
+    assert node, "Node is required to execute the runtime status checks"
+    root = Path(__file__).resolve().parent
+    result = subprocess.run(
+        [node, "--test", str(root / "tests/js/live-runtime-status.test.cjs")],
+        cwd=root, capture_output=True, text=True, timeout=60, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
