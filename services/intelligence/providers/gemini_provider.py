@@ -15,6 +15,7 @@ from services.intelligence.providers.base import (
     CompletionResponse,
     ProviderConfigError,
     ProviderResponseError,
+    TokenUsage,
 )
 from services.intelligence.providers.openai_provider import OpenAIProvider
 
@@ -90,8 +91,18 @@ class GeminiProvider(OpenAIProvider):
         usage = data.get("usage")
         if not isinstance(usage, dict):
             raise invalid()
-        for field in ("prompt_tokens", "completion_tokens"):
+        for field in ("prompt_tokens", "completion_tokens", "total_tokens"):
             value = usage.get(field)
             if type(value) is not int or value < 0:
                 raise invalid()
-        return super()._parse_response(request, data)
+        if usage["total_tokens"] < usage["prompt_tokens"] + usage["completion_tokens"]:
+            raise invalid()
+        response = super()._parse_response(request, data)
+        # Gemini may exclude thinking from completion_tokens while including
+        # it in total_tokens. The ledger has two token columns, so generated
+        # output must include all non-prompt tokens without counting twice.
+        response.usage = TokenUsage(
+            input_tokens=usage["prompt_tokens"],
+            output_tokens=usage["total_tokens"] - usage["prompt_tokens"],
+        )
+        return response
