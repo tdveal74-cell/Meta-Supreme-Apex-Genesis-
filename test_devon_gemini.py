@@ -40,7 +40,7 @@ async def test_gemini_uses_its_own_endpoint_and_max_tokens_contract():
         return httpx.Response(200, json={
             "model": "gemini-3.8-flash",
             "choices": [{"message": {"content": '{"ok": true}'}, "finish_reason": "stop"}],
-            "usage": {"prompt_tokens": 9, "completion_tokens": 4},
+            "usage": {"prompt_tokens": 9, "completion_tokens": 4, "total_tokens": 13},
         })
 
     provider = GeminiProvider(api_key="google-key", transport=httpx.MockTransport(handler))
@@ -212,7 +212,7 @@ async def test_empty_filtered_content_keeps_a_typed_measured_result():
     provider = GeminiProvider(api_key="test-key", max_retries=0, transport=httpx.MockTransport(
         lambda request: httpx.Response(200, json={
             "choices": [{"message": {"content": ""}, "finish_reason": "content_filter"}],
-            "usage": {"prompt_tokens": 9, "completion_tokens": 0},
+            "usage": {"prompt_tokens": 9, "completion_tokens": 0, "total_tokens": 9},
         })
     ))
     result = await provider.complete(CompletionRequest(messages=[ChatMessage(role="user", content="test")]))
@@ -247,3 +247,97 @@ def test_bootstrap_gemini_key_block_reads_private_environment_only(tmp_path):
                    env={**os.environ, "GEMINI_BOOTSTRAP_KEY": "fake-gemini-key"}, check=True)
     assert (tmp_path / ".env").read_text() == "PINECONE_API_KEY=unchanged\nGEMINI_API_KEY=fake-gemini-key\n"
     assert '"$VENV_PY" - "$GEMINI_INPUT"' not in source
+
+
+@pytest.mark.parametrize("completion,total,expected_output", [
+    (40, 1605, 192),  # Saved n8n response: 152 thinking tokens beyond visible output.
+    (192, 1605, 192),  # A compatible response that already includes them.
+    (0, 1413, 0),
+])
+def test_gemini_reconciles_all_reported_tokens_without_double_counting(
+    completion, total, expected_output,
+):
+    import copy
+
+    body = {
+        "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+        "usage": {
+            "prompt_tokens": 1413, "completion_tokens": completion, "total_tokens": total,
+        },
+    }
+    original = copy.deepcopy(body)
+    result = GeminiProvider(api_key="test-key")._parse_response(
+        CompletionRequest(messages=[ChatMessage(role="user", content="test")]), body,
+    )
+    assert result.usage.input_tokens == 1413
+    assert result.usage.output_tokens == expected_output
+    assert result.usage.total_tokens == total
+    assert body == original
+
+
+@pytest.mark.parametrize("total", [None, True, -1, "1605", 1605.0, 1412, 1452])
+async def test_gemini_rejects_invalid_total_without_retry(total):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={
+            "choices": [{"message": {"content": "ok"}}],
+            "usage": {"prompt_tokens": 1413, "completion_tokens": 40, "total_tokens": total},
+        })
+
+    provider = GeminiProvider(api_key="test-key", max_retries=3, transport=httpx.MockTransport(handler))
+    with pytest.raises(ProviderResponseError) as caught:
+        await provider.complete(CompletionRequest(messages=[ChatMessage(role="user", content="test")]))
+    assert not caught.value.retryable
+    assert len(calls) == 1
+
+
+def test_gemini_requires_total_for_complete_accounting():
+    with pytest.raises(ProviderResponseError):
+        GeminiProvider(api_key="test-key")._parse_response(
+            CompletionRequest(messages=[ChatMessage(role="user", content="test")]),
+            {
+                "choices": [{"message": {"content": "ok"}}],
+                "usage": {"prompt_tokens": 1413, "completion_tokens": 40},
+            },
+        )
+
+
+async def test_metered_gemini_records_complete_usage_after_cap_check(monkeypatch):
+    from app.core.tenant_context import bind_tenant, reset_tenant
+    from app.services import provider_usage
+
+    seen = []
+
+    async def cap(tenant_id):
+        seen.append(("cap", tenant_id))
+
+    async def record(tenant_id, *, input_tokens, output_tokens):
+        seen.append(("record", tenant_id, input_tokens, output_tokens))
+
+    def handler(request):
+        seen.append(("provider",))
+        return httpx.Response(200, json={
+            "choices": [{"message": {"content": "ok"}}],
+            "usage": {"prompt_tokens": 1413, "completion_tokens": 40, "total_tokens": 1605},
+        })
+
+    monkeypatch.setattr(provider_usage, "refuse_if_capped", cap)
+    monkeypatch.setattr(provider_usage, "record_usage", record)
+    provider = provider_usage.MeteredProvider(GeminiProvider(
+        api_key="test-key", max_retries=0, transport=httpx.MockTransport(handler),
+    ))
+    binding = bind_tenant("gemini-test-owner")
+    try:
+        result = await provider.complete(CompletionRequest(
+            messages=[ChatMessage(role="user", content="test")],
+        ))
+    finally:
+        reset_tenant(binding)
+    assert result.usage.total_tokens == 1605
+    assert seen == [
+        ("cap", "gemini-test-owner"),
+        ("provider",),
+        ("record", "gemini-test-owner", 1413, 192),
+    ]
