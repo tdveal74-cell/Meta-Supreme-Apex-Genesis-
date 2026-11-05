@@ -299,3 +299,133 @@ async def test_conversation_failure_does_not_report_empty_success(monkeypatch):
     result = await tools.execute("n8n.workflow_inventory", {})
     assert not result.ok and len(result.error) <= 500
     assert json.loads(result.error)["state"] == "failed"
+
+@pytest.mark.asyncio
+async def test_large_definition_page_still_projects_only_bounded_metadata(monkeypatch):
+    private = 'SYNTHETIC-NODE-CONTENT-' * 140000
+    page = {'data': [row(nodes=[{'parameters': {'code': private}}])], 'nextCursor': None}
+    assert len(json.dumps(page).encode()) > 2_000_000
+    calls = []
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json=page)
+    transport(monkeypatch, handler)
+    result = await inv.read_inventory(OWNER, environ=config())
+    assert result['state'] == 'ok' and result['complete']
+    assert result['counts']['observed'] == 1 and len(calls) == 1
+    assert 'SYNTHETIC-NODE-CONTENT-' not in json.dumps(result)
+    assert 'nodes' not in result['workflows'][0]
+
+
+@pytest.mark.asyncio
+async def test_cumulative_decoded_budget_rejects_later_page_without_retry(monkeypatch):
+    pages = [
+        {'data': [row('first', nodes=[{'code': 'x' * 1000}])], 'nextCursor': 'next'},
+        {'data': [row('second', nodes=[{'code': 'y' * 1000}])], 'nextCursor': None},
+    ]
+    encoded = [json.dumps(p, separators=(',', ':')).encode() for p in pages]
+    monkeypatch.setattr(inv, 'MAX_PAGE_BYTES', max(map(len, encoded)) + 1)
+    monkeypatch.setattr(inv, 'MAX_TOTAL_BYTES', sum(map(len, encoded)) - 1, raising=False)
+    calls = []
+    def handler(request):
+        page = encoded[len(calls)]
+        calls.append(request)
+        return httpx.Response(200, content=page)
+    transport(monkeypatch, handler)
+    result = await inv.read_inventory(OWNER, environ=config())
+    assert result['state'] == 'partial' and not result['complete']
+    assert result['counts']['observed'] == 1 and result['pages_read'] == 1
+    assert result['error'] == 'inventory total byte bound reached' and len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_projected_metadata_budget_preserves_only_prior_complete_pages(monkeypatch):
+    first = row('first', name='\x00' * 100)
+    one = len(json.dumps(inv._project(first), ensure_ascii=False, separators=(',', ':')).encode())
+    monkeypatch.setattr(inv, 'MAX_METADATA_BYTES', inv.METADATA_ENVELOPE_RESERVE + one + 20, raising=False)
+    calls = []
+    result = await inv.read_inventory(OWNER, environ=config(), fetcher=fetch_pages([
+        {'data': [first], 'nextCursor': 'next'},
+        {'data': [row('second', name='\x00' * 100)], 'nextCursor': None},
+    ], calls))
+    assert result['state'] == 'partial' and result['counts']['observed'] == 1
+    assert result['error'] == 'inventory metadata byte bound reached'
+
+
+@pytest.mark.asyncio
+async def test_overlapping_inventory_reads_refuse_without_second_transport():
+    started, release = asyncio.Event(), asyncio.Event()
+    calls = []
+    async def fetch(url, key):
+        calls.append(url)
+        started.set()
+        await release.wait()
+        return {'data': [], 'nextCursor': None}
+    first = asyncio.create_task(inv.read_inventory(OWNER, environ=config(), fetcher=fetch))
+    try:
+        await started.wait()
+        second = await asyncio.wait_for(inv.read_inventory(OWNER, environ=config(), fetcher=fetch), .1)
+        assert second['state'] == 'failed' and second['error'] == 'inventory read already in progress'
+        assert second['counts']['observed'] == 0 and len(calls) == 1
+    finally:
+        release.set()
+        await first
+
+
+@pytest.mark.asyncio
+async def test_cancelled_inventory_read_releases_singleflight_slot():
+    started = asyncio.Event()
+    async def fetch(url, key):
+        started.set()
+        await asyncio.Event().wait()
+    first = asyncio.create_task(inv.read_inventory(OWNER, environ=config(), fetcher=fetch))
+    await started.wait()
+    first.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await first
+    calls = []
+    result = await inv.read_inventory(OWNER, environ=config(), fetcher=fetch_pages([
+        {'data': [], 'nextCursor': None},
+    ], calls))
+    assert result['complete'] and len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_unknown_inventory_reason_is_redacted_and_read_slot_released():
+    calls = []
+    result = await inv.read_inventory(OWNER, environ=config(), fetcher=fetch_pages([
+        inv.InventoryReadError('private-secret-error-body'),
+    ], calls))
+    assert result['state'] == 'failed' and result['error'] == 'inventory read unavailable'
+    assert 'private-secret' not in json.dumps(result)
+    result = await inv.read_inventory(OWNER, environ=config(), fetcher=fetch_pages([
+        {'data': [], 'nextCursor': None},
+    ], []))
+    assert result['complete']
+
+@pytest.mark.asyncio
+async def test_valid_json_over_page_budget_refuses_before_projection(monkeypatch):
+    encoded = json.dumps({'data': [row(nodes=[{'code': 'x' * 400}])], 'nextCursor': None}).encode()
+    monkeypatch.setattr(inv, 'MAX_PAGE_BYTES', len(encoded) - 1)
+    transport(monkeypatch, lambda request: httpx.Response(200, content=encoded))
+    with pytest.raises(inv.InventoryReadError, match='^inventory response exceeded byte bound$'):
+        await inv._fetch_page(inv._url(None), KEY)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status,reason', [(401, 'inventory authentication refused'), (403, 'inventory permission refused')])
+async def test_fixed_auth_reasons_never_read_upstream_refusal_bodies(monkeypatch, status, reason):
+    class RefusalBody(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            raise AssertionError('refusal body must not be read')
+            yield b''
+    transport(monkeypatch, lambda request: httpx.Response(status, stream=RefusalBody()))
+    with pytest.raises(inv.InventoryReadError, match='^' + reason + '$'):
+        await inv._fetch_page(inv._url(None), KEY)
+
+
+def test_console_reason_vocabulary_matches_the_closed_backend_contract():
+    from pathlib import Path
+    source = (Path(__file__).parent / 'deploy/soul/console.html').read_text()
+    encoded = source.split('inventoryReasons: Object.freeze(')[1].split('),')[0]
+    assert set(json.loads(encoded)) == inv.PUBLIC_ERRORS

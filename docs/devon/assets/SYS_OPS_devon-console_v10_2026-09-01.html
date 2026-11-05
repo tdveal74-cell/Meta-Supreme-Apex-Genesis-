@@ -1721,6 +1721,7 @@ const LiveRuntimeStatus = {
     telemetry: '/api/v1/n8n/executions?limit=1'
   }),
   canonical: 'https://n8n.editforge.online',
+  inventoryReasons: Object.freeze(["inventory HTTP read refused", "inventory archive state refused", "inventory authentication refused", "inventory cursor repeated", "inventory duplicate workflow refused", "inventory metadata byte bound reached", "inventory metadata encoding refused", "inventory metadata shape refused", "inventory page bound reached", "inventory page envelope refused", "inventory page exceeded row bound", "inventory permission refused", "inventory published version refused", "inventory read already in progress", "inventory read unavailable", "inventory response exceeded byte bound", "inventory response is not JSON", "inventory time bound reached", "inventory total byte bound reached", "inventory transport unavailable", "inventory update time refused", "inventory workflow id refused", "self-hosted inventory configuration unavailable"]),
   async request(kind, jwt, revision) {
     if (onVercelSoulHost()) throw new Error('host');
     if (!Object.prototype.hasOwnProperty.call(this.routes, kind)) throw new Error('route');
@@ -1753,7 +1754,8 @@ const LiveRuntimeStatus = {
         b.counts.observed === b.workflows.length && b.counts.active_observed <= b.counts.observed &&
         (b.state !== 'ok' || b.complete === true)) {
       return 'n8n inventory: ' + b.state + '; complete=' + b.complete + '; observed=' + b.counts.observed +
-        '; active=' + b.counts.active_observed + '; source=' + this.canonical + '. Active is separate from execution health.';
+        '; active=' + b.counts.active_observed + '; source=' + this.canonical + '. Active is separate from execution health.' +
+        (b.state === 'ok' ? '' : ' Reason: ' + (this.inventoryReasons.includes(b.error) ? b.error : 'inventory read unavailable') + '.');
     }
     if (kind === 'telemetry' && b && Array.isArray(b.instances) && b.instances.length === 1) {
       const i = b.instances[0];

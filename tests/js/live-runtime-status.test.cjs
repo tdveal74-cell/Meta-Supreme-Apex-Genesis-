@@ -91,3 +91,11 @@ test('sign-in and credential-save events clear prior observations', async () => 
   f.elements.signForm.handlers.submit(); assert.match(f.elements.runtimeOutput.textContent, /Session changed/);
   await f.client.act(); f.elements.soulSave.handlers.click(); assert.match(f.elements.runtimeOutput.textContent, /Session changed/);
 });
+
+test('inventory failures render only fixed public reasons', () => {
+  const {client} = fixture();
+  const body = {source: canonical, read_only: true, state: 'failed', complete: false, counts: {observed: 0, active_observed: 0}, workflows: [], error: 'inventory response exceeded byte bound'};
+  assert.match(client.summary('inventory', {status: 200, body}), /Reason: inventory response exceeded byte bound/);
+  const hostile = client.summary('inventory', {status: 200, body: {...body, error: 'private-provider-body-synthetic-session-secret'}});
+  assert.doesNotMatch(hostile, /private-provider|synthetic-session-secret/);
+});
