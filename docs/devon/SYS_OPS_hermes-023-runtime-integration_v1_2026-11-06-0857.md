@@ -79,6 +79,12 @@ those two Data Tables at that timestamp, not all tables or today's contents.
 - Upstream removes old browser tool names in favor of browser_exec. DEVON's
   own adapters keep their contracts. This patch does not activate a private
   browser worker or claim a production computer is provisioned.
+  Its CI build exposed an unavailable Chromium pin. Following the standing
+  exact-pin policy, all three packages move from 156.0.8078.73-1~deb12u1 to
+  156.0.8078.79-1~deb12u1, verified in signed Debian metadata dated November 5.
+  `deploy/browser-worker/seccomp-sources.md` records signatures and hashes.
+  Debian still lists unresolved vulnerabilities; build availability does not
+  clear production rollout. The worker remains disabled.
 - No reachable DEVON PowerShell adapter was demonstrated. Its existing shell
   classifier work is not relabeled as a new PowerShell fix.
 - Compressed browser responses now fail explicitly when a server ignores
