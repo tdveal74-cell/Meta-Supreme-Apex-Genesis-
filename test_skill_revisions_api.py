@@ -160,3 +160,161 @@ async def test_promotion_refuses_mismatched_evaluation(client, auth_headers, db_
     refused = await _decision(client, auth_headers, proposal, evaluation_id)
     assert refused.status_code == 409, refused.text
     assert (await client.get(f'{BASE}/proof/revisions', headers=auth_headers)).json()['items'] == []
+
+
+@pytest.mark.asyncio
+async def test_curator_lock_gates_edit_rollback_and_requires_current_owner_version(client, auth_headers):
+    original = {'description': '  curated  ', 'instructions': 'exact\n\nwording\n'}
+    created = await client.put(f'{BASE}/proof', headers=auth_headers, json=original)
+    assert created.status_code == 200
+    locked = await client.put(f'{BASE}/proof/lock', headers=auth_headers,
+        json={'locked': True, 'expected_version': 1})
+    assert locked.status_code == 200, locked.text
+    assert locked.json()['version'] == 2 and locked.json()['locked'] is True
+    assert (await client.get(f'{BASE}/proof/lock', headers=auth_headers)).json() == locked.json()
+    skills = (await client.get(BASE, headers=auth_headers)).json()
+    assert skills[0]['curator_locked'] is True
+    assert skills[0]['instructions'] == original['instructions']
+    edited = await client.put(f'{BASE}/proof', headers=auth_headers,
+        json={'description': 'new', 'instructions': 'new', 'provenance': 'operator:unlock'})
+    assert edited.status_code == 409, edited.text
+    restored = await client.post(f'{BASE}/proof/rollback', headers=auth_headers,
+        json={'target_version': 1, 'expected_version': 2})
+    assert restored.status_code == 409, restored.text
+    stale = await client.put(f'{BASE}/proof/lock', headers=auth_headers,
+        json={'locked': False, 'expected_version': 1})
+    assert stale.status_code == 409
+    assert (await client.put(f'{BASE}/proof/lock', headers=auth_headers,
+        json={'locked': 'false', 'expected_version': 2})).status_code == 422
+    assert (await client.put(f'{BASE}/proof/lock',
+        json={'locked': False, 'expected_version': 2})).status_code == 401
+    rows = (await client.get(f'{BASE}/proof/revisions', headers=auth_headers)).json()['items']
+    assert len(rows) == 2 and rows[0]['content_hash'] == rows[1]['content_hash']
+    assert rows[1]['evidence'] == {'operation': 'human_curator_lock', 'curator_locked': True}
+    unlocked = await client.put(f'{BASE}/proof/lock', headers=auth_headers,
+        json={'locked': False, 'expected_version': 2})
+    assert unlocked.status_code == 200 and unlocked.json()['version'] == 3
+    edited = await client.put(f'{BASE}/proof', headers=auth_headers, json=original)
+    assert edited.status_code == 200 and edited.json()['version'] == 4
+    assert edited.json()['curator_locked'] is False
+
+
+@pytest.mark.asyncio
+async def test_curator_lock_cannot_be_changed_or_read_by_another_owner(client, auth_headers):
+    await client.put(f'{BASE}/proof', headers=auth_headers,
+                     json={'description': 'canon', 'instructions': 'protected'})
+    await client.put(f'{BASE}/proof/lock', headers=auth_headers,
+                     json={'locked': True, 'expected_version': 1})
+    registered = await client.post('/api/v1/auth/register', json={
+        'email': 'curator-other@example.com', 'password': 'another-strong-password-123',
+        'full_name': 'Other Owner'})
+    assert registered.status_code == 201, registered.text
+    login = await client.post('/api/v1/auth/login', json={
+        'email': 'curator-other@example.com', 'password': 'another-strong-password-123'})
+    assert login.status_code == 200, login.text
+    headers = {'Authorization': f"Bearer {login.json()['access_token']}"}
+    assert (await client.get(f'{BASE}/proof/lock', headers=headers)).status_code == 404
+    assert (await client.put(f'{BASE}/proof/lock', headers=headers,
+        json={'locked': False, 'expected_version': 2})).status_code == 404
+    own = await client.put(f'{BASE}/proof', headers=headers,
+                           json={'description': 'own', 'instructions': 'own'})
+    assert own.status_code == 200 and own.json()['version'] == 1
+    assert (await client.get(f'{BASE}/proof/lock', headers=auth_headers)).json()['locked'] is True
+
+
+@pytest.mark.asyncio
+async def test_curator_lock_refuses_even_evaluated_promotion(client, auth_headers, db_session):
+    _, proposal, body = await _candidate(client, auth_headers, db_session)
+    await client.put(f'{BASE}/proof', headers=auth_headers,
+                     json={'description': 'canon', 'instructions': 'protected'})
+    locked = await client.put(f'{BASE}/proof/lock', headers=auth_headers,
+        json={'locked': True, 'expected_version': 1})
+    assert locked.status_code == 200
+    evaluation = await client.post(f'{BASE}/proof/evaluations', headers=auth_headers, json=body)
+    assert evaluation.json()['evaluation_status'] == 'PASSED'
+    result = await client.post(f'/api/v1/agent-expansion/skill-proposals/{proposal}/decide',
+        headers=auth_headers, json={'approve': True, 'promote': True, 'expected_version': 2,
+                                   'evaluation_id': evaluation.json()['evaluation_id']})
+    assert result.status_code == 409 and 'locked' in result.text
+    proposals = (await client.get('/api/v1/agent-expansion/skill-proposals', headers=auth_headers)).json()
+    assert next(p for p in proposals if p['proposal_id'] == proposal)['state'] == 'proposed'
+    rows = (await client.get(f'{BASE}/proof/revisions', headers=auth_headers)).json()['items']
+    assert len(rows) == 2 and rows[-1]['instructions'] == 'protected'
+
+
+@pytest.mark.asyncio
+async def test_curator_lock_refreshes_previously_loaded_skill_before_write(client, auth_headers, db_session):
+    from sqlalchemy import select
+
+    from app.models.agent_runtime import AgentRuntimeSkill
+    from app.services.agent_tasks import agent_tasks_service
+    from app.services.skill_revisions import SkillLocked
+
+    await client.put(f'{BASE}/proof', headers=auth_headers,
+                     json={'description': 'canon', 'instructions': 'protected'})
+    owner = (await client.get('/api/v1/auth/me', headers=auth_headers)).json()['id']
+    stale = (await db_session.execute(select(AgentRuntimeSkill).where(
+        AgentRuntimeSkill.owner_id == owner, AgentRuntimeSkill.name == 'proof'))).scalar_one()
+    assert stale.version == 1
+    locked = await client.put(f'{BASE}/proof/lock', headers=auth_headers,
+        json={'locked': True, 'expected_version': 1})
+    assert locked.status_code == 200 and locked.json()['version'] == 2
+    with pytest.raises(SkillLocked):
+        await agent_tasks_service.learning.upsert_skill(db_session, owner_id=owner,
+            name='proof', description='overwrite', instructions='forbidden')
+    await db_session.rollback()
+    skills = (await client.get(BASE, headers=auth_headers)).json()
+    assert skills[0]['version'] == 2 and skills[0]['instructions'] == 'protected'
+
+
+@pytest.mark.asyncio
+async def test_curator_lock_commit_serializes_waiting_writer_and_rollback_is_atomic(client, auth_headers):
+    import asyncio
+
+    from app.db.session import AsyncSessionLocal
+    from app.services.agent_tasks import agent_tasks_service
+    from app.services.skill_revisions import SkillLocked, set_curator_lock
+
+    await client.put(f'{BASE}/proof', headers=auth_headers,
+                     json={'description': 'canon', 'instructions': 'protected'})
+    owner = (await client.get('/api/v1/auth/me', headers=auth_headers)).json()['id']
+    # An abandoned transition leaves neither a lock nor a partial version.
+    async with AsyncSessionLocal() as transition:
+        await set_curator_lock(transition, owner_id=owner, name='proof',
+                               locked=True, expected_version=1)
+        await transition.rollback()
+    status = (await client.get(f'{BASE}/proof/lock', headers=auth_headers)).json()
+    assert status['version'] == 1 and status['locked'] is False
+    started = asyncio.Event()
+
+    async def overwrite():
+        async with AsyncSessionLocal() as writer:
+            started.set()
+            try:
+                await agent_tasks_service.learning.upsert_skill(writer, owner_id=owner,
+                    name='proof', description='bad', instructions='bad')
+                await writer.commit()
+            finally:
+                await writer.rollback()
+
+    async with AsyncSessionLocal() as transition:
+        await set_curator_lock(transition, owner_id=owner, name='proof',
+                               locked=True, expected_version=1)
+        pending = asyncio.create_task(overwrite())
+        try:
+            await started.wait()
+            # Writer must wait for the committed verdict, not read an old
+            # unlocked revision while the transition remains in flight.
+            await asyncio.sleep(0.05)
+            assert not pending.done()
+            await transition.commit()
+            with pytest.raises(SkillLocked):
+                await asyncio.wait_for(pending, timeout=5)
+        finally:
+            if not pending.done():
+                pending.cancel()
+                await asyncio.gather(pending, return_exceptions=True)
+    status = (await client.get(f'{BASE}/proof/lock', headers=auth_headers)).json()
+    assert status['version'] == 2 and status['locked'] is True
+    rows = (await client.get(f'{BASE}/proof/revisions', headers=auth_headers)).json()['items']
+    assert len(rows) == 2 and rows[-1]['instructions'] == 'protected'

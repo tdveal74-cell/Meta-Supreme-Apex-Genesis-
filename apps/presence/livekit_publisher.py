@@ -56,10 +56,13 @@ audio and never holds blendshapes.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional, Protocol, runtime_checkable
 
 from apps.presence.livekit_token import mint_livekit_token
 from apps.presence.protocol import AUDIO_RATE
+
+logger = logging.getLogger(__name__)
 
 #: The wire format `speech.py` produces and `protocol.audio_message` names:
 #: `pcm_s16le`, mono, at `AUDIO_RATE`. Two bytes per sample, one channel.
@@ -206,17 +209,26 @@ class LiveKitPublisher:
             can_subscribe=False,
         )
 
-        room = rtc.Room()
-        await room.connect(self.url, token)
-
-        source = rtc.AudioSource(self.sample_rate, AUDIO_CHANNELS, QUEUE_SIZE_MS)
-        track = rtc.LocalAudioTrack.create_audio_track(TRACK_NAME, source)
-        options = rtc.TrackPublishOptions()
-        options.source = rtc.TrackSource.SOURCE_MICROPHONE
-        publication = await room.local_participant.publish_track(track, options)
-
-        self._room, self._source, self._publication = room, source, publication
-        self._started = True
+        # Retain each resource as soon as it is acquired. A failed connect or
+        # publication still owns resources that must be released before the
+        # WebSocket route reports startup failure.
+        self._room = rtc.Room()
+        try:
+            await self._room.connect(self.url, token)
+            self._source = rtc.AudioSource(self.sample_rate, AUDIO_CHANNELS, QUEUE_SIZE_MS)
+            track = rtc.LocalAudioTrack.create_audio_track(TRACK_NAME, self._source)
+            options = rtc.TrackPublishOptions()
+            options.source = rtc.TrackSource.SOURCE_MICROPHONE
+            self._publication = await self._room.local_participant.publish_track(track, options)
+            self._started = True
+        except BaseException:
+            # Cancelled startup has the same ownership obligation. Preserve
+            # the original failure even if a provider also rejects cleanup.
+            try:
+                await self.aclose()
+            except Exception:
+                logger.exception("livekit cleanup failed after startup failure")
+            raise
 
     async def publish(self, pcm: bytes, at_ms: float) -> None:
         """Send one PCM chunk into the room as an audio frame.
@@ -260,7 +272,9 @@ class LiveKitPublisher:
         self._started = False
         source, room = self._source, self._room
         self._source = self._room = self._publication = None
-        if source is not None:
-            await source.aclose()
-        if room is not None:
-            await room.disconnect()
+        try:
+            if source is not None:
+                await source.aclose()
+        finally:
+            if room is not None:
+                await room.disconnect()

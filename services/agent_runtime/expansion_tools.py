@@ -32,6 +32,7 @@ from services.agent_runtime.governance import (
     APPROVAL_METADATA_KEY,
     require_approved_runtime_binding,
 )
+from services.agent_runtime.schedule_policy import POLICY_KEY, schedule_context
 from services.agent_runtime.tools import ToolRegistry, ToolResult, ToolSpec
 from services.devon.approval import ApprovalQueue
 
@@ -163,12 +164,15 @@ class ExpansionToolAdapter:
         registry.register(
             ToolSpec(
                 name=SCHEDULE_TOOL,
-                parameters=("goal", "owner_id", "delay_seconds", "context"),
+                parameters=("goal", "owner_id", "delay_seconds", "context",
+                            "missed_run_policy", "max_lateness_seconds"),
                 description=(
                     "Schedule a goal to become runnable after a delay, on the same "
                     "schedule table the operator reads and materializes. owner_id, "
                     "when given, must match the task's owner. The scheduled goal "
-                    "does not execute effects until a later governed run."
+                    "does not execute effects until a later governed run. "
+                    "missed_run_policy is catch_up (default) or skip; skip expires "
+                    "after max_lateness_seconds (default 300) past the original slot."
                 ),
                 risk=ToolRisk.WRITE,
                 handler=self._schedule_goal,
@@ -460,6 +464,13 @@ class ExpansionToolAdapter:
             return delay
         if raw.get("context") is not None and not isinstance(raw.get("context"), dict):
             return ToolResult(False, error="context must be an object")
+        try:
+            policy_context = schedule_context({POLICY_KEY: {
+                "missed_run_policy": raw.get("missed_run_policy", "catch_up"),
+                "max_lateness_seconds": raw.get("max_lateness_seconds", 300),
+            }}, utcnow() + timedelta(seconds=delay))
+        except ValueError as exc:
+            return ToolResult(False, error=str(exc))
         not_ready = self._ready(self.schedule_writer, tool_name=SCHEDULE_TOOL)
         if not_ready is not None:
             return not_ready
@@ -470,6 +481,7 @@ class ExpansionToolAdapter:
         args = approved.args
         stated_owner = str(args.get("owner_id") or "").strip()
         context = dict(args.get("context") or {})
+        context.update(policy_context)
         # The operator reading the schedule table can trace the row back to
         # the governed step and the human ruling that produced it.
         context["raised_by"] = approved.provenance()

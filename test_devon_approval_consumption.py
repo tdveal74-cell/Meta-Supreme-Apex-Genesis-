@@ -361,3 +361,57 @@ async def test_a_real_adapter_refuses_the_second_identical_call() -> None:
     # The assertion this test exists for: the replay stopped at the capability
     # boundary and never became a second HTTP request against the repository.
     assert len(calls) == reached_github, "the replay reached GitHub"
+
+
+@pytest.mark.parametrize("offset", [0, -1])
+def test_approved_request_cannot_be_consumed_at_or_after_expiry(offset):
+    from datetime import timedelta
+
+    queue = ApprovalQueue(InMemoryApprovalStore())
+    request_id, _ = approved(queue)
+    record = queue.get(request_id)
+    outcome = queue.consume(request_id, at=record.expires_at - timedelta(seconds=offset))
+    assert not outcome.ok
+    assert outcome.reason is RefusalReason.EXPIRED
+    assert queue.get(request_id).state is ApprovalState.APPROVED
+    assert queue.get(request_id).decided_by == record.decided_by
+
+
+def test_expired_approved_card_cannot_cross_adapter_boundary():
+    from dataclasses import replace
+    from datetime import datetime, timedelta, timezone
+
+    store = InMemoryApprovalStore()
+    queue = ApprovalQueue(store)
+    request_id, binding = approved(queue)
+    store.put(replace(store.get(request_id), expires_at=datetime.now(timezone.utc) - timedelta(seconds=1)))
+    with pytest.raises(ValueError, match="Expired"):
+        require_approved_runtime_binding(queue, metadata(request_id, binding), tool_name=TOOL, arguments=ARGS)
+    assert store.get(request_id).state is ApprovalState.APPROVED
+
+
+def test_store_rechecks_expiry_after_queue_check(monkeypatch):
+    from dataclasses import replace
+    from datetime import timedelta
+
+    store = InMemoryApprovalStore()
+    queue = ApprovalQueue(store)
+    request_id, _ = approved(queue)
+    record = store.get(request_id)
+    monkeypatch.setattr("services.devon.approval._now", lambda: record.expires_at)
+    outcome = queue.consume(request_id, at=record.expires_at - timedelta(seconds=1))
+    assert not outcome.ok
+    assert outcome.reason is RefusalReason.EXPIRED
+    assert store.get(request_id).state is ApprovalState.APPROVED
+    assert not store.transition_approved(replace(record, state=ApprovalState.CONSUMED))
+
+
+def test_stale_card_cannot_approve_another_task_or_step():
+    queue = ApprovalQueue(InMemoryApprovalStore())
+    request_id, binding = approved(queue)
+    for key, replacement in (("task_id", "TASK-OTHER"), ("step_id", "STEP-OTHER")):
+        old_card = metadata(request_id, binding)
+        old_card[key] = replacement
+        with pytest.raises(ValueError, match="does not match"):
+            require_approved_runtime_binding(queue, old_card, tool_name=TOOL, arguments=ARGS)
+    assert queue.get(request_id).state is ApprovalState.APPROVED

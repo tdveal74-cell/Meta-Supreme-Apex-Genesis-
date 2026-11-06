@@ -640,12 +640,21 @@ class DurableAgentTaskService:
                     db, owner_id=owner_id, lease_token=claim.lease_token,
                     generation=claim.execution_generation, **kwargs)
 
+            async def cancellation_check():
+                # Read in a fresh transaction: the executing session may have
+                # uncommitted evidence, and must not hide another worker's stop.
+                async with AsyncSessionLocal() as cancellation_db:
+                    return await self.expansion.cancellation_reason(
+                        cancellation_db, owner_id=owner_id, task_id=task_id
+                    )
+
             started = time.perf_counter()
             runtime = self._runtime_for(
                 claim.task,
                 effect_recorder=recorder,
                 effect_idempotency_key=key,
                 result_recorder=record_result,
+                cancellation_check=cancellation_check,
             )
             result = await runtime.run_until_blocked(
                 claim.task.task_id,
@@ -1028,6 +1037,7 @@ class DurableAgentTaskService:
         effect_recorder: Optional[EffectRecorder] = None,
         effect_idempotency_key: str = "",
         result_recorder=None,
+        cancellation_check=None,
     ) -> AgentRuntime:
         store = InMemoryAgentTaskStore()
         store.put(task)
@@ -1043,6 +1053,7 @@ class DurableAgentTaskService:
             effect_recorder=effect_recorder,
             effect_idempotency_key=effect_idempotency_key,
             result_recorder=result_recorder,
+            cancellation_check=cancellation_check,
         )
 
     @staticmethod

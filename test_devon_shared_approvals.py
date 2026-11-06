@@ -192,3 +192,88 @@ def test_memory_backend_must_be_explicit():
 def test_unknown_backend_fails_closed():
     with pytest.raises(ValueError, match="DEVON_APPROVAL_STORE"):
         build_approval_queue(mode="redis")
+
+
+@pytest.mark.asyncio
+async def test_database_rejects_expired_approved_record_at_consumption(_clean_tables):
+    from dataclasses import replace
+
+    queue = _queue()
+    record, token = await asyncio.to_thread(_request, queue)
+    assert (await asyncio.to_thread(queue.decide, record.request_id, token, "approve")).approved
+    stale = await asyncio.to_thread(queue.get, record.request_id)
+
+    def expire_and_try_stale_snapshot():
+        with psycopg.connect(_dsn()) as conn:
+            # Age the whole fixture coherently: the database correctly refuses
+            # expiry before creation, and the ruling must precede its deadline.
+            conn.execute(
+                "UPDATE devon_approvals "
+                "SET created_at = clock_timestamp() - INTERVAL '3 seconds', "
+                "decided_at = clock_timestamp() - INTERVAL '2 seconds', "
+                "expires_at = clock_timestamp() - INTERVAL '1 second' "
+                "WHERE request_id = %s", (record.request_id,)
+            )
+        # Bypass the queue's earlier clock check, as a waiting worker would.
+        return PostgresApprovalStore(_dsn()).transition_approved(
+            replace(stale, state=ApprovalState.CONSUMED)
+        )
+
+    assert not await asyncio.to_thread(expire_and_try_stale_snapshot)
+    outcome = await asyncio.to_thread(queue.consume, record.request_id)
+    assert not outcome.ok
+    assert outcome.reason is RefusalReason.EXPIRED
+    assert (await asyncio.to_thread(queue.get, record.request_id)).state is ApprovalState.APPROVED
+
+
+@pytest.mark.asyncio
+async def test_approval_waiting_for_row_lock_cannot_outlive_deadline(_clean_tables):
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+    from dataclasses import replace
+
+    queue = _queue()
+    record, token = await asyncio.to_thread(_request, queue)
+    assert (await asyncio.to_thread(queue.decide, record.request_id, token, "approve")).approved
+    snapshot = await asyncio.to_thread(queue.get, record.request_id)
+
+    def race():
+        # No sleep guesses: observe the consumer blocked on the row, then let
+        # the database clock pass its deadline before releasing that row.
+        with psycopg.connect(_dsn()) as setup:
+            expires = setup.execute(
+                "UPDATE devon_approvals SET expires_at = clock_timestamp() + INTERVAL '2 seconds' "
+                "WHERE request_id = %s RETURNING expires_at", (record.request_id,),
+            ).fetchone()[0]
+        marker = "devon-expiry-" + record.request_id
+        dsn = psycopg.conninfo.make_conninfo(_dsn(), application_name=marker)
+        with psycopg.connect(_dsn()) as blocker, psycopg.connect(_dsn(), autocommit=True) as witness:
+            blocker.execute(
+                "SELECT request_id FROM devon_approvals WHERE request_id = %s FOR UPDATE",
+                (record.request_id,),
+            )
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(
+                    PostgresApprovalStore(dsn).transition_approved,
+                    replace(snapshot, state=ApprovalState.CONSUMED),
+                )
+                try:
+                    deadline = time.monotonic() + 8
+                    while time.monotonic() < deadline:
+                        blocked = witness.execute(
+                            "SELECT 1 FROM pg_stat_activity WHERE application_name = %s "
+                            "AND wait_event_type = 'Lock'", (marker,),
+                        ).fetchone()
+                        if blocked:
+                            break
+                        time.sleep(0.01)
+                    assert blocked, "consumer never waited on the held approval row"
+                    while witness.execute("SELECT clock_timestamp()").fetchone()[0] < expires:
+                        assert time.monotonic() < deadline
+                        time.sleep(0.01)
+                finally:
+                    blocker.commit()
+                assert future.result(timeout=5) is False
+        assert queue.get(record.request_id).state is ApprovalState.APPROVED
+
+    await asyncio.to_thread(race)

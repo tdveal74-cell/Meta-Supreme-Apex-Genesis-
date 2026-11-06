@@ -402,16 +402,43 @@ async def test_an_interrupt_mid_batch_counts_only_the_frames_that_left(cancel_on
     assert session.turns_interrupted == 1 and session.turns_completed == 0
 
 
-def test_interrupt_for_another_turn_acks_without_cancelling():
+@pytest.mark.parametrize("interleave_audio", [False, True])
+def test_interrupt_for_another_turn_acks_without_cancelling(monkeypatch, interleave_audio):
+    if interleave_audio:
+        # Force a legal task switch after the ack's send lock is released:
+        # an existing audio chunk leaves before interrupt() sends its state.
+        original_emit = presence_main.PresenceSession.emit
+        ack_sent, audio_sent = asyncio.Event(), asyncio.Event()
+
+        async def interleaved_emit(session, message):
+            delayed_audio = message["t"] == "audio" and message["seq"] == 1
+            if delayed_audio:
+                await asyncio.wait_for(ack_sent.wait(), 5)
+            result = await original_emit(session, message)
+            if delayed_audio:
+                audio_sent.set()
+            if message["t"] == "interrupt_ack" and message["turn_id"] == "someone-else":
+                ack_sent.set()
+                await asyncio.wait_for(audio_sent.wait(), 5)
+            return result
+
+        monkeypatch.setattr(presence_main.PresenceSession, "emit", interleaved_emit)
+
     client = fast_app(pacer=VirtualPacer(auto_advance=False))
     with open_ready(client) as ws:
         ws.send_json({"t": "say", "turn_id": "turn-3", "text": "keep going"})
         collect_until(ws, lambda m: m["t"] == "frame")
         ws.send_json({"t": "interrupt", "turn_id": "someone-else", "at_ms": 1})
-        ack = collect_until(ws, lambda m: m["t"] == "interrupt_ack")[-1]
+        until_ack = collect_until(ws, lambda m: m["t"] == "interrupt_ack")
+        ack = until_ack[-1]
+        assert ack["turn_id"] == "someone-else"
         assert ack["flushed_frames"] == 0
-        state = ws.receive_json()
-        assert state["t"] == "state" and state["state"] == "listening"
+        # The live turn keeps producing audio/frame messages. Each send is
+        # serialized separately, so those may arrive between ack and state.
+        after_ack = collect_until(ws, is_listening)
+        assert not any(m["t"] in {"metrics", "error"} for m in until_ack + after_ack)
+        if interleave_audio:
+            assert any(m["t"] == "audio" and m["turn_id"] == "turn-3" for m in after_ack)
         # A real interrupt for the live turn still finds it in flight.
         ws.send_json({"t": "interrupt", "turn_id": "turn-3", "at_ms": 2})
         ack = collect_until(ws, lambda m: m["t"] == "interrupt_ack")[-1]
@@ -691,6 +718,42 @@ def test_livekit_token_mints_when_configured_and_audio_goes_to_the_room():
         "/livekit/token", json={"room": room}, headers={"Authorization": f"Bearer {mint()}"}
     )
     assert closed.status_code == 403
+
+
+def test_failed_session_open_removes_owner_binding_and_closes_audio(monkeypatch):
+    """A disconnect at the first state message must not leave a joinable room."""
+    sinks = {}
+
+    def make_sink(session_id):
+        sink = RecordingSink()
+        sinks[session_id] = sink
+        return sink
+
+    async def disconnected(_session):
+        raise WebSocketDisconnect(code=1006)
+
+    monkeypatch.setattr(presence_main.PresenceSession, "open", disconnected)
+    settings = PresenceSettings(
+        SECRET_KEY=TEST_SECRET,
+        ENVIRONMENT="test",
+        LIVEKIT_URL="wss://example.livekit.cloud",
+        LIVEKIT_API_KEY="APIkey",
+        LIVEKIT_API_SECRET="livekit-secret-0123456789abcdef0123456789abcdef",
+    )
+    client = fast_app(settings=settings, make_audio_sink=make_sink)
+    with contextlib.suppress(WebSocketDisconnect):
+        with client.websocket_connect("/ws/presence") as ws:
+            hello(ws, mint())
+            ws.receive_json()
+    assert client.app.state.runtime.sessions == {}
+    assert len(sinks) == 1
+    assert all(sink.closed for sink in sinks.values())
+    for room in sinks:
+        response = client.post(
+            "/livekit/token", json={"room": room},
+            headers={"Authorization": f"Bearer {mint()}"},
+        )
+        assert response.status_code == 403
 
 
 class _HostileSpeech:

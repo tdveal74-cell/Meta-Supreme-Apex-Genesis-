@@ -25,6 +25,7 @@ from app.services.agent_runtime_persistence import (
     TaskRunPreviouslyFailed,
 )
 from app.services.agent_tasks import agent_tasks_service
+from app.services.skill_revisions import RevisionConflict
 from services.agent_runtime.runtime import AgentRuntimeError
 
 router = APIRouter(prefix="/agent-tasks", tags=["DEVON Agent Tasks"])
@@ -370,6 +371,8 @@ async def upsert_skill(
             instructions=body.instructions,
             provenance=body.provenance,
         )
+    except RevisionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return record.to_dict()

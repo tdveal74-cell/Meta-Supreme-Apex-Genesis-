@@ -19,7 +19,7 @@ no profile mounts and deny-all browser/network policy remain mandatory.
 
 Build inputs are pinned to Node image manifest digest
 `sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205`
-and Debian Chromium/common/sandbox `156.0.8078.73-1~deb12u1`. Apt repositories remain
+and Debian Chromium/common/sandbox `156.0.8078.79-1~deb12u1`. Apt repositories remain
 external build dependencies; pins fail closed when packages disappear. Record the
 resulting image ID/digest for each reviewed rollout and do not equate a Dockerfile
 pin with proof of what a deployed host runs.
@@ -83,3 +83,40 @@ Chromium pin and bump it when it breaks. A stale pin fails closed, which is the
 direction this file asks for, and the cost is one red job and a one line bump
 each time Debian's security pocket moves; the two breaks seen were eight days
 apart.
+
+## Package availability receipt (2026-11-06)
+
+PR #489 at `388c4780fb2e61d2a266cb8a194c806497190d7b`, run `42197920605`,
+job `127825729112`, could no longer resolve the three `.73` pins. Read-only
+retrieval of official Debian metadata confirmed `156.0.8078.79-1~deb12u1`
+for all three amd64 packages. Only those pins and this current-build record
+changed; the Node base digest, sandbox policy and disabled rollout remain intact.
+
+- [Bookworm security InRelease](https://security.debian.org/debian-security/dists/bookworm-security/InRelease):
+  dated `2026-11-05T18:22:28Z`, valid until `2026-11-12T18:22:28Z`, SHA-256
+  `5d916d253a3ed4b2413b355ac864adc2188295df58d3f569879e5322f50378bf`.
+- `gpgv` verified both signatures using the Debian 11 and 12 security archive
+  keys obtained from [Debian's official key publication](https://ftp-master.debian.org/keys.html).
+  The Debian 12 primary fingerprint was
+  `05AB90340C0C5E797F44A8C8254CF3B5AEC0A8F0`; verification exited zero.
+- [amd64 Packages.xz](https://security.debian.org/debian-security/dists/bookworm-security/main/binary-amd64/Packages.xz):
+  `361436` bytes, SHA-256
+  `9291f4f3c470a046b9751215169d689e539f3d5cade197a367738e58079205ba`,
+  checked against the signed InRelease before its package records were read.
+
+| Package | amd64 package SHA-256 | Archive Last-Modified (UTC) |
+|---|---|---|
+| chromium | `8f1f898bd42225ffb0dd2ca0234505ab9e9a2fc1493f996a091afe32218d8996` | 2026-11-03 11:59:04 |
+| chromium-common | `22f8b358b96ee1afca2cefa496b303f29381cea846a3791b23128dee154e3b6b` | 2026-11-03 11:59:03 |
+| chromium-sandbox | `5a8e3b720c9b6867e9747e697556ba4d58eac21d7755a1fd335b2517ce901d00` | 2026-11-03 11:59:03 |
+
+All three package URLs returned HTTP 200 to HEAD requests. These are package
+hashes published in verified metadata, not hashes of downloaded binaries.
+No package was installed and no image was built for this metadata check.
+The isolated GitHub sandbox validation must rebuild and execute every real
+worker test without skips before merge; this receipt supplies no new image ID.
+
+The [Debian Chromium security tracker](https://security-tracker.debian.org/tracker/source-package/chromium)
+still lists unresolved issues for this version. Package availability repairs
+the build pin; it is not security clearance or permission to activate the
+candidate. The worker remains disabled pending the existing rollout gates.

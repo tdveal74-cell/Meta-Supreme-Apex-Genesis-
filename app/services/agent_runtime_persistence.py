@@ -690,6 +690,7 @@ class AgentLearningRepository:
             lock_skill,
             normalized_name,
             preserve_current,
+            require_unlocked,
         )
         clean_name = normalized_name(name or "")
         clean_description = description or ""
@@ -704,7 +705,7 @@ class AgentLearningRepository:
             select(AgentRuntimeSkill).where(
                 AgentRuntimeSkill.owner_id == owner_id,
                 AgentRuntimeSkill.name == clean_name,
-            )
+            ).execution_options(populate_existing=True)
         )
         row = result.scalar_one_or_none()
         now = datetime.now(timezone.utc)
@@ -722,6 +723,7 @@ class AgentLearningRepository:
             )
             db.add(row)
         else:
+            await require_unlocked(db, row)
             await preserve_current(db, row)
             row.description = clean_description
             row.instructions = clean_instructions
@@ -731,7 +733,7 @@ class AgentLearningRepository:
         await db.flush()
         await append_revision(db, row=row, parent_version=row.version - 1 if row.version > 1 else None,
                               evidence=revision_evidence or {"operation": "human_edit"})
-        return self._skill_record(row)
+        return await self._skill_record(db, row)
 
     async def get_skill(
         self,
@@ -748,7 +750,7 @@ class AgentLearningRepository:
             )
         )
         row = result.scalar_one_or_none()
-        return self._skill_record(row) if row is not None else None
+        return await self._skill_record(db, row) if row is not None else None
 
     async def list_skills(
         self,
@@ -761,7 +763,7 @@ class AgentLearningRepository:
             .where(AgentRuntimeSkill.owner_id == owner_id)
             .order_by(AgentRuntimeSkill.name)
         )
-        return [self._skill_record(row) for row in result.scalars().all()]
+        return [await self._skill_record(db, row) for row in result.scalars().all()]
 
     async def context_for(
         self,
@@ -809,13 +811,15 @@ class AgentLearningRepository:
         )
 
     @staticmethod
-    def _skill_record(row: AgentRuntimeSkill) -> SkillRecord:
+    async def _skill_record(db: AsyncSession, row: AgentRuntimeSkill) -> SkillRecord:
+        from app.services.skill_revisions import curator_locked
         return SkillRecord(
             name=row.name,
             description=row.description,
             instructions=row.instructions,
             version=row.version,
             provenance=row.provenance,
+            curator_locked=await curator_locked(db, row),
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
