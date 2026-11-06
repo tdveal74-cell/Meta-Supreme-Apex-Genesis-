@@ -133,9 +133,10 @@ class PostgresApprovalStore:
     def transition_approved(self, request: ApprovalRequest) -> bool:
         """Atomically let exactly one worker spend an approved request.
 
-        The `state = 'approved'` predicate is the whole mechanism: two workers
-        holding the same approval metadata both reach this UPDATE, exactly one
-        matches a row, and the loser is told the effect is already running.
+        State and expiry are checked atomically after any row-lock wait. Two
+        workers cannot spend the same approval, and a wait cannot turn an expired
+        approval into permission. clock_timestamp() deliberately uses wall time,
+        unlike NOW(), which freezes at the start of a transaction.
         """
         if request.state is not ApprovalState.CONSUMED:
             raise ValueError("transition_approved requires the consumed state")
@@ -148,9 +149,17 @@ class PostgresApprovalStore:
                    updated_at = NOW()
              WHERE request_id = %(request_id)s
                AND state = 'approved'
+               AND expires_at > clock_timestamp()
         """
         try:
             with self._connect() as conn:
+                # Acquire the row before evaluating time. An UPDATE predicate
+                # alone can be evaluated before waiting behind another writer.
+                conn.execute(
+                    "SELECT request_id FROM devon_approvals "
+                    "WHERE request_id = %s FOR UPDATE",
+                    (request.request_id,),
+                ).fetchone()
                 cursor = conn.execute(sql, self._params(request))
                 return cursor.rowcount == 1
         except psycopg.Error:

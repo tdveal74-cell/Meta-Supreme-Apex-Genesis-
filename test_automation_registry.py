@@ -34,7 +34,7 @@ def live(wid="a1", name="Lane A", active=True, updated="2026-09-01T00:00:00.000Z
 def test_the_shipped_registry_is_well_formed():
     shipped = reg.load()
     assert reg.validate(shipped) == []
-    assert len(shipped["workflows"]) == 68
+    assert len(shipped["workflows"]) == 74
     assert all(r["owner"] == "Tee" for r in shipped["workflows"])
 
 

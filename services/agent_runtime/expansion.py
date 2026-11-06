@@ -19,6 +19,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from services.agent_runtime.contracts import utcnow
+from services.agent_runtime.schedule_policy import missed_run_expired, schedule_context
 
 
 class ScheduleState(str, Enum):
@@ -141,7 +142,7 @@ class InMemoryScheduleStore:
             owner_id=owner_id,
             goal=clean_goal,
             run_at=run_at,
-            context=dict(context or {}),
+            context=schedule_context(context, run_at),
         )
         item.mark_due()
         self._items[item.schedule_id] = item
@@ -161,6 +162,11 @@ class InMemoryScheduleStore:
         out: List[ScheduledGoal] = []
         for item in self._items.values():
             if owner_id and item.owner_id != owner_id:
+                continue
+            if item.state in {ScheduleState.PENDING, ScheduleState.DUE} and missed_run_expired(
+                item.context, item.run_at, now
+            ):
+                self.cancel(item.schedule_id, reason="missed_run_skipped: original slot exceeded max_lateness_seconds")
                 continue
             item.mark_due()
             if item.state is ScheduleState.DUE and item.run_at <= now:

@@ -16,6 +16,7 @@ from services.agent_runtime.expansion import (
     SkillProposal,
     SkillProposalState,
 )
+from services.agent_runtime.schedule_policy import missed_run_expired, schedule_context
 
 
 def _utcnow() -> datetime:
@@ -49,7 +50,7 @@ class HermesExpansionRepository:
             goal=clean,
             run_at=run_at,
             state=state.value,
-            context=dict(context or {}),
+            context=schedule_context(context, run_at),
             task_id=None,
             failure_reason="",
             created_at=now,
@@ -86,17 +87,58 @@ class HermesExpansionRepository:
                     [ScheduleState.PENDING.value, ScheduleState.DUE.value]
                 ),
                 AgentScheduleRecord.run_at <= now,
-            )
+            ).with_for_update().execution_options(populate_existing=True)
         )
         rows = list(result.scalars().all())
         out: List[ScheduledGoal] = []
         for row in rows:
+            if row.task_id:
+                continue
+            if missed_run_expired(dict(row.context or {}), row.run_at, now):
+                row.state = ScheduleState.CANCELLED.value
+                row.failure_reason = "missed_run_skipped: original slot exceeded max_lateness_seconds"
+                row.updated_at = now
+                continue
             if row.state == ScheduleState.PENDING.value:
                 row.state = ScheduleState.DUE.value
                 row.updated_at = now
             out.append(self._schedule_from_row(row))
         await db.flush()
         return out
+
+    async def cancel_schedule(
+        self, db: AsyncSession, *, owner_id: str, schedule_id: str, reason: str
+    ) -> ScheduledGoal:
+        """Cancel future work without invalidating an in-flight effect lease.
+
+        A running task observes this durable state at its next step boundary.
+        An already-started tool may finish; its receipt is never discarded.
+        The row lock serializes with materialization, including manual callers.
+        """
+        result = await db.execute(select(AgentScheduleRecord).where(
+            AgentScheduleRecord.owner_id == owner_id,
+            AgentScheduleRecord.schedule_id == schedule_id,
+        ).with_for_update().execution_options(populate_existing=True))
+        row = result.scalar_one_or_none()
+        if row is None:
+            raise KeyError("unknown schedule")
+        if row.state not in {ScheduleState.COMPLETED.value, ScheduleState.CANCELLED.value}:
+            row.state = ScheduleState.CANCELLED.value
+            row.failure_reason = reason.strip()[:2000] or "cancelled by operator"
+            row.updated_at = _utcnow()
+        await db.flush()
+        return self._schedule_from_row(row)
+
+    async def cancellation_reason(
+        self, db: AsyncSession, *, owner_id: str, task_id: str
+    ) -> Optional[str]:
+        result = await db.execute(select(AgentScheduleRecord.failure_reason).where(
+            AgentScheduleRecord.owner_id == owner_id,
+            AgentScheduleRecord.task_id == task_id,
+            AgentScheduleRecord.state == ScheduleState.CANCELLED.value,
+        ))
+        reason = result.scalar_one_or_none()
+        return (reason or "cancelled by operator") if reason is not None else None
 
     async def owners_with_due_schedules(
         self,
@@ -185,7 +227,7 @@ class HermesExpansionRepository:
                 ),
                 AgentScheduleRecord.run_at <= moment,
                 AgentScheduleRecord.task_id.is_(None),
-            )
+            ).with_for_update().execution_options(populate_existing=True)
         )
         rows = list(result.scalars().all())
         for row in rows:
@@ -210,11 +252,13 @@ class HermesExpansionRepository:
             select(AgentScheduleRecord).where(
                 AgentScheduleRecord.owner_id == owner_id,
                 AgentScheduleRecord.schedule_id == schedule_id,
-            )
+            ).with_for_update().execution_options(populate_existing=True)
         )
         row = result.scalar_one_or_none()
         if row is None:
             raise KeyError(f"unknown schedule: {schedule_id}")
+        if row.task_id or row.state not in {ScheduleState.PENDING.value, ScheduleState.DUE.value}:
+            raise ValueError("schedule is already attached or no longer runnable")
         row.task_id = task_id
         row.state = ScheduleState.RUNNING.value
         row.updated_at = _utcnow()
@@ -235,7 +279,7 @@ class HermesExpansionRepository:
             select(AgentScheduleRecord).where(
                 AgentScheduleRecord.owner_id == owner_id,
                 AgentScheduleRecord.task_id == task_id,
-            )
+            ).with_for_update().execution_options(populate_existing=True)
         )
         row = result.scalar_one_or_none()
         if row is None:

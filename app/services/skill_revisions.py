@@ -81,15 +81,84 @@ async def history(db, *, owner_id, name):
     return [revision_dict(r) for r in result.scalars()]
 
 
+class SkillLocked(RevisionConflict):
+    """A curated runtime skill requires a separate owner unlock before mutation."""
+
+
+async def curator_locked(db, row) -> bool:
+    # The immutable revision journal owns the lock, not request provenance or
+    # model-supplied evaluation evidence. Legacy rows start unlocked.
+    revision = (await db.execute(select(AgentSkillRevisionRecord).where(
+        AgentSkillRevisionRecord.owner_id == row.owner_id,
+        AgentSkillRevisionRecord.skill_name == row.name,
+        AgentSkillRevisionRecord.version == row.version))).scalar_one_or_none()
+    if revision is None:
+        return False
+    state = revision.evidence.get("curator_locked", False)
+    if type(state) is not bool:
+        raise RevisionConflict("invalid curator lock state")
+    return state
+
+
+async def require_unlocked(db, row) -> None:
+    # Callers hold lock_skill across this read and the mutation/commit.
+    if await curator_locked(db, row):
+        raise SkillLocked("curated skill is locked; owner unlock required")
+
+
+async def curator_lock_status(db, *, owner_id, name):
+    name = normalized_name(name)
+    await lock_skill(db, owner_id, name)
+    row = (await db.execute(select(AgentRuntimeSkill).where(
+        AgentRuntimeSkill.owner_id == owner_id,
+        AgentRuntimeSkill.name == name).execution_options(populate_existing=True))).scalar_one_or_none()
+    if row is None:
+        raise KeyError(name)
+    return {"name": row.name, "version": row.version,
+            "locked": await curator_locked(db, row),
+            "content_hash": content_hash(row.description, row.instructions)}
+
+
+async def set_curator_lock(db, *, owner_id, name, locked, expected_version):
+    """Owner-only route calls this; no agent tool exposes lock transitions.
+
+    A transition advances the same immutable journal as content changes. The
+    optimistic version guard and transaction lock prevent stale unlocks or
+    mutations racing a lock from winning after it commits.
+    """
+    if type(locked) is not bool:
+        raise ValueError("locked must be boolean")
+    name = normalized_name(name)
+    await lock_skill(db, owner_id, name)
+    row = (await db.execute(select(AgentRuntimeSkill).where(
+        AgentRuntimeSkill.owner_id == owner_id,
+        AgentRuntimeSkill.name == name).execution_options(populate_existing=True))).scalar_one_or_none()
+    if row is None:
+        raise KeyError(name)
+    if row.version != expected_version:
+        raise RevisionConflict("active version changed")
+    current_locked = await curator_locked(db, row)
+    if current_locked != locked:
+        await preserve_current(db, row)
+        previous = row.version
+        row.version += 1
+        row.updated_at = datetime.now(timezone.utc)
+        await append_revision(db, row=row, parent_version=previous,
+            evidence={"operation": "human_curator_lock", "curator_locked": locked})
+    return {"name": row.name, "version": row.version, "locked": locked,
+            "content_hash": content_hash(row.description, row.instructions)}
+
+
 async def rollback(db, *, owner_id, name, target_version, expected_version):
     name = normalized_name(name)
     await lock_skill(db, owner_id, name)
     current = (await db.execute(select(AgentRuntimeSkill).where(
-        AgentRuntimeSkill.owner_id == owner_id, AgentRuntimeSkill.name == name))).scalar_one_or_none()
+        AgentRuntimeSkill.owner_id == owner_id, AgentRuntimeSkill.name == name).execution_options(populate_existing=True))).scalar_one_or_none()
     if current is None:
         raise KeyError(name)
     if current.version != expected_version:
         raise RevisionConflict("active version changed")
+    await require_unlocked(db, current)
     await preserve_current(db, current)
     target = (await db.execute(select(AgentSkillRevisionRecord).where(
         AgentSkillRevisionRecord.owner_id == owner_id, AgentSkillRevisionRecord.skill_name == name,

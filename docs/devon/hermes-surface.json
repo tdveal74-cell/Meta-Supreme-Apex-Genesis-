@@ -53,6 +53,7 @@
     "GET /agent-tasks/learning/memories",
     "GET /agent-tasks/learning/skills",
     "GET /agent-tasks/learning/skills/{name}/evaluations/{evaluation_id}",
+    "GET /agent-tasks/learning/skills/{name}/lock",
     "GET /agent-tasks/learning/skills/{name}/revisions",
     "GET /agent-tasks/tools",
     "GET /agent-tasks/{task_id}",
@@ -63,6 +64,7 @@
     "GET /agents/{slug}",
     "POST /agent-expansion/schedules",
     "POST /agent-expansion/schedules/materialize",
+    "POST /agent-expansion/schedules/{schedule_id}/cancel",
     "POST /agent-expansion/skill-proposals",
     "POST /agent-expansion/skill-proposals/{proposal_id}/decide",
     "POST /agent-expansion/subagents",
@@ -74,7 +76,8 @@
     "POST /agent-tasks/{task_id}/cancel",
     "POST /agent-tasks/{task_id}/rollback",
     "POST /agent-tasks/{task_id}/run",
-    "PUT /agent-tasks/learning/skills/{name}"
+    "PUT /agent-tasks/learning/skills/{name}",
+    "PUT /agent-tasks/learning/skills/{name}/lock"
   ],
   "columns": [
     "agent_effect_intents.arguments_hash",

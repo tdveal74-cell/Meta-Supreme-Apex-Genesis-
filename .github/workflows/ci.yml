@@ -187,7 +187,7 @@ jobs:
             test_agent_evaluation.py \
             test_agent_benchmarks.py \
             test_runtime_verification.py \
-            test_skill_evaluation_policy.py \
+            test_skill_evaluation_policy.py test_skill_curator_locks.py test_devon_schedule_policy.py \
             test_billing.py \
             test_definition.py \
             test_providers.py \

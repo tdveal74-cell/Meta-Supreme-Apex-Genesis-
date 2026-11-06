@@ -2,7 +2,7 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
@@ -71,3 +71,34 @@ async def get_evaluation(name: str, evaluation_id: str, current_user: CurrentUse
                                               evaluation_id=evaluation_id)
     except KeyError as exc:
         raise HTTPException(404, "Evaluation not found") from exc
+
+
+class CuratorLockBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    locked: StrictBool
+    expected_version: int = Field(ge=1)
+
+
+@router.get("/{name}/lock")
+async def curator_lock_status(name: str, current_user: CurrentUser,
+                              db: AsyncSession = Depends(get_db)) -> dict:
+    try:
+        return await revisions.curator_lock_status(db, owner_id=current_user.id, name=name)
+    except KeyError as exc:
+        raise HTTPException(404, "Skill not found") from exc
+    except revisions.RevisionConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.put("/{name}/lock")
+async def set_curator_lock(name: str, body: CuratorLockBody, current_user: CurrentUser,
+                           db: AsyncSession = Depends(get_db)) -> dict:
+    try:
+        result = await revisions.set_curator_lock(db, owner_id=current_user.id, name=name,
+                                                 **body.model_dump())
+    except KeyError as exc:
+        raise HTTPException(404, "Skill not found") from exc
+    except revisions.RevisionConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
+    await db.commit()
+    return result

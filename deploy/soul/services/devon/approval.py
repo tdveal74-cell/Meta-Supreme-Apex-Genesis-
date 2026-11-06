@@ -216,7 +216,11 @@ class InMemoryApprovalStore:
 
     def transition_approved(self, request: ApprovalRequest) -> bool:
         current = self._records.get(request.request_id)
-        if current is None or current.state is not ApprovalState.APPROVED:
+        if (
+            current is None
+            or current.state is not ApprovalState.APPROVED
+            or current.is_expired()
+        ):
             return False
         self._records[request.request_id] = request
         return True
@@ -418,6 +422,17 @@ class ApprovalQueue:
                 message=f"State is {record.state.value}, not approved.",
             )
 
+        # Approval has a deadline even after the human decides. A token that
+        # was approved before expiry must not become a permanent capability.
+        if record.is_expired(at):
+            return DecisionResult(
+                False,
+                record.request_id,
+                state=ApprovalState.EXPIRED,
+                reason=RefusalReason.EXPIRED,
+                message=f"Expired at {record.expires_at.isoformat()}; raise a new approval.",
+            )
+
         spent = replace(
             record,
             state=ApprovalState.CONSUMED,
@@ -425,8 +440,17 @@ class ApprovalQueue:
             decided_by=record.decided_by or (consumed_by or "").strip() or None,
         )
         if not self._store.transition_approved(spent):
-            # Another worker spent it between the read and the write. The effect
-            # is running exactly once; this caller is simply not the one running it.
+            # The atomic store can also reject expiry between our check and
+            # its compare-and-set. Do not label that as an effect having run.
+            latest = self._store.get(record.request_id)
+            if latest is not None and latest.state is ApprovalState.APPROVED:
+                return DecisionResult(
+                    False,
+                    record.request_id,
+                    state=ApprovalState.EXPIRED,
+                    reason=RefusalReason.EXPIRED,
+                    message="Approval expired before it could be spent; raise a new approval.",
+                )
             return DecisionResult(
                 False,
                 record.request_id,

@@ -52,6 +52,7 @@ class SkillRecord:
     instructions: str
     version: int = 1
     provenance: str = "operator"
+    curator_locked: bool = False
     created_at: datetime = field(default_factory=utcnow)
     updated_at: datetime = field(default_factory=utcnow)
 
@@ -62,6 +63,7 @@ class SkillRecord:
             "instructions": self.instructions,
             "version": self.version,
             "provenance": self.provenance,
+            "curator_locked": self.curator_locked,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }
@@ -179,6 +181,8 @@ class InMemoryLearningStore:
                     provenance=(provenance or "operator").strip() or "operator",
                 )
             else:
+                if existing.curator_locked:
+                    raise ValueError("curated skill is locked; owner unlock required")
                 record = replace(
                     existing,
                     description=clean_description,
@@ -189,6 +193,28 @@ class InMemoryLearningStore:
                     updated_at=utcnow(),
                 )
             self._skills[clean_name] = record
+            return record
+
+    def set_curator_lock(self, name: str, *, locked: bool, expected_version: int) -> SkillRecord:
+        """Explicit operator transition for the isolated development store.
+
+        Not registered as an agent tool. Production uses the authenticated,
+        owner-scoped journal in app.services.skill_revisions instead.
+        """
+        if type(locked) is not bool:
+            raise ValueError("locked must be boolean")
+        normalized = (name or "").strip().lower().replace(" ", "-")
+        with self._lock:
+            existing = self._skills.get(normalized)
+            if existing is None:
+                raise KeyError(normalized)
+            if existing.version != expected_version:
+                raise ValueError("active version changed")
+            if existing.curator_locked == locked:
+                return existing
+            record = replace(existing, curator_locked=locked,
+                             version=existing.version + 1, updated_at=utcnow())
+            self._skills[normalized] = record
             return record
 
     def get_skill(self, name: str) -> Optional[SkillRecord]:

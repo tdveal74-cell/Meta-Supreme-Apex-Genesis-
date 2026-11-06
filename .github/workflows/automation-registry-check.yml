@@ -6,7 +6,8 @@ name: Automation registry check
 # instance, and one per GitHub Actions workflow file and wired hook in this
 # repository: owner, lane and the date it was last reviewed end to end. This
 # job reads the instance's workflow list and git, and diffs both against the
-# file once a day. Repository rows were added 2026-11-01.
+# file once a day and after registry/checker changes merge to main.
+# Repository rows were added 2026-11-01.
 #
 # Ruled by Tee 2026-10-31 on a card, "Build the registry", after Nate Herk's
 # agent management framework was read against the estate and the one gap found
@@ -31,6 +32,12 @@ name: Automation registry check
 # standalone job of ci.yml. Those tests prove nothing about the key or the host.
 
 on:
+  push:
+    branches: ["main"]
+    paths:
+      - "registry/automations.json"
+      - "scripts/automation_registry.py"
+      - ".github/workflows/automation-registry-check.yml"
   schedule:
     # Once a day at 08:17Z, off the hour and clear of the 07:41Z registry check.
     - cron: "17 8 * * *"

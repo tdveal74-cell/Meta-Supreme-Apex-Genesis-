@@ -142,6 +142,7 @@ class AgentRuntime:
         effect_idempotency_key: str = "",
         soul: Optional["SoulLayer"] = None,
         result_recorder: Optional[Callable[..., Awaitable[Dict[str, Any]]]] = None,
+        cancellation_check: Optional[Callable[[], Awaitable[Optional[str]]]] = None,
     ) -> None:
         self.planner = planner
         self.tools = tools
@@ -152,6 +153,7 @@ class AgentRuntime:
         self.effect_idempotency_key = (effect_idempotency_key or "").strip()
         self.soul = soul
         self.result_recorder = result_recorder
+        self.cancellation_check = cancellation_check
 
     async def create_task(
         self,
@@ -243,6 +245,14 @@ class AgentRuntime:
         task = self.get(task_id)
         if task.done:
             return RuntimeResult(task=task, message=f"task is {task.state.value}")
+
+        # Only stop at a tool boundary. Interrupting an adapter would discard
+        # the receipt for an effect that may already have happened externally.
+        if self.cancellation_check is not None:
+            reason = await self.cancellation_check()
+            if reason is not None:
+                cancelled = self.cancel(task_id, reason=reason)
+                return RuntimeResult(task=cancelled, message="schedule cancelled before next step")
 
         step = task.active_step
         if step is None:

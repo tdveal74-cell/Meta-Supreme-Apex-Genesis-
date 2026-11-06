@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -14,6 +14,7 @@ from app.security.deps import CurrentUser
 from app.services.agent_tasks import agent_tasks_service
 from app.services.hermes_expansion_persistence import HermesExpansionRepository
 from services.agent_runtime.expansion import SkillProposalStore
+from services.agent_runtime.schedule_policy import POLICY_KEY
 
 router = APIRouter(prefix="/agent-expansion", tags=["DEVON Agent Expansion"])
 _repo = HermesExpansionRepository()
@@ -23,6 +24,12 @@ class ScheduleCreateBody(BaseModel):
     goal: str = Field(..., min_length=1, max_length=20_000)
     delay_seconds: int = Field(default=0, ge=0, le=31_536_000)
     context: Dict[str, Any] = Field(default_factory=dict)
+    missed_run_policy: Literal["catch_up", "skip"] = "catch_up"
+    max_lateness_seconds: int = Field(default=300, ge=0, le=31_536_000, strict=True)
+
+
+class ScheduleCancelBody(BaseModel):
+    reason: str = Field(default="cancelled by operator", min_length=1, max_length=2000)
 
 
 class SkillProposeBody(BaseModel):
@@ -58,7 +65,10 @@ async def create_schedule(
             owner_id=current_user.id,
             goal=body.goal,
             run_at=run_at,
-            context=body.context,
+            context={**body.context, POLICY_KEY: {
+                "missed_run_policy": body.missed_run_policy,
+                "max_lateness_seconds": body.max_lateness_seconds,
+            }},
         )
     except ValueError as err:
         raise HTTPException(status_code=422, detail=str(err)) from err
@@ -99,6 +109,28 @@ async def materialize_due_schedules(
         raise HTTPException(status_code=422, detail=str(err)) from err
     await db.commit()
     return created
+
+
+@router.post("/schedules/{schedule_id}/cancel")
+async def cancel_schedule(
+    schedule_id: str,
+    body: ScheduleCancelBody,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """Stop future steps; already-started tools retain their receipt path."""
+    try:
+        item = await _repo.cancel_schedule(
+            db, owner_id=current_user.id, schedule_id=schedule_id, reason=body.reason
+        )
+    except KeyError as err:
+        raise HTTPException(status_code=404, detail="Schedule not found") from err
+    await db.commit()
+    return {
+        "schedule": item.to_dict(),
+        "cancellation_mode": "cooperative_between_steps",
+        "in_flight_tool_may_finish": bool(item.task_id),
+    }
 
 
 @router.get("/subagents")
@@ -180,7 +212,7 @@ async def decide_skill_proposal(
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     # Hold promotion and active-version checks in one serialized transaction.
-    from app.services.skill_revisions import lock_skill, require_evaluation
+    from app.services.skill_revisions import curator_lock_status, lock_skill, require_evaluation
     if body.approve and body.promote:
         proposals = await _repo.list_skill_proposals(db, owner_id=current_user.id)
         candidate = next((p for p in proposals if p.proposal_id == proposal_id), None)
@@ -191,6 +223,9 @@ async def decide_skill_proposal(
         if body.expected_version != (active.version if active else 0):
             raise HTTPException(status_code=409, detail="expected active skill version required or changed")
         try:
+            if active and (await curator_lock_status(db, owner_id=current_user.id,
+                                                     name=candidate.name))["locked"]:
+                raise ValueError("curated skill is locked; owner unlock required")
             promotion_evidence = await require_evaluation(db, owner_id=current_user.id, evaluation_id=body.evaluation_id,
                 name=candidate.name, description=candidate.description, instructions=candidate.instructions,
                 source_task_id=candidate.source_task_id)
