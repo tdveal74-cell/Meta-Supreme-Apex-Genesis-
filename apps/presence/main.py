@@ -496,6 +496,7 @@ def create_app(
         session = PresenceSession(
             session_id=session_id,
             user_id=str(payload["sub"]),
+            inference_access_token=str(hello["token"]),
             router=runtime.router,
             speech=runtime.speech,
             send=send_json,

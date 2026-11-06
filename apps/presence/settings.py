@@ -31,6 +31,7 @@ import json
 import os
 from dataclasses import dataclass
 from typing import Mapping, Optional, Tuple
+from urllib.parse import urlsplit
 
 DEFAULT_SECRET_KEY = "change-me-in-production-use-openssl-rand-hex-32"
 
@@ -107,6 +108,31 @@ def secret_key_refusal(
     return ""
 
 
+def validate_api_base(value: str) -> str:
+    """Only an operator-configured HTTPS origin may receive a DEVON JWT."""
+    try:
+        parsed = urlsplit(value)
+        valid = (
+            parsed.scheme == "https"
+            and bool(parsed.hostname)
+            and parsed.username is None
+            and parsed.password is None
+            and parsed.path in ("", "/")
+            and not parsed.query
+            and not parsed.fragment
+            and parsed.port != 0
+            and not any(c.isspace() or ord(c) < 32 for c in value)
+        )
+    except ValueError:
+        valid = False
+    if not valid:
+        raise PresenceConfigError(
+            "PRESENCE_API_BASE must be the DEVON API HTTPS origin, without "
+            "credentials, path, query or fragment."
+        )
+    return value.rstrip("/")
+
+
 def _read_positive_int(environ: Mapping[str, str], name: str, default: int) -> int:
     raw = (environ.get(name) or "").strip()
     if not raw:
@@ -152,6 +178,7 @@ class PresenceSettings:
     ENVIRONMENT: str = "development"
     PRESENCE_INFERENCE: str = "mock"
     PRESENCE_FALLBACK_INFERENCE: str = ""
+    PRESENCE_API_BASE: str = ""
     CEREBRAS_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-3.8-flash"
@@ -202,6 +229,10 @@ class PresenceSettings:
                 "A fallback on the same provider fails the same way; leave it empty or "
                 "name a different one."
             )
+        if any(name and name != "mock" for name in (
+            self.PRESENCE_INFERENCE, self.PRESENCE_FALLBACK_INFERENCE
+        )):
+            validate_api_base(self.PRESENCE_API_BASE)
         if self.PRESENCE_SPEECH not in SPEECH_CHOICES:
             raise PresenceConfigError(
                 f"PRESENCE_SPEECH is {self.PRESENCE_SPEECH!r}; it must be one of "
@@ -270,6 +301,7 @@ class PresenceSettings:
             ENVIRONMENT=text("ENVIRONMENT", "development"),
             PRESENCE_INFERENCE=text("PRESENCE_INFERENCE", "mock").lower() or "mock",
             PRESENCE_FALLBACK_INFERENCE=text("PRESENCE_FALLBACK_INFERENCE").lower(),
+            PRESENCE_API_BASE=text("PRESENCE_API_BASE"),
             CEREBRAS_API_KEY=text("CEREBRAS_API_KEY"),
             GEMINI_API_KEY=text("GEMINI_API_KEY"),
             GEMINI_MODEL=text("GEMINI_MODEL", "gemini-3.8-flash") or "gemini-3.8-flash",

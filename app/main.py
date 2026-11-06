@@ -69,8 +69,13 @@ async def lifespan(app: FastAPI):
 
     log_cors_configuration(log, settings.CORS_ORIGINS, settings.ENVIRONMENT)
 
-    yield
-    # Shutdown: close connections gracefully
+    from app.services.presence import drain_completions, start_accepting
+
+    start_accepting()
+    try:
+        yield
+    finally:
+        await drain_completions()
 
 
 app = FastAPI(

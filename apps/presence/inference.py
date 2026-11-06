@@ -6,7 +6,7 @@ cares about two moments: when the first token arrives (time to first
 token, the number the breaker watches) and whether the stream ends
 cleanly.
 
-Two implementations live here.
+Three implementations live here.
 
 ``MockTokenStreamer`` is for tests and the offline lane. Its timing is
 scripted (``first_token_delay_ms``, ``delay_ms``, ``fail_before_first``)
@@ -22,6 +22,11 @@ honest enough to drive the breaker (a slow completion is a slow first
 token) but it is not real streaming. Real provider streaming is a separate gate. It was not verified in this
 build and nothing here pretends otherwise.
 
+Configured real providers use ``RelayTokenStreamer`` from ``relay.py``. Its
+API call carries the session JWT; the API selects its configured provider,
+checks the tenant cap and commits provider usage before returning text.
+``ProviderTokenStreamer`` remains the mock and injected offline adapter only.
+
 The system prompt reuses the DEVON persona from ``services.devon.persona``
 rather than inventing a second voice for the face.
 """
@@ -32,7 +37,7 @@ import asyncio
 from typing import AsyncIterator, List, Optional, Protocol, runtime_checkable
 
 from apps.presence.settings import PresenceSettings
-from services.devon.persona import BOUNDARY, PERSONA_SUMMARY, REGISTER
+from services.intelligence.presence import PRESENCE_SYSTEM_PROMPT
 from services.intelligence.providers.base import (
     AIProvider,
     ChatMessage,
@@ -43,17 +48,7 @@ from services.intelligence.providers.factory import create_provider
 
 DEFAULT_MOCK_TEXT = "This is the offline mock voice. The face you see is driven by this text."
 
-PRESENCE_SYSTEM_PROMPT = (
-    "You are DEVON, answering out loud through a face and a voice rather than a "
-    "text box. Reply in one to three short sentences a person can listen to: plain "
-    "words, no lists, no markdown, no headings. "
-    f"Persona: {PERSONA_SUMMARY} Register: {REGISTER} Boundary: {BOUNDARY}"
-)
 
-#: Whole completion budget for the provider adapter. The router cancels the
-#: wait for the first token at PRESENCE_TTFT_THRESHOLD_MS regardless, so this
-#: only bounds a completion that started answering in time.
-PROVIDER_TIMEOUT_SECONDS = 30.0
 
 
 class StreamerError(RuntimeError):
@@ -150,35 +145,19 @@ class ProviderTokenStreamer:
 def build_streamer(name: str, settings: PresenceSettings) -> Optional[TokenStreamer]:
     """Build the configured streamer, or None for an empty name.
 
-    Misconfiguration (an unknown name, a missing key) raises the provider
-    factory's ProviderConfigError at startup rather than on the first turn.
-    Retries are set to zero on purpose: the base class would back off for
-    one and then two seconds inside a single turn, which is exactly the
-    stall the breaker and the fallback exist to prevent.
+    Mock stays local. Every real provider is served by the authenticated API,
+    where the daily cap and durable ledger live. Presence never calls a vendor
+    directly, and the API refuses a name other than its configured provider.
     """
     chosen = (name or "").strip().lower()
     if not chosen:
         return None
-    try:
-        provider = create_provider(
-            chosen,
-            anthropic_api_key=settings.ANTHROPIC_API_KEY,
-            openai_api_key=settings.OPENAI_API_KEY,
-            cerebras_api_key=settings.CEREBRAS_API_KEY,
-            gemini_api_key=settings.GEMINI_API_KEY,
-            model=settings.GEMINI_MODEL if chosen == "gemini" else None,
-            timeout_seconds=PROVIDER_TIMEOUT_SECONDS,
-            max_retries=0,
-        )
-    except ProviderConfigError as exc:
-        # The factory's message names DEFAULT_AI_PROVIDER, the API's variable.
-        # This service is configured by PRESENCE_INFERENCE and
-        # PRESENCE_FALLBACK_INFERENCE, and the refusal has to send the reader
-        # to the right line.
+    if chosen == "mock":
+        return ProviderTokenStreamer(create_provider("mock", max_retries=0))
+    if chosen not in ("gemini", "cerebras", "anthropic", "openai"):
         raise ProviderConfigError(
-            f"presence inference '{chosen}' cannot start: {exc} Set the key, or "
-            "set PRESENCE_INFERENCE (and PRESENCE_FALLBACK_INFERENCE) to mock "
-            "until it exists.",
-            provider=chosen,
-        ) from exc
-    return ProviderTokenStreamer(provider)
+            "presence inference name is not supported", provider=chosen
+        )
+    from apps.presence.relay import RelayTokenStreamer
+
+    return RelayTokenStreamer(chosen, settings.PRESENCE_API_BASE)

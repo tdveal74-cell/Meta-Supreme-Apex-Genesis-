@@ -109,19 +109,19 @@ def test_api_and_enrichment_build_metered_gemini_with_configured_model(monkeypat
         intelligence.get_enrichment_provider.cache_clear()
 
 
-def test_presence_accepts_gemini_and_passes_key_and_model():
+def test_presence_accepts_gemini_through_authenticated_metered_api():
     from apps.presence.inference import build_streamer
-    from apps.presence.settings import PresenceSettings
+    from apps.presence.relay import RelayTokenStreamer
+    from apps.presence.settings import PresenceConfigError, PresenceSettings
 
     settings = PresenceSettings.from_env({
-        "PRESENCE_INFERENCE": "gemini", "GEMINI_API_KEY": "google-key",
-        "GEMINI_MODEL": "gemini-custom", "ENVIRONMENT": "test",
+        "PRESENCE_INFERENCE": "gemini", "PRESENCE_API_BASE": "https://api.example",
+        "ENVIRONMENT": "test",
     })
     streamer = build_streamer(settings.PRESENCE_INFERENCE, settings)
-    assert isinstance(streamer._provider, GeminiProvider)
-    assert streamer._provider._api_key == "google-key"
-    assert streamer._provider.default_model == "gemini-custom"
-    with pytest.raises(ProviderConfigError, match="GEMINI_API_KEY"):
+    assert isinstance(streamer, RelayTokenStreamer)
+    assert streamer.name == "gemini"
+    with pytest.raises(PresenceConfigError, match="PRESENCE_API_BASE"):
         build_streamer("gemini", PresenceSettings())
 
 
@@ -182,7 +182,7 @@ async def test_malformed_gemini_success_is_a_typed_nonretryable_failure(response
 
 def test_presence_accepts_gemini_fallback_without_replacing_existing_primary():
     from apps.presence.settings import PresenceSettings
-    settings = PresenceSettings.from_env({"PRESENCE_INFERENCE": "cerebras", "PRESENCE_FALLBACK_INFERENCE": "gemini", "ENVIRONMENT": "test"})
+    settings = PresenceSettings.from_env({"PRESENCE_INFERENCE": "cerebras", "PRESENCE_FALLBACK_INFERENCE": "gemini", "PRESENCE_API_BASE": "https://api.example", "ENVIRONMENT": "test"})
     assert settings.PRESENCE_INFERENCE == "cerebras"
     assert settings.PRESENCE_FALLBACK_INFERENCE == "gemini"
 
