@@ -1,0 +1,23 @@
+schema: comfy-build/1
+id: null
+name: tsws-ltx23-serverless
+description: "TSWS Episode 1 motion lane: LTX 2.3 distilled 1.1 with the Gemma 3 12B text encoder and the x2 spatial upscaler, on upstream ComfyUI v0.42.0 with core nodes only. Ruled by Tee on 2026-11-03 (tenth post-merge card)."
+syncedRevision: null
+definition:
+  schema: distribution-definition/0
+  baseComfyVersion: v0.42.0
+  models:
+    - type: checkpoints
+      filename: ltx-2.3-22b-distilled-1.1.safetensors
+      sourceUri: https://huggingface.co/Lightricks/LTX-2.3/resolve/main/ltx-2.3-22b-distilled-1.1.safetensors
+      sha256: b33b7fe4bbfe084f484be4aaf90b0f1d95dca20d403ac4c0e037eb8c4f0af7cc
+    - type: text_encoders
+      filename: gemma_3_12B_it.safetensors
+      sourceUri: https://huggingface.co/Comfy-Org/ltx-2/resolve/main/split_files/text_encoders/gemma_3_12B_it.safetensors
+      sha256: 56eaa964a0d9325d2dc9ecaf7759bfaf0fac78ae36c789bed6e03e275a3729ec
+    - type: latent_upscale_models
+      filename: ltx-2.3-spatial-upscaler-x2-1.1.safetensors
+      sourceUri: https://huggingface.co/Lightricks/LTX-2.3/resolve/main/ltx-2.3-spatial-upscaler-x2-1.1.safetensors
+      sha256: 5f416311fa8172b65af67530758964708d29a317b830d689a51143b7f91913ed
+  customNodes: []
+  pipDependencies: ""
