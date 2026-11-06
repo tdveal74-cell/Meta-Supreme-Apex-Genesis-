@@ -102,3 +102,67 @@ def test_rate_limited_read_is_structured_without_automatic_replay(retry_after, e
     assert "private provider body" not in result.error
     assert "provider_receipt_id" not in result.metadata
     assert len(seen) == 1
+
+
+def test_large_page_stops_reading_and_closes_the_stream():
+    class LargePage(httpx.SyncByteStream):
+        def __init__(self):
+            self.bytes_read = 0
+            self.closed = False
+
+        def __iter__(self):
+            for _ in range(1000):
+                self.bytes_read += 4096
+                yield b"x" * 4096
+
+        def close(self):
+            self.closed = True
+
+    page = LargePage()
+    seen = []
+
+    def receive(request):
+        seen.append(request)
+        return httpx.Response(200, stream=page)
+
+    text = http_get_text("https://github.com/", transport=httpx.MockTransport(receive))
+    assert text == "x" * 50_000
+    assert 200_000 <= page.bytes_read <= 204_096
+    assert page.closed
+    assert len(seen) == 1
+    assert seen[0].headers["accept-encoding"] == "identity"
+
+
+@pytest.mark.parametrize("content_encoding", ["gzip", "br", "deflate", "gzip, identity"])
+def test_compression_is_refused_before_reading_or_expanding(content_encoding):
+    class Unreadable(httpx.SyncByteStream):
+        closed = False
+
+        def __iter__(self):
+            raise AssertionError("compressed bytes must not be read")
+            yield b""  # pragma: no cover
+
+        def close(self):
+            self.closed = True
+
+    page = Unreadable()
+    transport = httpx.MockTransport(
+        lambda _: httpx.Response(200, headers={"content-encoding": content_encoding}, stream=page)
+    )
+    with pytest.raises(ValueError, match="compressed browser response refused"):
+        http_get_text("https://github.com/", transport=transport)
+    assert page.closed
+
+
+@pytest.mark.parametrize("charset,body,expected", [
+    ("utf-8", "caf\u00e9".encode(), "caf\u00e9"),
+    ("iso-8859-1", b"caf\xe9", "caf\u00e9"),
+    ("invalid-charset", b"hello", "hello"),
+])
+def test_bounded_page_preserves_declared_encoding(charset, body, expected):
+    transport = httpx.MockTransport(
+        lambda _: httpx.Response(
+            200, headers={"content-type": "text/html; charset=" + charset}, content=body
+        )
+    )
+    assert http_get_text("https://github.com/", transport=transport) == expected

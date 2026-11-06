@@ -82,7 +82,7 @@ so a surface change has to move this document too:
 
 ```hermes-surface-counts
 tools 27
-routes 33
+routes 36
 columns 152
 states 9
 migrations 8
@@ -115,3 +115,8 @@ will apply and not what production runs; the deployed estate stays the job of
   Alembic head 018 as of 2026-09-03, amended from 015 on that date, one Cerebras voice turn, one materialize-run-complete
   path, one propose-approve-promote path). Not reachable from CI or agent
   containers. Until that lands, do not call this stack Live.
+
+Update 2026-11-06: owner-controlled runtime skill lock GET/PUT and durable
+schedule cancellation POST bring the governed route count to 36. Lock state
+is versioned in the immutable revision journal. Cancellation is cooperative
+between tools; in-flight effect receipts remain durable.

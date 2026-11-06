@@ -10,6 +10,9 @@ from typing import Optional
 
 import httpx
 
+MAX_RESPONSE_BYTES = 200_000
+MAX_TEXT_CHARS = 50_000
+
 
 class ReadRateLimited(RuntimeError):
     """A read was throttled; this observation does not authorize a retry."""
@@ -44,11 +47,14 @@ def http_get_text(
     """
     with httpx.Client(
         timeout=timeout_seconds, follow_redirects=False, transport=transport
-    ) as client:
-        response = client.get(
-            url,
-            headers={"User-Agent": "DEVON-BrowserAdapter/1.0"},
-        )
+    ) as client, client.stream(
+        "GET",
+        url,
+        headers={
+            "User-Agent": "DEVON-BrowserAdapter/1.0",
+            "Accept-Encoding": "identity",
+        },
+    ) as response:
         if 300 <= response.status_code < 400 and "location" in response.headers:
             location = response.headers.get("location", "")
             raise RedirectRefused(
@@ -59,7 +65,22 @@ def http_get_text(
         if response.status_code == 429:
             raise ReadRateLimited(response.headers.get("retry-after"))
         response.raise_for_status()
-        return response.text[:50_000]
+        # Bound the read before buffering, not after response.text has read the
+        # entire page. Refuse compression rather than letting a small wire body
+        # expand without a bound in HTTPX's decompressor.
+        encoding = response.headers.get("content-encoding", "identity").strip().lower()
+        if encoding not in {"", "identity"}:
+            raise ValueError("compressed browser response refused; identity encoding required")
+        body = bytearray()
+        for chunk in response.iter_bytes(chunk_size=4096):
+            body.extend(chunk[: MAX_RESPONSE_BYTES - len(body)])
+            if len(body) == MAX_RESPONSE_BYTES:
+                break
+        try:
+            text = body.decode(response.encoding or "utf-8", errors="replace")
+        except LookupError:
+            text = body.decode("utf-8", errors="replace")
+        return text[:MAX_TEXT_CHARS]
 
 
 def maybe_live_fetcher(enabled: bool) -> Optional[object]:

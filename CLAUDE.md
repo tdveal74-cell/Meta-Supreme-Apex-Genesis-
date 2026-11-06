@@ -551,7 +551,8 @@ line, before saying what production runs. A builder changed back in the
 dashboard reopens the gap and nothing here would notice.
 
 The eighteenth arrived on 2026-10-31: `.github/workflows/automation-registry-check.yml`,
-`schedule` only, once a day at 08:17Z, plus `workflow_dispatch`. Tee ruled it on
+`schedule` once a day at 08:17Z, plus `workflow_dispatch` and pushes to main
+that change the registry, checker or workflow itself. Tee ruled it on
 a card the same day, "Build the registry", after Nate Herk's agent management
 framework was read against the estate and the one gap was no record of who owns
 each automation or when a person last read it. It runs
@@ -602,7 +603,7 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -c "import standa
 env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_devon_rsi.py test_devon_rsi_ops.py test_devon_rsi_experiments.py \
   test_agent_evaluation.py test_agent_benchmarks.py \
-  test_runtime_verification.py test_skill_evaluation_policy.py \
+  test_runtime_verification.py test_skill_evaluation_policy.py test_skill_curator_locks.py test_devon_schedule_policy.py \
   test_billing.py test_definition.py test_providers.py test_schedule.py \
   test_workflow_engine.py test_devon_hermes_expansion.py \
   test_devon_hermes_durable_followon.py test_devon_learning_loop.py \

@@ -504,22 +504,24 @@ def create_app(
             send_audio=runtime.send_audio_over_websocket,
             audio_sink=audio_sink,
         )
-        await send_json(
-            ready_message(
-                session_id=session.session_id,
-                speech=runtime.speech.name,
-                inference=runtime.router.primary.name,
-                fallback=runtime.router.fallback_name,
-                livekit_configured=settings.livekit_configured,
-                livekit_url=settings.LIVEKIT_URL or None,
-                protocol=negotiated,
-            )
-        )
-        runtime.sessions[session.session_id] = session.user_id
-        await session.open()
-
-        # -- conversation ----------------------------------------------------
+        # A disconnect during either initial send needs the same cleanup as
+        # one during a turn: the sink is already started at this point.
         try:
+            await send_json(
+                ready_message(
+                    session_id=session.session_id,
+                    speech=runtime.speech.name,
+                    inference=runtime.router.primary.name,
+                    fallback=runtime.router.fallback_name,
+                    livekit_configured=settings.livekit_configured,
+                    livekit_url=settings.LIVEKIT_URL or None,
+                    protocol=negotiated,
+                )
+            )
+            runtime.sessions[session.session_id] = session.user_id
+            await session.open()
+
+            # -- conversation ------------------------------------------------
             while not session.closed:
                 raw = await ws.receive_text()
                 try:

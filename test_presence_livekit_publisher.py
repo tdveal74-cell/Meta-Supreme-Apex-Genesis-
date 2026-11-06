@@ -15,6 +15,7 @@ it passes. That test skips when the SDK is absent and runs in CI, where
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 
 import pytest
@@ -181,6 +182,60 @@ async def test_start_is_idempotent_and_does_not_join_twice():
     assert len(rtc.rooms) == 1
 
 
+@pytest.mark.parametrize("failure", ["connect", "source", "publish", "cancel"])
+async def test_failed_start_releases_every_acquired_resource(monkeypatch, failure):
+    rtc = FakeRTC()
+    room = FakeRoom()
+    sources = []
+
+    async def connect(url, token):
+        room.connected_to = (url, token)
+        if failure == "connect":
+            raise RuntimeError("connect failed")
+
+    def source(*args):
+        if failure == "source":
+            raise RuntimeError("source failed")
+        item = FakeAudioSource(*args)
+        sources.append(item)
+        return item
+
+    async def publish(track, options):
+        if failure == "cancel":
+            raise asyncio.CancelledError()
+        raise RuntimeError("publish failed")
+
+    monkeypatch.setattr(rtc, "Room", lambda: room)
+    monkeypatch.setattr(rtc, "AudioSource", source)
+    monkeypatch.setattr(room, "connect", connect)
+    monkeypatch.setattr(room.local_participant, "publish_track", publish)
+    pub = _publisher(rtc)
+    expected = asyncio.CancelledError if failure == "cancel" else RuntimeError
+    with pytest.raises(expected):
+        await pub.start()
+    assert room.disconnected, "failed startup left a LiveKit room connected"
+    assert all(item.closed for item in sources)
+    await pub.aclose()  # cleanup remains idempotent after a failed start
+
+
+async def test_failed_start_preserves_original_error_when_cleanup_also_fails(monkeypatch):
+    rtc = FakeRTC()
+    room = FakeRoom()
+
+    async def failed_publish(track, options):
+        raise RuntimeError("publication refused")
+
+    async def failed_close(_source):
+        raise RuntimeError("source close failed")
+
+    monkeypatch.setattr(rtc, "Room", lambda: room)
+    monkeypatch.setattr(room.local_participant, "publish_track", failed_publish)
+    monkeypatch.setattr(FakeAudioSource, "aclose", failed_close)
+    with pytest.raises(RuntimeError, match="publication refused"):
+        await _publisher(rtc).start()
+    assert room.disconnected
+
+
 # ---------------------------------------------------------------------------
 # The frame itself
 # ---------------------------------------------------------------------------
@@ -251,6 +306,22 @@ async def test_close_releases_the_source_and_leaves_the_room():
     await pub.aclose()
     assert source.closed is True
     assert rtc.rooms[0].disconnected is True
+
+
+async def test_source_close_failure_still_disconnects_room(monkeypatch):
+    rtc = FakeRTC()
+    pub = _publisher(rtc)
+    await pub.start()
+    room = rtc.rooms[0]
+    source = room.local_participant.published[0][0].source
+
+    async def failed_close():
+        raise RuntimeError("source close failed")
+
+    monkeypatch.setattr(source, "aclose", failed_close)
+    with pytest.raises(RuntimeError, match="source close failed"):
+        await pub.aclose()
+    assert room.disconnected, "a source failure must not strand the room"
 
 
 async def test_close_twice_is_safe():
