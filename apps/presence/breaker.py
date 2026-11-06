@@ -44,6 +44,7 @@ from enum import Enum
 from typing import AsyncIterator, Callable, Dict, Optional
 
 from apps.presence.inference import TokenStreamer
+from apps.presence.relay import InferenceRefused
 
 DEFAULT_FAILURE_THRESHOLD = 3
 DEFAULT_TTFT_THRESHOLD_MS = 500.0
@@ -242,6 +243,12 @@ class InferenceRouter:
             reason = (
                 f"{self.primary.name}: no first token within {self.ttft_threshold_ms:.0f} ms"
             )
+        except InferenceRefused as exc:
+            await _close_quietly(gen)
+            turn.primary_error = str(exc)
+            # Authentication, usage and accounting refusals are terminal, not
+            # provider outages. A fallback must not bypass the same cap.
+            raise InferenceUnavailable(str(exc)) from exc
         except StopAsyncIteration:
             reason = f"{self.primary.name}: empty reply"
         except asyncio.CancelledError:

@@ -59,6 +59,7 @@ from apps.presence.protocol import (
     token_message,
     validate_frame,
 )
+from apps.presence.relay import access_token
 from apps.presence.speech import (
     CHUNK_AUDIO,
     CHUNK_FRAME,
@@ -169,6 +170,7 @@ class PresenceSession:
         *,
         session_id: str,
         user_id: str,
+        inference_access_token: str = "",
         router: InferenceRouter,
         speech: SpeechSynthesizer,
         send: SendFn,
@@ -180,6 +182,7 @@ class PresenceSession:
     ) -> None:
         self.session_id = session_id
         self.user_id = user_id
+        self._inference_access_token = inference_access_token
         self.router = router
         self.speech = speech
         self._send = send
@@ -296,6 +299,7 @@ class PresenceSession:
         return self._task
 
     async def _run_guarded(self, turn_id: str, text: str) -> None:
+        binding = access_token.set(self._inference_access_token)
         try:
             await self.run_turn(turn_id, text)
         except asyncio.CancelledError:
@@ -308,6 +312,8 @@ class PresenceSession:
                 )
             )
             await self._finish_turn()
+        finally:
+            access_token.reset(binding)
 
     async def run_turn(self, turn_id: str, text: str) -> None:
         """Stream tokens, then speak the reply on the audio clock."""

@@ -232,6 +232,25 @@ async def _record_or_log(tenant_id: str, *, input_tokens: int, output_tokens: in
         )
 
 
+async def _record_or_raise(tenant_id: str, *, input_tokens: int, output_tokens: int) -> None:
+    """The Presence relay acknowledges only a committed usage record.
+
+    A write failure cannot recover a paid inference. Refuse acceptance, log the
+    numeric reconciliation evidence, and never cause a provider retry.
+    """
+    try:
+        await record_usage(tenant_id, input_tokens=input_tokens, output_tokens=output_tokens)
+    except Exception:  # noqa: BLE001 - paid outcome, ledger acceptance failed
+        logger.error(
+            "provider usage not recorded: tenant=%s input=%d output=%d",
+            tenant_id, input_tokens, output_tokens,
+        )
+        raise AppError(
+            "Provider answered but usage could not be recorded. No automatic retry.",
+            status_code=503, code="provider_usage_unconfirmed",
+        ) from None
+
+
 # ---------------------------------------------------------------------------
 # The wrappers
 # ---------------------------------------------------------------------------
@@ -245,7 +264,7 @@ class MeteredProvider(AIProvider):
     inner provider's `complete`; one successful completion is one record.
     """
 
-    def __init__(self, inner: AIProvider) -> None:
+    def __init__(self, inner: AIProvider, *, strict_recording: bool = False) -> None:
         super().__init__(
             default_model=inner.default_model,
             timeout_seconds=inner.timeout_seconds,
@@ -253,6 +272,7 @@ class MeteredProvider(AIProvider):
         )
         self.name = inner.name
         self.inner = inner
+        self.strict_recording = strict_recording
 
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
         tenant_id = spend_bucket()
@@ -261,8 +281,9 @@ class MeteredProvider(AIProvider):
         # Shielded: the provider has already been paid by the time this line
         # runs, so a client that disconnects between the call and the record
         # must not take the record with it.
+        recorder = _record_or_raise if self.strict_recording else _record_or_log
         await asyncio.shield(
-            _record_or_log(
+            recorder(
                 tenant_id,
                 input_tokens=response.usage.input_tokens,
                 output_tokens=response.usage.output_tokens,
