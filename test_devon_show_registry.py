@@ -131,7 +131,16 @@ def test_the_known_drift_is_pinned_here_and_only_shrinks():
 def test_the_voice_lane_traces_into_the_render_node():
     code = export_nodes()["Show Context: Render"]
     for show in SHOWS.values():
-        assert show.voice is VOICE, "both shows narrate in the owned clone"
+        # Both shows share the owned clone and every voice field except the
+        # approved_brand_voice_default.integration_checked_at timestamp.
+        assert show.voice.voice_id is VOICE.voice_id
+        assert show.voice.voice_ready is VOICE.voice_ready
+        assert show.voice.eleven_model is VOICE.eleven_model
+        assert show.voice.speechify_voice_id is VOICE.speechify_voice_id
+        assert show.voice.speechify_model is VOICE.speechify_model
+        assert show.voice.provider_eleven is VOICE.provider_eleven
+        assert show.voice.provider_speechify is VOICE.provider_speechify
+        assert show.voice.stale_claim_hours is VOICE.stale_claim_hours
     assert re.search(rf"const TEE_CLONE = {js_pattern(TEE_CLONE)};", code)
     assert re.search(r"const TQO_VOICE = TEE_CLONE;", code)
     assert re.search(r"const NCO_VOICE = TEE_CLONE;", code)
@@ -152,7 +161,10 @@ def test_the_voice_lane_traces_into_the_render_node():
     settings = re.search(r"const VOICE_SETTINGS = \{(.*?)\};", code, re.S)
     assert settings, "the Render node no longer declares VOICE_SETTINGS"
     block = settings.group(1)
-    for key, value in VOICE.settings.items():
+    # The node carries only the five legacy keys. The approved_brand_voice_default
+    # block lives in the data table and the registry module, not in the Render node.
+    legacy = {k: v for k, v in VOICE.settings.items() if k != "approved_brand_voice_default"}
+    for key, value in legacy.items():
         match = re.search(rf"(?<![\w$]){re.escape(key)}:\s*([\w.]+),", block)
         assert match, f"voice setting {key} is not in VOICE_SETTINGS"
         written = match.group(1)
@@ -160,8 +172,8 @@ def test_the_voice_lane_traces_into_the_render_node():
             assert written == ("true" if value else "false"), f"{key}: node {written}, registry {value}"
         else:
             assert float(written) == float(value), f"{key}: node {written}, registry {value}"
-    assert len(re.findall(r"(?<![\w$])\w+:\s*[\w.]+,", block)) == len(VOICE.settings), (
-        "VOICE_SETTINGS carries a setting the registry does not"
+    assert len(re.findall(r"(?<![\w$])\w+:\s*[\w.]+,", block)) == len(legacy), (
+        "VOICE_SETTINGS carries a setting the registry legacy keys do not"
     )
 
 
@@ -234,7 +246,7 @@ def test_the_rows_hold_only_what_a_data_table_column_can_hold():
         assert row["voice_id"] == TEE_CLONE
         assert "voice_voice_id" not in row
         assert row["brief_reach_profile_uuid"] == "af497848-65de-40f7-82ac-b0f4f162a141"
-        assert json.loads(row["voice_settings"]) == dict(VOICE.settings)
+        assert json.loads(row["voice_settings"]) == dict(get_show(row["key"]).voice.settings)
         assert json.loads(row["brief_sections"]) == list(get_show(row["key"]).brief.sections)
     assert json.loads(rows[0]["required_tags"]) == []
     assert json.loads(rows[1]["required_tags"]) == ["NCO Forge"]

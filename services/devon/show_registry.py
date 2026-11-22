@@ -116,7 +116,7 @@ class VoiceLane:
     provider_eleven: str
     provider_speechify: str
     stale_claim_hours: int
-    settings: Mapping[str, float]
+    settings: Mapping[str, object]
 
 
 @dataclass(frozen=True)
@@ -208,7 +208,43 @@ class Show:
         return record
 
 
-VOICE = VoiceLane(
+# Legacy five keys match the Show Context: Render node VOICE_SETTINGS.
+# The approved_brand_voice_default block was added to the live show_registry
+# data table on 2026-11-07/08 and is carried here so the registry check stays
+# clean. The two shows differ only in integration_checked_at.
+_LEGACY_SETTINGS = {
+    "stability": 0.5,
+    "similarity_boost": 0.75,
+    "style": 0.1,
+    "use_speaker_boost": True,
+    "speed": 0.99,
+}
+
+_APPROVED_BLOCK_BASE = {
+    "provider": "voicestudio",
+    "engine": "omnivoice-gguf",
+    "voice_profile_id": "5e85d366",
+    "request_speed": 0.99,
+    "postprocess_atempo": 0.84,
+    "pitch_preserved": True,
+    "seed": 42,
+    "approved_by": "Tee",
+    "approval_quote": "Make it my default voice for NCO & TQO",
+    "recorded_at": "2026-11-07T21:16:45.574129+00:00",
+    "scope": "Future narration only; existing recordings and publication states unchanged",
+    "automatic_routing_status": "INTEGRATED_AND_ROUTE_TESTED",
+    "legacy_provider_fields": "Historical compatibility; active route uses VoiceStudio only; no fallback",
+    "integration_workflows": ["qEkGOUsNyVaRAmm6", "jKrUIEQSUcGzr4tK"],
+    "verification": "Authenticated host-pinned bridge returned exact approved 84% sample hash from n8n container; new repair narration generation separately tracked",
+}
+
+def _settings(checked_at: str) -> dict:
+    block = dict(_APPROVED_BLOCK_BASE)
+    block["integration_checked_at"] = checked_at
+    # Preserve insertion order: legacy keys first, then the approved block.
+    return {**_LEGACY_SETTINGS, "approved_brand_voice_default": block}
+
+VOICE_TQO = VoiceLane(
     voice_id=TEE_CLONE,
     voice_ready=True,
     eleven_model="eleven_multilingual_v2",
@@ -217,14 +253,25 @@ VOICE = VoiceLane(
     provider_eleven="elevenlabs, Tee clone",
     provider_speechify="speechify geffen_32 STOPGAP VOICE, not for publish",
     stale_claim_hours=3,
-    settings={
-        "stability": 0.5,
-        "similarity_boost": 0.75,
-        "style": 0.1,
-        "use_speaker_boost": True,
-        "speed": 0.99,
-    },
+    settings=_settings("2026-11-08T21:54:35.247142+00:00"),
 )
+
+VOICE_NCO = VoiceLane(
+    voice_id=TEE_CLONE,
+    voice_ready=True,
+    eleven_model="eleven_multilingual_v2",
+    speechify_voice_id="geffen_32",
+    speechify_model="simba-3.2",
+    provider_eleven="elevenlabs, Tee clone",
+    provider_speechify="speechify geffen_32 STOPGAP VOICE, not for publish",
+    stale_claim_hours=3,
+    settings=_settings("2026-11-08T21:54:35.396662+00:00"),
+)
+
+#: Shared alias kept for any code or test that still imports VOICE.
+#: Points at TQO's lane; both lanes share every field except the checked_at
+#: timestamp inside the approved block.
+VOICE = VOICE_TQO
 
 #: One Reach profile serves both shows today, the uuid both Brief branches carry.
 REACH_PROFILE = "af497848-65de-40f7-82ac-b0f4f162a141"
@@ -257,7 +304,7 @@ TQO = Show(
     promote_limit=1,
     package_limit=3,
     youtube_ready=True,
-    voice=VOICE,
+    voice=VOICE_TQO,
     brief=Brief(
         name="The Quiet Brief",
         from_name="The Quiet Operator",
@@ -355,7 +402,7 @@ NCO = Show(
     # a node, not to a row, so a credential re-signed into another channel
     # needs this flipped back first.
     youtube_ready=True,
-    voice=VOICE,
+    voice=VOICE_NCO,
     brief=Brief(
         name="The Forge Report",
         from_name="NCO Forge",
