@@ -122,6 +122,16 @@ NAMED_SERVERS = (
     # and so does a generate, edit or extend call that only asks for a price,
     # below in WAVESPEED_QUOTE.
     "wavespeed",
+    # VideoGen, the video generation API registered in .mcp.json on 2026-11-26.
+    # Every workflow (script_to_video, voiceover_to_video and the rest), every
+    # media tool (generate_video_clip, text_to_speech, generate_avatar and the
+    # rest), an export, a video edit, an upload and an entity change spend the
+    # account's credits or write to its storage, so each needs a human signal.
+    # Its reads all begin get_ or list_ (get_me, get_workflow_run, list_files,
+    # list_tts_voices and the four get_*_guidance tools) and pass under
+    # READ_VERB. The substring also covers the read only docs server registered
+    # beside it as videogen-docs, whose one tool, searchDocs, is a read.
+    "videogen",
 )
 # Graphify's read tools, by exact name, read from the live connector on
 # 2026-10-22. Most of them start "graphify_" or name a noun (graph_stats,

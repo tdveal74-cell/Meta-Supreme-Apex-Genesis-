@@ -820,7 +820,7 @@ is the number; this paragraph is not.
 - Gated: every n8n write (publish, unpublish, archive, execute, update,
   restore, data table writes, folder moves); every tool on a server named
   Railway, Airtable, Vercel, Supabase, Hostinger, Rakazo, Blotato, Docusign,
-  Zapier, Remote Desktop Commander, Runpod, Graphify or WaveSpeed except a read (get, list, search, describe, query and the like, listed
+  Zapier, Remote Desktop Commander, Runpod, Graphify, WaveSpeed or VideoGen except a read (get, list, search, describe, query and the like, listed
   in `READ_VERB`), and except a WaveSpeed generate, edit or extend call that only asks for a price (`estimate_only` true); GitHub Actions triggers; Drive trash; a curl that writes to a
   non-local host; a wget that posts to one; `gh workflow run`, `gh api` writes
   and GraphQL mutations, `gh release`, `gh repo`, `gh secret` and `gh variable`
@@ -879,6 +879,28 @@ is the number; this paragraph is not.
   `x-devon-key` header. That key is not in this repository and is not set in the
   cloud environment, so nothing posts automatically; setting it as an
   environment secret is Tee's, and a curl to the webhook is itself gated.
+
+**VideoGen is registered and gated, and most of what it makes is a rented
+voice.** Registered 2026-11-26 in `.mcp.json` as `videogen`
+(`https://mcp.videogen.io/mcp`, the canonical URL from its docs; the
+`vg_client=claude` tag on the connect link changes nothing in the server's
+answer, measured that day) beside `videogen-docs`, the vendor's read only docs
+server with one tool, `searchDocs`. The API server answers 401 until it is
+signed in, with OAuth through Dynamic Client Registration or an API key as a
+bearer header, so in a cloud session its tools do not load until Tee either
+signs in on his own machine or saves the key as a network secret for
+`mcp.videogen.io`, where the proxy adds it and the container never holds it.
+Every workflow, media tool, export, edit, upload and entity change is gated;
+`get_` and `list_` tools pass. The owned voice rule still decides what is
+allowed once the gate opens: `script_to_video` with a VideoGen `voiceId`,
+`text_to_speech`, `slideshow_to_video` narration and the `CHANGE_NARRATOR`
+edit put a stock voice on the work, and nothing published under a show's name
+uses one, and a catalogue actor on `generate_avatar` is a rented likeness the
+same way. The lane that fits is `voiceover_to_video`, or `generate_avatar` on
+an ACTOR entity built from Tee's own reference images, both fed an uploaded Tee
+clone track; `upload_file` is not on the hosted server, so the bytes go up
+through `create_file_upload` and a PUT. Credit prices were not read; `get_me`
+is the connection test.
 
 Not a sandbox: it reads the command text of curl, wget, gh and git, so a write
 through `npx vercel`, `railway up`, an inline python or node script, or the

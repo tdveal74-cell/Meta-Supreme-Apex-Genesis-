@@ -860,6 +860,91 @@ def test_an_estimate_flag_passes_nothing_on_another_server():
     assert cls and gated
 
 
+# VideoGen, registered in .mcp.json on 2026-11-26. Every workflow and media
+# tool spends the account's credits, and an upload, an export, a video edit or
+# an entity change writes to its storage. The names below are the fifty one
+# tools the server's own documentation listed on 2026-11-26
+# (docs.videogen.io/libraries/mcp): forty nine on the hosted server plus
+# open_uploader, which is hosted only, and upload_file, which the local stdio
+# server has instead. The live catalogue was not read, because the server
+# answers 401 until it is signed in, so this pins the documented names and the
+# rule, as the Graphify block below did before its names could be read.
+VIDEOGEN_SERVERS = ("videogen", "VideoGen", "claude_ai_VideoGen", "plugin_videogen_videogen")
+VIDEOGEN_WRITES = (
+    # workflows
+    "script_to_video", "voiceover_to_video", "slideshow_to_video",
+    "storyboard_to_video", "prompt_to_video_clip", "video_to_video",
+    "cancel_workflow_run",
+    # media tools
+    "generate_image", "generate_video_clip", "text_to_speech",
+    "generate_sound_effect", "generate_music", "generate_motion_graphic",
+    "generate_avatar", "vectorize_image", "remove_image_background",
+    "remove_video_background", "upscale_image", "upscale_video",
+    "image_3d_effect", "cancel_tool_execution",
+    # projects, files, entities
+    "export_project", "start_video_edits",
+    "upload_file", "create_file_upload", "open_uploader",
+    "create_entity", "update_entity", "archive_entity",
+    "add_entity_reference", "remove_entity_reference",
+)
+VIDEOGEN_READS = (
+    "list_workflow_runs", "get_workflow_run",
+    "list_tool_executions", "get_tool_execution",
+    "list_projects", "get_project", "get_project_export", "list_video_edits",
+    "get_file", "list_files",
+    "list_entities", "get_entity",
+    "get_getting_started_guidance", "get_async_tasks_guidance",
+    "get_workflows_guidance", "get_tools_vs_workflows_guidance",
+    "list_tts_voices", "list_languages", "get_me", "get_app_deep_link",
+)
+
+
+def test_the_documented_videogen_catalogue_is_fifty_one_tools_each_classified_once():
+    assert not set(VIDEOGEN_WRITES) & set(VIDEOGEN_READS)
+    assert len(set(VIDEOGEN_WRITES) | set(VIDEOGEN_READS)) == 51
+
+
+@pytest.mark.parametrize("server", VIDEOGEN_SERVERS)
+@pytest.mark.parametrize("verb", VIDEOGEN_WRITES)
+def test_videogen_writes_are_gated(server, verb):
+    tool = f"mcp__{server}__{verb}"
+    cls, gated = gate.classify(tool, {"script": "x"})
+    assert cls == verb and gated, tool
+
+
+@pytest.mark.parametrize("server", VIDEOGEN_SERVERS)
+@pytest.mark.parametrize("verb", VIDEOGEN_READS)
+def test_videogen_reads_pass_without_a_signal(server, verb):
+    tool = f"mcp__{server}__{verb}"
+    assert gate.classify(tool, {}) == (None, False), tool
+
+
+def test_the_videogen_docs_server_read_passes_and_its_writes_would_not():
+    # The read only docs server registered beside it has one tool, searchDocs,
+    # read from the live server on 2026-11-26. The substring that names
+    # VideoGen also reaches this server, so a write verb it grew later is
+    # caught, and a WaveSpeed style price flag passes nothing here.
+    assert gate.classify("mcp__videogen-docs__searchDocs", {"query": "x"}) == (None, False)
+    cls, gated = gate.classify("mcp__videogen-docs__frobnicate", {})
+    assert cls == "frobnicate" and gated
+    cls, gated = gate.classify("mcp__videogen__generate_video_clip", {"estimate_only": True})
+    assert cls == "generate_video_clip" and gated
+
+
+def test_every_server_registered_in_mcp_json_is_enabled_and_gated():
+    # .mcp.json is where a server is registered at project scope and
+    # enabledMcpjsonServers in .claude/settings.json is what lets it load, so
+    # the two lists must agree. And a server registered here must be one the
+    # gate names: a write verb nobody listed is gated on each of them, so no
+    # registered server's writes pass unseen when Tee is absent.
+    registered = set(json.loads((ROOT / ".mcp.json").read_text())["mcpServers"])
+    enabled = set(json.loads((ROOT / ".claude" / "settings.json").read_text())["enabledMcpjsonServers"])
+    assert registered == enabled, (sorted(registered), sorted(enabled))
+    for name in sorted(registered):
+        cls, gated = gate.classify(f"mcp__{name}__frobnicate_everything", {})
+        assert cls == "frobnicate_everything" and gated, name
+
+
 # Graphify, ruled by Tee 2026-10-17: only its non-read tools need a signal.
 # These are the 26 real tool names read from the live connector on 2026-10-22,
 # each pinned as a read or a write. The stand-in verbs this replaced
