@@ -4,6 +4,7 @@ Offline. No network, no clock, no files outside tmp_path.
 """
 from __future__ import annotations
 
+import ast
 import copy
 import dataclasses
 import sys
@@ -173,6 +174,53 @@ def test_quote_mutates_nothing():
     assert snap == before
 
 
+# --- model_quote: a SELL into a drained pool (INVENTED rule) ----------------
+
+
+def _drained(**kw):
+    return _snap(liquidity_usd=0.0, **kw)
+
+
+@pytest.mark.parametrize("price", [None, 0.0, float("nan"), 0.001])
+def test_a_sell_into_a_drained_pool_is_a_total_loss_at_any_price(price):
+    q = paper.model_quote(Side.SELL, _drained(price_usd=price), _settings(fixed_fee_usd_per_side=0.5), qty=7.0)
+    assert q.side is Side.SELL
+    assert q.qty == 7.0
+    assert q.fill_price == 0.0
+    assert q.gross_usd == 0.0
+    assert q.venue_fee_usd == 0.0
+    assert q.pool_fee_usd == 0.0
+    assert q.fixed_fee_usd == 0.0
+    assert q.price_impact_pct == -100.0
+    assert q.spot_price == (0.001 if price == 0.001 else 0.0)
+
+
+def test_a_drained_pool_sell_gives_the_same_proceeds_whatever_the_price():
+    quotes = [
+        paper.model_quote(Side.SELL, _drained(price_usd=p), S, qty=3.0) for p in (None, 0.0, 0.001)
+    ]
+    assert len({(q.qty, q.fill_price, q.gross_usd, q.fees_usd, q.price_impact_pct) for q in quotes}) == 1
+    assert [q.spot_price for q in quotes] == [0.0, 0.0, 0.001]
+
+
+@pytest.mark.parametrize("liq", [-1.0, float("nan"), None])
+def test_a_sell_with_unknown_or_bad_liquidity_is_still_refused(liq):
+    with pytest.raises(paper.PaperError):
+        paper.model_quote(Side.SELL, _snap(liquidity_usd=liq), S, qty=10.0)
+
+
+@pytest.mark.parametrize("price", [None, 0.0, 0.001])
+def test_a_buy_into_a_drained_pool_is_still_refused(price):
+    with pytest.raises(paper.PaperError):
+        paper.model_quote(Side.BUY, _drained(price_usd=price), S, usd=10.0)
+
+
+def test_a_drained_pool_sell_still_checks_its_arguments_first():
+    for kw in ({"qty": 0.0}, {"qty": -1.0}, {"qty": float("nan")}, {"usd": 5.0}, {}, {"qty": 1.0, "usd": 1.0}):
+        with pytest.raises(paper.PaperError):
+            paper.model_quote(Side.SELL, _drained(), S, **kw)
+
+
 # --- require_approval -------------------------------------------------------
 
 
@@ -199,6 +247,25 @@ def test_live_with_the_matching_approval_passes_the_gate():
 def test_approval_required_is_a_permission_error():
     assert issubclass(paper.ApprovalRequired, PermissionError)
     assert issubclass(paper.PaperError, ValueError)
+
+
+@pytest.mark.parametrize("who", ["", " ", "  \t\n", None, 5])
+def test_live_with_an_approval_that_names_no_person_is_refused(who):
+    appr = HumanApproval(order_id="o1", approved_by=who, approved_ts=1)
+    with pytest.raises(paper.ApprovalRequired, match="names no person"):
+        paper.require_approval(_intent(), ExecutorKind.LIVE, appr)
+
+
+@pytest.mark.parametrize("ts", [0, -1, True, 1.5, None, "1"])
+def test_live_with_an_approval_that_carries_no_time_is_refused(ts):
+    appr = HumanApproval(order_id="o1", approved_by="tee", approved_ts=ts)
+    with pytest.raises(paper.ApprovalRequired, match="carries no time"):
+        paper.require_approval(_intent(), ExecutorKind.LIVE, appr)
+
+
+def test_paper_returns_before_the_person_and_time_checks():
+    appr = HumanApproval(order_id="other", approved_by="", approved_ts=0)
+    paper.require_approval(_intent(), ExecutorKind.PAPER, appr)
 
 
 # --- PaperExecutor ----------------------------------------------------------
@@ -354,6 +421,23 @@ def test_record_sell_oversell_is_refused_and_changes_nothing():
     assert led.cash_usd == cash and len(led.fills) == 1 and "MintA" in led.positions
 
 
+def test_record_sell_of_a_drained_pool_fill_closes_the_position_as_a_total_loss():
+    led = paper.Ledger(1_000.0)
+    buy = _buy_fill(100.0)
+    pos = _open(buy)
+    led.record_buy(buy, pos)
+    cash = led.cash_usd
+    fill = paper.PaperExecutor(S).execute(
+        _intent(side=Side.SELL, qty=buy.qty), _snap(liquidity_usd=0.0)
+    )
+    assert (fill.price, fill.gross_usd, fill.fees_usd, fill.cash_delta_usd) == (0.0, 0.0, 0.0, 0.0)
+    pnl = led.record_sell(fill)
+    assert "MintA" not in led.positions
+    assert led.cash_usd == cash
+    assert pnl == pytest.approx(-pos.cost_usd)
+    assert led.realized_pnl_usd == pytest.approx(-pos.cost_usd)
+
+
 def test_a_round_trip_at_the_same_price_loses_the_costs():
     led = paper.Ledger(1_000.0)
     buy = _buy_fill(100.0)
@@ -445,9 +529,63 @@ def test_the_nights_threshold_comes_from_settings():
     assert _gate(nights=5, settings=s) == ()
 
 
+ALLOWED_EXECUTE_CLASSES = {("model.py", "Executor"), ("paper.py", "PaperExecutor")}
+
+
+def _is_live(node) -> bool:
+    return (
+        isinstance(node, ast.Attribute)
+        and node.attr == "LIVE"
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "ExecutorKind"
+    )
+
+
+def _kind_target(t) -> bool:
+    return (isinstance(t, ast.Name) and t.id == "kind") or (
+        isinstance(t, ast.Attribute) and t.attr == "kind"
+    )
+
+
+def _live_executor_problems(directory) -> list[str]:
+    problems = []
+    for path in sorted(Path(directory).glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                for item in node.body:
+                    if (
+                        isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+                        and item.name == "execute"
+                        and (path.name, node.name) not in ALLOWED_EXECUTE_CLASSES
+                    ):
+                        problems.append(f"{path.name}: class {node.name} defines execute")
+            elif isinstance(node, ast.Assign):
+                if any(_kind_target(t) for t in node.targets) and _is_live(node.value):
+                    problems.append(f"{path.name}: line {node.lineno} sets kind to ExecutorKind.LIVE")
+            elif isinstance(node, ast.AnnAssign):
+                if _kind_target(node.target) and node.value is not None and _is_live(node.value):
+                    problems.append(f"{path.name}: line {node.lineno} sets kind to ExecutorKind.LIVE")
+    return problems
+
+
 def test_the_build_has_no_live_executor_so_the_gate_stays_shut():
-    assert "no_live_executor" in _gate(exists=False)
-    assert not hasattr(paper, "LiveExecutor")
+    assert _live_executor_problems(ROOT / "tools" / "overnight_desk") == []
+
+
+def test_the_live_executor_scan_can_fail(tmp_path):
+    (tmp_path / "bad.py").write_text(
+        "class Sneaky:\n"
+        "    kind = ExecutorKind.LIVE\n"
+        "    def execute(self, intent, snapshot):\n"
+        "        return None\n",
+        encoding="utf-8",
+    )
+    problems = _live_executor_problems(tmp_path)
+    assert any("defines execute" in p for p in problems)
+    assert any("ExecutorKind.LIVE" in p for p in problems)
+    (tmp_path / "bad.py").write_text("class A:\n    kind: ExecutorKind = ExecutorKind.LIVE\n", encoding="utf-8")
+    assert len(_live_executor_problems(tmp_path)) == 1
 
 
 def test_gate_returns_a_tuple():
@@ -508,6 +646,8 @@ def test_p2_zero_and_nan_liquidity_or_price_are_refused_on_both_sides(field, bad
     snap = _snap(**{field: bad})
     with pytest.raises(paper.PaperError):
         paper.model_quote(Side.BUY, snap, S, usd=10.0)
+    if field == "liquidity_usd" and bad == 0.0:
+        return  # a SELL into a drained pool is quoted, see the drained pool tests
     with pytest.raises(paper.PaperError):
         paper.model_quote(Side.SELL, snap, S, qty=10.0)
 

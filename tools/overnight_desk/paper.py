@@ -8,6 +8,11 @@ per-order human gate in ``require_approval`` comes from source line 80 and the
 SPEC.md "paper.py" section; it is not a setting. The rule that a position is
 never averaged down is source line 60. Nothing here reads a clock, the network
 or a random source, and no argument is mutated.
+
+INVENTED rule, drained pool: a SELL into a pool whose liquidity is known and
+exactly zero is quoted as a total loss (zero proceeds, price impact -100
+percent) instead of being refused, because a drained pool is the case the exit
+rules exist for and it must be recordable as a loss. It needs no price.
 """
 from __future__ import annotations
 
@@ -42,13 +47,25 @@ def model_quote(
     usd: float | None = None,
     qty: float | None = None,
 ) -> Quote:
-    """Quote an order against a constant-product pool. INVENTED cost model."""
+    """Quote an order against a constant-product pool. INVENTED cost model.
+
+    INVENTED rule, drained pool: when ``side`` is SELL and the liquidity is
+    known and exactly 0, the quote is a total loss. ``qty`` is the amount
+    offered, every price and fee is 0.0, ``price_impact_pct`` is -100.0 and
+    ``spot_price`` is the snapshot price when that is above 0, else 0.0. No
+    price is needed. The argument checks still run first. Unknown, negative or
+    NaN liquidity is refused on both sides, and a BUY into a drained pool too.
+    """
     liquidity = snap.liquidity_usd
     price = snap.price_usd
-    if liquidity is None or not liquidity > 0:
-        raise PaperError("liquidity is unknown or not positive")
-    if price is None or not price > 0:
-        raise PaperError("price is unknown or not positive")
+    if liquidity is None or liquidity != liquidity or liquidity < 0:
+        raise PaperError("liquidity is unknown or negative")
+    drained = side is Side.SELL and liquidity == 0
+    if not drained:
+        if not liquidity > 0:
+            raise PaperError("liquidity is unknown or not positive")
+        if price is None or not price > 0:
+            raise PaperError("price is unknown or not positive")
     if (usd is None) == (qty is None):
         raise PaperError("give exactly one of usd and qty")
     if side is Side.BUY and usd is None:
@@ -59,6 +76,20 @@ def model_quote(
     if amount is None or not amount > 0:
         raise PaperError("the amount must be positive")
 
+    if drained:
+        return Quote(
+            side=side,
+            spot_price=price if price is not None and price > 0 else 0.0,
+            fill_price=0.0,
+            qty=amount,
+            gross_usd=0.0,
+            venue_fee_usd=0.0,
+            pool_fee_usd=0.0,
+            fixed_fee_usd=0.0,
+            price_impact_pct=-100.0,
+        )
+
+    assert price is not None
     if (
         settings.venue_fee_pct_per_side is None
         or settings.pool_fee_pct_per_side is None
@@ -115,6 +146,11 @@ def require_approval(intent: OrderIntent, kind: ExecutorKind, approval: HumanApp
         raise ApprovalRequired("a human approval is required for this order")
     if approval.order_id != intent.order_id:
         raise ApprovalRequired("the approval is for a different order")
+    if not isinstance(approval.approved_by, str) or not approval.approved_by.strip():
+        raise ApprovalRequired("the approval names no person")
+    ts = approval.approved_ts
+    if not isinstance(ts, int) or isinstance(ts, bool) or not ts > 0:
+        raise ApprovalRequired("the approval carries no time")
 
 
 class PaperExecutor:
