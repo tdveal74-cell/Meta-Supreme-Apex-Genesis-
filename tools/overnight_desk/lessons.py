@@ -147,9 +147,14 @@ def apply_review(settings: Settings, changes: dict, approval: HumanApproval | No
 
     Raises LessonError without an approval or with more than three changes.
     The result goes through ``Settings.from_dict``, so names and ranges are
-    checked. The arguments are not changed.
+    checked. The arguments are not changed. The approval needs a non-blank
+    ``approved_by`` and a positive integer ``approved_ts``; its ``order_id`` is
+    not checked, because a review is not an order.
     """
     if approval is None:
+        raise LessonError("a review needs a named person's approval")
+    by, ts = approval.approved_by, approval.approved_ts
+    if not isinstance(by, str) or not by.strip() or not isinstance(ts, int) or isinstance(ts, bool) or ts <= 0:
         raise LessonError("a review needs a named person's approval")
     if len(changes) > MAX_REVIEW_CHANGES:
         raise LessonError(f"a review may change at most {MAX_REVIEW_CHANGES} settings, got {len(changes)}")

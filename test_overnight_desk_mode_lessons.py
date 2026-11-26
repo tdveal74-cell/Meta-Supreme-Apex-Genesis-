@@ -493,6 +493,25 @@ def test_a_review_does_not_touch_its_arguments():
     assert out is not settings
 
 
+@pytest.mark.parametrize("by", ["", " ", " \t\n", None, 5])
+def test_a_review_needs_a_non_blank_name(by):
+    bad = model.HumanApproval(order_id="x", approved_by=by, approved_ts=1)
+    with pytest.raises(LessonError, match="named person"):
+        lessons.apply_review(S, {"stop_loss_pct": 20.0}, bad)
+
+
+@pytest.mark.parametrize("ts", [0, -1, True, 1.0, None, "1"])
+def test_a_review_needs_a_positive_integer_timestamp(ts):
+    bad = model.HumanApproval(order_id="x", approved_by="owner", approved_ts=ts)
+    with pytest.raises(LessonError, match="named person"):
+        lessons.apply_review(S, {"stop_loss_pct": 20.0}, bad)
+
+
+def test_a_review_does_not_check_the_order_id():
+    ok = model.HumanApproval(order_id="", approved_by="owner", approved_ts=1)
+    assert lessons.apply_review(S, {"stop_loss_pct": 20.0}, ok).stop_loss_pct == 20.0
+
+
 # --- the modules' own source ----------------------------------------------
 
 
@@ -504,7 +523,8 @@ def test_module_docstring_and_no_dash_characters(name):
     assert chr(0x2014) not in text and chr(0x2013) not in text
 
 
-def test_lessons_module_marks_its_invented_parts():
+def test_lessons_and_market_mode_docstrings_carry_the_word_invented():
+    """Checks only that the word is present, not that every invented rule is labelled."""
     text = (ROOT / "tools" / "overnight_desk" / "lessons.py").read_text(encoding="utf-8")
     assert "INVENTED" in text.split('"""')[1]
     assert "INVENTED" in (ROOT / "tools" / "overnight_desk" / "market_mode.py").read_text(encoding="utf-8").split('"""')[1]
@@ -623,6 +643,17 @@ def test_a_tie_between_insiders_and_bundled_goes_to_insiders():
     # 9/15 and 3/5 are both 0.6; insiders_pct is listed first.
     pos = _position(insiders_pct=9.0, bundled_wallets=3, liquidity_usd=None)
     assert lessons.derive_lesson(pos, LOSS, S).check == "insiders_pct >= 9.0"
+
+
+def test_a_liquidity_lesson_blocks_every_coin_at_or_under_the_losers_liquidity():
+    pos = _position(liquidity_usd=40_000.0, top10_pct=5.0, dev_pct=1.0, insiders_pct=1.0, bundled_wallets=1)
+    lesson = lessons.derive_lesson(pos, LOSS, S)
+    assert lesson.check == "liquidity_usd <= 40000.0"
+    check = lessons.parse_check(lesson.check)
+    assert lessons.check_hits(check, _snap(liquidity_usd=30_000.0))
+    assert lessons.check_hits(check, _snap(liquidity_usd=40_000.0))
+    assert lessons.check_hits(check, _snap(liquidity_usd=None))
+    assert not lessons.check_hits(check, _snap(liquidity_usd=40_000.01))
 
 
 @pytest.mark.parametrize("missing", ["created_ts", "source_mint", "lesson_id", "check"])
