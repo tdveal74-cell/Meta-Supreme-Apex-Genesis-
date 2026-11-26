@@ -211,6 +211,7 @@ def test_unknown_number_inside_the_watch_is_watching_not_waiting():
 def test_a_passed_coin_can_still_be_killed():
     sc = scanner.Scanner(S)
     sc.observe(_clean())
+    assert sc.observe(_clean(ts=T0 + 600)).state is ScanState.PASSED
     assert sc.observe(_clean(ts=T0 + 700)).state is ScanState.PASSED
     r = sc.observe(_clean(ts=T0 + 800, trading_disabled=True))
     assert r.state is ScanState.KILLED and r.reason_code == "trading_disabled"
@@ -273,6 +274,77 @@ def test_the_watch_follows_the_setting():
     sc.observe(_clean())
     assert sc.observe(_clean(ts=T0 + 59)).state is ScanState.WATCHING
     assert sc.observe(_clean(ts=T0 + 60)).state is ScanState.PASSED
+
+
+def test_a_gap_restarts_the_watch_and_the_coin_passes_only_after_the_new_watch():
+    s = Settings.for_tests(scanner_max_gap_s=900)
+    gap = s.scanner_max_gap_s
+    sc = scanner.Scanner(s)
+    sc.observe(_clean())
+    t1 = T0 + gap + 1
+    r = sc.observe(_clean(ts=t1))
+    assert t1 - T0 > s.scanner_watch_s
+    assert r.state is ScanState.WATCHING and r.first_seen_ts == t1
+    assert r.reason_code == "watching" and r.detail == f"watch restarted after a gap of {gap + 1} seconds"
+    inside = sc.observe(_clean(ts=t1 + 300))
+    assert inside.state is ScanState.WATCHING and inside.detail == "watch period not over"
+    assert inside.first_seen_ts == t1
+    before = sc.observe(_clean(ts=t1 + S.scanner_watch_s - 1))
+    assert before.state is ScanState.WATCHING
+    assert sc.observe(_clean(ts=t1 + S.scanner_watch_s)).state is ScanState.PASSED
+
+
+def test_a_gap_exactly_at_the_setting_does_not_restart_the_watch():
+    s = Settings.for_tests(scanner_max_gap_s=300)
+    sc = scanner.Scanner(s)
+    sc.observe(_clean())
+    r = sc.observe(_clean(ts=T0 + 300))
+    assert r.first_seen_ts == T0 and r.detail == "watch period not over"
+
+
+def test_a_coin_seen_every_max_gap_seconds_passes_on_the_normal_schedule():
+    gap = S.scanner_max_gap_s
+    sc = scanner.Scanner(S)
+    results = [sc.observe(_clean(ts=T0 + i * gap)) for i in range(4)]
+    assert all(r.first_seen_ts == T0 for r in results)
+    assert results[0].state is ScanState.WATCHING
+    assert results[1].state is ScanState.PASSED
+    assert results[3].state is ScanState.PASSED
+
+
+def test_the_gap_follows_the_setting():
+    sc = scanner.Scanner(Settings.for_tests(scanner_max_gap_s=100))
+    sc.observe(_clean())
+    assert sc.observe(_clean(ts=T0 + 100)).first_seen_ts == T0
+    r = sc.observe(_clean(ts=T0 + 201))
+    assert r.first_seen_ts == T0 + 201 and r.detail == "watch restarted after a gap of 101 seconds"
+    wide = scanner.Scanner(Settings.for_tests(scanner_max_gap_s=5_000))
+    wide.observe(_clean())
+    assert wide.observe(_clean(ts=T0 + 4_000)).first_seen_ts == T0
+
+
+def test_a_killed_coin_stays_killed_whatever_the_gap():
+    sc = scanner.Scanner(S)
+    killed = sc.observe(_snap(liquidity_usd=1.0))
+    assert killed.state is ScanState.KILLED
+    after = sc.observe(_clean(ts=T0 + S.scanner_max_gap_s + 1))
+    assert after == killed
+    assert sc.result("MintA") == killed
+
+
+def test_the_kill_rules_run_on_the_reading_after_a_gap():
+    sc = scanner.Scanner(S)
+    sc.observe(_clean())
+    r = sc.observe(_clean(ts=T0 + S.scanner_max_gap_s + 1, top10_pct=99.0))
+    assert r.state is ScanState.KILLED and r.reason_code == "top10_above_max"
+
+
+def test_the_gap_is_measured_per_mint():
+    sc = scanner.Scanner(S)
+    sc.observe(_clean())
+    sc.observe(_clean(mint="MintB", ts=T0 + S.scanner_max_gap_s))
+    r = sc.observe(_clean(mint="MintB", ts=T0 + 2 * S.scanner_max_gap_s))
+    assert r.first_seen_ts == T0 + S.scanner_max_gap_s
 
 
 def test_the_scanner_does_not_mutate_its_input():

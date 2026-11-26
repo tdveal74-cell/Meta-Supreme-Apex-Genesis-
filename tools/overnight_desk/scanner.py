@@ -11,6 +11,10 @@ INVENTED, marked as such in SPEC.md: the definition of ``holders_leaving`` and
 its threshold ``holders_drop_kill_pct``. The source names "holders leaving" and
 defines nothing.
 
+INVENTED too: the gap rule. A coin last seen more than ``scanner_max_gap_s``
+before a reading starts its watch again, because the source says a coin "passes
+only after 10 minutes with no kill" and gives no way to count time nobody looked.
+
 No clock: the time is always ``snap.ts``. Nothing here reads a network or a file.
 """
 from __future__ import annotations
@@ -45,7 +49,12 @@ class Scanner:
         if previous is not None and previous.state is ScanState.KILLED:
             return previous
 
-        result = self._judge(snap, first_seen)
+        restart_gap: int | None = None
+        if last is not None and snap.ts - last > self._settings.scanner_max_gap_s:
+            first_seen = snap.ts
+            restart_gap = snap.ts - last
+
+        result = self._judge(snap, first_seen, restart_gap)
         self._results[mint] = result
         return result
 
@@ -53,7 +62,7 @@ class Scanner:
         """The last result for ``mint``, or None when it was never observed."""
         return self._results.get(mint)
 
-    def _judge(self, snap: TokenSnapshot, first_seen: int) -> ScanResult:
+    def _judge(self, snap: TokenSnapshot, first_seen: int, restart_gap: int | None = None) -> ScanResult:
         s = self._settings
         mint = snap.mint
 
@@ -78,6 +87,10 @@ class Scanner:
         ):
             return kill("holders_leaving", f"holders {snap.holders} from {snap.holders_prev}")
 
+        if restart_gap is not None:
+            return ScanResult(
+                mint, ScanState.WATCHING, first_seen, "watching", f"watch restarted after a gap of {restart_gap} seconds"
+            )
         if snap.ts - first_seen < s.scanner_watch_s:
             return ScanResult(mint, ScanState.WATCHING, first_seen, "watching", "watch period not over")
         if snap.liquidity_usd is None or snap.top10_pct is None or snap.change_1h_pct is None:
