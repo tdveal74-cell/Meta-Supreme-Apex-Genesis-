@@ -453,3 +453,129 @@ def test_the_build_has_no_live_executor_so_the_gate_stays_shut():
 def test_gate_returns_a_tuple():
     assert isinstance(_gate(), tuple)
     assert isinstance(_gate(nights=0), tuple)
+
+
+# --- contract tightening and mutation gaps ----------------------------------
+
+NAN = float("nan")
+
+
+def test_p1_exact_buy_and_sell_from_the_spec_formulas_by_hand():
+    # Pool: L = 20_000, price 0.001. Rq = L / 2 = 10_000 dollars and
+    # Rt = Rq / price = 10_000_000 tokens. v = 20%, p = 20%, f = 250.
+    s = _settings(venue_fee_pct_per_side=20.0, pool_fee_pct_per_side=20.0, fixed_fee_usd_per_side=250.0)
+    snap = _snap(liquidity_usd=20_000.0, price_usd=0.001)
+    # BUY usd = 15_937.5:
+    #   venue = 0.2 * 15_937.5 = 3_187.5, fixed = 250
+    #   to_pool = 15_937.5 - 3_187.5 - 250 = 12_500
+    #   pool fee = 0.2 * 12_500 = 2_500, effective = 10_000
+    #   qty = 10_000_000 * 10_000 / (10_000 + 10_000) = 5_000_000
+    #   gross = 12_500, fill price = 12_500 / 5_000_000 = 0.0025
+    #   impact = (0.0025 / 0.001 - 1) * 100 = 150
+    b = paper.model_quote(Side.BUY, snap, s, usd=15_937.5)
+    assert b.qty == pytest.approx(5_000_000.0)
+    assert b.gross_usd == pytest.approx(12_500.0)
+    assert b.venue_fee_usd == pytest.approx(3_187.5)
+    assert b.pool_fee_usd == pytest.approx(2_500.0)
+    assert b.fixed_fee_usd == 250.0
+    assert b.fill_price == pytest.approx(0.0025)
+    assert b.price_impact_pct == pytest.approx(150.0)
+    assert b.fees_usd == pytest.approx(5_937.5)
+    # SELL qty = 12_500_000:
+    #   effective = 12_500_000 * (1 - 0.2) = 10_000_000
+    #   gross = 10_000 * 10_000_000 / (10_000_000 + 10_000_000) = 5_000
+    #   pool fee = 12_500_000 * 0.2 * 0.001 = 2_500
+    #   venue = 0.2 * 5_000 = 1_000, fixed = 250
+    #   fill price = 5_000 / 12_500_000 = 0.0004
+    #   impact = (0.0004 / 0.001 - 1) * 100 = -60
+    q = paper.model_quote(Side.SELL, snap, s, qty=12_500_000.0)
+    assert q.qty == 12_500_000.0
+    assert q.gross_usd == pytest.approx(5_000.0)
+    assert q.pool_fee_usd == pytest.approx(2_500.0)
+    assert q.venue_fee_usd == pytest.approx(1_000.0)
+    assert q.fixed_fee_usd == 250.0
+    assert q.fill_price == pytest.approx(0.0004)
+    assert q.price_impact_pct == pytest.approx(-60.0)
+    # The executor turns the SELL into cash 5_000 - 1_000 - 250 = 3_750.
+    fill = paper.PaperExecutor(s).execute(_intent(side=Side.SELL, qty=12_500_000.0), snap)
+    assert fill.cash_delta_usd == pytest.approx(3_750.0)
+    assert fill.fees_usd == pytest.approx(3_750.0)
+
+
+@pytest.mark.parametrize("bad", [0.0, NAN])
+@pytest.mark.parametrize("field", ["liquidity_usd", "price_usd"])
+def test_p2_zero_and_nan_liquidity_or_price_are_refused_on_both_sides(field, bad):
+    snap = _snap(**{field: bad})
+    with pytest.raises(paper.PaperError):
+        paper.model_quote(Side.BUY, snap, S, usd=10.0)
+    with pytest.raises(paper.PaperError):
+        paper.model_quote(Side.SELL, snap, S, qty=10.0)
+
+
+def test_an_order_that_underflows_to_zero_tokens_is_a_paper_error():
+    s = _settings(venue_fee_pct_per_side=0, pool_fee_pct_per_side=0, fixed_fee_usd_per_side=0)
+    snap = _snap(liquidity_usd=20_000.0, price_usd=1e300)  # Rt = 1e-296
+    with pytest.raises(paper.PaperError):
+        paper.model_quote(Side.BUY, snap, s, usd=1e-30)  # 1e-296 * 1e-30 underflows to 0.0
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["venue_fee_pct_per_side", "pool_fee_pct_per_side", "fixed_fee_usd_per_side"],
+)
+def test_c3_a_missing_fee_setting_is_a_paper_error_not_an_assertion(field):
+    s = dataclasses.replace(S, **{field: None})
+    with pytest.raises(paper.PaperError):
+        paper.model_quote(Side.BUY, _snap(), s, usd=10.0)
+    with pytest.raises(paper.PaperError):
+        paper.model_quote(Side.SELL, _snap(), s, qty=10.0)
+
+
+def test_c1_the_executor_refuses_a_snapshot_of_another_coin():
+    ex = paper.PaperExecutor(S)
+    with pytest.raises(paper.PaperError):
+        ex.execute(_intent(), _snap(mint="MintB"))
+    with pytest.raises(paper.PaperError):
+        ex.execute(_intent(side=Side.SELL, qty=10.0), _snap(mint="MintB"))
+
+
+def test_m3_the_fill_ts_is_the_snapshots_not_the_intents():
+    fill = paper.PaperExecutor(S).execute(_intent(), _snap(ts=7_777))  # intent.ts is 1_000
+    assert fill.ts == 7_777
+    sell = paper.PaperExecutor(S).execute(_intent(side=Side.SELL, qty=10.0), _snap(ts=8_888))
+    assert sell.ts == 8_888
+
+
+def test_c2_record_buy_refuses_a_position_of_another_coin():
+    led = paper.Ledger(1_000.0)
+    fill = _buy_fill(100.0)
+    other = _open(dataclasses.replace(fill, mint="MintB"))
+    with pytest.raises(paper.PaperError):
+        led.record_buy(fill, other)
+    assert led.cash_usd == 1_000.0 and led.positions == {} and led.fills == []
+
+
+def test_m4_a_price_of_zero_values_the_position_at_zero():
+    led = paper.Ledger(1_000.0)
+    buy = _buy_fill(100.0)
+    led.record_buy(buy, _open(buy))
+    assert led.equity_usd({"MintA": 0.0}) == pytest.approx(900.0)
+
+
+@pytest.mark.parametrize(
+    "kw",
+    [
+        dict(tests=None),
+        dict(typed=None),
+        dict(exists=None),
+        dict(approval=None),
+        dict(tests=1),
+        dict(typed="yes"),
+        dict(exists=1),
+        dict(approval="yes"),
+    ],
+)
+def test_m6_to_m9_only_exactly_true_clears_a_blocker(kw):
+    blockers = _gate(**kw)
+    assert len(blockers) == 1
+    assert blockers == _gate(**{k: False for k in kw})

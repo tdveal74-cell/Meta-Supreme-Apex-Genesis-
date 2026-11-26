@@ -59,9 +59,12 @@ def model_quote(
     if amount is None or not amount > 0:
         raise PaperError("the amount must be positive")
 
-    assert settings.venue_fee_pct_per_side is not None
-    assert settings.pool_fee_pct_per_side is not None
-    assert settings.fixed_fee_usd_per_side is not None
+    if (
+        settings.venue_fee_pct_per_side is None
+        or settings.pool_fee_pct_per_side is None
+        or settings.fixed_fee_usd_per_side is None
+    ):
+        raise PaperError("a fee setting is not set")
     v = settings.venue_fee_pct_per_side / 100
     p = settings.pool_fee_pct_per_side / 100
     f = settings.fixed_fee_usd_per_side
@@ -129,6 +132,8 @@ class PaperExecutor:
         approval: HumanApproval | None = None,
     ) -> Fill:
         require_approval(intent, self.kind, approval)
+        if snapshot.mint != intent.mint:
+            raise PaperError("the snapshot is for a different coin than the intent")
         if intent.side is Side.BUY:
             if intent.usd is None:
                 raise PaperError("a BUY intent needs usd")
@@ -168,6 +173,8 @@ class Ledger:
     def record_buy(self, fill: Fill, position: Position) -> None:
         if fill.side is not Side.BUY:
             raise PaperError("record_buy needs a BUY fill")
+        if position.mint != fill.mint:
+            raise PaperError("the position is for a different coin than the fill")
         if fill.mint in self.positions:
             raise PaperError("a position in this coin is already open; never average down")
         cost = -fill.cash_delta_usd
