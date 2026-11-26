@@ -508,3 +508,138 @@ def test_lessons_module_marks_its_invented_parts():
     text = (ROOT / "tools" / "overnight_desk" / "lessons.py").read_text(encoding="utf-8")
     assert "INVENTED" in text.split('"""')[1]
     assert "INVENTED" in (ROOT / "tools" / "overnight_desk" / "market_mode.py").read_text(encoding="utf-8").split('"""')[1]
+
+
+# --- round 1: gaps found by mutation ---------------------------------------
+
+
+def test_no_market_snapshot_is_green_but_blocks_buys_and_says_why():
+    st = market_mode.assess(None, S)
+    assert st.mode is Mode.GREEN
+    assert st.data_ok is False
+    assert st.blocks_new_buys is True
+    assert st.reasons == ("market snapshot missing",)
+
+
+def test_all_four_missing_input_reasons_are_exact_and_in_order():
+    st = market_mode.assess(model.MarketSnapshot(ts=1), S)
+    assert st.reasons == ("btc_1h missing", "sol_1h missing", "fear_greed missing", "graduations missing")
+
+
+def test_a_quiet_result_carries_the_graduation_reason_and_red_does_not():
+    quiet = market_mode.assess(_market(grads=3), S)
+    assert quiet.mode is Mode.QUIET and quiet.reasons == ("graduations 3 <= 5",)
+    red = market_mode.assess(_market(btc=-9.0, grads=3), S)
+    assert red.mode is Mode.RED
+    assert red.reasons == ("btc_1h -9.00 <= -2.50",)
+
+
+def test_pool_age_checks_parse_and_evaluate():
+    assert "pool_age_s" in lessons.CHECK_FIELDS
+    assert lessons.parse_check("pool_age_s >= 600") == Check("pool_age_s", ">=", 600.0)
+    snap = _snap(ts=10_000, pool_created_ts=9_000)
+    assert lessons.check_hits(lessons.parse_check("pool_age_s >= 1000"), snap)
+    assert not lessons.check_hits(lessons.parse_check("pool_age_s >= 1001"), snap)
+
+
+@pytest.mark.parametrize(
+    "number",
+    [
+        "١٢",  # Arabic-Indic digits
+        "１２",  # fullwidth digits
+        "1٢",
+        "nan", "NaN", "inf", "-inf", "+inf", "Infinity",
+        "1e999", "-1e999", "+1e999",
+        "1_000", "1e1_0",
+    ],
+)
+def test_parse_check_refuses_non_ascii_non_finite_and_underscore_numbers(number):
+    with pytest.raises(LessonError):
+        lessons.parse_check(f"liquidity_usd >= {number}")
+
+
+def test_parse_check_refuses_overflow_of_either_sign():
+    for text in ("change_1h_pct <= -1e999", "change_1h_pct >= -1e999", "change_1h_pct >= 1e999"):
+        with pytest.raises(LessonError, match="finite"):
+            lessons.parse_check(text)
+
+
+def test_a_nan_field_value_is_unknown_and_hits_like_none():
+    nan = float("nan")
+    for op in (">", ">=", "<", "<="):
+        assert lessons.check_hits(Check("top10_pct", op, 5.0), _snap(top10_pct=nan)) is True
+    assert lessons.check_hits(Check("pool_age_s", "<", 1.0), _snap(pool_created_ts=nan)) is True
+    book = LessonBook()
+    book.add(_lesson("top10_pct >= 20.0"))
+    assert book.blocking(_snap(top10_pct=nan)) is not None
+
+
+def test_an_infinite_field_value_is_compared_not_unknown():
+    assert not lessons.check_hits(Check("top10_pct", "<", 5.0), _snap(top10_pct=float("inf")))
+    assert lessons.check_hits(Check("top10_pct", ">", 5.0), _snap(top10_pct=float("inf")))
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_a_non_finite_entry_value_is_left_out_of_the_derivation(bad):
+    pos = _position(top10_pct=bad, dev_pct=1.0, liquidity_usd=None)
+    lesson = lessons.derive_lesson(pos, LOSS, S)
+    assert lesson is not None and lesson.check == "dev_pct >= 1.0"
+    only_bad = _position(top10_pct=bad, liquidity_usd=None)
+    assert lessons.derive_lesson(only_bad, LOSS, S) is None
+    liq = _position(top10_pct=None, liquidity_usd=bad)
+    assert lessons.derive_lesson(liq, LOSS, S) is None
+
+
+@pytest.mark.parametrize("value", [1e-7, 1.5e22, 0.1, 4.0, 1234567.891])
+def test_a_derived_check_is_repr_of_the_float_and_always_parses(value):
+    pos = _position(dev_pct=value, top10_pct=None, liquidity_usd=None)
+    lesson = lessons.derive_lesson(pos, LOSS, S)
+    assert lesson is not None
+    assert lesson.check == f"dev_pct >= {float(value)!r}"
+    assert lessons.parse_check(lesson.check) == Check("dev_pct", ">=", float(value))
+
+
+def test_an_integer_bundled_count_is_written_as_a_float():
+    pos = _position(bundled_wallets=4, top10_pct=None, liquidity_usd=None)
+    assert lessons.derive_lesson(pos, LOSS, S).check == "bundled_wallets >= 4.0"
+
+
+def test_insiders_are_measured_against_the_insiders_limit():
+    # insiders 12/15 = 0.8 loses to top10 22/25 = 0.88. Against the dev limit (5) it would win.
+    pos = _position(top10_pct=22.0, insiders_pct=12.0, liquidity_usd=None)
+    assert lessons.derive_lesson(pos, LOSS, S).check == "top10_pct >= 22.0"
+    # and it wins when it is really the closest: 14.5/15 beats 20/25
+    pos = _position(top10_pct=20.0, insiders_pct=14.5, liquidity_usd=None)
+    assert lessons.derive_lesson(pos, LOSS, S).check == "insiders_pct >= 14.5"
+
+
+def test_bundled_wallets_are_measured_against_the_bundled_limit():
+    # 4/5 = 0.8 beats top10 15/25 = 0.6. Against the insiders limit (15) it would lose.
+    pos = _position(top10_pct=15.0, bundled_wallets=4, liquidity_usd=None)
+    assert lessons.derive_lesson(pos, LOSS, S).check == "bundled_wallets >= 4.0"
+
+
+def test_a_tie_between_insiders_and_bundled_goes_to_insiders():
+    # 9/15 and 3/5 are both 0.6; insiders_pct is listed first.
+    pos = _position(insiders_pct=9.0, bundled_wallets=3, liquidity_usd=None)
+    assert lessons.derive_lesson(pos, LOSS, S).check == "insiders_pct >= 9.0"
+
+
+@pytest.mark.parametrize("missing", ["created_ts", "source_mint", "lesson_id", "check"])
+def test_from_json_refuses_a_row_missing_any_required_key(missing):
+    row = {k: v for k, v in dataclasses.asdict(_lesson()).items() if k != missing}
+    with pytest.raises(LessonError):
+        LessonBook.from_json([row])
+
+
+def test_from_json_accepts_a_row_without_why():
+    row = {k: v for k, v in dataclasses.asdict(_lesson()).items() if k != "why"}
+    assert len(LessonBook.from_json([row]).to_json()) == 1
+
+
+def test_check_hits_refuses_an_operator_outside_the_four_even_for_an_unknown_value():
+    blank = model.TokenSnapshot(ts=1, mint="M", symbol="M")
+    for snap in (blank, _snap(top10_pct=10.0)):
+        for op in ("==", "!=", "", "=>"):
+            with pytest.raises(LessonError):
+                lessons.check_hits(Check("top10_pct", op, 1.0), snap)

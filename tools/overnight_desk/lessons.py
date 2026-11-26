@@ -14,6 +14,7 @@ network, no mutation of arguments.
 """
 from __future__ import annotations
 
+import math
 import operator
 import re
 from dataclasses import asdict, dataclass, fields
@@ -44,7 +45,7 @@ _OPS: dict[str, Callable[[float, float], bool]] = {
     "<=": operator.le,
 }
 
-_NUMBER = re.compile(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?")
+_NUMBER = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
 
 MAX_REVIEW_CHANGES = 3
 
@@ -98,7 +99,7 @@ def check_hits(check: Check, snap: TokenSnapshot) -> bool:
     if check.op not in _OPS:
         raise LessonError(f"unknown check operator {check.op!r}")
     value = _field_value(check, snap)
-    if value is None:
+    if value is None or math.isnan(value):
         return True
     return bool(_OPS[check.op](value, check.value))
 
@@ -123,7 +124,7 @@ def derive_lesson(position: Position, exit_fill: Fill, settings: Settings) -> Le
     )
     best: tuple[float, str, float, bool] | None = None
     for name, value, limit, higher_is_worse in candidates:
-        if value is None or limit is None or value <= 0 or limit <= 0:
+        if value is None or limit is None or not math.isfinite(value) or value <= 0 or limit <= 0:
             continue
         closeness = value / limit if higher_is_worse else limit / value
         if best is None or closeness > best[0]:
