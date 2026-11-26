@@ -106,7 +106,7 @@ def test_documented_defaults_match_the_source_lines():
     assert (s.dead_money_after_s, s.dead_money_min_gain_pct) == (10_800, 5)
     assert (s.dip_age_min_s, s.dip_age_max_s) == (600, 21_600)
     assert (s.red_btc_1h_pct, s.red_sol_1h_pct, s.red_fear_greed_max) == (-2.5, -4.0, 20)
-    assert (s.paper_nights_required, s.live_first_nights, s.live_first_nights_ticket_cap_usd) == (3, 3, 25)
+    assert s.paper_nights_required == 3
 
 
 def test_the_sizing_rule_is_twelve_percent_of_free_cash():

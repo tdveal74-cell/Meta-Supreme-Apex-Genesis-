@@ -250,7 +250,8 @@ class OrderIntent:
     """What the desk wants done. The desk never executes one itself.
 
     A BUY carries ``usd``. A SELL carries ``qty`` in tokens. ``decision_price``
-    is the snapshot price the decision was made on.
+    is the snapshot price the decision was made on, or ``None`` when an exit
+    was decided on a snapshot that had no price.
     """
 
     order_id: str
@@ -259,7 +260,7 @@ class OrderIntent:
     symbol: str
     side: Side
     reason_code: str
-    decision_price: float
+    decision_price: float | None
     usd: float | None = None
     qty: float | None = None
     strategy: Strategy | None = None

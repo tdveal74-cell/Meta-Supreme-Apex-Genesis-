@@ -93,10 +93,10 @@ def test_stop_does_not_trail_before_the_first_take():
 
 @pytest.mark.parametrize(
     "mode,expected_stop",
-    [(Mode.GREEN, 2.0 * 0.9), (Mode.QUIET, 2.0 * 0.9), (Mode.RED, 2.0 * 0.7)],
+    [(Mode.GREEN, 2.0 * 0.7), (Mode.QUIET, 2.0 * 0.7), (Mode.RED, 2.0 * 0.9)],
 )
 def test_trail_uses_the_red_figure_in_red_and_the_green_figure_otherwise(mode, expected_stop):
-    s = Settings.for_tests(trail_green_pct=10, trail_red_pct=30)
+    s = Settings.for_tests(trail_green_pct=30, trail_red_pct=10)
     pos = _pos(took_first_take=True, stop_price=0.75, peak_price=2.0)
     out, decision = _run(pos, _snap(price_usd=2.0), mode, s)
     assert decision is None
@@ -107,11 +107,11 @@ def test_trail_follows_a_new_peak():
     pos = _pos(took_first_take=True, stop_price=1.6, peak_price=2.0)
     out, decision = _run(pos, _snap(price_usd=3.0))
     assert decision is None
-    assert out.peak_price == 3.0 and out.stop_price == pytest.approx(2.4)
+    assert out.peak_price == 3.0 and out.stop_price == pytest.approx(2.25)
 
 
 def test_the_stop_never_moves_down():
-    pos = _pos(took_first_take=True, stop_price=1.9, peak_price=2.0)  # trail would give 1.6
+    pos = _pos(took_first_take=True, stop_price=1.9, peak_price=2.0)  # trail would give 1.5
     out, decision = _run(pos, _snap(price_usd=1.95))
     assert decision is None and out.stop_price == 1.9
 
@@ -127,7 +127,7 @@ def test_stop_threshold(price, fires):
         assert result[1].fraction == 1.0 and result[1].mint == "MintA"
 
 
-@pytest.mark.parametrize("price,fires", [(1.5999, True), (1.6, True), (1.6001, False)])
+@pytest.mark.parametrize("price,fires", [(1.4999, True), (1.5, True), (1.5001, False)])
 def test_trail_threshold_and_name(price, fires):
     pos = _pos(took_first_take=True, stop_price=0.75, peak_price=2.0)
     result = _run(pos, _snap(price_usd=price))
@@ -137,9 +137,9 @@ def test_trail_threshold_and_name(price, fires):
 
 
 def test_a_trail_hit_uses_the_stop_brought_up_to_date():
-    # The passed-in stop is 0.75, the trailed one is 1.6, and 1.5 is under it.
+    # The passed-in stop is 0.75, the trailed one is 1.5, and 1.4 is under it.
     pos = _pos(took_first_take=True, stop_price=0.75, peak_price=2.0)
-    assert _reason(_run(pos, _snap(price_usd=1.5))) is ExitReason.TRAIL
+    assert _reason(_run(pos, _snap(price_usd=1.4))) is ExitReason.TRAIL
 
 
 def test_a_stop_exit_returns_the_updated_position_and_keeps_qty_and_cost():
@@ -447,7 +447,7 @@ def test_trail_green_follows_its_setting_alone():
 
 
 def test_trail_red_follows_its_setting_alone():
-    s = Settings.for_tests(trail_green_pct=10, trail_red_pct=40)
+    s = Settings.for_tests(trail_green_pct=50, trail_red_pct=40)
     pos = _pos(took_first_take=True, stop_price=0.75, peak_price=2.0)
     out, _ = _run(pos, _snap(price_usd=2.0), Mode.RED, s)
     assert out.stop_price == pytest.approx(1.2)
@@ -499,4 +499,4 @@ def test_the_stop_trails_from_the_call_after_the_take():
     taken, decision = _run(pos, _snap(price_usd=2.0))
     assert decision.reason is ExitReason.TAKE and taken.stop_price == pos.stop_price
     nxt, decision = _run(taken, _snap(price_usd=2.0))
-    assert decision is None and nxt.stop_price == pytest.approx(2.0 * 0.8)
+    assert decision is None and nxt.stop_price == pytest.approx(2.0 * 0.75)

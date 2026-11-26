@@ -39,10 +39,18 @@ class SettingSpec:
 
 SPECS: dict[str, SettingSpec] = {
     # --- BOT 1, scanner (source lines 41-42) ---
-    "liquidity_floor_usd": SettingSpec("doc:42", 1_000, 10_000_000, "kill below this; two-sided pool value"),
+    "liquidity_floor_usd": SettingSpec(
+        "doc:42", 1_000, 10_000_000,
+        "kill below this. The figure is the source's; reading 'liquidity' as the value of both sides of the pool is INVENTED",
+    ),
     "top10_max_pct": SettingSpec("doc:42", 1, 100, "kill when the top 10 holders hold more than this"),
     "pump_1h_kill_pct": SettingSpec("doc:42", 10, 10_000, "kill at or above this 1 hour gain"),
     "scanner_watch_s": SettingSpec("doc:42", 60, 86_400, "seconds with no kill before a coin passes"),
+    "scanner_max_gap_s": SettingSpec(
+        "invented", 1, 86_400,
+        "a coin unseen for longer than this starts its watch again; the source gives no figure, "
+        "and a real feed should set it near its own polling interval",
+    ),
     "holders_drop_kill_pct": SettingSpec("invented", 0.1, 100, "'holders leaving' has no definition in the source"),
     # --- BOT 2, analyst (source lines 44-54) ---
     "dev_max_pct": SettingSpec("doc:48", 0, 100, "layer 3: the creator must hold less than this"),
@@ -60,10 +68,13 @@ SPECS: dict[str, SettingSpec] = {
     # --- BOT 3, brain (source lines 56-57) ---
     "risk_per_trade_pct": SettingSpec("doc:57", 0.01, 10, "share of free cash a stop at exactly stop_loss_pct loses"),
     "stop_loss_pct": SettingSpec("doc:57", 1, 90, "the stop below the fill price"),
-    "pool_liquidity_cap_pct": SettingSpec("doc:57", 0.01, 10, "a ticket may not exceed this share of pool liquidity"),
+    "pool_liquidity_cap_pct": SettingSpec(
+        "doc:57", 0.01, 10,
+        "a ticket may not exceed this share of pool liquidity, both sides counted (that reading is INVENTED)",
+    ),
     "min_ticket_usd": SettingSpec("invented", 0.01, 10_000, "skip a ticket smaller than this"),
     "max_ticket_usd": SettingSpec("owner", 0.01, 100_000, "named at source line 57 with no value"),
-    "max_open_positions": SettingSpec("owner", 1, 1_000, "the source sets no limit; the audit found 96% of cash at work at eight"),
+    "max_open_positions": SettingSpec("owner", 1, 1_000, "the source sets no limit on how many positions are open at once"),
     "max_total_exposure_pct": SettingSpec("owner", 0.1, 100, "cost of open positions as a share of equity"),
     # --- BOT 4, executor (source lines 59-60, 68) ---
     "dip_from_high_pct": SettingSpec("doc:60", 1, 90, "buy only this far below the 10 minute high"),
@@ -71,10 +82,17 @@ SPECS: dict[str, SettingSpec] = {
     "dip_age_max_s": SettingSpec("doc:68", 60, 604_800, "DIP strategy: oldest pool"),
     "sell_dryup_ratio": SettingSpec("invented", 0.01, 1, "'sellers drying up': latest 5 minute sell volume against the 5 minutes before"),
     "recheck_max_price_drift_pct": SettingSpec("invented", 0.1, 50, "abort when price moved this far since the decision"),
+    "max_snapshot_age_s": SettingSpec(
+        "invented", 1, 86_400,
+        "a buy never acts on a reading older than this, and an exit decided on one is flagged; the source gives no figure",
+    ),
     "take_multiple_green": SettingSpec("doc:60", 1.01, 100, "first take, as a multiple of the fill price"),
     "take_multiple_red": SettingSpec("doc:60", 1.01, 100, "first take while the market mode is RED"),
     "take_fraction": SettingSpec("doc:60", 0.01, 1, "share of the position sold at the first take"),
-    "trail_green_pct": SettingSpec("invented", 1, 90, "the source says 'trails the rest' and gives a figure only for RED"),
+    "trail_green_pct": SettingSpec(
+        "invented", 1, 90,
+        "the source gives a trail figure only for RED (20) and says RED tightens trails, so this must be wider",
+    ),
     "trail_red_pct": SettingSpec("doc:73", 1, 90, "trail below the peak while RED"),
     # --- BOT 5, risk (source lines 62-63, 73) ---
     "dead_money_after_s": SettingSpec("doc:63", 60, 604_800, "seconds held before the dead money test"),
@@ -89,9 +107,7 @@ SPECS: dict[str, SettingSpec] = {
     "quiet_max_graduations_per_hour": SettingSpec("invented", 0, 100_000, "'few graduations' has no number in the source"),
     # --- paper to live (source line 80) ---
     "paper_nights_required": SettingSpec("doc:80", 1, 365, "full PAPER nights before LIVE may be asked for"),
-    "live_first_nights": SettingSpec("doc:80", 0, 365, "LIVE nights that run under the first-nights ticket cap"),
-    "live_first_nights_ticket_cap_usd": SettingSpec("doc:80", 0.01, 100_000, "ticket cap on those nights"),
-    # --- costs: the source states none (audit findings market:P3, risk:P4) ---
+    # --- costs: the source states none ---
     "venue_fee_pct_per_side": SettingSpec("owner", 0, 20, "the trading app's fee on each buy and each sell"),
     "pool_fee_pct_per_side": SettingSpec("owner", 0, 20, "the pool's own fee on each swap"),
     "fixed_fee_usd_per_side": SettingSpec("owner", 0, 1_000, "any flat charge on each buy and each sell"),
@@ -100,6 +116,8 @@ SPECS: dict[str, SettingSpec] = {
 INT_SETTINGS = frozenset(
     {
         "scanner_watch_s",
+        "scanner_max_gap_s",
+        "max_snapshot_age_s",
         "pool_age_min_s",
         "bundled_wallets_max",
         "score_alive_trades_full",
@@ -111,7 +129,6 @@ INT_SETTINGS = frozenset(
         "red_fear_greed_max",
         "quiet_max_graduations_per_hour",
         "paper_nights_required",
-        "live_first_nights",
     }
 )
 
@@ -128,6 +145,7 @@ class Settings:
     top10_max_pct: float = 25.0
     pump_1h_kill_pct: float = 200.0
     scanner_watch_s: int = 600
+    scanner_max_gap_s: int = 600
     holders_drop_kill_pct: float = 5.0
 
     dev_max_pct: float = 5.0
@@ -156,10 +174,11 @@ class Settings:
     dip_age_max_s: int = 21_600
     sell_dryup_ratio: float = 0.5
     recheck_max_price_drift_pct: float = 5.0
+    max_snapshot_age_s: int = 120
     take_multiple_green: float = 2.0
     take_multiple_red: float = 1.5
     take_fraction: float = 0.5
-    trail_green_pct: float = 20.0
+    trail_green_pct: float = 25.0
     trail_red_pct: float = 20.0
 
     dead_money_after_s: int = 10_800
@@ -174,8 +193,6 @@ class Settings:
     quiet_max_graduations_per_hour: int = 5
 
     paper_nights_required: int = 3
-    live_first_nights: int = 3
-    live_first_nights_ticket_cap_usd: float = 25.0
 
     venue_fee_pct_per_side: float | None = None
     pool_fee_pct_per_side: float | None = None
@@ -256,6 +273,14 @@ class Settings:
                 problems.append("score_flush_full_max_pct must be above score_flush_full_min_pct")
             if self.max_ticket_usd is not None and self.max_ticket_usd < self.min_ticket_usd:
                 problems.append("max_ticket_usd must be at or above min_ticket_usd")
+            # Source line 77: RED tightens takes and trails. Equal figures would tighten nothing.
+            if not self.trail_red_pct < self.trail_green_pct:
+                problems.append("trail_red_pct must be below trail_green_pct")
+            if not self.take_multiple_red < self.take_multiple_green:
+                problems.append("take_multiple_red must be below take_multiple_green")
+            # A coin at the scanner's kill level must never earn full anti-chase points.
+            if not self.score_antichase_full_below_pct < self.pump_1h_kill_pct:
+                problems.append("score_antichase_full_below_pct must be below pump_1h_kill_pct")
         if problems:
             raise SettingsError("; ".join(problems))
 

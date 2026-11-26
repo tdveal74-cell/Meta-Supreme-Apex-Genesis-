@@ -259,10 +259,10 @@ def test_take_half_at_double_then_trail_the_rest():
     peak = pos.entry_price * 3.0
     d.tick(t2, market(t2), [coin(t2, price_usd=peak, high_10m_usd=peak)])
     trailed = d.ledger.positions["GOOD"]
-    assert trailed.stop_price == pytest.approx(peak * 0.8)
+    assert trailed.stop_price == pytest.approx(peak * 0.75)
     assert trailed.stop_price >= left.stop_price
     t3 = t2 + 60
-    last = d.tick(t3, market(t3), [coin(t3, price_usd=peak * 0.79, high_10m_usd=peak)])
+    last = d.tick(t3, market(t3), [coin(t3, price_usd=peak * 0.74, high_10m_usd=peak)])
     assert last.fills[0].exit_reason is model.ExitReason.TRAIL
     assert "GOOD" not in d.ledger.positions
     assert d.losses == [] and d.lessons_added == []
