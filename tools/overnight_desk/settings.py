@@ -239,6 +239,14 @@ class Settings:
         placeholders.update(overrides)
         return cls.from_dict(placeholders)
 
+    def check(self) -> None:
+        """Raise SettingsError unless every value is set, in range and consistent.
+
+        ``from_dict`` and ``from_file`` call this. So does the desk when it is
+        built, because a Settings can also be made by hand.
+        """
+        self._validate()
+
     def _validate(self) -> None:
         problems: list[str] = []
         for f in fields(self):

@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import Any
 
 from . import analyst, brain, entry, lessons, market_mode, paper, positions, risk
@@ -61,6 +61,21 @@ ApprovalSource = Callable[[OrderIntent], HumanApproval | None]
 
 # A loss may exceed the budget by this much before it is called a violation.
 _BUDGET_TOLERANCE_USD = 1e-9
+
+# A skip is recorded again when its detail changes, for these reasons only. Their
+# details are fixed sentences. Other details carry numbers that move every tick.
+_DETAIL_KEYED = frozenset(
+    {("executor", "order_refused"), ("executor", "approval_missing"), ("scanner", "watching")}
+)
+
+
+def _not_finite(obj: Any) -> str | None:
+    """The name of a field holding nan or an infinity, or None."""
+    for f in fields(obj):
+        value = getattr(obj, f.name)
+        if isinstance(value, float) and not math.isfinite(value):
+            return f.name
+    return None
 
 
 @dataclass(frozen=True)
@@ -95,6 +110,9 @@ class Desk:
             or starting_cash_usd <= 0
         ):
             raise ValueError("starting cash must be a positive, finite number")
+        # A Settings can be built by hand, without the loaders' checks. Check it
+        # here too, so the desk never starts on a missing owner value.
+        settings.check()
         self.settings = settings
         self.executor: Executor = executor if executor is not None else paper.PaperExecutor(settings)
         self.lessons = lesson_book if lesson_book is not None else lessons.LessonBook()
@@ -111,7 +129,7 @@ class Desk:
         self.lessons_added: list[Lesson] = []
         self._prices: dict[str, float] = {}
         self._traded: set[str] = set()
-        self._last_skip: dict[str, tuple[str, str]] = {}
+        self._last_skip: dict[str, tuple[str, str, str]] = {}
         self._alerting: dict[str, set[str]] = {}
         self._unexecuted: set[tuple[str, str]] = set()
         self._cash_at_entry: dict[str, float] = {}
@@ -130,10 +148,15 @@ class Desk:
     ) -> TickReport:
         if self._last_ts is not None and now < self._last_ts:
             raise ValueError("ticks must not go back in time")
+        if market is not None and _not_finite(market) is not None:
+            raise ValueError(f"the market reading has a number that is not finite: {_not_finite(market)}")
         by_mint: dict[str, TokenSnapshot] = {}
         for snap in snapshots:
             if snap.mint in by_mint:
                 raise ValueError(f"two snapshots for {snap.mint} in one tick")
+            bad = _not_finite(snap)
+            if bad is not None:
+                raise ValueError(f"snapshot for {snap.mint} has a number that is not finite: {bad}")
             if snap.ts > now:
                 raise ValueError(f"snapshot for {snap.mint} is from after the tick")
             seen = self._snap_ts.get(snap.mint)
@@ -152,7 +175,7 @@ class Desk:
             self._snap_ts[snap.mint] = snap.ts
             price = snap.price_usd
             # A price of 0.0 is a reading: it values a held coin at nothing.
-            if price is not None and math.isfinite(price) and price >= 0:
+            if price is not None and price >= 0:
                 self._prices[snap.mint] = price
 
         mark = _Mark(self)
@@ -352,11 +375,19 @@ class Desk:
             approval = self._approve(intent)
         try:
             paper.require_approval(intent, self.executor.kind, approval)
-            return self.executor.execute(intent, snap, approval), "", ""
+            fill = self.executor.execute(intent, snap, approval)
         except paper.ApprovalRequired as exc:
             return None, "approval_missing", str(exc)
         except paper.PaperError as exc:
             return None, "order_refused", str(exc)
+        # A fill for another order, coin or side would put a position in the
+        # wrong place. That is a fault in the executor, so it is raised before
+        # the ledger is touched and never recorded.
+        if (fill.order_id, fill.mint, fill.side) != (intent.order_id, intent.mint, intent.side):
+            raise ValueError("the executor returned a fill that does not match the order")
+        if intent.side is Side.SELL and not 0 < fill.qty <= (intent.qty or 0.0) * (1 + 1e-9):
+            raise ValueError("the executor returned a sell fill for more than was ordered")
+        return fill, "", ""
 
     def _close_out(self, now: int, position: Position, fill: Fill, reason: ExitReason) -> None:
         mint = position.mint
@@ -407,7 +438,7 @@ class Desk:
             )
 
     def _skip(self, now: int, snap: TokenSnapshot, stage: str, code: str, detail: str) -> None:
-        key = (stage, code)
+        key = (stage, code, detail if (stage, code) in _DETAIL_KEYED else "")
         if self._last_skip.get(snap.mint) == key:
             return
         self._last_skip[snap.mint] = key
@@ -422,6 +453,32 @@ class Desk:
         if mark in self._alerting.get(position.mint, ()):
             return
         self.alerts.append(f"{now} {code} {position.mint} {position.symbol}: {detail}")
+
+    def _open_row(self, p: Position) -> dict[str, Any]:
+        """One open position for the report, marked at its last price.
+
+        The mark counts what earlier sells on the position already realized,
+        and ``over_budget`` is the same test a closed loss gets, so a loss
+        that is past the limit shows whether or not it has been closed.
+        """
+        last = self._prices.get(p.mint)
+        cash_at_entry = self._cash_at_entry.get(p.mint, 0.0)
+        budget = cash_at_entry * self.settings.risk_per_trade_pct / 100
+        result = None
+        if last is not None:
+            result = self._realized.get(p.mint, 0.0) + p.qty * last - p.cost_usd
+        return {
+            "mint": p.mint,
+            "symbol": p.symbol,
+            "qty": p.qty,
+            "cost_usd": p.cost_usd,
+            "stop_price": p.stop_price,
+            "last_price": last,
+            "last_reading_ts": self._snap_ts.get(p.mint),
+            "result_so_far_usd": result,
+            "budget_usd": budget,
+            "over_budget": result is not None and -result > budget + _BUDGET_TOLERANCE_USD,
+        }
 
     def _next_id(self, now: int) -> str:
         self._seq += 1
@@ -457,18 +514,7 @@ class Desk:
             "fees_usd": self.ledger.fees_usd,
             "buys": buys,
             "sells": len(self.ledger.fills) - buys,
-            "open_positions": [
-                {
-                    "mint": p.mint,
-                    "symbol": p.symbol,
-                    "qty": p.qty,
-                    "cost_usd": p.cost_usd,
-                    "stop_price": p.stop_price,
-                    "last_price": self._prices.get(p.mint),
-                    "last_reading_ts": self._snap_ts.get(p.mint),
-                }
-                for p in (self.ledger.positions[m] for m in sorted(self.ledger.positions))
-            ],
+            "open_positions": [self._open_row(self.ledger.positions[m]) for m in sorted(self.ledger.positions)],
             "fills": [
                 {
                     "order_id": f.order_id,

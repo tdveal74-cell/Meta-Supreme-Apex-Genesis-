@@ -195,6 +195,20 @@ def test_a_sell_into_a_drained_pool_is_a_total_loss_at_any_price(price):
     assert q.spot_price == (price if price in (0.001, float("inf")) else 0.0)
 
 
+@pytest.mark.parametrize("side, kw", [(Side.BUY, dict(usd=25.0)), (Side.SELL, dict(qty=1_000.0))])
+def test_a_price_too_small_to_work_with_is_refused_and_never_quoted_as_inf_or_zero(side, kw):
+    snap = _snap(liquidity_usd=40_000.0, price_usd=5e-324)
+    with pytest.raises(paper.PaperError, match="not a usable number"):
+        paper.model_quote(side, snap, S, **kw)
+
+
+def test_an_ordinary_quote_is_all_finite_numbers():
+    for side, kw in ((Side.BUY, dict(usd=25.0)), (Side.SELL, dict(qty=1_000.0))):
+        q = paper.model_quote(side, _snap(liquidity_usd=40_000.0, price_usd=0.001), S, **kw)
+        figures = (q.qty, q.gross_usd, q.fill_price, q.venue_fee_usd, q.pool_fee_usd, q.price_impact_pct)
+        assert all(x == x and abs(x) != float("inf") for x in figures) and q.fill_price > 0
+
+
 def test_a_drained_pool_sell_gives_the_same_proceeds_whatever_the_price():
     quotes = [
         paper.model_quote(Side.SELL, _drained(price_usd=p), S, qty=3.0) for p in (None, 0.0, 0.001)

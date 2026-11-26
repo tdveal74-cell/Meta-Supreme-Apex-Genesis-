@@ -175,12 +175,30 @@ def test_a_coin_at_the_pump_kill_level_can_never_earn_full_anti_chase_points():
     assert Settings.for_tests(score_antichase_full_below_pct=199.0).score_antichase_full_below_pct == 199.0
 
 
+def _attributes_read(paths) -> set[str]:
+    """Every name used as an attribute (x.name) in the given files. A word in a comment does not count."""
+    found: set[str] = set()
+    for path in paths:
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Attribute):
+                found.add(node.attr)
+    return found
+
+
 def test_no_setting_exists_that_nothing_reads():
     """A setting no module reads looks like a rule that is enforced. Round 2 found two."""
-    code = "".join(p.read_text(encoding="utf-8") for p in _py_files() if p.name != "settings.py")
-    unread = sorted(name for name in SPECS if name not in code)
+    read = _attributes_read(p for p in _py_files() if p.name != "settings.py")
+    unread = sorted(name for name in SPECS if name not in read)
     assert unread == []
     assert "live_first_nights" not in SPECS and "live_first_nights_ticket_cap_usd" not in SPECS
+
+
+def test_the_unread_setting_scan_ignores_a_name_that_only_appears_in_words(tmp_path):
+    (tmp_path / "m.py").write_text(
+        '"""Mentions stop_loss_pct in a docstring."""\n# and top10_max_pct in a comment\nx = s.score_pass\n',
+        encoding="utf-8",
+    )
+    assert _attributes_read([tmp_path / "m.py"]) == {"score_pass"}
 
 
 def test_the_two_round_two_guards_are_invented_and_have_the_stated_defaults():

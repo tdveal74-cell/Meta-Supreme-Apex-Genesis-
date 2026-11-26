@@ -43,6 +43,8 @@ def morning_checks(report: dict[str, Any], risk_per_trade_pct: float) -> list[di
     skips = report["skips"]
     unexplained = [s for s in skips if not s["reason_code"]]
     losses = report["losses"]
+    open_positions = report["open_positions"]
+    open_over = [p for p in open_positions if p["over_budget"]]
     over = [loss for loss in losses if loss["loss_pct_of_cash"] is None or loss["over_budget"]]
     no_autopsy = [loss for loss in losses if not loss.get("exit_reason")]
     no_lesson = [loss for loss in losses if not loss.get("lesson")]
@@ -55,16 +57,20 @@ def morning_checks(report: dict[str, Any], risk_per_trade_pct: float) -> list[di
         skip_evidence = "no coin was seen, so there was nothing to skip"
     else:
         skip_ok = not unexplained
-        skip_evidence = f"{len(skips)} skips recorded, {len(unexplained)} without a reason code"
+        skip_evidence = (
+            f"{len(skips)} skips recorded, {len(unexplained)} without a reason code. "
+            "The desk gives every skip a code when it records it, so this guards the record"
+        )
 
-    if not losses:
+    if not losses and not open_positions:
         loss_ok: bool | None = None
-        loss_evidence = "no position closed at a loss, so the limit was not tested"
+        loss_evidence = "no position closed at a loss and none is open, so the limit was not tested"
     else:
-        loss_ok = not over and not no_autopsy
+        loss_ok = not over and not no_autopsy and not open_over
         loss_evidence = (
-            f"{len(losses)} losses, {len(over)} over the limit or unmeasured, "
-            f"{len(no_autopsy)} without an exit reason, {len(no_lesson)} with no lesson written"
+            f"{len(losses)} closed losses, {len(over)} over the limit or unmeasured, "
+            f"{len(no_autopsy)} without an exit reason, {len(no_lesson)} with no lesson written; "
+            f"{len(open_positions)} still open, {len(open_over)} of them past the limit at the last price"
         )
 
     if real == 0:
@@ -79,7 +85,10 @@ def morning_checks(report: dict[str, Any], risk_per_trade_pct: float) -> list[di
         rule_evidence = "no tick ran"
     else:
         rule_ok = not violations
-        rule_evidence = f"{len(violations)} recorded"
+        rule_evidence = (
+            f"{len(violations)} recorded. The desk records two kinds only: "
+            "an exit it could not carry out, and a loss past the limit"
+        )
 
     return [
         {"check": "a reason for every skip", "ok": skip_ok, "evidence": skip_evidence},
@@ -184,8 +193,14 @@ def render_morning(report: dict[str, Any], risk_per_trade_pct: float) -> str:
     add("Skips by stage and reason (a coin counts again only when its reason changes)")
     if not report["skips_by_reason"]:
         add("  none")
+    first: dict[str, dict[str, Any]] = {}
+    for skip in report["skips"]:
+        first.setdefault(f"{skip['stage']}:{skip['reason_code']}", skip)
     for key, count in report["skips_by_reason"].items():
         add(f"  {count:>4}  {_clean(key)}")
+        example = first.get(key)
+        if example is not None and example.get("detail"):
+            add(f"        first: {_clean(example['symbol'])}, {_clean(example['detail'])}")
     add("")
     add("Open positions")
     if not report["open_positions"]:
@@ -195,7 +210,9 @@ def render_morning(report: dict[str, Any], risk_per_trade_pct: float) -> str:
         add(
             f"  {_clean(pos['symbol'])}: cost {_usd(pos['cost_usd'])}, stop {pos['stop_price']:.10g}, "
             f"last price {'unknown' if last is None else format(last, '.10g')}, "
-            f"last reading {'never' if pos.get('last_reading_ts') is None else pos['last_reading_ts']}"
+            f"last reading {'never' if pos.get('last_reading_ts') is None else pos['last_reading_ts']}, "
+            f"result so far {_usd(pos['result_so_far_usd'])}"
+            f"{', PAST THE LOSS LIMIT' if pos['over_budget'] else ''}"
         )
     add("")
     add("Lessons in force")

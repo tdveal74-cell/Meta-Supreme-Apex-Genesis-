@@ -41,7 +41,7 @@ from typing import Any
 
 from .engine import Desk
 from .model import MarketSnapshot, TokenSnapshot
-from .report import render_morning
+from .report import _clean, render_morning
 from .settings import Settings, SettingsError
 
 
@@ -218,10 +218,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         frames = load_timeline(args.timeline)
         report = run(frames, settings, args.cash)
     except (SettingsError, TimelineError, ValueError) as exc:
-        print(f"refused: {exc}", file=sys.stderr)
+        # The message can quote a key or a name from the file. Escape it and
+        # cut it, so a crafted file cannot write to the operator's terminal.
+        print(f"refused: {_clean(exc)[:500]}", file=sys.stderr)
         return 2
     except OverflowError:
         print("refused: a number is too large to work with", file=sys.stderr)
+        return 2
+    except RecursionError:
+        print("refused: a line is nested too deeply to read", file=sys.stderr)
         return 2
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))

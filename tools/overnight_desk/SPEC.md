@@ -40,8 +40,10 @@ Not built, on purpose:
   (STEPS.md, step 14). It waits on a ruling about data sources.
 - NEWS, COPY, WAVE and TREND entry rules (source lines 69, 70, 72, 74). NEWS
   needs a judgment about a "real source story". COPY needs the venue's
-  leaderboard. WAVE and TREND give no thresholds. `entry_signal` answers
-  `strategy_not_built` for all four.
+  leaderboard. WAVE gives one figure, a theme that "already ran 3x+", and
+  does not say what a theme or its second wave is. TREND gives one figure, a
+  1.5 times take, and does not define "slow grinders", "high volume" or
+  "tighter trail". `entry_signal` answers `strategy_not_built` for all four.
 - The "sold the news" exit (source line 63). It has no definition.
 - Narrative tagging (source line 42).
 - The social check by X search (source line 54). `social_score` is a field a
@@ -61,8 +63,14 @@ Not built, on purpose:
 Built although nothing uses it yet, so the owner knows it is there:
 `ExecutorKind.LIVE`, the `Executor` protocol the desk accepts, the `approve`
 callback, and `live_gate.py`. They exist so the per-order approval gate and
-the live gate can be tested. STEPS.md proposes the steps the source leaves
+the live gate can be tested. `lessons.apply_review`,
+`LessonBook.from_json` and `Settings.describe` are library functions that
+nothing in the package calls. STEPS.md proposes the steps the source leaves
 undefined.
+
+The invented rules and defaults in this file are what the code runs on today.
+Any replay uses them. "Waits on the owner's review" means he has not ruled on
+them, and it does not mean they are switched off.
 
 General rules for every module:
 
@@ -80,9 +88,10 @@ General rules for every module:
 
 ## Readings of the source where it contradicts itself
 
-R1. RED mode. Source lines 4 and 57 say RED means no new buys. Lines 60, 73
-and 77 describe RED as a half-size trading mode. This build takes the stricter
-reading: in RED the brain skips every buy. The RED figures at lines 60 and 73
+R1. RED mode. Source lines 4 and 57 say RED means no new buys. Lines 73 and
+77 describe RED as a half-size trading mode, and line 60 gives it a take of
+its own. This build takes the stricter reading: in RED the brain skips every
+buy. The RED figures at lines 60 and 73
 (take at 1.5 times, 20% trail, 90 minute time stop) govern positions that are
 already open. RED is a market mode here and is not a Strategy.
 
@@ -127,6 +136,23 @@ it (source line 49, "Top 10 < 25%"). One setting serves both, so a coin at
 exactly 25 survives the scanner and stops at layer 4. That follows both lines
 as written.
 
+R8. Which entry rule. Source line 60 says the executor "buys only on the dip
+rule". Lines 69 to 74 give NEWS, COPY, WAVE and TREND entries of their own,
+and line 66 says a strategy decides how to enter. This build has the two
+strategies that enter on the dip rule, so the conflict does not arise yet.
+
+R9. When real money may move. Source line 13 says "Night 1 is PAPER: no real
+money moves until STEP 15 passes and you type LIVE", which can be read as one
+paper night. Lines 19 and 80 say three. This build takes three as the
+default. `paper_nights_required` accepts 1 to 365, so the owner can set
+either.
+
+R10. Which coins. Source line 42 gives the scanner "every coin that graduates
+from pump.fun". Line 68 gives DIP no graduation condition. The scanner here
+does not filter on graduation: it judges every coin in the timeline, and only
+the GRAD entry rule asks whether the coin graduated. What goes into a
+timeline is for the adapter and its ruling.
+
 ## Definitions this build chose
 
 Each of these is INVENTED in the sense above: the source uses the word and
@@ -154,6 +180,10 @@ this build had to decide what it means.
 - The RED time stop counts from entry, whatever the mode was at entry.
 - The order in which exits are checked.
 - A reading older than `max_snapshot_age_s` is never bought on.
+- With market data missing the mode is GREEN, so open positions are managed
+  with the GREEN take and trail while every buy is blocked. The other choice
+  is to manage them with the tighter RED figures and RED's 90 minute time
+  stop. That would sell on a data gap, so it is left to the owner.
 
 ## Settings
 
@@ -169,8 +199,13 @@ Cross checks, each a `SettingsError`: `score_full` at or above `score_pass`;
 `pump_1h_kill_pct`, so a coin at the kill level cannot earn full anti-chase
 points.
 
-Every setting is read by some module. A test fails when one is not, because a
-setting nothing reads looks like a rule that is enforced.
+Every setting is read by some module, as an attribute and not as a word in a
+comment. A test fails when one is not, because a setting nothing reads looks
+like a rule that is enforced.
+
+`Desk` runs these checks again when it is built, through `Settings.check()`.
+A `Settings` made by hand with an owner value missing or a value out of range
+is refused there, so the desk never starts on one.
 
 ## Data
 
@@ -245,7 +280,10 @@ class Scanner:
     def result(self, mint: str) -> ScanResult | None
 ```
 
-DOC, source line 42. One Scanner holds the state of every coin it has seen.
+DOC, source line 42, for the six kill reasons and the ten minute watch. One
+Scanner holds the state of every coin it has seen. INVENTED: the order the
+kills are checked in (the source says only "first hit"), and reading "+200%
+in 1h" as at or above 200.
 
 - The first observation of a mint sets `first_seen_ts = snap.ts`.
 - An observation older than the last one for that mint raises `ValueError`.
@@ -418,7 +456,19 @@ def size_ticket(
 ```
 
 DOC, source line 57, plus the OWNER limits. The brain sizes. It picks no coin
-and executes nothing. Skips are checked in this order:
+and executes nothing. INVENTED: the order of the skips below (the source says
+only "skips on RED mode, quiet market, or active lesson hit"), and the last
+one, `ticket_below_min`, with its setting `min_ticket_usd`.
+
+The sizing rule and costs. The source sizes a ticket so that a stop at exactly
+25% loses exactly 3% of cash. That arithmetic leaves out every cost. With any
+fee or price impact, a stop-out on a ticket that no cap has shrunk loses more
+than 3%, and the desk records a `loss_exceeded_risk_budget` violation. This is
+the source's rule missing its own standard at line 94, and the desk reports
+it. Sizing net of costs would be a change to the source's rule and is left to
+the owner. In the fixture night the $25 ticket cap keeps the loss inside 3%.
+
+Skips are checked in this order:
 
 1. `market_blocks_buys` when `market.blocks_new_buys`.
 2. `lesson_blocks` when `lesson` is not `None`.
@@ -514,7 +564,11 @@ class LessonBook:
     def from_json(cls, rows: list[dict]) -> LessonBook
 ```
 
-DOC, source lines 63 and 88-89. A lesson can only block.
+DOC, source lines 63 and 88-89: a loss writes a runnable check, and a check
+can only block. INVENTED: the grammar of a check and its list of eleven
+fields (the source gives one example, "top10_pct > 20"), and the rule that a
+check hits a coin whose value for that field is unknown, which means a lesson
+blocks every coin that lacks the reading.
 
 - A check is `<field> <op> <number>`. Fields: `liquidity_usd`,
   `change_1h_pct`, `top10_pct`, `dev_pct`, `lp_locked_or_burned_pct`,
@@ -616,7 +670,9 @@ so the dollar reserve is `Rq = L / 2` and the token reserve is
 
 Raises `PaperError` when liquidity or price is `None` or not positive, when
 both or neither of `usd` and `qty` are given, or when the amount is not
-positive. A BUY takes `usd`. A SELL takes `qty`.
+positive. A BUY takes `usd`. A SELL takes `qty`. It also raises when the
+arithmetic gives a quote that is not a finite number or has a fill price of
+zero, which a price near the smallest a float can hold will do.
 Zero and NaN count as not positive. A BUY given `qty`, a SELL given `usd`, a
 fee setting that is `None`, and an order so small it would return no tokens
 are each a `PaperError` too.
@@ -654,6 +710,12 @@ Both sides: `spot_price = snap.price_usd` and
 for a buy and negative for a sell.
 
 ### require_approval
+
+INVENTED. The source asks for no approval of single orders. This gate comes
+from the owner's own rule that no automation commits capital without a person
+confirming it (his capital-guardrails skill, under "Human gates"), and it
+contradicts the source's unattended stop. He has not ruled on how the two fit
+together.
 
 For any `kind` but PAPER it raises `ApprovalRequired`, checking in this
 order: `approval` is `None`; its `order_id` differs from the intent's; it
@@ -739,17 +801,21 @@ One Desk is one night. With no executor given it uses the paper executor.
 raises `ValueError`.
 
 `tick` raises `ValueError` when `now` is earlier than the last tick, when two
-snapshots share a mint, when a snapshot's `ts` is after `now`, or when a
-snapshot is older than the last one the desk saw for that coin. A snapshot
+snapshots share a mint, when a snapshot's `ts` is after `now`, when a
+snapshot is older than the last one the desk saw for that coin, or when a
+snapshot or the market reading holds a number that is not finite. A snapshot
 stamped exactly at `now`, or at the same time as the coin's last one, is
 accepted. Every one of those checks runs before anything is changed, so a
 refused tick leaves the desk exactly as it was.
 
 After those checks `tick` does not raise on a well formed tick. An order that
 is not filled is recorded and the tick carries on, so trouble with one
-position never stops the next position's stop from being checked. The one
-thing still raised is a fill the ledger cannot record, which would be a bug
-in an executor.
+position never stops the next position's stop from being checked.
+
+One thing is still raised: a fault in an executor. `_execute` raises
+`ValueError` before the ledger is touched when a fill comes back for another
+order, coin or side, or when a sell fill is for more than was ordered. A fill
+the ledger cannot record is raised too. The paper executor produces neither.
 
 A price of 0.0 is a reading. It is kept as the coin's last price and values a
 held coin at nothing.
@@ -818,7 +884,10 @@ violation. An unattended stop and a per-order human approval cannot both
 hold.
 
 A skip is recorded when a coin's (stage, reason) pair changes, and is not
-repeated on every tick (INVENTED). An alert on a held coin is recorded when
+repeated on every tick (INVENTED). For three reasons whose details are fixed
+sentences, `order_refused`, `approval_missing` and the scanner's `watching`,
+a changed detail is recorded as well, so a refusal for a new cause and a
+watch that started again both show. An alert on a held coin is recorded when
 it starts and again only after it has cleared (INVENTED). So the counts in
 the report are changes, not ticks.
 
@@ -841,9 +910,14 @@ readings and different coins were seen, the first and last tick, the account,
 every fill, every skip with its reason and a count by reason, losses with
 autopsies, violations, alerts, the mode log, lessons, a count of fills by
 verification kind, the number of real orders sent (verified and unverified
-both count), each open position with its last price and the time of its last
-reading, the live gate's blockers, and `recheck_source`, which is
-`same_snapshot` in this build.
+both count), each open position with its last price, the time of its last
+reading, its result so far and whether that result is past the loss limit,
+the live gate's blockers, and `recheck_source`, which is `same_snapshot` in
+this build.
+
+An open position's result so far is what its earlier sells realized plus its
+tokens at the last price, less their cost. `over_budget` is the same test a
+closed loss gets, so a loss past the limit shows before it is closed.
 
 ## report.py
 
@@ -861,7 +935,8 @@ INVENTED: each check's `ok` is `True`, `False` or `None`, printed `pass`,
 `FAIL` and `n/a`. `None` means the night gave the check nothing to test:
 
 - "a reason for every skip" is `None` when no coin was seen.
-- "every loss within the budget" is `None` when no position closed at a loss.
+- "every loss within the budget" is `None` when no position closed at a loss
+  and none is open.
 - "zero unverified orders" is `None` when no real order was sent, which is
   every paper night.
 - "zero rule violations" is `None` when no tick ran.
@@ -871,15 +946,28 @@ A night that tested nothing therefore prints four `n/a` lines and no `pass`.
 The autopsy is the loss record itself: exit reason, entry and exit price, and
 the loss in dollars and as a share of the cash held at entry. A loss with no
 exit reason fails the second check. So does a loss the desk marked
-`over_budget`, or one whose share of cash was not measured. The report reads
+`over_budget`, one whose share of cash was not measured, or an open position
+whose result so far is past the limit. The report reads
 the desk's `over_budget` verdict and does not work the comparison out again,
 so the check and the violation list cannot disagree. A loss that produced no
 lesson does not fail the check; the evidence line counts those.
 
+What the fourth check counts. The desk records two kinds of violation and no
+others: an exit it could not carry out, and a loss past the limit. The
+source's other rules are either built into the code, such as never averaging
+down, or not built at all, such as the cursor rules. A pass on this check is
+a pass on those two kinds. Its evidence line says so.
+
+What the first check counts. The desk gives every skip a stage and a reason
+code when it records it, so on the desk's own output this check guards the
+record and cannot fail. Its evidence line says so.
+
 `render_morning` also prints what the desk saw (ticks, readings, coins, first
 and last tick), with a line in capitals when no coin was seen, and a section
 "Not tested by this night" that names order verification on a paper night
-and price drift between the decision and the order.
+and price drift between the decision and the order. Under each kind of skip
+it prints the detail of the first one, so the reason behind a count can be
+read without the JSON.
 
 Coin symbols and names are text a stranger chose. Every piece of free text is
 escaped before it is printed: a character that is not printable is written as
@@ -913,7 +1001,9 @@ is worse than no run. A recorder that writes timelines has to clean its own
 text first.
 
 `main` returns 0 on success and 2 on a refused input, with one line starting
-`refused:` on standard error and no traceback. Refused inputs include a cash
+`refused:` on standard error and no traceback. The line is escaped and cut to
+500 characters, because it can quote a key or a name from the file. A line
+nested too deeply to read is refused the same way. Refused inputs include a cash
 amount that is not positive and finite, a malformed timeline, a number too
 large to work with, ticks out of order, a snapshot older than the coin's last
 one, and two snapshots for one coin in a tick. It opens no connection.

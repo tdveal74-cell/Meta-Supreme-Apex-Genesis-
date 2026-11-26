@@ -56,9 +56,12 @@ financial advice.
    loser writes a check on its liquidity. A loss on a coin with $40,000 of
    liquidity then blocks every later coin at or under $40,000. The fixture
    night shows it happen.
-2. A stop is not a guarantee. A price that gaps through the stop, or a pool
-   that is drained, takes more than the stop allows, up to the whole ticket.
-   The desk reports each one as a rule violation.
+2. A stop is not a guarantee, and the prompt's sizing leaves out costs. The
+   prompt sizes a ticket so a stop at exactly 25% loses exactly 3% of cash.
+   Fees and price impact come on top, so a stop-out at full size loses a
+   little more than 3%. A price that gaps through the stop, or a drained
+   pool, takes far more, up to the whole ticket. The desk reports each of
+   these as a rule violation.
 3. When an exit cannot be carried out, the desk says so and keeps going. It
    records a violation, leaves the position as it was and tries again on the
    next reading.
@@ -67,8 +70,8 @@ financial advice.
 
 - `SPEC.md`: every rule, the source line it came from, the reading taken where
   the prompt contradicts itself, a list of every definition this build chose,
-  and a label on everything that had to be invented. The invented parts wait
-  on Tee's review.
+  and a label on everything that had to be invented. The invented rules and
+  defaults are what the code runs on today. Tee has not ruled on them.
 - `STEPS.md`: the prompt defines steps 1 to 3 and gates live trading on
   "STEP 15 tests" it never states. That file proposes the missing steps.
 - `settings.py`: every setting with its origin (`doc:N`, `invented` or

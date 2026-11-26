@@ -3,7 +3,8 @@
 The source prompt defines STEP 1, STEP 2 and STEP 3. It then makes LIVE depend
 on "all STEP 15 tests" (source line 80) and never says what STEP 4 to STEP 15
 are. Everything below from STEP 4 on is INVENTED for this build and waits on
-Tee's review. Nothing here is in force until he rules on it.
+Tee's review. The steps marked built are in the code today. The acceptance
+list for step 15 is a proposal and gates nothing until he rules on it.
 
 ## The three steps the source defines
 
@@ -72,7 +73,7 @@ LIVE stays closed until every line below is true. This list is a proposal.
    public data, and each one's morning report is read by the owner.
 5. On those nights the four morning checks are reported honestly, and any
    FAIL has an owner's note beside it.
-6. The owner has ruled on each reading in SPEC.md marked R1 to R7, on the
+6. The owner has ruled on each reading in SPEC.md marked R1 to R10, on the
    list "Definitions this build chose" and on each INVENTED rule.
 7. A live executor exists, and each lane it uses was ruled on separately.
 8. Per-order human approval is demonstrated end to end on that executor.

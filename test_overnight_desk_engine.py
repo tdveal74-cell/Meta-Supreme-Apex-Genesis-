@@ -1232,3 +1232,282 @@ def test_the_command_line_refuses_a_huge_number_without_a_traceback(tmp_path, ca
     captured = capsys.readouterr()
     assert captured.err.startswith("refused: line 1:") and "Traceback" not in captured.err
     assert captured.out == ""
+
+
+# --- round 3: what a second attack on the engine found -------------------------
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        dict(price_usd=float("inf")),
+        dict(price_usd=float("nan")),
+        dict(liquidity_usd=float("-inf")),
+        dict(high_10m_usd=float("inf")),
+        dict(top10_pct=float("nan")),
+    ],
+)
+def test_a_reading_with_a_number_that_is_not_finite_is_refused_before_anything_changes(bad):
+    d = desk()
+    _bought(d)
+    ts = T0 + WATCH + 60
+    before = (d.ledger.cash_usd, dict(d.ledger.positions), list(d.ledger.fills), dict(d._prices), d._ticks, d.night_report())
+    with pytest.raises(ValueError, match="not finite"):
+        d.tick(ts, market(ts), [coin(ts, **bad)])
+    after = (d.ledger.cash_usd, dict(d.ledger.positions), list(d.ledger.fills), dict(d._prices), d._ticks, d.night_report())
+    assert after == before  # an infinite price once produced a take worth thousands of dollars
+
+
+def test_a_market_reading_that_is_not_finite_is_refused_too():
+    d = desk()
+    with pytest.raises(ValueError, match="market reading has a number that is not finite: btc_change_1h_pct"):
+        d.tick(T0, market(T0, btc_change_1h_pct=float("nan")), [])
+    assert d.night_report()["ticks"] == 0
+
+
+def test_a_price_too_small_to_quote_is_an_exit_not_carried_out_and_never_a_crash():
+    d = desk()
+    pos = _bought(d)
+    ts = T0 + WATCH + 60
+    out = d.tick(ts, market(ts), [coin(ts, price_usd=5e-324)])
+    assert out.fills == () and d.ledger.positions["GOOD"] == pos
+    assert [(v["rule"], v["exit_reason"]) for v in d.violations] == [("exit_not_executed", "stop")]
+    assert "order_refused: the quote is not a usable number" in out.alerts[0]
+
+
+class _WrongCoin(_FakeLive):
+    def execute(self, intent, snapshot, approval=None):
+        return dataclasses.replace(super().execute(intent, snapshot, approval), mint="OTHER")
+
+
+class _TooMuch(_FakeLive):
+    def execute(self, intent, snapshot, approval=None):
+        fill = super().execute(intent, snapshot, approval)
+        return dataclasses.replace(fill, qty=fill.qty * 2) if intent.side is model.Side.SELL else fill
+
+
+def test_a_fill_for_another_coin_is_raised_and_never_recorded():
+    ok = lambda intent: model.HumanApproval(intent.order_id, "tee", intent.ts)  # noqa: E731
+    d = Desk(Settings.for_tests(), 1_000.0, executor=_WrongCoin(), approve=ok)
+    d.tick(T0, market(T0), [_live_snapshot(T0)])
+    with pytest.raises(ValueError, match="does not match the order"):
+        d.tick(T0 + WATCH, market(T0 + WATCH), [_live_snapshot(T0 + WATCH)])
+    assert d.ledger.fills == [] and d.ledger.positions == {} and d.ledger.cash_usd == 1_000.0
+
+
+def test_a_sell_fill_for_more_than_was_ordered_is_raised_and_never_recorded():
+    ok = lambda intent: model.HumanApproval(intent.order_id, "tee", intent.ts)  # noqa: E731
+    d = Desk(Settings.for_tests(), 1_000.0, executor=_TooMuch(), approve=ok)
+    d.tick(T0, market(T0), [_live_snapshot(T0)])
+    d.tick(T0 + WATCH, market(T0 + WATCH), [_live_snapshot(T0 + WATCH)])
+    pos = d.ledger.positions["GOOD"]
+    ts = T0 + WATCH + 60
+    with pytest.raises(ValueError, match="more than was ordered"):
+        d.tick(ts, market(ts), [dataclasses.replace(_live_snapshot(ts), price_usd=pos.stop_price * 0.9)])
+    assert d.ledger.positions["GOOD"] == pos and len(d.ledger.fills) == 1
+
+
+def test_a_refusal_for_a_new_cause_is_recorded_again():
+    fake = _FakeLive()
+    answers = iter([None, None, "wrong"])
+
+    def approve(intent):
+        return model.HumanApproval("another-order", "tee", intent.ts) if next(answers) == "wrong" else None
+
+    d = Desk(Settings.for_tests(), 1_000.0, executor=fake, approve=approve)
+    d.tick(T0, market(T0), [_live_snapshot(T0)])
+    for step in (0, 30, 60):  # no approval, no approval again, then an approval for another order
+        ts = T0 + WATCH + step
+        d.tick(ts, market(ts), [_live_snapshot(ts)])
+    assert [(s.reason_code, s.detail) for s in d.skips if s.stage == "executor"] == [
+        ("approval_missing", "a human approval is required for this order"),
+        ("approval_missing", "the approval is for a different order"),
+    ]
+    assert fake.seen == []
+
+
+def test_a_watch_that_starts_again_is_recorded():
+    d = desk(scanner_max_gap_s=300)
+    d.tick(T0, market(T0), [coin(T0)])
+    d.tick(T0 + 200, market(T0 + 200), [coin(T0 + 200)])  # inside the gap: nothing new to say
+    d.tick(T0 + 900, market(T0 + 900), [coin(T0 + 900)])  # 700 seconds unseen: the watch starts again
+    watching = [s.detail for s in d.skips if (s.stage, s.reason_code) == ("scanner", "watching")]
+    assert watching[0] == "watch period not over" and len(watching) == 2
+    assert watching[1].startswith("watch restarted after a gap of 700")
+
+
+def test_an_open_position_past_the_loss_limit_fails_the_loss_check_before_it_is_closed():
+    d = desk(cash=100.0)  # a $12 ticket against a $3 budget
+    pos = _bought(d)
+    ts = T0 + WATCH + 60
+    d.tick(ts, market(ts), [coin(ts, price_usd=pos.entry_price * 0.4, liquidity_usd=None)])  # cannot be sold
+    rep = d.night_report()
+    row = rep["open_positions"][0]
+    assert rep["losses"] == [] and row["over_budget"] is True
+    assert row["budget_usd"] == pytest.approx(3.0)
+    assert row["result_so_far_usd"] == pytest.approx(pos.qty * pos.entry_price * 0.4 - pos.cost_usd)
+    checks = report.morning_checks(rep, 3.0)
+    assert checks[1]["ok"] is False
+    assert checks[1]["evidence"].endswith("1 still open, 1 of them past the limit at the last price")
+    assert "PAST THE LOSS LIMIT" in report.render_morning(rep, 3.0)
+
+
+def test_an_open_position_inside_the_limit_passes_the_loss_check():
+    d = desk()
+    _bought(d)
+    rep = d.night_report()
+    row = rep["open_positions"][0]
+    assert row["over_budget"] is False and row["result_so_far_usd"] < 0  # fees and impact, well inside $30
+    assert report.morning_checks(rep, 3.0)[1]["ok"] is True
+    assert "PAST THE LOSS LIMIT" not in report.render_morning(rep, 3.0)
+
+
+def test_the_result_so_far_counts_what_a_take_already_banked():
+    d = desk()
+    pos = _bought(d)
+    t1 = T0 + WATCH + 60
+    high = pos.entry_price * 2.0
+    d.tick(t1, market(t1), [coin(t1, price_usd=high, high_10m_usd=high)])
+    row = d.night_report()["open_positions"][0]
+    left = d.ledger.positions["GOOD"]
+    assert row["result_so_far_usd"] == pytest.approx(d.ledger.realized_pnl_usd + left.qty * high - left.cost_usd)
+    assert row["result_so_far_usd"] > 20.0
+
+
+def test_the_night_result_marks_open_positions_and_the_cash_figure_does_not():
+    d = desk()
+    pos = _bought(d)
+    ts = T0 + WATCH + 60
+    up = pos.entry_price * 1.5
+    d.tick(ts, market(ts), [coin(ts, price_usd=up, high_10m_usd=up)])
+    rep = d.night_report()
+    assert rep["ending_cash_usd"] == pytest.approx(975.0)
+    assert rep["ending_equity_usd"] == pytest.approx(975.0 + pos.qty * up)
+    assert rep["night_pnl_usd"] == pytest.approx(pos.qty * up - 25.0) and rep["night_pnl_usd"] > 10.0
+    assert rep["realized_pnl_usd"] == 0.0
+
+
+def test_the_live_gate_in_the_report_knows_whether_an_approval_source_exists():
+    without = Desk(Settings.for_tests(), 1_000.0).night_report()["live_gate_blockers"]
+    with_one = Desk(Settings.for_tests(), 1_000.0, approve=lambda i: None).night_report()["live_gate_blockers"]
+    assert "no_per_order_approval" in without and len(without) == 5
+    assert "no_per_order_approval" not in with_one and len(with_one) == 4
+
+
+def test_the_mode_log_says_when_market_data_was_missing():
+    d = desk()
+    d.tick(T0, None, [])
+    d.tick(T0 + 60, market(T0 + 60), [])
+    assert [m["data_ok"] for m in d.mode_log] == [False, True]
+
+
+def _sell_fill(pos, cash):
+    return model.Fill(
+        order_id="x", ts=T0 + WATCH + 60, mint=pos.mint, symbol=pos.symbol, side=model.Side.SELL,
+        qty=pos.qty, price=0.0005, gross_usd=cash, fees_usd=0.0, cash_delta_usd=cash,
+        verification=model.Verification.PAPER, exit_reason=model.ExitReason.STOP,
+    )
+
+
+@pytest.mark.parametrize(
+    "total, expect_loss, expect_over",
+    [(-30.0, True, False), (-30.000001, True, True), (0.0, False, False), (-0.01, True, False)],
+)
+def test_the_loss_and_budget_lines_at_their_exact_edges(total, expect_loss, expect_over):
+    d = desk()
+    pos = _bought(d)  # $1,000 of cash at entry, so the budget is exactly $30
+    d._realized["GOOD"] = total
+    d._close_out(T0 + WATCH + 60, pos, _sell_fill(pos, 1.0), model.ExitReason.STOP)
+    assert (len(d.losses) == 1) is expect_loss
+    if expect_loss:
+        assert d.losses[0]["over_budget"] is expect_over and d.losses[0]["budget_usd"] == 30.0
+    assert (len(d.violations) == 1) is expect_over
+
+
+def test_a_stop_at_full_size_goes_past_the_limit_on_costs_alone():
+    """The source sizes a ticket so a stop at exactly 25% loses exactly 3% of cash, before any cost.
+
+    With any fee or price impact a stop-out on a ticket no cap has shrunk therefore loses more than
+    3%, and the desk reports it. This pins that the report is honest about the source's own rule.
+    """
+    d = desk(cash=100.0)  # the ticket is the full 12% of cash: no cap binds
+    pos = _bought(d)
+    assert pos.cost_usd == pytest.approx(12.0)
+    ts = T0 + WATCH + 60
+    d.tick(ts, market(ts), [coin(ts, price_usd=pos.stop_price)])  # exactly at the stop, no gap
+    loss = d.losses[0]
+    assert loss["exit_reason"] == "stop" and 3.0 < loss["loss_pct_of_cash"] < 3.6
+    assert loss["over_budget"] is True and [v["rule"] for v in d.violations] == ["loss_exceeded_risk_budget"]
+
+
+def test_the_morning_text_shows_the_first_detail_behind_each_kind_of_skip():
+    frames = [replay.parse_frame(f) for f in _story()]
+    text = report.render_morning(replay.run(frames, Settings.for_tests(), 1_000.0), 3.0)
+    assert "   1  scanner:liquidity_below_floor\n        first: THIN, liquidity 15000.00 < 20000.00" in text
+    assert "        first: LATE, L-LOSR-" in text  # the lesson that blocked it is named
+
+
+def test_the_command_line_escapes_what_it_echoes_and_survives_deep_nesting(tmp_path, capsys):
+    settings = str(PKG / "fixtures" / "settings.test-placeholders.json")
+    evil = tmp_path / "evil.jsonl"
+    evil.write_text('{"ts": 1, "tokens": [], "bad\\u001b[2Jkey": 1}\n', encoding="utf-8")
+    assert replay.main(["--timeline", str(evil), "--settings", settings, "--cash", "1000"]) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("refused: line 1: unknown key(s) bad\\u001b[2Jkey") and "\x1b" not in err
+    long_key = tmp_path / "long.jsonl"
+    long_key.write_text('{"ts": 1, "tokens": [], "%s": 1}\n' % ("k" * 5000), encoding="utf-8")
+    assert replay.main(["--timeline", str(long_key), "--settings", settings, "--cash", "1000"]) == 2
+    assert len(capsys.readouterr().err) < 600
+    deep = tmp_path / "deep.jsonl"
+    deep.write_text('{"ts": 1, "tokens": ' + "[" * 100_000 + "]" * 100_000 + "}\n", encoding="utf-8")
+    assert replay.main(["--timeline", str(deep), "--settings", settings, "--cash", "1000"]) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("refused:") and "Traceback" not in err
+
+
+# --- round 3: claims the documents made that the code did not back -------------
+
+
+def test_the_desk_itself_refuses_settings_that_skipped_the_loaders_checks():
+    from overnight_desk.settings import SettingsError
+
+    with pytest.raises(SettingsError, match="the owner must set this"):
+        Desk(Settings(), 1_000.0)  # built by hand: the six owner values are missing
+    with pytest.raises(SettingsError, match="stop_loss_pct"):
+        Desk(dataclasses.replace(Settings.for_tests(), stop_loss_pct=500.0), 1_000.0)
+    with pytest.raises(SettingsError, match="trail_red_pct must be below trail_green_pct"):
+        Desk(dataclasses.replace(Settings.for_tests(), trail_green_pct=20.0), 1_000.0)
+
+
+def test_the_violations_line_says_what_the_desk_counts():
+    d = desk()
+    d.tick(T0, market(T0), [])
+    row = report.morning_checks(d.night_report(), 3.0)[3]
+    assert row["ok"] is True
+    assert row["evidence"] == (
+        "0 recorded. The desk records two kinds only: an exit it could not carry out, and a loss past the limit"
+    )
+
+
+@pytest.mark.parametrize("tiny", [1e-300, 1e-304, 1e-306])
+def test_a_buy_at_a_price_too_small_to_quote_is_a_skip_and_never_a_crash(tiny):
+    """A fuzz run found this: the quote overflowed to an infinite quantity at a price of zero."""
+    kw = dict(price_usd=tiny, high_10m_usd=tiny * 1.25, liquidity_usd=1_000_000.0)
+    d = desk(cash=10_000.0, max_ticket_usd=1_000.0)
+    warm(d, "GOOD", **kw)
+    ts = T0 + WATCH
+    out = d.tick(ts, market(ts), [coin(ts, **kw)])
+    assert out.fills == () and d.ledger.positions == {} and d.ledger.cash_usd == 10_000.0
+    assert reasons(d)[-1] == ("executor", "order_refused")
+    assert d.skips[-1].detail == "the quote is not a usable number"
+    json.dumps(d.night_report(), allow_nan=False)  # no inf or nan reached the report
+
+
+def test_a_small_but_workable_price_still_buys():
+    kw = dict(price_usd=1e-250, high_10m_usd=1.25e-250, liquidity_usd=1_000_000.0)
+    d = desk(cash=10_000.0, max_ticket_usd=1_000.0)
+    warm(d, "GOOD", **kw)
+    ts = T0 + WATCH
+    out = d.tick(ts, market(ts), [coin(ts, **kw)])
+    assert len(out.fills) == 1 and out.fills[0].price > 0
+    json.dumps(d.night_report(), allow_nan=False)

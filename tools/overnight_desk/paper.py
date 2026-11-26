@@ -4,9 +4,11 @@ Source line 80 says a PAPER fill is "taken from the quote" and the source
 states no cost anywhere. This module makes every cost explicit. The cost model
 (a constant-product pool plus a venue fee, a pool fee and a flat fee per side)
 is INVENTED, and its three rates are OWNER settings with no default. The
-per-order human gate in ``require_approval`` comes from source line 80 and the
-SPEC.md "paper.py" section; it is not a setting. The rule that a position is
-never averaged down is source line 60. Nothing here reads a clock, the network
+per-order human gate in ``require_approval`` is INVENTED too. The source asks
+for no approval of single orders. The gate comes from the owner's own rule
+that no automation commits capital without a person confirming it, and it is
+not a setting. The rule that a position is never averaged down is source line
+60. Nothing here reads a clock, the network
 or a random source, and no argument is mutated.
 
 INVENTED rule, drained pool: a SELL into a pool whose liquidity is known and
@@ -15,6 +17,8 @@ percent) instead of being refused, because a drained pool is the case the exit
 rules exist for and it must be recordable as a loss. It needs no price.
 """
 from __future__ import annotations
+
+import math
 
 from .model import (
     ExecutorKind,
@@ -125,6 +129,15 @@ def model_quote(
         fixed_fee_usd = f
         fill_price = gross_usd / out_qty
 
+    impact = (fill_price / price - 1) * 100
+    # A price so small or so large that the arithmetic runs off the end of a
+    # float gives no usable quote. Refuse it, so no fill carries inf, nan or a
+    # price of zero.
+    if not fill_price > 0 or not all(
+        math.isfinite(x) for x in (out_qty, gross_usd, fill_price, venue_fee_usd, pool_fee_usd, impact)
+    ):
+        raise PaperError("the quote is not a usable number")
+
     return Quote(
         side=side,
         spot_price=price,
@@ -134,7 +147,7 @@ def model_quote(
         venue_fee_usd=venue_fee_usd,
         pool_fee_usd=pool_fee_usd,
         fixed_fee_usd=fixed_fee_usd,
-        price_impact_pct=(fill_price / price - 1) * 100,
+        price_impact_pct=impact,
     )
 
 

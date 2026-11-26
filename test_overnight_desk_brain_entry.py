@@ -114,7 +114,7 @@ def test_dip_liquidity_floor(liq, expected):
 
 
 def test_grad_does_not_apply_the_dip_age_window_or_liquidity_floor():
-    # 300s is outside the DIP window and 100 is under the floor; GRAD checks neither.
+    # 100 is under the liquidity floor and 30,000s is past the DIP window; GRAD checks neither.
     assert code(aged(900, liquidity_usd=100.0), Strategy.GRAD) == "entry"
     assert code(aged(30_000), Strategy.GRAD) == "entry"
 

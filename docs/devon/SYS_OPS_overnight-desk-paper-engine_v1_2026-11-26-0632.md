@@ -1,7 +1,9 @@
 # Overnight Desk: the paper engine, built on Tee's ruling
 
 Status record for the `claude/new-session-1eccpt` branch, pull request #495.
-First written 2026-11-26 at 0632Z, the stamp in its name. Supersedes nothing.
+First written 2026-11-26 at 0632Z, the stamp in its name, and revised the
+same day at 0654Z after a third verification round, which has its own section
+below. Supersedes nothing.
 It follows no earlier doc on this topic. The nearest relative is
 `SYS_OPS_hypergrok-trading-desk_v1_2026-09-24-0206.md`, the other trading
 desk on record, whose line 16 reads "Standing approval for a protective stop:
@@ -75,7 +77,7 @@ line is his reading to give. From here the work is done at full quality.
 
 ## What was built
 
-`tools/overnight_desk/`, sixteen Python files and 2,910 lines, standard
+`tools/overnight_desk/`, sixteen Python files and 2,999 lines, standard
 library only. It is everything in the prompt that can be built and tested
 without an account, a browser or an order: settings with an origin and a
 range for every number, the market mode, the scanner, the eight layer analyst
@@ -84,8 +86,8 @@ risk exits, the lessons loop, a paper executor with an explicit cost model, a
 ledger, a live gate that stays shut, the desk that runs them in order, a
 morning report and a replay over a recorded timeline.
 
-Seven test files at the repository root hold 956 tests: base 85, brain and
-entry 141, engine 140, mode and lessons 231, paper and gate 117, risk 102,
+Seven test files at the repository root hold 990 tests: base 86, brain and
+entry 141, engine 170, mode and lessons 231, paper and gate 120, risk 102,
 scanner and analyst 140. All seven are in the standalone job of `ci.yml`
 and in the matching list in `CLAUDE.md`.
 
@@ -94,14 +96,17 @@ and the only timeline in the repository is synthetic. No real night has been
 recorded or replayed, so nothing it prints is about a real market. It cannot
 trade: the one executor fills on paper. It reads nothing from FOMO.
 
-Six numbers the prompt never states have no default and block startup until
-Tee sets them: the largest ticket, the most open positions, the most total
-exposure, and three fee rates.
+Six numbers the prompt never states have no default: the largest ticket, the
+most open positions, the most total exposure, and three fee rates. The desk
+checks its settings when it is built and refuses to start until Tee sets
+them.
 
 ## What had to be invented
 
-Every one of these is labelled INVENTED in `SPEC.md` and waits on Tee's
-review. None is in force until he rules.
+Every one of these is labelled INVENTED in `SPEC.md`. They are what the code
+runs on today, in any replay. Tee has not ruled on any of them. The first
+writing of this doc said none was in force until he ruled, and that was
+wrong: only the step 15 acceptance list is a proposal that gates nothing.
 
 - Steps 4 to 15, proposed in `STEPS.md`, with a nine line acceptance list
   for the step 15 the prompt gates live trading on.
@@ -110,9 +115,12 @@ review. None is in force until he rules.
   flat fee. A sale into a pool with nothing left pays nothing.
 - The rule that turns a loss into a lesson. Its reach is wide: a loss on a
   coin with $40,000 of liquidity blocks every later coin at or under $40,000.
-- Seven readings where the prompt contradicts itself or leaves a gap (R1 to
-  R7 in `SPEC.md`), and fourteen definitions the build had to choose, among
+- Ten readings where the prompt contradicts itself or leaves a gap (R1 to
+  R10 in `SPEC.md`), and fifteen definitions the build had to choose, among
   them that "liquidity" means both sides of the pool.
+- The per-order approval gate on any executor that is not the paper one. The
+  prompt asks for no such thing. It comes from Tee's own capital-guardrails
+  rule, and it cannot hold together with the prompt's unattended stop.
 - Fourteen settings marked invented, each with the reason in its note.
 
 ## How it was verified
@@ -176,11 +184,64 @@ verdicts were confirmed outright. Two were refuted on test strength alone,
 with every contract item holding, and the main session closed those gaps: the
 scan for a live executor had six holes and now has a test for each.
 
-Round 3 had not run when this was first written. Its result is recorded in
-the pull request description and in a revision of this doc.
+Round 3, on commit `43cddaa`. Four agents.
 
-Local runs on the fix commit: the 956 desk tests passed, `ruff check .`
-returned no finding, and the replay of the fixture night exited 0.
+- Engine re-attack: all seven round 2 defects fixed and all 23 listed mutants
+  dead. Of 45 new mutations, 7 survived with an effect that could be
+  observed. One new defect: a price of infinity handed straight to the desk
+  produced a paper take worth thousands of dollars. The replay already
+  refused such a number, so only a direct caller could reach it.
+- Fuzz: 1,500 seeded nights, 59,732 ticks, 2,313 buys, 2,373 sells, and 1,762
+  ticks in which a held coin read liquidity zero or unknown. Sixteen of
+  seventeen invariants held on every tick. The seventeenth, that no exception
+  escapes a tick, held on that run and failed 33 times in a second run that
+  pushed prices near 1e-300, where the quote overflowed to an infinite
+  quantity at a price of zero.
+- Code critic: 13 findings, two medium and none high. Scores of 3 for
+  correctness, failure handling and observability, 4 for security,
+  reversibility, completeness and maintainability, 5 for re-run safety.
+  Flagship floor met.
+- Fidelity critic: 11 findings, four medium. Scores of 4, 3 and 3.5.
+
+Across the eleven scored dimensions the mean was 3.68, against a gate of 4.0,
+and security was 4 against a required 5. Round 2's mean was 3.18 with the
+floor missed.
+
+What round 3 changed:
+
+- A reading that holds a number that is not finite is refused before anything
+  changes. The paper model refuses a quote that is not a usable number, so a
+  price too small to work with is a skip or an exit not carried out, and
+  never a crash.
+- The desk checks its settings when it is built. Before, only the loaders
+  did, and "refuses to start" was true of them and not of the desk.
+- A fill that does not match its order is raised before the ledger is
+  touched.
+- An open position past the loss limit fails the loss check before it is
+  closed, and the report prints its result so far.
+- The text report prints the first detail under each kind of skip. The
+  evidence lines for the first and fourth checks now say what they count: the
+  first guards the record and cannot fail on the desk's own output, and the
+  fourth counts two kinds of violation and no others.
+- A refusal for a new cause and a watch that starts again are recorded.
+- The replay escapes and cuts what it echoes, and refuses a line nested too
+  deeply to read.
+- Labels. The per-order approval gate had been filed under source line 80 and
+  is this build's own. The scanner's kill order, the brain's skip order and
+  minimum ticket, and the lesson grammar are now marked invented. Three
+  readings were added. A false sentence, that WAVE and TREND give no
+  thresholds, was corrected.
+- Written down for the first time: the prompt sizes a ticket so a stop at
+  exactly 25% loses exactly 3% of cash before costs, so with any fee a
+  stop-out at full size loses a little more than 3% and the desk reports a
+  violation.
+- Each of the seven surviving mutations got a test.
+
+Local runs after those fixes: the 990 desk tests passed, the CI standalone
+list returned 7,062 passed, `ruff check .` returned no finding, and the
+replay of the fixture night exited 0. The full
+PostgreSQL suite ran on `43cddaa`, before those fixes, and returned 11,039
+passed and 2 skipped.
 
 ## The data question for step 14
 
@@ -219,9 +280,11 @@ comment on the pull request records it.
 ## Open, in the order it blocks
 
 1. The data source for step 14. Without it the desk has nothing to read.
-2. Tee's review of the invented parts: `SPEC.md` readings R1 to R7, the
+2. Tee's review of the invented parts: `SPEC.md` readings R1 to R10, the
    definitions list, the score formula, the cost model, the lesson rule and
-   `STEPS.md`.
+   `STEPS.md`. Two questions inside that review came out of round 3: whether
+   to size a ticket net of costs, and whether open positions should be
+   managed on the tighter RED figures when market data is missing.
 3. His six numbers.
 4. Before any lane that touches FOMO: the reach of his compliance rule, his
    reading of capital-guardrails line 117, a written answer from FOMO on
@@ -236,8 +299,8 @@ TYPE: SYS_OPS
 ARTIFACT: Overnight Desk paper engine, tools/overnight_desk, pull request #495
 DATE: 2026-11-26
 DECISIONS: build toward the full desk, picked on a card over a recommendation to leave the prompt unbuilt (Tee, 2026-11-26); the session token lane is not built under any ruling short of written authorization from the venue, and the click lane returns on its own card, both carried in the text of the option he picked; build the paper engine first, with no venue access; every definition the prompt lacks is labelled INVENTED and waits on his review; the six risk and fee numbers the prompt never states have no default
-FINDINGS: FOMO terms section 16, last updated October 26 2026, prohibit automated trade execution and giving a session token to a script; the prompt gates live trading on STEP 15 tests it never defines; its stop is a price watch and a click and cannot be promised; it states no fee; the audit's long report failed the gauntlet three times and was quarantined; round 2 verification found that a risk exit on a drained pool stopped the night, fixed by recording an unfilled order and carrying on; 956 desk tests pass locally on the fix commit; no keyless public source gives bundled wallet counts or creator sales, so on free data the desk would pass no coin; three keyless sources disagreed on one coin's top 10 share, developer address and holder count
-OPEN: data source ruling for step 14; Tee's review of readings R1 to R7, the definitions list, the score formula, the cost model, the lesson rule and STEPS.md; his six numbers; before any FOMO lane, the reach of his compliance rule, his reading of capital-guardrails line 117 and the conflict between per-order approval and an unattended stop; round 3 verification result to be recorded
-STATUS: built and tested on the branch, two verification rounds run and their findings fixed, a third pending at first writing; paper only, no data source, no venue access; not merged
+FINDINGS: FOMO terms section 16, last updated October 26 2026, prohibit automated trade execution and giving a session token to a script; the prompt gates live trading on STEP 15 tests it never defines; its stop is a price watch and a click and cannot be promised; it states no fee; the audit's long report failed the gauntlet three times and was quarantined; round 2 verification found that a risk exit on a drained pool stopped the night, fixed by recording an unfilled order and carrying on; round 3 found no high finding and the flagship floor met, with a mean score of 3.68 against a gate of 4.0 and security 4 against 5; 990 desk tests pass locally after the round 3 fixes; the full API suite returned 11039 passed on 43cddaa; no keyless public source gives bundled wallet counts or creator sales, so on free data the desk would pass no coin; three keyless sources disagreed on one coin's top 10 share, developer address and holder count
+OPEN: data source ruling for step 14; Tee's review of readings R1 to R10, the definitions list, the score formula, the cost model, the lesson rule and STEPS.md; his six numbers; before any FOMO lane, the reach of his compliance rule, his reading of capital-guardrails line 117 and the conflict between per-order approval and an unattended stop; whether to size net of costs; how to manage open positions when market data is missing
+STATUS: built and tested on the branch, three verification rounds run and their findings fixed; the invented rules are active in any replay and unruled; paper only, no data source, no venue access; not merged
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
