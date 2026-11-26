@@ -2,8 +2,9 @@
 
 Status record for the `claude/new-session-1eccpt` branch, pull request #495.
 First written 2026-11-26 at 0632Z, the stamp in its name, and revised the
-same day at 0654Z after a third verification round and at 0712Z after the
-fourth and last, each with its own section below. Supersedes nothing.
+same day at 0654Z after a third verification round, at 0712Z after the
+fourth, at 0733Z after a verification-only pass and at 1930Z after a bounded
+fix round, each with its own section below. Supersedes nothing.
 It follows no earlier doc on this topic. The nearest relative is
 `SYS_OPS_hypergrok-trading-desk_v1_2026-09-24-0206.md`, the other trading
 desk on record, whose line 16 reads "Standing approval for a protective stop:
@@ -77,7 +78,7 @@ line is his reading to give. From here the work is done at full quality.
 
 ## What was built
 
-`tools/overnight_desk/`, sixteen Python files and 3,038 lines, standard
+`tools/overnight_desk/`, sixteen Python files and 3,070 lines, standard
 library only. It is everything in the prompt that can be built and tested
 without an account, a browser or an order: settings with an origin and a
 range for every number, the market mode, the scanner, the eight layer analyst
@@ -86,9 +87,9 @@ risk exits, the lessons loop, a paper executor with an explicit cost model, a
 ledger, a live gate that stays shut, the desk that runs them in order, a
 morning report and a replay over a recorded timeline.
 
-Seven test files at the repository root hold 999 tests: base 86, brain and
-entry 141, engine 179, mode and lessons 231, paper and gate 120, risk 102,
-scanner and analyst 140. All seven are in the standalone job of `ci.yml`
+Seven test files at the repository root hold 1,013 tests: base 86, brain
+and entry 141, engine 193, mode and lessons 231, paper and gate 120, risk
+102, scanner and analyst 140. All seven are in the standalone job of `ci.yml`
 and in the matching list in `CLAUDE.md`.
 
 What it is not. The desk has no source of data. Nothing produces a snapshot,
@@ -346,11 +347,75 @@ Left open from that pass:
   on is a subset of what the test bans. "Liquidity usually wins" in `SPEC.md`
   states a frequency that no real night here supports.
 
-Local runs on the final commit: the 999 desk tests passed, the CI standalone
+Local runs on `d679a45`: the 999 desk tests passed, the CI standalone
 list returned 7,071 passed, `ruff check .` returned no finding, and
 the replay of the fixture night exited 0. The full PostgreSQL suite last ran
 on `43cddaa`, two fix commits earlier, and returned 11,039 passed and 2
 skipped. CI runs it on the final commit.
+
+A bounded fix round, 19:13Z to 19:24Z. Tee ruled it on a card answered by
+19:11Z: one round past the cap of three, with no rescoring. Three editors
+worked in sequence, each on one fix in its own checkout, and three verifiers
+then checked the result. The three commits sit directly on the branch head
+and were fast-forwarded onto it unchanged, so the commits on the branch are
+the ones the verifiers checked.
+
+- `968a3a4`, the gate. `desk.executor` is a read-only property. The paper
+  decision is no longer stored: it is read from the held executor each time.
+  `_execute` reads the executor once and uses that one object for the paper
+  decision, the approval callback, the gate and the call. The probe that had
+  printed two unapproved calls and executor "paper" now stops at the
+  assignment with `AttributeError`.
+- `1a3b65d`, tests only. Eight of the ten surviving mutants are now killed.
+  The other two differ from the real code only outside the contract: an
+  executor kind that is not a member of `ExecutorKind`, and a sell order with
+  no quantity, which the desk never builds. One more test pins what happens
+  today when the approval callback raises.
+- `e05c1c8`, documents. The README's guard bullet lists everything the base
+  test bans. The "usually" sentence in `SPEC.md` is replaced by the mechanism
+  and by what the one synthetic night shows. The gate sections of both
+  documents describe the code as it now is, and name what the gate does not
+  stop.
+
+What the verifiers found on `e05c1c8`:
+
+- Gate attack, 42 probes. Assigning `desk.executor`, `desk._is_paper` or
+  `desk._gate_kind` raises. An executor put into the desk's private
+  attribute is still gated. No executor passed to the constructor received
+  an order without a valid approval, for a buy or for a sell.
+- Mutation. The eight mutants inside the contract are killed. Of 56 fresh
+  mutants of the changed lines, 49 were killed and 7 survived.
+- Truth. No false statement in the changed text. The round changed four
+  files: the engine, its test file, the README and the SPEC. No test was
+  removed or loosened. The replay of the fixture night prints byte for byte
+  what it printed before the round.
+
+Left open after the round. These were found by its verifiers and not fixed,
+because the round Tee ruled was one round:
+
+- Medium, in the tests only. One surviving mutant can be told from the real
+  code. In `_execute`, the gate kind is read once at the top and passed to
+  `require_approval` (`engine.py:424`). If that line read the kind afresh, an
+  approval callback that reassigns the executor object's class to the paper
+  class and returns no approval would get its order through. The real code
+  refuses that order. No test pins it.
+- Low, in the gate. The gate tests the executor's class and nothing else. An
+  exact `PaperExecutor` object whose `execute` has been replaced on the
+  instance is treated as paper, receives orders with no approval, and its
+  night reads as a paper night. The README names replaced functions in the
+  paper module as outside the gate. It does not name this case.
+- Low. Rebinding `paper.PaperExecutor` in the module changes what counts as
+  paper. Replacing `Desk._is_paper` on the class makes the report say paper
+  while the gate still refuses the order.
+- Low, in the tests only. Three survivors differ only for a subclass of
+  `Desk` that overrides the `executor` property. Three more are equivalent.
+- Still open from the earlier pass: what the desk should do when the
+  approval callback raises. Today the error leaves the tick and nothing is
+  sent, and a test now pins that.
+
+Local runs on `e05c1c8`: the 1,013 desk tests passed, the CI standalone
+list, regenerated from `ci.yml` at 65 files, returned 7,085 passed, and
+`ruff check .` returned no finding.
 
 ## The data question for step 14
 
@@ -388,21 +453,26 @@ comment on the pull request records it.
 
 ## Open, in the order it blocks
 
-1. The data source for step 14. Without it the desk has nothing to read.
-2. Tee's review of the invented parts: `SPEC.md` readings R1 to R10, the
+Tee ruled four things on one card on 2026-11-26, answered by 19:11Z: one
+bounded fix round, recorded above; pull request #495 held as a draft;
+nothing more built until he has reviewed the invented parts; and this
+record's receipt filed to the thread log. That ruling sets the order.
+
+1. Tee's review of the invented parts: `SPEC.md` readings R1 to R10, the
    definitions list, the score formula, the cost model, the lesson rule and
    `STEPS.md`. Two questions inside that review came out of round 3: whether
    to size a ticket net of costs, and whether open positions should be
-   managed on the tighter RED figures when market data is missing.
+   managed on the tighter RED figures when market data is missing. Nothing
+   more is built until this is done.
+2. The data source for step 14. Without it the desk has nothing to read.
 3. His six numbers.
 4. Before any lane that touches FOMO: the reach of his compliance rule, his
    reading of capital-guardrails line 117, a written answer from FOMO on
    automation, and the question that per-order approval and an unattended
    stop cannot both hold.
 
-Blocking nothing, and Tee's to rule: whether to spend a fourth revision cycle
-on the gate finding and the test gaps from the verification-only pass. The
-gauntlet's cap of three is why they were recorded and left.
+Blocking nothing: the items left open after the bounded fix round, listed
+in its section above. A further round on them is Tee's to rule.
 
 ## DEVON RECEIPT
 
@@ -411,9 +481,9 @@ AREA: Money
 TYPE: SYS_OPS
 ARTIFACT: Overnight Desk paper engine, tools/overnight_desk, pull request #495
 DATE: 2026-11-26
-DECISIONS: build toward the full desk, picked on a card over a recommendation to leave the prompt unbuilt (Tee, 2026-11-26); the session token lane is not built under any ruling short of written authorization from the venue, and the click lane returns on its own card, both carried in the text of the option he picked; build the paper engine first, with no venue access; every definition the prompt lacks is labelled INVENTED and waits on his review; the six risk and fee numbers the prompt never states have no default
-FINDINGS: FOMO terms section 16, last updated October 26 2026, prohibit automated trade execution and giving a session token to a script; the prompt gates live trading on STEP 15 tests it never defines; its stop is a price watch and a click and cannot be promised; it states no fee; the audit's long report failed the gauntlet three times and was quarantined; round 2 verification found that a risk exit on a drained pool stopped the night, fixed by recording an unfilled order and carrying on; round 3 found no high finding and the flagship floor met, with a mean score of 3.68 against a gate of 4.0 and security 4 against 5; the last pass scored a mean of 4.00 with security still 4, so the verdict is PASS-WITH-CONDITIONS; its security finding, that an executor could call itself paper and skip the approval gate, was closed afterwards in d679a45; a verification-only pass on d679a45 ran 60 gate probes and no executor passed to the constructor got an order without a valid approval; the same pass found one low way around the gate, by assigning the desk's executor after it is built, and 10 surviving mutants out of 91, two of them medium gaps in the tests with the code right today; all of it was reproduced by this session and left open because the three revision cycles were spent; 999 desk tests pass locally on the final commit; the full API suite returned 11039 passed on 43cddaa; no keyless public source gives bundled wallet counts or creator sales, so on free data the desk would pass no coin; three keyless sources disagreed on one coin's top 10 share, developer address and holder count
-OPEN: data source ruling for step 14; Tee's review of readings R1 to R10, the definitions list, the score formula, the cost model, the lesson rule and STEPS.md; his six numbers; before any FOMO lane, the reach of his compliance rule, his reading of capital-guardrails line 117 and the conflict between per-order approval and an unattended stop; whether to size net of costs; how to manage open positions when market data is missing; what a live desk does when an executor fails after sending an order; whether to spend a fourth revision cycle on the gate finding and the test gaps
-STATUS: built and tested on the branch, four verification rounds and one verification-only pass run; gauntlet verdict PASS-WITH-CONDITIONS on the third scored cycle, not rescored after the fixes that followed it; the invented rules are active in any replay and unruled; paper only, no data source, no venue access; not merged
+DECISIONS: build toward the full desk, picked on a card over a recommendation to leave the prompt unbuilt (Tee, 2026-11-26); the session token lane is not built under any ruling short of written authorization from the venue, and the click lane returns on its own card, both carried in the text of the option he picked; build the paper engine first, with no venue access; on a second card the same day, one bounded fix round past the cap of three revision cycles, pull request #495 held as a draft, building paused until he has reviewed the invented parts, and this receipt filed to the thread log (Tee, 2026-11-26); every definition the prompt lacks is labelled INVENTED and waits on his review; the six risk and fee numbers the prompt never states have no default
+FINDINGS: FOMO terms section 16, last updated October 26 2026, prohibit automated trade execution and giving a session token to a script; the prompt gates live trading on STEP 15 tests it never defines; its stop is a price watch and a click and cannot be promised; it states no fee; the audit's long report failed the gauntlet three times and was quarantined; round 2 verification found that a risk exit on a drained pool stopped the night, fixed by recording an unfilled order and carrying on; round 3 found no high finding and the flagship floor met, with a mean score of 3.68 against a gate of 4.0 and security 4 against 5; the last pass scored a mean of 4.00 with security still 4, so the verdict is PASS-WITH-CONDITIONS; its security finding, that an executor could call itself paper and skip the approval gate, was closed afterwards in d679a45; a verification-only pass on d679a45 ran 60 gate probes and no executor passed to the constructor got an order without a valid approval; the same pass found one low way around the gate, by assigning the desk's executor after it is built, and 10 surviving mutants out of 91, two of them medium gaps in the tests with the code right today; all of it was reproduced by this session and left open because the three revision cycles were spent; the bounded fix round then made the desk's executor read only and the paper decision uncached in 968a3a4, added tests that kill eight of the ten surviving mutants in 1a3b65d and corrected three statements in the documents in e05c1c8; its verifiers ran 42 gate probes with no order reaching an executor passed to the constructor without a valid approval, and found one medium gap in the tests and three low ways around the gate that need a write to the executor object, the paper module or the Desk class; 1013 desk tests and 7085 on the CI standalone list pass locally on e05c1c8; the full API suite returned 11039 passed on 43cddaa; no keyless public source gives bundled wallet counts or creator sales, so on free data the desk would pass no coin; three keyless sources disagreed on one coin's top 10 share, developer address and holder count
+OPEN: data source ruling for step 14; Tee's review of readings R1 to R10, the definitions list, the score formula, the cost model, the lesson rule and STEPS.md; his six numbers; before any FOMO lane, the reach of his compliance rule, his reading of capital-guardrails line 117 and the conflict between per-order approval and an unattended stop; whether to size net of costs; how to manage open positions when market data is missing; what a live desk does when an executor fails after sending an order; what the desk does when the approval callback raises; a test for the gate kind read once in _execute; whether the gate should also test that a paper executor's execute has not been replaced
+STATUS: built and tested on the branch, four verification rounds, one verification-only pass and one bounded fix round run; gauntlet verdict PASS-WITH-CONDITIONS on the third scored cycle, not rescored after the fixes that followed it; pull request #495 held as a draft and building paused for Tee's review, both on his ruling; the invented rules are active in any replay and unruled; paper only, no data source, no venue access; not merged
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
