@@ -106,10 +106,14 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q test
 Offline, no database. What two of the guard tests do and do not show:
 
 - `test_overnight_desk_base.py` fails if a file in this package imports any
-  module outside a written list of twelve standard library modules, calls
-  `eval`, `exec`, `open` or `__import__`, calls a method that writes a file,
-  or if a `.py` file names the venue or holds a web address. It guards against
-  drift and is no sandbox.
+  module outside a written list of twelve standard library modules, or calls
+  `eval`, `exec`, `compile`, `__import__`, `open`, `input` or `breakpoint`, or
+  calls a method on its list of banned methods (`write_text`, `write_bytes`,
+  `open`, `unlink`, `mkdir`, `rmdir`, `touch`, `rename`, `symlink_to`,
+  `hardlink_to`, `chmod`, `system`, `popen`), or if a `.py` file holds one of
+  eight banned words (the venue's name, `prod-api`, `session token`,
+  `bearer `, `private key`, `seed phrase`, `http://`, `https://`). It guards
+  against drift and is no sandbox.
 - `test_overnight_desk_paper_gate.py` fails if any class in the package but
   the paper executor defines `execute`, or if anything sets a `kind` to live.
 
@@ -121,6 +125,18 @@ is not the paper one unless it was given an approval for that one order that
 names a person and carries a time. "The paper one" is decided by the
 executor's class and never by what it calls itself. That is the default and
 it is not a setting.
+
+The desk's executor is fixed when the desk is built. `desk.executor` is read
+only, and assigning to it raises `AttributeError`. Whether the executor is the
+paper one is read from the executor object each time an order is handed over,
+so no stored answer can go stale.
+
+The gate does not stop code that writes to the desk's private attributes. A
+test replaced the approval callback after the desk was built, and an executor
+that is not the paper one then received its order. It does not stop code that
+replaces functions in the paper module either: with `paper.require_approval`
+replaced by a function that returns at once, the same executor received its
+order with no approval. Both are ordinary Python and out of its reach.
 
 The gate covers refusals. It does not cover an executor that fails after
 sending an order. What a live desk does then is undecided, and it has to be

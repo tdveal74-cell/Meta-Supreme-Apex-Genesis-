@@ -637,8 +637,13 @@ blocks every coin that lacks the reading.
   floor at $20,000, one loss can close most of the range the desk trades in.
   The lesson says "be pickier than the last loser". It does not say what went
   wrong. The fixture night shows it: the second coin is blocked by the first
-  loser's lesson. Liquidity usually wins because closeness compares ratios
-  that sit on different scales.
+  loser's lesson. The mechanism is that closeness compares ratios that sit on
+  different scales: a holder percentage over its maximum, and a liquidity
+  floor over the liquidity. The one synthetic night has one loser, LOSR. With
+  the default limits its ratios are 0.5 for liquidity (20,000 over 40,000),
+  0.4 for the top ten holders and 0.2 for each of the other three, so
+  liquidity wins there. How often it wins on other coins is not known,
+  because no real night has been recorded.
 
   A departure from the source: lines 63 and 88 say every loss writes a lesson.
   Here a loss can end with none, when no candidate field qualifies or when the
@@ -911,6 +916,12 @@ executor, is gated like a live one. Its night is not reported as a paper
 night, every fill it returns counts as a real order, and a fill it labels
 paper is counted as unverified.
 
+The executor is fixed when the desk is built. It is held in a private
+attribute and read through a property with no setter, so `desk.executor =
+other` raises `AttributeError`. Whether it is the paper one is not stored:
+`_execute` reads the held object and tests its class each time an order is
+handed over, so there is no cached answer to go stale.
+
 Every intent goes through `_execute`, which calls `paper.require_approval`
 before the executor runs. For any executor but the paper one it first asks
 the `approve` callback for a `HumanApproval`. With no
@@ -919,6 +930,12 @@ carries no time, nothing is executed. This gate is in the desk itself, so an
 executor cannot skip it. It covers sells as well as buys. `_execute` returns
 the fill, or the code `approval_missing` or `order_refused` with the reason.
 An executor refuses an order by raising `paper.PaperError`.
+
+What the gate does not stop: code that writes to the desk's private
+attributes, and code that replaces functions in the paper module. Replacing
+the private executor with one that is not the paper one is still gated. But
+replacing `desk._approve` after the build, or `paper.require_approval`, let an
+order through to such an executor in a test run. Both are ordinary Python.
 
 What that means for a live run, and why it must be ruled on: a stop on an
 executor that is not the paper one needs a person's approval for that one
