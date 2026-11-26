@@ -217,6 +217,57 @@ def test_a_passed_coin_can_still_be_killed():
     assert sc.observe(_clean(ts=T0 + 900)).state is ScanState.KILLED
 
 
+def test_holders_leaving_needs_a_positive_previous_count():
+    # holders_prev == 0 never kills, even against a negative holders count.
+    r = _first_kill(holders=-1, holders_prev=0)
+    assert r.state is not ScanState.KILLED
+    assert _first_kill(holders=-5, holders_prev=0).reason_code == "watching"
+
+
+def test_a_passed_result_carries_the_passed_reason_code():
+    sc = scanner.Scanner(S)
+    sc.observe(_clean())
+    r = sc.observe(_clean(ts=T0 + 600))
+    assert r.state is ScanState.PASSED and r.reason_code == "passed"
+
+
+@pytest.mark.parametrize("field", ["liquidity_usd", "top10_pct", "change_1h_pct"])
+def test_a_passed_coin_goes_back_to_waiting_and_passes_again(field):
+    sc = scanner.Scanner(S)
+    sc.observe(_clean())
+    assert sc.observe(_clean(ts=T0 + 600)).state is ScanState.PASSED
+    back = sc.observe(_clean(ts=T0 + 700, **{field: None}))
+    assert back.state is ScanState.WATCHING and back.reason_code == "waiting_for_data"
+    assert sc.result("MintA") == back
+    again = sc.observe(_clean(ts=T0 + 800))
+    assert again.state is ScanState.PASSED and again.reason_code == "passed"
+    assert again.first_seen_ts == T0
+
+
+@pytest.mark.parametrize(
+    "kw",
+    [
+        dict(liquidity_usd=None),
+        dict(top10_pct=None),
+        dict(change_1h_pct=None),
+        dict(copycat_of=None),
+        dict(trading_disabled=None),
+        dict(holders=None),
+        dict(holders_prev=None),
+        dict(holders=None, holders_prev=None),
+    ],
+)
+def test_an_unknown_value_never_kills_after_the_watch(kw):
+    sc = scanner.Scanner(S)
+    sc.observe(_clean())
+    r = sc.observe(_clean(ts=T0 + 600, **kw))
+    assert r.state is not ScanState.KILLED
+    if any(kw.get(f, 0) is None for f in ("liquidity_usd", "top10_pct", "change_1h_pct")):
+        assert r.state is ScanState.WATCHING and r.reason_code == "waiting_for_data"
+    else:
+        assert r.state is ScanState.PASSED and r.reason_code == "passed"
+
+
 def test_the_watch_follows_the_setting():
     sc = scanner.Scanner(Settings.for_tests(scanner_watch_s=60))
     sc.observe(_clean())
