@@ -2,7 +2,7 @@
 
 Status record for the `claude/mcp-videogen-integration-v7wvjx` branch, pull
 request #493. First written 2026-11-26 at 0123Z, the stamp in its name, and
-revised three times the same day, last at 0315Z after Tee's rulings, after two gauntlet rounds: three
+revised four times the same day, last at 0342Z after the avatar lane correction, after two gauntlet rounds: three
 cold critics, two refuters per finding and eight receipt verifiers on the first
 commit, then nine fix verifiers, two more critics and their refuters on the
 revision; what the gauntlet changed is marked below. Supersedes nothing. It follows
@@ -167,12 +167,59 @@ the bytes go up through `create_file_upload`, which returns a presigned URL,
 and a PUT. The gate does not enforce the rule; it only asks for a human signal.
 Nothing published under a show's name carries a stock voice or face.
 
-Whether an ACTOR entity built from Tee's own reference images and animated by
-`generate_avatar` is a candidate for the avatar render lane, which does not
-exist yet, went to Tee on the card. He ruled 2026-11-26: scout it after sign
-in, on its own card, with `get_me` and the credit prices read first and a
-ceiling set before anything spends or any image of him is uploaded. Nothing
-here starts it.
+## The avatar lane exists, and this doc said it did not
+
+The first version of this doc, and the card Tee answered at about 03:12Z on
+2026-11-26, said "the avatar render lane does not exist yet". That sentence
+came from an August profile note and was never checked against the estate,
+which is the first law's exact failure: the check cost one search of the n8n
+instance. Tee corrected it in chat at about 03:20Z, "I have a avatar lane on
+my n8n", and the lane was read live at about 03:24Z:
+
+- `snRyzuQhPxkidipW`, active, 14 nodes, created 2026-10-21, draft and active
+  version the same. Its title on the instance is the words TQO & NCO, an em
+  dash, then Hugging Face Avatar + Lip Sync; the dash is written out here
+  because the docs ban carries no exemption, and `registry/automations.json`
+  holds the title as typed. A private
+  MuseTalk 1.5 Space on free ZeroGPU behind the VPS worker at
+  `comfy.2-24-109-87.sslip.io/_worker/avatar/`, on the credential named "TSWS
+  ComfyUI VPS Worker". TQO and NCO call it with `action` health, render or
+  status. A render needs `approved_voice_audio: true`, a stable `request_id`
+  (the same id and inputs return the same job), and a `look_id` from eight
+  Terrance looks, default `edbec2e477cff16bad4f492ed6503f35`. A failed job
+  throws "No automatic retry or paid fallback". The output is a private review
+  link, and its own note says "Unreviewed output is never registered in V5".
+  It saves no executions, success or error, so its runs leave nothing for an
+  execution reader, which is the `saveDataSuccessExecution: none` shape
+  CLAUDE.md records for four other lanes.
+- `m22GM2MZYUqGc1Gx`, titled the same way with Approve HF Presenter Clip
+  after the dash, active, 13 nodes, created the same day. It refuses a job unless `visual_reviewed`,
+  `voice_identity_confirmed` and `segment_match_confirmed` are all true and
+  `reviewed_by` is named, refuses test jobs, checks the render receipt
+  (`bridge_verified`, `voice_track_in_clip`), refuses a duplicate, mints a
+  revocable VPS link, downloads the bytes and checks their SHA-256 against the
+  reviewed render, then registers the clip in data table `7Eq5HbskxapeeHfo`
+  (`at_tqo_presenter_clips`), which TQO V5 reads.
+- Inactive beside them: `NCO Forge | Google Vids personal-avatar pilot`
+  (2026-11-05), `SCRATCH TQO 46 lip-sync status` (2026-10-26) and `TEMP Claude
+  5 Oct: avatar_iii engine test` (2026-10-06, HeyGen).
+- Recorded in earlier docs, not re-read today: HeyGen's digital twin group
+  `f94efc2551ae403fa8d7c60c1aa5d1d5` with look 4
+  (`c89667ba7c474e2694bf18ffc035c604`) made the TQO look on 2026-11-01
+  (`SYS_OPS_openmontage-twin-test-and-arc-close_v1_2026-11-03-0703.md`), and
+  the open model presenter pipeline on a rented Runpod GPU
+  (`SYS_OPS_owned-presenter-pipeline_v1_2026-10-16-0153.md`).
+
+So the owned lane is MuseTalk on his own looks and his approved voice segment,
+human reviewed before registration, with HeyGen's filmed twin as a second
+route. VideoGen's `generate_avatar` would be a third provider, vendor hosted
+and paid, holding his reference images as an entity. The ruling Tee gave on the
+03:12Z card, scout it after sign in, was taken on the false premise and was
+re-asked once the lane was in view. Tee answered the second card at about
+03:35Z in his own words: "Use HeyGen". Recorded as given: the avatar route is
+HeyGen, his filmed digital twin on look 4, and VideoGen's `generate_avatar` is
+not scouted. He did not rule on the MuseTalk workflows' standing beside that,
+so they stay as they are on the instance and nothing here touches them.
 
 ## Open
 
@@ -206,6 +253,10 @@ here starts it.
   no key anywhere, and other claude.ai connectors loaded their tools in the
   cloud session of 2026-11-26, so the route reaches a container; the network
   secret second. Tee took the recommendation.
+- Avatar. Ruled by Tee at about 03:35Z on a second card, after the first
+  card's premise was corrected: "Use HeyGen". VideoGen's `generate_avatar` is
+  not scouted. The MuseTalk workflows on n8n were not ruled on and stay as they
+  are.
 - Measured after a worker restart on this branch at about 03:10Z on
   2026-11-26: the restart read `.mcp.json`, `videogen-docs` loaded and its
   `searchDocs` answered a storyboard query, and no `mcp__videogen__` tool
@@ -230,6 +281,10 @@ here starts it.
   like every other write. A paid run can only have been started inside the
   window, so its cancel is normally inside it too; if that ever bites, listing
   the two as reads is a ruling and a two line change.
+- The August profile note that says the avatar render lane does not exist is
+  stale, and it reached this doc and a card before anyone read the instance.
+  Worth filing to DEVON so the CONTEXT-PILL stops carrying it; the capture key
+  is not set here, so that is Tee's to do or to ask for.
 - The dependency audit is red on `main` and this branch inherits it: the
   `requirements.txt` pip-audit step fails on `dnspython` 2.9.0 (CVE-2026-128089,
   fixed in 2.9.2) and `pnpm audit` on three moderate `next` 15.5.28 advisories
@@ -245,9 +300,9 @@ AREA: Systems
 TYPE: SYS_OPS
 ARTIFACT: VideoGen MCP registered at project scope and gated
 DATE: 2026-11-26
-DECISIONS: register videogen at the canonical https://mcp.videogen.io/mcp and videogen-docs beside it in .mcp.json and enabledMcpjsonServers, project scope not user scope; add videogen to NAMED_SERVERS so every non-read tool needs a human signal, shipped in the conservative direction and confirmed by Tee on a card, cancels included (Tee, 2026-11-26); keep videogen-docs (Tee, 2026-11-26); sign in through the claude.ai custom connector, no key anywhere, alias row on a UUID arrival (Tee, 2026-11-26); scout generate_avatar on a Tee ACTOR entity after sign in on its own card, prices first (Tee, 2026-11-26); name VideoGen in the CLAUDE.md gated list and add a short MCP servers section that maps HardRule 6 (voice and likeness owned, never rented) onto its inputs; pin the fifty one documented tool names, a .mcp.json to settings parity test and the WaveSpeed price flag on VideoGen
-FINDINGS: both the tagged and canonical URLs return byte identical 401 bodies before sign in and the declared OAuth resource is the bare /mcp, so the vg_client tag is read as attribution and its effect after sign in is unmeasured; DCR is advertised through Supabase Auth; the docs server is unauthenticated with one read tool, searchDocs; the vendor publishes three tool counts (49, 46, 50) and its tables name 51; gate tests 962 to 1169 on the first commit, mutation 124 writes red and 80 reads green, reproduced by independent verifiers; a rented voice or face arrives through voiceId or its default, text_to_speech, spokenDialogue, video_to_video audio GENERATE, CHANGE_NARRATOR, TRANSLATE_PROJECT with changeVoice or dubVideos, and actorEntityId on four workflows and generate_avatar, while voiceover_to_video without an actor or generate_avatar on Tee's own ACTOR entity, both on an uploaded Tee clone track and with no edit after, stay inside the rule; storyboard_to_video has no REST page and its scenes carry spoken voiceoverScript lines in a vendor voice per the changelog v2.3.3; a worker restart on the branch loaded videogen-docs from .mcp.json and no videogen API tool, measured 2026-11-26; the dependency audit is red on main on dnspython and next and the first PR comment misread it
-OPEN: Tee connects the claude.ai custom connector; the next session reads the arrival name and adds a SERVER_ALIASES row if it is a UUID; live tool names unread until then, then check against READ_VERB; credit prices unread, get_me first; the avatar lane scouting card after sign in; dnspython 2.9.2 and next 15.5.29 pins in one separate PR before the standing merge grant can act
+DECISIONS: register videogen at the canonical https://mcp.videogen.io/mcp and videogen-docs beside it in .mcp.json and enabledMcpjsonServers, project scope not user scope; add videogen to NAMED_SERVERS so every non-read tool needs a human signal, shipped in the conservative direction and confirmed by Tee on a card, cancels included (Tee, 2026-11-26); keep videogen-docs (Tee, 2026-11-26); sign in through the claude.ai custom connector, no key anywhere, alias row on a UUID arrival (Tee, 2026-11-26); the avatar route is HeyGen, his filmed twin, and VideoGen's generate_avatar is not scouted, replacing the scouting ruling taken on the false premise that no avatar lane existed (Tee, 2026-11-26, "Use HeyGen"); name VideoGen in the CLAUDE.md gated list and add a short MCP servers section that maps HardRule 6 (voice and likeness owned, never rented) onto its inputs; pin the fifty one documented tool names, a .mcp.json to settings parity test and the WaveSpeed price flag on VideoGen
+FINDINGS: both the tagged and canonical URLs return byte identical 401 bodies before sign in and the declared OAuth resource is the bare /mcp, so the vg_client tag is read as attribution and its effect after sign in is unmeasured; DCR is advertised through Supabase Auth; the docs server is unauthenticated with one read tool, searchDocs; the vendor publishes three tool counts (49, 46, 50) and its tables name 51; gate tests 962 to 1169 on the first commit, mutation 124 writes red and 80 reads green, reproduced by independent verifiers; a rented voice or face arrives through voiceId or its default, text_to_speech, spokenDialogue, video_to_video audio GENERATE, CHANGE_NARRATOR, TRANSLATE_PROJECT with changeVoice or dubVideos, and actorEntityId on four workflows and generate_avatar, while voiceover_to_video without an actor or generate_avatar on Tee's own ACTOR entity, both on an uploaded Tee clone track and with no edit after, stay inside the rule; storyboard_to_video has no REST page and its scenes carry spoken voiceoverScript lines in a vendor voice per the changelog v2.3.3; a worker restart on the branch loaded videogen-docs from .mcp.json and no videogen API tool, measured 2026-11-26; the avatar lane exists on n8n, two active workflows since 2026-10-21 (TQO & NCO Hugging Face Avatar + Lip Sync on MuseTalk, Approve HF Presenter Clip registering reviewed clips to at_tqo_presenter_clips) plus HeyGen's filmed twin, and this doc's first version and a card said it did not, from an unchecked August note; the dependency audit is red on main on dnspython and next and the first PR comment misread it
+OPEN: Tee connects the claude.ai custom connector; the next session reads the arrival name and adds a SERVER_ALIASES row if it is a UUID; live tool names unread until then, then check against READ_VERB; credit prices unread, get_me first; the MuseTalk workflows' standing beside "Use HeyGen" was not ruled; the stale August note that no avatar lane exists is to be filed to DEVON (Tee); dnspython 2.9.2 and next 15.5.29 pins in one separate PR before the standing merge grant can act
 STATUS: built, tested and put through three gauntlet rounds on the branch; four rulings taken on a card 2026-11-26; counts and verdicts in pull request #493's description; not merged, the dependency audit on main blocks the standing grant
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```

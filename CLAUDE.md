@@ -963,7 +963,12 @@ work that is rented unless the entity is an ACTOR built from Tee's own
 reference images.
 Inside the rule: an uploaded Tee clone track into `voiceover_to_video` with no
 `actorEntityId`, or into `generate_avatar` on Tee's own ACTOR entity, with no
-translate or narrator edit after it. Nothing published under a show's name
+translate or narrator edit after it. Tee ruled on 2026-11-26, on a card, that
+the avatar route is HeyGen's filmed twin and VideoGen's `generate_avatar` is not
+scouted; the owned MuseTalk lane, n8n workflow `snRyzuQhPxkidipW` (its title is
+TQO & NCO, a dash, Hugging Face Avatar + Lip Sync) on the instance since
+2026-10-21, exists and was misreported as absent that day from an August note
+nobody checked. Nothing published under a show's name
 carries a stock voice or face. The probes, the counts and the open sign in
 ruling are in
 `docs/devon/SYS_OPS_videogen-mcp-registered-and-gated_v1_2026-11-26-0123.md`.
