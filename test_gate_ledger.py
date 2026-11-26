@@ -8,7 +8,9 @@ shape the real session file carries: a typed message has origin.kind human,
 every webhook, check-in, task notification and peer report is a user turn
 that does not.
 
-Standalone: no database, no network, no repository state beyond the file.
+Standalone: no database, no network, no repository state beyond the file and
+the two registration files the parity test reads, .mcp.json and
+.claude/settings.json.
 """
 
 from __future__ import annotations
@@ -923,12 +925,24 @@ def test_the_videogen_docs_server_read_passes_and_its_writes_would_not():
     # The read only docs server registered beside it has one tool, searchDocs,
     # read from the live server on 2026-11-26. The substring that names
     # VideoGen also reaches this server, so a write verb it grew later is
-    # caught, and a WaveSpeed style price flag passes nothing here.
+    # caught.
     assert gate.classify("mcp__videogen-docs__searchDocs", {"query": "x"}) == (None, False)
     cls, gated = gate.classify("mcp__videogen-docs__frobnicate", {})
     assert cls == "frobnicate" and gated
-    cls, gated = gate.classify("mcp__videogen__generate_video_clip", {"estimate_only": True})
-    assert cls == "generate_video_clip" and gated
+
+
+@pytest.mark.parametrize("verb", sorted(gate.WAVESPEED_QUOTE))
+def test_a_wavespeed_price_flag_passes_nothing_on_videogen(verb):
+    # The price exemption is WaveSpeed's alone. VideoGen's generate_image takes
+    # no estimate_only parameter, so a call carrying one would run and spend.
+    # generate_image is the one verb the two vendors share, and the first
+    # version of these tests asserted the flag only on generate_video_clip,
+    # which WAVESPEED_QUOTE never names, so the "wavespeed" condition on the
+    # exemption had no test behind it; a gauntlet critic found that on
+    # 2026-11-26 by deleting the condition and watching 285 tests stay green.
+    tool = f"mcp__videogen__{verb}"
+    cls, gated = gate.classify(tool, {"prompt": "x", "estimate_only": True})
+    assert cls == verb and gated, tool
 
 
 def test_every_server_registered_in_mcp_json_is_enabled_and_gated():

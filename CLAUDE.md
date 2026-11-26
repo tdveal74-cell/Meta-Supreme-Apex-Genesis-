@@ -880,28 +880,6 @@ is the number; this paragraph is not.
   cloud environment, so nothing posts automatically; setting it as an
   environment secret is Tee's, and a curl to the webhook is itself gated.
 
-**VideoGen is registered and gated, and most of what it makes is a rented
-voice.** Registered 2026-11-26 in `.mcp.json` as `videogen`
-(`https://mcp.videogen.io/mcp`, the canonical URL from its docs; the
-`vg_client=claude` tag on the connect link changes nothing in the server's
-answer, measured that day) beside `videogen-docs`, the vendor's read only docs
-server with one tool, `searchDocs`. The API server answers 401 until it is
-signed in, with OAuth through Dynamic Client Registration or an API key as a
-bearer header, so in a cloud session its tools do not load until Tee either
-signs in on his own machine or saves the key as a network secret for
-`mcp.videogen.io`, where the proxy adds it and the container never holds it.
-Every workflow, media tool, export, edit, upload and entity change is gated;
-`get_` and `list_` tools pass. The owned voice rule still decides what is
-allowed once the gate opens: `script_to_video` with a VideoGen `voiceId`,
-`text_to_speech`, `slideshow_to_video` narration and the `CHANGE_NARRATOR`
-edit put a stock voice on the work, and nothing published under a show's name
-uses one, and a catalogue actor on `generate_avatar` is a rented likeness the
-same way. The lane that fits is `voiceover_to_video`, or `generate_avatar` on
-an ACTOR entity built from Tee's own reference images, both fed an uploaded Tee
-clone track; `upload_file` is not on the hosted server, so the bytes go up
-through `create_file_upload` and a PUT. Credit prices were not read; `get_me`
-is the connection test.
-
 Not a sandbox: it reads the command text of curl, wget, gh and git, so a write
 through `npx vercel`, `railway up`, an inline python or node script, or the
 GitHub MCP file tools (`push_files`, `create_or_update_file`,
@@ -945,6 +923,41 @@ The curl/wget upload checks also recognize program words spelled with globs or
 variable expansion, without executing the expansion. They retain the existing
 read and loopback policy. This is bounded classification, not a full shell
 sandbox: aliases, arbitrary interpreters and other clients remain outside it.
+
+## MCP servers in .mcp.json
+
+`.mcp.json` and `enabledMcpjsonServers` in `.claude/settings.json` carry the
+servers registered at project scope, because a user scope entry lives in the
+container's home directory and is wiped with it. The two lists must agree, and
+every server on them must be one the gate names, so an unlisted write verb on
+it is still gated; `test_gate_ledger.py` pins both. A server that wants a sign
+in reads "needs authentication" in a cloud session until a route that reaches
+the container is taken: a claude.ai custom connector (the vendor's documented
+route for Claude, OAuth with Dynamic Client Registration, no key held
+anywhere), or an API key saved as a network secret, which the proxy adds to
+requests for that host. A Claude Code `/mcp` sign in on Tee's own machine
+serves that machine only. Whether the MCP client's connection gets the proxy's
+injection is unverified until it is tried; that the connection goes through
+the proxy is measured, because other HTTP servers failed this session with a
+proxy tunnel error.
+
+VideoGen, registered 2026-11-26 as `videogen` beside the vendor's read only
+docs server `videogen-docs`, is where HardRule 6 in `services/devon/persona.py`,
+voice and likeness owned, never rented (`test_devon_owned_voice.py`), meets a
+paid tool. Read from the vendor's REST pages that day: `script_to_video` and
+`slideshow_to_video` narrate with a catalogue voice whether or not `voiceId`
+is given; `text_to_speech` speaks in one; `generate_video_clip` with
+`spokenDialogue` synthesizes one; the `CHANGE_NARRATOR` edit swaps one in and
+`TRANSLATE_PROJECT` re-narrates in one unless `changeVoice` is false; and
+`actorEntityId` on `script_to_video`, `slideshow_to_video`,
+`voiceover_to_video` and `generate_avatar`, or `actorEntityIds` on
+`storyboard_to_video`, puts a face on the work that is rented unless the
+entity is an ACTOR built from Tee's own reference images. Inside the rule: an
+uploaded Tee clone track into `voiceover_to_video` with no `actorEntityId`, or
+into `generate_avatar` on Tee's own ACTOR entity. Nothing published under a
+show's name carries a stock voice or face. The probes, the counts and the open
+sign in ruling are in
+`docs/devon/SYS_OPS_videogen-mcp-registered-and-gated_v1_2026-11-26-0123.md`.
 
 ## The Jev router
 
