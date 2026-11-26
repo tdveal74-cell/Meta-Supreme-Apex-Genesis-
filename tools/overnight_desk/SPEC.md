@@ -91,6 +91,12 @@ DOC, source line 77.
   false (source line 57, and R1).
 - `reasons` names each trip and each missing input in plain words, for example
   `btc_1h -3.10 <= -2.50` and `fear_greed missing`.
+- When `market` is `None` the mode is GREEN, `data_ok` is false,
+  `blocks_new_buys` is true and `reasons` is `("market snapshot missing",)`.
+- The missing-input reasons are `btc_1h missing`, `sol_1h missing`,
+  `fear_greed missing` and `graduations missing`. A QUIET result adds a reason
+  of the form `graduations 3 <= 5`. In RED a known graduation count adds no
+  reason, because it did not set the mode.
 
 ## scanner.py
 
@@ -120,6 +126,12 @@ DOC, source line 42. One Scanner holds the state of every coin it has seen.
 - Before the watch is over the state is WATCHING with `reason_code` `watching`.
 - A coin that PASSED can still be KILLED by a later observation.
 - A killed coin stays KILLED with its first kill reason whatever comes later.
+- PASSED carries `reason_code` `passed`. It is recomputed on every observation:
+  a passed coin whose liquidity, top 10 share or 1 hour change later reads
+  `None` goes back to WATCHING with `waiting_for_data`.
+- An unknown value never trips a kill. It holds the coin at `waiting_for_data`
+  once the watch is over.
+- The `detail` text of a result is free wording and no part of the contract.
 
 ## analyst.py
 
@@ -210,6 +222,9 @@ Checks run in this order and the first failure sets `reason_code`.
 
 When every check passes, `fires` is true and `reason_code` is `entry`.
 
+GRAD has no liquidity floor of its own in `entry_signal`. The scanner's kill
+and the pre-trade recheck both apply the floor before any order.
+
 ### pre_trade_recheck
 
 DOC, source line 60: the executor re-checks liquidity, price, cash and venue
@@ -220,6 +235,8 @@ and an empty tuple when there is none.
 - `liquidity_unknown`, or `liquidity_below_floor`.
 - `ticket_exceeds_liquidity_cap`: the ticket is above `pool_liquidity_cap_pct`
   percent of `fresh.liquidity_usd`.
+  Skipped when that liquidity is `None`, since `liquidity_unknown` already
+  reports it.
 - `price_unknown` (either price `None` or the decision price not positive), or
   `price_drifted` (INVENTED tolerance): the absolute move from the decision
   price is above `recheck_max_price_drift_pct` percent.
@@ -282,6 +299,10 @@ brought up to date, and at most one exit decision.
   INVENTED).
 - The stop never moves down. The returned `stop_price` is never below the one
   passed in.
+- Exit check 1 below uses the stop after this update. On the call that returns
+  TAKE the stop is not trailed. Trailing starts on the next call.
+- "Held" time is `snap.ts - position.entry_ts`. Every threshold is read from
+  `settings`, never from a constant.
 
 Exit decisions, first hit wins:
 
@@ -330,8 +351,13 @@ DOC, source lines 63 and 88-89. A lesson can only block.
   `pool_age_s` (which is `snap.ts - pool_created_ts`). Operators: `>`, `>=`,
   `<`, `<=`. `parse_check` raises `LessonError` on anything else. It never
   calls `eval` or `exec`.
+  The three parts are separated by whitespace. The number is ASCII digits with
+  an optional sign, decimal point and exponent. `nan`, `inf`, an underscore, or
+  a digit from another script is refused.
 - `check_hits` is true when the condition holds. It is also true when the
   field's value is unknown, because an unknown never passes.
+  A value of `None` or NaN is unknown. A `Check` built by hand with an
+  operator outside the four raises `LessonError`.
 - `LessonBook.add` validates the check by parsing it. Adding a lesson whose
   check text matches an existing one returns the existing lesson. The book has
   no method that removes or weakens a lesson.
@@ -348,10 +374,20 @@ DOC, source lines 63 and 88-89. A lesson can only block.
   the order listed. The check is `<field> >= <value>` for the first four and
   `liquidity_usd <= <value>` for liquidity. `lesson_id` is
   `L-<mint>-<exit_fill.ts>`. Returns `None` when no field qualifies.
+  It also returns `None` unless the exit fill itself lost money, that is
+  `positions.realized_pnl(position, exit_fill) < 0`. A value that is not
+  finite is left out like an unknown one. The number in the check is written
+  with `repr(float(value))`, so the derived text always parses.
 - `apply_review`: source line 89. Raises `LessonError` when `approval` is
   `None` or when `changes` has more than 3 entries. Otherwise returns
   `Settings.from_dict` of the current values with the changes applied, so the
   range checks run.
+  An unknown setting name or a value outside its range therefore raises
+  `SettingsError`.
+- `LessonBook.from_json` raises `LessonError` for a row that lacks
+  `lesson_id`, `created_ts`, `source_mint` or `check`, or that has a key it
+  does not know. `why` may be left out. Two lessons are the same when their
+  check text is equal character for character.
 
 ## paper.py
 
@@ -392,6 +428,9 @@ so the dollar reserve is `Rq = L / 2` and the token reserve is
 Raises `PaperError` when liquidity or price is `None` or not positive, when
 both or neither of `usd` and `qty` are given, or when the amount is not
 positive. A BUY takes `usd`. A SELL takes `qty`.
+Zero and NaN count as not positive. A BUY given `qty`, a SELL given `usd`, a
+fee setting that is `None`, and an order so small it would return no tokens
+are each a `PaperError` too.
 
 BUY of `usd` dollars, all of which leaves the account:
 
@@ -422,6 +461,10 @@ is the default for anything live and is not a setting.
 
 ### PaperExecutor.execute
 
+`PaperExecutor(settings)` is the constructor. `PaperError` when
+`snapshot.mint` differs from `intent.mint`. `Fill.ts` is `snapshot.ts`, and
+the mint and symbol come from the intent.
+
 Calls `require_approval` with its own kind, then `model_quote`. A BUY needs
 `intent.usd`, a SELL needs `intent.qty`; `PaperError` otherwise. The Fill has
 `verification = Verification.PAPER`, `price = quote.fill_price`,
@@ -429,11 +472,16 @@ Calls `require_approval` with its own kind, then `model_quote`. A BUY needs
 intent's `exit_reason`. `cash_delta_usd` is `-usd` for a BUY and
 `gross_usd - venue_fee_usd - fixed_fee_usd` for a SELL, never below zero.
 
+For a BUY, `gross_usd` is the amount sent to the pool, pool fee included, and
+`fees_usd` lists the pool fee as well, so the two add up to more than `usd`.
+`cash_delta_usd` is the only figure that moves cash.
+
 ### Ledger
 
 - `record_buy`: `PaperError` when the fill is not a BUY, when a position in
   that mint is already open (source line 60, never average down), or when the
-  cost is above `cash_usd`. Otherwise cash falls by the cost, the position is
+  cost is above `cash_usd`. Also when `position.mint` differs from
+  `fill.mint`. Otherwise cash falls by the cost, the position is
   stored, fees are added and the fill is appended.
 - `record_sell`: `PaperError` when there is no position in that mint. Uses
   `positions.realized_pnl` and `positions.apply_exit_fill`. Cash rises by
@@ -442,6 +490,7 @@ intent's `exit_reason`. `cash_delta_usd` is `-usd` for a BUY and
 - `exposure_usd`: the sum of `cost_usd` over open positions.
 - `equity_usd`: cash plus, for each open position, `qty` times the price given
   for its mint, or its `cost_usd` when no price is given.
+  A price of 0.0 is a price: it values the position at zero.
 - `view`: a `PortfolioView`, with
   `night_pnl_usd = equity_usd(prices) - night_start_equity_usd`.
 
@@ -460,6 +509,11 @@ order: `paper_nights_short`, `acceptance_tests_not_passed`,
 `owner_has_not_typed_live`, `no_live_executor`, `no_per_order_approval`. An
 empty tuple means the gate is open. In this build `no_live_executor` is always
 present, because none exists.
+
+Each of the four booleans must be exactly `True` to clear its blocker. `None`
+or any other value leaves the blocker in place. "Always present" describes
+this build, where nothing passes `live_executor_exists=True`; the function
+itself follows its argument.
 
 ## engine.py
 
