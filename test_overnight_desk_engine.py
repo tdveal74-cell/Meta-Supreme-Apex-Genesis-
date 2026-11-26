@@ -1687,3 +1687,109 @@ def test_an_executor_whose_class_compares_equal_to_everything_is_still_gated():
     assert out.fills == () and fake.seen == []
     assert reasons(d)[-1] == ("executor", "approval_missing")
     assert d.night_report()["executor"] != "paper"
+
+
+# --- tests added for the mutants that survived the first suite -----------------
+
+
+def _approve_all(intent):
+    return model.HumanApproval(intent.order_id, "tee", intent.ts)
+
+
+def test_a_live_night_with_verified_fills_is_counted_and_named_live():
+    d = Desk(Settings.for_tests(), 1_000.0, executor=_FakeLive(), approve=_approve_all)
+    d.tick(T0, market(T0), [_live_snapshot(T0)])
+    d.tick(T0 + WATCH, market(T0 + WATCH), [_live_snapshot(T0 + WATCH)])
+    pos = d.ledger.positions["GOOD"]
+    ts = T0 + WATCH + 60
+    d.tick(ts, market(ts), [dataclasses.replace(_live_snapshot(ts), price_usd=pos.stop_price * 0.9)])
+    rep = d.night_report()
+    assert len(rep["fills"]) == 2
+    assert rep["verification"] == {"paper": 0, "verified": 2, "unverified": 0}
+    assert [f["verification"] for f in rep["fills"]] == ["verified", "verified"]
+    assert rep["real_orders_sent"] == 2
+    assert rep["executor"] == "live"
+
+
+class _SellQty(_FakeLive):
+    """A live stand-in whose sell fills carry a quantity the test chooses."""
+
+    def __init__(self, qty_of):
+        super().__init__()
+        self._qty_of = qty_of
+
+    def execute(self, intent, snapshot, approval=None):
+        fill = super().execute(intent, snapshot, approval)
+        if intent.side is model.Side.SELL:
+            return dataclasses.replace(fill, qty=self._qty_of(intent.qty))
+        return fill
+
+
+def _sell_through(qty_of):
+    """Buy, then stop out through a desk whose executor answers the sell with qty_of(ordered)."""
+    d = Desk(Settings.for_tests(), 1_000.0, executor=_SellQty(qty_of), approve=_approve_all)
+    d.tick(T0, market(T0), [_live_snapshot(T0)])
+    d.tick(T0 + WATCH, market(T0 + WATCH), [_live_snapshot(T0 + WATCH)])
+    pos = d.ledger.positions["GOOD"]
+    ts = T0 + WATCH + 60
+    snap = dataclasses.replace(_live_snapshot(ts), price_usd=pos.stop_price * 0.9)
+    return d, pos, lambda: d.tick(ts, market(ts), [snap])
+
+
+def test_a_sell_fill_of_zero_quantity_is_raised_and_never_recorded():
+    d, pos, sell = _sell_through(lambda ordered: 0.0)
+    cash = d.ledger.cash_usd
+    with pytest.raises(ValueError, match="more than was ordered"):
+        sell()
+    assert d.ledger.positions["GOOD"] == pos and len(d.ledger.fills) == 1 and d.ledger.cash_usd == cash
+
+
+@pytest.mark.parametrize("extra", [1e-9, 5e-10])
+def test_a_sell_fill_within_the_float_tolerance_of_the_order_is_accepted(extra):
+    # The first case sits exactly on the ceiling the desk computes, the second just inside it.
+    d, _pos, sell = _sell_through(lambda ordered: ordered * (1 + extra))
+    out = sell()
+    assert len(out.fills) == 1 and out.fills[0].side is model.Side.SELL
+    assert "GOOD" not in d.ledger.positions and len(d.ledger.fills) == 2
+
+
+def test_a_sell_fill_beyond_the_float_tolerance_is_raised_and_never_recorded():
+    d, pos, sell = _sell_through(lambda ordered: ordered * (1 + 1e-6))
+    with pytest.raises(ValueError, match="more than was ordered"):
+        sell()
+    assert d.ledger.positions["GOOD"] == pos and len(d.ledger.fills) == 1
+
+
+def test_a_report_without_the_venue_flag_still_renders_and_lists_the_venue_line():
+    d = desk()
+    _bought(d)
+    rep = d.night_report()
+    del rep["venue_checks_supplied"]
+    text = report.render_morning(rep, 3.0)
+    tail = text.split("Not tested by this night")[1].split("Market mode")[0]
+    assert "venue warnings and disabled trading" in tail
+
+
+def test_the_venue_sentence_in_the_morning_report_is_word_for_word():
+    d = desk()
+    _bought(d)
+    text = report.render_morning(d.night_report(), 3.0)
+    assert (
+        "  venue warnings and disabled trading: no reading carried either, "
+        "so those checks had nothing to test"
+    ) in text.splitlines()
+
+
+def test_present_behaviour_an_approval_callback_that_raises_leaves_the_tick_and_nothing_is_sent():
+    # Pins what the desk does today. Whether it should catch the error, record
+    # a skip and carry on is an open question, and this test does not answer it.
+    fake = _FakeLive()
+
+    def approve(intent):
+        raise RuntimeError("the approval card could not be shown")
+
+    d = Desk(Settings.for_tests(), 1_000.0, executor=fake, approve=approve)
+    d.tick(T0, market(T0), [_live_snapshot(T0)])
+    with pytest.raises(RuntimeError, match="approval card"):
+        d.tick(T0 + WATCH, market(T0 + WATCH), [_live_snapshot(T0 + WATCH)])
+    assert fake.seen == [] and d.ledger.fills == [] and d.ledger.cash_usd == 1_000.0
