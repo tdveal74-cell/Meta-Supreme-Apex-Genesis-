@@ -193,8 +193,9 @@ exist yet, is a scouting question and Tee's to open. Nothing here starts it.
      cloud container is new every session, so this route never lights the
      server here.
   The recommendation is the connector, because it is the vendor's route, needs
-  no key anywhere and is measured to work for other servers in this very
-  session; the network secret second.
+  no key anywhere, and other claude.ai connectors loaded their tools in the
+  cloud session of 2026-11-26, so the route reaches a container; the network
+  secret second.
 - The live tool names, once readable, are to be checked against `READ_VERB`
   and these tests, and the fifty one updated if the server differs from its
   docs.
