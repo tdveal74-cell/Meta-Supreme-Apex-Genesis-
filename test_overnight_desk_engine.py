@@ -1611,3 +1611,79 @@ def test_a_skip_whose_detail_moves_every_tick_is_recorded_once():
         d.tick(base + late, market(base + late), [coin(base)])
     stale = [s.detail for s in d.skips if s.reason_code == "stale_snapshot"]
     assert stale == ["the reading is 31s old"]
+
+
+# --- the executor is fixed when the desk is built -----------------------------
+
+
+def _two_ticks(d: Desk):
+    d.tick(T0, market(T0), [_live_snapshot(T0)])
+    return d.tick(T0 + WATCH, market(T0 + WATCH), [_live_snapshot(T0 + WATCH)])
+
+
+def test_assigning_the_desks_executor_after_build_raises_and_the_paper_night_stands():
+    other = _FakeLive()
+    d = desk()
+    with pytest.raises(AttributeError):
+        d.executor = other
+    out = _two_ticks(d)
+    assert other.seen == []
+    assert len(out.fills) == 1 and out.fills[0].verification is model.Verification.PAPER
+    rep = d.night_report()
+    assert rep["executor"] == "paper" and rep["real_orders_sent"] == 0
+
+
+def test_the_cached_paper_decision_cannot_be_assigned():
+    d = desk()
+    with pytest.raises(AttributeError):
+        d._is_paper = False
+    with pytest.raises(AttributeError):
+        d._gate_kind = model.ExecutorKind.PAPER
+    assert d._is_paper is True and d._gate_kind is model.ExecutorKind.PAPER
+
+
+@pytest.mark.parametrize("make", [_FakeLive, _ClaimsPaper])
+def test_a_private_executor_swap_on_a_paper_desk_still_meets_the_gate(make):
+    swapped = make()
+    d = desk()
+    d._executor = swapped
+    out = _two_ticks(d)
+    assert out.fills == () and swapped.seen == [] and d.ledger.fills == []
+    assert reasons(d)[-1] == ("executor", "approval_missing")
+    assert d.night_report()["executor"] != "paper"
+
+
+def test_an_approval_callback_that_swaps_the_executor_cannot_redirect_the_order():
+    a, b = _FakeLive(), _FakeLive()
+    holder = {}
+
+    def approve(intent):
+        holder["desk"]._executor = b
+        return model.HumanApproval(intent.order_id, "tee", intent.ts)
+
+    d = Desk(Settings.for_tests(), 1_000.0, executor=a, approve=approve)
+    holder["desk"] = d
+    _two_ticks(d)
+    assert len(a.seen) == 1 and a.seen[0][1].approved_by == "tee"
+    assert b.seen == []
+
+
+class _EqualsEverything(type):
+    def __eq__(cls, other):
+        return True
+
+    __hash__ = type.__hash__
+
+
+class _EqPaper(_FakeLive, metaclass=_EqualsEverything):
+    pass
+
+
+def test_an_executor_whose_class_compares_equal_to_everything_is_still_gated():
+    fake = _EqPaper()
+    assert type(fake) == paper.PaperExecutor  # noqa: E721  (the comparison the desk must not use)
+    d = Desk(Settings.for_tests(), 1_000.0, executor=fake)
+    out = _two_ticks(d)
+    assert out.fills == () and fake.seen == []
+    assert reasons(d)[-1] == ("executor", "approval_missing")
+    assert d.night_report()["executor"] != "paper"

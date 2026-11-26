@@ -14,6 +14,12 @@ class is exactly ``paper.PaperExecutor``. What an executor calls itself is not
 trusted: one that only declares itself paper is gated like any other, and the
 report does not call its night a paper night.
 
+The executor is fixed when the desk is built. ``desk.executor`` is read only,
+and the paper decision is recomputed from the held object on every order. The
+gate does not stop code that writes to the desk's private attributes, and it
+does not stop code that replaces functions in the paper module (for example
+``paper.require_approval``). Both are ordinary Python and out of its reach.
+
 An order the executor refuses, or one with no approval, is recorded and the
 tick carries on: a refused buy is a skip, and an exit that could not be
 carried out is an alert and a rule violation. With the paper executor, one
@@ -123,10 +129,11 @@ class Desk:
         # here too, so the desk never starts on a missing owner value.
         settings.check()
         self.settings = settings
-        self.executor: Executor = executor if executor is not None else paper.PaperExecutor(settings)
-        # Paper is a fact about the class, never a label an executor gives itself.
-        self._is_paper = type(self.executor) is paper.PaperExecutor
-        self._gate_kind = ExecutorKind.PAPER if self._is_paper else ExecutorKind.LIVE
+        # The executor is held privately and read through a property with no
+        # setter, so ``desk.executor = other`` raises. The paper decision is not
+        # stored either: it is worked out from the held object every time it is
+        # needed, so there is no cached answer that can go stale.
+        self._executor: Executor = executor if executor is not None else paper.PaperExecutor(settings)
         self._venue_checks_supplied = False
         self.lessons = lesson_book if lesson_book is not None else lessons.LessonBook()
         self.strategies = tuple(strategies)
@@ -377,6 +384,24 @@ class Desk:
 
     # ---------------------------------------------------------------- helpers
 
+    @property
+    def executor(self) -> Executor:
+        """The executor this desk was built with. Read only: it cannot be assigned."""
+        return self._executor
+
+    @property
+    def _is_paper(self) -> bool:
+        """Paper is a fact about the class, never a label an executor gives itself.
+
+        Computed on each read from the held executor, with ``is`` and not
+        ``isinstance`` or ``==``.
+        """
+        return type(self._executor) is paper.PaperExecutor
+
+    @property
+    def _gate_kind(self) -> ExecutorKind:
+        return ExecutorKind.PAPER if self._is_paper else ExecutorKind.LIVE
+
     def _execute(self, intent: OrderIntent, snap: TokenSnapshot) -> tuple[Fill | None, str, str]:
         """Hand one intent to the executor, behind the per-order human gate.
 
@@ -385,12 +410,19 @@ class Desk:
         ``order_refused`` when the executor did. Neither is raised, so the
         rest of the tick still runs.
         """
+        # Read the executor once. The paper decision, the approval callback, the
+        # gate and the call all use this one object, so nothing that runs in
+        # between (the callback included) can make the desk check one executor
+        # and call another.
+        executor = self._executor
+        is_paper = type(executor) is paper.PaperExecutor
+        gate_kind = ExecutorKind.PAPER if is_paper else ExecutorKind.LIVE
         approval: HumanApproval | None = None
-        if not self._is_paper and self._approve is not None:
+        if not is_paper and self._approve is not None:
             approval = self._approve(intent)
         try:
-            paper.require_approval(intent, self._gate_kind, approval)
-            fill = self.executor.execute(intent, snap, approval)
+            paper.require_approval(intent, gate_kind, approval)
+            fill = executor.execute(intent, snap, approval)
         except paper.ApprovalRequired as exc:
             return None, "approval_missing", str(exc)
         except paper.PaperError as exc:
