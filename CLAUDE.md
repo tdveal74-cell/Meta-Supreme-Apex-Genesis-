@@ -624,7 +624,11 @@ env -u PYTHONPATH -u DATABASE_URL -u TEST_DATABASE_URL python3 -m pytest -q \
   test_devon_lesson_registry.py test_gate_ledger.py test_jev_route.py \
   test_ledger_receipt.py test_code_worker.py test_watch_long.py \
   test_mpt_shorts.py test_openmontage_installer.py test_ltx_build_graph.py \
-  test_automation_registry.py test_agent_hq.py
+  test_automation_registry.py test_agent_hq.py \
+  test_overnight_desk_base.py test_overnight_desk_mode_lessons.py \
+  test_overnight_desk_scanner_analyst.py test_overnight_desk_brain_entry.py \
+  test_overnight_desk_risk.py test_overnight_desk_paper_gate.py \
+  test_overnight_desk_engine.py
 
 python3 -m pytest -q --tb=short          # full api suite, needs the database
 python3 -m ruff check .
