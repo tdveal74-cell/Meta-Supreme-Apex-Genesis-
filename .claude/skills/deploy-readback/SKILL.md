@@ -112,6 +112,40 @@ deployment `6d110ce6` for `b9422ef` sat WAITING from 22:34:57Z and went SUCCESS
 at 22:49:13Z, after that commit's CI passed, while `scheduler-cron` built it at
 once.
 
+**A SERVICE CAN BE PINNED TO ONE COMMIT, AND THEN IT FOLLOWS NO PUSH AT ALL.**
+Found 2026-11-26 by the read-back after PR #494 and PR #493 merged. Railway
+`presence` carried `source.commitSha: 15d1924...` beside `branch: main` in
+`get-service-config`, while `api` and `scheduler-cron` carried no `commitSha`.
+With the pin in place the service created NO deployment row of any status,
+SKIPPED included, for the three commits that reached main after 2026-11-06:
+`1347ef3` (2026-11-22, `services/devon/show_registry.py`, inside its watch
+patterns), `cce39d9` (the dnspython 2.9.2 pin in `requirements.txt`, inside
+them) and `bf9b7f3` (outside them). `api` and `scheduler-cron` each created a
+row for all three. So the presence image still carried dnspython 2.9.0 while
+the audit lane read green, and a read-back that took the `api` row as the
+estate's would have reported presence redeployed. The running code was
+unchanged by the freeze, because no `apps/presence` file had moved since the
+pin, and the CVE's vector is not reachable from presence; the cost was
+posture, confirmed by an independent verifier before it went to Tee.
+
+How the pin got there is not settled: every 2026-11-06 presence row reads
+`meta.reason: deploy` under the same creator, and nothing in the records names
+a pin. Tee ruled on a card, "Clear the pin now". `connect-service-source`
+with `repo` and `branch` and no `commitSha` cleared it live at 19:11:01Z;
+`update-service` cannot, because it does not handle the source. The read back
+after the call: `source` became `{branch: main, rootDirectory: ., checkSuites:
+false}`, the builder, Dockerfile path, watch patterns and start command were
+untouched, `api`'s `checkSuites` still read true, and deployment `0be15e50`
+built `bf9b7f3` from `Dockerfile.presence` with `dnspython-2.9.2` in its pip
+line and went SUCCESS at 19:11:54Z, container started 19:11:50Z, `/health` 200
+at 19:12:46Z with the same eleven keys as before.
+
+So the read-back of a Railway service starts with its `source` block, not its
+deployment list: a `commitSha` there means the rows below it stopped on
+purpose or by accident, and a merge that should have deployed it did not. A
+pin that Tee set and wants is fine; a pin nobody can account for is this
+finding again.
+
 **THE THREE RAILWAY SERVICES DO NOT DEPLOY ON THE SAME RULE, AND ONE OF THEM
 STOPPED WHEN CI WAS RED.** Read from `get-service-config` on 2026-09-16, because
 this file had said `scheduler-cron` deploys from the same commit as `api`, and
