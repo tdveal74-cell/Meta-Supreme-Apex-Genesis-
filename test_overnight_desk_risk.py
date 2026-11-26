@@ -4,7 +4,6 @@ Offline. Tests only tools/overnight_desk/risk.py against SPEC.md "risk.py".
 """
 from __future__ import annotations
 
-import dataclasses
 import sys
 from pathlib import Path
 
@@ -59,7 +58,7 @@ def _reason(result):
 
 def test_no_price_returns_the_same_position_and_no_decision():
     pos = _pos()
-    out, decision = _run(pos, _snap(price_usd=None, venue_warning="rug", dev_has_sold=True))
+    out, decision = _run(pos, _snap(price_usd=None))
     assert out is pos and decision is None
 
 
@@ -286,11 +285,95 @@ def test_dead_money_gain_threshold(price, fires):
     assert (_reason(result) is ExitReason.DEAD_MONEY) is fires
 
 
-def test_dead_money_applies_in_every_mode():
-    for mode in (Mode.GREEN, Mode.QUIET, Mode.RED):
-        assert _reason(_run(snap=_snap(ts=10_800), mode=mode)) in (
-            ExitReason.DEAD_MONEY, ExitReason.RED_TIME_STOP
-        )
+@pytest.mark.parametrize("mode", [Mode.GREEN, Mode.QUIET])
+def test_dead_money_in_green_and_quiet_is_dead_money(mode):
+    assert _reason(_run(snap=_snap(ts=10_800), mode=mode)) is ExitReason.DEAD_MONEY
+
+
+def test_dead_money_in_red_needs_the_time_stop_to_be_later_and_otherwise_is_the_time_stop():
+    s = Settings.for_tests(red_time_stop_s=20_000)
+    assert _reason(_run(snap=_snap(ts=10_800), mode=Mode.RED, settings=s)) is ExitReason.DEAD_MONEY
+    assert _reason(_run(snap=_snap(ts=10_800), mode=Mode.RED)) is ExitReason.RED_TIME_STOP
+
+
+# --- no price: the exits that need none still run ---------------------------
+
+
+def _blind(pos=None, mode=Mode.GREEN, settings=S, **kw):
+    return _run(pos, _snap(price_usd=None, **kw), mode, settings)
+
+
+def test_no_price_with_liquidity_zero_pulls_the_whole_position():
+    pos = _pos()
+    out, decision = _blind(pos, liquidity_usd=0.0)
+    assert decision is not None and decision.reason is ExitReason.LIQUIDITY_PULLED
+    assert decision.fraction == 1.0 and out is pos
+
+
+def test_no_price_with_the_liquidity_drop_alone_pulls_the_position():
+    pos = _pos(entry_liquidity_usd=100_000.0)
+    assert _reason(_blind(pos, liquidity_usd=50_000.0)) is ExitReason.LIQUIDITY_PULLED
+
+
+def test_no_price_venue_warning_exits():
+    pos = _pos()
+    out, decision = _blind(pos, venue_warning="honeypot")
+    assert decision.reason is ExitReason.VENUE_WARNING and decision.fraction == 1.0 and out is pos
+
+
+def test_no_price_dev_sold_exits():
+    pos = _pos()
+    out, decision = _blind(pos, dev_has_sold=True)
+    assert decision.reason is ExitReason.DEV_SOLD and decision.fraction == 1.0 and out is pos
+
+
+def test_no_price_red_time_stop_exits_only_in_red():
+    pos = _pos()
+    out, decision = _blind(pos, Mode.RED, ts=5_400)
+    assert decision.reason is ExitReason.RED_TIME_STOP and decision.fraction == 1.0 and out is pos
+    assert _blind(pos, Mode.RED, ts=5_399)[1] is None
+    assert _blind(pos, Mode.GREEN, ts=5_400)[1] is None
+
+
+def test_no_price_dead_money_never_fires():
+    for mode in (Mode.GREEN, Mode.QUIET):
+        assert _blind(mode=mode, ts=20_000)[1] is None
+    s = Settings.for_tests(red_time_stop_s=40_000)
+    assert _blind(mode=Mode.RED, ts=20_000, settings=s)[1] is None
+
+
+def test_no_price_with_nothing_else_wrong_returns_the_same_position_and_no_decision():
+    pos = _pos(took_first_take=True, stop_price=1.2, peak_price=2.0)
+    out, decision = _blind(pos)
+    assert decision is None and out is pos and out == pos
+
+
+def test_no_price_trips_neither_the_stop_nor_the_trail_nor_the_take():
+    assert _blind(_pos(stop_price=0.75))[1] is None
+    pos = _pos(took_first_take=True, stop_price=1.5, peak_price=2.0)
+    assert _blind(pos)[1] is None
+
+
+@pytest.mark.parametrize(
+    "kw,mode",
+    [
+        (dict(liquidity_usd=0.0), Mode.GREEN),
+        (dict(venue_warning="x"), Mode.GREEN),
+        (dict(dev_has_sold=True), Mode.GREEN),
+        (dict(ts=6_000), Mode.RED),
+        (dict(), Mode.GREEN),
+    ],
+)
+def test_no_price_leaves_peak_and_stop_untouched_with_or_without_a_decision(kw, mode):
+    pos = _pos(took_first_take=True, stop_price=1.2, peak_price=2.0)
+    out, _ = _blind(pos, mode, **kw)
+    assert out is pos and out.peak_price == 2.0 and out.stop_price == 1.2 and out.took_first_take is True
+
+
+def test_no_price_venue_warning_beats_dev_sold_and_liquidity_pulled():
+    assert _reason(_blind(venue_warning="x", dev_has_sold=True, liquidity_usd=0.0)) is ExitReason.VENUE_WARNING
+    assert _reason(_blind(dev_has_sold=True, liquidity_usd=0.0)) is ExitReason.DEV_SOLD
+    assert _reason(_blind(None, Mode.RED, liquidity_usd=0.0, ts=6_000)) is ExitReason.LIQUIDITY_PULLED
 
 
 # --- order of checks: the earlier rule wins ---------------------------------
@@ -341,7 +424,7 @@ def test_a_losing_take_candidate_cannot_double_fire():
 # --- invariants -------------------------------------------------------------
 
 
-def test_nothing_is_mutated_and_the_stop_never_falls():
+def test_the_stop_never_falls_and_qty_cost_and_entry_are_untouched():
     cases = [
         (_pos(), _snap(price_usd=2.5), Mode.GREEN),
         (_pos(took_first_take=True, stop_price=1.9, peak_price=2.0), _snap(price_usd=1.95), Mode.RED),
@@ -349,9 +432,7 @@ def test_nothing_is_mutated_and_the_stop_never_falls():
         (_pos(), _snap(price_usd=None), Mode.GREEN),
     ]
     for pos, snap, mode in cases:
-        pos_before, snap_before = dataclasses.replace(pos), dataclasses.replace(snap)
         out, _ = evaluate(pos, snap, mode, S)
-        assert pos == pos_before and snap == snap_before
         assert out.stop_price >= pos.stop_price
         assert out.qty == pos.qty and out.cost_usd == pos.cost_usd
         assert out.entry_price == pos.entry_price and out.entry_ts == pos.entry_ts

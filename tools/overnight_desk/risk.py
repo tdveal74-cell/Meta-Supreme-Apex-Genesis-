@@ -8,6 +8,12 @@ figures: take at 1.5 times, trail, 90 minute time stop). SPEC.md section
 INVENTED, per SPEC.md: the green trail figure (``trail_green_pct``), the
 liquidity pull drop (``liquidity_pull_drop_pct``).
 
+With no price, the exits that need none still run, in the same order: venue
+warning, dev sold, liquidity pulled and the RED time stop. The stop or trail,
+the first take and dead money need a price and are skipped, and the position
+comes back exactly as it was passed in. A missing price never hides a known
+danger.
+
 ``evaluate`` is pure. It never mutates the position or the snapshot, never
 changes ``qty`` or ``cost_usd``, and reads no clock: time is ``snap.ts``. The
 caller applies a fill with ``positions.apply_exit_fill``.
@@ -26,27 +32,30 @@ def evaluate(
     """Bring the peak and stop up to date, then return at most one exit.
 
     Raises ValueError when the snapshot is for another mint. With no price the
-    position comes back unchanged and there is no decision; the caller records
-    an alert.
+    stop or trail (1), the first take (5) and dead money (7) are skipped, the
+    exits that need none (venue warning, dev sold, liquidity pulled and the RED
+    time stop) still run in order, and the position comes back exactly as it
+    was passed in, peak and stop untouched, whether or not there is a decision.
     """
     if snap.mint != position.mint:
         raise ValueError(f"snapshot mint {snap.mint!r} is not the position's mint {position.mint!r}")
     price = snap.price_usd
     if price is None:
-        return position, None
-
-    peak = max(position.peak_price, price)
-    stop = position.stop_price
-    if position.took_first_take:
-        trail = settings.trail_red_pct if mode is Mode.RED else settings.trail_green_pct
-        stop = max(stop, peak * (1 - trail / 100))
-    updated = replace(position, peak_price=peak, stop_price=stop)
+        updated = position
+        stop = position.stop_price
+    else:
+        peak = max(position.peak_price, price)
+        stop = position.stop_price
+        if position.took_first_take:
+            trail = settings.trail_red_pct if mode is Mode.RED else settings.trail_green_pct
+            stop = max(stop, peak * (1 - trail / 100))
+        updated = replace(position, peak_price=peak, stop_price=stop)
 
     def exit_(reason: ExitReason, fraction: float, detail: str) -> tuple[Position, ExitDecision]:
         return updated, ExitDecision(mint=position.mint, reason=reason, fraction=fraction, detail=detail)
 
     # 1. stop or trail
-    if price <= stop:
+    if price is not None and price <= stop:
         reason = ExitReason.TRAIL if position.took_first_take else ExitReason.STOP
         return exit_(reason, 1.0, f"price {price:.8g} <= stop {stop:.8g}")
 
@@ -76,7 +85,7 @@ def evaluate(
                 )
 
     # 5. first take
-    if not position.took_first_take:
+    if price is not None and not position.took_first_take:
         multiple = settings.take_multiple_red if mode is Mode.RED else settings.take_multiple_green
         if price >= position.entry_price * multiple:
             taken = replace(updated, took_first_take=True)
@@ -92,7 +101,7 @@ def evaluate(
         return exit_(ExitReason.RED_TIME_STOP, 1.0, f"held {held}s >= {settings.red_time_stop_s}s in RED")
 
     # 7. dead money
-    if held >= settings.dead_money_after_s:
+    if price is not None and held >= settings.dead_money_after_s:
         floor = position.entry_price * (1 + settings.dead_money_min_gain_pct / 100)
         if price < floor:
             return exit_(
