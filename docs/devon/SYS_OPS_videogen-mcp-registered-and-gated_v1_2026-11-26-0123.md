@@ -2,9 +2,10 @@
 
 Status record for the `claude/mcp-videogen-integration-v7wvjx` branch, pull
 request #493. First written 2026-11-26 at 0123Z, the stamp in its name, and
-revised at 0208Z the same day after a gauntlet of three cold critics, two
-refuters per finding and eight receipt verifiers; what the gauntlet changed is
-marked below. Supersedes nothing. It follows
+revised twice the same day, last at 0237Z, after two gauntlet rounds: three
+cold critics, two refuters per finding and eight receipt verifiers on the first
+commit, then nine fix verifiers, two more critics and their refuters on the
+revision; what the gauntlet changed is marked below. Supersedes nothing. It follows
 `SYS_OPS_graphify-registered-and-gated_v1_2026-10-21-0744.md`, which is the
 pattern this change copies.
 
@@ -104,7 +105,8 @@ care.
   reproduced every one of those counts in their own worktrees. The parity test
   holds for the two servers already registered as well: `blotato-help` is
   gated by the `blotato` substring and `graphify` by name. The revision's
-  counts are on the pull request.
+  counts, 1174 in the gate file with the five price flag cases, and both
+  gauntlet rounds are recorded in pull request #493's description.
 - `test_devon_integrity.py`, `test_estate_reconcile.py`,
   `test_automation_registry.py` and `test_agent_hq.py` passed together, 623
   tests, after the first edits; `test_jev_route.py` passed 3111; the standalone
@@ -117,31 +119,46 @@ care.
 The rule is HardRule 6 in `services/devon/persona.py`, "Voice and likeness are
 owned, never rented", and `test_devon_owned_voice.py` guards it; the first
 version of this doc said the rule was written in `CLAUDE.md`, which only
-applies it, and the gauntlet caught that. Read from the vendor's REST pages on
-2026-11-26, this is where VideoGen can put a rented voice or face on the work:
+applies it, and the gauntlet caught that. Read on 2026-11-26 from the vendor's
+REST pages, except `storyboard_to_video`, whose REST page returns "Page Not
+Found" and whose fields come from the MCP tool table, this is where VideoGen
+can put a rented voice or face on the work:
 
 - `script_to_video` and `slideshow_to_video` narrate with a catalogue voice
   whether or not `voiceId` is given ("A default voice is used when omitted").
 - `text_to_speech` speaks text in a catalogue voice from `list_tts_voices`.
 - `generate_video_clip` with `spokenDialogue` has the model synthesize the
   voice from the text, shaped by `voiceDescription`.
-- The `CHANGE_NARRATOR` edit re-narrates every voiceover asset with a new
-  catalogue voice and, optionally, an actor avatar. `TRANSLATE_PROJECT`
-  re-narrates in the target language unless disabled, and its `changeVoice`
-  defaults to true.
+- `video_to_video` with `audio: GENERATE` "uses newly generated audio instead"
+  of the source video's audio; the default, `KEEP_ORIGINAL`, keeps it. A restyle
+  of Tee footage with `GENERATE` drops his recorded voice for generated audio.
+  The second gauntlet round found this one missing.
+- The `CHANGE_NARRATOR` edit re-narrates every AI narrated asset with a new
+  catalogue voice and, optionally, an actor avatar; a project with no AI
+  narrated asset is skipped unchanged. `TRANSLATE_PROJECT` re-narrates those in
+  the target language unless disabled, its `changeVoice` defaults to true, and
+  with `dubVideos` true it also dubs "the speech in the project's uploaded
+  videos into the target language, replacing their original audio", billed per
+  second of speech. Whose voice the dub carries is not stated on the page read;
+  either way it is audio nobody recorded over Tee's own footage. The second
+  round found `dubVideos` missing too.
 - `actorEntityId` on `script_to_video`, `slideshow_to_video`,
   `voiceover_to_video` and `generate_avatar` (where it is required), and
   `actorEntityIds` on `storyboard_to_video`, deliver the narration through "a
   built-in stock actor or an ACTOR entity with an image reference". A stock
   actor is a rented face. An ACTOR entity built from Tee's own reference images
-  is not.
+  is not. Two unknowns: `voiceover_to_video` lists `actorEntityId` on its REST
+  page while the vendor's MCP tool row omits it, and the live schema is unread;
+  `storyboard_to_video` has no REST page at all, so whether it narrates with a
+  voice is unread.
 
 Inside the rule: an uploaded Tee clone track from ElevenLabs into
 `voiceover_to_video` with no `actorEntityId`, or into `generate_avatar` on an
-ACTOR entity built from Tee's own images. The first version of this doc called
-`voiceover_to_video` the fitting lane without saying it takes
-`actorEntityId`; it does, so the fit holds only with that field left out or
-pointing at Tee's own entity. `upload_file` is not on the hosted server, so
+ACTOR entity built from Tee's own images, with no translate or narrator edit
+after it. The first version of this doc called `voiceover_to_video` the fitting
+lane without saying it takes `actorEntityId`; it does, so the fit holds only
+with that field left out or pointing at Tee's own entity. `upload_file` is not
+on the hosted server, so
 the bytes go up through `create_file_upload`, which returns a presigned URL,
 and a PUT. The gate does not enforce the rule; it only asks for a human signal.
 Nothing published under a show's name carries a stock voice or face.
@@ -160,14 +177,17 @@ exist yet, is a scouting question and Tee's to open. Nothing here starts it.
      connector appears in cloud sessions. Its tools would arrive as
      `mcp__claude_ai_VideoGen__*`, which the tests already pin, or under a UUID,
      which the gate records as unmapped and does not refuse until it is listed
-     in `SERVER_ALIASES`, as Graphify's was on 2026-10-22. Read the name the
-     tools arrive under before trusting the gate on them.
+     in `SERVER_ALIASES`, as Graphify's was on 2026-10-22. On that arrival
+     shape every one of the thirty one writes runs with a ledger row and no
+     refusal, so read the name the tools arrive under before trusting the gate
+     on them, and add the alias row the same day.
   2. An API key saved as a network secret for `mcp.videogen.io`, where the
      proxy adds the bearer header and the container never holds the key, the
      route the TypeSafe key takes for the Jev hook. Whether the MCP client's
-     own connection gets the same injection is unverified until it is tried;
-     that the connection goes through the proxy is measured, because the Zoom
-     plugin servers failed this session with a proxy tunnel error.
+     own connection gets the same injection is unverified until it is tried.
+     That the client's connections go through the proxy at all is an inference,
+     not a measurement of VideoGen's own: on 2026-11-26 other HTTP MCP servers
+     in this cloud session failed with proxy tunnel errors.
   3. Claude Code's `/mcp` on Tee's own machine, which runs the OAuth flow with
      the loopback callback the vendor lists and serves that machine only. A
      cloud container is new every session, so this route never lights the
@@ -184,6 +204,11 @@ exist yet, is a scouting question and Tee's to open. Nothing here starts it.
   vendor recommends it alongside and it is read only, unauthenticated and free.
   It is one server entry and one settings line to remove if he does not want
   it; it went on the card rather than shipping as the default alone.
+- The WaveSpeed price exemption matches `wavespeed` by substring, so a server
+  named for both vendors (`videogen_wavespeed` and the like) would pass a
+  VideoGen generate carrying `estimate_only`. None exists, and none should be
+  registered under such a name. The second gauntlet round found it and graded
+  it negligible; it is recorded so nobody wraps one vendor in the other's name.
 - Two cancels, `cancel_workflow_run` and `cancel_tool_execution`, are gated
   like every other write. A paid run can only have been started inside the
   window, so its cancel is normally inside it too; if that ever bites, listing
@@ -204,8 +229,8 @@ TYPE: SYS_OPS
 ARTIFACT: VideoGen MCP registered at project scope and gated
 DATE: 2026-11-26
 DECISIONS: register videogen at the canonical https://mcp.videogen.io/mcp and videogen-docs beside it in .mcp.json and enabledMcpjsonServers, project scope not user scope; add videogen to NAMED_SERVERS so every non-read tool needs a human signal, without a ruling, conservative direction, offered on the card; name VideoGen in the CLAUDE.md gated list and add a short MCP servers section that maps HardRule 6 (voice and likeness owned, never rented) onto its inputs; pin the fifty one documented tool names, a .mcp.json to settings parity test and the WaveSpeed price flag on VideoGen
-FINDINGS: both the tagged and canonical URLs return byte identical 401 bodies before sign in and the declared OAuth resource is the bare /mcp, so the vg_client tag is read as attribution and its effect after sign in is unmeasured; DCR is advertised through Supabase Auth; the docs server is unauthenticated with one read tool, searchDocs; the vendor publishes three tool counts (49, 46, 50) and its tables name 51; gate tests 962 to 1169 on the first commit, mutation 124 writes red and 80 reads green, reproduced by independent verifiers; a rented voice or face arrives through voiceId or its default, text_to_speech, spokenDialogue, CHANGE_NARRATOR, TRANSLATE_PROJECT, and actorEntityId on four workflows and generate_avatar, while voiceover_to_video without an actor or generate_avatar on Tee's own ACTOR entity, both on an uploaded Tee clone track, stay inside the rule; the dependency audit is red on main on dnspython and next and the first PR comment misread it
+FINDINGS: both the tagged and canonical URLs return byte identical 401 bodies before sign in and the declared OAuth resource is the bare /mcp, so the vg_client tag is read as attribution and its effect after sign in is unmeasured; DCR is advertised through Supabase Auth; the docs server is unauthenticated with one read tool, searchDocs; the vendor publishes three tool counts (49, 46, 50) and its tables name 51; gate tests 962 to 1169 on the first commit, mutation 124 writes red and 80 reads green, reproduced by independent verifiers; a rented voice or face arrives through voiceId or its default, text_to_speech, spokenDialogue, video_to_video audio GENERATE, CHANGE_NARRATOR, TRANSLATE_PROJECT with changeVoice or dubVideos, and actorEntityId on four workflows and generate_avatar, while voiceover_to_video without an actor or generate_avatar on Tee's own ACTOR entity, both on an uploaded Tee clone track and with no edit after, stay inside the rule; storyboard_to_video has no REST page and its voice path is unread; the dependency audit is red on main on dnspython and next and the first PR comment misread it
 OPEN: sign in route (Tee), the claude.ai custom connector recommended, then the network secret, with the per machine OAuth noted as not reaching a cloud session; a connector arriving under a UUID needs a SERVER_ALIASES row before the gate refuses its writes; live tool names unread until sign in, then check against READ_VERB; credit prices unread, get_me first; videogen-docs added beyond the one URL given (Tee), removable; cancel_workflow_run and cancel_tool_execution gated as writes; generate_avatar on a Tee ACTOR entity as an avatar lane candidate is a scouting question for Tee; dnspython 2.9.2 and next 15.5.29 pins in one separate PR
-STATUS: built, tested and put through a gauntlet on the branch; revision counts and the gauntlet verdict on the pull request; not merged
+STATUS: built, tested and put through two gauntlet rounds on the branch; revision counts and both verdicts in pull request #493's description; not merged
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```

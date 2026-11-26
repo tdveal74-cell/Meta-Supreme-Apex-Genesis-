@@ -937,26 +937,33 @@ route for Claude, OAuth with Dynamic Client Registration, no key held
 anywhere), or an API key saved as a network secret, which the proxy adds to
 requests for that host. A Claude Code `/mcp` sign in on Tee's own machine
 serves that machine only. Whether the MCP client's connection gets the proxy's
-injection is unverified until it is tried; that the connection goes through
-the proxy is measured, because other HTTP servers failed this session with a
-proxy tunnel error.
+injection is unverified until it is tried. That the client's connections go
+through the proxy at all is an inference, not a measurement of VideoGen's own:
+on 2026-11-26 other HTTP MCP servers in a cloud session failed with a proxy
+tunnel error.
 
 VideoGen, registered 2026-11-26 as `videogen` beside the vendor's read only
 docs server `videogen-docs`, is where HardRule 6 in `services/devon/persona.py`,
 voice and likeness owned, never rented (`test_devon_owned_voice.py`), meets a
-paid tool. Read from the vendor's REST pages that day: `script_to_video` and
-`slideshow_to_video` narrate with a catalogue voice whether or not `voiceId`
-is given; `text_to_speech` speaks in one; `generate_video_clip` with
-`spokenDialogue` synthesizes one; the `CHANGE_NARRATOR` edit swaps one in and
-`TRANSLATE_PROJECT` re-narrates in one unless `changeVoice` is false; and
-`actorEntityId` on `script_to_video`, `slideshow_to_video`,
-`voiceover_to_video` and `generate_avatar`, or `actorEntityIds` on
-`storyboard_to_video`, puts a face on the work that is rented unless the
-entity is an ACTOR built from Tee's own reference images. Inside the rule: an
-uploaded Tee clone track into `voiceover_to_video` with no `actorEntityId`, or
-into `generate_avatar` on Tee's own ACTOR entity. Nothing published under a
-show's name carries a stock voice or face. The probes, the counts and the open
-sign in ruling are in
+paid tool. Read on 2026-11-26 from the vendor's REST pages, and for
+`storyboard_to_video`, whose REST page does not exist, from its MCP tool table:
+`script_to_video` and `slideshow_to_video` narrate with a catalogue voice
+whether or not `voiceId` is given; `text_to_speech` speaks in one;
+`generate_video_clip` with `spokenDialogue` synthesizes one; `video_to_video`
+with `audio: GENERATE` replaces the source audio with generated audio; the
+`CHANGE_NARRATOR` edit swaps a catalogue voice onto every AI narrated asset,
+and `TRANSLATE_PROJECT` re-narrates those in the target language unless
+`changeVoice` is false and, with `dubVideos` true, dubs the speech in uploaded
+videos over their original audio; `actorEntityId` on `script_to_video`,
+`slideshow_to_video`, `voiceover_to_video` (on its REST page; its MCP row omits
+it and the live schema is unread) and `generate_avatar`, or `actorEntityIds` on
+`storyboard_to_video`, whose voice path is unread, puts a face on the work that
+is rented unless the entity is an ACTOR built from Tee's own reference images.
+Inside the rule: an uploaded Tee clone track into `voiceover_to_video` with no
+`actorEntityId`, or into `generate_avatar` on Tee's own ACTOR entity, with no
+translate or narrator edit after it. Nothing published under a show's name
+carries a stock voice or face. The probes, the counts and the open sign in
+ruling are in
 `docs/devon/SYS_OPS_videogen-mcp-registered-and-gated_v1_2026-11-26-0123.md`.
 
 ## The Jev router
