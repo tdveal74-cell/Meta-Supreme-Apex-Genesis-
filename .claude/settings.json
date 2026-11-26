@@ -79,7 +79,9 @@
   },
   "enabledMcpjsonServers": [
     "blotato-help",
-    "graphify"
+    "graphify",
+    "videogen",
+    "videogen-docs"
   ],
   "permissions": {
     "allow": [
