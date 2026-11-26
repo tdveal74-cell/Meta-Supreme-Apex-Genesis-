@@ -40,7 +40,9 @@ Not built, on purpose:
   (STEPS.md, step 14). It waits on a ruling about data sources.
 - NEWS, COPY, WAVE and TREND entry rules (source lines 69, 70, 72, 74). NEWS
   needs a judgment about a "real source story". COPY needs the venue's
-  leaderboard. WAVE gives one figure, a theme that "already ran 3x+", and
+  leaderboard. The source's own figures for those two are dropped with them:
+  NEWS at half size with a 45 minute time stop, COPY 30 seconds late at half
+  size. WAVE gives one figure, a theme that "already ran 3x+", and
   does not say what a theme or its second wave is. TREND gives one figure, a
   1.5 times take, and does not define "slow grinders", "high volume" or
   "tighter trail". `entry_signal` answers `strategy_not_built` for all four.
@@ -78,8 +80,16 @@ General rules for every module:
   The time is always `snapshot.ts` or an argument.
 - No module mutates its inputs. Dataclasses are frozen.
 - Every refusal carries a `reason_code` from this file, spelled exactly.
-- An unknown (`None`) never passes a safety check. "When in doubt, no trade"
-  (source line 92).
+- An unknown (`None`) fails the analyst's eight layers, the brain's sizing
+  and a lesson's check. "When in doubt, no trade" (source line 92).
+  INVENTED exceptions, which the owner should see: in the scanner an unknown
+  `copycat_of`, `trading_disabled` or holder count kills nothing, and an
+  unknown liquidity, top 10 share or 1 hour change holds a coin at
+  `waiting_for_data` without killing it. In risk an unknown `venue_warning`
+  is no warning. In the pre-trade recheck an unknown `trading_disabled` or
+  `venue_warning` passes on a paper run and is refused on any other. Nothing
+  in this build supplies the venue fields, so every paper night runs without
+  them, and the morning report says so.
 - Comparisons are plain floating point comparisons with no tolerance. A value
   within one rounding step of a threshold can land on either side of it. The
   one exception is the loss budget, where the desk decides once and the
@@ -108,7 +118,10 @@ as it was, records the alert `exit_not_executed` and the rule violation
 sent, so trying again is not a retry of an unverified order. The night's
 fourth morning check fails. See "engine.py".
 
-R3. Withdraw. Out of scope. Nothing here touches funds.
+R3. Withdraw. Source line 4 says Withdraw is opened on the command "withdraw
+$N" and stopped at the Review screen. Line 30 says never click Withdraw. This
+build touches no funds and no browser, so it takes no reading. It must be
+ruled on before any click lane.
 
 R4. The night stop (source line 73, listed under RED). This build applies it
 in every mode: once the night's loss reaches `night_stop_pct` of the equity the
@@ -180,6 +193,17 @@ this build had to decide what it means.
 - The RED time stop counts from entry, whatever the mode was at entry.
 - The order in which exits are checked.
 - A reading older than `max_snapshot_age_s` is never bought on.
+- A score from 70 up to but not including 80 is half size. The source says
+  "70 to 79" and "80 or more", which leaves 79.5 in neither band.
+- "Cash", in the source's "every loss within 3% of cash", is the free cash
+  held when that position was opened.
+- GRAD's ten minute wait is `scanner_watch_s` measured against the pool's age,
+  so changing that one setting changes the scanner's watch and GRAD's wait.
+- A scanner kill lasts the whole night. The source says "kills on first hit"
+  and does not say for how long. One bad liquidity reading therefore removes
+  a coin until the next night.
+- A coin passes the scanner only when its liquidity, top 10 share and 1 hour
+  change are all known, and goes back to waiting when one goes missing.
 - With market data missing the mode is GREEN, so open positions are managed
   with the GREEN take and trail while every buy is blocked. The other choice
   is to manage them with the tighter RED figures and RED's 90 minute time
@@ -282,8 +306,9 @@ class Scanner:
 
 DOC, source line 42, for the six kill reasons and the ten minute watch. One
 Scanner holds the state of every coin it has seen. INVENTED: the order the
-kills are checked in (the source says only "first hit"), and reading "+200%
-in 1h" as at or above 200.
+kills are checked in (the source says only "first hit"), reading "+200% in
+1h" as at or above 200, that a kill is permanent, and that a coin needs its
+three key numbers known before it passes.
 
 - The first observation of a mint sets `first_seen_ts = snap.ts`.
 - An observation older than the last one for that mint raises `ValueError`.
@@ -612,15 +637,16 @@ blocks every coin that lacks the reading.
   floor at $20,000, one loss can close most of the range the desk trades in.
   The lesson says "be pickier than the last loser". It does not say what went
   wrong. The fixture night shows it: the second coin is blocked by the first
-  loser's lesson.
+  loser's lesson. Liquidity usually wins because closeness compares ratios
+  that sit on different scales.
 
   A departure from the source: lines 63 and 88 say every loss writes a lesson.
   Here a loss can end with none, when no candidate field qualifies or when the
   last fill on its own did not lose. The morning report counts those losses.
   The second morning check does not fail on them.
 - `apply_review`: source line 89. Raises `LessonError` when `approval` is
-  `None`, when it names no person (`approved_by` must be text with a visible
-  character) or carries no time (`approved_ts` must be a whole number above
+  `None`, when it names no person (`approved_by` must be text that is not
+  blank) or carries no time (`approved_ts` must be a whole number above
   0), and then when `changes` has more than 3 entries, in that order. The
   approval's `order_id` is not checked, because a review is not an order.
   Otherwise returns `Settings.from_dict` of the current values with the
@@ -705,6 +731,11 @@ SELL of `qty` tokens:
 - `venue_fee_usd = v * gross_usd`, `fixed_fee_usd = f`.
 - `fill_price = gross_usd / qty`.
 
+On a sell the pool fee is already inside the price the pool pays, and it is
+not taken from cash a second time. It is still listed in `fees_usd`, so the
+report's "fees paid" adds a figure that sits inside the sale price to fees
+that left the account. On a buy every fee is cash.
+
 Both sides: `spot_price = snap.price_usd` and
 `price_impact_pct = (fill_price / spot_price - 1) * 100`, which is positive
 for a buy and negative for a sell.
@@ -719,7 +750,7 @@ together.
 
 For any `kind` but PAPER it raises `ApprovalRequired`, checking in this
 order: `approval` is `None`; its `order_id` differs from the intent's; it
-names no person (`approved_by` must be text with a visible character); it
+names no person (`approved_by` must be text that is not blank); it
 carries no time (`approved_ts` must be a whole number above 0). This is the
 per-order human gate. It is the default for anything live and is not a
 setting.
@@ -815,7 +846,12 @@ position never stops the next position's stop from being checked.
 One thing is still raised: a fault in an executor. `_execute` raises
 `ValueError` before the ledger is touched when a fill comes back for another
 order, coin or side, or when a sell fill is for more than was ordered. A fill
-the ledger cannot record is raised too. The paper executor produces neither.
+the ledger cannot record is raised too, and so is anything an executor raises
+other than `PaperError` or `ApprovalRequired`. The paper executor produces
+none of these. With any other executor a fault stops the tick part way: the
+fills already made in that tick are kept and the positions not yet visited
+are not checked. What a live desk should do after a fault is not decided and
+belongs with reading R2.
 
 A price of 0.0 is a reading. It is kept as the coin's last price and values a
 held coin at nothing.
@@ -868,9 +904,16 @@ Then, in this order:
      portfolio view is rebuilt before each candidate, so a second buy in one
      tick sees the cash the first one spent.
 
+Which executor counts as paper. Only an object whose class is exactly
+`paper.PaperExecutor`. The desk does not trust what an executor calls
+itself: one that declares the kind PAPER, or a subclass of the paper
+executor, is gated like a live one. Its night is not reported as a paper
+night, every fill it returns counts as a real order, and a fill it labels
+paper is counted as unverified.
+
 Every intent goes through `_execute`, which calls `paper.require_approval`
-with the executor's kind before the executor runs. For a kind other than
-PAPER it first asks the `approve` callback for a `HumanApproval`. With no
+before the executor runs. For any executor but the paper one it first asks
+the `approve` callback for a `HumanApproval`. With no
 callback, an approval for another order, or one that names no person or
 carries no time, nothing is executed. This gate is in the desk itself, so an
 executor cannot skip it. It covers sells as well as buys. `_execute` returns
@@ -919,6 +962,12 @@ An open position's result so far is what its earlier sells realized plus its
 tokens at the last price, less their cost. `over_budget` is the same test a
 closed loss gets, so a loss past the limit shows before it is closed.
 
+Equity values an open position at its last price with no cost of selling it.
+The night result and the night stop both use that figure, so each is better
+than a sale would give by the fees and price impact of the exit. The report
+says so whenever a position is open. `venue_checks_supplied` says whether any
+reading carried a venue warning or a trading flag.
+
 ## report.py
 
 ```python
@@ -964,8 +1013,9 @@ record and cannot fail. Its evidence line says so.
 
 `render_morning` also prints what the desk saw (ticks, readings, coins, first
 and last tick), with a line in capitals when no coin was seen, and a section
-"Not tested by this night" that names order verification on a paper night
-and price drift between the decision and the order. Under each kind of skip
+"Not tested by this night" that names order verification on a paper night,
+price drift between the decision and the order, and the venue checks when no
+reading carried them. Under each kind of skip
 it prints the detail of the first one, so the reason behind a count can be
 read without the JSON.
 

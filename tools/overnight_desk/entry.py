@@ -12,7 +12,8 @@ INVENTED, labelled so in SPEC.md: the definition of "sellers drying up"
 answer ``strategy_not_built``.
 
 Pure functions. Nothing is mutated, and there is no clock, network or
-randomness. An unknown (None) never passes a check.
+randomness. An unknown (None) fails an entry check. The exception is the
+recheck's two venue fields on a paper run, which SPEC.md describes.
 """
 from __future__ import annotations
 

@@ -5,8 +5,9 @@ clock, no network. Times are whole seconds since the Unix epoch, UTC, and are
 always passed in. Prices and money are floats in US dollars.
 
 ``None`` in a snapshot field means "this source did not tell us". The rules
-in SPEC.md say what each module does with an unknown, and the safety layers
-treat an unknown as a failure.
+in SPEC.md say what each module does with an unknown. The analyst's layers,
+the brain and a lesson's check treat an unknown as a failure. SPEC.md lists
+the inputs that are exceptions.
 """
 from __future__ import annotations
 

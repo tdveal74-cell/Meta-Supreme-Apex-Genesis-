@@ -9,10 +9,19 @@ the click queue"):
 
 The desk never executes an order itself. It hands an OrderIntent to an
 Executor, and for any executor that is not the paper one it demands a
-HumanApproval for that order first. An order the executor refuses, or one with
-no approval, is recorded and the tick carries on: a refused buy is a skip, and
-an exit that could not be carried out is an alert and a rule violation. So one
-position's trouble never stops the next position's stop from being checked.
+HumanApproval for that order first. "The paper one" means an object whose
+class is exactly ``paper.PaperExecutor``. What an executor calls itself is not
+trusted: one that only declares itself paper is gated like any other, and the
+report does not call its night a paper night.
+
+An order the executor refuses, or one with no approval, is recorded and the
+tick carries on: a refused buy is a skip, and an exit that could not be
+carried out is an alert and a rule violation. With the paper executor, one
+position's trouble therefore never stops the next position's stop from being
+checked. An executor that raises anything other than a refusal, or returns a
+fill that does not match its order, is a fault: it is raised and the tick
+stops part way. What a live desk should do then is not decided (SPEC.md,
+reading R2).
 
 INVENTED here, and labelled so in SPEC.md: candidates are tried best score
 first; a coin traded once in a night is not traded again that night; a skip
@@ -115,6 +124,10 @@ class Desk:
         settings.check()
         self.settings = settings
         self.executor: Executor = executor if executor is not None else paper.PaperExecutor(settings)
+        # Paper is a fact about the class, never a label an executor gives itself.
+        self._is_paper = type(self.executor) is paper.PaperExecutor
+        self._gate_kind = ExecutorKind.PAPER if self._is_paper else ExecutorKind.LIVE
+        self._venue_checks_supplied = False
         self.lessons = lesson_book if lesson_book is not None else lessons.LessonBook()
         self.strategies = tuple(strategies)
         self._approve = approve
@@ -173,6 +186,8 @@ class Desk:
         self._last_ts = now
         for snap in by_mint.values():
             self._snap_ts[snap.mint] = snap.ts
+            if snap.trading_disabled is not None or snap.venue_warning is not None:
+                self._venue_checks_supplied = True
             price = snap.price_usd
             # A price of 0.0 is a reading: it values a held coin at nothing.
             if price is not None and price >= 0:
@@ -333,7 +348,7 @@ class Desk:
             # One reading per coin per tick: the decision and the fresh snapshot
             # are the same object, so drift and staleness cannot fire here.
             reasons = entry.pre_trade_recheck(
-                snap, snap, decision.ticket_usd, view.free_cash_usd, self.settings, self.executor.kind
+                snap, snap, decision.ticket_usd, view.free_cash_usd, self.settings, self._gate_kind
             )
             if reasons:
                 self._skip(now, snap, "executor", reasons[0], "; ".join(reasons))
@@ -371,10 +386,10 @@ class Desk:
         rest of the tick still runs.
         """
         approval: HumanApproval | None = None
-        if self.executor.kind is not ExecutorKind.PAPER and self._approve is not None:
+        if not self._is_paper and self._approve is not None:
             approval = self._approve(intent)
         try:
-            paper.require_approval(intent, self.executor.kind, approval)
+            paper.require_approval(intent, self._gate_kind, approval)
             fill = self.executor.execute(intent, snap, approval)
         except paper.ApprovalRequired as exc:
             return None, "approval_missing", str(exc)
@@ -480,6 +495,12 @@ class Desk:
             "over_budget": result is not None and -result > budget + _BUDGET_TOLERANCE_USD,
         }
 
+    def _verification(self, fill: Fill) -> Verification:
+        """A fill is a paper fill only when the desk's own paper executor made it."""
+        if fill.verification is Verification.PAPER and not self._is_paper:
+            return Verification.UNVERIFIED
+        return fill.verification
+
     def _next_id(self, now: int) -> str:
         self._seq += 1
         return f"{now}-{self._seq:04d}"
@@ -495,10 +516,17 @@ class Desk:
             by_reason[key] = by_reason.get(key, 0) + 1
         verification = {v.value: 0 for v in Verification}
         for fill in self.ledger.fills:
-            verification[fill.verification.value] += 1
+            verification[self._verification(fill).value] += 1
         buys = sum(1 for f in self.ledger.fills if f.side is Side.BUY)
+        if self._is_paper:
+            executor_name = "paper"
+        elif self.executor.kind is ExecutorKind.PAPER:
+            executor_name = "not the paper executor, though it calls itself paper"
+        else:
+            executor_name = self.executor.kind.value
         return {
-            "executor": self.executor.kind.value,
+            "executor": executor_name,
+            "venue_checks_supplied": self._venue_checks_supplied,
             "ticks": self._ticks,
             "snapshots_seen": self._snapshots_seen,
             "coins_seen": len(self._snap_ts),
@@ -527,7 +555,7 @@ class Desk:
                     "gross_usd": f.gross_usd,
                     "fees_usd": f.fees_usd,
                     "cash_delta_usd": f.cash_delta_usd,
-                    "verification": f.verification.value,
+                    "verification": self._verification(f).value,
                     "exit_reason": f.exit_reason.value if f.exit_reason else None,
                 }
                 for f in self.ledger.fills

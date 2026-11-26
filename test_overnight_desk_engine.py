@@ -19,7 +19,7 @@ PKG = ROOT / "tools" / "overnight_desk"
 if str(ROOT / "tools") not in sys.path:
     sys.path.append(str(ROOT / "tools"))
 
-from overnight_desk import lessons, model, replay, report  # noqa: E402
+from overnight_desk import lessons, model, paper, replay, report  # noqa: E402
 from overnight_desk.engine import Desk  # noqa: E402
 from overnight_desk.settings import Settings  # noqa: E402
 
@@ -1217,6 +1217,8 @@ def test_the_replay_refuses_a_number_too_large_to_work_with(patch):
 def test_the_replay_accepts_a_number_at_the_bound_and_refuses_a_huge_tick_time():
     frame = replay.parse_frame({"ts": T0, "tokens": [{"mint": "A", "symbol": "A", "liquidity_usd": 10**15}]})
     assert frame.tokens[0].liquidity_usd == 10**15
+    edge = replay.parse_frame({"ts": T0, "tokens": [{"mint": "A", "symbol": "A", "price_usd": 1e15, "top10_pct": -1e15}]})
+    assert edge.tokens[0].price_usd == 1e15 and edge.tokens[0].top10_pct == -1e15  # the bound itself is allowed
     with pytest.raises(replay.TimelineError, match="whole number of seconds"):
         replay.parse_frame({"ts": 10**15 + 1, "tokens": []})
     with pytest.raises(replay.TimelineError, match="between"):
@@ -1411,7 +1413,10 @@ def _sell_fill(pos, cash):
 
 @pytest.mark.parametrize(
     "total, expect_loss, expect_over",
-    [(-30.0, True, False), (-30.000001, True, True), (0.0, False, False), (-0.01, True, False)],
+    [
+        (-30.0, True, False), (-(30.0 + 1e-9), True, False), (-30.000001, True, True),
+        (0.0, False, False), (-0.01, True, False),
+    ],
 )
 def test_the_loss_and_budget_lines_at_their_exact_edges(total, expect_loss, expect_over):
     d = desk()
@@ -1511,3 +1516,98 @@ def test_a_small_but_workable_price_still_buys():
     out = d.tick(ts, market(ts), [coin(ts, **kw)])
     assert len(out.fills) == 1 and out.fills[0].price > 0
     json.dumps(d.night_report(), allow_nan=False)
+
+
+# --- the last pass: paper is the desk's own executor, never a label -----------
+
+
+class _ClaimsPaper(_FakeLive):
+    """Not the paper executor. It only says it is, on itself and on its fills."""
+
+    kind = model.ExecutorKind.PAPER
+
+    def execute(self, intent, snapshot, approval=None):
+        fill = super().execute(intent, snapshot, approval)
+        return dataclasses.replace(fill, verification=model.Verification.PAPER)
+
+
+class _PaperSubclass(paper.PaperExecutor):
+    pass
+
+
+@pytest.mark.parametrize("make", [_ClaimsPaper, lambda: _PaperSubclass(Settings.for_tests())])
+def test_an_executor_that_only_calls_itself_paper_gets_no_order_without_an_approval(make):
+    d = Desk(Settings.for_tests(), 1_000.0, executor=make())
+    d.tick(T0, market(T0), [_live_snapshot(T0)])
+    out = d.tick(T0 + WATCH, market(T0 + WATCH), [_live_snapshot(T0 + WATCH)])
+    assert out.fills == () and d.ledger.fills == [] and d.ledger.cash_usd == 1_000.0
+    assert reasons(d)[-1] == ("executor", "approval_missing")
+    assert d.night_report()["executor"] != "paper"
+
+
+def test_a_night_on_such_an_executor_is_never_reported_as_a_paper_night():
+    ok = lambda intent: model.HumanApproval(intent.order_id, "tee", intent.ts)  # noqa: E731
+    fake = _ClaimsPaper()
+    d = Desk(Settings.for_tests(), 1_000.0, executor=fake, approve=ok)
+    d.tick(T0, market(T0), [_live_snapshot(T0)])
+    d.tick(T0 + WATCH, market(T0 + WATCH), [_live_snapshot(T0 + WATCH)])
+    assert len(fake.seen) == 1 and fake.seen[0][1].approved_by == "tee"
+    rep = d.night_report()
+    assert rep["executor"] == "not the paper executor, though it calls itself paper"
+    assert rep["verification"] == {"paper": 0, "verified": 0, "unverified": 1}
+    assert rep["real_orders_sent"] == 1 and rep["fills"][0]["verification"] == "unverified"
+    text = report.render_morning(rep, 3.0)
+    assert "This was a paper night" not in text and "Real orders sent: 1." in text
+    assert "[FAIL] zero unverified orders: 1 real orders sent, 1 unverified" in text
+
+
+def test_a_live_run_without_venue_checks_is_refused_whatever_the_executor_calls_itself():
+    ok = lambda intent: model.HumanApproval(intent.order_id, "tee", intent.ts)  # noqa: E731
+    fake = _ClaimsPaper()
+    d = Desk(Settings.for_tests(), 1_000.0, executor=fake, approve=ok)
+    warm(d, "GOOD")  # trading_disabled and venue_warning are unknown
+    d.tick(T0 + WATCH, market(T0 + WATCH), [coin(T0 + WATCH)])
+    assert fake.seen == [] and reasons(d)[-1] == ("executor", "venue_checks_missing")
+
+
+def test_the_desks_own_paper_executor_is_still_a_paper_night():
+    d = desk()
+    _bought(d)
+    rep = d.night_report()
+    assert rep["executor"] == "paper" and rep["real_orders_sent"] == 0
+    assert rep["verification"] == {"paper": 1, "verified": 0, "unverified": 0}
+
+
+def test_the_report_says_when_no_reading_carried_the_venue_checks():
+    d = desk()
+    _bought(d)
+    rep = d.night_report()
+    assert rep["venue_checks_supplied"] is False
+    assert "venue warnings and disabled trading: no reading carried either" in report.render_morning(rep, 3.0)
+    with_checks = desk()
+    with_checks.tick(T0, market(T0), [coin(T0, trading_disabled=False)])
+    rep = with_checks.night_report()
+    assert rep["venue_checks_supplied"] is True
+    assert "venue warnings and disabled trading" not in report.render_morning(rep, 3.0)
+    warned = desk()
+    warned.tick(T0, market(T0), [coin(T0, venue_warning="")])
+    assert warned.night_report()["venue_checks_supplied"] is True
+
+
+def test_the_report_says_open_positions_are_valued_before_the_cost_of_selling():
+    d = desk()
+    assert "valued at their last price" not in report.render_morning(d.night_report(), 3.0)
+    _bought(d)
+    assert "open positions are valued at their last price, before any cost of selling them" in report.render_morning(
+        d.night_report(), 3.0
+    )
+
+
+def test_a_skip_whose_detail_moves_every_tick_is_recorded_once():
+    d = desk(max_snapshot_age_s=30)
+    warm(d, "GOOD")
+    base = T0 + WATCH
+    for late in (31, 32, 33, 34):  # the reading is 31s old, then 32s, 33s, 34s
+        d.tick(base + late, market(base + late), [coin(base)])
+    stale = [s.detail for s in d.skips if s.reason_code == "stale_snapshot"]
+    assert stale == ["the reading is 31s old"]

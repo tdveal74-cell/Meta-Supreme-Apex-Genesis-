@@ -2,8 +2,8 @@
 
 Status record for the `claude/new-session-1eccpt` branch, pull request #495.
 First written 2026-11-26 at 0632Z, the stamp in its name, and revised the
-same day at 0654Z after a third verification round, which has its own section
-below. Supersedes nothing.
+same day at 0654Z after a third verification round and at 0712Z after the
+fourth and last, each with its own section below. Supersedes nothing.
 It follows no earlier doc on this topic. The nearest relative is
 `SYS_OPS_hypergrok-trading-desk_v1_2026-09-24-0206.md`, the other trading
 desk on record, whose line 16 reads "Standing approval for a protective stop:
@@ -77,7 +77,7 @@ line is his reading to give. From here the work is done at full quality.
 
 ## What was built
 
-`tools/overnight_desk/`, sixteen Python files and 2,999 lines, standard
+`tools/overnight_desk/`, sixteen Python files and 3,038 lines, standard
 library only. It is everything in the prompt that can be built and tested
 without an account, a browser or an order: settings with an origin and a
 range for every number, the market mode, the scanner, the eight layer analyst
@@ -86,8 +86,8 @@ risk exits, the lessons loop, a paper executor with an explicit cost model, a
 ledger, a live gate that stays shut, the desk that runs them in order, a
 morning report and a replay over a recorded timeline.
 
-Seven test files at the repository root hold 990 tests: base 86, brain and
-entry 141, engine 170, mode and lessons 231, paper and gate 120, risk 102,
+Seven test files at the repository root hold 999 tests: base 86, brain and
+entry 141, engine 179, mode and lessons 231, paper and gate 120, risk 102,
 scanner and analyst 140. All seven are in the standalone job of `ci.yml`
 and in the matching list in `CLAUDE.md`.
 
@@ -116,8 +116,9 @@ wrong: only the step 15 acceptance list is a proposal that gates nothing.
 - The rule that turns a loss into a lesson. Its reach is wide: a loss on a
   coin with $40,000 of liquidity blocks every later coin at or under $40,000.
 - Ten readings where the prompt contradicts itself or leaves a gap (R1 to
-  R10 in `SPEC.md`), and fifteen definitions the build had to choose, among
-  them that "liquidity" means both sides of the pool.
+  R10 in `SPEC.md`), and twenty definitions the build had to choose, among
+  them that "liquidity" means both sides of the pool and that a scanner kill
+  lasts the whole night.
 - The per-order approval gate on any executor that is not the paper one. The
   prompt asks for no such thing. It comes from Tee's own capital-guardrails
   rule, and it cannot hold together with the prompt's unattended stop.
@@ -243,6 +244,66 @@ replay of the fixture night exited 0. The full
 PostgreSQL suite ran on `43cddaa`, before those fixes, and returned 11,039
 passed and 2 skipped.
 
+The last pass, on commit `08b1502`. Three agents. This was the third scored
+cycle, and the gauntlet allows three.
+
+- Engine re-attack with extreme inputs: all six round 3 defects fixed, 19 of
+  21 listed mutants dead, and 63 new mutations tried, of which one survived
+  the whole suite with an effect that could be shown. A fuzz of 400 seeded
+  nights and 12,121 ticks at the edges of every range found no failure, and a
+  second of 11,904 ticks found none.
+- Code critic: 10 findings, two medium and none high. Scores of 4 on seven
+  dimensions and 5 on re-run safety. Flagship floor met.
+- Fidelity critic: 14 findings, two medium. Scores of 4 for scope, 3 for
+  traceability, 4 for verification coverage.
+
+Across the eleven dimensions the mean was 4.00, at the gate of 4.0. No
+dimension was under 3. Security was 4 against a required 5, so the verdict is
+PASS-WITH-CONDITIONS and not PASS.
+
+The security finding: the desk trusted an executor's own claim to be the
+paper one. An executor that only called itself paper skipped the approval
+gate, and the report would have said no money moved. No such executor exists,
+so nothing could reach it today.
+
+Changed after the last pass, and checked by this session's own tests only.
+No independent verifier has seen these:
+
+- Paper is now a fact about the executor's class. Only the desk's own
+  `PaperExecutor` skips the approval gate. Anything else is gated, its night
+  is not reported as a paper night, and a fill it labels paper counts as
+  unverified. Five tests pin it.
+- The report says when no reading carried the venue checks, and that open
+  positions are valued before the cost of selling them.
+- False statements corrected: "an unknown never passes a safety check" was
+  not true of four scanner and venue inputs, and the contract now lists the
+  exceptions. The live gate's docstring said nothing in it was invented. The
+  engine's claim that one position's trouble never stops the next is now
+  limited to the paper executor and to refusals.
+- Five more definitions were labelled, among them that a scanner kill lasts
+  the whole night and what "cash" means in the 3% rule.
+
+Left open from the last pass, all rated low:
+
+- An executor that fails after sending an order stops the tick part way. What
+  a live desk should do then is undecided and belongs with reading R2.
+- The lesson is derived from the last fill and its closeness measure favours
+  liquidity.
+- On a refused exit the refreshed peak is dropped for that tick.
+- A market reading may carry its own time, which nothing checks.
+- "Fees paid" adds a sell's pool fee, which is already inside the price.
+- `apply_review`, `LessonBook.from_json` and `Settings.describe` are called by
+  nothing in the package.
+- The tests add `tools/` to the import path for the whole test run.
+- A handful of tests are weaker than their names, and two listed mutants
+  survive at an exact boundary.
+
+Local runs on the final commit: the 999 desk tests passed, the CI standalone
+list returned 7,071 passed, `ruff check .` returned no finding, and
+the replay of the fixture night exited 0. The full PostgreSQL suite last ran
+on `43cddaa`, two fix commits earlier, and returned 11,039 passed and 2
+skipped. CI runs it on the final commit.
+
 ## The data question for step 14
 
 A second workflow surveyed keyless public sources for the readings the desk
@@ -299,8 +360,8 @@ TYPE: SYS_OPS
 ARTIFACT: Overnight Desk paper engine, tools/overnight_desk, pull request #495
 DATE: 2026-11-26
 DECISIONS: build toward the full desk, picked on a card over a recommendation to leave the prompt unbuilt (Tee, 2026-11-26); the session token lane is not built under any ruling short of written authorization from the venue, and the click lane returns on its own card, both carried in the text of the option he picked; build the paper engine first, with no venue access; every definition the prompt lacks is labelled INVENTED and waits on his review; the six risk and fee numbers the prompt never states have no default
-FINDINGS: FOMO terms section 16, last updated October 26 2026, prohibit automated trade execution and giving a session token to a script; the prompt gates live trading on STEP 15 tests it never defines; its stop is a price watch and a click and cannot be promised; it states no fee; the audit's long report failed the gauntlet three times and was quarantined; round 2 verification found that a risk exit on a drained pool stopped the night, fixed by recording an unfilled order and carrying on; round 3 found no high finding and the flagship floor met, with a mean score of 3.68 against a gate of 4.0 and security 4 against 5; 990 desk tests pass locally after the round 3 fixes; the full API suite returned 11039 passed on 43cddaa; no keyless public source gives bundled wallet counts or creator sales, so on free data the desk would pass no coin; three keyless sources disagreed on one coin's top 10 share, developer address and holder count
-OPEN: data source ruling for step 14; Tee's review of readings R1 to R10, the definitions list, the score formula, the cost model, the lesson rule and STEPS.md; his six numbers; before any FOMO lane, the reach of his compliance rule, his reading of capital-guardrails line 117 and the conflict between per-order approval and an unattended stop; whether to size net of costs; how to manage open positions when market data is missing
-STATUS: built and tested on the branch, three verification rounds run and their findings fixed; the invented rules are active in any replay and unruled; paper only, no data source, no venue access; not merged
+FINDINGS: FOMO terms section 16, last updated October 26 2026, prohibit automated trade execution and giving a session token to a script; the prompt gates live trading on STEP 15 tests it never defines; its stop is a price watch and a click and cannot be promised; it states no fee; the audit's long report failed the gauntlet three times and was quarantined; round 2 verification found that a risk exit on a drained pool stopped the night, fixed by recording an unfilled order and carrying on; round 3 found no high finding and the flagship floor met, with a mean score of 3.68 against a gate of 4.0 and security 4 against 5; the last pass scored a mean of 4.00 with security still 4, so the verdict is PASS-WITH-CONDITIONS; its security finding, that an executor could call itself paper and skip the approval gate, was closed afterwards and checked by this session's tests only; 999 desk tests pass locally on the final commit; the full API suite returned 11039 passed on 43cddaa; no keyless public source gives bundled wallet counts or creator sales, so on free data the desk would pass no coin; three keyless sources disagreed on one coin's top 10 share, developer address and holder count
+OPEN: data source ruling for step 14; Tee's review of readings R1 to R10, the definitions list, the score formula, the cost model, the lesson rule and STEPS.md; his six numbers; before any FOMO lane, the reach of his compliance rule, his reading of capital-guardrails line 117 and the conflict between per-order approval and an unattended stop; whether to size net of costs; how to manage open positions when market data is missing; what a live desk does when an executor fails after sending an order
+STATUS: built and tested on the branch, four verification rounds run; gauntlet verdict PASS-WITH-CONDITIONS on the third scored cycle, with the fixes made after it not independently verified; the invented rules are active in any replay and unruled; paper only, no data source, no venue access; not merged
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```

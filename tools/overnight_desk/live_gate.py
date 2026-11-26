@@ -4,8 +4,10 @@ Source line 80 sets the conditions before any live trading: a number of full
 paper nights, passed acceptance tests and the owner typing the word live.
 SPEC.md adds the per-order approval and the existence of a live executor,
 which this build does not contain. Pure function: it returns every blocker, in
-a fixed order, and an empty tuple means the gate is open. Nothing is INVENTED
-here.
+a fixed order, and an empty tuple means the gate is open. The first three
+blockers follow source line 80, and the acceptance tests it names are the
+STEP 15 the source never defines (STEPS.md). The last two, that a live
+executor exists and that per-order approval exists, are INVENTED.
 """
 from __future__ import annotations
 

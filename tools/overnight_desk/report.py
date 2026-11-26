@@ -1,6 +1,6 @@
 """The morning report: a night's plain data turned into plain text.
 
-The source prompt's last paragraph (line 94) says what a good first morning
+Line 94 of the source prompt says what a good first morning
 shows: a clear reason for every skip, every loss within 3% of cash with an
 autopsy, zero unverified orders and zero rule violations. This report answers
 each of those four from the night's data and claims nothing the data does not
@@ -131,6 +131,8 @@ def render_morning(report: dict[str, Any], risk_per_trade_pct: float) -> str:
     add(f"  realized         {_usd(report['realized_pnl_usd'])}")
     add(f"  fees paid        {_usd(report['fees_usd'])}")
     add(f"  buys {report['buys']}, sells {report['sells']}, open positions {len(report['open_positions'])}")
+    if report["open_positions"]:
+        add("  open positions are valued at their last price, before any cost of selling them")
     add("")
     add("The four morning checks (source line 94)")
     for row in morning_checks(report, risk_per_trade_pct):
@@ -143,6 +145,10 @@ def render_morning(report: dict[str, Any], risk_per_trade_pct: float) -> str:
     if report.get("recheck_source") == "same_snapshot":
         untested.append(
             "price drift between the decision and the order: the desk had one reading per coin per tick"
+        )
+    if not report.get("venue_checks_supplied"):
+        untested.append(
+            "venue warnings and disabled trading: no reading carried either, so those checks had nothing to test"
         )
     if not untested:
         add("  nothing listed")

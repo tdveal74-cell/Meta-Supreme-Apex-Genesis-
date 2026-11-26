@@ -7,7 +7,8 @@ rule it trips and a kill is permanent. A coin that has survived the watch with
 its three key numbers known is PASSED, and a later observation can still kill
 it.
 
-INVENTED, marked as such in SPEC.md: the definition of ``holders_leaving`` and
+INVENTED, marked as such in SPEC.md: that a kill lasts the whole night, that a
+coin passes only once its three key numbers are known, the definition of ``holders_leaving`` and
 its threshold ``holders_drop_kill_pct``. The source names "holders leaving" and
 defines nothing.
 

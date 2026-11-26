@@ -29,9 +29,10 @@ tested without an account, a browser or an order. The status record is
 - Fills orders on paper, with every cost named: a venue fee, a pool fee, a
   flat fee and the price impact of the order on a constant-product pool. A
   sale into a pool with nothing left in it is recorded as a total loss.
-- Writes a lesson after a loss. A lesson can only block a later trade.
-- Prints a morning report that answers the four tests in the prompt's last
-  paragraph. Each reads pass, FAIL or n/a. A check the night gave nothing to
+- Writes a lesson after most losses (`SPEC.md` says when it does not). A
+  lesson can only block a later trade.
+- Prints a morning report that answers the four tests in the prompt's line
+  94. Each reads pass, FAIL or n/a. A check the night gave nothing to
   test reads n/a and never pass.
 
 ## What it does not do
@@ -117,8 +118,13 @@ Offline, no database. What two of the guard tests do and do not show:
 `ExecutorKind.LIVE` exists so the gate can be tested. Nothing constructs a
 live executor. The desk itself refuses to hand an order to any executor that
 is not the paper one unless it was given an approval for that one order that
-names a person and carries a time. That is the default and it is not a
-setting.
+names a person and carries a time. "The paper one" is decided by the
+executor's class and never by what it calls itself. That is the default and
+it is not a setting.
+
+The gate covers refusals. It does not cover an executor that fails after
+sending an order. What a live desk does then is undecided, and it has to be
+ruled on before one is built.
 
 The approval is a record. It does not prove a person gave it, because any
 code can build one. A real approval path would have to prove who gave it, and
