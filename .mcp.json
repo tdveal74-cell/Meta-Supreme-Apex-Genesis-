@@ -7,6 +7,14 @@
     "graphify": {
       "type": "http",
       "url": "https://api.graphify.com/mcp"
+    },
+    "videogen": {
+      "type": "http",
+      "url": "https://mcp.videogen.io/mcp"
+    },
+    "videogen-docs": {
+      "type": "http",
+      "url": "https://docs.videogen.io/_mcp/server"
     }
   }
 }

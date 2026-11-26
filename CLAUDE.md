@@ -820,7 +820,7 @@ is the number; this paragraph is not.
 - Gated: every n8n write (publish, unpublish, archive, execute, update,
   restore, data table writes, folder moves); every tool on a server named
   Railway, Airtable, Vercel, Supabase, Hostinger, Rakazo, Blotato, Docusign,
-  Zapier, Remote Desktop Commander, Runpod, Graphify or WaveSpeed except a read (get, list, search, describe, query and the like, listed
+  Zapier, Remote Desktop Commander, Runpod, Graphify, WaveSpeed or VideoGen except a read (get, list, search, describe, query and the like, listed
   in `READ_VERB`), and except a WaveSpeed generate, edit or extend call that only asks for a price (`estimate_only` true); GitHub Actions triggers; Drive trash; a curl that writes to a
   non-local host; a wget that posts to one; `gh workflow run`, `gh api` writes
   and GraphQL mutations, `gh release`, `gh repo`, `gh secret` and `gh variable`
@@ -923,6 +923,55 @@ The curl/wget upload checks also recognize program words spelled with globs or
 variable expansion, without executing the expansion. They retain the existing
 read and loopback policy. This is bounded classification, not a full shell
 sandbox: aliases, arbitrary interpreters and other clients remain outside it.
+
+## MCP servers in .mcp.json
+
+`.mcp.json` and `enabledMcpjsonServers` in `.claude/settings.json` carry the
+servers registered at project scope, because a user scope entry lives in the
+container's home directory and is wiped with it. The two lists must agree, and
+every server on them must be one the gate names, so an unlisted write verb on
+it is still gated; `test_gate_ledger.py` pins both. A server that wants a sign
+in reads "needs authentication" in a cloud session until a route that reaches
+the container is taken: a claude.ai custom connector (the vendor's documented
+route for Claude, OAuth with Dynamic Client Registration, no key held
+anywhere; ruled by Tee for VideoGen on 2026-11-26, on a card), or an API key
+saved as a network secret, which the proxy adds to requests for that host. A Claude Code `/mcp` sign in on Tee's own machine
+serves that machine only. Whether the MCP client's connection gets the proxy's
+injection is unverified until it is tried. That the client's connections go
+through the proxy at all is an inference, not a measurement of VideoGen's own:
+on 2026-11-26 other HTTP MCP servers in a cloud session failed with a proxy
+tunnel error.
+
+VideoGen, registered 2026-11-26 as `videogen` beside the vendor's read only
+docs server `videogen-docs`, is where HardRule 6 in `services/devon/persona.py`,
+voice and likeness owned, never rented (`test_devon_owned_voice.py`), meets a
+paid tool. Read on 2026-11-26 from the vendor's REST pages, and for
+`storyboard_to_video`, whose REST page does not exist, from its MCP tool table:
+`script_to_video` and `slideshow_to_video` narrate with a catalogue voice
+whether or not `voiceId` is given; `text_to_speech` speaks in one;
+`generate_video_clip` with `spokenDialogue` synthesizes one; `video_to_video`
+with `audio: GENERATE` replaces the source audio with generated audio; the
+`CHANGE_NARRATOR` edit swaps a catalogue voice onto every AI narrated asset,
+and `TRANSLATE_PROJECT` re-narrates those in the target language unless
+`changeVoice` is false and, with `dubVideos` true, dubs the speech in uploaded
+videos over their original audio; `actorEntityId` on `script_to_video`,
+`slideshow_to_video`, `voiceover_to_video` (on its REST page; its MCP row omits
+it and the live schema is unread) and `generate_avatar`, or `actorEntityIds` on
+`storyboard_to_video`, whose scenes also carry spoken `voiceoverScript` lines in
+a vendor voice (its changelog v2.3.3; it has no REST page), puts a face on the
+work that is rented unless the entity is an ACTOR built from Tee's own
+reference images.
+Inside the rule: an uploaded Tee clone track into `voiceover_to_video` with no
+`actorEntityId`, or into `generate_avatar` on Tee's own ACTOR entity, with no
+translate or narrator edit after it. Tee ruled on 2026-11-26, on a card, that
+the avatar route is HeyGen's filmed twin and VideoGen's `generate_avatar` is not
+scouted; the owned MuseTalk lane, n8n workflow `snRyzuQhPxkidipW` (its title is
+TQO & NCO, a dash, Hugging Face Avatar + Lip Sync) on the instance since
+2026-10-21, exists and was misreported as absent that day from an August note
+nobody checked. Nothing published under a show's name
+carries a stock voice or face. The probes, the counts and the open sign in
+ruling are in
+`docs/devon/SYS_OPS_videogen-mcp-registered-and-gated_v1_2026-11-26-0123.md`.
 
 ## The Jev router
 
