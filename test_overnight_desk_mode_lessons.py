@@ -512,6 +512,18 @@ def test_a_review_does_not_check_the_order_id():
     assert lessons.apply_review(S, {"stop_loss_pct": 20.0}, ok).stop_loss_pct == 20.0
 
 
+def test_a_review_asks_who_approved_before_it_counts_the_changes():
+    four = {"stop_loss_pct": 20.0, "score_pass": 71.0, "score_full": 81.0, "top10_max_pct": 24.0}
+    nobody = model.HumanApproval(order_id="x", approved_by=" ", approved_ts=1)
+    with pytest.raises(LessonError, match="named person"):
+        lessons.apply_review(S, four, nobody)
+    with pytest.raises(LessonError, match="named person"):
+        lessons.apply_review(S, four, None)
+    somebody = model.HumanApproval(order_id="x", approved_by=" tee ", approved_ts=1)
+    with pytest.raises(LessonError, match="at most 3"):
+        lessons.apply_review(S, four, somebody)
+
+
 # --- the modules' own source ----------------------------------------------
 
 

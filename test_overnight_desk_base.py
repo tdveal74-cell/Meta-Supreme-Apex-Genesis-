@@ -62,6 +62,11 @@ def test_every_setting_has_a_spec_and_every_spec_a_setting():
 
 
 def test_origins_are_one_of_three_kinds():
+    """Checks the form of each origin and that a doc line number is inside the 96 line source.
+
+    It cannot check that line N states the number: the source prompt is not in this repository.
+    SPEC.md records its SHA-256 so a holder of the file can.
+    """
     for name, spec in SPECS.items():
         assert spec.origin in ("invented", "owner") or spec.origin.startswith("doc:"), name
         if spec.origin.startswith("doc:"):
@@ -95,7 +100,8 @@ def test_one_missing_owner_setting_is_enough_to_refuse():
             Settings.from_dict(partial)
 
 
-def test_documented_defaults_match_the_source_lines():
+def test_documented_defaults_match_the_numbers_copied_from_the_source():
+    """The source prompt is not in this repository, so this pins the copies and cannot check the original."""
     s = Settings.for_tests()
     assert (s.liquidity_floor_usd, s.top10_max_pct, s.pump_1h_kill_pct, s.scanner_watch_s) == (20_000, 25, 200, 600)
     assert (s.dev_max_pct, s.lp_locked_min_pct, s.pool_age_min_s) == (5, 99, 600)
@@ -109,7 +115,8 @@ def test_documented_defaults_match_the_source_lines():
     assert s.paper_nights_required == 3
 
 
-def test_the_sizing_rule_is_twelve_percent_of_free_cash():
+def test_the_two_sizing_settings_divide_to_twelve_percent():
+    """Settings only. The brain's own sizing is tested in test_overnight_desk_brain_entry.py."""
     s = Settings.for_tests()
     assert s.risk_per_trade_pct / s.stop_loss_pct == pytest.approx(0.12)
 
@@ -145,6 +152,41 @@ def test_cross_field_rules():
         Settings.for_tests(dip_age_min_s=600, dip_age_max_s=600)
     with pytest.raises(SettingsError, match="max_ticket_usd"):
         Settings.for_tests(max_ticket_usd=0.5, min_ticket_usd=1.0)
+
+
+def test_red_must_be_tighter_than_green_on_the_trail_and_on_the_take():
+    """Source line 77: RED tightens takes and trails. Equal figures would tighten nothing."""
+    s = Settings.for_tests()
+    assert s.trail_red_pct < s.trail_green_pct and s.take_multiple_red < s.take_multiple_green
+    for bad in (20.0, 19.0):
+        with pytest.raises(SettingsError, match="trail_red_pct must be below trail_green_pct"):
+            Settings.for_tests(trail_green_pct=bad)
+    assert Settings.for_tests(trail_green_pct=20.01).trail_green_pct == 20.01
+    for bad in (1.5, 1.4):
+        with pytest.raises(SettingsError, match="take_multiple_red must be below take_multiple_green"):
+            Settings.for_tests(take_multiple_green=bad)
+    assert Settings.for_tests(take_multiple_green=1.51).take_multiple_green == 1.51
+
+
+def test_a_coin_at_the_pump_kill_level_can_never_earn_full_anti_chase_points():
+    for bad in (200.0, 250.0):
+        with pytest.raises(SettingsError, match="score_antichase_full_below_pct must be below pump_1h_kill_pct"):
+            Settings.for_tests(score_antichase_full_below_pct=bad)
+    assert Settings.for_tests(score_antichase_full_below_pct=199.0).score_antichase_full_below_pct == 199.0
+
+
+def test_no_setting_exists_that_nothing_reads():
+    """A setting no module reads looks like a rule that is enforced. Round 2 found two."""
+    code = "".join(p.read_text(encoding="utf-8") for p in _py_files() if p.name != "settings.py")
+    unread = sorted(name for name in SPECS if name not in code)
+    assert unread == []
+    assert "live_first_nights" not in SPECS and "live_first_nights_ticket_cap_usd" not in SPECS
+
+
+def test_the_two_round_two_guards_are_invented_and_have_the_stated_defaults():
+    s = Settings.for_tests()
+    assert (s.scanner_max_gap_s, s.max_snapshot_age_s, s.trail_green_pct) == (600, 120, 25.0)
+    assert {"scanner_max_gap_s", "max_snapshot_age_s", "trail_green_pct"} <= set(INVENTED_SETTINGS)
 
 
 def test_from_file_reads_overrides_and_refuses_bad_files(tmp_path):
@@ -262,46 +304,81 @@ def _py_files():
     return sorted(PKG.rglob("*.py"))
 
 
-def test_the_package_imports_only_the_standard_library_and_itself():
-    assert _py_files(), "the package has no python files"
-    for path in _py_files():
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                roots = [a.name.split(".")[0] for a in node.names]
-            elif isinstance(node, ast.ImportFrom):
-                if node.level:  # a relative import stays inside the package
-                    continue
-                roots = [(node.module or "").split(".")[0]]
-            else:
-                continue
-            for root in roots:
-                assert root in sys.stdlib_module_names, f"{path.name} imports {root}"
-
-
-FORBIDDEN_IMPORTS = {
-    "socket", "ssl", "http", "urllib", "requests", "httpx", "aiohttp", "websockets",
-    "subprocess", "playwright", "selenium", "webbrowser", "ftplib", "smtplib", "asyncio",
+# The whole list of modules the package may import. It was read from the package
+# on 2026-11-26, not chosen in advance, and none of the twelve can open a
+# connection or start a process. A new import has to be added here by hand.
+ALLOWED_IMPORTS = {
+    "__future__", "argparse", "collections", "dataclasses", "enum", "json", "math",
+    "operator", "pathlib", "re", "sys", "typing",
+}
+BANNED_CALLS = {"eval", "exec", "compile", "__import__", "open", "input", "breakpoint"}
+# pathlib can write as well as read. The package only ever reads two files.
+BANNED_METHODS = {
+    "write_text", "write_bytes", "open", "unlink", "mkdir", "rmdir", "touch", "rename",
+    "symlink_to", "hardlink_to", "chmod", "system", "popen",
 }
 
 
-def test_no_module_can_open_a_connection_or_start_a_process():
-    for path in _py_files():
+def _package_problems(directory: Path) -> list[str]:
+    """Every import, call or method in the .py files of ``directory`` that the package may not use."""
+    problems = []
+    for path in sorted(directory.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
-            names = []
+            roots: list[str] = []
             if isinstance(node, ast.Import):
-                names = [a.name.split(".")[0] for a in node.names]
-            elif isinstance(node, ast.ImportFrom) and not node.level:
-                names = [(node.module or "").split(".")[0]]
-            hit = FORBIDDEN_IMPORTS.intersection(names)
-            assert not hit, f"{path.name} imports {sorted(hit)}"
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-                assert node.func.id not in ("eval", "exec", "__import__"), f"{path.name} calls {node.func.id}"
+                roots = [a.name.split(".")[0] for a in node.names]
+            elif isinstance(node, ast.ImportFrom) and not node.level:  # a relative import stays inside
+                roots = [(node.module or "").split(".")[0]]
+            problems += [f"{path.name} imports {root}" for root in roots if root not in ALLOWED_IMPORTS]
+            if isinstance(node, ast.Call):
+                if isinstance(node.func, ast.Name) and node.func.id in BANNED_CALLS:
+                    problems.append(f"{path.name} calls {node.func.id}")
+                # re.compile builds a pattern and runs no code, so it is the one allowed "compile"
+                if isinstance(node.func, ast.Attribute) and node.func.attr in BANNED_METHODS:
+                    problems.append(f"{path.name} calls .{node.func.attr}")
+    return problems
 
 
-def test_no_file_names_the_venue_or_carries_a_credential_word():
-    banned = ("fomo.family", "prod-api", "session token", "bearer ", "private key", "seed phrase")
+def test_the_package_imports_only_twelve_named_standard_library_modules():
+    assert _py_files(), "the package has no python files"
+    assert ALLOWED_IMPORTS <= sys.stdlib_module_names | {"__future__"}
+    assert _package_problems(PKG) == []
+
+
+def test_the_import_and_call_scan_can_fail(tmp_path):
+    """The scan above is only worth something if it catches what it names."""
+    (tmp_path / "bad.py").write_text(
+        "import os\n"
+        "import socket\n"
+        "from importlib import import_module\n"
+        "from subprocess import run\n"
+        "from . import fine\n"
+        "import json\n"
+        "eval('1')\n"
+        "open('x')\n"
+        "__import__('ctypes')\n"
+        "p.write_text('x')\n"
+        "os.system('true')\n"
+        "p.read_text()\n",
+        encoding="utf-8",
+    )
+    assert _package_problems(tmp_path) == [
+        "bad.py imports os",
+        "bad.py imports socket",
+        "bad.py imports importlib",
+        "bad.py imports subprocess",
+        "bad.py calls eval",
+        "bad.py calls open",
+        "bad.py calls __import__",
+        "bad.py calls .write_text",
+        "bad.py calls .system",
+    ]
+
+
+def test_no_python_file_names_the_venue_or_carries_a_credential_word():
+    """Covers the .py files only. The .md files name the venue to say it is not touched."""
+    banned = ("fomo", "prod-api", "session token", "bearer ", "private key", "seed phrase", "http://", "https://")
     for path in _py_files():
         text = path.read_text(encoding="utf-8").lower()
         for word in banned:

@@ -4,8 +4,9 @@ Source line 77 (DOC): RED when Bitcoin's or Solana's 1 hour change, or the
 fear and greed index, is at or past its limit. Source line 57 and SPEC.md
 reading R1: RED blocks every new buy. The QUIET rule ("few graduations") has
 no number in the source, so ``quiet_max_graduations_per_hour`` is INVENTED.
-Missing data also blocks new buys, because an unknown never passes a safety
-check (source line 92).
+INVENTED as well: missing data blocks new buys. The source does not say what
+to do without market data; "when in doubt, no trade" (source line 92) is the
+reason for blocking.
 
 Pure function. Nothing is mutated, no clock, no network.
 """

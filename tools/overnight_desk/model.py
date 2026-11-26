@@ -237,7 +237,11 @@ class SizeDecision:
 
 @dataclass(frozen=True)
 class HumanApproval:
-    """A named person's approval of one order. Needed by any executor but PAPER."""
+    """A record that a named person approved one order. Needed by any executor but PAPER.
+
+    It is a record and proves nothing about who built it. The desk checks that
+    it names someone, carries a time and matches the order.
+    """
 
     order_id: str
     approved_by: str

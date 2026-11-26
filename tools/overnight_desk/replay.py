@@ -11,6 +11,12 @@ A timeline is a JSON Lines file. Each line is one tick:
 ``model.TokenSnapshot``; a token without ``ts`` takes the tick's. An unknown
 field name is an error, so a typo cannot pass as a missing reading.
 
+Every value is checked before it reaches the desk. A number must be finite
+and no larger than ``MAX_NUMBER``. A piece of text (a mint, a symbol, a name)
+must be printable and no longer than ``MAX_TEXT``, because coin names are
+chosen by strangers and end up in the morning report. A value that fails is
+refused, never repaired: a changed name or number is worse than no run.
+
 Run it from the repository root:
 
     PYTHONPATH=tools python3 -m overnight_desk.replay \
@@ -53,13 +59,32 @@ class Frame:
 _TOKEN_FIELDS = {f.name for f in fields(TokenSnapshot)}
 _MARKET_FIELDS = {f.name for f in fields(MarketSnapshot)}
 
+# INVENTED bounds. No reading the desk uses comes near either.
+MAX_NUMBER = 1e15
+MAX_TEXT = 200
+MAX_TAGS = 32
+
 _KIND_WORDS = {
     bool: "true or false",
-    int: "a whole number",
-    float: "a finite number",
-    str: "a string",
-    tuple: "a list of strings",
+    int: f"a whole number between -{MAX_NUMBER:g} and {MAX_NUMBER:g}",
+    float: f"a finite number between -{MAX_NUMBER:g} and {MAX_NUMBER:g}",
+    str: f"printable text of at most {MAX_TEXT} characters",
+    tuple: f"a list of at most {MAX_TAGS} pieces of printable text",
 }
+
+
+def _number_ok(value: Any) -> bool:
+    """A JSON number that is not a boolean, is finite and is within MAX_NUMBER."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    if isinstance(value, int):
+        # Compared as an int: a huge one cannot be turned into a float at all.
+        return -int(MAX_NUMBER) <= value <= int(MAX_NUMBER)
+    return math.isfinite(value) and -MAX_NUMBER <= value <= MAX_NUMBER
+
+
+def _text_ok(value: Any) -> bool:
+    return isinstance(value, str) and len(value) <= MAX_TEXT and value.isprintable()
 
 
 def _kinds(cls: type) -> dict[str, tuple[type, bool]]:
@@ -90,13 +115,13 @@ def _check_value(where: str, name: str, value: Any, kind: type, optional: bool) 
     if kind is bool:
         ok = isinstance(value, bool)
     elif kind is int:
-        ok = isinstance(value, int) and not isinstance(value, bool)
+        ok = isinstance(value, int) and _number_ok(value)
     elif kind is float:
-        ok = isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+        ok = _number_ok(value)
     elif kind is str:
-        ok = isinstance(value, str)
+        ok = _text_ok(value)
     elif kind is tuple:
-        ok = isinstance(value, list) and all(isinstance(item, str) for item in value)
+        ok = isinstance(value, list) and len(value) <= MAX_TAGS and all(_text_ok(item) for item in value)
     else:
         ok = False
     if not ok:
@@ -115,7 +140,7 @@ def parse_frame(obj: Any, where: str = "frame") -> Frame:
     if unknown:
         raise TimelineError(f"{where}: unknown key(s) {', '.join(unknown)}")
     ts = obj.get("ts")
-    if isinstance(ts, bool) or not isinstance(ts, int):
+    if not isinstance(ts, int) or not _number_ok(ts):
         raise TimelineError(f"{where}: 'ts' must be a whole number of seconds")
     market_obj = obj.get("market")
     market: MarketSnapshot | None = None
@@ -194,6 +219,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         report = run(frames, settings, args.cash)
     except (SettingsError, TimelineError, ValueError) as exc:
         print(f"refused: {exc}", file=sys.stderr)
+        return 2
+    except OverflowError:
+        print("refused: a number is too large to work with", file=sys.stderr)
         return 2
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))

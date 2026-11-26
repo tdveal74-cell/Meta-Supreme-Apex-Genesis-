@@ -181,7 +181,7 @@ def _drained(**kw):
     return _snap(liquidity_usd=0.0, **kw)
 
 
-@pytest.mark.parametrize("price", [None, 0.0, float("nan"), 0.001])
+@pytest.mark.parametrize("price", [None, 0.0, float("nan"), 0.001, -0.5, float("inf")])
 def test_a_sell_into_a_drained_pool_is_a_total_loss_at_any_price(price):
     q = paper.model_quote(Side.SELL, _drained(price_usd=price), _settings(fixed_fee_usd_per_side=0.5), qty=7.0)
     assert q.side is Side.SELL
@@ -192,7 +192,7 @@ def test_a_sell_into_a_drained_pool_is_a_total_loss_at_any_price(price):
     assert q.pool_fee_usd == 0.0
     assert q.fixed_fee_usd == 0.0
     assert q.price_impact_pct == -100.0
-    assert q.spot_price == (0.001 if price == 0.001 else 0.0)
+    assert q.spot_price == (price if price in (0.001, float("inf")) else 0.0)
 
 
 def test_a_drained_pool_sell_gives_the_same_proceeds_whatever_the_price():
@@ -261,6 +261,22 @@ def test_live_with_an_approval_that_carries_no_time_is_refused(ts):
     appr = HumanApproval(order_id="o1", approved_by="tee", approved_ts=ts)
     with pytest.raises(paper.ApprovalRequired, match="carries no time"):
         paper.require_approval(_intent(), ExecutorKind.LIVE, appr)
+
+
+@pytest.mark.parametrize("who", ["tee", " tee ", "Terrance Veal", "x" * 300, "\u5927\u962a"])
+def test_any_name_with_a_visible_character_is_accepted_whatever_its_length_or_padding(who):
+    """The gate checks that a name was given. It does not judge the name."""
+    appr = HumanApproval(order_id="o1", approved_by=who, approved_ts=1)
+    paper.require_approval(_intent(), ExecutorKind.LIVE, appr)
+
+
+def test_the_approval_checks_run_in_a_fixed_order():
+    wrong_everything = HumanApproval(order_id="other", approved_by="", approved_ts=0)
+    with pytest.raises(paper.ApprovalRequired, match="different order"):
+        paper.require_approval(_intent(), ExecutorKind.LIVE, wrong_everything)
+    no_name_no_time = HumanApproval(order_id="o1", approved_by="", approved_ts=0)
+    with pytest.raises(paper.ApprovalRequired, match="names no person"):
+        paper.require_approval(_intent(), ExecutorKind.LIVE, no_name_no_time)
 
 
 def test_paper_returns_before_the_person_and_time_checks():
@@ -531,13 +547,22 @@ def test_the_nights_threshold_comes_from_settings():
 
 ALLOWED_EXECUTE_CLASSES = {("model.py", "Executor"), ("paper.py", "PaperExecutor")}
 
+# Every python file the package holds, written out. A new module has to be added
+# here by hand, so the scan below can never quietly stop covering one.
+PACKAGE_FILES = {
+    "__init__.py", "analyst.py", "brain.py", "engine.py", "entry.py", "lessons.py", "live_gate.py",
+    "market_mode.py", "model.py", "paper.py", "positions.py", "replay.py", "report.py", "risk.py",
+    "scanner.py", "settings.py",
+}
+
 
 def _is_live(node) -> bool:
-    return (
-        isinstance(node, ast.Attribute)
-        and node.attr == "LIVE"
-        and isinstance(node.value, ast.Name)
-        and node.value.id == "ExecutorKind"
+    """ExecutorKind.LIVE, however the enum is reached: bare, or as model.ExecutorKind.LIVE."""
+    if not (isinstance(node, ast.Attribute) and node.attr == "LIVE"):
+        return False
+    owner = node.value
+    return (isinstance(owner, ast.Name) and owner.id == "ExecutorKind") or (
+        isinstance(owner, ast.Attribute) and owner.attr == "ExecutorKind"
     )
 
 
@@ -547,9 +572,11 @@ def _kind_target(t) -> bool:
     )
 
 
-def _live_executor_problems(directory) -> list[str]:
+def _live_executor_problems(directory, scanned: list[str] | None = None) -> list[str]:
     problems = []
-    for path in sorted(Path(directory).glob("*.py")):
+    for path in sorted(Path(directory).rglob("*.py")):
+        if scanned is not None:
+            scanned.append(path.name)
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef):
@@ -570,22 +597,50 @@ def _live_executor_problems(directory) -> list[str]:
 
 
 def test_the_build_has_no_live_executor_so_the_gate_stays_shut():
-    assert _live_executor_problems(ROOT / "tools" / "overnight_desk") == []
+    scanned: list[str] = []
+    assert _live_executor_problems(ROOT / "tools" / "overnight_desk", scanned) == []
+    assert set(scanned) == PACKAGE_FILES and len(scanned) == len(PACKAGE_FILES)
+    assert ALLOWED_EXECUTE_CLASSES == {("model.py", "Executor"), ("paper.py", "PaperExecutor")}
 
 
-def test_the_live_executor_scan_can_fail(tmp_path):
-    (tmp_path / "bad.py").write_text(
-        "class Sneaky:\n"
-        "    kind = ExecutorKind.LIVE\n"
-        "    def execute(self, intent, snapshot):\n"
-        "        return None\n",
-        encoding="utf-8",
-    )
-    problems = _live_executor_problems(tmp_path)
-    assert any("defines execute" in p for p in problems)
-    assert any("ExecutorKind.LIVE" in p for p in problems)
-    (tmp_path / "bad.py").write_text("class A:\n    kind: ExecutorKind = ExecutorKind.LIVE\n", encoding="utf-8")
-    assert len(_live_executor_problems(tmp_path)) == 1
+@pytest.mark.parametrize(
+    "name, source, expected",
+    [
+        (
+            "bad.py",
+            "class Sneaky:\n    kind = ExecutorKind.LIVE\n    def execute(self, intent, snapshot):\n        return None\n",
+            ["bad.py: class Sneaky defines execute", "bad.py: line 2 sets kind to ExecutorKind.LIVE"],
+        ),
+        ("zz.py", "class A:\n    kind: ExecutorKind = ExecutorKind.LIVE\n", ["zz.py: line 2 sets kind to ExecutorKind.LIVE"]),
+        ("q.py", "class A:\n    async def execute(self):\n        return None\n", ["q.py: class A defines execute"]),
+        (
+            "r.py",
+            "class A:\n    def __init__(self):\n        self.kind = ExecutorKind.LIVE\n",
+            ["r.py: line 3 sets kind to ExecutorKind.LIVE"],
+        ),
+        ("s.py", "a = kind = ExecutorKind.LIVE\n", ["s.py: line 1 sets kind to ExecutorKind.LIVE"]),
+        ("t.py", "kind = model.ExecutorKind.LIVE\n", ["t.py: line 1 sets kind to ExecutorKind.LIVE"]),
+        # The two allowed classes are allowed only in their own files.
+        ("other.py", "class PaperExecutor:\n    def execute(self):\n        return None\n", ["other.py: class PaperExecutor defines execute"]),
+        ("engine.py", "class Executor:\n    def execute(self):\n        return None\n", ["engine.py: class Executor defines execute"]),
+        # What must not be flagged.
+        ("ok1.py", "class PaperExecutor:\n    kind = ExecutorKind.PAPER\n", []),
+        ("ok2.py", "if kind is ExecutorKind.LIVE:\n    pass\n", []),
+        ("ok3.py", "class A:\n    def run(self):\n        return None\n", []),
+    ],
+)
+def test_the_live_executor_scan_catches_each_shape_and_nothing_else(tmp_path, name, source, expected):
+    (tmp_path / name).write_text(source, encoding="utf-8")
+    assert _live_executor_problems(tmp_path) == expected
+
+
+def test_the_live_executor_scan_reads_subfolders_and_every_file(tmp_path):
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "zebra.py").write_text("kind = ExecutorKind.LIVE\n", encoding="utf-8")
+    (tmp_path / "paper.py").write_text("class PaperExecutor:\n    def execute(self):\n        return None\n", encoding="utf-8")
+    scanned: list[str] = []
+    assert _live_executor_problems(tmp_path, scanned) == ["zebra.py: line 1 sets kind to ExecutorKind.LIVE"]
+    assert sorted(scanned) == ["paper.py", "zebra.py"]
 
 
 def test_gate_returns_a_tuple():

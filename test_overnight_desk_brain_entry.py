@@ -5,6 +5,7 @@ sections, with each threshold tested just below, exactly at and just above.
 """
 from __future__ import annotations
 
+import ast
 import copy
 import dataclasses
 import sys
@@ -430,8 +431,8 @@ def test_market_blocks_buys():
 
 
 def test_a_market_that_does_not_block_lets_a_ticket_through():
-    quiet = model.MarketState(mode=model.Mode.GREEN, data_ok=True, blocks_new_buys=False)
-    assert not size(market=quiet).skipped
+    open_market = model.MarketState(mode=model.Mode.GREEN, data_ok=True, blocks_new_buys=False)
+    assert not size(market=open_market).skipped
 
 
 def test_any_lesson_blocks():
@@ -565,10 +566,15 @@ def test_order_exposure_cap_beats_ticket_below_min():
     assert got == "exposure_cap"
 
 
-def test_the_night_stop_applies_in_every_mode():
+def test_the_night_stop_does_not_read_the_market_mode():
+    """market_mode.assess blocks buys in RED and QUIET, so those two states are built by hand here.
+
+    The point is that the night stop itself asks nothing of the mode (SPEC reading R4).
+    """
     for mode in (model.Mode.GREEN, model.Mode.RED, model.Mode.QUIET):
         m = model.MarketState(mode=mode, data_ok=True, blocks_new_buys=False)
         assert size(market=m, portfolio=folio(night_pnl_usd=-10.0)).skip_reason_code == "night_stop"
+        assert not size(market=m, portfolio=folio(night_pnl_usd=-9.99)).skipped
 
 
 def test_the_brain_does_not_mutate_its_inputs():
@@ -585,6 +591,12 @@ def test_the_decision_is_frozen():
         d.ticket_usd = 99.0  # type: ignore[misc]
 
 
-def test_the_brain_only_sizes_it_returns_a_size_decision():
+def test_the_brain_only_sizes_it_returns_a_size_and_reaches_for_nothing_else():
     assert isinstance(size(), model.SizeDecision)
     assert isinstance(size(market=BLOCKED), model.SizeDecision)
+    assert {f.name for f in dataclasses.fields(model.SizeDecision)} == {"ticket_usd", "skip_reason_code", "detail"}
+    # "Sizes only. Never picks coins or clicks" (source line 57): the module imports no executor,
+    # no entry rule and no ledger. It reads the model and the settings and nothing else.
+    tree = ast.parse((ROOT / "tools" / "overnight_desk" / "brain.py").read_text(encoding="utf-8"))
+    imported = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
+    assert imported == {"__future__", "model", "settings"}

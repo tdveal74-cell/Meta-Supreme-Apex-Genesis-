@@ -19,7 +19,7 @@ PKG = ROOT / "tools" / "overnight_desk"
 if str(ROOT / "tools") not in sys.path:
     sys.path.append(str(ROOT / "tools"))
 
-from overnight_desk import lessons, model, paper, replay, report  # noqa: E402
+from overnight_desk import lessons, model, replay, report  # noqa: E402
 from overnight_desk.engine import Desk  # noqa: E402
 from overnight_desk.settings import Settings  # noqa: E402
 
@@ -301,15 +301,22 @@ def test_a_coin_is_not_bought_twice_in_one_night():
     assert reasons(d)[-1] == ("desk", "already_traded_tonight")
 
 
-def test_a_held_coin_with_no_price_raises_an_alert_and_is_kept():
+def test_a_held_coin_with_no_reading_or_no_price_alerts_once_and_is_kept():
     d = desk()
     _bought(d)
     ts = T0 + WATCH + 60
     out = d.tick(ts, market(ts), [])
     assert out.fills == () and "GOOD" in d.ledger.positions
-    assert len(out.alerts) == 1 and "no_price_for_position GOOD" in out.alerts[0]
+    assert len(out.alerts) == 1 and "no_reading_for_position GOOD" in out.alerts[0]
+    again = d.tick(ts + 30, market(ts + 30), [])
+    assert again.alerts == ()  # the same trouble is not repeated on every tick it lasts
     out2 = d.tick(ts + 60, market(ts + 60), [coin(ts + 60, price_usd=None)])
-    assert "no_price_for_position GOOD" in out2.alerts[0]
+    assert len(out2.alerts) == 1 and "no_price_for_position GOOD" in out2.alerts[0]
+    fine = d.tick(ts + 120, market(ts + 120), [coin(ts + 120)])
+    assert fine.alerts == () and "GOOD" in d.ledger.positions
+    back = d.tick(ts + 180, market(ts + 180), [])
+    assert len(back.alerts) == 1 and "no_reading_for_position GOOD" in back.alerts[0]  # it cleared, so it alerts anew
+    assert len(d.night_report()["alerts"]) == 3
 
 
 def test_the_night_stop_halts_new_buys():
@@ -361,9 +368,10 @@ def test_a_live_executor_gets_nothing_without_a_human_approval():
     fake = _FakeLive()
     d = Desk(Settings.for_tests(), 1_000.0, executor=fake)
     d.tick(T0, market(T0), [_live_snapshot(T0)])
-    with pytest.raises(paper.ApprovalRequired):
-        d.tick(T0 + WATCH, market(T0 + WATCH), [_live_snapshot(T0 + WATCH)])
-    assert fake.seen == [] and d.ledger.fills == [] and d.ledger.cash_usd == 1_000.0
+    out = d.tick(T0 + WATCH, market(T0 + WATCH), [_live_snapshot(T0 + WATCH)])
+    assert out.fills == () and fake.seen == [] and d.ledger.fills == [] and d.ledger.cash_usd == 1_000.0
+    assert reasons(d)[-1] == ("executor", "approval_missing")
+    assert d.skips[-1].detail == "a human approval is required for this order"
 
 
 def test_an_approval_for_another_order_is_refused():
@@ -371,9 +379,10 @@ def test_an_approval_for_another_order_is_refused():
     wrong = lambda intent: model.HumanApproval("some-other-order", "tee", intent.ts)  # noqa: E731
     d = Desk(Settings.for_tests(), 1_000.0, executor=fake, approve=wrong)
     d.tick(T0, market(T0), [_live_snapshot(T0)])
-    with pytest.raises(paper.ApprovalRequired):
-        d.tick(T0 + WATCH, market(T0 + WATCH), [_live_snapshot(T0 + WATCH)])
-    assert fake.seen == []
+    d.tick(T0 + WATCH, market(T0 + WATCH), [_live_snapshot(T0 + WATCH)])
+    assert fake.seen == [] and d.ledger.fills == []
+    assert reasons(d)[-1] == ("executor", "approval_missing")
+    assert d.skips[-1].detail == "the approval is for a different order"
 
 
 def test_a_matching_approval_lets_one_order_through_and_is_handed_to_the_executor():
@@ -486,13 +495,18 @@ def test_the_morning_text_answers_the_four_checks_and_claims_no_verified_order()
     assert "This was a paper night. No money moved" in text
     assert "Real orders sent: 0." in text
     assert "order verification was never exercised" in text
-    for name in ("a reason for every skip", "every loss within 3% of cash", "zero unverified orders",
-                 "zero rule violations"):
+    for name in ("a reason for every skip", "every loss within 3% of cash", "zero rule violations"):
         assert f"[pass] {name}" in text
+    # A paper night sends no real order, so that check is not a pass. It is not applicable.
+    assert "[n/a] zero unverified orders" in text and "[pass] zero unverified orders" not in text
     assert "closed: " in text and "no_live_executor" in text
     assert chr(0x2014) not in text and chr(0x2013) not in text
     checks = report.morning_checks(out, 3.0)
-    assert [c["ok"] for c in checks] == [True, True, True, True]
+    assert [c["ok"] for c in checks] == [True, True, None, True]
+    assert "5 ticks, 13 readings, 4 different coins" in text
+    assert f"first tick {T0}, last tick {T0 + 2 * WATCH + 120}" in text
+    assert "Not tested by this night" in text
+    assert "price drift between the decision and the order" in text
 
 
 def test_an_empty_night_reports_cleanly():
@@ -745,20 +759,46 @@ def test_a_refused_sell_leaves_the_position_and_the_ledger_untouched():
     cash = d.ledger.cash_usd
     ts = T0 + WATCH + 60
     for price in (pos.stop_price * 0.9, pos.entry_price * 2.5):  # a stop, then a take
-        with pytest.raises(paper.ApprovalRequired):
-            d.tick(ts, market(ts), [dataclasses.replace(_live_snapshot(ts), price_usd=price)])
+        out = d.tick(ts, market(ts), [dataclasses.replace(_live_snapshot(ts), price_usd=price)])
+        assert out.fills == ()
         assert d.ledger.positions["GOOD"] == pos  # same quantity, same stop, first take not marked
         assert d.ledger.cash_usd == cash and len(d.ledger.fills) == 1 and len(fake.seen) == 1
+    # An exit that was decided and not carried out is a rule violation, once per reason.
+    assert [(v["rule"], v["exit_reason"]) for v in d.violations] == [
+        ("exit_not_executed", "stop"), ("exit_not_executed", "take"),
+    ]
+    assert [a.split()[1] for a in d.alerts] == ["exit_not_executed", "exit_not_executed"]
+    assert "approval_missing" in d.alerts[0]
+    assert report.morning_checks(d.night_report(), 3.0)[3]["ok"] is False
 
 
-def _clean_report():
-    return replay.run([], Settings.for_tests(), 500.0)
+def test_a_refused_exit_is_one_violation_however_long_it_lasts_and_clears_when_sold():
+    fake = _FakeLive()
+    allow = {"sell": False}
+
+    def approve(intent):
+        if intent.side is model.Side.BUY or allow["sell"]:
+            return model.HumanApproval(intent.order_id, "tee", intent.ts)
+        return None
+
+    d = Desk(Settings.for_tests(), 1_000.0, executor=fake, approve=approve)
+    d.tick(T0, market(T0), [_live_snapshot(T0)])
+    d.tick(T0 + WATCH, market(T0 + WATCH), [_live_snapshot(T0 + WATCH)])
+    low = d.ledger.positions["GOOD"].stop_price * 0.9
+    ts = T0 + WATCH
+    for step in (60, 120, 180):
+        d.tick(ts + step, market(ts + step), [dataclasses.replace(_live_snapshot(ts + step), price_usd=low)])
+    assert len(d.violations) == 1 and len(d.alerts) == 1
+    allow["sell"] = True
+    out = d.tick(ts + 240, market(ts + 240), [dataclasses.replace(_live_snapshot(ts + 240), price_usd=low)])
+    assert out.fills[0].exit_reason is model.ExitReason.STOP and "GOOD" not in d.ledger.positions
+    assert d._unexecuted == set() and d._alerting == {}
 
 
 def _loss(**kw):
     base = dict(ts=1, mint="M", symbol="S", strategy="DIP", exit_reason="stop", entry_ts=0, entry_price=1.0,
                 exit_price=0.7, pnl_usd=-3.0, cash_at_entry_usd=500.0, loss_pct_of_cash=0.6,
-                budget_usd=15.0, lesson="top10_pct >= 20.0")
+                budget_usd=15.0, over_budget=False, lesson="top10_pct >= 20.0")
     base.update(kw)
     return base
 
@@ -774,6 +814,37 @@ def _checks(rep):
     return [c["ok"] for c in report.morning_checks(rep, 3.0)]
 
 
+def _clean_report():
+    """A night that gave every one of the four checks something to test, and passed each."""
+    rep = replay.run([], Settings.for_tests(), 500.0)
+    rep.update(ticks=1, snapshots_seen=1, coins_seen=1, first_ts=1, last_ts=1, real_orders_sent=1)
+    rep["fills"] = [_fill(verification="verified")]
+    rep["verification"] = {"paper": 0, "verified": 1, "unverified": 0}
+    rep["losses"] = [_loss()]
+    return rep
+
+
+def test_a_check_the_night_did_not_test_reads_not_applicable_and_never_pass():
+    empty = replay.run([], Settings.for_tests(), 500.0)
+    assert _checks(empty) == [None, None, None, None]
+    text = report.render_morning(empty, 3.0)
+    assert text.count("[n/a]") == 4 and "[pass]" not in text and "[FAIL]" not in text
+    assert "NO COIN WAS SEEN" in text and "0 ticks, 0 readings, 0 different coins" in text
+    # Each check turns real on exactly the fact that gives it something to test.
+    seen = replay.run([], Settings.for_tests(), 500.0)
+    seen["coins_seen"] = 1
+    assert _checks(seen) == [True, None, None, None]
+    lost = replay.run([], Settings.for_tests(), 500.0)
+    lost["losses"] = [_loss()]
+    assert _checks(lost) == [None, True, None, None]
+    sent = replay.run([], Settings.for_tests(), 500.0)
+    sent["real_orders_sent"] = 1
+    assert _checks(sent) == [None, None, True, None]
+    ticked = replay.run([], Settings.for_tests(), 500.0)
+    ticked["ticks"] = 1
+    assert _checks(ticked) == [None, None, None, True]
+
+
 def test_each_morning_check_fails_alone_on_the_data_that_should_fail_it():
     assert _checks(_clean_report()) == [True, True, True, True]
 
@@ -781,23 +852,23 @@ def test_each_morning_check_fails_alone_on_the_data_that_should_fail_it():
     no_reason["skips"] = [dict(ts=1, mint="M", symbol="S", stage="brain", reason_code="", detail="")]
     assert _checks(no_reason) == [False, True, True, True]
 
-    for bad_loss in (_loss(loss_pct_of_cash=3.01), _loss(loss_pct_of_cash=None), _loss(exit_reason=""),
+    for bad_loss in (_loss(over_budget=True), _loss(loss_pct_of_cash=None), _loss(exit_reason=""),
                      _loss(exit_reason=None)):
         rep = _clean_report()
         rep["losses"] = [_loss(), bad_loss]
         assert _checks(rep) == [True, False, True, True], bad_loss
 
+    # The desk decides once whether a loss is over its budget, and the report reads that verdict.
     at_limit = _clean_report()
-    at_limit["losses"] = [_loss(loss_pct_of_cash=3.0), _loss(lesson=None)]
-    assert _checks(at_limit) == [True, True, True, True]  # at the limit passes; a missing lesson is counted, not failed
+    at_limit["losses"] = [_loss(loss_pct_of_cash=3.0000001, over_budget=False), _loss(lesson=None)]
+    assert _checks(at_limit) == [True, True, True, True]  # a missing lesson is counted, not failed
     assert "1 with no lesson written" in report.morning_checks(at_limit, 3.0)[1]["evidence"]
 
     unverified = _clean_report()
     unverified["fills"] = [_fill(verification="unverified")]
     unverified["verification"] = {"paper": 0, "verified": 0, "unverified": 1}
-    unverified["real_orders_sent"] = 1
     assert _checks(unverified) == [True, True, False, True]
-    assert "was exercised" in report.morning_checks(unverified, 3.0)[2]["evidence"]
+    assert report.morning_checks(unverified, 3.0)[2]["evidence"] == "1 real orders sent, 1 unverified"
 
     violated = _clean_report()
     violated["violations"] = [dict(ts=1, rule="loss_exceeded_risk_budget", mint="M", symbol="S", loss_usd=9.0,
@@ -816,3 +887,348 @@ def test_the_morning_text_prints_fail_for_each_failed_check():
     text = report.render_morning(rep, 3.0)
     assert text.count("[FAIL]") == 4 and "[pass]" not in text
     assert "unknown of the cash held at entry" in text
+
+
+# --- round 2: an order that cannot be filled is recorded, and the night goes on ---
+
+
+def test_a_drained_pool_is_written_off_as_a_total_loss_and_the_night_goes_on():
+    d = desk()
+    pos = _bought(d)
+    ts = T0 + WATCH + 60
+    out = d.tick(ts, market(ts), [coin(ts, liquidity_usd=0.0)])  # the price reading has not moved
+    assert [f.exit_reason for f in out.fills] == [model.ExitReason.LIQUIDITY_PULLED]
+    fill = out.fills[0]
+    assert (fill.price, fill.gross_usd, fill.fees_usd, fill.cash_delta_usd) == (0.0, 0.0, 0.0, 0.0)
+    assert fill.qty == pytest.approx(pos.qty) and "GOOD" not in d.ledger.positions
+    assert d.losses[0]["pnl_usd"] == pytest.approx(-pos.cost_usd)
+    assert d.losses[0]["loss_pct_of_cash"] == pytest.approx(2.5)  # all of a $25 ticket on $1,000 of cash
+    rep = d.night_report()
+    assert rep["ending_equity_usd"] == pytest.approx(1_000.0 - pos.cost_usd)
+    assert "Exit: liquidity_pulled" in report.render_morning(rep, 3.0)
+
+
+def test_a_drained_pool_with_no_price_at_all_is_still_exited():
+    d = desk()
+    pos = _bought(d)
+    ts = T0 + WATCH + 60
+    out = d.tick(ts, market(ts), [coin(ts, liquidity_usd=0.0, price_usd=None)])
+    assert [f.exit_reason for f in out.fills] == [model.ExitReason.LIQUIDITY_PULLED]
+    assert out.fills[0].cash_delta_usd == 0.0 and "GOOD" not in d.ledger.positions
+    assert d.losses[0]["pnl_usd"] == pytest.approx(-pos.cost_usd)
+
+
+def test_a_total_loss_past_the_risk_budget_is_reported_as_a_violation():
+    d = desk(cash=100.0)  # the ticket is 12% of cash, four times the 3% budget
+    pos = _bought(d)
+    ts = T0 + WATCH + 60
+    d.tick(ts, market(ts), [coin(ts, liquidity_usd=0.0)])
+    assert d.losses[0]["over_budget"] is True
+    assert d.losses[0]["loss_pct_of_cash"] == pytest.approx(pos.cost_usd)  # $12 of $100
+    assert [v["rule"] for v in d.violations] == ["loss_exceeded_risk_budget"]
+    checks = report.morning_checks(d.night_report(), 3.0)
+    assert [c["ok"] for c in checks] == [True, False, None, False]
+
+
+def test_an_exit_the_model_cannot_price_is_a_violation_and_the_night_goes_on():
+    d = desk()
+    pos = _bought(d)
+    ts = T0 + WATCH + 60
+    low = pos.stop_price * 0.9
+    out = d.tick(ts, market(ts), [coin(ts, price_usd=low, liquidity_usd=None)])
+    assert out.fills == () and d.ledger.positions["GOOD"] == pos and d.ledger.cash_usd == pytest.approx(975.0)
+    assert [(v["rule"], v["exit_reason"]) for v in d.violations] == [("exit_not_executed", "stop")]
+    assert len(out.alerts) == 1 and "exit_not_executed GOOD" in out.alerts[0]
+    assert "order_refused: liquidity is unknown or negative" in out.alerts[0]
+    text = report.render_morning(d.night_report(), 3.0)  # the report is still written
+    assert "[FAIL] zero rule violations: 1 recorded" in text and "exit_not_executed on GOOD" in text
+    out2 = d.tick(ts + 60, market(ts + 60), [coin(ts + 60, price_usd=low)])
+    assert out2.fills[0].exit_reason is model.ExitReason.STOP and "GOOD" not in d.ledger.positions
+    assert len(d.violations) == 1  # carried out on the next reading; the one violation stays on the record
+
+
+def test_one_positions_trouble_does_not_stop_the_next_positions_stop():
+    d = desk()
+    warm(d, "AAA", "BBB")
+    t1 = T0 + WATCH
+    d.tick(t1, market(t1), [coin(t1, "AAA"), coin(t1, "BBB")])
+    low = d.ledger.positions["BBB"].stop_price * 0.9
+    t2 = t1 + 60
+    out = d.tick(
+        t2, market(t2),
+        [coin(t2, "AAA", price_usd=low, liquidity_usd=None), coin(t2, "BBB", price_usd=low)],
+    )
+    assert [(f.mint, f.exit_reason) for f in out.fills] == [("BBB", model.ExitReason.STOP)]
+    assert sorted(d.ledger.positions) == ["AAA"]
+    assert [v["mint"] for v in d.violations] == ["AAA"]
+
+
+def test_a_ticket_the_fees_would_swallow_is_a_skip_and_the_tick_goes_on():
+    d = desk(cash=100.0, fixed_fee_usd_per_side=20.0)  # a $12 ticket against a $20 flat fee
+    warm(d, "AAA", "BBB")
+    ts = T0 + WATCH
+    out = d.tick(ts, market(ts), [coin(ts, "AAA"), coin(ts, "BBB")])
+    assert out.fills == () and d.ledger.cash_usd == 100.0 and d.ledger.positions == {}
+    assert reasons(d, "AAA")[-1] == ("executor", "order_refused") == reasons(d, "BBB")[-1]
+    assert d.skips[-1].detail == "fees take the whole order"
+    assert d._traded == set()  # a refused buy does not use up the coin's one trade for the night
+
+
+def test_a_snapshot_older_than_the_last_one_for_its_coin_is_refused_before_anything_changes():
+    d = desk()
+    pos = _bought(d)
+    ts = T0 + WATCH + 60
+    before = (
+        d.ledger.cash_usd, dict(d.ledger.positions), list(d.ledger.fills), dict(d._prices),
+        dict(d._snap_ts), d._ticks, d._snapshots_seen, d._last_ts, len(d.skips), len(d.alerts),
+        len(d.mode_log), d.night_report(),
+    )
+    stale = coin(T0 + WATCH - 1, price_usd=pos.stop_price * 0.5)  # would hit the stop if it were let in
+    with pytest.raises(ValueError, match="older than the last one seen"):
+        d.tick(ts, market(ts, btc_change_1h_pct=-9.0), [coin(ts, "NEW"), stale])
+    after = (
+        d.ledger.cash_usd, dict(d.ledger.positions), list(d.ledger.fills), dict(d._prices),
+        dict(d._snap_ts), d._ticks, d._snapshots_seen, d._last_ts, len(d.skips), len(d.alerts),
+        len(d.mode_log), d.night_report(),
+    )
+    assert after == before and d.scanner.result("NEW") is None
+    same = d.tick(ts, market(ts), [coin(T0 + WATCH)])  # the same time as the last reading is not older
+    assert same.fills == ()
+
+
+def test_a_reading_older_than_the_limit_is_never_bought_on():
+    d = desk(max_snapshot_age_s=30)
+    warm(d, "GOOD")
+    t = T0 + WATCH
+    out = d.tick(t + 31, market(t + 31), [coin(t)])
+    assert out.fills == () and reasons(d)[-1] == ("executor", "stale_snapshot")
+    assert d.skips[-1].detail == "the reading is 31s old"
+    out = d.tick(t + 60, market(t + 60), [coin(t + 30)])  # exactly at the limit is allowed
+    assert len(out.fills) == 1
+
+
+def test_an_exit_decided_on_an_old_reading_is_carried_out_and_flagged():
+    d = desk(max_snapshot_age_s=30)
+    pos = _bought(d)
+    ts = T0 + WATCH + 100
+    out = d.tick(ts, market(ts), [coin(ts - 31, price_usd=pos.stop_price * 0.9)])
+    assert out.fills[0].exit_reason is model.ExitReason.STOP
+    assert len(out.alerts) == 1 and "stale_reading_for_position GOOD" in out.alerts[0]
+    assert "the reading is 31s old" in out.alerts[0]
+    fresh = desk(max_snapshot_age_s=30)
+    _bought(fresh)
+    quiet = fresh.tick(ts, market(ts), [coin(ts - 30)])
+    assert quiet.alerts == ()  # at the limit there is nothing to flag
+
+
+def test_a_zero_price_is_a_reading_and_values_a_held_coin_at_nothing():
+    d = desk()
+    _bought(d)
+    ts = T0 + WATCH + 60
+    out = d.tick(ts, market(ts), [coin(ts, price_usd=0.0)])
+    # Money in the pool and a price of zero cannot both be true, so the model will not price the sale.
+    assert out.fills == () and [v["exit_reason"] for v in d.violations] == ["stop"]
+    rep = d.night_report()
+    assert rep["open_positions"][0]["last_price"] == 0.0
+    assert rep["open_positions"][0]["last_reading_ts"] == ts
+    assert rep["ending_equity_usd"] == pytest.approx(d.ledger.cash_usd)
+    assert "last price 0, last reading" in report.render_morning(rep, 3.0)
+
+
+# --- round 2: what the report counts ------------------------------------------
+
+
+def test_the_night_report_counts_ticks_readings_and_coins():
+    d = desk()
+    assert d.night_report()["ticks"] == 0 and d.night_report()["first_ts"] is None
+    warm(d, "AAA", "BBB")
+    d.tick(T0 + 60, market(T0 + 60), [coin(T0 + 60, "AAA")])
+    d.tick(T0 + 120, market(T0 + 120), [])
+    rep = d.night_report()
+    assert (rep["ticks"], rep["snapshots_seen"], rep["coins_seen"]) == (3, 3, 2)
+    assert (rep["first_ts"], rep["last_ts"]) == (T0, T0 + 120)
+    assert rep["recheck_source"] == "same_snapshot"
+
+
+def test_the_fees_total_is_the_sum_over_the_fills():
+    frames = [replay.parse_frame(f) for f in _story()]
+    rep = replay.run(frames, Settings.for_tests(), 1_000.0)
+    assert rep["fees_usd"] > 2.0
+    assert rep["fees_usd"] == pytest.approx(sum(f["fees_usd"] for f in rep["fills"]))
+
+
+class _FakeUnverified(_FakeLive):
+    def execute(self, intent, snapshot, approval=None):
+        fill = super().execute(intent, snapshot, approval)
+        return dataclasses.replace(fill, verification=model.Verification.UNVERIFIED)
+
+
+def test_an_unverified_order_is_a_real_order_and_fails_the_morning_check():
+    ok = lambda intent: model.HumanApproval(intent.order_id, "tee", intent.ts)  # noqa: E731
+    d = Desk(Settings.for_tests(), 1_000.0, executor=_FakeUnverified(), approve=ok)
+    d.tick(T0, market(T0), [_live_snapshot(T0)])
+    d.tick(T0 + WATCH, market(T0 + WATCH), [_live_snapshot(T0 + WATCH)])
+    rep = d.night_report()
+    assert rep["verification"] == {"paper": 0, "verified": 0, "unverified": 1}
+    assert rep["real_orders_sent"] == 1
+    assert report.morning_checks(rep, 3.0)[2] == {
+        "check": "zero unverified orders", "ok": False, "evidence": "1 real orders sent, 1 unverified",
+    }
+    assert "[FAIL] zero unverified orders" in report.render_morning(rep, 3.0)
+
+
+def test_the_loss_budget_is_measured_on_the_cash_held_when_that_position_opened():
+    d = desk()
+    warm(d, "AAA")
+    t1 = T0 + WATCH
+    d.tick(t1, market(t1), [coin(t1, "AAA"), coin(t1, "BBB")])  # AAA is bought, BBB is first seen
+    assert d.ledger.cash_usd == pytest.approx(975.0)
+    t2 = t1 + WATCH
+    d.tick(t2, market(t2), [coin(t2, "AAA"), coin(t2, "BBB")])  # BBB is bought with $975 free
+    low = d.ledger.positions["BBB"].stop_price * 0.9
+    t3 = t2 + 60
+    d.tick(t3, market(t3), [coin(t3, "AAA"), coin(t3, "BBB", price_usd=low)])
+    assert [loss["symbol"] for loss in d.losses] == ["BBB"]
+    assert d.losses[0]["cash_at_entry_usd"] == pytest.approx(975.0)
+    assert d.losses[0]["budget_usd"] == pytest.approx(29.25)
+
+
+def test_a_loss_is_the_sum_of_every_sell_on_the_position_not_the_last_one():
+    d = desk()
+    pos = _bought(d)
+    t1 = T0 + WATCH + 60
+    high = pos.entry_price * 2.0
+    d.tick(t1, market(t1), [coin(t1, price_usd=high, high_10m_usd=high)])
+    after_take = d.ledger.realized_pnl_usd
+    assert after_take > 10.0  # half the tokens sold at twice the entry price
+    t2 = t1 + 60
+    d.tick(t2, market(t2), [coin(t2, price_usd=pos.entry_price * 0.01, high_10m_usd=high)])
+    total = d.ledger.realized_pnl_usd
+    assert "GOOD" not in d.ledger.positions and total < 0 < after_take
+    assert total - after_take < -10.0  # the last sell alone lost more than ten dollars
+    assert [loss["pnl_usd"] for loss in d.losses] == [pytest.approx(total)]
+    assert d.losses[0]["pnl_usd"] > -1.0  # the position as a whole lost under a dollar
+
+
+def test_two_losers_with_the_same_lesson_write_it_once():
+    d = desk()
+    warm(d, "AAA", "BBB")
+    t1 = T0 + WATCH
+    d.tick(t1, market(t1), [coin(t1, "AAA"), coin(t1, "BBB")])
+    low = d.ledger.positions["AAA"].stop_price * 0.9
+    t2 = t1 + 60
+    out = d.tick(t2, market(t2), [coin(t2, "AAA", price_usd=low), coin(t2, "BBB", price_usd=low)])
+    assert len(d.losses) == 2 and d.losses[0]["lesson"] == d.losses[1]["lesson"] == "liquidity_usd <= 40000.0"
+    assert len(out.lessons_added) == 1 and len(d.lessons_added) == 1
+    assert d.night_report()["lessons_added_tonight"] == ["liquidity_usd <= 40000.0"]
+
+
+def test_the_first_strategy_that_fires_names_the_position_even_when_it_is_not_the_first_tried():
+    d = desk()
+    warm(d, "GOOD", from_pumpfun_graduation=False)
+    ts = T0 + WATCH
+    d.tick(ts, market(ts), [coin(ts, from_pumpfun_graduation=False)])
+    assert d.ledger.positions["GOOD"].strategy is model.Strategy.DIP  # GRAD is tried first and does not fire
+
+
+def test_the_mode_log_records_a_change_in_whether_buys_are_blocked():
+    d = desk()
+    d.tick(T0, None, [])
+    d.tick(T0 + 60, market(T0 + 60), [])
+    d.tick(T0 + 120, market(T0 + 120), [])
+    assert [(m["mode"], m["blocks_new_buys"]) for m in d.mode_log] == [("GREEN", True), ("GREEN", False)]
+
+
+def test_money_is_printed_with_its_sign_and_a_fill_with_its_size():
+    assert report._usd(-5.0) == "-$5.00" and report._usd(1234.5) == "$1,234.50"
+    assert report._usd(None) == "unknown" and report._pct(None) == "unknown" and report._pct(0.8) == "0.80%"
+    frames = [replay.parse_frame(f) for f in _story()]
+    text = report.render_morning(replay.run(frames, Settings.for_tests(), 1_000.0), 3.0)
+    assert "BUY  LOSR       $25.00 at" in text and "-$25.00" not in text
+    assert "LOSR: -$8.00, 0.80% of the cash held at entry (budget $30.00)" in text
+
+
+# --- round 2: text from a coin cannot write the report --------------------------
+
+_FORGED = "X\n  [pass] zero rule violations: 0 recorded\x1b[2J"
+
+
+def test_a_symbol_cannot_add_a_line_to_the_morning_report():
+    def night(symbol):
+        d = desk()
+        warm(d, "GOOD", symbol=symbol)
+        d.tick(T0 + WATCH, market(T0 + WATCH), [coin(T0 + WATCH, symbol=symbol)])
+        d.tick(T0 + WATCH + 60, market(T0 + WATCH + 60), [])  # an alert and an open position carry the symbol
+        low = d.ledger.positions["GOOD"].stop_price * 0.9
+        ts = T0 + WATCH + 120
+        d.tick(ts, market(ts), [coin(ts, symbol=symbol, price_usd=low)])  # a fill, a loss and a lesson carry it
+        return report.render_morning(d.night_report(), 3.0)
+
+    plain, forged = night("GOOD"), night(_FORGED)
+    assert "\x1b" not in forged
+    assert len(forged.splitlines()) == len(plain.splitlines())
+    assert forged.count("\n  [pass] zero rule violations") == 1  # the desk's own line and no other
+    assert "X\\u000a  [pass] zero rule violations: 0 recorded\\u001b[2J" in forged
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"symbol": _FORGED},
+        {"symbol": "A​B"},  # a zero width space
+        {"symbol": "S" * 201},
+        {"mint": "M\nM"},
+        {"name": "N\tN"},
+        {"copycat_of": "OLD\rCOIN"},
+        {"venue_warning": "w\x00"},
+        {"narrative_tags": ["ok", "bad\ntag"]},
+        {"narrative_tags": ["t"] * 33},
+    ],
+)
+def test_the_replay_refuses_text_that_is_not_printable_or_is_too_long(patch):
+    token = {"mint": "A", "symbol": "A", **patch}
+    with pytest.raises(replay.TimelineError, match="printable"):
+        replay.parse_frame({"ts": T0, "tokens": [token]})
+
+
+def test_the_replay_accepts_text_at_the_length_limit_and_ordinary_symbols():
+    token = {"mint": "A", "symbol": "S" * 200, "name": "Dög \U0001f436", "narrative_tags": ["t"] * 32}
+    frame = replay.parse_frame({"ts": T0, "tokens": [token]})
+    assert len(frame.tokens[0].symbol) == 200 and len(frame.tokens[0].narrative_tags) == 32
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"price_usd": 10**400},
+        {"price_usd": 1e15 + 1e3},
+        {"liquidity_usd": -(10**16)},
+        {"holders": 10**15 + 1},
+        {"ts": 10**15 + 1},
+        {"pool_created_ts": -(10**15) - 1},
+    ],
+)
+def test_the_replay_refuses_a_number_too_large_to_work_with(patch):
+    token = {"mint": "A", "symbol": "A", **patch}
+    with pytest.raises(replay.TimelineError, match="between"):
+        replay.parse_frame({"ts": T0, "tokens": [token]})
+
+
+def test_the_replay_accepts_a_number_at_the_bound_and_refuses_a_huge_tick_time():
+    frame = replay.parse_frame({"ts": T0, "tokens": [{"mint": "A", "symbol": "A", "liquidity_usd": 10**15}]})
+    assert frame.tokens[0].liquidity_usd == 10**15
+    with pytest.raises(replay.TimelineError, match="whole number of seconds"):
+        replay.parse_frame({"ts": 10**15 + 1, "tokens": []})
+    with pytest.raises(replay.TimelineError, match="between"):
+        replay.parse_frame({"ts": T0, "market": {"fear_greed": 10**400}, "tokens": []})
+
+
+def test_the_command_line_refuses_a_huge_number_without_a_traceback(tmp_path, capsys):
+    timeline = tmp_path / "night.jsonl"
+    token = '{"mint": "A", "symbol": "A", "price_usd": 1' + "0" * 400 + "}"
+    timeline.write_text('{"ts": %d, "tokens": [%s]}\n' % (T0, token), encoding="utf-8")
+    settings = PKG / "fixtures" / "settings.test-placeholders.json"
+    assert replay.main(["--timeline", str(timeline), "--settings", str(settings), "--cash", "1000"]) == 2
+    captured = capsys.readouterr()
+    assert captured.err.startswith("refused: line 1:") and "Traceback" not in captured.err
+    assert captured.out == ""
