@@ -380,3 +380,123 @@ def test_every_non_take_exit_sells_the_whole_position():
 def test_a_healthy_position_gets_no_decision():
     out, decision = _run(snap=_snap(price_usd=1.2))
     assert decision is None and out.peak_price == 1.2
+
+
+# --- the mint guard and the decision's mint ---------------------------------
+
+
+@pytest.mark.parametrize("price", [1.0, None])
+def test_a_snapshot_for_another_mint_raises(price):
+    with pytest.raises(ValueError):
+        _run(snap=_snap(mint="MintB", price_usd=price))
+
+
+def test_the_decision_carries_the_positions_own_mint_object():
+    class Alias(str):
+        def __ne__(self, other):  # equal to any mint, so the guard lets it by
+            return False
+
+        __hash__ = str.__hash__
+
+    pos = _pos(mint=Alias("MintA"))
+    _, decision = _run(pos, _snap(mint="MintZ", price_usd=0.5))
+    assert decision.reason is ExitReason.STOP
+    assert decision.mint is pos.mint
+
+
+# --- held time is measured from entry_ts ------------------------------------
+
+
+def test_red_time_stop_counts_from_entry_ts():
+    pos = _pos(entry_ts=10_000)
+    assert _run(pos, _snap(ts=10_000 + 5_399), mode=Mode.RED)[1] is None
+    assert _reason(_run(pos, _snap(ts=10_000 + 5_400), mode=Mode.RED)) is ExitReason.RED_TIME_STOP
+
+
+def test_dead_money_counts_from_entry_ts():
+    pos = _pos(entry_ts=10_000)
+    assert _run(pos, _snap(ts=10_000 + 10_799))[1] is None
+    assert _reason(_run(pos, _snap(ts=10_000 + 10_800))) is ExitReason.DEAD_MONEY
+
+
+# --- every threshold is read from settings ----------------------------------
+
+
+def test_take_multiple_green_follows_its_setting():
+    s = Settings.for_tests(take_multiple_green=3.0)
+    assert _run(snap=_snap(price_usd=2.5), settings=s)[1] is None
+    assert _reason(_run(snap=_snap(price_usd=3.0), settings=s)) is ExitReason.TAKE
+
+
+def test_take_multiple_red_follows_its_setting():
+    s = Settings.for_tests(take_multiple_red=1.2)
+    assert _reason(_run(snap=_snap(price_usd=1.2), mode=Mode.RED, settings=s)) is ExitReason.TAKE
+    assert _run(snap=_snap(price_usd=1.19), mode=Mode.RED, settings=s)[1] is None
+
+
+def test_take_fraction_follows_its_setting():
+    s = Settings.for_tests(take_fraction=0.25)
+    assert _run(snap=_snap(price_usd=2.0), settings=s)[1].fraction == 0.25
+
+
+def test_trail_green_follows_its_setting_alone():
+    s = Settings.for_tests(trail_green_pct=40, trail_red_pct=10)
+    pos = _pos(took_first_take=True, stop_price=0.75, peak_price=2.0)
+    out, _ = _run(pos, _snap(price_usd=2.0), Mode.GREEN, s)
+    assert out.stop_price == pytest.approx(1.2)
+
+
+def test_trail_red_follows_its_setting_alone():
+    s = Settings.for_tests(trail_green_pct=10, trail_red_pct=40)
+    pos = _pos(took_first_take=True, stop_price=0.75, peak_price=2.0)
+    out, _ = _run(pos, _snap(price_usd=2.0), Mode.RED, s)
+    assert out.stop_price == pytest.approx(1.2)
+
+
+def test_the_initial_stop_is_the_one_on_the_position():
+    assert _reason(_run(_pos(stop_price=0.9), _snap(price_usd=0.9))) is ExitReason.STOP
+    assert _run(_pos(stop_price=0.5), _snap(price_usd=0.6))[1] is None
+
+
+def test_liquidity_floor_follows_its_setting():
+    pos = _pos(entry_liquidity_usd=0.0)
+    s = Settings.for_tests(liquidity_floor_usd=30_000)
+    assert _reason(_run(pos, _snap(liquidity_usd=25_000.0), settings=s)) is ExitReason.LIQUIDITY_PULLED
+    assert _run(pos, _snap(liquidity_usd=30_000.0), settings=s)[1] is None
+    s = Settings.for_tests(liquidity_floor_usd=10_000)
+    assert _run(pos, _snap(liquidity_usd=15_000.0), settings=s)[1] is None
+
+
+def test_red_time_stop_follows_its_setting():
+    s = Settings.for_tests(red_time_stop_s=3_600)
+    assert _run(snap=_snap(ts=3_599), mode=Mode.RED, settings=s)[1] is None
+    assert _reason(_run(snap=_snap(ts=3_600), mode=Mode.RED, settings=s)) is ExitReason.RED_TIME_STOP
+    s = Settings.for_tests(red_time_stop_s=7_200)
+    assert _run(snap=_snap(ts=5_400), mode=Mode.RED, settings=s)[1] is None
+
+
+def test_dead_money_age_follows_its_setting():
+    s = Settings.for_tests(dead_money_after_s=7_200)
+    assert _run(snap=_snap(ts=7_199), settings=s)[1] is None
+    assert _reason(_run(snap=_snap(ts=7_200), settings=s)) is ExitReason.DEAD_MONEY
+    s = Settings.for_tests(dead_money_after_s=14_400)
+    assert _run(snap=_snap(ts=10_800), settings=s)[1] is None
+
+
+def test_dead_money_min_gain_follows_its_setting():
+    s = Settings.for_tests(dead_money_min_gain_pct=10)
+    assert _reason(_run(snap=_snap(ts=10_800, price_usd=1.09), settings=s)) is ExitReason.DEAD_MONEY
+    assert _run(snap=_snap(ts=10_800, price_usd=1.1), settings=s)[1] is None
+    s = Settings.for_tests(dead_money_min_gain_pct=2)
+    assert _run(snap=_snap(ts=10_800, price_usd=1.03), settings=s)[1] is None
+
+
+# --- the TAKE call does not trail, the next one does ------------------------
+
+
+def test_the_stop_trails_from_the_call_after_the_take():
+    pos = _pos()
+    taken, decision = _run(pos, _snap(price_usd=2.0))
+    assert decision.reason is ExitReason.TAKE and taken.stop_price == pos.stop_price
+    nxt, decision = _run(taken, _snap(price_usd=2.0))
+    assert decision is None and nxt.stop_price == pytest.approx(2.0 * 0.8)

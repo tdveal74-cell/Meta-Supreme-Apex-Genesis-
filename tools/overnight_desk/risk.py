@@ -25,9 +25,12 @@ def evaluate(
 ) -> tuple[Position, ExitDecision | None]:
     """Bring the peak and stop up to date, then return at most one exit.
 
-    With no price the position comes back unchanged and there is no decision;
-    the caller records an alert.
+    Raises ValueError when the snapshot is for another mint. With no price the
+    position comes back unchanged and there is no decision; the caller records
+    an alert.
     """
+    if snap.mint != position.mint:
+        raise ValueError(f"snapshot mint {snap.mint!r} is not the position's mint {position.mint!r}")
     price = snap.price_usd
     if price is None:
         return position, None
