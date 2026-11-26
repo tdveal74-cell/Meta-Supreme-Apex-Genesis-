@@ -528,10 +528,14 @@ class Desk:
 ```
 
 One Desk is one night. With no executor given it uses the paper executor.
+`starting_cash_usd` must be a positive, finite number, or the constructor
+raises `ValueError`.
 
 `tick` raises `ValueError` when `now` is earlier than the last tick, when two
-snapshots share a mint, or when a snapshot's `ts` is after `now`. Then, in
-this order:
+snapshots share a mint, or when a snapshot's `ts` is after `now`. A snapshot
+stamped exactly at `now` is accepted. Every one of those checks runs before
+anything is changed, so a refused tick leaves the desk exactly as it was.
+Then, in this order:
 
 1. Market mode: `market_mode.assess`.
 2. Risk pass, before any buy (DOC, source line 63, "sells jump the click
@@ -565,7 +569,9 @@ with the executor's kind before the executor runs. For a kind other than
 PAPER it first asks the `approve` callback for a `HumanApproval`. With no
 callback, or an approval for another order, the tick raises
 `ApprovalRequired` and nothing is executed. This gate is in the desk itself,
-so an executor cannot skip it.
+so an executor cannot skip it. It covers sells as well as buys. A refused
+sell leaves the position as it was: same quantity, same stop, and the first
+take not marked as taken.
 
 A skip is recorded when a coin's (stage, reason) pair changes, and is not
 repeated on every tick (INVENTED).
@@ -598,6 +604,13 @@ with an autopsy, zero unverified orders, zero rule violations. A paper fill is
 never counted as a verified order, and the report says when order verification
 was never exercised because no real order was sent.
 
+The autopsy is the loss record itself: exit reason, entry and exit price, and
+the loss in dollars and as a share of the cash held at entry. A loss with no
+exit reason fails the second check. So does a loss whose share of cash is
+above the limit or was not measured. A loss exactly at the limit passes. A
+loss that produced no lesson does not fail the check; the evidence line counts
+those.
+
 ## replay.py
 
 ```python
@@ -609,5 +622,16 @@ def main(argv=None) -> int
 
 Reads a JSON Lines timeline and a settings file from disk, runs a fresh paper
 Desk over the frames and prints the morning report. An unknown key or field
-name is a `TimelineError`, so a typo cannot pass as a missing reading. `main`
-returns 0 on success and 2 on a refused input. It opens no connection.
+name is a `TimelineError`, so a typo cannot pass as a missing reading.
+
+Every value is checked against the type of its field in `model.py`. A number
+field takes a JSON number and never a string or a boolean. A whole-number
+field refuses a fraction. `NaN`, `Infinity` and a number too large to be
+finite are refused. A null is accepted only where the field may be unknown.
+So a wrongly typed reading is refused at the door and can never reach a
+comparison.
+
+`main` returns 0 on success and 2 on a refused input, with one line starting
+`refused:` on standard error and no traceback. Refused inputs include a cash
+amount that is not positive and finite, a malformed timeline, ticks out of
+order, and two snapshots for one coin in a tick. It opens no connection.

@@ -19,6 +19,7 @@ No clock, no network. The time is the ``now`` passed to ``tick``.
 """
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -78,8 +79,13 @@ class Desk:
         strategies: Sequence[Strategy] = (Strategy.GRAD, Strategy.DIP),
         approve: ApprovalSource | None = None,
     ) -> None:
-        if starting_cash_usd <= 0:
-            raise ValueError("starting cash must be positive")
+        if (
+            isinstance(starting_cash_usd, bool)
+            or not isinstance(starting_cash_usd, (int, float))
+            or not math.isfinite(starting_cash_usd)
+            or starting_cash_usd <= 0
+        ):
+            raise ValueError("starting cash must be a positive, finite number")
         self.settings = settings
         self.executor: Executor = executor if executor is not None else paper.PaperExecutor(settings)
         self.lessons = lesson_book if lesson_book is not None else lessons.LessonBook()
@@ -116,6 +122,8 @@ class Desk:
             if snap.ts > now:
                 raise ValueError(f"snapshot for {snap.mint} is from after the tick")
             by_mint[snap.mint] = snap
+        # Nothing above changed the desk, so a refused tick leaves it as it was.
+        for snap in by_mint.values():
             if snap.price_usd is not None and snap.price_usd > 0:
                 self._prices[snap.mint] = snap.price_usd
         self._last_ts = now

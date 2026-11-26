@@ -501,7 +501,7 @@ def test_module_docstring_and_no_dash_characters(name):
     text = (ROOT / "tools" / "overnight_desk" / name).read_text(encoding="utf-8")
     assert text.lstrip().startswith('"""')
     assert "source line" in text.lower()
-    assert "—" not in text and "–" not in text
+    assert chr(0x2014) not in text and chr(0x2013) not in text
 
 
 def test_lessons_module_marks_its_invented_parts():

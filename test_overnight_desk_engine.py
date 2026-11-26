@@ -340,12 +340,16 @@ class _FakeLive:
 
     def execute(self, intent, snapshot, approval=None):
         self.seen.append((intent.order_id, approval))
-        usd = intent.usd or 0.0
+        price = snapshot.price_usd
+        if intent.side is model.Side.BUY:
+            usd, qty = intent.usd, intent.usd / price
+        else:
+            usd, qty = intent.qty * price, intent.qty
         return model.Fill(
             order_id=intent.order_id, ts=intent.ts, mint=intent.mint, symbol=intent.symbol,
-            side=intent.side, qty=usd / snapshot.price_usd, price=snapshot.price_usd,
-            gross_usd=usd, fees_usd=0.0, cash_delta_usd=-usd,
-            verification=model.Verification.VERIFIED,
+            side=intent.side, qty=qty, price=price, gross_usd=usd, fees_usd=0.0,
+            cash_delta_usd=-usd if intent.side is model.Side.BUY else usd,
+            verification=model.Verification.VERIFIED, exit_reason=intent.exit_reason,
         )
 
 
@@ -486,7 +490,7 @@ def test_the_morning_text_answers_the_four_checks_and_claims_no_verified_order()
                  "zero rule violations"):
         assert f"[pass] {name}" in text
     assert "closed: " in text and "no_live_executor" in text
-    assert "—" not in text and "–" not in text
+    assert chr(0x2014) not in text and chr(0x2013) not in text
     checks = report.morning_checks(out, 3.0)
     assert [c["ok"] for c in checks] == [True, True, True, True]
 
@@ -515,6 +519,25 @@ def test_an_empty_night_reports_cleanly():
         {"ts": 1, "tokens": [{"symbol": "S"}]},
         {"ts": 1, "tokens": [{"mint": "", "symbol": "S"}]},
         {"ts": 1, "tokens": ["M"]},
+        {"ts": 1, "tokens": [{"mint": "M", "symbol": "S", "liquidity_usd": "40000"}]},
+        {"ts": 1, "tokens": [{"mint": "M", "symbol": "S", "price_usd": "x"}]},
+        {"ts": 1, "tokens": [{"mint": "M", "symbol": "S", "liquidity_usd": True}]},
+        {"ts": 1, "tokens": [{"mint": "M", "symbol": "S", "liquidity_usd": float("inf")}]},
+        {"ts": 1, "tokens": [{"mint": "M", "symbol": "S", "price_usd": float("nan")}]},
+        {"ts": 1, "tokens": [{"mint": "M", "symbol": "S", "holders": "5"}]},
+        {"ts": 1, "tokens": [{"mint": "M", "symbol": "S", "holders": 5.5}]},
+        {"ts": 1, "tokens": [{"mint": "M", "symbol": "S", "ts": 1.5}]},
+        {"ts": 1, "tokens": [{"mint": "M", "symbol": "S", "from_pumpfun_graduation": "yes"}]},
+        {"ts": 1, "tokens": [{"mint": "M", "symbol": "S", "dev_has_sold": 1}]},
+        {"ts": 1, "tokens": [{"mint": "M", "symbol": "S", "copycat_of": 7}]},
+        {"ts": 1, "tokens": [{"mint": "M", "symbol": "S", "name": None}]},
+        {"ts": 1, "tokens": [{"mint": "M", "symbol": "S", "narrative_tags": 5}]},
+        {"ts": 1, "tokens": [{"mint": "M", "symbol": "S", "narrative_tags": ["ai", 3]}]},
+        {"ts": 1, "tokens": [{"mint": 5, "symbol": "S"}]},
+        {"ts": 1, "market": {"btc_change_1h_pct": "x"}},
+        {"ts": 1, "market": {"fear_greed": 55.5}},
+        {"ts": 1, "market": {"graduations_last_hour": True}},
+        {"ts": 1.0, "tokens": []},
     ],
 )
 def test_a_malformed_frame_is_refused(bad):
@@ -570,3 +593,226 @@ def test_the_command_line_prints_the_report_and_refuses_bad_input(capsys, tmp_pa
     assert replay.main(["--timeline", str(tmp_path / "none.jsonl"), "--settings", str(PLACEHOLDERS),
                         "--cash", "1000"]) == 2
     assert replay.main(args[:-1] + ["0"]) == 2
+
+
+# --- gaps a verifier found by mutating the engine, the report and the replay ---
+
+
+def test_a_null_reading_and_a_whole_number_for_a_float_are_accepted():
+    frame = replay.parse_frame({"ts": 9, "market": {"btc_change_1h_pct": None, "fear_greed": 40},
+                                "tokens": [{"mint": "M", "symbol": "S", "liquidity_usd": 40000,
+                                            "price_usd": None, "copycat_of": None}]})
+    assert frame.tokens[0].liquidity_usd == 40000 and frame.tokens[0].price_usd is None
+    assert frame.market.btc_change_1h_pct is None and frame.market.fear_greed == 40
+
+
+def test_a_token_that_is_not_an_object_is_named_as_such():
+    with pytest.raises(replay.TimelineError, match="token 0 must be an object, got str"):
+        replay.parse_frame({"ts": 1, "tokens": ["M"]})
+
+
+def test_a_nan_or_infinity_literal_in_a_timeline_is_refused_with_its_line(tmp_path):
+    for literal in ("NaN", "Infinity", "-Infinity", "1e999"):
+        bad = tmp_path / "bad.jsonl"
+        bad.write_text(json.dumps(_story()[0]) + "\n"
+                       + '{"ts": 5, "tokens": [{"mint": "M", "symbol": "S", "price_usd": %s}]}\n' % literal)
+        with pytest.raises(replay.TimelineError, match="line 2"):
+            replay.load_timeline(bad)
+
+
+@pytest.mark.parametrize("cash", ["inf", "nan", "-5", "0"])
+def test_the_command_line_refuses_a_cash_amount_that_is_not_positive_and_finite(cash, capsys):
+    code = replay.main(["--timeline", str(FIXTURE), "--settings", str(PLACEHOLDERS), f"--cash={cash}"])
+    assert code == 2 and "refused" in capsys.readouterr().err
+
+
+def test_the_command_line_refuses_bad_timelines_without_a_traceback(tmp_path, capsys):
+    def run(lines):
+        path = tmp_path / "t.jsonl"
+        path.write_text("".join(json.dumps(line) + "\n" for line in lines))
+        code = replay.main(["--timeline", str(path), "--settings", str(PLACEHOLDERS), "--cash", "1000"])
+        return code, capsys.readouterr().err
+
+    tok = {"mint": "M", "symbol": "S"}
+    cases = [
+        [{"ts": 1, "tokens": [dict(tok, liquidity_usd="40000")]}],
+        [{"ts": 1, "tokens": [dict(tok, price_usd="x")]}],
+        [{"ts": 1, "market": {"btc_change_1h_pct": "x"}, "tokens": []}],
+        [{"ts": 1, "tokens": [dict(tok, narrative_tags=5)]}],
+        [{"ts": 1, "tokens": [tok, tok]}],                       # the same mint twice in one tick
+        [{"ts": 9, "tokens": []}, {"ts": 3, "tokens": []}],     # ticks out of order
+        [{"ts": 1, "tokens": [dict(tok, ts=99)]}],               # a snapshot from after its tick
+    ]
+    for lines in cases:
+        code, err = run(lines)
+        assert code == 2 and err.startswith("refused: "), lines
+    assert replay.main(["--timeline", str(tmp_path), "--settings", str(PLACEHOLDERS), "--cash", "1000"]) == 2
+    assert capsys.readouterr().err.startswith("refused: ")
+
+
+@pytest.mark.parametrize("cash", [float("inf"), float("nan"), -1.0, 0, True, "1000", None])
+def test_a_desk_needs_positive_finite_starting_cash(cash):
+    with pytest.raises(ValueError, match="positive, finite"):
+        Desk(Settings.for_tests(), cash)
+
+
+def test_a_snapshot_stamped_at_the_tick_is_accepted_and_one_second_later_is_not():
+    d = desk()
+    d.tick(T0, market(T0), [coin(T0)])
+    with pytest.raises(ValueError, match="after the tick"):
+        d.tick(T0 + 10, market(T0 + 10), [coin(T0 + 11)])
+
+
+def test_a_refused_tick_changes_nothing():
+    d = desk()
+    pos = _bought(d)
+    before = json.dumps(d.night_report(), sort_keys=True)
+    ts = T0 + WATCH + 60
+    with pytest.raises(ValueError, match="after the tick"):
+        d.tick(ts, market(ts), [coin(ts, price_usd=pos.entry_price * 5), coin(ts + 1, "LATER")])
+    with pytest.raises(ValueError, match="two snapshots"):
+        d.tick(ts, market(ts), [coin(ts, price_usd=pos.entry_price * 5), coin(ts, price_usd=1.0)])
+    assert json.dumps(d.night_report(), sort_keys=True) == before
+    assert d.ledger.positions["GOOD"] == pos
+    d.tick(ts, market(ts), [coin(ts)])  # the same time is still open to a good tick
+
+
+def test_a_held_coin_is_never_sent_to_the_buy_pass():
+    d = desk()
+    _bought(d)
+    for step in (1, 2, 3):
+        ts = T0 + WATCH + 60 * step
+        out = d.tick(ts, market(ts), [coin(ts)])
+        assert out.fills == () and out.skips == ()
+    assert ("desk", "already_traded_tonight") not in reasons(d)
+    assert len(d.ledger.fills) == 1
+
+
+def _stop_loss_night(**settings_kw):
+    d = desk(**settings_kw)
+    pos = _bought(d)
+    ts = T0 + WATCH + 60
+    d.tick(ts, market(ts), [coin(ts, price_usd=pos.stop_price * 0.99)])
+    return d
+
+
+def test_the_violation_line_is_the_risk_budget_to_the_cent():
+    lost = -_stop_loss_night().losses[0]["pnl_usd"]  # the ticket is capped at $25, so the loss is fixed
+    assert 6.5 < lost < 7.5  # above $6.25, so the capped $25 ticket still binds at the budgets below
+    # budget = $1,000 of cash * risk_per_trade_pct / 100, so one cent of budget is 0.001 points
+    over = _stop_loss_night(risk_per_trade_pct=(lost - 0.01) / 10)
+    under = _stop_loss_night(risk_per_trade_pct=(lost + 0.01) / 10)
+    assert -over.losses[0]["pnl_usd"] == pytest.approx(lost) == -under.losses[0]["pnl_usd"]
+    assert [v["rule"] for v in over.violations] == ["loss_exceeded_risk_budget"]
+    assert over.violations[0]["loss_usd"] == pytest.approx(lost)
+    assert over.violations[0]["budget_usd"] == pytest.approx(lost - 0.01)
+    assert under.violations == []
+
+
+def test_a_sell_on_a_live_executor_needs_its_own_approval():
+    fake = _FakeLive()
+    asked = []
+
+    def approve(intent):
+        asked.append((intent.side, intent.order_id))
+        return model.HumanApproval(intent.order_id, "tee", intent.ts)
+
+    d = Desk(Settings.for_tests(), 1_000.0, executor=fake, approve=approve)
+    d.tick(T0, market(T0), [_live_snapshot(T0)])
+    d.tick(T0 + WATCH, market(T0 + WATCH), [_live_snapshot(T0 + WATCH)])
+    pos = d.ledger.positions["GOOD"]
+    ts = T0 + WATCH + 60
+    out = d.tick(ts, market(ts), [dataclasses.replace(_live_snapshot(ts), price_usd=pos.stop_price * 0.9)])
+    assert [side for side, _ in asked] == [model.Side.BUY, model.Side.SELL]
+    assert out.fills[0].side is model.Side.SELL
+    sell_id, sell_approval = fake.seen[1]
+    assert sell_id == asked[1][1] and sell_approval.order_id == sell_id
+    assert "GOOD" not in d.ledger.positions
+
+
+def test_a_refused_sell_leaves_the_position_and_the_ledger_untouched():
+    fake = _FakeLive()
+
+    def buys_only(intent):
+        if intent.side is model.Side.BUY:
+            return model.HumanApproval(intent.order_id, "tee", intent.ts)
+        return None
+
+    d = Desk(Settings.for_tests(), 1_000.0, executor=fake, approve=buys_only)
+    d.tick(T0, market(T0), [_live_snapshot(T0)])
+    d.tick(T0 + WATCH, market(T0 + WATCH), [_live_snapshot(T0 + WATCH)])
+    pos = d.ledger.positions["GOOD"]
+    cash = d.ledger.cash_usd
+    ts = T0 + WATCH + 60
+    for price in (pos.stop_price * 0.9, pos.entry_price * 2.5):  # a stop, then a take
+        with pytest.raises(paper.ApprovalRequired):
+            d.tick(ts, market(ts), [dataclasses.replace(_live_snapshot(ts), price_usd=price)])
+        assert d.ledger.positions["GOOD"] == pos  # same quantity, same stop, first take not marked
+        assert d.ledger.cash_usd == cash and len(d.ledger.fills) == 1 and len(fake.seen) == 1
+
+
+def _clean_report():
+    return replay.run([], Settings.for_tests(), 500.0)
+
+
+def _loss(**kw):
+    base = dict(ts=1, mint="M", symbol="S", strategy="DIP", exit_reason="stop", entry_ts=0, entry_price=1.0,
+                exit_price=0.7, pnl_usd=-3.0, cash_at_entry_usd=500.0, loss_pct_of_cash=0.6,
+                budget_usd=15.0, lesson="top10_pct >= 20.0")
+    base.update(kw)
+    return base
+
+
+def _fill(**kw):
+    base = dict(order_id="1-0001", ts=1, mint="M", symbol="S", side="BUY", qty=1.0, price=1.0, gross_usd=1.0,
+                fees_usd=0.0, cash_delta_usd=-1.0, verification="paper", exit_reason=None)
+    base.update(kw)
+    return base
+
+
+def _checks(rep):
+    return [c["ok"] for c in report.morning_checks(rep, 3.0)]
+
+
+def test_each_morning_check_fails_alone_on_the_data_that_should_fail_it():
+    assert _checks(_clean_report()) == [True, True, True, True]
+
+    no_reason = _clean_report()
+    no_reason["skips"] = [dict(ts=1, mint="M", symbol="S", stage="brain", reason_code="", detail="")]
+    assert _checks(no_reason) == [False, True, True, True]
+
+    for bad_loss in (_loss(loss_pct_of_cash=3.01), _loss(loss_pct_of_cash=None), _loss(exit_reason=""),
+                     _loss(exit_reason=None)):
+        rep = _clean_report()
+        rep["losses"] = [_loss(), bad_loss]
+        assert _checks(rep) == [True, False, True, True], bad_loss
+
+    at_limit = _clean_report()
+    at_limit["losses"] = [_loss(loss_pct_of_cash=3.0), _loss(lesson=None)]
+    assert _checks(at_limit) == [True, True, True, True]  # at the limit passes; a missing lesson is counted, not failed
+    assert "1 with no lesson written" in report.morning_checks(at_limit, 3.0)[1]["evidence"]
+
+    unverified = _clean_report()
+    unverified["fills"] = [_fill(verification="unverified")]
+    unverified["verification"] = {"paper": 0, "verified": 0, "unverified": 1}
+    unverified["real_orders_sent"] = 1
+    assert _checks(unverified) == [True, True, False, True]
+    assert "was exercised" in report.morning_checks(unverified, 3.0)[2]["evidence"]
+
+    violated = _clean_report()
+    violated["violations"] = [dict(ts=1, rule="loss_exceeded_risk_budget", mint="M", symbol="S", loss_usd=9.0,
+                                   budget_usd=3.0, detail="over")]
+    assert _checks(violated) == [True, True, True, False]
+
+
+def test_the_morning_text_prints_fail_for_each_failed_check():
+    rep = _clean_report()
+    rep["skips"] = [dict(ts=1, mint="M", symbol="S", stage="brain", reason_code="", detail="")]
+    rep["losses"] = [_loss(loss_pct_of_cash=None)]
+    rep["fills"] = [_fill(verification="unverified")]
+    rep["verification"] = {"paper": 0, "verified": 0, "unverified": 1}
+    rep["real_orders_sent"] = 1
+    rep["violations"] = [dict(ts=1, rule="r", mint="M", symbol="S", loss_usd=9.0, budget_usd=3.0, detail="d")]
+    text = report.render_morning(rep, 3.0)
+    assert text.count("[FAIL]") == 4 and "[pass]" not in text
+    assert "unknown of the cash held at entry" in text

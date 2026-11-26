@@ -31,6 +31,7 @@ def morning_checks(report: dict[str, Any], risk_per_trade_pct: float) -> list[di
         if loss["loss_pct_of_cash"] is None or loss["loss_pct_of_cash"] > risk_per_trade_pct
     ]
     no_autopsy = [loss for loss in losses if not loss.get("exit_reason")]
+    no_lesson = [loss for loss in losses if not loss.get("lesson")]
     unverified = report["verification"]["unverified"]
     violations = report["violations"]
     return [
@@ -44,7 +45,7 @@ def morning_checks(report: dict[str, Any], risk_per_trade_pct: float) -> list[di
             "ok": not over and not no_autopsy,
             "evidence": (
                 f"{len(losses)} losses, {len(over)} over the limit or unmeasured, "
-                f"{len(no_autopsy)} without an exit reason"
+                f"{len(no_autopsy)} without an exit reason, {len(no_lesson)} with no lesson written"
             ),
         },
         {

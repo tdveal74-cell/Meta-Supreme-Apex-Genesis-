@@ -308,11 +308,11 @@ def test_no_file_names_the_venue_or_carries_a_credential_word():
             assert word not in text, f"{path.name} contains {word!r}"
 
 
-def test_no_dashes_in_any_package_file():
-    for path in sorted(PKG.rglob("*")):
+def test_no_dashes_in_any_package_file_or_desk_test_file():
+    for path in sorted(PKG.rglob("*")) + sorted(ROOT.glob("test_overnight_desk_*.py")):
         if path.is_file() and path.suffix in (".py", ".md", ".json", ".jsonl", ".txt"):
             text = path.read_text(encoding="utf-8")
-            assert "—" not in text and "–" not in text, path.name
+            assert chr(0x2014) not in text and chr(0x2013) not in text, path.name
 
 
 def test_no_module_shadows_a_standard_library_name():

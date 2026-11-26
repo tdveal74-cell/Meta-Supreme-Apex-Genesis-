@@ -25,7 +25,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
+import typing
 from collections.abc import Sequence
 from dataclasses import dataclass, fields
 from pathlib import Path
@@ -51,6 +53,59 @@ class Frame:
 _TOKEN_FIELDS = {f.name for f in fields(TokenSnapshot)}
 _MARKET_FIELDS = {f.name for f in fields(MarketSnapshot)}
 
+_KIND_WORDS = {
+    bool: "true or false",
+    int: "a whole number",
+    float: "a finite number",
+    str: "a string",
+    tuple: "a list of strings",
+}
+
+
+def _kinds(cls: type) -> dict[str, tuple[type, bool]]:
+    """Each field's base type and whether it may be null, read from the dataclass."""
+    out: dict[str, tuple[type, bool]] = {}
+    for name, hint in typing.get_type_hints(cls).items():
+        if typing.get_origin(hint) is tuple:
+            out[name] = (tuple, False)
+            continue
+        args = typing.get_args(hint)
+        if args:
+            out[name] = (next(a for a in args if a is not type(None)), True)
+        else:
+            out[name] = (hint, False)
+    return out
+
+
+_TOKEN_KINDS = _kinds(TokenSnapshot)
+_MARKET_KINDS = _kinds(MarketSnapshot)
+
+
+def _check_value(where: str, name: str, value: Any, kind: type, optional: bool) -> None:
+    """Refuse a value of the wrong type, so a string can never reach a comparison."""
+    if value is None:
+        if optional:
+            return
+        raise TimelineError(f"{where}: '{name}' may not be null")
+    if kind is bool:
+        ok = isinstance(value, bool)
+    elif kind is int:
+        ok = isinstance(value, int) and not isinstance(value, bool)
+    elif kind is float:
+        ok = isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    elif kind is str:
+        ok = isinstance(value, str)
+    elif kind is tuple:
+        ok = isinstance(value, list) and all(isinstance(item, str) for item in value)
+    else:
+        ok = False
+    if not ok:
+        raise TimelineError(f"{where}: '{name}' must be {_KIND_WORDS.get(kind, 'of a known type')}")
+
+
+def _refuse_constant(name: str) -> Any:
+    raise TimelineError(f"{name} is not a finite number")
+
 
 def parse_frame(obj: Any, where: str = "frame") -> Frame:
     """One decoded JSON object into a Frame. Raises TimelineError."""
@@ -70,6 +125,8 @@ def parse_frame(obj: Any, where: str = "frame") -> Frame:
         bad = sorted(set(market_obj) - _MARKET_FIELDS)
         if bad:
             raise TimelineError(f"{where}: unknown market field(s) {', '.join(bad)}")
+        for name, value in market_obj.items():
+            _check_value(f"{where}: market", name, value, *_MARKET_KINDS[name])
         market = MarketSnapshot(**{"ts": ts, **market_obj})
     tokens_obj = obj.get("tokens", [])
     if not isinstance(tokens_obj, list):
@@ -77,13 +134,15 @@ def parse_frame(obj: Any, where: str = "frame") -> Frame:
     tokens = []
     for i, tok in enumerate(tokens_obj):
         if not isinstance(tok, dict):
-            raise TimelineError(f"{where}: token {i} must be an object")
+            raise TimelineError(f"{where}: token {i} must be an object, got {type(tok).__name__}")
         bad = sorted(set(tok) - _TOKEN_FIELDS)
         if bad:
             raise TimelineError(f"{where}: token {i} has unknown field(s) {', '.join(bad)}")
         for need in ("mint", "symbol"):
             if not isinstance(tok.get(need), str) or not tok[need]:
                 raise TimelineError(f"{where}: token {i} needs a non-empty '{need}'")
+        for name, value in tok.items():
+            _check_value(f"{where}: token {i}", name, value, *_TOKEN_KINDS[name])
         data = {"ts": ts, **tok}
         if "narrative_tags" in data:
             data["narrative_tags"] = tuple(data["narrative_tags"])
@@ -102,9 +161,11 @@ def load_timeline(path: str | Path) -> list[Frame]:
         if not line.strip():
             continue
         try:
-            obj = json.loads(line)
+            obj = json.loads(line, parse_constant=_refuse_constant)
         except json.JSONDecodeError as exc:
             raise TimelineError(f"line {number}: not valid JSON") from exc
+        except TimelineError as exc:
+            raise TimelineError(f"line {number}: {exc}") from exc
         frames.append(parse_frame(obj, where=f"line {number}"))
     return frames
 

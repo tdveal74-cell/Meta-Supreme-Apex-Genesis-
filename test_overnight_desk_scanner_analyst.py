@@ -559,3 +559,10 @@ def test_analyse_returns_no_score_when_the_audit_fails(kw):
     a, b = analyst.analyse(_clean(**kw), S)
     assert not a.passed and b is None
     assert a == analyst.audit(_clean(**kw), S)
+
+
+@pytest.mark.parametrize("value", [1, True, ["OLD"], 0.5])
+def test_only_a_non_empty_string_counts_as_a_copycat(value):
+    """The contract says a non-empty string. A truthy value of another type is no copycat."""
+    assert _first_kill(copycat_of=value).state is not ScanState.KILLED
+    assert _first_kill(copycat_of="OLD").reason_code == "copycat_name"
