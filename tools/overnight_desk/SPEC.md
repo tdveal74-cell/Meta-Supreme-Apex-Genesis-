@@ -290,6 +290,7 @@ def evaluate(
 DOC, source lines 60, 63 and 73. Returns the position with its peak and stop
 brought up to date, and at most one exit decision.
 
+- `ValueError` when `snap.mint` differs from `position.mint`.
 - When `snap.price_usd is None`: return the position unchanged and no decision.
   The caller records an alert.
 - `peak_price = max(peak_price, price)`.
