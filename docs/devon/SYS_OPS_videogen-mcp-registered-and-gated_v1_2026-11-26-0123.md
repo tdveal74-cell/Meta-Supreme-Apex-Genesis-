@@ -2,7 +2,7 @@
 
 Status record for the `claude/mcp-videogen-integration-v7wvjx` branch, pull
 request #493. First written 2026-11-26 at 0123Z, the stamp in its name, and
-revised twice the same day, last at 0237Z, after two gauntlet rounds: three
+revised three times the same day, last at 0315Z after Tee's rulings, after two gauntlet rounds: three
 cold critics, two refuters per finding and eight receipt verifiers on the first
 commit, then nine fix verifiers, two more critics and their refuters on the
 revision; what the gauntlet changed is marked below. Supersedes nothing. It follows
@@ -29,8 +29,9 @@ avatars, upscaling, project export, all paid from the account's credits.
   every VideoGen tool that is not a read needs a human signal inside the two
   hour window. No ruling was asked for that line; the Graphify precedent carried
   one ("Add it to the list", 2026-10-17). The direction is the conservative one,
-  more calls need a signal, so it shipped and is offered to Tee on the card
-  beside the sign in route rather than held.
+  more calls need a signal, so it shipped and was offered to Tee on the card
+  beside the sign in route rather than held. He confirmed it the same day,
+  cancels included.
 - `CLAUDE.md` names VideoGen in the gated list and carries a short section,
   "MCP servers in .mcp.json", on how a registered server gets its sign in and
   which VideoGen inputs put a rented voice or face on the work. The first
@@ -149,8 +150,11 @@ can put a rented voice or face on the work:
   actor is a rented face. An ACTOR entity built from Tee's own reference images
   is not. Two unknowns: `voiceover_to_video` lists `actorEntityId` on its REST
   page while the vendor's MCP tool row omits it, and the live schema is unread;
-  `storyboard_to_video` has no REST page at all, so whether it narrates with a
-  voice is unread.
+  `storyboard_to_video` has no REST page; its narration is read from the
+  vendor's changelog v2.3.3 (2026-10-05), where "each scene's `voiceoverScript`
+  can now hold about 30 seconds of speech", so a scene with spoken lines is
+  narrated in a vendor voice, and its `actorEntityIds` come from the MCP tool
+  table. The docs server found that page; the REST pages could not.
 
 Inside the rule: an uploaded Tee clone track from ElevenLabs into
 `voiceover_to_video` with no `actorEntityId`, or into `generate_avatar` on an
@@ -165,12 +169,18 @@ Nothing published under a show's name carries a stock voice or face.
 
 Whether an ACTOR entity built from Tee's own reference images and animated by
 `generate_avatar` is a candidate for the avatar render lane, which does not
-exist yet, is a scouting question and Tee's to open. Nothing here starts it.
+exist yet, went to Tee on the card. He ruled 2026-11-26: scout it after sign
+in, on its own card, with `get_me` and the credit prices read first and a
+ceiling set before anything spends or any image of him is uploaded. Nothing
+here starts it.
 
 ## Open
 
-- Sign in, Tee's call, on the card. Three routes reach a VideoGen session, and
-  the first version of this doc named only the last two:
+- Sign in. Ruled by Tee 2026-11-26 on a card: the claude.ai custom connector,
+  route 1 below. Connecting it is his act; afterwards a session reads the name
+  the tools arrive under and adds a `SERVER_ALIASES` row the same day if it is
+  a UUID. Three routes reach a VideoGen session, and the first version of this
+  doc named only the last two:
   1. A claude.ai custom connector: Settings, Connectors, Add custom connector,
      the bare URL, OAuth through Dynamic Client Registration, no key held
      anywhere. This is the route the vendor documents for Claude, and a
@@ -192,19 +202,25 @@ exist yet, is a scouting question and Tee's to open. Nothing here starts it.
      the loopback callback the vendor lists and serves that machine only. A
      cloud container is new every session, so this route never lights the
      server here.
-  The recommendation is the connector, because it is the vendor's route, needs
+  The recommendation was the connector, because it is the vendor's route, needs
   no key anywhere, and other claude.ai connectors loaded their tools in the
   cloud session of 2026-11-26, so the route reaches a container; the network
-  secret second.
+  secret second. Tee took the recommendation.
+- Measured after a worker restart on this branch at about 03:10Z on
+  2026-11-26: the restart read `.mcp.json`, `videogen-docs` loaded and its
+  `searchDocs` answered a storyboard query, and no `mcp__videogen__` tool
+  loaded, which is the 401 doing what this doc said it would. The parity test's
+  premise, that `.mcp.json` plus `enabledMcpjsonServers` is what loads a server
+  here, is measured rather than read.
 - The live tool names, once readable, are to be checked against `READ_VERB`
   and these tests, and the fifty one updated if the server differs from its
   docs.
 - Credit prices were not read. `get_me` is the connection test the vendor
   names; the first call after sign in should be that and nothing that spends.
-- `videogen-docs` was added beyond the one URL Tee gave (Tee), because the
-  vendor recommends it alongside and it is read only, unauthenticated and free.
-  It is one server entry and one settings line to remove if he does not want
-  it; it went on the card rather than shipping as the default alone.
+- `videogen-docs` was added beyond the one URL Tee gave, because the vendor
+  recommends it alongside and it is read only, unauthenticated and free. It
+  went on the card rather than shipping as the default alone, and Tee ruled
+  2026-11-26: keep it.
 - The WaveSpeed price exemption matches `wavespeed` by substring, so a server
   named for both vendors (`videogen_wavespeed` and the like) would pass a
   VideoGen generate carrying `estimate_only`. None exists, and none should be
@@ -229,9 +245,9 @@ AREA: Systems
 TYPE: SYS_OPS
 ARTIFACT: VideoGen MCP registered at project scope and gated
 DATE: 2026-11-26
-DECISIONS: register videogen at the canonical https://mcp.videogen.io/mcp and videogen-docs beside it in .mcp.json and enabledMcpjsonServers, project scope not user scope; add videogen to NAMED_SERVERS so every non-read tool needs a human signal, without a ruling, conservative direction, offered on the card; name VideoGen in the CLAUDE.md gated list and add a short MCP servers section that maps HardRule 6 (voice and likeness owned, never rented) onto its inputs; pin the fifty one documented tool names, a .mcp.json to settings parity test and the WaveSpeed price flag on VideoGen
-FINDINGS: both the tagged and canonical URLs return byte identical 401 bodies before sign in and the declared OAuth resource is the bare /mcp, so the vg_client tag is read as attribution and its effect after sign in is unmeasured; DCR is advertised through Supabase Auth; the docs server is unauthenticated with one read tool, searchDocs; the vendor publishes three tool counts (49, 46, 50) and its tables name 51; gate tests 962 to 1169 on the first commit, mutation 124 writes red and 80 reads green, reproduced by independent verifiers; a rented voice or face arrives through voiceId or its default, text_to_speech, spokenDialogue, video_to_video audio GENERATE, CHANGE_NARRATOR, TRANSLATE_PROJECT with changeVoice or dubVideos, and actorEntityId on four workflows and generate_avatar, while voiceover_to_video without an actor or generate_avatar on Tee's own ACTOR entity, both on an uploaded Tee clone track and with no edit after, stay inside the rule; storyboard_to_video has no REST page and its voice path is unread; the dependency audit is red on main on dnspython and next and the first PR comment misread it
-OPEN: sign in route (Tee), the claude.ai custom connector recommended, then the network secret, with the per machine OAuth noted as not reaching a cloud session; a connector arriving under a UUID needs a SERVER_ALIASES row before the gate refuses its writes; live tool names unread until sign in, then check against READ_VERB; credit prices unread, get_me first; videogen-docs added beyond the one URL given (Tee), removable; cancel_workflow_run and cancel_tool_execution gated as writes; generate_avatar on a Tee ACTOR entity as an avatar lane candidate is a scouting question for Tee; dnspython 2.9.2 and next 15.5.29 pins in one separate PR
-STATUS: built, tested and put through two gauntlet rounds on the branch; revision counts and both verdicts in pull request #493's description; not merged
+DECISIONS: register videogen at the canonical https://mcp.videogen.io/mcp and videogen-docs beside it in .mcp.json and enabledMcpjsonServers, project scope not user scope; add videogen to NAMED_SERVERS so every non-read tool needs a human signal, shipped in the conservative direction and confirmed by Tee on a card, cancels included (Tee, 2026-11-26); keep videogen-docs (Tee, 2026-11-26); sign in through the claude.ai custom connector, no key anywhere, alias row on a UUID arrival (Tee, 2026-11-26); scout generate_avatar on a Tee ACTOR entity after sign in on its own card, prices first (Tee, 2026-11-26); name VideoGen in the CLAUDE.md gated list and add a short MCP servers section that maps HardRule 6 (voice and likeness owned, never rented) onto its inputs; pin the fifty one documented tool names, a .mcp.json to settings parity test and the WaveSpeed price flag on VideoGen
+FINDINGS: both the tagged and canonical URLs return byte identical 401 bodies before sign in and the declared OAuth resource is the bare /mcp, so the vg_client tag is read as attribution and its effect after sign in is unmeasured; DCR is advertised through Supabase Auth; the docs server is unauthenticated with one read tool, searchDocs; the vendor publishes three tool counts (49, 46, 50) and its tables name 51; gate tests 962 to 1169 on the first commit, mutation 124 writes red and 80 reads green, reproduced by independent verifiers; a rented voice or face arrives through voiceId or its default, text_to_speech, spokenDialogue, video_to_video audio GENERATE, CHANGE_NARRATOR, TRANSLATE_PROJECT with changeVoice or dubVideos, and actorEntityId on four workflows and generate_avatar, while voiceover_to_video without an actor or generate_avatar on Tee's own ACTOR entity, both on an uploaded Tee clone track and with no edit after, stay inside the rule; storyboard_to_video has no REST page and its scenes carry spoken voiceoverScript lines in a vendor voice per the changelog v2.3.3; a worker restart on the branch loaded videogen-docs from .mcp.json and no videogen API tool, measured 2026-11-26; the dependency audit is red on main on dnspython and next and the first PR comment misread it
+OPEN: Tee connects the claude.ai custom connector; the next session reads the arrival name and adds a SERVER_ALIASES row if it is a UUID; live tool names unread until then, then check against READ_VERB; credit prices unread, get_me first; the avatar lane scouting card after sign in; dnspython 2.9.2 and next 15.5.29 pins in one separate PR before the standing merge grant can act
+STATUS: built, tested and put through three gauntlet rounds on the branch; four rulings taken on a card 2026-11-26; counts and verdicts in pull request #493's description; not merged, the dependency audit on main blocks the standing grant
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```

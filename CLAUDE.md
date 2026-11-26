@@ -934,8 +934,8 @@ it is still gated; `test_gate_ledger.py` pins both. A server that wants a sign
 in reads "needs authentication" in a cloud session until a route that reaches
 the container is taken: a claude.ai custom connector (the vendor's documented
 route for Claude, OAuth with Dynamic Client Registration, no key held
-anywhere), or an API key saved as a network secret, which the proxy adds to
-requests for that host. A Claude Code `/mcp` sign in on Tee's own machine
+anywhere; ruled by Tee for VideoGen on 2026-11-26, on a card), or an API key
+saved as a network secret, which the proxy adds to requests for that host. A Claude Code `/mcp` sign in on Tee's own machine
 serves that machine only. Whether the MCP client's connection gets the proxy's
 injection is unverified until it is tried. That the client's connections go
 through the proxy at all is an inference, not a measurement of VideoGen's own:
@@ -957,8 +957,10 @@ and `TRANSLATE_PROJECT` re-narrates those in the target language unless
 videos over their original audio; `actorEntityId` on `script_to_video`,
 `slideshow_to_video`, `voiceover_to_video` (on its REST page; its MCP row omits
 it and the live schema is unread) and `generate_avatar`, or `actorEntityIds` on
-`storyboard_to_video`, whose voice path is unread, puts a face on the work that
-is rented unless the entity is an ACTOR built from Tee's own reference images.
+`storyboard_to_video`, whose scenes also carry spoken `voiceoverScript` lines in
+a vendor voice (its changelog v2.3.3; it has no REST page), puts a face on the
+work that is rented unless the entity is an ACTOR built from Tee's own
+reference images.
 Inside the rule: an uploaded Tee clone track into `voiceover_to_video` with no
 `actorEntityId`, or into `generate_avatar` on Tee's own ACTOR entity, with no
 translate or narrator edit after it. Nothing published under a show's name
