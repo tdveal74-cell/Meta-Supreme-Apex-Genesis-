@@ -461,7 +461,98 @@ order: `paper_nights_short`, `acceptance_tests_not_passed`,
 empty tuple means the gate is open. In this build `no_live_executor` is always
 present, because none exists.
 
-## engine.py, report.py, replay.py
+## engine.py
 
-Written after the modules above are merged. Their contract is added to this
-file in that change.
+```python
+class Desk:
+    def __init__(self, settings, starting_cash_usd, executor=None, lesson_book=None,
+                 strategies=(Strategy.GRAD, Strategy.DIP), approve=None) -> None
+    def tick(self, now: int, market: MarketSnapshot | None,
+             snapshots: Sequence[TokenSnapshot]) -> TickReport
+    def night_report(self) -> dict
+```
+
+One Desk is one night. With no executor given it uses the paper executor.
+
+`tick` raises `ValueError` when `now` is earlier than the last tick, when two
+snapshots share a mint, or when a snapshot's `ts` is after `now`. Then, in
+this order:
+
+1. Market mode: `market_mode.assess`.
+2. Risk pass, before any buy (DOC, source line 63, "sells jump the click
+   queue"). Open positions are visited in mint order. A position with no
+   snapshot or no price this tick gets the alert `no_price_for_position` and
+   is left alone. Otherwise `risk.evaluate` runs, and an exit decision becomes
+   a SELL intent for `qty * fraction`.
+3. Scan pass: every snapshot goes to the scanner, in mint order. A coin that
+   is held is not considered for a buy. A coin that is not PASSED is skipped
+   at stage `scanner` with the scanner's reason code.
+4. Buy pass, for PASSED coins not held:
+   - INVENTED: a coin bought once tonight is skipped at stage `desk` with
+     `already_traded_tonight`. This also means no averaging down (DOC, source
+     line 60).
+   - `analyst.analyse`. A failed audit is skipped at stage `analyst` with
+     `layer_<n>_red` or `layer_<n>_unknown`.
+   - INVENTED: survivors are tried best total score first, ties by mint.
+   - `brain.size_ticket`, given the first blocking lesson if any. A skip is
+     recorded at stage `brain` with the brain's reason code.
+   - `entry.entry_signal` for each strategy in order. When none fires the skip
+     is `no_entry_signal` at stage `executor`, and its detail lists each
+     strategy's reason.
+   - `entry.pre_trade_recheck`. Any reason is a skip at stage `executor` with
+     the first reason as its code.
+   - A BUY intent for the ticket, then `positions.open_position` and
+     `Ledger.record_buy`. The portfolio view is rebuilt before each candidate,
+     so a second buy in one tick sees the cash the first one spent.
+
+Every intent goes through `_execute`, which calls `paper.require_approval`
+with the executor's kind before the executor runs. For a kind other than
+PAPER it first asks the `approve` callback for a `HumanApproval`. With no
+callback, or an approval for another order, the tick raises
+`ApprovalRequired` and nothing is executed. This gate is in the desk itself,
+so an executor cannot skip it.
+
+A skip is recorded when a coin's (stage, reason) pair changes, and is not
+repeated on every tick (INVENTED).
+
+When a position closes at a net loss across all of its fills:
+
+- `lessons.derive_lesson` runs and the lesson is added to the book.
+- The loss is recorded with its exit reason, its size in dollars and as a
+  share of the free cash held when the position was opened.
+- When the loss is larger than `risk_per_trade_pct` of that cash, a violation
+  `loss_exceeded_risk_budget` is recorded. The source's own standard at line
+  94 is that no loss exceeds 3% of cash. The desk cannot guarantee that. It
+  reports every time it fails.
+
+`night_report` returns plain JSON-ready data: the account, every fill, every
+skip with its reason and a count by reason, losses with autopsies, violations,
+alerts, the mode log, lessons, a count of fills by verification kind, the
+number of real orders sent, and the live gate's blockers.
+
+## report.py
+
+```python
+def morning_checks(report: dict, risk_per_trade_pct: float) -> list[dict]
+def render_morning(report: dict, risk_per_trade_pct: float) -> str
+```
+
+DOC, source line 94. `morning_checks` answers the four tests of that line from
+the night's data: a reason for every skip, every loss within the risk budget
+with an autopsy, zero unverified orders, zero rule violations. A paper fill is
+never counted as a verified order, and the report says when order verification
+was never exercised because no real order was sent.
+
+## replay.py
+
+```python
+def parse_frame(obj, where="frame") -> Frame
+def load_timeline(path) -> list[Frame]
+def run(frames, settings, starting_cash_usd) -> dict
+def main(argv=None) -> int
+```
+
+Reads a JSON Lines timeline and a settings file from disk, runs a fresh paper
+Desk over the frames and prints the morning report. An unknown key or field
+name is a `TimelineError`, so a typo cannot pass as a missing reading. `main`
+returns 0 on success and 2 on a refused input. It opens no connection.

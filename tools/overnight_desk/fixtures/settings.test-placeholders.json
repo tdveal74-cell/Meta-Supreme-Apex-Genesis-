@@ -1,0 +1,8 @@
+{
+  "max_ticket_usd": 25.0,
+  "max_open_positions": 3,
+  "max_total_exposure_pct": 36.0,
+  "venue_fee_pct_per_side": 0.5,
+  "pool_fee_pct_per_side": 1.25,
+  "fixed_fee_usd_per_side": 0.0
+}
