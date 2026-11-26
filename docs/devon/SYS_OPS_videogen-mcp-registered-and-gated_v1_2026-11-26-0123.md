@@ -2,8 +2,8 @@
 
 Status record for the `claude/mcp-videogen-integration-v7wvjx` branch, pull
 request #493. First written 2026-11-26 at 0123Z, the stamp in its name, and
-revised five times the same day, last at 0354Z after a fourth gauntlet pass on
-the avatar lane correction, after two gauntlet rounds: three
+revised six times the same day, last at 0404Z after a fourth gauntlet pass on
+the avatar lane correction and a fifth on its wording, after two gauntlet rounds: three
 cold critics, two refuters per finding and eight receipt verifiers on the first
 commit, then nine fix verifiers, two more critics and their refuters on the
 revision; what the gauntlet changed is marked below. Supersedes nothing. It follows
@@ -119,17 +119,21 @@ care.
   independent verifiers in their own worktrees, each told to refute one claim
   by re-reading the n8n instance live and the repo. Four confirmed and one
   refuted. The refuted claim was the composition in the verifier's own prompt,
-  which said a name search for "avatar" returns both active workflows: the
-  search returns four rows, one active (`snRyzuQhPxkidipW`) and three
-  inactive, and `m22GM2MZYUqGc1Gx` is active on the instance but carries no
-  "avatar" in its name, so a name search cannot find it. The doc's text never
+  which said a search for "avatar" returns both active workflows: the
+  search, which matches names and descriptions, returns four rows, one active
+  (`snRyzuQhPxkidipW`) and three inactive, one of those three matching on its
+  description alone, and `m22GM2MZYUqGc1Gx` is active on the instance but
+  carries no "avatar" in its name or description, so the search cannot find
+  it. The doc's text never
   made that claim; it reads the two active workflows by id. The four
   confirmations carried precision notes, each folded into the bullets below:
   `look_id` is optional and the code fills the default; a repeated approval
   returns the existing registration rather than throwing; the bytes check
   covers length and SHA-256; the approve workflow also saves no executions;
   and the render workflow carries one Google Drive node the 2026-09-22 Drive
-  table in `CLAUDE.md` predates.
+  table in `CLAUDE.md` predates. A fifth pass at `9a98596`, three verifiers on
+  the folded wording: three of three confirmed against the same live reads,
+  with the two hedges below as its only notes.
 
 ## What the owned voice and likeness rule says about this server
 
@@ -219,9 +223,11 @@ my n8n", and the lane was read live at about 03:24Z:
   `reviewed_by` is named, checks the episode key's format and refuses test
   jobs (an `episode_row_id` beginning VERIFY, TEST or SMOKE in any case),
   checks the render receipt (`bridge_verified`, `voice_track_in_clip`), returns
-  the existing registration on a repeated approval instead of inserting twice,
-  mints a revocable VPS link, downloads the bytes and checks their length and
-  SHA-256 against the reviewed render, then registers the clip in data table
+  the existing registration on a repeated approval of the same job instead of
+  inserting twice, asks the VPS worker for a clip link that the workflow's own
+  note calls revocable (the worker's code is not in this repository, so that
+  word is its claim), downloads the bytes and checks their length and SHA-256
+  against the reviewed render, then registers the clip in data table
   `7Eq5HbskxapeeHfo` (`at_tqo_presenter_clips`), which `TQO FINAL V5` reads
   through its Presenter: Fetch Clips node. It saves no executions either,
   success or error, so a refused approval leaves nothing to read.
@@ -333,6 +339,6 @@ DATE: 2026-11-26
 DECISIONS: register videogen at the canonical https://mcp.videogen.io/mcp and videogen-docs beside it in .mcp.json and enabledMcpjsonServers, project scope not user scope; add videogen to NAMED_SERVERS so every non-read tool needs a human signal, shipped in the conservative direction and confirmed by Tee on a card, cancels included (Tee, 2026-11-26); keep videogen-docs (Tee, 2026-11-26); sign in through the claude.ai custom connector, no key anywhere, alias row on a UUID arrival (Tee, 2026-11-26); the avatar route is HeyGen, his filmed twin, and VideoGen's generate_avatar is not scouted, replacing the scouting ruling taken on the false premise that no avatar lane existed (Tee, 2026-11-26, "Use HeyGen"); name VideoGen in the CLAUDE.md gated list and add a short MCP servers section that maps HardRule 6 (voice and likeness owned, never rented) onto its inputs; pin the fifty one documented tool names, a .mcp.json to settings parity test and the WaveSpeed price flag on VideoGen
 FINDINGS: both the tagged and canonical URLs return byte identical 401 bodies before sign in and the declared OAuth resource is the bare /mcp, so the vg_client tag is read as attribution and its effect after sign in is unmeasured; DCR is advertised through Supabase Auth; the docs server is unauthenticated with one read tool, searchDocs; the vendor publishes three tool counts (49, 46, 50) and its tables name 51; gate tests 962 to 1169 on the first commit, mutation 124 writes red and 80 reads green, reproduced by independent verifiers; a rented voice or face arrives through voiceId or its default, text_to_speech, spokenDialogue, video_to_video audio GENERATE, CHANGE_NARRATOR, TRANSLATE_PROJECT with changeVoice or dubVideos, and actorEntityId on four workflows and generate_avatar, while voiceover_to_video without an actor or generate_avatar on Tee's own ACTOR entity, both on an uploaded Tee clone track and with no edit after, stay inside the rule; storyboard_to_video has no REST page and its scenes carry spoken voiceoverScript lines in a vendor voice per the changelog v2.3.3; a worker restart on the branch loaded videogen-docs from .mcp.json and no videogen API tool, measured 2026-11-26; the avatar lane exists on n8n, two active workflows since 2026-10-21 (TQO & NCO Hugging Face Avatar + Lip Sync on MuseTalk, Approve HF Presenter Clip registering reviewed clips to at_tqo_presenter_clips) plus HeyGen's filmed twin, and this doc's first version and a card said it did not, from an unchecked August note; a fourth gauntlet pass at c2e5b28 confirmed four of five claims about the lane live against n8n and refuted the fifth, a composition error in the verifier prompt and not in the doc's text, and its precision notes are folded in; the dependency audit is red on main on dnspython and next and the first PR comment misread it
 OPEN: Tee connects the claude.ai custom connector; the next session reads the arrival name and adds a SERVER_ALIASES row if it is a UUID; live tool names unread until then, then check against READ_VERB; credit prices unread, get_me first; the MuseTalk workflows' standing beside "Use HeyGen" was not ruled; the stale August note that no avatar lane exists is to be filed to DEVON (Tee); the 2026-09-22 Drive node count in CLAUDE.md predates the MuseTalk workflow's Drive node and is due a re-enumeration; dnspython 2.9.2 and next 15.5.29 pins in one separate PR before the standing merge grant can act
-STATUS: built, tested and put through three gauntlet rounds and a fourth pass on the correction on the branch; four rulings taken on a card 2026-11-26; counts and verdicts in pull request #493's description; not merged, the dependency audit on main blocks the standing grant
+STATUS: built, tested and put through three gauntlet rounds, a fourth pass on the correction and a fifth on its wording, on the branch; four rulings taken on a card 2026-11-26; counts and verdicts in pull request #493's description; not merged, the dependency audit on main blocks the standing grant
 TOKEN: dcp_claude_f18d1fd0d3e6a354456d28bfbbe62973b702de8f
 ```
